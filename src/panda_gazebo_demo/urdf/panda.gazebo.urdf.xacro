@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
+    <xacro:arg name="initial_positions_file"
+        default="$(find panda_gazebo_demo)/config/initial_positions.yaml" />
+    <xacro:arg name="ros2_control_hardware_type" default="gazebo" />
+    <xacro:arg
+        name="controllers_file"
+        default="$(find panda_gazebo_demo)/config/controllers.yaml" />
+
+    <!-- Import panda urdf file -->
+    <xacro:include filename="$(find moveit_resources_panda_description)/urdf/panda.urdf.xacro" />
+
+    <!-- Fix Panda base to the Gazebo world at the table-top height. -->
+    <link name="world" />
+
+    <joint name="world_to_panda" type="fixed">
+        <parent link="world" />
+        <child link="panda_link0" />
+        <origin xyz="0 0 0.775" rpy="0 0 0" />
+    </joint>
+
+    <!-- Import panda ros2_control description -->
+    <xacro:include filename="panda.ros2_control.xacro" />
+    <xacro:include filename="panda_hand.ros2_control.xacro" />
+
+    <xacro:panda_ros2_control name="PandaGazeboSystem"
+        initial_positions_file="$(arg initial_positions_file)"
+        ros2_control_hardware_type="$(arg ros2_control_hardware_type)" />
+    <xacro:panda_hand_ros2_control name="PandaHandGazeboSystem"
+        ros2_control_hardware_type="$(arg ros2_control_hardware_type)" />
+    <gazebo>
+        <plugin
+            filename="libgz_ros2_control-system.so"
+            name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+            <parameters>$(arg controllers_file)</parameters>
+        </plugin>
+    </gazebo>
+</robot>
