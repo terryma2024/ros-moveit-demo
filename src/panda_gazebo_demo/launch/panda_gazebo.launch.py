@@ -5,6 +5,7 @@ from launch.substitutions import Command, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
@@ -95,6 +96,79 @@ def generate_launch_description():
         ],
         output="screen",
     )
+    
+    
+    moveit_config = (
+        MoveItConfigsBuilder("moveit_resources_panda")
+        .robot_description(
+            file_path="config/panda.urdf.xacro",
+            mappings={
+                "ros2_control_hardware_type": "mock_components",
+            },
+        )
+        .robot_description_semantic(file_path="config/panda.srdf")
+        .planning_scene_monitor(
+            publish_robot_description=True,
+            publish_robot_description_semantic=True,
+        )
+        .trajectory_execution(
+            file_path="config/gripper_moveit_controllers.yaml"
+        )
+        .planning_pipelines(
+            pipelines=[
+                "ompl",
+                "chomp",
+                "pilz_industrial_motion_planner",
+                "stomp",
+            ]
+        )
+        .to_moveit_configs()
+    )
+
+    # 其余 MoveIt 配置来自标准 Panda 配置包，
+    # 但 URDF 必须替换成 Gazebo 和 robot_state_publisher 正在使用的版本。
+    moveit_parameters = moveit_config.to_dict()
+    moveit_parameters.update(robot_description)
+    
+    
+    move_group_node = Node(
+        package="moveit_ros_move_group",
+        executable="move_group",
+        output="screen",
+        parameters=[
+            moveit_parameters,
+            {"use_sim_time": True},
+        ],
+        arguments=[
+            "--ros-args",
+            "--log-level",
+            "info",
+        ],
+    )
+    
+    rviz_config = PathJoinSubstitution(
+        [
+            package_share,
+            "config",
+            "panda_gazebo.rviz",
+        ]
+    )
+    
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz",
+        output="screen",
+        arguments=["-d", rviz_config],
+        parameters=[
+            robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+            {"use_sim_time": True},
+        ],
+    )
 
     return LaunchDescription([
         gazebo,
@@ -104,4 +178,6 @@ def generate_launch_description():
         joint_state_broadcaster,
         panda_arm_controller,
         panda_hand_controller,
+        move_group_node,
+        rviz_node,
     ])
