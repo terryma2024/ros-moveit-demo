@@ -16,6 +16,11 @@ find_package(joint_state_broadcaster REQUIRED)
 find_package(joint_trajectory_controller REQUIRED)
 find_package(moveit_resources_panda_description REQUIRED)
 find_package(moveit_resources_panda_moveit_config REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(shape_msgs REQUIRED)
+find_package(moveit_msgs REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -28,6 +33,26 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+add_executable(
+  planning_scene_setup
+  src/planning_scene_setup.cpp
+)
+
+ament_target_dependencies(
+  planning_scene_setup
+  rclcpp
+  geometry_msgs
+  shape_msgs
+  moveit_msgs
+  moveit_ros_planning_interface
+)
+
+install(
+  TARGETS 
+    planning_scene_setup
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(
   DIRECTORY

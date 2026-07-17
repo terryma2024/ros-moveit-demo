@@ -169,6 +169,12 @@ def generate_launch_description():
             {"use_sim_time": True},
         ],
     )
+    
+    planning_scene_setup_node = Node(
+        package="panda_gazebo_demo",
+        executable="planning_scene_setup",
+        output="screen",
+    )
 
     return LaunchDescription([
         gazebo,
@@ -179,5 +185,6 @@ def generate_launch_description():
         panda_arm_controller,
         panda_hand_controller,
         move_group_node,
+        planning_scene_setup_node,
         rviz_node,
     ])
