@@ -44,6 +44,11 @@ add_executable(
   src/pick_place_demo.cpp
 )
 
+add_executable(
+  attach_and_lift_demo
+  src/attach_and_lift_demo.cpp
+)
+
 ament_target_dependencies(
   planning_scene_setup
   rclcpp
@@ -62,10 +67,19 @@ ament_target_dependencies(
   moveit_ros_planning_interface
 )
 
+ament_target_dependencies(
+  attach_and_lift_demo
+  rclcpp
+  geometry_msgs
+  moveit_msgs
+  moveit_ros_planning_interface
+)
+
 install(
   TARGETS 
     planning_scene_setup
     pre_grasp_plan
+    attach_and_lift_demo
   DESTINATION lib/${PROJECT_NAME}
 )
 
