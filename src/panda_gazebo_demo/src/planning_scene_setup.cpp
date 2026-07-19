@@ -3,6 +3,7 @@
 #include <moveit_msgs/msg/collision_object.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <shape_msgs/msg/solid_primitive.hpp>
+#include <vector>
 
 int main(int argc, char *argv[])
 {
@@ -32,21 +33,47 @@ int main(int argc, char *argv[])
     table.primitive_poses.push_back(pose);
     table.operation = moveit_msgs::msg::CollisionObject::ADD;
 
+    moveit_msgs::msg::CollisionObject coke;
+    coke.header.frame_id = "world";
+    coke.id = "coke";
+
+    shape_msgs::msg::SolidPrimitive coke_primitive;
+    coke_primitive.type = shape_msgs::msg::SolidPrimitive::CYLINDER;
+    coke_primitive.dimensions.resize(2);
+
+    // SolidPrimitive 对 Cylinder 的维度顺序：高度、半径
+    coke_primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_HEIGHT] = 0.122;
+    coke_primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_RADIUS] = 0.033;
+
+    geometry_msgs::msg::Pose coke_pose;
+    coke_pose.orientation.w = 1.0;
+    coke_pose.position.x = 0.3;
+    coke_pose.position.y = 0.0;
+    coke_pose.position.z = 0.836;
+
+    coke.primitives.push_back(coke_primitive);
+    coke.primitive_poses.push_back(coke_pose);
+    coke.operation = moveit_msgs::msg::CollisionObject::ADD;
+
     RCLCPP_INFO(node->get_logger(), "Waiting for MoveGroup planning scene service...");
 
     // 默认会等待 MoveGroup 的 Planning Scene 服务出现。
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
 
-    if (!planning_scene_interface.applyCollisionObject(table))
+    const std::vector<moveit_msgs::msg::CollisionObject> objects{table, coke};
+
+    if (!planning_scene_interface.applyCollisionObjects(objects))
     {
-        RCLCPP_ERROR(node->get_logger(), "Failed to add table to Planning Scene");
+        RCLCPP_INFO(
+            node->get_logger(),
+            "Added table and coke to Planning Scene");
         rclcpp::shutdown();
         return 1;
     }
 
     RCLCPP_INFO(
         node->get_logger(),
-        "Added table: frame=world center=(0, 0, 0.75) size=(1.2, 0.8, 0.05)");
+        "Added table: frame=world center=(0, 0, 0.75) size=(1.2, 0.8, 0.05); coke: frame=world center=(0.3, 0, 0.836) size=(0.066, 0.122)");
 
     rclcpp::shutdown();
     return 0;
