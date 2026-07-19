@@ -4,12 +4,22 @@
 #include <rclcpp/rclcpp.hpp>
 #include <shape_msgs/msg/solid_primitive.hpp>
 #include <vector>
+#include <cmath>
 
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
 
     auto node = std::make_shared<rclcpp::Node>("planning_scene_setup");
+
+    const double coke_x =
+        node->declare_parameter<double>("coke_x", 0.3);
+    const double coke_y =
+        node->declare_parameter<double>("coke_y", 0.0);
+    const double coke_z =
+        node->declare_parameter<double>("coke_z", 0.836);
+    const double coke_yaw =
+        node->declare_parameter<double>("coke_yaw", 0.0);
 
     moveit_msgs::msg::CollisionObject table;
     table.header.frame_id = "world";
@@ -46,10 +56,14 @@ int main(int argc, char *argv[])
     coke_primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_RADIUS] = 0.033;
 
     geometry_msgs::msg::Pose coke_pose;
-    coke_pose.orientation.w = 1.0;
-    coke_pose.position.x = 0.3;
-    coke_pose.position.y = 0.0;
-    coke_pose.position.z = 0.836;
+    coke_pose.position.x = coke_x;
+    coke_pose.position.y = coke_y;
+    coke_pose.position.z = coke_z;
+
+    coke_pose.orientation.x = 0.0;
+    coke_pose.orientation.y = 0.0;
+    coke_pose.orientation.z = std::sin(coke_yaw / 2.0);
+    coke_pose.orientation.w = std::cos(coke_yaw / 2.0);
 
     coke.primitives.push_back(coke_primitive);
     coke.primitive_poses.push_back(coke_pose);
@@ -64,17 +78,21 @@ int main(int argc, char *argv[])
 
     if (!planning_scene_interface.applyCollisionObjects(objects))
     {
-        RCLCPP_INFO(
+        RCLCPP_ERROR(
             node->get_logger(),
-            "Added table and coke to Planning Scene");
+            "Failed to add table and coke to Planning Scene");
         rclcpp::shutdown();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     RCLCPP_INFO(
         node->get_logger(),
-        "Added table: frame=world center=(0, 0, 0.75) size=(1.2, 0.8, 0.05); coke: frame=world center=(0.3, 0, 0.836) size=(0.066, 0.122)");
+        "Synced coke world pose: x=%.6f y=%.6f z=%.6f yaw=%.6f",
+        coke_x,
+        coke_y,
+        coke_z,
+        coke_yaw);
 
     rclcpp::shutdown();
-    return 0;
+    return EXIT_SUCCESS;
 }
