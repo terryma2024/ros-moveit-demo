@@ -39,8 +39,22 @@ add_executable(
   src/planning_scene_setup.cpp
 )
 
+add_executable(
+  pre_grasp_plan
+  src/pick_place_demo.cpp
+)
+
 ament_target_dependencies(
   planning_scene_setup
+  rclcpp
+  geometry_msgs
+  shape_msgs
+  moveit_msgs
+  moveit_ros_planning_interface
+)
+
+ament_target_dependencies(
+  pre_grasp_plan
   rclcpp
   geometry_msgs
   shape_msgs
@@ -51,6 +65,7 @@ ament_target_dependencies(
 install(
   TARGETS 
     planning_scene_setup
+    pre_grasp_plan
   DESTINATION lib/${PROJECT_NAME}
 )
 

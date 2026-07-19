@@ -8,7 +8,16 @@
         default="$(find panda_gazebo_demo)/config/controllers.yaml" />
 
     <!-- Import panda urdf file -->
-    <xacro:include filename="$(find moveit_resources_panda_description)/urdf/panda.urdf.xacro" />
+    <xacro:include filename="panda.description.urdf.xacro" />
+
+    <!-- Nominal grasp TCP at the center between the closed fingertips. -->
+    <link name="panda_tcp" />
+
+    <joint name="panda_tcp_joint" type="fixed">
+        <parent link="panda_hand" />
+        <child link="panda_tcp" />
+        <origin xyz="0 0 0.1034" rpy="0 0 0" />
+    </joint>
 
     <!-- Fix Panda base to the Gazebo world at the table-top height. -->
     <link name="world" />
