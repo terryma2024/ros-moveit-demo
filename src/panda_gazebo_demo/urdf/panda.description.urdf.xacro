@@ -274,9 +274,14 @@
             </geometry>
         </visual>
         <collision>
+            <!--
+                Gazebo Bullet Featherstone assigns a 10 mm margin to the
+                default GImpact mesh path.  This primitive matches the STL
+                bounding box while preserving the original visual mesh.
+            -->
+            <origin rpy="0 0 0" xyz="0 0.013135 0.026990" />
             <geometry>
-                <mesh
-                    filename="file://$(find moveit_resources_panda_description)/meshes/collision/finger.stl" />
+                <box size="0.020974 0.026536 0.053717" />
             </geometry>
         </collision>
         <inertial>
@@ -294,10 +299,9 @@
             </geometry>
         </visual>
         <collision>
-            <origin rpy="0 0 3.14159265359" xyz="0 0 0" />
+            <origin rpy="0 0 0" xyz="0 -0.013135 0.026990" />
             <geometry>
-                <mesh
-                    filename="file://$(find moveit_resources_panda_description)/meshes/collision/finger.stl" />
+                <box size="0.020974 0.026536 0.053717" />
             </geometry>
         </collision>
         <inertial>

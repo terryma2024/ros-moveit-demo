@@ -291,6 +291,16 @@
           </geometry>
         </collision>
 
+        <sensor name="coke_contact_sensor" type="contact">
+          <always_on>true</always_on>
+          <update_rate>200</update_rate>
+          <topic>/coke/contacts</topic>
+
+          <contact>
+            <collision>collision</collision>
+          </contact>
+        </sensor>
+
         <visual name="visual">
           <geometry>
             <cylinder>
@@ -305,5 +315,22 @@
         </visual>
       </link>
     </model>
+
+    <!-- Explicit defaults are needed once a world system plugin is specified. -->
+    <plugin
+      filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics" />
+
+    <plugin
+      filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands" />
+
+    <plugin
+      filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster" />
+
+    <plugin
+      filename="gz-sim-contact-system"
+      name="gz::sim::systems::Contact" />
   </world>
 </sdf>

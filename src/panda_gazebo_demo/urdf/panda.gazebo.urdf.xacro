@@ -43,5 +43,21 @@
             name="gz_ros2_control::GazeboSimROS2ControlPlugin">
             <parameters>$(arg controllers_file)</parameters>
         </plugin>
+        <!--
+            MoveIt's AttachedCollisionObject only changes the planning scene.
+            This Gazebo system creates the physical fixed constraint used by
+            the simulation pick / place state machine.
+        -->
+        <plugin
+            filename="gz-sim-detachable-joint-system"
+            name="gz::sim::systems::DetachableJoint">
+            <!-- panda_hand is reduced into panda_link7 by URDF-to-SDF fixed-joint lumping. -->
+            <parent_link>panda_link7</parent_link>
+            <child_model>coke</child_model>
+            <child_link>body</child_link>
+            <attach_topic>/panda/attach_coke</attach_topic>
+            <detach_topic>/panda/detach_coke</detach_topic>
+            <output_topic>/panda/coke_attached</output_topic>
+        </plugin>
     </gazebo>
 </robot>
