@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include <geometry_msgs/msg/pose.hpp>
@@ -17,11 +18,26 @@ int main(int argc, char *argv[])
     const auto logger = node->get_logger();
     int exit_code = EXIT_FAILURE;
 
+    auto executor =
+        std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+    executor->add_node(node);
+    std::thread([executor]() { executor->spin(); }).detach();
+
     bool execute_requested = node->get_parameter_or("execute", false);
     bool plan_approach_requested = node->get_parameter_or("plan_approach", false);
     bool execute_approach_requested = node->get_parameter_or("execute_approach", false);
     double approach_target_z = node->get_parameter_or("approach_target_z", 0.947);
     double target_y = node->get_parameter_or("target_y", 0.0);
+    bool retreat_only_requested = node->get_parameter_or("retreat_only", false);
+    bool execute_retreat_requested = node->get_parameter_or("execute_retreat", false);
+    double retreat_target_z = node->get_parameter_or("retreat_target_z", 0.987);
+
+    if (execute_retreat_requested && !retreat_only_requested)
+    {
+        RCLCPP_ERROR(logger, "execute_retreat requires retreat_only=true");
+        rclcpp::shutdown();
+        return EXIT_FAILURE;
+    }
 
     if (approach_target_z < 0.867 || approach_target_z >= 0.987)
     {
@@ -56,6 +72,105 @@ int main(int argc, char *argv[])
             "Target link: %s",
             move_group.getEndEffectorLink().c_str());
 
+        move_group.setPlanningTime(10.0);
+        move_group.setGoalPositionTolerance(0.005);
+        move_group.setGoalOrientationTolerance(0.02);
+        move_group.setMaxVelocityScalingFactor(0.1);
+        move_group.setMaxAccelerationScalingFactor(0.1);
+
+        if (retreat_only_requested)
+        {
+            if (!move_group.startStateMonitor(2.0))
+            {
+                RCLCPP_ERROR(logger, "Failed to start current state monitor");
+                rclcpp::shutdown();
+                return EXIT_FAILURE;
+            }
+
+            move_group.clearPoseTargets();
+            move_group.setStartStateToCurrentState();
+
+            geometry_msgs::msg::Pose retreat_pose =
+                move_group.getCurrentPose("panda_tcp").pose;
+            const double retreat_start_z = retreat_pose.position.z;
+
+            if (retreat_target_z <= retreat_start_z || retreat_target_z > 1.10)
+            {
+                RCLCPP_ERROR(
+                    logger,
+                    "retreat_target_z must be above current TCP z (%.6f) and no greater than 1.10",
+                    retreat_start_z);
+                rclcpp::shutdown();
+                return EXIT_FAILURE;
+            }
+
+            // Keep current x/y/orientation and move only along world +Z.
+            retreat_pose.position.z = retreat_target_z;
+            std::vector<geometry_msgs::msg::Pose> waypoints{retreat_pose};
+
+            moveit_msgs::msg::RobotTrajectory retreat_trajectory;
+            moveit_msgs::msg::MoveItErrorCodes cartesian_error;
+            constexpr double eef_step = 0.002;
+
+            const double fraction = move_group.computeCartesianPath(
+                waypoints,
+                eef_step,
+                retreat_trajectory,
+                true,
+                &cartesian_error);
+
+            RCLCPP_INFO(
+                logger,
+                "Cartesian retreat: %.1f%%, z=%.6f -> %.6f, %zu trajectory points, error=%d",
+                fraction * 100.0,
+                retreat_start_z,
+                retreat_target_z,
+                retreat_trajectory.joint_trajectory.points.size(),
+                cartesian_error.val);
+
+            const auto &points = retreat_trajectory.joint_trajectory.points;
+            if (fraction < 0.999 || points.empty())
+            {
+                RCLCPP_ERROR(logger, "Cartesian retreat incomplete; refusing execution");
+                rclcpp::shutdown();
+                return EXIT_FAILURE;
+            }
+
+            if (!execute_retreat_requested)
+            {
+                RCLCPP_INFO(logger, "Cartesian retreat fully planned; not executing");
+                rclcpp::shutdown();
+                return EXIT_SUCCESS;
+            }
+
+            const auto &time_from_start = points.back().time_from_start;
+            const double trajectory_duration =
+                static_cast<double>(time_from_start.sec) +
+                static_cast<double>(time_from_start.nanosec) * 1e-9;
+            if (trajectory_duration <= 0.0)
+            {
+                RCLCPP_ERROR(
+                    logger,
+                    "Cartesian retreat has no valid timing; refusing execution");
+                rclcpp::shutdown();
+                return EXIT_FAILURE;
+            }
+
+            RCLCPP_WARN(logger, "Executing Cartesian retreat along world +Z");
+            const bool retreat_executed =
+                static_cast<bool>(move_group.execute(retreat_trajectory));
+            if (!retreat_executed)
+            {
+                RCLCPP_ERROR(logger, "Cartesian retreat execution failed");
+                rclcpp::shutdown();
+                return EXIT_FAILURE;
+            }
+
+            RCLCPP_INFO(logger, "Cartesian retreat execution succeeded");
+            rclcpp::shutdown();
+            return EXIT_SUCCESS;
+        }
+
         // 第一阶段只规划到 Coke 上方 0.12 m 的 pre-grasp。
         geometry_msgs::msg::Pose target_pose;
         target_pose.position.x = 0.3;
@@ -72,12 +187,6 @@ int main(int argc, char *argv[])
         target_pose.orientation.w = 0.0;
 
         move_group.setStartStateToCurrentState();
-        move_group.setPlanningTime(10.0);
-        move_group.setGoalPositionTolerance(0.005);
-        move_group.setGoalOrientationTolerance(0.02);
-        move_group.setMaxVelocityScalingFactor(0.1);
-        move_group.setMaxAccelerationScalingFactor(0.1);
-
         if (!move_group.setPoseTarget(target_pose, "panda_tcp"))
         {
             RCLCPP_ERROR(logger, "Failed to set panda_tcp pose target");
