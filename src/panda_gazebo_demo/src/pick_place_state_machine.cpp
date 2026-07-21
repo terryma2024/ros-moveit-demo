@@ -1,4 +1,5 @@
 #include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <map>
 #include <memory>
@@ -7,9 +8,11 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <moveit/move_group_interface/move_group_interface.hpp>
+#include <moveit/planning_scene_interface/planning_scene_interface.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -297,12 +300,26 @@ private:
     using MoveGroupInterface = moveit::planning_interface::MoveGroupInterface;
     MoveGroupInterface move_group(node_, "panda_arm");
 
+    moveit::planning_interface::PlanningSceneInterface planning_scene;
+    const std::vector<std::string> required_objects{"table", "coke"};
+    const auto world_objects = planning_scene.getObjects(required_objects);
+    for (const auto &object_id : required_objects) {
+      if (world_objects.count(object_id) == 0) {
+        RCLCPP_ERROR(logger,
+                     "Required Planning Scene world object '%s' does not exist",
+                     object_id.c_str());
+        return Outcome::FAILED;
+      }
+    }
+
     if (!move_group.startStateMonitor(2.0)) {
       RCLCPP_ERROR(logger, "Failed to start current state monitor");
       return Outcome::FAILED;
     }
 
     move_group.setPoseReferenceFrame("world");
+    move_group.setMaxVelocityScalingFactor(0.1);
+    move_group.setMaxAccelerationScalingFactor(0.1);
     if (!move_group.setEndEffectorLink("panda_tcp")) {
       RCLCPP_ERROR(logger, "MoveIt RobotModel does not accept panda_tcp");
       return Outcome::FAILED;
@@ -356,8 +373,33 @@ public:
     }
   }
 
-  [[nodiscard]] static bool isKnownStateName(std::string_view state_name) {
-    for (const auto state : kStates) {
+  [[nodiscard]] static bool isSupportedFailAtState(Mode mode,
+                                                    std::string_view state_name) {
+    if (mode != Mode::DRY_RUN) {
+      return false;
+    }
+
+    // In dry_run, these are the only states reached along the normal forward
+    // path. Recovery and terminal states require a prior injected failure, so
+    // a single fail_at value can never reach them.
+    static constexpr std::array<State, 14> kDryRunFailureInjectionStates{
+        State::IDLE,
+        State::MOVE_ABOVE_OBJECT,
+        State::DESCEND,
+        State::CLOSE_GRIPPER,
+        State::ATTACH_GAZEBO,
+        State::ATTACH_MOVEIT,
+        State::LIFT,
+        State::MOVE_ABOVE_PLACE,
+        State::DESCEND_TO_PLACE,
+        State::OPEN_GRIPPER,
+        State::DETACH_GAZEBO,
+        State::DETACH_MOVEIT,
+        State::SYNC_WORLD_OBJECT,
+        State::RETREAT,
+    };
+
+    for (const auto state : kDryRunFailureInjectionStates) {
       if (state_name == StateMachine::toString(state)) {
         return true;
       }
@@ -432,6 +474,11 @@ int main(int argc, char *argv[]) {
   const auto mode_parameter = node->get_parameter_or("mode", std::string(""));
   const auto mode = modeFromParameter(mode_parameter);
   const auto fail_at = node->get_parameter_or("fail_at", std::string(""));
+  if (!node->has_parameter("max_state_transitions")) {
+    node->declare_parameter<std::int64_t>("max_state_transitions", 100);
+  }
+  const auto max_state_transitions =
+      node->get_parameter("max_state_transitions").as_int();
   if (!mode.has_value()) {
     RCLCPP_ERROR(logger, "Unsupported mode: %s. Use dry_run or plan_only",
                  mode_parameter.c_str());
@@ -445,20 +492,43 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  if (!fail_at.empty() && !StateExecutorRegistry::isKnownStateName(fail_at)) {
-    RCLCPP_ERROR(logger, "Unsupported fail_at state: %s", fail_at.c_str());
+  if (!fail_at.empty() &&
+      !StateExecutorRegistry::isSupportedFailAtState(*mode, fail_at)) {
+    RCLCPP_ERROR(
+        logger,
+        "Unsupported fail_at state '%s' for mode '%s'. fail_at is supported "
+        "only for reachable dry_run forward states.",
+        fail_at.c_str(), mode_parameter.c_str());
+    rclcpp::shutdown();
+    return EXIT_FAILURE;
+  }
+
+  if (max_state_transitions <= 0) {
+    RCLCPP_ERROR(logger,
+                 "max_state_transitions must be greater than zero; got %ld",
+                 max_state_transitions);
     rclcpp::shutdown();
     return EXIT_FAILURE;
   }
 
   StateExecutorRegistry executors(node, *mode, fail_at);
   StateMachine state_machine;
-  while (!state_machine.isTerminal()) {
+  std::int64_t transition_count = 0;
+  while (!state_machine.isTerminal() &&
+         transition_count < max_state_transitions) {
     const auto previous_state = state_machine.currentState();
     state_machine.advance(executors.execute(previous_state));
+    ++transition_count;
     RCLCPP_INFO(logger, "Current state: %s -> %s",
                 StateMachine::toString(previous_state),
                 StateMachine::toString(state_machine.currentState()));
+  }
+
+  if (!state_machine.isTerminal()) {
+    RCLCPP_ERROR(logger, "State machine exceeded max_state_transitions=%ld",
+                 max_state_transitions);
+    rclcpp::shutdown();
+    return EXIT_FAILURE;
   }
 
   const bool succeeded = state_machine.completedSuccessfully();
