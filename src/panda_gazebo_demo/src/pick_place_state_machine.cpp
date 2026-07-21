@@ -53,6 +53,7 @@ public:
     RETREAT,
     DONE,
     PLAN_ONLY_COMPLETE,
+    MOVE_ABOVE_OBJECT_EXECUTED,
     RECOVER_DETACH_MOVEIT,
     RECOVER_OPEN_GRIPPER,
     RECOVER_DETACH_GAZEBO,
@@ -61,19 +62,26 @@ public:
     ERROR
   };
 
-  enum class Outcome { SUCCEEDED, FAILED, PLANNED_ONLY };
+  enum class Outcome {
+    SUCCEEDED,
+    FAILED,
+    PLANNED_ONLY,
+    EXECUTED_STEP_ONLY
+  };
 
   [[nodiscard]] State currentState() const noexcept { return current_state_; }
 
   [[nodiscard]] bool isTerminal() const noexcept {
     return current_state_ == State::DONE ||
            current_state_ == State::PLAN_ONLY_COMPLETE ||
+           current_state_ == State::MOVE_ABOVE_OBJECT_EXECUTED ||
            current_state_ == State::ERROR;
   }
 
   [[nodiscard]] bool completedSuccessfully() const noexcept {
     return current_state_ == State::DONE ||
-           current_state_ == State::PLAN_ONLY_COMPLETE;
+           current_state_ == State::PLAN_ONLY_COMPLETE ||
+           current_state_ == State::MOVE_ABOVE_OBJECT_EXECUTED;
   }
 
   void advance(Outcome outcome) {
@@ -116,6 +124,8 @@ public:
       return "DONE";
     case State::PLAN_ONLY_COMPLETE:
       return "PLAN_ONLY_COMPLETE";
+    case State::MOVE_ABOVE_OBJECT_EXECUTED:
+      return "MOVE_ABOVE_OBJECT_EXECUTED";
     case State::RECOVER_DETACH_MOVEIT:
       return "RECOVER_DETACH_MOVEIT";
     case State::RECOVER_OPEN_GRIPPER:
@@ -156,6 +166,10 @@ private:
       return transitions->second.failed;
     case Outcome::PLANNED_ONLY:
       return transitions->second.planned_only;
+    case Outcome::EXECUTED_STEP_ONLY:
+      return current_state == State::MOVE_ABOVE_OBJECT
+                 ? State::MOVE_ABOVE_OBJECT_EXECUTED
+                 : State::ERROR;
     }
 
     return State::ERROR;
@@ -163,7 +177,8 @@ private:
 
   // Keys are explicit enum values, so enum declaration order does not affect
   // transitions. Each row gives the next state for {SUCCEEDED, FAILED,
-  // PLANNED_ONLY} outcomes.
+  // PLANNED_ONLY} outcomes. EXECUTED_STEP_ONLY is handled explicitly above,
+  // because it is valid only for MOVE_ABOVE_OBJECT.
   inline static const TransitionTable kTransitionTable{
       {State::IDLE, {State::MOVE_ABOVE_OBJECT, State::ERROR, State::ERROR}},
       {State::MOVE_ABOVE_OBJECT,
@@ -192,6 +207,10 @@ private:
       {State::PLAN_ONLY_COMPLETE,
        {State::PLAN_ONLY_COMPLETE, State::PLAN_ONLY_COMPLETE,
         State::PLAN_ONLY_COMPLETE}},
+      {State::MOVE_ABOVE_OBJECT_EXECUTED,
+       {State::MOVE_ABOVE_OBJECT_EXECUTED,
+        State::MOVE_ABOVE_OBJECT_EXECUTED,
+        State::MOVE_ABOVE_OBJECT_EXECUTED}},
       {State::RECOVER_DETACH_MOVEIT,
        {State::RECOVER_OPEN_GRIPPER, State::ERROR, State::ERROR}},
       {State::RECOVER_OPEN_GRIPPER,
@@ -422,7 +441,7 @@ private:
     return std::make_unique<AlwaysSucceedExecutor>(state);
   }
 
-  static constexpr std::array<State, 22> kStates{
+  static constexpr std::array<State, 23> kStates{
       State::IDLE,
       State::MOVE_ABOVE_OBJECT,
       State::DESCEND,
@@ -439,6 +458,7 @@ private:
       State::RETREAT,
       State::DONE,
       State::PLAN_ONLY_COMPLETE,
+      State::MOVE_ABOVE_OBJECT_EXECUTED,
       State::RECOVER_DETACH_MOVEIT,
       State::RECOVER_OPEN_GRIPPER,
       State::RECOVER_DETACH_GAZEBO,
