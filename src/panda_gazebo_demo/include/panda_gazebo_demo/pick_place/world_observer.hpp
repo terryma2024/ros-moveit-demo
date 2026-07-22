@@ -3,6 +3,7 @@
 #include <chrono>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
@@ -32,6 +33,8 @@ struct WorldSnapshot
   std::map<std::string, double> joint_velocities;
   std::map<std::string, Pose3d> moveit_world_object_poses;
   std::optional<bool> moveit_coke_attached;
+  std::optional<std::string> moveit_coke_attached_link;
+  std::set<std::string> moveit_coke_touch_links;
   std::optional<Pose3d> gazebo_coke_pose_world;
   std::optional<bool> gazebo_coke_attached;
   std::optional<bool> gazebo_coke_stationary;

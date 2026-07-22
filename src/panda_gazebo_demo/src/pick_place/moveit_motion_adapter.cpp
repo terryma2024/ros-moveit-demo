@@ -383,8 +383,14 @@ ObservationResult MoveItMotionAdapter::observe()
     snapshot.moveit_world_object_poses.emplace(
       object_id, worldPoseFromCollisionObject(object));
   }
-  snapshot.moveit_coke_attached =
-    impl_->planning_scene.getAttachedObjects({"coke"}).count("coke") != 0;
+  const auto attached_objects = impl_->planning_scene.getAttachedObjects({"coke"});
+  const auto attached = attached_objects.find("coke");
+  snapshot.moveit_coke_attached = attached != attached_objects.end();
+  if (attached != attached_objects.end()) {
+    snapshot.moveit_coke_attached_link = attached->second.link_name;
+    snapshot.moveit_coke_touch_links = {
+      attached->second.touch_links.begin(), attached->second.touch_links.end()};
+  }
   return {snapshot, std::nullopt};
 }
 
