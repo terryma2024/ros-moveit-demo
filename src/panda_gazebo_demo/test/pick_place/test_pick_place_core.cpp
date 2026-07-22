@@ -296,8 +296,9 @@ TEST(PickPlaceTargetPolicy, ConfigurationSignatureIncludesEveryFixedTarget)
   const pick_place::FixedPickPlaceTargetPolicy policy;
 
   EXPECT_EQ(
-    "fixed-v1|MOVE_ABOVE_OBJECT->DESCEND=0.3,0,0.987,1,0,0,0|"
-    "DESCEND->CLOSE_GRIPPER=0.3,0,0.93,1,0,0,0",
+    "fixed-v2|above_pick=0.3,0,0.987,1,0,0,0|pick=0.3,0,0.93,1,0,0,0|"
+    "above_place=0.3,0.2,0.987,1,0,0,0|place=0.3,0.2,0.93,1,0,0,0|"
+    "recovery_safe_height=0.987",
     policy.configurationSignature());
 }
 
@@ -501,6 +502,74 @@ TEST(TransitionTable, RoutesPrepareOpenGripperFailureToError)
   pick_place::StateMachine machine;
   static_cast<void>(machine.advance(pick_place::ActionStatus::SUCCEEDED));
   EXPECT_EQ(pick_place::State::ERROR, machine.advance(pick_place::ActionStatus::FAILED));
+}
+
+TEST(TransitionTable, CarryFailureUsesCarryRecovery)
+{
+  const pick_place::TransitionTable table;
+
+  EXPECT_EQ(
+    pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+    table.resolve(pick_place::State::MOVE_ABOVE_PLACE, pick_place::ActionStatus::FAILED));
+}
+
+TEST(TransitionTable, NewRecoveryStatesRoundTripAndAreNotForwardActions)
+{
+  const std::map<pick_place::State, std::string> expected{
+    {pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT, "RECOVER_LIFT_TO_SAFE_HEIGHT"},
+    {pick_place::State::RECOVER_MOVE_ABOVE_PICK, "RECOVER_MOVE_ABOVE_PICK"},
+    {pick_place::State::RECOVER_DESCEND_TO_PICK, "RECOVER_DESCEND_TO_PICK"},
+  };
+
+  for (const auto & [state, name] : expected) {
+    EXPECT_STREQ(name.c_str(), pick_place::toString(state));
+    EXPECT_EQ(state, pick_place::stateFromString(name));
+    EXPECT_FALSE(pick_place::isForwardAction(state));
+  }
+}
+
+TEST(TransitionTable, CarryRecoveryReturnsObjectToPickBeforeCleanup)
+{
+  const pick_place::TransitionTable table;
+
+  EXPECT_EQ(
+    pick_place::State::RECOVER_MOVE_ABOVE_PICK,
+    table.resolve(
+      pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT, pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(
+    pick_place::State::RECOVER_DESCEND_TO_PICK,
+    table.resolve(
+      pick_place::State::RECOVER_MOVE_ABOVE_PICK, pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(
+    pick_place::State::RECOVER_OPEN_GRIPPER,
+    table.resolve(
+      pick_place::State::RECOVER_DESCEND_TO_PICK, pick_place::ActionStatus::SUCCEEDED));
+}
+
+TEST(TransitionTable, UsesCanonicalFailureEdges)
+{
+  const pick_place::TransitionTable table;
+  const std::map<pick_place::State, pick_place::State> expected{
+    {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::State::ERROR},
+    {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::RECOVER_RETREAT},
+    {pick_place::State::DESCEND, pick_place::State::RECOVER_OPEN_GRIPPER},
+    {pick_place::State::CLOSE_GRIPPER, pick_place::State::RECOVER_OPEN_GRIPPER},
+    {pick_place::State::ATTACH_GAZEBO, pick_place::State::RECOVER_OPEN_GRIPPER},
+    {pick_place::State::ATTACH_MOVEIT, pick_place::State::RECOVER_OPEN_GRIPPER},
+    {pick_place::State::LIFT, pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT},
+    {pick_place::State::MOVE_ABOVE_PLACE, pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT},
+    {pick_place::State::DESCEND_TO_PLACE, pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT},
+    {pick_place::State::OPEN_GRIPPER, pick_place::State::RECOVER_OPEN_GRIPPER},
+    {pick_place::State::DETACH_GAZEBO, pick_place::State::RECOVER_DETACH_GAZEBO},
+    {pick_place::State::DETACH_MOVEIT, pick_place::State::RECOVER_DETACH_MOVEIT},
+    {pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RECOVER_SYNC_WORLD_OBJECT},
+    {pick_place::State::RETREAT, pick_place::State::RECOVER_RETREAT},
+  };
+
+  for (const auto & [state, recovery_state] : expected) {
+    EXPECT_EQ(recovery_state, table.resolve(state, pick_place::ActionStatus::FAILED)) <<
+      pick_place::toString(state);
+  }
 }
 
 TEST(Runner, DryRunCompletesAndNeverNeedsAnActionRegistry)
