@@ -1,4 +1,5 @@
 #include "panda_gazebo_demo/pick_place/move_above_object_planner.hpp"
+#include "panda_gazebo_demo/pick_place/state_validation.hpp"
 
 #include <cmath>
 #include <memory>
@@ -260,9 +261,7 @@ ObservationResult MoveAboveObjectPlanner::observe()
       snapshot.arm_stationary = false;
     }
   }
-  const auto finger1 = state->getVariablePosition("panda_finger_joint1");
-  const auto finger2 = state->getVariablePosition("panda_finger_joint2");
-  snapshot.gripper_open = finger1 >= 0.02 && finger2 >= 0.02;
+  snapshot.gripper_open = validateGripperOpen(snapshot, GripperLimits{}).ok;
 
   moveit::planning_interface::PlanningSceneInterface planning_scene;
   const auto world_objects = planning_scene.getObjects(required_world_objects_);

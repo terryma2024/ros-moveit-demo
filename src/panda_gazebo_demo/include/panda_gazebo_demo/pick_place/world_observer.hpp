@@ -34,6 +34,7 @@ struct WorldSnapshot
   std::optional<bool> moveit_coke_attached;
   std::optional<Pose3d> gazebo_coke_pose_world;
   std::optional<bool> gazebo_coke_attached;
+  std::optional<bool> gazebo_coke_stationary;
   std::string simulation_session_id;
 };
 
