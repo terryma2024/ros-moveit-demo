@@ -17,8 +17,9 @@
 #include "panda_gazebo_demo/pick_place/descend_planner_executor.hpp"
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
+#include "panda_gazebo_demo/pick_place/gripper_command_adapter.hpp"
+#include "panda_gazebo_demo/pick_place/gripper_state_executor.hpp"
 #include "panda_gazebo_demo/pick_place/move_above_object_planner.hpp"
-#include "panda_gazebo_demo/pick_place/open_gripper_executor.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
@@ -65,6 +66,8 @@ public:
   {
     logPose("COKE_POSE_BEFORE", state, before.gazebo_coke_pose_world);
     logPose("COKE_POSE_AFTER", state, after.gazebo_coke_pose_world);
+    logGripper("GRIPPER_JOINTS_BEFORE", state, before);
+    logGripper("GRIPPER_JOINTS_AFTER", state, after);
   }
 
 private:
@@ -82,6 +85,30 @@ private:
       logger_,
       "%s state=%s x=%.6f y=%.6f z=%.6f roll=%.6f pitch=%.6f yaw=%.6f",
       label, pick_place::toString(state), pose->x, pose->y, pose->z, rpy.x(), rpy.y(), rpy.z());
+  }
+
+  void logGripper(
+    const char * label, pick_place::State state,
+    const pick_place::WorldSnapshot & snapshot) const
+  {
+    const auto finger1_position = snapshot.joint_positions.find("panda_finger_joint1");
+    const auto finger2_position = snapshot.joint_positions.find("panda_finger_joint2");
+    const auto finger1_velocity = snapshot.joint_velocities.find("panda_finger_joint1");
+    const auto finger2_velocity = snapshot.joint_velocities.find("panda_finger_joint2");
+    if (finger1_position == snapshot.joint_positions.end() ||
+      finger2_position == snapshot.joint_positions.end() ||
+      finger1_velocity == snapshot.joint_velocities.end() ||
+      finger2_velocity == snapshot.joint_velocities.end())
+    {
+      RCLCPP_INFO(logger_, "%s state=%s unavailable", label, pick_place::toString(state));
+      return;
+    }
+    RCLCPP_INFO(
+      logger_,
+      "%s state=%s finger1_position=%.6f finger2_position=%.6f "
+      "finger1_velocity=%.6f finger2_velocity=%.6f",
+      label, pick_place::toString(state), finger1_position->second, finger2_position->second,
+      finger1_velocity->second, finger2_velocity->second);
   }
 
   rclcpp::Logger logger_;
@@ -268,7 +295,6 @@ int main(int argc, char * argv[])
     target_policy, tcp_position_tolerance);
   std::shared_ptr<pick_place::MoveAboveObjectPlanner> move_above_action;
   std::shared_ptr<pick_place::DescendPlannerExecutor> descend_action;
-  std::shared_ptr<pick_place::OpenGripperExecutor> open_gripper_action;
   std::unique_ptr<pick_place::FileCheckpointStore> checkpoint_store;
   std::unique_ptr<pick_place::GazeboWorldObserver> world_observer;
   std::unique_ptr<pick_place::CommonResumeValidator> common_resume_validator;
@@ -290,10 +316,32 @@ int main(int argc, char * argv[])
       std::make_shared<pick_place::NonEmptyPlanValidator>());
   }
   if (*mode == pick_place::RunMode::EXECUTE) {
-    open_gripper_action = std::make_shared<pick_place::OpenGripperExecutor>(
-      node, gripper_action_name, gripper_open_position, gripper_max_effort,
-      gripper_action_timeout_seconds);
-    actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER, open_gripper_action);
+    const auto gripper_adapter = std::make_shared<pick_place::GripperCommandAdapter>(
+      node, gripper_action_name, gripper_action_timeout_seconds);
+    actions.registerExecutor(
+      pick_place::State::PREPARE_OPEN_GRIPPER,
+      std::make_shared<pick_place::GripperStateExecutor>(
+        gripper_adapter,
+        pick_place::GripperStateConfig{pick_place::State::PREPARE_OPEN_GRIPPER,
+          gripper_open_position, gripper_max_effort, false}));
+    actions.registerExecutor(
+      pick_place::State::CLOSE_GRIPPER,
+      std::make_shared<pick_place::GripperStateExecutor>(
+        gripper_adapter,
+        pick_place::GripperStateConfig{pick_place::State::CLOSE_GRIPPER,
+          0.0, gripper_max_effort, false}));
+    actions.registerExecutor(
+      pick_place::State::OPEN_GRIPPER,
+      std::make_shared<pick_place::GripperStateExecutor>(
+        gripper_adapter,
+        pick_place::GripperStateConfig{pick_place::State::OPEN_GRIPPER,
+          gripper_open_position, gripper_max_effort, false}));
+    actions.registerExecutor(
+      pick_place::State::RECOVER_OPEN_GRIPPER,
+      std::make_shared<pick_place::GripperStateExecutor>(
+        gripper_adapter,
+        pick_place::GripperStateConfig{pick_place::State::RECOVER_OPEN_GRIPPER,
+          gripper_open_position, gripper_max_effort, true}));
     actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
     actions.registerExecutor(pick_place::State::DESCEND, descend_action);
   }
