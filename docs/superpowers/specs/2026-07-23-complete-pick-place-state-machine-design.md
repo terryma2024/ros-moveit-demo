@@ -15,11 +15,19 @@ All fixed targets belong to `FixedPickPlaceTargetPolicy` and its configuration s
 | Semantic target | TCP pose in world |
 | --- | --- |
 | `above_pick` | position `(0.30, 0.00, 0.987)`, quaternion `(1, 0, 0, 0)` |
-| `pick` | position `(0.30, 0.00, 0.930)`, quaternion `(1, 0, 0, 0)` |
+| `pick` | position `(0.30, 0.00, 0.870)`, quaternion `(1, 0, 0, 0)` |
 | `above_place` | position `(0.30, 0.20, 0.987)`, quaternion `(1, 0, 0, 0)` |
-| `place` | position `(0.30, 0.20, 0.930)`, quaternion `(1, 0, 0, 0)` |
+| `place` | position `(0.30, 0.20, 0.870)`, quaternion `(1, 0, 0, 0)` |
 
 The expected final Coke centre is approximately `(0.30, 0.20, 0.836)`. Recovery safe-height targets retain the observed TCP `x/y` and raise `z` to at least `0.987`. Recovery return-to-pick uses the fixed `above_pick` and `pick` targets.
+
+The pick/place TCP height is derived from the simulated Panda finger collision geometry. With
+`panda_tcp` at hand-local `z=0.1034`, the finger collision boxes span world
+`[target_z-0.00885, target_z+0.04487]` in the downward grasp orientation. At the former
+`target_z=0.930` they ended 24 mm above the Coke top (`z=0.897`), so the gripper closed empty.
+`target_z=0.870` gives 36 mm of vertical overlap and was verified in Gazebo by a symmetric
+contact-stalled grasp at approximately `0.0308 m` per finger without moving the Coke outside
+tolerance.
 
 ## 3. Architectural rules
 
@@ -63,8 +71,18 @@ Each forward or recovery state has a thin state-level component that declares th
 - `MoveItMotionAdapter`: pose planning, Cartesian planning, trajectory execution, cancellation, FK evidence, and current state.
 - `GripperCommandAdapter`: action goal, result, cancellation acknowledgement, and timeout handling.
 - `GazeboAttachmentAdapter`: publish attach/detach commands and wait for `/panda/coke_attached`
-  convergence. Gazebo Sim 8 DetachableJoint publishes `gz.msgs.StringMsg` with `attached` or
-  `detached`; these strings map to the domain Boolean attachment fact.
+  convergence. Gazebo Sim 8 DetachableJoint publishes event-driven `gz.msgs.StringMsg` values on
+  `/panda/coke_attached_event`. A launch-lifetime relay validates `attached` / `detached`, retains
+  the latest fact, and periodically publishes it on `/panda/coke_attached`, so a resumed process
+  observes physical state instead of guessing from configuration. The local Gazebo Sim 8 plugin
+  binary does not implement the `initially_detached` SDF tag and starts attached; the relay keeps
+  state unknown, requests one initial detach after the first raw `attached`, and publishes nothing
+  until raw `detached` confirms the safe state.
+- `GazeboWorldObserver`: treats `max_observation_age_seconds` as both the maximum accepted sample
+  age and the bounded startup wait for the first Coke-pose and durable attachment-state messages;
+  it still fails closed when either fact is absent at the deadline. Pose and attachment samples
+  have independent receive timestamps; a relay state that is present but older than the same
+  bound fails as `GAZEBO_ATTACHMENT_STATE_UNAVAILABLE`.
 - `MoveItAttachmentAdapter`: attach/detach and wait for Planning Scene membership convergence.
 - `PlanningSceneSyncAdapter`: apply the Gazebo-authoritative Coke 6D pose to the MoveIt world object and verify it.
 - `PickPlaceTargetPolicy`: the single target source.
@@ -218,14 +236,36 @@ After a forward failure, Runner cancels the active operation, waits for all robo
 
 | Observed facts | Recovery entry |
 | --- | --- |
-| both attached and Coke carried above a support surface | `RECOVER_LIFT_TO_SAFE_HEIGHT` |
-| both attached and Coke at the pick/place support surface | `RECOVER_OPEN_GRIPPER` |
-| Gazebo attached only | `RECOVER_OPEN_GRIPPER`; carrying motion is forbidden because MoveIt does not model the carried Coke |
-| MoveIt attached only | `RECOVER_OPEN_GRIPPER`, then remove the stale MoveIt attachment |
-| both detached | `RECOVER_OPEN_GRIPPER`, then idempotent cleanup and synchronization |
-| missing attachment facts, stale observation, or robot not stopped | terminal `ERROR` without another side effect |
+| both attached below safe height, with Coke following TCP | `RECOVER_LIFT_TO_SAFE_HEIGHT` |
+| both attached at/above safe height but not at `above_pick` | `RECOVER_MOVE_ABOVE_PICK` |
+| both attached at `above_pick` 6DoF with Coke following TCP | `RECOVER_DESCEND_TO_PICK` |
+| both attached and TCP plus Gazebo Coke are in the same pick/place 6DoF support region, gripper closed | `RECOVER_OPEN_GRIPPER` |
+| both attached at support with gripper safely open | `RECOVER_DETACH_GAZEBO` |
+| Gazebo attached only at support | closed: `RECOVER_OPEN_GRIPPER`; open: `RECOVER_DETACH_GAZEBO` |
+| MoveIt attached only at support | closed: `RECOVER_OPEN_GRIPPER`; open: `RECOVER_DETACH_MOVEIT` |
+| either partial-attachment case without positive support evidence | fail closed without releasing Coke |
+| both detached, gripper not safely open | `RECOVER_OPEN_GRIPPER` |
+| both detached/open but Gazebo and MoveIt Coke 6DoF differ | `RECOVER_SYNC_WORLD_OBJECT` |
+| both detached/open/synchronized | `RECOVER_RETREAT` (including its safe-height no-op) |
+| missing required facts, stale observation, moving Coke, or robot not stopped | terminal `ERROR` without another side effect |
 
 The original business failure is retained throughout recovery.
+
+For deterministic cross-process verification, `stop_after` accepts any
+non-terminal forward or recovery action and writes the ordinary validated
+checkpoint after that action. `IDLE`, `DONE`, and `ERROR` are not valid
+`stop_after` values. This control changes only where a run returns to the
+caller; it does not bypass planning, execution, contracts, observation, or
+checkpoint persistence.
+
+This table is evaluated from fresh facts both at initial failure and on every recovery checkpoint
+resume. The persisted recovery state is only a hint: already completed physical side effects advance
+the selected entry point, so process restart cannot repeatedly re-enter the first recovery action.
+
+Forward runtime failures after static coverage is established—including precondition, observation,
+planner, plan-validation, execution, post-validation, and checkpoint persistence failures—use the
+same stop/cancel, stationary observation, fact classification, and recovery workflow. Missing
+executor, transition contract, or plan validator remains a configuration error and never executes.
 
 ## 8. Recovery state graph and contracts
 
@@ -245,9 +285,9 @@ Routes may enter at any cleanup state selected by observed facts. Recovery motio
 
 ### 8.1 Carrying recovery
 
-- `RECOVER_LIFT_TO_SAFE_HEIGHT`: Cartesian `+Z` from actual TCP `x/y` to at least `z=0.987`; no-op if already safe. Both attachments and relative pose must remain stable.
-- `RECOVER_MOVE_ABOVE_PICK`: collision-aware carried-object pose motion to `above_pick`.
-- `RECOVER_DESCEND_TO_PICK`: carried-object Cartesian descent to `pick`; Coke must return to the original support region.
+- `RECOVER_LIFT_TO_SAFE_HEIGHT`: Cartesian `+Z` from actual TCP `x/y` to at least `z=0.987`; no-op if already at its 6D target. Both attachments and relative pose must remain stable.
+- `RECOVER_MOVE_ABOVE_PICK`: collision-aware carried-object pose motion to `above_pick`; no-op if already at its 6D target.
+- `RECOVER_DESCEND_TO_PICK`: carried-object Cartesian descent to `pick`; no-op if already at its 6D target; Coke must return to the original support region.
 
 ### 8.2 Release cleanup
 
@@ -256,6 +296,11 @@ Routes may enter at any cleanup state selected by observed facts. Recovery motio
 - `RECOVER_DETACH_MOVEIT`: no-op if detached, otherwise detach and wait until Coke is in MoveIt world.
 - `RECOVER_SYNC_WORLD_OBJECT`: idempotently copy Gazebo Coke pose into MoveIt and verify cross-world equality.
 - `RECOVER_RETREAT`: Cartesian `+Z` from the actual TCP location to safe height; no-op if already safe. It requires open fingers, both models detached, synchronized world state, and stable Coke.
+
+All recovery-motion no-ops require a fresh, stationary observation at the policy-provided 6D
+target. They still pass through plan validation, execute-time target revalidation, observation,
+the normal transition post-contract, and checkpoint commit. Forward motions never use this
+shortcut, and a zero-duration MoveIt trajectory is never accepted as a substitute.
 
 A recovery action failure immediately terminates in `ERROR`; the Runner does not cross a failed recovery precondition. Final Failure includes original category/code and recovery state/code/metrics.
 
@@ -273,7 +318,16 @@ expected: ExpectedWorldState
 
 Forward checkpoints retain current behavior. Once a failed action is stopped, freshly observed, and classified, Runner commits a recovery checkpoint before the first recovery side effect. Each successful recovery state commits the next recovery boundary.
 
-On recovery resume, Runner validates the simulation session, configuration hash, and current world, then runs `IRecoveryPolicy` again. It never executes the persisted recovery state without reclassification. Terminal cleanup completion reports the original workflow as `ERROR`, not `DONE`.
+Checkpoint persistence is subordinate to physical safety. If writing the recovery-entry checkpoint
+fails, Runner records `recovery_checkpoint_persisted=0` and continues emergency recovery only in
+the current process. If a later recovery checkpoint also fails, the same in-process recovery pass
+continues without claiming a durable resume boundary. The terminal result remains `ERROR`, retains
+the original workflow failure, and includes the persistence failure in its message/metrics.
+
+On recovery resume, Runner validates the simulation session, configuration hash, and current world,
+waits within the bounded stationary window for fresh Gazebo Coke stationary evidence, then runs
+`IRecoveryPolicy` again. It never executes the persisted recovery state without reclassification.
+Terminal cleanup completion reports the original workflow as `ERROR`, not `DONE`.
 
 ## 10. Configuration
 
@@ -286,6 +340,7 @@ All behavior-affecting values participate in the configuration hash.
 | `cartesian_eef_step` | `0.005 m` |
 | `cartesian_min_fraction` | `0.99` |
 | `joint_jump_threshold` | `0.20 rad` |
+| `motion_start_joint_tolerance` | `0.010 rad` |
 | `tcp_position_tolerance` | `0.020 m` |
 | `tcp_orientation_tolerance_rad` | `0.0872665 rad` |
 | `coke_position_tolerance` | `0.010 m` |
@@ -304,6 +359,28 @@ All behavior-affecting values participate in the configuration hash.
 | `coke_settle_interval_seconds` | `0.05 s` |
 | `coke_settle_position_tolerance` | `0.002 m` |
 | `coke_settle_orientation_tolerance_rad` | `0.020 rad` |
+| `recovery_safe_height` | `0.987 m` (minimum canonical safe height) |
+
+Every motion artifact contains a complete map of named planned-start joints. Plan validation
+compares it with the pre-plan snapshot, and the MoveIt adapter rereads current joints immediately
+before `execute()` using `motion_start_joint_tolerance`; missing, non-finite, or changed state fails
+closed. Recovery no-op artifacts carry the same verifiable start-joint evidence. Forward resume
+applies the same tolerance to the checkpoint's complete named-joint map. Recovery resume requires
+complete finite named-joint evidence but deliberately permits drift from an old recovery checkpoint,
+then reclassifies current stopped-world facts; this covers a crash after an action but before its
+checkpoint commit. All shared 6DoF distance calculations reject non-finite position or quaternion
+input with an infinite error so NaN observations cannot satisfy a contract.
+
+`FixedPickPlaceTargetPolicy` owns both the canonical recovery safe height and the single TCP-to-Coke
+center offset. A recovery lift target uses `max(observed_tcp_z, recovery_safe_height)`. Forward and
+recovery support checks derive pick/place Coke center poses from the policy's TCP targets and require
+the Coke's absolute position and upright orientation.
+
+The launch-lifetime attachment relay actively republishes detach commands while initial attachment
+state is unknown, independent of whether an initial `attached` event was observed. It stops only
+after a raw `detached` confirmation. A timed-out gripper goal retains its pending goal-response
+future; cancellation resolves it within a bound, cancels and acknowledges an accepted goal, accepts
+an explicit rejection as proof of no goal, and otherwise fails closed.
 
 The installed Jazzy `GripperActionController` parameter schema is verified before editing `controllers.yaml`. The intended configuration is `allow_stalling=true`, `stall_velocity_threshold=0.001`, `stall_timeout=1.0`, and `goal_tolerance=0.002`, so Coke contact can complete a grasp action without requiring an empty-gripper zero position.
 
@@ -343,6 +420,7 @@ Every state logs structured evidence with state and transition names:
 
 - one complete fixed pick-place cycle;
 - plan-only for every motion state with no physical motion or recovery checkpoint;
+- plan-only target and planned endpoints compared in position and quaternion angular distance;
 - stop-after and resume across forward and recovery process boundaries;
 - three representative partial-side-effect recoveries: Gazebo-only attach, failure while carrying, and Gazebo-detached/MoveIt-attached release;
 - final invariants: safe TCP, open gripper, both models detached, Coke at fixed place, and cross-world pose consistency.

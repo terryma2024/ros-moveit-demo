@@ -16,12 +16,12 @@ namespace
 {
 
 constexpr Pose3d kAbovePick{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
-constexpr Pose3d kPick{0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0};
+constexpr Pose3d kPick{0.3, 0.0, 0.87, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d kAbovePlace{0.3, 0.2, 0.987, 1.0, 0.0, 0.0, 0.0};
-constexpr Pose3d kPlace{0.3, 0.2, 0.93, 1.0, 0.0, 0.0, 0.0};
+constexpr Pose3d kPlace{0.3, 0.2, 0.87, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d kCokePick{0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
-constexpr Pose3d kCokeAbovePick{0.3, 0.0, 0.893, 0.0, 0.0, 0.0, 1.0};
-constexpr Pose3d kCokeAbovePlace{0.3, 0.2, 0.893, 0.0, 0.0, 0.0, 1.0};
+constexpr Pose3d kCokeAbovePick{0.3, 0.0, 0.953, 0.0, 0.0, 0.0, 1.0};
+constexpr Pose3d kCokeAbovePlace{0.3, 0.2, 0.953, 0.0, 0.0, 0.0, 1.0};
 constexpr Pose3d kCokePlace{0.3, 0.2, 0.836, 0.0, 0.0, 0.0, 1.0};
 
 ActionResult succeeded()
@@ -216,7 +216,7 @@ TEST(ForwardContracts, OpenAtPlaceKeepsBothAttachmentsAndCokeStable)
 
 TEST(ForwardContracts, GazeboDetachRequiresOpenFingersAndCokeSettling)
 {
-  const auto contract = makeGazeboToMoveItDetachContract({});
+  const auto contract = makeGazeboToMoveItDetachContract(targetPolicy(), {});
   const auto before = carryingSnapshot(kPlace, kCokePlace, true);
   auto after = moveItOnlyAttachedSnapshot(true);
 
@@ -228,7 +228,7 @@ TEST(ForwardContracts, GazeboDetachRequiresOpenFingersAndCokeSettling)
 
 TEST(ForwardContracts, MoveItDetachDefersCrossWorldPoseEquality)
 {
-  const auto contract = makeMoveItDetachToSyncContract({});
+  const auto contract = makeMoveItDetachToSyncContract(targetPolicy(), {});
   const auto before = moveItOnlyAttachedSnapshot(true);
   auto after = detachedSnapshot(kPlace, kCokePlace, true);
   after.moveit_world_object_poses["coke"].x += 0.05;
@@ -267,6 +267,24 @@ TEST(ForwardContracts, DoneRequiresAllFinalInvariants)
 
   after.moveit_world_object_poses.erase("table");
   expectMetricBearingFailure(contract->validate(before, after, succeeded()));
+}
+
+TEST(ForwardContracts, DoneRejectsTippedCokeAtCorrectPosition)
+{
+  const auto contract = makeRetreatToDoneContract(targetPolicy(), {});
+  const auto before = detachedSnapshot(kPlace, kCokePlace, true);
+  auto tipped = kCokePlace;
+  tipped.qx = 0.258819;
+  tipped.qw = 0.965926;
+  auto after = detachedSnapshot(kAbovePlace, tipped, true);
+
+  const auto result = contract->validate(before, after, succeeded());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(std::any_of(result.failures.begin(), result.failures.end(),
+    [](const Failure & failure) {
+      return failure.code == "COKE_NOT_AT_SUPPORTED_PLACE_POSE";
+      }));
 }
 
 TEST(ForwardContracts, EveryForwardTransitionAndPlannerHasValidationCoverage)

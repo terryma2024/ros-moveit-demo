@@ -58,7 +58,7 @@
             <initially_detached>true</initially_detached>
             <attach_topic>/panda/attach_coke</attach_topic>
             <detach_topic>/panda/detach_coke</detach_topic>
-            <output_topic>/panda/coke_attached</output_topic>
+            <output_topic>/panda/coke_attached_event</output_topic>
         </plugin>
     </gazebo>
 </robot>

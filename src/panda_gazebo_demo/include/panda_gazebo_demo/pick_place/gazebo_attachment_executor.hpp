@@ -4,6 +4,7 @@
 #include <string>
 
 #include "panda_gazebo_demo/pick_place/state_action.hpp"
+#include "panda_gazebo_demo/pick_place/state_validation.hpp"
 
 namespace panda_gazebo_demo::pick_place
 {
@@ -15,7 +16,8 @@ public:
     State allowed_state, bool desired_attached,
     std::string attach_topic, std::string detach_topic,
     std::string output_topic, double timeout_seconds,
-    double poll_interval_seconds, bool idempotent);
+    double poll_interval_seconds, bool idempotent,
+    GripperLimits gripper_limits = {});
   ~GazeboAttachmentExecutor() override;
 
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
@@ -28,6 +30,7 @@ private:
   double timeout_seconds_;
   double poll_interval_seconds_;
   bool idempotent_;
+  GripperLimits gripper_limits_;
   std::unique_ptr<Impl> impl_;
 };
 

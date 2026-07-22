@@ -22,11 +22,11 @@ constexpr std::array<MotionStateConfig, 10> kMotionConfigs{{
   {State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, MotionKind::CARTESIAN_DOWN, true},
   {State::RETREAT, State::DONE, MotionKind::CARTESIAN_UP, false},
   {State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK,
-    MotionKind::CARTESIAN_UP, true},
+    MotionKind::CARTESIAN_UP, true, true},
   {State::RECOVER_MOVE_ABOVE_PICK, State::RECOVER_DESCEND_TO_PICK,
-    MotionKind::POSE, true},
+    MotionKind::POSE, true, true},
   {State::RECOVER_DESCEND_TO_PICK, State::RECOVER_OPEN_GRIPPER,
-    MotionKind::CARTESIAN_DOWN, true},
+    MotionKind::CARTESIAN_DOWN, true, true},
   {State::RECOVER_RETREAT, State::ERROR, MotionKind::CARTESIAN_UP, false, true},
 }};
 
@@ -93,7 +93,8 @@ void registerMoveItSceneActions(
   for (const auto & scene_config : scene_configs) {
     runtime.actions.registerExecutor(scene_config.state,
       std::make_shared<MoveItSceneExecutor>(dependencies.moveit_scene, scene_config,
-        config.planning_scene_timeout_seconds, config.state_poll_interval_seconds));
+        config.planning_scene_timeout_seconds, config.state_poll_interval_seconds,
+        config.gripper));
   }
 }
 

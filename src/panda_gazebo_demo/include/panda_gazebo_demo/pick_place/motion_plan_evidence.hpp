@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
@@ -35,6 +37,7 @@ struct MotionPlanEvidence : PlanArtifact
   double cartesian_fraction{1.0};
   double duration_seconds{0.0};
   double max_joint_jump{0.0};
+  std::map<std::string, double> planned_start_joint_positions;
   Pose3d start_tcp_pose;
   Pose3d end_tcp_pose;
   std::vector<Pose3d> tcp_path;
@@ -57,7 +60,13 @@ struct MotionPlanLimits
   double endpoint_orientation_tolerance_rad{0.1};
   double carried_relative_position_tolerance{0.003};
   double carried_relative_orientation_tolerance_rad{0.035};
+  double start_joint_tolerance{0.01};
 };
+
+[[nodiscard]] ValidationResult validateMotionStartJoints(
+  const std::map<std::string, double> & planned_start_joint_positions,
+  const std::map<std::string, double> & observed_joint_positions,
+  double tolerance);
 
 [[nodiscard]] ValidationResult validateMotionPlan(
   const MotionPlanEvidence & evidence, const Pose3d & target,

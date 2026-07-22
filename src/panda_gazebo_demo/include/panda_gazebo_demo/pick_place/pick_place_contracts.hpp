@@ -38,9 +38,9 @@ using TargetPolicyPtr = std::shared_ptr<const PickPlaceTargetPolicy>;
 [[nodiscard]] std::shared_ptr<const Contract> makeOpenToGazeboDetachContract(
   TargetPolicyPtr target_policy, PickPlaceContractConfig config);
 [[nodiscard]] std::shared_ptr<const Contract> makeGazeboToMoveItDetachContract(
-  PickPlaceContractConfig config);
+  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
 [[nodiscard]] std::shared_ptr<const Contract> makeMoveItDetachToSyncContract(
-  PickPlaceContractConfig config);
+  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
 [[nodiscard]] std::shared_ptr<const Contract> makeSyncToRetreatContract(
   TargetPolicyPtr target_policy, PickPlaceContractConfig config);
 [[nodiscard]] std::shared_ptr<const Contract> makeRetreatToDoneContract(

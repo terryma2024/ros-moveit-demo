@@ -8,9 +8,13 @@ ARM_ACTION="${ARM_ACTION:-/panda_arm_controller/follow_joint_trajectory}"
 READY_DURATION_SECONDS="${READY_DURATION_SECONDS:-3}"
 ARM_ACTION_TIMEOUT_SECONDS="${ARM_ACTION_TIMEOUT_SECONDS:-10}"
 GRIPPER_ACTION="${GRIPPER_ACTION:-/panda_hand_controller/gripper_cmd}"
+GRIPPER_OPEN_POSITION="${GRIPPER_OPEN_POSITION:-0.04}"
 GRIPPER_CLOSED_POSITION="${GRIPPER_CLOSED_POSITION:-0.0}"
 GRIPPER_MAX_EFFORT="${GRIPPER_MAX_EFFORT:-0.0}"
 GRIPPER_ACTION_TIMEOUT_SECONDS="${GRIPPER_ACTION_TIMEOUT_SECONDS:-10}"
+ATTACHMENT_OUTPUT_TOPIC="${ATTACHMENT_OUTPUT_TOPIC:-/panda/coke_attached}"
+ATTACHMENT_OBSERVATION_TIMEOUT_SECONDS="${ATTACHMENT_OBSERVATION_TIMEOUT_SECONDS:-3}"
+EXPECTED_COKE_DETACHED="${EXPECTED_COKE_DETACHED:-false}"
 
 CONTROL_SERVICE="/world/${WORLD_NAME}/control"
 SET_POSE_SERVICE="/world/${WORLD_NAME}/set_pose"
@@ -52,6 +56,7 @@ resume_world() {
 
 move_arm_to_ready() {
   local action_list
+  local response
 
   if ! command -v ros2 >/dev/null 2>&1; then
     printf 'ros2 command not found. Source the ROS environment first.\n' >&2
@@ -65,12 +70,25 @@ move_arm_to_ready() {
   fi
 
   printf 'Moving Panda arm to ready pose over %s seconds...\n' "${READY_DURATION_SECONDS}"
-  ros2 action send_goal -t "${ARM_ACTION_TIMEOUT_SECONDS}" \
-    "${ARM_ACTION}" control_msgs/action/FollowJointTrajectory \
-    "{trajectory: {joint_names: [panda_joint1, panda_joint2, panda_joint3, panda_joint4, panda_joint5, panda_joint6, panda_joint7], points: [{positions: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785], time_from_start: {sec: ${READY_DURATION_SECONDS}}}]}}"
+  if ! response="$(
+      ros2 action send_goal -t "${ARM_ACTION_TIMEOUT_SECONDS}" \
+        "${ARM_ACTION}" control_msgs/action/FollowJointTrajectory \
+        "{trajectory: {joint_names: [panda_joint1, panda_joint2, panda_joint3, panda_joint4, panda_joint5, panda_joint6, panda_joint7], points: [{positions: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785], time_from_start: {sec: ${READY_DURATION_SECONDS}}}]}}"
+    )"; then
+    printf '%s\n' "${response}"
+    printf 'Failed to send the arm ready goal.\n' >&2
+    return 1
+  fi
+  printf '%s\n' "${response}"
+  if ! grep -Fq 'Goal finished with status: SUCCEEDED' <<<"${response}"; then
+    printf 'Arm ready action did not succeed.\n' >&2
+    return 1
+  fi
 }
 
-close_gripper() {
+command_gripper() {
+  local position="$1"
+  local operation="$2"
   local action_list
   local response
 
@@ -80,20 +98,41 @@ close_gripper() {
     return 1
   fi
 
-  printf 'Closing Panda gripper to position %s...\n' "${GRIPPER_CLOSED_POSITION}"
+  printf '%s Panda gripper to position %s...\n' "${operation}" "${position}"
   if ! response="$(
       ros2 action send_goal -t "${GRIPPER_ACTION_TIMEOUT_SECONDS}" \
         "${GRIPPER_ACTION}" control_msgs/action/GripperCommand \
-        "{command: {position: ${GRIPPER_CLOSED_POSITION}, max_effort: ${GRIPPER_MAX_EFFORT}}}"
+        "{command: {position: ${position}, max_effort: ${GRIPPER_MAX_EFFORT}}}"
     )"; then
     printf '%s\n' "${response}"
-    printf 'Failed to send the gripper close goal.\n' >&2
+    printf 'Failed to send the gripper %s goal.\n' "${operation}" >&2
     return 1
   fi
 
   printf '%s\n' "${response}"
   if ! grep -Fq 'Goal finished with status: SUCCEEDED' <<<"${response}"; then
-    printf 'Gripper close action did not succeed.\n' >&2
+    printf 'Gripper %s action did not succeed.\n' "${operation}" >&2
+    return 1
+  fi
+}
+
+require_detached_coke() {
+  local response
+
+  if ! response="$(
+      timeout "${ATTACHMENT_OBSERVATION_TIMEOUT_SECONDS}" \
+        gz topic -e -t "${ATTACHMENT_OUTPUT_TOPIC}" -n 1
+    )"; then
+    printf 'Unable to observe Gazebo Coke attachment state on %s.\n' \
+      "${ATTACHMENT_OUTPUT_TOPIC}" >&2
+    return 1
+  fi
+  if grep -Eq 'data: *"?attached"?' <<<"${response}"; then
+    printf 'Coke is Gazebo-attached; run state-machine recovery before reset.\n' >&2
+    return 1
+  fi
+  if ! grep -Eq 'data: *"?detached"?' <<<"${response}"; then
+    printf 'Unknown Gazebo Coke attachment state: %s\n' "${response}" >&2
     return 1
   fi
 }
@@ -115,6 +154,14 @@ if ! gz service -l | grep -Fxq "${SET_POSE_SERVICE}"; then
   exit 1
 fi
 
+if [[ "${EXPECTED_COKE_DETACHED}" == true ]]; then
+  printf 'Using caller-provided evidence that Coke is Gazebo-detached.\n'
+else
+  require_detached_coke
+fi
+command_gripper "${GRIPPER_OPEN_POSITION}" Opening
+move_arm_to_ready
+
 printf 'Pausing world %s...\n' "${WORLD_NAME}"
 call_service "${CONTROL_SERVICE}" gz.msgs.WorldControl 'pause: true'
 paused=true
@@ -133,5 +180,4 @@ trap - EXIT
 printf 'Current %s pose:\n' "${MODEL_NAME}"
 gz model -m "${MODEL_NAME}" -p
 
-move_arm_to_ready
-close_gripper
+command_gripper "${GRIPPER_CLOSED_POSITION}" Closing

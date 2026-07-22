@@ -201,6 +201,40 @@ void requireTarget(
   }
 }
 
+void requireSupportedCoke(
+  ValidationResult & result, const WorldSnapshot & snapshot,
+  const TargetPolicyPtr & target_policy, State state, State next_state,
+  const PickPlaceContractConfig & config)
+{
+  if (!snapshot.gazebo_coke_pose_world || !target_policy) {
+    addFailure(result, FailureCategory::OBSERVATION,
+      "RECOVERY_SUPPORTED_COKE_POSE_UNAVAILABLE",
+      "Recovery support validation requires Coke observation and target policy");
+    return;
+  }
+  const auto expected = supportedCokePose(
+    *target_policy, state, next_state, ObservationResult{snapshot, std::nullopt});
+  if (!expected.target_pose) {
+    result.failures.push_back(expected.failure.value_or(Failure{
+          FailureCategory::CONFIGURATION, "RECOVERY_SUPPORTED_COKE_TARGET_MISSING",
+          "Recovery target policy did not return a supported Coke pose", {}}));
+    return;
+  }
+  const double position_error = positionDistance(
+    *snapshot.gazebo_coke_pose_world, *expected.target_pose);
+  const double orientation_error = orientationDistance(
+    *snapshot.gazebo_coke_pose_world, *expected.target_pose);
+  result.metrics["supported_coke_position_error"] = position_error;
+  result.metrics["supported_coke_orientation_error_rad"] = orientation_error;
+  if (position_error > config.coke_position_tolerance ||
+    orientation_error > config.coke_orientation_tolerance_rad)
+  {
+    addFailure(result, FailureCategory::POSTCONDITION,
+      "RECOVERY_COKE_NOT_AT_SUPPORTED_POSE",
+      "Recovery Coke is outside the derived support pose or upright orientation");
+  }
+}
+
 void requireCokeDrift(
   ValidationResult & result, const WorldSnapshot & before,
   const WorldSnapshot & after, const PickPlaceContractConfig & config)
@@ -357,6 +391,10 @@ std::shared_ptr<const Contract> carriedMotionContract(
       requireGrasp(result, after, config);
       requireTarget(result, after, target_policy, state, next_state, config);
       requireRelativePose(result, before, after, config);
+      if (state == State::RECOVER_DESCEND_TO_PICK) {
+        requireSupportedCoke(result, after, target_policy,
+          State::DESCEND, State::CLOSE_GRIPPER, config);
+      }
       return finish(std::move(result));
     });
 }

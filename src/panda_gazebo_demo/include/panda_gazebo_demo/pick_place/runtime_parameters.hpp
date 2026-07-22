@@ -21,6 +21,7 @@ struct PickPlaceParameters
   double cartesian_eef_step{0.005};
   double cartesian_min_fraction{0.99};
   double joint_jump_threshold{0.20};
+  double motion_start_joint_tolerance{0.010};
   double tcp_position_tolerance{0.020};
   double tcp_orientation_tolerance_rad{0.0872665};
   double coke_position_tolerance{0.010};
@@ -47,6 +48,7 @@ struct PickPlaceParameters
   std::string gazebo_coke_model{"coke"};
   std::string gazebo_attach_topic{"/panda/attach_coke"};
   std::string gazebo_detach_topic{"/panda/detach_coke"};
+  std::string gazebo_attachment_event_topic{"/panda/coke_attached_event"};
   std::string gazebo_attachment_topic{"/panda/coke_attached"};
   bool gazebo_coke_initially_detached{true};
   std::string gripper_action_name{"/panda_hand_controller/gripper_cmd"};

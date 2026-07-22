@@ -13,6 +13,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 
+#include "panda_gazebo_demo/pick_place/headless_fault_fixture.hpp"
+
 int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
@@ -31,11 +33,15 @@ int main(int argc, char * argv[])
 
   const bool execute_lift = node->get_parameter_or("execute_lift", false);
   const double lift_distance = node->get_parameter_or("lift_distance", 0.03);
+  const double lateral_offset_y = node->get_parameter_or("lateral_offset_y", 0.0);
   const bool plan_lift = node->get_parameter_or("plan_lift", false);
   const bool detach_moveit = node->get_parameter_or("detach_moveit", false);
 
-  if (std::abs(lift_distance) < 1e-6 || std::abs(lift_distance) > 0.10) {
-    RCLCPP_ERROR(logger, "absolute lift_distance must be in [1e-6, 0.10]");
+  const auto parameter_validation =
+    panda_gazebo_demo::pick_place::buildLiftThenLateralWaypoints(
+    {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0}, lift_distance, lateral_offset_y);
+  if (parameter_validation.failure) {
+    RCLCPP_ERROR(logger, "%s", parameter_validation.failure->c_str());
     rclcpp::shutdown();
     return EXIT_FAILURE;
   }
@@ -136,18 +142,47 @@ int main(int argc, char * argv[])
   }
 
   move_group.setStartStateToCurrentState();
-  geometry_msgs::msg::Pose lift_pose = move_group.getCurrentPose("panda_tcp").pose;
-  lift_pose.position.z += lift_distance;
-
-  std::vector<geometry_msgs::msg::Pose> waypoints{lift_pose};
+  const auto start_pose = move_group.getCurrentPose("panda_tcp").pose;
+  const auto fixture_waypoints =
+    panda_gazebo_demo::pick_place::buildLiftThenLateralWaypoints(
+    {start_pose.position.x, start_pose.position.y, start_pose.position.z,
+      start_pose.orientation.x, start_pose.orientation.y, start_pose.orientation.z,
+      start_pose.orientation.w}, lift_distance, lateral_offset_y);
+  if (fixture_waypoints.failure) {
+    RCLCPP_ERROR(logger, "%s", fixture_waypoints.failure->c_str());
+    rclcpp::shutdown();
+    return EXIT_FAILURE;
+  }
+  std::vector<geometry_msgs::msg::Pose> waypoints;
+  waypoints.reserve(fixture_waypoints.waypoints.size());
+  RCLCPP_INFO(
+    logger, "Fault fixture parameters: lift_distance=%.3f lateral_offset_y=%.3f",
+    lift_distance, lateral_offset_y);
+  for (std::size_t index = 0; index < fixture_waypoints.waypoints.size(); ++index) {
+    const auto & source = fixture_waypoints.waypoints[index];
+    geometry_msgs::msg::Pose target;
+    target.position.x = source.x;
+    target.position.y = source.y;
+    target.position.z = source.z;
+    target.orientation.x = source.qx;
+    target.orientation.y = source.qy;
+    target.orientation.z = source.qz;
+    target.orientation.w = source.qw;
+    waypoints.push_back(target);
+    RCLCPP_INFO(
+      logger, "Fault fixture waypoint %zu: x=%.6f y=%.6f z=%.6f",
+      index + 1, source.x, source.y, source.z);
+  }
   moveit_msgs::msg::RobotTrajectory trajectory;
   moveit_msgs::msg::MoveItErrorCodes error;
   const double fraction =
     move_group.computeCartesianPath(waypoints, 0.002, trajectory, true, &error);
 
-  RCLCPP_INFO(logger, "Cartesian lift: %.1f%%, distance=%.3f m, points=%zu, error=%d",
-              fraction * 100.0, lift_distance, trajectory.joint_trajectory.points.size(),
-              error.val);
+  RCLCPP_INFO(
+    logger,
+    "Cartesian fault fixture: %.1f%%, lift=%.3f m, lateral_y=%.3f m, points=%zu, error=%d",
+    fraction * 100.0, lift_distance, lateral_offset_y,
+    trajectory.joint_trajectory.points.size(), error.val);
 
   if (fraction < 0.999 || trajectory.joint_trajectory.points.empty()) {
     RCLCPP_ERROR(logger, "Lift path is incomplete; refusing execution");
@@ -168,6 +203,13 @@ int main(int argc, char * argv[])
     return EXIT_FAILURE;
   }
 
+  const auto executed_pose = move_group.getCurrentPose("panda_tcp").pose;
+  RCLCPP_INFO(
+    logger,
+    "FAULT_FIXTURE_EXECUTED_TCP_POSE x=%.9f y=%.9f z=%.9f qx=%.9f qy=%.9f qz=%.9f qw=%.9f",
+    executed_pose.position.x, executed_pose.position.y, executed_pose.position.z,
+    executed_pose.orientation.x, executed_pose.orientation.y, executed_pose.orientation.z,
+    executed_pose.orientation.w);
   RCLCPP_INFO(logger, "Lift execution succeeded");
   rclcpp::shutdown();
   return EXIT_SUCCESS;

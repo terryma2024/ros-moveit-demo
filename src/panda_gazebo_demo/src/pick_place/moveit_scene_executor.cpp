@@ -50,7 +50,8 @@ bool poseMatches(const Pose3d & actual, const Pose3d & expected) noexcept
          orientationDistance(actual, expected) <= 1e-4;
 }
 
-bool detachedBoundaryComplete(const WorldSnapshot & snapshot)
+bool detachedBoundaryComplete(
+  const WorldSnapshot & snapshot, const GripperLimits & gripper_limits)
 {
   return snapshot.fresh && snapshot.arm_stationary &&
          snapshot.gazebo_coke_attached && !*snapshot.gazebo_coke_attached &&
@@ -60,12 +61,13 @@ bool detachedBoundaryComplete(const WorldSnapshot & snapshot)
          *snapshot.gazebo_coke_stationary &&
          snapshot.moveit_world_object_poses.count("table") == 1 &&
          snapshot.moveit_world_object_poses.count(kCokeObjectId) == 1 &&
-         validateGripperOpen(snapshot, {}).ok;
+         validateGripperOpen(snapshot, gripper_limits).ok;
 }
 
-bool synchronizedBoundaryComplete(const WorldSnapshot & snapshot)
+bool synchronizedBoundaryComplete(
+  const WorldSnapshot & snapshot, const GripperLimits & gripper_limits)
 {
-  return detachedBoundaryComplete(snapshot) &&
+  return detachedBoundaryComplete(snapshot, gripper_limits) &&
          poseMatches(snapshot.moveit_world_object_poses.at(kCokeObjectId),
            *snapshot.gazebo_coke_pose_world);
 }
@@ -74,9 +76,10 @@ bool synchronizedBoundaryComplete(const WorldSnapshot & snapshot)
 
 MoveItSceneExecutor::MoveItSceneExecutor(
   std::shared_ptr<IMoveItSceneAdapter> adapter, MoveItSceneConfig config,
-  double timeout_seconds, double poll_interval_seconds)
+  double timeout_seconds, double poll_interval_seconds,
+  GripperLimits gripper_limits)
 : adapter_(std::move(adapter)), config_(config), timeout_seconds_(timeout_seconds),
-  poll_interval_seconds_(poll_interval_seconds)
+  poll_interval_seconds_(poll_interval_seconds), gripper_limits_(gripper_limits)
 {
 }
 
@@ -108,7 +111,7 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
       command_result = adapter_->attachCoke(kAttachLink, kTouchLinks);
       break;
     case MoveItSceneOperation::DETACH:
-      if (config_.idempotent && detachedBoundaryComplete(context.before)) {
+      if (config_.idempotent && detachedBoundaryComplete(context.before, gripper_limits_)) {
         return {ActionStatus::SUCCEEDED, std::nullopt};
       }
       command_result = adapter_->detachCoke();
@@ -118,7 +121,9 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
         return sceneFailure(ActionStatus::FAILED, "GAZEBO_COKE_POSE_MISSING",
           "Cannot synchronize MoveIt without an observed Gazebo Coke pose");
       }
-      if (config_.idempotent && synchronizedBoundaryComplete(context.before)) {
+      if (config_.idempotent &&
+        synchronizedBoundaryComplete(context.before, gripper_limits_))
+      {
         return {ActionStatus::SUCCEEDED, std::nullopt};
       }
       synchronized_pose = context.before.gazebo_coke_pose_world;

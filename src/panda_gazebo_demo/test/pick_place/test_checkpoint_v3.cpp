@@ -33,6 +33,7 @@ pick_place::WorldSnapshot makeSnapshot()
   snapshot.moveit_coke_attached = false;
   snapshot.gazebo_coke_pose_world = {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
   snapshot.gazebo_coke_attached = false;
+  snapshot.gazebo_coke_stationary = true;
   snapshot.simulation_session_id = "test-session";
   return snapshot;
 }
@@ -56,6 +57,7 @@ pick_place::Checkpoint makeRecoveryCheckpoint()
   checkpoint.expected.moveit_coke_attached = snapshot.moveit_coke_attached;
   checkpoint.expected.gazebo_coke_pose_world = snapshot.gazebo_coke_pose_world;
   checkpoint.expected.gazebo_coke_attached = snapshot.gazebo_coke_attached;
+  checkpoint.expected.gazebo_coke_stationary = snapshot.gazebo_coke_stationary;
   checkpoint.expected.required_world_objects = {"table", "coke"};
   checkpoint.configuration_hash = "test-config";
   checkpoint.simulation_session_id = "test-session";
@@ -216,6 +218,7 @@ TEST(Runner, RecoveryResumeReclassifiesCurrentFacts)
   pick_place::StateActionRegistry actions;
   pick_place::TransitionContractRegistry contracts;
   FakeObserver observer;
+  observer.snapshot.joint_positions.at("panda_joint1") = 0.5;
   FakeCheckpointStore checkpoints;
   checkpoints.loaded.next_state = pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT;
   const pick_place::CommonResumeValidator common_resume_validator(

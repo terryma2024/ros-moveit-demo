@@ -131,6 +131,11 @@ add_executable(
   src/nodes/pick_place_state_machine_node.cpp
 )
 
+add_executable(
+  gazebo_attachment_state_relay
+  src/nodes/gazebo_attachment_state_relay.cpp
+)
+
 ament_target_dependencies(
   planning_scene_setup
   rclcpp
@@ -156,12 +161,20 @@ ament_target_dependencies(
   moveit_msgs
   moveit_ros_planning_interface
 )
+target_link_libraries(attach_and_lift_demo pick_place_core)
 
 ament_target_dependencies(
   pick_place_state_machine
   rclcpp
 )
 target_link_libraries(pick_place_state_machine pick_place_core pick_place_ros_adapters)
+
+ament_target_dependencies(gazebo_attachment_state_relay rclcpp)
+target_link_libraries(
+  gazebo_attachment_state_relay
+  gz-transport13::core
+  gz-msgs10::core
+)
 
 if(BUILD_TESTING)
   ament_add_gtest(test_pick_place_core test/pick_place/test_pick_place_core.cpp)
@@ -195,12 +208,42 @@ if(BUILD_TESTING)
   endif()
 
   ament_add_gtest(
+    test_gripper_command_adapter
+    test/pick_place/test_gripper_command_adapter.cpp
+  )
+  if(TARGET test_gripper_command_adapter)
+    target_link_libraries(
+      test_gripper_command_adapter
+      pick_place_core
+      pick_place_ros_adapters
+    )
+    ament_target_dependencies(
+      test_gripper_command_adapter
+      rclcpp
+      rclcpp_action
+      control_msgs
+    )
+  endif()
+
+  ament_add_gtest(
     test_gazebo_attachment_executor
     test/pick_place/test_gazebo_attachment_executor.cpp
   )
   if(TARGET test_gazebo_attachment_executor)
     target_link_libraries(
       test_gazebo_attachment_executor
+      pick_place_core
+      pick_place_ros_adapters
+    )
+  endif()
+
+  ament_add_gtest(
+    test_gazebo_world_observer
+    test/pick_place/test_gazebo_world_observer.cpp
+  )
+  if(TARGET test_gazebo_world_observer)
+    target_link_libraries(
+      test_gazebo_world_observer
       pick_place_core
       pick_place_ros_adapters
     )
@@ -219,7 +262,11 @@ if(BUILD_TESTING)
     test/pick_place/test_motion_plan_validation.cpp
   )
   if(TARGET test_motion_plan_validation)
-    target_link_libraries(test_motion_plan_validation pick_place_core)
+    target_link_libraries(
+      test_motion_plan_validation
+      pick_place_core
+      pick_place_ros_adapters
+    )
   endif()
 
   ament_add_gtest(
@@ -266,6 +313,39 @@ if(BUILD_TESTING)
       ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reset_coke.sh
   )
 
+  add_test(
+    NAME test_attachment_state_relay
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/test_attachment_state_relay.sh
+      $<TARGET_FILE:gazebo_attachment_state_relay>
+  )
+
+  add_test(
+    NAME test_assert_pick_place_log
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/test_assert_pick_place_log.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/assert_pick_place_log.py
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/fixtures
+  )
+
+  add_test(
+    NAME test_assert_pick_place_snapshot
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/test_assert_pick_place_snapshot.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/assert_pick_place_snapshot.py
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/fixtures
+  )
+
+  add_test(
+    NAME test_plan_only_resume_helpers
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/test_plan_only_resume_helpers.sh
+  )
+
   ament_cppcheck(
     LIBRARIES googletest
     INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -280,6 +360,7 @@ install(
     pre_grasp_plan
     attach_and_lift_demo
     pick_place_state_machine
+    gazebo_attachment_state_relay
   DESTINATION lib/${PROJECT_NAME}
 )
 

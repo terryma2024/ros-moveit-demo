@@ -1,5 +1,7 @@
 #include "panda_gazebo_demo/pick_place/runtime_parameters.hpp"
 
+#include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
+
 #include <cmath>
 #include <iomanip>
 #include <limits>
@@ -35,10 +37,14 @@ std::optional<Failure> validatePickPlaceParameters(
   if (parameters.planning_group.empty() || parameters.tcp_link.empty() ||
     parameters.required_world_objects.empty() || parameters.gazebo_world_name.empty() ||
     parameters.gazebo_coke_model.empty() || parameters.gazebo_attach_topic.empty() ||
-    parameters.gazebo_detach_topic.empty() || parameters.gazebo_attachment_topic.empty() ||
+    parameters.gazebo_detach_topic.empty() || parameters.gazebo_attachment_event_topic.empty() ||
+    parameters.gazebo_attachment_topic.empty() ||
     parameters.gripper_action_name.empty())
   {
     return invalid("Runtime names, topics, links, groups, and required objects must be non-empty");
+  }
+  if (parameters.gazebo_attachment_event_topic == parameters.gazebo_attachment_topic) {
+    return invalid("Gazebo attachment event and state topics must be distinct");
   }
   for (const auto & object : parameters.required_world_objects) {
     if (object.empty()) {
@@ -53,9 +59,11 @@ std::optional<Failure> validatePickPlaceParameters(
   if (!positiveFinite(parameters.cartesian_eef_step) ||
     !positiveFinite(parameters.cartesian_min_fraction) ||
     parameters.cartesian_min_fraction > 1.0 ||
-    !positiveFinite(parameters.joint_jump_threshold))
+    !positiveFinite(parameters.joint_jump_threshold) ||
+    !positiveFinite(parameters.motion_start_joint_tolerance))
   {
-    return invalid("Cartesian step, fraction, and joint-jump threshold are outside safe ranges");
+    return invalid(
+      "Cartesian step, fraction, joint-jump threshold, or motion-start tolerance is unsafe");
   }
   if (!positiveFinite(parameters.tcp_position_tolerance) ||
     !positiveFinite(parameters.tcp_orientation_tolerance_rad) ||
@@ -97,9 +105,11 @@ std::optional<Failure> validatePickPlaceParameters(
     return invalid("Coke settle sampling and tolerances are outside safe ranges");
   }
   if (!positiveFinite(parameters.recovery_safe_height) ||
+    parameters.recovery_safe_height < FixedPickPlaceTargetPolicy::kCanonicalSafeHeight ||
     parameters.max_state_transitions == 0)
   {
-    return invalid("Recovery safe height and maximum transitions must be positive");
+    return invalid(
+      "Recovery safe height is below the canonical safe target or transitions invalid");
   }
   return std::nullopt;
 }
@@ -117,6 +127,7 @@ std::string pickPlaceConfigurationHash(
         << parameters.cartesian_eef_step << '\n'
         << parameters.cartesian_min_fraction << '\n'
         << parameters.joint_jump_threshold << '\n'
+        << parameters.motion_start_joint_tolerance << '\n'
         << parameters.tcp_position_tolerance << '\n'
         << parameters.tcp_orientation_tolerance_rad << '\n'
         << parameters.coke_position_tolerance << '\n'
@@ -143,6 +154,7 @@ std::string pickPlaceConfigurationHash(
         << parameters.gazebo_coke_model << '\n'
         << parameters.gazebo_attach_topic << '\n'
         << parameters.gazebo_detach_topic << '\n'
+        << parameters.gazebo_attachment_event_topic << '\n'
         << parameters.gazebo_attachment_topic << '\n'
         << parameters.gazebo_coke_initially_detached << '\n'
         << parameters.gripper_action_name << '\n'

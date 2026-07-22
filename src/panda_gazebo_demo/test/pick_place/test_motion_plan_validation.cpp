@@ -1,18 +1,21 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <limits>
+#include <memory>
 #include <string>
 
 #include "panda_gazebo_demo/pick_place/motion_plan_evidence.hpp"
+#include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
 
 namespace panda_gazebo_demo::pick_place
 {
 namespace
 {
 
-constexpr Pose3d kStart{0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0};
+constexpr Pose3d kStart{0.3, 0.0, 0.87, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d kLiftTarget{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
-constexpr Pose3d kPlaceTarget{0.3, 0.2, 0.93, 1.0, 0.0, 0.0, 0.0};
+constexpr Pose3d kPlaceTarget{0.3, 0.2, 0.87, 1.0, 0.0, 0.0, 0.0};
 
 MotionPlanEvidence validEvidence(
   MotionKind kind, const Pose3d & start, const Pose3d & target, bool carrying)
@@ -38,6 +41,7 @@ MotionPlanEvidence validEvidence(
   evidence.max_carried_relative_position_error = 0.0;
   evidence.max_carried_relative_orientation_error_rad = 0.0;
   evidence.carried_clearance_verified = carrying;
+  evidence.planned_start_joint_positions = {{"panda_joint1", 0.1}, {"panda_joint2", -0.2}};
   return evidence;
 }
 
@@ -109,7 +113,7 @@ TEST(RetreatPlan, RejectsDownwardSegment)
   evidence.state = State::RETREAT;
   evidence.next_state = State::DONE;
   evidence.tcp_path = {
-    {0.3, 0.2, 0.91, 1.0, 0.0, 0.0, 0.0},
+    {0.3, 0.2, 0.85, 1.0, 0.0, 0.0, 0.0},
     target};
 
   const auto result = validateMotionPlan(
@@ -132,6 +136,90 @@ TEST(PoseCarryPlan, RequiresTimedCollisionAwareTrajectory)
   EXPECT_FALSE(result.ok);
   EXPECT_TRUE(hasFailure(result, "MOTION_TRAJECTORY_NOT_TIMED"));
   EXPECT_TRUE(hasFailure(result, "COLLISION_AWARE_PLAN_EVIDENCE_MISSING"));
+}
+
+TEST(MotionPlanValidator, RejectsMissingPlannedStartJointEvidence)
+{
+  auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+  evidence.planned_start_joint_positions.clear();
+  WorldSnapshot before;
+  before.joint_positions = {{"panda_joint1", 0.1}, {"panda_joint2", -0.2}};
+  MotionPlanValidator validator(
+    {State::LIFT, State::MOVE_ABOVE_PLACE, MotionKind::CARTESIAN_UP, true},
+    std::make_shared<FixedPickPlaceTargetPolicy>());
+
+  const auto result = validator.validate(State::LIFT, before, evidence);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "MOTION_START_JOINTS_MISSING"));
+}
+
+TEST(MotionPlanValidator, RejectsNonFiniteObservedStartJoint)
+{
+  const auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+  WorldSnapshot before;
+  before.joint_positions = {
+    {"panda_joint1", 0.1},
+    {"panda_joint2", std::numeric_limits<double>::quiet_NaN()}};
+  MotionPlanValidator validator(
+    {State::LIFT, State::MOVE_ABOVE_PLACE, MotionKind::CARTESIAN_UP, true},
+    std::make_shared<FixedPickPlaceTargetPolicy>());
+
+  const auto result = validator.validate(State::LIFT, before, evidence);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "MOTION_START_JOINT_NON_FINITE"));
+}
+
+TEST(MotionPlanValidator, RejectsObservedStartJointMismatch)
+{
+  const auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+  WorldSnapshot before;
+  before.joint_positions = {{"panda_joint1", 0.1}, {"panda_joint2", -0.3}};
+  MotionPlanLimits limits;
+  limits.start_joint_tolerance = 0.01;
+  MotionPlanValidator validator(
+    {State::LIFT, State::MOVE_ABOVE_PLACE, MotionKind::CARTESIAN_UP, true},
+    std::make_shared<FixedPickPlaceTargetPolicy>(), limits);
+
+  const auto result = validator.validate(State::LIFT, before, evidence);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "MOTION_START_JOINT_MISMATCH"));
+}
+
+TEST(MotionExecutionStartValidation, RejectsStateChangedAfterPlanValidation)
+{
+  const std::map<std::string, double> planned{
+    {"panda_joint1", 0.1}, {"panda_joint2", -0.2}};
+  const std::map<std::string, double> current{
+    {"panda_joint1", 0.1}, {"panda_joint2", -0.25}};
+
+  const auto result = validateMotionStartJoints(planned, current, 0.01);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "MOTION_START_JOINT_MISMATCH"));
+}
+
+TEST(MotionObservationThresholds, ConfiguredLimitsChangeObservedFacts)
+{
+  WorldSnapshot snapshot;
+  snapshot.joint_positions = {{"panda_finger_joint1", 0.04},
+    {"panda_finger_joint2", 0.04}};
+  snapshot.joint_velocities = {{"panda_joint1", 0.02},
+    {"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
+  GripperLimits strict_gripper;
+  strict_gripper.open_min = 0.041;
+
+  applyMotionObservationThresholds(snapshot, 0.01, strict_gripper);
+  EXPECT_FALSE(snapshot.arm_stationary);
+  EXPECT_FALSE(snapshot.gripper_open);
+
+  GripperLimits permissive_gripper;
+  permissive_gripper.open_min = 0.038;
+  applyMotionObservationThresholds(snapshot, 0.03, permissive_gripper);
+  EXPECT_TRUE(snapshot.arm_stationary);
+  EXPECT_TRUE(snapshot.gripper_open);
 }
 
 }  // namespace

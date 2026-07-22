@@ -138,7 +138,9 @@ std::shared_ptr<MoveItMotionPlanEvidence> buildEvidence(
   std::vector<double> previous_positions;
   previous_positions.reserve(joint_trajectory.joint_names.size());
   for (const auto & joint_name : joint_trajectory.joint_names) {
-    previous_positions.push_back(state.getVariablePosition(joint_name));
+    const double position = state.getVariablePosition(joint_name);
+    previous_positions.push_back(position);
+    evidence->planned_start_joint_positions.emplace(joint_name, position);
   }
 
   std::int64_t previous_nanoseconds = -1;
@@ -179,17 +181,36 @@ std::shared_ptr<MoveItMotionPlanEvidence> buildEvidence(
 
 }  // namespace
 
+void applyMotionObservationThresholds(
+  WorldSnapshot & snapshot, double joint_velocity_tolerance,
+  const GripperLimits & gripper_limits)
+{
+  snapshot.arm_stationary = std::isfinite(joint_velocity_tolerance) &&
+    joint_velocity_tolerance > 0.0;
+  for (const auto & [name, velocity] : snapshot.joint_velocities) {
+    static_cast<void>(name);
+    if (!std::isfinite(velocity) || std::abs(velocity) > joint_velocity_tolerance) {
+      snapshot.arm_stationary = false;
+    }
+  }
+  snapshot.gripper_open = validateGripperOpen(snapshot, gripper_limits).ok;
+}
+
 class MoveItMotionAdapter::Impl
 {
 public:
   Impl(
     std::shared_ptr<rclcpp::Node> node, std::string planning_group,
     std::string tcp_link, std::vector<std::string> required_world_objects,
-    double velocity_scaling, double acceleration_scaling, double cartesian_eef_step)
+    double velocity_scaling, double acceleration_scaling, double cartesian_eef_step,
+    double motion_start_joint_tolerance, double joint_velocity_tolerance,
+    GripperLimits gripper_limits)
   : node(std::move(node)), planning_group(std::move(planning_group)),
     tcp_link(std::move(tcp_link)), required_world_objects(std::move(required_world_objects)),
     velocity_scaling(velocity_scaling), acceleration_scaling(acceleration_scaling),
-    cartesian_eef_step(cartesian_eef_step)
+    cartesian_eef_step(cartesian_eef_step),
+    motion_start_joint_tolerance(motion_start_joint_tolerance),
+    joint_velocity_tolerance(joint_velocity_tolerance), gripper_limits(gripper_limits)
   {
   }
 
@@ -208,6 +229,9 @@ public:
   double velocity_scaling;
   double acceleration_scaling;
   double cartesian_eef_step;
+  double motion_start_joint_tolerance;
+  double joint_velocity_tolerance;
+  GripperLimits gripper_limits;
   std::unique_ptr<MoveGroupInterface> move_group;
   moveit::planning_interface::PlanningSceneInterface planning_scene;
 };
@@ -215,10 +239,13 @@ public:
 MoveItMotionAdapter::MoveItMotionAdapter(
   std::shared_ptr<rclcpp::Node> node, std::string planning_group,
   std::string tcp_link, std::vector<std::string> required_world_objects,
-  double velocity_scaling, double acceleration_scaling, double cartesian_eef_step)
+  double velocity_scaling, double acceleration_scaling, double cartesian_eef_step,
+  double motion_start_joint_tolerance, double joint_velocity_tolerance,
+  GripperLimits gripper_limits)
 : impl_(std::make_unique<Impl>(std::move(node), std::move(planning_group),
     std::move(tcp_link), std::move(required_world_objects), velocity_scaling,
-    acceleration_scaling, cartesian_eef_step))
+    acceleration_scaling, cartesian_eef_step, motion_start_joint_tolerance,
+    joint_velocity_tolerance, gripper_limits))
 {
 }
 
@@ -346,6 +373,29 @@ ActionResult MoveItMotionAdapter::execute(const MotionPlanEvidence & evidence)
     return executionFailure("INVALID_MOVEIT_MOTION_PLAN",
       "MoveIt execution requires a trajectory produced by this adapter");
   }
+  const auto current_state = impl_->move_group->getCurrentState(2.0);
+  if (!current_state) {
+    return executionFailure("CURRENT_STATE_UNAVAILABLE",
+      "MoveIt did not provide a current state immediately before execution");
+  }
+  std::map<std::string, double> current_joint_positions;
+  const auto & current_variable_names = current_state->getVariableNames();
+  for (const auto & [name, planned_position] : evidence.planned_start_joint_positions) {
+    static_cast<void>(planned_position);
+    if (std::find(current_variable_names.begin(), current_variable_names.end(), name) !=
+      current_variable_names.end())
+    {
+      current_joint_positions.emplace(name, current_state->getVariablePosition(name));
+    }
+  }
+  const auto start_validation = validateMotionStartJoints(
+    evidence.planned_start_joint_positions, current_joint_positions,
+    impl_->motion_start_joint_tolerance);
+  if (!start_validation.ok) {
+    const auto & failure = start_validation.failures.front();
+    return executionFailure(failure.code,
+      "MoveIt execution start state changed after plan validation: " + failure.message);
+  }
   if (!static_cast<bool>(impl_->move_group->execute(moveit_evidence->trajectory))) {
     return executionFailure("MOVEIT_MOTION_EXECUTION_FAILED",
       "MoveIt failed to execute the validated motion trajectory");
@@ -384,16 +434,13 @@ ObservationResult MoveItMotionAdapter::observe()
   snapshot.observed_at = std::chrono::steady_clock::now();
   snapshot.fresh = true;
   snapshot.tcp_pose_world = toPose(move_group.getCurrentPose(impl_->tcp_link).pose);
-  snapshot.arm_stationary = true;
   for (const auto & variable : state->getVariableNames()) {
     snapshot.joint_positions[variable] = state->getVariablePosition(variable);
     const double velocity = state->getVariableVelocity(variable);
     snapshot.joint_velocities[variable] = velocity;
-    if (std::abs(velocity) > 0.01) {
-      snapshot.arm_stationary = false;
-    }
   }
-  snapshot.gripper_open = validateGripperOpen(snapshot, GripperLimits{}).ok;
+  applyMotionObservationThresholds(
+    snapshot, impl_->joint_velocity_tolerance, impl_->gripper_limits);
   const auto world_objects =
     impl_->planning_scene.getObjects(impl_->required_world_objects);
   for (const auto & [object_id, object] : world_objects) {

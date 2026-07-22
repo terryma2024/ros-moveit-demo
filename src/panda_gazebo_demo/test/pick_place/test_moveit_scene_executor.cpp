@@ -159,6 +159,35 @@ TEST(MoveItSceneExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
   EXPECT_EQ(adapter->observe_calls, 0);
 }
 
+TEST(MoveItSceneExecutor, RecoveryNoOpUsesInjectedGripperLimits)
+{
+  auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
+  adapter->observations = {detachedState()};
+  GripperLimits strict_gripper;
+  strict_gripper.open_min = 0.041;
+  MoveItSceneExecutor executor(
+    adapter, {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true},
+    0.05, 0.001, strict_gripper);
+  auto context = contextFor(State::RECOVER_DETACH_MOVEIT);
+  context.before.fresh = true;
+  context.before.arm_stationary = true;
+  context.before.gazebo_coke_attached = false;
+  context.before.gazebo_coke_pose_world = Pose3d{};
+  context.before.gazebo_coke_stationary = true;
+  context.before.moveit_coke_attached = false;
+  context.before.joint_positions = {{"panda_finger_joint1", 0.04},
+    {"panda_finger_joint2", 0.04}};
+  context.before.joint_velocities = {{"panda_finger_joint1", 0.0},
+    {"panda_finger_joint2", 0.0}};
+  context.before.moveit_world_object_poses.emplace("table", Pose3d{});
+  context.before.moveit_world_object_poses.emplace("coke", Pose3d{});
+
+  const auto result = executor.execute(context);
+
+  EXPECT_EQ(result.status, ActionStatus::SUCCEEDED);
+  EXPECT_EQ(adapter->detach_calls, 1);
+}
+
 TEST(MoveItSceneExecutor, SyncUsesBeforeGazeboPoseAndPreservesGeometry)
 {
   const Pose3d gazebo_pose{0.42, -0.17, 0.84, 0.1, 0.2, 0.3, 0.9};

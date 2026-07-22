@@ -12,6 +12,8 @@ namespace panda_gazebo_demo::pick_place
 /// Enriches robot and Planning Scene observations with Gazebo's authoritative
 /// Coke pose and DetachableJoint state. Missing or stale Gazebo data is an
 /// observation failure; it is never silently replaced with Planning Scene data.
+/// max_observation_age_seconds is also the bounded startup wait for the first
+/// pose and durable attachment-state messages.
 class GazeboWorldObserver final : public IWorldObserver
 {
 public:

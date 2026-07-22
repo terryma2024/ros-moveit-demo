@@ -4,8 +4,6 @@
 #include <string>
 #include <utility>
 
-#include "panda_gazebo_demo/pick_place/state_validation.hpp"
-
 namespace panda_gazebo_demo::pick_place
 {
 namespace
@@ -24,29 +22,18 @@ ActionResult executionFailure(std::string code, std::string message)
       std::move(code), std::move(message), {}}};
 }
 
-bool recoveryRetreatPostconditionSatisfied(
-  const WorldSnapshot & snapshot, const Pose3d & target)
+bool recoveryMotionTargetSatisfied(
+  State state, const WorldSnapshot & snapshot, const Pose3d & target)
 {
-  if (!snapshot.fresh || !snapshot.arm_stationary ||
-    !snapshot.gazebo_coke_attached || *snapshot.gazebo_coke_attached ||
-    !snapshot.moveit_coke_attached || *snapshot.moveit_coke_attached ||
-    !snapshot.gazebo_coke_pose_world || !snapshot.gazebo_coke_stationary ||
-    !*snapshot.gazebo_coke_stationary ||
-    snapshot.moveit_world_object_poses.count("table") == 0 ||
-    snapshot.moveit_world_object_poses.count("coke") == 0 ||
-    !validateGripperOpen(snapshot, {}).ok)
-  {
-    return false;
-  }
-  const auto & moveit_coke = snapshot.moveit_world_object_poses.at("coke");
-  return positionDistance(snapshot.tcp_pose_world, target) <= 0.005 &&
-         orientationDistance(snapshot.tcp_pose_world, target) <= 0.035 &&
-         positionDistance(*snapshot.gazebo_coke_pose_world, moveit_coke) <= 0.003 &&
-         orientationDistance(*snapshot.gazebo_coke_pose_world, moveit_coke) <= 0.035;
+  return !isForwardAction(state) && !isTerminal(state) && snapshot.fresh &&
+         snapshot.arm_stationary &&
+         positionDistance(snapshot.tcp_pose_world, target) <= 0.005 &&
+         orientationDistance(snapshot.tcp_pose_world, target) <= 0.035;
 }
 
 PlanResult noOpPlan(
-  const MotionStateConfig & config, const Pose3d & current_pose)
+  const MotionStateConfig & config, const WorldSnapshot & snapshot,
+  const Pose3d & target)
 {
   auto evidence = std::make_shared<MotionPlanEvidence>();
   evidence->state = config.state;
@@ -55,11 +42,16 @@ PlanResult noOpPlan(
   evidence->carrying = config.carrying;
   evidence->cartesian_fraction = 1.0;
   evidence->duration_seconds = 1.0e-6;
-  evidence->start_tcp_pose = current_pose;
-  evidence->end_tcp_pose = current_pose;
-  evidence->tcp_path = {current_pose};
+  evidence->planned_start_joint_positions = snapshot.joint_positions;
+  evidence->start_tcp_pose = snapshot.tcp_pose_world;
+  evidence->end_tcp_pose = target;
+  evidence->tcp_path = {snapshot.tcp_pose_world};
   evidence->trajectory_points = 1;
   evidence->collision_aware = true;
+  const bool attached = snapshot.moveit_coke_attached && *snapshot.moveit_coke_attached;
+  evidence->attached_object_in_model = config.carrying && attached;
+  evidence->carried_relative_pose_available = config.carrying && attached;
+  evidence->carried_clearance_verified = config.carrying && attached;
   evidence->no_op = true;
   return {{ActionStatus::SUCCEEDED, std::nullopt}, std::move(evidence)};
 }
@@ -105,10 +97,9 @@ PlanResult MotionStateAction::plan(
     return {{ActionStatus::FAILED, failure}, nullptr};
   }
   if (config_.no_op_if_postcondition_satisfied &&
-    config_.state == State::RECOVER_RETREAT &&
-    recoveryRetreatPostconditionSatisfied(*observation.snapshot, *target.target_pose))
+    recoveryMotionTargetSatisfied(config_.state, *observation.snapshot, *target.target_pose))
   {
-    return noOpPlan(config_, observation.snapshot->tcp_pose_world);
+    return noOpPlan(config_, *observation.snapshot, *target.target_pose);
   }
   return adapter_->plan(
     {current_state, next_state, config_.kind, config_.carrying, *target.target_pose},
@@ -134,12 +125,16 @@ ActionResult MotionStateAction::execute(const ExecutionContext & context)
       "Motion execution requires typed evidence for its configured transition");
   }
   if (evidence->no_op) {
-    if (!config_.no_op_if_postcondition_satisfied ||
-      config_.state != State::RECOVER_RETREAT ||
-      !recoveryRetreatPostconditionSatisfied(context.before, evidence->end_tcp_pose))
+    const auto target = target_policy_->targetPose(
+      context.state, context.next_state, ObservationResult{context.before, std::nullopt});
+    if (!config_.no_op_if_postcondition_satisfied || isForwardAction(config_.state) ||
+      !target.target_pose ||
+      positionDistance(evidence->end_tcp_pose, *target.target_pose) > 1.0e-6 ||
+      orientationDistance(evidence->end_tcp_pose, *target.target_pose) > 1.0e-6 ||
+      !recoveryMotionTargetSatisfied(config_.state, context.before, *target.target_pose))
     {
       return executionFailure("INVALID_MOTION_NO_OP_EVIDENCE",
-        "Recovery motion no-op is allowed only when its complete postcondition holds");
+        "Recovery motion no-op is allowed only while the observed TCP remains at its target");
     }
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }

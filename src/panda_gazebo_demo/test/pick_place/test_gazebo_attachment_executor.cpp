@@ -129,6 +129,34 @@ TEST(GazeboAttachmentExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
   EXPECT_EQ(0, detach_messages.load());
 }
 
+TEST(GazeboAttachmentExecutor, RecoveryNoOpUsesInjectedGripperLimits)
+{
+  const auto topics = uniqueTopics();
+  gz::transport::Node peer;
+  auto output = peer.Advertise<gz::msgs::StringMsg>(topics.output);
+  std::atomic<int> detach_messages{0};
+  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(
+      topics.detach,
+      [&output, &detach_messages](const gz::msgs::Empty &) {
+        ++detach_messages;
+        gz::msgs::StringMsg response;
+        response.set_data("detached");
+        output.Publish(response);
+      }));
+  pick_place::GripperLimits strict_gripper;
+  strict_gripper.open_min = 0.041;
+  pick_place::GazeboAttachmentExecutor executor(
+    pick_place::State::RECOVER_DETACH_GAZEBO, false, topics.attach, topics.detach, topics.output,
+    0.5, 0.005, true, strict_gripper);
+  waitForDiscovery();
+
+  const auto result = executor.execute(
+    contextFor(pick_place::State::RECOVER_DETACH_GAZEBO, false));
+
+  EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, result.status);
+  EXPECT_EQ(1, detach_messages.load());
+}
+
 TEST(GazeboAttachmentExecutor, TimesOutWithoutExpectedOutput)
 {
   const auto topics = uniqueTopics();

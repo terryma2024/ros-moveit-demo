@@ -145,5 +145,45 @@ TEST(MotionStateAction, ExecutesOnlyTypedEvidenceForItsConfiguredState)
   EXPECT_TRUE(adapter->executed_states.empty());
 }
 
+TEST(MotionStateAction, RecoveryMotionAlreadyAtTargetUsesValidatedNoOp)
+{
+  auto policy = std::make_shared<RecordingTargetPolicy>();
+  auto adapter = std::make_shared<RecordingMotionAdapter>();
+  const MotionStateConfig config{State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+    State::RECOVER_MOVE_ABOVE_PICK, MotionKind::CARTESIAN_UP, true, true};
+  MotionStateAction action(adapter, policy, config);
+  auto current = observation();
+  current.snapshot->tcp_pose_world = {0.31, 0.12, 0.98, 1.0, 0.0, 0.0, 0.0};
+  current.snapshot->arm_stationary = true;
+  current.snapshot->moveit_coke_attached = true;
+
+  const auto plan = action.plan(config.state, config.next_state, current);
+
+  ASSERT_EQ(plan.action.status, ActionStatus::SUCCEEDED);
+  ASSERT_TRUE(plan.artifact);
+  const auto evidence = std::dynamic_pointer_cast<const MotionPlanEvidence>(plan.artifact);
+  ASSERT_TRUE(evidence);
+  EXPECT_TRUE(evidence->no_op);
+  EXPECT_TRUE(evidence->attached_object_in_model);
+  EXPECT_TRUE(evidence->carried_relative_pose_available);
+  EXPECT_TRUE(evidence->carried_clearance_verified);
+  EXPECT_TRUE(adapter->requests.empty());
+  EXPECT_EQ(action.execute(
+      {config.state, config.next_state, *current.snapshot, plan.artifact}).status,
+    ActionStatus::SUCCEEDED);
+  EXPECT_TRUE(adapter->executed_states.empty());
+
+  auto tampered = std::make_shared<MotionPlanEvidence>(*evidence);
+  tampered->end_tcp_pose.x += 0.1;
+  EXPECT_EQ(action.execute(
+      {config.state, config.next_state, *current.snapshot, tampered}).status,
+    ActionStatus::FAILED);
+  auto moved_before = *current.snapshot;
+  moved_before.tcp_pose_world.x += 0.1;
+  EXPECT_EQ(action.execute(
+      {config.state, config.next_state, moved_before, plan.artifact}).status,
+    ActionStatus::FAILED);
+}
+
 }  // namespace
 }  // namespace panda_gazebo_demo::pick_place
