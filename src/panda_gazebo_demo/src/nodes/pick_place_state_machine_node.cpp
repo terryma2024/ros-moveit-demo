@@ -16,6 +16,7 @@
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/descend_planner_executor.hpp"
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
+#include "panda_gazebo_demo/pick_place/gazebo_attachment_executor.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
 #include "panda_gazebo_demo/pick_place/gripper_command_adapter.hpp"
 #include "panda_gazebo_demo/pick_place/gripper_state_executor.hpp"
@@ -157,7 +158,9 @@ std::string configurationHash(
   double acceleration_scaling, double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
   double coke_position_tolerance, double coke_orientation_tolerance_rad,
   const std::string & gazebo_world_name, const std::string & gazebo_coke_model,
-  const std::string & gazebo_attachment_topic, double gazebo_observation_max_age_seconds,
+  const std::string & gazebo_attach_topic, const std::string & gazebo_detach_topic,
+  const std::string & gazebo_attachment_topic, double gazebo_attachment_timeout_seconds,
+  double gazebo_attachment_poll_interval_seconds, double gazebo_observation_max_age_seconds,
   bool gazebo_coke_initially_detached, const std::string & gripper_action_name,
   double gripper_open_position, double gripper_max_effort, double gripper_action_timeout_seconds,
   double descend_eef_step, double descend_min_fraction, double descend_joint_jump_threshold,
@@ -174,7 +177,11 @@ std::string configurationHash(
         << coke_orientation_tolerance_rad << '\n'
         << gazebo_world_name << '\n'
         << gazebo_coke_model << '\n'
+        << gazebo_attach_topic << '\n'
+        << gazebo_detach_topic << '\n'
         << gazebo_attachment_topic << '\n'
+        << gazebo_attachment_timeout_seconds << '\n'
+        << gazebo_attachment_poll_interval_seconds << '\n'
         << gazebo_observation_max_age_seconds << '\n'
         << gazebo_coke_initially_detached << '\n'
         << gripper_action_name << '\n'
@@ -251,8 +258,16 @@ int main(int argc, char * argv[])
   const auto gazebo_world_name =
     parameterOrDeclare(node, "gazebo_world_name", std::string("pick_place_world"));
   const auto gazebo_coke_model = parameterOrDeclare(node, "gazebo_coke_model", std::string("coke"));
+  const auto gazebo_attach_topic =
+    parameterOrDeclare(node, "gazebo_attach_topic", std::string("/panda/attach_coke"));
+  const auto gazebo_detach_topic =
+    parameterOrDeclare(node, "gazebo_detach_topic", std::string("/panda/detach_coke"));
   const auto gazebo_attachment_topic =
     parameterOrDeclare(node, "gazebo_attachment_topic", std::string("/panda/coke_attached"));
+  const auto gazebo_attachment_timeout_seconds =
+    parameterOrDeclare(node, "gazebo_attachment_timeout_seconds", 2.0);
+  const auto gazebo_attachment_poll_interval_seconds =
+    parameterOrDeclare(node, "gazebo_attachment_poll_interval_seconds", 0.01);
   const auto gazebo_observation_max_age_seconds =
     parameterOrDeclare(node, "gazebo_observation_max_age_seconds", 0.5);
   const auto gazebo_coke_initially_detached =
@@ -273,7 +288,13 @@ int main(int argc, char * argv[])
     velocity_scaling > 1.0 || !std::isfinite(acceleration_scaling) ||
     acceleration_scaling <= 0.0 || acceleration_scaling > 1.0 || tcp_position_tolerance <= 0.0 ||
     tcp_orientation_tolerance_rad <= 0.0 || coke_position_tolerance <= 0.0 ||
-    coke_orientation_tolerance_rad <= 0.0 || gazebo_observation_max_age_seconds <= 0.0 ||
+    coke_orientation_tolerance_rad <= 0.0 || gazebo_attach_topic.empty() ||
+    gazebo_detach_topic.empty() || gazebo_attachment_topic.empty() ||
+    !std::isfinite(gazebo_attachment_timeout_seconds) ||
+    gazebo_attachment_timeout_seconds <= 0.0 ||
+    !std::isfinite(gazebo_attachment_poll_interval_seconds) ||
+    gazebo_attachment_poll_interval_seconds <= 0.0 ||
+    gazebo_observation_max_age_seconds <= 0.0 ||
     gripper_action_name.empty() || gripper_open_position <= 0.0 || gripper_max_effort < 0.0 ||
     gripper_action_timeout_seconds <= 0.0 || !std::isfinite(descend_eef_step) ||
     descend_eef_step <= 0.0 || !std::isfinite(descend_min_fraction) ||
@@ -344,6 +365,24 @@ int main(int argc, char * argv[])
           gripper_open_position, gripper_max_effort, true}));
     actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
     actions.registerExecutor(pick_place::State::DESCEND, descend_action);
+    actions.registerExecutor(
+      pick_place::State::ATTACH_GAZEBO,
+      std::make_shared<pick_place::GazeboAttachmentExecutor>(
+        pick_place::State::ATTACH_GAZEBO, true, gazebo_attach_topic, gazebo_detach_topic,
+        gazebo_attachment_topic, gazebo_attachment_timeout_seconds,
+        gazebo_attachment_poll_interval_seconds, false));
+    actions.registerExecutor(
+      pick_place::State::DETACH_GAZEBO,
+      std::make_shared<pick_place::GazeboAttachmentExecutor>(
+        pick_place::State::DETACH_GAZEBO, false, gazebo_attach_topic, gazebo_detach_topic,
+        gazebo_attachment_topic, gazebo_attachment_timeout_seconds,
+        gazebo_attachment_poll_interval_seconds, false));
+    actions.registerExecutor(
+      pick_place::State::RECOVER_DETACH_GAZEBO,
+      std::make_shared<pick_place::GazeboAttachmentExecutor>(
+        pick_place::State::RECOVER_DETACH_GAZEBO, false, gazebo_attach_topic,
+        gazebo_detach_topic, gazebo_attachment_topic, gazebo_attachment_timeout_seconds,
+        gazebo_attachment_poll_interval_seconds, true));
   }
   if (*mode == pick_place::RunMode::EXECUTE || resume) {
     contracts.registerContract(
@@ -378,7 +417,9 @@ int main(int argc, char * argv[])
       configurationHash(planning_group, tcp_link, required_objects, velocity_scaling,
                         acceleration_scaling, tcp_position_tolerance, tcp_orientation_tolerance_rad,
                         coke_position_tolerance, coke_orientation_tolerance_rad, gazebo_world_name,
-                        gazebo_coke_model, gazebo_attachment_topic,
+                        gazebo_coke_model, gazebo_attach_topic, gazebo_detach_topic,
+                        gazebo_attachment_topic, gazebo_attachment_timeout_seconds,
+                        gazebo_attachment_poll_interval_seconds,
                         gazebo_observation_max_age_seconds, gazebo_coke_initially_detached,
                         gripper_action_name, gripper_open_position, gripper_max_effort,
                         gripper_action_timeout_seconds, descend_eef_step, descend_min_fraction,

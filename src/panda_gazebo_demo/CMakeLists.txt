@@ -70,6 +70,7 @@ ament_target_dependencies(pick_place_core moveit_msgs)
 add_library(
   pick_place_ros_adapters
   src/pick_place/file_checkpoint_store.cpp
+  src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_world_observer.cpp
   src/pick_place/gripper_command_adapter.cpp
   src/pick_place/descend_planner_executor.cpp
@@ -180,6 +181,18 @@ if(BUILD_TESTING)
   ament_add_gtest(test_gripper_state_executor test/pick_place/test_gripper_state_executor.cpp)
   if(TARGET test_gripper_state_executor)
     target_link_libraries(test_gripper_state_executor pick_place_core)
+  endif()
+
+  ament_add_gtest(
+    test_gazebo_attachment_executor
+    test/pick_place/test_gazebo_attachment_executor.cpp
+  )
+  if(TARGET test_gazebo_attachment_executor)
+    target_link_libraries(
+      test_gazebo_attachment_executor
+      pick_place_core
+      pick_place_ros_adapters
+    )
   endif()
 
   add_test(

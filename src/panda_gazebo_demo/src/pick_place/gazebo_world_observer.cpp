@@ -6,8 +6,8 @@
 #include <optional>
 #include <utility>
 
-#include <gz/msgs/boolean.pb.h>
 #include <gz/msgs/pose_v.pb.h>
+#include <gz/msgs/stringmsg.pb.h>
 #include <gz/transport/Node.hh>
 
 namespace panda_gazebo_demo::pick_place
@@ -60,10 +60,14 @@ public:
     }
   }
 
-  void onAttachment(const gz::msgs::Boolean & message)
+  void onAttachment(const gz::msgs::StringMsg & message)
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    coke_attached_ = message.data();
+    if (message.data() == "attached") {
+      coke_attached_ = true;
+    } else if (message.data() == "detached") {
+      coke_attached_ = false;
+    }
   }
 
   [[nodiscard]] ObservationResult enrich(WorldSnapshot snapshot) const
