@@ -18,6 +18,8 @@
   <depend>joint_trajectory_controller</depend>
   <depend>moveit_resources_panda_description</depend>
   <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>control_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>shape_msgs</depend>
   <depend>moveit_msgs</depend>

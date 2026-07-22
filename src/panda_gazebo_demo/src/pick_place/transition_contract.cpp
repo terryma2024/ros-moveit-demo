@@ -256,6 +256,121 @@ ValidationResult AlwaysPassValidator::validate(
   return {true, {}, {}};
 }
 
+PrepareOpenGripperToMoveAboveObjectValidator::PrepareOpenGripperToMoveAboveObjectValidator(
+  std::vector<std::string> required_world_objects, double tcp_position_tolerance,
+  double tcp_orientation_tolerance_rad, double coke_position_tolerance,
+  double coke_orientation_tolerance_rad)
+: required_world_objects_(std::move(required_world_objects)),
+  tcp_position_tolerance_(tcp_position_tolerance),
+  tcp_orientation_tolerance_rad_(tcp_orientation_tolerance_rad),
+  coke_position_tolerance_(coke_position_tolerance),
+  coke_orientation_tolerance_rad_(coke_orientation_tolerance_rad)
+{
+}
+
+ValidationResult PrepareOpenGripperToMoveAboveObjectValidator::validate(
+  const WorldSnapshot & before, const WorldSnapshot & after,
+  const ActionResult & action_result) const
+{
+  ValidationResult result{true, {}, {}};
+  if (action_result.status != ActionStatus::SUCCEEDED) {
+    addFailure(result, FailureCategory::GRIPPER, "GRIPPER_OPEN_EXECUTION_FAILED",
+      "The gripper controller did not report a successful open command");
+  }
+  if (!before.fresh || !after.fresh) {
+    addFailure(result, FailureCategory::OBSERVATION, "STALE_WORLD_SNAPSHOT",
+      "Pre- and post-gripper world snapshots must be fresh");
+  }
+  if (!after.arm_stationary) {
+    addFailure(result, FailureCategory::POSTCONDITION, "ARM_NOT_QUIESCENT",
+      "Arm joint velocities remain above the configured stopped threshold");
+  }
+  validateCrossWorldConsistency(
+    result, before, coke_position_tolerance_, coke_orientation_tolerance_rad_);
+  validateCrossWorldConsistency(
+    result, after, coke_position_tolerance_, coke_orientation_tolerance_rad_);
+  if (!after.gazebo_coke_attached || !after.moveit_coke_attached ||
+    *after.gazebo_coke_attached || *after.moveit_coke_attached)
+  {
+    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_UNEXPECTEDLY_ATTACHED",
+      "Coke must remain detached while opening the gripper");
+  }
+  if (!after.gripper_open) {
+    addFailure(result, FailureCategory::GRIPPER, "GRIPPER_NOT_SAFELY_OPEN",
+      "Both fingers from /joint_states must reach the safe open range");
+  }
+  for (const auto & object_id : required_world_objects_) {
+    if (after.moveit_world_object_poses.count(object_id) == 0) {
+      addFailure(result, FailureCategory::MOVEIT_SCENE, "REQUIRED_WORLD_OBJECT_MISSING",
+        "Required Planning Scene world object is missing: " + object_id);
+    }
+  }
+  const auto tcp_position_drift = positionDistance(before.tcp_pose_world, after.tcp_pose_world);
+  const auto tcp_orientation_drift = orientationDistance(
+    before.tcp_pose_world, after.tcp_pose_world);
+  result.metrics["tcp_position_drift"] = tcp_position_drift;
+  result.metrics["tcp_orientation_drift_rad"] = tcp_orientation_drift;
+  if (tcp_position_drift > tcp_position_tolerance_) {
+    addFailure(result, FailureCategory::POSTCONDITION, "TCP_MOVED_DURING_GRIPPER_OPEN",
+      "TCP position changed while opening the gripper");
+  }
+  if (tcp_orientation_drift > tcp_orientation_tolerance_rad_) {
+    addFailure(result, FailureCategory::POSTCONDITION, "TCP_ROTATED_DURING_GRIPPER_OPEN",
+      "TCP orientation changed while opening the gripper");
+  }
+  if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
+    addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
+      "Gazebo Coke pose is required to validate gripper opening");
+  } else {
+    const auto coke_position_drift = positionDistance(
+      *before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
+    const auto coke_orientation_drift = orientationDistance(
+      *before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
+    result.metrics["coke_position_drift"] = coke_position_drift;
+    result.metrics["coke_orientation_drift_rad"] = coke_orientation_drift;
+    if (coke_position_drift > coke_position_tolerance_) {
+      addFailure(result, FailureCategory::POSTCONDITION, "COKE_MOVED_DURING_GRIPPER_OPEN",
+        "Coke position changed while opening the gripper");
+    }
+    if (coke_orientation_drift > coke_orientation_tolerance_rad_) {
+      addFailure(result, FailureCategory::POSTCONDITION, "COKE_ROTATED_DURING_GRIPPER_OPEN",
+        "Coke orientation changed while opening the gripper");
+    }
+  }
+  result.ok = result.failures.empty();
+  return result;
+}
+
+ValidationResult PrepareOpenGripperToMoveAboveObjectValidator::validatePrecondition(
+  const WorldSnapshot & before) const
+{
+  ValidationResult result{true, {}, {}};
+  if (!before.fresh) {
+    addFailure(result, FailureCategory::OBSERVATION, "STALE_WORLD_SNAPSHOT",
+      "The pre-gripper world snapshot must be fresh");
+  }
+  if (!before.arm_stationary) {
+    addFailure(result, FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT",
+      "Arm must be stationary before opening the gripper");
+  }
+  validateCrossWorldConsistency(
+    result, before, coke_position_tolerance_, coke_orientation_tolerance_rad_);
+  if (!before.gazebo_coke_attached || !before.moveit_coke_attached ||
+    *before.gazebo_coke_attached || *before.moveit_coke_attached)
+  {
+    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_UNEXPECTEDLY_ATTACHED",
+      "Coke must be detached before opening the gripper");
+  }
+  for (const auto & object_id : required_world_objects_) {
+    if (before.moveit_world_object_poses.count(object_id) == 0) {
+      addFailure(result, FailureCategory::MOVEIT_SCENE, "REQUIRED_WORLD_OBJECT_MISSING",
+        "Required Planning Scene world object is missing: " + object_id);
+    }
+  }
+  result.ok = result.failures.empty();
+  return result;
+}
+
 MoveAboveObjectToDescendValidator::MoveAboveObjectToDescendValidator(
   Pose3d target_pose, std::vector<std::string> required_world_objects,
   double tcp_position_tolerance, double tcp_orientation_tolerance_rad,

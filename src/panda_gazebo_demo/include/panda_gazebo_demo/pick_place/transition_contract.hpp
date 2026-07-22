@@ -70,6 +70,29 @@ public:
     const ActionResult & action_result) const override;
 };
 
+class PrepareOpenGripperToMoveAboveObjectValidator final : public TransitionContractRegistry::
+  ITransitionContract
+{
+public:
+  PrepareOpenGripperToMoveAboveObjectValidator(
+    std::vector<std::string> required_world_objects, double tcp_position_tolerance,
+    double tcp_orientation_tolerance_rad, double coke_position_tolerance,
+    double coke_orientation_tolerance_rad);
+
+  [[nodiscard]] ValidationResult validate(
+    const WorldSnapshot & before, const WorldSnapshot & after,
+    const ActionResult & action_result) const override;
+  [[nodiscard]] ValidationResult validatePrecondition(
+    const WorldSnapshot & before) const override;
+
+private:
+  std::vector<std::string> required_world_objects_;
+  double tcp_position_tolerance_;
+  double tcp_orientation_tolerance_rad_;
+  double coke_position_tolerance_;
+  double coke_orientation_tolerance_rad_;
+};
+
 class MoveAboveObjectToDescendValidator final : public TransitionContractRegistry::
   ITransitionContract
 {

@@ -4,7 +4,8 @@ namespace panda_gazebo_demo::pick_place
 {
 
 const std::map<State, StateTransitions> TransitionTable::kTransitions{
-  {State::IDLE, {State::MOVE_ABOVE_OBJECT, State::ERROR}},
+  {State::IDLE, {State::PREPARE_OPEN_GRIPPER, State::ERROR}},
+  {State::PREPARE_OPEN_GRIPPER, {State::MOVE_ABOVE_OBJECT, State::ERROR}},
   {State::MOVE_ABOVE_OBJECT, {State::DESCEND, State::ERROR}},
   {State::DESCEND, {State::CLOSE_GRIPPER, State::RECOVER_OPEN_GRIPPER}},
   {State::CLOSE_GRIPPER, {State::ATTACH_GAZEBO, State::RECOVER_OPEN_GRIPPER}},

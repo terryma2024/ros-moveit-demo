@@ -17,6 +17,8 @@ find_package(joint_trajectory_controller REQUIRED)
 find_package(moveit_resources_panda_description REQUIRED)
 find_package(moveit_resources_panda_moveit_config REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(control_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
@@ -63,6 +65,7 @@ add_library(
   src/pick_place/file_checkpoint_store.cpp
   src/pick_place/gazebo_world_observer.cpp
   src/pick_place/move_above_object_planner.cpp
+  src/pick_place/open_gripper_executor.cpp
 )
 target_link_libraries(
   pick_place_ros_adapters
@@ -80,6 +83,8 @@ target_include_directories(
 ament_target_dependencies(
   pick_place_ros_adapters
   rclcpp
+  rclcpp_action
+  control_msgs
   geometry_msgs
   moveit_msgs
   moveit_ros_planning_interface
@@ -142,6 +147,14 @@ if(BUILD_TESTING)
   if(TARGET test_pick_place_core)
     target_link_libraries(test_pick_place_core pick_place_core)
   endif()
+
+  add_test(
+    NAME test_reset_coke
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_reset_coke.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reset_coke.sh
+  )
 endif()
 
 install(
