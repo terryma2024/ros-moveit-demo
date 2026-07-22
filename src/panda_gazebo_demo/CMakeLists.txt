@@ -50,6 +50,7 @@ add_library(
   src/pick_place/motion_state_action.cpp
   src/pick_place/plan_validation.cpp
   src/pick_place/pick_place_contracts.cpp
+  src/pick_place/recovery_contracts.cpp
   src/pick_place/recovery_policy.cpp
   src/pick_place/state_validation.cpp
   src/pick_place/state_action.cpp
@@ -230,6 +231,18 @@ if(BUILD_TESTING)
   )
   if(TARGET test_forward_contracts)
     target_link_libraries(test_forward_contracts pick_place_core)
+  endif()
+
+  ament_add_gtest(
+    test_recovery_workflow
+    test/pick_place/test_recovery_workflow.cpp
+  )
+  if(TARGET test_recovery_workflow)
+    target_link_libraries(
+      test_recovery_workflow
+      pick_place_core
+      pick_place_ros_adapters
+    )
   endif()
 
   add_test(

@@ -16,6 +16,17 @@ ActionResult unsupportedState(State actual, State configured)
       " cannot execute " + toString(actual), {}}};
 }
 
+bool recoveryOpenPostconditionSatisfied(
+  const WorldSnapshot & snapshot, const GripperLimits & limits)
+{
+  return snapshot.fresh && snapshot.arm_stationary &&
+         snapshot.gazebo_coke_pose_world.has_value() &&
+         snapshot.gazebo_coke_attached.has_value() &&
+         snapshot.moveit_coke_attached.has_value() &&
+         snapshot.gazebo_coke_stationary && *snapshot.gazebo_coke_stationary &&
+         validateGripperOpen(snapshot, limits).ok;
+}
+
 }  // namespace
 
 GripperStateExecutor::GripperStateExecutor(
@@ -35,7 +46,9 @@ ActionResult GripperStateExecutor::execute(const ExecutionContext & context)
       Failure{FailureCategory::CONFIGURATION, "GRIPPER_ADAPTER_MISSING",
         "Gripper executor has no command adapter", {}}};
   }
-  if (config_.no_op_if_already_open && validateGripperOpen(context.before, limits_).ok) {
+  if (config_.no_op_if_already_open &&
+    recoveryOpenPostconditionSatisfied(context.before, limits_))
+  {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
   return adapter_->command(config_.target_position, config_.max_effort);

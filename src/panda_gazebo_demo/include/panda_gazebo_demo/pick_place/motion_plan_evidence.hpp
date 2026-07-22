@@ -23,6 +23,7 @@ struct MotionStateConfig
   State next_state;
   MotionKind kind;
   bool carrying;
+  bool no_op_if_postcondition_satisfied{false};
 };
 
 struct MotionPlanEvidence : PlanArtifact
@@ -43,6 +44,7 @@ struct MotionPlanEvidence : PlanArtifact
   double max_carried_relative_position_error{0.0};
   double max_carried_relative_orientation_error_rad{0.0};
   bool carried_clearance_verified{false};
+  bool no_op{false};
 };
 
 struct MotionPlanLimits

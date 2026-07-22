@@ -138,7 +138,18 @@ TEST(MoveItSceneExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
   auto executor = executorFor(
     adapter, State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true);
   auto context = contextFor(State::RECOVER_DETACH_MOVEIT);
+  context.before.fresh = true;
+  context.before.arm_stationary = true;
+  context.before.gripper_open = true;
+  context.before.gazebo_coke_attached = false;
+  context.before.gazebo_coke_pose_world = Pose3d{};
+  context.before.gazebo_coke_stationary = true;
   context.before.moveit_coke_attached = false;
+  context.before.joint_positions = {{"panda_finger_joint1", 0.04},
+    {"panda_finger_joint2", 0.04}};
+  context.before.joint_velocities = {{"panda_finger_joint1", 0.0},
+    {"panda_finger_joint2", 0.0}};
+  context.before.moveit_world_object_poses.emplace("table", Pose3d{});
   context.before.moveit_world_object_poses.emplace("coke", Pose3d{});
 
   const auto result = executor.execute(context);

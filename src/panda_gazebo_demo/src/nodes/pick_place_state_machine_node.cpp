@@ -24,8 +24,11 @@
 #include "panda_gazebo_demo/pick_place/motion_plan_evidence.hpp"
 #include "panda_gazebo_demo/pick_place/motion_state_action.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
+#include "panda_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
+#include "panda_gazebo_demo/pick_place/moveit_scene_executor.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_contracts.hpp"
+#include "panda_gazebo_demo/pick_place/recovery_contracts.hpp"
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
@@ -375,6 +378,30 @@ int main(int argc, char * argv[])
         std::make_shared<pick_place::MotionPlanValidator>(
           config, target_policy, motion_plan_limits));
     }
+    const std::vector<pick_place::MotionStateConfig> recovery_motion_configs{
+      {pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+        pick_place::State::RECOVER_MOVE_ABOVE_PICK,
+        pick_place::MotionKind::CARTESIAN_UP, true},
+      {pick_place::State::RECOVER_MOVE_ABOVE_PICK,
+        pick_place::State::RECOVER_DESCEND_TO_PICK,
+        pick_place::MotionKind::POSE, true},
+      {pick_place::State::RECOVER_DESCEND_TO_PICK,
+        pick_place::State::RECOVER_OPEN_GRIPPER,
+        pick_place::MotionKind::CARTESIAN_DOWN, true},
+      {pick_place::State::RECOVER_RETREAT, pick_place::State::ERROR,
+        pick_place::MotionKind::CARTESIAN_UP, false, true},
+    };
+    for (const auto & config : recovery_motion_configs) {
+      auto action = std::make_shared<pick_place::MotionStateAction>(
+        forward_motion_adapter, target_policy, config);
+      actions.registerPlanner(config.state, action);
+      if (*mode == pick_place::RunMode::EXECUTE) {
+        actions.registerExecutor(config.state, action);
+      }
+      plan_validators.registerValidator(config.state,
+        std::make_shared<pick_place::MotionPlanValidator>(
+          config, target_policy, motion_plan_limits));
+    }
   }
   if (*mode == pick_place::RunMode::EXECUTE) {
     const auto gripper_adapter = std::make_shared<pick_place::GripperCommandAdapter>(
@@ -423,6 +450,22 @@ int main(int argc, char * argv[])
         pick_place::State::RECOVER_DETACH_GAZEBO, false, gazebo_attach_topic,
         gazebo_detach_topic, gazebo_attachment_topic, gazebo_attachment_timeout_seconds,
         gazebo_attachment_poll_interval_seconds, true));
+    const auto moveit_scene_adapter = std::make_shared<pick_place::MoveItSceneAdapter>(
+      node, planning_group);
+    const std::vector<pick_place::MoveItSceneConfig> moveit_scene_configs{
+      {pick_place::State::ATTACH_MOVEIT, pick_place::MoveItSceneOperation::ATTACH, false},
+      {pick_place::State::DETACH_MOVEIT, pick_place::MoveItSceneOperation::DETACH, false},
+      {pick_place::State::SYNC_WORLD_OBJECT, pick_place::MoveItSceneOperation::SYNC, false},
+      {pick_place::State::RECOVER_DETACH_MOVEIT,
+        pick_place::MoveItSceneOperation::DETACH, true},
+      {pick_place::State::RECOVER_SYNC_WORLD_OBJECT,
+        pick_place::MoveItSceneOperation::SYNC, true},
+    };
+    for (const auto & config : moveit_scene_configs) {
+      actions.registerExecutor(config.state,
+        std::make_shared<pick_place::MoveItSceneExecutor>(
+          moveit_scene_adapter, config));
+    }
   }
   if (*mode == pick_place::RunMode::EXECUTE || resume) {
     contracts.registerContract(
@@ -449,6 +492,8 @@ int main(int argc, char * argv[])
     contract_config.carried_relative_orientation_tolerance_rad =
       coke_orientation_tolerance_rad;
     pick_place::registerPickPlaceForwardContracts(
+      contracts, target_policy, contract_config);
+    pick_place::registerRecoveryContracts(
       contracts, target_policy, contract_config);
   }
   if (*mode == pick_place::RunMode::EXECUTE || resume) {
