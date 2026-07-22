@@ -24,12 +24,12 @@ namespace
 {
 
 constexpr Pose3d kAbovePick{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
-constexpr Pose3d kPick{0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0};
+constexpr Pose3d kPick{0.3, 0.0, 0.87, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d kAbovePlace{0.3, 0.2, 0.987, 1.0, 0.0, 0.0, 0.0};
-constexpr Pose3d kPlace{0.3, 0.2, 0.93, 1.0, 0.0, 0.0, 0.0};
+constexpr Pose3d kPlace{0.3, 0.2, 0.87, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d kCokePick{0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
-constexpr Pose3d kCokeAbovePick{0.3, 0.0, 0.893, 0.0, 0.0, 0.0, 1.0};
-constexpr Pose3d kCokeAbovePlace{0.3, 0.2, 0.893, 0.0, 0.0, 0.0, 1.0};
+constexpr Pose3d kCokeAbovePick{0.3, 0.0, 0.953, 0.0, 0.0, 0.0, 1.0};
+constexpr Pose3d kCokeAbovePlace{0.3, 0.2, 0.953, 0.0, 0.0, 0.0, 1.0};
 constexpr Pose3d kCokePlace{0.3, 0.2, 0.836, 0.0, 0.0, 0.0, 1.0};
 const std::set<std::string> kTouchLinks{
   "panda_hand", "panda_leftfinger", "panda_rightfinger"};
@@ -131,11 +131,15 @@ public:
     ++calls;
     snapshot.fresh = true;
     snapshot.arm_stationary = true;
+    if (stationary_after_call > 0) {
+      snapshot.gazebo_coke_stationary = calls >= stationary_after_call;
+    }
     return {snapshot, std::nullopt};
   }
 
   WorldSnapshot snapshot;
   int calls{0};
+  int stationary_after_call{0};
 };
 
 void setExpected(Checkpoint & checkpoint, const WorldSnapshot & snapshot)
@@ -173,6 +177,11 @@ class MemoryCheckpointStore final : public ICheckpointStore
 public:
   std::optional<Failure> commit(const Checkpoint & checkpoint) override
   {
+    ++commit_attempts;
+    if (failing_commit_attempts.count(commit_attempts) != 0) {
+      return Failure{FailureCategory::CHECKPOINT, "CHECKPOINT_WRITE_FAILED",
+        "configured checkpoint write failure", {}};
+    }
     committed.push_back(checkpoint);
     loaded = checkpoint;
     return std::nullopt;
@@ -185,6 +194,86 @@ public:
 
   Checkpoint loaded;
   std::vector<Checkpoint> committed;
+  std::set<int> failing_commit_attempts;
+  int commit_attempts{0};
+};
+
+Checkpoint forwardCarryingCheckpoint(const WorldSnapshot & snapshot)
+{
+  Checkpoint checkpoint;
+  checkpoint.run_id = "forward-failure-test";
+  checkpoint.sequence = 7;
+  checkpoint.phase = CheckpointPhase::FORWARD;
+  checkpoint.last_completed_state = State::LIFT;
+  checkpoint.next_state = State::MOVE_ABOVE_PLACE;
+  checkpoint.configuration_hash = "recovery-test-config";
+  checkpoint.simulation_session_id = "recovery-test-session";
+  setExpected(checkpoint, snapshot);
+  return checkpoint;
+}
+
+class ConfigurableForwardContract final : public TransitionContractRegistry::ITransitionContract
+{
+public:
+  ValidationResult validatePrecondition(const WorldSnapshot &) const override
+  {
+    return precondition;
+  }
+
+  ValidationResult validate(
+    const WorldSnapshot &, const WorldSnapshot &,
+    const ActionResult &) const override
+  {
+    return {true, {}, {}};
+  }
+
+  ValidationResult precondition{true, {}, {}};
+};
+
+class ConfigurableForwardAction final : public IStatePlanner, public IStateExecutor
+{
+public:
+  PlanResult plan(
+    State, State, const ObservationResult &) override
+  {
+    ++plan_calls;
+    if (plan_failure) {
+      return {{ActionStatus::FAILED, plan_failure}, nullptr};
+    }
+    auto artifact = std::make_shared<PlanArtifact>();
+    artifact->trajectory_points = 1;
+    return {{ActionStatus::SUCCEEDED, std::nullopt}, artifact};
+  }
+
+  ActionResult execute(const ExecutionContext &) override
+  {
+    ++execute_calls;
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+
+  ActionResult cancel() override
+  {
+    ++cancel_calls;
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+
+  std::optional<Failure> plan_failure;
+  int plan_calls{0};
+  int execute_calls{0};
+  int cancel_calls{0};
+};
+
+class ConfigurableForwardPlanValidator final : public IPlanValidator
+{
+public:
+  ValidationResult validate(
+    State, const WorldSnapshot &,
+    const PlanArtifact &) const override
+  {
+    return validation;
+  }
+
+  ValidationResult validation{true, {}, {}};
 };
 
 class RecordingRecoveryAction final : public IStatePlanner, public IStateExecutor
@@ -218,6 +307,7 @@ public:
     evidence->cartesian_fraction = 1.0;
     evidence->duration_seconds = 1.0;
     evidence->max_joint_jump = 0.01;
+    evidence->planned_start_joint_positions = observation.snapshot->joint_positions;
     evidence->start_tcp_pose = observation.snapshot->tcp_pose_world;
     auto after = *observation.snapshot;
     applySuccessfulRecoveryState(state_, after);
@@ -331,12 +421,71 @@ public:
   std::vector<State> planning_order;
 };
 
+enum class ForwardFailureStage
+{
+  PRECONDITION,
+  PLANNER,
+  PLAN_VALIDATOR,
+  CHECKPOINT,
+};
+
+class ForwardFailureHarness
+{
+public:
+  explicit ForwardFailureHarness(ForwardFailureStage stage)
+  : workflow(carryingSnapshot(kAbovePlace, kCokeAbovePlace)),
+    action(std::make_shared<ConfigurableForwardAction>()),
+    contract(std::make_shared<ConfigurableForwardContract>()),
+    validator(std::make_shared<ConfigurableForwardPlanValidator>())
+  {
+    workflow.checkpoints.loaded = forwardCarryingCheckpoint(workflow.observer.snapshot);
+    workflow.contracts.registerContract(
+      {State::LIFT, State::MOVE_ABOVE_PLACE}, std::make_shared<AlwaysPassValidator>());
+    workflow.contracts.registerContract(
+      {State::MOVE_ABOVE_PLACE, State::DESCEND_TO_PLACE}, contract);
+    workflow.actions.registerPlanner(State::MOVE_ABOVE_PLACE, action);
+    workflow.actions.registerExecutor(State::MOVE_ABOVE_PLACE, action);
+    workflow.plan_validators.registerValidator(State::MOVE_ABOVE_PLACE, validator);
+
+    const Failure failure{FailureCategory::PRECONDITION,
+      "FORWARD_PRECONDITION_FAILED", "configured precondition failure", {}};
+    if (stage == ForwardFailureStage::PRECONDITION) {
+      contract->precondition = {false, {failure}, {}};
+    } else if (stage == ForwardFailureStage::PLANNER) {
+      action->plan_failure = Failure{FailureCategory::PLANNING,
+        "FORWARD_PLAN_FAILED", "configured planner failure", {}};
+    } else if (stage == ForwardFailureStage::PLAN_VALIDATOR) {
+      validator->validation = {false, {Failure{FailureCategory::PLAN_VALIDATION,
+            "FORWARD_PLAN_INVALID", "configured plan-validation failure", {}}}, {}};
+    } else {
+      workflow.checkpoints.failing_commit_attempts = {1, 2};
+    }
+  }
+
+  RunResult run()
+  {
+    return workflow.run();
+  }
+
+  WorkflowHarness workflow;
+  std::shared_ptr<ConfigurableForwardAction> action;
+  std::shared_ptr<ConfigurableForwardContract> contract;
+  std::shared_ptr<ConfigurableForwardPlanValidator> validator;
+};
+
 std::vector<State> fullRecoveryOrder()
 {
   return {State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK,
     State::RECOVER_DESCEND_TO_PICK, State::RECOVER_OPEN_GRIPPER,
     State::RECOVER_DETACH_GAZEBO, State::RECOVER_DETACH_MOVEIT,
     State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT};
+}
+
+std::vector<State> recoveryOrderFromSafeHeight()
+{
+  auto order = fullRecoveryOrder();
+  order.erase(order.begin());
+  return order;
 }
 
 class FakeGripperAdapter final : public IGripperCommandAdapter
@@ -416,9 +565,71 @@ TEST(RecoveryWorkflow, CarryFailureReturnsToPickBeforeOpening)
   const auto result = harness.run();
 
   EXPECT_EQ(result.status, RunStatus::ERROR);
-  EXPECT_EQ(harness.execution_order, fullRecoveryOrder());
+  EXPECT_EQ(harness.execution_order, recoveryOrderFromSafeHeight());
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(result.failure->code, "FORWARD_FAILED");
+}
+
+TEST(RecoveryWorkflow, CarryingPreconditionFailureRunsTheExactRecoveryWorkflow)
+{
+  ForwardFailureHarness harness(ForwardFailureStage::PRECONDITION);
+
+  const auto result = harness.run();
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "FORWARD_PRECONDITION_FAILED");
+  EXPECT_EQ(harness.action->cancel_calls, 1);
+  EXPECT_EQ(harness.action->plan_calls, 0);
+  EXPECT_EQ(harness.action->execute_calls, 0);
+  EXPECT_EQ(harness.workflow.execution_order, recoveryOrderFromSafeHeight());
+  ASSERT_FALSE(harness.workflow.checkpoints.committed.empty());
+  EXPECT_EQ(harness.workflow.checkpoints.committed.front().phase, CheckpointPhase::RECOVERY);
+  EXPECT_EQ(harness.workflow.checkpoints.committed.front().next_state,
+    State::RECOVER_MOVE_ABOVE_PICK);
+}
+
+TEST(RecoveryWorkflow, CarryingPlannerFailureRunsTheExactRecoveryWorkflow)
+{
+  ForwardFailureHarness harness(ForwardFailureStage::PLANNER);
+
+  const auto result = harness.run();
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "FORWARD_PLAN_FAILED");
+  EXPECT_EQ(harness.action->cancel_calls, 1);
+  EXPECT_EQ(harness.action->plan_calls, 1);
+  EXPECT_EQ(harness.action->execute_calls, 0);
+  EXPECT_EQ(harness.workflow.execution_order, recoveryOrderFromSafeHeight());
+}
+
+TEST(RecoveryWorkflow, CarryingPlanValidatorFailureRunsTheExactRecoveryWorkflow)
+{
+  ForwardFailureHarness harness(ForwardFailureStage::PLAN_VALIDATOR);
+
+  const auto result = harness.run();
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "FORWARD_PLAN_INVALID");
+  EXPECT_EQ(harness.action->cancel_calls, 1);
+  EXPECT_EQ(harness.action->plan_calls, 1);
+  EXPECT_EQ(harness.action->execute_calls, 0);
+  EXPECT_EQ(harness.workflow.execution_order, recoveryOrderFromSafeHeight());
+}
+
+TEST(RecoveryWorkflow, CheckpointFailuresStillRunEmergencyRecoveryInProcess)
+{
+  ForwardFailureHarness harness(ForwardFailureStage::CHECKPOINT);
+
+  const auto result = harness.run();
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "CHECKPOINT_WRITE_FAILED");
+  EXPECT_EQ(result.failure->metrics.at("recovery_checkpoint_persisted"), 0.0);
+  EXPECT_EQ(harness.action->cancel_calls, 1);
+  EXPECT_EQ(harness.action->execute_calls, 1);
+  EXPECT_EQ(harness.workflow.execution_order, recoveryOrderFromSafeHeight());
+  EXPECT_EQ(harness.workflow.checkpoints.commit_attempts, 9);
+  EXPECT_EQ(harness.workflow.checkpoints.committed.size(), 7U);
 }
 
 TEST(RecoveryWorkflow, CarryFailureAtPlaceSurfaceOpensBeforeCleanup)
@@ -531,7 +742,7 @@ TEST(RecoveryWorkflow, AlreadyDetachedCleanupNoOpsAndSynchronizes)
 
 TEST(RecoveryWorkflow, RecoveryActionFailureStopsImmediately)
 {
-  for (const auto failed_state : fullRecoveryOrder()) {
+  for (const auto failed_state : recoveryOrderFromSafeHeight()) {
     SCOPED_TRACE(toString(failed_state));
     WorkflowHarness harness(carryingSnapshot(kAbovePlace, kCokeAbovePlace), failed_state);
 
@@ -545,6 +756,20 @@ TEST(RecoveryWorkflow, RecoveryActionFailureStopsImmediately)
     ASSERT_TRUE(result.failure);
     EXPECT_EQ(result.failure->code, std::string("RECOVERY_FAILED_") + toString(failed_state));
   }
+
+
+  const Pose3d low_tcp{0.3, 0.2, 0.93, 1.0, 0.0, 0.0, 0.0};
+  const Pose3d low_coke = supportedCokePoseFromTcp(low_tcp);
+  WorkflowHarness lift_harness(
+    carryingSnapshot(low_tcp, low_coke), State::RECOVER_LIFT_TO_SAFE_HEIGHT);
+
+  const auto lift_result = lift_harness.run();
+
+  ASSERT_EQ(lift_result.status, RunStatus::ERROR);
+  ASSERT_EQ(lift_harness.execution_order.size(), 1U);
+  EXPECT_EQ(lift_harness.execution_order.front(), State::RECOVER_LIFT_TO_SAFE_HEIGHT);
+  ASSERT_TRUE(lift_result.failure);
+  EXPECT_EQ(lift_result.failure->code, "RECOVERY_FAILED_RECOVER_LIFT_TO_SAFE_HEIGHT");
 }
 
 TEST(RecoveryWorkflow, FinalErrorPreservesOriginalAndRecoveryFailure)
@@ -573,8 +798,22 @@ TEST(RecoveryWorkflow, ResumeReclassifiesChangedAttachmentFacts)
 
   EXPECT_EQ(result.status, RunStatus::ERROR);
   ASSERT_FALSE(harness.execution_order.empty());
-  EXPECT_EQ(harness.execution_order.front(), State::RECOVER_OPEN_GRIPPER);
+  EXPECT_EQ(harness.execution_order.front(), State::RECOVER_SYNC_WORLD_OBJECT);
   EXPECT_EQ(harness.planning_order, (std::vector<State>{State::RECOVER_RETREAT}));
+}
+
+TEST(RecoveryWorkflow, ResumeWaitsForGazeboCokeStationaryEvidence)
+{
+  WorkflowHarness harness(carryingSnapshot(kAbovePlace, kCokeAbovePlace));
+  harness.observer.stationary_after_call = 3;
+
+  const auto result = harness.run();
+
+  EXPECT_EQ(result.status, RunStatus::ERROR);
+  EXPECT_EQ(harness.execution_order, recoveryOrderFromSafeHeight());
+  EXPECT_GE(harness.observer.calls, 3);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "FORWARD_FAILED");
 }
 
 }  // namespace

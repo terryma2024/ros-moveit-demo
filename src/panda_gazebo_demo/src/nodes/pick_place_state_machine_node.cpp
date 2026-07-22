@@ -111,6 +111,18 @@ public:
       RCLCPP_INFO(logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s unavailable",
         pick_place::toString(state));
     }
+    const auto moveit_coke = after.moveit_world_object_poses.find("coke");
+    if (after.gazebo_coke_pose_world && moveit_coke != after.moveit_world_object_poses.end()) {
+      RCLCPP_INFO(
+        logger_,
+        "CROSS_WORLD_COKE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
+        pick_place::toString(state),
+        pick_place::positionDistance(*after.gazebo_coke_pose_world, moveit_coke->second),
+        pick_place::orientationDistance(*after.gazebo_coke_pose_world, moveit_coke->second));
+    } else {
+      RCLCPP_INFO(logger_, "CROSS_WORLD_COKE_POSE_ERROR state=%s unavailable",
+        pick_place::toString(state));
+    }
   }
 
 private:
@@ -224,10 +236,16 @@ T parameterOrDeclare(
   return node->get_parameter(name).get_value<T>();
 }
 
+enum class StateParameterScope
+{
+  FORWARD_ACTION,
+  ANY_ACTION,
+};
+
 std::optional<pick_place::State> optionalStateParameter(
   const std::shared_ptr<rclcpp::Node> & node,
   const std::string & name,
-  bool forward_action_only,
+  StateParameterScope scope,
   rclcpp::Logger logger)
 {
   const auto value = parameterOrDeclare(node, name, std::string(""));
@@ -235,9 +253,14 @@ std::optional<pick_place::State> optionalStateParameter(
     return std::nullopt;
   }
   const auto state = pick_place::stateFromString(value);
-  if (!state || (forward_action_only && !pick_place::isForwardAction(*state))) {
-    RCLCPP_ERROR(logger, "%s must name a forward action State; got '%s'", name.c_str(),
-                 value.c_str());
+  const bool valid_action = state && pick_place::isAction(*state);
+  const bool valid_scope = valid_action &&
+    (scope == StateParameterScope::ANY_ACTION || pick_place::isForwardAction(*state));
+  if (!valid_scope) {
+    const char * expected = scope == StateParameterScope::ANY_ACTION ?
+      "a non-terminal action State" : "a forward action State";
+    RCLCPP_ERROR(
+      logger, "%s must name %s; got '%s'", name.c_str(), expected, value.c_str());
     return std::nullopt;
   }
   return state;
@@ -270,9 +293,11 @@ int main(int argc, char * argv[])
     return EXIT_FAILURE;
   }
 
-  const auto fail_at = optionalStateParameter(node, "fail_at", true, logger);
+  const auto fail_at = optionalStateParameter(
+    node, "fail_at", StateParameterScope::FORWARD_ACTION, logger);
   const auto fail_at_value = node->get_parameter("fail_at").get_value<std::string>();
-  const auto stop_after = optionalStateParameter(node, "stop_after", true, logger);
+  const auto stop_after = optionalStateParameter(
+    node, "stop_after", StateParameterScope::ANY_ACTION, logger);
   const auto stop_after_value = node->get_parameter("stop_after").get_value<std::string>();
   if ((!fail_at_value.empty() && !fail_at) || (!stop_after_value.empty() && !stop_after)) {
     rclcpp::shutdown();
@@ -301,6 +326,8 @@ int main(int argc, char * argv[])
     node, "cartesian_min_fraction", parameters.cartesian_min_fraction);
   parameters.joint_jump_threshold = parameterOrDeclare(
     node, "joint_jump_threshold", parameters.joint_jump_threshold);
+  parameters.motion_start_joint_tolerance = parameterOrDeclare(
+    node, "motion_start_joint_tolerance", parameters.motion_start_joint_tolerance);
   parameters.tcp_position_tolerance = parameterOrDeclare(
     node, "tcp_position_tolerance", parameters.tcp_position_tolerance);
   parameters.tcp_orientation_tolerance_rad = parameterOrDeclare(
@@ -355,6 +382,8 @@ int main(int argc, char * argv[])
     node, "gazebo_attach_topic", parameters.gazebo_attach_topic);
   parameters.gazebo_detach_topic = parameterOrDeclare(
     node, "gazebo_detach_topic", parameters.gazebo_detach_topic);
+  parameters.gazebo_attachment_event_topic = parameterOrDeclare(
+    node, "gazebo_attachment_event_topic", parameters.gazebo_attachment_event_topic);
   parameters.gazebo_attachment_topic = parameterOrDeclare(
     node, "gazebo_attachment_topic", parameters.gazebo_attachment_topic);
   parameters.gazebo_coke_initially_detached = parameterOrDeclare(
@@ -384,15 +413,23 @@ int main(int argc, char * argv[])
 
   const auto target_policy = std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(
     parameters.recovery_safe_height);
+  const pick_place::GripperLimits gripper_limits{
+    parameters.gripper_open_min_position, parameters.gripper_grasp_min_position,
+    parameters.gripper_grasp_max_position, parameters.gripper_symmetry_tolerance,
+    parameters.joint_velocity_tolerance};
   const pick_place::FixedRecoveryPolicy recovery_policy(
-    target_policy, parameters.tcp_position_tolerance);
+    target_policy, parameters.tcp_position_tolerance,
+    parameters.tcp_orientation_tolerance_rad, parameters.coke_position_tolerance,
+    parameters.coke_orientation_tolerance_rad, gripper_limits);
   pick_place::PickPlaceRuntimeRegistries runtime;
   std::shared_ptr<pick_place::MoveItMotionAdapter> motion_adapter;
   if (*mode == pick_place::RunMode::PLAN_ONLY || *mode == pick_place::RunMode::EXECUTE) {
     motion_adapter = std::make_shared<pick_place::MoveItMotionAdapter>(
       node, parameters.planning_group, parameters.tcp_link,
       parameters.required_world_objects, parameters.velocity_scaling,
-      parameters.acceleration_scaling, parameters.cartesian_eef_step);
+      parameters.acceleration_scaling, parameters.cartesian_eef_step,
+      parameters.motion_start_joint_tolerance, parameters.joint_velocity_tolerance,
+      gripper_limits);
     pick_place::PickPlaceRuntimeDependencies dependencies;
     dependencies.motion = motion_adapter;
     if (*mode == pick_place::RunMode::EXECUTE) {
@@ -403,17 +440,19 @@ int main(int argc, char * argv[])
       dependencies.gazebo_attach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
         pick_place::State::ATTACH_GAZEBO, true, parameters.gazebo_attach_topic,
         parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
-        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false);
+        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
+        gripper_limits);
       dependencies.gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
         pick_place::State::DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
         parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
-        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false);
+        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
+        gripper_limits);
       dependencies.recovery_gazebo_detach =
         std::make_shared<pick_place::GazeboAttachmentExecutor>(
         pick_place::State::RECOVER_DETACH_GAZEBO, false,
         parameters.gazebo_attach_topic, parameters.gazebo_detach_topic,
         parameters.gazebo_attachment_topic, parameters.attachment_timeout_seconds,
-        parameters.state_poll_interval_seconds, true);
+        parameters.state_poll_interval_seconds, true, gripper_limits);
     }
     pick_place::PickPlaceRuntimeConfig runtime_config;
     runtime_config.target_policy = target_policy;
@@ -422,10 +461,9 @@ int main(int argc, char * argv[])
       parameters.joint_jump_threshold, parameters.tcp_position_tolerance,
       parameters.tcp_orientation_tolerance_rad, parameters.tcp_position_tolerance,
       parameters.tcp_orientation_tolerance_rad, parameters.coke_position_tolerance,
-      parameters.coke_orientation_tolerance_rad};
-    runtime_config.gripper = {parameters.gripper_open_min_position,
-      parameters.gripper_grasp_min_position, parameters.gripper_grasp_max_position,
-      parameters.gripper_symmetry_tolerance, parameters.joint_velocity_tolerance};
+      parameters.coke_orientation_tolerance_rad,
+      parameters.motion_start_joint_tolerance};
+    runtime_config.gripper = gripper_limits;
     runtime_config.contract = {parameters.tcp_position_tolerance,
       parameters.tcp_orientation_tolerance_rad, parameters.coke_position_tolerance,
       parameters.coke_orientation_tolerance_rad, parameters.coke_position_tolerance,
@@ -462,7 +500,7 @@ int main(int argc, char * argv[])
     common_resume_validator = std::make_unique<pick_place::CommonResumeValidator>(
       pick_place::pickPlaceConfigurationHash(
         parameters, target_policy->configurationSignature()),
-      simulation_session_id);
+      simulation_session_id, parameters.motion_start_joint_tolerance);
   }
 
   NodeSpinner spinner(node);

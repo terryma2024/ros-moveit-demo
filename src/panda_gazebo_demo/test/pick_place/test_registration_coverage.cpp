@@ -159,6 +159,16 @@ TEST(RegistrationCoverage, FactoryBuildsTheCompleteRuntimeGraph)
   EXPECT_FALSE(runtime.contracts.validateExecuteCoverage(transitions).has_value());
 }
 
+TEST(RegistrationCoverage, NullTransitionContractIsNotRegisteredCoverage)
+{
+  TransitionContractRegistry contracts;
+  const TransitionKey key{State::CLOSE_GRIPPER, State::ATTACH_GAZEBO};
+
+  contracts.registerContract(key, nullptr);
+
+  EXPECT_FALSE(contracts.hasContract(key));
+}
+
 TEST(RuntimeParameters, DefaultsAreValidAndEveryBehaviorParameterChangesTheHash)
 {
   const PickPlaceParameters defaults;
@@ -178,6 +188,7 @@ TEST(RuntimeParameters, DefaultsAreValidAndEveryBehaviorParameterChangesTheHash)
   add([](auto & value) {value.cartesian_eef_step = 0.006;});
   add([](auto & value) {value.cartesian_min_fraction = 0.98;});
   add([](auto & value) {value.joint_jump_threshold = 0.21;});
+  add([](auto & value) {value.motion_start_joint_tolerance = 0.011;});
   add([](auto & value) {value.tcp_position_tolerance = 0.021;});
   add([](auto & value) {value.tcp_orientation_tolerance_rad = 0.08;});
   add([](auto & value) {value.coke_position_tolerance = 0.011;});
@@ -204,6 +215,7 @@ TEST(RuntimeParameters, DefaultsAreValidAndEveryBehaviorParameterChangesTheHash)
   add([](auto & value) {value.gazebo_coke_model = "other_coke";});
   add([](auto & value) {value.gazebo_attach_topic = "/other/attach";});
   add([](auto & value) {value.gazebo_detach_topic = "/other/detach";});
+  add([](auto & value) {value.gazebo_attachment_event_topic = "/other/event";});
   add([](auto & value) {value.gazebo_attachment_topic = "/other/attached";});
   add([](auto & value) {value.gazebo_coke_initially_detached = false;});
   add([](auto & value) {value.gripper_action_name = "/other/gripper";});
@@ -224,6 +236,13 @@ TEST(RuntimeParameters, RejectsNonFiniteAndUnsafeRanges)
   parameters.cartesian_min_fraction = 1.1;
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
   parameters = {};
+  parameters.motion_start_joint_tolerance = 0.0;
+  EXPECT_TRUE(validatePickPlaceParameters(parameters));
+  parameters = {};
+  parameters.recovery_safe_height =
+    FixedPickPlaceTargetPolicy::kCanonicalSafeHeight - 0.001;
+  EXPECT_TRUE(validatePickPlaceParameters(parameters));
+  parameters = {};
   parameters.coke_settle_samples = 1;
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
   parameters = {};
@@ -231,6 +250,9 @@ TEST(RuntimeParameters, RejectsNonFiniteAndUnsafeRanges)
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
   parameters = {};
   parameters.gripper_open_min_position = parameters.gripper_open_position + 0.001;
+  EXPECT_TRUE(validatePickPlaceParameters(parameters));
+  parameters = {};
+  parameters.gazebo_attachment_event_topic = parameters.gazebo_attachment_topic;
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
 }
 

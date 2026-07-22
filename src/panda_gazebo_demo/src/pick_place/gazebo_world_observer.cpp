@@ -2,6 +2,7 @@
 #include "panda_gazebo_demo/pick_place/state_validation.hpp"
 
 #include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <optional>
 #include <utility>
@@ -41,11 +42,11 @@ public:
     bool initially_detached)
   : coke_model_(std::move(coke_model)), simulation_session_id_(std::move(simulation_session_id)),
     max_observation_age_(std::chrono::duration<double>(max_observation_age_seconds)),
-    coke_attached_(!initially_detached),
     coke_pose_stability_(coke_settle_samples, coke_settle_position_tolerance,
       coke_settle_orientation_tolerance_rad),
     coke_settle_interval_(std::chrono::duration<double>(coke_settle_interval_seconds))
   {
+    static_cast<void>(initially_detached);
     const auto pose_topic = "/world/" + world_name + "/pose/info";
     pose_subscription_ok_ = transport_.Subscribe(pose_topic, &Impl::onPoses, this);
     attachment_subscription_ok_ = transport_.Subscribe(
@@ -66,6 +67,7 @@ public:
           coke_pose_stability_.addSample(*coke_pose_, observed_at);
           last_stability_sample_at_ = observed_at;
         }
+        condition_.notify_all();
         return;
       }
     }
@@ -78,7 +80,11 @@ public:
       coke_attached_ = true;
     } else if (message.data() == "detached") {
       coke_attached_ = false;
+    } else {
+      return;
     }
+    attachment_received_at_ = std::chrono::steady_clock::now();
+    condition_.notify_all();
   }
 
   [[nodiscard]] ObservationResult enrich(WorldSnapshot snapshot) const
@@ -87,14 +93,26 @@ public:
       return {std::nullopt, observationFailure("GAZEBO_SUBSCRIPTION_FAILED",
           "Unable to subscribe to Gazebo Coke pose or attachment topic")};
     }
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait_for(lock, max_observation_age_, [this]() {
+        const auto now = std::chrono::steady_clock::now();
+        return coke_pose_.has_value() && coke_attached_.has_value() &&
+               now - coke_pose_received_at_ <= max_observation_age_ &&
+               now - attachment_received_at_ <= max_observation_age_;
+    });
     const auto now = std::chrono::steady_clock::now();
-    if (!coke_pose_ || now - coke_pose_received_at_ > max_observation_age_) {
+    if (!coke_pose_) {
       return {std::nullopt, observationFailure("GAZEBO_COKE_POSE_UNAVAILABLE",
           "Gazebo Coke pose is missing or stale")};
     }
-    // DetachableJoint's output is event-driven. The configured initial state
-    // is authoritative until Gazebo publishes the first attach/detach event.
+    if (!coke_attached_ || now - attachment_received_at_ > max_observation_age_) {
+      return {std::nullopt, observationFailure("GAZEBO_ATTACHMENT_STATE_UNAVAILABLE",
+          "Gazebo attachment state relay has not published a fresh validated state")};
+    }
+    if (now - coke_pose_received_at_ > max_observation_age_) {
+      return {std::nullopt, observationFailure("GAZEBO_COKE_POSE_UNAVAILABLE",
+          "Gazebo Coke pose is missing or stale")};
+    }
     snapshot.gazebo_coke_pose_world = coke_pose_;
     snapshot.gazebo_coke_attached = coke_attached_;
     snapshot.gazebo_coke_stationary = coke_pose_stability_.stationary();
@@ -110,8 +128,10 @@ private:
   bool pose_subscription_ok_{false};
   bool attachment_subscription_ok_{false};
   mutable std::mutex mutex_;
+  mutable std::condition_variable condition_;
   std::optional<Pose3d> coke_pose_;
   std::optional<bool> coke_attached_;
+  std::chrono::steady_clock::time_point attachment_received_at_{};
   CokePoseStabilityTracker coke_pose_stability_;
   std::chrono::duration<double> coke_settle_interval_;
   std::chrono::steady_clock::time_point last_stability_sample_at_{};

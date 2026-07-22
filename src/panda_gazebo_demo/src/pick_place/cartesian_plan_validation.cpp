@@ -32,6 +32,45 @@ void addMotionFailure(ValidationResult & result, std::string code, std::string m
 
 }  // namespace
 
+ValidationResult validateMotionStartJoints(
+  const std::map<std::string, double> & planned_start_joint_positions,
+  const std::map<std::string, double> & observed_joint_positions,
+  double tolerance)
+{
+  ValidationResult result{true, {}, {}};
+  if (planned_start_joint_positions.empty()) {
+    addMotionFailure(result, "MOTION_START_JOINTS_MISSING",
+      "Motion plan does not contain named planned-start joint positions");
+  }
+  if (!std::isfinite(tolerance) || tolerance <= 0.0) {
+    addMotionFailure(result, "MOTION_START_JOINT_TOLERANCE_INVALID",
+      "Motion start joint tolerance must be finite and positive");
+  }
+  double maximum_error = 0.0;
+  for (const auto & [name, planned_position] : planned_start_joint_positions) {
+    const auto observed = observed_joint_positions.find(name);
+    if (observed == observed_joint_positions.end()) {
+      addMotionFailure(result, "MOTION_START_JOINTS_MISSING",
+        "Observed world snapshot is missing planned joint " + name);
+      continue;
+    }
+    if (!std::isfinite(planned_position) || !std::isfinite(observed->second)) {
+      addMotionFailure(result, "MOTION_START_JOINT_NON_FINITE",
+        "Planned or observed start position is non-finite for joint " + name);
+      continue;
+    }
+    const double error = std::abs(planned_position - observed->second);
+    maximum_error = std::max(maximum_error, error);
+    if (std::isfinite(tolerance) && tolerance > 0.0 && error > tolerance) {
+      addMotionFailure(result, "MOTION_START_JOINT_MISMATCH",
+        "Observed start position differs from the plan for joint " + name);
+    }
+  }
+  result.metrics["motion_start_joint_max_error"] = maximum_error;
+  result.ok = result.failures.empty();
+  return result;
+}
+
 ValidationResult validateCartesianPlan(
   const CartesianPlanEvidence & evidence, const Pose3d & target,
   const CartesianPlanLimits & limits)
@@ -303,6 +342,12 @@ ValidationResult MotionPlanValidator::validate(
   if (!target_policy_) {
     return {false, {{FailureCategory::CONFIGURATION, "TARGET_POLICY_MISSING",
         "Motion plan validator requires a target policy", {}}}, {}};
+  }
+  auto result = validateMotionStartJoints(
+    evidence->planned_start_joint_positions, before.joint_positions,
+    limits_.start_joint_tolerance);
+  if (!result.ok) {
+    return result;
   }
   const ObservationResult observation{before, std::nullopt};
   const auto target = target_policy_->targetPose(

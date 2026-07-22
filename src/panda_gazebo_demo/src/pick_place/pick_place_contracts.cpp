@@ -14,9 +14,6 @@ namespace panda_gazebo_demo::pick_place
 namespace
 {
 
-constexpr double kSupportedCokeX = 0.3;
-constexpr double kSupportedCokeY = 0.2;
-constexpr double kSupportedCokeZ = 0.836;
 const std::set<std::string> kRequiredTouchLinks{
   "panda_hand", "panda_leftfinger", "panda_rightfinger"};
 
@@ -345,6 +342,7 @@ void requireCrossWorldEquality(
 
 void requireSupportedCoke(
   ValidationResult & result, const WorldSnapshot & snapshot,
+  const TargetPolicyPtr & target_policy, State state, State next_state,
   const PickPlaceContractConfig & config)
 {
   if (!snapshot.gazebo_coke_pose_world) {
@@ -352,14 +350,30 @@ void requireSupportedCoke(
       "Gazebo Coke pose is required for place support validation");
     return;
   }
-  const Pose3d expected{kSupportedCokeX, kSupportedCokeY, kSupportedCokeZ,
-    snapshot.gazebo_coke_pose_world->qx, snapshot.gazebo_coke_pose_world->qy,
-    snapshot.gazebo_coke_pose_world->qz, snapshot.gazebo_coke_pose_world->qw};
-  const double position_error = positionDistance(*snapshot.gazebo_coke_pose_world, expected);
+  if (!target_policy) {
+    addFailure(result, FailureCategory::CONFIGURATION, "TARGET_POLICY_MISSING",
+      "Coke support validation requires a target policy");
+    return;
+  }
+  const auto expected = supportedCokePose(
+    *target_policy, state, next_state, ObservationResult{snapshot, std::nullopt});
+  if (!expected.target_pose) {
+    result.failures.push_back(expected.failure.value_or(Failure{
+          FailureCategory::CONFIGURATION, "SUPPORTED_COKE_TARGET_MISSING",
+          "Target policy did not return a supported Coke pose", {}}));
+    return;
+  }
+  const double position_error = positionDistance(
+    *snapshot.gazebo_coke_pose_world, *expected.target_pose);
+  const double orientation_error = orientationDistance(
+    *snapshot.gazebo_coke_pose_world, *expected.target_pose);
   result.metrics["supported_coke_position_error"] = position_error;
-  if (position_error > config.coke_position_tolerance) {
+  result.metrics["supported_coke_orientation_error_rad"] = orientation_error;
+  if (position_error > config.coke_position_tolerance ||
+    orientation_error > config.coke_orientation_tolerance_rad)
+  {
     addFailure(result, FailureCategory::POSTCONDITION, "COKE_NOT_AT_SUPPORTED_PLACE_POSE",
-      "Coke is outside the supported fixed place position");
+      "Coke is outside the supported position or upright orientation");
   }
 }
 
@@ -398,7 +412,8 @@ std::shared_ptr<const Contract> makeCarriedMotionContract(
       requireTcpTarget(result, after, target_policy, end_state, end_next, config);
       requireRelativePoseContinuity(result, before, after, config);
       if (require_supported_place) {
-        requireSupportedCoke(result, after, config);
+        requireSupportedCoke(result, after, target_policy,
+          State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       }
       return finish(std::move(result));
     });
@@ -515,7 +530,8 @@ std::shared_ptr<const Contract> makeOpenToGazeboDetachContract(
       auto result = carryingBoundary(before, config, false);
       requireTcpTarget(result, before, target_policy, State::DESCEND_TO_PLACE,
         State::OPEN_GRIPPER, config);
-      requireSupportedCoke(result, before, config);
+      requireSupportedCoke(result, before, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       return finish(std::move(result));
     },
     [target_policy, config](const WorldSnapshot & before, const WorldSnapshot & after,
@@ -524,7 +540,8 @@ std::shared_ptr<const Contract> makeOpenToGazeboDetachContract(
       requireActionSucceeded(result, action_result);
       requireTcpTarget(result, after, target_policy, State::DESCEND_TO_PLACE,
         State::OPEN_GRIPPER, config);
-      requireSupportedCoke(result, after, config);
+      requireSupportedCoke(result, after, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       requireCokeDrift(result, before, after, config);
       requireRelativePoseContinuity(result, before, after, config);
       return finish(std::move(result));
@@ -532,15 +549,16 @@ std::shared_ptr<const Contract> makeOpenToGazeboDetachContract(
 }
 
 std::shared_ptr<const Contract> makeGazeboToMoveItDetachContract(
-  PickPlaceContractConfig config)
+  TargetPolicyPtr target_policy, PickPlaceContractConfig config)
 {
   return std::make_shared<FunctionalContract>(
-    [config](const WorldSnapshot & before) {
+    [target_policy, config](const WorldSnapshot & before) {
       auto result = carryingBoundary(before, config, true);
-      requireSupportedCoke(result, before, config);
+      requireSupportedCoke(result, before, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       return finish(std::move(result));
     },
-    [config](const WorldSnapshot & before, const WorldSnapshot & after,
+    [target_policy, config](const WorldSnapshot & before, const WorldSnapshot & after,
     const ActionResult & action_result) {
       auto result = resultFor(after);
       requireActionSucceeded(result, action_result);
@@ -548,24 +566,28 @@ std::shared_ptr<const Contract> makeGazeboToMoveItDetachContract(
       requireAttachments(result, after, false, true);
       requireGripperOpen(result, after, config);
       requireCokeStationary(result, after);
-      requireSupportedCoke(result, after, config);
+      requireSupportedCoke(result, after, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       requireCokeDrift(result, before, after, config);
       return finish(std::move(result));
     });
 }
 
-std::shared_ptr<const Contract> makeMoveItDetachToSyncContract(PickPlaceContractConfig config)
+std::shared_ptr<const Contract> makeMoveItDetachToSyncContract(
+  TargetPolicyPtr target_policy, PickPlaceContractConfig config)
 {
   return std::make_shared<FunctionalContract>(
-    [config](const WorldSnapshot & before) {
+    [target_policy, config](const WorldSnapshot & before) {
       auto result = resultFor(before);
       requireFreshStationary(result, before, FailureCategory::PRECONDITION);
       requireAttachments(result, before, false, true);
       requireGripperOpen(result, before, config);
       requireCokeStationary(result, before);
+      requireSupportedCoke(result, before, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       return finish(std::move(result));
     },
-    [config](const WorldSnapshot &, const WorldSnapshot & after,
+    [target_policy, config](const WorldSnapshot &, const WorldSnapshot & after,
     const ActionResult & action_result) {
       auto result = resultFor(after);
       requireActionSucceeded(result, action_result);
@@ -573,6 +595,8 @@ std::shared_ptr<const Contract> makeMoveItDetachToSyncContract(PickPlaceContract
       requireAttachments(result, after, false, false);
       requireGripperOpen(result, after, config);
       requireCokeStationary(result, after);
+      requireSupportedCoke(result, after, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       requireWorldObjects(result, after);
       return finish(std::move(result));
     });
@@ -590,6 +614,8 @@ std::shared_ptr<const Contract> makeSyncToRetreatContract(
       requireCokeStationary(result, before);
       requireTcpTarget(result, before, target_policy, State::DESCEND_TO_PLACE,
         State::OPEN_GRIPPER, config);
+      requireSupportedCoke(result, before, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       requireWorldObjects(result, before);
       return finish(std::move(result));
     },
@@ -603,6 +629,8 @@ std::shared_ptr<const Contract> makeSyncToRetreatContract(
       requireCokeStationary(result, after);
       requireTcpTarget(result, after, target_policy, State::DESCEND_TO_PLACE,
         State::OPEN_GRIPPER, config);
+      requireSupportedCoke(result, after, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       requireWorldObjects(result, after);
       requireCrossWorldEquality(result, after, config);
       requireCokeDrift(result, before, after, config);
@@ -622,6 +650,8 @@ std::shared_ptr<const Contract> makeRetreatToDoneContract(
       requireCokeStationary(result, before);
       requireTcpTarget(result, before, target_policy, State::DESCEND_TO_PLACE,
         State::OPEN_GRIPPER, config);
+      requireSupportedCoke(result, before, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       requireWorldObjects(result, before);
       requireCrossWorldEquality(result, before, config);
       return finish(std::move(result));
@@ -635,6 +665,8 @@ std::shared_ptr<const Contract> makeRetreatToDoneContract(
       requireGripperOpen(result, after, config);
       requireCokeStationary(result, after);
       requireTcpTarget(result, after, target_policy, State::RETREAT, State::DONE, config);
+      requireSupportedCoke(result, after, target_policy,
+        State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       requireWorldObjects(result, after);
       requireCrossWorldEquality(result, after, config);
       requireCokeDrift(result, before, after, config);
@@ -661,9 +693,9 @@ void registerPickPlaceForwardContracts(
   registry.registerContract({State::OPEN_GRIPPER, State::DETACH_GAZEBO},
     makeOpenToGazeboDetachContract(target_policy, config));
   registry.registerContract({State::DETACH_GAZEBO, State::DETACH_MOVEIT},
-    makeGazeboToMoveItDetachContract(config));
+    makeGazeboToMoveItDetachContract(target_policy, config));
   registry.registerContract({State::DETACH_MOVEIT, State::SYNC_WORLD_OBJECT},
-    makeMoveItDetachToSyncContract(config));
+    makeMoveItDetachToSyncContract(target_policy, config));
   registry.registerContract({State::SYNC_WORLD_OBJECT, State::RETREAT},
     makeSyncToRetreatContract(target_policy, config));
   registry.registerContract({State::RETREAT, State::DONE},

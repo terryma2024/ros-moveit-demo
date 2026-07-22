@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <type_traits>
@@ -271,7 +272,7 @@ TEST(PickPlaceTargetPolicy, ReturnsFixedDescendTarget)
   EXPECT_FALSE(result.failure.has_value());
   EXPECT_DOUBLE_EQ(0.3, result.target_pose->x);
   EXPECT_DOUBLE_EQ(0.0, result.target_pose->y);
-  EXPECT_DOUBLE_EQ(0.93, result.target_pose->z);
+  EXPECT_DOUBLE_EQ(0.87, result.target_pose->z);
   EXPECT_DOUBLE_EQ(1.0, result.target_pose->qx);
   EXPECT_DOUBLE_EQ(0.0, result.target_pose->qy);
   EXPECT_DOUBLE_EQ(0.0, result.target_pose->qz);
@@ -296,8 +297,9 @@ TEST(PickPlaceTargetPolicy, ConfigurationSignatureIncludesEveryFixedTarget)
   const pick_place::FixedPickPlaceTargetPolicy policy;
 
   EXPECT_EQ(
-    "fixed-v2|above_pick=0.3,0,0.987,1,0,0,0|pick=0.3,0,0.93,1,0,0,0|"
-    "above_place=0.3,0.2,0.987,1,0,0,0|place=0.3,0.2,0.93,1,0,0,0|"
+    "fixed-v4|above_pick=0.3,0,0.987,1,0,0,0|pick=0.3,0,0.87,1,0,0,0|"
+    "above_place=0.3,0.2,0.987,1,0,0,0|place=0.3,0.2,0.87,1,0,0,0|"
+    "supported_coke_offset_z=-0.034|"
     "recovery_safe_height=0.987",
     policy.configurationSignature());
 }
@@ -340,6 +342,40 @@ TEST(TransitionContracts, ResolvesMoveAboveTargetFromPreExecutionObservation)
 
   EXPECT_TRUE(result.ok);
   EXPECT_DOUBLE_EQ(0.0, result.metrics.at("tcp_position_error"));
+}
+
+TEST(WorldObserverMath, NonFinitePositionReturnsInfinity)
+{
+  auto lhs = makeSnapshot().tcp_pose_world;
+  const auto rhs = lhs;
+  lhs.x = std::numeric_limits<double>::quiet_NaN();
+
+  EXPECT_TRUE(std::isinf(pick_place::positionDistance(lhs, rhs)));
+}
+
+TEST(WorldObserverMath, NonFiniteQuaternionReturnsInfinity)
+{
+  auto lhs = makeSnapshot().tcp_pose_world;
+  const auto rhs = lhs;
+  lhs.qw = std::numeric_limits<double>::quiet_NaN();
+
+  EXPECT_TRUE(std::isinf(pick_place::orientationDistance(lhs, rhs)));
+}
+
+TEST(TransitionContracts, RejectsNonFiniteTcpPose)
+{
+  const auto before = makeSnapshot();
+  auto after = before;
+  after.tcp_pose_world.x = std::numeric_limits<double>::quiet_NaN();
+  const pick_place::MoveAboveObjectToDescendValidator contract(
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"},
+    0.02, 0.1, 0.01, 0.1);
+
+  const auto result = contract.validate(
+    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(std::isinf(result.metrics.at("tcp_position_error")));
 }
 
 pick_place::Checkpoint makeCheckpoint(const pick_place::WorldSnapshot & snapshot)
@@ -526,6 +562,16 @@ TEST(TransitionTable, NewRecoveryStatesRoundTripAndAreNotForwardActions)
     EXPECT_EQ(state, pick_place::stateFromString(name));
     EXPECT_FALSE(pick_place::isForwardAction(state));
   }
+}
+
+TEST(TransitionTable, ActionStatesIncludeForwardAndRecoveryButRejectControlStates)
+{
+  EXPECT_TRUE(pick_place::isAction(pick_place::State::MOVE_ABOVE_OBJECT));
+  EXPECT_TRUE(pick_place::isAction(pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT));
+  EXPECT_TRUE(pick_place::isAction(pick_place::State::RECOVER_RETREAT));
+  EXPECT_FALSE(pick_place::isAction(pick_place::State::IDLE));
+  EXPECT_FALSE(pick_place::isAction(pick_place::State::DONE));
+  EXPECT_FALSE(pick_place::isAction(pick_place::State::ERROR));
 }
 
 TEST(TransitionTable, CarryRecoveryReturnsObjectToPickBeforeCleanup)
@@ -946,6 +992,39 @@ TEST(Runner, ResumePlanOnlyValidatesCheckpointAndPlansMoveAboveWithoutCommitting
   EXPECT_EQ(1, checkpoints.load_calls);
 }
 
+TEST(Runner, ResumePlanOnlyWaitsForForwardCokeStationaryEvidence)
+{
+  pick_place::StateActionRegistry actions;
+  auto planner = std::make_shared<FakePlanner>();
+  actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(
+    pick_place::State::MOVE_ABOVE_OBJECT,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  pick_place::TransitionContractRegistry contracts;
+  registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
+  FakeObserver observer;
+  observer.snapshot.gazebo_coke_stationary = false;
+  observer.after_snapshot = observer.snapshot;
+  observer.after_snapshot->gazebo_coke_stationary = true;
+  FakeCheckpointStore checkpoints;
+  auto checkpoint_snapshot = observer.snapshot;
+  checkpoint_snapshot.gazebo_coke_stationary = true;
+  checkpoints.load_result.checkpoint = makeCheckpoint(checkpoint_snapshot);
+  checkpoints.load_result.checkpoint->expected.gazebo_coke_stationary = true;
+  const auto common_resume_validator = makeCommonResumeValidator();
+  const pick_place::StateMachineRunner runner(
+    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
+    &plan_validators);
+
+  const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true,
+        std::nullopt, 100});
+
+  EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
+  EXPECT_GE(observer.calls, 2);
+  EXPECT_EQ(1, planner->calls);
+}
+
 TEST(Runner, ResumeExecuteRunsMoveAboveObjectFromPrepareCheckpoint)
 {
   pick_place::StateActionRegistry actions;
@@ -994,7 +1073,7 @@ TEST(Runner, ResumeExecuteStopsSuccessfullyAfterDescendCheckpoint)
   registerDescendToCloseGripperValidator(contracts);
   FakeObserver observer;
   observer.after_snapshot = observer.snapshot;
-  observer.after_snapshot->tcp_pose_world.z = 0.93;
+  observer.after_snapshot->tcp_pose_world.z = 0.87;
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeMoveAboveCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
@@ -1031,7 +1110,7 @@ TEST(Runner, ResumeExecuteReachesExpectedUnregisteredCloseGripperBoundary)
   registerDescendToCloseGripperValidator(contracts);
   FakeObserver observer;
   observer.after_snapshot = observer.snapshot;
-  observer.after_snapshot->tcp_pose_world.z = 0.93;
+  observer.after_snapshot->tcp_pose_world.z = 0.87;
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeMoveAboveCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
@@ -1128,7 +1207,7 @@ TEST(TransitionContracts, DescendRejectsCokeOrientationDriftAfterExecution)
 {
   const auto before = makeSnapshot();
   auto after = before;
-  after.tcp_pose_world.z = 0.93;
+  after.tcp_pose_world.z = 0.87;
   const pick_place::Pose3d rotated_coke{
     0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
   after.gazebo_coke_pose_world = rotated_coke;
@@ -1149,7 +1228,7 @@ TEST(TransitionContracts, DescendAcceptsStableSixDofCompletion)
 {
   const auto before = makeSnapshot();
   auto after = before;
-  after.tcp_pose_world.z = 0.93;
+  after.tcp_pose_world.z = 0.87;
   const pick_place::DescendToCloseGripperValidator contract(
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
     0.01, 0.1);
@@ -1195,6 +1274,86 @@ TEST(CommonResumeValidator, RejectsSessionMismatch)
   EXPECT_EQ("RESUME_SIMULATION_SESSION_MISMATCH", result.failures.front().code);
 }
 
+TEST(CommonResumeValidator, RejectsJointPositionDrift)
+{
+  const auto checkpoint = makeCheckpoint(makeSnapshot());
+  auto current = makeSnapshot();
+  current.joint_positions.at("panda_joint1") = 0.02;
+  const pick_place::CommonResumeValidator validator(
+    "test-config", "test-session", 0.01);
+
+  const auto result = validator.validate(checkpoint, current);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("RESUME_JOINT_POSITION_MISMATCH", firstFailureCode(result));
+}
+
+TEST(CommonResumeValidator, RejectsMissingJointPosition)
+{
+  const auto checkpoint = makeCheckpoint(makeSnapshot());
+  auto current = makeSnapshot();
+  current.joint_positions.erase("panda_joint1");
+  const pick_place::CommonResumeValidator validator(
+    "test-config", "test-session", 0.01);
+
+  const auto result = validator.validate(checkpoint, current);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("RESUME_JOINT_POSITION_MISMATCH", firstFailureCode(result));
+}
+
+TEST(CommonResumeValidator, RejectsNonFiniteJointPosition)
+{
+  auto checkpoint = makeCheckpoint(makeSnapshot());
+  auto current = makeSnapshot();
+  checkpoint.expected.joint_positions.at("panda_joint1") =
+    std::numeric_limits<double>::quiet_NaN();
+  const pick_place::CommonResumeValidator validator(
+    "test-config", "test-session", 0.01);
+
+  const auto result = validator.validate(checkpoint, current);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("RESUME_JOINT_POSITION_MISMATCH", firstFailureCode(result));
+}
+
+TEST(CommonResumeValidator, RecoveryAllowsFiniteJointDriftForFactReclassification)
+{
+  auto checkpoint = makeCheckpoint(makeSnapshot());
+  checkpoint.phase = pick_place::CheckpointPhase::RECOVERY;
+  checkpoint.failed_state = pick_place::State::MOVE_ABOVE_PLACE;
+  checkpoint.original_failure = pick_place::Failure{
+    pick_place::FailureCategory::EXECUTION, "MOVE_FAILED", "move failed", {}};
+  auto current = makeSnapshot();
+  current.joint_positions.at("panda_joint1") = 0.5;
+  const pick_place::CommonResumeValidator validator(
+    "test-config", "test-session", 0.01);
+
+  const auto result = validator.validate(checkpoint, current);
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_DOUBLE_EQ(0.5, result.metrics.at("resume_joint_position_error_max"));
+}
+
+TEST(CommonResumeValidator, RecoveryRejectsNonFiniteJointEvidence)
+{
+  auto checkpoint = makeCheckpoint(makeSnapshot());
+  checkpoint.phase = pick_place::CheckpointPhase::RECOVERY;
+  checkpoint.failed_state = pick_place::State::MOVE_ABOVE_PLACE;
+  checkpoint.original_failure = pick_place::Failure{
+    pick_place::FailureCategory::EXECUTION, "MOVE_FAILED", "move failed", {}};
+  auto current = makeSnapshot();
+  current.joint_positions.at("panda_joint1") =
+    std::numeric_limits<double>::quiet_NaN();
+  const pick_place::CommonResumeValidator validator(
+    "test-config", "test-session", 0.01);
+
+  const auto result = validator.validate(checkpoint, current);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("RESUME_JOINT_POSITION_MISMATCH", firstFailureCode(result));
+}
+
 TEST(TransitionContracts, ResumeUsesTheSameMoveAboveObjectToDescendValidator)
 {
   const auto checkpoint = makeCheckpoint(makeSnapshot());
@@ -1215,7 +1374,7 @@ TEST(TransitionContracts, ResumeUsesTheSameMoveAboveObjectToDescendValidator)
 TEST(TransitionContracts, ResumeUsesTheSameDescendToCloseGripperValidator)
 {
   auto expected = makeSnapshot();
-  expected.tcp_pose_world.z = 0.93;
+  expected.tcp_pose_world.z = 0.87;
   auto current = expected;
   const pick_place::Pose3d rotated_coke{
     0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};

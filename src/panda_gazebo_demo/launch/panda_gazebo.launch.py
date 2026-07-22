@@ -31,6 +31,7 @@ def generate_launch_description():
         'gripper_grasp_max_position': '0.037',
         'gripper_symmetry_tolerance': '0.003',
         'joint_velocity_tolerance': '0.010',
+        'motion_start_joint_tolerance': '0.010',
         'gripper_max_effort': '0.0',
         'gripper_action_timeout_seconds': '5.0',
         'attachment_timeout_seconds': '2.0',
@@ -247,6 +248,21 @@ def generate_launch_description():
         output='screen',
     )
 
+    attachment_state_relay = Node(
+        package='panda_gazebo_demo',
+        executable='gazebo_attachment_state_relay',
+        output='screen',
+        parameters=[
+            {
+                'event_topic': '/panda/coke_attached_event',
+                'state_topic': '/panda/coke_attached',
+                'detach_topic': '/panda/detach_coke',
+                'enforce_initially_detached': True,
+                'publish_period_seconds': 0.05,
+            }
+        ],
+    )
+
     pick_place_state_machine = Node(
         package='panda_gazebo_demo',
         executable='pick_place_state_machine',
@@ -288,6 +304,7 @@ def generate_launch_description():
             gazebo_headless,
             gazebo_with_gui,
             clock_bridge,
+            attachment_state_relay,
             robot_state_publisher,
             spawn_panda,
             joint_state_broadcaster,

@@ -103,7 +103,8 @@ void TransitionContractRegistry::registerContract(
 }
 bool TransitionContractRegistry::hasContract(TransitionKey key) const noexcept
 {
-  return contracts_.count(key) != 0;
+  const auto found = contracts_.find(key);
+  return found != contracts_.end() && static_cast<bool>(found->second);
 }
 
 ValidationResult TransitionContractRegistry::validate(

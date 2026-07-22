@@ -1,5 +1,7 @@
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace panda_gazebo_demo::pick_place
@@ -17,9 +19,11 @@ void addFailure(ValidationResult & result, std::string code, std::string message
 }  // namespace
 
 CommonResumeValidator::CommonResumeValidator(
-  std::string configuration_hash, std::string simulation_session_id)
+  std::string configuration_hash, std::string simulation_session_id,
+  double joint_position_tolerance)
 : configuration_hash_(std::move(configuration_hash)),
-  simulation_session_id_(std::move(simulation_session_id))
+  simulation_session_id_(std::move(simulation_session_id)),
+  joint_position_tolerance_(joint_position_tolerance)
 {
 }
 
@@ -67,6 +71,33 @@ ValidationResult CommonResumeValidator::validate(
   {
     addFailure(result, "CHECKPOINT_EXPECTATION_INCOMPLETE",
       "Checkpoint is missing required cross-world transition evidence");
+  }
+  bool joint_evidence_valid =
+    checkpoint.expected.joint_positions.size() == current.joint_positions.size();
+  bool joint_positions_within_tolerance = true;
+  double maximum_joint_position_error = 0.0;
+  for (const auto & [name, expected_position] : checkpoint.expected.joint_positions) {
+    const auto current_position = current.joint_positions.find(name);
+    if (current_position == current.joint_positions.end() ||
+      !std::isfinite(expected_position) || !std::isfinite(current_position->second))
+    {
+      joint_evidence_valid = false;
+      continue;
+    }
+    const auto error = std::abs(expected_position - current_position->second);
+    maximum_joint_position_error = std::max(maximum_joint_position_error, error);
+    if (error > joint_position_tolerance_) {
+      joint_positions_within_tolerance = false;
+    }
+  }
+  result.metrics["resume_joint_position_error_max"] = maximum_joint_position_error;
+  const bool forward_joint_mismatch = checkpoint.phase == CheckpointPhase::FORWARD &&
+    !joint_positions_within_tolerance;
+  if (!joint_evidence_valid || forward_joint_mismatch) {
+    addFailure(result, "RESUME_JOINT_POSITION_MISMATCH",
+      checkpoint.phase == CheckpointPhase::FORWARD ?
+      "Current named joint positions differ from the checkpoint expectation" :
+      "Recovery resume requires complete finite named-joint evidence");
   }
   result.ok = result.failures.empty();
   return result;

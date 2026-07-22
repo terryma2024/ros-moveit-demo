@@ -122,5 +122,6 @@ struct RunResult
 [[nodiscard]] std::optional<RunMode> runModeFromString(std::string_view value);
 [[nodiscard]] bool isTerminal(State state) noexcept;
 [[nodiscard]] bool isForwardAction(State state) noexcept;
+[[nodiscard]] bool isAction(State state) noexcept;
 
 }  // namespace panda_gazebo_demo::pick_place

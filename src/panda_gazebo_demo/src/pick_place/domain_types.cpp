@@ -97,4 +97,9 @@ bool isForwardAction(State state) noexcept
   return state >= State::IDLE && state <= State::RETREAT;
 }
 
+bool isAction(State state) noexcept
+{
+  return state >= State::PREPARE_OPEN_GRIPPER && state <= State::RECOVER_RETREAT;
+}
+
 }  // namespace panda_gazebo_demo::pick_place

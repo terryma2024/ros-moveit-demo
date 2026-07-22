@@ -59,6 +59,15 @@ Failure withOriginalFailure(Failure recovery_failure, const Failure & original_f
   return recovery_failure;
 }
 
+Failure withCheckpointPersistenceFailure(
+  Failure workflow_failure, const Failure & checkpoint_failure)
+{
+  workflow_failure.message += " | recovery checkpoint persistence failure " +
+    checkpoint_failure.code + ": " + checkpoint_failure.message;
+  workflow_failure.metrics["recovery_checkpoint_persisted"] = 0.0;
+  return workflow_failure;
+}
+
 }  // namespace
 
 RunResult StateMachineRunner::run(const RunRequest & request) const
@@ -204,6 +213,10 @@ RunResult StateMachineRunner::runExecuteWorkflow(
       failed_state = state;
       workflow_failure = step.failure;
       ++checkpoint_sequence;
+    } else if (phase == CheckpointPhase::RECOVERY && step.status == RunStatus::RUNNING &&
+      step.failure)
+    {
+      workflow_failure = step.failure;
     }
     state = *step.next_state;
     if (step.status == RunStatus::CHECKPOINT_COMPLETE) {
@@ -260,15 +273,24 @@ RunResult StateMachineRunner::runExecuteStep(
   if (!before) {
     const auto observation = observer_->observe();
     if (!observation.snapshot) {
-      return error(state, observation.failure.value_or(Failure{
+      auto failure = observation.failure.value_or(Failure{
           FailureCategory::OBSERVATION, "PRE_EXECUTION_OBSERVATION_FAILED",
-          "Could not observe the world before execution", {}}));
+          "Could not observe the world before execution", {}});
+      if (phase == CheckpointPhase::FORWARD) {
+        return handleActionFailure(
+          state, *executor, std::move(failure), checkpoint_sequence);
+      }
+      return error(state, std::move(failure));
     }
     before = *observation.snapshot;
   }
   const ObservationResult planning_observation{*before, std::nullopt};
   const auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
   if (!precondition.ok) {
+    if (phase == CheckpointPhase::FORWARD) {
+      return handleActionFailure(
+        state, *executor, precondition.failures.front(), checkpoint_sequence);
+    }
     return error(state, precondition.failures.front());
   }
   std::shared_ptr<const PlanArtifact> plan_artifact;
@@ -280,12 +302,21 @@ RunResult StateMachineRunner::runExecuteStep(
     }
     const auto plan = planner->plan(state, next_state, planning_observation);
     if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact) {
-      return error(state, plan.action.failure.value_or(Failure{
+      auto failure = plan.action.failure.value_or(Failure{
           FailureCategory::PLAN_VALIDATION, "EMPTY_PLAN_ARTIFACT",
-          "Planner returned no usable trajectory", {}}));
+          "Planner returned no usable trajectory", {}});
+      if (phase == CheckpointPhase::FORWARD) {
+        return handleActionFailure(
+          state, *executor, std::move(failure), checkpoint_sequence);
+      }
+      return error(state, std::move(failure));
     }
     const auto plan_validation = plan_validators_->validate(state, *before, *plan.artifact);
     if (!plan_validation.ok) {
+      if (phase == CheckpointPhase::FORWARD) {
+        return handleActionFailure(
+          state, *executor, plan_validation.failures.front(), checkpoint_sequence);
+      }
       return error(state, plan_validation.failures.front());
     }
     plan_artifact = plan.artifact;
@@ -324,7 +355,11 @@ RunResult StateMachineRunner::runExecuteStep(
   checkpoint.simulation_session_id = common_resume_validator_->simulationSessionId();
   checkpoint.configuration_hash = common_resume_validator_->configurationHash();
   if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
-    return error(state, *checkpoint_failure);
+    if (phase == CheckpointPhase::FORWARD) {
+      return handleActionFailure(state, *executor, *checkpoint_failure, checkpoint_sequence);
+    }
+    return {RunStatus::RUNNING, state, next_state,
+      withCheckpointPersistenceFailure(*original_failure, *checkpoint_failure), 1};
   }
   return {RunStatus::CHECKPOINT_COMPLETE, state, next_state, std::nullopt, 1};
 }
@@ -368,7 +403,31 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
     return error(checkpoint.next_state, {FailureCategory::RESUME_VALIDATION,
                "COMMON_RESUME_VALIDATOR_MISSING", "resume requires a CommonResumeValidator", {}});
   }
-  const auto & snapshot = *observation.snapshot;
+  auto snapshot = *observation.snapshot;
+  const bool requires_stationary_coke =
+    checkpoint.phase == CheckpointPhase::RECOVERY ||
+    checkpoint.expected.gazebo_coke_stationary.value_or(false);
+  if (requires_stationary_coke) {
+    const auto stationary_deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
+    while ((!snapshot.gazebo_coke_stationary || !*snapshot.gazebo_coke_stationary) &&
+      std::chrono::steady_clock::now() < stationary_deadline)
+    {
+      std::this_thread::sleep_for(kStationaryPollInterval);
+      const auto settled_observation = observer_->observe();
+      if (!settled_observation.snapshot) {
+        return error(checkpoint.next_state, settled_observation.failure.value_or(Failure{
+            FailureCategory::OBSERVATION, "RESUME_SETTLE_OBSERVATION_FAILED",
+            "Unable to observe the world while waiting for resume to settle", {}}));
+      }
+      snapshot = *settled_observation.snapshot;
+    }
+    if (!snapshot.gazebo_coke_stationary || !*snapshot.gazebo_coke_stationary) {
+      const bool recovery = checkpoint.phase == CheckpointPhase::RECOVERY;
+      return error(checkpoint.next_state, {FailureCategory::PRECONDITION,
+                 recovery ? "RECOVERY_COKE_NOT_STATIONARY" : "RESUME_COKE_NOT_STATIONARY",
+                 "Gazebo Coke did not become stationary before resume", {}});
+    }
+  }
   const auto common_validation = common_resume_validator_->validate(checkpoint, snapshot);
   if (!common_validation.ok) {
     return error(checkpoint.next_state, common_validation.failures.front());
@@ -463,8 +522,10 @@ RunResult StateMachineRunner::handleActionFailure(
   checkpoint.configuration_hash = common_resume_validator_->configurationHash();
   checkpoint.simulation_session_id = common_resume_validator_->simulationSessionId();
   if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
-    return error(state, *checkpoint_failure);
+    return {RunStatus::RUNNING, state, route.next_state,
+      withCheckpointPersistenceFailure(std::move(original_failure), *checkpoint_failure), 1};
   }
+  original_failure.metrics["recovery_checkpoint_persisted"] = 1.0;
   return {RunStatus::RUNNING, state, route.next_state, std::move(original_failure), 1};
 }
 

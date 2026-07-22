@@ -33,14 +33,15 @@ bool supportedState(State state) noexcept
          state == State::RECOVER_DETACH_GAZEBO;
 }
 
-bool detachedPostconditionSatisfied(const WorldSnapshot & snapshot)
+bool detachedPostconditionSatisfied(
+  const WorldSnapshot & snapshot, const GripperLimits & gripper_limits)
 {
   return snapshot.fresh && snapshot.arm_stationary &&
          snapshot.gazebo_coke_attached && !*snapshot.gazebo_coke_attached &&
          snapshot.moveit_coke_attached.has_value() &&
          snapshot.gazebo_coke_pose_world.has_value() &&
          snapshot.gazebo_coke_stationary && *snapshot.gazebo_coke_stationary &&
-         validateGripperOpen(snapshot, {}).ok;
+         validateGripperOpen(snapshot, gripper_limits).ok;
 }
 
 }  // namespace
@@ -89,10 +90,10 @@ GazeboAttachmentExecutor::GazeboAttachmentExecutor(
   State allowed_state, bool desired_attached,
   std::string attach_topic, std::string detach_topic,
   std::string output_topic, double timeout_seconds,
-  double poll_interval_seconds, bool idempotent)
+  double poll_interval_seconds, bool idempotent, GripperLimits gripper_limits)
 : allowed_state_(allowed_state), desired_attached_(desired_attached),
   timeout_seconds_(timeout_seconds), poll_interval_seconds_(poll_interval_seconds),
-  idempotent_(idempotent),
+  idempotent_(idempotent), gripper_limits_(gripper_limits),
   impl_(std::make_unique<Impl>(attach_topic, detach_topic, output_topic))
 {
 }
@@ -107,7 +108,7 @@ ActionResult GazeboAttachmentExecutor::execute(const ExecutionContext & context)
       " cannot execute " + toString(context.state));
   }
   if (idempotent_ && !desired_attached_ &&
-    detachedPostconditionSatisfied(context.before))
+    detachedPostconditionSatisfied(context.before, gripper_limits_))
   {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }

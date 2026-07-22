@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Preserve commits `75f9f68` (`FixedPickPlaceTargetPolicy`) and `07ee3a1` (Cartesian `DESCEND`) as the verified baseline.
-- Use fixed TCP targets: above-pick `(0.30,0.00,0.987)`, pick `(0.30,0.00,0.930)`, above-place `(0.30,0.20,0.987)`, place `(0.30,0.20,0.930)`, all with quaternion `(1,0,0,0)`.
+- Use fixed TCP targets: above-pick `(0.30,0.00,0.987)`, pick `(0.30,0.00,0.870)`, above-place `(0.30,0.20,0.987)`, place `(0.30,0.20,0.870)`, all with quaternion `(1,0,0,0)`. The pick/place height was corrected during Task 12 after Gazebo geometry diagnostics proved the former `0.930` target left a 24 mm gap above the Coke; a one-variable `0.870` test produced the expected contact-stalled grasp.
 - Never duplicate fixed target literals outside `FixedPickPlaceTargetPolicy` and its tests.
 - One state produces one independently observable side effect.
 - Missing Executor, TransitionContract, or PlanValidator fails closed.
@@ -192,7 +192,7 @@ TEST(FixedTargets, SuppliesAllForwardMotionTargets)
 {
   EXPECT_POSE(policy, State::LIFT, State::MOVE_ABOVE_PLACE, 0.30, 0.00, 0.987);
   EXPECT_POSE(policy, State::MOVE_ABOVE_PLACE, State::DESCEND_TO_PLACE, 0.30, 0.20, 0.987);
-  EXPECT_POSE(policy, State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, 0.30, 0.20, 0.930);
+  EXPECT_POSE(policy, State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, 0.30, 0.20, 0.870);
   EXPECT_POSE(policy, State::RETREAT, State::DONE, 0.30, 0.20, 0.987);
 }
 
@@ -322,6 +322,22 @@ public:
 ```
 
 Extend `Checkpoint` with `phase`, optional `failed_state`, and optional `original_failure`. After action failure, Runner cancels, waits for a fresh stationary snapshot, calls `select`, commits a recovery checkpoint, and starts the selected recovery state. Recovery resume validates common invariants and calls `select` again.
+
+The resume classification is a fact-driven recovery cursor, not only an initial route selector. It
+must advance past completed side effects: carrying height selects lift/move-above-pick/descend;
+supported open partial attachments select the matching detach; detached open worlds select sync or
+retreat according to full 6D cross-world equality. Missing facts fail closed and no attached Coke is
+released away from a proven pick/place support pose. This is the minimum consistency correction
+required for `stop_after` recovery checkpoints to make progress across process restarts.
+
+Task 12 cross-process verification requires `stop_after` to accept recovery
+actions as well as forward actions. The CLI therefore accepts every
+non-terminal action state while continuing to reject `IDLE`, `DONE`, and
+`ERROR`; `fail_at` remains forward-only. A real low carrying recovery fixture
+is formed from the `ATTACH_MOVEIT` checkpoint by lifting 30 mm and then moving
+30 mm laterally at the lifted height. The two-segment order avoids a low-height
+lateral sweep, while ensuring recovery lift preserves an off-axis x/y so the
+fact cursor subsequently selects move-above-pick and descend.
 
 Recovery action failure terminates immediately; it must not ask the policy for another potentially unsafe route.
 
@@ -525,6 +541,23 @@ GazeboAttachmentExecutor(
 Publish exactly one `gz::msgs::Empty` command. Wait until a fresh output message equals `desired_attached`; distinguish publish failure, stale output, and timeout codes.
 The Gazebo Sim 8 DetachableJoint output is `gz::msgs::StringMsg`: map `attached` to `true` and
 `detached` to `false` before checking convergence.
+
+Task 12 runtime verification found that this local Gazebo Sim 8 plugin is event-driven, does not
+replay its latest state to resumed processes, and its binary does not implement the
+`initially_detached` tag. The consistent implementation therefore routes raw output through
+`/panda/coke_attached_event` to a launch-lifetime relay. The relay starts unknown, validates raw
+strings, enforces and confirms the initial detach, and periodically publishes durable current
+state on `/panda/coke_attached`. Observers fail closed until that validated state is available.
+`GazeboWorldObserver` uses `max_observation_age_seconds` for both the maximum accepted sample age
+and the bounded startup wait for the first Coke-pose and durable attachment-state messages; a
+missing fact at the deadline remains an observation failure. Pose and validated attachment samples
+carry independent receive timestamps, so a stopped relay ages out with
+`GAZEBO_ATTACHMENT_STATE_UNAVAILABLE` even when Coke poses continue.
+
+Task 12 critical review tightened recovery classification: release is permitted only when both the
+TCP and Gazebo Coke are within the corresponding pick or place 6DoF support regions. Both-attached
+states lacking that complete evidence take carrying recovery; partially attached states lacking it
+fail closed instead of opening the gripper.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -838,6 +871,21 @@ Expected: recovery actions/contracts not registered.
 
 Use the same motion, gripper, Gazebo, and MoveIt classes with recovery-specific `State` configs. All detach/open/retract actions check `ExecutionContext.before` and no-op only when their complete postcondition already holds.
 
+Task 12 real recovery execution also proved that a checkpoint may already be within the recovery
+motion's 6D target tolerance, producing a one-point zero-duration Cartesian result. Every recovery
+motion is therefore configured for a generic, validated no-op when a fresh stationary TCP is
+already at the policy target. Execute re-resolves and rechecks the target, and the ordinary
+post-contract and checkpoint still run; the trajectory validator remains strict and forward
+motions do not gain no-op semantics.
+
+Task 12 critical review also unified every non-static forward runtime failure after executor,
+contract, and plan-validator coverage checks. Preconditions, observation, planning, plan
+validation, execution, post-validation, and forward checkpoint persistence now all cancel/stop,
+observe a stationary world, classify current facts, and enter recovery. Recovery checkpoint write
+failure does not authorize abandoning a carried Coke: the current process continues emergency
+recovery, records `recovery_checkpoint_persisted=0`, never claims the missing durable boundary,
+and ultimately reports `ERROR` with the original and persistence context.
+
 Recovery contract preconditions never assume the originally failed state reached its intended endpoint. They validate the actual snapshot and require both attachments for carrying recovery.
 
 - [ ] **Step 4: Run GREEN and failure-injection matrix**
@@ -973,6 +1021,11 @@ both attached while carrying -> return to pick before release
 Gazebo detached / MoveIt attached -> detach MoveIt, sync, retreat
 ```
 
+The real recovery harness converts a forward schema-v3 checkpoint at each observed boundary to
+`RECOVERY`, intentionally stores a wrong recovery next-state hint, and resumes. RecoveryPolicy must
+reclassify current durable Gazebo and MoveIt facts. A newly constructed observer is allowed a
+bounded wait for Coke stationary sampling before the first recovery contract.
+
 - [ ] **Step 3: Run one normal headless E2E and three recovery scenarios**
 
 Expected: all scripts return zero and produce retained log artifacts under `build/panda_gazebo_demo/test_logs/`.
@@ -1003,6 +1056,13 @@ git commit -m "test: verify complete Panda pick-place workflow"
 ---
 
 ## Final review checklist
+
+Post-implementation review hardening added TDD coverage for planned-start joint evidence and
+execute-time state drift, delayed gripper goal acceptance, event-loss-safe initial detach,
+non-descending recovery safe height, policy-derived 6D Coke support poses, configured observation
+and recovery no-op thresholds, null transition-contract coverage, non-finite 6DoF observations,
+checkpoint-to-live named-joint drift, and plan-only target/endpoint 6DoF mismatch. These behaviors
+are part of the Task 12 verification boundary and configuration hash.
 
 - [ ] Every fixed target is sourced from `FixedPickPlaceTargetPolicy`.
 - [ ] Every planner has a registered plan validator.

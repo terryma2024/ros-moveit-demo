@@ -4,6 +4,7 @@
 #include <exception>
 #include <future>
 #include <mutex>
+#include <optional>
 #include <utility>
 
 #include <control_msgs/action/gripper_command.hpp>
@@ -38,6 +39,7 @@ public:
 
   rclcpp_action::Client<GripperCommand>::SharedPtr client;
   std::mutex mutex;
+  std::optional<std::shared_future<GripperGoalHandle::SharedPtr>> pending_goal_response;
   GripperGoalHandle::SharedPtr active_goal;
 };
 
@@ -61,9 +63,9 @@ ActionResult GripperCommandAdapter::command(double position, double max_effort)
   }
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->active_goal) {
+    if (impl_->active_goal || impl_->pending_goal_response) {
       return gripperFailure(ActionStatus::FAILED, "GRIPPER_GOAL_ALREADY_ACTIVE",
-        "A gripper action goal is already active");
+        "A gripper action goal is active or still awaiting a response");
     }
   }
 
@@ -72,11 +74,19 @@ ActionResult GripperCommandAdapter::command(double position, double max_effort)
   goal.command.max_effort = max_effort;
   try {
     const auto goal_future = impl_->client->async_send_goal(goal);
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      impl_->pending_goal_response = goal_future;
+    }
     if (goal_future.wait_for(timeout) != std::future_status::ready) {
       return gripperFailure(ActionStatus::TIMED_OUT, "GRIPPER_GOAL_RESPONSE_TIMEOUT",
         "Timed out while waiting for the gripper goal response");
     }
     const auto goal_handle = goal_future.get();
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      impl_->pending_goal_response.reset();
+    }
     if (!goal_handle) {
       return gripperFailure(ActionStatus::FAILED, "GRIPPER_GOAL_REJECTED",
         "The gripper controller rejected the goal");
@@ -124,17 +134,34 @@ ActionResult GripperCommandAdapter::command(double position, double max_effort)
 
 ActionResult GripperCommandAdapter::cancelAndWait()
 {
+  std::optional<std::shared_future<GripperGoalHandle::SharedPtr>> pending_goal_response;
   GripperGoalHandle::SharedPtr active_goal;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
+    pending_goal_response = impl_->pending_goal_response;
     active_goal = impl_->active_goal;
-  }
-  if (!active_goal) {
-    return {ActionStatus::SUCCEEDED, std::nullopt};
   }
 
   const auto timeout = std::chrono::duration<double>(action_timeout_seconds_);
   try {
+    if (pending_goal_response) {
+      if (pending_goal_response->wait_for(timeout) != std::future_status::ready) {
+        return gripperFailure(ActionStatus::TIMED_OUT, "GRIPPER_PENDING_GOAL_UNRESOLVED",
+          "Could not prove whether the timed-out gripper goal was accepted");
+      }
+      active_goal = pending_goal_response->get();
+      {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        impl_->pending_goal_response.reset();
+        impl_->active_goal = active_goal;
+      }
+      if (!active_goal) {
+        return {ActionStatus::SUCCEEDED, std::nullopt};
+      }
+    }
+    if (!active_goal) {
+      return {ActionStatus::SUCCEEDED, std::nullopt};
+    }
     const auto cancel_future = impl_->client->async_cancel_goal(active_goal);
     if (cancel_future.wait_for(timeout) != std::future_status::ready) {
       return gripperFailure(ActionStatus::TIMED_OUT, "GRIPPER_CANCEL_RESPONSE_TIMEOUT",

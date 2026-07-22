@@ -6,6 +6,7 @@
 
 #include "panda_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
 #include "panda_gazebo_demo/pick_place/state_action.hpp"
+#include "panda_gazebo_demo/pick_place/state_validation.hpp"
 
 namespace panda_gazebo_demo::pick_place
 {
@@ -29,7 +30,8 @@ class MoveItSceneExecutor final : public IStateExecutor
 public:
   MoveItSceneExecutor(
     std::shared_ptr<IMoveItSceneAdapter> adapter, MoveItSceneConfig config,
-    double timeout_seconds = 2.0, double poll_interval_seconds = 0.05);
+    double timeout_seconds = 2.0, double poll_interval_seconds = 0.05,
+    GripperLimits gripper_limits = {});
 
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;
@@ -42,6 +44,7 @@ private:
   MoveItSceneConfig config_;
   double timeout_seconds_;
   double poll_interval_seconds_;
+  GripperLimits gripper_limits_;
   std::mutex mutex_;
   std::condition_variable condition_;
   bool cancel_requested_{false};
