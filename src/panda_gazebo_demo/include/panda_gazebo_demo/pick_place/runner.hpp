@@ -26,7 +26,9 @@ public:
 private:
   [[nodiscard]] RunResult runDryRun(const RunRequest & request) const;
   [[nodiscard]] RunResult runPlanOnly(const RunRequest & request) const;
-  [[nodiscard]] RunResult runPlanOnly(State state, const RunRequest & request) const;
+  [[nodiscard]] RunResult runPlanOnly(
+    State state, const RunRequest & request,
+    std::optional<ObservationResult> observation = std::nullopt) const;
   [[nodiscard]] RunResult runExecuteWorkflow(
     State initial_state, const RunRequest & request,
     std::optional<WorldSnapshot> initial_snapshot = std::nullopt,

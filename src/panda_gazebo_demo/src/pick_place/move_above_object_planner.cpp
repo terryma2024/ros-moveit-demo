@@ -52,6 +52,19 @@ Pose3d toPose3d(const geometry_msgs::msg::Pose & pose)
     pose.orientation.y, pose.orientation.z, pose.orientation.w};
 }
 
+geometry_msgs::msg::Pose toGeometryPose(const Pose3d & pose)
+{
+  geometry_msgs::msg::Pose result;
+  result.position.x = pose.x;
+  result.position.y = pose.y;
+  result.position.z = pose.z;
+  result.orientation.x = pose.qx;
+  result.orientation.y = pose.qy;
+  result.orientation.z = pose.qz;
+  result.orientation.w = pose.qw;
+  return result;
+}
+
 Pose3d toPose3d(const Eigen::Isometry3d & transform)
 {
   const Eigen::Quaterniond orientation(transform.rotation());
@@ -87,19 +100,6 @@ std::optional<Pose3d> plannedEndTcpPose(
   return toPose3d(end_state.getGlobalLinkTransform(tcp_link));
 }
 
-geometry_msgs::msg::Pose preGraspPose()
-{
-  geometry_msgs::msg::Pose pose;
-  pose.position.x = 0.3;
-  pose.position.y = 0.0;
-  pose.position.z = 0.987;
-  pose.orientation.x = 1.0;
-  pose.orientation.y = 0.0;
-  pose.orientation.z = 0.0;
-  pose.orientation.w = 0.0;
-  return pose;
-}
-
 }  // namespace
 
 class MoveAboveObjectPlanner::Impl
@@ -112,10 +112,12 @@ MoveAboveObjectPlanner::MoveAboveObjectPlanner(
   std::shared_ptr<rclcpp::Node> node,
   std::string planning_group, std::string tcp_link,
   std::vector<std::string> required_world_objects,
+  std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
   double velocity_scaling,
   double acceleration_scaling)
 :node_(std::move(node)), planning_group_(std::move(planning_group)),
   tcp_link_(std::move(tcp_link)), required_world_objects_(std::move(required_world_objects)),
+  target_policy_(std::move(target_policy)),
   velocity_scaling_(velocity_scaling), acceleration_scaling_(acceleration_scaling),
   impl_(std::make_unique<Impl>())
 {
@@ -123,11 +125,22 @@ MoveAboveObjectPlanner::MoveAboveObjectPlanner(
 
 MoveAboveObjectPlanner::~MoveAboveObjectPlanner() = default;
 
-PlanResult MoveAboveObjectPlanner::plan(State state)
+PlanResult MoveAboveObjectPlanner::plan(
+  State current_state, State next_state, const ObservationResult & observation)
 {
-  if (state != State::MOVE_ABOVE_OBJECT) {
+  if (current_state != State::MOVE_ABOVE_OBJECT) {
     return planningFailure(FailureCategory::PLANNING, "STATE_NOT_PLANNABLE",
                            "Planner only supports MOVE_ABOVE_OBJECT");
+  }
+  if (!target_policy_) {
+    return planningFailure(FailureCategory::CONFIGURATION, "TARGET_POLICY_MISSING",
+                           "MoveAboveObjectPlanner requires a target policy");
+  }
+  const auto target = target_policy_->targetPose(current_state, next_state, observation);
+  if (!target.target_pose) {
+    const auto failure = target.failure.value_or(Failure{FailureCategory::CONFIGURATION,
+          "TARGET_POLICY_FAILED", "Target policy did not return a MOVE_ABOVE_OBJECT pose", {}});
+    return planningFailure(failure.category, failure.code, failure.message);
   }
   if (!impl_->move_group) {
     impl_->move_group = std::make_unique<MoveGroupInterface>(node_, planning_group_);
@@ -154,8 +167,8 @@ PlanResult MoveAboveObjectPlanner::plan(State state)
   }
   move_group.clearPoseTargets();
   move_group.setStartStateToCurrentState();
-  const auto target_pose = preGraspPose();
-  logTcpPose(node_->get_logger(), "TARGET_TCP_POSE", toPose3d(target_pose));
+  const auto target_pose = toGeometryPose(*target.target_pose);
+  logTcpPose(node_->get_logger(), "TARGET_TCP_POSE", *target.target_pose);
   if (!move_group.setPoseTarget(target_pose, tcp_link_)) {
     return planningFailure(FailureCategory::PLANNING, "POSE_TARGET_REJECTED",
                            "Failed to set pre-grasp pose target");
@@ -173,7 +186,8 @@ PlanResult MoveAboveObjectPlanner::plan(State state)
                            "Could not compute TCP pose at the planned trajectory endpoint");
   }
   logTcpPose(node_->get_logger(), "PLANNED_END_TCP_POSE", *planned_end_pose);
-  RCLCPP_INFO(node_->get_logger(), "%s plan succeeded: %zu trajectory points", toString(state),
+  RCLCPP_INFO(node_->get_logger(), "%s plan succeeded: %zu trajectory points",
+              toString(current_state),
               point_count);
   return {{ActionStatus::SUCCEEDED, std::nullopt},
     std::make_shared<MoveItPlanArtifact>(std::move(moveit_plan))};

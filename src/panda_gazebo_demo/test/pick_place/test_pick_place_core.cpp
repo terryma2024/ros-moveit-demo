@@ -7,6 +7,7 @@
 
 #include "panda_gazebo_demo/pick_place/checkpoint.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_world_object_pose.hpp"
+#include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
 namespace pick_place = panda_gazebo_demo::pick_place;
@@ -17,10 +18,14 @@ namespace
 class FakePlanner final : public pick_place::IStatePlanner
 {
 public:
-  pick_place::PlanResult plan(pick_place::State state) override
+  pick_place::PlanResult plan(
+    pick_place::State state, pick_place::State next_state,
+    const pick_place::ObservationResult & observation) override
   {
     ++calls;
     last_state = state;
+    last_next_state = next_state;
+    last_observation = observation;
     auto artifact = std::make_shared<pick_place::PlanArtifact>();
     artifact->trajectory_points = 3;
     return {{pick_place::ActionStatus::SUCCEEDED, std::nullopt}, artifact};
@@ -28,6 +33,8 @@ public:
 
   int calls{0};
   pick_place::State last_state{pick_place::State::ERROR};
+  pick_place::State last_next_state{pick_place::State::ERROR};
+  pick_place::ObservationResult last_observation;
 };
 
 class FakeExecutor final : public pick_place::IStateExecutor
@@ -72,6 +79,107 @@ pick_place::WorldSnapshot makeSnapshot()
   return snapshot;
 }
 
+TEST(PickPlaceTargetPolicy, ReturnsFixedMoveAboveObjectTarget)
+{
+  const pick_place::FixedPickPlaceTargetPolicy policy;
+  const pick_place::ObservationResult observation{makeSnapshot(), std::nullopt};
+
+  const auto result = policy.targetPose(
+    pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND, observation);
+
+  ASSERT_TRUE(result.target_pose.has_value());
+  EXPECT_FALSE(result.failure.has_value());
+  EXPECT_DOUBLE_EQ(0.3, result.target_pose->x);
+  EXPECT_DOUBLE_EQ(0.0, result.target_pose->y);
+  EXPECT_DOUBLE_EQ(0.987, result.target_pose->z);
+  EXPECT_DOUBLE_EQ(1.0, result.target_pose->qx);
+  EXPECT_DOUBLE_EQ(0.0, result.target_pose->qy);
+  EXPECT_DOUBLE_EQ(0.0, result.target_pose->qz);
+  EXPECT_DOUBLE_EQ(0.0, result.target_pose->qw);
+}
+
+TEST(PickPlaceTargetPolicy, ReturnsFixedDescendTarget)
+{
+  const pick_place::FixedPickPlaceTargetPolicy policy;
+  const pick_place::ObservationResult observation{makeSnapshot(), std::nullopt};
+
+  const auto result = policy.targetPose(
+    pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER, observation);
+
+  ASSERT_TRUE(result.target_pose.has_value());
+  EXPECT_FALSE(result.failure.has_value());
+  EXPECT_DOUBLE_EQ(0.3, result.target_pose->x);
+  EXPECT_DOUBLE_EQ(0.0, result.target_pose->y);
+  EXPECT_DOUBLE_EQ(0.93, result.target_pose->z);
+  EXPECT_DOUBLE_EQ(1.0, result.target_pose->qx);
+  EXPECT_DOUBLE_EQ(0.0, result.target_pose->qy);
+  EXPECT_DOUBLE_EQ(0.0, result.target_pose->qz);
+  EXPECT_DOUBLE_EQ(0.0, result.target_pose->qw);
+}
+
+TEST(PickPlaceTargetPolicy, RejectsUnsupportedTransition)
+{
+  const pick_place::FixedPickPlaceTargetPolicy policy;
+  const pick_place::ObservationResult observation{makeSnapshot(), std::nullopt};
+
+  const auto result = policy.targetPose(
+    pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::State::MOVE_ABOVE_OBJECT, observation);
+
+  EXPECT_FALSE(result.target_pose.has_value());
+  ASSERT_TRUE(result.failure.has_value());
+  EXPECT_EQ("TARGET_POLICY_UNSUPPORTED_TRANSITION", result.failure->code);
+}
+
+TEST(PickPlaceTargetPolicy, ConfigurationSignatureIncludesEveryFixedTarget)
+{
+  const pick_place::FixedPickPlaceTargetPolicy policy;
+
+  EXPECT_EQ(
+    "fixed-v1|MOVE_ABOVE_OBJECT->DESCEND=0.3,0,0.987,1,0,0,0|"
+    "DESCEND->CLOSE_GRIPPER=0.3,0,0.93,1,0,0,0",
+    policy.configurationSignature());
+}
+
+class ObservationDrivenTargetPolicy final : public pick_place::PickPlaceTargetPolicy
+{
+public:
+  pick_place::TargetPoseResult targetPose(
+    pick_place::State current_state, pick_place::State next_state,
+    const pick_place::ObservationResult & observation) const override
+  {
+    if (current_state != pick_place::State::MOVE_ABOVE_OBJECT ||
+      next_state != pick_place::State::DESCEND || !observation.snapshot)
+    {
+      return {std::nullopt, pick_place::Failure{pick_place::FailureCategory::CONFIGURATION,
+          "UNEXPECTED_POLICY_INPUT", "Unexpected target policy input", {}}};
+    }
+    auto target = observation.snapshot->tcp_pose_world;
+    target.z += 0.05;
+    return {target, std::nullopt};
+  }
+
+  std::string configurationSignature() const override
+  {
+    return "observation-driven-test-policy";
+  }
+};
+
+TEST(TransitionContracts, ResolvesMoveAboveTargetFromPreExecutionObservation)
+{
+  const auto policy = std::make_shared<ObservationDrivenTargetPolicy>();
+  const pick_place::MoveAboveObjectToDescendValidator contract(
+    policy, std::vector<std::string>{"table", "coke"}, 0.001, 0.1, 0.01, 0.1);
+  const auto before = makeSnapshot();
+  auto after = before;
+  after.tcp_pose_world.z += 0.05;
+
+  const auto result = contract.validate(
+    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_DOUBLE_EQ(0.0, result.metrics.at("tcp_position_error"));
+}
+
 pick_place::Checkpoint makeCheckpoint(const pick_place::WorldSnapshot & snapshot)
 {
   pick_place::Checkpoint checkpoint;
@@ -99,10 +207,11 @@ pick_place::CommonResumeValidator makeCommonResumeValidator()
 
 void registerMoveAboveObjectToDescendValidator(pick_place::TransitionContractRegistry & contracts)
 {
+  const auto target_policy = std::make_shared<pick_place::FixedPickPlaceTargetPolicy>();
   contracts.registerContract(
     {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
     std::make_shared<pick_place::MoveAboveObjectToDescendValidator>(
-      pick_place::Pose3d{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0},
+      target_policy,
       std::vector<std::string>{"table", "coke"}, 0.02, 0.1, 0.01, 0.1));
 }
 
@@ -243,7 +352,8 @@ TEST(Runner, PlanOnlyUsesExactlyOnePlannerAndDoesNotAdvanceBusinessState)
   auto planner = std::make_shared<FakePlanner>();
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   pick_place::TransitionContractRegistry contracts;
-  const pick_place::StateMachineRunner runner(actions, contracts);
+  FakeObserver observer;
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer);
 
   const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, false, std::nullopt,
         100});
@@ -252,6 +362,10 @@ TEST(Runner, PlanOnlyUsesExactlyOnePlannerAndDoesNotAdvanceBusinessState)
   EXPECT_EQ(pick_place::State::DESCEND, *result.next_state);
   EXPECT_EQ(1, planner->calls);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, planner->last_state);
+  EXPECT_EQ(pick_place::State::DESCEND, planner->last_next_state);
+  ASSERT_TRUE(planner->last_observation.snapshot.has_value());
+  EXPECT_EQ("test-session", planner->last_observation.snapshot->simulation_session_id);
+  EXPECT_EQ(1, observer.calls);
 }
 
 TEST(Runner, ExecuteWorkflowRequiresExecutionInfrastructure)
@@ -325,6 +439,10 @@ TEST(Runner, ExecuteWorkflowAdvancesThroughRegisteredStatesUntilStopAfter)
   EXPECT_EQ(3U, result.transition_count);
   EXPECT_EQ(2, executor->calls);
   EXPECT_EQ(1, planner->calls);
+  EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, planner->last_state);
+  EXPECT_EQ(pick_place::State::DESCEND, planner->last_next_state);
+  ASSERT_TRUE(planner->last_observation.snapshot.has_value());
+  EXPECT_TRUE(planner->last_observation.snapshot->gripper_open);
   EXPECT_EQ(2, checkpoints.calls);
   ASSERT_TRUE(checkpoints.checkpoint.has_value());
   EXPECT_EQ(pick_place::State::DESCEND, checkpoints.checkpoint->next_state);
@@ -488,7 +606,8 @@ TEST(TransitionContracts, RejectsTcpOrientationErrorAndReportsItsMetric)
   after.tcp_pose_world = {0.3, 0.0, 0.987, 0.7071067811865476, 0.0, 0.0,
     0.7071067811865476};
   const pick_place::MoveAboveObjectToDescendValidator contract(
-    {0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0}, {"table", "coke"}, 0.02, 0.1, 0.01, 0.1);
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
+    0.01, 0.1);
 
   const auto result = contract.validate(
     before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
@@ -506,7 +625,8 @@ TEST(TransitionContracts, RejectsGazeboAndMoveItCokePoseMismatch)
   after.gazebo_coke_pose_world->y = -0.426;
   after.gazebo_coke_pose_world->z = 0.987;
   const pick_place::MoveAboveObjectToDescendValidator contract(
-    {0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0}, {"table", "coke"}, 0.02, 0.1, 0.01, 0.1);
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
+    0.01, 0.1);
 
   const auto result = contract.validate(
     before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
