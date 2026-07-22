@@ -264,6 +264,8 @@ int main(int argc, char * argv[])
   pick_place::PlanValidatorRegistry plan_validators;
   pick_place::TransitionContractRegistry contracts;
   const auto target_policy = std::make_shared<pick_place::FixedPickPlaceTargetPolicy>();
+  const pick_place::FixedRecoveryPolicy recovery_policy(
+    target_policy, tcp_position_tolerance);
   std::shared_ptr<pick_place::MoveAboveObjectPlanner> move_above_action;
   std::shared_ptr<pick_place::DescendPlannerExecutor> descend_action;
   std::shared_ptr<pick_place::OpenGripperExecutor> open_gripper_action;
@@ -344,7 +346,8 @@ int main(int argc, char * argv[])
   RosExecutionObservationLogger execution_observation_logger(logger);
   const pick_place::StateMachineRunner runner(actions, contracts, runner_observer,
     checkpoint_store.get(),
-    common_resume_validator.get(), &execution_observation_logger, &plan_validators);
+    common_resume_validator.get(), &execution_observation_logger, &plan_validators,
+    &recovery_policy);
   const auto result =
     runner.run({*mode, stop_after, resume, fail_at, static_cast<std::uint64_t>(max_transitions)});
   if (result.failure) {

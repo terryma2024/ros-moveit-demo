@@ -27,6 +27,16 @@ ValidationResult CommonResumeValidator::validate(
   const Checkpoint & checkpoint, const WorldSnapshot & current) const
 {
   ValidationResult result{true, {}, {}};
+  if (checkpoint.schema_version != 3) {
+    addFailure(result, "CHECKPOINT_INCOMPATIBLE",
+      "Only checkpoint schema version 3 can be resumed");
+  }
+  if (checkpoint.phase == CheckpointPhase::RECOVERY &&
+    (!checkpoint.failed_state || !checkpoint.original_failure))
+  {
+    addFailure(result, "RECOVERY_CHECKPOINT_CONTEXT_INCOMPLETE",
+      "Recovery checkpoints require a failed state and original failure");
+  }
   if (checkpoint.configuration_hash.empty() ||
     checkpoint.configuration_hash != configuration_hash_)
   {
