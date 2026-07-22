@@ -187,6 +187,7 @@ ObservationResult MoveItPreGraspPlanner::observe()
   snapshot.tcp_pose_world = toPose3d(move_group.getCurrentPose(tcp_link_).pose);
   snapshot.arm_stationary = true;
   for (const auto & variable : state->getVariableNames()) {
+    snapshot.joint_positions[variable] = state->getVariablePosition(variable);
     const auto velocity = state->getVariableVelocity(variable);
     snapshot.joint_velocities[variable] = velocity;
     if (std::abs(velocity) > 0.01) {
@@ -201,12 +202,14 @@ ObservationResult MoveItPreGraspPlanner::observe()
   const auto world_objects = planning_scene.getObjects(required_world_objects_);
   for (const auto & [object_id, object] : world_objects) {
     if (!object.primitive_poses.empty()) {
-      snapshot.world_object_poses.emplace(object_id, toPose3d(object.primitive_poses.front()));
+      snapshot.moveit_world_object_poses.emplace(
+        object_id, toPose3d(object.primitive_poses.front()));
     } else if (!object.mesh_poses.empty()) {
-      snapshot.world_object_poses.emplace(object_id, toPose3d(object.mesh_poses.front()));
+      snapshot.moveit_world_object_poses.emplace(object_id, toPose3d(object.mesh_poses.front()));
     }
   }
-  snapshot.coke_attached = planning_scene.getAttachedObjects({"coke"}).count("coke") != 0;
+  snapshot.moveit_coke_attached =
+    planning_scene.getAttachedObjects({"coke"}).count("coke") != 0;
   return {snapshot, std::nullopt};
 }
 

@@ -23,6 +23,8 @@
   <depend>moveit_msgs</depend>
   <depend>moveit_ros_planning_interface</depend>
   <depend>nlohmann-json-dev</depend>
+  <depend>gz_transport_vendor</depend>
+  <depend>gz_msgs_vendor</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

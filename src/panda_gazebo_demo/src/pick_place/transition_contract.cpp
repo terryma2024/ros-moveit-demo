@@ -10,10 +10,50 @@ namespace panda_gazebo_demo::pick_place
 namespace
 {
 
-void addFailure(ValidationResult & result, FailureCategory category, std::string code,
-                std::string message)
+void addFailure(
+  ValidationResult & result, FailureCategory category, std::string code,
+  std::string message)
 {
   result.failures.push_back({category, std::move(code), std::move(message), {}});
+}
+
+void validateCrossWorldConsistency(
+  ValidationResult & result, const WorldSnapshot & snapshot, double coke_position_tolerance,
+  double coke_orientation_tolerance_rad)
+{
+  if (!snapshot.gazebo_coke_attached || !snapshot.moveit_coke_attached ||
+    !snapshot.gazebo_coke_pose_world)
+  {
+    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "CROSS_WORLD_EVIDENCE_UNAVAILABLE",
+      "Gazebo Coke pose/attachment and MoveIt attachment state are required");
+    return;
+  }
+  if (*snapshot.gazebo_coke_attached != *snapshot.moveit_coke_attached) {
+    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_ATTACHMENT_MISMATCH",
+      "Gazebo and MoveIt disagree about whether Coke is attached");
+    return;
+  }
+  if (*snapshot.gazebo_coke_attached) {
+    return;
+  }
+  const auto moveit_coke = snapshot.moveit_world_object_poses.find("coke");
+  if (moveit_coke == snapshot.moveit_world_object_poses.end()) {
+    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "MOVEIT_COKE_POSE_UNAVAILABLE",
+      "Detached Coke must have a MoveIt Planning Scene pose");
+    return;
+  }
+  const auto position_error = positionDistance(*snapshot.gazebo_coke_pose_world,
+        moveit_coke->second);
+  const auto orientation_error = orientationDistance(
+    *snapshot.gazebo_coke_pose_world, moveit_coke->second);
+  result.metrics["gazebo_moveit_coke_position_error"] = position_error;
+  result.metrics["gazebo_moveit_coke_orientation_error_rad"] = orientation_error;
+  if (position_error > coke_position_tolerance ||
+    orientation_error > coke_orientation_tolerance_rad)
+  {
+    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_POSE_MISMATCH",
+      "Gazebo and MoveIt Coke poses differ beyond the configured tolerance");
+  }
 }
 
 }  // namespace
@@ -28,39 +68,47 @@ bool TransitionContractRegistry::hasContract(TransitionKey key) const noexcept
   return contracts_.count(key) != 0;
 }
 
-ValidationResult TransitionContractRegistry::validate(TransitionKey key,
-                                                      const WorldSnapshot & before,
-                                                      const WorldSnapshot & after,
-                                                      const ActionResult & action_result) const
+ValidationResult TransitionContractRegistry::validate(
+  TransitionKey key,
+  const WorldSnapshot & before,
+  const WorldSnapshot & after,
+  const ActionResult & action_result) const
 {
   const auto found = contracts_.find(key);
   if (found == contracts_.end() || !found->second) {
     return {false,
-            {{FailureCategory::CONFIGURATION,
-              "MISSING_TRANSITION_CONTRACT",
-              std::string("No execute transition contract registered for ") + toString(key.from) +
-                " -> " + toString(key.to),
-              {}}},
-            {}};
+      {{FailureCategory::CONFIGURATION,
+        "MISSING_TRANSITION_CONTRACT",
+        std::string("No execute transition contract registered for ") + toString(key.from) +
+        " -> " + toString(key.to),
+        {}}},
+      {}};
   }
   return found->second->validate(before, after, action_result);
 }
 
 ValidationResult
-TransitionContractRegistry::validatePrecondition(TransitionKey key,
-                                                 const WorldSnapshot & before) const
+TransitionContractRegistry::validatePrecondition(
+  TransitionKey key,
+  const WorldSnapshot & before) const
 {
   const auto found = contracts_.find(key);
   if (found == contracts_.end() || !found->second) {
     return {false,
-            {{FailureCategory::CONFIGURATION,
-              "MISSING_TRANSITION_CONTRACT",
-              std::string("No execute transition contract registered for ") + toString(key.from) +
-                " -> " + toString(key.to),
-              {}}},
-            {}};
+      {{FailureCategory::CONFIGURATION,
+        "MISSING_TRANSITION_CONTRACT",
+        std::string("No execute transition contract registered for ") + toString(key.from) +
+        " -> " + toString(key.to),
+        {}}},
+      {}};
   }
   return found->second->validatePrecondition(before);
+}
+
+ValidationResult TransitionContractRegistry::validateResume(
+  TransitionKey key, const WorldSnapshot & expected, const WorldSnapshot & current) const
+{
+  return validate(key, expected, current, {ActionStatus::SUCCEEDED, std::nullopt});
 }
 
 std::optional<Failure>
@@ -75,7 +123,7 @@ TransitionContractRegistry::validateExecuteCoverage(const TransitionTable & tabl
         FailureCategory::CONFIGURATION,
         "MISSING_TRANSITION_CONTRACT",
         std::string("No execute transition contract registered for ") + toString(from) + " -> " +
-          toString(transitions.succeeded),
+        toString(transitions.succeeded),
         {},
       };
     }
@@ -83,19 +131,16 @@ TransitionContractRegistry::validateExecuteCoverage(const TransitionTable & tabl
   return std::nullopt;
 }
 
-TcpMotionContract::TcpMotionContract(Pose3d target_pose,
-                                     std::vector<std::string> required_world_objects,
-                                     double tcp_position_tolerance, double coke_position_tolerance,
-                                     bool require_gripper_open) :
-    target_pose_(target_pose), required_world_objects_(std::move(required_world_objects)),
-    tcp_position_tolerance_(tcp_position_tolerance),
-    coke_position_tolerance_(coke_position_tolerance), require_gripper_open_(require_gripper_open)
+namespace
 {
-}
 
-ValidationResult TcpMotionContract::validate(const WorldSnapshot & before,
-                                             const WorldSnapshot & after,
-                                             const ActionResult & action_result) const
+ValidationResult validateMotionCompletion(
+  const WorldSnapshot & before,
+  const WorldSnapshot & after,
+  const ActionResult & action_result, const Pose3d & target_pose,
+  const std::vector<std::string> & required_world_objects, double tcp_position_tolerance,
+  double tcp_orientation_tolerance_rad, double coke_position_tolerance,
+  double coke_orientation_tolerance_rad, bool require_gripper_open)
 {
   ValidationResult result{true, {}, {}};
   if (action_result.status != ActionStatus::SUCCEEDED) {
@@ -110,32 +155,46 @@ ValidationResult TcpMotionContract::validate(const WorldSnapshot & before,
     addFailure(result, FailureCategory::POSTCONDITION, "ARM_NOT_QUIESCENT",
                "Arm joint velocities remain above the configured stopped threshold");
   }
-  if (after.coke_attached) {
+  validateCrossWorldConsistency(
+    result, before, coke_position_tolerance, coke_orientation_tolerance_rad);
+  validateCrossWorldConsistency(
+    result, after, coke_position_tolerance, coke_orientation_tolerance_rad);
+  if (!after.gazebo_coke_attached || !after.moveit_coke_attached ||
+    *after.gazebo_coke_attached || *after.moveit_coke_attached)
+  {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_UNEXPECTEDLY_ATTACHED",
                "Coke must remain detached after MOVE_ABOVE_OBJECT");
   }
-  const auto tcp_error = positionDistance(after.tcp_pose_world, target_pose_);
+  const auto tcp_error = positionDistance(after.tcp_pose_world, target_pose);
+  const auto tcp_orientation_error = orientationDistance(after.tcp_pose_world, target_pose);
   result.metrics["tcp_position_error"] = tcp_error;
-  if (tcp_error > tcp_position_tolerance_) {
+  result.metrics["tcp_orientation_error_rad"] = tcp_orientation_error;
+  if (tcp_error > tcp_position_tolerance) {
     addFailure(result, FailureCategory::POSTCONDITION, "TCP_OUTSIDE_TARGET_TOLERANCE",
                "TCP did not reach the configured target position tolerance");
   }
-  for (const auto & object_id : required_world_objects_) {
-    if (after.world_object_poses.count(object_id) == 0) {
+  if (tcp_orientation_error > tcp_orientation_tolerance_rad) {
+    addFailure(result, FailureCategory::POSTCONDITION, "TCP_ORIENTATION_OUTSIDE_TARGET_TOLERANCE",
+               "TCP did not reach the configured target orientation tolerance");
+  }
+  if (require_gripper_open && !after.gripper_open) {
+    addFailure(result, FailureCategory::POSTCONDITION, "GRIPPER_NOT_SAFELY_OPEN",
+      "Gripper must be open before entering the next motion state");
+  }
+  for (const auto & object_id : required_world_objects) {
+    if (after.moveit_world_object_poses.count(object_id) == 0) {
       addFailure(result, FailureCategory::MOVEIT_SCENE, "REQUIRED_WORLD_OBJECT_MISSING",
                  "Required Planning Scene world object is missing: " + object_id);
     }
   }
-  const auto before_coke = before.world_object_poses.find("coke");
-  const auto after_coke = after.world_object_poses.find("coke");
-  if (before_coke == before.world_object_poses.end() ||
-      after_coke == after.world_object_poses.end()) {
-    addFailure(result, FailureCategory::MOVEIT_SCENE, "COKE_POSE_UNAVAILABLE",
-               "Coke world pose is required for post-execution stability validation");
+  if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
+    addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
+      "Gazebo Coke pose is required for post-execution stability validation");
   } else {
-    const auto coke_error = positionDistance(before_coke->second, after_coke->second);
+    const auto coke_error = positionDistance(
+      *before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
     result.metrics["coke_position_drift"] = coke_error;
-    if (coke_error > coke_position_tolerance_) {
+    if (coke_error > coke_position_tolerance) {
       addFailure(result, FailureCategory::POSTCONDITION, "COKE_MOVED_DURING_MOVE_ABOVE",
                  "Coke moved farther than the configured stability tolerance");
     }
@@ -144,7 +203,10 @@ ValidationResult TcpMotionContract::validate(const WorldSnapshot & before,
   return result;
 }
 
-ValidationResult TcpMotionContract::validatePrecondition(const WorldSnapshot & before) const
+ValidationResult validateMotionPrecondition(
+  const WorldSnapshot & before, const std::vector<std::string> & required_world_objects,
+  double coke_position_tolerance, double coke_orientation_tolerance_rad,
+  bool require_gripper_open)
 {
   ValidationResult result{true, {}, {}};
   if (!before.fresh) {
@@ -155,26 +217,103 @@ ValidationResult TcpMotionContract::validatePrecondition(const WorldSnapshot & b
     addFailure(result, FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT",
                "Arm must be stationary before MOVE_ABOVE_OBJECT");
   }
-  if (require_gripper_open_ && !before.gripper_open) {
+  if (require_gripper_open && !before.gripper_open) {
     addFailure(result, FailureCategory::PRECONDITION, "GRIPPER_NOT_SAFELY_OPEN",
                "Gripper must be open before the configured motion state");
   }
-  if (before.coke_attached) {
+  validateCrossWorldConsistency(
+    result, before, coke_position_tolerance, coke_orientation_tolerance_rad);
+  if (!before.gazebo_coke_attached || !before.moveit_coke_attached ||
+    *before.gazebo_coke_attached || *before.moveit_coke_attached)
+  {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_UNEXPECTEDLY_ATTACHED",
                "Coke must be detached before MOVE_ABOVE_OBJECT");
   }
-  for (const auto & object_id : required_world_objects_) {
-    if (before.world_object_poses.count(object_id) == 0) {
+  for (const auto & object_id : required_world_objects) {
+    if (before.moveit_world_object_poses.count(object_id) == 0) {
       addFailure(result, FailureCategory::MOVEIT_SCENE, "REQUIRED_WORLD_OBJECT_MISSING",
                  "Required Planning Scene world object is missing: " + object_id);
     }
   }
-  if (before.world_object_poses.count("coke") == 0) {
+  if (!before.gazebo_coke_pose_world) {
     addFailure(result, FailureCategory::MOVEIT_SCENE, "COKE_POSE_UNAVAILABLE",
                "Coke world pose is required before MOVE_ABOVE_OBJECT");
   }
   result.ok = result.failures.empty();
   return result;
+}
+
+}  // namespace
+
+ValidationResult AlwaysPassValidator::validatePrecondition(const WorldSnapshot &) const
+{
+  return {true, {}, {}};
+}
+
+ValidationResult AlwaysPassValidator::validate(
+  const WorldSnapshot &, const WorldSnapshot &, const ActionResult &) const
+{
+  return {true, {}, {}};
+}
+
+MoveAboveObjectToDescendValidator::MoveAboveObjectToDescendValidator(
+  Pose3d target_pose, std::vector<std::string> required_world_objects,
+  double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
+  double coke_position_tolerance, double coke_orientation_tolerance_rad)
+: target_pose_(target_pose), required_world_objects_(std::move(required_world_objects)),
+  tcp_position_tolerance_(tcp_position_tolerance),
+  tcp_orientation_tolerance_rad_(tcp_orientation_tolerance_rad),
+  coke_position_tolerance_(coke_position_tolerance),
+  coke_orientation_tolerance_rad_(coke_orientation_tolerance_rad)
+{
+}
+
+ValidationResult MoveAboveObjectToDescendValidator::validate(
+  const WorldSnapshot & before, const WorldSnapshot & after,
+  const ActionResult & action_result) const
+{
+  return validateMotionCompletion(
+    before, after, action_result, target_pose_, required_world_objects_, tcp_position_tolerance_,
+    tcp_orientation_tolerance_rad_, coke_position_tolerance_, coke_orientation_tolerance_rad_,
+      true);
+}
+
+ValidationResult MoveAboveObjectToDescendValidator::validatePrecondition(
+  const WorldSnapshot & before) const
+{
+  return validateMotionPrecondition(
+    before, required_world_objects_, coke_position_tolerance_, coke_orientation_tolerance_rad_,
+      false);
+}
+
+DescendToCloseGripperValidator::DescendToCloseGripperValidator(
+  Pose3d target_pose, std::vector<std::string> required_world_objects,
+  double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
+  double coke_position_tolerance, double coke_orientation_tolerance_rad)
+: target_pose_(target_pose), required_world_objects_(std::move(required_world_objects)),
+  tcp_position_tolerance_(tcp_position_tolerance),
+  tcp_orientation_tolerance_rad_(tcp_orientation_tolerance_rad),
+  coke_position_tolerance_(coke_position_tolerance),
+  coke_orientation_tolerance_rad_(coke_orientation_tolerance_rad)
+{
+}
+
+ValidationResult DescendToCloseGripperValidator::validate(
+  const WorldSnapshot & before, const WorldSnapshot & after,
+  const ActionResult & action_result) const
+{
+  return validateMotionCompletion(
+    before, after, action_result, target_pose_, required_world_objects_, tcp_position_tolerance_,
+    tcp_orientation_tolerance_rad_, coke_position_tolerance_, coke_orientation_tolerance_rad_,
+      true);
+}
+
+ValidationResult DescendToCloseGripperValidator::validatePrecondition(
+  const WorldSnapshot & before) const
+{
+  return validateMotionPrecondition(
+    before, required_world_objects_, coke_position_tolerance_, coke_orientation_tolerance_rad_,
+      true);
 }
 
 }  // namespace panda_gazebo_demo::pick_place

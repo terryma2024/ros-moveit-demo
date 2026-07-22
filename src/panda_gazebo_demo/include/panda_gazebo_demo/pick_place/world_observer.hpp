@@ -27,10 +27,14 @@ struct WorldSnapshot
   bool fresh{false};
   bool arm_stationary{false};
   bool gripper_open{false};
-  bool coke_attached{false};
   Pose3d tcp_pose_world{};
+  std::map<std::string, double> joint_positions;
   std::map<std::string, double> joint_velocities;
-  std::map<std::string, Pose3d> world_object_poses;
+  std::map<std::string, Pose3d> moveit_world_object_poses;
+  std::optional<bool> moveit_coke_attached;
+  std::optional<Pose3d> gazebo_coke_pose_world;
+  std::optional<bool> gazebo_coke_attached;
+  std::string simulation_session_id;
 };
 
 struct ObservationResult
@@ -47,5 +51,6 @@ public:
 };
 
 [[nodiscard]] double positionDistance(const Pose3d & lhs, const Pose3d & rhs) noexcept;
+[[nodiscard]] double orientationDistance(const Pose3d & lhs, const Pose3d & rhs) noexcept;
 
 }  // namespace panda_gazebo_demo::pick_place

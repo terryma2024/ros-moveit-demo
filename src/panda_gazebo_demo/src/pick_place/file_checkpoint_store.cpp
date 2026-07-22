@@ -26,6 +26,24 @@ Pose3d poseFromJson(const Json & json)
     json.at("qw").get<double>()};
 }
 
+Json poseMapToJson(const std::map<std::string, Pose3d> & poses)
+{
+  Json json = Json::object();
+  for (const auto & [name, pose] : poses) {
+    json[name] = poseToJson(pose);
+  }
+  return json;
+}
+
+std::map<std::string, Pose3d> poseMapFromJson(const Json & json)
+{
+  std::map<std::string, Pose3d> poses;
+  for (const auto & [name, pose] : json.items()) {
+    poses.emplace(name, poseFromJson(pose));
+  }
+  return poses;
+}
+
 Failure checkpointFailure(std::string code, std::string message)
 {
   return {FailureCategory::CHECKPOINT, std::move(code), std::move(message), {}};
@@ -51,9 +69,20 @@ std::optional<Failure> FileCheckpointStore::commit(const Checkpoint & checkpoint
   const Json json{{"schema_version", checkpoint.schema_version}, {"run_id", checkpoint.run_id},
     {"sequence", checkpoint.sequence}, {"source_mode", toString(checkpoint.source_mode)},
     {"last_completed_state", toString(checkpoint.last_completed_state)},
-    {"next_state", toString(checkpoint.next_state)}, {"resumable", checkpoint.resumable},
+    {"next_state", toString(checkpoint.next_state)},
+    {"configuration_hash", checkpoint.configuration_hash},
+    {"simulation_session_id", checkpoint.simulation_session_id},
+    {"resumable", checkpoint.resumable},
     {"expected", {{"tcp_pose_world", poseToJson(checkpoint.expected.tcp_pose_world)},
-        {"coke_attached", checkpoint.expected.coke_attached},
+        {"gripper_open", checkpoint.expected.gripper_open},
+        {"joint_positions", checkpoint.expected.joint_positions},
+        {"moveit_world_object_poses", poseMapToJson(checkpoint.expected.moveit_world_object_poses)},
+        {"moveit_coke_attached", checkpoint.expected.moveit_coke_attached ?
+          Json(*checkpoint.expected.moveit_coke_attached) : Json(nullptr)},
+        {"gazebo_coke_pose_world", checkpoint.expected.gazebo_coke_pose_world ?
+          poseToJson(*checkpoint.expected.gazebo_coke_pose_world) : Json(nullptr)},
+        {"gazebo_coke_attached", checkpoint.expected.gazebo_coke_attached ?
+          Json(*checkpoint.expected.gazebo_coke_attached) : Json(nullptr)},
         {"required_world_objects", checkpoint.expected.required_world_objects}}}};
   const auto temporary_path = path_.string() + ".tmp";
   {
@@ -103,8 +132,24 @@ CheckpointLoadResult FileCheckpointStore::loadLatestCompatible()
     checkpoint.last_completed_state = *last_completed;
     checkpoint.next_state = *next_state;
     checkpoint.resumable = json.at("resumable").get<bool>();
+    checkpoint.configuration_hash = json.at("configuration_hash").get<std::string>();
+    checkpoint.simulation_session_id = json.at("simulation_session_id").get<std::string>();
     checkpoint.expected.tcp_pose_world = poseFromJson(expected.at("tcp_pose_world"));
-    checkpoint.expected.coke_attached = expected.at("coke_attached").get<bool>();
+    checkpoint.expected.gripper_open = expected.at("gripper_open").get<bool>();
+    checkpoint.expected.joint_positions =
+      expected.at("joint_positions").get<std::map<std::string, double>>();
+    checkpoint.expected.moveit_world_object_poses =
+      poseMapFromJson(expected.at("moveit_world_object_poses"));
+    if (!expected.at("moveit_coke_attached").is_null()) {
+      checkpoint.expected.moveit_coke_attached = expected.at("moveit_coke_attached").get<bool>();
+    }
+    if (!expected.at("gazebo_coke_pose_world").is_null()) {
+      checkpoint.expected.gazebo_coke_pose_world =
+        poseFromJson(expected.at("gazebo_coke_pose_world"));
+    }
+    if (!expected.at("gazebo_coke_attached").is_null()) {
+      checkpoint.expected.gazebo_coke_attached = expected.at("gazebo_coke_attached").get<bool>();
+    }
     checkpoint.expected.required_world_objects =
       expected.at("required_world_objects").get<std::vector<std::string>>();
     return {checkpoint, std::nullopt};

@@ -22,6 +22,8 @@ find_package(shape_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(gz-transport13 REQUIRED)
+find_package(gz-msgs10 REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -43,6 +45,7 @@ add_library(
   src/pick_place/transition_contract.cpp
   src/pick_place/transition_table.cpp
   src/pick_place/runner.cpp
+  src/pick_place/common_resume_validator.cpp
   src/pick_place/world_observer.cpp
 )
 target_compile_features(pick_place_core PUBLIC cxx_std_17)
@@ -56,9 +59,16 @@ target_include_directories(
 add_library(
   pick_place_ros_adapters
   src/pick_place/file_checkpoint_store.cpp
+  src/pick_place/gazebo_world_observer.cpp
   src/pick_place/moveit_pregrasp_planner.cpp
 )
-target_link_libraries(pick_place_ros_adapters pick_place_core nlohmann_json::nlohmann_json)
+target_link_libraries(
+  pick_place_ros_adapters
+  pick_place_core
+  nlohmann_json::nlohmann_json
+  gz-transport13::core
+  gz-msgs10::core
+)
 target_include_directories(
   pick_place_ros_adapters
   PUBLIC
