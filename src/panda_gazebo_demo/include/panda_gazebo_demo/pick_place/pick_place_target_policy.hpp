@@ -28,10 +28,15 @@ public:
 class FixedPickPlaceTargetPolicy final : public PickPlaceTargetPolicy
 {
 public:
+  explicit FixedPickPlaceTargetPolicy(double recovery_safe_height = 0.987);
+
   [[nodiscard]] TargetPoseResult targetPose(
     State current_state, State next_state,
     const ObservationResult & observation) const override;
   [[nodiscard]] std::string configurationSignature() const override;
+
+private:
+  double recovery_safe_height_;
 };
 
 }  // namespace panda_gazebo_demo::pick_place

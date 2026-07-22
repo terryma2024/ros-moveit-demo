@@ -84,12 +84,17 @@ bool poseIsFinite(const geometry_msgs::msg::Pose & pose)
          std::isfinite(pose.orientation.w) && quaternion_norm > 1.0e-9;
 }
 
-void logPose(const rclcpp::Logger & logger, const char * label, const Pose3d & pose)
+void logPose(
+  const rclcpp::Logger & logger, const char * label, State state,
+  State next_state, const Pose3d & pose)
 {
   const Eigen::Quaterniond orientation(pose.qw, pose.qx, pose.qy, pose.qz);
   const auto rpy = orientation.normalized().toRotationMatrix().eulerAngles(0, 1, 2);
-  RCLCPP_INFO(logger, "%s x=%.6f y=%.6f z=%.6f roll=%.6f pitch=%.6f yaw=%.6f", label,
-    pose.x, pose.y, pose.z, rpy.x(), rpy.y(), rpy.z());
+  RCLCPP_INFO(
+    logger,
+    "%s state=%s next_state=%s x=%.6f y=%.6f z=%.6f roll=%.6f pitch=%.6f yaw=%.6f",
+    label, toString(state), toString(next_state), pose.x, pose.y, pose.z,
+    rpy.x(), rpy.y(), rpy.z());
 }
 
 double durationSeconds(const builtin_interfaces::msg::Duration & duration)
@@ -280,7 +285,8 @@ PlanResult MoveItMotionAdapter::plan(
   move_group.setMaxAccelerationScalingFactor(impl_->acceleration_scaling);
   move_group.clearPoseTargets();
   move_group.setStartState(*current_state);
-  logPose(impl_->node->get_logger(), "TARGET_TCP_POSE", request.target_pose);
+  logPose(impl_->node->get_logger(), "TARGET_TCP_POSE", request.state,
+    request.next_state, request.target_pose);
 
   moveit_msgs::msg::RobotTrajectory trajectory;
   double fraction = 1.0;
@@ -300,8 +306,6 @@ PlanResult MoveItMotionAdapter::plan(
     moveit_msgs::msg::MoveItErrorCodes error_code;
     fraction = move_group.computeCartesianPath(
       waypoints, impl_->cartesian_eef_step, trajectory, true, &error_code);
-    RCLCPP_INFO(impl_->node->get_logger(), "CARTESIAN_FRACTION state=%s value=%.6f",
-      toString(request.state), fraction);
   }
   if (trajectory.joint_trajectory.points.empty()) {
     return planningFailure(FailureCategory::PLANNING, "EMPTY_MOTION_TRAJECTORY",
@@ -315,10 +319,23 @@ PlanResult MoveItMotionAdapter::plan(
       "MOTION_TCP_PATH_UNAVAILABLE",
       "Could not reconstruct TCP poses from the MoveIt trajectory");
   }
-  logPose(impl_->node->get_logger(), "START_TCP_POSE", evidence->start_tcp_pose);
-  logPose(impl_->node->get_logger(), "PLANNED_END_TCP_POSE", evidence->end_tcp_pose);
-  RCLCPP_INFO(impl_->node->get_logger(), "%s plan succeeded: %zu trajectory points",
+  logPose(impl_->node->get_logger(), "START_TCP_POSE", request.state,
+    request.next_state, evidence->start_tcp_pose);
+  logPose(impl_->node->get_logger(), "PLANNED_END_TCP_POSE", request.state,
+    request.next_state, evidence->end_tcp_pose);
+  RCLCPP_INFO(impl_->node->get_logger(), "CARTESIAN_FRACTION state=%s value=%.6f",
+    toString(request.state), evidence->cartesian_fraction);
+  RCLCPP_INFO(impl_->node->get_logger(), "TRAJECTORY_POINTS state=%s value=%zu",
     toString(request.state), evidence->trajectory_points);
+  RCLCPP_INFO(impl_->node->get_logger(), "MAX_JOINT_JUMP state=%s value=%.6f",
+    toString(request.state), evidence->max_joint_jump);
+  RCLCPP_INFO(impl_->node->get_logger(), "TRAJECTORY_DURATION state=%s value=%.6f",
+    toString(request.state), evidence->duration_seconds);
+  RCLCPP_INFO(
+    impl_->node->get_logger(),
+    "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
+    toString(request.state), evidence->max_carried_relative_position_error,
+    evidence->max_carried_relative_orientation_error_rad);
   return {{ActionStatus::SUCCEEDED, std::nullopt}, evidence};
 }
 
@@ -333,8 +350,8 @@ ActionResult MoveItMotionAdapter::execute(const MotionPlanEvidence & evidence)
     return executionFailure("MOVEIT_MOTION_EXECUTION_FAILED",
       "MoveIt failed to execute the validated motion trajectory");
   }
-  logPose(impl_->node->get_logger(), "EXECUTED_END_TCP_POSE",
-    toPose(impl_->move_group->getCurrentPose(impl_->tcp_link).pose));
+  logPose(impl_->node->get_logger(), "EXECUTED_END_TCP_POSE", evidence.state,
+    evidence.next_state, toPose(impl_->move_group->getCurrentPose(impl_->tcp_link).pose));
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
