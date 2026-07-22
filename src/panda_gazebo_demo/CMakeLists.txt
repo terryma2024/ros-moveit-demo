@@ -154,6 +154,11 @@ if(BUILD_TESTING)
     target_link_libraries(test_pick_place_core pick_place_core pick_place_ros_adapters)
   endif()
 
+  ament_add_gtest(test_pick_place_targets test/pick_place/test_pick_place_targets.cpp)
+  if(TARGET test_pick_place_targets)
+    target_link_libraries(test_pick_place_targets pick_place_core)
+  endif()
+
   add_test(
     NAME test_reset_coke
     COMMAND

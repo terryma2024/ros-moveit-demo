@@ -21,6 +21,9 @@ const char * toString(State state) noexcept
     case State::DETACH_MOVEIT: return "DETACH_MOVEIT";
     case State::SYNC_WORLD_OBJECT: return "SYNC_WORLD_OBJECT";
     case State::RETREAT: return "RETREAT";
+    case State::RECOVER_LIFT_TO_SAFE_HEIGHT: return "RECOVER_LIFT_TO_SAFE_HEIGHT";
+    case State::RECOVER_MOVE_ABOVE_PICK: return "RECOVER_MOVE_ABOVE_PICK";
+    case State::RECOVER_DESCEND_TO_PICK: return "RECOVER_DESCEND_TO_PICK";
     case State::RECOVER_DETACH_MOVEIT: return "RECOVER_DETACH_MOVEIT";
     case State::RECOVER_OPEN_GRIPPER: return "RECOVER_OPEN_GRIPPER";
     case State::RECOVER_DETACH_GAZEBO: return "RECOVER_DETACH_GAZEBO";
@@ -62,6 +65,8 @@ std::optional<State> stateFromString(std::string_view value)
     State::ATTACH_GAZEBO, State::ATTACH_MOVEIT, State::LIFT, State::MOVE_ABOVE_PLACE,
     State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, State::DETACH_GAZEBO,
     State::DETACH_MOVEIT, State::SYNC_WORLD_OBJECT, State::RETREAT,
+    State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK,
+    State::RECOVER_DESCEND_TO_PICK,
     State::RECOVER_DETACH_MOVEIT, State::RECOVER_OPEN_GRIPPER,
     State::RECOVER_DETACH_GAZEBO, State::RECOVER_SYNC_WORLD_OBJECT,
     State::RECOVER_RETREAT, State::DONE, State::ERROR,
