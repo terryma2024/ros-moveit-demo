@@ -13,22 +13,19 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 
-int main(int argc, char *argv[])
+int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
 
   auto node = std::make_shared<rclcpp::Node>(
-      "attach_and_lift_demo",
-      rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
+    "attach_and_lift_demo",
+    rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
 
-  auto executor =
-    std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+  auto executor = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
 
   executor->add_node(node);
 
-  std::thread([executor]()
-    {executor->spin();})
-  .detach();
+  std::thread([executor]() { executor->spin(); }).detach();
 
   const auto logger = node->get_logger();
 
@@ -38,9 +35,7 @@ int main(int argc, char *argv[])
   const bool detach_moveit = node->get_parameter_or("detach_moveit", false);
 
   if (std::abs(lift_distance) < 1e-6 || std::abs(lift_distance) > 0.10) {
-    RCLCPP_ERROR(
-        logger,
-        "absolute lift_distance must be in [1e-6, 0.10]");
+    RCLCPP_ERROR(logger, "absolute lift_distance must be in [1e-6, 0.10]");
     rclcpp::shutdown();
     return EXIT_FAILURE;
   }
@@ -64,8 +59,7 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  const std::vector<std::string> touch_links{
-    "panda_hand", "panda_leftfinger", "panda_rightfinger"};
+  const std::vector<std::string> touch_links{"panda_hand", "panda_leftfinger", "panda_rightfinger"};
 
   moveit::planning_interface::PlanningSceneInterface planning_scene;
 
@@ -82,8 +76,7 @@ int main(int argc, char *argv[])
       const bool no_longer_attached =
         planning_scene.getAttachedObjects({"coke"}).count("coke") == 0;
 
-      const bool returned_to_world =
-        planning_scene.getObjects({"coke"}).count("coke") == 1;
+      const bool returned_to_world = planning_scene.getObjects({"coke"}).count("coke") == 1;
 
       if (no_longer_attached && returned_to_world) {
         detached = true;
@@ -94,9 +87,7 @@ int main(int argc, char *argv[])
     }
 
     if (!detached) {
-      RCLCPP_ERROR(
-          logger,
-          "coke did not transition from attached object to world object");
+      RCLCPP_ERROR(logger, "coke did not transition from attached object to world object");
       rclcpp::shutdown();
       return EXIT_FAILURE;
     }
@@ -135,9 +126,8 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  RCLCPP_INFO(
-      logger,
-      "MoveIt attached coke to panda_hand; touch links: panda_hand and both fingers");
+  RCLCPP_INFO(logger,
+              "MoveIt attached coke to panda_hand; touch links: panda_hand and both fingers");
 
   if (!plan_lift) {
     RCLCPP_INFO(logger, "Attach-only mode; pass plan_lift:=true for a 30 mm test lift");
@@ -152,16 +142,12 @@ int main(int argc, char *argv[])
   std::vector<geometry_msgs::msg::Pose> waypoints{lift_pose};
   moveit_msgs::msg::RobotTrajectory trajectory;
   moveit_msgs::msg::MoveItErrorCodes error;
-  const double fraction = move_group.computeCartesianPath(
-      waypoints, 0.002, trajectory, true, &error);
+  const double fraction =
+    move_group.computeCartesianPath(waypoints, 0.002, trajectory, true, &error);
 
-  RCLCPP_INFO(
-      logger,
-      "Cartesian lift: %.1f%%, distance=%.3f m, points=%zu, error=%d",
-      fraction * 100.0,
-      lift_distance,
-      trajectory.joint_trajectory.points.size(),
-      error.val);
+  RCLCPP_INFO(logger, "Cartesian lift: %.1f%%, distance=%.3f m, points=%zu, error=%d",
+              fraction * 100.0, lift_distance, trajectory.joint_trajectory.points.size(),
+              error.val);
 
   if (fraction < 0.999 || trajectory.joint_trajectory.points.empty()) {
     RCLCPP_ERROR(logger, "Lift path is incomplete; refusing execution");
