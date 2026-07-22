@@ -22,6 +22,7 @@ find_package(control_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
+find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(gz-transport13 REQUIRED)
@@ -42,6 +43,7 @@ endif()
 
 add_library(
   pick_place_core
+  src/pick_place/cartesian_plan_validation.cpp
   src/pick_place/domain_types.cpp
   src/pick_place/state_action.cpp
   src/pick_place/transition_contract.cpp
@@ -65,6 +67,7 @@ add_library(
   pick_place_ros_adapters
   src/pick_place/file_checkpoint_store.cpp
   src/pick_place/gazebo_world_observer.cpp
+  src/pick_place/descend_planner_executor.cpp
   src/pick_place/move_above_object_planner.cpp
   src/pick_place/open_gripper_executor.cpp
 )
@@ -87,6 +90,7 @@ ament_target_dependencies(
   rclcpp_action
   control_msgs
   geometry_msgs
+  moveit_core
   moveit_msgs
   moveit_ros_planning_interface
 )
@@ -146,7 +150,7 @@ target_link_libraries(pick_place_state_machine pick_place_core pick_place_ros_ad
 if(BUILD_TESTING)
   ament_add_gtest(test_pick_place_core test/pick_place/test_pick_place_core.cpp)
   if(TARGET test_pick_place_core)
-    target_link_libraries(test_pick_place_core pick_place_core)
+    target_link_libraries(test_pick_place_core pick_place_core pick_place_ros_adapters)
   endif()
 
   add_test(

@@ -249,6 +249,9 @@ RunResult StateMachineRunner::runExecuteStep(
       state, *executor, observation_failure);
     return transitionFailure(state, stopped_failure.value_or(observation_failure));
   }
+  if (execution_observation_sink_ != nullptr) {
+    execution_observation_sink_->record(state, *before, *after.snapshot);
+  }
   const auto validation = contracts_.validate({state, next_state}, *before, *after.snapshot,
       action);
   if (!validation.ok) {

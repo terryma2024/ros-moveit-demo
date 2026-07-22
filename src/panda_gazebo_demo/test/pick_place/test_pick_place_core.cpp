@@ -1,11 +1,15 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
+#include <type_traits>
 
 #include <moveit_msgs/msg/collision_object.hpp>
 
+#include "panda_gazebo_demo/pick_place/cartesian_plan_validation.hpp"
 #include "panda_gazebo_demo/pick_place/checkpoint.hpp"
+#include "panda_gazebo_demo/pick_place/descend_planner_executor.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_world_object_pose.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
@@ -77,6 +81,161 @@ pick_place::WorldSnapshot makeSnapshot()
   snapshot.gazebo_coke_attached = false;
   snapshot.simulation_session_id = "test-session";
   return snapshot;
+}
+
+pick_place::CartesianPlanEvidence validDescendPlanEvidence()
+{
+  pick_place::CartesianPlanEvidence evidence;
+  evidence.fraction = 1.0;
+  evidence.trajectory_points = 3;
+  evidence.max_joint_delta = 0.05;
+  evidence.time_parameterized = true;
+  evidence.start_tcp_pose = {0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
+  evidence.tcp_path = {
+    {0.3, 0.0, 0.97, 1.0, 0.0, 0.0, 0.0},
+    {0.3, 0.0, 0.95, 1.0, 0.0, 0.0, 0.0},
+    {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0},
+  };
+  return evidence;
+}
+
+pick_place::CartesianPlanLimits descendPlanLimits()
+{
+  return {0.99, 0.2, 0.02, 0.1, 0.02, 0.1};
+}
+
+std::string firstFailureCode(const pick_place::ValidationResult & result)
+{
+  return result.failures.empty() ? "" : result.failures.front().code;
+}
+
+TEST(CartesianPlanValidation, AcceptsCompleteVerticalDescent)
+{
+  const auto result = pick_place::validateCartesianPlan(
+    validDescendPlanEvidence(), {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_DOUBLE_EQ(1.0, result.metrics.at("cartesian_fraction"));
+  EXPECT_DOUBLE_EQ(0.05, result.metrics.at("max_joint_delta"));
+  EXPECT_DOUBLE_EQ(0.0, result.metrics.at("max_lateral_deviation"));
+}
+
+TEST(DescendPlannerExecutor, ImplementsIndependentPlannerAndExecutorInterfaces)
+{
+  EXPECT_TRUE((std::is_base_of_v<pick_place::IStatePlanner,
+    pick_place::DescendPlannerExecutor>));
+  EXPECT_TRUE((std::is_base_of_v<pick_place::IStateExecutor,
+    pick_place::DescendPlannerExecutor>));
+}
+
+TEST(CartesianPlanValidation, RejectsPartialCartesianPath)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.fraction = 0.98;
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("CARTESIAN_FRACTION_BELOW_THRESHOLD", firstFailureCode(result));
+}
+
+TEST(CartesianPlanValidation, RejectsEmptyCartesianTrajectory)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.trajectory_points = 0;
+  evidence.tcp_path.clear();
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("EMPTY_CARTESIAN_TRAJECTORY", firstFailureCode(result));
+}
+
+TEST(CartesianPlanValidation, RejectsTrajectoryWithoutIncreasingTime)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.time_parameterized = false;
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("CARTESIAN_TRAJECTORY_NOT_TIME_PARAMETERIZED", firstFailureCode(result));
+}
+
+TEST(CartesianPlanValidation, RejectsAdjacentJointJump)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.max_joint_delta = 0.21;
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("CARTESIAN_JOINT_JUMP_EXCEEDED", firstFailureCode(result));
+}
+
+TEST(CartesianPlanValidation, RejectsLateralSweep)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.tcp_path[1].x = 0.321;
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("CARTESIAN_LATERAL_DEVIATION_EXCEEDED", firstFailureCode(result));
+}
+
+TEST(CartesianPlanValidation, RejectsUpwardMotion)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.tcp_path[1].z = 0.975;
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("CARTESIAN_PATH_NOT_MONOTONIC_DESCENT", firstFailureCode(result));
+}
+
+TEST(CartesianPlanValidation, RejectsOrientationDrift)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.tcp_path[1] = {0.3, 0.0, 0.95, 0.7071067811865476, 0.0, 0.0,
+    0.7071067811865476};
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("CARTESIAN_ORIENTATION_DEVIATION_EXCEEDED", firstFailureCode(result));
+}
+
+TEST(CartesianPlanValidation, RejectsWrongSixDofEndpoint)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.tcp_path.back().z = 0.909;
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("CARTESIAN_ENDPOINT_POSITION_OUTSIDE_TOLERANCE", firstFailureCode(result));
+}
+
+TEST(CartesianPlanValidation, RejectsNonFiniteTcpPathPose)
+{
+  auto evidence = validDescendPlanEvidence();
+  evidence.tcp_path[1].x = std::numeric_limits<double>::quiet_NaN();
+
+  const auto result = pick_place::validateCartesianPlan(
+    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("CARTESIAN_TCP_PATH_NON_FINITE", firstFailureCode(result));
 }
 
 TEST(PickPlaceTargetPolicy, ReturnsFixedMoveAboveObjectTarget)
@@ -224,6 +383,23 @@ void registerPrepareOpenGripperToMoveAboveObjectValidator(
       std::vector<std::string>{"table", "coke"}, 0.02, 0.1, 0.01, 0.1));
 }
 
+void registerDescendToCloseGripperValidator(pick_place::TransitionContractRegistry & contracts)
+{
+  const auto target_policy = std::make_shared<pick_place::FixedPickPlaceTargetPolicy>();
+  contracts.registerContract(
+    {pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER},
+    std::make_shared<pick_place::DescendToCloseGripperValidator>(
+      target_policy, std::vector<std::string>{"table", "coke"}, 0.02, 0.1, 0.01, 0.1));
+}
+
+pick_place::Checkpoint makeMoveAboveCheckpoint(const pick_place::WorldSnapshot & snapshot)
+{
+  auto checkpoint = makeCheckpoint(snapshot);
+  checkpoint.last_completed_state = pick_place::State::MOVE_ABOVE_OBJECT;
+  checkpoint.next_state = pick_place::State::DESCEND;
+  return checkpoint;
+}
+
 class FakeObserver final : public pick_place::IWorldObserver
 {
 public:
@@ -259,6 +435,25 @@ public:
   pick_place::CheckpointLoadResult load_result;
   int calls{0};
   int load_calls{0};
+};
+
+class RecordingExecutionObservationSink final : public pick_place::IExecutionObservationSink
+{
+public:
+  void record(
+    pick_place::State state, const pick_place::WorldSnapshot & before,
+    const pick_place::WorldSnapshot & after) override
+  {
+    ++calls;
+    last_state = state;
+    before_snapshot = before;
+    after_snapshot = after;
+  }
+
+  int calls{0};
+  pick_place::State last_state{pick_place::State::ERROR};
+  std::optional<pick_place::WorldSnapshot> before_snapshot;
+  std::optional<pick_place::WorldSnapshot> after_snapshot;
 };
 
 }  // namespace
@@ -408,6 +603,39 @@ TEST(Runner, ExecutesPrepareOpenGripperWithoutPlanningAndCommitsAfterPostValidat
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, checkpoints.checkpoint->next_state);
   EXPECT_FALSE(*checkpoints.checkpoint->expected.gazebo_coke_attached);
   EXPECT_FALSE(*checkpoints.checkpoint->expected.moveit_coke_attached);
+}
+
+TEST(Runner, RecordsExistingPreAndPostExecutionSnapshotsOnce)
+{
+  pick_place::StateActionRegistry actions;
+  auto executor = std::make_shared<FakeExecutor>();
+  actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER, executor);
+  pick_place::TransitionContractRegistry contracts;
+  registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
+  FakeObserver observer;
+  observer.snapshot.gripper_open = false;
+  observer.snapshot.gazebo_coke_pose_world->x = 0.301;
+  observer.after_snapshot = observer.snapshot;
+  observer.after_snapshot->gripper_open = true;
+  observer.after_snapshot->gazebo_coke_pose_world->x = 0.302;
+  observer.after_snapshot->moveit_world_object_poses.at("coke").x = 0.302;
+  FakeCheckpointStore checkpoints;
+  const auto common_resume_validator = makeCommonResumeValidator();
+  RecordingExecutionObservationSink sink;
+  const pick_place::StateMachineRunner runner(
+    actions, contracts, &observer, &checkpoints, &common_resume_validator, &sink);
+
+  const auto result = runner.run({pick_place::RunMode::EXECUTE,
+        pick_place::State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(1, sink.calls);
+  EXPECT_EQ(pick_place::State::PREPARE_OPEN_GRIPPER, sink.last_state);
+  ASSERT_TRUE(sink.before_snapshot.has_value());
+  ASSERT_TRUE(sink.after_snapshot.has_value());
+  EXPECT_DOUBLE_EQ(0.301, sink.before_snapshot->gazebo_coke_pose_world->x);
+  EXPECT_DOUBLE_EQ(0.302, sink.after_snapshot->gazebo_coke_pose_world->x);
+  EXPECT_EQ(2, observer.calls);
 }
 
 TEST(Runner, ExecuteWorkflowAdvancesThroughRegisteredStatesUntilStopAfter)
@@ -577,6 +805,67 @@ TEST(Runner, ResumeExecuteRunsMoveAboveObjectFromPrepareCheckpoint)
   EXPECT_EQ(1, executor->calls);
 }
 
+TEST(Runner, ResumeExecuteStopsSuccessfullyAfterDescendCheckpoint)
+{
+  pick_place::StateActionRegistry actions;
+  auto planner = std::make_shared<FakePlanner>();
+  auto executor = std::make_shared<FakeExecutor>();
+  actions.registerPlanner(pick_place::State::DESCEND, planner);
+  actions.registerExecutor(pick_place::State::DESCEND, executor);
+  pick_place::TransitionContractRegistry contracts;
+  registerMoveAboveObjectToDescendValidator(contracts);
+  registerDescendToCloseGripperValidator(contracts);
+  FakeObserver observer;
+  observer.after_snapshot = observer.snapshot;
+  observer.after_snapshot->tcp_pose_world.z = 0.93;
+  FakeCheckpointStore checkpoints;
+  checkpoints.load_result.checkpoint = makeMoveAboveCheckpoint(observer.snapshot);
+  const auto common_resume_validator = makeCommonResumeValidator();
+  const pick_place::StateMachineRunner runner(
+    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+
+  const auto result = runner.run({pick_place::RunMode::EXECUTE,
+        pick_place::State::DESCEND, true, std::nullopt, 100});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(pick_place::State::DESCEND, result.current_state);
+  ASSERT_TRUE(result.next_state.has_value());
+  EXPECT_EQ(pick_place::State::CLOSE_GRIPPER, *result.next_state);
+  EXPECT_EQ(1, planner->calls);
+  EXPECT_EQ(1, executor->calls);
+  ASSERT_TRUE(checkpoints.checkpoint.has_value());
+  EXPECT_EQ(pick_place::State::DESCEND, checkpoints.checkpoint->last_completed_state);
+}
+
+TEST(Runner, ResumeExecuteReachesExpectedUnregisteredCloseGripperBoundary)
+{
+  pick_place::StateActionRegistry actions;
+  auto planner = std::make_shared<FakePlanner>();
+  auto executor = std::make_shared<FakeExecutor>();
+  actions.registerPlanner(pick_place::State::DESCEND, planner);
+  actions.registerExecutor(pick_place::State::DESCEND, executor);
+  pick_place::TransitionContractRegistry contracts;
+  registerMoveAboveObjectToDescendValidator(contracts);
+  registerDescendToCloseGripperValidator(contracts);
+  FakeObserver observer;
+  observer.after_snapshot = observer.snapshot;
+  observer.after_snapshot->tcp_pose_world.z = 0.93;
+  FakeCheckpointStore checkpoints;
+  checkpoints.load_result.checkpoint = makeMoveAboveCheckpoint(observer.snapshot);
+  const auto common_resume_validator = makeCommonResumeValidator();
+  const pick_place::StateMachineRunner runner(
+    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+
+  const auto result = runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true,
+        std::nullopt, 100});
+
+  EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
+  ASSERT_TRUE(result.failure.has_value());
+  EXPECT_EQ("EXECUTE_ACTION_NOT_REGISTERED", result.failure->code);
+  EXPECT_NE(std::string::npos, result.failure->message.find("CLOSE_GRIPPER"));
+  EXPECT_EQ(1, executor->calls);
+}
+
 TEST(Runner, ResumeRejectsWorldMismatchBeforePlanning)
 {
   pick_place::StateActionRegistry actions;
@@ -637,6 +926,59 @@ TEST(TransitionContracts, RejectsGazeboAndMoveItCokePoseMismatch)
   EXPECT_EQ("COKE_POSE_MISMATCH", result.failures.front().code);
 }
 
+TEST(TransitionContracts, DescendRequiresTcpAtMoveAboveTargetBeforePlanning)
+{
+  auto before = makeSnapshot();
+  before.tcp_pose_world.x += 0.03;
+  const pick_place::DescendToCloseGripperValidator contract(
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
+    0.01, 0.1);
+
+  const auto result = contract.validatePrecondition(before);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_GT(result.metrics.at("tcp_position_error"), 0.02);
+  EXPECT_EQ("TCP_OUTSIDE_DESCEND_START_TOLERANCE", firstFailureCode(result));
+}
+
+TEST(TransitionContracts, DescendRejectsCokeOrientationDriftAfterExecution)
+{
+  const auto before = makeSnapshot();
+  auto after = before;
+  after.tcp_pose_world.z = 0.93;
+  const pick_place::Pose3d rotated_coke{
+    0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
+  after.gazebo_coke_pose_world = rotated_coke;
+  after.moveit_world_object_poses.at("coke") = rotated_coke;
+  const pick_place::DescendToCloseGripperValidator contract(
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
+    0.01, 0.1);
+
+  const auto result = contract.validate(
+    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_GT(result.metrics.at("coke_orientation_drift_rad"), 0.1);
+  EXPECT_EQ("COKE_ROTATED_DURING_MOTION", firstFailureCode(result));
+}
+
+TEST(TransitionContracts, DescendAcceptsStableSixDofCompletion)
+{
+  const auto before = makeSnapshot();
+  auto after = before;
+  after.tcp_pose_world.z = 0.93;
+  const pick_place::DescendToCloseGripperValidator contract(
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
+    0.01, 0.1);
+
+  const auto result = contract.validate(
+    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_DOUBLE_EQ(0.0, result.metrics.at("tcp_position_error"));
+  EXPECT_DOUBLE_EQ(0.0, result.metrics.at("tcp_orientation_error_rad"));
+}
+
 TEST(TransitionContracts, PrepareRequiresBothFingersSafelyOpenAndCokeStationary)
 {
   auto before = makeSnapshot();
@@ -685,6 +1027,25 @@ TEST(TransitionContracts, ResumeUsesTheSameMoveAboveObjectToDescendValidator)
   EXPECT_FALSE(result.ok);
   ASSERT_FALSE(result.failures.empty());
   EXPECT_EQ("COKE_POSE_MISMATCH", result.failures.front().code);
+}
+
+TEST(TransitionContracts, ResumeUsesTheSameDescendToCloseGripperValidator)
+{
+  auto expected = makeSnapshot();
+  expected.tcp_pose_world.z = 0.93;
+  auto current = expected;
+  const pick_place::Pose3d rotated_coke{
+    0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
+  current.gazebo_coke_pose_world = rotated_coke;
+  current.moveit_world_object_poses.at("coke") = rotated_coke;
+  pick_place::TransitionContractRegistry contracts;
+  registerDescendToCloseGripperValidator(contracts);
+
+  const auto result = contracts.validateResume(
+    {pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER}, expected, current);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ("COKE_ROTATED_DURING_MOTION", firstFailureCode(result));
 }
 
 TEST(TransitionContracts, ResumeUsesTheSamePrepareOpenGripperValidator)

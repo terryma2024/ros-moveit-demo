@@ -10,6 +10,15 @@
 namespace panda_gazebo_demo::pick_place
 {
 
+class IExecutionObservationSink
+{
+public:
+  virtual ~IExecutionObservationSink() = default;
+  virtual void record(
+    State state, const WorldSnapshot & before,
+    const WorldSnapshot & after) = 0;
+};
+
 class StateMachineRunner
 {
 public:
@@ -17,9 +26,11 @@ public:
     const StateActionRegistry & actions,
     const TransitionContractRegistry & contracts, IWorldObserver * observer = nullptr,
     ICheckpointStore * checkpoint_store = nullptr,
-    const CommonResumeValidator * common_resume_validator = nullptr)
+    const CommonResumeValidator * common_resume_validator = nullptr,
+    IExecutionObservationSink * execution_observation_sink = nullptr)
   : actions_(actions), contracts_(contracts), observer_(observer),
-    checkpoint_store_(checkpoint_store), common_resume_validator_(common_resume_validator) {}
+    checkpoint_store_(checkpoint_store), common_resume_validator_(common_resume_validator),
+    execution_observation_sink_(execution_observation_sink) {}
 
   [[nodiscard]] RunResult run(const RunRequest & request) const;
 
@@ -51,6 +62,7 @@ private:
   IWorldObserver * observer_;
   ICheckpointStore * checkpoint_store_;
   const CommonResumeValidator * common_resume_validator_;
+  IExecutionObservationSink * execution_observation_sink_;
 };
 
 }  // namespace panda_gazebo_demo::pick_place
