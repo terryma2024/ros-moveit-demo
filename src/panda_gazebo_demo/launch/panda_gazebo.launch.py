@@ -12,6 +12,59 @@ from moveit_configs_utils import MoveItConfigsBuilder
 def generate_launch_description():
     package_share = FindPackageShare('panda_gazebo_demo')
     headless = LaunchConfiguration('headless')
+    run_state_machine = LaunchConfiguration('run_state_machine')
+
+    runtime_defaults = {
+        'velocity_scaling': '0.10',
+        'acceleration_scaling': '0.10',
+        'cartesian_eef_step': '0.005',
+        'cartesian_min_fraction': '0.99',
+        'joint_jump_threshold': '0.20',
+        'tcp_position_tolerance': '0.020',
+        'tcp_orientation_tolerance_rad': '0.0872665',
+        'coke_position_tolerance': '0.010',
+        'coke_orientation_tolerance_rad': '0.0872665',
+        'gripper_open_position': '0.040',
+        'gripper_open_min_position': '0.038',
+        'gripper_close_position': '0.000',
+        'gripper_grasp_min_position': '0.028',
+        'gripper_grasp_max_position': '0.037',
+        'gripper_symmetry_tolerance': '0.003',
+        'joint_velocity_tolerance': '0.010',
+        'gripper_max_effort': '0.0',
+        'gripper_action_timeout_seconds': '5.0',
+        'attachment_timeout_seconds': '2.0',
+        'planning_scene_timeout_seconds': '2.0',
+        'state_poll_interval_seconds': '0.05',
+        'gazebo_observation_max_age_seconds': '0.5',
+        'coke_settle_interval_seconds': '0.05',
+        'coke_settle_position_tolerance': '0.002',
+        'coke_settle_orientation_tolerance_rad': '0.020',
+        'recovery_safe_height': '0.987',
+    }
+    runtime_arguments = [
+        DeclareLaunchArgument(name, default_value=value)
+        for name, value in runtime_defaults.items()
+    ]
+    runtime_float_parameters = {
+        name: ParameterValue(LaunchConfiguration(name), value_type=float)
+        for name in runtime_defaults
+    }
+    runtime_arguments.extend(
+        [
+            DeclareLaunchArgument('run_state_machine', default_value='false'),
+            DeclareLaunchArgument('mode', default_value='execute'),
+            DeclareLaunchArgument('resume', default_value='false'),
+            DeclareLaunchArgument('stop_after', default_value=''),
+            DeclareLaunchArgument('simulation_session_id', default_value=''),
+            DeclareLaunchArgument(
+                'checkpoint_path',
+                default_value='/tmp/panda_pick_place_checkpoint.json',
+            ),
+            DeclareLaunchArgument('max_state_transitions', default_value='100'),
+            DeclareLaunchArgument('coke_settle_samples', default_value='5'),
+        ]
+    )
 
     world_file = PathJoinSubstitution([package_share, 'worlds', 'table_coke.sdf'])
     xacro_file = PathJoinSubstitution(
@@ -194,6 +247,36 @@ def generate_launch_description():
         output='screen',
     )
 
+    pick_place_state_machine = Node(
+        package='panda_gazebo_demo',
+        executable='pick_place_state_machine',
+        output='screen',
+        condition=IfCondition(run_state_machine),
+        parameters=[
+            runtime_float_parameters,
+            {
+                'use_sim_time': True,
+                'mode': LaunchConfiguration('mode'),
+                'resume': ParameterValue(
+                    LaunchConfiguration('resume'), value_type=bool
+                ),
+                'stop_after': LaunchConfiguration('stop_after'),
+                'simulation_session_id': LaunchConfiguration(
+                    'simulation_session_id'
+                ),
+                'checkpoint_path': LaunchConfiguration('checkpoint_path'),
+                'max_state_transitions': ParameterValue(
+                    LaunchConfiguration('max_state_transitions'),
+                    value_type=int,
+                ),
+                'coke_settle_samples': ParameterValue(
+                    LaunchConfiguration('coke_settle_samples'),
+                    value_type=int,
+                ),
+            },
+        ],
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -201,6 +284,7 @@ def generate_launch_description():
                 default_value='false',
                 description='Run Gazebo server-only and do not start RViz',
             ),
+            *runtime_arguments,
             gazebo_headless,
             gazebo_with_gui,
             clock_bridge,
@@ -211,6 +295,7 @@ def generate_launch_description():
             panda_hand_controller,
             move_group_node,
             planning_scene_setup_node,
+            pick_place_state_machine,
             rviz_node,
         ]
     )

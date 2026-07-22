@@ -35,10 +35,16 @@ class GazeboWorldObserver::Impl
 public:
   Impl(
     std::string world_name, std::string coke_model, std::string attachment_topic,
-    std::string simulation_session_id, double max_observation_age_seconds, bool initially_detached)
+    std::string simulation_session_id, double max_observation_age_seconds,
+    std::size_t coke_settle_samples, double coke_settle_interval_seconds,
+    double coke_settle_position_tolerance, double coke_settle_orientation_tolerance_rad,
+    bool initially_detached)
   : coke_model_(std::move(coke_model)), simulation_session_id_(std::move(simulation_session_id)),
     max_observation_age_(std::chrono::duration<double>(max_observation_age_seconds)),
-    coke_attached_(!initially_detached)
+    coke_attached_(!initially_detached),
+    coke_pose_stability_(coke_settle_samples, coke_settle_position_tolerance,
+      coke_settle_orientation_tolerance_rad),
+    coke_settle_interval_(std::chrono::duration<double>(coke_settle_interval_seconds))
   {
     const auto pose_topic = "/world/" + world_name + "/pose/info";
     pose_subscription_ok_ = transport_.Subscribe(pose_topic, &Impl::onPoses, this);
@@ -54,7 +60,12 @@ public:
         const auto observed_at = std::chrono::steady_clock::now();
         coke_pose_ = toPose3d(pose);
         coke_pose_received_at_ = observed_at;
-        coke_pose_stability_.addSample(*coke_pose_, observed_at);
+        if (last_stability_sample_at_ == std::chrono::steady_clock::time_point{} ||
+          observed_at - last_stability_sample_at_ >= coke_settle_interval_)
+        {
+          coke_pose_stability_.addSample(*coke_pose_, observed_at);
+          last_stability_sample_at_ = observed_at;
+        }
         return;
       }
     }
@@ -102,17 +113,22 @@ private:
   std::optional<Pose3d> coke_pose_;
   std::optional<bool> coke_attached_;
   CokePoseStabilityTracker coke_pose_stability_;
+  std::chrono::duration<double> coke_settle_interval_;
+  std::chrono::steady_clock::time_point last_stability_sample_at_{};
   std::chrono::steady_clock::time_point coke_pose_received_at_{};
 };
 
 GazeboWorldObserver::GazeboWorldObserver(
   IWorldObserver & moveit_observer, std::string world_name, std::string coke_model,
   std::string attachment_topic, std::string simulation_session_id,
-  double max_observation_age_seconds, bool initially_detached)
+  double max_observation_age_seconds, std::size_t coke_settle_samples,
+  double coke_settle_interval_seconds, double coke_settle_position_tolerance,
+  double coke_settle_orientation_tolerance_rad, bool initially_detached)
 : moveit_observer_(moveit_observer),
   impl_(std::make_unique<Impl>(std::move(world_name), std::move(coke_model),
     std::move(attachment_topic), std::move(simulation_session_id), max_observation_age_seconds,
-    initially_detached))
+    coke_settle_samples, coke_settle_interval_seconds, coke_settle_position_tolerance,
+    coke_settle_orientation_tolerance_rad, initially_detached))
 {
 }
 

@@ -38,6 +38,9 @@ if(BUILD_TESTING)
   # comment the line when this package is in a git repo and when
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
+  # Register cppcheck explicitly below so its bundled GoogleTest model is loaded.
+  # Without it cppcheck 2.13 reports TEST(...) declarations as syntax errors.
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cppcheck)
   ament_lint_auto_find_test_dependencies()
 endif()
 
@@ -50,6 +53,7 @@ add_library(
   src/pick_place/motion_state_action.cpp
   src/pick_place/plan_validation.cpp
   src/pick_place/pick_place_contracts.cpp
+  src/pick_place/pick_place_runtime.cpp
   src/pick_place/recovery_contracts.cpp
   src/pick_place/recovery_policy.cpp
   src/pick_place/state_validation.cpp
@@ -57,6 +61,7 @@ add_library(
   src/pick_place/transition_contract.cpp
   src/pick_place/transition_table.cpp
   src/pick_place/runner.cpp
+  src/pick_place/runtime_parameters.cpp
   src/pick_place/common_resume_validator.cpp
   src/pick_place/moveit_world_object_pose.cpp
   src/pick_place/pick_place_target_policy.cpp
@@ -245,12 +250,25 @@ if(BUILD_TESTING)
     )
   endif()
 
+  ament_add_gtest(
+    test_registration_coverage
+    test/pick_place/test_registration_coverage.cpp
+  )
+  if(TARGET test_registration_coverage)
+    target_link_libraries(test_registration_coverage pick_place_core)
+  endif()
+
   add_test(
     NAME test_reset_coke
     COMMAND
       bash
       ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_reset_coke.sh
       ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reset_coke.sh
+  )
+
+  ament_cppcheck(
+    LIBRARIES googletest
+    INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include
   )
 endif()
 

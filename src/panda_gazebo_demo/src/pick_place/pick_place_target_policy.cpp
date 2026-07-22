@@ -1,5 +1,6 @@
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 
+#include <sstream>
 #include <utility>
 
 namespace panda_gazebo_demo::pick_place
@@ -12,7 +13,6 @@ constexpr Pose3d above_pick_target{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d pick_target{0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d above_place_target{0.3, 0.2, 0.987, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d place_target{0.3, 0.2, 0.93, 1.0, 0.0, 0.0, 0.0};
-constexpr double recovery_safe_height = 0.987;
 
 TargetPoseResult unsupportedTransition(State current_state, State next_state)
 {
@@ -23,6 +23,11 @@ TargetPoseResult unsupportedTransition(State current_state, State next_state)
 }
 
 }  // namespace
+
+FixedPickPlaceTargetPolicy::FixedPickPlaceTargetPolicy(double recovery_safe_height)
+: recovery_safe_height_(recovery_safe_height)
+{
+}
 
 TargetPoseResult FixedPickPlaceTargetPolicy::targetPose(
   State current_state, State next_state, const ObservationResult & observation) const
@@ -65,7 +70,7 @@ TargetPoseResult FixedPickPlaceTargetPolicy::targetPose(
           "Recovery safe-height target requires a current world snapshot", {}}};
     }
     auto target = observation.snapshot->tcp_pose_world;
-    target.z = recovery_safe_height;
+    target.z = recovery_safe_height_;
     return {target, std::nullopt};
   }
   return unsupportedTransition(current_state, next_state);
@@ -73,9 +78,11 @@ TargetPoseResult FixedPickPlaceTargetPolicy::targetPose(
 
 std::string FixedPickPlaceTargetPolicy::configurationSignature() const
 {
-  return "fixed-v2|above_pick=0.3,0,0.987,1,0,0,0|pick=0.3,0,0.93,1,0,0,0|"
-         "above_place=0.3,0.2,0.987,1,0,0,0|place=0.3,0.2,0.93,1,0,0,0|"
-         "recovery_safe_height=0.987";
+  std::ostringstream signature;
+  signature << "fixed-v2|above_pick=0.3,0,0.987,1,0,0,0|pick=0.3,0,0.93,1,0,0,0|"
+            << "above_place=0.3,0.2,0.987,1,0,0,0|place=0.3,0.2,0.93,1,0,0,0|"
+            << "recovery_safe_height=" << recovery_safe_height_;
+  return signature.str();
 }
 
 }  // namespace panda_gazebo_demo::pick_place
