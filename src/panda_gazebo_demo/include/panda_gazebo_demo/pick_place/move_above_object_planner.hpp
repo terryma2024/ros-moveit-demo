@@ -12,15 +12,15 @@
 namespace panda_gazebo_demo::pick_place
 {
 
-class MoveItPreGraspPlanner final : public IStatePlanner, public IStateExecutor,
+class MoveAboveObjectPlanner final : public IStatePlanner, public IStateExecutor,
   public IWorldObserver
 {
 public:
-  MoveItPreGraspPlanner(
+  MoveAboveObjectPlanner(
     std::shared_ptr<rclcpp::Node> node, std::string planning_group,
     std::string tcp_link, std::vector<std::string> required_world_objects,
     double velocity_scaling, double acceleration_scaling);
-  ~MoveItPreGraspPlanner() override;
+  ~MoveAboveObjectPlanner() override;
 
   [[nodiscard]] PlanResult plan(State state) override;
   [[nodiscard]] ActionResult execute(

@@ -2,7 +2,10 @@
 
 #include <memory>
 
+#include <moveit_msgs/msg/collision_object.hpp>
+
 #include "panda_gazebo_demo/pick_place/checkpoint.hpp"
+#include "panda_gazebo_demo/pick_place/moveit_world_object_pose.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
 namespace pick_place = panda_gazebo_demo::pick_place;
@@ -140,6 +143,25 @@ public:
 };
 
 }  // namespace
+
+TEST(MoveItWorldObjectPose, UsesObjectPoseInsteadOfLocalPrimitivePose)
+{
+  moveit_msgs::msg::CollisionObject object;
+  object.pose.position.x = 0.3;
+  object.pose.position.y = -0.2;
+  object.pose.position.z = 0.836;
+  object.pose.orientation.w = 1.0;
+
+  geometry_msgs::msg::Pose local_primitive_pose;
+  local_primitive_pose.orientation.w = 1.0;
+  object.primitive_poses.push_back(local_primitive_pose);
+
+  const auto observed = pick_place::worldPoseFromCollisionObject(object);
+  EXPECT_DOUBLE_EQ(0.3, observed.x);
+  EXPECT_DOUBLE_EQ(-0.2, observed.y);
+  EXPECT_DOUBLE_EQ(0.836, observed.z);
+  EXPECT_DOUBLE_EQ(1.0, observed.qw);
+}
 
 TEST(TransitionTable, SeparatesBusinessStateFromRunStatus)
 {

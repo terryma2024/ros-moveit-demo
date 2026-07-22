@@ -14,7 +14,7 @@
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
-#include "panda_gazebo_demo/pick_place/moveit_pregrasp_planner.hpp"
+#include "panda_gazebo_demo/pick_place/move_above_object_planner.hpp"
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
@@ -183,19 +183,17 @@ int main(int argc, char * argv[])
 
   pick_place::StateActionRegistry actions;
   pick_place::TransitionContractRegistry contracts;
-  std::shared_ptr<pick_place::MoveItPreGraspPlanner> move_above_action;
+  std::shared_ptr<pick_place::MoveAboveObjectPlanner> move_above_action;
   std::unique_ptr<pick_place::FileCheckpointStore> checkpoint_store;
   std::unique_ptr<pick_place::GazeboWorldObserver> world_observer;
   std::unique_ptr<pick_place::CommonResumeValidator> common_resume_validator;
   if (*mode == pick_place::RunMode::PLAN_ONLY || *mode == pick_place::RunMode::EXECUTE) {
-    move_above_action = std::make_shared<pick_place::MoveItPreGraspPlanner>(
+    move_above_action = std::make_shared<pick_place::MoveAboveObjectPlanner>(
       node, planning_group, tcp_link, required_objects, velocity_scaling, acceleration_scaling);
     actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
-    actions.registerPlanner(pick_place::State::DESCEND, move_above_action);
   }
   if (*mode == pick_place::RunMode::EXECUTE || resume) {
     actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
-    actions.registerExecutor(pick_place::State::DESCEND, move_above_action);
     contracts.registerContract(
       {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
       std::make_shared<pick_place::MoveAboveObjectToDescendValidator>(
