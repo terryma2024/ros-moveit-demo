@@ -1,0 +1,391 @@
+#include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <Eigen/Geometry>
+#include <geometry_msgs/msg/pose.hpp>
+#include <moveit/move_group_interface/move_group_interface.hpp>
+#include <moveit/planning_scene_interface/planning_scene_interface.hpp>
+#include <moveit/robot_state/robot_state.hpp>
+#include <moveit_msgs/msg/robot_trajectory.hpp>
+#include <rclcpp/node.hpp>
+
+#include "panda_gazebo_demo/pick_place/moveit_world_object_pose.hpp"
+#include "panda_gazebo_demo/pick_place/state_validation.hpp"
+
+namespace panda_gazebo_demo::pick_place
+{
+namespace
+{
+
+using MoveGroupInterface = moveit::planning_interface::MoveGroupInterface;
+
+class MoveItMotionPlanEvidence final : public MotionPlanEvidence
+{
+public:
+  moveit_msgs::msg::RobotTrajectory trajectory;
+};
+
+PlanResult planningFailure(FailureCategory category, std::string code, std::string message)
+{
+  return {{ActionStatus::FAILED, Failure{category, std::move(code), std::move(message), {}}},
+    nullptr};
+}
+
+ActionResult executionFailure(std::string code, std::string message)
+{
+  return {ActionStatus::FAILED, Failure{FailureCategory::EXECUTION,
+      std::move(code), std::move(message), {}}};
+}
+
+geometry_msgs::msg::Pose toMessage(const Pose3d & pose)
+{
+  geometry_msgs::msg::Pose message;
+  message.position.x = pose.x;
+  message.position.y = pose.y;
+  message.position.z = pose.z;
+  message.orientation.x = pose.qx;
+  message.orientation.y = pose.qy;
+  message.orientation.z = pose.qz;
+  message.orientation.w = pose.qw;
+  return message;
+}
+
+Pose3d toPose(const geometry_msgs::msg::Pose & pose)
+{
+  return {pose.position.x, pose.position.y, pose.position.z, pose.orientation.x,
+    pose.orientation.y, pose.orientation.z, pose.orientation.w};
+}
+
+Pose3d toPose(const Eigen::Isometry3d & transform)
+{
+  const Eigen::Quaterniond orientation(transform.rotation());
+  const auto & position = transform.translation();
+  return {position.x(), position.y(), position.z(), orientation.x(), orientation.y(),
+    orientation.z(), orientation.w()};
+}
+
+bool poseIsFinite(const geometry_msgs::msg::Pose & pose)
+{
+  const double quaternion_norm = std::sqrt(
+    pose.orientation.x * pose.orientation.x + pose.orientation.y * pose.orientation.y +
+    pose.orientation.z * pose.orientation.z + pose.orientation.w * pose.orientation.w);
+  return std::isfinite(pose.position.x) && std::isfinite(pose.position.y) &&
+         std::isfinite(pose.position.z) && std::isfinite(pose.orientation.x) &&
+         std::isfinite(pose.orientation.y) && std::isfinite(pose.orientation.z) &&
+         std::isfinite(pose.orientation.w) && quaternion_norm > 1.0e-9;
+}
+
+void logPose(const rclcpp::Logger & logger, const char * label, const Pose3d & pose)
+{
+  const Eigen::Quaterniond orientation(pose.qw, pose.qx, pose.qy, pose.qz);
+  const auto rpy = orientation.normalized().toRotationMatrix().eulerAngles(0, 1, 2);
+  RCLCPP_INFO(logger, "%s x=%.6f y=%.6f z=%.6f roll=%.6f pitch=%.6f yaw=%.6f", label,
+    pose.x, pose.y, pose.z, rpy.x(), rpy.y(), rpy.z());
+}
+
+double durationSeconds(const builtin_interfaces::msg::Duration & duration)
+{
+  return static_cast<double>(duration.sec) +
+         static_cast<double>(duration.nanosec) / 1.0e9;
+}
+
+std::shared_ptr<MoveItMotionPlanEvidence> buildEvidence(
+  const MotionPlanningRequest & request,
+  const moveit_msgs::msg::RobotTrajectory & trajectory,
+  const moveit::core::RobotState & start_state, const std::string & tcp_link,
+  double cartesian_fraction, bool attached_object_in_model,
+  bool carried_relative_pose_available)
+{
+  auto evidence = std::make_shared<MoveItMotionPlanEvidence>();
+  evidence->state = request.state;
+  evidence->next_state = request.next_state;
+  evidence->kind = request.kind;
+  evidence->carrying = request.carrying;
+  evidence->cartesian_fraction = cartesian_fraction;
+  evidence->trajectory = trajectory;
+  const auto & joint_trajectory = evidence->trajectory.joint_trajectory;
+  evidence->trajectory_points = joint_trajectory.points.size();
+  evidence->collision_aware = true;
+  evidence->attached_object_in_model = attached_object_in_model;
+  evidence->carried_relative_pose_available = carried_relative_pose_available;
+  // MoveIt represents an attached body by one rigid link-to-object transform. Once that
+  // transform is present and finite, its modeled relative drift across every FK sample is zero.
+  evidence->max_carried_relative_position_error = 0.0;
+  evidence->max_carried_relative_orientation_error_rad = 0.0;
+  // Both MoveGroup pose planning and computeCartesianPath(..., avoid_collisions=true)
+  // collision-check the attached body along the returned trajectory.
+  evidence->carried_clearance_verified =
+    request.carrying && evidence->collision_aware && attached_object_in_model &&
+    carried_relative_pose_available;
+
+  moveit::core::RobotState state(start_state);
+  state.update();
+  evidence->start_tcp_pose = toPose(state.getGlobalLinkTransform(tcp_link));
+  std::vector<double> previous_positions;
+  previous_positions.reserve(joint_trajectory.joint_names.size());
+  for (const auto & joint_name : joint_trajectory.joint_names) {
+    previous_positions.push_back(state.getVariablePosition(joint_name));
+  }
+
+  std::int64_t previous_nanoseconds = -1;
+  bool timed = !joint_trajectory.points.empty();
+  for (const auto & point : joint_trajectory.points) {
+    if (point.positions.size() != joint_trajectory.joint_names.size()) {
+      return nullptr;
+    }
+    const auto nanoseconds = static_cast<std::int64_t>(point.time_from_start.sec) *
+      1000000000LL + point.time_from_start.nanosec;
+    if (nanoseconds < 0 ||
+      (previous_nanoseconds >= 0 && nanoseconds <= previous_nanoseconds))
+    {
+      timed = false;
+    }
+    previous_nanoseconds = nanoseconds;
+    for (std::size_t index = 0; index < point.positions.size(); ++index) {
+      evidence->max_joint_jump = std::max(evidence->max_joint_jump,
+        std::abs(point.positions[index] - previous_positions[index]));
+    }
+    state.setVariablePositions(joint_trajectory.joint_names, point.positions);
+    state.update();
+    evidence->tcp_path.push_back(toPose(state.getGlobalLinkTransform(tcp_link)));
+    previous_positions = point.positions;
+  }
+  if (timed && !joint_trajectory.points.empty()) {
+    evidence->duration_seconds =
+      durationSeconds(joint_trajectory.points.back().time_from_start);
+  }
+  if (evidence->duration_seconds <= 0.0) {
+    evidence->duration_seconds = 0.0;
+  }
+  if (!evidence->tcp_path.empty()) {
+    evidence->end_tcp_pose = evidence->tcp_path.back();
+  }
+  return evidence;
+}
+
+}  // namespace
+
+class MoveItMotionAdapter::Impl
+{
+public:
+  Impl(
+    std::shared_ptr<rclcpp::Node> node, std::string planning_group,
+    std::string tcp_link, std::vector<std::string> required_world_objects,
+    double velocity_scaling, double acceleration_scaling, double cartesian_eef_step)
+  : node(std::move(node)), planning_group(std::move(planning_group)),
+    tcp_link(std::move(tcp_link)), required_world_objects(std::move(required_world_objects)),
+    velocity_scaling(velocity_scaling), acceleration_scaling(acceleration_scaling),
+    cartesian_eef_step(cartesian_eef_step)
+  {
+  }
+
+  MoveGroupInterface & moveGroup()
+  {
+    if (!move_group) {
+      move_group = std::make_unique<MoveGroupInterface>(node, planning_group);
+    }
+    return *move_group;
+  }
+
+  std::shared_ptr<rclcpp::Node> node;
+  std::string planning_group;
+  std::string tcp_link;
+  std::vector<std::string> required_world_objects;
+  double velocity_scaling;
+  double acceleration_scaling;
+  double cartesian_eef_step;
+  std::unique_ptr<MoveGroupInterface> move_group;
+  moveit::planning_interface::PlanningSceneInterface planning_scene;
+};
+
+MoveItMotionAdapter::MoveItMotionAdapter(
+  std::shared_ptr<rclcpp::Node> node, std::string planning_group,
+  std::string tcp_link, std::vector<std::string> required_world_objects,
+  double velocity_scaling, double acceleration_scaling, double cartesian_eef_step)
+: impl_(std::make_unique<Impl>(std::move(node), std::move(planning_group),
+    std::move(tcp_link), std::move(required_world_objects), velocity_scaling,
+    acceleration_scaling, cartesian_eef_step))
+{
+}
+
+MoveItMotionAdapter::~MoveItMotionAdapter() = default;
+
+PlanResult MoveItMotionAdapter::plan(
+  const MotionPlanningRequest & request,
+  const ObservationResult & observation)
+{
+  if (!observation.snapshot) {
+    return planningFailure(FailureCategory::OBSERVATION, "MOTION_OBSERVATION_MISSING",
+      "MoveIt motion planning requires a current world observation");
+  }
+  if (impl_->velocity_scaling <= 0.0 || impl_->velocity_scaling > 1.0 ||
+    impl_->acceleration_scaling <= 0.0 || impl_->acceleration_scaling > 1.0 ||
+    impl_->cartesian_eef_step <= 0.0)
+  {
+    return planningFailure(FailureCategory::CONFIGURATION, "MOTION_CONFIGURATION_INVALID",
+      "Motion scaling factors and Cartesian eef step must be positive and valid");
+  }
+
+  const auto world_objects = impl_->planning_scene.getObjects(impl_->required_world_objects);
+  for (const auto & object_id : impl_->required_world_objects) {
+    if (request.carrying && object_id == "coke") {
+      continue;
+    }
+    if (world_objects.count(object_id) == 0) {
+      return planningFailure(FailureCategory::MOVEIT_SCENE,
+        "REQUIRED_WORLD_OBJECT_MISSING",
+        "Required Planning Scene world object is missing: " + object_id);
+    }
+  }
+  const auto attached_objects = impl_->planning_scene.getAttachedObjects({"coke"});
+  const auto attached = attached_objects.find("coke");
+  const bool attached_object_in_model = attached != attached_objects.end();
+  const bool coke_in_world =
+    impl_->planning_scene.getObjects({"coke"}).count("coke") != 0;
+  if (request.carrying &&
+    (!attached_object_in_model || coke_in_world))
+  {
+    return planningFailure(FailureCategory::MOVEIT_SCENE,
+      "ATTACHED_OBJECT_MODEL_EVIDENCE_MISSING",
+      "Carried motion requires Coke exclusively in the MoveIt attached-object model");
+  }
+  const bool relative_pose_available = attached_object_in_model &&
+    !attached->second.link_name.empty() && poseIsFinite(attached->second.object.pose);
+
+  auto & move_group = impl_->moveGroup();
+  if (!move_group.startStateMonitor(2.0)) {
+    return planningFailure(FailureCategory::OBSERVATION, "STATE_MONITOR_UNAVAILABLE",
+      "Failed to start MoveIt current-state monitor");
+  }
+  if (!move_group.setEndEffectorLink(impl_->tcp_link)) {
+    return planningFailure(FailureCategory::CONFIGURATION, "INVALID_TCP_LINK",
+      "MoveIt RobotModel does not accept " + impl_->tcp_link);
+  }
+  const auto current_state = move_group.getCurrentState(2.0);
+  if (!current_state) {
+    return planningFailure(FailureCategory::OBSERVATION, "CURRENT_STATE_UNAVAILABLE",
+      "MoveIt did not provide a current state for motion planning");
+  }
+  move_group.setPoseReferenceFrame("world");
+  move_group.setMaxVelocityScalingFactor(impl_->velocity_scaling);
+  move_group.setMaxAccelerationScalingFactor(impl_->acceleration_scaling);
+  move_group.clearPoseTargets();
+  move_group.setStartState(*current_state);
+  logPose(impl_->node->get_logger(), "TARGET_TCP_POSE", request.target_pose);
+
+  moveit_msgs::msg::RobotTrajectory trajectory;
+  double fraction = 1.0;
+  if (request.kind == MotionKind::POSE) {
+    if (!move_group.setPoseTarget(toMessage(request.target_pose), impl_->tcp_link)) {
+      return planningFailure(FailureCategory::PLANNING, "POSE_TARGET_REJECTED",
+        "MoveIt rejected the configured TCP pose target");
+    }
+    MoveGroupInterface::Plan plan;
+    if (!static_cast<bool>(move_group.plan(plan))) {
+      return planningFailure(FailureCategory::PLANNING, "MOVEIT_POSE_PLAN_FAILED",
+        "MoveIt collision-aware pose planning failed");
+    }
+    trajectory = std::move(plan.trajectory);
+  } else {
+    const std::vector<geometry_msgs::msg::Pose> waypoints{toMessage(request.target_pose)};
+    moveit_msgs::msg::MoveItErrorCodes error_code;
+    fraction = move_group.computeCartesianPath(
+      waypoints, impl_->cartesian_eef_step, trajectory, true, &error_code);
+    RCLCPP_INFO(impl_->node->get_logger(), "CARTESIAN_FRACTION state=%s value=%.6f",
+      toString(request.state), fraction);
+  }
+  if (trajectory.joint_trajectory.points.empty()) {
+    return planningFailure(FailureCategory::PLANNING, "EMPTY_MOTION_TRAJECTORY",
+      "MoveIt planning produced an empty trajectory");
+  }
+
+  auto evidence = buildEvidence(request, trajectory, *current_state, impl_->tcp_link,
+    fraction, attached_object_in_model, relative_pose_available);
+  if (!evidence) {
+    return planningFailure(FailureCategory::PLAN_VALIDATION,
+      "MOTION_TCP_PATH_UNAVAILABLE",
+      "Could not reconstruct TCP poses from the MoveIt trajectory");
+  }
+  logPose(impl_->node->get_logger(), "START_TCP_POSE", evidence->start_tcp_pose);
+  logPose(impl_->node->get_logger(), "PLANNED_END_TCP_POSE", evidence->end_tcp_pose);
+  RCLCPP_INFO(impl_->node->get_logger(), "%s plan succeeded: %zu trajectory points",
+    toString(request.state), evidence->trajectory_points);
+  return {{ActionStatus::SUCCEEDED, std::nullopt}, evidence};
+}
+
+ActionResult MoveItMotionAdapter::execute(const MotionPlanEvidence & evidence)
+{
+  const auto * moveit_evidence = dynamic_cast<const MoveItMotionPlanEvidence *>(&evidence);
+  if (moveit_evidence == nullptr || !impl_->move_group) {
+    return executionFailure("INVALID_MOVEIT_MOTION_PLAN",
+      "MoveIt execution requires a trajectory produced by this adapter");
+  }
+  if (!static_cast<bool>(impl_->move_group->execute(moveit_evidence->trajectory))) {
+    return executionFailure("MOVEIT_MOTION_EXECUTION_FAILED",
+      "MoveIt failed to execute the validated motion trajectory");
+  }
+  logPose(impl_->node->get_logger(), "EXECUTED_END_TCP_POSE",
+    toPose(impl_->move_group->getCurrentPose(impl_->tcp_link).pose));
+  return {ActionStatus::SUCCEEDED, std::nullopt};
+}
+
+ActionResult MoveItMotionAdapter::cancel()
+{
+  if (impl_->move_group) {
+    impl_->move_group->stop();
+  }
+  return {ActionStatus::SUCCEEDED, std::nullopt};
+}
+
+ObservationResult MoveItMotionAdapter::observe()
+{
+  auto & move_group = impl_->moveGroup();
+  if (!move_group.startStateMonitor(2.0)) {
+    return {std::nullopt, Failure{FailureCategory::OBSERVATION,
+        "STATE_MONITOR_UNAVAILABLE", "Failed to start MoveIt current-state monitor", {}}};
+  }
+  if (!move_group.setEndEffectorLink(impl_->tcp_link)) {
+    return {std::nullopt, Failure{FailureCategory::CONFIGURATION,
+        "INVALID_TCP_LINK", "MoveIt RobotModel does not accept " + impl_->tcp_link, {}}};
+  }
+  const auto state = move_group.getCurrentState(2.0);
+  if (!state) {
+    return {std::nullopt, Failure{FailureCategory::OBSERVATION,
+        "CURRENT_STATE_UNAVAILABLE", "MoveIt did not provide a current robot state", {}}};
+  }
+
+  WorldSnapshot snapshot;
+  snapshot.observed_at = std::chrono::steady_clock::now();
+  snapshot.fresh = true;
+  snapshot.tcp_pose_world = toPose(move_group.getCurrentPose(impl_->tcp_link).pose);
+  snapshot.arm_stationary = true;
+  for (const auto & variable : state->getVariableNames()) {
+    snapshot.joint_positions[variable] = state->getVariablePosition(variable);
+    const double velocity = state->getVariableVelocity(variable);
+    snapshot.joint_velocities[variable] = velocity;
+    if (std::abs(velocity) > 0.01) {
+      snapshot.arm_stationary = false;
+    }
+  }
+  snapshot.gripper_open = validateGripperOpen(snapshot, GripperLimits{}).ok;
+  const auto world_objects =
+    impl_->planning_scene.getObjects(impl_->required_world_objects);
+  for (const auto & [object_id, object] : world_objects) {
+    snapshot.moveit_world_object_poses.emplace(
+      object_id, worldPoseFromCollisionObject(object));
+  }
+  snapshot.moveit_coke_attached =
+    impl_->planning_scene.getAttachedObjects({"coke"}).count("coke") != 0;
+  return {snapshot, std::nullopt};
+}
+
+}  // namespace panda_gazebo_demo::pick_place

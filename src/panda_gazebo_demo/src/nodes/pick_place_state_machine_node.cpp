@@ -21,6 +21,9 @@
 #include "panda_gazebo_demo/pick_place/gripper_command_adapter.hpp"
 #include "panda_gazebo_demo/pick_place/gripper_state_executor.hpp"
 #include "panda_gazebo_demo/pick_place/move_above_object_planner.hpp"
+#include "panda_gazebo_demo/pick_place/motion_plan_evidence.hpp"
+#include "panda_gazebo_demo/pick_place/motion_state_action.hpp"
+#include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
@@ -324,9 +327,17 @@ int main(int argc, char * argv[])
       node, planning_group, tcp_link, required_objects, target_policy, velocity_scaling,
       acceleration_scaling);
     actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
+    const pick_place::MotionPlanLimits motion_plan_limits{
+      descend_min_fraction, descend_joint_jump_threshold, tcp_position_tolerance,
+      tcp_orientation_tolerance_rad, tcp_position_tolerance,
+      tcp_orientation_tolerance_rad, coke_position_tolerance,
+      coke_orientation_tolerance_rad};
     plan_validators.registerValidator(
       pick_place::State::MOVE_ABOVE_OBJECT,
-      std::make_shared<pick_place::NonEmptyPlanValidator>());
+      std::make_shared<pick_place::MotionPlanValidator>(
+        pick_place::MotionStateConfig{pick_place::State::MOVE_ABOVE_OBJECT,
+          pick_place::State::DESCEND, pick_place::MotionKind::POSE, false},
+        target_policy, motion_plan_limits));
     descend_action = std::make_shared<pick_place::DescendPlannerExecutor>(
       node, planning_group, tcp_link, target_policy, velocity_scaling, acceleration_scaling,
       descend_eef_step, descend_min_fraction, descend_joint_jump_threshold,
@@ -334,7 +345,35 @@ int main(int argc, char * argv[])
     actions.registerPlanner(pick_place::State::DESCEND, descend_action);
     plan_validators.registerValidator(
       pick_place::State::DESCEND,
-      std::make_shared<pick_place::NonEmptyPlanValidator>());
+      std::make_shared<pick_place::MotionPlanValidator>(
+        pick_place::MotionStateConfig{pick_place::State::DESCEND,
+          pick_place::State::CLOSE_GRIPPER, pick_place::MotionKind::CARTESIAN_DOWN, false},
+        target_policy, motion_plan_limits));
+
+    const auto forward_motion_adapter = std::make_shared<pick_place::MoveItMotionAdapter>(
+      node, planning_group, tcp_link, required_objects, velocity_scaling,
+      acceleration_scaling, descend_eef_step);
+    const std::vector<pick_place::MotionStateConfig> forward_motion_configs{
+      {pick_place::State::LIFT, pick_place::State::MOVE_ABOVE_PLACE,
+        pick_place::MotionKind::CARTESIAN_UP, true},
+      {pick_place::State::MOVE_ABOVE_PLACE, pick_place::State::DESCEND_TO_PLACE,
+        pick_place::MotionKind::POSE, true},
+      {pick_place::State::DESCEND_TO_PLACE, pick_place::State::OPEN_GRIPPER,
+        pick_place::MotionKind::CARTESIAN_DOWN, true},
+      {pick_place::State::RETREAT, pick_place::State::DONE,
+        pick_place::MotionKind::CARTESIAN_UP, false},
+    };
+    for (const auto & config : forward_motion_configs) {
+      auto action = std::make_shared<pick_place::MotionStateAction>(
+        forward_motion_adapter, target_policy, config);
+      actions.registerPlanner(config.state, action);
+      if (*mode == pick_place::RunMode::EXECUTE) {
+        actions.registerExecutor(config.state, action);
+      }
+      plan_validators.registerValidator(config.state,
+        std::make_shared<pick_place::MotionPlanValidator>(
+          config, target_policy, motion_plan_limits));
+    }
   }
   if (*mode == pick_place::RunMode::EXECUTE) {
     const auto gripper_adapter = std::make_shared<pick_place::GripperCommandAdapter>(

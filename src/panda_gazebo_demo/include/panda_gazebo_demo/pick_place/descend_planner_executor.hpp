@@ -29,17 +29,6 @@ public:
   [[nodiscard]] ActionResult cancel() override;
 
 private:
-  std::shared_ptr<rclcpp::Node> node_;
-  std::string planning_group_;
-  std::string tcp_link_;
-  std::shared_ptr<const PickPlaceTargetPolicy> target_policy_;
-  double velocity_scaling_;
-  double acceleration_scaling_;
-  double eef_step_;
-  double min_fraction_;
-  double joint_jump_threshold_;
-  double tcp_position_tolerance_;
-  double tcp_orientation_tolerance_rad_;
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

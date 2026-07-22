@@ -676,6 +676,13 @@ Create configured instances for all four forward states. Preserve TOTG timing an
 
 For each motion state, use execute checkpoints followed by `resume + plan_only`. Confirm no actual TCP, joint, or Coke pose movement and no recovery checkpoint.
 
+Implementation sequencing note (2026-07-23): Task 8 can perform this live smoke for the
+already reachable `MOVE_ABOVE_OBJECT` and `DESCEND` states. Real execute checkpoints for
+`LIFT`, `MOVE_ABOVE_PLACE`, `DESCEND_TO_PLACE`, and `RETREAT` require the forward contracts
+from Task 9 and complete runtime registration from Task 11. Their checkpoint-based plan-only
+smoke tests are therefore completed in Task 11/12; Task 8 must not synthesize checkpoints to
+bypass those fail-closed prerequisites.
+
 - [ ] **Step 5: Commit**
 
 ```bash
