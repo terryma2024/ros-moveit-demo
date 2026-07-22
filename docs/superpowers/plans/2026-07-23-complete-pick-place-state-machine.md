@@ -523,6 +523,8 @@ GazeboAttachmentExecutor(
 ```
 
 Publish exactly one `gz::msgs::Empty` command. Wait until a fresh output message equals `desired_attached`; distinguish publish failure, stale output, and timeout codes.
+The Gazebo Sim 8 DetachableJoint output is `gz::msgs::StringMsg`: map `attached` to `true` and
+`detached` to `false` before checking convergence.
 
 - [ ] **Step 4: Run GREEN**
 

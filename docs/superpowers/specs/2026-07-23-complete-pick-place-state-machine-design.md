@@ -62,7 +62,9 @@ Each forward or recovery state has a thin state-level component that declares th
 
 - `MoveItMotionAdapter`: pose planning, Cartesian planning, trajectory execution, cancellation, FK evidence, and current state.
 - `GripperCommandAdapter`: action goal, result, cancellation acknowledgement, and timeout handling.
-- `GazeboAttachmentAdapter`: publish attach/detach commands and wait for `/panda/coke_attached` convergence.
+- `GazeboAttachmentAdapter`: publish attach/detach commands and wait for `/panda/coke_attached`
+  convergence. Gazebo Sim 8 DetachableJoint publishes `gz.msgs.StringMsg` with `attached` or
+  `detached`; these strings map to the domain Boolean attachment fact.
 - `MoveItAttachmentAdapter`: attach/detach and wait for Planning Scene membership convergence.
 - `PlanningSceneSyncAdapter`: apply the Gazebo-authoritative Coke 6D pose to the MoveIt world object and verify it.
 - `PickPlaceTargetPolicy`: the single target source.
@@ -133,7 +135,8 @@ Contact stopping is expected. Success does not require an empty gripper to reach
 
 ### 6.2 `ATTACH_GAZEBO → ATTACH_MOVEIT`
 
-- Action: publish `gz.msgs.Empty` on `/panda/attach_coke` and wait for `/panda/coke_attached=true`.
+- Action: publish `gz.msgs.Empty` on `/panda/attach_coke` and wait for
+  `/panda/coke_attached="attached"`.
 - Preconditions: valid grasp; both models detached; arm and Coke stationary.
 - Success: Gazebo attached, MoveIt detached, Coke world pose does not snap, and `TCP→Coke` relative pose is continuous.
 - Failure entry: recovery policy, normally `RECOVER_OPEN_GRIPPER`.
@@ -178,7 +181,7 @@ Contact stopping is expected. Success does not require an empty gripper to reach
 
 ### 6.8 `DETACH_GAZEBO → DETACH_MOVEIT`
 
-- Action: publish `/panda/detach_coke` and wait for `coke_attached=false`.
+- Action: publish `/panda/detach_coke` and wait for `coke_attached="detached"`.
 - Preconditions: gripper open, both models attached, Coke in the place region.
 - Success: Gazebo detached and MoveIt still attached; sampled Gazebo poses show Coke settled on the table without unacceptable translation or tilt.
 - Failure entry: `RECOVER_DETACH_GAZEBO`.
