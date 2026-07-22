@@ -1,7 +1,8 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, PathJoinSubstitution
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -10,6 +11,7 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 def generate_launch_description():
     package_share = FindPackageShare("panda_gazebo_demo")
+    headless = LaunchConfiguration('headless')
 
     world_file = PathJoinSubstitution([package_share, "worlds", "table_coke.sdf"])
     xacro_file = PathJoinSubstitution(
@@ -23,20 +25,34 @@ def generate_launch_description():
         )
     }
 
-    gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution(
-                [FindPackageShare("ros_gz_sim"), "launch", "gz_sim.launch.py"]
-            )
-        ),
+    gazebo_launch_source = PythonLaunchDescriptionSource(
+        PathJoinSubstitution(
+            [FindPackageShare("ros_gz_sim"), "launch", "gz_sim.launch.py"]
+        )
+    )
+
+    gazebo_headless = IncludeLaunchDescription(
+        gazebo_launch_source,
         launch_arguments={
-            # 不加 -r：首次启动保持暂停，等 Controller 就绪后再播放。
+            'gz_args': [
+                '-s -r -v 4 ',
+                '--physics-engine gz-physics-bullet-featherstone-plugin ',
+                world_file,
+            ],
+        }.items(),
+        condition=IfCondition(headless),
+    )
+
+    gazebo_with_gui = IncludeLaunchDescription(
+        gazebo_launch_source,
+        launch_arguments={
             "gz_args": [
                 "-r -v 4 ",
                 "--physics-engine gz-physics-bullet-featherstone-plugin ",
                 world_file,
             ],
         }.items(),
+        condition=UnlessCondition(headless),
     )
 
     robot_state_publisher = Node(
@@ -169,6 +185,7 @@ def generate_launch_description():
             moveit_config.joint_limits,
             {"use_sim_time": True},
         ],
+        condition=UnlessCondition(headless),
     )
 
     planning_scene_setup_node = Node(
@@ -179,7 +196,13 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            gazebo,
+            DeclareLaunchArgument(
+                'headless',
+                default_value='false',
+                description='Run Gazebo server-only and do not start RViz',
+            ),
+            gazebo_headless,
+            gazebo_with_gui,
             clock_bridge,
             robot_state_publisher,
             spawn_panda,
