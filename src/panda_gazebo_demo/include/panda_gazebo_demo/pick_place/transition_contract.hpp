@@ -1,0 +1,81 @@
+#pragma once
+
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "panda_gazebo_demo/pick_place/domain_types.hpp"
+#include "panda_gazebo_demo/pick_place/world_observer.hpp"
+
+namespace panda_gazebo_demo::pick_place
+{
+
+class TransitionTable;
+
+struct TransitionKey
+{
+  State from;
+  State to;
+
+  friend bool operator<(const TransitionKey & lhs, const TransitionKey & rhs) noexcept
+  {
+    return lhs.from != rhs.from ? lhs.from < rhs.from : lhs.to < rhs.to;
+  }
+};
+
+struct ValidationResult
+{
+  bool ok{false};
+  std::vector<Failure> failures;
+  std::map<std::string, double> metrics;
+};
+
+class TransitionContractRegistry
+{
+public:
+  class ITransitionContract
+  {
+public:
+    virtual ~ITransitionContract() = default;
+    [[nodiscard]] virtual ValidationResult validatePrecondition(
+      const WorldSnapshot & before) const = 0;
+    [[nodiscard]] virtual ValidationResult validate(
+      const WorldSnapshot & before, const WorldSnapshot & after,
+      const ActionResult & action_result) const = 0;
+  };
+
+  void registerContract(TransitionKey key, std::shared_ptr<const ITransitionContract> contract);
+  [[nodiscard]] bool hasContract(TransitionKey key) const noexcept;
+  [[nodiscard]] ValidationResult validate(
+    TransitionKey key, const WorldSnapshot & before, const WorldSnapshot & after,
+    const ActionResult & action_result) const;
+  [[nodiscard]] ValidationResult validatePrecondition(
+    TransitionKey key, const WorldSnapshot & before) const;
+  [[nodiscard]] std::optional<Failure> validateExecuteCoverage(const TransitionTable & table) const;
+
+private:
+  std::map<TransitionKey, std::shared_ptr<const ITransitionContract>> contracts_;
+};
+
+class MoveAboveObjectContract final : public TransitionContractRegistry::ITransitionContract
+{
+public:
+  MoveAboveObjectContract(
+    Pose3d target_pose, std::vector<std::string> required_world_objects,
+    double tcp_position_tolerance, double coke_position_tolerance);
+
+  [[nodiscard]] ValidationResult validate(
+    const WorldSnapshot & before, const WorldSnapshot & after,
+    const ActionResult & action_result) const override;
+  [[nodiscard]] ValidationResult validatePrecondition(
+    const WorldSnapshot & before) const override;
+
+private:
+  Pose3d target_pose_;
+  std::vector<std::string> required_world_objects_;
+  double tcp_position_tolerance_;
+  double coke_position_tolerance_;
+};
+
+}  // namespace panda_gazebo_demo::pick_place
