@@ -1,16 +1,20 @@
 #include <cstdlib>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
+#include <Eigen/Geometry>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
+#include "panda_gazebo_demo/pick_place/descend_planner_executor.hpp"
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
 #include "panda_gazebo_demo/pick_place/move_above_object_planner.hpp"
@@ -47,6 +51,40 @@ private:
   std::shared_ptr<rclcpp::Node> node_;
   rclcpp::executors::SingleThreadedExecutor executor_;
   std::thread thread_;
+};
+
+class RosExecutionObservationLogger final : public pick_place::IExecutionObservationSink
+{
+public:
+  explicit RosExecutionObservationLogger(rclcpp::Logger logger)
+  : logger_(std::move(logger)) {}
+
+  void record(
+    pick_place::State state, const pick_place::WorldSnapshot & before,
+    const pick_place::WorldSnapshot & after) override
+  {
+    logPose("COKE_POSE_BEFORE", state, before.gazebo_coke_pose_world);
+    logPose("COKE_POSE_AFTER", state, after.gazebo_coke_pose_world);
+  }
+
+private:
+  void logPose(
+    const char * label, pick_place::State state,
+    const std::optional<pick_place::Pose3d> & pose) const
+  {
+    if (!pose) {
+      RCLCPP_INFO(logger_, "%s state=%s unavailable", label, pick_place::toString(state));
+      return;
+    }
+    const Eigen::Quaterniond orientation(pose->qw, pose->qx, pose->qy, pose->qz);
+    const auto rpy = orientation.normalized().toRotationMatrix().eulerAngles(0, 1, 2);
+    RCLCPP_INFO(
+      logger_,
+      "%s state=%s x=%.6f y=%.6f z=%.6f roll=%.6f pitch=%.6f yaw=%.6f",
+      label, pick_place::toString(state), pose->x, pose->y, pose->z, rpy.x(), rpy.y(), rpy.z());
+  }
+
+  rclcpp::Logger logger_;
 };
 
 template<typename T>
@@ -95,6 +133,7 @@ std::string configurationHash(
   const std::string & gazebo_attachment_topic, double gazebo_observation_max_age_seconds,
   bool gazebo_coke_initially_detached, const std::string & gripper_action_name,
   double gripper_open_position, double gripper_max_effort, double gripper_action_timeout_seconds,
+  double descend_eef_step, double descend_min_fraction, double descend_joint_jump_threshold,
   const std::string & target_policy_signature)
 {
   std::ostringstream input;
@@ -115,6 +154,9 @@ std::string configurationHash(
         << gripper_open_position << '\n'
         << gripper_max_effort << '\n'
         << gripper_action_timeout_seconds << '\n'
+        << descend_eef_step << '\n'
+        << descend_min_fraction << '\n'
+        << descend_joint_jump_threshold << '\n'
         << target_policy_signature;
   for (const auto & object : required_objects) {
     input << '\n' << object;
@@ -196,12 +238,20 @@ int main(int argc, char * argv[])
   const auto gripper_max_effort = parameterOrDeclare(node, "gripper_max_effort", 0.0);
   const auto gripper_action_timeout_seconds =
     parameterOrDeclare(node, "gripper_action_timeout_seconds", 5.0);
-  if (max_transitions <= 0 || velocity_scaling <= 0.0 || velocity_scaling > 1.0 ||
+  const auto descend_eef_step = parameterOrDeclare(node, "descend_eef_step", 0.005);
+  const auto descend_min_fraction = parameterOrDeclare(node, "descend_min_fraction", 0.99);
+  const auto descend_joint_jump_threshold =
+    parameterOrDeclare(node, "descend_joint_jump_threshold", 0.2);
+  if (max_transitions <= 0 || !std::isfinite(velocity_scaling) || velocity_scaling <= 0.0 ||
+    velocity_scaling > 1.0 || !std::isfinite(acceleration_scaling) ||
     acceleration_scaling <= 0.0 || acceleration_scaling > 1.0 || tcp_position_tolerance <= 0.0 ||
     tcp_orientation_tolerance_rad <= 0.0 || coke_position_tolerance <= 0.0 ||
     coke_orientation_tolerance_rad <= 0.0 || gazebo_observation_max_age_seconds <= 0.0 ||
     gripper_action_name.empty() || gripper_open_position <= 0.0 || gripper_max_effort < 0.0 ||
-    gripper_action_timeout_seconds <= 0.0)
+    gripper_action_timeout_seconds <= 0.0 || !std::isfinite(descend_eef_step) ||
+    descend_eef_step <= 0.0 || !std::isfinite(descend_min_fraction) ||
+    descend_min_fraction <= 0.0 || descend_min_fraction > 1.0 ||
+    !std::isfinite(descend_joint_jump_threshold) || descend_joint_jump_threshold <= 0.0)
   {
     RCLCPP_ERROR(
       logger,
@@ -214,6 +264,7 @@ int main(int argc, char * argv[])
   pick_place::TransitionContractRegistry contracts;
   const auto target_policy = std::make_shared<pick_place::FixedPickPlaceTargetPolicy>();
   std::shared_ptr<pick_place::MoveAboveObjectPlanner> move_above_action;
+  std::shared_ptr<pick_place::DescendPlannerExecutor> descend_action;
   std::shared_ptr<pick_place::OpenGripperExecutor> open_gripper_action;
   std::unique_ptr<pick_place::FileCheckpointStore> checkpoint_store;
   std::unique_ptr<pick_place::GazeboWorldObserver> world_observer;
@@ -223,6 +274,11 @@ int main(int argc, char * argv[])
       node, planning_group, tcp_link, required_objects, target_policy, velocity_scaling,
       acceleration_scaling);
     actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
+    descend_action = std::make_shared<pick_place::DescendPlannerExecutor>(
+      node, planning_group, tcp_link, target_policy, velocity_scaling, acceleration_scaling,
+      descend_eef_step, descend_min_fraction, descend_joint_jump_threshold,
+      tcp_position_tolerance, tcp_orientation_tolerance_rad);
+    actions.registerPlanner(pick_place::State::DESCEND, descend_action);
   }
   if (*mode == pick_place::RunMode::EXECUTE) {
     open_gripper_action = std::make_shared<pick_place::OpenGripperExecutor>(
@@ -230,6 +286,7 @@ int main(int argc, char * argv[])
       gripper_action_timeout_seconds);
     actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER, open_gripper_action);
     actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
+    actions.registerExecutor(pick_place::State::DESCEND, descend_action);
   }
   if (*mode == pick_place::RunMode::EXECUTE || resume) {
     contracts.registerContract(
@@ -267,7 +324,8 @@ int main(int argc, char * argv[])
                         gazebo_coke_model, gazebo_attachment_topic,
                         gazebo_observation_max_age_seconds, gazebo_coke_initially_detached,
                         gripper_action_name, gripper_open_position, gripper_max_effort,
-                        gripper_action_timeout_seconds, target_policy->configurationSignature()),
+                        gripper_action_timeout_seconds, descend_eef_step, descend_min_fraction,
+                        descend_joint_jump_threshold, target_policy->configurationSignature()),
       simulation_session_id);
   }
 
@@ -276,9 +334,10 @@ int main(int argc, char * argv[])
   if (runner_observer == nullptr && move_above_action) {
     runner_observer = move_above_action.get();
   }
+  RosExecutionObservationLogger execution_observation_logger(logger);
   const pick_place::StateMachineRunner runner(actions, contracts, runner_observer,
     checkpoint_store.get(),
-    common_resume_validator.get());
+    common_resume_validator.get(), &execution_observation_logger);
   const auto result =
     runner.run({*mode, stop_after, resume, fail_at, static_cast<std::uint64_t>(max_transitions)});
   if (result.failure) {

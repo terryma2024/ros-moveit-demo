@@ -163,7 +163,7 @@ ValidationResult validateMotionCompletion(
     *after.gazebo_coke_attached || *after.moveit_coke_attached)
   {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_UNEXPECTEDLY_ATTACHED",
-               "Coke must remain detached after MOVE_ABOVE_OBJECT");
+               "Coke must remain detached after the motion state");
   }
   const auto tcp_error = positionDistance(after.tcp_pose_world, target_pose);
   const auto tcp_orientation_error = orientationDistance(after.tcp_pose_world, target_pose);
@@ -191,12 +191,19 @@ ValidationResult validateMotionCompletion(
     addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
       "Gazebo Coke pose is required for post-execution stability validation");
   } else {
-    const auto coke_error = positionDistance(
+    const auto coke_position_drift = positionDistance(
       *before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
-    result.metrics["coke_position_drift"] = coke_error;
-    if (coke_error > coke_position_tolerance) {
-      addFailure(result, FailureCategory::POSTCONDITION, "COKE_MOVED_DURING_MOVE_ABOVE",
-                 "Coke moved farther than the configured stability tolerance");
+    const auto coke_orientation_drift = orientationDistance(
+      *before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
+    result.metrics["coke_position_drift"] = coke_position_drift;
+    result.metrics["coke_orientation_drift_rad"] = coke_orientation_drift;
+    if (coke_position_drift > coke_position_tolerance) {
+      addFailure(result, FailureCategory::POSTCONDITION, "COKE_MOVED_DURING_MOTION",
+                 "Coke position changed beyond the configured stability tolerance");
+    }
+    if (coke_orientation_drift > coke_orientation_tolerance_rad) {
+      addFailure(result, FailureCategory::POSTCONDITION, "COKE_ROTATED_DURING_MOTION",
+                 "Coke orientation changed beyond the configured stability tolerance");
     }
   }
   result.ok = result.failures.empty();
@@ -215,7 +222,7 @@ ValidationResult validateMotionPrecondition(
   }
   if (!before.arm_stationary) {
     addFailure(result, FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT",
-               "Arm must be stationary before MOVE_ABOVE_OBJECT");
+               "Arm must be stationary before the configured motion state");
   }
   if (require_gripper_open && !before.gripper_open) {
     addFailure(result, FailureCategory::PRECONDITION, "GRIPPER_NOT_SAFELY_OPEN",
@@ -227,7 +234,7 @@ ValidationResult validateMotionPrecondition(
     *before.gazebo_coke_attached || *before.moveit_coke_attached)
   {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_UNEXPECTEDLY_ATTACHED",
-               "Coke must be detached before MOVE_ABOVE_OBJECT");
+               "Coke must be detached before the configured motion state");
   }
   for (const auto & object_id : required_world_objects) {
     if (before.moveit_world_object_poses.count(object_id) == 0) {
@@ -237,7 +244,7 @@ ValidationResult validateMotionPrecondition(
   }
   if (!before.gazebo_coke_pose_world) {
     addFailure(result, FailureCategory::MOVEIT_SCENE, "COKE_POSE_UNAVAILABLE",
-               "Coke world pose is required before MOVE_ABOVE_OBJECT");
+               "Coke world pose is required before the configured motion state");
   }
   result.ok = result.failures.empty();
   return result;
@@ -453,9 +460,41 @@ ValidationResult DescendToCloseGripperValidator::validate(
 ValidationResult DescendToCloseGripperValidator::validatePrecondition(
   const WorldSnapshot & before) const
 {
-  return validateMotionPrecondition(
+  auto result = validateMotionPrecondition(
     before, required_world_objects_, coke_position_tolerance_, coke_orientation_tolerance_rad_,
       true);
+  if (!target_policy_) {
+    addFailure(result, FailureCategory::CONFIGURATION, "TARGET_POLICY_MISSING",
+      "DescendToCloseGripperValidator requires a target policy");
+    result.ok = false;
+    return result;
+  }
+  const auto start_target = target_policy_->targetPose(
+    State::MOVE_ABOVE_OBJECT, State::DESCEND, ObservationResult{before, std::nullopt});
+  if (!start_target.target_pose) {
+    result.failures.push_back(start_target.failure.value_or(Failure{
+        FailureCategory::CONFIGURATION, "TARGET_POLICY_FAILED",
+        "Target policy did not return a DESCEND start pose", {}}));
+    result.ok = false;
+    return result;
+  }
+  const auto tcp_position_error = positionDistance(before.tcp_pose_world,
+      *start_target.target_pose);
+  const auto tcp_orientation_error = orientationDistance(
+    before.tcp_pose_world, *start_target.target_pose);
+  result.metrics["tcp_position_error"] = tcp_position_error;
+  result.metrics["tcp_orientation_error_rad"] = tcp_orientation_error;
+  if (tcp_position_error > tcp_position_tolerance_) {
+    addFailure(result, FailureCategory::PRECONDITION, "TCP_OUTSIDE_DESCEND_START_TOLERANCE",
+      "TCP must be at the MOVE_ABOVE_OBJECT target before DESCEND planning");
+  }
+  if (tcp_orientation_error > tcp_orientation_tolerance_rad_) {
+    addFailure(result, FailureCategory::PRECONDITION,
+      "TCP_ORIENTATION_OUTSIDE_DESCEND_START_TOLERANCE",
+      "TCP orientation must match the MOVE_ABOVE_OBJECT target before DESCEND planning");
+  }
+  result.ok = result.failures.empty();
+  return result;
 }
 
 }  // namespace panda_gazebo_demo::pick_place
