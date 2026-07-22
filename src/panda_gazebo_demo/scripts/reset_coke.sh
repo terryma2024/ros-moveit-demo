@@ -4,6 +4,8 @@ set -euo pipefail
 WORLD_NAME="${WORLD_NAME:-pick_place_world}"
 MODEL_NAME="${MODEL_NAME:-coke}"
 TIMEOUT_MS="${TIMEOUT_MS:-3000}"
+ARM_ACTION="${ARM_ACTION:-/panda_arm_controller/follow_joint_trajectory}"
+READY_DURATION_SECONDS="${READY_DURATION_SECONDS:-3}"
 
 CONTROL_SERVICE="/world/${WORLD_NAME}/control"
 SET_POSE_SERVICE="/world/${WORLD_NAME}/set_pose"
@@ -43,6 +45,25 @@ resume_world() {
   fi
 }
 
+move_arm_to_ready() {
+  local action_list
+
+  if ! command -v ros2 >/dev/null 2>&1; then
+    printf 'ros2 command not found. Source the ROS environment first.\n' >&2
+    return 1
+  fi
+
+  action_list="$(ros2 action list)"
+  if ! grep -Fxq "${ARM_ACTION}" <<<"${action_list}"; then
+    printf 'Arm trajectory action not found: %s\n' "${ARM_ACTION}" >&2
+    return 1
+  fi
+
+  printf 'Moving Panda arm to ready pose over %s seconds...\n' "${READY_DURATION_SECONDS}"
+  ros2 action send_goal --wait "${ARM_ACTION}" control_msgs/action/FollowJointTrajectory \
+    "{trajectory: {joint_names: [panda_joint1, panda_joint2, panda_joint3, panda_joint4, panda_joint5, panda_joint6, panda_joint7], points: [{positions: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785], time_from_start: {sec: ${READY_DURATION_SECONDS}}}]}}"
+}
+
 trap resume_world EXIT
 
 if ! command -v gz >/dev/null 2>&1; then
@@ -77,3 +98,5 @@ trap - EXIT
 
 printf 'Current %s pose:\n' "${MODEL_NAME}"
 gz model -m "${MODEL_NAME}" -p
+
+move_arm_to_ready

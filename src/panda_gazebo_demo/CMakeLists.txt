@@ -46,6 +46,7 @@ add_library(
   src/pick_place/transition_table.cpp
   src/pick_place/runner.cpp
   src/pick_place/common_resume_validator.cpp
+  src/pick_place/moveit_world_object_pose.cpp
   src/pick_place/world_observer.cpp
 )
 target_compile_features(pick_place_core PUBLIC cxx_std_17)
@@ -55,12 +56,13 @@ target_include_directories(
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+ament_target_dependencies(pick_place_core moveit_msgs)
 
 add_library(
   pick_place_ros_adapters
   src/pick_place/file_checkpoint_store.cpp
   src/pick_place/gazebo_world_observer.cpp
-  src/pick_place/moveit_pregrasp_planner.cpp
+  src/pick_place/move_above_object_planner.cpp
 )
 target_link_libraries(
   pick_place_ros_adapters

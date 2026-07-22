@@ -39,8 +39,11 @@ int main(int argc, char *argv[])
   pose.position.y = 0.0;
   pose.position.z = 0.75;
 
+  table.pose = pose;
   table.primitives.push_back(primitive);
-  table.primitive_poses.push_back(pose);
+  geometry_msgs::msg::Pose table_primitive_pose;
+  table_primitive_pose.orientation.w = 1.0;
+  table.primitive_poses.push_back(table_primitive_pose);
   table.operation = moveit_msgs::msg::CollisionObject::ADD;
 
   moveit_msgs::msg::CollisionObject coke;
@@ -65,8 +68,11 @@ int main(int argc, char *argv[])
   coke_pose.orientation.z = std::sin(coke_yaw / 2.0);
   coke_pose.orientation.w = std::cos(coke_yaw / 2.0);
 
+  coke.pose = coke_pose;
   coke.primitives.push_back(coke_primitive);
-  coke.primitive_poses.push_back(coke_pose);
+  geometry_msgs::msg::Pose coke_primitive_pose;
+  coke_primitive_pose.orientation.w = 1.0;
+  coke.primitive_poses.push_back(coke_primitive_pose);
   coke.operation = moveit_msgs::msg::CollisionObject::ADD;
 
   RCLCPP_INFO(node->get_logger(), "Waiting for MoveGroup planning scene service...");
