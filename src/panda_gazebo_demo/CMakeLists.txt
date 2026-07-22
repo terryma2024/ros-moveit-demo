@@ -46,6 +46,7 @@ add_library(
   src/pick_place/cartesian_plan_validation.cpp
   src/pick_place/domain_types.cpp
   src/pick_place/gripper_state_executor.cpp
+  src/pick_place/moveit_scene_executor.cpp
   src/pick_place/plan_validation.cpp
   src/pick_place/recovery_policy.cpp
   src/pick_place/state_validation.cpp
@@ -73,6 +74,7 @@ add_library(
   src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_world_observer.cpp
   src/pick_place/gripper_command_adapter.cpp
+  src/pick_place/moveit_scene_adapter.cpp
   src/pick_place/descend_planner_executor.cpp
   src/pick_place/move_above_object_planner.cpp
 )
@@ -193,6 +195,14 @@ if(BUILD_TESTING)
       pick_place_core
       pick_place_ros_adapters
     )
+  endif()
+
+  ament_add_gtest(
+    test_moveit_scene_executor
+    test/pick_place/test_moveit_scene_executor.cpp
+  )
+  if(TARGET test_moveit_scene_executor)
+    target_link_libraries(test_moveit_scene_executor pick_place_core)
   endif()
 
   add_test(
