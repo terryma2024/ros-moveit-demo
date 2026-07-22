@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <map>
 #include <vector>
 
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
@@ -14,19 +15,26 @@ namespace panda_gazebo_demo::pick_place
 struct ExpectedWorldState
 {
   Pose3d tcp_pose_world{};
-  bool coke_attached{false};
+  bool gripper_open{false};
+  std::map<std::string, double> joint_positions;
+  std::map<std::string, Pose3d> moveit_world_object_poses;
+  std::optional<bool> moveit_coke_attached;
+  std::optional<Pose3d> gazebo_coke_pose_world;
+  std::optional<bool> gazebo_coke_attached;
   std::vector<std::string> required_world_objects;
 };
 
 struct Checkpoint
 {
-  std::uint32_t schema_version{1};
+  std::uint32_t schema_version{2};
   std::string run_id;
   std::uint64_t sequence{0};
   RunMode source_mode{RunMode::EXECUTE};
   State last_completed_state{State::IDLE};
   State next_state{State::IDLE};
   ExpectedWorldState expected;
+  std::string configuration_hash;
+  std::string simulation_session_id;
   bool resumable{true};
 };
 

@@ -25,7 +25,7 @@ int main(int argc, char * argv[])
 
   executor->add_node(node);
 
-  std::thread([executor]() { executor->spin(); }).detach();
+  std::thread([executor]() {executor->spin();}).detach();
 
   const auto logger = node->get_logger();
 

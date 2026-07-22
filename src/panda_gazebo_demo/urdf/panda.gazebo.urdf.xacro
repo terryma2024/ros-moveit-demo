@@ -55,6 +55,7 @@
             <parent_link>panda_link7</parent_link>
             <child_model>coke</child_model>
             <child_link>body</child_link>
+            <initially_detached>true</initially_detached>
             <attach_topic>/panda/attach_coke</attach_topic>
             <detach_topic>/panda/detach_coke</detach_topic>
             <output_topic>/panda/coke_attached</output_topic>

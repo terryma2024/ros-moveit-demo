@@ -52,19 +52,32 @@ public:
     const ActionResult & action_result) const;
   [[nodiscard]] ValidationResult validatePrecondition(
     TransitionKey key, const WorldSnapshot & before) const;
+  [[nodiscard]] ValidationResult validateResume(
+    TransitionKey key, const WorldSnapshot & expected, const WorldSnapshot & current) const;
   [[nodiscard]] std::optional<Failure> validateExecuteCoverage(const TransitionTable & table) const;
 
 private:
   std::map<TransitionKey, std::shared_ptr<const ITransitionContract>> contracts_;
 };
 
-class TcpMotionContract final : public TransitionContractRegistry::ITransitionContract
+class AlwaysPassValidator final : public TransitionContractRegistry::ITransitionContract
 {
 public:
-  TcpMotionContract(
+  [[nodiscard]] ValidationResult validatePrecondition(
+    const WorldSnapshot & before) const override;
+  [[nodiscard]] ValidationResult validate(
+    const WorldSnapshot & before, const WorldSnapshot & after,
+    const ActionResult & action_result) const override;
+};
+
+class MoveAboveObjectToDescendValidator final : public TransitionContractRegistry::
+  ITransitionContract
+{
+public:
+  MoveAboveObjectToDescendValidator(
     Pose3d target_pose, std::vector<std::string> required_world_objects,
-    double tcp_position_tolerance, double coke_position_tolerance,
-    bool require_gripper_open = false);
+    double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
+    double coke_position_tolerance, double coke_orientation_tolerance_rad);
 
   [[nodiscard]] ValidationResult validate(
     const WorldSnapshot & before, const WorldSnapshot & after,
@@ -76,8 +89,32 @@ private:
   Pose3d target_pose_;
   std::vector<std::string> required_world_objects_;
   double tcp_position_tolerance_;
+  double tcp_orientation_tolerance_rad_;
   double coke_position_tolerance_;
-  bool require_gripper_open_;
+  double coke_orientation_tolerance_rad_;
+};
+
+class DescendToCloseGripperValidator final : public TransitionContractRegistry::ITransitionContract
+{
+public:
+  DescendToCloseGripperValidator(
+    Pose3d target_pose, std::vector<std::string> required_world_objects,
+    double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
+    double coke_position_tolerance, double coke_orientation_tolerance_rad);
+
+  [[nodiscard]] ValidationResult validate(
+    const WorldSnapshot & before, const WorldSnapshot & after,
+    const ActionResult & action_result) const override;
+  [[nodiscard]] ValidationResult validatePrecondition(
+    const WorldSnapshot & before) const override;
+
+private:
+  Pose3d target_pose_;
+  std::vector<std::string> required_world_objects_;
+  double tcp_position_tolerance_;
+  double tcp_orientation_tolerance_rad_;
+  double coke_position_tolerance_;
+  double coke_orientation_tolerance_rad_;
 };
 
 }  // namespace panda_gazebo_demo::pick_place

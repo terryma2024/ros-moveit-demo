@@ -1,12 +1,35 @@
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
+#include <chrono>
+#include <thread>
+
 namespace panda_gazebo_demo::pick_place
 {
 
 namespace
 {
 
-constexpr double kResumeTcpPositionTolerance = 0.02;
+constexpr auto kStationaryTimeout = std::chrono::seconds(2);
+constexpr auto kStationaryPollInterval = std::chrono::milliseconds(25);
+
+WorldSnapshot snapshotFromExpected(
+  const ExpectedWorldState & expected,
+  const std::string & simulation_session_id)
+{
+  WorldSnapshot snapshot;
+  snapshot.observed_at = std::chrono::steady_clock::now();
+  snapshot.fresh = true;
+  snapshot.arm_stationary = true;
+  snapshot.gripper_open = expected.gripper_open;
+  snapshot.tcp_pose_world = expected.tcp_pose_world;
+  snapshot.joint_positions = expected.joint_positions;
+  snapshot.moveit_world_object_poses = expected.moveit_world_object_poses;
+  snapshot.moveit_coke_attached = expected.moveit_coke_attached;
+  snapshot.gazebo_coke_pose_world = expected.gazebo_coke_pose_world;
+  snapshot.gazebo_coke_attached = expected.gazebo_coke_attached;
+  snapshot.simulation_session_id = simulation_session_id;
+  return snapshot;
+}
 
 }  // namespace
 
@@ -113,6 +136,11 @@ RunResult StateMachineRunner::runExecuteStep(
     return error(state, {FailureCategory::CONFIGURATION, "EXECUTE_INFRASTRUCTURE_MISSING",
                "execute requires a world observer and checkpoint store", {}});
   }
+  if (common_resume_validator_ == nullptr) {
+    return error(state, {FailureCategory::CONFIGURATION, "COMMON_RESUME_VALIDATOR_MISSING",
+               "execute requires a CommonResumeValidator to bind checkpoints to configuration",
+               {}});
+  }
   auto * planner = actions_.findPlanner(state);
   auto * executor = actions_.findExecutor(state);
   if (planner == nullptr || executor == nullptr) {
@@ -147,19 +175,26 @@ RunResult StateMachineRunner::runExecuteStep(
   }
   const auto action = executor->execute(state, plan.artifact);
   if (action.status != ActionStatus::SUCCEEDED) {
-    return error(state, action.failure.value_or(Failure{
-        FailureCategory::EXECUTION, "EXECUTION_FAILED", "Trajectory execution failed", {}}));
+    return error(state, stopAndObserveAfterFailure(state, *executor,
+      action.failure.value_or(Failure{
+        FailureCategory::EXECUTION, "EXECUTION_FAILED", "Trajectory execution failed", {}}))
+             .value_or(Failure{FailureCategory::EXECUTION, "EXECUTION_FAILED",
+               "Trajectory execution failed", {}}));
   }
   const auto after = observer_->observe();
   if (!after.snapshot) {
-    return error(state, after.failure.value_or(Failure{
+    const auto observation_failure = after.failure.value_or(Failure{
         FailureCategory::OBSERVATION, "POST_EXECUTION_OBSERVATION_FAILED",
-        "Could not observe the world after execution", {}}));
+        "Could not observe the world after execution", {}});
+    const auto stopped_failure = stopAndObserveAfterFailure(
+      state, *executor, observation_failure);
+    return error(state, stopped_failure.value_or(observation_failure));
   }
   const auto validation = contracts_.validate({state, next_state}, *before, *after.snapshot,
       action);
   if (!validation.ok) {
-    return error(state, validation.failures.front());
+    return error(state, stopAndObserveAfterFailure(
+      state, *executor, validation.failures.front()).value_or(validation.failures.front()));
   }
   Checkpoint checkpoint;
   checkpoint.run_id = "pick_place_state_machine";
@@ -167,11 +202,18 @@ RunResult StateMachineRunner::runExecuteStep(
   checkpoint.last_completed_state = state;
   checkpoint.next_state = next_state;
   checkpoint.expected.tcp_pose_world = after.snapshot->tcp_pose_world;
-  checkpoint.expected.coke_attached = after.snapshot->coke_attached;
-  for (const auto & [object_id, pose] : after.snapshot->world_object_poses) {
+  checkpoint.expected.gripper_open = after.snapshot->gripper_open;
+  checkpoint.expected.joint_positions = after.snapshot->joint_positions;
+  checkpoint.expected.moveit_world_object_poses = after.snapshot->moveit_world_object_poses;
+  checkpoint.expected.moveit_coke_attached = after.snapshot->moveit_coke_attached;
+  checkpoint.expected.gazebo_coke_pose_world = after.snapshot->gazebo_coke_pose_world;
+  checkpoint.expected.gazebo_coke_attached = after.snapshot->gazebo_coke_attached;
+  checkpoint.simulation_session_id = common_resume_validator_->simulationSessionId();
+  for (const auto & [object_id, pose] : after.snapshot->moveit_world_object_poses) {
     static_cast<void>(pose);
     checkpoint.expected.required_world_objects.push_back(object_id);
   }
+  checkpoint.configuration_hash = common_resume_validator_->configurationHash();
   if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
     return error(state, *checkpoint_failure);
   }
@@ -194,7 +236,7 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
         FailureCategory::CHECKPOINT, "CHECKPOINT_LOAD_FAILED", "Unable to load checkpoint", {}}));
   }
   const auto & checkpoint = *loaded.checkpoint;
-  if (checkpoint.schema_version != 1 || checkpoint.source_mode != RunMode::EXECUTE ||
+  if (checkpoint.schema_version != 2 || checkpoint.source_mode != RunMode::EXECUTE ||
     !checkpoint.resumable || checkpoint.last_completed_state != State::MOVE_ABOVE_OBJECT ||
     checkpoint.next_state != State::DESCEND)
   {
@@ -207,22 +249,26 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
         FailureCategory::RESUME_VALIDATION, "RESUME_OBSERVATION_FAILED",
         "Unable to observe the world while resuming", {}}));
   }
-  const auto & snapshot = *observation.snapshot;
-  if (!snapshot.fresh || !snapshot.arm_stationary ||
-    snapshot.coke_attached != checkpoint.expected.coke_attached ||
-    positionDistance(snapshot.tcp_pose_world, checkpoint.expected.tcp_pose_world) >
-    kResumeTcpPositionTolerance)
-  {
+  if (common_resume_validator_ == nullptr) {
     return error(checkpoint.next_state, {FailureCategory::RESUME_VALIDATION,
-               "RESUME_WORLD_MISMATCH",
-               "Current TCP, attachment state, or robot motion does not match checkpoint", {}});
+               "COMMON_RESUME_VALIDATOR_MISSING", "resume requires a CommonResumeValidator", {}});
   }
-  for (const auto & object_id : checkpoint.expected.required_world_objects) {
-    if (snapshot.world_object_poses.count(object_id) == 0) {
-      return error(checkpoint.next_state, {FailureCategory::RESUME_VALIDATION,
-                 "RESUME_REQUIRED_WORLD_OBJECT_MISSING",
-                 "Required Planning Scene object is missing during resume: " + object_id, {}});
-    }
+  const auto & snapshot = *observation.snapshot;
+  const auto common_validation = common_resume_validator_->validate(checkpoint, snapshot);
+  if (!common_validation.ok) {
+    return error(checkpoint.next_state, common_validation.failures.front());
+  }
+  const TransitionKey resumed_transition{
+    checkpoint.last_completed_state, checkpoint.next_state};
+  if (!contracts_.hasContract(resumed_transition)) {
+    return error(checkpoint.next_state, {FailureCategory::CONFIGURATION,
+               "MISSING_TRANSITION_CONTRACT", "resume requires a transition validator", {}});
+  }
+  const auto transition_validation = contracts_.validateResume(
+    resumed_transition, snapshotFromExpected(checkpoint.expected, checkpoint.simulation_session_id),
+    snapshot);
+  if (!transition_validation.ok) {
+    return error(checkpoint.next_state, transition_validation.failures.front());
   }
   if (request.mode == RunMode::PLAN_ONLY) {
     return runPlanOnly(checkpoint.next_state, request);
@@ -239,6 +285,36 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
 RunResult StateMachineRunner::error(State state, Failure failure, std::uint64_t transition_count)
 {
   return {RunStatus::ERROR, state, std::nullopt, std::move(failure), transition_count};
+}
+
+std::optional<Failure> StateMachineRunner::stopAndObserveAfterFailure(
+  State state, IStateExecutor & executor, Failure original_failure) const
+{
+  static_cast<void>(state);
+  const auto cancelled = executor.cancel();
+  if (cancelled.status != ActionStatus::SUCCEEDED) {
+    return cancelled.failure.value_or(Failure{FailureCategory::EXECUTION, "CANCEL_FAILED",
+               "Failed to stop the trajectory after an execution or validation failure", {}});
+  }
+  const auto deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
+  std::optional<ObservationResult> latest_observation;
+  do {
+    latest_observation = observer_->observe();
+    if (!latest_observation->snapshot) {
+      return latest_observation->failure.value_or(Failure{FailureCategory::OBSERVATION,
+                 "POST_FAILURE_OBSERVATION_FAILED", "Unable to observe after cancelling motion",
+                 {}});
+    }
+    if (latest_observation->snapshot->fresh && latest_observation->snapshot->arm_stationary) {
+      original_failure.metrics["cancel_succeeded"] = 1.0;
+      original_failure.metrics["arm_stationary_after_cancel"] = 1.0;
+      return original_failure;
+    }
+    std::this_thread::sleep_for(kStationaryPollInterval);
+  } while (std::chrono::steady_clock::now() < deadline);
+  return Failure{FailureCategory::POSTCONDITION, "ARM_NOT_QUIESCENT_AFTER_CANCEL",
+    "Motion was cancelled but the robot did not become stationary before the timeout",
+    {{"cancel_succeeded", 1.0}, {"arm_stationary_after_cancel", 0.0}}};
 }
 
 }  // namespace panda_gazebo_demo::pick_place

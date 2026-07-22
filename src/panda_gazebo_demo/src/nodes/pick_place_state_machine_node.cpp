@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -12,7 +13,9 @@
 
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
+#include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_pregrasp_planner.hpp"
+#include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
 namespace pick_place = panda_gazebo_demo::pick_place;
@@ -81,6 +84,35 @@ bool successful(pick_place::RunStatus status)
          status == pick_place::RunStatus::CHECKPOINT_COMPLETE;
 }
 
+std::string configurationHash(
+  const std::string & planning_group, const std::string & tcp_link,
+  const std::vector<std::string> & required_objects, double velocity_scaling,
+  double acceleration_scaling, double tcp_position_tolerance,
+  double tcp_orientation_tolerance_rad, double coke_position_tolerance,
+  double coke_orientation_tolerance_rad, const std::string & gazebo_world_name,
+  const std::string & gazebo_coke_model, const std::string & gazebo_attachment_topic,
+  double gazebo_observation_max_age_seconds, bool gazebo_coke_initially_detached)
+{
+  std::ostringstream input;
+  input << planning_group << '\n' << tcp_link << '\n' << velocity_scaling << '\n' <<
+    acceleration_scaling << '\n' << tcp_position_tolerance << '\n' <<
+    tcp_orientation_tolerance_rad << '\n' << coke_position_tolerance << '\n' <<
+    coke_orientation_tolerance_rad << '\n' << gazebo_world_name << '\n' << gazebo_coke_model <<
+    '\n' << gazebo_attachment_topic << '\n' << gazebo_observation_max_age_seconds << '\n' <<
+    gazebo_coke_initially_detached;
+  for (const auto & object : required_objects) {
+    input << '\n' << object;
+  }
+  std::uint64_t hash = 14695981039346656037ULL;
+  for (const auto character : input.str()) {
+    hash ^= static_cast<unsigned char>(character);
+    hash *= 1099511628211ULL;
+  }
+  std::ostringstream output;
+  output << std::hex << hash;
+  return output.str();
+}
+
 }  // namespace
 
 int main(int argc, char * argv[])
@@ -121,10 +153,27 @@ int main(int argc, char * argv[])
   const auto checkpoint_path = parameterOrDeclare(
     node, "checkpoint_path", std::string("/tmp/panda_pick_place_checkpoint.json"));
   const auto tcp_position_tolerance = parameterOrDeclare(node, "tcp_position_tolerance", 0.02);
+  const auto tcp_orientation_tolerance_rad = parameterOrDeclare(
+    node, "tcp_orientation_tolerance_rad", 0.08726646259971647);
   const auto coke_position_tolerance = parameterOrDeclare(node, "coke_position_tolerance", 0.01);
+  const auto coke_orientation_tolerance_rad = parameterOrDeclare(
+    node, "coke_orientation_tolerance_rad", 0.08726646259971647);
+  const auto gazebo_world_name = parameterOrDeclare(node, "gazebo_world_name",
+    std::string("pick_place_world"));
+  const auto gazebo_coke_model = parameterOrDeclare(node, "gazebo_coke_model", std::string("coke"));
+  const auto gazebo_attachment_topic = parameterOrDeclare(node, "gazebo_attachment_topic",
+    std::string("/panda/coke_attached"));
+  const auto gazebo_observation_max_age_seconds = parameterOrDeclare(
+    node, "gazebo_observation_max_age_seconds", 0.5);
+  const auto gazebo_coke_initially_detached = parameterOrDeclare(
+    node, "gazebo_coke_initially_detached", true);
+  const auto simulation_session_id = parameterOrDeclare(node, "simulation_session_id",
+    std::string(""));
   if (max_transitions <= 0 || velocity_scaling <= 0.0 || velocity_scaling > 1.0 ||
     acceleration_scaling <= 0.0 || acceleration_scaling > 1.0 ||
-    tcp_position_tolerance <= 0.0 || coke_position_tolerance <= 0.0)
+    tcp_position_tolerance <= 0.0 || tcp_orientation_tolerance_rad <= 0.0 ||
+    coke_position_tolerance <= 0.0 || coke_orientation_tolerance_rad <= 0.0 ||
+    gazebo_observation_max_age_seconds <= 0.0)
   {
     RCLCPP_ERROR(logger,
       "transition count and tolerances must be positive; scaling factors must be in (0, 1]");
@@ -136,33 +185,54 @@ int main(int argc, char * argv[])
   pick_place::TransitionContractRegistry contracts;
   std::shared_ptr<pick_place::MoveItPreGraspPlanner> move_above_action;
   std::unique_ptr<pick_place::FileCheckpointStore> checkpoint_store;
+  std::unique_ptr<pick_place::GazeboWorldObserver> world_observer;
+  std::unique_ptr<pick_place::CommonResumeValidator> common_resume_validator;
   if (*mode == pick_place::RunMode::PLAN_ONLY || *mode == pick_place::RunMode::EXECUTE) {
     move_above_action = std::make_shared<pick_place::MoveItPreGraspPlanner>(
       node, planning_group, tcp_link, required_objects, velocity_scaling, acceleration_scaling);
     actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
     actions.registerPlanner(pick_place::State::DESCEND, move_above_action);
   }
-  if (*mode == pick_place::RunMode::EXECUTE) {
+  if (*mode == pick_place::RunMode::EXECUTE || resume) {
     actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
     actions.registerExecutor(pick_place::State::DESCEND, move_above_action);
     contracts.registerContract(
       {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
-      std::make_shared<pick_place::TcpMotionContract>(
+      std::make_shared<pick_place::MoveAboveObjectToDescendValidator>(
         pick_place::Pose3d{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0}, required_objects,
-        tcp_position_tolerance, coke_position_tolerance));
+        tcp_position_tolerance, tcp_orientation_tolerance_rad, coke_position_tolerance,
+        coke_orientation_tolerance_rad));
     contracts.registerContract(
       {pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER},
-      std::make_shared<pick_place::TcpMotionContract>(
+      std::make_shared<pick_place::DescendToCloseGripperValidator>(
         pick_place::Pose3d{0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, required_objects,
-        tcp_position_tolerance, coke_position_tolerance, true));
+        tcp_position_tolerance, tcp_orientation_tolerance_rad, coke_position_tolerance,
+        coke_orientation_tolerance_rad));
   }
   if (*mode == pick_place::RunMode::EXECUTE || resume) {
+    if (simulation_session_id.empty()) {
+      RCLCPP_ERROR(logger,
+        "simulation_session_id is required for execute or resume to reject stale checkpoints");
+      rclcpp::shutdown();
+      return EXIT_FAILURE;
+    }
     checkpoint_store = std::make_unique<pick_place::FileCheckpointStore>(checkpoint_path);
+    world_observer = std::make_unique<pick_place::GazeboWorldObserver>(
+      *move_above_action, gazebo_world_name, gazebo_coke_model, gazebo_attachment_topic,
+      simulation_session_id, gazebo_observation_max_age_seconds, gazebo_coke_initially_detached);
+    common_resume_validator = std::make_unique<pick_place::CommonResumeValidator>(
+      configurationHash(planning_group, tcp_link, required_objects, velocity_scaling,
+        acceleration_scaling, tcp_position_tolerance, tcp_orientation_tolerance_rad,
+        coke_position_tolerance, coke_orientation_tolerance_rad, gazebo_world_name,
+        gazebo_coke_model, gazebo_attachment_topic, gazebo_observation_max_age_seconds,
+        gazebo_coke_initially_detached),
+      simulation_session_id);
   }
 
   NodeSpinner spinner(node);
   const pick_place::StateMachineRunner runner(
-    actions, contracts, move_above_action.get(), checkpoint_store.get());
+    actions, contracts, world_observer.get(), checkpoint_store.get(),
+    common_resume_validator.get());
   const auto result = runner.run({*mode, stop_after, resume, fail_at,
         static_cast<std::uint64_t>(max_transitions)});
   if (result.failure) {
