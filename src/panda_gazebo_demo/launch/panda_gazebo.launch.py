@@ -10,24 +10,24 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
-    package_share = FindPackageShare("panda_gazebo_demo")
+    package_share = FindPackageShare('panda_gazebo_demo')
     headless = LaunchConfiguration('headless')
 
-    world_file = PathJoinSubstitution([package_share, "worlds", "table_coke.sdf"])
+    world_file = PathJoinSubstitution([package_share, 'worlds', 'table_coke.sdf'])
     xacro_file = PathJoinSubstitution(
-        [package_share, "urdf", "panda.gazebo.urdf.xacro"]
+        [package_share, 'urdf', 'panda.gazebo.urdf.xacro']
     )
 
     robot_description = {
-        "robot_description": ParameterValue(
-            Command(["xacro ", xacro_file]),
+        'robot_description': ParameterValue(
+            Command(['xacro ', xacro_file]),
             value_type=str,
         )
     }
 
     gazebo_launch_source = PythonLaunchDescriptionSource(
         PathJoinSubstitution(
-            [FindPackageShare("ros_gz_sim"), "launch", "gz_sim.launch.py"]
+            [FindPackageShare('ros_gz_sim'), 'launch', 'gz_sim.launch.py']
         )
     )
 
@@ -46,9 +46,9 @@ def generate_launch_description():
     gazebo_with_gui = IncludeLaunchDescription(
         gazebo_launch_source,
         launch_arguments={
-            "gz_args": [
-                "-r -v 4 ",
-                "--physics-engine gz-physics-bullet-featherstone-plugin ",
+            'gz_args': [
+                '-r -v 4 ',
+                '--physics-engine gz-physics-bullet-featherstone-plugin ',
                 world_file,
             ],
         }.items(),
@@ -56,88 +56,88 @@ def generate_launch_description():
     )
 
     robot_state_publisher = Node(
-        package="robot_state_publisher",
-        executable="robot_state_publisher",
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
         parameters=[robot_description],
-        output="screen",
+        output='screen',
     )
 
     spawn_panda = Node(
-        package="ros_gz_sim",
-        executable="create",
+        package='ros_gz_sim',
+        executable='create',
         arguments=[
-            "-name",
-            "panda",
-            "-topic",
-            "robot_description",
-            "-allow_renaming",
-            "true",
+            '-name',
+            'panda',
+            '-topic',
+            'robot_description',
+            '-allow_renaming',
+            'true',
         ],
-        output="screen",
+        output='screen',
     )
 
     joint_state_broadcaster = Node(
-        package="controller_manager",
-        executable="spawner",
+        package='controller_manager',
+        executable='spawner',
         arguments=[
-            "joint_state_broadcaster",
-            "--controller-manager-timeout",
-            "60",
+            'joint_state_broadcaster',
+            '--controller-manager-timeout',
+            '60',
         ],
-        output="screen",
+        output='screen',
     )
 
     panda_arm_controller = Node(
-        package="controller_manager",
-        executable="spawner",
+        package='controller_manager',
+        executable='spawner',
         arguments=[
-            "panda_arm_controller",
-            "--controller-manager-timeout",
-            "60",
+            'panda_arm_controller',
+            '--controller-manager-timeout',
+            '60',
         ],
-        output="screen",
+        output='screen',
     )
 
     panda_hand_controller = Node(
-        package="controller_manager",
-        executable="spawner",
+        package='controller_manager',
+        executable='spawner',
         arguments=[
-            "panda_hand_controller",
-            "--controller-manager-timeout",
-            "60",
+            'panda_hand_controller',
+            '--controller-manager-timeout',
+            '60',
         ],
-        output="screen",
+        output='screen',
     )
 
     clock_bridge = Node(
-        package="ros_gz_bridge",
-        executable="parameter_bridge",
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
         arguments=[
-            "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
         ],
-        output="screen",
+        output='screen',
     )
 
     moveit_config = (
-        MoveItConfigsBuilder("moveit_resources_panda")
+        MoveItConfigsBuilder('moveit_resources_panda')
         .robot_description(
-            file_path="config/panda.urdf.xacro",
+            file_path='config/panda.urdf.xacro',
             mappings={
-                "ros2_control_hardware_type": "mock_components",
+                'ros2_control_hardware_type': 'mock_components',
             },
         )
-        .robot_description_semantic(file_path="config/panda.srdf")
+        .robot_description_semantic(file_path='config/panda.srdf')
         .planning_scene_monitor(
             publish_robot_description=True,
             publish_robot_description_semantic=True,
         )
-        .trajectory_execution(file_path="config/gripper_moveit_controllers.yaml")
+        .trajectory_execution(file_path='config/gripper_moveit_controllers.yaml')
         .planning_pipelines(
             pipelines=[
-                "ompl",
-                "chomp",
-                "pilz_industrial_motion_planner",
-                "stomp",
+                'ompl',
+                'chomp',
+                'pilz_industrial_motion_planner',
+                'stomp',
             ]
         )
         .to_moveit_configs()
@@ -149,49 +149,49 @@ def generate_launch_description():
     moveit_parameters.update(robot_description)
 
     move_group_node = Node(
-        package="moveit_ros_move_group",
-        executable="move_group",
-        output="screen",
+        package='moveit_ros_move_group',
+        executable='move_group',
+        output='screen',
         parameters=[
             moveit_parameters,
-            {"use_sim_time": True},
+            {'use_sim_time': True},
         ],
         arguments=[
-            "--ros-args",
-            "--log-level",
-            "info",
+            '--ros-args',
+            '--log-level',
+            'info',
         ],
     )
 
     rviz_config = PathJoinSubstitution(
         [
             package_share,
-            "config",
-            "panda_gazebo.rviz",
+            'config',
+            'panda_gazebo.rviz',
         ]
     )
 
     rviz_node = Node(
-        package="rviz2",
-        executable="rviz2",
-        name="rviz",
-        output="screen",
-        arguments=["-d", rviz_config],
+        package='rviz2',
+        executable='rviz2',
+        name='rviz',
+        output='screen',
+        arguments=['-d', rviz_config],
         parameters=[
             robot_description,
             moveit_config.robot_description_semantic,
             moveit_config.robot_description_kinematics,
             moveit_config.planning_pipelines,
             moveit_config.joint_limits,
-            {"use_sim_time": True},
+            {'use_sim_time': True},
         ],
         condition=UnlessCondition(headless),
     )
 
     planning_scene_setup_node = Node(
-        package="panda_gazebo_demo",
-        executable="planning_scene_setup",
-        output="screen",
+        package='panda_gazebo_demo',
+        executable='planning_scene_setup',
+        output='screen',
     )
 
     return LaunchDescription(
