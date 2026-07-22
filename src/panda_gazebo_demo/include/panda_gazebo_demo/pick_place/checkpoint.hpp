@@ -30,11 +30,18 @@ struct Checkpoint
   bool resumable{true};
 };
 
+struct CheckpointLoadResult
+{
+  std::optional<Checkpoint> checkpoint;
+  std::optional<Failure> failure;
+};
+
 class ICheckpointStore
 {
 public:
   virtual ~ICheckpointStore() = default;
   [[nodiscard]] virtual std::optional<Failure> commit(const Checkpoint & checkpoint) = 0;
+  [[nodiscard]] virtual CheckpointLoadResult loadLatestCompatible() = 0;
 };
 
 }  // namespace panda_gazebo_demo::pick_place

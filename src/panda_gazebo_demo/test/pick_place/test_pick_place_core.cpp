@@ -73,9 +73,17 @@ public:
     return failure;
   }
 
+  pick_place::CheckpointLoadResult loadLatestCompatible() override
+  {
+    ++load_calls;
+    return load_result;
+  }
+
   std::optional<pick_place::Checkpoint> checkpoint;
   std::optional<pick_place::Failure> failure;
+  pick_place::CheckpointLoadResult load_result;
   int calls{0};
+  int load_calls{0};
 };
 
 }  // namespace
@@ -175,7 +183,7 @@ TEST(Runner, ExecutesOnlyMoveAboveAndCommitsAfterPostValidation)
   pick_place::TransitionContractRegistry contracts;
   contracts.registerContract(
     {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
-    std::make_shared<pick_place::MoveAboveObjectContract>(
+    std::make_shared<pick_place::TcpMotionContract>(
       pick_place::Pose3d{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0},
       std::vector<std::string>{"table", "coke"}, 0.02, 0.01));
   FakeObserver observer;
@@ -204,7 +212,7 @@ TEST(Runner, DoesNotCommitWhenPostValidationFails)
   pick_place::TransitionContractRegistry contracts;
   contracts.registerContract(
     {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
-    std::make_shared<pick_place::MoveAboveObjectContract>(
+    std::make_shared<pick_place::TcpMotionContract>(
       pick_place::Pose3d{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0},
       std::vector<std::string>{"table", "coke"}, 0.02, 0.01));
   FakeObserver observer;
@@ -216,9 +224,55 @@ TEST(Runner, DoesNotCommitWhenPostValidationFails)
   const auto result = runner.run({pick_place::RunMode::EXECUTE,
         pick_place::State::MOVE_ABOVE_OBJECT, false, std::nullopt, 100});
   ASSERT_TRUE(result.failure.has_value());
-  EXPECT_EQ("TCP_OUTSIDE_PREGRASP_TOLERANCE", result.failure->code);
+  EXPECT_EQ("TCP_OUTSIDE_TARGET_TOLERANCE", result.failure->code);
   EXPECT_EQ(1, executor->calls);
   EXPECT_EQ(0, checkpoints.calls);
+}
+
+TEST(Runner, ResumePlanOnlyValidatesCheckpointAndPlansDescendWithoutCommitting)
+{
+  pick_place::StateActionRegistry actions;
+  auto planner = std::make_shared<FakePlanner>();
+  actions.registerPlanner(pick_place::State::DESCEND, planner);
+  pick_place::TransitionContractRegistry contracts;
+  FakeObserver observer;
+  FakeCheckpointStore checkpoints;
+  checkpoints.load_result.checkpoint = pick_place::Checkpoint{
+    1, "run", 1, pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT,
+    pick_place::State::DESCEND,
+    {{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0}, false, {"table", "coke"}}, true};
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints);
+
+  const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true,
+        std::nullopt, 100});
+  EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
+  EXPECT_EQ(pick_place::State::DESCEND, result.current_state);
+  EXPECT_EQ(pick_place::State::CLOSE_GRIPPER, *result.next_state);
+  EXPECT_EQ(pick_place::State::DESCEND, planner->last_state);
+  EXPECT_EQ(0, checkpoints.calls);
+  EXPECT_EQ(1, checkpoints.load_calls);
+}
+
+TEST(Runner, ResumeRejectsWorldMismatchBeforePlanning)
+{
+  pick_place::StateActionRegistry actions;
+  auto planner = std::make_shared<FakePlanner>();
+  actions.registerPlanner(pick_place::State::DESCEND, planner);
+  pick_place::TransitionContractRegistry contracts;
+  FakeObserver observer;
+  observer.snapshot.tcp_pose_world.x = 0.5;
+  FakeCheckpointStore checkpoints;
+  checkpoints.load_result.checkpoint = pick_place::Checkpoint{
+    1, "run", 1, pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT,
+    pick_place::State::DESCEND,
+    {{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0}, false, {"table", "coke"}}, true};
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints);
+
+  const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true,
+        std::nullopt, 100});
+  ASSERT_TRUE(result.failure.has_value());
+  EXPECT_EQ("RESUME_WORLD_MISMATCH", result.failure->code);
+  EXPECT_EQ(0, planner->calls);
 }
 
 TEST(Runner, RejectsFailureInjectionOutsideDryRun)

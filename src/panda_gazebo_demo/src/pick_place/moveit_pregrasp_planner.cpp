@@ -57,6 +57,13 @@ geometry_msgs::msg::Pose preGraspPose()
   return pose;
 }
 
+geometry_msgs::msg::Pose graspPose()
+{
+  auto pose = preGraspPose();
+  pose.position.z = 0.93;
+  return pose;
+}
+
 }  // namespace
 
 class MoveItPreGraspPlanner::Impl
@@ -80,9 +87,9 @@ MoveItPreGraspPlanner::~MoveItPreGraspPlanner() = default;
 
 PlanResult MoveItPreGraspPlanner::plan(State state)
 {
-  if (state != State::MOVE_ABOVE_OBJECT) {
+  if (state != State::MOVE_ABOVE_OBJECT && state != State::DESCEND) {
     return planningFailure(FailureCategory::PLANNING, "STATE_NOT_PLANNABLE",
-        "Planner only supports MOVE_ABOVE_OBJECT");
+        "Planner only supports MOVE_ABOVE_OBJECT and DESCEND");
   }
   if (!impl_->move_group) {
     impl_->move_group = std::make_unique<MoveGroupInterface>(node_, planning_group_);
@@ -109,7 +116,8 @@ PlanResult MoveItPreGraspPlanner::plan(State state)
   }
   move_group.clearPoseTargets();
   move_group.setStartStateToCurrentState();
-  if (!move_group.setPoseTarget(preGraspPose(), tcp_link_)) {
+  const auto target_pose = state == State::MOVE_ABOVE_OBJECT ? preGraspPose() : graspPose();
+  if (!move_group.setPoseTarget(target_pose, tcp_link_)) {
     return planningFailure(FailureCategory::PLANNING, "POSE_TARGET_REJECTED",
                            "Failed to set pre-grasp pose target");
   }
@@ -118,9 +126,10 @@ PlanResult MoveItPreGraspPlanner::plan(State state)
   const auto point_count = moveit_plan.trajectory.joint_trajectory.points.size();
   if (!succeeded || point_count == 0) {
     return planningFailure(FailureCategory::PLANNING, "EMPTY_OR_FAILED_PLAN",
-                           "Planning to pre-grasp failed or produced an empty trajectory");
+                           "Planning failed or produced an empty trajectory");
   }
-  RCLCPP_INFO(node_->get_logger(), "Pre-grasp plan succeeded: %zu trajectory points", point_count);
+  RCLCPP_INFO(node_->get_logger(), "%s plan succeeded: %zu trajectory points", toString(state),
+    point_count);
   return {{ActionStatus::SUCCEEDED, std::nullopt},
     std::make_shared<MoveItPlanArtifact>(std::move(moveit_plan))};
 }
@@ -128,8 +137,9 @@ PlanResult MoveItPreGraspPlanner::plan(State state)
 ActionResult MoveItPreGraspPlanner::execute(
   State state, std::shared_ptr<const PlanArtifact> plan)
 {
-  if (state != State::MOVE_ABOVE_OBJECT) {
-    return executionFailure("STATE_NOT_EXECUTABLE", "Executor only supports MOVE_ABOVE_OBJECT");
+  if (state != State::MOVE_ABOVE_OBJECT && state != State::DESCEND) {
+    return executionFailure("STATE_NOT_EXECUTABLE",
+      "Executor only supports MOVE_ABOVE_OBJECT and DESCEND");
   }
   const auto moveit_plan = std::dynamic_pointer_cast<const MoveItPlanArtifact>(std::move(plan));
   if (!moveit_plan || !impl_->move_group) {

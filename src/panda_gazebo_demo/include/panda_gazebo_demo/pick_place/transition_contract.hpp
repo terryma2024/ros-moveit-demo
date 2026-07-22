@@ -58,12 +58,13 @@ private:
   std::map<TransitionKey, std::shared_ptr<const ITransitionContract>> contracts_;
 };
 
-class MoveAboveObjectContract final : public TransitionContractRegistry::ITransitionContract
+class TcpMotionContract final : public TransitionContractRegistry::ITransitionContract
 {
 public:
-  MoveAboveObjectContract(
+  TcpMotionContract(
     Pose3d target_pose, std::vector<std::string> required_world_objects,
-    double tcp_position_tolerance, double coke_position_tolerance);
+    double tcp_position_tolerance, double coke_position_tolerance,
+    bool require_gripper_open = false);
 
   [[nodiscard]] ValidationResult validate(
     const WorldSnapshot & before, const WorldSnapshot & after,
@@ -76,6 +77,7 @@ private:
   std::vector<std::string> required_world_objects_;
   double tcp_position_tolerance_;
   double coke_position_tolerance_;
+  bool require_gripper_open_;
 };
 
 }  // namespace panda_gazebo_demo::pick_place

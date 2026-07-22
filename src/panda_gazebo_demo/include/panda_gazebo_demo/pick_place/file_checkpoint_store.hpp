@@ -12,6 +12,7 @@ class FileCheckpointStore final : public ICheckpointStore
 public:
   explicit FileCheckpointStore(std::filesystem::path path);
   [[nodiscard]] std::optional<Failure> commit(const Checkpoint & checkpoint) override;
+  [[nodiscard]] CheckpointLoadResult loadLatestCompatible() override;
 
 private:
   std::filesystem::path path_;
