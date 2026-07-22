@@ -45,6 +45,7 @@ add_library(
   pick_place_core
   src/pick_place/cartesian_plan_validation.cpp
   src/pick_place/domain_types.cpp
+  src/pick_place/plan_validation.cpp
   src/pick_place/state_action.cpp
   src/pick_place/transition_contract.cpp
   src/pick_place/transition_table.cpp

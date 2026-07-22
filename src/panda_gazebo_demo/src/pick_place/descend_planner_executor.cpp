@@ -234,14 +234,13 @@ PlanResult DescendPlannerExecutor::plan(
     std::make_shared<DescendPlanArtifact>(std::move(trajectory))};
 }
 
-ActionResult DescendPlannerExecutor::execute(
-  State state, std::shared_ptr<const PlanArtifact> plan)
+ActionResult DescendPlannerExecutor::execute(const ExecutionContext & context)
 {
-  if (state != State::DESCEND) {
+  if (context.state != State::DESCEND) {
     return executionFailure("STATE_NOT_EXECUTABLE",
       "DescendPlannerExecutor only executes DESCEND");
   }
-  const auto descend_plan = std::dynamic_pointer_cast<const DescendPlanArtifact>(std::move(plan));
+  const auto descend_plan = std::dynamic_pointer_cast<const DescendPlanArtifact>(context.plan);
   if (!descend_plan || !impl_->move_group) {
     return executionFailure("INVALID_DESCEND_PLAN_ARTIFACT",
       "DESCEND execution requires a Cartesian trajectory from this planner");

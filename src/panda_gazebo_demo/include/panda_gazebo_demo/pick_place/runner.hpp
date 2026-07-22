@@ -2,6 +2,7 @@
 
 #include "panda_gazebo_demo/pick_place/checkpoint.hpp"
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
+#include "panda_gazebo_demo/pick_place/plan_validation.hpp"
 #include "panda_gazebo_demo/pick_place/state_action.hpp"
 #include "panda_gazebo_demo/pick_place/transition_contract.hpp"
 #include "panda_gazebo_demo/pick_place/transition_table.hpp"
@@ -27,10 +28,11 @@ public:
     const TransitionContractRegistry & contracts, IWorldObserver * observer = nullptr,
     ICheckpointStore * checkpoint_store = nullptr,
     const CommonResumeValidator * common_resume_validator = nullptr,
-    IExecutionObservationSink * execution_observation_sink = nullptr)
+    IExecutionObservationSink * execution_observation_sink = nullptr,
+    const PlanValidatorRegistry * plan_validators = nullptr)
   : actions_(actions), contracts_(contracts), observer_(observer),
     checkpoint_store_(checkpoint_store), common_resume_validator_(common_resume_validator),
-    execution_observation_sink_(execution_observation_sink) {}
+    execution_observation_sink_(execution_observation_sink), plan_validators_(plan_validators) {}
 
   [[nodiscard]] RunResult run(const RunRequest & request) const;
 
@@ -63,6 +65,7 @@ private:
   ICheckpointStore * checkpoint_store_;
   const CommonResumeValidator * common_resume_validator_;
   IExecutionObservationSink * execution_observation_sink_;
+  const PlanValidatorRegistry * plan_validators_;
 };
 
 }  // namespace panda_gazebo_demo::pick_place
