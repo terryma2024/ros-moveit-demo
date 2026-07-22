@@ -25,6 +25,7 @@
 #include "panda_gazebo_demo/pick_place/motion_state_action.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
+#include "panda_gazebo_demo/pick_place/pick_place_contracts.hpp"
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
@@ -439,6 +440,16 @@ int main(int argc, char * argv[])
                                  target_policy, required_objects, tcp_position_tolerance,
                                  tcp_orientation_tolerance_rad, coke_position_tolerance,
                                  coke_orientation_tolerance_rad));
+    pick_place::PickPlaceContractConfig contract_config;
+    contract_config.tcp_position_tolerance = tcp_position_tolerance;
+    contract_config.tcp_orientation_tolerance_rad = tcp_orientation_tolerance_rad;
+    contract_config.coke_position_tolerance = coke_position_tolerance;
+    contract_config.coke_orientation_tolerance_rad = coke_orientation_tolerance_rad;
+    contract_config.carried_relative_position_tolerance = coke_position_tolerance;
+    contract_config.carried_relative_orientation_tolerance_rad =
+      coke_orientation_tolerance_rad;
+    pick_place::registerPickPlaceForwardContracts(
+      contracts, target_policy, contract_config);
   }
   if (*mode == pick_place::RunMode::EXECUTE || resume) {
     if (simulation_session_id.empty()) {

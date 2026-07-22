@@ -49,6 +49,7 @@ add_library(
   src/pick_place/moveit_scene_executor.cpp
   src/pick_place/motion_state_action.cpp
   src/pick_place/plan_validation.cpp
+  src/pick_place/pick_place_contracts.cpp
   src/pick_place/recovery_policy.cpp
   src/pick_place/state_validation.cpp
   src/pick_place/state_action.cpp
@@ -221,6 +222,14 @@ if(BUILD_TESTING)
   )
   if(TARGET test_motion_state_action)
     target_link_libraries(test_motion_state_action pick_place_core)
+  endif()
+
+  ament_add_gtest(
+    test_forward_contracts
+    test/pick_place/test_forward_contracts.cpp
+  )
+  if(TARGET test_forward_contracts)
+    target_link_libraries(test_forward_contracts pick_place_core)
   endif()
 
   add_test(

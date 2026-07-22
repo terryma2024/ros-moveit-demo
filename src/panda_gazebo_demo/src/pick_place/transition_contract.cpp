@@ -17,6 +17,44 @@ void addFailure(
   result.failures.push_back({category, std::move(code), std::move(message), {}});
 }
 
+void addBoundaryMetrics(
+  std::map<std::string, double> & metrics, const char * prefix,
+  const WorldSnapshot & snapshot)
+{
+  const std::string key_prefix(prefix);
+  metrics[key_prefix + "fresh"] = snapshot.fresh ? 1.0 : 0.0;
+  metrics[key_prefix + "arm_stationary"] = snapshot.arm_stationary ? 1.0 : 0.0;
+  metrics[key_prefix + "gripper_open"] = snapshot.gripper_open ? 1.0 : 0.0;
+  metrics[key_prefix + "gazebo_attached"] = snapshot.gazebo_coke_attached ?
+    (*snapshot.gazebo_coke_attached ? 1.0 : 0.0) : -1.0;
+  metrics[key_prefix + "moveit_attached"] = snapshot.moveit_coke_attached ?
+    (*snapshot.moveit_coke_attached ? 1.0 : 0.0) : -1.0;
+  for (const auto * joint_name : {"panda_finger_joint1", "panda_finger_joint2"}) {
+    const auto position = snapshot.joint_positions.find(joint_name);
+    const auto velocity = snapshot.joint_velocities.find(joint_name);
+    if (position != snapshot.joint_positions.end()) {
+      metrics[key_prefix + joint_name + "_position"] = position->second;
+    }
+    if (velocity != snapshot.joint_velocities.end()) {
+      metrics[key_prefix + joint_name + "_velocity"] = velocity->second;
+    }
+  }
+}
+
+ValidationResult withBoundaryFailureMetrics(
+  ValidationResult result, const WorldSnapshot & before,
+  const WorldSnapshot * after = nullptr)
+{
+  addBoundaryMetrics(result.metrics, "before_", before);
+  if (after != nullptr) {
+    addBoundaryMetrics(result.metrics, "after_", *after);
+  }
+  for (auto & failure : result.failures) {
+    failure.metrics.insert(result.metrics.begin(), result.metrics.end());
+  }
+  return result;
+}
+
 void validateCrossWorldConsistency(
   ValidationResult & result, const WorldSnapshot & snapshot, double coke_position_tolerance,
   double coke_orientation_tolerance_rad)
@@ -76,15 +114,14 @@ ValidationResult TransitionContractRegistry::validate(
 {
   const auto found = contracts_.find(key);
   if (found == contracts_.end() || !found->second) {
-    return {false,
-      {{FailureCategory::CONFIGURATION,
+    ValidationResult missing{false, {{FailureCategory::CONFIGURATION,
         "MISSING_TRANSITION_CONTRACT",
         std::string("No execute transition contract registered for ") + toString(key.from) +
-        " -> " + toString(key.to),
-        {}}},
-      {}};
+        " -> " + toString(key.to), {}}}, {}};
+    return withBoundaryFailureMetrics(std::move(missing), before, &after);
   }
-  return found->second->validate(before, after, action_result);
+  return withBoundaryFailureMetrics(
+    found->second->validate(before, after, action_result), before, &after);
 }
 
 ValidationResult
@@ -94,15 +131,13 @@ TransitionContractRegistry::validatePrecondition(
 {
   const auto found = contracts_.find(key);
   if (found == contracts_.end() || !found->second) {
-    return {false,
-      {{FailureCategory::CONFIGURATION,
+    ValidationResult missing{false, {{FailureCategory::CONFIGURATION,
         "MISSING_TRANSITION_CONTRACT",
         std::string("No execute transition contract registered for ") + toString(key.from) +
-        " -> " + toString(key.to),
-        {}}},
-      {}};
+        " -> " + toString(key.to), {}}}, {}};
+    return withBoundaryFailureMetrics(std::move(missing), before);
   }
-  return found->second->validatePrecondition(before);
+  return withBoundaryFailureMetrics(found->second->validatePrecondition(before), before);
 }
 
 ValidationResult TransitionContractRegistry::validateResume(
@@ -115,7 +150,7 @@ std::optional<Failure>
 TransitionContractRegistry::validateExecuteCoverage(const TransitionTable & table) const
 {
   for (const auto & [from, transitions] : table.entries()) {
-    if (isTerminal(from)) {
+    if (!isForwardAction(from) || from == State::IDLE || isTerminal(from)) {
       continue;
     }
     if (!hasContract({from, transitions.succeeded})) {
