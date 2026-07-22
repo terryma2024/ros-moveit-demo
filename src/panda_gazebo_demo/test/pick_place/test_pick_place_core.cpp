@@ -11,6 +11,7 @@
 #include "panda_gazebo_demo/pick_place/checkpoint.hpp"
 #include "panda_gazebo_demo/pick_place/descend_planner_executor.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_world_object_pose.hpp"
+#include "panda_gazebo_demo/pick_place/plan_validation.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
@@ -44,11 +45,11 @@ public:
 class FakeExecutor final : public pick_place::IStateExecutor
 {
 public:
-  pick_place::ActionResult execute(
-    pick_place::State state, std::shared_ptr<const pick_place::PlanArtifact>) override
+  pick_place::ActionResult execute(const pick_place::ExecutionContext & context) override
   {
     ++calls;
-    last_state = state;
+    last_state = context.state;
+    last_context = context;
     return execute_result;
   }
 
@@ -61,6 +62,7 @@ public:
   int calls{0};
   int cancel_calls{0};
   pick_place::State last_state{pick_place::State::ERROR};
+  pick_place::ExecutionContext last_context{};
   pick_place::ActionResult execute_result{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
 };
 
@@ -546,9 +548,14 @@ TEST(Runner, PlanOnlyUsesExactlyOnePlannerAndDoesNotAdvanceBusinessState)
   pick_place::StateActionRegistry actions;
   auto planner = std::make_shared<FakePlanner>();
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(
+    pick_place::State::MOVE_ABOVE_OBJECT,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   FakeObserver observer;
-  const pick_place::StateMachineRunner runner(actions, contracts, &observer);
+  const pick_place::StateMachineRunner runner(
+    actions, contracts, &observer, nullptr, nullptr, nullptr, &plan_validators);
 
   const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, false, std::nullopt,
         100});
@@ -561,6 +568,88 @@ TEST(Runner, PlanOnlyUsesExactlyOnePlannerAndDoesNotAdvanceBusinessState)
   ASSERT_TRUE(planner->last_observation.snapshot.has_value());
   EXPECT_EQ("test-session", planner->last_observation.snapshot->simulation_session_id);
   EXPECT_EQ(1, observer.calls);
+}
+
+TEST(Runner, RejectsPlannedExecuteStateWithoutPlanValidator)
+{
+  pick_place::StateActionRegistry actions;
+  auto planner = std::make_shared<FakePlanner>();
+  auto executor = std::make_shared<FakeExecutor>();
+  actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
+  actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, executor);
+  pick_place::TransitionContractRegistry contracts;
+  registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
+  registerMoveAboveObjectToDescendValidator(contracts);
+  FakeObserver observer;
+  FakeCheckpointStore checkpoints;
+  checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
+  const auto common_resume_validator = makeCommonResumeValidator();
+  const pick_place::StateMachineRunner runner(
+    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+
+  const auto result = runner.run({pick_place::RunMode::EXECUTE,
+        pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("PLAN_VALIDATOR_NOT_REGISTERED", result.failure->code);
+  EXPECT_EQ(0, executor->calls);
+}
+
+TEST(Runner, PassesVerifiedBeforeSnapshotToExecutor)
+{
+  pick_place::StateActionRegistry actions;
+  auto planner = std::make_shared<FakePlanner>();
+  auto executor = std::make_shared<FakeExecutor>();
+  actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
+  actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, executor);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(
+    pick_place::State::MOVE_ABOVE_OBJECT,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  pick_place::TransitionContractRegistry contracts;
+  registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
+  registerMoveAboveObjectToDescendValidator(contracts);
+  FakeObserver observer;
+  FakeCheckpointStore checkpoints;
+  checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
+  const auto common_resume_validator = makeCommonResumeValidator();
+  const pick_place::StateMachineRunner runner(
+    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
+    &plan_validators);
+
+  const auto result = runner.run({pick_place::RunMode::EXECUTE,
+        pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
+
+  ASSERT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_NEAR(
+    observer.snapshot.tcp_pose_world.x,
+    executor->last_context.before.tcp_pose_world.x, 1e-12);
+  EXPECT_NEAR(
+    observer.snapshot.tcp_pose_world.y,
+    executor->last_context.before.tcp_pose_world.y, 1e-12);
+  EXPECT_NEAR(
+    observer.snapshot.tcp_pose_world.z,
+    executor->last_context.before.tcp_pose_world.z, 1e-12);
+  EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, executor->last_context.state);
+  EXPECT_EQ(pick_place::State::DESCEND, executor->last_context.next_state);
+}
+
+TEST(PlanValidatorRegistry, RejectsEmptyTrajectory)
+{
+  pick_place::PlanValidatorRegistry registry;
+  registry.registerValidator(
+    pick_place::State::MOVE_ABOVE_OBJECT,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  const auto snapshot = makeSnapshot();
+  pick_place::PlanArtifact artifact;
+  artifact.trajectory_points = 0;
+
+  const auto result = registry.validate(
+    pick_place::State::MOVE_ABOVE_OBJECT, snapshot, artifact);
+
+  EXPECT_FALSE(result.ok);
+  ASSERT_FALSE(result.failures.empty());
+  EXPECT_EQ("EMPTY_PLAN_ARTIFACT", result.failures.front().code);
 }
 
 TEST(Runner, ExecuteWorkflowRequiresExecutionInfrastructure)
@@ -646,6 +735,10 @@ TEST(Runner, ExecuteWorkflowAdvancesThroughRegisteredStatesUntilStopAfter)
   actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER, executor);
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, executor);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(
+    pick_place::State::MOVE_ABOVE_OBJECT,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   registerMoveAboveObjectToDescendValidator(contracts);
@@ -656,7 +749,8 @@ TEST(Runner, ExecuteWorkflowAdvancesThroughRegisteredStatesUntilStopAfter)
   FakeCheckpointStore checkpoints;
   const auto common_resume_validator = makeCommonResumeValidator();
   const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
+    &plan_validators);
 
   const auto result = runner.run({pick_place::RunMode::EXECUTE,
         pick_place::State::MOVE_ABOVE_OBJECT, false, std::nullopt, 100});
@@ -759,6 +853,10 @@ TEST(Runner, ResumePlanOnlyValidatesCheckpointAndPlansMoveAboveWithoutCommitting
   pick_place::StateActionRegistry actions;
   auto planner = std::make_shared<FakePlanner>();
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(
+    pick_place::State::MOVE_ABOVE_OBJECT,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   FakeObserver observer;
@@ -766,7 +864,8 @@ TEST(Runner, ResumePlanOnlyValidatesCheckpointAndPlansMoveAboveWithoutCommitting
   checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
   const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
+    &plan_validators);
 
   const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true,
         std::nullopt, 100});
@@ -785,6 +884,10 @@ TEST(Runner, ResumeExecuteRunsMoveAboveObjectFromPrepareCheckpoint)
   auto executor = std::make_shared<FakeExecutor>();
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, executor);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(
+    pick_place::State::MOVE_ABOVE_OBJECT,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   registerMoveAboveObjectToDescendValidator(contracts);
@@ -793,7 +896,8 @@ TEST(Runner, ResumeExecuteRunsMoveAboveObjectFromPrepareCheckpoint)
   checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
   const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
+    &plan_validators);
 
   const auto result = runner.run({pick_place::RunMode::EXECUTE,
         pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
@@ -812,6 +916,10 @@ TEST(Runner, ResumeExecuteStopsSuccessfullyAfterDescendCheckpoint)
   auto executor = std::make_shared<FakeExecutor>();
   actions.registerPlanner(pick_place::State::DESCEND, planner);
   actions.registerExecutor(pick_place::State::DESCEND, executor);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(
+    pick_place::State::DESCEND,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerMoveAboveObjectToDescendValidator(contracts);
   registerDescendToCloseGripperValidator(contracts);
@@ -822,7 +930,8 @@ TEST(Runner, ResumeExecuteStopsSuccessfullyAfterDescendCheckpoint)
   checkpoints.load_result.checkpoint = makeMoveAboveCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
   const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
+    &plan_validators);
 
   const auto result = runner.run({pick_place::RunMode::EXECUTE,
         pick_place::State::DESCEND, true, std::nullopt, 100});
@@ -844,6 +953,10 @@ TEST(Runner, ResumeExecuteReachesExpectedUnregisteredCloseGripperBoundary)
   auto executor = std::make_shared<FakeExecutor>();
   actions.registerPlanner(pick_place::State::DESCEND, planner);
   actions.registerExecutor(pick_place::State::DESCEND, executor);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(
+    pick_place::State::DESCEND,
+    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerMoveAboveObjectToDescendValidator(contracts);
   registerDescendToCloseGripperValidator(contracts);
@@ -854,7 +967,8 @@ TEST(Runner, ResumeExecuteReachesExpectedUnregisteredCloseGripperBoundary)
   checkpoints.load_result.checkpoint = makeMoveAboveCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
   const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
+    &plan_validators);
 
   const auto result = runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true,
         std::nullopt, 100});

@@ -49,11 +49,9 @@ OpenGripperExecutor::OpenGripperExecutor(
 
 OpenGripperExecutor::~OpenGripperExecutor() = default;
 
-ActionResult OpenGripperExecutor::execute(
-  State state, std::shared_ptr<const PlanArtifact> plan)
+ActionResult OpenGripperExecutor::execute(const ExecutionContext & context)
 {
-  static_cast<void>(plan);
-  if (state != State::PREPARE_OPEN_GRIPPER) {
+  if (context.state != State::PREPARE_OPEN_GRIPPER) {
     return gripperFailure("STATE_NOT_EXECUTABLE",
       "OpenGripperExecutor only supports PREPARE_OPEN_GRIPPER");
   }

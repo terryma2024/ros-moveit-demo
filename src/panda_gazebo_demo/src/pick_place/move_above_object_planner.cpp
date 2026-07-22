@@ -193,12 +193,12 @@ PlanResult MoveAboveObjectPlanner::plan(
     std::make_shared<MoveItPlanArtifact>(std::move(moveit_plan))};
 }
 
-ActionResult MoveAboveObjectPlanner::execute(State state, std::shared_ptr<const PlanArtifact> plan)
+ActionResult MoveAboveObjectPlanner::execute(const ExecutionContext & context)
 {
-  if (state != State::MOVE_ABOVE_OBJECT) {
+  if (context.state != State::MOVE_ABOVE_OBJECT) {
     return executionFailure("STATE_NOT_EXECUTABLE", "Executor only supports MOVE_ABOVE_OBJECT");
   }
-  const auto moveit_plan = std::dynamic_pointer_cast<const MoveItPlanArtifact>(std::move(plan));
+  const auto moveit_plan = std::dynamic_pointer_cast<const MoveItPlanArtifact>(context.plan);
   if (!moveit_plan || !impl_->move_group) {
     return executionFailure(
       "INVALID_MOVEIT_PLAN_ARTIFACT",

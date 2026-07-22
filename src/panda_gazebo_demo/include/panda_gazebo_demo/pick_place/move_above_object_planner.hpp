@@ -27,8 +27,7 @@ public:
   [[nodiscard]] PlanResult plan(
     State current_state, State next_state,
     const ObservationResult & observation) override;
-  [[nodiscard]] ActionResult execute(
-    State state, std::shared_ptr<const PlanArtifact> plan) override;
+  [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;
   [[nodiscard]] ObservationResult observe() override;
 

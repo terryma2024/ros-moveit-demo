@@ -18,8 +18,7 @@ public:
     double max_effort, double action_timeout_seconds);
   ~OpenGripperExecutor() override;
 
-  [[nodiscard]] ActionResult execute(
-    State state, std::shared_ptr<const PlanArtifact> plan) override;
+  [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;
 
 private:

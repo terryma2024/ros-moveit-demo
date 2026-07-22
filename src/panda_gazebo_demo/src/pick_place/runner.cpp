@@ -105,6 +105,10 @@ RunResult StateMachineRunner::runPlanOnly(
     return error(state, {FailureCategory::PLANNING, "PLANNER_NOT_REGISTERED",
                std::string("No planner is registered for ") + toString(state), {}});
   }
+  if (plan_validators_ == nullptr || !plan_validators_->hasValidator(state)) {
+    return error(state, {FailureCategory::CONFIGURATION, "PLAN_VALIDATOR_NOT_REGISTERED",
+               std::string("No plan validator is registered for ") + toString(state), {}});
+  }
   if (!observation) {
     if (observer_ == nullptr) {
       return error(state, {FailureCategory::CONFIGURATION, "TARGET_OBSERVER_MISSING",
@@ -120,12 +124,15 @@ RunResult StateMachineRunner::runPlanOnly(
   const TransitionTable transitions;
   const auto next_state = transitions.resolve(state, ActionStatus::SUCCEEDED);
   const auto plan = planner->plan(state, next_state, *observation);
-  if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact ||
-    plan.artifact->trajectory_points == 0)
-  {
+  if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact) {
     return error(state, plan.action.failure.value_or(Failure{
         FailureCategory::PLAN_VALIDATION, "EMPTY_PLAN_ARTIFACT",
         "Planner returned no usable trajectory", {}}));
+  }
+  const auto plan_validation = plan_validators_->validate(state, *observation->snapshot,
+      *plan.artifact);
+  if (!plan_validation.ok) {
+    return error(state, plan_validation.failures.front());
   }
   return {RunStatus::PLAN_ONLY_COMPLETE, state,
     next_state, std::nullopt, 0};
@@ -222,17 +229,24 @@ RunResult StateMachineRunner::runExecuteStep(
   }
   std::shared_ptr<const PlanArtifact> plan_artifact;
   if (auto * planner = actions_.findPlanner(state)) {
+    if (plan_validators_ == nullptr || !plan_validators_->hasValidator(state)) {
+      return transitionFailure(state, {FailureCategory::CONFIGURATION,
+                 "PLAN_VALIDATOR_NOT_REGISTERED",
+                 std::string("No plan validator is registered for ") + toString(state), {}});
+    }
     const auto plan = planner->plan(state, next_state, planning_observation);
-    if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact ||
-      plan.artifact->trajectory_points == 0)
-    {
+    if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact) {
       return transitionFailure(state, plan.action.failure.value_or(Failure{
           FailureCategory::PLAN_VALIDATION, "EMPTY_PLAN_ARTIFACT",
           "Planner returned no usable trajectory", {}}));
     }
+    const auto plan_validation = plan_validators_->validate(state, *before, *plan.artifact);
+    if (!plan_validation.ok) {
+      return transitionFailure(state, plan_validation.failures.front());
+    }
     plan_artifact = plan.artifact;
   }
-  const auto action = executor->execute(state, plan_artifact);
+  const auto action = executor->execute({state, next_state, *before, plan_artifact});
   if (action.status != ActionStatus::SUCCEEDED) {
     return transitionFailure(state, stopAndObserveAfterFailure(state, *executor,
       action.failure.value_or(Failure{

@@ -261,6 +261,7 @@ int main(int argc, char * argv[])
   }
 
   pick_place::StateActionRegistry actions;
+  pick_place::PlanValidatorRegistry plan_validators;
   pick_place::TransitionContractRegistry contracts;
   const auto target_policy = std::make_shared<pick_place::FixedPickPlaceTargetPolicy>();
   std::shared_ptr<pick_place::MoveAboveObjectPlanner> move_above_action;
@@ -274,11 +275,17 @@ int main(int argc, char * argv[])
       node, planning_group, tcp_link, required_objects, target_policy, velocity_scaling,
       acceleration_scaling);
     actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
+    plan_validators.registerValidator(
+      pick_place::State::MOVE_ABOVE_OBJECT,
+      std::make_shared<pick_place::NonEmptyPlanValidator>());
     descend_action = std::make_shared<pick_place::DescendPlannerExecutor>(
       node, planning_group, tcp_link, target_policy, velocity_scaling, acceleration_scaling,
       descend_eef_step, descend_min_fraction, descend_joint_jump_threshold,
       tcp_position_tolerance, tcp_orientation_tolerance_rad);
     actions.registerPlanner(pick_place::State::DESCEND, descend_action);
+    plan_validators.registerValidator(
+      pick_place::State::DESCEND,
+      std::make_shared<pick_place::NonEmptyPlanValidator>());
   }
   if (*mode == pick_place::RunMode::EXECUTE) {
     open_gripper_action = std::make_shared<pick_place::OpenGripperExecutor>(
@@ -337,7 +344,7 @@ int main(int argc, char * argv[])
   RosExecutionObservationLogger execution_observation_logger(logger);
   const pick_place::StateMachineRunner runner(actions, contracts, runner_observer,
     checkpoint_store.get(),
-    common_resume_validator.get(), &execution_observation_logger);
+    common_resume_validator.get(), &execution_observation_logger, &plan_validators);
   const auto result =
     runner.run({*mode, stop_after, resume, fail_at, static_cast<std::uint64_t>(max_transitions)});
   if (result.failure) {

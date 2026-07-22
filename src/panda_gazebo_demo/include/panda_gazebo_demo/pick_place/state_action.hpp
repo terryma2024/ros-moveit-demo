@@ -22,6 +22,14 @@ struct PlanResult
   std::shared_ptr<const PlanArtifact> artifact;
 };
 
+struct ExecutionContext
+{
+  State state;
+  State next_state;
+  WorldSnapshot before;
+  std::shared_ptr<const PlanArtifact> plan;
+};
+
 class IStatePlanner
 {
 public:
@@ -35,8 +43,7 @@ class IStateExecutor
 {
 public:
   virtual ~IStateExecutor() = default;
-  [[nodiscard]] virtual ActionResult execute(
-    State state, std::shared_ptr<const PlanArtifact> plan) = 0;
+  [[nodiscard]] virtual ActionResult execute(const ExecutionContext & context) = 0;
   [[nodiscard]] virtual ActionResult cancel() = 0;
 };
 
