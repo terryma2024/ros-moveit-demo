@@ -119,7 +119,7 @@ int main(int argc, char * argv[])
   const auto velocity_scaling = parameterOrDeclare(node, "velocity_scaling", 0.1);
   const auto acceleration_scaling = parameterOrDeclare(node, "acceleration_scaling", 0.1);
   const auto checkpoint_path = parameterOrDeclare(
-    node, "checkpoint_path", std::string("/tmp/panda_pick_place_checkpoint.yaml"));
+    node, "checkpoint_path", std::string("/tmp/panda_pick_place_checkpoint.json"));
   const auto tcp_position_tolerance = parameterOrDeclare(node, "tcp_position_tolerance", 0.02);
   const auto coke_position_tolerance = parameterOrDeclare(node, "coke_position_tolerance", 0.01);
   if (max_transitions <= 0 || velocity_scaling <= 0.0 || velocity_scaling > 1.0 ||
@@ -140,14 +140,23 @@ int main(int argc, char * argv[])
     move_above_action = std::make_shared<pick_place::MoveItPreGraspPlanner>(
       node, planning_group, tcp_link, required_objects, velocity_scaling, acceleration_scaling);
     actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
+    actions.registerPlanner(pick_place::State::DESCEND, move_above_action);
   }
   if (*mode == pick_place::RunMode::EXECUTE) {
     actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
+    actions.registerExecutor(pick_place::State::DESCEND, move_above_action);
     contracts.registerContract(
       {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
-      std::make_shared<pick_place::MoveAboveObjectContract>(
+      std::make_shared<pick_place::TcpMotionContract>(
         pick_place::Pose3d{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0}, required_objects,
         tcp_position_tolerance, coke_position_tolerance));
+    contracts.registerContract(
+      {pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER},
+      std::make_shared<pick_place::TcpMotionContract>(
+        pick_place::Pose3d{0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, required_objects,
+        tcp_position_tolerance, coke_position_tolerance, true));
+  }
+  if (*mode == pick_place::RunMode::EXECUTE || resume) {
     checkpoint_store = std::make_unique<pick_place::FileCheckpointStore>(checkpoint_path);
   }
 

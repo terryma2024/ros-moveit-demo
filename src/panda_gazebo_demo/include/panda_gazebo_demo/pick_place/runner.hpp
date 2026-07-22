@@ -24,7 +24,13 @@ public:
 private:
   [[nodiscard]] RunResult runDryRun(const RunRequest & request) const;
   [[nodiscard]] RunResult runPlanOnly(const RunRequest & request) const;
+  [[nodiscard]] RunResult runPlanOnly(State state, const RunRequest & request) const;
   [[nodiscard]] RunResult runExecuteMoveAboveObject(const RunRequest & request) const;
+  [[nodiscard]] RunResult runExecuteStep(
+    State state, State next_state, const RunRequest & request,
+    std::optional<WorldSnapshot> before = std::nullopt,
+    std::uint64_t checkpoint_sequence = 1) const;
+  [[nodiscard]] RunResult runResume(const RunRequest & request) const;
   [[nodiscard]] static RunResult error(
     State state, Failure failure,
     std::uint64_t transition_count = 0);

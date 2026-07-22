@@ -74,22 +74,22 @@ std::optional<Failure> TransitionContractRegistry::validateExecuteCoverage(
   return std::nullopt;
 }
 
-MoveAboveObjectContract::MoveAboveObjectContract(
+TcpMotionContract::TcpMotionContract(
   Pose3d target_pose, std::vector<std::string> required_world_objects,
-  double tcp_position_tolerance, double coke_position_tolerance)
+  double tcp_position_tolerance, double coke_position_tolerance, bool require_gripper_open)
 : target_pose_(target_pose), required_world_objects_(std::move(required_world_objects)),
   tcp_position_tolerance_(tcp_position_tolerance),
-  coke_position_tolerance_(coke_position_tolerance)
+  coke_position_tolerance_(coke_position_tolerance), require_gripper_open_(require_gripper_open)
 {
 }
 
-ValidationResult MoveAboveObjectContract::validate(
+ValidationResult TcpMotionContract::validate(
   const WorldSnapshot & before, const WorldSnapshot & after,
   const ActionResult & action_result) const
 {
   ValidationResult result{true, {}, {}};
   if (action_result.status != ActionStatus::SUCCEEDED) {
-    addFailure(result, FailureCategory::EXECUTION, "MOVE_ABOVE_EXECUTION_FAILED",
+    addFailure(result, FailureCategory::EXECUTION, "MOTION_EXECUTION_FAILED",
       "MoveIt trajectory execution did not report success");
   }
   if (!before.fresh || !after.fresh) {
@@ -107,8 +107,8 @@ ValidationResult MoveAboveObjectContract::validate(
   const auto tcp_error = positionDistance(after.tcp_pose_world, target_pose_);
   result.metrics["tcp_position_error"] = tcp_error;
   if (tcp_error > tcp_position_tolerance_) {
-    addFailure(result, FailureCategory::POSTCONDITION, "TCP_OUTSIDE_PREGRASP_TOLERANCE",
-      "TCP did not reach the configured pre-grasp position tolerance");
+    addFailure(result, FailureCategory::POSTCONDITION, "TCP_OUTSIDE_TARGET_TOLERANCE",
+      "TCP did not reach the configured target position tolerance");
   }
   for (const auto & object_id : required_world_objects_) {
     if (after.world_object_poses.count(object_id) == 0) {
@@ -135,7 +135,7 @@ ValidationResult MoveAboveObjectContract::validate(
   return result;
 }
 
-ValidationResult MoveAboveObjectContract::validatePrecondition(const WorldSnapshot & before) const
+ValidationResult TcpMotionContract::validatePrecondition(const WorldSnapshot & before) const
 {
   ValidationResult result{true, {}, {}};
   if (!before.fresh) {
@@ -145,6 +145,10 @@ ValidationResult MoveAboveObjectContract::validatePrecondition(const WorldSnapsh
   if (!before.arm_stationary) {
     addFailure(result, FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT",
       "Arm must be stationary before MOVE_ABOVE_OBJECT");
+  }
+  if (require_gripper_open_ && !before.gripper_open) {
+    addFailure(result, FailureCategory::PRECONDITION, "GRIPPER_NOT_SAFELY_OPEN",
+      "Gripper must be open before the configured motion state");
   }
   if (before.coke_attached) {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_UNEXPECTEDLY_ATTACHED",
