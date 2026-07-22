@@ -92,7 +92,9 @@ RunResult StateMachineRunner::runPlanOnly(const RunRequest & request) const
   return runPlanOnly(State::MOVE_ABOVE_OBJECT, request);
 }
 
-RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & request) const
+RunResult StateMachineRunner::runPlanOnly(
+  State state, const RunRequest & request,
+  std::optional<ObservationResult> observation) const
 {
   if (request.stop_after.has_value()) {
     return error(state, {FailureCategory::CONFIGURATION, "STOP_AFTER_PLAN_ONLY_UNSUPPORTED",
@@ -103,7 +105,21 @@ RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & reques
     return error(state, {FailureCategory::PLANNING, "PLANNER_NOT_REGISTERED",
                std::string("No planner is registered for ") + toString(state), {}});
   }
-  const auto plan = planner->plan(state);
+  if (!observation) {
+    if (observer_ == nullptr) {
+      return error(state, {FailureCategory::CONFIGURATION, "TARGET_OBSERVER_MISSING",
+                 "plan_only requires an observer for target policy input", {}});
+    }
+    observation = observer_->observe();
+  }
+  if (!observation->snapshot) {
+    return error(state, observation->failure.value_or(Failure{
+        FailureCategory::OBSERVATION, "TARGET_OBSERVATION_FAILED",
+        "Could not observe the world before planning", {}}));
+  }
+  const TransitionTable transitions;
+  const auto next_state = transitions.resolve(state, ActionStatus::SUCCEEDED);
+  const auto plan = planner->plan(state, next_state, *observation);
   if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact ||
     plan.artifact->trajectory_points == 0)
   {
@@ -111,9 +127,8 @@ RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & reques
         FailureCategory::PLAN_VALIDATION, "EMPTY_PLAN_ARTIFACT",
         "Planner returned no usable trajectory", {}}));
   }
-  const TransitionTable transitions;
   return {RunStatus::PLAN_ONLY_COMPLETE, state,
-    transitions.resolve(state, ActionStatus::SUCCEEDED), std::nullopt, 0};
+    next_state, std::nullopt, 0};
 }
 
 RunResult StateMachineRunner::runExecuteWorkflow(
@@ -200,13 +215,14 @@ RunResult StateMachineRunner::runExecuteStep(
     }
     before = *observation.snapshot;
   }
+  const ObservationResult planning_observation{*before, std::nullopt};
   const auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
   if (!precondition.ok) {
     return transitionFailure(state, precondition.failures.front());
   }
   std::shared_ptr<const PlanArtifact> plan_artifact;
   if (auto * planner = actions_.findPlanner(state)) {
-    const auto plan = planner->plan(state);
+    const auto plan = planner->plan(state, next_state, planning_observation);
     if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact ||
       plan.artifact->trajectory_points == 0)
     {
@@ -316,7 +332,7 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
     return error(checkpoint.next_state, transition_validation.failures.front());
   }
   if (request.mode == RunMode::PLAN_ONLY) {
-    return runPlanOnly(checkpoint.next_state, request);
+    return runPlanOnly(checkpoint.next_state, request, ObservationResult{snapshot, std::nullopt});
   }
   return runExecuteWorkflow(
     checkpoint.next_state, request, snapshot, checkpoint.sequence + 1);

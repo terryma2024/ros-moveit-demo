@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
+#include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 #include "panda_gazebo_demo/pick_place/world_observer.hpp"
 
 namespace panda_gazebo_demo::pick_place
@@ -98,7 +99,8 @@ class MoveAboveObjectToDescendValidator final : public TransitionContractRegistr
 {
 public:
   MoveAboveObjectToDescendValidator(
-    Pose3d target_pose, std::vector<std::string> required_world_objects,
+    std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
+    std::vector<std::string> required_world_objects,
     double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
     double coke_position_tolerance, double coke_orientation_tolerance_rad);
 
@@ -109,7 +111,7 @@ public:
     const WorldSnapshot & before) const override;
 
 private:
-  Pose3d target_pose_;
+  std::shared_ptr<const PickPlaceTargetPolicy> target_policy_;
   std::vector<std::string> required_world_objects_;
   double tcp_position_tolerance_;
   double tcp_orientation_tolerance_rad_;
@@ -121,7 +123,8 @@ class DescendToCloseGripperValidator final : public TransitionContractRegistry::
 {
 public:
   DescendToCloseGripperValidator(
-    Pose3d target_pose, std::vector<std::string> required_world_objects,
+    std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
+    std::vector<std::string> required_world_objects,
     double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
     double coke_position_tolerance, double coke_orientation_tolerance_rad);
 
@@ -132,7 +135,7 @@ public:
     const WorldSnapshot & before) const override;
 
 private:
-  Pose3d target_pose_;
+  std::shared_ptr<const PickPlaceTargetPolicy> target_policy_;
   std::vector<std::string> required_world_objects_;
   double tcp_position_tolerance_;
   double tcp_orientation_tolerance_rad_;

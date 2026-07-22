@@ -372,10 +372,12 @@ ValidationResult PrepareOpenGripperToMoveAboveObjectValidator::validatePrecondit
 }
 
 MoveAboveObjectToDescendValidator::MoveAboveObjectToDescendValidator(
-  Pose3d target_pose, std::vector<std::string> required_world_objects,
+  std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
+  std::vector<std::string> required_world_objects,
   double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
   double coke_position_tolerance, double coke_orientation_tolerance_rad)
-: target_pose_(target_pose), required_world_objects_(std::move(required_world_objects)),
+: target_policy_(std::move(target_policy)),
+  required_world_objects_(std::move(required_world_objects)),
   tcp_position_tolerance_(tcp_position_tolerance),
   tcp_orientation_tolerance_rad_(tcp_orientation_tolerance_rad),
   coke_position_tolerance_(coke_position_tolerance),
@@ -387,8 +389,20 @@ ValidationResult MoveAboveObjectToDescendValidator::validate(
   const WorldSnapshot & before, const WorldSnapshot & after,
   const ActionResult & action_result) const
 {
+  if (!target_policy_) {
+    return {false, {Failure{FailureCategory::CONFIGURATION, "TARGET_POLICY_MISSING",
+          "MoveAboveObjectToDescendValidator requires a target policy", {}}}, {}};
+  }
+  const auto target = target_policy_->targetPose(
+    State::MOVE_ABOVE_OBJECT, State::DESCEND, ObservationResult{before, std::nullopt});
+  if (!target.target_pose) {
+    return {false, {target.failure.value_or(Failure{FailureCategory::CONFIGURATION,
+            "TARGET_POLICY_FAILED", "Target policy did not return a MOVE_ABOVE_OBJECT pose", {}})},
+      {}};
+  }
   return validateMotionCompletion(
-    before, after, action_result, target_pose_, required_world_objects_, tcp_position_tolerance_,
+    before, after, action_result, *target.target_pose, required_world_objects_,
+      tcp_position_tolerance_,
     tcp_orientation_tolerance_rad_, coke_position_tolerance_, coke_orientation_tolerance_rad_,
       true);
 }
@@ -402,10 +416,12 @@ ValidationResult MoveAboveObjectToDescendValidator::validatePrecondition(
 }
 
 DescendToCloseGripperValidator::DescendToCloseGripperValidator(
-  Pose3d target_pose, std::vector<std::string> required_world_objects,
+  std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
+  std::vector<std::string> required_world_objects,
   double tcp_position_tolerance, double tcp_orientation_tolerance_rad,
   double coke_position_tolerance, double coke_orientation_tolerance_rad)
-: target_pose_(target_pose), required_world_objects_(std::move(required_world_objects)),
+: target_policy_(std::move(target_policy)),
+  required_world_objects_(std::move(required_world_objects)),
   tcp_position_tolerance_(tcp_position_tolerance),
   tcp_orientation_tolerance_rad_(tcp_orientation_tolerance_rad),
   coke_position_tolerance_(coke_position_tolerance),
@@ -417,8 +433,19 @@ ValidationResult DescendToCloseGripperValidator::validate(
   const WorldSnapshot & before, const WorldSnapshot & after,
   const ActionResult & action_result) const
 {
+  if (!target_policy_) {
+    return {false, {Failure{FailureCategory::CONFIGURATION, "TARGET_POLICY_MISSING",
+          "DescendToCloseGripperValidator requires a target policy", {}}}, {}};
+  }
+  const auto target = target_policy_->targetPose(
+    State::DESCEND, State::CLOSE_GRIPPER, ObservationResult{before, std::nullopt});
+  if (!target.target_pose) {
+    return {false, {target.failure.value_or(Failure{FailureCategory::CONFIGURATION,
+            "TARGET_POLICY_FAILED", "Target policy did not return a DESCEND pose", {}})}, {}};
+  }
   return validateMotionCompletion(
-    before, after, action_result, target_pose_, required_world_objects_, tcp_position_tolerance_,
+    before, after, action_result, *target.target_pose, required_world_objects_,
+      tcp_position_tolerance_,
     tcp_orientation_tolerance_rad_, coke_position_tolerance_, coke_orientation_tolerance_rad_,
       true);
 }

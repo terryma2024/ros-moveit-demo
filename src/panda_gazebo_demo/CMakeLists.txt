@@ -49,6 +49,7 @@ add_library(
   src/pick_place/runner.cpp
   src/pick_place/common_resume_validator.cpp
   src/pick_place/moveit_world_object_pose.cpp
+  src/pick_place/pick_place_target_policy.cpp
   src/pick_place/world_observer.cpp
 )
 target_compile_features(pick_place_core PUBLIC cxx_std_17)

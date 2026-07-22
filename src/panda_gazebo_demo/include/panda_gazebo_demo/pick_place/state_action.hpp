@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
+#include "panda_gazebo_demo/pick_place/world_observer.hpp"
 
 namespace panda_gazebo_demo::pick_place
 {
@@ -25,7 +26,9 @@ class IStatePlanner
 {
 public:
   virtual ~IStatePlanner() = default;
-  [[nodiscard]] virtual PlanResult plan(State state) = 0;
+  [[nodiscard]] virtual PlanResult plan(
+    State current_state, State next_state,
+    const ObservationResult & observation) = 0;
 };
 
 class IStateExecutor
