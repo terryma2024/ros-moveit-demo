@@ -11,3 +11,6 @@ __pycache__/
 *.py[cod]
 
 .cache/
+
+# Local Git worktrees
+.worktrees/
