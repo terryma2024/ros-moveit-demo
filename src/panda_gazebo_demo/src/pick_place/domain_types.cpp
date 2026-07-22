@@ -7,6 +7,7 @@ const char * toString(State state) noexcept
 {
   switch (state) {
     case State::IDLE: return "IDLE";
+    case State::PREPARE_OPEN_GRIPPER: return "PREPARE_OPEN_GRIPPER";
     case State::MOVE_ABOVE_OBJECT: return "MOVE_ABOVE_OBJECT";
     case State::DESCEND: return "DESCEND";
     case State::CLOSE_GRIPPER: return "CLOSE_GRIPPER";
@@ -56,7 +57,8 @@ const char * toString(RunMode mode) noexcept
 std::optional<State> stateFromString(std::string_view value)
 {
   constexpr State states[] = {
-    State::IDLE, State::MOVE_ABOVE_OBJECT, State::DESCEND, State::CLOSE_GRIPPER,
+    State::IDLE, State::PREPARE_OPEN_GRIPPER, State::MOVE_ABOVE_OBJECT, State::DESCEND,
+    State::CLOSE_GRIPPER,
     State::ATTACH_GAZEBO, State::ATTACH_MOVEIT, State::LIFT, State::MOVE_ABOVE_PLACE,
     State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, State::DETACH_GAZEBO,
     State::DETACH_MOVEIT, State::SYNC_WORLD_OBJECT, State::RETREAT,

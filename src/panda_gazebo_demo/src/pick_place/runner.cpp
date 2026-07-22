@@ -51,8 +51,11 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
       return runDryRun(request);
     case RunMode::PLAN_ONLY:
       return runPlanOnly(request);
-    case RunMode::EXECUTE:
-      return runExecuteMoveAboveObject(request);
+    case RunMode::EXECUTE: {
+        const TransitionTable transitions;
+        return runExecuteWorkflow(
+          transitions.resolve(State::IDLE, ActionStatus::SUCCEEDED), request, std::nullopt, 1, 1);
+      }
   }
   return error(State::IDLE, {FailureCategory::INTERNAL, "UNKNOWN_MODE", "Unknown run mode", {}});
 }
@@ -113,49 +116,85 @@ RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & reques
     transitions.resolve(state, ActionStatus::SUCCEEDED), std::nullopt, 0};
 }
 
-RunResult StateMachineRunner::runExecuteMoveAboveObject(const RunRequest & request) const
+RunResult StateMachineRunner::runExecuteWorkflow(
+  State initial_state, const RunRequest & request, std::optional<WorldSnapshot> initial_snapshot,
+  std::uint64_t checkpoint_sequence, std::uint64_t initial_transition_count) const
 {
-  constexpr State state_to_execute = State::MOVE_ABOVE_OBJECT;
-  constexpr State next_state = State::DESCEND;
-  if (request.stop_after != state_to_execute) {
-    return error(State::IDLE, {FailureCategory::CONFIGURATION, "EXECUTE_SCOPE_REJECTED",
-               "execute is currently allowed only with stop_after=MOVE_ABOVE_OBJECT", {}});
+  State state = initial_state;
+  std::uint64_t transition_count = initial_transition_count;
+  std::optional<Failure> workflow_failure;
+  while (!isTerminal(state) && transition_count < request.max_state_transitions) {
+    const auto step = runExecuteStep(state, initial_snapshot, checkpoint_sequence);
+    initial_snapshot.reset();
+    ++transition_count;
+    if (step.failure && !workflow_failure) {
+      workflow_failure = step.failure;
+    }
+    if (step.status == RunStatus::ERROR) {
+      auto failed = step;
+      failed.failure = workflow_failure;
+      failed.transition_count = transition_count;
+      return failed;
+    }
+    if (!step.next_state) {
+      return error(state, {FailureCategory::INTERNAL, "WORKFLOW_NEXT_STATE_MISSING",
+                 "Successful execute step did not provide its next state", {}}, transition_count);
+    }
+    if (step.status == RunStatus::CHECKPOINT_COMPLETE && request.stop_after == state) {
+      auto stopped = step;
+      stopped.transition_count = transition_count;
+      return stopped;
+    }
+    state = *step.next_state;
+    if (step.status == RunStatus::CHECKPOINT_COMPLETE) {
+      ++checkpoint_sequence;
+    }
   }
-  return runExecuteStep(state_to_execute, next_state, request);
+  if (!isTerminal(state)) {
+    return error(state, {FailureCategory::INTERNAL, "MAX_TRANSITIONS_EXCEEDED",
+               "State machine exceeded max_state_transitions", {}}, transition_count);
+  }
+  if (state == State::DONE) {
+    return {RunStatus::DONE, state, std::nullopt, std::nullopt, transition_count};
+  }
+  return {RunStatus::ERROR, State::ERROR, std::nullopt,
+    workflow_failure.value_or(Failure{FailureCategory::INTERNAL, "WORKFLOW_REACHED_ERROR",
+        "Workflow reached ERROR without a recorded failure", {}}), transition_count};
 }
 
 RunResult StateMachineRunner::runExecuteStep(
-  State state, State next_state, const RunRequest & request, std::optional<WorldSnapshot> before,
+  State state, std::optional<WorldSnapshot> before,
   std::uint64_t checkpoint_sequence) const
 {
-  if (request.stop_after != state) {
-    return error(state, {FailureCategory::CONFIGURATION, "EXECUTE_SCOPE_REJECTED",
-               std::string("execute requires stop_after=") + toString(state), {}});
-  }
+  const TransitionTable transitions;
+  const auto next_state = transitions.resolve(state, ActionStatus::SUCCEEDED);
   if (observer_ == nullptr || checkpoint_store_ == nullptr) {
-    return error(state, {FailureCategory::CONFIGURATION, "EXECUTE_INFRASTRUCTURE_MISSING",
+    return transitionFailure(state, {FailureCategory::CONFIGURATION,
+               "EXECUTE_INFRASTRUCTURE_MISSING",
                "execute requires a world observer and checkpoint store", {}});
   }
   if (common_resume_validator_ == nullptr) {
-    return error(state, {FailureCategory::CONFIGURATION, "COMMON_RESUME_VALIDATOR_MISSING",
+    return transitionFailure(state, {FailureCategory::CONFIGURATION,
+               "COMMON_RESUME_VALIDATOR_MISSING",
                "execute requires a CommonResumeValidator to bind checkpoints to configuration",
                {}});
   }
-  auto * planner = actions_.findPlanner(state);
   auto * executor = actions_.findExecutor(state);
-  if (planner == nullptr || executor == nullptr) {
-    return error(state, {FailureCategory::CONFIGURATION, "EXECUTE_ACTION_NOT_REGISTERED",
-               std::string("State requires both planner and executor: ") + toString(state), {}});
+  if (executor == nullptr) {
+    return transitionFailure(state, {FailureCategory::CONFIGURATION,
+               "EXECUTE_ACTION_NOT_REGISTERED",
+               std::string("State requires an executor: ") + toString(state), {}});
   }
   if (!contracts_.hasContract({state, next_state})) {
-    return error(state, {FailureCategory::CONFIGURATION, "MISSING_TRANSITION_CONTRACT",
+    return transitionFailure(state, {FailureCategory::CONFIGURATION,
+               "MISSING_TRANSITION_CONTRACT",
                std::string("Missing execute contract for ") + toString(state) + " -> " +
                toString(next_state), {}});
   }
   if (!before) {
     const auto observation = observer_->observe();
     if (!observation.snapshot) {
-      return error(state, observation.failure.value_or(Failure{
+      return transitionFailure(state, observation.failure.value_or(Failure{
           FailureCategory::OBSERVATION, "PRE_EXECUTION_OBSERVATION_FAILED",
           "Could not observe the world before execution", {}}));
     }
@@ -163,19 +202,23 @@ RunResult StateMachineRunner::runExecuteStep(
   }
   const auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
   if (!precondition.ok) {
-    return error(state, precondition.failures.front());
+    return transitionFailure(state, precondition.failures.front());
   }
-  const auto plan = planner->plan(state);
-  if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact ||
-    plan.artifact->trajectory_points == 0)
-  {
-    return error(state, plan.action.failure.value_or(Failure{
-        FailureCategory::PLAN_VALIDATION, "EMPTY_PLAN_ARTIFACT",
-        "Planner returned no usable trajectory", {}}));
+  std::shared_ptr<const PlanArtifact> plan_artifact;
+  if (auto * planner = actions_.findPlanner(state)) {
+    const auto plan = planner->plan(state);
+    if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact ||
+      plan.artifact->trajectory_points == 0)
+    {
+      return transitionFailure(state, plan.action.failure.value_or(Failure{
+          FailureCategory::PLAN_VALIDATION, "EMPTY_PLAN_ARTIFACT",
+          "Planner returned no usable trajectory", {}}));
+    }
+    plan_artifact = plan.artifact;
   }
-  const auto action = executor->execute(state, plan.artifact);
+  const auto action = executor->execute(state, plan_artifact);
   if (action.status != ActionStatus::SUCCEEDED) {
-    return error(state, stopAndObserveAfterFailure(state, *executor,
+    return transitionFailure(state, stopAndObserveAfterFailure(state, *executor,
       action.failure.value_or(Failure{
         FailureCategory::EXECUTION, "EXECUTION_FAILED", "Trajectory execution failed", {}}))
              .value_or(Failure{FailureCategory::EXECUTION, "EXECUTION_FAILED",
@@ -188,12 +231,12 @@ RunResult StateMachineRunner::runExecuteStep(
         "Could not observe the world after execution", {}});
     const auto stopped_failure = stopAndObserveAfterFailure(
       state, *executor, observation_failure);
-    return error(state, stopped_failure.value_or(observation_failure));
+    return transitionFailure(state, stopped_failure.value_or(observation_failure));
   }
   const auto validation = contracts_.validate({state, next_state}, *before, *after.snapshot,
       action);
   if (!validation.ok) {
-    return error(state, stopAndObserveAfterFailure(
+    return transitionFailure(state, stopAndObserveAfterFailure(
       state, *executor, validation.failures.front()).value_or(validation.failures.front()));
   }
   Checkpoint checkpoint;
@@ -236,12 +279,14 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
         FailureCategory::CHECKPOINT, "CHECKPOINT_LOAD_FAILED", "Unable to load checkpoint", {}}));
   }
   const auto & checkpoint = *loaded.checkpoint;
+  const TransitionTable transitions;
   if (checkpoint.schema_version != 2 || checkpoint.source_mode != RunMode::EXECUTE ||
-    !checkpoint.resumable || checkpoint.last_completed_state != State::MOVE_ABOVE_OBJECT ||
-    checkpoint.next_state != State::DESCEND)
+    !checkpoint.resumable || isTerminal(checkpoint.last_completed_state) ||
+    transitions.resolve(checkpoint.last_completed_state, ActionStatus::SUCCEEDED) !=
+    checkpoint.next_state)
   {
     return error(State::IDLE, {FailureCategory::RESUME_VALIDATION, "CHECKPOINT_INCOMPATIBLE",
-               "Checkpoint is not a resumable MOVE_ABOVE_OBJECT -> DESCEND checkpoint", {}});
+               "Checkpoint does not describe a valid successful workflow transition", {}});
   }
   const auto observation = observer_->observe();
   if (!observation.snapshot) {
@@ -273,18 +318,24 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
   if (request.mode == RunMode::PLAN_ONLY) {
     return runPlanOnly(checkpoint.next_state, request);
   }
-  if (request.stop_after != checkpoint.next_state) {
-    return error(checkpoint.next_state,
-             {FailureCategory::CONFIGURATION, "RESUME_EXECUTE_SCOPE_REJECTED",
-               "resume execute requires stop_after=DESCEND", {}});
+  return runExecuteWorkflow(
+    checkpoint.next_state, request, snapshot, checkpoint.sequence + 1);
+}
+
+RunResult StateMachineRunner::transitionFailure(State state, Failure failure) const
+{
+  const TransitionTable transitions;
+  const auto next_state = transitions.resolve(state, ActionStatus::FAILED);
+  if (next_state == State::ERROR) {
+    return error(state, std::move(failure));
   }
-  return runExecuteStep(
-    checkpoint.next_state, State::CLOSE_GRIPPER, request, snapshot, checkpoint.sequence + 1);
+  return {RunStatus::RUNNING, state, next_state, std::move(failure), 1};
 }
 
 RunResult StateMachineRunner::error(State state, Failure failure, std::uint64_t transition_count)
 {
-  return {RunStatus::ERROR, state, std::nullopt, std::move(failure), transition_count};
+  static_cast<void>(state);
+  return {RunStatus::ERROR, State::ERROR, std::nullopt, std::move(failure), transition_count};
 }
 
 std::optional<Failure> StateMachineRunner::stopAndObserveAfterFailure(

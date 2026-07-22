@@ -25,7 +25,8 @@ using MoveGroupInterface = moveit::planning_interface::MoveGroupInterface;
 class MoveItPlanArtifact final : public PlanArtifact
 {
 public:
-  explicit MoveItPlanArtifact(MoveGroupInterface::Plan moveit_plan) : plan(std::move(moveit_plan))
+  explicit MoveItPlanArtifact(MoveGroupInterface::Plan moveit_plan)
+  : plan(std::move(moveit_plan))
   {
     trajectory_points = plan.trajectory.joint_trajectory.points.size();
   }
@@ -36,27 +37,27 @@ public:
 PlanResult planningFailure(FailureCategory category, std::string code, std::string message)
 {
   return {{ActionStatus::FAILED, Failure{category, std::move(code), std::move(message), {}}},
-          nullptr};
+    nullptr};
 }
 
 ActionResult executionFailure(std::string code, std::string message)
 {
   return {ActionStatus::FAILED,
-          Failure{FailureCategory::EXECUTION, std::move(code), std::move(message), {}}};
+    Failure{FailureCategory::EXECUTION, std::move(code), std::move(message), {}}};
 }
 
 Pose3d toPose3d(const geometry_msgs::msg::Pose & pose)
 {
-  return {pose.position.x,    pose.position.y,    pose.position.z,   pose.orientation.x,
-          pose.orientation.y, pose.orientation.z, pose.orientation.w};
+  return {pose.position.x, pose.position.y, pose.position.z, pose.orientation.x,
+    pose.orientation.y, pose.orientation.z, pose.orientation.w};
 }
 
 Pose3d toPose3d(const Eigen::Isometry3d & transform)
 {
   const Eigen::Quaterniond orientation(transform.rotation());
   const auto & position = transform.translation();
-  return {position.x(),    position.y(),    position.z(),   orientation.x(),
-          orientation.y(), orientation.z(), orientation.w()};
+  return {position.x(), position.y(), position.z(), orientation.x(),
+    orientation.y(), orientation.z(), orientation.w()};
 }
 
 void logTcpPose(const rclcpp::Logger & logger, const char * label, const Pose3d & pose)
@@ -67,9 +68,10 @@ void logTcpPose(const rclcpp::Logger & logger, const char * label, const Pose3d 
               pose.y, pose.z, rpy.x(), rpy.y(), rpy.z());
 }
 
-std::optional<Pose3d> plannedEndTcpPose(const MoveGroupInterface & move_group,
-                                        const MoveGroupInterface::Plan & plan,
-                                        const std::string & tcp_link)
+std::optional<Pose3d> plannedEndTcpPose(
+  const MoveGroupInterface & move_group,
+  const MoveGroupInterface::Plan & plan,
+  const std::string & tcp_link)
 {
   const auto robot_model = move_group.getRobotModel();
   const auto & trajectory = plan.trajectory.joint_trajectory;
@@ -106,15 +108,16 @@ public:
   std::unique_ptr<MoveGroupInterface> move_group;
 };
 
-MoveAboveObjectPlanner::MoveAboveObjectPlanner(std::shared_ptr<rclcpp::Node> node,
-                                               std::string planning_group, std::string tcp_link,
-                                               std::vector<std::string> required_world_objects,
-                                               double velocity_scaling,
-                                               double acceleration_scaling) :
-    node_(std::move(node)), planning_group_(std::move(planning_group)),
-    tcp_link_(std::move(tcp_link)), required_world_objects_(std::move(required_world_objects)),
-    velocity_scaling_(velocity_scaling), acceleration_scaling_(acceleration_scaling),
-    impl_(std::make_unique<Impl>())
+MoveAboveObjectPlanner::MoveAboveObjectPlanner(
+  std::shared_ptr<rclcpp::Node> node,
+  std::string planning_group, std::string tcp_link,
+  std::vector<std::string> required_world_objects,
+  double velocity_scaling,
+  double acceleration_scaling)
+:node_(std::move(node)), planning_group_(std::move(planning_group)),
+  tcp_link_(std::move(tcp_link)), required_world_objects_(std::move(required_world_objects)),
+  velocity_scaling_(velocity_scaling), acceleration_scaling_(acceleration_scaling),
+  impl_(std::make_unique<Impl>())
 {
 }
 
@@ -173,7 +176,7 @@ PlanResult MoveAboveObjectPlanner::plan(State state)
   RCLCPP_INFO(node_->get_logger(), "%s plan succeeded: %zu trajectory points", toString(state),
               point_count);
   return {{ActionStatus::SUCCEEDED, std::nullopt},
-          std::make_shared<MoveItPlanArtifact>(std::move(moveit_plan))};
+    std::make_shared<MoveItPlanArtifact>(std::move(moveit_plan))};
 }
 
 ActionResult MoveAboveObjectPlanner::execute(State state, std::shared_ptr<const PlanArtifact> plan)
@@ -213,22 +216,22 @@ ObservationResult MoveAboveObjectPlanner::observe()
   auto & move_group = *impl_->move_group;
   if (!move_group.startStateMonitor(2.0)) {
     return {std::nullopt, Failure{FailureCategory::OBSERVATION,
-                                  "STATE_MONITOR_UNAVAILABLE",
-                                  "Failed to start MoveIt current-state monitor",
-                                  {}}};
+        "STATE_MONITOR_UNAVAILABLE",
+        "Failed to start MoveIt current-state monitor",
+        {}}};
   }
   if (!move_group.setEndEffectorLink(tcp_link_)) {
     return {std::nullopt, Failure{FailureCategory::CONFIGURATION,
-                                  "INVALID_TCP_LINK",
-                                  "MoveIt RobotModel does not accept " + tcp_link_,
-                                  {}}};
+        "INVALID_TCP_LINK",
+        "MoveIt RobotModel does not accept " + tcp_link_,
+        {}}};
   }
   const auto state = move_group.getCurrentState(2.0);
   if (!state) {
     return {std::nullopt, Failure{FailureCategory::OBSERVATION,
-                                  "CURRENT_STATE_UNAVAILABLE",
-                                  "MoveIt did not provide a current robot state",
-                                  {}}};
+        "CURRENT_STATE_UNAVAILABLE",
+        "MoveIt did not provide a current robot state",
+        {}}};
   }
   WorldSnapshot snapshot;
   snapshot.observed_at = std::chrono::steady_clock::now();

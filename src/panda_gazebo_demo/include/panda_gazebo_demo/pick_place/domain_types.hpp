@@ -12,6 +12,7 @@ namespace panda_gazebo_demo::pick_place
 enum class State
 {
   IDLE,
+  PREPARE_OPEN_GRIPPER,
   MOVE_ABOVE_OBJECT,
   DESCEND,
   CLOSE_GRIPPER,

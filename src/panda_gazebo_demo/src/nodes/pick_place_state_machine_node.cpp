@@ -15,6 +15,7 @@
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
 #include "panda_gazebo_demo/pick_place/move_above_object_planner.hpp"
+#include "panda_gazebo_demo/pick_place/open_gripper_executor.hpp"
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 
@@ -91,7 +92,9 @@ std::string configurationHash(
   double tcp_orientation_tolerance_rad, double coke_position_tolerance,
   double coke_orientation_tolerance_rad, const std::string & gazebo_world_name,
   const std::string & gazebo_coke_model, const std::string & gazebo_attachment_topic,
-  double gazebo_observation_max_age_seconds, bool gazebo_coke_initially_detached)
+  double gazebo_observation_max_age_seconds, bool gazebo_coke_initially_detached,
+  const std::string & gripper_action_name, double gripper_open_position,
+  double gripper_max_effort, double gripper_action_timeout_seconds)
 {
   std::ostringstream input;
   input << planning_group << '\n' << tcp_link << '\n' << velocity_scaling << '\n' <<
@@ -99,7 +102,8 @@ std::string configurationHash(
     tcp_orientation_tolerance_rad << '\n' << coke_position_tolerance << '\n' <<
     coke_orientation_tolerance_rad << '\n' << gazebo_world_name << '\n' << gazebo_coke_model <<
     '\n' << gazebo_attachment_topic << '\n' << gazebo_observation_max_age_seconds << '\n' <<
-    gazebo_coke_initially_detached;
+    gazebo_coke_initially_detached << '\n' << gripper_action_name << '\n' <<
+    gripper_open_position << '\n' << gripper_max_effort << '\n' << gripper_action_timeout_seconds;
   for (const auto & object : required_objects) {
     input << '\n' << object;
   }
@@ -144,6 +148,11 @@ int main(int argc, char * argv[])
 
   const auto max_transitions = parameterOrDeclare<std::int64_t>(node, "max_state_transitions", 100);
   const auto resume = parameterOrDeclare(node, "resume", false);
+  if (resume && *mode == pick_place::RunMode::DRY_RUN) {
+    RCLCPP_ERROR(logger, "resume is supported only in plan_only and execute modes");
+    rclcpp::shutdown();
+    return EXIT_FAILURE;
+  }
   const auto planning_group = parameterOrDeclare(node, "planning_group", std::string("panda_arm"));
   const auto tcp_link = parameterOrDeclare(node, "tcp_link", std::string("panda_tcp"));
   const auto required_objects = parameterOrDeclare(node, "required_world_objects",
@@ -169,11 +178,19 @@ int main(int argc, char * argv[])
     node, "gazebo_coke_initially_detached", true);
   const auto simulation_session_id = parameterOrDeclare(node, "simulation_session_id",
     std::string(""));
+  const auto gripper_action_name = parameterOrDeclare(node, "gripper_action_name",
+    std::string("/panda_hand_controller/gripper_cmd"));
+  const auto gripper_open_position = parameterOrDeclare(node, "gripper_open_position", 0.04);
+  const auto gripper_max_effort = parameterOrDeclare(node, "gripper_max_effort", 0.0);
+  const auto gripper_action_timeout_seconds = parameterOrDeclare(
+    node, "gripper_action_timeout_seconds", 5.0);
   if (max_transitions <= 0 || velocity_scaling <= 0.0 || velocity_scaling > 1.0 ||
     acceleration_scaling <= 0.0 || acceleration_scaling > 1.0 ||
     tcp_position_tolerance <= 0.0 || tcp_orientation_tolerance_rad <= 0.0 ||
     coke_position_tolerance <= 0.0 || coke_orientation_tolerance_rad <= 0.0 ||
-    gazebo_observation_max_age_seconds <= 0.0)
+    gazebo_observation_max_age_seconds <= 0.0 || gripper_action_name.empty() ||
+    gripper_open_position <= 0.0 || gripper_max_effort < 0.0 ||
+    gripper_action_timeout_seconds <= 0.0)
   {
     RCLCPP_ERROR(logger,
       "transition count and tolerances must be positive; scaling factors must be in (0, 1]");
@@ -184,6 +201,7 @@ int main(int argc, char * argv[])
   pick_place::StateActionRegistry actions;
   pick_place::TransitionContractRegistry contracts;
   std::shared_ptr<pick_place::MoveAboveObjectPlanner> move_above_action;
+  std::shared_ptr<pick_place::OpenGripperExecutor> open_gripper_action;
   std::unique_ptr<pick_place::FileCheckpointStore> checkpoint_store;
   std::unique_ptr<pick_place::GazeboWorldObserver> world_observer;
   std::unique_ptr<pick_place::CommonResumeValidator> common_resume_validator;
@@ -192,8 +210,19 @@ int main(int argc, char * argv[])
       node, planning_group, tcp_link, required_objects, velocity_scaling, acceleration_scaling);
     actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
   }
-  if (*mode == pick_place::RunMode::EXECUTE || resume) {
+  if (*mode == pick_place::RunMode::EXECUTE) {
+    open_gripper_action = std::make_shared<pick_place::OpenGripperExecutor>(
+      node, gripper_action_name, gripper_open_position, gripper_max_effort,
+      gripper_action_timeout_seconds);
+    actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER, open_gripper_action);
     actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, move_above_action);
+  }
+  if (*mode == pick_place::RunMode::EXECUTE || resume) {
+    contracts.registerContract(
+      {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::State::MOVE_ABOVE_OBJECT},
+      std::make_shared<pick_place::PrepareOpenGripperToMoveAboveObjectValidator>(
+        required_objects, tcp_position_tolerance, tcp_orientation_tolerance_rad,
+        coke_position_tolerance, coke_orientation_tolerance_rad));
     contracts.registerContract(
       {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
       std::make_shared<pick_place::MoveAboveObjectToDescendValidator>(
@@ -223,7 +252,8 @@ int main(int argc, char * argv[])
         acceleration_scaling, tcp_position_tolerance, tcp_orientation_tolerance_rad,
         coke_position_tolerance, coke_orientation_tolerance_rad, gazebo_world_name,
         gazebo_coke_model, gazebo_attachment_topic, gazebo_observation_max_age_seconds,
-        gazebo_coke_initially_detached),
+        gazebo_coke_initially_detached, gripper_action_name, gripper_open_position,
+        gripper_max_effort, gripper_action_timeout_seconds),
       simulation_session_id);
   }
 
