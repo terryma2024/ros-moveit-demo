@@ -49,6 +49,41 @@ Failure checkpointFailure(std::string code, std::string message)
   return {FailureCategory::CHECKPOINT, std::move(code), std::move(message), {}};
 }
 
+const char * checkpointPhaseToString(CheckpointPhase phase) noexcept
+{
+  switch (phase) {
+    case CheckpointPhase::FORWARD: return "FORWARD";
+    case CheckpointPhase::RECOVERY: return "RECOVERY";
+  }
+  return "UNKNOWN";
+}
+
+std::optional<CheckpointPhase> checkpointPhaseFromString(const std::string & value)
+{
+  if (value == "FORWARD") {return CheckpointPhase::FORWARD;}
+  if (value == "RECOVERY") {return CheckpointPhase::RECOVERY;}
+  return std::nullopt;
+}
+
+Json failureToJson(const Failure & failure)
+{
+  return {{"category", static_cast<int>(failure.category)}, {"code", failure.code},
+    {"message", failure.message}, {"metrics", failure.metrics}};
+}
+
+Failure failureFromJson(const Json & json)
+{
+  const auto category = json.at("category").get<int>();
+  if (category < static_cast<int>(FailureCategory::CONFIGURATION) ||
+    category > static_cast<int>(FailureCategory::INTERNAL))
+  {
+    throw std::out_of_range("failure category is outside the supported range");
+  }
+  return {static_cast<FailureCategory>(category), json.at("code").get<std::string>(),
+    json.at("message").get<std::string>(),
+    json.at("metrics").get<std::map<std::string, double>>()};
+}
+
 }  // namespace
 
 FileCheckpointStore::FileCheckpointStore(std::filesystem::path path)
@@ -58,6 +93,10 @@ FileCheckpointStore::FileCheckpointStore(std::filesystem::path path)
 
 std::optional<Failure> FileCheckpointStore::commit(const Checkpoint & checkpoint)
 {
+  if (checkpoint.schema_version != 3) {
+    return checkpointFailure("CHECKPOINT_INCOMPATIBLE",
+      "Only checkpoint schema version 3 can be committed");
+  }
   std::error_code error;
   if (!path_.parent_path().empty()) {
     std::filesystem::create_directories(path_.parent_path(), error);
@@ -68,7 +107,12 @@ std::optional<Failure> FileCheckpointStore::commit(const Checkpoint & checkpoint
   }
   const Json json{{"schema_version", checkpoint.schema_version}, {"run_id", checkpoint.run_id},
     {"sequence", checkpoint.sequence}, {"source_mode", toString(checkpoint.source_mode)},
+    {"phase", checkpointPhaseToString(checkpoint.phase)},
     {"last_completed_state", toString(checkpoint.last_completed_state)},
+    {"failed_state", checkpoint.failed_state ? Json(toString(*checkpoint.failed_state)) :
+      Json(nullptr)},
+    {"original_failure", checkpoint.original_failure ?
+      failureToJson(*checkpoint.original_failure) : Json(nullptr)},
     {"next_state", toString(checkpoint.next_state)},
     {"configuration_hash", checkpoint.configuration_hash},
     {"simulation_session_id", checkpoint.simulation_session_id},
@@ -116,20 +160,37 @@ CheckpointLoadResult FileCheckpointStore::loadLatestCompatible()
   try {
     Json json;
     input >> json;
+    const auto schema_version = json.at("schema_version").get<std::uint32_t>();
+    if (schema_version != 3) {
+      return {std::nullopt, checkpointFailure("CHECKPOINT_INCOMPATIBLE",
+        "Only checkpoint schema version 3 is supported")};
+    }
     const auto source_mode = runModeFromString(json.at("source_mode").get<std::string>());
+    const auto phase = checkpointPhaseFromString(json.at("phase").get<std::string>());
     const auto last_completed = stateFromString(json.at("last_completed_state").get<std::string>());
     const auto next_state = stateFromString(json.at("next_state").get<std::string>());
-    if (!source_mode || !last_completed || !next_state) {
+    if (!source_mode || !phase || !last_completed || !next_state) {
       return {std::nullopt, checkpointFailure("CHECKPOINT_INVALID_ENUM",
-        "Checkpoint contains an unsupported mode or state")};
+        "Checkpoint contains an unsupported mode, phase, or state")};
     }
     const auto & expected = json.at("expected");
     Checkpoint checkpoint;
-    checkpoint.schema_version = json.at("schema_version").get<std::uint32_t>();
+    checkpoint.schema_version = schema_version;
     checkpoint.run_id = json.at("run_id").get<std::string>();
     checkpoint.sequence = json.at("sequence").get<std::uint64_t>();
     checkpoint.source_mode = *source_mode;
+    checkpoint.phase = *phase;
     checkpoint.last_completed_state = *last_completed;
+    if (!json.at("failed_state").is_null()) {
+      checkpoint.failed_state = stateFromString(json.at("failed_state").get<std::string>());
+      if (!checkpoint.failed_state) {
+        return {std::nullopt, checkpointFailure("CHECKPOINT_INVALID_ENUM",
+          "Checkpoint contains an unsupported failed state")};
+      }
+    }
+    if (!json.at("original_failure").is_null()) {
+      checkpoint.original_failure = failureFromJson(json.at("original_failure"));
+    }
     checkpoint.next_state = *next_state;
     checkpoint.resumable = json.at("resumable").get<bool>();
     checkpoint.configuration_hash = json.at("configuration_hash").get<std::string>();

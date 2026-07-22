@@ -12,6 +12,12 @@
 namespace panda_gazebo_demo::pick_place
 {
 
+enum class CheckpointPhase
+{
+  FORWARD,
+  RECOVERY,
+};
+
 struct ExpectedWorldState
 {
   Pose3d tcp_pose_world{};
@@ -26,11 +32,14 @@ struct ExpectedWorldState
 
 struct Checkpoint
 {
-  std::uint32_t schema_version{2};
+  std::uint32_t schema_version{3};
   std::string run_id;
   std::uint64_t sequence{0};
   RunMode source_mode{RunMode::EXECUTE};
+  CheckpointPhase phase{CheckpointPhase::FORWARD};
   State last_completed_state{State::IDLE};
+  std::optional<State> failed_state;
+  std::optional<Failure> original_failure;
   State next_state{State::IDLE};
   ExpectedWorldState expected;
   std::string configuration_hash;
