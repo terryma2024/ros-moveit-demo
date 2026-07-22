@@ -1,4 +1,5 @@
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
+#include "panda_gazebo_demo/pick_place/state_validation.hpp"
 
 #include <chrono>
 #include <mutex>
@@ -50,8 +51,10 @@ public:
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto & pose : message.pose()) {
       if (pose.name() == coke_model_ || pose.name().find("::" + coke_model_) != std::string::npos) {
+        const auto observed_at = std::chrono::steady_clock::now();
         coke_pose_ = toPose3d(pose);
-        coke_pose_received_at_ = std::chrono::steady_clock::now();
+        coke_pose_received_at_ = observed_at;
+        coke_pose_stability_.addSample(*coke_pose_, observed_at);
         return;
       }
     }
@@ -79,6 +82,7 @@ public:
     // is authoritative until Gazebo publishes the first attach/detach event.
     snapshot.gazebo_coke_pose_world = coke_pose_;
     snapshot.gazebo_coke_attached = coke_attached_;
+    snapshot.gazebo_coke_stationary = coke_pose_stability_.stationary();
     snapshot.simulation_session_id = simulation_session_id_;
     return {snapshot, std::nullopt};
   }
@@ -93,6 +97,7 @@ private:
   mutable std::mutex mutex_;
   std::optional<Pose3d> coke_pose_;
   std::optional<bool> coke_attached_;
+  CokePoseStabilityTracker coke_pose_stability_;
   std::chrono::steady_clock::time_point coke_pose_received_at_{};
 };
 

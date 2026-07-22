@@ -47,6 +47,7 @@ add_library(
   src/pick_place/domain_types.cpp
   src/pick_place/plan_validation.cpp
   src/pick_place/recovery_policy.cpp
+  src/pick_place/state_validation.cpp
   src/pick_place/state_action.cpp
   src/pick_place/transition_contract.cpp
   src/pick_place/transition_table.cpp
@@ -168,6 +169,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_checkpoint_v3 test/pick_place/test_checkpoint_v3.cpp)
   if(TARGET test_checkpoint_v3)
     target_link_libraries(test_checkpoint_v3 pick_place_core pick_place_ros_adapters)
+  endif()
+
+  ament_add_gtest(test_state_validation test/pick_place/test_state_validation.cpp)
+  if(TARGET test_state_validation)
+    target_link_libraries(test_state_validation pick_place_core)
   endif()
 
   add_test(

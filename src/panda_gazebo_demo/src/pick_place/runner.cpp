@@ -28,6 +28,7 @@ WorldSnapshot snapshotFromExpected(
   snapshot.moveit_coke_attached = expected.moveit_coke_attached;
   snapshot.gazebo_coke_pose_world = expected.gazebo_coke_pose_world;
   snapshot.gazebo_coke_attached = expected.gazebo_coke_attached;
+  snapshot.gazebo_coke_stationary = expected.gazebo_coke_stationary;
   snapshot.simulation_session_id = simulation_session_id;
   return snapshot;
 }
@@ -41,6 +42,7 @@ void setExpectedWorldState(Checkpoint & checkpoint, const WorldSnapshot & snapsh
   checkpoint.expected.moveit_coke_attached = snapshot.moveit_coke_attached;
   checkpoint.expected.gazebo_coke_pose_world = snapshot.gazebo_coke_pose_world;
   checkpoint.expected.gazebo_coke_attached = snapshot.gazebo_coke_attached;
+  checkpoint.expected.gazebo_coke_stationary = snapshot.gazebo_coke_stationary;
   for (const auto & [object_id, pose] : snapshot.moveit_world_object_poses) {
     static_cast<void>(pose);
     checkpoint.expected.required_world_objects.push_back(object_id);

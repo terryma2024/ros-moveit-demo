@@ -127,6 +127,8 @@ std::optional<Failure> FileCheckpointStore::commit(const Checkpoint & checkpoint
           poseToJson(*checkpoint.expected.gazebo_coke_pose_world) : Json(nullptr)},
         {"gazebo_coke_attached", checkpoint.expected.gazebo_coke_attached ?
           Json(*checkpoint.expected.gazebo_coke_attached) : Json(nullptr)},
+        {"gazebo_coke_stationary", checkpoint.expected.gazebo_coke_stationary ?
+          Json(*checkpoint.expected.gazebo_coke_stationary) : Json(nullptr)},
         {"required_world_objects", checkpoint.expected.required_world_objects}}}};
   const auto temporary_path = path_.string() + ".tmp";
   {
@@ -210,6 +212,10 @@ CheckpointLoadResult FileCheckpointStore::loadLatestCompatible()
     }
     if (!expected.at("gazebo_coke_attached").is_null()) {
       checkpoint.expected.gazebo_coke_attached = expected.at("gazebo_coke_attached").get<bool>();
+    }
+    if (!expected.at("gazebo_coke_stationary").is_null()) {
+      checkpoint.expected.gazebo_coke_stationary =
+        expected.at("gazebo_coke_stationary").get<bool>();
     }
     checkpoint.expected.required_world_objects =
       expected.at("required_world_objects").get<std::vector<std::string>>();
