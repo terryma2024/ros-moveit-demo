@@ -11,6 +11,8 @@
 #include <gz/msgs/stringmsg.pb.h>
 #include <gz/transport/Node.hh>
 
+#include "panda_gazebo_demo/pick_place/state_validation.hpp"
+
 namespace panda_gazebo_demo::pick_place
 {
 
@@ -29,6 +31,16 @@ bool supportedState(State state) noexcept
 {
   return state == State::ATTACH_GAZEBO || state == State::DETACH_GAZEBO ||
          state == State::RECOVER_DETACH_GAZEBO;
+}
+
+bool detachedPostconditionSatisfied(const WorldSnapshot & snapshot)
+{
+  return snapshot.fresh && snapshot.arm_stationary &&
+         snapshot.gazebo_coke_attached && !*snapshot.gazebo_coke_attached &&
+         snapshot.moveit_coke_attached.has_value() &&
+         snapshot.gazebo_coke_pose_world.has_value() &&
+         snapshot.gazebo_coke_stationary && *snapshot.gazebo_coke_stationary &&
+         validateGripperOpen(snapshot, {}).ok;
 }
 
 }  // namespace
@@ -94,8 +106,8 @@ ActionResult GazeboAttachmentExecutor::execute(const ExecutionContext & context)
       std::string("Gazebo attachment executor configured for ") + toString(allowed_state_) +
       " cannot execute " + toString(context.state));
   }
-  if (idempotent_ && context.before.gazebo_coke_attached &&
-    *context.before.gazebo_coke_attached == desired_attached_)
+  if (idempotent_ && !desired_attached_ &&
+    detachedPostconditionSatisfied(context.before))
   {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }

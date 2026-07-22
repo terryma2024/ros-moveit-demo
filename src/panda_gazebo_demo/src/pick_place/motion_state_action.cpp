@@ -4,6 +4,8 @@
 #include <string>
 #include <utility>
 
+#include "panda_gazebo_demo/pick_place/state_validation.hpp"
+
 namespace panda_gazebo_demo::pick_place
 {
 namespace
@@ -20,6 +22,46 @@ ActionResult executionFailure(std::string code, std::string message)
 {
   return {ActionStatus::FAILED, Failure{FailureCategory::EXECUTION,
       std::move(code), std::move(message), {}}};
+}
+
+bool recoveryRetreatPostconditionSatisfied(
+  const WorldSnapshot & snapshot, const Pose3d & target)
+{
+  if (!snapshot.fresh || !snapshot.arm_stationary ||
+    !snapshot.gazebo_coke_attached || *snapshot.gazebo_coke_attached ||
+    !snapshot.moveit_coke_attached || *snapshot.moveit_coke_attached ||
+    !snapshot.gazebo_coke_pose_world || !snapshot.gazebo_coke_stationary ||
+    !*snapshot.gazebo_coke_stationary ||
+    snapshot.moveit_world_object_poses.count("table") == 0 ||
+    snapshot.moveit_world_object_poses.count("coke") == 0 ||
+    !validateGripperOpen(snapshot, {}).ok)
+  {
+    return false;
+  }
+  const auto & moveit_coke = snapshot.moveit_world_object_poses.at("coke");
+  return positionDistance(snapshot.tcp_pose_world, target) <= 0.005 &&
+         orientationDistance(snapshot.tcp_pose_world, target) <= 0.035 &&
+         positionDistance(*snapshot.gazebo_coke_pose_world, moveit_coke) <= 0.003 &&
+         orientationDistance(*snapshot.gazebo_coke_pose_world, moveit_coke) <= 0.035;
+}
+
+PlanResult noOpPlan(
+  const MotionStateConfig & config, const Pose3d & current_pose)
+{
+  auto evidence = std::make_shared<MotionPlanEvidence>();
+  evidence->state = config.state;
+  evidence->next_state = config.next_state;
+  evidence->kind = config.kind;
+  evidence->carrying = config.carrying;
+  evidence->cartesian_fraction = 1.0;
+  evidence->duration_seconds = 1.0e-6;
+  evidence->start_tcp_pose = current_pose;
+  evidence->end_tcp_pose = current_pose;
+  evidence->tcp_path = {current_pose};
+  evidence->trajectory_points = 1;
+  evidence->collision_aware = true;
+  evidence->no_op = true;
+  return {{ActionStatus::SUCCEEDED, std::nullopt}, std::move(evidence)};
 }
 
 }  // namespace
@@ -62,6 +104,12 @@ PlanResult MotionStateAction::plan(
           "TARGET_POLICY_FAILED", "Target policy did not return a motion target", {}});
     return {{ActionStatus::FAILED, failure}, nullptr};
   }
+  if (config_.no_op_if_postcondition_satisfied &&
+    config_.state == State::RECOVER_RETREAT &&
+    recoveryRetreatPostconditionSatisfied(*observation.snapshot, *target.target_pose))
+  {
+    return noOpPlan(config_, observation.snapshot->tcp_pose_world);
+  }
   return adapter_->plan(
     {current_state, next_state, config_.kind, config_.carrying, *target.target_pose},
     observation);
@@ -84,6 +132,16 @@ ActionResult MotionStateAction::execute(const ExecutionContext & context)
   {
     return executionFailure("INVALID_MOTION_PLAN_ARTIFACT",
       "Motion execution requires typed evidence for its configured transition");
+  }
+  if (evidence->no_op) {
+    if (!config_.no_op_if_postcondition_satisfied ||
+      config_.state != State::RECOVER_RETREAT ||
+      !recoveryRetreatPostconditionSatisfied(context.before, evidence->end_tcp_pose))
+    {
+      return executionFailure("INVALID_MOTION_NO_OP_EVIDENCE",
+        "Recovery motion no-op is allowed only when its complete postcondition holds");
+    }
+    return {ActionStatus::SUCCEEDED, std::nullopt};
   }
   return adapter_->execute(*evidence);
 }

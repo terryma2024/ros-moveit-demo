@@ -45,6 +45,12 @@ pick_place::ExecutionContext contextFor(
 pick_place::WorldSnapshot safelyOpenSnapshot()
 {
   pick_place::WorldSnapshot snapshot;
+  snapshot.fresh = true;
+  snapshot.arm_stationary = true;
+  snapshot.gazebo_coke_pose_world = pick_place::Pose3d{};
+  snapshot.gazebo_coke_attached = false;
+  snapshot.moveit_coke_attached = false;
+  snapshot.gazebo_coke_stationary = true;
   snapshot.joint_positions = {{"panda_finger_joint1", 0.04},
     {"panda_finger_joint2", 0.04}};
   snapshot.joint_velocities = {{"panda_finger_joint1", 0.0},
