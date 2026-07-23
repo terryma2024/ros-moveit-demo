@@ -4,7 +4,10 @@
 
 **Goal:** Replace every active caller of deleted `planning_scene_setup` with the established MoveIt/world-reset flow.
 
-**Architecture:** Launch initializes only the MoveIt scene with the installed `reset_moveit_world` node after `move_group`. The three headless harnesses already call `reset_world.sh`; they retain the independent Planning Scene assertion and remove their obsolete second setup action.
+**Architecture:** Launch initializes the complete required MoveIt scene (`table` plus detached Coke)
+with the installed `reset_moveit_world` node after `move_group`. The three headless harnesses
+already call `reset_world.sh`; they retain the independent Planning Scene assertion and remove
+their obsolete second setup action.
 
 **Tech Stack:** ROS 2 launch Python, Bash, CMake/CTest, `reset_moveit_world`, `reset_world.sh`.
 
@@ -181,7 +184,67 @@ git add src/panda_gazebo_demo/launch/panda_gazebo.launch.py \
 git commit -m "fix: migrate callers to world reset flow"
 ```
 
-### Task 3: Preserve and inspect real reset evidence
+### Task 3: Complete the MoveIt reset setup contract
+
+**Why this task was added:** The first real E2E attempt reached the state machine and failed
+fail-closed with `REQUIRED_WORLD_OBJECT_MISSING: table`. The deleted executable had created both
+the table and Coke, while the original resetter only restored Coke. The resetter must therefore
+own both required MoveIt world objects before callers can be migrated.
+
+**Files:**
+
+- Modify: `src/panda_gazebo_demo/include/panda_gazebo_demo/pick_place/moveit_scene_adapter.hpp`
+- Modify: `src/panda_gazebo_demo/src/pick_place/moveit_scene_adapter.cpp`
+- Modify: `src/panda_gazebo_demo/src/pick_place/moveit_world_resetter.cpp`
+- Modify: `src/panda_gazebo_demo/test/pick_place/test_moveit_world_resetter.cpp`
+- Modify: `src/panda_gazebo_demo/test/headless/assert_reset_moveit_scene.py`
+- Modify: every test fake implementing `IMoveItSceneAdapter`
+
+- [ ] **Step 1: Write a failing resetter unit test**
+
+Extend the fake scene state with table presence, add a table-upsert fake method, and add a test
+that requires reset to upsert the canonical table before Coke and to reject a final scene that lacks
+the table. The canonical table is a `1.2 × 0.8 × 0.05 m` `world` box at
+`(0.0, 0.0, 0.75, 0.0, 0.0, 0.0, 1.0)`.
+
+- [ ] **Step 2: Verify RED**
+
+Build and run only `test_moveit_world_resetter`; the new test must fail because the adapter and
+resetter do not yet supply or verify table state.
+
+- [ ] **Step 3: Implement the smallest complete scene reset**
+
+Add table upsert and observation to `IMoveItSceneAdapter`/`MoveItSceneAdapter`. `MoveItWorldResetter`
+must upsert table, detach/upsert Coke, and return success only after observation confirms both table
+and Coke's canonical detached 6DoF world pose. Update the reset-scene assertion to require table.
+Do not introduce `planning_scene_setup` or a fallback.
+
+- [ ] **Step 4: Verify GREEN**
+
+Run:
+
+```bash
+colcon build --packages-select panda_gazebo_demo --event-handlers console_direct+
+ctest --test-dir build/panda_gazebo_demo \
+  -R '^(test_moveit_world_resetter|test_assert_reset_moveit_scene|test_reset_world|test_world_reset_caller_migration|test_reset_moveit_world_cli)$' \
+  --output-on-failure
+```
+
+- [ ] **Step 5: Commit the resetter contract repair**
+
+```bash
+git add src/panda_gazebo_demo/include/panda_gazebo_demo/pick_place/moveit_scene_adapter.hpp \
+  src/panda_gazebo_demo/src/pick_place/moveit_scene_adapter.cpp \
+  src/panda_gazebo_demo/src/pick_place/moveit_world_resetter.cpp \
+  src/panda_gazebo_demo/test/pick_place/test_moveit_world_resetter.cpp \
+  src/panda_gazebo_demo/test/headless/assert_reset_moveit_scene.py \
+  src/panda_gazebo_demo/test/pick_place/test_moveit_scene_executor.cpp \
+  src/panda_gazebo_demo/test/pick_place/test_recovery_workflow.cpp \
+  src/panda_gazebo_demo/test/pick_place/test_registration_coverage.cpp
+git commit -m "fix: reset complete MoveIt world scene"
+```
+
+### Task 4: Preserve and inspect real reset evidence
 
 **Files:**
 
