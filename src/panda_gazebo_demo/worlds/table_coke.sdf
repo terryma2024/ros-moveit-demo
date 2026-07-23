@@ -286,7 +286,7 @@
 
       <link name="body">
         <inertial>
-          <mass>0.35</mass>
+          <mass>0.1</mass>
           <inertia>
             <ixx>0.0005294</ixx>
             <iyy>0.0005294</iyy>
