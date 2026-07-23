@@ -352,6 +352,17 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME test_world_reset_caller_migration
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_world_reset_caller_migration.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/launch/panda_gazebo.launch.py
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/run_pick_place_e2e.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/run_recovery_scenarios.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/run_plan_only_resume_matrix.sh
+  )
+
+  add_test(
     NAME test_cpp_quality_gate
     COMMAND
       bash
