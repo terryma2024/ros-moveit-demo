@@ -1,6 +1,36 @@
 cmake_minimum_required(VERSION 3.8)
 project(panda_gazebo_demo)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+get_filename_component(
+  PANDA_GAZEBO_DEMO_WORKSPACE_ROOT
+  "${CMAKE_CURRENT_SOURCE_DIR}/../.."
+  REALPATH
+)
+find_program(
+  RUN_CLANG_TIDY_EXECUTABLE
+  NAMES run-clang-tidy run-clang-tidy-18 run-clang-tidy-17 run-clang-tidy-16
+  DOC "Path to run-clang-tidy for the required C++ quality gate"
+)
+if(NOT RUN_CLANG_TIDY_EXECUTABLE)
+  message(FATAL_ERROR
+          "RUN_CLANG_TIDY_EXECUTABLE is required for the C++ quality gate. "
+          "Install run-clang-tidy or set -DRUN_CLANG_TIDY_EXECUTABLE=/path/to/run-clang-tidy.")
+endif()
+find_program(
+  CLANG_FORMAT_EXECUTABLE
+  NAMES clang-format clang-format-18 clang-format-17 clang-format-16
+  DOC "Path to clang-format for the required C++ quality gate"
+)
+if(NOT CLANG_FORMAT_EXECUTABLE)
+  message(FATAL_ERROR
+          "CLANG_FORMAT_EXECUTABLE is required for the C++ quality gate. "
+          "Install clang-format or set -DCLANG_FORMAT_EXECUTABLE=/path/to/clang-format.")
+endif()
+
+include(cmake/cpp_quality_gate.cmake)
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -147,6 +177,19 @@ target_link_libraries(
 
 ament_target_dependencies(reset_moveit_world rclcpp)
 target_link_libraries(reset_moveit_world pick_place_core pick_place_ros_adapters)
+
+panda_gazebo_add_cpp_quality_gate(
+  WORKSPACE_ROOT ${PANDA_GAZEBO_DEMO_WORKSPACE_ROOT}
+  SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}
+  RUN_CLANG_TIDY_EXECUTABLE ${RUN_CLANG_TIDY_EXECUTABLE}
+  CLANG_FORMAT_EXECUTABLE ${CLANG_FORMAT_EXECUTABLE}
+  TARGETS
+    pick_place_core
+    pick_place_ros_adapters
+    pick_place_state_machine
+    gazebo_attachment_state_relay
+    reset_moveit_world
+)
 
 if(BUILD_TESTING)
   ament_add_gtest(test_pick_place_core test/pick_place/test_pick_place_core.cpp)
@@ -306,6 +349,15 @@ if(BUILD_TESTING)
       bash
       ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_reset_world.sh
       ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reset_world.sh
+  )
+
+  add_test(
+    NAME test_cpp_quality_gate
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_cpp_quality_gate.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_cpp_quality_gate.cmake
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cpp_quality_gate.cmake
   )
 
   add_test(

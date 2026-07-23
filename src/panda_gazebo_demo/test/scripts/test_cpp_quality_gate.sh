@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$#" -ne 1 ]]; then
-  printf 'usage: %s QUALITY_GATE_SCRIPT\n' "$0" >&2
+if [[ "$#" -ne 2 ]]; then
+  printf 'usage: %s QUALITY_GATE_SCRIPT QUALITY_GATE_CMAKE_MODULE\n' "$0" >&2
   exit 2
 fi
 
-quality_gate_script="$1"
+quality_gate_script="$(realpath "$1")"
+quality_gate_module="$(realpath "$2")"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "${test_dir}"' EXIT
 
@@ -83,5 +84,62 @@ then
 fi
 grep -Fq 'QUALITY_SOURCE_FILES' "${missing_input_output}" ||
   fail 'missing source files did not produce a clear diagnostic'
+
+fixture_root="${test_dir}/fixture"
+fixture_build_dir="${test_dir}/fixture-build"
+mkdir -p "${fixture_root}/src"
+touch "${fixture_root}/.clang-tidy" "${fixture_root}/.clang-format"
+printf 'int example() { return 1; }\n' >"${fixture_root}/src/example.cpp"
+cat >"${fixture_root}/CMakeLists.txt" <<EOF
+cmake_minimum_required(VERSION 3.8)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+project(cpp_quality_gate_fixture LANGUAGES CXX)
+include("${quality_gate_module}")
+add_library(example STATIC src/example.cpp)
+set(FIXTURE_RUN_CLANG_TIDY "${fake_bin}/run-clang-tidy" CACHE FILEPATH "")
+set(FIXTURE_CLANG_FORMAT "${fake_bin}/clang-format" CACHE FILEPATH "")
+panda_gazebo_add_cpp_quality_gate(
+  WORKSPACE_ROOT "\${CMAKE_CURRENT_SOURCE_DIR}"
+  SOURCE_ROOT "\${CMAKE_CURRENT_SOURCE_DIR}"
+  RUN_CLANG_TIDY_EXECUTABLE "\${FIXTURE_RUN_CLANG_TIDY}"
+  CLANG_FORMAT_EXECUTABLE "\${FIXTURE_CLANG_FORMAT}"
+  TARGETS example
+)
+EOF
+
+cmake -S "${fixture_root}" -B "${fixture_build_dir}" >/dev/null
+[[ -f "${fixture_build_dir}/compile_commands.json" ]] ||
+  fail 'quality-gate CMake wiring did not export compile_commands.json'
+cmake --build "${fixture_build_dir}" --target help >"${test_dir}/target-help.log"
+grep -Fq 'cpp_quality_gate' "${test_dir}/target-help.log" ||
+  fail 'quality-gate CMake wiring did not define cpp_quality_gate'
+
+: >"${command_log}"
+COMMAND_LOG="${command_log}" cmake --build "${fixture_build_dir}" --target example \
+  >/dev/null
+mapfile -t commands <"${command_log}"
+[[ "${#commands[@]}" -eq 2 && "${commands[0]}" == tidy* &&
+  "${commands[1]}" == format* ]] ||
+  fail 'target compilation did not run tidy then format first'
+
+sleep 1
+touch "${fixture_root}/src/example.cpp"
+COMMAND_LOG="${command_log}" cmake --build "${fixture_build_dir}" --target example \
+  >/dev/null
+mapfile -t commands <"${command_log}"
+[[ "${#commands[@]}" -eq 4 && "${commands[2]}" == tidy* &&
+  "${commands[3]}" == format* ]] ||
+  fail 'touching a C++ source did not rerun the quality gate'
+
+missing_tool_build_dir="${test_dir}/missing-tool-build"
+missing_tool_output="${test_dir}/missing-tool-output.log"
+if cmake -S "${fixture_root}" -B "${missing_tool_build_dir}" \
+  -DFIXTURE_RUN_CLANG_TIDY="${test_dir}/does-not-exist" \
+  -DFIXTURE_CLANG_FORMAT="${fake_bin}/clang-format" >"${missing_tool_output}" 2>&1
+then
+  fail 'CMake accepted a missing clang-tidy executable'
+fi
+grep -Fq 'RUN_CLANG_TIDY_EXECUTABLE' "${missing_tool_output}" ||
+  fail 'missing clang-tidy did not produce a clear CMake diagnostic'
 
 printf 'PASS: C++ quality gate runs tidy before format and fails closed\n'
