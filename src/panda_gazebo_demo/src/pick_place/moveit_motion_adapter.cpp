@@ -104,17 +104,17 @@ double durationSeconds(const builtin_interfaces::msg::Duration & duration)
 }
 
 std::shared_ptr<MoveItMotionPlanEvidence> buildEvidence(
-  const MotionPlanningRequest & request,
+  State state_id, State next_state, MotionKind kind, bool carrying,
   const moveit_msgs::msg::RobotTrajectory & trajectory,
   const moveit::core::RobotState & start_state, const std::string & tcp_link,
   double cartesian_fraction, bool attached_object_in_model,
   bool carried_relative_pose_available)
 {
   auto evidence = std::make_shared<MoveItMotionPlanEvidence>();
-  evidence->state = request.state;
-  evidence->next_state = request.next_state;
-  evidence->kind = request.kind;
-  evidence->carrying = request.carrying;
+  evidence->state = state_id;
+  evidence->next_state = next_state;
+  evidence->kind = kind;
+  evidence->carrying = carrying;
   evidence->cartesian_fraction = cartesian_fraction;
   evidence->trajectory = trajectory;
   const auto & joint_trajectory = evidence->trajectory.joint_trajectory;
@@ -129,7 +129,7 @@ std::shared_ptr<MoveItMotionPlanEvidence> buildEvidence(
   // Both MoveGroup pose planning and computeCartesianPath(..., avoid_collisions=true)
   // collision-check the attached body along the returned trajectory.
   evidence->carried_clearance_verified =
-    request.carrying && evidence->collision_aware && attached_object_in_model &&
+    carrying && evidence->collision_aware && attached_object_in_model &&
     carried_relative_pose_available;
 
   moveit::core::RobotState state(start_state);
@@ -175,6 +175,10 @@ std::shared_ptr<MoveItMotionPlanEvidence> buildEvidence(
   }
   if (!evidence->tcp_path.empty()) {
     evidence->end_tcp_pose = evidence->tcp_path.back();
+    for (std::size_t index = 0; index < joint_trajectory.joint_names.size(); ++index) {
+      evidence->planned_end_joint_positions.emplace(
+        joint_trajectory.joint_names[index], previous_positions[index]);
+    }
   }
   return evidence;
 }
@@ -339,7 +343,8 @@ PlanResult MoveItMotionAdapter::plan(
       "MoveIt planning produced an empty trajectory");
   }
 
-  auto evidence = buildEvidence(request, trajectory, *current_state, impl_->tcp_link,
+  auto evidence = buildEvidence(request.state, request.next_state, request.kind, request.carrying,
+    trajectory, *current_state, impl_->tcp_link,
     fraction, attached_object_in_model, relative_pose_available);
   if (!evidence) {
     return planningFailure(FailureCategory::PLAN_VALIDATION,
@@ -363,6 +368,106 @@ PlanResult MoveItMotionAdapter::plan(
     "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
     toString(request.state), evidence->max_carried_relative_position_error,
     evidence->max_carried_relative_orientation_error_rad);
+  return {{ActionStatus::SUCCEEDED, std::nullopt}, evidence};
+}
+
+std::optional<std::map<std::string, double>> MoveItMotionAdapter::namedTargetJointPositions(
+  const std::string & target_name)
+{
+  if (target_name.empty()) {
+    return std::nullopt;
+  }
+  const auto values = impl_->moveGroup().getNamedTargetValues(target_name);
+  if (values.empty()) {
+    return std::nullopt;
+  }
+  for (const auto & [joint, position] : values) {
+    if (joint.empty() || !std::isfinite(position)) {
+      return std::nullopt;
+    }
+  }
+  return values;
+}
+
+PlanResult MoveItMotionAdapter::planNamedTarget(
+  const NamedTargetPlanningRequest & request,
+  const ObservationResult & observation)
+{
+  if (!observation.snapshot) {
+    return planningFailure(FailureCategory::OBSERVATION, "MOTION_OBSERVATION_MISSING",
+      "MoveIt motion planning requires a current world observation");
+  }
+  if (request.target_name.empty()) {
+    return planningFailure(FailureCategory::CONFIGURATION, "NAMED_TARGET_UNAVAILABLE",
+      "MoveIt named target must be non-empty");
+  }
+  if (impl_->velocity_scaling <= 0.0 || impl_->velocity_scaling > 1.0 ||
+    impl_->acceleration_scaling <= 0.0 || impl_->acceleration_scaling > 1.0)
+  {
+    return planningFailure(FailureCategory::CONFIGURATION, "MOTION_CONFIGURATION_INVALID",
+      "Motion scaling factors must be positive and valid");
+  }
+  const auto world_objects = impl_->planning_scene.getObjects(impl_->required_world_objects);
+  for (const auto & object_id : impl_->required_world_objects) {
+    if (world_objects.count(object_id) == 0) {
+      return planningFailure(FailureCategory::MOVEIT_SCENE,
+        "REQUIRED_WORLD_OBJECT_MISSING",
+        "Required Planning Scene world object is missing: " + object_id);
+    }
+  }
+  auto & move_group = impl_->moveGroup();
+  if (!move_group.startStateMonitor(2.0)) {
+    return planningFailure(FailureCategory::OBSERVATION, "STATE_MONITOR_UNAVAILABLE",
+      "Failed to start MoveIt current-state monitor");
+  }
+  if (!move_group.setEndEffectorLink(impl_->tcp_link)) {
+    return planningFailure(FailureCategory::CONFIGURATION, "INVALID_TCP_LINK",
+      "MoveIt RobotModel does not accept " + impl_->tcp_link);
+  }
+  const auto current_state = move_group.getCurrentState(2.0);
+  if (!current_state) {
+    return planningFailure(FailureCategory::OBSERVATION, "CURRENT_STATE_UNAVAILABLE",
+      "MoveIt did not provide a current state for motion planning");
+  }
+  const auto target_joint_positions = move_group.getNamedTargetValues(request.target_name);
+  if (target_joint_positions.empty()) {
+    return planningFailure(FailureCategory::CONFIGURATION, "NAMED_TARGET_UNAVAILABLE",
+      "MoveIt named target is unavailable: " + request.target_name);
+  }
+  move_group.setMaxVelocityScalingFactor(impl_->velocity_scaling);
+  move_group.setMaxAccelerationScalingFactor(impl_->acceleration_scaling);
+  move_group.clearPoseTargets();
+  move_group.setStartState(*current_state);
+  if (!move_group.setNamedTarget(request.target_name)) {
+    return planningFailure(FailureCategory::CONFIGURATION, "NAMED_TARGET_UNAVAILABLE",
+      "MoveIt rejected named target: " + request.target_name);
+  }
+  MoveGroupInterface::Plan plan;
+  if (!static_cast<bool>(move_group.plan(plan))) {
+    return planningFailure(FailureCategory::PLANNING, "MOVEIT_NAMED_TARGET_PLAN_FAILED",
+      "MoveIt collision-aware named-target planning failed");
+  }
+  if (plan.trajectory.joint_trajectory.points.empty()) {
+    return planningFailure(FailureCategory::PLANNING, "EMPTY_MOTION_TRAJECTORY",
+      "MoveIt planning produced an empty trajectory");
+  }
+  auto evidence = buildEvidence(request.state, request.next_state, MotionKind::NAMED_TARGET, false,
+    plan.trajectory, *current_state, impl_->tcp_link, 1.0, false, false);
+  if (!evidence) {
+    return planningFailure(FailureCategory::PLAN_VALIDATION,
+      "MOTION_TCP_PATH_UNAVAILABLE",
+      "Could not reconstruct TCP poses from the MoveIt trajectory");
+  }
+  evidence->named_target = request.target_name;
+  evidence->target_joint_positions = target_joint_positions;
+  RCLCPP_INFO(impl_->node->get_logger(), "NAMED_JOINT_TARGET state=%s target=%s",
+    toString(request.state), request.target_name.c_str());
+  logPose(impl_->node->get_logger(), "START_TCP_POSE", request.state,
+    request.next_state, evidence->start_tcp_pose);
+  logPose(impl_->node->get_logger(), "PLANNED_END_TCP_POSE", request.state,
+    request.next_state, evidence->end_tcp_pose);
+  RCLCPP_INFO(impl_->node->get_logger(), "TRAJECTORY_POINTS state=%s value=%zu",
+    toString(request.state), evidence->trajectory_points);
   return {{ActionStatus::SUCCEEDED, std::nullopt}, evidence};
 }
 

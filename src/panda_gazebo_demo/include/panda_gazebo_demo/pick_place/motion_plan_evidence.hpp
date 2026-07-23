@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@ enum class MotionKind
   POSE,
   CARTESIAN_UP,
   CARTESIAN_DOWN,
+  NAMED_TARGET,
 };
 
 struct MotionStateConfig
@@ -38,6 +40,9 @@ struct MotionPlanEvidence : PlanArtifact
   double duration_seconds{0.0};
   double max_joint_jump{0.0};
   std::map<std::string, double> planned_start_joint_positions;
+  std::map<std::string, double> planned_end_joint_positions;
+  std::map<std::string, double> target_joint_positions;
+  std::optional<std::string> named_target;
   Pose3d start_tcp_pose;
   Pose3d end_tcp_pose;
   std::vector<Pose3d> tcp_path;

@@ -7,6 +7,7 @@
 
 #include "panda_gazebo_demo/pick_place/motion_plan_evidence.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
+#include "panda_gazebo_demo/pick_place/named_target_validation.hpp"
 
 namespace panda_gazebo_demo::pick_place
 {
@@ -220,6 +221,55 @@ TEST(MotionObservationThresholds, ConfiguredLimitsChangeObservedFacts)
   applyMotionObservationThresholds(snapshot, 0.03, permissive_gripper);
   EXPECT_TRUE(snapshot.arm_stationary);
   EXPECT_TRUE(snapshot.gripper_open);
+}
+
+MotionPlanEvidence readyEvidence()
+{
+  MotionPlanEvidence evidence;
+  evidence.state = State::RETREAT;
+  evidence.next_state = State::DONE;
+  evidence.kind = MotionKind::NAMED_TARGET;
+  evidence.named_target = "ready";
+  evidence.trajectory_points = 2;
+  evidence.target_joint_positions = {{"panda_joint1", 0.0},
+    {"panda_joint2", -0.785}};
+  evidence.planned_end_joint_positions = evidence.target_joint_positions;
+  return evidence;
+}
+
+TEST(NamedTargetPlanValidator, AcceptsMatchingReadyPlan)
+{
+  const auto evidence = readyEvidence();
+  const NamedTargetPlanValidator validator(
+    State::RETREAT, State::DONE, "ready", evidence.target_joint_positions, 0.010);
+
+  EXPECT_TRUE(validator.validate(State::RETREAT, WorldSnapshot{}, evidence).ok);
+}
+
+TEST(NamedTargetPlanValidator, RejectsWrongPlannedEndpoint)
+{
+  auto evidence = readyEvidence();
+  evidence.planned_end_joint_positions["panda_joint1"] = 0.02;
+  const NamedTargetPlanValidator validator(
+    State::RETREAT, State::DONE, "ready", evidence.target_joint_positions, 0.010);
+
+  const auto result = validator.validate(State::RETREAT, WorldSnapshot{}, evidence);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "NAMED_TARGET_ENDPOINT_MISMATCH"));
+}
+
+TEST(NamedTargetPlanValidator, RejectsMissingRequestedJoint)
+{
+  auto evidence = readyEvidence();
+  evidence.planned_end_joint_positions.erase("panda_joint2");
+  const NamedTargetPlanValidator validator(
+    State::RETREAT, State::DONE, "ready", evidence.target_joint_positions, 0.010);
+
+  const auto result = validator.validate(State::RETREAT, WorldSnapshot{}, evidence);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "NAMED_TARGET_JOINTS_MISSING"));
 }
 
 }  // namespace
