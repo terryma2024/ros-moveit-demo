@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdlib>
 #include <cstdint>
 #include <filesystem>
@@ -23,6 +24,7 @@
 #include "panda_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "panda_gazebo_demo/pick_place/runner.hpp"
 #include "panda_gazebo_demo/pick_place/runtime_parameters.hpp"
+#include "panda_gazebo_demo/pick_place/simulation_session_id.hpp"
 
 namespace pick_place = panda_gazebo_demo::pick_place;
 
@@ -395,8 +397,22 @@ int main(int argc, char * argv[])
     static_cast<std::int64_t>(parameters.max_state_transitions));
   const auto checkpoint_path = parameterOrDeclare(
     node, "checkpoint_path", std::string("/tmp/panda_pick_place_checkpoint.json"));
-  const auto simulation_session_id =
+  const auto configured_simulation_session_id =
     parameterOrDeclare(node, "simulation_session_id", std::string(""));
+  const auto unix_timestamp_milliseconds = static_cast<std::uint64_t>(
+    std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count());
+  const auto session_id = pick_place::resolveSimulationSessionId(
+    *mode, resume, configured_simulation_session_id, unix_timestamp_milliseconds);
+  if (!session_id.error.empty()) {
+    RCLCPP_ERROR(logger, "%s", session_id.error.c_str());
+    rclcpp::shutdown();
+    return EXIT_FAILURE;
+  }
+  const auto simulation_session_id = session_id.value.value_or("");
+  if (session_id.value) {
+    RCLCPP_INFO(logger, "SIMULATION_SESSION_ID=%s", simulation_session_id.c_str());
+  }
   if (coke_settle_samples < 2 || max_state_transitions <= 0) {
     RCLCPP_ERROR(logger, "coke_settle_samples and max_state_transitions are outside safe ranges");
     rclcpp::shutdown();
@@ -482,13 +498,6 @@ int main(int argc, char * argv[])
   std::unique_ptr<pick_place::GazeboWorldObserver> world_observer;
   std::unique_ptr<pick_place::CommonResumeValidator> common_resume_validator;
   if (*mode == pick_place::RunMode::EXECUTE || resume) {
-    if (simulation_session_id.empty()) {
-      RCLCPP_ERROR(
-        logger,
-        "simulation_session_id is required for execute or resume to reject stale checkpoints");
-      rclcpp::shutdown();
-      return EXIT_FAILURE;
-    }
     checkpoint_store = std::make_unique<LoggingCheckpointStore>(checkpoint_path, logger);
     world_observer = std::make_unique<pick_place::GazeboWorldObserver>(
       *motion_adapter, parameters.gazebo_world_name, parameters.gazebo_coke_model,

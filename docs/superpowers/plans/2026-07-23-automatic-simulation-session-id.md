@@ -33,7 +33,7 @@
 - Consumes: `pick_place::RunMode`, configured parameter text, `resume`, and a Unix timestamp in milliseconds.
 - Produces: `SimulationSessionIdResolution resolveSimulationSessionId(RunMode, bool, std::string, std::uint64_t)` where `value` is the consumed session ID, or empty for modes that do not use one, and `error` is non-empty only for invalid resume startup.
 
-- [ ] **Step 1: Write the failing pure-function tests**
+- [x] **Step 1: Write the failing pure-function tests**
 
 Create `test_simulation_session_id.cpp` with focused cases:
 
@@ -89,10 +89,10 @@ TEST(SimulationSessionId, DoesNotGenerateForNonResumeNonExecuteModes)
 }  // namespace panda_gazebo_demo::pick_place
 ```
 
-Register `test_simulation_session_id` in CMake and add the new source to `pick_place_core` so the
-test reaches the missing interface at compile time.
+Register `test_simulation_session_id` in CMake, but do not add the resolver source before RED. The
+test must reach the missing header at compile time rather than fail earlier on a missing source.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -105,7 +105,7 @@ colcon build --packages-select panda_gazebo_demo --symlink-install \
 Expected: compilation fails because
 `panda_gazebo_demo/pick_place/simulation_session_id.hpp` does not exist.
 
-- [ ] **Step 3: Implement the pure resolver**
+- [x] **Step 3: Implement the pure resolver**
 
 Create the header:
 
@@ -167,7 +167,9 @@ SimulationSessionIdResolution resolveSimulationSessionId(
 }  // namespace panda_gazebo_demo::pick_place
 ```
 
-- [ ] **Step 4: Integrate one resolution and one log point in the node**
+Add `src/pick_place/simulation_session_id.cpp` to the `pick_place_core` source list.
+
+- [x] **Step 4: Integrate one resolution and one log point in the node**
 
 Add `<chrono>` and the resolver header, rename the raw parameter to
 `configured_simulation_session_id`, and resolve it immediately after parameter parsing:
@@ -195,7 +197,7 @@ Remove the later generic empty-ID rejection. Keep the existing
 `if (*mode == RunMode::EXECUTE || resume)` construction block and pass
 `simulation_session_id` unchanged to both `GazeboWorldObserver` and `CommonResumeValidator`.
 
-- [ ] **Step 5: Run focused GREEN and lint**
+- [x] **Step 5: Run focused GREEN and lint**
 
 Run:
 
@@ -205,7 +207,7 @@ colcon build --packages-select panda_gazebo_demo --symlink-install \
   --cmake-args -DBUILD_TESTING=ON
 ctest --test-dir build/panda_gazebo_demo \
   -R '^test_simulation_session_id$' --output-on-failure
-ament_uncrustify --path \
+ament_uncrustify \
   src/panda_gazebo_demo/include/panda_gazebo_demo/pick_place/simulation_session_id.hpp \
   src/panda_gazebo_demo/src/pick_place/simulation_session_id.cpp \
   src/panda_gazebo_demo/test/pick_place/test_simulation_session_id.cpp
@@ -213,7 +215,7 @@ ament_uncrustify --path \
 
 Expected: focused test passes and the read-only style check reports no divergence.
 
-- [ ] **Step 6: Run complete verification**
+- [x] **Step 6: Run complete verification**
 
 Run:
 
@@ -230,10 +232,11 @@ git status --short
 Expected: zero test failures, no diff whitespace errors, and `table_coke.sdf` remains an unrelated
 unstaged user change.
 
-- [ ] **Step 7: Commit only this feature**
+- [x] **Step 7: Commit only this feature**
 
 ```bash
 git add \
+  docs/superpowers/plans/2026-07-23-automatic-simulation-session-id.md \
   src/panda_gazebo_demo/CMakeLists.txt \
   src/panda_gazebo_demo/include/panda_gazebo_demo/pick_place/simulation_session_id.hpp \
   src/panda_gazebo_demo/src/pick_place/simulation_session_id.cpp \
