@@ -131,6 +131,16 @@ void requireGripperGrasp(
   merge(result, validateGripperGrasp(snapshot, config.gripper));
 }
 
+void requireReadyAndClosed(
+  ValidationResult & result, const WorldSnapshot & snapshot,
+  const PickPlaceContractConfig & config)
+{
+  merge(result, validateNamedJointTarget(
+    snapshot, config.ready_joint_positions, config.ready_joint_tolerance));
+  merge(result, validateGripperClosed(
+    snapshot, config.gripper_close_position, config.gripper_close_tolerance, config.gripper));
+}
+
 void requireCokeStationary(ValidationResult & result, const WorldSnapshot & snapshot)
 {
   if (!snapshot.gazebo_coke_stationary || !*snapshot.gazebo_coke_stationary) {
@@ -662,9 +672,8 @@ std::shared_ptr<const Contract> makeRetreatToDoneContract(
       requireActionSucceeded(result, action_result);
       requireFreshStationary(result, after, FailureCategory::POSTCONDITION);
       requireAttachments(result, after, false, false);
-      requireGripperOpen(result, after, config);
+      requireReadyAndClosed(result, after, config);
       requireCokeStationary(result, after);
-      requireTcpTarget(result, after, target_policy, State::RETREAT, State::DONE, config);
       requireSupportedCoke(result, after, target_policy,
         State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, config);
       requireWorldObjects(result, after);

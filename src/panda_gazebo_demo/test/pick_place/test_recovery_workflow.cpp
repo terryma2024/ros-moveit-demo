@@ -117,6 +117,10 @@ void applySuccessfulRecoveryState(State state, WorldSnapshot & snapshot)
       break;
     case State::RECOVER_RETREAT:
       snapshot.tcp_pose_world.z = kAbovePick.z;
+      snapshot.gripper_open = false;
+      snapshot.joint_positions["panda_joint1"] = 0.0;
+      snapshot.joint_positions["panda_finger_joint1"] = 0.0;
+      snapshot.joint_positions["panda_finger_joint2"] = 0.0;
       break;
     default:
       break;
@@ -384,7 +388,11 @@ public:
   {
     observer.snapshot = std::move(initial_snapshot);
     checkpoints.loaded = recoveryCheckpoint(observer.snapshot);
-    registerRecoveryContracts(contracts, target_policy, {});
+    PickPlaceContractConfig contract_config;
+    contract_config.ready_joint_positions = {{"panda_joint1", 0.0}};
+    contract_config.gripper_close_position = 0.0;
+    contract_config.gripper_close_tolerance = 0.004;
+    registerRecoveryContracts(contracts, target_policy, contract_config);
     for (const auto & config : kRecoveryMotionConfigs) {
       auto action = std::make_shared<RecordingRecoveryAction>(
         config.state, config.next_state, config, &observer, &execution_order,

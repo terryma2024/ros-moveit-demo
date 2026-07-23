@@ -151,6 +151,16 @@ void requireOpen(
   merge(result, validateGripperOpen(snapshot, config.gripper));
 }
 
+void requireReadyAndClosed(
+  ValidationResult & result, const WorldSnapshot & snapshot,
+  const PickPlaceContractConfig & config)
+{
+  merge(result, validateNamedJointTarget(
+    snapshot, config.ready_joint_positions, config.ready_joint_tolerance));
+  merge(result, validateGripperClosed(
+    snapshot, config.gripper_close_position, config.gripper_close_tolerance, config.gripper));
+}
+
 void requireWorldObjects(ValidationResult & result, const WorldSnapshot & snapshot)
 {
   result.metrics["table_in_moveit_world"] =
@@ -515,11 +525,10 @@ std::shared_ptr<const Contract> retreatContract(
     const ActionResult & action_result) {
       auto result = boundary(after);
       requireActionSucceeded(result, action_result);
-      requireOpen(result, after, config);
+      requireReadyAndClosed(result, after, config);
       requireAttachmentCombination(result, after, false, false);
       requireWorldObjects(result, after);
       requireCrossWorldEquality(result, after, config);
-      requireTarget(result, after, target_policy, State::RECOVER_RETREAT, State::ERROR, config);
       requireCokeDrift(result, before, after, config);
       return finish(std::move(result));
     });

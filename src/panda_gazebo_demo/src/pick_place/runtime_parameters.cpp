@@ -35,6 +35,7 @@ std::optional<Failure> validatePickPlaceParameters(
   const PickPlaceParameters & parameters)
 {
   if (parameters.planning_group.empty() || parameters.tcp_link.empty() ||
+    parameters.ready_named_target.empty() ||
     parameters.required_world_objects.empty() || parameters.gazebo_world_name.empty() ||
     parameters.gazebo_coke_model.empty() || parameters.gazebo_attach_topic.empty() ||
     parameters.gazebo_detach_topic.empty() || parameters.gazebo_attachment_event_topic.empty() ||
@@ -60,7 +61,8 @@ std::optional<Failure> validatePickPlaceParameters(
     !positiveFinite(parameters.cartesian_min_fraction) ||
     parameters.cartesian_min_fraction > 1.0 ||
     !positiveFinite(parameters.joint_jump_threshold) ||
-    !positiveFinite(parameters.motion_start_joint_tolerance))
+    !positiveFinite(parameters.motion_start_joint_tolerance) ||
+    !positiveFinite(parameters.ready_joint_tolerance))
   {
     return invalid(
       "Cartesian step, fraction, joint-jump threshold, or motion-start tolerance is unsafe");
@@ -76,6 +78,7 @@ std::optional<Failure> validatePickPlaceParameters(
     !positiveFinite(parameters.gripper_open_min_position) ||
     parameters.gripper_open_min_position > parameters.gripper_open_position ||
     !nonnegativeFinite(parameters.gripper_close_position) ||
+    !positiveFinite(parameters.gripper_close_tolerance) ||
     parameters.gripper_close_position >= parameters.gripper_open_min_position ||
     !nonnegativeFinite(parameters.gripper_grasp_min_position) ||
     !positiveFinite(parameters.gripper_grasp_max_position) ||
@@ -128,6 +131,8 @@ std::string pickPlaceConfigurationHash(
         << parameters.cartesian_min_fraction << '\n'
         << parameters.joint_jump_threshold << '\n'
         << parameters.motion_start_joint_tolerance << '\n'
+        << parameters.ready_named_target << '\n'
+        << parameters.ready_joint_tolerance << '\n'
         << parameters.tcp_position_tolerance << '\n'
         << parameters.tcp_orientation_tolerance_rad << '\n'
         << parameters.coke_position_tolerance << '\n'
@@ -135,6 +140,7 @@ std::string pickPlaceConfigurationHash(
         << parameters.gripper_open_position << '\n'
         << parameters.gripper_open_min_position << '\n'
         << parameters.gripper_close_position << '\n'
+        << parameters.gripper_close_tolerance << '\n'
         << parameters.gripper_grasp_min_position << '\n'
         << parameters.gripper_grasp_max_position << '\n'
         << parameters.gripper_symmetry_tolerance << '\n'

@@ -330,6 +330,10 @@ int main(int argc, char * argv[])
     node, "joint_jump_threshold", parameters.joint_jump_threshold);
   parameters.motion_start_joint_tolerance = parameterOrDeclare(
     node, "motion_start_joint_tolerance", parameters.motion_start_joint_tolerance);
+  parameters.ready_named_target = parameterOrDeclare(
+    node, "ready_named_target", parameters.ready_named_target);
+  parameters.ready_joint_tolerance = parameterOrDeclare(
+    node, "ready_joint_tolerance", parameters.ready_joint_tolerance);
   parameters.tcp_position_tolerance = parameterOrDeclare(
     node, "tcp_position_tolerance", parameters.tcp_position_tolerance);
   parameters.tcp_orientation_tolerance_rad = parameterOrDeclare(
@@ -344,6 +348,8 @@ int main(int argc, char * argv[])
     node, "gripper_open_min_position", parameters.gripper_open_min_position);
   parameters.gripper_close_position = parameterOrDeclare(
     node, "gripper_close_position", parameters.gripper_close_position);
+  parameters.gripper_close_tolerance = parameterOrDeclare(
+    node, "gripper_close_tolerance", parameters.gripper_close_tolerance);
   parameters.gripper_grasp_min_position = parameterOrDeclare(
     node, "gripper_grasp_min_position", parameters.gripper_grasp_min_position);
   parameters.gripper_grasp_max_position = parameterOrDeclare(
@@ -448,6 +454,7 @@ int main(int argc, char * argv[])
       gripper_limits);
     pick_place::PickPlaceRuntimeDependencies dependencies;
     dependencies.motion = motion_adapter;
+    dependencies.observer = motion_adapter;
     if (*mode == pick_place::RunMode::EXECUTE) {
       dependencies.gripper = std::make_shared<pick_place::GripperCommandAdapter>(
         node, parameters.gripper_action_name, parameters.gripper_action_timeout_seconds);
@@ -471,6 +478,14 @@ int main(int argc, char * argv[])
         parameters.state_poll_interval_seconds, true, gripper_limits);
     }
     pick_place::PickPlaceRuntimeConfig runtime_config;
+    const auto ready_joints = motion_adapter->namedTargetJointPositions(
+      parameters.ready_named_target);
+    if (!ready_joints) {
+      RCLCPP_ERROR(logger, "NAMED_TARGET_UNAVAILABLE: %s",
+        parameters.ready_named_target.c_str());
+      rclcpp::shutdown();
+      return EXIT_FAILURE;
+    }
     runtime_config.target_policy = target_policy;
     runtime_config.required_world_objects = parameters.required_world_objects;
     runtime_config.motion_plan_limits = {parameters.cartesian_min_fraction,
@@ -480,16 +495,31 @@ int main(int argc, char * argv[])
       parameters.coke_orientation_tolerance_rad,
       parameters.motion_start_joint_tolerance};
     runtime_config.gripper = gripper_limits;
-    runtime_config.contract = {parameters.tcp_position_tolerance,
-      parameters.tcp_orientation_tolerance_rad, parameters.coke_position_tolerance,
-      parameters.coke_orientation_tolerance_rad, parameters.coke_position_tolerance,
-      parameters.coke_orientation_tolerance_rad, runtime_config.gripper};
+    runtime_config.contract.tcp_position_tolerance = parameters.tcp_position_tolerance;
+    runtime_config.contract.tcp_orientation_tolerance_rad =
+      parameters.tcp_orientation_tolerance_rad;
+    runtime_config.contract.coke_position_tolerance = parameters.coke_position_tolerance;
+    runtime_config.contract.coke_orientation_tolerance_rad =
+      parameters.coke_orientation_tolerance_rad;
+    runtime_config.contract.carried_relative_position_tolerance =
+      parameters.coke_position_tolerance;
+    runtime_config.contract.carried_relative_orientation_tolerance_rad =
+      parameters.coke_orientation_tolerance_rad;
+    runtime_config.contract.gripper = runtime_config.gripper;
     runtime_config.gripper_open_position = parameters.gripper_open_position;
     runtime_config.gripper_close_position = parameters.gripper_close_position;
+    runtime_config.gripper_close_tolerance = parameters.gripper_close_tolerance;
     runtime_config.gripper_max_effort = parameters.gripper_max_effort;
     runtime_config.planning_scene_timeout_seconds =
       parameters.planning_scene_timeout_seconds;
     runtime_config.state_poll_interval_seconds = parameters.state_poll_interval_seconds;
+    runtime_config.ready_named_target = parameters.ready_named_target;
+    runtime_config.ready_joint_positions = *ready_joints;
+    runtime_config.ready_joint_tolerance = parameters.ready_joint_tolerance;
+    runtime_config.contract.ready_joint_positions = runtime_config.ready_joint_positions;
+    runtime_config.contract.ready_joint_tolerance = runtime_config.ready_joint_tolerance;
+    runtime_config.contract.gripper_close_position = runtime_config.gripper_close_position;
+    runtime_config.contract.gripper_close_tolerance = runtime_config.gripper_close_tolerance;
     runtime = pick_place::makePickPlaceRuntimeRegistries(
       dependencies, std::move(runtime_config));
   }
