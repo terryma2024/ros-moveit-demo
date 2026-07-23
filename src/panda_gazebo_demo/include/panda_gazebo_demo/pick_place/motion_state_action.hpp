@@ -12,14 +12,12 @@ namespace panda_gazebo_demo::pick_place
 class MotionStateAction final : public IStatePlanner, public IStateExecutor
 {
 public:
-  MotionStateAction(
-    std::shared_ptr<IMoveItMotionAdapter> adapter,
-    std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
-    MotionStateConfig config);
+  MotionStateAction(std::shared_ptr<IMoveItMotionAdapter> adapter,
+                    std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
+                    MotionStateConfig config);
 
-  [[nodiscard]] PlanResult plan(
-    State current_state, State next_state,
-    const ObservationResult & observation) override;
+  [[nodiscard]] PlanResult plan(State current_state, State next_state,
+                                const ObservationResult & observation) override;
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;
 

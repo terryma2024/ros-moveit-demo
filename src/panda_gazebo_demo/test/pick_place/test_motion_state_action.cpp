@@ -16,9 +16,8 @@ namespace
 class RecordingTargetPolicy final : public PickPlaceTargetPolicy
 {
 public:
-  TargetPoseResult targetPose(
-    State current_state, State next_state,
-    const ObservationResult & observation) const override
+  TargetPoseResult targetPose(State current_state, State next_state,
+                              const ObservationResult & observation) const override
   {
     calls.emplace_back(current_state, next_state, observation.snapshot.has_value());
     return {Pose3d{0.31, 0.12, 0.98, 1.0, 0.0, 0.0, 0.0}, std::nullopt};
@@ -35,9 +34,8 @@ public:
 class RecordingMotionAdapter final : public IMoveItMotionAdapter
 {
 public:
-  PlanResult plan(
-    const MotionPlanningRequest & request,
-    const ObservationResult & observation) override
+  PlanResult plan(const MotionPlanningRequest & request,
+                  const ObservationResult & observation) override
   {
     requests.push_back(request);
     observations.push_back(observation);
@@ -90,8 +88,7 @@ TEST(MotionStateAction, EveryForwardMotionUsesConfiguredTargetAndCarryingFlag)
 
   for (const auto & configuration : configurations) {
     MotionStateAction action(adapter, policy, configuration);
-    const auto result = action.plan(
-      configuration.state, configuration.next_state, observation());
+    const auto result = action.plan(configuration.state, configuration.next_state, observation());
     ASSERT_EQ(result.action.status, ActionStatus::SUCCEEDED);
   }
 
@@ -114,7 +111,7 @@ TEST(MotionStateAction, RejectsMismatchedTransitionBeforeCallingDependencies)
   auto policy = std::make_shared<RecordingTargetPolicy>();
   auto adapter = std::make_shared<RecordingMotionAdapter>();
   MotionStateAction action(adapter, policy,
-    {State::LIFT, State::MOVE_ABOVE_PLACE, MotionKind::CARTESIAN_UP, true});
+                           {State::LIFT, State::MOVE_ABOVE_PLACE, MotionKind::CARTESIAN_UP, true});
 
   const auto result = action.plan(State::LIFT, State::DONE, observation());
 
@@ -128,16 +125,15 @@ TEST(MotionStateAction, ExecutesOnlyTypedEvidenceForItsConfiguredState)
   auto policy = std::make_shared<RecordingTargetPolicy>();
   auto adapter = std::make_shared<RecordingMotionAdapter>();
   MotionStateAction action(adapter, policy,
-    {State::RETREAT, State::DONE, MotionKind::CARTESIAN_UP, false});
+                           {State::RETREAT, State::DONE, MotionKind::CARTESIAN_UP, false});
   MotionPlanEvidence wrong_evidence;
   wrong_evidence.state = State::LIFT;
   wrong_evidence.next_state = State::MOVE_ABOVE_PLACE;
   wrong_evidence.kind = MotionKind::CARTESIAN_UP;
   wrong_evidence.carrying = true;
   wrong_evidence.trajectory_points = 1;
-  ExecutionContext context{
-    State::RETREAT, State::DONE, WorldSnapshot{},
-    std::make_shared<MotionPlanEvidence>(wrong_evidence)};
+  ExecutionContext context{State::RETREAT, State::DONE, WorldSnapshot{},
+                           std::make_shared<MotionPlanEvidence>(wrong_evidence)};
 
   const auto result = action.execute(context);
 
@@ -149,8 +145,8 @@ TEST(MotionStateAction, RecoveryMotionAlreadyAtTargetUsesValidatedNoOp)
 {
   auto policy = std::make_shared<RecordingTargetPolicy>();
   auto adapter = std::make_shared<RecordingMotionAdapter>();
-  const MotionStateConfig config{State::RECOVER_LIFT_TO_SAFE_HEIGHT,
-    State::RECOVER_MOVE_ABOVE_PICK, MotionKind::CARTESIAN_UP, true, true};
+  const MotionStateConfig config{State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK,
+                                 MotionKind::CARTESIAN_UP, true, true};
   MotionStateAction action(adapter, policy, config);
   auto current = observation();
   current.snapshot->tcp_pose_world = {0.31, 0.12, 0.98, 1.0, 0.0, 0.0, 0.0};
@@ -168,21 +164,19 @@ TEST(MotionStateAction, RecoveryMotionAlreadyAtTargetUsesValidatedNoOp)
   EXPECT_TRUE(evidence->carried_relative_pose_available);
   EXPECT_TRUE(evidence->carried_clearance_verified);
   EXPECT_TRUE(adapter->requests.empty());
-  EXPECT_EQ(action.execute(
-      {config.state, config.next_state, *current.snapshot, plan.artifact}).status,
+  EXPECT_EQ(
+    action.execute({config.state, config.next_state, *current.snapshot, plan.artifact}).status,
     ActionStatus::SUCCEEDED);
   EXPECT_TRUE(adapter->executed_states.empty());
 
   auto tampered = std::make_shared<MotionPlanEvidence>(*evidence);
   tampered->end_tcp_pose.x += 0.1;
-  EXPECT_EQ(action.execute(
-      {config.state, config.next_state, *current.snapshot, tampered}).status,
-    ActionStatus::FAILED);
+  EXPECT_EQ(action.execute({config.state, config.next_state, *current.snapshot, tampered}).status,
+            ActionStatus::FAILED);
   auto moved_before = *current.snapshot;
   moved_before.tcp_pose_world.x += 0.1;
-  EXPECT_EQ(action.execute(
-      {config.state, config.next_state, moved_before, plan.artifact}).status,
-    ActionStatus::FAILED);
+  EXPECT_EQ(action.execute({config.state, config.next_state, moved_before, plan.artifact}).status,
+            ActionStatus::FAILED);
 }
 
 }  // namespace

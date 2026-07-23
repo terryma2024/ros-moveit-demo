@@ -5,8 +5,8 @@
 namespace panda_gazebo_demo::pick_place
 {
 
-void registerRecoveryContracts(
-  TransitionContractRegistry & registry, TargetPolicyPtr target_policy,
-  PickPlaceContractConfig config);
+void registerRecoveryContracts(TransitionContractRegistry & registry,
+                               const TargetPolicyPtr & target_policy,
+                               const PickPlaceContractConfig & config);
 
 }  // namespace panda_gazebo_demo::pick_place

@@ -36,8 +36,8 @@ public:
   double last_max_effort{-1.0};
 };
 
-pick_place::ExecutionContext contextFor(
-  pick_place::State state, pick_place::WorldSnapshot before = {})
+pick_place::ExecutionContext contextFor(pick_place::State state,
+                                        pick_place::WorldSnapshot before = {})
 {
   return {state, pick_place::State::DONE, std::move(before), nullptr};
 }
@@ -51,10 +51,8 @@ pick_place::WorldSnapshot safelyOpenSnapshot()
   snapshot.gazebo_coke_attached = false;
   snapshot.moveit_coke_attached = false;
   snapshot.gazebo_coke_stationary = true;
-  snapshot.joint_positions = {{"panda_finger_joint1", 0.04},
-    {"panda_finger_joint2", 0.04}};
-  snapshot.joint_velocities = {{"panda_finger_joint1", 0.0},
-    {"panda_finger_joint2", 0.0}};
+  snapshot.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
+  snapshot.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   return snapshot;
 }
 
@@ -63,8 +61,8 @@ pick_place::WorldSnapshot safelyOpenSnapshot()
 TEST(GripperExecutor, CloseSendsZeroPositionOnce)
 {
   const auto adapter = std::make_shared<FakeGripperCommandAdapter>();
-  pick_place::GripperStateExecutor executor(
-    adapter, {pick_place::State::CLOSE_GRIPPER, 0.0, 20.0, false});
+  pick_place::GripperStateExecutor executor(adapter,
+                                            {pick_place::State::CLOSE_GRIPPER, 0.0, 20.0, false});
 
   const auto result = executor.execute(contextFor(pick_place::State::CLOSE_GRIPPER));
 
@@ -80,8 +78,8 @@ TEST(GripperExecutor, RecoveryOpenNoOpsWhenSnapshotAlreadyOpen)
   pick_place::GripperStateExecutor executor(
     adapter, {pick_place::State::RECOVER_OPEN_GRIPPER, 0.04, 20.0, true});
 
-  const auto result = executor.execute(
-    contextFor(pick_place::State::RECOVER_OPEN_GRIPPER, safelyOpenSnapshot()));
+  const auto result =
+    executor.execute(contextFor(pick_place::State::RECOVER_OPEN_GRIPPER, safelyOpenSnapshot()));
 
   EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, result.status);
   EXPECT_EQ(0, adapter->command_calls);
@@ -90,8 +88,8 @@ TEST(GripperExecutor, RecoveryOpenNoOpsWhenSnapshotAlreadyOpen)
 TEST(GripperExecutor, RejectsUnsupportedStateBeforeSendingGoal)
 {
   const auto adapter = std::make_shared<FakeGripperCommandAdapter>();
-  pick_place::GripperStateExecutor executor(
-    adapter, {pick_place::State::CLOSE_GRIPPER, 0.0, 20.0, false});
+  pick_place::GripperStateExecutor executor(adapter,
+                                            {pick_place::State::CLOSE_GRIPPER, 0.0, 20.0, false});
 
   const auto result = executor.execute(contextFor(pick_place::State::OPEN_GRIPPER));
 
@@ -105,10 +103,12 @@ TEST(GripperExecutor, PropagatesGoalRejection)
 {
   const auto adapter = std::make_shared<FakeGripperCommandAdapter>();
   adapter->command_result = {pick_place::ActionStatus::FAILED,
-    pick_place::Failure{pick_place::FailureCategory::GRIPPER,
-      "GRIPPER_GOAL_REJECTED", "goal rejected", {}}};
-  pick_place::GripperStateExecutor executor(
-    adapter, {pick_place::State::OPEN_GRIPPER, 0.04, 20.0, false});
+                             pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                                 "GRIPPER_GOAL_REJECTED",
+                                                 "goal rejected",
+                                                 {}}};
+  pick_place::GripperStateExecutor executor(adapter,
+                                            {pick_place::State::OPEN_GRIPPER, 0.04, 20.0, false});
 
   const auto result = executor.execute(contextFor(pick_place::State::OPEN_GRIPPER));
 
@@ -121,8 +121,8 @@ TEST(GripperExecutor, PropagatesGoalRejection)
 TEST(GripperExecutor, WaitsForCancellationAcknowledgement)
 {
   const auto adapter = std::make_shared<FakeGripperCommandAdapter>();
-  pick_place::GripperStateExecutor executor(
-    adapter, {pick_place::State::OPEN_GRIPPER, 0.04, 20.0, false});
+  pick_place::GripperStateExecutor executor(adapter,
+                                            {pick_place::State::OPEN_GRIPPER, 0.04, 20.0, false});
 
   const auto result = executor.cancel();
 
@@ -134,10 +134,12 @@ TEST(GripperExecutor, ReportsCancelRejectedInsteadOfSuccess)
 {
   const auto adapter = std::make_shared<FakeGripperCommandAdapter>();
   adapter->cancel_result = {pick_place::ActionStatus::FAILED,
-    pick_place::Failure{pick_place::FailureCategory::GRIPPER,
-      "GRIPPER_CANCEL_REJECTED", "cancel rejected", {}}};
-  pick_place::GripperStateExecutor executor(
-    adapter, {pick_place::State::OPEN_GRIPPER, 0.04, 20.0, false});
+                            pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                                "GRIPPER_CANCEL_REJECTED",
+                                                "cancel rejected",
+                                                {}}};
+  pick_place::GripperStateExecutor executor(adapter,
+                                            {pick_place::State::OPEN_GRIPPER, 0.04, 20.0, false});
 
   const auto result = executor.cancel();
 

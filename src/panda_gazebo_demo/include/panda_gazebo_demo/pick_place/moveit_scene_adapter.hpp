@@ -30,9 +30,8 @@ class IMoveItSceneAdapter
 {
 public:
   virtual ~IMoveItSceneAdapter() = default;
-  [[nodiscard]] virtual ActionResult attachCoke(
-    const std::string & link_name,
-    const std::vector<std::string> & touch_links) = 0;
+  [[nodiscard]] virtual ActionResult attachCoke(const std::string & link_name,
+                                                const std::vector<std::string> & touch_links) = 0;
   [[nodiscard]] virtual ActionResult detachCoke() = 0;
   [[nodiscard]] virtual ActionResult syncCokeWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual ActionResult upsertCokeWorldPose(const Pose3d & pose) = 0;
@@ -42,14 +41,12 @@ public:
 class MoveItSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  MoveItSceneAdapter(
-    std::shared_ptr<rclcpp::Node> node, std::string planning_group,
-    std::string object_id = "coke");
+  MoveItSceneAdapter(const std::shared_ptr<rclcpp::Node> & node, const std::string & planning_group,
+                     std::string object_id = "coke");
   ~MoveItSceneAdapter() override;
 
-  [[nodiscard]] ActionResult attachCoke(
-    const std::string & link_name,
-    const std::vector<std::string> & touch_links) override;
+  [[nodiscard]] ActionResult attachCoke(const std::string & link_name,
+                                        const std::vector<std::string> & touch_links) override;
   [[nodiscard]] ActionResult detachCoke() override;
   [[nodiscard]] ActionResult syncCokeWorldPose(const Pose3d & pose) override;
   [[nodiscard]] ActionResult upsertCokeWorldPose(const Pose3d & pose) override;

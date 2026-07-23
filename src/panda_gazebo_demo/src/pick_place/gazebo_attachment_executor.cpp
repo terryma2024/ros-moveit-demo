@@ -19,12 +19,11 @@ namespace panda_gazebo_demo::pick_place
 namespace
 {
 
-ActionResult attachmentFailure(
-  ActionStatus status, std::string code, std::string message,
-  std::map<std::string, double> metrics = {})
+ActionResult attachmentFailure(ActionStatus status, std::string code, std::string message,
+                               std::map<std::string, double> metrics = {})
 {
-  return {status, Failure{FailureCategory::GAZEBO_ATTACHMENT, std::move(code),
-      std::move(message), std::move(metrics)}};
+  return {status, Failure{FailureCategory::GAZEBO_ATTACHMENT, std::move(code), std::move(message),
+                          std::move(metrics)}};
 }
 
 bool supportedState(State state) noexcept
@@ -33,15 +32,13 @@ bool supportedState(State state) noexcept
          state == State::RECOVER_DETACH_GAZEBO;
 }
 
-bool detachedPostconditionSatisfied(
-  const WorldSnapshot & snapshot, const GripperLimits & gripper_limits)
+bool detachedPostconditionSatisfied(const WorldSnapshot & snapshot,
+                                    const GripperLimits & gripper_limits)
 {
-  return snapshot.fresh && snapshot.arm_stationary &&
-         snapshot.gazebo_coke_attached && !*snapshot.gazebo_coke_attached &&
-         snapshot.moveit_coke_attached.has_value() &&
-         snapshot.gazebo_coke_pose_world.has_value() &&
-         snapshot.gazebo_coke_stationary && *snapshot.gazebo_coke_stationary &&
-         validateGripperOpen(snapshot, gripper_limits).ok;
+  return snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_coke_attached &&
+         !*snapshot.gazebo_coke_attached && snapshot.moveit_coke_attached.has_value() &&
+         snapshot.gazebo_coke_pose_world.has_value() && snapshot.gazebo_coke_stationary &&
+         *snapshot.gazebo_coke_stationary && validateGripperOpen(snapshot, gripper_limits).ok;
 }
 
 }  // namespace
@@ -49,14 +46,12 @@ bool detachedPostconditionSatisfied(
 class GazeboAttachmentExecutor::Impl
 {
 public:
-  Impl(
-    const std::string & attach_topic, const std::string & detach_topic,
-    const std::string & output_topic)
-  : attach_publisher(node.Advertise<gz::msgs::Empty>(attach_topic)),
-    detach_publisher(node.Advertise<gz::msgs::Empty>(detach_topic))
+  Impl(const std::string & attach_topic, const std::string & detach_topic,
+       const std::string & output_topic) :
+      attach_publisher(node.Advertise<gz::msgs::Empty>(attach_topic)),
+      detach_publisher(node.Advertise<gz::msgs::Empty>(detach_topic))
   {
-    subscription_ok = node.Subscribe(
-      output_topic, &Impl::onOutput, this);
+    subscription_ok = node.Subscribe(output_topic, &Impl::onOutput, this);
   }
 
   void onOutput(const gz::msgs::StringMsg & message)
@@ -87,14 +82,13 @@ public:
 };
 
 GazeboAttachmentExecutor::GazeboAttachmentExecutor(
-  State allowed_state, bool desired_attached,
-  std::string attach_topic, std::string detach_topic,
-  std::string output_topic, double timeout_seconds,
-  double poll_interval_seconds, bool idempotent, GripperLimits gripper_limits)
-: allowed_state_(allowed_state), desired_attached_(desired_attached),
-  timeout_seconds_(timeout_seconds), poll_interval_seconds_(poll_interval_seconds),
-  idempotent_(idempotent), gripper_limits_(gripper_limits),
-  impl_(std::make_unique<Impl>(attach_topic, detach_topic, output_topic))
+  State allowed_state, bool desired_attached, const std::string & attach_topic,
+  const std::string & detach_topic, const std::string & output_topic, double timeout_seconds,
+  double poll_interval_seconds, bool idempotent, GripperLimits gripper_limits) :
+    allowed_state_(allowed_state), desired_attached_(desired_attached),
+    timeout_seconds_(timeout_seconds), poll_interval_seconds_(poll_interval_seconds),
+    idempotent_(idempotent), gripper_limits_(gripper_limits),
+    impl_(std::make_unique<Impl>(attach_topic, detach_topic, output_topic))
 {
 }
 
@@ -104,23 +98,23 @@ ActionResult GazeboAttachmentExecutor::execute(const ExecutionContext & context)
 {
   if (context.state != allowed_state_ || !supportedState(allowed_state_)) {
     return attachmentFailure(ActionStatus::NOT_SUPPORTED, "STATE_NOT_EXECUTABLE",
-      std::string("Gazebo attachment executor configured for ") + toString(allowed_state_) +
-      " cannot execute " + toString(context.state));
+                             std::string("Gazebo attachment executor configured for ") +
+                               toString(allowed_state_) + " cannot execute " +
+                               toString(context.state));
   }
   if (idempotent_ && !desired_attached_ &&
-    detachedPostconditionSatisfied(context.before, gripper_limits_))
-  {
+      detachedPostconditionSatisfied(context.before, gripper_limits_)) {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
   if (!impl_->subscription_ok) {
     return attachmentFailure(ActionStatus::FAILED, "GAZEBO_ATTACHMENT_SUBSCRIPTION_FAILED",
-      "Unable to subscribe to the Gazebo attachment output topic");
+                             "Unable to subscribe to the Gazebo attachment output topic");
   }
 
   auto & publisher = desired_attached_ ? impl_->attach_publisher : impl_->detach_publisher;
   if (!publisher.Valid()) {
     return attachmentFailure(ActionStatus::FAILED, "GAZEBO_ATTACHMENT_PUBLISH_FAILED",
-      "Gazebo attachment command publisher is invalid");
+                             "Gazebo attachment command publisher is invalid");
   }
 
   std::uint64_t baseline_sequence;
@@ -132,21 +126,20 @@ ActionResult GazeboAttachmentExecutor::execute(const ExecutionContext & context)
   gz::msgs::Empty command;
   if (!publisher.Publish(command)) {
     return attachmentFailure(ActionStatus::FAILED, "GAZEBO_ATTACHMENT_PUBLISH_FAILED",
-      "Failed to publish the Gazebo attachment command");
+                             "Failed to publish the Gazebo attachment command");
   }
 
-  const auto deadline = std::chrono::steady_clock::now() +
-    std::chrono::duration<double>(timeout_seconds_);
+  const auto deadline =
+    std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds_);
   const auto poll_interval = std::chrono::duration<double>(poll_interval_seconds_);
   std::unique_lock<std::mutex> lock(impl_->mutex);
   while (std::chrono::steady_clock::now() < deadline) {
     if (impl_->cancel_requested) {
       return attachmentFailure(ActionStatus::CANCELLED, "GAZEBO_ATTACHMENT_CANCELLED",
-        "Gazebo attachment convergence wait was cancelled");
+                               "Gazebo attachment convergence wait was cancelled");
     }
     if (impl_->output_sequence > baseline_sequence && impl_->last_output &&
-      *impl_->last_output == desired_attached_)
-    {
+        *impl_->last_output == desired_attached_) {
       return {ActionStatus::SUCCEEDED, std::nullopt};
     }
     impl_->condition.wait_for(lock, poll_interval);
@@ -159,10 +152,11 @@ ActionResult GazeboAttachmentExecutor::execute(const ExecutionContext & context)
   };
   if (impl_->output_sequence == baseline_sequence) {
     return attachmentFailure(ActionStatus::TIMED_OUT, "GAZEBO_ATTACHMENT_STALE_OUTPUT",
-      "No attachment output message arrived after the command", metrics);
+                             "No attachment output message arrived after the command", metrics);
   }
   return attachmentFailure(ActionStatus::TIMED_OUT, "GAZEBO_ATTACHMENT_TIMEOUT",
-    "Fresh Gazebo attachment output did not converge to the requested state", metrics);
+                           "Fresh Gazebo attachment output did not converge to the requested state",
+                           metrics);
 }
 
 ActionResult GazeboAttachmentExecutor::cancel()

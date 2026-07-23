@@ -31,12 +31,10 @@ constexpr Pose3d kCokePick{0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
 constexpr Pose3d kCokeAbovePick{0.3, 0.0, 0.953, 0.0, 0.0, 0.0, 1.0};
 constexpr Pose3d kCokeAbovePlace{0.3, 0.2, 0.953, 0.0, 0.0, 0.0, 1.0};
 constexpr Pose3d kCokePlace{0.3, 0.2, 0.836, 0.0, 0.0, 0.0, 1.0};
-const std::set<std::string> kTouchLinks{
-  "panda_hand", "panda_leftfinger", "panda_rightfinger"};
+const std::set<std::string> kTouchLinks{"panda_hand", "panda_leftfinger", "panda_rightfinger"};
 
-WorldSnapshot detachedSnapshot(
-  const Pose3d & tcp = kPick, const Pose3d & coke = kCokePick,
-  bool synchronized = true)
+WorldSnapshot detachedSnapshot(const Pose3d & tcp = kPick, const Pose3d & coke = kCokePick,
+                               bool synchronized = true)
 {
   WorldSnapshot snapshot;
   snapshot.fresh = true;
@@ -44,9 +42,11 @@ WorldSnapshot detachedSnapshot(
   snapshot.gripper_open = true;
   snapshot.tcp_pose_world = tcp;
   snapshot.joint_positions = {{"panda_joint1", 0.0},
-    {"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
+                              {"panda_finger_joint1", 0.04},
+                              {"panda_finger_joint2", 0.04}};
   snapshot.joint_velocities = {{"panda_joint1", 0.0},
-    {"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
+                               {"panda_finger_joint1", 0.0},
+                               {"panda_finger_joint2", 0.0}};
   snapshot.gazebo_coke_pose_world = coke;
   snapshot.gazebo_coke_attached = false;
   snapshot.gazebo_coke_stationary = true;
@@ -109,8 +109,8 @@ void applySuccessfulRecoveryState(State state, WorldSnapshot & snapshot)
       snapshot.moveit_coke_attached_link.reset();
       snapshot.moveit_coke_touch_links.clear();
       snapshot.moveit_world_object_poses["coke"] =
-        Pose3d{kCokePick.x + 0.02, kCokePick.y, kCokePick.z,
-        kCokePick.qx, kCokePick.qy, kCokePick.qz, kCokePick.qw};
+        Pose3d{kCokePick.x + 0.02, kCokePick.y,  kCokePick.z, kCokePick.qx,
+               kCokePick.qy,       kCokePick.qz, kCokePick.qw};
       break;
     case State::RECOVER_SYNC_WORLD_OBJECT:
       snapshot.moveit_world_object_poses["coke"] = *snapshot.gazebo_coke_pose_world;
@@ -168,7 +168,9 @@ Checkpoint recoveryCheckpoint(const WorldSnapshot & snapshot)
   checkpoint.last_completed_state = State::MOVE_ABOVE_PLACE;
   checkpoint.failed_state = State::MOVE_ABOVE_PLACE;
   checkpoint.original_failure = Failure{FailureCategory::EXECUTION,
-    "FORWARD_FAILED", "forward motion failed", {{"forward_metric", 0.25}}};
+                                        "FORWARD_FAILED",
+                                        "forward motion failed",
+                                        {{"forward_metric", 0.25}}};
   checkpoint.next_state = State::RECOVER_LIFT_TO_SAFE_HEIGHT;
   checkpoint.configuration_hash = "recovery-test-config";
   checkpoint.simulation_session_id = "recovery-test-session";
@@ -183,8 +185,10 @@ public:
   {
     ++commit_attempts;
     if (failing_commit_attempts.count(commit_attempts) != 0) {
-      return Failure{FailureCategory::CHECKPOINT, "CHECKPOINT_WRITE_FAILED",
-        "configured checkpoint write failure", {}};
+      return Failure{FailureCategory::CHECKPOINT,
+                     "CHECKPOINT_WRITE_FAILED",
+                     "configured checkpoint write failure",
+                     {}};
     }
     committed.push_back(checkpoint);
     loaded = checkpoint;
@@ -219,14 +223,13 @@ Checkpoint forwardCarryingCheckpoint(const WorldSnapshot & snapshot)
 class ConfigurableForwardContract final : public TransitionContractRegistry::ITransitionContract
 {
 public:
-  ValidationResult validatePrecondition(const WorldSnapshot &) const override
+  [[nodiscard]] ValidationResult validatePrecondition(const WorldSnapshot &) const override
   {
     return precondition;
   }
 
-  ValidationResult validate(
-    const WorldSnapshot &, const WorldSnapshot &,
-    const ActionResult &) const override
+  [[nodiscard]] ValidationResult validate(const WorldSnapshot &, const WorldSnapshot &,
+                                          const ActionResult &) const override
   {
     return {true, {}, {}};
   }
@@ -237,8 +240,7 @@ public:
 class ConfigurableForwardAction final : public IStatePlanner, public IStateExecutor
 {
 public:
-  PlanResult plan(
-    State, State, const ObservationResult &) override
+  PlanResult plan(State, State, const ObservationResult &) override
   {
     ++plan_calls;
     if (plan_failure) {
@@ -270,9 +272,8 @@ public:
 class ConfigurableForwardPlanValidator final : public IPlanValidator
 {
 public:
-  ValidationResult validate(
-    State, const WorldSnapshot &,
-    const PlanArtifact &) const override
+  [[nodiscard]] ValidationResult validate(State, const WorldSnapshot &,
+                                          const PlanArtifact &) const override
   {
     return validation;
   }
@@ -283,25 +284,26 @@ public:
 class RecordingRecoveryAction final : public IStatePlanner, public IStateExecutor
 {
 public:
-  RecordingRecoveryAction(
-    State state, State next_state, std::optional<MotionStateConfig> motion_config,
-    MutableObserver * observer, std::vector<State> * execution_order,
-    std::vector<State> * planning_order, std::optional<State> fail_state)
-  : state_(state), next_state_(next_state), motion_config_(motion_config), observer_(observer),
-    execution_order_(execution_order), planning_order_(planning_order), fail_state_(fail_state)
+  RecordingRecoveryAction(State state, State next_state,
+                          std::optional<MotionStateConfig> motion_config,
+                          MutableObserver * observer, std::vector<State> * execution_order,
+                          std::vector<State> * planning_order, std::optional<State> fail_state) :
+      state_(state), next_state_(next_state), motion_config_(motion_config), observer_(observer),
+      execution_order_(execution_order), planning_order_(planning_order), fail_state_(fail_state)
   {
   }
 
-  PlanResult plan(
-    State current_state, State next_state,
-    const ObservationResult & observation) override
+  PlanResult plan(State current_state, State next_state,
+                  const ObservationResult & observation) override
   {
     planning_order_->push_back(state_);
     if (!motion_config_ || current_state != state_ || next_state != next_state_ ||
-      !observation.snapshot)
-    {
+        !observation.snapshot) {
       return {{ActionStatus::FAILED, Failure{FailureCategory::PLANNING,
-          "TEST_PLANNER_MISUSE", "test planner received an invalid request", {}}}, nullptr};
+                                             "TEST_PLANNER_MISUSE",
+                                             "test planner received an invalid request",
+                                             {}}},
+              nullptr};
     }
     auto evidence = std::make_shared<MotionPlanEvidence>();
     evidence->state = state_;
@@ -330,13 +332,16 @@ public:
     execution_order_->push_back(state_);
     if (context.state != state_ || context.next_state != next_state_) {
       return {ActionStatus::FAILED, Failure{FailureCategory::EXECUTION,
-          "TEST_EXECUTOR_MISUSE", "test executor received an invalid transition", {}}};
+                                            "TEST_EXECUTOR_MISUSE",
+                                            "test executor received an invalid transition",
+                                            {}}};
     }
     if (fail_state_ == state_) {
-      return {ActionStatus::FAILED, Failure{FailureCategory::EXECUTION,
-          std::string("RECOVERY_FAILED_") + toString(state_),
-          std::string("recovery action failed at ") + toString(state_),
-          {{"recovery_metric", 0.5}}}};
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::EXECUTION,
+                      std::string("RECOVERY_FAILED_") + toString(state_),
+                      std::string("recovery action failed at ") + toString(state_),
+                      {{"recovery_metric", 0.5}}}};
     }
     applySuccessfulRecoveryState(state_, observer_->snapshot);
     return {ActionStatus::SUCCEEDED, std::nullopt};
@@ -361,12 +366,10 @@ private:
 };
 
 const std::array<MotionStateConfig, 4> kRecoveryMotionConfigs{{
-  {State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK,
-    MotionKind::CARTESIAN_UP, true},
-  {State::RECOVER_MOVE_ABOVE_PICK, State::RECOVER_DESCEND_TO_PICK,
-    MotionKind::POSE, true},
-  {State::RECOVER_DESCEND_TO_PICK, State::RECOVER_OPEN_GRIPPER,
-    MotionKind::CARTESIAN_DOWN, true},
+  {State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK, MotionKind::CARTESIAN_UP,
+   true},
+  {State::RECOVER_MOVE_ABOVE_PICK, State::RECOVER_DESCEND_TO_PICK, MotionKind::POSE, true},
+  {State::RECOVER_DESCEND_TO_PICK, State::RECOVER_OPEN_GRIPPER, MotionKind::CARTESIAN_DOWN, true},
   {State::RECOVER_RETREAT, State::ERROR, MotionKind::CARTESIAN_UP, false},
 }};
 
@@ -380,11 +383,11 @@ const std::array<std::pair<State, State>, 4> kRecoveryNonMotionTransitions{{
 class WorkflowHarness
 {
 public:
-  explicit WorkflowHarness(
-    WorldSnapshot initial_snapshot, std::optional<State> fail_state = std::nullopt)
-  : target_policy(std::make_shared<FixedPickPlaceTargetPolicy>()),
-    recovery_policy(target_policy, 0.005),
-    common_resume("recovery-test-config", "recovery-test-session")
+  explicit WorkflowHarness(WorldSnapshot initial_snapshot,
+                           std::optional<State> fail_state = std::nullopt) :
+      target_policy(std::make_shared<FixedPickPlaceTargetPolicy>()),
+      recovery_policy(target_policy, 0.005),
+      common_resume("recovery-test-config", "recovery-test-session")
   {
     observer.snapshot = std::move(initial_snapshot);
     checkpoints.loaded = recoveryCheckpoint(observer.snapshot);
@@ -394,26 +397,25 @@ public:
     contract_config.gripper_close_tolerance = 0.004;
     registerRecoveryContracts(contracts, target_policy, contract_config);
     for (const auto & config : kRecoveryMotionConfigs) {
-      auto action = std::make_shared<RecordingRecoveryAction>(
-        config.state, config.next_state, config, &observer, &execution_order,
-        &planning_order, fail_state);
+      auto action = std::make_shared<RecordingRecoveryAction>(config.state, config.next_state,
+                                                              config, &observer, &execution_order,
+                                                              &planning_order, fail_state);
       actions.registerPlanner(config.state, action);
       actions.registerExecutor(config.state, action);
-      plan_validators.registerValidator(config.state,
-        std::make_shared<MotionPlanValidator>(config, target_policy));
+      plan_validators.registerValidator(
+        config.state, std::make_shared<MotionPlanValidator>(config, target_policy));
     }
     for (const auto & [state, next_state] : kRecoveryNonMotionTransitions) {
       actions.registerExecutor(state, std::make_shared<RecordingRecoveryAction>(
-          state, next_state, std::nullopt, &observer, &execution_order,
-          &planning_order, fail_state));
+                                        state, next_state, std::nullopt, &observer,
+                                        &execution_order, &planning_order, fail_state));
     }
   }
 
   RunResult run()
   {
-    const StateMachineRunner runner(
-      actions, contracts, &observer, &checkpoints, &common_resume, nullptr,
-      &plan_validators, &recovery_policy);
+    const StateMachineRunner runner(actions, contracts, &observer, &checkpoints, &common_resume,
+                                    nullptr, &plan_validators, &recovery_policy);
     return runner.run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
   }
 
@@ -440,31 +442,37 @@ enum class ForwardFailureStage
 class ForwardFailureHarness
 {
 public:
-  explicit ForwardFailureHarness(ForwardFailureStage stage)
-  : workflow(carryingSnapshot(kAbovePlace, kCokeAbovePlace)),
-    action(std::make_shared<ConfigurableForwardAction>()),
-    contract(std::make_shared<ConfigurableForwardContract>()),
-    validator(std::make_shared<ConfigurableForwardPlanValidator>())
+  explicit ForwardFailureHarness(ForwardFailureStage stage) :
+      workflow(carryingSnapshot(kAbovePlace, kCokeAbovePlace)),
+      action(std::make_shared<ConfigurableForwardAction>()),
+      contract(std::make_shared<ConfigurableForwardContract>()),
+      validator(std::make_shared<ConfigurableForwardPlanValidator>())
   {
     workflow.checkpoints.loaded = forwardCarryingCheckpoint(workflow.observer.snapshot);
-    workflow.contracts.registerContract(
-      {State::LIFT, State::MOVE_ABOVE_PLACE}, std::make_shared<AlwaysPassValidator>());
-    workflow.contracts.registerContract(
-      {State::MOVE_ABOVE_PLACE, State::DESCEND_TO_PLACE}, contract);
+    workflow.contracts.registerContract({State::LIFT, State::MOVE_ABOVE_PLACE},
+                                        std::make_shared<AlwaysPassValidator>());
+    workflow.contracts.registerContract({State::MOVE_ABOVE_PLACE, State::DESCEND_TO_PLACE},
+                                        contract);
     workflow.actions.registerPlanner(State::MOVE_ABOVE_PLACE, action);
     workflow.actions.registerExecutor(State::MOVE_ABOVE_PLACE, action);
     workflow.plan_validators.registerValidator(State::MOVE_ABOVE_PLACE, validator);
 
     const Failure failure{FailureCategory::PRECONDITION,
-      "FORWARD_PRECONDITION_FAILED", "configured precondition failure", {}};
+                          "FORWARD_PRECONDITION_FAILED",
+                          "configured precondition failure",
+                          {}};
     if (stage == ForwardFailureStage::PRECONDITION) {
       contract->precondition = {false, {failure}, {}};
     } else if (stage == ForwardFailureStage::PLANNER) {
-      action->plan_failure = Failure{FailureCategory::PLANNING,
-        "FORWARD_PLAN_FAILED", "configured planner failure", {}};
+      action->plan_failure =
+        Failure{FailureCategory::PLANNING, "FORWARD_PLAN_FAILED", "configured planner failure", {}};
     } else if (stage == ForwardFailureStage::PLAN_VALIDATOR) {
-      validator->validation = {false, {Failure{FailureCategory::PLAN_VALIDATION,
-            "FORWARD_PLAN_INVALID", "configured plan-validation failure", {}}}, {}};
+      validator->validation = {false,
+                               {Failure{FailureCategory::PLAN_VALIDATION,
+                                        "FORWARD_PLAN_INVALID",
+                                        "configured plan-validation failure",
+                                        {}}},
+                               {}};
     } else {
       workflow.checkpoints.failing_commit_attempts = {1, 2};
     }
@@ -484,9 +492,9 @@ public:
 std::vector<State> fullRecoveryOrder()
 {
   return {State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK,
-    State::RECOVER_DESCEND_TO_PICK, State::RECOVER_OPEN_GRIPPER,
-    State::RECOVER_DETACH_GAZEBO, State::RECOVER_DETACH_MOVEIT,
-    State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT};
+          State::RECOVER_DESCEND_TO_PICK,     State::RECOVER_OPEN_GRIPPER,
+          State::RECOVER_DETACH_GAZEBO,       State::RECOVER_DETACH_MOVEIT,
+          State::RECOVER_SYNC_WORLD_OBJECT,   State::RECOVER_RETREAT};
 }
 
 std::vector<State> recoveryOrderFromSafeHeight()
@@ -546,13 +554,14 @@ public:
 class FakeMotionAdapter final : public IMoveItMotionAdapter
 {
 public:
-  PlanResult plan(
-    const MotionPlanningRequest &,
-    const ObservationResult &) override
+  PlanResult plan(const MotionPlanningRequest &, const ObservationResult &) override
   {
     ++plan_calls;
     return {{ActionStatus::FAILED, Failure{FailureCategory::PLANNING,
-        "FAKE_PLAN_CALLED", "fake adapter planning was called", {}}}, nullptr};
+                                           "FAKE_PLAN_CALLED",
+                                           "fake adapter planning was called",
+                                           {}}},
+            nullptr};
   }
 
   ActionResult execute(const MotionPlanEvidence &) override
@@ -597,7 +606,7 @@ TEST(RecoveryWorkflow, CarryingPreconditionFailureRunsTheExactRecoveryWorkflow)
   ASSERT_FALSE(harness.workflow.checkpoints.committed.empty());
   EXPECT_EQ(harness.workflow.checkpoints.committed.front().phase, CheckpointPhase::RECOVERY);
   EXPECT_EQ(harness.workflow.checkpoints.committed.front().next_state,
-    State::RECOVER_MOVE_ABOVE_PICK);
+            State::RECOVER_MOVE_ABOVE_PICK);
 }
 
 TEST(RecoveryWorkflow, CarryingPlannerFailureRunsTheExactRecoveryWorkflow)
@@ -652,9 +661,9 @@ TEST(RecoveryWorkflow, CarryFailureAtPlaceSurfaceOpensBeforeCleanup)
 
   EXPECT_EQ(result.status, RunStatus::ERROR);
   EXPECT_EQ(harness.execution_order,
-    (std::vector<State>{State::RECOVER_OPEN_GRIPPER, State::RECOVER_DETACH_GAZEBO,
-      State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT,
-      State::RECOVER_RETREAT}));
+            (std::vector<State>{State::RECOVER_OPEN_GRIPPER, State::RECOVER_DETACH_GAZEBO,
+                                State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT,
+                                State::RECOVER_RETREAT}));
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(result.failure->code, "FORWARD_FAILED");
 }
@@ -681,27 +690,35 @@ TEST(RecoveryWorkflow, AlreadyDetachedCleanupNoOpsAndSynchronizes)
   auto snapshot = detachedSnapshot(kPick, kCokePick, false);
   const auto gripper_adapter = std::make_shared<FakeGripperAdapter>();
   GripperStateExecutor open_executor(gripper_adapter,
-    {State::RECOVER_OPEN_GRIPPER, 0.04, 20.0, true});
-  GazeboAttachmentExecutor gazebo_detach(
-    State::RECOVER_DETACH_GAZEBO, false, "/unused/attach", "/unused/detach",
-    "/unused/output", 0.01, 0.001, true);
+                                     {State::RECOVER_OPEN_GRIPPER, 0.04, 20.0, true});
+  GazeboAttachmentExecutor gazebo_detach(State::RECOVER_DETACH_GAZEBO, false, "/unused/attach",
+                                         "/unused/detach", "/unused/output", 0.01, 0.001, true);
   const auto scene_adapter = std::make_shared<FakeSceneAdapter>();
-  MoveItSceneExecutor moveit_detach(scene_adapter,
-    {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true});
-  MoveItSceneExecutor synchronize(scene_adapter,
-    {State::RECOVER_SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, true}, 0.05, 0.001);
+  MoveItSceneExecutor moveit_detach(
+    scene_adapter, {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true});
+  MoveItSceneExecutor synchronize(
+    scene_adapter, {State::RECOVER_SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, true}, 0.05,
+    0.001);
 
-  EXPECT_EQ(open_executor.execute(
-      {State::RECOVER_OPEN_GRIPPER, State::RECOVER_DETACH_GAZEBO, snapshot, nullptr}).status,
+  EXPECT_EQ(
+    open_executor
+      .execute({State::RECOVER_OPEN_GRIPPER, State::RECOVER_DETACH_GAZEBO, snapshot, nullptr})
+      .status,
     ActionStatus::SUCCEEDED);
-  EXPECT_EQ(gazebo_detach.execute(
-      {State::RECOVER_DETACH_GAZEBO, State::RECOVER_DETACH_MOVEIT, snapshot, nullptr}).status,
+  EXPECT_EQ(
+    gazebo_detach
+      .execute({State::RECOVER_DETACH_GAZEBO, State::RECOVER_DETACH_MOVEIT, snapshot, nullptr})
+      .status,
     ActionStatus::SUCCEEDED);
-  EXPECT_EQ(moveit_detach.execute(
-      {State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT, snapshot, nullptr}).status,
+  EXPECT_EQ(
+    moveit_detach
+      .execute({State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT, snapshot, nullptr})
+      .status,
     ActionStatus::SUCCEEDED);
-  EXPECT_EQ(synchronize.execute(
-      {State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT, snapshot, nullptr}).status,
+  EXPECT_EQ(
+    synchronize
+      .execute({State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT, snapshot, nullptr})
+      .status,
     ActionStatus::SUCCEEDED);
   EXPECT_EQ(gripper_adapter->command_calls, 0);
   EXPECT_EQ(scene_adapter->detach_calls, 0);
@@ -711,42 +728,46 @@ TEST(RecoveryWorkflow, AlreadyDetachedCleanupNoOpsAndSynchronizes)
 
   auto incomplete = detachedSnapshot(kPick, kCokePick);
   incomplete.gazebo_coke_stationary = false;
-  EXPECT_EQ(open_executor.execute(
-      {State::RECOVER_OPEN_GRIPPER, State::RECOVER_DETACH_GAZEBO, incomplete, nullptr}).status,
+  EXPECT_EQ(
+    open_executor
+      .execute({State::RECOVER_OPEN_GRIPPER, State::RECOVER_DETACH_GAZEBO, incomplete, nullptr})
+      .status,
     ActionStatus::SUCCEEDED);
   EXPECT_EQ(gripper_adapter->command_calls, 1);
 
   auto stale_moveit_metadata = detachedSnapshot(kPick, kCokePick);
   stale_moveit_metadata.moveit_coke_attached_link = "panda_hand";
-  EXPECT_EQ(moveit_detach.execute(
-      {State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT,
-        stale_moveit_metadata, nullptr}).status,
-    ActionStatus::SUCCEEDED);
+  EXPECT_EQ(moveit_detach
+              .execute({State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT,
+                        stale_moveit_metadata, nullptr})
+              .status,
+            ActionStatus::SUCCEEDED);
   EXPECT_EQ(scene_adapter->detach_calls, 1);
 
   const auto synchronized_snapshot = detachedSnapshot(kPick, kCokePick);
-  EXPECT_EQ(synchronize.execute(
-      {State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT,
-        synchronized_snapshot, nullptr}).status,
-    ActionStatus::SUCCEEDED);
+  EXPECT_EQ(synchronize
+              .execute({State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT,
+                        synchronized_snapshot, nullptr})
+              .status,
+            ActionStatus::SUCCEEDED);
   EXPECT_EQ(scene_adapter->sync_calls, 1);
 
   const auto motion_adapter = std::make_shared<FakeMotionAdapter>();
   const auto target_policy = std::make_shared<FixedPickPlaceTargetPolicy>();
   const MotionStateConfig retreat_config{State::RECOVER_RETREAT, State::ERROR,
-    MotionKind::CARTESIAN_UP, false, true};
+                                         MotionKind::CARTESIAN_UP, false, true};
   MotionStateAction retreat(motion_adapter, target_policy, retreat_config);
   const auto already_retreated = detachedSnapshot(kAbovePick, kCokePick);
-  const auto no_op_plan = retreat.plan(
-    State::RECOVER_RETREAT, State::ERROR,
-    ObservationResult{already_retreated, std::nullopt});
+  const auto no_op_plan = retreat.plan(State::RECOVER_RETREAT, State::ERROR,
+                                       ObservationResult{already_retreated, std::nullopt});
   ASSERT_EQ(no_op_plan.action.status, ActionStatus::SUCCEEDED);
   ASSERT_TRUE(no_op_plan.artifact);
   const MotionPlanValidator retreat_validator(retreat_config, target_policy);
-  EXPECT_TRUE(retreat_validator.validate(
-      State::RECOVER_RETREAT, already_retreated, *no_op_plan.artifact).ok);
-  EXPECT_EQ(retreat.execute(
-      {State::RECOVER_RETREAT, State::ERROR, already_retreated, no_op_plan.artifact}).status,
+  EXPECT_TRUE(
+    retreat_validator.validate(State::RECOVER_RETREAT, already_retreated, *no_op_plan.artifact).ok);
+  EXPECT_EQ(
+    retreat.execute({State::RECOVER_RETREAT, State::ERROR, already_retreated, no_op_plan.artifact})
+      .status,
     ActionStatus::SUCCEEDED);
   EXPECT_EQ(motion_adapter->plan_calls, 0);
   EXPECT_EQ(motion_adapter->execute_calls, 0);
@@ -763,17 +784,16 @@ TEST(RecoveryWorkflow, RecoveryActionFailureStopsImmediately)
     ASSERT_EQ(result.status, RunStatus::ERROR);
     ASSERT_FALSE(harness.execution_order.empty());
     EXPECT_EQ(harness.execution_order.back(), failed_state);
-    EXPECT_EQ(std::count(harness.execution_order.begin(), harness.execution_order.end(),
-      failed_state), 1);
+    EXPECT_EQ(
+      std::count(harness.execution_order.begin(), harness.execution_order.end(), failed_state), 1);
     ASSERT_TRUE(result.failure);
     EXPECT_EQ(result.failure->code, std::string("RECOVERY_FAILED_") + toString(failed_state));
   }
 
-
   const Pose3d low_tcp{0.3, 0.2, 0.93, 1.0, 0.0, 0.0, 0.0};
   const Pose3d low_coke = supportedCokePoseFromTcp(low_tcp);
-  WorkflowHarness lift_harness(
-    carryingSnapshot(low_tcp, low_coke), State::RECOVER_LIFT_TO_SAFE_HEIGHT);
+  WorkflowHarness lift_harness(carryingSnapshot(low_tcp, low_coke),
+                               State::RECOVER_LIFT_TO_SAFE_HEIGHT);
 
   const auto lift_result = lift_harness.run();
 
@@ -786,9 +806,8 @@ TEST(RecoveryWorkflow, RecoveryActionFailureStopsImmediately)
 
 TEST(RecoveryWorkflow, FinalErrorPreservesOriginalAndRecoveryFailure)
 {
-  WorkflowHarness harness(
-    carryingSnapshot(kAbovePlace, kCokeAbovePlace),
-    State::RECOVER_DETACH_GAZEBO);
+  WorkflowHarness harness(carryingSnapshot(kAbovePlace, kCokeAbovePlace),
+                          State::RECOVER_DETACH_GAZEBO);
 
   const auto result = harness.run();
 
@@ -802,8 +821,7 @@ TEST(RecoveryWorkflow, FinalErrorPreservesOriginalAndRecoveryFailure)
 TEST(RecoveryWorkflow, ResumeReclassifiesChangedAttachmentFacts)
 {
   WorkflowHarness harness(carryingSnapshot(kAbovePlace, kCokeAbovePlace));
-  harness.checkpoints.loaded = recoveryCheckpoint(
-    carryingSnapshot(kAbovePlace, kCokeAbovePlace));
+  harness.checkpoints.loaded = recoveryCheckpoint(carryingSnapshot(kAbovePlace, kCokeAbovePlace));
   harness.observer.snapshot = detachedSnapshot(kPick, kCokePick, false);
 
   const auto result = harness.run();

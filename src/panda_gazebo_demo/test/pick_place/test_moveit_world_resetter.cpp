@@ -24,7 +24,7 @@ ActionResult succeeded()
 ActionResult failed(std::string code)
 {
   return {ActionStatus::FAILED,
-    Failure{FailureCategory::MOVEIT_SCENE, std::move(code), "test failure", {}}};
+          Failure{FailureCategory::MOVEIT_SCENE, std::move(code), "test failure", {}}};
 }
 
 MoveItSceneState attachedState()
@@ -40,8 +40,7 @@ MoveItSceneState detachedState(std::optional<Pose3d> pose = std::nullopt)
 class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(
-    const std::string &, const std::vector<std::string> &) override
+  ActionResult attachCoke(const std::string &, const std::vector<std::string> &) override
   {
     return succeeded();
   }
@@ -72,8 +71,8 @@ public:
     if (observations.empty()) {
       return std::nullopt;
     }
-    const auto index = observation_index < observations.size() ?
-      observation_index++ : observations.size() - 1;
+    const auto index =
+      observation_index < observations.size() ? observation_index++ : observations.size() - 1;
     return observations[index];
   }
 

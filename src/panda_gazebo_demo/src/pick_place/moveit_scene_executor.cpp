@@ -17,16 +17,14 @@ namespace
 
 constexpr char kCokeObjectId[] = "coke";
 constexpr char kAttachLink[] = "panda_hand";
-const std::vector<std::string> kTouchLinks{
-  "panda_hand", "panda_leftfinger", "panda_rightfinger"};
+const std::vector<std::string> kTouchLinks{"panda_hand", "panda_leftfinger", "panda_rightfinger"};
 const std::set<std::string> kTouchLinkSet(kTouchLinks.begin(), kTouchLinks.end());
 
-ActionResult sceneFailure(
-  ActionStatus status, std::string code, std::string message,
-  std::map<std::string, double> metrics = {})
+ActionResult sceneFailure(ActionStatus status, std::string code, std::string message,
+                          std::map<std::string, double> metrics = {})
 {
-  return {status, Failure{FailureCategory::MOVEIT_SCENE, std::move(code),
-      std::move(message), std::move(metrics)}};
+  return {status, Failure{FailureCategory::MOVEIT_SCENE, std::move(code), std::move(message),
+                          std::move(metrics)}};
 }
 
 bool validConfiguration(const MoveItSceneConfig & config) noexcept
@@ -35,8 +33,7 @@ bool validConfiguration(const MoveItSceneConfig & config) noexcept
     case MoveItSceneOperation::ATTACH:
       return config.state == State::ATTACH_MOVEIT;
     case MoveItSceneOperation::DETACH:
-      return config.state == State::DETACH_MOVEIT ||
-             config.state == State::RECOVER_DETACH_MOVEIT;
+      return config.state == State::DETACH_MOVEIT || config.state == State::RECOVER_DETACH_MOVEIT;
     case MoveItSceneOperation::SYNC:
       return config.state == State::SYNC_WORLD_OBJECT ||
              config.state == State::RECOVER_SYNC_WORLD_OBJECT;
@@ -50,36 +47,34 @@ bool poseMatches(const Pose3d & actual, const Pose3d & expected) noexcept
          orientationDistance(actual, expected) <= 1e-4;
 }
 
-bool detachedBoundaryComplete(
-  const WorldSnapshot & snapshot, const GripperLimits & gripper_limits)
+bool detachedBoundaryComplete(const WorldSnapshot & snapshot, const GripperLimits & gripper_limits)
 {
-  return snapshot.fresh && snapshot.arm_stationary &&
-         snapshot.gazebo_coke_attached && !*snapshot.gazebo_coke_attached &&
-         snapshot.moveit_coke_attached && !*snapshot.moveit_coke_attached &&
-         !snapshot.moveit_coke_attached_link && snapshot.moveit_coke_touch_links.empty() &&
-         snapshot.gazebo_coke_pose_world && snapshot.gazebo_coke_stationary &&
-         *snapshot.gazebo_coke_stationary &&
+  return snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_coke_attached &&
+         !*snapshot.gazebo_coke_attached && snapshot.moveit_coke_attached &&
+         !*snapshot.moveit_coke_attached && !snapshot.moveit_coke_attached_link &&
+         snapshot.moveit_coke_touch_links.empty() && snapshot.gazebo_coke_pose_world &&
+         snapshot.gazebo_coke_stationary && *snapshot.gazebo_coke_stationary &&
          snapshot.moveit_world_object_poses.count("table") == 1 &&
          snapshot.moveit_world_object_poses.count(kCokeObjectId) == 1 &&
          validateGripperOpen(snapshot, gripper_limits).ok;
 }
 
-bool synchronizedBoundaryComplete(
-  const WorldSnapshot & snapshot, const GripperLimits & gripper_limits)
+bool synchronizedBoundaryComplete(const WorldSnapshot & snapshot,
+                                  const GripperLimits & gripper_limits)
 {
   return detachedBoundaryComplete(snapshot, gripper_limits) &&
          poseMatches(snapshot.moveit_world_object_poses.at(kCokeObjectId),
-           *snapshot.gazebo_coke_pose_world);
+                     *snapshot.gazebo_coke_pose_world);
 }
 
 }  // namespace
 
-MoveItSceneExecutor::MoveItSceneExecutor(
-  std::shared_ptr<IMoveItSceneAdapter> adapter, MoveItSceneConfig config,
-  double timeout_seconds, double poll_interval_seconds,
-  GripperLimits gripper_limits)
-: adapter_(std::move(adapter)), config_(config), timeout_seconds_(timeout_seconds),
-  poll_interval_seconds_(poll_interval_seconds), gripper_limits_(gripper_limits)
+MoveItSceneExecutor::MoveItSceneExecutor(std::shared_ptr<IMoveItSceneAdapter> adapter,
+                                         MoveItSceneConfig config, double timeout_seconds,
+                                         double poll_interval_seconds,
+                                         GripperLimits gripper_limits) :
+    adapter_(std::move(adapter)), config_(config), timeout_seconds_(timeout_seconds),
+    poll_interval_seconds_(poll_interval_seconds), gripper_limits_(gripper_limits)
 {
 }
 
@@ -87,16 +82,16 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
 {
   if (context.state != config_.state || !validConfiguration(config_)) {
     return sceneFailure(ActionStatus::NOT_SUPPORTED, "STATE_NOT_EXECUTABLE",
-      std::string("MoveIt scene executor configured for ") + toString(config_.state) +
-      " cannot execute " + toString(context.state));
+                        std::string("MoveIt scene executor configured for ") +
+                          toString(config_.state) + " cannot execute " + toString(context.state));
   }
   if (!adapter_) {
     return sceneFailure(ActionStatus::FAILED, "MOVEIT_SCENE_ADAPTER_MISSING",
-      "MoveIt scene adapter is not configured");
+                        "MoveIt scene adapter is not configured");
   }
   if (timeout_seconds_ <= 0.0 || poll_interval_seconds_ <= 0.0) {
     return sceneFailure(ActionStatus::FAILED, "MOVEIT_SCENE_TIMING_INVALID",
-      "MoveIt scene timeout and polling interval must be positive");
+                        "MoveIt scene timeout and polling interval must be positive");
   }
 
   {
@@ -119,11 +114,9 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
     case MoveItSceneOperation::SYNC:
       if (!context.before.gazebo_coke_pose_world) {
         return sceneFailure(ActionStatus::FAILED, "GAZEBO_COKE_POSE_MISSING",
-          "Cannot synchronize MoveIt without an observed Gazebo Coke pose");
+                            "Cannot synchronize MoveIt without an observed Gazebo Coke pose");
       }
-      if (config_.idempotent &&
-        synchronizedBoundaryComplete(context.before, gripper_limits_))
-      {
+      if (config_.idempotent && synchronizedBoundaryComplete(context.before, gripper_limits_)) {
         return {ActionStatus::SUCCEEDED, std::nullopt};
       }
       synchronized_pose = context.before.gazebo_coke_pose_world;
@@ -137,11 +130,11 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
   return waitForConvergence(synchronized_pose);
 }
 
-ActionResult MoveItSceneExecutor::waitForConvergence(
-  const std::optional<Pose3d> & synchronized_pose)
+ActionResult
+MoveItSceneExecutor::waitForConvergence(const std::optional<Pose3d> & synchronized_pose)
 {
-  const auto deadline = std::chrono::steady_clock::now() +
-    std::chrono::duration<double>(timeout_seconds_);
+  const auto deadline =
+    std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds_);
   const auto poll_interval = std::chrono::duration<double>(poll_interval_seconds_);
   std::size_t observation_count = 0;
 
@@ -150,7 +143,7 @@ ActionResult MoveItSceneExecutor::waitForConvergence(
       std::lock_guard<std::mutex> lock(mutex_);
       if (cancel_requested_) {
         return sceneFailure(ActionStatus::CANCELLED, "MOVEIT_SCENE_CANCELLED",
-          "MoveIt scene convergence wait was cancelled");
+                            "MoveIt scene convergence wait was cancelled");
       }
     }
 
@@ -161,15 +154,15 @@ ActionResult MoveItSceneExecutor::waitForConvergence(
       switch (config_.operation) {
         case MoveItSceneOperation::ATTACH:
           converged = state->coke_attached && !state->coke_in_world &&
-            state->attached_link == kAttachLink && state->touch_links == kTouchLinkSet;
+                      state->attached_link == kAttachLink && state->touch_links == kTouchLinkSet;
           break;
         case MoveItSceneOperation::DETACH:
           converged = !state->coke_attached && state->coke_in_world;
           break;
         case MoveItSceneOperation::SYNC:
-          converged = !state->coke_attached && state->coke_in_world &&
-            synchronized_pose && state->coke_world_pose &&
-            poseMatches(*state->coke_world_pose, *synchronized_pose);
+          converged = !state->coke_attached && state->coke_in_world && synchronized_pose &&
+                      state->coke_world_pose &&
+                      poseMatches(*state->coke_world_pose, *synchronized_pose);
           break;
       }
       if (converged) {
@@ -178,12 +171,12 @@ ActionResult MoveItSceneExecutor::waitForConvergence(
     }
 
     std::unique_lock<std::mutex> lock(mutex_);
-    condition_.wait_for(lock, poll_interval, [this]() {return cancel_requested_;});
+    condition_.wait_for(lock, poll_interval, [this]() { return cancel_requested_; });
   }
 
   return sceneFailure(ActionStatus::TIMED_OUT, "MOVEIT_SCENE_CONVERGENCE_TIMEOUT",
-    "MoveIt Planning Scene did not converge to the requested state",
-           {{"observation_count", static_cast<double>(observation_count)}});
+                      "MoveIt Planning Scene did not converge to the requested state",
+                      {{"observation_count", static_cast<double>(observation_count)}});
 }
 
 ActionResult MoveItSceneExecutor::cancel()

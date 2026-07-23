@@ -27,15 +27,14 @@ struct TestTopics
 TestTopics uniqueTopics()
 {
   static std::atomic<unsigned int> sequence{0};
-  const auto suffix = std::to_string(
-    std::chrono::steady_clock::now().time_since_epoch().count()) + "_" +
-    std::to_string(sequence.fetch_add(1));
+  const auto suffix = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) +
+                      "_" + std::to_string(sequence.fetch_add(1));
   const auto prefix = "/panda_gazebo_demo/test/attachment_" + suffix;
   return {prefix + "/attach", prefix + "/detach", prefix + "/output"};
 }
 
-pick_place::ExecutionContext contextFor(
-  pick_place::State state, std::optional<bool> attached = std::nullopt)
+pick_place::ExecutionContext contextFor(pick_place::State state,
+                                        std::optional<bool> attached = std::nullopt)
 {
   pick_place::WorldSnapshot before;
   before.fresh = true;
@@ -45,10 +44,8 @@ pick_place::ExecutionContext contextFor(
   before.moveit_coke_attached = false;
   before.gazebo_coke_pose_world = pick_place::Pose3d{};
   before.gazebo_coke_stationary = true;
-  before.joint_positions = {{"panda_finger_joint1", 0.04},
-    {"panda_finger_joint2", 0.04}};
-  before.joint_velocities = {{"panda_finger_joint1", 0.0},
-    {"panda_finger_joint2", 0.0}};
+  before.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
+  before.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   return {state, pick_place::State::DONE, before, nullptr};
 }
 
@@ -65,17 +62,16 @@ TEST(GazeboAttachmentExecutor, PublishesAttachAndWaitsForTrueOutput)
   gz::transport::Node peer;
   auto output = peer.Advertise<gz::msgs::StringMsg>(topics.output);
   std::atomic<int> attach_messages{0};
-  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(
-      topics.attach,
-      [&output, &attach_messages](const gz::msgs::Empty &) {
-        ++attach_messages;
-        gz::msgs::StringMsg response;
-        response.set_data("attached");
-        output.Publish(response);
-      }));
-  pick_place::GazeboAttachmentExecutor executor(
-    pick_place::State::ATTACH_GAZEBO, true, topics.attach, topics.detach, topics.output,
-    0.5, 0.005, false);
+  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(topics.attach,
+                                              [&output, &attach_messages](const gz::msgs::Empty &) {
+                                                ++attach_messages;
+                                                gz::msgs::StringMsg response;
+                                                response.set_data("attached");
+                                                output.Publish(response);
+                                              }));
+  pick_place::GazeboAttachmentExecutor executor(pick_place::State::ATTACH_GAZEBO, true,
+                                                topics.attach, topics.detach, topics.output, 0.5,
+                                                0.005, false);
   waitForDiscovery();
 
   const auto result = executor.execute(contextFor(pick_place::State::ATTACH_GAZEBO, false));
@@ -90,17 +86,16 @@ TEST(GazeboAttachmentExecutor, PublishesDetachAndWaitsForFalseOutput)
   gz::transport::Node peer;
   auto output = peer.Advertise<gz::msgs::StringMsg>(topics.output);
   std::atomic<int> detach_messages{0};
-  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(
-      topics.detach,
-      [&output, &detach_messages](const gz::msgs::Empty &) {
-        ++detach_messages;
-        gz::msgs::StringMsg response;
-        response.set_data("detached");
-        output.Publish(response);
-      }));
-  pick_place::GazeboAttachmentExecutor executor(
-    pick_place::State::DETACH_GAZEBO, false, topics.attach, topics.detach, topics.output,
-    0.5, 0.005, false);
+  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(topics.detach,
+                                              [&output, &detach_messages](const gz::msgs::Empty &) {
+                                                ++detach_messages;
+                                                gz::msgs::StringMsg response;
+                                                response.set_data("detached");
+                                                output.Publish(response);
+                                              }));
+  pick_place::GazeboAttachmentExecutor executor(pick_place::State::DETACH_GAZEBO, false,
+                                                topics.attach, topics.detach, topics.output, 0.5,
+                                                0.005, false);
   waitForDiscovery();
 
   const auto result = executor.execute(contextFor(pick_place::State::DETACH_GAZEBO, true));
@@ -115,15 +110,13 @@ TEST(GazeboAttachmentExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
   gz::transport::Node peer;
   std::atomic<int> detach_messages{0};
   ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(
-      topics.detach,
-      [&detach_messages](const gz::msgs::Empty &) {++detach_messages;}));
-  pick_place::GazeboAttachmentExecutor executor(
-    pick_place::State::RECOVER_DETACH_GAZEBO, false, topics.attach, topics.detach, topics.output,
-    0.5, 0.005, true);
+    topics.detach, [&detach_messages](const gz::msgs::Empty &) { ++detach_messages; }));
+  pick_place::GazeboAttachmentExecutor executor(pick_place::State::RECOVER_DETACH_GAZEBO, false,
+                                                topics.attach, topics.detach, topics.output, 0.5,
+                                                0.005, true);
   waitForDiscovery();
 
-  const auto result = executor.execute(
-    contextFor(pick_place::State::RECOVER_DETACH_GAZEBO, false));
+  const auto result = executor.execute(contextFor(pick_place::State::RECOVER_DETACH_GAZEBO, false));
 
   EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, result.status);
   EXPECT_EQ(0, detach_messages.load());
@@ -135,23 +128,21 @@ TEST(GazeboAttachmentExecutor, RecoveryNoOpUsesInjectedGripperLimits)
   gz::transport::Node peer;
   auto output = peer.Advertise<gz::msgs::StringMsg>(topics.output);
   std::atomic<int> detach_messages{0};
-  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(
-      topics.detach,
-      [&output, &detach_messages](const gz::msgs::Empty &) {
-        ++detach_messages;
-        gz::msgs::StringMsg response;
-        response.set_data("detached");
-        output.Publish(response);
-      }));
+  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(topics.detach,
+                                              [&output, &detach_messages](const gz::msgs::Empty &) {
+                                                ++detach_messages;
+                                                gz::msgs::StringMsg response;
+                                                response.set_data("detached");
+                                                output.Publish(response);
+                                              }));
   pick_place::GripperLimits strict_gripper;
   strict_gripper.open_min = 0.041;
-  pick_place::GazeboAttachmentExecutor executor(
-    pick_place::State::RECOVER_DETACH_GAZEBO, false, topics.attach, topics.detach, topics.output,
-    0.5, 0.005, true, strict_gripper);
+  pick_place::GazeboAttachmentExecutor executor(pick_place::State::RECOVER_DETACH_GAZEBO, false,
+                                                topics.attach, topics.detach, topics.output, 0.5,
+                                                0.005, true, strict_gripper);
   waitForDiscovery();
 
-  const auto result = executor.execute(
-    contextFor(pick_place::State::RECOVER_DETACH_GAZEBO, false));
+  const auto result = executor.execute(contextFor(pick_place::State::RECOVER_DETACH_GAZEBO, false));
 
   EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, result.status);
   EXPECT_EQ(1, detach_messages.load());
@@ -163,17 +154,16 @@ TEST(GazeboAttachmentExecutor, TimesOutWithoutExpectedOutput)
   gz::transport::Node peer;
   auto output = peer.Advertise<gz::msgs::StringMsg>(topics.output);
   std::atomic<int> attach_messages{0};
-  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(
-      topics.attach,
-      [&output, &attach_messages](const gz::msgs::Empty &) {
-        ++attach_messages;
-        gz::msgs::StringMsg response;
-        response.set_data("detached");
-        output.Publish(response);
-      }));
-  pick_place::GazeboAttachmentExecutor executor(
-    pick_place::State::ATTACH_GAZEBO, true, topics.attach, topics.detach, topics.output,
-    0.1, 0.005, false);
+  ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(topics.attach,
+                                              [&output, &attach_messages](const gz::msgs::Empty &) {
+                                                ++attach_messages;
+                                                gz::msgs::StringMsg response;
+                                                response.set_data("detached");
+                                                output.Publish(response);
+                                              }));
+  pick_place::GazeboAttachmentExecutor executor(pick_place::State::ATTACH_GAZEBO, true,
+                                                topics.attach, topics.detach, topics.output, 0.1,
+                                                0.005, false);
   waitForDiscovery();
 
   const auto result = executor.execute(contextFor(pick_place::State::ATTACH_GAZEBO, false));
@@ -190,11 +180,10 @@ TEST(GazeboAttachmentExecutor, RejectsWrongStateWithoutPublishing)
   gz::transport::Node peer;
   std::atomic<int> attach_messages{0};
   ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(
-      topics.attach,
-      [&attach_messages](const gz::msgs::Empty &) {++attach_messages;}));
-  pick_place::GazeboAttachmentExecutor executor(
-    pick_place::State::ATTACH_GAZEBO, true, topics.attach, topics.detach, topics.output,
-    0.1, 0.005, false);
+    topics.attach, [&attach_messages](const gz::msgs::Empty &) { ++attach_messages; }));
+  pick_place::GazeboAttachmentExecutor executor(pick_place::State::ATTACH_GAZEBO, true,
+                                                topics.attach, topics.detach, topics.output, 0.1,
+                                                0.005, false);
   waitForDiscovery();
 
   const auto result = executor.execute(contextFor(pick_place::State::DETACH_GAZEBO, true));

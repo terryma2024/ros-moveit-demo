@@ -17,10 +17,9 @@ constexpr pick_place::Pose3d kCokePick{0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
 constexpr pick_place::Pose3d kCokePlace{0.3, 0.2, 0.836, 0.0, 0.0, 0.0, 1.0};
 constexpr pick_place::Pose3d kCokeAbovePick{0.3, 0.0, 0.953, 0.0, 0.0, 0.0, 1.0};
 
-pick_place::WorldSnapshot snapshot(
-  bool gazebo_attached, bool moveit_attached,
-  const pick_place::Pose3d & tcp = kPick,
-  const pick_place::Pose3d & coke = kCokePick)
+pick_place::WorldSnapshot snapshot(bool gazebo_attached, bool moveit_attached,
+                                   const pick_place::Pose3d & tcp = kPick,
+                                   const pick_place::Pose3d & coke = kCokePick)
 {
   pick_place::WorldSnapshot world;
   world.fresh = true;
@@ -30,10 +29,8 @@ pick_place::WorldSnapshot snapshot(
   world.gazebo_coke_stationary = true;
   world.gazebo_coke_attached = gazebo_attached;
   world.moveit_coke_attached = moveit_attached;
-  world.joint_positions = {{"panda_finger_joint1", 0.032},
-    {"panda_finger_joint2", 0.032}};
-  world.joint_velocities = {{"panda_finger_joint1", 0.0},
-    {"panda_finger_joint2", 0.0}};
+  world.joint_positions = {{"panda_finger_joint1", 0.032}, {"panda_finger_joint2", 0.032}};
+  world.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   if (!moveit_attached) {
     world.moveit_world_object_poses["coke"] = coke;
   }
@@ -52,23 +49,19 @@ pick_place::Failure originalFailure()
   return {pick_place::FailureCategory::EXECUTION, "MOVE_FAILED", "move failed", {}};
 }
 
-void expectRoute(
-  const pick_place::FixedRecoveryPolicy & policy,
-  const pick_place::WorldSnapshot & world, pick_place::State expected)
+void expectRoute(const pick_place::FixedRecoveryPolicy & policy,
+                 const pick_place::WorldSnapshot & world, pick_place::State expected)
 {
-  const auto route = policy.select(
-    pick_place::State::MOVE_ABOVE_PLACE, originalFailure(), world);
+  const auto route = policy.select(pick_place::State::MOVE_ABOVE_PLACE, originalFailure(), world);
   ASSERT_TRUE(route.next_state);
   EXPECT_EQ(expected, *route.next_state);
   EXPECT_FALSE(route.failure);
 }
 
-void expectRouteError(
-  const pick_place::FixedRecoveryPolicy & policy,
-  const pick_place::WorldSnapshot & world, const std::string & expected_code)
+void expectRouteError(const pick_place::FixedRecoveryPolicy & policy,
+                      const pick_place::WorldSnapshot & world, const std::string & expected_code)
 {
-  const auto route = policy.select(
-    pick_place::State::MOVE_ABOVE_PLACE, originalFailure(), world);
+  const auto route = policy.select(pick_place::State::MOVE_ABOVE_PLACE, originalFailure(), world);
   EXPECT_FALSE(route.next_state);
   ASSERT_TRUE(route.failure);
   EXPECT_EQ(expected_code, route.failure->code);
@@ -81,19 +74,14 @@ TEST(FixedRecoveryPolicy, SelectsExactFactMatrix)
   const pick_place::FixedRecoveryPolicy policy(
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), 0.02);
 
-  expectRoute(
-    policy, snapshot(true, true,
-    {0.3, 0.0, 0.95, 1.0, 0.0, 0.0, 0.0},
-    {0.3, 0.0, 0.916, 0.0, 0.0, 0.0, 1.0}),
-    pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT);
-  expectRoute(
-    policy, snapshot(true, true), pick_place::State::RECOVER_OPEN_GRIPPER);
-  expectRoute(
-    policy, snapshot(true, false), pick_place::State::RECOVER_OPEN_GRIPPER);
-  expectRoute(
-    policy, snapshot(false, true), pick_place::State::RECOVER_OPEN_GRIPPER);
-  expectRoute(
-    policy, snapshot(false, false), pick_place::State::RECOVER_OPEN_GRIPPER);
+  expectRoute(policy,
+              snapshot(true, true, {0.3, 0.0, 0.95, 1.0, 0.0, 0.0, 0.0},
+                       {0.3, 0.0, 0.916, 0.0, 0.0, 0.0, 1.0}),
+              pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT);
+  expectRoute(policy, snapshot(true, true), pick_place::State::RECOVER_OPEN_GRIPPER);
+  expectRoute(policy, snapshot(true, false), pick_place::State::RECOVER_OPEN_GRIPPER);
+  expectRoute(policy, snapshot(false, true), pick_place::State::RECOVER_OPEN_GRIPPER);
+  expectRoute(policy, snapshot(false, false), pick_place::State::RECOVER_OPEN_GRIPPER);
 
   auto stale = snapshot(false, false);
   stale.fresh = false;
@@ -113,12 +101,10 @@ TEST(FixedRecoveryPolicy, OpensOnlyWithPositivePickOrPlaceSupportEvidence)
   const pick_place::FixedRecoveryPolicy policy(
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), 0.02);
 
-  expectRoute(
-    policy, snapshot(true, true, kPick, kCokePick),
-    pick_place::State::RECOVER_OPEN_GRIPPER);
-  expectRoute(
-    policy, snapshot(true, true, kPlace, kCokePlace),
-    pick_place::State::RECOVER_OPEN_GRIPPER);
+  expectRoute(policy, snapshot(true, true, kPick, kCokePick),
+              pick_place::State::RECOVER_OPEN_GRIPPER);
+  expectRoute(policy, snapshot(true, true, kPlace, kCokePlace),
+              pick_place::State::RECOVER_OPEN_GRIPPER);
 }
 
 TEST(FixedRecoveryPolicy, BothAttachedWithoutPositiveSupportUsesCarryingRecovery)
@@ -126,9 +112,8 @@ TEST(FixedRecoveryPolicy, BothAttachedWithoutPositiveSupportUsesCarryingRecovery
   const pick_place::FixedRecoveryPolicy policy(
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), 0.02);
 
-  auto wrong_xy = snapshot(true, true,
-      {0.1, 0.1, 0.87, 1.0, 0.0, 0.0, 0.0},
-      {0.1, 0.1, 0.836, 0.0, 0.0, 0.0, 1.0});
+  auto wrong_xy = snapshot(true, true, {0.1, 0.1, 0.87, 1.0, 0.0, 0.0, 0.0},
+                           {0.1, 0.1, 0.836, 0.0, 0.0, 0.0, 1.0});
   expectRoute(policy, wrong_xy, pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT);
 
   auto wrong_orientation = snapshot(true, true);
@@ -150,10 +135,10 @@ TEST(FixedRecoveryPolicy, PartialAttachmentWithoutPositiveSupportFailsClosed)
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), 0.02);
   const pick_place::Pose3d wrong_xy{0.1, 0.1, 0.87, 1.0, 0.0, 0.0, 0.0};
 
-  expectRouteError(
-    policy, snapshot(true, false, wrong_xy), "RECOVERY_PARTIAL_ATTACHMENT_UNSUPPORTED");
-  expectRouteError(
-    policy, snapshot(false, true, wrong_xy), "RECOVERY_PARTIAL_ATTACHMENT_UNSUPPORTED");
+  expectRouteError(policy, snapshot(true, false, wrong_xy),
+                   "RECOVERY_PARTIAL_ATTACHMENT_UNSUPPORTED");
+  expectRouteError(policy, snapshot(false, true, wrong_xy),
+                   "RECOVERY_PARTIAL_ATTACHMENT_UNSUPPORTED");
 }
 
 TEST(FixedRecoveryPolicy, CarryingResumeAdvancesFromSafeHeightToMoveAbovePick)
@@ -163,9 +148,8 @@ TEST(FixedRecoveryPolicy, CarryingResumeAdvancesFromSafeHeightToMoveAbovePick)
   const pick_place::Pose3d safe_tcp{0.1, -0.1, 1.05, 1.0, 0.0, 0.0, 0.0};
   const pick_place::Pose3d carried_coke{0.1, -0.1, 1.016, 0.0, 0.0, 0.0, 1.0};
 
-  expectRoute(
-    policy, snapshot(true, true, safe_tcp, carried_coke),
-    pick_place::State::RECOVER_MOVE_ABOVE_PICK);
+  expectRoute(policy, snapshot(true, true, safe_tcp, carried_coke),
+              pick_place::State::RECOVER_MOVE_ABOVE_PICK);
 }
 
 TEST(FixedRecoveryPolicy, CarryingResumeAdvancesFromAbovePickToDescend)
@@ -173,9 +157,8 @@ TEST(FixedRecoveryPolicy, CarryingResumeAdvancesFromAbovePickToDescend)
   const pick_place::FixedRecoveryPolicy policy(
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), 0.02);
 
-  expectRoute(
-    policy, snapshot(true, true, kAbovePick, kCokeAbovePick),
-    pick_place::State::RECOVER_DESCEND_TO_PICK);
+  expectRoute(policy, snapshot(true, true, kAbovePick, kCokeAbovePick),
+              pick_place::State::RECOVER_DESCEND_TO_PICK);
 }
 
 TEST(FixedRecoveryPolicy, DetachedOpenSynchronizedResumeAdvancesToRetreat)

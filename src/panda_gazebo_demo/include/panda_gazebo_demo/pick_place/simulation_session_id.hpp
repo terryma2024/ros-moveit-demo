@@ -15,8 +15,8 @@ struct SimulationSessionIdResolution
   std::string error;
 };
 
-SimulationSessionIdResolution resolveSimulationSessionId(
-  RunMode mode, bool resume, std::string configured_id,
-  std::uint64_t unix_timestamp_milliseconds);
+SimulationSessionIdResolution resolveSimulationSessionId(RunMode mode, bool resume,
+                                                         std::string configured_id,
+                                                         std::uint64_t unix_timestamp_milliseconds);
 
 }  // namespace panda_gazebo_demo::pick_place

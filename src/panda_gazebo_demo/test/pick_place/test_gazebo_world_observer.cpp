@@ -40,10 +40,10 @@ std::string uniqueName(const std::string & prefix)
 void configureUniquePartition()
 {
   static const bool configured = []() {
-      const auto partition = "panda_gazebo_world_observer_" +
-        std::to_string(static_cast<long long>(getpid()));
-      return setenv("GZ_PARTITION", partition.c_str(), 1) == 0;
-    }();
+    const auto partition =
+      "panda_gazebo_world_observer_" + std::to_string(static_cast<long long>(getpid()));
+    return setenv("GZ_PARTITION", partition.c_str(), 1) == 0;
+  }();
   ASSERT_TRUE(configured);
 }
 
@@ -55,8 +55,7 @@ bool waitForConnections(gz::transport::Node::Publisher & publisher)
   return publisher.HasConnections();
 }
 
-void publishPose(
-  gz::transport::Node::Publisher & publisher, const std::string & model)
+void publishPose(gz::transport::Node::Publisher & publisher, const std::string & model)
 {
   gz::msgs::Pose_V poses;
   auto * pose = poses.add_pose();
@@ -67,8 +66,7 @@ void publishPose(
   ASSERT_TRUE(publisher.Publish(poses));
 }
 
-void publishAttachment(
-  gz::transport::Node::Publisher & publisher, const std::string & state)
+void publishAttachment(gz::transport::Node::Publisher & publisher, const std::string & state)
 {
   gz::msgs::StringMsg message;
   message.set_data(state);
@@ -81,21 +79,19 @@ TEST(GazeboWorldObserver, WaitsForFirstPoseAndAttachmentMessages)
   BaseObserver base;
   const auto world = uniqueName("observer_world_");
   const auto attachment_topic = "/test/" + world + "/attachment";
-  GazeboWorldObserver observer(
-    base, world, "coke", attachment_topic, "session", 0.5, 2, 0.01, 0.002, 0.02,
-    true);
+  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.5, 2, 0.01,
+                               0.002, 0.02, true);
   gz::transport::Node transport;
-  auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>(
-    "/world/" + world + "/pose/info");
+  auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto attachment_publisher = transport.Advertise<gz::msgs::StringMsg>(attachment_topic);
   ASSERT_TRUE(waitForConnections(pose_publisher));
   ASSERT_TRUE(waitForConnections(attachment_publisher));
 
   std::thread delayed_publish([&]() {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      publishPose(pose_publisher, "coke");
-      publishAttachment(attachment_publisher, "detached");
-    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    publishPose(pose_publisher, "coke");
+    publishAttachment(attachment_publisher, "detached");
+  });
   const auto result = observer.observe();
   delayed_publish.join();
 
@@ -111,9 +107,8 @@ TEST(GazeboWorldObserver, MissingInitialPoseStillFailsClosedAtDeadline)
   BaseObserver base;
   const auto world = uniqueName("missing_pose_world_");
   const auto attachment_topic = "/test/" + world + "/attachment";
-  GazeboWorldObserver observer(
-    base, world, "coke", attachment_topic, "session", 0.05, 2, 0.01, 0.002, 0.02,
-    true);
+  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.05, 2, 0.01,
+                               0.002, 0.02, true);
   gz::transport::Node transport;
   auto attachment_publisher = transport.Advertise<gz::msgs::StringMsg>(attachment_topic);
   ASSERT_TRUE(waitForConnections(attachment_publisher));
@@ -131,12 +126,10 @@ TEST(GazeboWorldObserver, MissingInitialAttachmentStillFailsClosedAtDeadline)
   BaseObserver base;
   const auto world = uniqueName("missing_attachment_world_");
   const auto attachment_topic = "/test/" + world + "/attachment";
-  GazeboWorldObserver observer(
-    base, world, "coke", attachment_topic, "session", 0.05, 2, 0.01, 0.002, 0.02,
-    true);
+  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.05, 2, 0.01,
+                               0.002, 0.02, true);
   gz::transport::Node transport;
-  auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>(
-    "/world/" + world + "/pose/info");
+  auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   ASSERT_TRUE(waitForConnections(pose_publisher));
   publishPose(pose_publisher, "coke");
 
@@ -152,27 +145,25 @@ TEST(GazeboWorldObserver, AttachmentStateAgesOutWhenRelayStopsPublishing)
   BaseObserver base;
   const auto world = uniqueName("stale_attachment_world_");
   const auto attachment_topic = "/test/" + world + "/attachment";
-  GazeboWorldObserver observer(
-    base, world, "coke", attachment_topic, "session", 0.5, 2, 0.01, 0.002, 0.02,
-    true);
+  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.5, 2, 0.01,
+                               0.002, 0.02, true);
   gz::transport::Node transport;
-  auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>(
-    "/world/" + world + "/pose/info");
+  auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto attachment_publisher = transport.Advertise<gz::msgs::StringMsg>(attachment_topic);
   ASSERT_TRUE(waitForConnections(pose_publisher));
   ASSERT_TRUE(waitForConnections(attachment_publisher));
   std::thread initial_publish([&]() {
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
-      for (int attempt = 0; attempt < 5; ++attempt) {
-        publishPose(pose_publisher, "coke");
-        publishAttachment(attachment_publisher, "detached");
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      }
-    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    for (int attempt = 0; attempt < 5; ++attempt) {
+      publishPose(pose_publisher, "coke");
+      publishAttachment(attachment_publisher, "detached");
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  });
   const auto initial = observer.observe();
   initial_publish.join();
-  ASSERT_TRUE(initial.snapshot) <<
-    (initial.failure ? initial.failure->code : "missing snapshot without failure");
+  ASSERT_TRUE(initial.snapshot) << (initial.failure ? initial.failure->code
+                                                    : "missing snapshot without failure");
 
   std::this_thread::sleep_for(std::chrono::milliseconds(550));
   publishPose(pose_publisher, "coke");

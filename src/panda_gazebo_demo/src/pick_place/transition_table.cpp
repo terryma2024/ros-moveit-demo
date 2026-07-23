@@ -12,8 +12,7 @@ const std::map<State, StateTransitions> TransitionTable::kTransitions{
   {State::ATTACH_GAZEBO, {State::ATTACH_MOVEIT, State::RECOVER_OPEN_GRIPPER}},
   {State::ATTACH_MOVEIT, {State::LIFT, State::RECOVER_OPEN_GRIPPER}},
   {State::LIFT, {State::MOVE_ABOVE_PLACE, State::RECOVER_LIFT_TO_SAFE_HEIGHT}},
-  {State::MOVE_ABOVE_PLACE,
-    {State::DESCEND_TO_PLACE, State::RECOVER_LIFT_TO_SAFE_HEIGHT}},
+  {State::MOVE_ABOVE_PLACE, {State::DESCEND_TO_PLACE, State::RECOVER_LIFT_TO_SAFE_HEIGHT}},
   {State::DESCEND_TO_PLACE, {State::OPEN_GRIPPER, State::RECOVER_LIFT_TO_SAFE_HEIGHT}},
   {State::OPEN_GRIPPER, {State::DETACH_GAZEBO, State::RECOVER_OPEN_GRIPPER}},
   {State::DETACH_GAZEBO, {State::DETACH_MOVEIT, State::RECOVER_DETACH_GAZEBO}},
@@ -30,18 +29,18 @@ const std::map<State, StateTransitions> TransitionTable::kTransitions{
   {State::RECOVER_RETREAT, {State::ERROR, State::ERROR}},
 };
 
-State TransitionTable::resolve(State from, ActionStatus outcome) const noexcept
+State TransitionTable::resolve(State from, ActionStatus outcome) noexcept
 {
   const auto transition = kTransitions.find(from);
   if (transition == kTransitions.end()) {
     return State::ERROR;
   }
 
-  return outcome ==
-         ActionStatus::SUCCEEDED ? transition->second.succeeded : transition->second.failed;
+  return outcome == ActionStatus::SUCCEEDED ? transition->second.succeeded
+                                            : transition->second.failed;
 }
 
-const std::map<State, StateTransitions> & TransitionTable::entries() const noexcept
+const std::map<State, StateTransitions> & TransitionTable::entries() noexcept
 {
   return kTransitions;
 }
@@ -59,7 +58,7 @@ bool StateMachine::isTerminal() const noexcept
 State StateMachine::advance(ActionStatus outcome) noexcept
 {
   if (!isTerminal()) {
-    current_state_ = transitions_.resolve(current_state_, outcome);
+    current_state_ = TransitionTable::resolve(current_state_, outcome);
   }
   return current_state_;
 }

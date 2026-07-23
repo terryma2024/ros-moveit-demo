@@ -47,8 +47,10 @@ pick_place::Checkpoint makeRecoveryCheckpoint()
   checkpoint.phase = pick_place::CheckpointPhase::RECOVERY;
   checkpoint.last_completed_state = pick_place::State::MOVE_ABOVE_PLACE;
   checkpoint.failed_state = pick_place::State::MOVE_ABOVE_PLACE;
-  checkpoint.original_failure = pick_place::Failure{
-    pick_place::FailureCategory::EXECUTION, "MOVE_FAILED", "move failed", {{"error", 0.5}}};
+  checkpoint.original_failure = pick_place::Failure{pick_place::FailureCategory::EXECUTION,
+                                                    "MOVE_FAILED",
+                                                    "move failed",
+                                                    {{"error", 0.5}}};
   checkpoint.next_state = pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT;
   checkpoint.expected.tcp_pose_world = snapshot.tcp_pose_world;
   checkpoint.expected.gripper_open = snapshot.gripper_open;
@@ -111,9 +113,9 @@ public:
 class RecordingRecoveryPolicy final : public pick_place::IRecoveryPolicy
 {
 public:
-  pick_place::RecoveryRoute select(
-    pick_place::State failed_state, const pick_place::Failure & original_failure,
-    const pick_place::WorldSnapshot & stopped_world) const override
+  pick_place::RecoveryRoute select(pick_place::State failed_state,
+                                   const pick_place::Failure & original_failure,
+                                   const pick_place::WorldSnapshot & stopped_world) const override
   {
     ++calls;
     observed_failed_state = failed_state;
@@ -145,8 +147,10 @@ public:
   }
 
   pick_place::ActionResult result{pick_place::ActionStatus::FAILED,
-    pick_place::Failure{pick_place::FailureCategory::EXECUTION,
-      "ACTION_FAILED", "action failed", {}}};
+                                  pick_place::Failure{pick_place::FailureCategory::EXECUTION,
+                                                      "ACTION_FAILED",
+                                                      "action failed",
+                                                      {}}};
   pick_place::State last_state{pick_place::State::ERROR};
   int calls{0};
   int cancel_calls{0};
@@ -169,9 +173,7 @@ TEST(CheckpointV3, RecoveryJsonRoundTripsPhaseFailureAndNextState)
   EXPECT_EQ(pick_place::CheckpointPhase::RECOVERY, loaded.checkpoint->phase);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_PLACE, loaded.checkpoint->failed_state);
   ASSERT_TRUE(loaded.checkpoint->original_failure);
-  EXPECT_EQ(
-    pick_place::FailureCategory::EXECUTION,
-    loaded.checkpoint->original_failure->category);
+  EXPECT_EQ(pick_place::FailureCategory::EXECUTION, loaded.checkpoint->original_failure->category);
   EXPECT_EQ("MOVE_FAILED", loaded.checkpoint->original_failure->code);
   EXPECT_EQ("move failed", loaded.checkpoint->original_failure->message);
   EXPECT_DOUBLE_EQ(0.5, loaded.checkpoint->original_failure->metrics.at("error"));
@@ -221,15 +223,14 @@ TEST(Runner, RecoveryResumeReclassifiesCurrentFacts)
   observer.snapshot.joint_positions.at("panda_joint1") = 0.5;
   FakeCheckpointStore checkpoints;
   checkpoints.loaded.next_state = pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT;
-  const pick_place::CommonResumeValidator common_resume_validator(
-    "test-config", "test-session");
+  const pick_place::CommonResumeValidator common_resume_validator("test-config", "test-session");
   const RecordingRecoveryPolicy recovery_policy;
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr, nullptr,
-    &recovery_policy);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, nullptr,
+                                              &recovery_policy);
 
-  const auto result = runner.run(
-    {pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("EXECUTE_ACTION_NOT_REGISTERED", result.failure->code);
@@ -247,24 +248,21 @@ TEST(Runner, ForwardActionFailureCommitsRecoveryCheckpointBeforeRecoverySideEffe
   auto executor = std::make_shared<FakeExecutor>();
   actions.registerExecutor(pick_place::State::CLOSE_GRIPPER, executor);
   pick_place::TransitionContractRegistry contracts;
-  contracts.registerContract(
-    {pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER},
-    std::make_shared<pick_place::AlwaysPassValidator>());
-  contracts.registerContract(
-    {pick_place::State::CLOSE_GRIPPER, pick_place::State::ATTACH_GAZEBO},
-    std::make_shared<pick_place::AlwaysPassValidator>());
+  contracts.registerContract({pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER},
+                             std::make_shared<pick_place::AlwaysPassValidator>());
+  contracts.registerContract({pick_place::State::CLOSE_GRIPPER, pick_place::State::ATTACH_GAZEBO},
+                             std::make_shared<pick_place::AlwaysPassValidator>());
   FakeObserver observer;
   FakeCheckpointStore checkpoints;
   checkpoints.loaded = makeForwardCheckpoint();
-  const pick_place::CommonResumeValidator common_resume_validator(
-    "test-config", "test-session");
+  const pick_place::CommonResumeValidator common_resume_validator("test-config", "test-session");
   const RecordingRecoveryPolicy recovery_policy;
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr, nullptr,
-    &recovery_policy);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, nullptr,
+                                              &recovery_policy);
 
-  const auto result = runner.run(
-    {pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(1, executor->calls);
@@ -290,15 +288,14 @@ TEST(Runner, RecoveryActionFailureTerminatesWithoutSelectingAnotherRoute)
     std::make_shared<pick_place::AlwaysPassValidator>());
   FakeObserver observer;
   FakeCheckpointStore checkpoints;
-  const pick_place::CommonResumeValidator common_resume_validator(
-    "test-config", "test-session");
+  const pick_place::CommonResumeValidator common_resume_validator("test-config", "test-session");
   const RecordingRecoveryPolicy recovery_policy;
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr, nullptr,
-    &recovery_policy);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, nullptr,
+                                              &recovery_policy);
 
-  const auto result = runner.run(
-    {pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("ACTION_FAILED", result.failure->code);

@@ -13,20 +13,19 @@
 namespace panda_gazebo_demo::pick_place
 {
 
-class MoveAboveObjectPlanner final : public IStatePlanner, public IStateExecutor,
-  public IWorldObserver
+class MoveAboveObjectPlanner final : public IStatePlanner,
+                                     public IStateExecutor,
+                                     public IWorldObserver
 {
 public:
-  MoveAboveObjectPlanner(
-    std::shared_ptr<rclcpp::Node> node, std::string planning_group,
-    std::string tcp_link, std::vector<std::string> required_world_objects,
-    std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
-    double velocity_scaling, double acceleration_scaling);
+  MoveAboveObjectPlanner(std::shared_ptr<rclcpp::Node> node, std::string planning_group,
+                         std::string tcp_link, std::vector<std::string> required_world_objects,
+                         std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
+                         double velocity_scaling, double acceleration_scaling);
   ~MoveAboveObjectPlanner() override;
 
-  [[nodiscard]] PlanResult plan(
-    State current_state, State next_state,
-    const ObservationResult & observation) override;
+  [[nodiscard]] PlanResult plan(State current_state, State next_state,
+                                const ObservationResult & observation) override;
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;
   [[nodiscard]] ObservationResult observe() override;

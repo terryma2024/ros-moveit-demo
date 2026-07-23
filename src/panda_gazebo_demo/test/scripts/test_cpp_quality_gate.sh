@@ -32,7 +32,9 @@ cat >"${fake_bin}/clang-format" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-printf 'format %s\n' "$*" >>"${COMMAND_LOG}"
+printf 'format argc=%s args=' "$#" >>"${COMMAND_LOG}"
+printf '<%s>' "$@" >>"${COMMAND_LOG}"
+printf '\n' >>"${COMMAND_LOG}"
 EOF
 chmod +x "${fake_bin}/run-clang-tidy" "${fake_bin}/clang-format"
 
@@ -59,9 +61,10 @@ mapfile -t commands <"${command_log}"
 [[ "${commands[0]}" == *'tidy -p '* &&
   "${commands[0]}" == *"${compilation_database_dir}"* &&
   "${commands[0]}" == *'-warnings-as-errors='* &&
-  "${commands[0]}" == *"-config-file ${workspace_root}/.clang-tidy"* ]] ||
+  "${commands[0]}" == *"-config-file ${workspace_root}/.clang-tidy"* &&
+  "${commands[0]}" == *"${source_file}"* ]] ||
   fail 'tidy did not receive the strict compilation database arguments'
-[[ "${commands[1]}" == "format -i --style=file ${source_file}" ]] ||
+[[ "${commands[1]}" == "format argc=3 args=<-i><--style=file><${source_file}>" ]] ||
   fail 'format did not receive repository style arguments'
 
 : >"${command_log}"
@@ -90,12 +93,13 @@ fixture_build_dir="${test_dir}/fixture-build"
 mkdir -p "${fixture_root}/src"
 touch "${fixture_root}/.clang-tidy" "${fixture_root}/.clang-format"
 printf 'int example() { return 1; }\n' >"${fixture_root}/src/example.cpp"
+printf 'int other() { return 2; }\n' >"${fixture_root}/src/other.cpp"
 cat >"${fixture_root}/CMakeLists.txt" <<EOF
 cmake_minimum_required(VERSION 3.8)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 project(cpp_quality_gate_fixture LANGUAGES CXX)
 include("${quality_gate_module}")
-add_library(example STATIC src/example.cpp)
+add_library(example STATIC src/example.cpp src/other.cpp)
 set(FIXTURE_RUN_CLANG_TIDY "${fake_bin}/run-clang-tidy" CACHE FILEPATH "")
 set(FIXTURE_CLANG_FORMAT "${fake_bin}/clang-format" CACHE FILEPATH "")
 panda_gazebo_add_cpp_quality_gate(
@@ -119,7 +123,9 @@ COMMAND_LOG="${command_log}" cmake --build "${fixture_build_dir}" --target examp
   >/dev/null
 mapfile -t commands <"${command_log}"
 [[ "${#commands[@]}" -eq 2 && "${commands[0]}" == tidy* &&
-  "${commands[1]}" == format* ]] ||
+  "${commands[1]}" == *'format argc=4'* &&
+  "${commands[1]}" == *"<${fixture_root}/src/example.cpp>"* &&
+  "${commands[1]}" == *"<${fixture_root}/src/other.cpp>"* ]] ||
   fail 'target compilation did not run tidy then format first'
 
 sleep 1

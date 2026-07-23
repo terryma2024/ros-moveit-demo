@@ -34,9 +34,8 @@ class IStatePlanner
 {
 public:
   virtual ~IStatePlanner() = default;
-  [[nodiscard]] virtual PlanResult plan(
-    State current_state, State next_state,
-    const ObservationResult & observation) = 0;
+  [[nodiscard]] virtual PlanResult plan(State current_state, State next_state,
+                                        const ObservationResult & observation) = 0;
 };
 
 class IStateExecutor

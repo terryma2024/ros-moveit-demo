@@ -12,12 +12,11 @@ namespace panda_gazebo_demo::pick_place
 class GazeboAttachmentExecutor final : public IStateExecutor
 {
 public:
-  GazeboAttachmentExecutor(
-    State allowed_state, bool desired_attached,
-    std::string attach_topic, std::string detach_topic,
-    std::string output_topic, double timeout_seconds,
-    double poll_interval_seconds, bool idempotent,
-    GripperLimits gripper_limits = {});
+  GazeboAttachmentExecutor(State allowed_state, bool desired_attached,
+                           const std::string & attach_topic, const std::string & detach_topic,
+                           const std::string & output_topic, double timeout_seconds,
+                           double poll_interval_seconds, bool idempotent,
+                           GripperLimits gripper_limits = {});
   ~GazeboAttachmentExecutor() override;
 
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;

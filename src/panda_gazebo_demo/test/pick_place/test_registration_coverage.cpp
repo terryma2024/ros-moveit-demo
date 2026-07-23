@@ -104,20 +104,40 @@ public:
 };
 
 const std::array<State, 22> kActionStates{{
-  State::PREPARE_OPEN_GRIPPER, State::MOVE_ABOVE_OBJECT, State::DESCEND,
-  State::CLOSE_GRIPPER, State::ATTACH_GAZEBO, State::ATTACH_MOVEIT, State::LIFT,
-  State::MOVE_ABOVE_PLACE, State::DESCEND_TO_PLACE, State::OPEN_GRIPPER,
-  State::DETACH_GAZEBO, State::DETACH_MOVEIT, State::SYNC_WORLD_OBJECT, State::RETREAT,
-  State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK,
-  State::RECOVER_DESCEND_TO_PICK, State::RECOVER_OPEN_GRIPPER,
-  State::RECOVER_DETACH_GAZEBO, State::RECOVER_DETACH_MOVEIT,
-  State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT,
+  State::PREPARE_OPEN_GRIPPER,
+  State::MOVE_ABOVE_OBJECT,
+  State::DESCEND,
+  State::CLOSE_GRIPPER,
+  State::ATTACH_GAZEBO,
+  State::ATTACH_MOVEIT,
+  State::LIFT,
+  State::MOVE_ABOVE_PLACE,
+  State::DESCEND_TO_PLACE,
+  State::OPEN_GRIPPER,
+  State::DETACH_GAZEBO,
+  State::DETACH_MOVEIT,
+  State::SYNC_WORLD_OBJECT,
+  State::RETREAT,
+  State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+  State::RECOVER_MOVE_ABOVE_PICK,
+  State::RECOVER_DESCEND_TO_PICK,
+  State::RECOVER_OPEN_GRIPPER,
+  State::RECOVER_DETACH_GAZEBO,
+  State::RECOVER_DETACH_MOVEIT,
+  State::RECOVER_SYNC_WORLD_OBJECT,
+  State::RECOVER_RETREAT,
 }};
 
 const std::array<State, 10> kMotionStates{{
-  State::MOVE_ABOVE_OBJECT, State::DESCEND, State::LIFT, State::MOVE_ABOVE_PLACE,
-  State::DESCEND_TO_PLACE, State::RETREAT, State::RECOVER_LIFT_TO_SAFE_HEIGHT,
-  State::RECOVER_MOVE_ABOVE_PICK, State::RECOVER_DESCEND_TO_PICK,
+  State::MOVE_ABOVE_OBJECT,
+  State::DESCEND,
+  State::LIFT,
+  State::MOVE_ABOVE_PLACE,
+  State::DESCEND_TO_PLACE,
+  State::RETREAT,
+  State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+  State::RECOVER_MOVE_ABOVE_PICK,
+  State::RECOVER_DESCEND_TO_PICK,
   State::RECOVER_RETREAT,
 }};
 
@@ -150,8 +170,7 @@ TEST(RegistrationCoverage, FactoryBuildsTheCompleteRuntimeGraph)
     EXPECT_NE(runtime.actions.findExecutor(state), nullptr) << toString(state);
     EXPECT_EQ(runtime.actions.findPlanner(state) != nullptr, isMotionState(state))
       << toString(state);
-    EXPECT_EQ(runtime.plan_validators.hasValidator(state), isMotionState(state))
-      << toString(state);
+    EXPECT_EQ(runtime.plan_validators.hasValidator(state), isMotionState(state)) << toString(state);
   }
   for (const auto state : {State::IDLE, State::DONE, State::ERROR}) {
     EXPECT_EQ(runtime.actions.findExecutor(state), nullptr) << toString(state);
@@ -161,18 +180,17 @@ TEST(RegistrationCoverage, FactoryBuildsTheCompleteRuntimeGraph)
   EXPECT_EQ(runtime.actions.findExecutor(State::ATTACH_GAZEBO), gazebo_attach.get());
   EXPECT_EQ(runtime.actions.findExecutor(State::DETACH_GAZEBO), gazebo_detach.get());
   EXPECT_EQ(runtime.actions.findExecutor(State::RECOVER_DETACH_GAZEBO),
-    recovery_gazebo_detach.get());
+            recovery_gazebo_detach.get());
 
-  const TransitionTable transitions;
-  for (const auto & [state, edges] : transitions.entries()) {
+  for (const auto & [state, edges] : TransitionTable::entries()) {
     static_cast<void>(edges);
     if (state != State::IDLE && !isTerminal(state)) {
       EXPECT_TRUE(runtime.contracts.hasContract(
-          {state, transitions.resolve(state, ActionStatus::SUCCEEDED)}))
+        {state, TransitionTable::resolve(state, ActionStatus::SUCCEEDED)}))
         << toString(state);
     }
   }
-  EXPECT_FALSE(runtime.contracts.validateExecuteCoverage(transitions).has_value());
+  EXPECT_FALSE(runtime.contracts.validateExecuteCoverage().has_value());
 }
 
 TEST(RegistrationCoverage, NullTransitionContractIsNotRegisteredCoverage)
@@ -192,53 +210,53 @@ TEST(RuntimeParameters, DefaultsAreValidAndEveryBehaviorParameterChangesTheHash)
   const auto default_hash = pickPlaceConfigurationHash(defaults, "target-signature");
   std::vector<PickPlaceParameters> variants;
   const auto add = [&defaults, &variants](const auto & mutate) {
-      auto variant = defaults;
-      mutate(variant);
-      variants.push_back(std::move(variant));
-    };
-  add([](auto & value) {value.planning_group = "other_arm";});
-  add([](auto & value) {value.tcp_link = "other_tcp";});
-  add([](auto & value) {value.required_world_objects.push_back("fixture");});
-  add([](auto & value) {value.velocity_scaling = 0.11;});
-  add([](auto & value) {value.acceleration_scaling = 0.11;});
-  add([](auto & value) {value.cartesian_eef_step = 0.006;});
-  add([](auto & value) {value.cartesian_min_fraction = 0.98;});
-  add([](auto & value) {value.joint_jump_threshold = 0.21;});
-  add([](auto & value) {value.motion_start_joint_tolerance = 0.011;});
-  add([](auto & value) {value.ready_named_target = "other_ready";});
-  add([](auto & value) {value.ready_joint_tolerance = 0.011;});
-  add([](auto & value) {value.tcp_position_tolerance = 0.021;});
-  add([](auto & value) {value.tcp_orientation_tolerance_rad = 0.08;});
-  add([](auto & value) {value.coke_position_tolerance = 0.011;});
-  add([](auto & value) {value.coke_orientation_tolerance_rad = 0.08;});
-  add([](auto & value) {value.gripper_open_position = 0.039;});
-  add([](auto & value) {value.gripper_open_min_position = 0.037;});
-  add([](auto & value) {value.gripper_close_position = 0.001;});
-  add([](auto & value) {value.gripper_close_tolerance = 0.003;});
-  add([](auto & value) {value.gripper_grasp_min_position = 0.027;});
-  add([](auto & value) {value.gripper_grasp_max_position = 0.036;});
-  add([](auto & value) {value.gripper_symmetry_tolerance = 0.002;});
-  add([](auto & value) {value.joint_velocity_tolerance = 0.009;});
-  add([](auto & value) {value.gripper_max_effort = 1.0;});
-  add([](auto & value) {value.gripper_action_timeout_seconds = 4.0;});
-  add([](auto & value) {value.attachment_timeout_seconds = 2.1;});
-  add([](auto & value) {value.planning_scene_timeout_seconds = 2.1;});
-  add([](auto & value) {value.state_poll_interval_seconds = 0.04;});
-  add([](auto & value) {value.gazebo_observation_max_age_seconds = 0.6;});
-  add([](auto & value) {value.coke_settle_samples = 6;});
-  add([](auto & value) {value.coke_settle_interval_seconds = 0.04;});
-  add([](auto & value) {value.coke_settle_position_tolerance = 0.001;});
-  add([](auto & value) {value.coke_settle_orientation_tolerance_rad = 0.019;});
-  add([](auto & value) {value.recovery_safe_height = 0.997;});
-  add([](auto & value) {value.gazebo_world_name = "other_world";});
-  add([](auto & value) {value.gazebo_coke_model = "other_coke";});
-  add([](auto & value) {value.gazebo_attach_topic = "/other/attach";});
-  add([](auto & value) {value.gazebo_detach_topic = "/other/detach";});
-  add([](auto & value) {value.gazebo_attachment_event_topic = "/other/event";});
-  add([](auto & value) {value.gazebo_attachment_topic = "/other/attached";});
-  add([](auto & value) {value.gazebo_coke_initially_detached = false;});
-  add([](auto & value) {value.gripper_action_name = "/other/gripper";});
-  add([](auto & value) {value.max_state_transitions = 101;});
+    auto variant = defaults;
+    mutate(variant);
+    variants.push_back(std::move(variant));
+  };
+  add([](auto & value) { value.planning_group = "other_arm"; });
+  add([](auto & value) { value.tcp_link = "other_tcp"; });
+  add([](auto & value) { value.required_world_objects.push_back("fixture"); });
+  add([](auto & value) { value.velocity_scaling = 0.11; });
+  add([](auto & value) { value.acceleration_scaling = 0.11; });
+  add([](auto & value) { value.cartesian_eef_step = 0.006; });
+  add([](auto & value) { value.cartesian_min_fraction = 0.98; });
+  add([](auto & value) { value.joint_jump_threshold = 0.21; });
+  add([](auto & value) { value.motion_start_joint_tolerance = 0.011; });
+  add([](auto & value) { value.ready_named_target = "other_ready"; });
+  add([](auto & value) { value.ready_joint_tolerance = 0.011; });
+  add([](auto & value) { value.tcp_position_tolerance = 0.021; });
+  add([](auto & value) { value.tcp_orientation_tolerance_rad = 0.08; });
+  add([](auto & value) { value.coke_position_tolerance = 0.011; });
+  add([](auto & value) { value.coke_orientation_tolerance_rad = 0.08; });
+  add([](auto & value) { value.gripper_open_position = 0.039; });
+  add([](auto & value) { value.gripper_open_min_position = 0.037; });
+  add([](auto & value) { value.gripper_close_position = 0.001; });
+  add([](auto & value) { value.gripper_close_tolerance = 0.003; });
+  add([](auto & value) { value.gripper_grasp_min_position = 0.027; });
+  add([](auto & value) { value.gripper_grasp_max_position = 0.036; });
+  add([](auto & value) { value.gripper_symmetry_tolerance = 0.002; });
+  add([](auto & value) { value.joint_velocity_tolerance = 0.009; });
+  add([](auto & value) { value.gripper_max_effort = 1.0; });
+  add([](auto & value) { value.gripper_action_timeout_seconds = 4.0; });
+  add([](auto & value) { value.attachment_timeout_seconds = 2.1; });
+  add([](auto & value) { value.planning_scene_timeout_seconds = 2.1; });
+  add([](auto & value) { value.state_poll_interval_seconds = 0.04; });
+  add([](auto & value) { value.gazebo_observation_max_age_seconds = 0.6; });
+  add([](auto & value) { value.coke_settle_samples = 6; });
+  add([](auto & value) { value.coke_settle_interval_seconds = 0.04; });
+  add([](auto & value) { value.coke_settle_position_tolerance = 0.001; });
+  add([](auto & value) { value.coke_settle_orientation_tolerance_rad = 0.019; });
+  add([](auto & value) { value.recovery_safe_height = 0.997; });
+  add([](auto & value) { value.gazebo_world_name = "other_world"; });
+  add([](auto & value) { value.gazebo_coke_model = "other_coke"; });
+  add([](auto & value) { value.gazebo_attach_topic = "/other/attach"; });
+  add([](auto & value) { value.gazebo_detach_topic = "/other/detach"; });
+  add([](auto & value) { value.gazebo_attachment_event_topic = "/other/event"; });
+  add([](auto & value) { value.gazebo_attachment_topic = "/other/attached"; });
+  add([](auto & value) { value.gazebo_coke_initially_detached = false; });
+  add([](auto & value) { value.gripper_action_name = "/other/gripper"; });
+  add([](auto & value) { value.max_state_transitions = 101; });
 
   for (const auto & variant : variants) {
     EXPECT_NE(default_hash, pickPlaceConfigurationHash(variant, "target-signature"));
@@ -264,8 +282,7 @@ TEST(RuntimeParameters, RejectsNonFiniteAndUnsafeRanges)
   parameters.gripper_close_tolerance = 0.0;
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
   parameters = {};
-  parameters.recovery_safe_height =
-    FixedPickPlaceTargetPolicy::kCanonicalSafeHeight - 0.001;
+  parameters.recovery_safe_height = FixedPickPlaceTargetPolicy::kCanonicalSafeHeight - 0.001;
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
   parameters = {};
   parameters.coke_settle_samples = 1;

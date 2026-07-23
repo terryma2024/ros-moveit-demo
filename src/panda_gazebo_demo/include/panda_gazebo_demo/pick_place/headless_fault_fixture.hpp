@@ -16,15 +16,14 @@ struct FaultFixtureWaypoints
   std::optional<std::string> failure;
 };
 
-inline FaultFixtureWaypoints buildLiftThenLateralWaypoints(
-  const Pose3d & start, double lift_distance, double lateral_offset_y)
+inline FaultFixtureWaypoints
+buildLiftThenLateralWaypoints(const Pose3d & start, double lift_distance, double lateral_offset_y)
 {
   const bool finite_start = std::isfinite(start.x) && std::isfinite(start.y) &&
-    std::isfinite(start.z) && std::isfinite(start.qx) && std::isfinite(start.qy) &&
-    std::isfinite(start.qz) && std::isfinite(start.qw);
-  if (!finite_start || !std::isfinite(lift_distance) ||
-    !std::isfinite(lateral_offset_y))
-  {
+                            std::isfinite(start.z) && std::isfinite(start.qx) &&
+                            std::isfinite(start.qy) && std::isfinite(start.qz) &&
+                            std::isfinite(start.qw);
+  if (!finite_start || !std::isfinite(lift_distance) || !std::isfinite(lateral_offset_y)) {
     return {{}, "fault-fixture pose and offsets must be finite"};
   }
   if (lift_distance <= 1.0e-6 || lift_distance > 0.10) {

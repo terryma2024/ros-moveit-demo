@@ -29,31 +29,40 @@ struct PickPlaceContractConfig
 using Contract = TransitionContractRegistry::ITransitionContract;
 using TargetPolicyPtr = std::shared_ptr<const PickPlaceTargetPolicy>;
 
-[[nodiscard]] std::shared_ptr<const Contract> makeCloseToGazeboAttachContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeGazeboToMoveItAttachContract(
-  PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeMoveItAttachToLiftContract(
-  PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeLiftToMoveAbovePlaceContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeMoveAbovePlaceToDescendContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeDescendPlaceToOpenContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeOpenToGazeboDetachContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeGazeboToMoveItDetachContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeMoveItDetachToSyncContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeSyncToRetreatContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
-[[nodiscard]] std::shared_ptr<const Contract> makeRetreatToDoneContract(
-  TargetPolicyPtr target_policy, PickPlaceContractConfig config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeCloseToGazeboAttachContract(const TargetPolicyPtr & target_policy,
+                                const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeGazeboToMoveItAttachContract(const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeMoveItAttachToLiftContract(const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeLiftToMoveAbovePlaceContract(const TargetPolicyPtr & target_policy,
+                                 const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeMoveAbovePlaceToDescendContract(const TargetPolicyPtr & target_policy,
+                                    const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeDescendPlaceToOpenContract(const TargetPolicyPtr & target_policy,
+                               const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeOpenToGazeboDetachContract(const TargetPolicyPtr & target_policy,
+                               const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeGazeboToMoveItDetachContract(const TargetPolicyPtr & target_policy,
+                                 const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeMoveItDetachToSyncContract(const TargetPolicyPtr & target_policy,
+                               const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeSyncToRetreatContract(const TargetPolicyPtr & target_policy,
+                          const PickPlaceContractConfig & config);
+[[nodiscard]] std::shared_ptr<const Contract>
+makeRetreatToDoneContract(const TargetPolicyPtr & target_policy,
+                          const PickPlaceContractConfig & config);
 
-void registerPickPlaceForwardContracts(
-  TransitionContractRegistry & registry, TargetPolicyPtr target_policy,
-  PickPlaceContractConfig config);
+void registerPickPlaceForwardContracts(TransitionContractRegistry & registry,
+                                       const TargetPolicyPtr & target_policy,
+                                       const PickPlaceContractConfig & config);
 
 }  // namespace panda_gazebo_demo::pick_place

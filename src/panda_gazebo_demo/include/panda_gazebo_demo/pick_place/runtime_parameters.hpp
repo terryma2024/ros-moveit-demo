@@ -58,10 +58,9 @@ struct PickPlaceParameters
   std::uint64_t max_state_transitions{100};
 };
 
-[[nodiscard]] std::optional<Failure> validatePickPlaceParameters(
-  const PickPlaceParameters & parameters);
-[[nodiscard]] std::string pickPlaceConfigurationHash(
-  const PickPlaceParameters & parameters,
-  const std::string & target_policy_signature);
+[[nodiscard]] std::optional<Failure>
+validatePickPlaceParameters(const PickPlaceParameters & parameters);
+[[nodiscard]] std::string pickPlaceConfigurationHash(const PickPlaceParameters & parameters,
+                                                     const std::string & target_policy_signature);
 
 }  // namespace panda_gazebo_demo::pick_place

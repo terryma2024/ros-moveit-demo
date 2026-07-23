@@ -18,20 +18,21 @@ constexpr Pose3d place_target{0.3, 0.2, 0.87, 1.0, 0.0, 0.0, 0.0};
 TargetPoseResult unsupportedTransition(State current_state, State next_state)
 {
   return {std::nullopt, Failure{FailureCategory::CONFIGURATION,
-      "TARGET_POLICY_UNSUPPORTED_TRANSITION",
-      std::string("PickPlaceTargetPolicy does not support ") + toString(current_state) + " -> " +
-      toString(next_state), {}}};
+                                "TARGET_POLICY_UNSUPPORTED_TRANSITION",
+                                std::string("PickPlaceTargetPolicy does not support ") +
+                                  toString(current_state) + " -> " + toString(next_state),
+                                {}}};
 }
 
 }  // namespace
 
-FixedPickPlaceTargetPolicy::FixedPickPlaceTargetPolicy(double recovery_safe_height)
-: recovery_safe_height_(recovery_safe_height)
+FixedPickPlaceTargetPolicy::FixedPickPlaceTargetPolicy(double recovery_safe_height) :
+    recovery_safe_height_(recovery_safe_height)
 {
 }
 
-TargetPoseResult FixedPickPlaceTargetPolicy::targetPose(
-  State current_state, State next_state, const ObservationResult & observation) const
+TargetPoseResult FixedPickPlaceTargetPolicy::targetPose(State current_state, State next_state,
+                                                        const ObservationResult & observation) const
 {
   if (current_state == State::MOVE_ABOVE_OBJECT && next_state == State::DESCEND) {
     return {above_pick_target, std::nullopt};
@@ -52,23 +53,21 @@ TargetPoseResult FixedPickPlaceTargetPolicy::targetPose(
     return {above_place_target, std::nullopt};
   }
   if (current_state == State::RECOVER_MOVE_ABOVE_PICK &&
-    next_state == State::RECOVER_DESCEND_TO_PICK)
-  {
+      next_state == State::RECOVER_DESCEND_TO_PICK) {
     return {above_pick_target, std::nullopt};
   }
   if (current_state == State::RECOVER_DESCEND_TO_PICK &&
-    next_state == State::RECOVER_OPEN_GRIPPER)
-  {
+      next_state == State::RECOVER_OPEN_GRIPPER) {
     return {pick_target, std::nullopt};
   }
   if ((current_state == State::RECOVER_LIFT_TO_SAFE_HEIGHT &&
-    next_state == State::RECOVER_MOVE_ABOVE_PICK) ||
-    (current_state == State::RECOVER_RETREAT && next_state == State::ERROR))
-  {
+       next_state == State::RECOVER_MOVE_ABOVE_PICK) ||
+      (current_state == State::RECOVER_RETREAT && next_state == State::ERROR)) {
     if (!observation.snapshot) {
       return {std::nullopt, Failure{FailureCategory::OBSERVATION,
-          "RECOVERY_TARGET_OBSERVATION_MISSING",
-          "Recovery safe-height target requires a current world snapshot", {}}};
+                                    "RECOVERY_TARGET_OBSERVATION_MISSING",
+                                    "Recovery safe-height target requires a current world snapshot",
+                                    {}}};
     }
     auto target = observation.snapshot->tcp_pose_world;
     target.z = std::max(target.z, recovery_safe_height_);
@@ -87,9 +86,8 @@ std::string FixedPickPlaceTargetPolicy::configurationSignature() const
   return signature.str();
 }
 
-TargetPoseResult supportedCokePose(
-  const PickPlaceTargetPolicy & target_policy, State current_state,
-  State next_state, const ObservationResult & observation)
+TargetPoseResult supportedCokePose(const PickPlaceTargetPolicy & target_policy, State current_state,
+                                   State next_state, const ObservationResult & observation)
 {
   auto result = target_policy.targetPose(current_state, next_state, observation);
   if (!result.target_pose) {
@@ -101,9 +99,10 @@ TargetPoseResult supportedCokePose(
 
 Pose3d supportedCokePoseFromTcp(const Pose3d & tcp_pose)
 {
-  return {tcp_pose.x, tcp_pose.y,
-    tcp_pose.z + FixedPickPlaceTargetPolicy::kSupportedCokeCenterOffsetZ,
-    0.0, 0.0, 0.0, 1.0};
+  return {
+    tcp_pose.x, tcp_pose.y, tcp_pose.z + FixedPickPlaceTargetPolicy::kSupportedCokeCenterOffsetZ,
+    0.0,        0.0,        0.0,
+    1.0};
 }
 
 }  // namespace panda_gazebo_demo::pick_place
