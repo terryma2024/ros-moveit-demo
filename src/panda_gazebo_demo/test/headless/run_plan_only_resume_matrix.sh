@@ -121,12 +121,9 @@ reset_fixture() {
     >"${directory}/reset.log" 2>&1
   timeout 5 ros2 service call /get_planning_scene \
     moveit_msgs/srv/GetPlanningScene '{components: {components: 28}}' \
-    >"${directory}/reset_moveit_before_setup.txt" 2>&1
+    >"${directory}/reset_moveit.txt" 2>&1
   python3 "${script_dir}/assert_reset_moveit_scene.py" \
-    "${directory}/reset_moveit_before_setup.txt"
-  timeout 15 ros2 run panda_gazebo_demo planning_scene_setup \
-    >"${directory}/planning_scene_reset.log" 2>&1
-  sleep 1
+    "${directory}/reset_moveit.txt"
 }
 
 capture_snapshot() {
