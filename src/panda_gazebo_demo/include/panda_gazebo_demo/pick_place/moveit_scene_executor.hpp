@@ -28,17 +28,15 @@ struct MoveItSceneConfig
 class MoveItSceneExecutor final : public IStateExecutor
 {
 public:
-  MoveItSceneExecutor(
-    std::shared_ptr<IMoveItSceneAdapter> adapter, MoveItSceneConfig config,
-    double timeout_seconds = 2.0, double poll_interval_seconds = 0.05,
-    GripperLimits gripper_limits = {});
+  MoveItSceneExecutor(std::shared_ptr<IMoveItSceneAdapter> adapter, MoveItSceneConfig config,
+                      double timeout_seconds = 2.0, double poll_interval_seconds = 0.05,
+                      GripperLimits gripper_limits = {});
 
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;
 
 private:
-  [[nodiscard]] ActionResult waitForConvergence(
-    const std::optional<Pose3d> & synchronized_pose);
+  [[nodiscard]] ActionResult waitForConvergence(const std::optional<Pose3d> & synchronized_pose);
 
   std::shared_ptr<IMoveItSceneAdapter> adapter_;
   MoveItSceneConfig config_;

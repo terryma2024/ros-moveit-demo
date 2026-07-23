@@ -23,7 +23,7 @@ Create a Bash test that creates a temporary source tree, compilation database, a
 
 Cover these cases:
 
-1. tidy succeeds: log order is exactly `tidy` then `format`; tidy receives `-p`, the package build directory, `-warnings-as-errors=*`, and the root `.clang-tidy`; format receives `-i` and `--style=file`.
+1. tidy succeeds: log order is exactly `tidy` then `format`; tidy receives `-p`, the package build directory, `-warnings-as-errors=*`, the root `.clang-tidy`, and the package source-file list; format receives `-i` and `--style=file`.
 2. tidy fails: script exits nonzero and the log contains only `tidy`—format must never run.
 3. required input or executable is missing: script exits nonzero with a clear message.
 
@@ -37,7 +37,7 @@ Implement `run_cpp_quality_gate.cmake` to:
 
 - require `RUN_CLANG_TIDY_EXECUTABLE`, `CLANG_FORMAT_EXECUTABLE`, `COMPILATION_DATABASE_DIR`, `WORKSPACE_ROOT`, and a nonempty `QUALITY_SOURCE_FILES` list;
 - verify that `${COMPILATION_DATABASE_DIR}/compile_commands.json`, `${WORKSPACE_ROOT}/.clang-tidy`, and `${WORKSPACE_ROOT}/.clang-format` exist;
-- run `run-clang-tidy -p <build-dir> -warnings-as-errors=* -config-file <root/.clang-tidy>` and fail immediately on a nonzero exit code;
+- run `run-clang-tidy -p <build-dir> -warnings-as-errors=* -config-file <root/.clang-tidy> <package-source-files>` and fail immediately on a nonzero exit code, so dependency compilation-database entries are excluded;
 - only after success, run `clang-format -i --style=file` over the supplied source list, so style discovery reaches the repository root;
 - fail closed on any command failure and emit concise status messages.
 

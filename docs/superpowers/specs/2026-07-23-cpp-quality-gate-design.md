@@ -21,8 +21,9 @@ normal build targets depend on it.
 The target runs in this strict order:
 
 1. `run-clang-tidy` reads the package compilation database and repository `.clang-tidy`, with
-   warnings treated as errors. Any diagnostic exits nonzero and stops the build before formatting
-   or compilation.
+   warnings treated as errors. It receives the package-owned C/C++ source list explicitly, so
+   compilation-database entries belonging to ROS, GTest, or other dependencies are never linted.
+   Any project diagnostic exits nonzero and stops the build before formatting or compilation.
 2. `clang-format -i --style=file` processes only tracked package C/C++ headers and sources. The
    tool discovers the workspace root `.clang-format` through its parent directories.
 3. CMake compiles the potentially reformatted sources.

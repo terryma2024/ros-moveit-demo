@@ -24,9 +24,8 @@ namespace
 class FakePlanner final : public pick_place::IStatePlanner
 {
 public:
-  pick_place::PlanResult plan(
-    pick_place::State state, pick_place::State next_state,
-    const pick_place::ObservationResult & observation) override
+  pick_place::PlanResult plan(pick_place::State state, pick_place::State next_state,
+                              const pick_place::ObservationResult & observation) override
   {
     ++calls;
     last_state = state;
@@ -75,10 +74,11 @@ pick_place::WorldSnapshot makeSnapshot()
   snapshot.arm_stationary = true;
   snapshot.gripper_open = true;
   snapshot.tcp_pose_world = {0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
-  snapshot.joint_positions = {{"panda_joint1", 0.0}, {"panda_finger_joint1", 0.04},
-    {"panda_finger_joint2", 0.04}};
+  snapshot.joint_positions = {{"panda_joint1", 0.0},
+                              {"panda_finger_joint1", 0.04},
+                              {"panda_finger_joint2", 0.04}};
   snapshot.moveit_world_object_poses = {{"table", {}},
-    {"coke", {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0}}};
+                                        {"coke", {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0}}};
   snapshot.moveit_coke_attached = false;
   snapshot.gazebo_coke_pose_world = {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
   snapshot.gazebo_coke_attached = false;
@@ -125,10 +125,8 @@ TEST(CartesianPlanValidation, AcceptsCompleteVerticalDescent)
 
 TEST(DescendPlannerExecutor, ImplementsIndependentPlannerAndExecutorInterfaces)
 {
-  EXPECT_TRUE((std::is_base_of_v<pick_place::IStatePlanner,
-    pick_place::DescendPlannerExecutor>));
-  EXPECT_TRUE((std::is_base_of_v<pick_place::IStateExecutor,
-    pick_place::DescendPlannerExecutor>));
+  EXPECT_TRUE((std::is_base_of_v<pick_place::IStatePlanner, pick_place::DescendPlannerExecutor>));
+  EXPECT_TRUE((std::is_base_of_v<pick_place::IStateExecutor, pick_place::DescendPlannerExecutor>));
 }
 
 TEST(CartesianPlanValidation, RejectsPartialCartesianPath)
@@ -207,8 +205,7 @@ TEST(CartesianPlanValidation, RejectsUpwardMotion)
 TEST(CartesianPlanValidation, RejectsOrientationDrift)
 {
   auto evidence = validDescendPlanEvidence();
-  evidence.tcp_path[1] = {0.3, 0.0, 0.95, 0.7071067811865476, 0.0, 0.0,
-    0.7071067811865476};
+  evidence.tcp_path[1] = {0.3, 0.0, 0.95, 0.7071067811865476, 0.0, 0.0, 0.7071067811865476};
 
   const auto result = pick_place::validateCartesianPlan(
     evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
@@ -246,8 +243,8 @@ TEST(PickPlaceTargetPolicy, ReturnsFixedMoveAboveObjectTarget)
   const pick_place::FixedPickPlaceTargetPolicy policy;
   const pick_place::ObservationResult observation{makeSnapshot(), std::nullopt};
 
-  const auto result = policy.targetPose(
-    pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND, observation);
+  const auto result = policy.targetPose(pick_place::State::MOVE_ABOVE_OBJECT,
+                                        pick_place::State::DESCEND, observation);
 
   ASSERT_TRUE(result.target_pose.has_value());
   EXPECT_FALSE(result.failure.has_value());
@@ -265,8 +262,8 @@ TEST(PickPlaceTargetPolicy, ReturnsFixedDescendTarget)
   const pick_place::FixedPickPlaceTargetPolicy policy;
   const pick_place::ObservationResult observation{makeSnapshot(), std::nullopt};
 
-  const auto result = policy.targetPose(
-    pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER, observation);
+  const auto result =
+    policy.targetPose(pick_place::State::DESCEND, pick_place::State::CLOSE_GRIPPER, observation);
 
   ASSERT_TRUE(result.target_pose.has_value());
   EXPECT_FALSE(result.failure.has_value());
@@ -284,8 +281,8 @@ TEST(PickPlaceTargetPolicy, RejectsUnsupportedTransition)
   const pick_place::FixedPickPlaceTargetPolicy policy;
   const pick_place::ObservationResult observation{makeSnapshot(), std::nullopt};
 
-  const auto result = policy.targetPose(
-    pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::State::MOVE_ABOVE_OBJECT, observation);
+  const auto result = policy.targetPose(pick_place::State::PREPARE_OPEN_GRIPPER,
+                                        pick_place::State::MOVE_ABOVE_OBJECT, observation);
 
   EXPECT_FALSE(result.target_pose.has_value());
   ASSERT_TRUE(result.failure.has_value());
@@ -296,33 +293,33 @@ TEST(PickPlaceTargetPolicy, ConfigurationSignatureIncludesEveryFixedTarget)
 {
   const pick_place::FixedPickPlaceTargetPolicy policy;
 
-  EXPECT_EQ(
-    "fixed-v4|above_pick=0.3,0,0.987,1,0,0,0|pick=0.3,0,0.87,1,0,0,0|"
-    "above_place=0.3,0.2,0.987,1,0,0,0|place=0.3,0.2,0.87,1,0,0,0|"
-    "supported_coke_offset_z=-0.034|"
-    "recovery_safe_height=0.987",
-    policy.configurationSignature());
+  EXPECT_EQ("fixed-v4|above_pick=0.3,0,0.987,1,0,0,0|pick=0.3,0,0.87,1,0,0,0|"
+            "above_place=0.3,0.2,0.987,1,0,0,0|place=0.3,0.2,0.87,1,0,0,0|"
+            "supported_coke_offset_z=-0.034|"
+            "recovery_safe_height=0.987",
+            policy.configurationSignature());
 }
 
 class ObservationDrivenTargetPolicy final : public pick_place::PickPlaceTargetPolicy
 {
 public:
-  pick_place::TargetPoseResult targetPose(
-    pick_place::State current_state, pick_place::State next_state,
-    const pick_place::ObservationResult & observation) const override
+  [[nodiscard]] pick_place::TargetPoseResult
+  targetPose(pick_place::State current_state, pick_place::State next_state,
+             const pick_place::ObservationResult & observation) const override
   {
     if (current_state != pick_place::State::MOVE_ABOVE_OBJECT ||
-      next_state != pick_place::State::DESCEND || !observation.snapshot)
-    {
+        next_state != pick_place::State::DESCEND || !observation.snapshot) {
       return {std::nullopt, pick_place::Failure{pick_place::FailureCategory::CONFIGURATION,
-          "UNEXPECTED_POLICY_INPUT", "Unexpected target policy input", {}}};
+                                                "UNEXPECTED_POLICY_INPUT",
+                                                "Unexpected target policy input",
+                                                {}}};
     }
     auto target = observation.snapshot->tcp_pose_world;
     target.z += 0.05;
     return {target, std::nullopt};
   }
 
-  std::string configurationSignature() const override
+  [[nodiscard]] std::string configurationSignature() const override
   {
     return "observation-driven-test-policy";
   }
@@ -337,8 +334,8 @@ TEST(TransitionContracts, ResolvesMoveAboveTargetFromPreExecutionObservation)
   auto after = before;
   after.tcp_pose_world.z += 0.05;
 
-  const auto result = contract.validate(
-    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract.validate(before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_TRUE(result.ok);
   EXPECT_DOUBLE_EQ(0.0, result.metrics.at("tcp_position_error"));
@@ -368,11 +365,11 @@ TEST(TransitionContracts, RejectsNonFiniteTcpPose)
   auto after = before;
   after.tcp_pose_world.x = std::numeric_limits<double>::quiet_NaN();
   const pick_place::MoveAboveObjectToDescendValidator contract(
-    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"},
-    0.02, 0.1, 0.01, 0.1);
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1, 0.01,
+    0.1);
 
-  const auto result = contract.validate(
-    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract.validate(before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_FALSE(result.ok);
   EXPECT_TRUE(std::isinf(result.metrics.at("tcp_position_error")));
@@ -409,8 +406,7 @@ void registerMoveAboveObjectToDescendValidator(pick_place::TransitionContractReg
   contracts.registerContract(
     {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
     std::make_shared<pick_place::MoveAboveObjectToDescendValidator>(
-      target_policy,
-      std::vector<std::string>{"table", "coke"}, 0.02, 0.1, 0.01, 0.1));
+      target_policy, std::vector<std::string>{"table", "coke"}, 0.02, 0.1, 0.01, 0.1));
 }
 
 void registerPrepareOpenGripperToMoveAboveObjectValidator(
@@ -479,9 +475,8 @@ public:
 class RecordingExecutionObservationSink final : public pick_place::IExecutionObservationSink
 {
 public:
-  void record(
-    pick_place::State state, const pick_place::WorldSnapshot & before,
-    const pick_place::WorldSnapshot & after) override
+  void record(pick_place::State state, const pick_place::WorldSnapshot & before,
+              const pick_place::WorldSnapshot & after) override
   {
     ++calls;
     last_state = state;
@@ -521,16 +516,16 @@ TEST(TransitionTable, SeparatesBusinessStateFromRunStatus)
   EXPECT_FALSE(pick_place::stateFromString("PLAN_ONLY_COMPLETE").has_value());
   EXPECT_FALSE(pick_place::stateFromString("MOVE_ABOVE_OBJECT_EXECUTED").has_value());
   EXPECT_STREQ("PLAN_ONLY_COMPLETE",
-    pick_place::toString(pick_place::RunStatus::PLAN_ONLY_COMPLETE));
+               pick_place::toString(pick_place::RunStatus::PLAN_ONLY_COMPLETE));
 }
 
 TEST(TransitionTable, RoutesSuccessAndFailureEdges)
 {
   pick_place::StateMachine machine;
   EXPECT_EQ(pick_place::State::PREPARE_OPEN_GRIPPER,
-    machine.advance(pick_place::ActionStatus::SUCCEEDED));
+            machine.advance(pick_place::ActionStatus::SUCCEEDED));
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT,
-    machine.advance(pick_place::ActionStatus::SUCCEEDED));
+            machine.advance(pick_place::ActionStatus::SUCCEEDED));
 }
 
 TEST(TransitionTable, RoutesPrepareOpenGripperFailureToError)
@@ -544,9 +539,8 @@ TEST(TransitionTable, CarryFailureUsesCarryRecovery)
 {
   const pick_place::TransitionTable table;
 
-  EXPECT_EQ(
-    pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
-    table.resolve(pick_place::State::MOVE_ABOVE_PLACE, pick_place::ActionStatus::FAILED));
+  EXPECT_EQ(pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+            table.resolve(pick_place::State::MOVE_ABOVE_PLACE, pick_place::ActionStatus::FAILED));
 }
 
 TEST(TransitionTable, NewRecoveryStatesRoundTripAndAreNotForwardActions)
@@ -578,18 +572,15 @@ TEST(TransitionTable, CarryRecoveryReturnsObjectToPickBeforeCleanup)
 {
   const pick_place::TransitionTable table;
 
-  EXPECT_EQ(
-    pick_place::State::RECOVER_MOVE_ABOVE_PICK,
-    table.resolve(
-      pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT, pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::RECOVER_MOVE_ABOVE_PICK,
+            table.resolve(pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+                          pick_place::ActionStatus::SUCCEEDED));
   EXPECT_EQ(
     pick_place::State::RECOVER_DESCEND_TO_PICK,
-    table.resolve(
-      pick_place::State::RECOVER_MOVE_ABOVE_PICK, pick_place::ActionStatus::SUCCEEDED));
+    table.resolve(pick_place::State::RECOVER_MOVE_ABOVE_PICK, pick_place::ActionStatus::SUCCEEDED));
   EXPECT_EQ(
     pick_place::State::RECOVER_OPEN_GRIPPER,
-    table.resolve(
-      pick_place::State::RECOVER_DESCEND_TO_PICK, pick_place::ActionStatus::SUCCEEDED));
+    table.resolve(pick_place::State::RECOVER_DESCEND_TO_PICK, pick_place::ActionStatus::SUCCEEDED));
 }
 
 TEST(TransitionTable, UsesCanonicalFailureEdges)
@@ -613,8 +604,8 @@ TEST(TransitionTable, UsesCanonicalFailureEdges)
   };
 
   for (const auto & [state, recovery_state] : expected) {
-    EXPECT_EQ(recovery_state, table.resolve(state, pick_place::ActionStatus::FAILED)) <<
-      pick_place::toString(state);
+    EXPECT_EQ(recovery_state, table.resolve(state, pick_place::ActionStatus::FAILED))
+      << pick_place::toString(state);
   }
 }
 
@@ -624,8 +615,8 @@ TEST(Runner, DryRunCompletesAndNeverNeedsAnActionRegistry)
   pick_place::TransitionContractRegistry contracts;
   const pick_place::StateMachineRunner runner(actions, contracts);
 
-  const auto result = runner.run({pick_place::RunMode::DRY_RUN, std::nullopt, false, std::nullopt,
-        100});
+  const auto result =
+    runner.run({pick_place::RunMode::DRY_RUN, std::nullopt, false, std::nullopt, 100});
   EXPECT_EQ(pick_place::RunStatus::DONE, result.status);
   EXPECT_EQ(pick_place::State::DONE, result.current_state);
   EXPECT_FALSE(result.failure.has_value());
@@ -637,8 +628,8 @@ TEST(Runner, DryRunFailureFollowsTheRecoveryPathAndReportsTheInjection)
   pick_place::TransitionContractRegistry contracts;
   const pick_place::StateMachineRunner runner(actions, contracts);
 
-  const auto result = runner.run({pick_place::RunMode::DRY_RUN, std::nullopt, false,
-        pick_place::State::DESCEND, 100});
+  const auto result = runner.run(
+    {pick_place::RunMode::DRY_RUN, std::nullopt, false, pick_place::State::DESCEND, 100});
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   EXPECT_EQ(pick_place::State::ERROR, result.current_state);
   ASSERT_TRUE(result.failure.has_value());
@@ -652,7 +643,7 @@ TEST(Runner, DryRunFailureTakesPriorityOverStopAfter)
   const pick_place::StateMachineRunner runner(actions, contracts);
 
   const auto result = runner.run({pick_place::RunMode::DRY_RUN, pick_place::State::DESCEND, false,
-        pick_place::State::DESCEND, 100});
+                                  pick_place::State::DESCEND, 100});
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("DRY_RUN_FAILURE_INJECTED", result.failure->code);
@@ -664,16 +655,15 @@ TEST(Runner, PlanOnlyUsesExactlyOnePlannerAndDoesNotAdvanceBusinessState)
   auto planner = std::make_shared<FakePlanner>();
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   pick_place::PlanValidatorRegistry plan_validators;
-  plan_validators.registerValidator(
-    pick_place::State::MOVE_ABOVE_OBJECT,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   FakeObserver observer;
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, nullptr, nullptr, nullptr, &plan_validators);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, nullptr, nullptr,
+                                              nullptr, &plan_validators);
 
-  const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, false, std::nullopt,
-        100});
+  const auto result =
+    runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, false, std::nullopt, 100});
   EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
   EXPECT_EQ(pick_place::State::DESCEND, *result.next_state);
@@ -699,11 +689,11 @@ TEST(Runner, RejectsPlannedExecuteStateWithoutPlanValidator)
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
+  const auto result = runner.run(
+    {pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("PLAN_VALIDATOR_NOT_REGISTERED", result.failure->code);
@@ -718,9 +708,8 @@ TEST(Runner, PassesVerifiedBeforeSnapshotToExecutor)
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, executor);
   pick_place::PlanValidatorRegistry plan_validators;
-  plan_validators.registerValidator(
-    pick_place::State::MOVE_ABOVE_OBJECT,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   registerMoveAboveObjectToDescendValidator(contracts);
@@ -728,23 +717,19 @@ TEST(Runner, PassesVerifiedBeforeSnapshotToExecutor)
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
-    &plan_validators);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
+  const auto result = runner.run(
+    {pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
 
   ASSERT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
-  EXPECT_NEAR(
-    observer.snapshot.tcp_pose_world.x,
-    executor->last_context.before.tcp_pose_world.x, 1e-12);
-  EXPECT_NEAR(
-    observer.snapshot.tcp_pose_world.y,
-    executor->last_context.before.tcp_pose_world.y, 1e-12);
-  EXPECT_NEAR(
-    observer.snapshot.tcp_pose_world.z,
-    executor->last_context.before.tcp_pose_world.z, 1e-12);
+  EXPECT_NEAR(observer.snapshot.tcp_pose_world.x, executor->last_context.before.tcp_pose_world.x,
+              1e-12);
+  EXPECT_NEAR(observer.snapshot.tcp_pose_world.y, executor->last_context.before.tcp_pose_world.y,
+              1e-12);
+  EXPECT_NEAR(observer.snapshot.tcp_pose_world.z, executor->last_context.before.tcp_pose_world.z,
+              1e-12);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, executor->last_context.state);
   EXPECT_EQ(pick_place::State::DESCEND, executor->last_context.next_state);
 }
@@ -752,15 +737,13 @@ TEST(Runner, PassesVerifiedBeforeSnapshotToExecutor)
 TEST(PlanValidatorRegistry, RejectsEmptyTrajectory)
 {
   pick_place::PlanValidatorRegistry registry;
-  registry.registerValidator(
-    pick_place::State::MOVE_ABOVE_OBJECT,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  registry.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
+                             std::make_shared<pick_place::NonEmptyPlanValidator>());
   const auto snapshot = makeSnapshot();
   pick_place::PlanArtifact artifact;
   artifact.trajectory_points = 0;
 
-  const auto result = registry.validate(
-    pick_place::State::MOVE_ABOVE_OBJECT, snapshot, artifact);
+  const auto result = registry.validate(pick_place::State::MOVE_ABOVE_OBJECT, snapshot, artifact);
 
   EXPECT_FALSE(result.ok);
   ASSERT_FALSE(result.failures.empty());
@@ -773,8 +756,8 @@ TEST(Runner, ExecuteWorkflowRequiresExecutionInfrastructure)
   pick_place::TransitionContractRegistry contracts;
   const pick_place::StateMachineRunner runner(actions, contracts);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE, std::nullopt, false, std::nullopt,
-        100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("EXECUTE_INFRASTRUCTURE_MISSING", result.failure->code);
 }
@@ -792,11 +775,12 @@ TEST(Runner, ExecutesPrepareOpenGripperWithoutPlanningAndCommitsAfterPostValidat
   observer.after_snapshot->gripper_open = true;
   FakeCheckpointStore checkpoints;
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
+                std::nullopt, 100});
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::PREPARE_OPEN_GRIPPER, result.current_state);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, *result.next_state);
@@ -826,11 +810,12 @@ TEST(Runner, RecordsExistingPreAndPostExecutionSnapshotsOnce)
   FakeCheckpointStore checkpoints;
   const auto common_resume_validator = makeCommonResumeValidator();
   RecordingExecutionObservationSink sink;
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, &sink);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, &sink);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
+                std::nullopt, 100});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(1, sink.calls);
@@ -851,9 +836,8 @@ TEST(Runner, ExecuteWorkflowAdvancesThroughRegisteredStatesUntilStopAfter)
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, executor);
   pick_place::PlanValidatorRegistry plan_validators;
-  plan_validators.registerValidator(
-    pick_place::State::MOVE_ABOVE_OBJECT,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   registerMoveAboveObjectToDescendValidator(contracts);
@@ -863,12 +847,11 @@ TEST(Runner, ExecuteWorkflowAdvancesThroughRegisteredStatesUntilStopAfter)
   observer.after_snapshot->gripper_open = true;
   FakeCheckpointStore checkpoints;
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
-    &plan_validators);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::MOVE_ABOVE_OBJECT, false, std::nullopt, 100});
+  const auto result = runner.run(
+    {pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, false, std::nullopt, 100});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
@@ -899,11 +882,12 @@ TEST(Runner, DoesNotCommitWhenPostValidationFails)
   observer.after_snapshot->tcp_pose_world.x = 0.5;
   FakeCheckpointStore checkpoints;
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
+                std::nullopt, 100});
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("TCP_MOVED_DURING_GRIPPER_OPEN", result.failure->code);
   EXPECT_EQ(1, executor->calls);
@@ -923,11 +907,12 @@ TEST(Runner, PrepareOpenGripperFailureTransitionsToError)
   observer.after_snapshot = observer.snapshot;
   FakeCheckpointStore checkpoints;
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
+                std::nullopt, 100});
 
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   EXPECT_EQ(pick_place::State::ERROR, result.current_state);
@@ -941,19 +926,22 @@ TEST(Runner, ExecutionFailureCancelsAndObservesStationaryRobotBeforeReturningErr
   pick_place::StateActionRegistry actions;
   auto executor = std::make_shared<FakeExecutor>();
   executor->execute_result = {pick_place::ActionStatus::FAILED,
-    pick_place::Failure{pick_place::FailureCategory::GRIPPER, "GRIPPER_OPEN_FAILED",
-      "trajectory failed", {}}};
+                              pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                                  "GRIPPER_OPEN_FAILED",
+                                                  "trajectory failed",
+                                                  {}}};
   actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER, executor);
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   FakeObserver observer;
   FakeCheckpointStore checkpoints;
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
+                std::nullopt, 100});
 
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("GRIPPER_OPEN_FAILED", result.failure->code);
@@ -969,21 +957,19 @@ TEST(Runner, ResumePlanOnlyValidatesCheckpointAndPlansMoveAboveWithoutCommitting
   auto planner = std::make_shared<FakePlanner>();
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   pick_place::PlanValidatorRegistry plan_validators;
-  plan_validators.registerValidator(
-    pick_place::State::MOVE_ABOVE_OBJECT,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   FakeObserver observer;
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
-    &plan_validators);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true,
-        std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100});
   EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
   EXPECT_EQ(pick_place::State::DESCEND, *result.next_state);
@@ -998,9 +984,8 @@ TEST(Runner, ResumePlanOnlyWaitsForForwardCokeStationaryEvidence)
   auto planner = std::make_shared<FakePlanner>();
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   pick_place::PlanValidatorRegistry plan_validators;
-  plan_validators.registerValidator(
-    pick_place::State::MOVE_ABOVE_OBJECT,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   FakeObserver observer;
@@ -1013,12 +998,11 @@ TEST(Runner, ResumePlanOnlyWaitsForForwardCokeStationaryEvidence)
   checkpoints.load_result.checkpoint = makeCheckpoint(checkpoint_snapshot);
   checkpoints.load_result.checkpoint->expected.gazebo_coke_stationary = true;
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
-    &plan_validators);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true,
-        std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100});
 
   EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
   EXPECT_GE(observer.calls, 2);
@@ -1033,9 +1017,8 @@ TEST(Runner, ResumeExecuteRunsMoveAboveObjectFromPrepareCheckpoint)
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, executor);
   pick_place::PlanValidatorRegistry plan_validators;
-  plan_validators.registerValidator(
-    pick_place::State::MOVE_ABOVE_OBJECT,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   registerMoveAboveObjectToDescendValidator(contracts);
@@ -1043,12 +1026,11 @@ TEST(Runner, ResumeExecuteRunsMoveAboveObjectFromPrepareCheckpoint)
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
-    &plan_validators);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
+  const auto result = runner.run(
+    {pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
@@ -1065,9 +1047,8 @@ TEST(Runner, ResumeExecuteStopsSuccessfullyAfterDescendCheckpoint)
   actions.registerPlanner(pick_place::State::DESCEND, planner);
   actions.registerExecutor(pick_place::State::DESCEND, executor);
   pick_place::PlanValidatorRegistry plan_validators;
-  plan_validators.registerValidator(
-    pick_place::State::DESCEND,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  plan_validators.registerValidator(pick_place::State::DESCEND,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerMoveAboveObjectToDescendValidator(contracts);
   registerDescendToCloseGripperValidator(contracts);
@@ -1077,12 +1058,11 @@ TEST(Runner, ResumeExecuteStopsSuccessfullyAfterDescendCheckpoint)
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeMoveAboveCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
-    &plan_validators);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE,
-        pick_place::State::DESCEND, true, std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::DESCEND, true, std::nullopt, 100});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::DESCEND, result.current_state);
@@ -1102,9 +1082,8 @@ TEST(Runner, ResumeExecuteReachesExpectedUnregisteredCloseGripperBoundary)
   actions.registerPlanner(pick_place::State::DESCEND, planner);
   actions.registerExecutor(pick_place::State::DESCEND, executor);
   pick_place::PlanValidatorRegistry plan_validators;
-  plan_validators.registerValidator(
-    pick_place::State::DESCEND,
-    std::make_shared<pick_place::NonEmptyPlanValidator>());
+  plan_validators.registerValidator(pick_place::State::DESCEND,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerMoveAboveObjectToDescendValidator(contracts);
   registerDescendToCloseGripperValidator(contracts);
@@ -1114,12 +1093,11 @@ TEST(Runner, ResumeExecuteReachesExpectedUnregisteredCloseGripperBoundary)
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeMoveAboveCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator, nullptr,
-    &plan_validators);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true,
-        std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
 
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   ASSERT_TRUE(result.failure.has_value());
@@ -1140,11 +1118,11 @@ TEST(Runner, ResumeRejectsWorldMismatchBeforePlanning)
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeCheckpoint(makeSnapshot());
   const auto common_resume_validator = makeCommonResumeValidator();
-  const pick_place::StateMachineRunner runner(
-    actions, contracts, &observer, &checkpoints, &common_resume_validator);
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator);
 
-  const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true,
-        std::nullopt, 100});
+  const auto result =
+    runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100});
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("TCP_MOVED_DURING_GRIPPER_OPEN", result.failure->code);
   EXPECT_EQ(0, planner->calls);
@@ -1154,14 +1132,13 @@ TEST(TransitionContracts, RejectsTcpOrientationErrorAndReportsItsMetric)
 {
   const auto before = makeSnapshot();
   auto after = before;
-  after.tcp_pose_world = {0.3, 0.0, 0.987, 0.7071067811865476, 0.0, 0.0,
-    0.7071067811865476};
+  after.tcp_pose_world = {0.3, 0.0, 0.987, 0.7071067811865476, 0.0, 0.0, 0.7071067811865476};
   const pick_place::MoveAboveObjectToDescendValidator contract(
-    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
-    0.01, 0.1);
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1, 0.01,
+    0.1);
 
-  const auto result = contract.validate(
-    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract.validate(before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_FALSE(result.ok);
   EXPECT_GT(result.metrics.at("tcp_orientation_error_rad"), 1.5);
@@ -1176,11 +1153,11 @@ TEST(TransitionContracts, RejectsGazeboAndMoveItCokePoseMismatch)
   after.gazebo_coke_pose_world->y = -0.426;
   after.gazebo_coke_pose_world->z = 0.987;
   const pick_place::MoveAboveObjectToDescendValidator contract(
-    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
-    0.01, 0.1);
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1, 0.01,
+    0.1);
 
-  const auto result = contract.validate(
-    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract.validate(before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_FALSE(result.ok);
   EXPECT_GT(result.metrics.at("gazebo_moveit_coke_position_error"), 0.1);
@@ -1193,8 +1170,8 @@ TEST(TransitionContracts, DescendRequiresTcpAtMoveAboveTargetBeforePlanning)
   auto before = makeSnapshot();
   before.tcp_pose_world.x += 0.03;
   const pick_place::DescendToCloseGripperValidator contract(
-    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
-    0.01, 0.1);
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1, 0.01,
+    0.1);
 
   const auto result = contract.validatePrecondition(before);
 
@@ -1208,16 +1185,15 @@ TEST(TransitionContracts, DescendRejectsCokeOrientationDriftAfterExecution)
   const auto before = makeSnapshot();
   auto after = before;
   after.tcp_pose_world.z = 0.87;
-  const pick_place::Pose3d rotated_coke{
-    0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
+  const pick_place::Pose3d rotated_coke{0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
   after.gazebo_coke_pose_world = rotated_coke;
   after.moveit_world_object_poses.at("coke") = rotated_coke;
   const pick_place::DescendToCloseGripperValidator contract(
-    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
-    0.01, 0.1);
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1, 0.01,
+    0.1);
 
-  const auto result = contract.validate(
-    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract.validate(before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_FALSE(result.ok);
   EXPECT_GT(result.metrics.at("coke_orientation_drift_rad"), 0.1);
@@ -1230,11 +1206,11 @@ TEST(TransitionContracts, DescendAcceptsStableSixDofCompletion)
   auto after = before;
   after.tcp_pose_world.z = 0.87;
   const pick_place::DescendToCloseGripperValidator contract(
-    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1,
-    0.01, 0.1);
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1, 0.01,
+    0.1);
 
-  const auto result = contract.validate(
-    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract.validate(before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_TRUE(result.ok);
   EXPECT_DOUBLE_EQ(0.0, result.metrics.at("tcp_position_error"));
@@ -1247,16 +1223,17 @@ TEST(TransitionContracts, PrepareRequiresBothFingersSafelyOpenAndCokeStationary)
   before.gripper_open = false;
   auto after = before;
   after.gazebo_coke_pose_world->x += 0.1;
-  const pick_place::PrepareOpenGripperToMoveAboveObjectValidator contract(
-    {"table", "coke"}, 0.02, 0.1, 0.01, 0.1);
+  const pick_place::PrepareOpenGripperToMoveAboveObjectValidator contract({"table", "coke"}, 0.02,
+                                                                          0.1, 0.01, 0.1);
 
-  const auto result = contract.validate(
-    before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract.validate(before, after, {pick_place::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_FALSE(result.ok);
   ASSERT_GE(result.failures.size(), 2U);
-  EXPECT_TRUE(std::any_of(result.failures.begin(), result.failures.end(),
-    [](const pick_place::Failure & failure) {return failure.code == "GRIPPER_NOT_SAFELY_OPEN";}));
+  EXPECT_TRUE(std::any_of(
+    result.failures.begin(), result.failures.end(),
+    [](const pick_place::Failure & failure) { return failure.code == "GRIPPER_NOT_SAFELY_OPEN"; }));
   EXPECT_GT(result.metrics.at("coke_position_drift"), 0.01);
 }
 
@@ -1279,8 +1256,7 @@ TEST(CommonResumeValidator, RejectsJointPositionDrift)
   const auto checkpoint = makeCheckpoint(makeSnapshot());
   auto current = makeSnapshot();
   current.joint_positions.at("panda_joint1") = 0.02;
-  const pick_place::CommonResumeValidator validator(
-    "test-config", "test-session", 0.01);
+  const pick_place::CommonResumeValidator validator("test-config", "test-session", 0.01);
 
   const auto result = validator.validate(checkpoint, current);
 
@@ -1293,8 +1269,7 @@ TEST(CommonResumeValidator, RejectsMissingJointPosition)
   const auto checkpoint = makeCheckpoint(makeSnapshot());
   auto current = makeSnapshot();
   current.joint_positions.erase("panda_joint1");
-  const pick_place::CommonResumeValidator validator(
-    "test-config", "test-session", 0.01);
+  const pick_place::CommonResumeValidator validator("test-config", "test-session", 0.01);
 
   const auto result = validator.validate(checkpoint, current);
 
@@ -1306,10 +1281,8 @@ TEST(CommonResumeValidator, RejectsNonFiniteJointPosition)
 {
   auto checkpoint = makeCheckpoint(makeSnapshot());
   auto current = makeSnapshot();
-  checkpoint.expected.joint_positions.at("panda_joint1") =
-    std::numeric_limits<double>::quiet_NaN();
-  const pick_place::CommonResumeValidator validator(
-    "test-config", "test-session", 0.01);
+  checkpoint.expected.joint_positions.at("panda_joint1") = std::numeric_limits<double>::quiet_NaN();
+  const pick_place::CommonResumeValidator validator("test-config", "test-session", 0.01);
 
   const auto result = validator.validate(checkpoint, current);
 
@@ -1322,12 +1295,11 @@ TEST(CommonResumeValidator, RecoveryAllowsFiniteJointDriftForFactReclassificatio
   auto checkpoint = makeCheckpoint(makeSnapshot());
   checkpoint.phase = pick_place::CheckpointPhase::RECOVERY;
   checkpoint.failed_state = pick_place::State::MOVE_ABOVE_PLACE;
-  checkpoint.original_failure = pick_place::Failure{
-    pick_place::FailureCategory::EXECUTION, "MOVE_FAILED", "move failed", {}};
+  checkpoint.original_failure =
+    pick_place::Failure{pick_place::FailureCategory::EXECUTION, "MOVE_FAILED", "move failed", {}};
   auto current = makeSnapshot();
   current.joint_positions.at("panda_joint1") = 0.5;
-  const pick_place::CommonResumeValidator validator(
-    "test-config", "test-session", 0.01);
+  const pick_place::CommonResumeValidator validator("test-config", "test-session", 0.01);
 
   const auto result = validator.validate(checkpoint, current);
 
@@ -1340,13 +1312,11 @@ TEST(CommonResumeValidator, RecoveryRejectsNonFiniteJointEvidence)
   auto checkpoint = makeCheckpoint(makeSnapshot());
   checkpoint.phase = pick_place::CheckpointPhase::RECOVERY;
   checkpoint.failed_state = pick_place::State::MOVE_ABOVE_PLACE;
-  checkpoint.original_failure = pick_place::Failure{
-    pick_place::FailureCategory::EXECUTION, "MOVE_FAILED", "move failed", {}};
+  checkpoint.original_failure =
+    pick_place::Failure{pick_place::FailureCategory::EXECUTION, "MOVE_FAILED", "move failed", {}};
   auto current = makeSnapshot();
-  current.joint_positions.at("panda_joint1") =
-    std::numeric_limits<double>::quiet_NaN();
-  const pick_place::CommonResumeValidator validator(
-    "test-config", "test-session", 0.01);
+  current.joint_positions.at("panda_joint1") = std::numeric_limits<double>::quiet_NaN();
+  const pick_place::CommonResumeValidator validator("test-config", "test-session", 0.01);
 
   const auto result = validator.validate(checkpoint, current);
 
@@ -1363,8 +1333,7 @@ TEST(TransitionContracts, ResumeUsesTheSameMoveAboveObjectToDescendValidator)
   registerMoveAboveObjectToDescendValidator(contracts);
 
   const auto result = contracts.validateResume(
-    {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND},
-    makeSnapshot(), current);
+    {pick_place::State::MOVE_ABOVE_OBJECT, pick_place::State::DESCEND}, makeSnapshot(), current);
 
   EXPECT_FALSE(result.ok);
   ASSERT_FALSE(result.failures.empty());
@@ -1376,8 +1345,7 @@ TEST(TransitionContracts, ResumeUsesTheSameDescendToCloseGripperValidator)
   auto expected = makeSnapshot();
   expected.tcp_pose_world.z = 0.87;
   auto current = expected;
-  const pick_place::Pose3d rotated_coke{
-    0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
+  const pick_place::Pose3d rotated_coke{0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
   current.gazebo_coke_pose_world = rotated_coke;
   current.moveit_world_object_poses.at("coke") = rotated_coke;
   pick_place::TransitionContractRegistry contracts;
@@ -1400,8 +1368,8 @@ TEST(TransitionContracts, ResumeUsesTheSamePrepareOpenGripperValidator)
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
 
   const auto result = contracts.validateResume(
-    {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::State::MOVE_ABOVE_OBJECT},
-    expected, current);
+    {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::State::MOVE_ABOVE_OBJECT}, expected,
+    current);
 
   EXPECT_FALSE(result.ok);
   ASSERT_FALSE(result.failures.empty());
@@ -1415,7 +1383,7 @@ TEST(Runner, RejectsFailureInjectionOutsideDryRun)
   const pick_place::StateMachineRunner runner(actions, contracts);
 
   const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, false,
-        pick_place::State::MOVE_ABOVE_OBJECT, 100});
+                                  pick_place::State::MOVE_ABOVE_OBJECT, 100});
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("FAIL_AT_MODE_MISMATCH", result.failure->code);
 }
@@ -1423,8 +1391,7 @@ TEST(Runner, RejectsFailureInjectionOutsideDryRun)
 TEST(TransitionContracts, MissingExecuteContractFailsClosed)
 {
   pick_place::TransitionContractRegistry contracts;
-  pick_place::TransitionTable table;
-  const auto failure = contracts.validateExecuteCoverage(table);
+  const auto failure = contracts.validateExecuteCoverage();
   ASSERT_TRUE(failure.has_value());
   EXPECT_EQ("MISSING_TRANSITION_CONTRACT", failure->code);
 }

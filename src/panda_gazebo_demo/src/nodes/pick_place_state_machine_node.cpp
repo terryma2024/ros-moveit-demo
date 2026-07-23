@@ -34,11 +34,10 @@ namespace
 class NodeSpinner
 {
 public:
-  explicit NodeSpinner(const std::shared_ptr<rclcpp::Node> & node)
-  : node_(node)
+  explicit NodeSpinner(const std::shared_ptr<rclcpp::Node> & node) : node_(node)
   {
     executor_.add_node(node_);
-    thread_ = std::thread([this]() {executor_.spin();});
+    thread_ = std::thread([this]() { executor_.spin(); });
   }
 
   ~NodeSpinner()
@@ -59,71 +58,63 @@ private:
 class RosExecutionObservationLogger final : public pick_place::IExecutionObservationSink
 {
 public:
-  explicit RosExecutionObservationLogger(rclcpp::Logger logger)
-  : logger_(std::move(logger)) {}
+  explicit RosExecutionObservationLogger(rclcpp::Logger logger) : logger_(std::move(logger)) {}
 
-  void record(
-    pick_place::State state, const pick_place::WorldSnapshot & before,
-    const pick_place::WorldSnapshot & after) override
+  void record(pick_place::State state, const pick_place::WorldSnapshot & before,
+              const pick_place::WorldSnapshot & after) override
   {
     const pick_place::TransitionTable transitions;
-    RCLCPP_INFO(logger_, "STATE_TRANSITION state=%s next_state=%s",
-      pick_place::toString(state),
+    RCLCPP_INFO(
+      logger_, "STATE_TRANSITION state=%s next_state=%s", pick_place::toString(state),
       pick_place::toString(transitions.resolve(state, pick_place::ActionStatus::SUCCEEDED)));
     logPose("COKE_POSE_BEFORE", state, before.gazebo_coke_pose_world);
     logPose("COKE_POSE_AFTER", state, after.gazebo_coke_pose_world);
     logGripper("BEFORE", state, before);
     logGripper("AFTER", state, after);
-    RCLCPP_INFO(
-      logger_,
-      "ATTACHMENT_EVIDENCE state=%s GAZEBO_ATTACHED_BEFORE=%d GAZEBO_ATTACHED_AFTER=%d "
-      "MOVEIT_ATTACHED_BEFORE=%d MOVEIT_ATTACHED_AFTER=%d",
-      pick_place::toString(state), valueOrUnknown(before.gazebo_coke_attached),
-      valueOrUnknown(after.gazebo_coke_attached),
-      valueOrUnknown(before.moveit_coke_attached), valueOrUnknown(after.moveit_coke_attached));
-    RCLCPP_INFO(
-      logger_,
-      "MOVEIT_MEMBERSHIP state=%s COKE_IN_WORLD_BEFORE=%d COKE_IN_WORLD_AFTER=%d "
-      "ATTACHED_LINK=%s TOUCH_LINK_COUNT=%zu",
-      pick_place::toString(state),
-      before.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
-      after.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
-      after.moveit_coke_attached_link ? after.moveit_coke_attached_link->c_str() : "",
-      after.moveit_coke_touch_links.size());
+    RCLCPP_INFO(logger_,
+                "ATTACHMENT_EVIDENCE state=%s GAZEBO_ATTACHED_BEFORE=%d GAZEBO_ATTACHED_AFTER=%d "
+                "MOVEIT_ATTACHED_BEFORE=%d MOVEIT_ATTACHED_AFTER=%d",
+                pick_place::toString(state), valueOrUnknown(before.gazebo_coke_attached),
+                valueOrUnknown(after.gazebo_coke_attached),
+                valueOrUnknown(before.moveit_coke_attached),
+                valueOrUnknown(after.moveit_coke_attached));
+    RCLCPP_INFO(logger_,
+                "MOVEIT_MEMBERSHIP state=%s COKE_IN_WORLD_BEFORE=%d COKE_IN_WORLD_AFTER=%d "
+                "ATTACHED_LINK=%s TOUCH_LINK_COUNT=%zu",
+                pick_place::toString(state),
+                before.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
+                after.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
+                after.moveit_coke_attached_link ? after.moveit_coke_attached_link->c_str() : "",
+                after.moveit_coke_touch_links.size());
     if (before.gazebo_coke_pose_world && after.gazebo_coke_pose_world) {
       RCLCPP_INFO(
         logger_, "COKE_DRIFT state=%s position=%.6f orientation_rad=%.6f",
         pick_place::toString(state),
-        pick_place::positionDistance(
-          *before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world),
-        pick_place::orientationDistance(
-          *before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world));
-      const auto before_relative = relativePose(
-        before.tcp_pose_world, *before.gazebo_coke_pose_world);
-      const auto after_relative = relativePose(
-        after.tcp_pose_world, *after.gazebo_coke_pose_world);
+        pick_place::positionDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world),
+        pick_place::orientationDistance(*before.gazebo_coke_pose_world,
+                                        *after.gazebo_coke_pose_world));
+      const auto before_relative =
+        relativePose(before.tcp_pose_world, *before.gazebo_coke_pose_world);
+      const auto after_relative = relativePose(after.tcp_pose_world, *after.gazebo_coke_pose_world);
       RCLCPP_INFO(
-        logger_,
-        "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
-        pick_place::toString(state),
-        pick_place::positionDistance(before_relative, after_relative),
+        logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
+        pick_place::toString(state), pick_place::positionDistance(before_relative, after_relative),
         pick_place::orientationDistance(before_relative, after_relative));
     } else {
       RCLCPP_INFO(logger_, "COKE_DRIFT state=%s unavailable", pick_place::toString(state));
       RCLCPP_INFO(logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s unavailable",
-        pick_place::toString(state));
+                  pick_place::toString(state));
     }
     const auto moveit_coke = after.moveit_world_object_poses.find("coke");
     if (after.gazebo_coke_pose_world && moveit_coke != after.moveit_world_object_poses.end()) {
       RCLCPP_INFO(
-        logger_,
-        "CROSS_WORLD_COKE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
+        logger_, "CROSS_WORLD_COKE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
         pick_place::toString(state),
         pick_place::positionDistance(*after.gazebo_coke_pose_world, moveit_coke->second),
         pick_place::orientationDistance(*after.gazebo_coke_pose_world, moveit_coke->second));
     } else {
       RCLCPP_INFO(logger_, "CROSS_WORLD_COKE_POSE_ERROR state=%s unavailable",
-        pick_place::toString(state));
+                  pick_place::toString(state));
     }
   }
 
@@ -133,22 +124,28 @@ private:
     return value ? (*value ? 1 : 0) : -1;
   }
 
-  static pick_place::Pose3d relativePose(
-    const pick_place::Pose3d & frame, const pick_place::Pose3d & object)
+  static pick_place::Pose3d relativePose(const pick_place::Pose3d & frame,
+                                         const pick_place::Pose3d & object)
   {
-    const Eigen::Isometry3d world_frame = Eigen::Translation3d(frame.x, frame.y, frame.z) *
+    const Eigen::Isometry3d world_frame =
+      Eigen::Translation3d(frame.x, frame.y, frame.z) *
       Eigen::Quaterniond(frame.qw, frame.qx, frame.qy, frame.qz).normalized();
-    const Eigen::Isometry3d world_object = Eigen::Translation3d(object.x, object.y, object.z) *
+    const Eigen::Isometry3d world_object =
+      Eigen::Translation3d(object.x, object.y, object.z) *
       Eigen::Quaterniond(object.qw, object.qx, object.qy, object.qz).normalized();
     const Eigen::Isometry3d relative = world_frame.inverse() * world_object;
     const Eigen::Quaterniond orientation(relative.rotation());
-    return {relative.translation().x(), relative.translation().y(), relative.translation().z(),
-      orientation.x(), orientation.y(), orientation.z(), orientation.w()};
+    return {relative.translation().x(),
+            relative.translation().y(),
+            relative.translation().z(),
+            orientation.x(),
+            orientation.y(),
+            orientation.z(),
+            orientation.w()};
   }
 
-  void logPose(
-    const char * label, pick_place::State state,
-    const std::optional<pick_place::Pose3d> & pose) const
+  void logPose(const char * label, pick_place::State state,
+               const std::optional<pick_place::Pose3d> & pose) const
   {
     if (!pose) {
       RCLCPP_INFO(logger_, "%s state=%s unavailable", label, pick_place::toString(state));
@@ -156,34 +153,29 @@ private:
     }
     const Eigen::Quaterniond orientation(pose->qw, pose->qx, pose->qy, pose->qz);
     const auto rpy = orientation.normalized().toRotationMatrix().eulerAngles(0, 1, 2);
-    RCLCPP_INFO(
-      logger_,
-      "%s state=%s x=%.6f y=%.6f z=%.6f roll=%.6f pitch=%.6f yaw=%.6f",
-      label, pick_place::toString(state), pose->x, pose->y, pose->z, rpy.x(), rpy.y(), rpy.z());
+    RCLCPP_INFO(logger_, "%s state=%s x=%.6f y=%.6f z=%.6f roll=%.6f pitch=%.6f yaw=%.6f", label,
+                pick_place::toString(state), pose->x, pose->y, pose->z, rpy.x(), rpy.y(), rpy.z());
   }
 
-  void logGripper(
-    const char * label, pick_place::State state,
-    const pick_place::WorldSnapshot & snapshot) const
+  void logGripper(const char * label, pick_place::State state,
+                  const pick_place::WorldSnapshot & snapshot) const
   {
     const auto finger1_position = snapshot.joint_positions.find("panda_finger_joint1");
     const auto finger2_position = snapshot.joint_positions.find("panda_finger_joint2");
     const auto finger1_velocity = snapshot.joint_velocities.find("panda_finger_joint1");
     const auto finger2_velocity = snapshot.joint_velocities.find("panda_finger_joint2");
     if (finger1_position == snapshot.joint_positions.end() ||
-      finger2_position == snapshot.joint_positions.end() ||
-      finger1_velocity == snapshot.joint_velocities.end() ||
-      finger2_velocity == snapshot.joint_velocities.end())
-    {
+        finger2_position == snapshot.joint_positions.end() ||
+        finger1_velocity == snapshot.joint_velocities.end() ||
+        finger2_velocity == snapshot.joint_velocities.end()) {
       RCLCPP_INFO(logger_, "%s state=%s unavailable", label, pick_place::toString(state));
       return;
     }
-    RCLCPP_INFO(
-      logger_,
-      "GRIPPER_EVIDENCE state=%s sample=%s FINGER1_POSITION=%.6f FINGER2_POSITION=%.6f "
-      "FINGER1_VELOCITY=%.6f FINGER2_VELOCITY=%.6f",
-      pick_place::toString(state), label, finger1_position->second, finger2_position->second,
-      finger1_velocity->second, finger2_velocity->second);
+    RCLCPP_INFO(logger_,
+                "GRIPPER_EVIDENCE state=%s sample=%s FINGER1_POSITION=%.6f FINGER2_POSITION=%.6f "
+                "FINGER1_VELOCITY=%.6f FINGER2_VELOCITY=%.6f",
+                pick_place::toString(state), label, finger1_position->second,
+                finger2_position->second, finger1_velocity->second, finger2_velocity->second);
   }
 
   rclcpp::Logger logger_;
@@ -192,20 +184,18 @@ private:
 class LoggingCheckpointStore final : public pick_place::ICheckpointStore
 {
 public:
-  LoggingCheckpointStore(std::filesystem::path path, rclcpp::Logger logger)
-  : delegate_(std::move(path)), logger_(std::move(logger))
+  LoggingCheckpointStore(std::filesystem::path path, rclcpp::Logger logger) :
+      delegate_(std::move(path)), logger_(std::move(logger))
   {
   }
 
-  std::optional<pick_place::Failure> commit(
-    const pick_place::Checkpoint & checkpoint) override
+  std::optional<pick_place::Failure> commit(const pick_place::Checkpoint & checkpoint) override
   {
     const auto failure = delegate_.commit(checkpoint);
     if (!failure) {
-      RCLCPP_INFO(
-        logger_, "CHECKPOINT_PHASE=%s CHECKPOINT_SEQUENCE=%lu NEXT_STATE=%s",
-        checkpoint.phase == pick_place::CheckpointPhase::FORWARD ? "FORWARD" : "RECOVERY",
-        checkpoint.sequence, pick_place::toString(checkpoint.next_state));
+      RCLCPP_INFO(logger_, "CHECKPOINT_PHASE=%s CHECKPOINT_SEQUENCE=%lu NEXT_STATE=%s",
+                  checkpoint.phase == pick_place::CheckpointPhase::FORWARD ? "FORWARD" : "RECOVERY",
+                  checkpoint.sequence, pick_place::toString(checkpoint.next_state));
     }
     return failure;
   }
@@ -227,10 +217,9 @@ private:
   rclcpp::Logger logger_;
 };
 
-template<typename T>
-T parameterOrDeclare(
-  const std::shared_ptr<rclcpp::Node> & node, const std::string & name,
-  const T & default_value)
+template <typename T>
+T parameterOrDeclare(const std::shared_ptr<rclcpp::Node> & node, const std::string & name,
+                     const T & default_value)
 {
   if (!node->has_parameter(name)) {
     node->declare_parameter<T>(name, default_value);
@@ -244,11 +233,10 @@ enum class StateParameterScope
   ANY_ACTION,
 };
 
-std::optional<pick_place::State> optionalStateParameter(
-  const std::shared_ptr<rclcpp::Node> & node,
-  const std::string & name,
-  StateParameterScope scope,
-  rclcpp::Logger logger)
+std::optional<pick_place::State> optionalStateParameter(const std::shared_ptr<rclcpp::Node> & node,
+                                                        const std::string & name,
+                                                        StateParameterScope scope,
+                                                        const rclcpp::Logger & logger)
 {
   const auto value = parameterOrDeclare(node, name, std::string(""));
   if (value.empty()) {
@@ -256,13 +244,12 @@ std::optional<pick_place::State> optionalStateParameter(
   }
   const auto state = pick_place::stateFromString(value);
   const bool valid_action = state && pick_place::isAction(*state);
-  const bool valid_scope = valid_action &&
-    (scope == StateParameterScope::ANY_ACTION || pick_place::isForwardAction(*state));
+  const bool valid_scope = valid_action && (scope == StateParameterScope::ANY_ACTION ||
+                                            pick_place::isForwardAction(*state));
   if (!valid_scope) {
-    const char * expected = scope == StateParameterScope::ANY_ACTION ?
-      "a non-terminal action State" : "a forward action State";
-    RCLCPP_ERROR(
-      logger, "%s must name %s; got '%s'", name.c_str(), expected, value.c_str());
+    const char * expected = scope == StateParameterScope::ANY_ACTION ? "a non-terminal action State"
+                                                                     : "a forward action State";
+    RCLCPP_ERROR(logger, "%s must name %s; got '%s'", name.c_str(), expected, value.c_str());
     return std::nullopt;
   }
   return state;
@@ -282,8 +269,8 @@ int main(int argc, char * argv[])
   rclcpp::init(argc, argv);
   const auto node = std::make_shared<rclcpp::Node>(
     "pick_place_state_machine", rclcpp::NodeOptions()
-    .automatically_declare_parameters_from_overrides(true)
-    .append_parameter_override("use_sim_time", true));
+                                  .automatically_declare_parameters_from_overrides(true)
+                                  .append_parameter_override("use_sim_time", true));
   const auto logger = node->get_logger();
 
   const auto mode_value = parameterOrDeclare(node, "mode", std::string(""));
@@ -295,11 +282,11 @@ int main(int argc, char * argv[])
     return EXIT_FAILURE;
   }
 
-  const auto fail_at = optionalStateParameter(
-    node, "fail_at", StateParameterScope::FORWARD_ACTION, logger);
+  const auto fail_at =
+    optionalStateParameter(node, "fail_at", StateParameterScope::FORWARD_ACTION, logger);
   const auto fail_at_value = node->get_parameter("fail_at").get_value<std::string>();
-  const auto stop_after = optionalStateParameter(
-    node, "stop_after", StateParameterScope::ANY_ACTION, logger);
+  const auto stop_after =
+    optionalStateParameter(node, "stop_after", StateParameterScope::ANY_ACTION, logger);
   const auto stop_after_value = node->get_parameter("stop_after").get_value<std::string>();
   if ((!fail_at_value.empty() && !fail_at) || (!stop_after_value.empty() && !stop_after)) {
     rclcpp::shutdown();
@@ -313,101 +300,99 @@ int main(int argc, char * argv[])
     return EXIT_FAILURE;
   }
   pick_place::PickPlaceParameters parameters;
-  parameters.planning_group = parameterOrDeclare(
-    node, "planning_group", parameters.planning_group);
+  parameters.planning_group = parameterOrDeclare(node, "planning_group", parameters.planning_group);
   parameters.tcp_link = parameterOrDeclare(node, "tcp_link", parameters.tcp_link);
-  parameters.required_world_objects = parameterOrDeclare(
-    node, "required_world_objects", parameters.required_world_objects);
-  parameters.velocity_scaling = parameterOrDeclare(
-    node, "velocity_scaling", parameters.velocity_scaling);
-  parameters.acceleration_scaling = parameterOrDeclare(
-    node, "acceleration_scaling", parameters.acceleration_scaling);
-  parameters.cartesian_eef_step = parameterOrDeclare(
-    node, "cartesian_eef_step", parameters.cartesian_eef_step);
-  parameters.cartesian_min_fraction = parameterOrDeclare(
-    node, "cartesian_min_fraction", parameters.cartesian_min_fraction);
-  parameters.joint_jump_threshold = parameterOrDeclare(
-    node, "joint_jump_threshold", parameters.joint_jump_threshold);
+  parameters.required_world_objects =
+    parameterOrDeclare(node, "required_world_objects", parameters.required_world_objects);
+  parameters.velocity_scaling =
+    parameterOrDeclare(node, "velocity_scaling", parameters.velocity_scaling);
+  parameters.acceleration_scaling =
+    parameterOrDeclare(node, "acceleration_scaling", parameters.acceleration_scaling);
+  parameters.cartesian_eef_step =
+    parameterOrDeclare(node, "cartesian_eef_step", parameters.cartesian_eef_step);
+  parameters.cartesian_min_fraction =
+    parameterOrDeclare(node, "cartesian_min_fraction", parameters.cartesian_min_fraction);
+  parameters.joint_jump_threshold =
+    parameterOrDeclare(node, "joint_jump_threshold", parameters.joint_jump_threshold);
   parameters.motion_start_joint_tolerance = parameterOrDeclare(
     node, "motion_start_joint_tolerance", parameters.motion_start_joint_tolerance);
-  parameters.ready_named_target = parameterOrDeclare(
-    node, "ready_named_target", parameters.ready_named_target);
-  parameters.ready_joint_tolerance = parameterOrDeclare(
-    node, "ready_joint_tolerance", parameters.ready_joint_tolerance);
-  parameters.tcp_position_tolerance = parameterOrDeclare(
-    node, "tcp_position_tolerance", parameters.tcp_position_tolerance);
+  parameters.ready_named_target =
+    parameterOrDeclare(node, "ready_named_target", parameters.ready_named_target);
+  parameters.ready_joint_tolerance =
+    parameterOrDeclare(node, "ready_joint_tolerance", parameters.ready_joint_tolerance);
+  parameters.tcp_position_tolerance =
+    parameterOrDeclare(node, "tcp_position_tolerance", parameters.tcp_position_tolerance);
   parameters.tcp_orientation_tolerance_rad = parameterOrDeclare(
     node, "tcp_orientation_tolerance_rad", parameters.tcp_orientation_tolerance_rad);
-  parameters.coke_position_tolerance = parameterOrDeclare(
-    node, "coke_position_tolerance", parameters.coke_position_tolerance);
+  parameters.coke_position_tolerance =
+    parameterOrDeclare(node, "coke_position_tolerance", parameters.coke_position_tolerance);
   parameters.coke_orientation_tolerance_rad = parameterOrDeclare(
     node, "coke_orientation_tolerance_rad", parameters.coke_orientation_tolerance_rad);
-  parameters.gripper_open_position = parameterOrDeclare(
-    node, "gripper_open_position", parameters.gripper_open_position);
-  parameters.gripper_open_min_position = parameterOrDeclare(
-    node, "gripper_open_min_position", parameters.gripper_open_min_position);
-  parameters.gripper_close_position = parameterOrDeclare(
-    node, "gripper_close_position", parameters.gripper_close_position);
-  parameters.gripper_close_tolerance = parameterOrDeclare(
-    node, "gripper_close_tolerance", parameters.gripper_close_tolerance);
-  parameters.gripper_grasp_min_position = parameterOrDeclare(
-    node, "gripper_grasp_min_position", parameters.gripper_grasp_min_position);
-  parameters.gripper_grasp_max_position = parameterOrDeclare(
-    node, "gripper_grasp_max_position", parameters.gripper_grasp_max_position);
-  parameters.gripper_symmetry_tolerance = parameterOrDeclare(
-    node, "gripper_symmetry_tolerance", parameters.gripper_symmetry_tolerance);
-  parameters.joint_velocity_tolerance = parameterOrDeclare(
-    node, "joint_velocity_tolerance", parameters.joint_velocity_tolerance);
-  parameters.gripper_max_effort = parameterOrDeclare(
-    node, "gripper_max_effort", parameters.gripper_max_effort);
+  parameters.gripper_open_position =
+    parameterOrDeclare(node, "gripper_open_position", parameters.gripper_open_position);
+  parameters.gripper_open_min_position =
+    parameterOrDeclare(node, "gripper_open_min_position", parameters.gripper_open_min_position);
+  parameters.gripper_close_position =
+    parameterOrDeclare(node, "gripper_close_position", parameters.gripper_close_position);
+  parameters.gripper_close_tolerance =
+    parameterOrDeclare(node, "gripper_close_tolerance", parameters.gripper_close_tolerance);
+  parameters.gripper_grasp_min_position =
+    parameterOrDeclare(node, "gripper_grasp_min_position", parameters.gripper_grasp_min_position);
+  parameters.gripper_grasp_max_position =
+    parameterOrDeclare(node, "gripper_grasp_max_position", parameters.gripper_grasp_max_position);
+  parameters.gripper_symmetry_tolerance =
+    parameterOrDeclare(node, "gripper_symmetry_tolerance", parameters.gripper_symmetry_tolerance);
+  parameters.joint_velocity_tolerance =
+    parameterOrDeclare(node, "joint_velocity_tolerance", parameters.joint_velocity_tolerance);
+  parameters.gripper_max_effort =
+    parameterOrDeclare(node, "gripper_max_effort", parameters.gripper_max_effort);
   parameters.gripper_action_timeout_seconds = parameterOrDeclare(
     node, "gripper_action_timeout_seconds", parameters.gripper_action_timeout_seconds);
-  parameters.attachment_timeout_seconds = parameterOrDeclare(
-    node, "attachment_timeout_seconds", parameters.attachment_timeout_seconds);
+  parameters.attachment_timeout_seconds =
+    parameterOrDeclare(node, "attachment_timeout_seconds", parameters.attachment_timeout_seconds);
   parameters.planning_scene_timeout_seconds = parameterOrDeclare(
     node, "planning_scene_timeout_seconds", parameters.planning_scene_timeout_seconds);
-  parameters.state_poll_interval_seconds = parameterOrDeclare(
-    node, "state_poll_interval_seconds", parameters.state_poll_interval_seconds);
+  parameters.state_poll_interval_seconds =
+    parameterOrDeclare(node, "state_poll_interval_seconds", parameters.state_poll_interval_seconds);
   parameters.gazebo_observation_max_age_seconds = parameterOrDeclare(
-    node, "gazebo_observation_max_age_seconds",
-    parameters.gazebo_observation_max_age_seconds);
+    node, "gazebo_observation_max_age_seconds", parameters.gazebo_observation_max_age_seconds);
   const auto coke_settle_samples = parameterOrDeclare<std::int64_t>(
     node, "coke_settle_samples", static_cast<std::int64_t>(parameters.coke_settle_samples));
   parameters.coke_settle_interval_seconds = parameterOrDeclare(
     node, "coke_settle_interval_seconds", parameters.coke_settle_interval_seconds);
   parameters.coke_settle_position_tolerance = parameterOrDeclare(
     node, "coke_settle_position_tolerance", parameters.coke_settle_position_tolerance);
-  parameters.coke_settle_orientation_tolerance_rad = parameterOrDeclare(
-    node, "coke_settle_orientation_tolerance_rad",
-    parameters.coke_settle_orientation_tolerance_rad);
-  parameters.recovery_safe_height = parameterOrDeclare(
-    node, "recovery_safe_height", parameters.recovery_safe_height);
-  parameters.gazebo_world_name = parameterOrDeclare(
-    node, "gazebo_world_name", parameters.gazebo_world_name);
-  parameters.gazebo_coke_model = parameterOrDeclare(
-    node, "gazebo_coke_model", parameters.gazebo_coke_model);
-  parameters.gazebo_attach_topic = parameterOrDeclare(
-    node, "gazebo_attach_topic", parameters.gazebo_attach_topic);
-  parameters.gazebo_detach_topic = parameterOrDeclare(
-    node, "gazebo_detach_topic", parameters.gazebo_detach_topic);
+  parameters.coke_settle_orientation_tolerance_rad =
+    parameterOrDeclare(node, "coke_settle_orientation_tolerance_rad",
+                       parameters.coke_settle_orientation_tolerance_rad);
+  parameters.recovery_safe_height =
+    parameterOrDeclare(node, "recovery_safe_height", parameters.recovery_safe_height);
+  parameters.gazebo_world_name =
+    parameterOrDeclare(node, "gazebo_world_name", parameters.gazebo_world_name);
+  parameters.gazebo_coke_model =
+    parameterOrDeclare(node, "gazebo_coke_model", parameters.gazebo_coke_model);
+  parameters.gazebo_attach_topic =
+    parameterOrDeclare(node, "gazebo_attach_topic", parameters.gazebo_attach_topic);
+  parameters.gazebo_detach_topic =
+    parameterOrDeclare(node, "gazebo_detach_topic", parameters.gazebo_detach_topic);
   parameters.gazebo_attachment_event_topic = parameterOrDeclare(
     node, "gazebo_attachment_event_topic", parameters.gazebo_attachment_event_topic);
-  parameters.gazebo_attachment_topic = parameterOrDeclare(
-    node, "gazebo_attachment_topic", parameters.gazebo_attachment_topic);
+  parameters.gazebo_attachment_topic =
+    parameterOrDeclare(node, "gazebo_attachment_topic", parameters.gazebo_attachment_topic);
   parameters.gazebo_coke_initially_detached = parameterOrDeclare(
     node, "gazebo_coke_initially_detached", parameters.gazebo_coke_initially_detached);
-  parameters.gripper_action_name = parameterOrDeclare(
-    node, "gripper_action_name", parameters.gripper_action_name);
+  parameters.gripper_action_name =
+    parameterOrDeclare(node, "gripper_action_name", parameters.gripper_action_name);
   const auto max_state_transitions = parameterOrDeclare<std::int64_t>(
-    node, "max_state_transitions",
-    static_cast<std::int64_t>(parameters.max_state_transitions));
+    node, "max_state_transitions", static_cast<std::int64_t>(parameters.max_state_transitions));
   const auto checkpoint_path = parameterOrDeclare(
     node, "checkpoint_path", std::string("/tmp/panda_pick_place_checkpoint.json"));
   const auto configured_simulation_session_id =
     parameterOrDeclare(node, "simulation_session_id", std::string(""));
-  const auto unix_timestamp_milliseconds = static_cast<std::uint64_t>(
-    std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::system_clock::now().time_since_epoch()).count());
+  const auto unix_timestamp_milliseconds =
+    static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::system_clock::now().time_since_epoch())
+                                 .count());
   const auto session_id = pick_place::resolveSimulationSessionId(
     *mode, resume, configured_simulation_session_id, unix_timestamp_milliseconds);
   if (!session_id.error.empty()) {
@@ -428,38 +413,35 @@ int main(int argc, char * argv[])
   parameters.max_state_transitions = static_cast<std::uint64_t>(max_state_transitions);
   if (const auto invalid_parameters = pick_place::validatePickPlaceParameters(parameters)) {
     RCLCPP_ERROR(logger, "%s: %s", invalid_parameters->code.c_str(),
-      invalid_parameters->message.c_str());
+                 invalid_parameters->message.c_str());
     rclcpp::shutdown();
     return EXIT_FAILURE;
   }
 
-  const auto target_policy = std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(
-    parameters.recovery_safe_height);
+  const auto target_policy =
+    std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(parameters.recovery_safe_height);
   const pick_place::GripperLimits gripper_limits{
     parameters.gripper_open_min_position, parameters.gripper_grasp_min_position,
     parameters.gripper_grasp_max_position, parameters.gripper_symmetry_tolerance,
     parameters.joint_velocity_tolerance};
   const pick_place::FixedRecoveryPolicy recovery_policy(
-    target_policy, parameters.tcp_position_tolerance,
-    parameters.tcp_orientation_tolerance_rad, parameters.coke_position_tolerance,
-    parameters.coke_orientation_tolerance_rad, gripper_limits);
+    target_policy, parameters.tcp_position_tolerance, parameters.tcp_orientation_tolerance_rad,
+    parameters.coke_position_tolerance, parameters.coke_orientation_tolerance_rad, gripper_limits);
   pick_place::PickPlaceRuntimeRegistries runtime;
   std::shared_ptr<pick_place::MoveItMotionAdapter> motion_adapter;
   if (*mode == pick_place::RunMode::PLAN_ONLY || *mode == pick_place::RunMode::EXECUTE) {
     motion_adapter = std::make_shared<pick_place::MoveItMotionAdapter>(
-      node, parameters.planning_group, parameters.tcp_link,
-      parameters.required_world_objects, parameters.velocity_scaling,
-      parameters.acceleration_scaling, parameters.cartesian_eef_step,
-      parameters.motion_start_joint_tolerance, parameters.joint_velocity_tolerance,
-      gripper_limits);
+      node, parameters.planning_group, parameters.tcp_link, parameters.required_world_objects,
+      parameters.velocity_scaling, parameters.acceleration_scaling, parameters.cartesian_eef_step,
+      parameters.motion_start_joint_tolerance, parameters.joint_velocity_tolerance, gripper_limits);
     pick_place::PickPlaceRuntimeDependencies dependencies;
     dependencies.motion = motion_adapter;
     dependencies.observer = motion_adapter;
     if (*mode == pick_place::RunMode::EXECUTE) {
       dependencies.gripper = std::make_shared<pick_place::GripperCommandAdapter>(
         node, parameters.gripper_action_name, parameters.gripper_action_timeout_seconds);
-      dependencies.moveit_scene = std::make_shared<pick_place::MoveItSceneAdapter>(
-        node, parameters.planning_group);
+      dependencies.moveit_scene =
+        std::make_shared<pick_place::MoveItSceneAdapter>(node, parameters.planning_group);
       dependencies.gazebo_attach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
         pick_place::State::ATTACH_GAZEBO, true, parameters.gazebo_attach_topic,
         parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
@@ -470,29 +452,27 @@ int main(int argc, char * argv[])
         parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
         parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
         gripper_limits);
-      dependencies.recovery_gazebo_detach =
-        std::make_shared<pick_place::GazeboAttachmentExecutor>(
-        pick_place::State::RECOVER_DETACH_GAZEBO, false,
-        parameters.gazebo_attach_topic, parameters.gazebo_detach_topic,
-        parameters.gazebo_attachment_topic, parameters.attachment_timeout_seconds,
-        parameters.state_poll_interval_seconds, true, gripper_limits);
+      dependencies.recovery_gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
+        pick_place::State::RECOVER_DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
+        parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
+        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, true,
+        gripper_limits);
     }
     pick_place::PickPlaceRuntimeConfig runtime_config;
-    const auto ready_joints = motion_adapter->namedTargetJointPositions(
-      parameters.ready_named_target);
+    const auto ready_joints =
+      motion_adapter->namedTargetJointPositions(parameters.ready_named_target);
     if (!ready_joints) {
-      RCLCPP_ERROR(logger, "NAMED_TARGET_UNAVAILABLE: %s",
-        parameters.ready_named_target.c_str());
+      RCLCPP_ERROR(logger, "NAMED_TARGET_UNAVAILABLE: %s", parameters.ready_named_target.c_str());
       rclcpp::shutdown();
       return EXIT_FAILURE;
     }
     runtime_config.target_policy = target_policy;
     runtime_config.required_world_objects = parameters.required_world_objects;
-    runtime_config.motion_plan_limits = {parameters.cartesian_min_fraction,
-      parameters.joint_jump_threshold, parameters.tcp_position_tolerance,
-      parameters.tcp_orientation_tolerance_rad, parameters.tcp_position_tolerance,
-      parameters.tcp_orientation_tolerance_rad, parameters.coke_position_tolerance,
-      parameters.coke_orientation_tolerance_rad,
+    runtime_config.motion_plan_limits = {
+      parameters.cartesian_min_fraction,      parameters.joint_jump_threshold,
+      parameters.tcp_position_tolerance,      parameters.tcp_orientation_tolerance_rad,
+      parameters.tcp_position_tolerance,      parameters.tcp_orientation_tolerance_rad,
+      parameters.coke_position_tolerance,     parameters.coke_orientation_tolerance_rad,
       parameters.motion_start_joint_tolerance};
     runtime_config.gripper = gripper_limits;
     runtime_config.contract.tcp_position_tolerance = parameters.tcp_position_tolerance;
@@ -510,8 +490,7 @@ int main(int argc, char * argv[])
     runtime_config.gripper_close_position = parameters.gripper_close_position;
     runtime_config.gripper_close_tolerance = parameters.gripper_close_tolerance;
     runtime_config.gripper_max_effort = parameters.gripper_max_effort;
-    runtime_config.planning_scene_timeout_seconds =
-      parameters.planning_scene_timeout_seconds;
+    runtime_config.planning_scene_timeout_seconds = parameters.planning_scene_timeout_seconds;
     runtime_config.state_poll_interval_seconds = parameters.state_poll_interval_seconds;
     runtime_config.ready_named_target = parameters.ready_named_target;
     runtime_config.ready_joint_positions = *ready_joints;
@@ -520,8 +499,7 @@ int main(int argc, char * argv[])
     runtime_config.contract.ready_joint_tolerance = runtime_config.ready_joint_tolerance;
     runtime_config.contract.gripper_close_position = runtime_config.gripper_close_position;
     runtime_config.contract.gripper_close_tolerance = runtime_config.gripper_close_tolerance;
-    runtime = pick_place::makePickPlaceRuntimeRegistries(
-      dependencies, std::move(runtime_config));
+    runtime = pick_place::makePickPlaceRuntimeRegistries(dependencies, std::move(runtime_config));
   }
 
   std::unique_ptr<LoggingCheckpointStore> checkpoint_store;
@@ -534,11 +512,9 @@ int main(int argc, char * argv[])
       parameters.gazebo_attachment_topic, simulation_session_id,
       parameters.gazebo_observation_max_age_seconds, parameters.coke_settle_samples,
       parameters.coke_settle_interval_seconds, parameters.coke_settle_position_tolerance,
-      parameters.coke_settle_orientation_tolerance_rad,
-      parameters.gazebo_coke_initially_detached);
+      parameters.coke_settle_orientation_tolerance_rad, parameters.gazebo_coke_initially_detached);
     common_resume_validator = std::make_unique<pick_place::CommonResumeValidator>(
-      pick_place::pickPlaceConfigurationHash(
-        parameters, target_policy->configurationSignature()),
+      pick_place::pickPlaceConfigurationHash(parameters, target_policy->configurationSignature()),
       simulation_session_id, parameters.motion_start_joint_tolerance);
   }
 
@@ -549,9 +525,9 @@ int main(int argc, char * argv[])
   }
   RosExecutionObservationLogger execution_observation_logger(logger);
   const pick_place::StateMachineRunner runner(runtime.actions, runtime.contracts, runner_observer,
-    checkpoint_store.get(),
-    common_resume_validator.get(), &execution_observation_logger, &runtime.plan_validators,
-    &recovery_policy);
+                                              checkpoint_store.get(), common_resume_validator.get(),
+                                              &execution_observation_logger,
+                                              &runtime.plan_validators, &recovery_policy);
   const auto result =
     runner.run({*mode, stop_after, resume, fail_at, parameters.max_state_transitions});
   if (result.failure) {

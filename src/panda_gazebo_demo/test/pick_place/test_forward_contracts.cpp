@@ -29,9 +29,8 @@ ActionResult succeeded()
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
-WorldSnapshot detachedSnapshot(
-  const Pose3d & tcp = kPick, const Pose3d & coke = kCokePick,
-  bool gripper_open = true)
+WorldSnapshot detachedSnapshot(const Pose3d & tcp = kPick, const Pose3d & coke = kCokePick,
+                               bool gripper_open = true)
 {
   WorldSnapshot snapshot;
   snapshot.fresh = true;
@@ -45,22 +44,19 @@ WorldSnapshot detachedSnapshot(
   snapshot.moveit_world_object_poses = {{"table", Pose3d{}}, {"coke", coke}};
   const double finger_position = gripper_open ? 0.04 : 0.032;
   snapshot.joint_positions = {{"panda_finger_joint1", finger_position},
-    {"panda_finger_joint2", finger_position}};
-  snapshot.joint_velocities = {{"panda_finger_joint1", 0.0},
-    {"panda_finger_joint2", 0.0}};
+                              {"panda_finger_joint2", finger_position}};
+  snapshot.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   return snapshot;
 }
 
-WorldSnapshot carryingSnapshot(
-  const Pose3d & tcp, const Pose3d & coke, bool gripper_open = false)
+WorldSnapshot carryingSnapshot(const Pose3d & tcp, const Pose3d & coke, bool gripper_open = false)
 {
   auto snapshot = detachedSnapshot(tcp, coke, gripper_open);
   snapshot.gazebo_coke_attached = true;
   snapshot.moveit_coke_attached = true;
   snapshot.moveit_world_object_poses.erase("coke");
   snapshot.moveit_coke_attached_link = "panda_hand";
-  snapshot.moveit_coke_touch_links =
-  {"panda_hand", "panda_leftfinger", "panda_rightfinger"};
+  snapshot.moveit_coke_touch_links = {"panda_hand", "panda_leftfinger", "panda_rightfinger"};
   return snapshot;
 }
 
@@ -78,8 +74,7 @@ WorldSnapshot moveItOnlyAttachedSnapshot(bool gripper_open = true)
   snapshot.moveit_coke_attached = true;
   snapshot.moveit_world_object_poses.erase("coke");
   snapshot.moveit_coke_attached_link = "panda_hand";
-  snapshot.moveit_coke_touch_links =
-  {"panda_hand", "panda_leftfinger", "panda_rightfinger"};
+  snapshot.moveit_coke_touch_links = {"panda_hand", "panda_leftfinger", "panda_rightfinger"};
   return snapshot;
 }
 
@@ -117,14 +112,13 @@ void setTerminalRobot(WorldSnapshot & snapshot)
 class MetriclessFailingContract final : public Contract
 {
 public:
-  ValidationResult validatePrecondition(const WorldSnapshot &) const override
+  [[nodiscard]] ValidationResult validatePrecondition(const WorldSnapshot &) const override
   {
     return {false, {{FailureCategory::PRECONDITION, "METRICLESS_FAILURE", "failed", {}}}, {}};
   }
 
-  ValidationResult validate(
-    const WorldSnapshot &, const WorldSnapshot &,
-    const ActionResult &) const override
+  [[nodiscard]] ValidationResult validate(const WorldSnapshot &, const WorldSnapshot &,
+                                          const ActionResult &) const override
   {
     return {false, {{FailureCategory::POSTCONDITION, "METRICLESS_FAILURE", "failed", {}}}, {}};
   }
@@ -299,10 +293,10 @@ TEST(ForwardContracts, DoneRejectsTippedCokeAtCorrectPosition)
   const auto result = contract->validate(before, after, succeeded());
 
   EXPECT_FALSE(result.ok);
-  EXPECT_TRUE(std::any_of(result.failures.begin(), result.failures.end(),
-    [](const Failure & failure) {
+  EXPECT_TRUE(
+    std::any_of(result.failures.begin(), result.failures.end(), [](const Failure & failure) {
       return failure.code == "COKE_NOT_AT_SUPPORTED_PLACE_POSE";
-      }));
+    }));
 }
 
 TEST(ForwardContracts, EveryForwardTransitionAndPlannerHasValidationCoverage)
@@ -311,18 +305,17 @@ TEST(ForwardContracts, EveryForwardTransitionAndPlannerHasValidationCoverage)
   const std::vector<std::string> required_objects{"table", "coke"};
   TransitionContractRegistry contracts;
   contracts.registerContract({State::PREPARE_OPEN_GRIPPER, State::MOVE_ABOVE_OBJECT},
-    std::make_shared<PrepareOpenGripperToMoveAboveObjectValidator>(
-      required_objects, 0.005, 0.035, 0.003, 0.035));
+                             std::make_shared<PrepareOpenGripperToMoveAboveObjectValidator>(
+                               required_objects, 0.005, 0.035, 0.003, 0.035));
   contracts.registerContract({State::MOVE_ABOVE_OBJECT, State::DESCEND},
-    std::make_shared<MoveAboveObjectToDescendValidator>(
-      policy, required_objects, 0.005, 0.035, 0.003, 0.035));
+                             std::make_shared<MoveAboveObjectToDescendValidator>(
+                               policy, required_objects, 0.005, 0.035, 0.003, 0.035));
   contracts.registerContract({State::DESCEND, State::CLOSE_GRIPPER},
-    std::make_shared<DescendToCloseGripperValidator>(
-      policy, required_objects, 0.005, 0.035, 0.003, 0.035));
+                             std::make_shared<DescendToCloseGripperValidator>(
+                               policy, required_objects, 0.005, 0.035, 0.003, 0.035));
   registerPickPlaceForwardContracts(contracts, policy, {});
 
-  const TransitionTable table;
-  EXPECT_FALSE(contracts.validateExecuteCoverage(table).has_value());
+  EXPECT_FALSE(contracts.validateExecuteCoverage().has_value());
 
   PlanValidatorRegistry plan_validators;
   const std::array motion_configs{
@@ -330,13 +323,13 @@ TEST(ForwardContracts, EveryForwardTransitionAndPlannerHasValidationCoverage)
     MotionStateConfig{State::DESCEND, State::CLOSE_GRIPPER, MotionKind::CARTESIAN_DOWN, false},
     MotionStateConfig{State::LIFT, State::MOVE_ABOVE_PLACE, MotionKind::CARTESIAN_UP, true},
     MotionStateConfig{State::MOVE_ABOVE_PLACE, State::DESCEND_TO_PLACE, MotionKind::POSE, true},
-    MotionStateConfig{State::DESCEND_TO_PLACE, State::OPEN_GRIPPER,
-      MotionKind::CARTESIAN_DOWN, true},
+    MotionStateConfig{State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, MotionKind::CARTESIAN_DOWN,
+                      true},
     MotionStateConfig{State::RETREAT, State::DONE, MotionKind::CARTESIAN_UP, false},
   };
   for (const auto & config : motion_configs) {
-    plan_validators.registerValidator(
-      config.state, std::make_shared<MotionPlanValidator>(config, policy));
+    plan_validators.registerValidator(config.state,
+                                      std::make_shared<MotionPlanValidator>(config, policy));
   }
   for (const auto & config : motion_configs) {
     EXPECT_TRUE(plan_validators.hasValidator(config.state)) << toString(config.state);
@@ -346,15 +339,14 @@ TEST(ForwardContracts, EveryForwardTransitionAndPlannerHasValidationCoverage)
 TEST(ForwardContracts, RegistryAddsBoundaryMetricsToEveryContractFailure)
 {
   TransitionContractRegistry contracts;
-  contracts.registerContract(
-    {State::CLOSE_GRIPPER, State::ATTACH_GAZEBO},
-    std::make_shared<MetriclessFailingContract>());
+  contracts.registerContract({State::CLOSE_GRIPPER, State::ATTACH_GAZEBO},
+                             std::make_shared<MetriclessFailingContract>());
   const auto snapshot = detachedSnapshot();
 
-  const auto precondition = contracts.validatePrecondition(
-    {State::CLOSE_GRIPPER, State::ATTACH_GAZEBO}, snapshot);
-  const auto postcondition = contracts.validate(
-    {State::CLOSE_GRIPPER, State::ATTACH_GAZEBO}, snapshot, snapshot, succeeded());
+  const auto precondition =
+    contracts.validatePrecondition({State::CLOSE_GRIPPER, State::ATTACH_GAZEBO}, snapshot);
+  const auto postcondition = contracts.validate({State::CLOSE_GRIPPER, State::ATTACH_GAZEBO},
+                                                snapshot, snapshot, succeeded());
 
   ASSERT_FALSE(precondition.failures.empty());
   EXPECT_FALSE(precondition.failures.front().metrics.empty());

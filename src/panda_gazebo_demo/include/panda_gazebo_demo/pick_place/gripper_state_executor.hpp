@@ -20,9 +20,8 @@ struct GripperStateConfig
 class GripperStateExecutor final : public IStateExecutor
 {
 public:
-  GripperStateExecutor(
-    std::shared_ptr<IGripperCommandAdapter> adapter, GripperStateConfig config,
-    GripperLimits limits = {});
+  GripperStateExecutor(std::shared_ptr<IGripperCommandAdapter> adapter, GripperStateConfig config,
+                       GripperLimits limits = {});
 
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;

@@ -24,9 +24,8 @@ public:
 class GripperCommandAdapter final : public IGripperCommandAdapter
 {
 public:
-  GripperCommandAdapter(
-    std::shared_ptr<rclcpp::Node> node, std::string action_name,
-    double action_timeout_seconds);
+  GripperCommandAdapter(std::shared_ptr<rclcpp::Node> node, std::string action_name,
+                        double action_timeout_seconds);
   ~GripperCommandAdapter() override;
 
   [[nodiscard]] ActionResult command(double position, double max_effort) override;

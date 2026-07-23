@@ -28,8 +28,8 @@ struct CartesianPlanLimits
   double endpoint_orientation_tolerance_rad{0.1};
 };
 
-[[nodiscard]] ValidationResult validateCartesianPlan(
-  const CartesianPlanEvidence & evidence, const Pose3d & target,
-  const CartesianPlanLimits & limits);
+[[nodiscard]] ValidationResult validateCartesianPlan(const CartesianPlanEvidence & evidence,
+                                                     const Pose3d & target,
+                                                     const CartesianPlanLimits & limits);
 
 }  // namespace panda_gazebo_demo::pick_place

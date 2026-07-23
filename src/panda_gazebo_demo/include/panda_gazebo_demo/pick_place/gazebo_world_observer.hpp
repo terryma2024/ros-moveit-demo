@@ -17,12 +17,12 @@ namespace panda_gazebo_demo::pick_place
 class GazeboWorldObserver final : public IWorldObserver
 {
 public:
-  GazeboWorldObserver(
-    IWorldObserver & moveit_observer, std::string world_name, std::string coke_model,
-    std::string attachment_topic, std::string simulation_session_id,
-    double max_observation_age_seconds, std::size_t coke_settle_samples,
-    double coke_settle_interval_seconds, double coke_settle_position_tolerance,
-    double coke_settle_orientation_tolerance_rad, bool initially_detached);
+  GazeboWorldObserver(IWorldObserver & moveit_observer, const std::string & world_name,
+                      std::string coke_model, const std::string & attachment_topic,
+                      std::string simulation_session_id, double max_observation_age_seconds,
+                      std::size_t coke_settle_samples, double coke_settle_interval_seconds,
+                      double coke_settle_position_tolerance,
+                      double coke_settle_orientation_tolerance_rad, bool initially_detached);
   ~GazeboWorldObserver() override;
 
   [[nodiscard]] ObservationResult observe() override;

@@ -4,6 +4,14 @@ function(require_defined_variable variable_name)
   endif()
 endfunction()
 
+if(DEFINED QUALITY_SOURCE_MANIFEST)
+  if(NOT EXISTS "${QUALITY_SOURCE_MANIFEST}")
+    message(FATAL_ERROR
+            "QUALITY_SOURCE_MANIFEST does not exist: ${QUALITY_SOURCE_MANIFEST}")
+  endif()
+  include("${QUALITY_SOURCE_MANIFEST}")
+endif()
+
 require_defined_variable(RUN_CLANG_TIDY_EXECUTABLE)
 require_defined_variable(CLANG_FORMAT_EXECUTABLE)
 require_defined_variable(COMPILATION_DATABASE_DIR)
@@ -21,8 +29,9 @@ if(NOT EXISTS "${COMPILATION_DATABASE_DIR}/compile_commands.json")
           "Compilation database is missing: ${COMPILATION_DATABASE_DIR}/compile_commands.json")
 endif()
 
-foreach(config_file IN ITEMS "${WORKSPACE_ROOT}/.clang-tidy"
-                             "${WORKSPACE_ROOT}/.clang-format")
+foreach(config_file IN ITEMS
+    "${WORKSPACE_ROOT}/.clang-tidy"
+    "${WORKSPACE_ROOT}/.clang-format")
   if(NOT EXISTS "${config_file}")
     message(FATAL_ERROR "Required quality-gate configuration is missing: ${config_file}")
   endif()
@@ -37,6 +46,7 @@ execute_process(
     -warnings-as-errors=*
     -config-file
     "${WORKSPACE_ROOT}/.clang-tidy"
+    ${QUALITY_SOURCE_FILES}
   RESULT_VARIABLE clang_tidy_result
 )
 if(NOT clang_tidy_result EQUAL 0)

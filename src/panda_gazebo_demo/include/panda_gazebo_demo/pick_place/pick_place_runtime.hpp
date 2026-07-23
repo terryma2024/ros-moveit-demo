@@ -51,8 +51,8 @@ struct PickPlaceRuntimeRegistries
   TransitionContractRegistry contracts;
 };
 
-[[nodiscard]] PickPlaceRuntimeRegistries makePickPlaceRuntimeRegistries(
-  const PickPlaceRuntimeDependencies & dependencies,
-  PickPlaceRuntimeConfig config);
+[[nodiscard]] PickPlaceRuntimeRegistries
+makePickPlaceRuntimeRegistries(const PickPlaceRuntimeDependencies & dependencies,
+                               PickPlaceRuntimeConfig config);
 
 }  // namespace panda_gazebo_demo::pick_place

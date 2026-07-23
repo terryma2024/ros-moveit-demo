@@ -26,14 +26,12 @@ struct ReadyRetreatConfig
 class ReadyRetreatAction final : public IStatePlanner, public IStateExecutor
 {
 public:
-  ReadyRetreatAction(
-    std::shared_ptr<IMoveItMotionAdapter> motion,
-    std::shared_ptr<IGripperCommandAdapter> gripper,
-    std::shared_ptr<IWorldObserver> observer, ReadyRetreatConfig config);
+  ReadyRetreatAction(std::shared_ptr<IMoveItMotionAdapter> motion,
+                     std::shared_ptr<IGripperCommandAdapter> gripper,
+                     std::shared_ptr<IWorldObserver> observer, ReadyRetreatConfig config);
 
-  [[nodiscard]] PlanResult plan(
-    State current_state, State next_state,
-    const ObservationResult & observation) override;
+  [[nodiscard]] PlanResult plan(State current_state, State next_state,
+                                const ObservationResult & observation) override;
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;
 

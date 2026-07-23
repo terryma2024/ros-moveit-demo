@@ -11,28 +11,27 @@ namespace
 ActionResult unsupportedState(State actual, State configured)
 {
   return {ActionStatus::NOT_SUPPORTED,
-    Failure{FailureCategory::GRIPPER, "STATE_NOT_EXECUTABLE",
-      std::string("Gripper executor configured for ") + toString(configured) +
-      " cannot execute " + toString(actual), {}}};
+          Failure{FailureCategory::GRIPPER,
+                  "STATE_NOT_EXECUTABLE",
+                  std::string("Gripper executor configured for ") + toString(configured) +
+                    " cannot execute " + toString(actual),
+                  {}}};
 }
 
-bool recoveryOpenPostconditionSatisfied(
-  const WorldSnapshot & snapshot, const GripperLimits & limits)
+bool recoveryOpenPostconditionSatisfied(const WorldSnapshot & snapshot,
+                                        const GripperLimits & limits)
 {
-  return snapshot.fresh && snapshot.arm_stationary &&
-         snapshot.gazebo_coke_pose_world.has_value() &&
-         snapshot.gazebo_coke_attached.has_value() &&
-         snapshot.moveit_coke_attached.has_value() &&
+  return snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_coke_pose_world.has_value() &&
+         snapshot.gazebo_coke_attached.has_value() && snapshot.moveit_coke_attached.has_value() &&
          snapshot.gazebo_coke_stationary && *snapshot.gazebo_coke_stationary &&
          validateGripperOpen(snapshot, limits).ok;
 }
 
 }  // namespace
 
-GripperStateExecutor::GripperStateExecutor(
-  std::shared_ptr<IGripperCommandAdapter> adapter, GripperStateConfig config,
-  GripperLimits limits)
-: adapter_(std::move(adapter)), config_(config), limits_(limits)
+GripperStateExecutor::GripperStateExecutor(std::shared_ptr<IGripperCommandAdapter> adapter,
+                                           GripperStateConfig config, GripperLimits limits) :
+    adapter_(std::move(adapter)), config_(config), limits_(limits)
 {
 }
 
@@ -42,13 +41,13 @@ ActionResult GripperStateExecutor::execute(const ExecutionContext & context)
     return unsupportedState(context.state, config_.state);
   }
   if (!adapter_) {
-    return {ActionStatus::FAILED,
-      Failure{FailureCategory::CONFIGURATION, "GRIPPER_ADAPTER_MISSING",
-        "Gripper executor has no command adapter", {}}};
+    return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+                                          "GRIPPER_ADAPTER_MISSING",
+                                          "Gripper executor has no command adapter",
+                                          {}}};
   }
   if (config_.no_op_if_already_open &&
-    recoveryOpenPostconditionSatisfied(context.before, limits_))
-  {
+      recoveryOpenPostconditionSatisfied(context.before, limits_)) {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
   return adapter_->command(config_.target_position, config_.max_effort);
@@ -57,9 +56,10 @@ ActionResult GripperStateExecutor::execute(const ExecutionContext & context)
 ActionResult GripperStateExecutor::cancel()
 {
   if (!adapter_) {
-    return {ActionStatus::FAILED,
-      Failure{FailureCategory::CONFIGURATION, "GRIPPER_ADAPTER_MISSING",
-        "Gripper executor has no command adapter", {}}};
+    return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+                                          "GRIPPER_ADAPTER_MISSING",
+                                          "Gripper executor has no command adapter",
+                                          {}}};
   }
   return adapter_->cancelAndWait();
 }

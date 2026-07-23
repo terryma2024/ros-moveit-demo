@@ -34,27 +34,23 @@ struct AttachmentExpectation
 };
 
 [[nodiscard]] GripperEvidence gripperEvidence(const WorldSnapshot & snapshot);
-[[nodiscard]] ValidationResult validateGripperOpen(
-  const WorldSnapshot & snapshot, const GripperLimits & limits);
-[[nodiscard]] ValidationResult validateGripperGrasp(
-  const WorldSnapshot & snapshot, const GripperLimits & limits);
-[[nodiscard]] ValidationResult validateGripperClosed(
-  const WorldSnapshot & snapshot, double target_position, double tolerance,
-  const GripperLimits & limits);
-[[nodiscard]] ValidationResult validateAttachmentState(
-  const WorldSnapshot & snapshot, bool gazebo_attached, bool moveit_attached);
+[[nodiscard]] ValidationResult validateGripperOpen(const WorldSnapshot & snapshot,
+                                                   const GripperLimits & limits);
+[[nodiscard]] ValidationResult validateGripperGrasp(const WorldSnapshot & snapshot,
+                                                    const GripperLimits & limits);
+[[nodiscard]] ValidationResult validateGripperClosed(const WorldSnapshot & snapshot,
+                                                     double target_position, double tolerance,
+                                                     const GripperLimits & limits);
+[[nodiscard]] ValidationResult validateAttachmentState(const WorldSnapshot & snapshot,
+                                                       bool gazebo_attached, bool moveit_attached);
 
 class CokePoseStabilityTracker
 {
 public:
-  CokePoseStabilityTracker(
-    std::size_t required_samples = 5,
-    double position_tolerance = 0.002,
-    double orientation_tolerance_rad = 0.020);
+  CokePoseStabilityTracker(std::size_t required_samples = 5, double position_tolerance = 0.002,
+                           double orientation_tolerance_rad = 0.020);
 
-  void addSample(
-    const Pose3d & pose,
-    std::chrono::steady_clock::time_point observed_at);
+  void addSample(const Pose3d & pose, std::chrono::steady_clock::time_point observed_at);
   [[nodiscard]] std::optional<bool> stationary() const noexcept;
 
 private:

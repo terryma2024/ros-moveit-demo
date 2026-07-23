@@ -16,8 +16,8 @@ struct StateTransitions
 class TransitionTable
 {
 public:
-  [[nodiscard]] State resolve(State from, ActionStatus outcome) const noexcept;
-  [[nodiscard]] const std::map<State, StateTransitions> & entries() const noexcept;
+  [[nodiscard]] static State resolve(State from, ActionStatus outcome) noexcept;
+  [[nodiscard]] static const std::map<State, StateTransitions> & entries() noexcept;
 
 private:
   static const std::map<State, StateTransitions> kTransitions;
@@ -26,15 +26,13 @@ private:
 class StateMachine
 {
 public:
-  explicit StateMachine(State initial_state = State::IDLE)
-  : current_state_(initial_state) {}
+  explicit StateMachine(State initial_state = State::IDLE) : current_state_(initial_state) {}
 
   [[nodiscard]] State currentState() const noexcept;
   [[nodiscard]] bool isTerminal() const noexcept;
   [[nodiscard]] State advance(ActionStatus outcome) noexcept;
 
 private:
-  TransitionTable transitions_;
   State current_state_;
 };
 

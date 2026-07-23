@@ -15,8 +15,10 @@ namespace
 
 std::optional<Failure> invalid(std::string message)
 {
-  return Failure{FailureCategory::CONFIGURATION, "INVALID_RUNTIME_PARAMETERS",
-    std::move(message), {}};
+  return Failure{FailureCategory::CONFIGURATION,
+                 "INVALID_RUNTIME_PARAMETERS",
+                 std::move(message),
+                 {}};
 }
 
 bool positiveFinite(double value)
@@ -31,17 +33,14 @@ bool nonnegativeFinite(double value)
 
 }  // namespace
 
-std::optional<Failure> validatePickPlaceParameters(
-  const PickPlaceParameters & parameters)
+std::optional<Failure> validatePickPlaceParameters(const PickPlaceParameters & parameters)
 {
   if (parameters.planning_group.empty() || parameters.tcp_link.empty() ||
-    parameters.ready_named_target.empty() ||
-    parameters.required_world_objects.empty() || parameters.gazebo_world_name.empty() ||
-    parameters.gazebo_coke_model.empty() || parameters.gazebo_attach_topic.empty() ||
-    parameters.gazebo_detach_topic.empty() || parameters.gazebo_attachment_event_topic.empty() ||
-    parameters.gazebo_attachment_topic.empty() ||
-    parameters.gripper_action_name.empty())
-  {
+      parameters.ready_named_target.empty() || parameters.required_world_objects.empty() ||
+      parameters.gazebo_world_name.empty() || parameters.gazebo_coke_model.empty() ||
+      parameters.gazebo_attach_topic.empty() || parameters.gazebo_detach_topic.empty() ||
+      parameters.gazebo_attachment_event_topic.empty() ||
+      parameters.gazebo_attachment_topic.empty() || parameters.gripper_action_name.empty()) {
     return invalid("Runtime names, topics, links, groups, and required objects must be non-empty");
   }
   if (parameters.gazebo_attachment_event_topic == parameters.gazebo_attachment_topic) {
@@ -53,77 +52,68 @@ std::optional<Failure> validatePickPlaceParameters(
     }
   }
   if (!positiveFinite(parameters.velocity_scaling) || parameters.velocity_scaling > 1.0 ||
-    !positiveFinite(parameters.acceleration_scaling) || parameters.acceleration_scaling > 1.0)
-  {
+      !positiveFinite(parameters.acceleration_scaling) || parameters.acceleration_scaling > 1.0) {
     return invalid("Velocity and acceleration scaling must be finite and in (0, 1]");
   }
   if (!positiveFinite(parameters.cartesian_eef_step) ||
-    !positiveFinite(parameters.cartesian_min_fraction) ||
-    parameters.cartesian_min_fraction > 1.0 ||
-    !positiveFinite(parameters.joint_jump_threshold) ||
-    !positiveFinite(parameters.motion_start_joint_tolerance) ||
-    !positiveFinite(parameters.ready_joint_tolerance))
-  {
+      !positiveFinite(parameters.cartesian_min_fraction) ||
+      parameters.cartesian_min_fraction > 1.0 || !positiveFinite(parameters.joint_jump_threshold) ||
+      !positiveFinite(parameters.motion_start_joint_tolerance) ||
+      !positiveFinite(parameters.ready_joint_tolerance)) {
     return invalid(
       "Cartesian step, fraction, joint-jump threshold, or motion-start tolerance is unsafe");
   }
   if (!positiveFinite(parameters.tcp_position_tolerance) ||
-    !positiveFinite(parameters.tcp_orientation_tolerance_rad) ||
-    !positiveFinite(parameters.coke_position_tolerance) ||
-    !positiveFinite(parameters.coke_orientation_tolerance_rad))
-  {
+      !positiveFinite(parameters.tcp_orientation_tolerance_rad) ||
+      !positiveFinite(parameters.coke_position_tolerance) ||
+      !positiveFinite(parameters.coke_orientation_tolerance_rad)) {
     return invalid("TCP and Coke pose tolerances must be finite and positive");
   }
   if (!positiveFinite(parameters.gripper_open_position) ||
-    !positiveFinite(parameters.gripper_open_min_position) ||
-    parameters.gripper_open_min_position > parameters.gripper_open_position ||
-    !nonnegativeFinite(parameters.gripper_close_position) ||
-    !positiveFinite(parameters.gripper_close_tolerance) ||
-    parameters.gripper_close_position >= parameters.gripper_open_min_position ||
-    !nonnegativeFinite(parameters.gripper_grasp_min_position) ||
-    !positiveFinite(parameters.gripper_grasp_max_position) ||
-    parameters.gripper_grasp_min_position >= parameters.gripper_grasp_max_position ||
-    parameters.gripper_grasp_max_position > parameters.gripper_open_position ||
-    !positiveFinite(parameters.gripper_symmetry_tolerance) ||
-    !positiveFinite(parameters.joint_velocity_tolerance) ||
-    !nonnegativeFinite(parameters.gripper_max_effort) ||
-    !positiveFinite(parameters.gripper_action_timeout_seconds))
-  {
+      !positiveFinite(parameters.gripper_open_min_position) ||
+      parameters.gripper_open_min_position > parameters.gripper_open_position ||
+      !nonnegativeFinite(parameters.gripper_close_position) ||
+      !positiveFinite(parameters.gripper_close_tolerance) ||
+      parameters.gripper_close_position >= parameters.gripper_open_min_position ||
+      !nonnegativeFinite(parameters.gripper_grasp_min_position) ||
+      !positiveFinite(parameters.gripper_grasp_max_position) ||
+      parameters.gripper_grasp_min_position >= parameters.gripper_grasp_max_position ||
+      parameters.gripper_grasp_max_position > parameters.gripper_open_position ||
+      !positiveFinite(parameters.gripper_symmetry_tolerance) ||
+      !positiveFinite(parameters.joint_velocity_tolerance) ||
+      !nonnegativeFinite(parameters.gripper_max_effort) ||
+      !positiveFinite(parameters.gripper_action_timeout_seconds)) {
     return invalid("Gripper positions, tolerances, effort, or timeout are outside safe ranges");
   }
   if (!positiveFinite(parameters.attachment_timeout_seconds) ||
-    !positiveFinite(parameters.planning_scene_timeout_seconds) ||
-    !positiveFinite(parameters.state_poll_interval_seconds) ||
-    parameters.state_poll_interval_seconds > parameters.attachment_timeout_seconds ||
-    parameters.state_poll_interval_seconds > parameters.planning_scene_timeout_seconds ||
-    !positiveFinite(parameters.gazebo_observation_max_age_seconds))
-  {
+      !positiveFinite(parameters.planning_scene_timeout_seconds) ||
+      !positiveFinite(parameters.state_poll_interval_seconds) ||
+      parameters.state_poll_interval_seconds > parameters.attachment_timeout_seconds ||
+      parameters.state_poll_interval_seconds > parameters.planning_scene_timeout_seconds ||
+      !positiveFinite(parameters.gazebo_observation_max_age_seconds)) {
     return invalid("Attachment, Planning Scene, polling, and observation timing is invalid");
   }
   if (parameters.coke_settle_samples < 2 ||
-    !positiveFinite(parameters.coke_settle_interval_seconds) ||
-    !positiveFinite(parameters.coke_settle_position_tolerance) ||
-    !positiveFinite(parameters.coke_settle_orientation_tolerance_rad))
-  {
+      !positiveFinite(parameters.coke_settle_interval_seconds) ||
+      !positiveFinite(parameters.coke_settle_position_tolerance) ||
+      !positiveFinite(parameters.coke_settle_orientation_tolerance_rad)) {
     return invalid("Coke settle sampling and tolerances are outside safe ranges");
   }
   if (!positiveFinite(parameters.recovery_safe_height) ||
-    parameters.recovery_safe_height < FixedPickPlaceTargetPolicy::kCanonicalSafeHeight ||
-    parameters.max_state_transitions == 0)
-  {
+      parameters.recovery_safe_height < FixedPickPlaceTargetPolicy::kCanonicalSafeHeight ||
+      parameters.max_state_transitions == 0) {
     return invalid(
       "Recovery safe height is below the canonical safe target or transitions invalid");
   }
   return std::nullopt;
 }
 
-std::string pickPlaceConfigurationHash(
-  const PickPlaceParameters & parameters,
-  const std::string & target_policy_signature)
+std::string pickPlaceConfigurationHash(const PickPlaceParameters & parameters,
+                                       const std::string & target_policy_signature)
 {
   std::ostringstream input;
-  input << std::setprecision(std::numeric_limits<double>::max_digits10)
-        << parameters.planning_group << '\n'
+  input << std::setprecision(std::numeric_limits<double>::max_digits10) << parameters.planning_group
+        << '\n'
         << parameters.tcp_link << '\n'
         << parameters.velocity_scaling << '\n'
         << parameters.acceleration_scaling << '\n'

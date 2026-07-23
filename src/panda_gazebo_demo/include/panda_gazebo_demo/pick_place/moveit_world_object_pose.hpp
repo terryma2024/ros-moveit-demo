@@ -10,7 +10,7 @@ namespace panda_gazebo_demo::pick_place
 /// Returns a CollisionObject's pose in its header frame.
 ///
 /// CollisionObject primitive and mesh poses are defined relative to this pose.
-[[nodiscard]] Pose3d worldPoseFromCollisionObject(
-  const moveit_msgs::msg::CollisionObject & object) noexcept;
+[[nodiscard]] Pose3d
+worldPoseFromCollisionObject(const moveit_msgs::msg::CollisionObject & object) noexcept;
 
 }  // namespace panda_gazebo_demo::pick_place

@@ -68,27 +68,25 @@ struct MotionPlanLimits
   double start_joint_tolerance{0.01};
 };
 
-[[nodiscard]] ValidationResult validateMotionStartJoints(
-  const std::map<std::string, double> & planned_start_joint_positions,
-  const std::map<std::string, double> & observed_joint_positions,
-  double tolerance);
+[[nodiscard]] ValidationResult
+validateMotionStartJoints(const std::map<std::string, double> & planned_start_joint_positions,
+                          const std::map<std::string, double> & observed_joint_positions,
+                          double tolerance);
 
-[[nodiscard]] ValidationResult validateMotionPlan(
-  const MotionPlanEvidence & evidence, const Pose3d & target,
-  MotionKind expected_kind, bool expected_carrying,
-  const MotionPlanLimits & limits);
+[[nodiscard]] ValidationResult validateMotionPlan(const MotionPlanEvidence & evidence,
+                                                  const Pose3d & target, MotionKind expected_kind,
+                                                  bool expected_carrying,
+                                                  const MotionPlanLimits & limits);
 
 class MotionPlanValidator final : public IPlanValidator
 {
 public:
-  MotionPlanValidator(
-    MotionStateConfig config,
-    std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
-    MotionPlanLimits limits = {});
+  MotionPlanValidator(MotionStateConfig config,
+                      std::shared_ptr<const PickPlaceTargetPolicy> target_policy,
+                      MotionPlanLimits limits = {});
 
-  [[nodiscard]] ValidationResult validate(
-    State state, const WorldSnapshot & before,
-    const PlanArtifact & artifact) const override;
+  [[nodiscard]] ValidationResult validate(State state, const WorldSnapshot & before,
+                                          const PlanArtifact & artifact) const override;
 
 private:
   MotionStateConfig config_;

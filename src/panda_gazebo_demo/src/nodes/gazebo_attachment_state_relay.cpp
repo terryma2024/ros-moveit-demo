@@ -16,24 +16,18 @@ namespace
 class GazeboAttachmentStateRelay final : public rclcpp::Node
 {
 public:
-  GazeboAttachmentStateRelay()
-  : Node("gazebo_attachment_state_relay")
+  GazeboAttachmentStateRelay() : Node("gazebo_attachment_state_relay")
   {
-    const auto event_topic = declare_parameter<std::string>(
-      "event_topic", "/panda/coke_attached_event");
-    const auto state_topic = declare_parameter<std::string>(
-      "state_topic", "/panda/coke_attached");
-    const auto detach_topic = declare_parameter<std::string>(
-      "detach_topic", "/panda/detach_coke");
-    enforce_initially_detached_ = declare_parameter<bool>(
-      "enforce_initially_detached", true);
-    const auto publish_period_seconds = declare_parameter<double>(
-      "publish_period_seconds", 0.05);
+    const auto event_topic =
+      declare_parameter<std::string>("event_topic", "/panda/coke_attached_event");
+    const auto state_topic = declare_parameter<std::string>("state_topic", "/panda/coke_attached");
+    const auto detach_topic = declare_parameter<std::string>("detach_topic", "/panda/detach_coke");
+    enforce_initially_detached_ = declare_parameter<bool>("enforce_initially_detached", true);
+    const auto publish_period_seconds = declare_parameter<double>("publish_period_seconds", 0.05);
     if (event_topic.empty() || state_topic.empty() || detach_topic.empty() ||
-      event_topic == state_topic)
-    {
+        event_topic == state_topic) {
       throw std::invalid_argument(
-              "attachment event and state topics must be non-empty and distinct");
+        "attachment event and state topics must be non-empty and distinct");
     }
     if (!std::isfinite(publish_period_seconds) || publish_period_seconds <= 0.0) {
       throw std::invalid_argument("attachment state publish period must be positive and finite");
@@ -52,11 +46,11 @@ public:
     }
     const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::duration<double>(publish_period_seconds));
-    timer_ = create_wall_timer(period, [this]() {publishState();});
-    RCLCPP_INFO(
-      get_logger(), "Relaying attachment events from %s as durable state on %s; initial state "
-      "remains unknown until a validated raw event arrives",
-      event_topic.c_str(), state_topic.c_str());
+    timer_ = create_wall_timer(period, [this]() { publishState(); });
+    RCLCPP_INFO(get_logger(),
+                "Relaying attachment events from %s as durable state on %s; initial state "
+                "remains unknown until a validated raw event arrives",
+                event_topic.c_str(), state_topic.c_str());
   }
 
 private:
@@ -64,8 +58,8 @@ private:
   {
     if (message.data() == "attached") {
       if (enforce_initially_detached_ && !initialized_.load()) {
-        RCLCPP_INFO(
-          get_logger(), "Observed initial attached state; awaiting confirmed safe detach");
+        RCLCPP_INFO(get_logger(),
+                    "Observed initial attached state; awaiting confirmed safe detach");
         return;
       }
       attached_.store(true);
@@ -74,8 +68,7 @@ private:
       attached_.store(false);
       initialized_.store(true);
     } else {
-      RCLCPP_WARN(
-        get_logger(), "Ignoring invalid attachment event '%s'", message.data().c_str());
+      RCLCPP_WARN(get_logger(), "Ignoring invalid attachment event '%s'", message.data().c_str());
     }
   }
 
@@ -95,8 +88,8 @@ private:
     gz::msgs::StringMsg message;
     message.set_data(attached_.load() ? "attached" : "detached");
     if (!state_publisher_.Publish(message)) {
-      RCLCPP_ERROR_THROTTLE(
-        get_logger(), *get_clock(), 1000, "Failed to publish Gazebo attachment state");
+      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+                            "Failed to publish Gazebo attachment state");
     }
   }
 

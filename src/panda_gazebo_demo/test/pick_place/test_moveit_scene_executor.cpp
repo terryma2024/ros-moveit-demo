@@ -20,9 +20,11 @@ ActionResult succeeded()
 
 MoveItSceneState attachedState(bool in_world = false)
 {
-  return {
-    in_world, true, "panda_hand",
-    {"panda_hand", "panda_leftfinger", "panda_rightfinger"}, std::nullopt};
+  return {in_world,
+          true,
+          "panda_hand",
+          {"panda_hand", "panda_leftfinger", "panda_rightfinger"},
+          std::nullopt};
 }
 
 MoveItSceneState detachedState(const Pose3d & pose = {})
@@ -33,9 +35,8 @@ MoveItSceneState detachedState(const Pose3d & pose = {})
 class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(
-    const std::string & link_name,
-    const std::vector<std::string> & touch_links) override
+  ActionResult attachCoke(const std::string & link_name,
+                          const std::vector<std::string> & touch_links) override
   {
     ++attach_calls;
     attached_link = link_name;
@@ -68,8 +69,8 @@ public:
     if (observations.empty()) {
       return std::nullopt;
     }
-    const auto index = observation_index < observations.size() ?
-      observation_index++ : observations.size() - 1;
+    const auto index =
+      observation_index < observations.size() ? observation_index++ : observations.size() - 1;
     return observations[index];
   }
 
@@ -93,9 +94,9 @@ ExecutionContext contextFor(State state)
   return {state, State::ERROR, WorldSnapshot{}, nullptr};
 }
 
-MoveItSceneExecutor executorFor(
-  const std::shared_ptr<FakeMoveItSceneAdapter> & adapter,
-  State state, MoveItSceneOperation operation, bool idempotent = false)
+MoveItSceneExecutor executorFor(const std::shared_ptr<FakeMoveItSceneAdapter> & adapter,
+                                State state, MoveItSceneOperation operation,
+                                bool idempotent = false)
 {
   return MoveItSceneExecutor(adapter, {state, operation, idempotent}, 0.05, 0.001);
 }
@@ -111,7 +112,7 @@ TEST(MoveItSceneExecutor, AttachUsesPandaHandAndExactTouchLinks)
   EXPECT_EQ(result.status, ActionStatus::SUCCEEDED);
   EXPECT_EQ(adapter->attached_link, "panda_hand");
   EXPECT_EQ(adapter->attached_touch_links,
-    (std::vector<std::string>{"panda_hand", "panda_leftfinger", "panda_rightfinger"}));
+            (std::vector<std::string>{"panda_hand", "panda_leftfinger", "panda_rightfinger"}));
 }
 
 TEST(MoveItSceneExecutor, AttachWaitsForWorldAttachedMutualExclusion)
@@ -141,8 +142,8 @@ TEST(MoveItSceneExecutor, DetachWaitsForReturnToWorld)
 TEST(MoveItSceneExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
-  auto executor = executorFor(
-    adapter, State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true);
+  auto executor =
+    executorFor(adapter, State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true);
   auto context = contextFor(State::RECOVER_DETACH_MOVEIT);
   context.before.fresh = true;
   context.before.arm_stationary = true;
@@ -151,10 +152,8 @@ TEST(MoveItSceneExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
   context.before.gazebo_coke_pose_world = Pose3d{};
   context.before.gazebo_coke_stationary = true;
   context.before.moveit_coke_attached = false;
-  context.before.joint_positions = {{"panda_finger_joint1", 0.04},
-    {"panda_finger_joint2", 0.04}};
-  context.before.joint_velocities = {{"panda_finger_joint1", 0.0},
-    {"panda_finger_joint2", 0.0}};
+  context.before.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
+  context.before.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   context.before.moveit_world_object_poses.emplace("table", Pose3d{});
   context.before.moveit_world_object_poses.emplace("coke", Pose3d{});
 
@@ -171,9 +170,9 @@ TEST(MoveItSceneExecutor, RecoveryNoOpUsesInjectedGripperLimits)
   adapter->observations = {detachedState()};
   GripperLimits strict_gripper;
   strict_gripper.open_min = 0.041;
-  MoveItSceneExecutor executor(
-    adapter, {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true},
-    0.05, 0.001, strict_gripper);
+  MoveItSceneExecutor executor(adapter,
+                               {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true},
+                               0.05, 0.001, strict_gripper);
   auto context = contextFor(State::RECOVER_DETACH_MOVEIT);
   context.before.fresh = true;
   context.before.arm_stationary = true;
@@ -181,10 +180,8 @@ TEST(MoveItSceneExecutor, RecoveryNoOpUsesInjectedGripperLimits)
   context.before.gazebo_coke_pose_world = Pose3d{};
   context.before.gazebo_coke_stationary = true;
   context.before.moveit_coke_attached = false;
-  context.before.joint_positions = {{"panda_finger_joint1", 0.04},
-    {"panda_finger_joint2", 0.04}};
-  context.before.joint_velocities = {{"panda_finger_joint1", 0.0},
-    {"panda_finger_joint2", 0.0}};
+  context.before.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
+  context.before.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   context.before.moveit_world_object_poses.emplace("table", Pose3d{});
   context.before.moveit_world_object_poses.emplace("coke", Pose3d{});
 
@@ -200,8 +197,7 @@ TEST(MoveItSceneExecutor, SyncUsesBeforeGazeboPoseAndPreservesGeometry)
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {detachedState(gazebo_pose)};
   const int geometry_before = adapter->geometry_revision;
-  auto executor = executorFor(
-    adapter, State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC);
+  auto executor = executorFor(adapter, State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC);
   auto context = contextFor(State::SYNC_WORLD_OBJECT);
   context.before.gazebo_coke_pose_world = gazebo_pose;
 
@@ -222,8 +218,7 @@ TEST(MoveItSceneExecutor, SyncUsesBeforeGazeboPoseAndPreservesGeometry)
 TEST(MoveItSceneExecutor, SyncRejectsMissingGazeboPose)
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
-  auto executor = executorFor(
-    adapter, State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC);
+  auto executor = executorFor(adapter, State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC);
 
   const auto result = executor.execute(contextFor(State::SYNC_WORLD_OBJECT));
 

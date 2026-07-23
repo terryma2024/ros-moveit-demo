@@ -18,8 +18,8 @@ constexpr Pose3d kStart{0.3, 0.0, 0.87, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d kLiftTarget{0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
 constexpr Pose3d kPlaceTarget{0.3, 0.2, 0.87, 1.0, 0.0, 0.0, 0.0};
 
-MotionPlanEvidence validEvidence(
-  MotionKind kind, const Pose3d & start, const Pose3d & target, bool carrying)
+MotionPlanEvidence validEvidence(MotionKind kind, const Pose3d & start, const Pose3d & target,
+                                 bool carrying)
 {
   MotionPlanEvidence evidence;
   evidence.state = State::LIFT;
@@ -33,8 +33,7 @@ MotionPlanEvidence validEvidence(
   evidence.start_tcp_pose = start;
   evidence.end_tcp_pose = target;
   evidence.tcp_path = {
-    {start.x, start.y, (start.z + target.z) / 2.0,
-      target.qx, target.qy, target.qz, target.qw},
+    {start.x, start.y, (start.z + target.z) / 2.0, target.qx, target.qy, target.qz, target.qw},
     target};
   evidence.collision_aware = true;
   evidence.attached_object_in_model = carrying;
@@ -49,7 +48,7 @@ MotionPlanEvidence validEvidence(
 bool hasFailure(const ValidationResult & result, const std::string & code)
 {
   return std::any_of(result.failures.begin(), result.failures.end(),
-           [&code](const Failure & failure) {return failure.code == code;});
+                     [&code](const Failure & failure) { return failure.code == code; });
 }
 
 TEST(CarriedMotionPlan, RejectsMissingAttachedObjectEvidence)
@@ -58,8 +57,8 @@ TEST(CarriedMotionPlan, RejectsMissingAttachedObjectEvidence)
   evidence.attached_object_in_model = false;
   evidence.carried_clearance_verified = false;
 
-  const auto result = validateMotionPlan(
-    evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
 
   EXPECT_FALSE(result.ok);
   EXPECT_TRUE(hasFailure(result, "ATTACHED_OBJECT_MODEL_EVIDENCE_MISSING"));
@@ -72,8 +71,8 @@ TEST(CarriedMotionPlan, RejectsRelativePoseDrift)
   evidence.max_carried_relative_position_error = 0.02;
   evidence.max_carried_relative_orientation_error_rad = 0.2;
 
-  const auto result = validateMotionPlan(
-    evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
 
   EXPECT_FALSE(result.ok);
   EXPECT_TRUE(hasFailure(result, "CARRIED_RELATIVE_POSITION_DRIFT"));
@@ -85,8 +84,8 @@ TEST(CartesianLiftPlan, RejectsLateralMotion)
   auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
   evidence.tcp_path.front().x += 0.03;
 
-  const auto result = validateMotionPlan(
-    evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
 
   EXPECT_FALSE(result.ok);
   EXPECT_TRUE(hasFailure(result, "CARTESIAN_LATERAL_DEVIATION_EXCEEDED"));
@@ -96,12 +95,10 @@ TEST(CartesianPlacePlan, RejectsUpwardSegment)
 {
   const Pose3d start{0.3, 0.2, 0.987, 1.0, 0.0, 0.0, 0.0};
   auto evidence = validEvidence(MotionKind::CARTESIAN_DOWN, start, kPlaceTarget, true);
-  evidence.tcp_path = {
-    {0.3, 0.2, 1.00, 1.0, 0.0, 0.0, 0.0},
-    kPlaceTarget};
+  evidence.tcp_path = {{0.3, 0.2, 1.00, 1.0, 0.0, 0.0, 0.0}, kPlaceTarget};
 
-  const auto result = validateMotionPlan(
-    evidence, kPlaceTarget, MotionKind::CARTESIAN_DOWN, true, MotionPlanLimits{});
+  const auto result = validateMotionPlan(evidence, kPlaceTarget, MotionKind::CARTESIAN_DOWN, true,
+                                         MotionPlanLimits{});
 
   EXPECT_FALSE(result.ok);
   EXPECT_TRUE(hasFailure(result, "CARTESIAN_PATH_NOT_MONOTONIC_DOWN"));
@@ -113,12 +110,10 @@ TEST(RetreatPlan, RejectsDownwardSegment)
   auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kPlaceTarget, target, false);
   evidence.state = State::RETREAT;
   evidence.next_state = State::DONE;
-  evidence.tcp_path = {
-    {0.3, 0.2, 0.85, 1.0, 0.0, 0.0, 0.0},
-    target};
+  evidence.tcp_path = {{0.3, 0.2, 0.85, 1.0, 0.0, 0.0, 0.0}, target};
 
-  const auto result = validateMotionPlan(
-    evidence, target, MotionKind::CARTESIAN_UP, false, MotionPlanLimits{});
+  const auto result =
+    validateMotionPlan(evidence, target, MotionKind::CARTESIAN_UP, false, MotionPlanLimits{});
 
   EXPECT_FALSE(result.ok);
   EXPECT_TRUE(hasFailure(result, "CARTESIAN_PATH_NOT_MONOTONIC_UP"));
@@ -131,8 +126,8 @@ TEST(PoseCarryPlan, RequiresTimedCollisionAwareTrajectory)
   evidence.duration_seconds = 0.0;
   evidence.collision_aware = false;
 
-  const auto result = validateMotionPlan(
-    evidence, target, MotionKind::POSE, true, MotionPlanLimits{});
+  const auto result =
+    validateMotionPlan(evidence, target, MotionKind::POSE, true, MotionPlanLimits{});
 
   EXPECT_FALSE(result.ok);
   EXPECT_TRUE(hasFailure(result, "MOTION_TRAJECTORY_NOT_TIMED"));
@@ -159,9 +154,8 @@ TEST(MotionPlanValidator, RejectsNonFiniteObservedStartJoint)
 {
   const auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
   WorldSnapshot before;
-  before.joint_positions = {
-    {"panda_joint1", 0.1},
-    {"panda_joint2", std::numeric_limits<double>::quiet_NaN()}};
+  before.joint_positions = {{"panda_joint1", 0.1},
+                            {"panda_joint2", std::numeric_limits<double>::quiet_NaN()}};
   MotionPlanValidator validator(
     {State::LIFT, State::MOVE_ABOVE_PLACE, MotionKind::CARTESIAN_UP, true},
     std::make_shared<FixedPickPlaceTargetPolicy>());
@@ -191,10 +185,8 @@ TEST(MotionPlanValidator, RejectsObservedStartJointMismatch)
 
 TEST(MotionExecutionStartValidation, RejectsStateChangedAfterPlanValidation)
 {
-  const std::map<std::string, double> planned{
-    {"panda_joint1", 0.1}, {"panda_joint2", -0.2}};
-  const std::map<std::string, double> current{
-    {"panda_joint1", 0.1}, {"panda_joint2", -0.25}};
+  const std::map<std::string, double> planned{{"panda_joint1", 0.1}, {"panda_joint2", -0.2}};
+  const std::map<std::string, double> current{{"panda_joint1", 0.1}, {"panda_joint2", -0.25}};
 
   const auto result = validateMotionStartJoints(planned, current, 0.01);
 
@@ -205,10 +197,10 @@ TEST(MotionExecutionStartValidation, RejectsStateChangedAfterPlanValidation)
 TEST(MotionObservationThresholds, ConfiguredLimitsChangeObservedFacts)
 {
   WorldSnapshot snapshot;
-  snapshot.joint_positions = {{"panda_finger_joint1", 0.04},
-    {"panda_finger_joint2", 0.04}};
+  snapshot.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
   snapshot.joint_velocities = {{"panda_joint1", 0.02},
-    {"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
+                               {"panda_finger_joint1", 0.0},
+                               {"panda_finger_joint2", 0.0}};
   GripperLimits strict_gripper;
   strict_gripper.open_min = 0.041;
 
@@ -231,8 +223,7 @@ MotionPlanEvidence readyEvidence()
   evidence.kind = MotionKind::NAMED_TARGET;
   evidence.named_target = "ready";
   evidence.trajectory_points = 2;
-  evidence.target_joint_positions = {{"panda_joint1", 0.0},
-    {"panda_joint2", -0.785}};
+  evidence.target_joint_positions = {{"panda_joint1", 0.0}, {"panda_joint2", -0.785}};
   evidence.planned_end_joint_positions = evidence.target_joint_positions;
   return evidence;
 }
@@ -240,8 +231,8 @@ MotionPlanEvidence readyEvidence()
 TEST(NamedTargetPlanValidator, AcceptsMatchingReadyPlan)
 {
   const auto evidence = readyEvidence();
-  const NamedTargetPlanValidator validator(
-    State::RETREAT, State::DONE, "ready", evidence.target_joint_positions, 0.010);
+  const NamedTargetPlanValidator validator(State::RETREAT, State::DONE, "ready",
+                                           evidence.target_joint_positions, 0.010);
 
   EXPECT_TRUE(validator.validate(State::RETREAT, WorldSnapshot{}, evidence).ok);
 }
@@ -250,8 +241,8 @@ TEST(NamedTargetPlanValidator, RejectsWrongPlannedEndpoint)
 {
   auto evidence = readyEvidence();
   evidence.planned_end_joint_positions["panda_joint1"] = 0.02;
-  const NamedTargetPlanValidator validator(
-    State::RETREAT, State::DONE, "ready", evidence.target_joint_positions, 0.010);
+  const NamedTargetPlanValidator validator(State::RETREAT, State::DONE, "ready",
+                                           evidence.target_joint_positions, 0.010);
 
   const auto result = validator.validate(State::RETREAT, WorldSnapshot{}, evidence);
 
@@ -263,8 +254,8 @@ TEST(NamedTargetPlanValidator, RejectsMissingRequestedJoint)
 {
   auto evidence = readyEvidence();
   evidence.planned_end_joint_positions.erase("panda_joint2");
-  const NamedTargetPlanValidator validator(
-    State::RETREAT, State::DONE, "ready", evidence.target_joint_positions, 0.010);
+  const NamedTargetPlanValidator validator(State::RETREAT, State::DONE, "ready",
+                                           evidence.target_joint_positions, 0.010);
 
   const auto result = validator.validate(State::RETREAT, WorldSnapshot{}, evidence);
 
