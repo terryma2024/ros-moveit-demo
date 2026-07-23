@@ -35,6 +35,7 @@ public:
     const std::vector<std::string> & touch_links) = 0;
   [[nodiscard]] virtual ActionResult detachCoke() = 0;
   [[nodiscard]] virtual ActionResult syncCokeWorldPose(const Pose3d & pose) = 0;
+  [[nodiscard]] virtual ActionResult upsertCokeWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual std::optional<MoveItSceneState> observe() = 0;
 };
 
@@ -51,6 +52,7 @@ public:
     const std::vector<std::string> & touch_links) override;
   [[nodiscard]] ActionResult detachCoke() override;
   [[nodiscard]] ActionResult syncCokeWorldPose(const Pose3d & pose) override;
+  [[nodiscard]] ActionResult upsertCokeWorldPose(const Pose3d & pose) override;
   [[nodiscard]] std::optional<MoveItSceneState> observe() override;
 
 private:

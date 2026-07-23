@@ -521,6 +521,10 @@ public:
     synchronized_pose = pose;
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
+  ActionResult upsertCokeWorldPose(const Pose3d & pose) override
+  {
+    return syncCokeWorldPose(pose);
+  }
   std::optional<MoveItSceneState> observe() override
   {
     return MoveItSceneState{true, false, "", {}, synchronized_pose};
