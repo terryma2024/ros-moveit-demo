@@ -51,7 +51,8 @@ int main(int argc, char * argv[])
     return EXIT_FAILURE;
   }
 
-  RCLCPP_INFO(node->get_logger(), "MoveIt Coke is detached at x=0.300000 y=0.000000 z=0.836000");
+  RCLCPP_INFO(node->get_logger(),
+              "MoveIt table and detached Coke are reset at canonical world poses");
   rclcpp::shutdown();
   return EXIT_SUCCESS;
 }

@@ -42,4 +42,10 @@ if python3 "${validator}" "${tmp_dir}/missing.txt" >/dev/null 2>&1; then
   fail 'validator accepted a scene without world Coke'
 fi
 
+sed "s/id='table'/id='other'/" "${tmp_dir}/canonical.txt" \
+  >"${tmp_dir}/missing_table.txt"
+if python3 "${validator}" "${tmp_dir}/missing_table.txt" >/dev/null 2>&1; then
+  fail 'validator accepted a scene without world table'
+fi
+
 printf 'PASS: reset MoveIt scene validator rejects inconsistent evidence\n'

@@ -53,6 +53,7 @@ public:
   moveit::planning_interface::MoveGroupInterface move_group;
   moveit::planning_interface::PlanningSceneInterface planning_scene;
   std::string object_id;
+  const std::string table_id{"table"};
 };
 
 MoveItSceneAdapter::MoveItSceneAdapter(const std::shared_ptr<rclcpp::Node> & node,
@@ -139,9 +140,36 @@ ActionResult MoveItSceneAdapter::upsertCokeWorldPose(const Pose3d & pose)
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
+ActionResult MoveItSceneAdapter::upsertTableWorldPose(const Pose3d & pose)
+{
+  auto objects = impl_->planning_scene.getObjects({impl_->table_id});
+  const auto existing = objects.find(impl_->table_id);
+  moveit_msgs::msg::CollisionObject upserted;
+  if (existing != objects.end()) {
+    upserted = existing->second;
+  } else {
+    upserted.id = impl_->table_id;
+    shape_msgs::msg::SolidPrimitive primitive;
+    primitive.type = shape_msgs::msg::SolidPrimitive::BOX;
+    primitive.dimensions = {1.2, 0.8, 0.05};
+    upserted.primitives.push_back(primitive);
+    geometry_msgs::msg::Pose local_pose;
+    local_pose.orientation.w = 1.0;
+    upserted.primitive_poses.push_back(local_pose);
+  }
+  upserted.header.frame_id = "world";
+  upserted.pose = toMessage(pose);
+  upserted.operation = moveit_msgs::msg::CollisionObject::ADD;
+  if (!impl_->planning_scene.applyCollisionObject(upserted)) {
+    return sceneFailure("MOVEIT_TABLE_UPSERT_APPLY_FAILED",
+                        "Failed to apply the canonical table world pose");
+  }
+  return {ActionStatus::SUCCEEDED, std::nullopt};
+}
+
 std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
 {
-  const auto objects = impl_->planning_scene.getObjects({impl_->object_id});
+  const auto objects = impl_->planning_scene.getObjects({impl_->object_id, impl_->table_id});
   const auto attached_objects = impl_->planning_scene.getAttachedObjects({impl_->object_id});
 
   MoveItSceneState state;
@@ -149,6 +177,11 @@ std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
   state.coke_in_world = world != objects.end();
   if (state.coke_in_world) {
     state.coke_world_pose = worldPoseFromCollisionObject(world->second);
+  }
+  const auto table = objects.find(impl_->table_id);
+  state.table_in_world = table != objects.end();
+  if (state.table_in_world) {
+    state.table_world_pose = worldPoseFromCollisionObject(table->second);
   }
 
   const auto attached = attached_objects.find(impl_->object_id);

@@ -20,16 +20,14 @@ ActionResult succeeded()
 
 MoveItSceneState attachedState(bool in_world = false)
 {
-  return {in_world,
-          true,
-          "panda_hand",
-          {"panda_hand", "panda_leftfinger", "panda_rightfinger"},
-          std::nullopt};
+  return {
+    in_world,     true,  "panda_hand", {"panda_hand", "panda_leftfinger", "panda_rightfinger"},
+    std::nullopt, false, std::nullopt};
 }
 
 MoveItSceneState detachedState(const Pose3d & pose = {})
 {
-  return {true, false, "", {}, pose};
+  return {true, false, "", {}, pose, false, std::nullopt};
 }
 
 class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
@@ -61,6 +59,11 @@ public:
   {
     synced_pose = pose;
     return sync_result;
+  }
+
+  ActionResult upsertTableWorldPose(const Pose3d &) override
+  {
+    return succeeded();
   }
 
   std::optional<MoveItSceneState> observe() override

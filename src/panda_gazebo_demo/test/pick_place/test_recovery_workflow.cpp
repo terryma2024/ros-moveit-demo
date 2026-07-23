@@ -541,9 +541,13 @@ public:
   {
     return syncCokeWorldPose(pose);
   }
+  ActionResult upsertTableWorldPose(const Pose3d &) override
+  {
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
   std::optional<MoveItSceneState> observe() override
   {
-    return MoveItSceneState{true, false, "", {}, synchronized_pose};
+    return MoveItSceneState{true, false, "", {}, synchronized_pose, false, std::nullopt};
   }
 
   int detach_calls{0};

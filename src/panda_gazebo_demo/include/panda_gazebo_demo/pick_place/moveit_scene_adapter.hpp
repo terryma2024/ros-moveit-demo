@@ -24,6 +24,8 @@ struct MoveItSceneState
   std::string attached_link;
   std::set<std::string> touch_links;
   std::optional<Pose3d> coke_world_pose;
+  bool table_in_world{false};
+  std::optional<Pose3d> table_world_pose;
 };
 
 class IMoveItSceneAdapter
@@ -35,6 +37,7 @@ public:
   [[nodiscard]] virtual ActionResult detachCoke() = 0;
   [[nodiscard]] virtual ActionResult syncCokeWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual ActionResult upsertCokeWorldPose(const Pose3d & pose) = 0;
+  [[nodiscard]] virtual ActionResult upsertTableWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual std::optional<MoveItSceneState> observe() = 0;
 };
 
@@ -50,6 +53,7 @@ public:
   [[nodiscard]] ActionResult detachCoke() override;
   [[nodiscard]] ActionResult syncCokeWorldPose(const Pose3d & pose) override;
   [[nodiscard]] ActionResult upsertCokeWorldPose(const Pose3d & pose) override;
+  [[nodiscard]] ActionResult upsertTableWorldPose(const Pose3d & pose) override;
   [[nodiscard]] std::optional<MoveItSceneState> observe() override;
 
 private:

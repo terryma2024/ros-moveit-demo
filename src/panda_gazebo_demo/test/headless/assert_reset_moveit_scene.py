@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate MoveIt Coke reset evidence captured before scene setup."""
+"""Validate complete MoveIt reset evidence captured after world reset."""
 
 import math
 import pathlib
@@ -46,6 +46,8 @@ moveit_objects = {
 }
 if 'coke' not in moveit_objects:
     fail('MoveIt reset evidence does not contain world Coke')
+if 'table' not in moveit_objects:
+    fail('MoveIt reset evidence does not contain world table')
 
 position, orientation = moveit_objects['coke']
 if not all(math.isfinite(value) for value in position + orientation):
@@ -55,4 +57,12 @@ if math.dist(position, (0.3, 0.0, 0.836)) > 0.002:
 if orientation_distance(orientation) > 0.02:
     fail('MoveIt reset Coke orientation is outside tolerance')
 
-print('PASS: MoveIt reset Coke is detached and at the canonical 6D pose')
+table_position, table_orientation = moveit_objects['table']
+if not all(math.isfinite(value) for value in table_position + table_orientation):
+    fail('MoveIt reset table pose is non-finite')
+if math.dist(table_position, (0.0, 0.0, 0.75)) > 0.002:
+    fail(f'MoveIt reset table position is outside tolerance: {table_position}')
+if orientation_distance(table_orientation) > 0.02:
+    fail('MoveIt reset table orientation is outside tolerance')
+
+print('PASS: MoveIt reset table and detached Coke are at canonical 6D poses')
