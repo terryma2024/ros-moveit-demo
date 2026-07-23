@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,6 +27,13 @@ struct MotionPlanningRequest
   Pose3d target_pose;
 };
 
+struct NamedTargetPlanningRequest
+{
+  State state;
+  State next_state;
+  std::string target_name;
+};
+
 class IMoveItMotionAdapter
 {
 public:
@@ -32,6 +41,22 @@ public:
   [[nodiscard]] virtual PlanResult plan(
     const MotionPlanningRequest & request,
     const ObservationResult & observation) = 0;
+  [[nodiscard]] virtual PlanResult planNamedTarget(
+    const NamedTargetPlanningRequest & request,
+    const ObservationResult & observation)
+  {
+    static_cast<void>(request);
+    static_cast<void>(observation);
+    return {{ActionStatus::NOT_SUPPORTED, Failure{FailureCategory::PLANNING,
+        "NAMED_TARGET_PLANNING_NOT_SUPPORTED",
+        "MoveIt motion adapter does not support named-target planning", {}}}, nullptr};
+  }
+  [[nodiscard]] virtual std::optional<std::map<std::string, double>> namedTargetJointPositions(
+    const std::string & target_name)
+  {
+    static_cast<void>(target_name);
+    return std::nullopt;
+  }
   [[nodiscard]] virtual ActionResult execute(const MotionPlanEvidence & evidence) = 0;
   [[nodiscard]] virtual ActionResult cancel() = 0;
 };
@@ -50,6 +75,11 @@ public:
   [[nodiscard]] PlanResult plan(
     const MotionPlanningRequest & request,
     const ObservationResult & observation) override;
+  [[nodiscard]] PlanResult planNamedTarget(
+    const NamedTargetPlanningRequest & request,
+    const ObservationResult & observation) override;
+  [[nodiscard]] std::optional<std::map<std::string, double>> namedTargetJointPositions(
+    const std::string & target_name) override;
   [[nodiscard]] ActionResult execute(const MotionPlanEvidence & evidence) override;
   [[nodiscard]] ActionResult cancel() override;
   [[nodiscard]] ObservationResult observe() override;

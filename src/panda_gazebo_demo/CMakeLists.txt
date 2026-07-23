@@ -51,6 +51,7 @@ add_library(
   src/pick_place/gripper_state_executor.cpp
   src/pick_place/moveit_scene_executor.cpp
   src/pick_place/motion_state_action.cpp
+  src/pick_place/named_target_validation.cpp
   src/pick_place/plan_validation.cpp
   src/pick_place/pick_place_contracts.cpp
   src/pick_place/pick_place_runtime.cpp
