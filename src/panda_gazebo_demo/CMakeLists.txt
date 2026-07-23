@@ -138,6 +138,11 @@ add_executable(
   src/nodes/gazebo_attachment_state_relay.cpp
 )
 
+add_executable(
+  reset_moveit_world
+  src/nodes/reset_moveit_world.cpp
+)
+
 ament_target_dependencies(
   planning_scene_setup
   rclcpp
@@ -177,6 +182,9 @@ target_link_libraries(
   gz-transport13::core
   gz-msgs10::core
 )
+
+ament_target_dependencies(reset_moveit_world rclcpp)
+target_link_libraries(reset_moveit_world pick_place_core pick_place_ros_adapters)
 
 if(BUILD_TESTING)
   ament_add_gtest(test_pick_place_core test/pick_place/test_pick_place_core.cpp)
@@ -324,6 +332,14 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME test_reset_moveit_world_cli
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_reset_moveit_world_cli.sh
+      $<TARGET_FILE:reset_moveit_world>
+  )
+
+  add_test(
     NAME test_attachment_state_relay
     COMMAND
       bash
@@ -371,6 +387,7 @@ install(
     attach_and_lift_demo
     pick_place_state_machine
     gazebo_attachment_state_relay
+    reset_moveit_world
   DESTINATION lib/${PROJECT_NAME}
 )
 
