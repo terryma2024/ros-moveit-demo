@@ -28,6 +28,8 @@ bool poseMatches(const Pose3d & actual, const Pose3d & expected)
          orientationDistance(actual, expected) <= 1e-4;
 }
 
+constexpr Pose3d kCanonicalTablePose{0.0, 0.0, 0.75, 0.0, 0.0, 0.0, 1.0};
+
 }  // namespace
 
 MoveItWorldResetter::MoveItWorldResetter(std::shared_ptr<IMoveItSceneAdapter> adapter,
@@ -52,6 +54,11 @@ ActionResult MoveItWorldResetter::reset(const Pose3d & target_pose)
     return resetFailure(
       ActionStatus::FAILED, "MOVEIT_RESET_TARGET_INVALID",
       "MoveIt world reset target must contain a finite position and valid quaternion");
+  }
+
+  auto table_upsert = adapter_->upsertTableWorldPose(kCanonicalTablePose);
+  if (table_upsert.status != ActionStatus::SUCCEEDED) {
+    return table_upsert;
   }
 
   const auto initial = adapter_->observe();
@@ -90,14 +97,16 @@ ActionResult MoveItWorldResetter::reset(const Pose3d & target_pose)
     std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds_);
   while (std::chrono::steady_clock::now() < sync_deadline) {
     const auto state = adapter_->observe();
-    if (state && !state->coke_attached && state->coke_in_world && state->coke_world_pose &&
+    if (state && state->table_in_world && state->table_world_pose &&
+        poseMatches(*state->table_world_pose, kCanonicalTablePose) && !state->coke_attached &&
+        state->coke_in_world && state->coke_world_pose &&
         poseMatches(*state->coke_world_pose, target_pose)) {
       return {ActionStatus::SUCCEEDED, std::nullopt};
     }
     std::this_thread::sleep_for(std::chrono::duration<double>(poll_interval_seconds_));
   }
   return resetFailure(ActionStatus::TIMED_OUT, "MOVEIT_RESET_SYNC_TIMEOUT",
-                      "MoveIt Coke did not converge to the canonical detached world pose");
+                      "MoveIt table and Coke did not converge to canonical world poses");
 }
 
 }  // namespace panda_gazebo_demo::pick_place

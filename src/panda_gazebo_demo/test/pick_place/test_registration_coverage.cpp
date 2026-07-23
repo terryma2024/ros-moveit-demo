@@ -74,6 +74,11 @@ public:
     return {ActionStatus::NOT_SUPPORTED, std::nullopt};
   }
 
+  ActionResult upsertTableWorldPose(const Pose3d &) override
+  {
+    return {ActionStatus::NOT_SUPPORTED, std::nullopt};
+  }
+
   std::optional<MoveItSceneState> observe() override
   {
     return std::nullopt;

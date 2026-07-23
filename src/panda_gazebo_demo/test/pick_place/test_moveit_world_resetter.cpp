@@ -15,6 +15,7 @@ namespace
 {
 
 const Pose3d kResetPose{0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
+const Pose3d kTablePose{0.0, 0.0, 0.75, 0.0, 0.0, 0.0, 1.0};
 
 ActionResult succeeded()
 {
@@ -29,12 +30,12 @@ ActionResult failed(std::string code)
 
 MoveItSceneState attachedState()
 {
-  return {false, true, "panda_hand", {"panda_hand"}, std::nullopt};
+  return {false, true, "panda_hand", {"panda_hand"}, std::nullopt, false, std::nullopt};
 }
 
 MoveItSceneState detachedState(std::optional<Pose3d> pose = std::nullopt)
 {
-  return {pose.has_value(), false, "", {}, pose};
+  return {pose.has_value(), false, "", {}, pose, true, kTablePose};
 }
 
 class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
@@ -65,6 +66,14 @@ public:
     return upsert_result;
   }
 
+  ActionResult upsertTableWorldPose(const Pose3d & pose) override
+  {
+    ++upsert_table_calls;
+    commands.emplace_back("upsert_table");
+    upserted_table_pose = pose;
+    return upsert_table_result;
+  }
+
   std::optional<MoveItSceneState> observe() override
   {
     ++observe_calls;
@@ -78,14 +87,32 @@ public:
 
   ActionResult detach_result{succeeded()};
   ActionResult upsert_result{succeeded()};
+  ActionResult upsert_table_result{succeeded()};
   std::vector<MoveItSceneState> observations;
   std::size_t observation_index{0};
   int detach_calls{0};
   int upsert_calls{0};
+  int upsert_table_calls{0};
   int observe_calls{0};
   std::vector<std::string> commands;
   std::optional<Pose3d> upserted_pose;
+  std::optional<Pose3d> upserted_table_pose;
 };
+
+TEST(MoveItWorldResetter, UpsertsCanonicalTableBeforeCanonicalCoke)
+{
+  auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
+  adapter->observations = {detachedState(), detachedState(kResetPose)};
+  MoveItWorldResetter resetter(adapter, 0.05, 0.001);
+
+  const auto result = resetter.reset(kResetPose);
+
+  EXPECT_EQ(ActionStatus::SUCCEEDED, result.status);
+  EXPECT_EQ(1, adapter->upsert_table_calls);
+  EXPECT_EQ((std::vector<std::string>{"upsert_table", "upsert"}), adapter->commands);
+  ASSERT_TRUE(adapter->upserted_table_pose);
+  EXPECT_DOUBLE_EQ(kTablePose.z, adapter->upserted_table_pose->z);
+}
 
 TEST(MoveItWorldResetter, DetachesThenUpsertsCanonicalWorldPose)
 {
@@ -98,7 +125,7 @@ TEST(MoveItWorldResetter, DetachesThenUpsertsCanonicalWorldPose)
   EXPECT_EQ(ActionStatus::SUCCEEDED, result.status);
   EXPECT_EQ(1, adapter->detach_calls);
   EXPECT_EQ(1, adapter->upsert_calls);
-  EXPECT_EQ((std::vector<std::string>{"detach", "upsert"}), adapter->commands);
+  EXPECT_EQ((std::vector<std::string>{"upsert_table", "detach", "upsert"}), adapter->commands);
   ASSERT_TRUE(adapter->upserted_pose);
   EXPECT_DOUBLE_EQ(kResetPose.z, adapter->upserted_pose->z);
 }
