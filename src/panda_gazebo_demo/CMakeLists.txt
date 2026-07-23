@@ -114,21 +114,6 @@ ament_target_dependencies(
 )
 
 add_executable(
-  planning_scene_setup
-  src/planning_scene_setup.cpp
-)
-
-add_executable(
-  pre_grasp_plan
-  src/pick_place_demo.cpp
-)
-
-add_executable(
-  attach_and_lift_demo
-  src/attach_and_lift_demo.cpp
-)
-
-add_executable(
   pick_place_state_machine
   src/nodes/pick_place_state_machine_node.cpp
 )
@@ -143,32 +128,6 @@ add_executable(
   src/nodes/reset_moveit_world.cpp
 )
 
-ament_target_dependencies(
-  planning_scene_setup
-  rclcpp
-  geometry_msgs
-  shape_msgs
-  moveit_msgs
-  moveit_ros_planning_interface
-)
-
-ament_target_dependencies(
-  pre_grasp_plan
-  rclcpp
-  geometry_msgs
-  shape_msgs
-  moveit_msgs
-  moveit_ros_planning_interface
-)
-
-ament_target_dependencies(
-  attach_and_lift_demo
-  rclcpp
-  geometry_msgs
-  moveit_msgs
-  moveit_ros_planning_interface
-)
-target_link_libraries(attach_and_lift_demo pick_place_core)
 
 ament_target_dependencies(
   pick_place_state_machine
@@ -391,9 +350,6 @@ install(
   TARGETS
     pick_place_core
     pick_place_ros_adapters
-    planning_scene_setup
-    pre_grasp_plan
-    attach_and_lift_demo
     pick_place_state_machine
     gazebo_attachment_state_relay
     reset_moveit_world
