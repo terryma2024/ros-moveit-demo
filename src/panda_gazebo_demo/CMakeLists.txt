@@ -57,6 +57,7 @@ add_library(
   src/pick_place/pick_place_runtime.cpp
   src/pick_place/recovery_contracts.cpp
   src/pick_place/recovery_policy.cpp
+  src/pick_place/ready_retreat_action.cpp
   src/pick_place/state_validation.cpp
   src/pick_place/state_action.cpp
   src/pick_place/transition_contract.cpp
@@ -262,6 +263,13 @@ if(BUILD_TESTING)
   )
   if(TARGET test_motion_state_action)
     target_link_libraries(test_motion_state_action pick_place_core)
+  endif()
+  ament_add_gtest(
+    test_ready_retreat_action
+    test/pick_place/test_ready_retreat_action.cpp
+  )
+  if(TARGET test_ready_retreat_action)
+    target_link_libraries(test_ready_retreat_action pick_place_core)
   endif()
 
   ament_add_gtest(
