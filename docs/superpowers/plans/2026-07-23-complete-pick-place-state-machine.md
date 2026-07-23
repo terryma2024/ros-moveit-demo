@@ -1008,7 +1008,8 @@ The script must:
 
 1. launch `panda_gazebo.launch.py headless:=true`;
 2. wait for Gazebo, MoveGroup, controllers, `/joint_states`, and attachment output;
-3. run `reset_coke.sh` and verify detached Coke at the pick pose;
+3. run `reset_world.sh`, actively detach Gazebo and MoveIt Coke, synchronize both Coke poses, and
+   verify detached Coke at the pick pose;
 4. run one full state-machine execution with a unique `simulation_session_id`;
 5. capture logs and validate final invariants;
 6. terminate only processes started by the script.

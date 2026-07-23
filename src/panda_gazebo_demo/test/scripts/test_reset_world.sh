@@ -28,6 +28,10 @@ if [[ "$1" == service && "$2" == -l ]]; then
     /world/pick_place_world/set_pose
 elif [[ "$1" == service ]]; then
   printf 'data: true\n'
+elif [[ "$1" == topic && "$2" == -l ]]; then
+  printf '%s\n' \
+    /panda/detach_coke \
+    /panda/coke_attached
 elif [[ "$1" == topic && "$2" == -t ]]; then
   if [[ "${FAKE_DETACH_CONVERGES:-true}" == true ]]; then
     printf 'detached\n' >"${ATTACHMENT_STATE_FILE}"
@@ -35,7 +39,15 @@ elif [[ "$1" == topic && "$2" == -t ]]; then
 elif [[ "$1" == topic && "$2" == -e ]]; then
   printf 'data: "%s"\n' "$(<"${ATTACHMENT_STATE_FILE}")"
 elif [[ "$1" == model ]]; then
-  printf 'pose: mocked\n'
+  if [[ "${FAKE_GAZEBO_POSE:-canonical}" == canonical ]]; then
+    printf 'Pose [ XYZ (m) ] [ RPY (rad) ]:\n'
+    printf '  [0.300 0.000 0.836]\n'
+    printf '  [0.000 0.000 0.000]\n'
+  else
+    printf 'Pose [ XYZ (m) ] [ RPY (rad) ]:\n'
+    printf '  [0.350 0.000 0.836]\n'
+    printf '  [0.000 0.000 0.000]\n'
+  fi
 else
   printf 'unexpected gz arguments: %s\n' "$*" >&2
   exit 2
@@ -50,9 +62,10 @@ printf '%s\n' "$*" >>"${ROS2_COMMAND_LOG}"
 printf 'ros2 %s\n' "$*" >>"${COMMAND_LOG}"
 
 if [[ "$1" == action && "$2" == list ]]; then
-  printf '%s\n' \
-    /panda_arm_controller/follow_joint_trajectory \
-    /panda_hand_controller/gripper_cmd
+  if [[ "${FAKE_ARM_AVAILABLE:-true}" == true ]]; then
+    printf '%s\n' /panda_arm_controller/follow_joint_trajectory
+  fi
+  printf '%s\n' /panda_hand_controller/gripper_cmd
 elif [[ "$1" == action && "$2" == send_goal ]]; then
   status=SUCCEEDED
   if [[ "$*" == *'/panda_hand_controller/gripper_cmd'* ]]; then
@@ -96,6 +109,10 @@ run_reset() {
     FAKE_MOVEIT_RESET_STATUS="${moveit_status}" \
     FAKE_GRIPPER_STATUS="${FAKE_GRIPPER_STATUS:-SUCCEEDED}" \
     FAKE_ARM_STATUS="${FAKE_ARM_STATUS:-SUCCEEDED}" \
+    FAKE_ARM_AVAILABLE="${FAKE_ARM_AVAILABLE:-true}" \
+    FAKE_GAZEBO_POSE="${FAKE_GAZEBO_POSE:-canonical}" \
+    GAZEBO_POSE_OBSERVATION_ATTEMPTS=1 \
+    GAZEBO_POSE_POLL_INTERVAL_SECONDS=0 \
     EXPECTED_COKE_DETACHED="${expected_detached}" \
     bash "${reset_script}"
 }
@@ -121,7 +138,8 @@ mapfile -t goal_commands < <(grep '^action send_goal' "${ros2_command_log}")
 
 detach_line="$(grep -n 'gz topic -t /panda/detach_coke' "${command_log}" | head -1 | cut -d: -f1)"
 pose_line="$(grep -n 'gz service -s /world/pick_place_world/set_pose' "${command_log}" | head -1 | cut -d: -f1)"
-moveit_line="$(grep -n 'ros2 run panda_gazebo_demo reset_moveit_world' "${command_log}" | head -1 | cut -d: -f1)"
+moveit_line="$(grep -n 'ros2 run panda_gazebo_demo reset_moveit_world$' \
+  "${command_log}" | head -1 | cut -d: -f1)"
 open_line="$(grep -En 'ros2 action send_goal.*position: 0\.04,' "${command_log}" | head -1 | cut -d: -f1)"
 arm_line="$(grep -n 'ros2 action send_goal.*/panda_arm_controller' "${command_log}" | head -1 | cut -d: -f1)"
 close_line="$(grep -En 'ros2 action send_goal.*position: 0\.0,' "${command_log}" | head -1 | cut -d: -f1)"
@@ -135,8 +153,8 @@ close_line="$(grep -En 'ros2 action send_goal.*position: 0\.0,' "${command_log}"
 if run_reset attached false >/dev/null 2>&1; then
   fail 'reset succeeded without Gazebo detach convergence'
 fi
-if grep -Eq 'set_pose|ros2 run panda_gazebo_demo reset_moveit_world|action send_goal' \
-    "${command_log}"
+if grep -Eq 'set_pose|action send_goal' "${command_log}" || \
+    grep -Eq '^ros2 run panda_gazebo_demo reset_moveit_world$' "${command_log}"
 then
   fail 'detach failure allowed later side effects'
 fi
@@ -148,6 +166,30 @@ if run_reset attached true FAILED >/dev/null 2>&1; then
 fi
 if grep -q 'action send_goal' "${command_log}"; then
   fail 'MoveIt reset failure allowed arm or gripper motion'
+fi
+
+: >"${ros2_command_log}"
+: >"${command_log}"
+if FAKE_GAZEBO_POSE=wrong run_reset detached true SUCCEEDED true \
+    >/dev/null 2>&1
+then
+  fail 'reset succeeded when Gazebo Coke did not reach the canonical pose'
+fi
+if grep -q 'action send_goal' "${command_log}"; then
+  fail 'wrong Gazebo Coke pose allowed arm or gripper motion'
+fi
+
+: >"${ros2_command_log}"
+: >"${command_log}"
+if FAKE_ARM_AVAILABLE=false run_reset detached true SUCCEEDED true \
+    >/dev/null 2>&1
+then
+  fail 'reset succeeded without the arm trajectory action'
+fi
+if grep -Eq 'gz topic -t /panda/detach_coke|set_pose|action send_goal' \
+    "${command_log}"
+then
+  fail 'missing arm action allowed physical reset side effects'
 fi
 
 : >"${ros2_command_log}"

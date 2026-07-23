@@ -332,6 +332,15 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME test_assert_reset_moveit_scene
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/test_assert_reset_moveit_scene.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/assert_reset_moveit_scene.py
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/headless/fixtures/snapshot_planning_scene.txt
+  )
+
+  add_test(
     NAME test_reset_moveit_world_cli
     COMMAND
       bash

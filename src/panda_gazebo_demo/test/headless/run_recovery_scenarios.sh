@@ -96,8 +96,13 @@ last_attachment_is_detached() {
 reset_fixture() {
   local scenario_dir="$1"
   last_attachment_is_detached
-  EXPECTED_COKE_DETACHED=true "${package_root}/scripts/reset_coke.sh" \
+  EXPECTED_COKE_DETACHED=true "${package_root}/scripts/reset_world.sh" \
     >"${scenario_dir}/reset.log" 2>&1
+  timeout 5 ros2 service call /get_planning_scene \
+    moveit_msgs/srv/GetPlanningScene '{components: {components: 28}}' \
+    >"${scenario_dir}/reset_moveit_before_setup.txt" 2>&1
+  python3 "${script_dir}/assert_reset_moveit_scene.py" \
+    "${scenario_dir}/reset_moveit_before_setup.txt"
   timeout 15 ros2 run panda_gazebo_demo planning_scene_setup \
     >"${scenario_dir}/planning_scene_reset.log" 2>&1
   sleep 1

@@ -382,6 +382,12 @@ after a raw `detached` confirmation. A timed-out gripper goal retains its pendin
 future; cancellation resolves it within a bound, cancels and acknowledges an accepted goal, accepts
 an explicit rejection as proof of no goal, and otherwise fails closed.
 
+The force-reset utility is `reset_world.sh`. It actively detaches the Gazebo Coke, resets its fixed
+6DoF pose, detaches and upserts the MoveIt world Coke through `reset_moveit_world`, verifies durable
+Gazebo detach, and only then opens the gripper, returns the Panda arm to ready, and closes the
+gripper. This utility establishes a new test world; it is not a replacement for in-workflow safety
+recovery.
+
 The installed Jazzy `GripperActionController` parameter schema is verified before editing `controllers.yaml`. The intended configuration is `allow_stalling=true`, `stall_velocity_threshold=0.001`, `stall_timeout=1.0`, and `goal_tolerance=0.002`, so Coke contact can complete a grasp action without requiring an empty-gripper zero position.
 
 ## 11. Observability

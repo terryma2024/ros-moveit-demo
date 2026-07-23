@@ -24,8 +24,9 @@ The renamed script owns orchestration and Gazebo operations. It must:
 4. pause Gazebo and reset Coke to the canonical fixed pose;
 5. invoke the MoveIt helper to detach and synchronize Coke;
 6. resume Gazebo and verify the final Gazebo detached fact;
-7. open the gripper, move the arm to ready, and close the gripper;
-8. exit nonzero immediately when any required command or convergence check fails.
+7. poll and verify the final Gazebo Coke 6DoF pose within configured tolerances;
+8. open the gripper, move the arm to ready, and close the gripper;
+9. exit nonzero immediately when any required command or convergence check fails.
 
 The existing world-resume trap remains active while Gazebo is paused. Reset is intentionally a
 force-reset operation: unlike recovery, it may detach a carried Coke and teleport it to the fixed
@@ -77,8 +78,12 @@ Tests are written before implementation and must demonstrate RED for the missing
 - Shell fixture: attached Gazebo Coke triggers detach and waits for detached confirmation.
 - Shell fixture: missing/unknown detach confirmation fails before pose or arm side effects.
 - Shell fixture: MoveIt helper failure fails before arm side effects.
+- Shell fixture: missing preflight interfaces fail before world or robot side effects.
+- Shell fixture: a non-convergent Gazebo 6DoF pose fails before arm side effects.
 - Shell fixture: command ordering is detach, reset/synchronize, open, ready, close.
 - Helper tests: attached, detached/idempotent, unavailable scene, and non-convergent scene cases.
+- Headless harnesses validate the reset helper's Planning Scene result before any subsequent scene
+  setup can replace Coke.
 - Migration check: no active source, CMake, README, or headless reference uses `reset_coke.sh`.
 - Verification: targeted tests, package build, complete `colcon test`, read-only uncrustify, shell
   syntax checks, and `git diff --check`.
