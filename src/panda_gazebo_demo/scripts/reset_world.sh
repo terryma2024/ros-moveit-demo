@@ -12,12 +12,17 @@ GRIPPER_OPEN_POSITION="${GRIPPER_OPEN_POSITION:-0.04}"
 GRIPPER_CLOSED_POSITION="${GRIPPER_CLOSED_POSITION:-0.0}"
 GRIPPER_MAX_EFFORT="${GRIPPER_MAX_EFFORT:-0.0}"
 GRIPPER_ACTION_TIMEOUT_SECONDS="${GRIPPER_ACTION_TIMEOUT_SECONDS:-10}"
+GAZEBO_DETACH_TOPIC="${GAZEBO_DETACH_TOPIC:-/panda/detach_coke}"
 ATTACHMENT_OUTPUT_TOPIC="${ATTACHMENT_OUTPUT_TOPIC:-/panda/coke_attached}"
 ATTACHMENT_OBSERVATION_TIMEOUT_SECONDS="${ATTACHMENT_OBSERVATION_TIMEOUT_SECONDS:-3}"
+MOVEIT_RESET_PACKAGE="${MOVEIT_RESET_PACKAGE:-panda_gazebo_demo}"
+MOVEIT_RESET_EXECUTABLE="${MOVEIT_RESET_EXECUTABLE:-reset_moveit_world}"
+MOVEIT_RESET_TIMEOUT_SECONDS="${MOVEIT_RESET_TIMEOUT_SECONDS:-10}"
 EXPECTED_COKE_DETACHED="${EXPECTED_COKE_DETACHED:-false}"
 
 CONTROL_SERVICE="/world/${WORLD_NAME}/control"
 SET_POSE_SERVICE="/world/${WORLD_NAME}/set_pose"
+CANONICAL_POSE_REQUEST="name: \"${MODEL_NAME}\", position: {x: 0.3, y: 0.0, z: 0.836}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}"
 
 paused=false
 
@@ -57,11 +62,6 @@ resume_world() {
 move_arm_to_ready() {
   local action_list
   local response
-
-  if ! command -v ros2 >/dev/null 2>&1; then
-    printf 'ros2 command not found. Source the ROS environment first.\n' >&2
-    return 1
-  fi
 
   action_list="$(ros2 action list)"
   if ! grep -Fxq "${ARM_ACTION}" <<<"${action_list}"; then
@@ -116,6 +116,11 @@ command_gripper() {
   fi
 }
 
+request_gazebo_detach() {
+  printf 'Requesting Gazebo Coke detach on %s...\n' "${GAZEBO_DETACH_TOPIC}"
+  gz topic -t "${GAZEBO_DETACH_TOPIC}" -m gz.msgs.Empty -p 'unused: true'
+}
+
 require_detached_coke() {
   local response
 
@@ -128,11 +133,21 @@ require_detached_coke() {
     return 1
   fi
   if grep -Eq 'data: *"?attached"?' <<<"${response}"; then
-    printf 'Coke is Gazebo-attached; run state-machine recovery before reset.\n' >&2
+    printf 'Coke remained Gazebo-attached after detach request.\n' >&2
     return 1
   fi
   if ! grep -Eq 'data: *"?detached"?' <<<"${response}"; then
     printf 'Unknown Gazebo Coke attachment state: %s\n' "${response}" >&2
+    return 1
+  fi
+}
+
+reset_moveit_world() {
+  printf 'Detaching and synchronizing MoveIt Coke...\n'
+  if ! timeout "${MOVEIT_RESET_TIMEOUT_SECONDS}" \
+      ros2 run "${MOVEIT_RESET_PACKAGE}" "${MOVEIT_RESET_EXECUTABLE}"
+  then
+    printf 'MoveIt Coke detach/synchronization failed.\n' >&2
     return 1
   fi
 }
@@ -143,41 +158,44 @@ if ! command -v gz >/dev/null 2>&1; then
   printf 'gz command not found. Source the Gazebo environment first.\n' >&2
   exit 1
 fi
-
+if ! command -v ros2 >/dev/null 2>&1; then
+  printf 'ros2 command not found. Source the ROS environment first.\n' >&2
+  exit 1
+fi
 if ! gz service -l | grep -Fxq "${CONTROL_SERVICE}"; then
   printf 'Gazebo control service not found: %s\n' "${CONTROL_SERVICE}" >&2
   exit 1
 fi
-
 if ! gz service -l | grep -Fxq "${SET_POSE_SERVICE}"; then
   printf 'Gazebo set_pose service not found: %s\n' "${SET_POSE_SERVICE}" >&2
   exit 1
 fi
 
+request_gazebo_detach
 if [[ "${EXPECTED_COKE_DETACHED}" == true ]]; then
-  printf 'Using caller-provided evidence that Coke is Gazebo-detached.\n'
+  printf 'Using caller-provided evidence for initial Gazebo detach convergence.\n'
 else
   require_detached_coke
 fi
-command_gripper "${GRIPPER_OPEN_POSITION}" Opening
-move_arm_to_ready
 
 printf 'Pausing world %s...\n' "${WORLD_NAME}"
 call_service "${CONTROL_SERVICE}" gz.msgs.WorldControl 'pause: true'
 paused=true
 
 printf 'Resetting %s to (0.3, 0.0, 0.836), identity orientation...\n' "${MODEL_NAME}"
-call_service \
-  "${SET_POSE_SERVICE}" \
-  gz.msgs.Pose \
-  "name: \"${MODEL_NAME}\", position: {x: 0.3, y: 0.0, z: 0.836}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}"
+call_service "${SET_POSE_SERVICE}" gz.msgs.Pose "${CANONICAL_POSE_REQUEST}"
+reset_moveit_world
 
 printf 'Resuming world %s...\n' "${WORLD_NAME}"
 call_service "${CONTROL_SERVICE}" gz.msgs.WorldControl 'pause: false'
 paused=false
-trap - EXIT
+require_detached_coke
 
 printf 'Current %s pose:\n' "${MODEL_NAME}"
 gz model -m "${MODEL_NAME}" -p
 
+command_gripper "${GRIPPER_OPEN_POSITION}" Opening
+move_arm_to_ready
 command_gripper "${GRIPPER_CLOSED_POSITION}" Closing
+
+trap - EXIT
