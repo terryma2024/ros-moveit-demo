@@ -65,9 +65,12 @@ Gazebo Sim 8's DetachableJoint output is event-driven. The launch-lifetime
 `gazebo_attachment_state_relay` validates raw events on
 `/panda/coke_attached_event`, enforces the initial safe detach, and publishes
 fresh durable state on `/panda/coke_attached`. It publishes nothing while the
-state is unknown. `reset_coke.sh` therefore fails closed unless it observes a
-detached state or the caller explicitly supplies already-validated evidence
-with `EXPECTED_COKE_DETACHED=true`.
+state is unknown. `reset_world.sh` actively requests Gazebo detach, resets the
+physical Coke pose, invokes `reset_moveit_world` to detach and synchronize the
+Planning Scene Coke, and verifies durable Gazebo detach before initializing the
+arm and gripper. `EXPECTED_COKE_DETACHED=true` may supply already-validated
+initial evidence, but never skips the detach command, MoveIt reset, or final
+Gazebo validation.
 
 Key safety parameters are explicit and configuration-hashed. In particular,
 `motion_start_joint_tolerance` defaults to `0.010 rad`: every motion plan records

@@ -173,9 +173,14 @@ for ((run = 1; run <= runs; ++run)); do
   checkpoint="${run_root}/run_${run}_checkpoint.json"
   # The initial readiness probe, or the previous accepted run, established
   # detached state. DetachableJoint is event-driven and does not replay that
-  # fact to reset_coke.sh, so pass the already-asserted evidence explicitly.
-  EXPECTED_COKE_DETACHED=true "${package_root}/scripts/reset_coke.sh" \
+  # fact to reset_world.sh, so pass the already-asserted evidence explicitly.
+  EXPECTED_COKE_DETACHED=true "${package_root}/scripts/reset_world.sh" \
     >"${run_root}/run_${run}_reset.log" 2>&1
+  timeout 5 ros2 service call /get_planning_scene \
+    moveit_msgs/srv/GetPlanningScene '{components: {components: 28}}' \
+    >"${run_root}/run_${run}_reset_moveit_before_setup.txt" 2>&1
+  python3 "${script_dir}/assert_reset_moveit_scene.py" \
+    "${run_root}/run_${run}_reset_moveit_before_setup.txt"
   timeout 15 ros2 run panda_gazebo_demo planning_scene_setup \
     >"${run_root}/run_${run}_planning_scene_reset.log" 2>&1
   wait_until 10 'detached Coke at reset pose' verify_reset_world

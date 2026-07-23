@@ -38,7 +38,7 @@
 - Consumes: `IMoveItSceneAdapter::observe()`, `detachCoke()`, `Pose3d`, `ActionResult`.
 - Produces: `IMoveItSceneAdapter::upsertCokeWorldPose(const Pose3d &)`, and `MoveItWorldResetter::reset(const Pose3d &) -> ActionResult`.
 
-- [ ] **Step 1: Write failing coordinator tests**
+- [x] **Step 1: Write failing coordinator tests**
 
 Add a fake adapter and tests that require detach-before-upsert, already-detached idempotence,
 missing-object creation, detach command failure, observation timeout, and final 6DoF convergence:
@@ -72,7 +72,7 @@ TEST(MoveItWorldResetter, RejectsNonConvergentScene)
 }
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -83,7 +83,7 @@ colcon build --packages-select panda_gazebo_demo --symlink-install \
 
 Expected: compilation fails because `MoveItWorldResetter` and `upsertCokeWorldPose` do not exist.
 
-- [ ] **Step 3: Implement the coordinator and adapter upsert**
+- [x] **Step 3: Implement the coordinator and adapter upsert**
 
 Define the interface and coordinator:
 
@@ -106,7 +106,7 @@ Implement `MoveItSceneAdapter::upsertCokeWorldPose()` so an existing world Coke 
 geometry and a missing Coke is created as a `CYLINDER` with height `0.122` and radius `0.033`.
 It rejects upsert while attached and requires `applyCollisionObject()` success.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -120,7 +120,7 @@ ctest --test-dir build/panda_gazebo_demo \
 
 Expected: all selected tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/panda_gazebo_demo/CMakeLists.txt \
@@ -145,7 +145,7 @@ git commit -m "feat: add MoveIt world reset coordinator"
 - Consumes: `MoveItSceneAdapter(node, planning_group, object_id)` and `MoveItWorldResetter::reset()`.
 - Produces: installed executable `ros2 run panda_gazebo_demo reset_moveit_world` with parameters `planning_group`, `object_id`, `timeout_seconds`, and `poll_interval_seconds`.
 
-- [ ] **Step 1: Write a failing installed-interface test**
+- [x] **Step 1: Write a failing installed-interface test**
 
 Add a CTest shell check that receives `$<TARGET_FILE:reset_moveit_world>`, requires an executable,
 and invokes the node's side-effect-free `--help` path:
@@ -157,7 +157,7 @@ grep -Fq 'reset_moveit_world [--ros-args ...]' "${output}" ||
   fail 'reset_moveit_world usage was not produced'
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -167,7 +167,7 @@ cmake --build build/panda_gazebo_demo --target reset_moveit_world
 
 Expected: fails with `No rule to make target 'reset_moveit_world'`.
 
-- [ ] **Step 3: Implement the node and CMake target**
+- [x] **Step 3: Implement the node and CMake target**
 
 The node handles plain `--help` before initializing ROS. Otherwise it constructs the real adapter,
 resolves the fixed pose, calls `reset()`, logs the failure code/message on error, and returns
@@ -184,7 +184,7 @@ return result.status == ActionStatus::SUCCEEDED ? EXIT_SUCCESS : EXIT_FAILURE;
 Link the target with `pick_place_core`, `pick_place_ros_adapters`, and `rclcpp`, install it with the
 other executables, and register `test_reset_moveit_world_cli`.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -197,7 +197,7 @@ ctest --test-dir build/panda_gazebo_demo \
 
 Expected: build and CLI test pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/panda_gazebo_demo/CMakeLists.txt \
@@ -221,7 +221,7 @@ git commit -m "feat: add MoveIt world reset command"
 - Consumes: Gazebo `/panda/detach_coke`, durable `/panda/coke_attached`, Gazebo control/set-pose services, ROS arm/gripper actions, and `ros2 run panda_gazebo_demo reset_moveit_world`.
 - Produces: installed script `reset_world.sh` and CTest `test_reset_world`.
 
-- [ ] **Step 1: Write the failing shell behavior test**
+- [x] **Step 1: Write the failing shell behavior test**
 
 The fake `gz` command stores attachment state in a file. Publishing detach changes it to detached
 unless `FAKE_DETACH_CONVERGES=false`. The fake `ros2` command supports the MoveIt helper and returns
@@ -242,7 +242,7 @@ open_line="$(grep -n 'position: 0.04' "${command_log}" | head -1 | cut -d: -f1)"
 Add negative cases proving detach non-convergence and MoveIt reset failure produce nonzero status
 and no arm/gripper goals.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -253,7 +253,7 @@ bash src/panda_gazebo_demo/test/scripts/test_reset_world.sh \
 
 Expected: fails because the old script rejects attached Coke and never invokes the MoveIt helper.
 
-- [ ] **Step 3: Implement `reset_world.sh` and migrate CTest**
+- [x] **Step 3: Implement `reset_world.sh` and migrate CTest**
 
 Use this required orchestration order:
 
@@ -277,7 +277,7 @@ command_gripper "${GRIPPER_CLOSED_POSITION}" Closing
 
 Delete both old filenames. Rename the CTest and pass the new script path.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -291,7 +291,7 @@ ctest --test-dir build/panda_gazebo_demo -R '^test_reset_world$' --output-on-fai
 
 Expected: shell fixture and CTest pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A src/panda_gazebo_demo/scripts src/panda_gazebo_demo/test/scripts \
@@ -304,6 +304,11 @@ git commit -m "feat: reset Gazebo and MoveIt worlds together"
 ### Task 4: Migrate callers and verify the real reset
 
 **Files:**
+- Modify: `src/panda_gazebo_demo/CMakeLists.txt`
+- Modify: `src/panda_gazebo_demo/scripts/reset_world.sh`
+- Modify: `src/panda_gazebo_demo/test/scripts/test_reset_world.sh`
+- Create: `src/panda_gazebo_demo/test/headless/assert_reset_moveit_scene.py`
+- Create: `src/panda_gazebo_demo/test/headless/test_assert_reset_moveit_scene.sh`
 - Modify: `src/panda_gazebo_demo/test/headless/run_pick_place_e2e.sh`
 - Modify: `src/panda_gazebo_demo/test/headless/run_plan_only_resume_matrix.sh`
 - Modify: `src/panda_gazebo_demo/test/headless/run_recovery_scenarios.sh`
@@ -315,7 +320,7 @@ git commit -m "feat: reset Gazebo and MoveIt worlds together"
 - Consumes: `reset_world.sh` and independent Gazebo/MoveIt snapshot validators.
 - Produces: no active caller of `reset_coke.sh`, and retained real headless reset evidence.
 
-- [ ] **Step 1: Add a failing migration assertion**
+- [x] **Step 1: Add a failing migration assertion**
 
 Before replacing callers, run:
 
@@ -328,14 +333,18 @@ fi
 
 Expected: fails and prints every remaining active caller.
 
-- [ ] **Step 2: Replace active references and update semantics documentation**
+- [x] **Step 2: Replace active references and update semantics documentation**
 
 All harnesses call `${package_root}/scripts/reset_world.sh`. README and complete-state-machine
 documents state that reset actively detaches Gazebo, detaches MoveIt, synchronizes the canonical
 pose, then returns the arm/gripper to their initial state. Historical reset design/plan documents
 remain unchanged as historical records.
 
-- [ ] **Step 3: Run targeted static and package verification**
+Code review additionally requires all ROS/Gazebo interfaces to be preflighted before mutations,
+Gazebo Coke 6DoF convergence to gate robot motion, and an independent Planning Scene assertion
+immediately after `reset_world.sh` and before `planning_scene_setup`.
+
+- [x] **Step 3: Run targeted static and package verification**
 
 Run:
 
@@ -355,7 +364,7 @@ colcon test-result --test-result-base build/panda_gazebo_demo/test_results --ver
 
 Expected: all tests pass with zero failures; read-only uncrustify and explicit cppcheck pass.
 
-- [ ] **Step 4: Run one real headless reset and inspect independent facts**
+- [x] **Step 4: Run one real headless reset and inspect independent facts**
 
 Launch headless Gazebo/MoveIt, establish an attached Coke, then run `reset_world.sh`. Capture:
 
@@ -370,7 +379,7 @@ timeout 5 ros2 service call /get_planning_scene \
 Expected: Gazebo detached, no MoveIt attached Coke, one MoveIt world Coke at the canonical 6DoF
 pose, closed/stationary fingers, ready arm, and cross-world consistency.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/panda_gazebo_demo/test/headless src/panda_gazebo_demo/README.md \

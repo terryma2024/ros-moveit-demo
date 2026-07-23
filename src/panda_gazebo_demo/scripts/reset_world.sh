@@ -19,6 +19,10 @@ MOVEIT_RESET_PACKAGE="${MOVEIT_RESET_PACKAGE:-panda_gazebo_demo}"
 MOVEIT_RESET_EXECUTABLE="${MOVEIT_RESET_EXECUTABLE:-reset_moveit_world}"
 MOVEIT_RESET_TIMEOUT_SECONDS="${MOVEIT_RESET_TIMEOUT_SECONDS:-10}"
 EXPECTED_COKE_DETACHED="${EXPECTED_COKE_DETACHED:-false}"
+GAZEBO_RESET_POSITION_TOLERANCE="${GAZEBO_RESET_POSITION_TOLERANCE:-0.002}"
+GAZEBO_RESET_ORIENTATION_TOLERANCE_RAD="${GAZEBO_RESET_ORIENTATION_TOLERANCE_RAD:-0.02}"
+GAZEBO_POSE_OBSERVATION_ATTEMPTS="${GAZEBO_POSE_OBSERVATION_ATTEMPTS:-30}"
+GAZEBO_POSE_POLL_INTERVAL_SECONDS="${GAZEBO_POSE_POLL_INTERVAL_SECONDS:-0.1}"
 
 CONTROL_SERVICE="/world/${WORLD_NAME}/control"
 SET_POSE_SERVICE="/world/${WORLD_NAME}/set_pose"
@@ -152,6 +156,103 @@ reset_moveit_world() {
   fi
 }
 
+preflight_ros_interfaces() {
+  local action_list
+  local topic_list
+
+  action_list="$(ros2 action list)"
+  if ! grep -Fxq "${ARM_ACTION}" <<<"${action_list}"; then
+    printf 'Arm trajectory action not found: %s\n' "${ARM_ACTION}" >&2
+    return 1
+  fi
+  if ! grep -Fxq "${GRIPPER_ACTION}" <<<"${action_list}"; then
+    printf 'Gripper action not found: %s\n' "${GRIPPER_ACTION}" >&2
+    return 1
+  fi
+
+  topic_list="$(gz topic -l)"
+  if ! grep -Fxq "${GAZEBO_DETACH_TOPIC}" <<<"${topic_list}"; then
+    printf 'Gazebo Coke detach topic not found: %s\n' \
+      "${GAZEBO_DETACH_TOPIC}" >&2
+    return 1
+  fi
+  if ! grep -Fxq "${ATTACHMENT_OUTPUT_TOPIC}" <<<"${topic_list}"; then
+    printf 'Gazebo Coke attachment topic not found: %s\n' \
+      "${ATTACHMENT_OUTPUT_TOPIC}" >&2
+    return 1
+  fi
+
+  if ! timeout "${MOVEIT_RESET_TIMEOUT_SECONDS}" \
+      ros2 run "${MOVEIT_RESET_PACKAGE}" "${MOVEIT_RESET_EXECUTABLE}" --help \
+      >/dev/null
+  then
+    printf 'MoveIt world reset helper is unavailable.\n' >&2
+    return 1
+  fi
+}
+
+gazebo_pose_is_canonical() {
+  local pose="$1"
+
+  python3 - "${pose}" "${GAZEBO_RESET_POSITION_TOLERANCE}" \
+    "${GAZEBO_RESET_ORIENTATION_TOLERANCE_RAD}" <<'PY'
+import math
+import re
+import sys
+
+text = sys.argv[1]
+position_tolerance = float(sys.argv[2])
+orientation_tolerance = float(sys.argv[3])
+match = re.search(
+    r"Pose \[ XYZ \(m\) \] \[ RPY \(rad\) \]:\s*"
+    r"\[\s*([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s*\]\s*"
+    r"\[\s*([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s*\]",
+    text,
+)
+if not match:
+    raise SystemExit(1)
+
+x, y, z, roll, pitch, yaw = map(float, match.groups())
+values = (x, y, z, roll, pitch, yaw, position_tolerance, orientation_tolerance)
+if not all(math.isfinite(value) for value in values):
+    raise SystemExit(1)
+
+cr, sr = math.cos(roll / 2.0), math.sin(roll / 2.0)
+cp, sp = math.cos(pitch / 2.0), math.sin(pitch / 2.0)
+cy, sy = math.cos(yaw / 2.0), math.sin(yaw / 2.0)
+qw = cr * cp * cy + sr * sp * sy
+orientation_error = 2.0 * math.acos(min(1.0, abs(qw)))
+position_error = math.dist((x, y, z), (0.3, 0.0, 0.836))
+raise SystemExit(
+    0
+    if position_error <= position_tolerance
+    and orientation_error <= orientation_tolerance
+    else 1
+)
+PY
+}
+
+require_canonical_gazebo_pose() {
+  local attempt
+  local pose=''
+
+  for ((attempt = 1; attempt <= GAZEBO_POSE_OBSERVATION_ATTEMPTS; ++attempt)); do
+    if pose="$(gz model -m "${MODEL_NAME}" -p)" && \
+        gazebo_pose_is_canonical "${pose}"
+    then
+      printf 'Current %s pose:\n%s\n' "${MODEL_NAME}" "${pose}"
+      return 0
+    fi
+    if ((attempt < GAZEBO_POSE_OBSERVATION_ATTEMPTS)); then
+      sleep "${GAZEBO_POSE_POLL_INTERVAL_SECONDS}"
+    fi
+  done
+
+  printf 'Gazebo %s did not converge to the canonical 6D pose. Last observation:\n%s\n' \
+    "${MODEL_NAME}" "${pose}" >&2
+  return 1
+}
+
 trap resume_world EXIT
 
 if ! command -v gz >/dev/null 2>&1; then
@@ -170,6 +271,7 @@ if ! gz service -l | grep -Fxq "${SET_POSE_SERVICE}"; then
   printf 'Gazebo set_pose service not found: %s\n' "${SET_POSE_SERVICE}" >&2
   exit 1
 fi
+preflight_ros_interfaces
 
 request_gazebo_detach
 if [[ "${EXPECTED_COKE_DETACHED}" == true ]]; then
@@ -190,9 +292,7 @@ printf 'Resuming world %s...\n' "${WORLD_NAME}"
 call_service "${CONTROL_SERVICE}" gz.msgs.WorldControl 'pause: false'
 paused=false
 require_detached_coke
-
-printf 'Current %s pose:\n' "${MODEL_NAME}"
-gz model -m "${MODEL_NAME}" -p
+require_canonical_gazebo_pose
 
 command_gripper "${GRIPPER_OPEN_POSITION}" Opening
 move_arm_to_ready
