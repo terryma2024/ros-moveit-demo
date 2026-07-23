@@ -98,6 +98,22 @@ std::shared_ptr<const PickPlaceTargetPolicy> targetPolicy()
   return std::make_shared<FixedPickPlaceTargetPolicy>();
 }
 
+PickPlaceContractConfig terminalConfig()
+{
+  PickPlaceContractConfig config;
+  config.ready_joint_positions = {{"panda_joint1", 0.0}};
+  config.gripper_close_position = 0.0;
+  config.gripper_close_tolerance = 0.004;
+  return config;
+}
+
+void setTerminalRobot(WorldSnapshot & snapshot)
+{
+  snapshot.joint_positions["panda_joint1"] = 0.0;
+  snapshot.joint_positions["panda_finger_joint1"] = 0.0;
+  snapshot.joint_positions["panda_finger_joint2"] = 0.0;
+}
+
 class MetriclessFailingContract final : public Contract
 {
 public:
@@ -259,9 +275,10 @@ TEST(ForwardContracts, RetreatRequiresOpenDetachedSynchronizedWorld)
 
 TEST(ForwardContracts, DoneRequiresAllFinalInvariants)
 {
-  const auto contract = makeRetreatToDoneContract(targetPolicy(), {});
+  const auto contract = makeRetreatToDoneContract(targetPolicy(), terminalConfig());
   const auto before = detachedSnapshot(kPlace, kCokePlace, true);
-  auto after = detachedSnapshot(kAbovePlace, kCokePlace, true);
+  auto after = detachedSnapshot(kAbovePlace, kCokePlace, false);
+  setTerminalRobot(after);
 
   EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
 
@@ -271,12 +288,13 @@ TEST(ForwardContracts, DoneRequiresAllFinalInvariants)
 
 TEST(ForwardContracts, DoneRejectsTippedCokeAtCorrectPosition)
 {
-  const auto contract = makeRetreatToDoneContract(targetPolicy(), {});
+  const auto contract = makeRetreatToDoneContract(targetPolicy(), terminalConfig());
   const auto before = detachedSnapshot(kPlace, kCokePlace, true);
   auto tipped = kCokePlace;
   tipped.qx = 0.258819;
   tipped.qw = 0.965926;
-  auto after = detachedSnapshot(kAbovePlace, tipped, true);
+  auto after = detachedSnapshot(kAbovePlace, tipped, false);
+  setTerminalRobot(after);
 
   const auto result = contract->validate(before, after, succeeded());
 

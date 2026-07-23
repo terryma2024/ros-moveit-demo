@@ -19,6 +19,7 @@ struct PickPlaceRuntimeDependencies
 {
   std::shared_ptr<IMoveItMotionAdapter> motion;
   std::shared_ptr<IGripperCommandAdapter> gripper;
+  std::shared_ptr<IWorldObserver> observer;
   std::shared_ptr<IMoveItSceneAdapter> moveit_scene;
   std::shared_ptr<IStateExecutor> gazebo_attach;
   std::shared_ptr<IStateExecutor> gazebo_detach;
@@ -34,7 +35,11 @@ struct PickPlaceRuntimeConfig
   GripperLimits gripper{};
   double gripper_open_position{0.04};
   double gripper_close_position{0.0};
+  double gripper_close_tolerance{0.004};
   double gripper_max_effort{0.0};
+  std::string ready_named_target{"ready"};
+  std::map<std::string, double> ready_joint_positions;
+  double ready_joint_tolerance{0.010};
   double planning_scene_timeout_seconds{2.0};
   double state_poll_interval_seconds{0.05};
 };

@@ -7,6 +7,7 @@
 #include "panda_gazebo_demo/pick_place/gripper_state_executor.hpp"
 #include "panda_gazebo_demo/pick_place/motion_state_action.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_scene_executor.hpp"
+#include "panda_gazebo_demo/pick_place/ready_retreat_action.hpp"
 #include "panda_gazebo_demo/pick_place/recovery_contracts.hpp"
 
 namespace panda_gazebo_demo::pick_place
@@ -14,20 +15,18 @@ namespace panda_gazebo_demo::pick_place
 namespace
 {
 
-constexpr std::array<MotionStateConfig, 10> kMotionConfigs{{
+constexpr std::array<MotionStateConfig, 8> kMotionConfigs{{
   {State::MOVE_ABOVE_OBJECT, State::DESCEND, MotionKind::POSE, false},
   {State::DESCEND, State::CLOSE_GRIPPER, MotionKind::CARTESIAN_DOWN, false},
   {State::LIFT, State::MOVE_ABOVE_PLACE, MotionKind::CARTESIAN_UP, true},
   {State::MOVE_ABOVE_PLACE, State::DESCEND_TO_PLACE, MotionKind::POSE, true},
   {State::DESCEND_TO_PLACE, State::OPEN_GRIPPER, MotionKind::CARTESIAN_DOWN, true},
-  {State::RETREAT, State::DONE, MotionKind::CARTESIAN_UP, false},
   {State::RECOVER_LIFT_TO_SAFE_HEIGHT, State::RECOVER_MOVE_ABOVE_PICK,
     MotionKind::CARTESIAN_UP, true, true},
   {State::RECOVER_MOVE_ABOVE_PICK, State::RECOVER_DESCEND_TO_PICK,
     MotionKind::POSE, true, true},
   {State::RECOVER_DESCEND_TO_PICK, State::RECOVER_OPEN_GRIPPER,
     MotionKind::CARTESIAN_DOWN, true, true},
-  {State::RECOVER_RETREAT, State::ERROR, MotionKind::CARTESIAN_UP, false, true},
 }};
 
 void registerMotionActions(
@@ -43,6 +42,33 @@ void registerMotionActions(
     runtime.plan_validators.registerValidator(motion_config.state,
       std::make_shared<MotionPlanValidator>(
         motion_config, config.target_policy, config.motion_plan_limits));
+  }
+}
+
+void registerReadyRetreatActions(
+  PickPlaceRuntimeRegistries & runtime,
+  const PickPlaceRuntimeDependencies & dependencies,
+  const PickPlaceRuntimeConfig & config)
+{
+  if (!dependencies.motion || config.ready_joint_positions.empty()) {
+    return;
+  }
+  for (const auto & [state, next_state] : std::array{
+        std::pair{State::RETREAT, State::DONE},
+        std::pair{State::RECOVER_RETREAT, State::ERROR}})
+  {
+    const ReadyRetreatConfig action_config{state, next_state, config.ready_named_target,
+      config.ready_joint_positions, config.ready_joint_tolerance, config.gripper_close_position,
+      config.gripper_max_effort};
+    auto action = std::make_shared<ReadyRetreatAction>(
+      dependencies.motion, dependencies.gripper, dependencies.observer, action_config);
+    runtime.actions.registerPlanner(state, action);
+    runtime.plan_validators.registerValidator(state,
+      std::make_shared<NamedTargetPlanValidator>(state, next_state, config.ready_named_target,
+        config.ready_joint_positions, config.ready_joint_tolerance));
+    if (dependencies.gripper && dependencies.observer) {
+      runtime.actions.registerExecutor(state, std::move(action));
+    }
   }
 }
 
@@ -139,6 +165,7 @@ PickPlaceRuntimeRegistries makePickPlaceRuntimeRegistries(
 {
   PickPlaceRuntimeRegistries runtime;
   registerMotionActions(runtime, dependencies, config);
+  registerReadyRetreatActions(runtime, dependencies, config);
   registerGripperActions(runtime, dependencies, config);
   registerGazeboActions(runtime, dependencies);
   registerMoveItSceneActions(runtime, dependencies, config);

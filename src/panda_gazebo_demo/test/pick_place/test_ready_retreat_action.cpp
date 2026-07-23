@@ -136,7 +136,7 @@ TEST(ReadyRetreatAction, ExecutesReadyArmThenObservesThenClosesGripper)
 
   EXPECT_EQ(result.status, ActionStatus::SUCCEEDED);
   EXPECT_EQ(*events, (std::vector<std::string>{
-      "motion.plan", "motion.execute", "observer.observe", "gripper.command"}));
+        "motion.plan", "motion.execute", "observer.observe", "gripper.command"}));
   ASSERT_EQ(gripper->targets.size(), 1U);
   EXPECT_DOUBLE_EQ(gripper->targets.front().first, 0.0);
 }

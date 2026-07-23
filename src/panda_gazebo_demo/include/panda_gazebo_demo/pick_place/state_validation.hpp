@@ -38,6 +38,9 @@ struct AttachmentExpectation
   const WorldSnapshot & snapshot, const GripperLimits & limits);
 [[nodiscard]] ValidationResult validateGripperGrasp(
   const WorldSnapshot & snapshot, const GripperLimits & limits);
+[[nodiscard]] ValidationResult validateGripperClosed(
+  const WorldSnapshot & snapshot, double target_position, double tolerance,
+  const GripperLimits & limits);
 [[nodiscard]] ValidationResult validateAttachmentState(
   const WorldSnapshot & snapshot, bool gazebo_attached, bool moveit_attached);
 

@@ -77,6 +77,14 @@ TEST(GripperValidation, RejectsAsymmetricFingerPositions)
   EXPECT_EQ("GRIPPER_FINGERS_ASYMMETRIC", result.failures.front().code);
 }
 
+TEST(GripperValidation, AcceptsEmptyGripperClosedAtCommandPosition)
+{
+  const auto result = pick_place::validateGripperClosed(
+    gripperSnapshot(0.001, 0.001, 0.0, 0.0), 0.0, 0.004, {});
+
+  EXPECT_TRUE(result.ok);
+}
+
 TEST(AttachmentValidation, DistinguishesAllFourAttachmentCombinations)
 {
   constexpr std::array combinations{

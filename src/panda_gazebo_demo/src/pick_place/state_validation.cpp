@@ -114,6 +114,35 @@ ValidationResult validateGripperGrasp(
   return result;
 }
 
+ValidationResult validateGripperClosed(
+  const WorldSnapshot & snapshot, double target_position, double tolerance,
+  const GripperLimits & limits)
+{
+  const auto evidence = gripperEvidence(snapshot);
+  if (!complete(evidence)) {
+    return incompleteGripperEvidence();
+  }
+  auto result = baseResult(evidence);
+  if (!std::isfinite(target_position) || !std::isfinite(tolerance) || tolerance <= 0.0 ||
+    std::abs(*evidence.finger1_position - target_position) > tolerance ||
+    std::abs(*evidence.finger2_position - target_position) > tolerance)
+  {
+    result.failures.push_back({FailureCategory::GRIPPER,
+        "GRIPPER_CLOSED_POSITION_OUT_OF_RANGE",
+        "Both finger positions must be within the configured closed range", {}});
+  }
+  if (result.metrics.at("finger_symmetry_error") > limits.symmetry_tolerance) {
+    result.failures.push_back({FailureCategory::GRIPPER, "GRIPPER_FINGERS_ASYMMETRIC",
+        "Finger positions differ by more than the configured tolerance", {}});
+  }
+  if (!stopped(evidence, limits)) {
+    result.failures.push_back({FailureCategory::GRIPPER, "GRIPPER_NOT_STATIONARY",
+        "Both finger velocities must be below the stop threshold", {}});
+  }
+  result.ok = result.failures.empty();
+  return result;
+}
+
 ValidationResult validateAttachmentState(
   const WorldSnapshot & snapshot, bool gazebo_attached, bool moveit_attached)
 {

@@ -22,6 +22,8 @@ struct PickPlaceParameters
   double cartesian_min_fraction{0.99};
   double joint_jump_threshold{0.20};
   double motion_start_joint_tolerance{0.010};
+  std::string ready_named_target{"ready"};
+  double ready_joint_tolerance{0.010};
   double tcp_position_tolerance{0.020};
   double tcp_orientation_tolerance_rad{0.0872665};
   double coke_position_tolerance{0.010};
@@ -29,6 +31,7 @@ struct PickPlaceParameters
   double gripper_open_position{0.040};
   double gripper_open_min_position{0.038};
   double gripper_close_position{0.000};
+  double gripper_close_tolerance{0.004};
   double gripper_grasp_min_position{0.028};
   double gripper_grasp_max_position{0.037};
   double gripper_symmetry_tolerance{0.003};

@@ -1,8 +1,10 @@
 #pragma once
 
+#include <map>
 #include <memory>
 
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
+#include "panda_gazebo_demo/pick_place/named_target_validation.hpp"
 #include "panda_gazebo_demo/pick_place/state_validation.hpp"
 #include "panda_gazebo_demo/pick_place/transition_contract.hpp"
 
@@ -18,6 +20,10 @@ struct PickPlaceContractConfig
   double carried_relative_position_tolerance{0.003};
   double carried_relative_orientation_tolerance_rad{0.035};
   GripperLimits gripper{};
+  std::map<std::string, double> ready_joint_positions;
+  double ready_joint_tolerance{0.010};
+  double gripper_close_position{0.0};
+  double gripper_close_tolerance{0.004};
 };
 
 using Contract = TransitionContractRegistry::ITransitionContract;

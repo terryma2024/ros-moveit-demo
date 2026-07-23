@@ -94,6 +94,15 @@ public:
   }
 };
 
+class FakeObserver final : public IWorldObserver
+{
+public:
+  ObservationResult observe() override
+  {
+    return {WorldSnapshot{}, std::nullopt};
+  }
+};
+
 const std::array<State, 22> kActionStates{{
   State::PREPARE_OPEN_GRIPPER, State::MOVE_ABOVE_OBJECT, State::DESCEND,
   State::CLOSE_GRIPPER, State::ATTACH_GAZEBO, State::ATTACH_MOVEIT, State::LIFT,
@@ -125,6 +134,7 @@ TEST(RegistrationCoverage, FactoryBuildsTheCompleteRuntimeGraph)
   PickPlaceRuntimeDependencies dependencies;
   dependencies.motion = std::make_shared<FakeMotionAdapter>();
   dependencies.gripper = std::make_shared<FakeGripperAdapter>();
+  dependencies.observer = std::make_shared<FakeObserver>();
   dependencies.moveit_scene = std::make_shared<FakeSceneAdapter>();
   dependencies.gazebo_attach = gazebo_attach;
   dependencies.gazebo_detach = gazebo_detach;
@@ -132,6 +142,7 @@ TEST(RegistrationCoverage, FactoryBuildsTheCompleteRuntimeGraph)
   PickPlaceRuntimeConfig config;
   config.target_policy = std::make_shared<FixedPickPlaceTargetPolicy>();
   config.required_world_objects = {"table", "coke"};
+  config.ready_joint_positions = {{"panda_joint1", 0.0}};
 
   const auto runtime = makePickPlaceRuntimeRegistries(dependencies, config);
 
@@ -194,6 +205,8 @@ TEST(RuntimeParameters, DefaultsAreValidAndEveryBehaviorParameterChangesTheHash)
   add([](auto & value) {value.cartesian_min_fraction = 0.98;});
   add([](auto & value) {value.joint_jump_threshold = 0.21;});
   add([](auto & value) {value.motion_start_joint_tolerance = 0.011;});
+  add([](auto & value) {value.ready_named_target = "other_ready";});
+  add([](auto & value) {value.ready_joint_tolerance = 0.011;});
   add([](auto & value) {value.tcp_position_tolerance = 0.021;});
   add([](auto & value) {value.tcp_orientation_tolerance_rad = 0.08;});
   add([](auto & value) {value.coke_position_tolerance = 0.011;});
@@ -201,6 +214,7 @@ TEST(RuntimeParameters, DefaultsAreValidAndEveryBehaviorParameterChangesTheHash)
   add([](auto & value) {value.gripper_open_position = 0.039;});
   add([](auto & value) {value.gripper_open_min_position = 0.037;});
   add([](auto & value) {value.gripper_close_position = 0.001;});
+  add([](auto & value) {value.gripper_close_tolerance = 0.003;});
   add([](auto & value) {value.gripper_grasp_min_position = 0.027;});
   add([](auto & value) {value.gripper_grasp_max_position = 0.036;});
   add([](auto & value) {value.gripper_symmetry_tolerance = 0.002;});
@@ -242,6 +256,12 @@ TEST(RuntimeParameters, RejectsNonFiniteAndUnsafeRanges)
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
   parameters = {};
   parameters.motion_start_joint_tolerance = 0.0;
+  EXPECT_TRUE(validatePickPlaceParameters(parameters));
+  parameters = {};
+  parameters.ready_named_target.clear();
+  EXPECT_TRUE(validatePickPlaceParameters(parameters));
+  parameters = {};
+  parameters.gripper_close_tolerance = 0.0;
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
   parameters = {};
   parameters.recovery_safe_height =
