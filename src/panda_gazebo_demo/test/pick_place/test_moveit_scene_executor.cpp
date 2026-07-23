@@ -56,6 +56,12 @@ public:
     return sync_result;
   }
 
+  ActionResult upsertCokeWorldPose(const Pose3d & pose) override
+  {
+    synced_pose = pose;
+    return sync_result;
+  }
+
   std::optional<MoveItSceneState> observe() override
   {
     ++observe_calls;

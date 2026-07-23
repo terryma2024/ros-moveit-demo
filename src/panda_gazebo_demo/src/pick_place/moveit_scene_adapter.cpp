@@ -12,6 +12,7 @@
 #include <moveit/planning_scene_interface/planning_scene_interface.hpp>
 #include <moveit_msgs/msg/collision_object.hpp>
 #include <rclcpp/node.hpp>
+#include <shape_msgs/msg/solid_primitive.hpp>
 
 #include "panda_gazebo_demo/pick_place/moveit_world_object_pose.hpp"
 
@@ -105,6 +106,40 @@ ActionResult MoveItSceneAdapter::syncCokeWorldPose(const Pose3d & pose)
   if (!impl_->planning_scene.applyCollisionObject(synchronized)) {
     return sceneFailure("MOVEIT_SYNC_APPLY_FAILED",
       "Failed to apply the synchronized Coke world pose");
+  }
+  return {ActionStatus::SUCCEEDED, std::nullopt};
+}
+
+ActionResult MoveItSceneAdapter::upsertCokeWorldPose(const Pose3d & pose)
+{
+  if (impl_->planning_scene.getAttachedObjects({impl_->object_id}).count(impl_->object_id) != 0) {
+    return sceneFailure("MOVEIT_UPSERT_OBJECT_ATTACHED",
+      "Cannot upsert Coke while it is attached in MoveIt");
+  }
+
+  auto objects = impl_->planning_scene.getObjects({impl_->object_id});
+  const auto existing = objects.find(impl_->object_id);
+  moveit_msgs::msg::CollisionObject upserted;
+  if (existing != objects.end()) {
+    upserted = existing->second;
+  } else {
+    upserted.id = impl_->object_id;
+    shape_msgs::msg::SolidPrimitive primitive;
+    primitive.type = shape_msgs::msg::SolidPrimitive::CYLINDER;
+    primitive.dimensions.resize(2);
+    primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_HEIGHT] = 0.122;
+    primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_RADIUS] = 0.033;
+    upserted.primitives.push_back(primitive);
+    geometry_msgs::msg::Pose local_pose;
+    local_pose.orientation.w = 1.0;
+    upserted.primitive_poses.push_back(local_pose);
+  }
+  upserted.header.frame_id = "world";
+  upserted.pose = toMessage(pose);
+  upserted.operation = moveit_msgs::msg::CollisionObject::ADD;
+  if (!impl_->planning_scene.applyCollisionObject(upserted)) {
+    return sceneFailure("MOVEIT_UPSERT_APPLY_FAILED",
+      "Failed to apply the canonical Coke world pose");
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }

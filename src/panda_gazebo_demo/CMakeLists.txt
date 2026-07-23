@@ -64,6 +64,7 @@ add_library(
   src/pick_place/runtime_parameters.cpp
   src/pick_place/common_resume_validator.cpp
   src/pick_place/moveit_world_object_pose.cpp
+  src/pick_place/moveit_world_resetter.cpp
   src/pick_place/pick_place_target_policy.cpp
   src/pick_place/world_observer.cpp
 )
@@ -109,6 +110,7 @@ ament_target_dependencies(
   moveit_core
   moveit_msgs
   moveit_ros_planning_interface
+  shape_msgs
 )
 
 add_executable(
@@ -255,6 +257,14 @@ if(BUILD_TESTING)
   )
   if(TARGET test_moveit_scene_executor)
     target_link_libraries(test_moveit_scene_executor pick_place_core)
+  endif()
+
+  ament_add_gtest(
+    test_moveit_world_resetter
+    test/pick_place/test_moveit_world_resetter.cpp
+  )
+  if(TARGET test_moveit_world_resetter)
+    target_link_libraries(test_moveit_world_resetter pick_place_core)
   endif()
 
   ament_add_gtest(
