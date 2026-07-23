@@ -62,6 +62,7 @@ add_library(
   src/pick_place/transition_table.cpp
   src/pick_place/runner.cpp
   src/pick_place/runtime_parameters.cpp
+  src/pick_place/simulation_session_id.cpp
   src/pick_place/common_resume_validator.cpp
   src/pick_place/moveit_world_object_pose.cpp
   src/pick_place/moveit_world_resetter.cpp
@@ -149,6 +150,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_pick_place_core test/pick_place/test_pick_place_core.cpp)
   if(TARGET test_pick_place_core)
     target_link_libraries(test_pick_place_core pick_place_core pick_place_ros_adapters)
+  endif()
+
+  ament_add_gtest(
+    test_simulation_session_id
+    test/pick_place/test_simulation_session_id.cpp
+  )
+  if(TARGET test_simulation_session_id)
+    target_link_libraries(test_simulation_session_id pick_place_core)
   endif()
 
   ament_add_gtest(test_pick_place_targets test/pick_place/test_pick_place_targets.cpp)
