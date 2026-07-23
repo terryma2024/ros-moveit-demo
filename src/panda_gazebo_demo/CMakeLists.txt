@@ -324,11 +324,11 @@ if(BUILD_TESTING)
   endif()
 
   add_test(
-    NAME test_reset_coke
+    NAME test_reset_world
     COMMAND
       bash
-      ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_reset_coke.sh
-      ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reset_coke.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_reset_world.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reset_world.sh
   )
 
   add_test(
@@ -392,6 +392,11 @@ install(
 )
 
 install(DIRECTORY include/ DESTINATION include)
+
+install(
+  PROGRAMS scripts/reset_world.sh
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(
   DIRECTORY
