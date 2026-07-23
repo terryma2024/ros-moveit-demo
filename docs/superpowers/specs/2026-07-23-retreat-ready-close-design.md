@@ -62,7 +62,8 @@ Both postconditions require:
 
 - a successful composite action and a fresh stationary observation;
 - arm joints within `ready_joint_tolerance` of the resolved named target;
-- both gripper fingers within the configured closed range;
+- both gripper fingers within the configured closed range, centered on the configured close command
+  position and bounded by a new explicit close tolerance;
 - Coke detached in both worlds, stable/supported, and present/synchronized in the Planning Scene.
 
 The normal contract additionally preserves its place-completion checks. The recovery contract
@@ -89,6 +90,8 @@ Tests are written before implementation and cover:
   closed; a valid `ready` plan passes;
 - action ordering: execute arm-to-ready before close-gripper; plan-only never commands the
   gripper; arm failure prevents close-gripper;
+- closed-gripper validation accepts the configured empty-gripper close position and does not reuse
+  the distinct object-grasp range;
 - forward and recovery contracts: preconditions still demand an open, detached world; postconditions
   demand ready joints and closed fingers; recovery still has `ERROR` as its terminal state;
 - focused and complete package tests, read-only uncrustify, and `git diff --check`.
