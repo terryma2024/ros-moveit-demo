@@ -11,6 +11,7 @@ PACKAGE_DIR = Path(__file__).resolve().parents[1]
 GAZEBO_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_gazebo.launch.py'
 CONTROLLER_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_controller.launch.py'
 DISPLAY_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_display.launch.py'
+MOVEIT_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_moveit.launch.py'
 
 
 def load_launch_description(path):
@@ -53,6 +54,18 @@ def test_gazebo_uses_canonical_base_height_default():
         declared_argument(GAZEBO_LAUNCH, 'base_height')
     )
     assert gazebo_default == '0.1899186'
+
+
+def test_moveit_uses_canonical_base_height_and_same_package_resources():
+    """MoveIt must use the same package-local model as the simulator."""
+    moveit_default = launch_default_text(
+        declared_argument(MOVEIT_LAUNCH, 'base_height')
+    )
+    assert moveit_default == '0.1899186'
+
+    launch_source = MOVEIT_LAUNCH.read_text()
+    assert 'package_name="so101_gazebo_demo"' in launch_source
+    assert 'lerobot_' not in launch_source
 
 
 def test_gazebo_launch_exposes_world_and_base_height():
