@@ -1,50 +1,500 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <limits>
+#include <string>
+#include <vector>
+
+#include <nlohmann/json.hpp>
+
 #include "so101_gazebo_demo/pick_place/checkpoint.hpp"
 #include "so101_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "so101_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "so101_gazebo_demo/pick_place/simulation_session_id.hpp"
 
-#include <filesystem>
-
 namespace pick_place = so101_gazebo_demo::pick_place;
+
+namespace
+{
+
+using Json = nlohmann::json;
+
+std::filesystem::path checkpointPath(const std::string & name)
+{
+  const auto path =
+    std::filesystem::temp_directory_path() / ("so101_checkpoint_v3_" + name + ".json");
+  std::filesystem::remove_all(path);
+  std::filesystem::remove(path.string() + ".tmp");
+  return path;
+}
+
+pick_place::Pose3d makePose(double offset)
+{
+  return {0.1 + offset, 0.2 + offset, 0.3 + offset, 0.0, 0.0, 0.0, 1.0};
+}
+
+pick_place::Checkpoint makeRecoveryCheckpoint()
+{
+  pick_place::Checkpoint checkpoint;
+  checkpoint.schema_version = 3;
+  checkpoint.run_id = "run-42";
+  checkpoint.sequence = 42;
+  checkpoint.source_mode = pick_place::RunMode::PLAN_ONLY;
+  checkpoint.phase = pick_place::CheckpointPhase::RECOVERY;
+  checkpoint.last_completed_state = pick_place::State::MOVE_ABOVE_PLACE;
+  checkpoint.failed_state = pick_place::State::DESCEND_TO_PLACE;
+  checkpoint.original_failure = pick_place::Failure{pick_place::FailureCategory::EXECUTION,
+                                                    "TRAJECTORY_ABORTED",
+                                                    "controller aborted",
+                                                    {{"path_error", 0.125}, {"goal_error", 0.25}}};
+  checkpoint.next_state = pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT;
+  checkpoint.expected.tcp_pose_world = makePose(0.0);
+  checkpoint.expected.gripper_open = true;
+  checkpoint.expected.joint_positions = {{"joint_a", -0.5}, {"joint_b", 0.75}};
+  checkpoint.expected.moveit_world_object_poses = {{"object", makePose(0.1)},
+                                                   {"table", makePose(0.2)}};
+  checkpoint.expected.moveit_coke_attached = false;
+  checkpoint.expected.gazebo_coke_pose_world = makePose(0.3);
+  checkpoint.expected.gazebo_coke_attached = true;
+  checkpoint.expected.gazebo_coke_stationary = true;
+  checkpoint.expected.required_world_objects = {"object", "table"};
+  checkpoint.configuration_hash = "configuration-sha256";
+  checkpoint.simulation_session_id = "simulation-session";
+  checkpoint.resumable = false;
+  return checkpoint;
+}
+
+pick_place::Checkpoint makeForwardCheckpointWithNullOptionals()
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.source_mode = pick_place::RunMode::EXECUTE;
+  checkpoint.phase = pick_place::CheckpointPhase::FORWARD;
+  checkpoint.last_completed_state = pick_place::State::DESCEND;
+  checkpoint.failed_state.reset();
+  checkpoint.original_failure.reset();
+  checkpoint.next_state = pick_place::State::CLOSE_GRIPPER;
+  checkpoint.expected.moveit_coke_attached.reset();
+  checkpoint.expected.gazebo_coke_pose_world.reset();
+  checkpoint.expected.gazebo_coke_attached.reset();
+  checkpoint.expected.gazebo_coke_stationary.reset();
+  checkpoint.resumable = true;
+  return checkpoint;
+}
+
+pick_place::WorldSnapshot snapshotFrom(const pick_place::Checkpoint & checkpoint)
+{
+  pick_place::WorldSnapshot snapshot;
+  snapshot.fresh = true;
+  snapshot.arm_stationary = true;
+  snapshot.gripper_open = checkpoint.expected.gripper_open;
+  snapshot.tcp_pose_world = checkpoint.expected.tcp_pose_world;
+  snapshot.joint_positions = checkpoint.expected.joint_positions;
+  snapshot.moveit_world_object_poses = checkpoint.expected.moveit_world_object_poses;
+  snapshot.moveit_coke_attached = checkpoint.expected.moveit_coke_attached;
+  snapshot.gazebo_coke_pose_world = checkpoint.expected.gazebo_coke_pose_world;
+  snapshot.gazebo_coke_attached = checkpoint.expected.gazebo_coke_attached;
+  snapshot.gazebo_coke_stationary = checkpoint.expected.gazebo_coke_stationary;
+  snapshot.simulation_session_id = checkpoint.simulation_session_id;
+  return snapshot;
+}
+
+Json readJson(const std::filesystem::path & path)
+{
+  std::ifstream input(path);
+  Json json;
+  input >> json;
+  return json;
+}
+
+void writeJson(const std::filesystem::path & path, const Json & json)
+{
+  std::ofstream output(path, std::ios::out | std::ios::trunc);
+  output << json.dump(2) << '\n';
+}
+
+void expectLoadFailure(const std::filesystem::path & path, const std::string & code)
+{
+  pick_place::FileCheckpointStore store(path);
+  const auto loaded = store.loadLatestCompatible();
+  EXPECT_FALSE(loaded.checkpoint);
+  ASSERT_TRUE(loaded.failure);
+  EXPECT_EQ(code, loaded.failure->code);
+}
+
+void expectPoseEqual(const pick_place::Pose3d & lhs, const pick_place::Pose3d & rhs)
+{
+  EXPECT_DOUBLE_EQ(lhs.x, rhs.x);
+  EXPECT_DOUBLE_EQ(lhs.y, rhs.y);
+  EXPECT_DOUBLE_EQ(lhs.z, rhs.z);
+  EXPECT_DOUBLE_EQ(lhs.qx, rhs.qx);
+  EXPECT_DOUBLE_EQ(lhs.qy, rhs.qy);
+  EXPECT_DOUBLE_EQ(lhs.qz, rhs.qz);
+  EXPECT_DOUBLE_EQ(lhs.qw, rhs.qw);
+}
+
+}  // namespace
 
 TEST(CheckpointV3, RequiresSchemaV3AndResumeSession)
 {
   pick_place::Checkpoint checkpoint;
   EXPECT_EQ(3U, checkpoint.schema_version);
-  const auto resume = pick_place::resolveSimulationSessionId(pick_place::RunMode::EXECUTE, true,
-                                                               "", 1);
+  const auto resume =
+    pick_place::resolveSimulationSessionId(pick_place::RunMode::EXECUTE, true, "", 1);
   EXPECT_FALSE(resume.value);
   EXPECT_FALSE(resume.error.empty());
 }
 
-TEST(CheckpointV3, FileStoreRoundTripsAndResumeValidatorBindsConfigurationAndSession)
+TEST(CheckpointV3, FullJsonRoundTripPreservesEveryCheckpointAndExpectedWorldField)
 {
-  const auto path = std::filesystem::temp_directory_path() / "so101_checkpoint_v3_test";
-  std::filesystem::remove(path);
+  const auto path = checkpointPath("full_round_trip");
   pick_place::FileCheckpointStore store(path);
-  pick_place::Checkpoint checkpoint;
-  checkpoint.run_id = "dry-run-boundary";
-  checkpoint.sequence = 7;
-  checkpoint.next_state = pick_place::State::ATTACH_MOVEIT;
-  checkpoint.configuration_hash = "config-a";
-  checkpoint.simulation_session_id = "session-a";
-  EXPECT_FALSE(store.commit(checkpoint));
+  const auto checkpoint = makeRecoveryCheckpoint();
+
+  ASSERT_FALSE(store.commit(checkpoint));
+  const auto loaded = store.loadLatestCompatible();
+
+  ASSERT_TRUE(loaded.checkpoint);
+  EXPECT_FALSE(loaded.failure);
+  EXPECT_EQ(checkpoint.schema_version, loaded.checkpoint->schema_version);
+  EXPECT_EQ(checkpoint.run_id, loaded.checkpoint->run_id);
+  EXPECT_EQ(checkpoint.sequence, loaded.checkpoint->sequence);
+  EXPECT_EQ(checkpoint.source_mode, loaded.checkpoint->source_mode);
+  EXPECT_EQ(checkpoint.phase, loaded.checkpoint->phase);
+  EXPECT_EQ(checkpoint.last_completed_state, loaded.checkpoint->last_completed_state);
+  EXPECT_EQ(checkpoint.failed_state, loaded.checkpoint->failed_state);
+  ASSERT_TRUE(loaded.checkpoint->original_failure);
+  EXPECT_EQ(checkpoint.original_failure->category, loaded.checkpoint->original_failure->category);
+  EXPECT_EQ(checkpoint.original_failure->code, loaded.checkpoint->original_failure->code);
+  EXPECT_EQ(checkpoint.original_failure->message, loaded.checkpoint->original_failure->message);
+  EXPECT_EQ(checkpoint.original_failure->metrics, loaded.checkpoint->original_failure->metrics);
+  EXPECT_EQ(checkpoint.next_state, loaded.checkpoint->next_state);
+  expectPoseEqual(checkpoint.expected.tcp_pose_world, loaded.checkpoint->expected.tcp_pose_world);
+  EXPECT_EQ(checkpoint.expected.gripper_open, loaded.checkpoint->expected.gripper_open);
+  EXPECT_EQ(checkpoint.expected.joint_positions, loaded.checkpoint->expected.joint_positions);
+  ASSERT_EQ(checkpoint.expected.moveit_world_object_poses.size(),
+            loaded.checkpoint->expected.moveit_world_object_poses.size());
+  for (const auto & [name, pose] : checkpoint.expected.moveit_world_object_poses) {
+    expectPoseEqual(pose, loaded.checkpoint->expected.moveit_world_object_poses.at(name));
+  }
+  EXPECT_EQ(checkpoint.expected.moveit_coke_attached,
+            loaded.checkpoint->expected.moveit_coke_attached);
+  ASSERT_TRUE(loaded.checkpoint->expected.gazebo_coke_pose_world);
+  expectPoseEqual(*checkpoint.expected.gazebo_coke_pose_world,
+                  *loaded.checkpoint->expected.gazebo_coke_pose_world);
+  EXPECT_EQ(checkpoint.expected.gazebo_coke_attached,
+            loaded.checkpoint->expected.gazebo_coke_attached);
+  EXPECT_EQ(checkpoint.expected.gazebo_coke_stationary,
+            loaded.checkpoint->expected.gazebo_coke_stationary);
+  EXPECT_EQ(checkpoint.expected.required_world_objects,
+            loaded.checkpoint->expected.required_world_objects);
+  EXPECT_EQ(checkpoint.configuration_hash, loaded.checkpoint->configuration_hash);
+  EXPECT_EQ(checkpoint.simulation_session_id, loaded.checkpoint->simulation_session_id);
+  EXPECT_EQ(checkpoint.resumable, loaded.checkpoint->resumable);
+  std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, OptionalWorldAndRecoveryEvidenceRoundTripsAsJsonNull)
+{
+  const auto path = checkpointPath("optional_null");
+  pick_place::FileCheckpointStore store(path);
+  const auto checkpoint = makeForwardCheckpointWithNullOptionals();
+
+  ASSERT_FALSE(store.commit(checkpoint));
+  const auto json = readJson(path);
+  EXPECT_TRUE(json.at("failed_state").is_null());
+  EXPECT_TRUE(json.at("original_failure").is_null());
+  EXPECT_TRUE(json.at("expected").at("moveit_coke_attached").is_null());
+  EXPECT_TRUE(json.at("expected").at("gazebo_coke_pose_world").is_null());
+  EXPECT_TRUE(json.at("expected").at("gazebo_coke_attached").is_null());
+  EXPECT_TRUE(json.at("expected").at("gazebo_coke_stationary").is_null());
 
   const auto loaded = store.loadLatestCompatible();
   ASSERT_TRUE(loaded.checkpoint);
-  EXPECT_EQ(3U, loaded.checkpoint->schema_version);
-  EXPECT_EQ(pick_place::State::ATTACH_MOVEIT, loaded.checkpoint->next_state);
-  pick_place::WorldSnapshot observed;
-  observed.fresh = true;
-  observed.arm_stationary = true;
-  observed.simulation_session_id = "session-a";
-  const pick_place::CommonResumeValidator matching("config-a", "session-a");
-  EXPECT_TRUE(matching.validate(*loaded.checkpoint, observed).ok);
-  const pick_place::CommonResumeValidator stale("config-b", "session-a");
-  ASSERT_FALSE(stale.validate(*loaded.checkpoint, observed).ok);
-  EXPECT_EQ("RESUME_CONFIGURATION_MISMATCH",
-            stale.validate(*loaded.checkpoint, observed).failures.front().code);
+  EXPECT_FALSE(loaded.checkpoint->failed_state);
+  EXPECT_FALSE(loaded.checkpoint->original_failure);
+  EXPECT_FALSE(loaded.checkpoint->expected.moveit_coke_attached);
+  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_pose_world);
+  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_attached);
+  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_stationary);
   std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, RejectsWrongSchemaAndMalformedOrTruncatedJson)
+{
+  const auto path = checkpointPath("malformed");
+  {
+    std::ofstream output(path);
+    output << R"({"schema_version":3,"run_id":)";
+  }
+  expectLoadFailure(path, "CHECKPOINT_PARSE_FAILED");
+
+  writeJson(path, Json{{"schema_version", 2}});
+  expectLoadFailure(path, "CHECKPOINT_INCOMPATIBLE");
+  std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, RejectsMissingUnknownAndWrongTypedRequiredKeys)
+{
+  const auto path = checkpointPath("required_keys");
+  pick_place::FileCheckpointStore store(path);
+  ASSERT_FALSE(store.commit(makeRecoveryCheckpoint()));
+  const auto valid = readJson(path);
+
+  auto missing = valid;
+  missing.erase("run_id");
+  writeJson(path, missing);
+  expectLoadFailure(path, "CHECKPOINT_PARSE_FAILED");
+
+  auto unknown = valid;
+  unknown["unexpected"] = true;
+  writeJson(path, unknown);
+  expectLoadFailure(path, "CHECKPOINT_PARSE_FAILED");
+
+  auto wrong_type = valid;
+  wrong_type["sequence"] = "42";
+  writeJson(path, wrong_type);
+  expectLoadFailure(path, "CHECKPOINT_PARSE_FAILED");
+
+  auto unknown_expected = valid;
+  unknown_expected["expected"]["unexpected"] = 1;
+  writeJson(path, unknown_expected);
+  expectLoadFailure(path, "CHECKPOINT_PARSE_FAILED");
+  std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, RejectsUnknownStateModePhaseAndFailureCategoryNames)
+{
+  const auto path = checkpointPath("invalid_enums");
+  pick_place::FileCheckpointStore store(path);
+  ASSERT_FALSE(store.commit(makeRecoveryCheckpoint()));
+  const auto valid = readJson(path);
+
+  const std::vector<std::pair<std::string, Json>> mutations{
+    {"source_mode", "unsafe_execute"}, {"phase", "PAUSED"},
+    {"last_completed_state", "FLY"},   {"next_state", "LAND"},
+    {"failed_state", "UNKNOWN_STATE"},
+  };
+  for (const auto & [key, value] : mutations) {
+    auto invalid = valid;
+    invalid[key] = value;
+    writeJson(path, invalid);
+    expectLoadFailure(path, "CHECKPOINT_INVALID_ENUM");
+  }
+
+  auto invalid_failure_category = valid;
+  invalid_failure_category["original_failure"]["category"] = "NETWORK";
+  writeJson(path, invalid_failure_category);
+  expectLoadFailure(path, "CHECKPOINT_INVALID_ENUM");
+  std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, RejectsWrongOptionalShapesAndNonFiniteNumericEvidence)
+{
+  const auto path = checkpointPath("optional_and_finite");
+  pick_place::FileCheckpointStore store(path);
+  auto checkpoint = makeRecoveryCheckpoint();
+  ASSERT_FALSE(store.commit(checkpoint));
+  const auto valid = readJson(path);
+
+  auto wrong_optional = valid;
+  wrong_optional["failed_state"] = Json::object();
+  writeJson(path, wrong_optional);
+  expectLoadFailure(path, "CHECKPOINT_PARSE_FAILED");
+
+  auto wrong_map_value = valid;
+  wrong_map_value["expected"]["joint_positions"]["joint_a"] = "not-a-number";
+  writeJson(path, wrong_map_value);
+  expectLoadFailure(path, "CHECKPOINT_PARSE_FAILED");
+
+  auto nonfinite_json_number = valid.dump();
+  const auto finite_position = nonfinite_json_number.find("-0.5");
+  ASSERT_NE(std::string::npos, finite_position);
+  nonfinite_json_number.replace(finite_position, 4, "1e999");
+  {
+    std::ofstream output(path, std::ios::out | std::ios::trunc);
+    output << nonfinite_json_number;
+  }
+  expectLoadFailure(path, "CHECKPOINT_PARSE_FAILED");
+
+  checkpoint.expected.joint_positions["joint_a"] = std::numeric_limits<double>::infinity();
+  const auto commit_failure = store.commit(checkpoint);
+  ASSERT_TRUE(commit_failure);
+  EXPECT_EQ("CHECKPOINT_INVALID_DATA", commit_failure->code);
+
+  checkpoint = makeRecoveryCheckpoint();
+  checkpoint.original_failure->metrics["path_error"] = std::numeric_limits<double>::quiet_NaN();
+  const auto metric_failure = store.commit(checkpoint);
+  ASSERT_TRUE(metric_failure);
+  EXPECT_EQ("CHECKPOINT_INVALID_DATA", metric_failure->code);
+  std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, AtomicCommitReplacesTargetAndLeavesNoTemporaryFile)
+{
+  const auto path = checkpointPath("atomic_success");
+  {
+    std::ofstream output(path);
+    output << "old checkpoint";
+  }
+  pick_place::FileCheckpointStore store(path);
+
+  ASSERT_FALSE(store.commit(makeRecoveryCheckpoint()));
+  EXPECT_EQ(3U, readJson(path).at("schema_version").get<std::uint32_t>());
+  for (const auto & entry : std::filesystem::directory_iterator(path.parent_path())) {
+    EXPECT_EQ(std::string::npos,
+              entry.path().filename().string().find(path.filename().string() + ".tmp"));
+  }
+  std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, CommitFailurePreservesExistingTargetAndCleansTemporaryFile)
+{
+  const auto path = checkpointPath("rename_failure");
+  std::filesystem::create_directory(path);
+  {
+    std::ofstream sentinel(path / "sentinel");
+    sentinel << "preserve me";
+  }
+  pick_place::FileCheckpointStore store(path);
+
+  const auto failure = store.commit(makeRecoveryCheckpoint());
+
+  ASSERT_TRUE(failure);
+  EXPECT_EQ("CHECKPOINT_ATOMIC_RENAME_FAILED", failure->code);
+  EXPECT_TRUE(std::filesystem::exists(path / "sentinel"));
+  for (const auto & entry : std::filesystem::directory_iterator(path.parent_path())) {
+    EXPECT_EQ(std::string::npos,
+              entry.path().filename().string().find(path.filename().string() + ".tmp"));
+  }
+  std::filesystem::remove_all(path);
+}
+
+TEST(CheckpointV3, ReportsDirectoryCreationWriteAndLoadFailures)
+{
+  const auto root = checkpointPath("io_failures");
+  {
+    std::ofstream blocking_parent(root);
+    blocking_parent << "not a directory";
+  }
+  pick_place::FileCheckpointStore blocked_store(root / "checkpoint.json");
+  const auto write_failure = blocked_store.commit(makeRecoveryCheckpoint());
+  ASSERT_TRUE(write_failure);
+  EXPECT_EQ("CHECKPOINT_DIRECTORY_CREATE_FAILED", write_failure->code);
+
+  const auto missing = checkpointPath("missing");
+  expectLoadFailure(missing, "CHECKPOINT_NOT_FOUND");
+  std::filesystem::remove(root);
+}
+
+TEST(CommonResumeValidator, AcceptsOnlyACompleteMatchingWorldBoundary)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.resumable = true;
+  const auto snapshot = snapshotFrom(checkpoint);
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
+                                                    checkpoint.simulation_session_id);
+
+  const auto result = validator.validate(checkpoint, snapshot);
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_TRUE(result.failures.empty());
+}
+
+TEST(CommonResumeValidator, FailsClosedForEveryExpectedWorldBoundaryMismatch)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.resumable = true;
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
+                                                    checkpoint.simulation_session_id);
+  const auto matching = snapshotFrom(checkpoint);
+
+  std::vector<pick_place::WorldSnapshot> mismatches;
+  auto tcp = matching;
+  tcp.tcp_pose_world.x += 0.1;
+  mismatches.push_back(tcp);
+  auto gripper = matching;
+  gripper.gripper_open = !gripper.gripper_open;
+  mismatches.push_back(gripper);
+  auto joint = matching;
+  joint.joint_positions.at("joint_a") += 0.1;
+  mismatches.push_back(joint);
+  auto extra_joint = matching;
+  extra_joint.joint_positions["joint_c"] = 0.0;
+  mismatches.push_back(extra_joint);
+  auto moveit_pose = matching;
+  moveit_pose.moveit_world_object_poses.at("object").z += 0.1;
+  mismatches.push_back(moveit_pose);
+  auto missing_required_object = matching;
+  missing_required_object.moveit_world_object_poses.erase("object");
+  mismatches.push_back(missing_required_object);
+  auto moveit_attachment = matching;
+  moveit_attachment.moveit_coke_attached = true;
+  mismatches.push_back(moveit_attachment);
+  auto gazebo_pose = matching;
+  gazebo_pose.gazebo_coke_pose_world->y += 0.1;
+  mismatches.push_back(gazebo_pose);
+  auto gazebo_attachment = matching;
+  gazebo_attachment.gazebo_coke_attached = false;
+  mismatches.push_back(gazebo_attachment);
+  auto gazebo_stationary = matching;
+  gazebo_stationary.gazebo_coke_stationary = false;
+  mismatches.push_back(gazebo_stationary);
+
+  for (const auto & mismatch : mismatches) {
+    EXPECT_FALSE(validator.validate(checkpoint, mismatch).ok);
+  }
+}
+
+TEST(CommonResumeValidator, FailsClosedForIncompleteNonFiniteOrStaleBoundaryEvidence)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.resumable = true;
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
+                                                    checkpoint.simulation_session_id);
+  const auto matching = snapshotFrom(checkpoint);
+
+  auto missing_optional = matching;
+  missing_optional.gazebo_coke_pose_world.reset();
+  EXPECT_FALSE(validator.validate(checkpoint, missing_optional).ok);
+
+  auto nonfinite = matching;
+  nonfinite.joint_positions.at("joint_a") = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_FALSE(validator.validate(checkpoint, nonfinite).ok);
+
+  auto stale = matching;
+  stale.fresh = false;
+  EXPECT_FALSE(validator.validate(checkpoint, stale).ok);
+
+  auto moving = matching;
+  moving.arm_stationary = false;
+  EXPECT_FALSE(validator.validate(checkpoint, moving).ok);
+
+  auto wrong_session = matching;
+  wrong_session.simulation_session_id = "other-session";
+  EXPECT_FALSE(validator.validate(checkpoint, wrong_session).ok);
+
+  checkpoint.configuration_hash = "other-config";
+  EXPECT_FALSE(validator.validate(checkpoint, matching).ok);
+}
+
+TEST(CommonResumeValidator, RejectsNonResumableAndIncompleteRecoveryContext)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  const auto snapshot = snapshotFrom(checkpoint);
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
+                                                    checkpoint.simulation_session_id);
+
+  checkpoint.resumable = false;
+  EXPECT_FALSE(validator.validate(checkpoint, snapshot).ok);
+
+  checkpoint.resumable = true;
+  checkpoint.failed_state.reset();
+  EXPECT_FALSE(validator.validate(checkpoint, snapshot).ok);
+
+  checkpoint = makeRecoveryCheckpoint();
+  checkpoint.resumable = true;
+  checkpoint.original_failure.reset();
+  EXPECT_FALSE(validator.validate(checkpoint, snapshot).ok);
 }

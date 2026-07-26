@@ -1,3 +1,230 @@
 #include "so101_gazebo_demo/pick_place/common_resume_validator.hpp"
+
+#include <algorithm>
 #include <cmath>
-namespace so101_gazebo_demo::pick_place { CommonResumeValidator::CommonResumeValidator(std::string c,std::string s,double t):configuration_hash_(std::move(c)),simulation_session_id_(std::move(s)),tolerance_(t){} ValidationResult CommonResumeValidator::validate(const Checkpoint&c,const WorldSnapshot&w)const{ValidationResult r{true,{},{}};auto fail=[&](const char*x){r.ok=false;r.failures.push_back({FailureCategory::RESUME_VALIDATION,x,x,{}});};if(c.schema_version!=3||!c.resumable)fail("CHECKPOINT_INCOMPATIBLE");if(c.configuration_hash!=configuration_hash_)fail("RESUME_CONFIGURATION_MISMATCH");if(c.simulation_session_id!=simulation_session_id_||w.simulation_session_id!=simulation_session_id_)fail("RESUME_SIMULATION_SESSION_MISMATCH");if(!w.fresh||!w.arm_stationary)fail("RESUME_ARM_NOT_QUIESCENT");for(const auto&[n,v]:c.expected.joint_positions){auto i=w.joint_positions.find(n);if(i==w.joint_positions.end()||std::abs(i->second-v)>tolerance_)fail("RESUME_JOINT_POSITION_MISMATCH");}return r;} const std::string& CommonResumeValidator::configurationHash()const noexcept{return configuration_hash_;} const std::string& CommonResumeValidator::simulationSessionId()const noexcept{return simulation_session_id_;} }
+#include <set>
+#include <utility>
+
+namespace so101_gazebo_demo::pick_place
+{
+
+namespace
+{
+
+void addFailure(ValidationResult & result, std::string code, std::string message)
+{
+  result.failures.push_back(
+    {FailureCategory::RESUME_VALIDATION, std::move(code), std::move(message), {}});
+}
+
+bool poseIsFinite(const Pose3d & pose) noexcept
+{
+  return std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
+         std::isfinite(pose.qx) && std::isfinite(pose.qy) && std::isfinite(pose.qz) &&
+         std::isfinite(pose.qw);
+}
+
+double positionError(const Pose3d & expected, const Pose3d & current) noexcept
+{
+  return std::hypot(std::hypot(expected.x - current.x, expected.y - current.y),
+                    expected.z - current.z);
+}
+
+double orientationError(const Pose3d & expected, const Pose3d & current) noexcept
+{
+  const auto direct = std::hypot(std::hypot(expected.qx - current.qx, expected.qy - current.qy),
+                                 std::hypot(expected.qz - current.qz, expected.qw - current.qw));
+  const auto negated = std::hypot(std::hypot(expected.qx + current.qx, expected.qy + current.qy),
+                                  std::hypot(expected.qz + current.qz, expected.qw + current.qw));
+  return std::min(direct, negated);
+}
+
+bool posesMatch(const Pose3d & expected, const Pose3d & current, double tolerance) noexcept
+{
+  return poseIsFinite(expected) && poseIsFinite(current) &&
+         positionError(expected, current) <= tolerance &&
+         orientationError(expected, current) <= tolerance;
+}
+
+bool finitePositionMap(const std::map<std::string, double> & positions)
+{
+  return std::all_of(positions.begin(), positions.end(), [](const auto & item) {
+    return !item.first.empty() && std::isfinite(item.second);
+  });
+}
+
+bool poseMapsMatch(const std::map<std::string, Pose3d> & expected,
+                   const std::map<std::string, Pose3d> & current, double tolerance)
+{
+  if (expected.size() != current.size()) {
+    return false;
+  }
+  for (const auto & [name, expected_pose] : expected) {
+    const auto current_pose = current.find(name);
+    if (name.empty() || current_pose == current.end() ||
+        !posesMatch(expected_pose, current_pose->second, tolerance)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool optionalPosesMatch(const std::optional<Pose3d> & expected,
+                        const std::optional<Pose3d> & current, double tolerance)
+{
+  if (expected.has_value() != current.has_value()) {
+    return false;
+  }
+  return !expected || posesMatch(*expected, *current, tolerance);
+}
+
+}  // namespace
+
+CommonResumeValidator::CommonResumeValidator(std::string configuration_hash,
+                                             std::string simulation_session_id, double tolerance) :
+    configuration_hash_(std::move(configuration_hash)),
+    simulation_session_id_(std::move(simulation_session_id)), tolerance_(tolerance)
+{
+}
+
+ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
+                                                 const WorldSnapshot & current) const
+{
+  ValidationResult result{true, {}, {}};
+  if (!std::isfinite(tolerance_) || tolerance_ < 0.0) {
+    addFailure(result, "RESUME_VALIDATOR_CONFIGURATION_INVALID",
+               "Resume boundary tolerance must be finite and non-negative");
+  }
+  if (checkpoint.schema_version != 3 || !checkpoint.resumable) {
+    addFailure(result, "CHECKPOINT_INCOMPATIBLE",
+               "Resume requires a resumable checkpoint with schema version 3");
+  }
+  const bool has_failed_state = checkpoint.failed_state.has_value();
+  const bool has_original_failure = checkpoint.original_failure.has_value();
+  if (has_failed_state != has_original_failure ||
+      (checkpoint.phase == CheckpointPhase::RECOVERY && !has_failed_state) ||
+      (checkpoint.phase == CheckpointPhase::FORWARD && has_failed_state)) {
+    addFailure(result, "RECOVERY_CHECKPOINT_CONTEXT_INCOMPLETE",
+               "Checkpoint recovery context must match its phase");
+  }
+  if (checkpoint.configuration_hash.empty() || configuration_hash_.empty() ||
+      checkpoint.configuration_hash != configuration_hash_) {
+    addFailure(result, "RESUME_CONFIGURATION_MISMATCH",
+               "Checkpoint configuration hash differs from the active configuration");
+  }
+  if (checkpoint.simulation_session_id.empty() || simulation_session_id_.empty() ||
+      checkpoint.simulation_session_id != simulation_session_id_ ||
+      current.simulation_session_id != simulation_session_id_) {
+    addFailure(result, "RESUME_SIMULATION_SESSION_MISMATCH",
+               "Checkpoint, validator, and observation must share a simulation session");
+  }
+  if (!current.fresh || !current.arm_stationary) {
+    addFailure(result, "RESUME_ARM_NOT_QUIESCENT",
+               "Current robot observation must be fresh and stationary before resume");
+  }
+
+  const bool expected_complete = !checkpoint.expected.joint_positions.empty() &&
+                                 !checkpoint.expected.moveit_world_object_poses.empty() &&
+                                 checkpoint.expected.moveit_coke_attached.has_value() &&
+                                 checkpoint.expected.gazebo_coke_pose_world.has_value() &&
+                                 checkpoint.expected.gazebo_coke_attached.has_value() &&
+                                 checkpoint.expected.gazebo_coke_stationary.has_value() &&
+                                 !checkpoint.expected.required_world_objects.empty();
+  if (!expected_complete || !poseIsFinite(checkpoint.expected.tcp_pose_world) ||
+      !finitePositionMap(checkpoint.expected.joint_positions)) {
+    addFailure(result, "CHECKPOINT_EXPECTATION_INCOMPLETE",
+               "Checkpoint is missing complete finite cross-world boundary evidence");
+  }
+  const bool current_complete =
+    !current.joint_positions.empty() && !current.moveit_world_object_poses.empty() &&
+    current.moveit_coke_attached.has_value() && current.gazebo_coke_pose_world.has_value() &&
+    current.gazebo_coke_attached.has_value() && current.gazebo_coke_stationary.has_value();
+  if (!current_complete || !poseIsFinite(current.tcp_pose_world) ||
+      !finitePositionMap(current.joint_positions)) {
+    addFailure(result, "RESUME_SNAPSHOT_INCOMPLETE",
+               "Current observation is missing complete finite cross-world boundary evidence");
+  }
+
+  const auto tcp_position_error =
+    positionError(checkpoint.expected.tcp_pose_world, current.tcp_pose_world);
+  const auto tcp_orientation_error =
+    orientationError(checkpoint.expected.tcp_pose_world, current.tcp_pose_world);
+  result.metrics["resume_tcp_position_error"] = tcp_position_error;
+  result.metrics["resume_tcp_orientation_error"] = tcp_orientation_error;
+  if (!posesMatch(checkpoint.expected.tcp_pose_world, current.tcp_pose_world, tolerance_)) {
+    addFailure(result, "RESUME_TCP_POSE_MISMATCH",
+               "Current TCP pose differs from the checkpoint expectation");
+  }
+  if (checkpoint.expected.gripper_open != current.gripper_open) {
+    addFailure(result, "RESUME_GRIPPER_STATE_MISMATCH",
+               "Current gripper state differs from the checkpoint expectation");
+  }
+
+  bool joints_match = checkpoint.expected.joint_positions.size() == current.joint_positions.size();
+  double maximum_joint_error = 0.0;
+  for (const auto & [name, expected_position] : checkpoint.expected.joint_positions) {
+    const auto current_position = current.joint_positions.find(name);
+    if (current_position == current.joint_positions.end() || !std::isfinite(expected_position) ||
+        !std::isfinite(current_position->second)) {
+      joints_match = false;
+      continue;
+    }
+    const auto error = std::abs(expected_position - current_position->second);
+    maximum_joint_error = std::max(maximum_joint_error, error);
+    joints_match = joints_match && error <= tolerance_;
+  }
+  result.metrics["resume_joint_position_error_max"] = maximum_joint_error;
+  if (!joints_match) {
+    addFailure(result, "RESUME_JOINT_POSITION_MISMATCH",
+               "Current named joint positions differ from the checkpoint expectation");
+  }
+
+  if (!poseMapsMatch(checkpoint.expected.moveit_world_object_poses,
+                     current.moveit_world_object_poses, tolerance_)) {
+    addFailure(result, "RESUME_MOVEIT_WORLD_MISMATCH",
+               "Current MoveIt world poses differ from the checkpoint expectation");
+  }
+  std::set<std::string> required_objects;
+  bool required_objects_present = true;
+  for (const auto & name : checkpoint.expected.required_world_objects) {
+    required_objects_present = required_objects_present && !name.empty() &&
+                               required_objects.insert(name).second &&
+                               checkpoint.expected.moveit_world_object_poses.count(name) != 0 &&
+                               current.moveit_world_object_poses.count(name) != 0;
+  }
+  if (!required_objects_present) {
+    addFailure(result, "RESUME_REQUIRED_WORLD_OBJECT_MISSING",
+               "A required world object is absent or duplicated at the resume boundary");
+  }
+  if (checkpoint.expected.moveit_coke_attached != current.moveit_coke_attached) {
+    addFailure(result, "RESUME_MOVEIT_ATTACHMENT_MISMATCH",
+               "Current MoveIt attachment state differs from the checkpoint expectation");
+  }
+  if (!optionalPosesMatch(checkpoint.expected.gazebo_coke_pose_world,
+                          current.gazebo_coke_pose_world, tolerance_)) {
+    addFailure(result, "RESUME_GAZEBO_POSE_MISMATCH",
+               "Current Gazebo object pose differs from the checkpoint expectation");
+  }
+  if (checkpoint.expected.gazebo_coke_attached != current.gazebo_coke_attached) {
+    addFailure(result, "RESUME_GAZEBO_ATTACHMENT_MISMATCH",
+               "Current Gazebo attachment state differs from the checkpoint expectation");
+  }
+  if (checkpoint.expected.gazebo_coke_stationary != current.gazebo_coke_stationary) {
+    addFailure(result, "RESUME_GAZEBO_STATIONARY_MISMATCH",
+               "Current Gazebo stationary state differs from the checkpoint expectation");
+  }
+  result.ok = result.failures.empty();
+  return result;
+}
+
+const std::string & CommonResumeValidator::configurationHash() const noexcept
+{
+  return configuration_hash_;
+}
+
+const std::string & CommonResumeValidator::simulationSessionId() const noexcept
+{
+  return simulation_session_id_;
+}
+
+}  // namespace so101_gazebo_demo::pick_place

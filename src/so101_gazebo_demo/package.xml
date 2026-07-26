@@ -9,6 +9,8 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <depend>nlohmann-json-dev</depend>
+
   <depend>xacro</depend>
   <depend>urdf</depend>
   <depend>robot_state_publisher</depend>
