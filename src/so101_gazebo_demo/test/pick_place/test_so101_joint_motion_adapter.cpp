@@ -1,3 +1,4 @@
+#include <limits>
 #include <memory>
 
 #include <gtest/gtest.h>
@@ -13,8 +14,16 @@ class FakeBoundary final : public spp::IJointPlanningBoundary,
                            public spp::IRobotStateEvidenceProvider
 {
 public:
-  std::optional<spp::CurrentJointStateEvidence> currentState() override { return current; }
-  std::optional<spp::MotionPlanningSceneFacts> sceneFacts() override { return scene; }
+  std::optional<spp::CurrentJointStateEvidence> currentState() override
+  {
+    ++current_state_calls;
+    return current;
+  }
+  std::optional<spp::MotionPlanningSceneFacts> sceneFacts() override
+  {
+    ++scene_fact_calls;
+    return scene;
+  }
   spp::JointSegmentPlanResult planSegment(const std::vector<std::string> & names,
                                           const std::vector<double> & start,
                                           const std::vector<double> & goal,
@@ -52,6 +61,8 @@ public:
                                          {0, 0, 0, 0, 0}, 1234};
   spp::MotionPlanningSceneFacts scene{true, true, false, std::nullopt, {}};
   int plan_calls{0};
+  int current_state_calls{0};
+  int scene_fact_calls{0};
   bool wrong_segment_start{false};
   bool offset_segment_timestamps{false};
   std::vector<std::vector<double>> starts;
@@ -60,21 +71,63 @@ public:
   std::vector<double> gripper_positions;
 };
 
-spp::ObservationResult observation()
+spp::ObservationResult observation(double q6 = 0.707194871, double velocity = 0.0)
 {
   spp::WorldSnapshot snapshot;
   snapshot.fresh = true;
   snapshot.arm_stationary = true;
+  snapshot.joint_positions.emplace("6", q6);
+  snapshot.joint_velocities.emplace("6", velocity);
   return {snapshot, std::nullopt};
 }
 
 spp::JointMotionRequest goalRequest()
 {
   return {spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
-          {"1", "2", "3", "4", "5"}, {{0.1, 0.2, 0.3, 0.4, 0.5}}, false, false};
+          {"1", "2", "3", "4", "5"}, {{0.1, 0.2, 0.3, 0.4, 0.5}}, false, false,
+          {}, 0.707194871};
 }
 
 }  // namespace
+
+TEST(SO101JointMotionAdapter, RejectsMissingNonfiniteMovingOrWrongQ6BeforeAnyBoundaryCall)
+{
+  const auto nan = std::numeric_limits<double>::quiet_NaN();
+  for (const int mutation : {0, 1, 2, 3, 4}) {
+    auto boundary = std::make_shared<FakeBoundary>();
+    auto observed = observation();
+    if (mutation == 0) observed.snapshot->joint_positions.erase("6");
+    if (mutation == 1) observed.snapshot->joint_velocities.erase("6");
+    if (mutation == 2) observed.snapshot->joint_positions["6"] = nan;
+    if (mutation == 3) observed.snapshot->joint_velocities["6"] = 0.02;
+    if (mutation == 4) observed.snapshot->joint_positions["6"] = 0.662818811;
+
+    spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+    const auto result = adapter.plan(goalRequest(), observed);
+
+    ASSERT_EQ(result.action.status, spp::ActionStatus::FAILED) << mutation;
+    ASSERT_TRUE(result.action.failure) << mutation;
+    EXPECT_TRUE(result.action.failure->category == spp::FailureCategory::OBSERVATION ||
+                result.action.failure->category == spp::FailureCategory::PRECONDITION) << mutation;
+    EXPECT_EQ(boundary->scene_fact_calls, 0) << mutation;
+    EXPECT_EQ(boundary->current_state_calls, 0) << mutation;
+    EXPECT_EQ(boundary->plan_calls, 0) << mutation;
+  }
+}
+
+TEST(SO101JointMotionAdapter, PassesObservedQ6RatherThanAnExpectedFallbackIntoPlanning)
+{
+  auto boundary = std::make_shared<FakeBoundary>();
+  auto request = goalRequest();
+  request.gripper_position = 0.662818811;
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+
+  const auto result = adapter.plan(request, observation(0.662818811, 0.0));
+
+  ASSERT_EQ(result.action.status, spp::ActionStatus::SUCCEEDED);
+  ASSERT_EQ(boundary->gripper_positions.size(), 1U);
+  EXPECT_DOUBLE_EQ(boundary->gripper_positions.front(), 0.662818811);
+}
 
 TEST(SO101JointMotionAdapter, PlansGoalFromObservedCurrentStateAndBuildsEvidence)
 {

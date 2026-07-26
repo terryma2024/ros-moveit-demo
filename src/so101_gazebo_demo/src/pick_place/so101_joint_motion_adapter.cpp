@@ -75,6 +75,25 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     return fail(FailureCategory::PRECONDITION, "ARM_NOT_STATIONARY_BEFORE_PLAN",
                 "Arm must be stationary before planning");
   }
+  const auto q6_position =
+    observation.snapshot->joint_positions.find(profile_.gripper_joint);
+  const auto q6_velocity =
+    observation.snapshot->joint_velocities.find(profile_.gripper_joint);
+  if (q6_position == observation.snapshot->joint_positions.end() ||
+      q6_velocity == observation.snapshot->joint_velocities.end() ||
+      !std::isfinite(q6_position->second) || !std::isfinite(q6_velocity->second)) {
+    return fail(FailureCategory::OBSERVATION, "CURRENT_GRIPPER_STATE_UNAVAILABLE",
+                "Motion planning requires fresh finite q6 position and velocity evidence");
+  }
+  if (std::abs(q6_velocity->second) > profile_.q6_velocity_tolerance) {
+    return fail(FailureCategory::PRECONDITION, "GRIPPER_NOT_STATIONARY_BEFORE_PLAN",
+                "Gripper joint 6 must be stationary before planning");
+  }
+  if (!std::isfinite(request.gripper_position) ||
+      std::abs(q6_position->second - request.gripper_position) > profile_.q6_tolerance) {
+    return fail(FailureCategory::PRECONDITION, "GRIPPER_CONTEXT_MISMATCH_BEFORE_PLAN",
+                "Observed q6 does not match the motion state's expected gripper context");
+  }
   if (request.joint_names != profile_.arm_joints || request.joint_waypoints.empty() ||
       (!request.ladder && request.joint_waypoints.size() != 1)) {
     return fail(FailureCategory::CONFIGURATION, "JOINT_MOTION_REQUEST_INVALID",
@@ -111,7 +130,7 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
   combined.moveit_success = true;
   combined.collision_aware_planner = true;
   combined.allowed_touch_pairs = request.allowed_touch_pairs;
-  combined.gripper_position = request.gripper_position;
+  combined.gripper_position = q6_position->second;
   combined.temporal_contact_policy = request.temporal_contact_policy;
   std::vector<double> segment_start = current->positions;
   double time_offset = 0.0;
@@ -120,7 +139,7 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     auto result = boundary_->planSegment(profile_.arm_joints, segment_start, waypoint,
                                          request.allowed_touch_pairs,
                                          request.temporal_contact_policy,
-                                         request.gripper_position);
+                                         q6_position->second);
     if (result.action.status != ActionStatus::SUCCEEDED || !result.segment) {
       return {result.action, nullptr};
     }
