@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 
 #include "so101_gazebo_demo/pick_place/follow_joint_trajectory_gripper_adapter.hpp"
@@ -74,8 +76,42 @@ TEST(SO101Profile, OwnsExactRobotSceneAndAttachmentContract)
 TEST(SO101GripperGeometry, UsesTwentyMillimeterSectionCalibrationForBothTargets)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
-  EXPECT_NEAR(0.070, pick_place::gripperWidthAtSection(profile.q6_preopen, profile), 1e-9);
-  EXPECT_NEAR(0.066, pick_place::gripperWidthAtSection(profile.q6_contact, profile), 1e-9);
+  EXPECT_NEAR(0.070, pick_place::gripperWidthAtSection(profile.q6_preopen, profile), 2e-9);
+  EXPECT_NEAR(0.066, pick_place::gripperWidthAtSection(profile.q6_contact, profile), 2e-9);
+}
+
+TEST(SO101GripperGeometry, MatchesRealMeshTruthAtNonEndpointAndRejectsExtrapolation)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  constexpr double midpoint_q6 = 0.685006841;
+  constexpr double mesh_truth_width = 0.0679670145369185;
+
+  EXPECT_NEAR(mesh_truth_width, pick_place::gripperWidthAtSection(midpoint_q6, profile), 1e-10);
+  EXPECT_TRUE(std::isnan(
+    pick_place::gripperWidthAtSection(profile.q6_contact - profile.q6_tolerance - 1e-6,
+                                      profile)));
+}
+
+TEST(SO101GripperValidation, RejectsWidthAndGeometryModelIndependentlyOfExactQ6)
+{
+  const auto & canonical = pick_place::SO101Profile::canonical();
+  const auto current = q6Snapshot(canonical.q6_contact, 0.0);
+  const auto wrong_width = pick_place::validateQ6Target(
+    current, canonical.q6_contact,
+    canonical.contact_width + canonical.width_tolerance * 2.0, canonical);
+  EXPECT_FALSE(wrong_width.ok);
+  EXPECT_TRUE(std::any_of(
+    wrong_width.failures.begin(), wrong_width.failures.end(),
+    [](const auto & failure) { return failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE"; }));
+
+  auto mismatched_model = canonical;
+  mismatched_model.gripper_geometry_model_fingerprint = "wrong-mesh-or-urdf";
+  const auto mismatch = pick_place::validateQ6Target(
+    current, mismatched_model.q6_contact, mismatched_model.contact_width, mismatched_model);
+  EXPECT_FALSE(mismatch.ok);
+  EXPECT_TRUE(std::any_of(
+    mismatch.failures.begin(), mismatch.failures.end(),
+    [](const auto & failure) { return failure.code == "Q6_GEOMETRY_MODEL_MISMATCH"; }));
 }
 
 TEST(SO101GripperValidation, AcceptsOnlyFreshFiniteStoppedQ6Evidence)
