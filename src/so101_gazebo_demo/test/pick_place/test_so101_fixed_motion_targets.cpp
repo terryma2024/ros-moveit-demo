@@ -1,10 +1,113 @@
+#include <algorithm>
+#include <cstdint>
+#include <fstream>
+#include <iomanip>
+#include <iterator>
+#include <map>
 #include <set>
+#include <sstream>
+#include <string>
 
 #include <gtest/gtest.h>
+#include <moveit/robot_model_loader/robot_model_loader.hpp>
+#include <moveit/robot_state/robot_state.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #include "so101_gazebo_demo/pick_place/so101_fixed_motion_targets.hpp"
 
 namespace spp = so101_gazebo_demo::pick_place;
+
+namespace
+{
+
+std::string readFile(const std::string & path)
+{
+  std::ifstream stream(path);
+  return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+}
+
+const std::vector<std::vector<double>> kGoldenWaypoints{
+  {-0.000074896, 0.406242712, -0.335892969, 1.500452910, -0.029650203},
+  {-0.004520982, 0.427298423, -0.219093530, 1.362597749, -0.083117591},
+  {-0.000416079, 0.471283543, -0.135531958, 1.235051068, -0.033743502},
+  {-0.000011454, 0.536286226, -0.082912794, 1.117429221, -0.028880766},
+  {0.331019977, 0.550670543, -0.562313463, 1.582446437, -1.600206428},
+  {0.331012586, 0.555338833, -0.421537209, 1.437001892, -1.597230266},
+  {0.331041085, 0.592207044, -0.331690813, 1.310287286, -1.607707019},
+  {0.331034755, 0.648891100, -0.272710221, 1.194622637, -1.605735287},
+};
+
+std::vector<std::vector<double>> calibratedWaypoints(const spp::SO101FixedMotionTargetPolicy & policy)
+{
+  std::vector<std::vector<double>> result;
+  result.push_back(policy.spec(spp::State::MOVE_ABOVE_OBJECT)->target.joint_waypoints.back());
+  const auto pick = policy.spec(spp::State::DESCEND)->target.joint_waypoints;
+  result.insert(result.end(), pick.begin(), pick.end());
+  result.push_back(policy.spec(spp::State::MOVE_ABOVE_PLACE)->target.joint_waypoints.back());
+  const auto place = policy.spec(spp::State::DESCEND_TO_PLACE)->target.joint_waypoints;
+  result.insert(result.end(), place.begin(), place.end());
+  return result;
+}
+
+void appendValues(std::ostringstream & out, const std::vector<double> & values)
+{
+  for (const auto value : values) out << value << ',';
+}
+
+std::string policyFingerprint(const spp::SO101FixedMotionTargetPolicy & policy)
+{
+  std::ostringstream serialized;
+  serialized << std::setprecision(17);
+  for (const auto state : {spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
+                           spp::State::LIFT, spp::State::MOVE_ABOVE_PLACE,
+                           spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
+                           spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+                           spp::State::RECOVER_MOVE_ABOVE_PICK,
+                           spp::State::RECOVER_DESCEND_TO_PICK,
+                           spp::State::RECOVER_RETREAT}) {
+    const auto spec = policy.spec(state);
+    EXPECT_TRUE(spec);
+    if (!spec) continue;
+    serialized << static_cast<int>(state) << '|';
+    appendValues(serialized, spec->logical_start);
+    serialized << '|';
+    for (const auto & waypoint : spec->target.joint_waypoints) {
+      appendValues(serialized, waypoint);
+      serialized << ';';
+    }
+    const auto & c = spec->validation;
+    serialized << '|' << spec->target.ladder << '|' << spec->target.gripper_position
+               << '|' << c.endpoint_position.x << ',' << c.endpoint_position.y << ','
+               << c.endpoint_position.z << '|' << c.local_approach_axis.x << ','
+               << c.local_approach_axis.y << ',' << c.local_approach_axis.z << '|'
+               << c.target_approach_axis.x << ',' << c.target_approach_axis.y << ','
+               << c.target_approach_axis.z << '|' << c.path_direction.x << ','
+               << c.path_direction.y << ',' << c.path_direction.z << '|'
+               << c.position_tolerance << ',' << c.axis_tolerance_rad << ','
+               << c.max_lateral_deviation << ',' << c.max_joint_jump << ','
+               << c.joint_endpoint_tolerance << ',' << c.min_duration_seconds << ','
+               << c.monotonic_tolerance << '|';
+    for (const auto & pair : c.allowed_touch_pairs) serialized << pair << ',';
+    if (c.temporal_contact_policy) {
+      serialized << static_cast<int>(c.temporal_contact_policy->location) << ','
+                 << c.temporal_contact_policy->max_axial_clearance_m << ',';
+      for (const auto & pair : c.temporal_contact_policy->allowed_pairs) {
+        serialized << pair << ',';
+      }
+    }
+    serialized << '\n';
+  }
+  std::uint64_t hash = 1469598103934665603ULL;
+  for (const unsigned char byte : serialized.str()) {
+    hash ^= byte;
+    hash *= 1099511628211ULL;
+  }
+  std::ostringstream result;
+  result << std::hex << std::setfill('0') << std::setw(16) << hash;
+  return result.str();
+}
+
+}  // namespace
 
 TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
 {
@@ -26,6 +129,64 @@ TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
                 spec->expected_gripper_q6 == 0.662818811 ||
                 spec->expected_gripper_q6 == 1.7);
   }
+}
+
+TEST(SO101FixedMotionTargets, BindsPolicyVersionToAllMotionConstants)
+{
+  const spp::SO101FixedMotionTargetPolicy policy;
+  const std::map<std::string, std::string> version_to_golden_fingerprint{
+    {"so101-fixed-table-d20-v1", "5d21eeb1e57f3f41"},
+  };
+  ASSERT_EQ(version_to_golden_fingerprint.count(policy.version()), 1U);
+  EXPECT_EQ(policyFingerprint(policy), version_to_golden_fingerprint.at(policy.version()));
+}
+
+TEST(SO101FixedMotionTargets, LocksAllEightCalibratedJointVectorsExactly)
+{
+  spp::SO101FixedMotionTargetPolicy policy;
+  EXPECT_EQ(calibratedWaypoints(policy), kGoldenWaypoints);
+}
+
+TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEveryGoldenWaypoint)
+{
+  if (!rclcpp::ok()) rclcpp::init(0, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("so101_fixed_target_robot_model_test");
+  robot_model_loader::RobotModelLoader::Options options(
+    readFile(SO101_TEST_URDF), readFile(SO101_TEST_SRDF));
+  options.load_kinematics_solvers = false;
+  robot_model_loader::RobotModelLoader loader(node, options);
+  const auto model = loader.getModel();
+  ASSERT_TRUE(model);
+  moveit::core::RobotState state(model);
+  const auto profile = spp::SO101Profile::canonical();
+  const std::vector<spp::Vec3> expected_positions{
+    {0.02, -0.28, 0.282}, {0.02, -0.28, 0.262},
+    {0.02, -0.28, 0.242}, {0.02, -0.28, 0.222},
+    {-0.08, -0.25, 0.282}, {-0.08, -0.25, 0.262},
+    {-0.08, -0.25, 0.242}, {-0.08, -0.25, 0.222},
+  };
+  for (std::size_t index = 0; index < kGoldenWaypoints.size(); ++index) {
+    state.setToDefaultValues();
+    state.setVariablePositions(profile.arm_joints, kGoldenWaypoints[index]);
+    state.setVariablePosition(profile.gripper_joint, profile.q6_preopen);
+    state.update();
+    const auto & transform = state.getGlobalLinkTransform(profile.tcp_link);
+    const Eigen::Quaterniond q(transform.rotation());
+    const spp::Pose3d pose{transform.translation().x(), transform.translation().y(),
+                           transform.translation().z(), q.x(), q.y(), q.z(), q.w()};
+    EXPECT_NEAR(pose.x, expected_positions[index].x, 2e-7) << index;
+    EXPECT_NEAR(pose.y, expected_positions[index].y, 2e-7) << index;
+    EXPECT_NEAR(pose.z, expected_positions[index].z, 2e-7) << index;
+    EXPECT_NEAR(spp::approachAxisError(pose, {0, 0, -1}, {0, 0, -1}), 0.0, 2e-5)
+      << index;
+    for (std::size_t joint = 0; joint < profile.arm_joints.size(); ++joint) {
+      const auto & bounds = model->getVariableBounds(profile.arm_joints[joint]);
+      EXPECT_GT(std::min(kGoldenWaypoints[index][joint] - bounds.min_position_,
+                         bounds.max_position_ - kGoldenWaypoints[index][joint]), 0.05)
+        << index << ":" << joint;
+    }
+  }
+  rclcpp::shutdown();
 }
 
 TEST(SO101FixedMotionTargets, ScopesPersistentAndBoundaryTouchPolicies)

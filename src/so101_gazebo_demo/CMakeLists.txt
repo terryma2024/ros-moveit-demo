@@ -119,6 +119,21 @@ if(BUILD_TESTING)
   ament_add_gtest(test_so101_fixed_motion_targets
     test/pick_place/test_so101_fixed_motion_targets.cpp)
   target_link_libraries(test_so101_fixed_motion_targets pick_place_core)
+  find_program(XACRO_EXECUTABLE xacro REQUIRED)
+  set(SO101_TEST_URDF ${CMAKE_CURRENT_BINARY_DIR}/so101_fixed_target_test.urdf)
+  add_custom_command(
+    OUTPUT ${SO101_TEST_URDF}
+    COMMAND ${XACRO_EXECUTABLE} -o ${SO101_TEST_URDF}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/so101_robot_model.xacro
+      base_height:=0.1899186
+    DEPENDS
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/so101_robot_model.xacro
+      ${CMAKE_CURRENT_SOURCE_DIR}/urdf/so101_base.xacro)
+  add_custom_target(so101_fixed_target_test_urdf DEPENDS ${SO101_TEST_URDF})
+  add_dependencies(test_so101_fixed_motion_targets so101_fixed_target_test_urdf)
+  target_compile_definitions(test_so101_fixed_motion_targets PRIVATE
+    SO101_TEST_URDF="${SO101_TEST_URDF}"
+    SO101_TEST_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/config/so101.srdf")
   ament_add_gtest(test_so101_joint_motion_adapter
     test/pick_place/test_so101_joint_motion_adapter.cpp)
   target_link_libraries(test_so101_joint_motion_adapter pick_place_core)
