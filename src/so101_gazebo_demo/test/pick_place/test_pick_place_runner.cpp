@@ -1,6 +1,13 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <map>
 #include <memory>
+#include <optional>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "so101_gazebo_demo/pick_place/runner.hpp"
 
@@ -9,107 +16,692 @@ namespace pick_place = so101_gazebo_demo::pick_place;
 namespace
 {
 
-class SuccessfulExecutor final : public pick_place::IStateExecutor
-{
-public:
-  pick_place::ActionResult execute(const pick_place::ExecutionContext &) override
-  {
-    return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
-  }
+using pick_place::ActionResult;
+using pick_place::ActionStatus;
+using pick_place::Checkpoint;
+using pick_place::CheckpointPhase;
+using pick_place::Failure;
+using pick_place::FailureCategory;
+using pick_place::ObservationResult;
+using pick_place::PlanArtifact;
+using pick_place::PlanResult;
+using pick_place::RunMode;
+using pick_place::State;
+using pick_place::TransitionKey;
+using pick_place::ValidationResult;
+using pick_place::WorldSnapshot;
 
-  pick_place::ActionResult cancel() override
-  {
-    return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
-  }
+Failure failure(FailureCategory category, std::string code)
+{
+  return {category, std::move(code), "injected test failure", {}};
+}
+
+WorldSnapshot snapshot(std::string session = "session-a")
+{
+  WorldSnapshot value;
+  value.fresh = true;
+  value.arm_stationary = true;
+  value.gripper_open = true;
+  value.tcp_pose_world = {0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0};
+  value.joint_positions = {{"joint_a", 0.25}, {"joint_b", -0.5}};
+  value.joint_velocities = {{"joint_a", 0.0}, {"joint_b", 0.0}};
+  value.moveit_world_object_poses = {{"object", {0.4, 0.5, 0.6, 0.0, 0.0, 0.0, 1.0}}};
+  value.moveit_coke_attached = false;
+  value.gazebo_coke_pose_world = {0.4, 0.5, 0.6, 0.0, 0.0, 0.0, 1.0};
+  value.gazebo_coke_attached = false;
+  value.gazebo_coke_stationary = true;
+  value.simulation_session_id = std::move(session);
+  return value;
+}
+
+void setExpected(Checkpoint & checkpoint, const WorldSnapshot & value)
+{
+  checkpoint.expected.tcp_pose_world = value.tcp_pose_world;
+  checkpoint.expected.gripper_open = value.gripper_open;
+  checkpoint.expected.joint_positions = value.joint_positions;
+  checkpoint.expected.moveit_world_object_poses = value.moveit_world_object_poses;
+  checkpoint.expected.moveit_coke_attached = value.moveit_coke_attached;
+  checkpoint.expected.gazebo_coke_pose_world = value.gazebo_coke_pose_world;
+  checkpoint.expected.gazebo_coke_attached = value.gazebo_coke_attached;
+  checkpoint.expected.gazebo_coke_stationary = value.gazebo_coke_stationary;
+  checkpoint.expected.required_world_objects = {"object"};
+}
+
+std::string event(const char * operation, State state)
+{
+  return std::string(operation) + ":" + pick_place::toString(state);
+}
+
+struct Scenario
+{
+  std::vector<std::string> events;
+  WorldSnapshot world{snapshot()};
+  std::optional<State> fail_plan;
+  std::optional<State> fail_plan_validation;
+  std::optional<State> fail_execute;
+  std::optional<State> fail_precondition;
+  std::optional<State> fail_transition;
+  std::optional<int> fail_observation_call;
+  ActionResult cancel_result{ActionStatus::SUCCEEDED, std::nullopt};
+  int observation_calls{0};
+  int planner_calls{0};
+  int executor_calls{0};
+  int cancel_calls{0};
+  int precondition_calls{0};
+  int transition_calls{0};
+  int validation_calls{0};
 };
 
-class SequencedObserver final : public pick_place::IWorldObserver
+class FakeObserver final : public pick_place::IWorldObserver
 {
 public:
-  pick_place::ObservationResult observe() override
+  explicit FakeObserver(Scenario & scenario) : scenario_(scenario) {}
+
+  ObservationResult observe() override
   {
-    ++calls;
-    return {calls == 1 ? before : after, std::nullopt};
+    scenario_.events.push_back("observe");
+    ++scenario_.observation_calls;
+    if (scenario_.fail_observation_call == scenario_.observation_calls) {
+      return {std::nullopt, failure(FailureCategory::OBSERVATION, "OBSERVATION_INJECTED")};
+    }
+    return {scenario_.world, std::nullopt};
   }
 
-  pick_place::WorldSnapshot before;
-  pick_place::WorldSnapshot after;
-  int calls{0};
+private:
+  Scenario & scenario_;
 };
 
-class RecordingCheckpointStore final : public pick_place::ICheckpointStore
+class FakePlanner final : public pick_place::IStatePlanner
 {
 public:
-  std::optional<pick_place::Failure> commit(const pick_place::Checkpoint & checkpoint) override
+  FakePlanner(State state, Scenario & scenario) : state_(state), scenario_(scenario) {}
+
+  PlanResult plan(State state, State, const ObservationResult &) override
   {
-    committed = checkpoint;
+    scenario_.events.push_back(event("plan", state));
+    ++scenario_.planner_calls;
+    if (scenario_.fail_plan == state_) {
+      return {{ActionStatus::FAILED, failure(FailureCategory::PLANNING, "PLANNING_INJECTED")},
+              nullptr};
+    }
+    auto artifact = std::make_shared<PlanArtifact>();
+    artifact->trajectory_points = 2;
+    return {{ActionStatus::SUCCEEDED, std::nullopt}, std::move(artifact)};
+  }
+
+private:
+  State state_;
+  Scenario & scenario_;
+};
+
+class FakePlanValidator final : public pick_place::IPlanValidator
+{
+public:
+  FakePlanValidator(State state, Scenario & scenario) : state_(state), scenario_(scenario) {}
+
+  ValidationResult validate(State state, const WorldSnapshot &, const PlanArtifact &) const override
+  {
+    scenario_.events.push_back(event("plan-validate", state));
+    ++scenario_.validation_calls;
+    if (scenario_.fail_plan_validation == state_) {
+      return {false, {failure(FailureCategory::PLAN_VALIDATION, "PLAN_INVALID_INJECTED")}, {}};
+    }
+    return {true, {}, {}};
+  }
+
+private:
+  State state_;
+  Scenario & scenario_;
+};
+
+class FakeExecutor final : public pick_place::IStateExecutor
+{
+public:
+  FakeExecutor(State state, Scenario & scenario) : state_(state), scenario_(scenario) {}
+
+  ActionResult execute(const pick_place::ExecutionContext & context) override
+  {
+    scenario_.events.push_back(event("execute", context.state));
+    ++scenario_.executor_calls;
+    if (scenario_.fail_execute == state_) {
+      return {ActionStatus::FAILED, failure(FailureCategory::EXECUTION, "EXECUTION_INJECTED")};
+    }
+    switch (state_) {
+      case State::ATTACH_GAZEBO:
+        scenario_.world.gazebo_coke_attached = true;
+        break;
+      case State::ATTACH_MOVEIT:
+        scenario_.world.moveit_coke_attached = true;
+        break;
+      case State::DETACH_GAZEBO:
+      case State::RECOVER_DETACH_GAZEBO:
+        scenario_.world.gazebo_coke_attached = false;
+        break;
+      case State::DETACH_MOVEIT:
+      case State::RECOVER_DETACH_MOVEIT:
+        scenario_.world.moveit_coke_attached = false;
+        break;
+      default:
+        break;
+    }
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+
+  ActionResult cancel() override
+  {
+    scenario_.events.push_back(event("cancel", state_));
+    ++scenario_.cancel_calls;
+    return scenario_.cancel_result;
+  }
+
+private:
+  State state_;
+  Scenario & scenario_;
+};
+
+class FakeContract final : public pick_place::TransitionContractRegistry::ITransitionContract
+{
+public:
+  FakeContract(State state, Scenario & scenario) : state_(state), scenario_(scenario) {}
+
+  ValidationResult validatePrecondition(const WorldSnapshot &) const override
+  {
+    scenario_.events.push_back(event("precondition", state_));
+    ++scenario_.precondition_calls;
+    if (scenario_.fail_precondition == state_) {
+      return {false, {failure(FailureCategory::PRECONDITION, "PRECONDITION_INJECTED")}, {}};
+    }
+    return {true, {}, {}};
+  }
+
+  ValidationResult validate(const WorldSnapshot &, const WorldSnapshot &,
+                            const ActionResult &) const override
+  {
+    scenario_.events.push_back(event("transition-validate", state_));
+    ++scenario_.transition_calls;
+    if (scenario_.fail_transition == state_) {
+      return {false, {failure(FailureCategory::POSTCONDITION, "POSTCONDITION_INJECTED")}, {}};
+    }
+    return {true, {}, {}};
+  }
+
+private:
+  State state_;
+  Scenario & scenario_;
+};
+
+class MemoryCheckpointStore final : public pick_place::ICheckpointStore
+{
+public:
+  explicit MemoryCheckpointStore(Scenario & scenario) : scenario_(scenario) {}
+
+  std::optional<Failure> commit(const Checkpoint & checkpoint) override
+  {
+    scenario_.events.push_back(event("checkpoint", checkpoint.next_state));
+    ++commit_calls;
+    if (commit_failure) {
+      return commit_failure;
+    }
+    latest = checkpoint;
+    history.push_back(checkpoint);
     return std::nullopt;
   }
 
   pick_place::CheckpointLoadResult loadLatestCompatible() override
   {
-    return {std::nullopt, std::nullopt};
+    ++load_calls;
+    return latest ? pick_place::CheckpointLoadResult{latest, std::nullopt}
+                  : pick_place::CheckpointLoadResult{
+                      std::nullopt, failure(FailureCategory::CHECKPOINT, "NO_CHECKPOINT")};
   }
 
-  std::optional<pick_place::Checkpoint> committed;
+  Scenario & scenario_;
+  std::optional<Checkpoint> latest;
+  std::vector<Checkpoint> history;
+  std::optional<Failure> commit_failure;
+  int commit_calls{0};
+  int load_calls{0};
 };
 
-}  // namespace
-
-TEST(RunnerContracts, RegisteredFakesCanPlanExecuteCheckpointAndResume)
+class FactDrivenRecoveryPolicy final : public pick_place::IRecoveryPolicy
 {
+public:
+  explicit FactDrivenRecoveryPolicy(Scenario & scenario) : scenario_(scenario) {}
+
+  pick_place::RecoveryRoute select(State state, const Failure &,
+                                   const WorldSnapshot & current) const override
+  {
+    scenario_.events.push_back(event("recover", state));
+    ++calls;
+    if (route_failure) {
+      return {std::nullopt, route_failure};
+    }
+    if (current.gazebo_coke_attached.value_or(false) &&
+        current.moveit_coke_attached.value_or(false)) {
+      return {State::RECOVER_LIFT_TO_SAFE_HEIGHT, std::nullopt};
+    }
+    if (current.gazebo_coke_attached.value_or(false) ||
+        current.moveit_coke_attached.value_or(false)) {
+      return {State::RECOVER_OPEN_GRIPPER, std::nullopt};
+    }
+    return {State::RECOVER_RETREAT, std::nullopt};
+  }
+
+  Scenario & scenario_;
+  mutable int calls{0};
+  std::optional<Failure> route_failure;
+};
+
+const std::vector<State> kActionStates{State::PREPARE_OPEN_GRIPPER,
+                                       State::MOVE_ABOVE_OBJECT,
+                                       State::DESCEND,
+                                       State::CLOSE_GRIPPER,
+                                       State::ATTACH_GAZEBO,
+                                       State::ATTACH_MOVEIT,
+                                       State::LIFT,
+                                       State::MOVE_ABOVE_PLACE,
+                                       State::DESCEND_TO_PLACE,
+                                       State::OPEN_GRIPPER,
+                                       State::DETACH_GAZEBO,
+                                       State::DETACH_MOVEIT,
+                                       State::SYNC_WORLD_OBJECT,
+                                       State::RETREAT,
+                                       State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+                                       State::RECOVER_MOVE_ABOVE_PICK,
+                                       State::RECOVER_DESCEND_TO_PICK,
+                                       State::RECOVER_OPEN_GRIPPER,
+                                       State::RECOVER_DETACH_GAZEBO,
+                                       State::RECOVER_DETACH_MOVEIT,
+                                       State::RECOVER_SYNC_WORLD_OBJECT,
+                                       State::RECOVER_RETREAT};
+
+struct Harness
+{
+  Harness() : observer(scenario), store(scenario), recovery(scenario) {}
+
+  void registerState(State state, bool planned = false)
+  {
+    actions.registerExecutor(state, std::make_shared<FakeExecutor>(state, scenario));
+    const auto next = pick_place::TransitionTable::resolve(state, ActionStatus::SUCCEEDED);
+    contracts.registerContract({state, next}, std::make_shared<FakeContract>(state, scenario));
+    if (planned) {
+      actions.registerPlanner(state, std::make_shared<FakePlanner>(state, scenario));
+      validators.registerValidator(state, std::make_shared<FakePlanValidator>(state, scenario));
+    }
+  }
+
+  void registerAll()
+  {
+    for (const auto state : kActionStates) {
+      registerState(state);
+    }
+  }
+
+  pick_place::StateMachineRunner runner()
+  {
+    return {actions, contracts, &observer, &store, &resume, &validators, &recovery};
+  }
+
+  Scenario scenario;
   pick_place::StateActionRegistry actions;
   pick_place::TransitionContractRegistry contracts;
   pick_place::PlanValidatorRegistry validators;
-  (void)actions;
-  (void)contracts;
-  (void)validators;
+  FakeObserver observer;
+  MemoryCheckpointStore store;
+  pick_place::CommonResumeValidator resume{"config-a", "session-a"};
+  FactDrivenRecoveryPolicy recovery;
+};
+
+Checkpoint forwardCheckpoint(State last, State next, const WorldSnapshot & world)
+{
+  Checkpoint checkpoint;
+  checkpoint.run_id = "pick_place_state_machine";
+  checkpoint.sequence = 4;
+  checkpoint.source_mode = RunMode::EXECUTE;
+  checkpoint.phase = CheckpointPhase::FORWARD;
+  checkpoint.last_completed_state = last;
+  checkpoint.next_state = next;
+  checkpoint.configuration_hash = "config-a";
+  checkpoint.simulation_session_id = "session-a";
+  setExpected(checkpoint, world);
+  return checkpoint;
 }
 
-TEST(RunnerContracts, SuccessfulTransitionCheckpointsTheCompleteObservedWorldExpectation)
+std::vector<State> normalTrace()
 {
-  pick_place::StateActionRegistry actions;
-  actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER,
-                           std::make_shared<SuccessfulExecutor>());
-  pick_place::TransitionContractRegistry contracts;
-  contracts.registerContract(
-    {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::State::MOVE_ABOVE_OBJECT},
-    std::make_shared<pick_place::AlwaysPassValidator>());
-  SequencedObserver observer;
-  observer.before.fresh = true;
-  observer.before.arm_stationary = true;
-  observer.after.fresh = true;
-  observer.after.arm_stationary = true;
-  observer.after.tcp_pose_world = {0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0};
-  observer.after.gripper_open = true;
-  observer.after.joint_positions = {{"joint_a", 0.25}, {"joint_b", -0.5}};
-  observer.after.moveit_world_object_poses = {{"object", {0.4, 0.5, 0.6, 0.0, 0.0, 0.0, 1.0}}};
-  observer.after.moveit_coke_attached = true;
-  observer.after.gazebo_coke_pose_world = pick_place::Pose3d{0.7, 0.8, 0.9, 0.0, 0.0, 0.0, 1.0};
-  observer.after.gazebo_coke_attached = true;
-  observer.after.gazebo_coke_stationary = true;
-  observer.after.simulation_session_id = "session-a";
-  RecordingCheckpointStore store;
-  const pick_place::CommonResumeValidator resume_validator("config-a", "session-a");
-  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &store,
-                                              &resume_validator);
+  return {State::IDLE,
+          State::PREPARE_OPEN_GRIPPER,
+          State::MOVE_ABOVE_OBJECT,
+          State::DESCEND,
+          State::CLOSE_GRIPPER,
+          State::ATTACH_GAZEBO,
+          State::ATTACH_MOVEIT,
+          State::LIFT,
+          State::MOVE_ABOVE_PLACE,
+          State::DESCEND_TO_PLACE,
+          State::OPEN_GRIPPER,
+          State::DETACH_GAZEBO,
+          State::DETACH_MOVEIT,
+          State::SYNC_WORLD_OBJECT,
+          State::RETREAT,
+          State::DONE};
+}
+
+TEST(PureRunnerIntegration, ExecuteUsesTheCompleteBoundaryInOrder)
+{
+  Harness harness;
+  harness.registerState(State::PREPARE_OPEN_GRIPPER);
+  harness.registerState(State::MOVE_ABOVE_OBJECT, true);
 
   const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
-                std::nullopt, 10});
+    harness.runner().run({RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
-  ASSERT_TRUE(store.committed);
-  EXPECT_EQ(observer.after.tcp_pose_world.x, store.committed->expected.tcp_pose_world.x);
-  EXPECT_EQ(observer.after.gripper_open, store.committed->expected.gripper_open);
-  EXPECT_EQ(observer.after.joint_positions, store.committed->expected.joint_positions);
-  EXPECT_EQ(observer.after.moveit_world_object_poses.size(),
-            store.committed->expected.moveit_world_object_poses.size());
-  EXPECT_EQ(observer.after.moveit_coke_attached, store.committed->expected.moveit_coke_attached);
-  EXPECT_EQ(observer.after.gazebo_coke_pose_world->z,
-            store.committed->expected.gazebo_coke_pose_world->z);
-  EXPECT_EQ(observer.after.gazebo_coke_attached, store.committed->expected.gazebo_coke_attached);
-  EXPECT_EQ(observer.after.gazebo_coke_stationary,
-            store.committed->expected.gazebo_coke_stationary);
-  EXPECT_EQ(std::vector<std::string>({"object"}), store.committed->expected.required_world_objects);
+  const std::vector<std::string> expected{"observe",
+                                          "precondition:PREPARE_OPEN_GRIPPER",
+                                          "execute:PREPARE_OPEN_GRIPPER",
+                                          "observe",
+                                          "transition-validate:PREPARE_OPEN_GRIPPER",
+                                          "checkpoint:MOVE_ABOVE_OBJECT",
+                                          "observe",
+                                          "precondition:MOVE_ABOVE_OBJECT",
+                                          "plan:MOVE_ABOVE_OBJECT",
+                                          "plan-validate:MOVE_ABOVE_OBJECT",
+                                          "execute:MOVE_ABOVE_OBJECT",
+                                          "observe",
+                                          "transition-validate:MOVE_ABOVE_OBJECT",
+                                          "checkpoint:DESCEND"};
+  EXPECT_EQ(expected, harness.scenario.events);
 }
+
+TEST(PureRunnerIntegration, PlanOnlyStopBoundaryPlansValidatesAndCheckpointsWithoutActing)
+{
+  Harness harness;
+  harness.registerState(State::MOVE_ABOVE_OBJECT, true);
+
+  const auto result =
+    harness.runner().run({RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(0, harness.scenario.executor_calls);
+  EXPECT_EQ(0, harness.scenario.transition_calls);
+  EXPECT_EQ(
+    (std::vector<std::string>{"observe", "precondition:MOVE_ABOVE_OBJECT", "plan:MOVE_ABOVE_OBJECT",
+                              "plan-validate:MOVE_ABOVE_OBJECT", "checkpoint:MOVE_ABOVE_OBJECT"}),
+    harness.scenario.events);
+  ASSERT_TRUE(harness.store.latest);
+  EXPECT_EQ(RunMode::PLAN_ONLY, harness.store.latest->source_mode);
+  EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, harness.store.latest->last_completed_state);
+  EXPECT_EQ(State::MOVE_ABOVE_OBJECT, harness.store.latest->next_state);
+}
+
+TEST(PureRunnerIntegration, ExecuteStopCheckpointResumesWithFreshRunnerAndObserver)
+{
+  Harness first;
+  first.registerState(State::PREPARE_OPEN_GRIPPER);
+  ASSERT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE,
+            first.runner()
+              .run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20})
+              .status);
+
+  Harness resumed;
+  resumed.store.latest = first.store.latest;
+  resumed.registerState(State::PREPARE_OPEN_GRIPPER);
+  resumed.registerState(State::MOVE_ABOVE_OBJECT, true);
+  resumed.contracts.registerContract(
+    {State::PREPARE_OPEN_GRIPPER, State::MOVE_ABOVE_OBJECT},
+    std::make_shared<FakeContract>(State::PREPARE_OPEN_GRIPPER, resumed.scenario));
+
+  const auto result =
+    resumed.runner().run({RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, true, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ((std::vector<State>{State::MOVE_ABOVE_OBJECT, State::DESCEND}), result.state_trace);
+  EXPECT_EQ(1, resumed.scenario.executor_calls);
+  EXPECT_EQ(1, resumed.store.load_calls);
+}
+
+TEST(PureRunnerIntegration, ResumeValidatesCommonAndTransitionBoundaryBeforeAnyAction)
+{
+  Harness harness;
+  harness.registerState(State::PREPARE_OPEN_GRIPPER);
+  harness.registerState(State::MOVE_ABOVE_OBJECT, true);
+  harness.store.latest = forwardCheckpoint(State::PREPARE_OPEN_GRIPPER, State::MOVE_ABOVE_OBJECT,
+                                           harness.scenario.world);
+  harness.scenario.fail_transition = State::PREPARE_OPEN_GRIPPER;
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 20});
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("POSTCONDITION_INJECTED", result.failure->code);
+  EXPECT_EQ(0, harness.scenario.executor_calls);
+  EXPECT_EQ(0, harness.scenario.planner_calls);
+  EXPECT_EQ(1, harness.scenario.transition_calls);
+}
+
+TEST(PureRunnerIntegration, ResumeMismatchStaleSessionConfigAndSkippedBoundaryFailClosed)
+{
+  const std::vector<std::string> cases{"world", "stale", "session", "config", "skipped"};
+  for (const auto & which : cases) {
+    Harness harness;
+    harness.registerState(State::PREPARE_OPEN_GRIPPER);
+    harness.registerState(State::MOVE_ABOVE_OBJECT, true);
+    harness.store.latest = forwardCheckpoint(State::PREPARE_OPEN_GRIPPER, State::MOVE_ABOVE_OBJECT,
+                                             harness.scenario.world);
+    if (which == "world") {
+      harness.scenario.world.tcp_pose_world.x += 1.0;
+    } else if (which == "stale") {
+      harness.scenario.world.fresh = false;
+    } else if (which == "session") {
+      harness.scenario.world.simulation_session_id = "other-session";
+    } else if (which == "config") {
+      harness.store.latest->configuration_hash = "other-config";
+    } else {
+      harness.store.latest->next_state = State::DESCEND;
+    }
+
+    const auto result =
+      harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 20});
+
+    EXPECT_EQ(pick_place::RunStatus::ERROR, result.status) << which;
+    EXPECT_EQ(0, harness.scenario.executor_calls) << which;
+    EXPECT_EQ(0, harness.scenario.planner_calls) << which;
+  }
+}
+
+TEST(PureRunnerIntegration, MissingPlannerExecutorValidatorContractAndObserverFailClosed)
+{
+  {
+    Harness harness;
+    harness.validators.registerValidator(
+      State::MOVE_ABOVE_OBJECT,
+      std::make_shared<FakePlanValidator>(State::MOVE_ABOVE_OBJECT, harness.scenario));
+    harness.actions.registerExecutor(
+      State::MOVE_ABOVE_OBJECT,
+      std::make_shared<FakeExecutor>(State::MOVE_ABOVE_OBJECT, harness.scenario));
+    harness.contracts.registerContract(
+      {State::MOVE_ABOVE_OBJECT, State::DESCEND},
+      std::make_shared<FakeContract>(State::MOVE_ABOVE_OBJECT, harness.scenario));
+    const auto result =
+      harness.runner().run({RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ("PLANNER_NOT_REGISTERED", result.failure->code);
+  }
+  {
+    Harness harness;
+    harness.registerState(State::PREPARE_OPEN_GRIPPER);
+    harness.actions = {};
+    const auto result = harness.runner().run(
+      {RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20});
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ("EXECUTE_ACTION_NOT_REGISTERED", result.failure->code);
+  }
+  {
+    Harness harness;
+    harness.actions.registerPlanner(
+      State::MOVE_ABOVE_OBJECT,
+      std::make_shared<FakePlanner>(State::MOVE_ABOVE_OBJECT, harness.scenario));
+    const auto result =
+      harness.runner().run({RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ("PLAN_VALIDATOR_NOT_REGISTERED", result.failure->code);
+  }
+  {
+    Harness harness;
+    harness.actions.registerExecutor(
+      State::PREPARE_OPEN_GRIPPER,
+      std::make_shared<FakeExecutor>(State::PREPARE_OPEN_GRIPPER, harness.scenario));
+    const auto result = harness.runner().run(
+      {RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20});
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ("MISSING_TRANSITION_CONTRACT", result.failure->code);
+  }
+}
+
+TEST(PureRunnerIntegration, PlanningAndExecutionFailuresKeepTheirClassificationAndRecover)
+{
+  const std::vector<std::pair<std::string, FailureCategory>> cases{
+    {"precondition", FailureCategory::PRECONDITION},
+    {"plan", FailureCategory::PLANNING},
+    {"plan-validation", FailureCategory::PLAN_VALIDATION},
+    {"execute", FailureCategory::EXECUTION},
+    {"post-observe", FailureCategory::OBSERVATION},
+    {"transition", FailureCategory::POSTCONDITION}};
+  for (const auto & [which, category] : cases) {
+    Harness harness;
+    harness.registerAll();
+    harness.actions.registerPlanner(
+      State::MOVE_ABOVE_OBJECT,
+      std::make_shared<FakePlanner>(State::MOVE_ABOVE_OBJECT, harness.scenario));
+    harness.validators.registerValidator(
+      State::MOVE_ABOVE_OBJECT,
+      std::make_shared<FakePlanValidator>(State::MOVE_ABOVE_OBJECT, harness.scenario));
+    if (which == "precondition") {
+      harness.scenario.fail_precondition = State::MOVE_ABOVE_OBJECT;
+    } else if (which == "plan") {
+      harness.scenario.fail_plan = State::MOVE_ABOVE_OBJECT;
+    } else if (which == "plan-validation") {
+      harness.scenario.fail_plan_validation = State::MOVE_ABOVE_OBJECT;
+    } else if (which == "execute") {
+      harness.scenario.fail_execute = State::MOVE_ABOVE_OBJECT;
+    } else if (which == "post-observe") {
+      harness.scenario.fail_observation_call = 4;
+    } else {
+      harness.scenario.fail_transition = State::MOVE_ABOVE_OBJECT;
+    }
+
+    const auto result =
+      harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+
+    ASSERT_TRUE(result.failure) << which;
+    EXPECT_EQ(category, result.failure->category) << which;
+    EXPECT_EQ(pick_place::RunStatus::ERROR, result.status) << which;
+    EXPECT_GE(harness.scenario.cancel_calls, 1) << which;
+    EXPECT_EQ(State::ERROR, result.state_trace.back()) << which;
+  }
+}
+
+TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTraces)
+{
+  Harness normal;
+  normal.registerAll();
+  const auto successful =
+    normal.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+  EXPECT_EQ(pick_place::RunStatus::DONE, successful.status);
+  EXPECT_EQ(normalTrace(), successful.state_trace);
+
+  Harness failed;
+  failed.registerAll();
+  failed.scenario.fail_execute = State::LIFT;
+  const auto recovered =
+    failed.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+  const std::vector<State> expected{State::IDLE,
+                                    State::PREPARE_OPEN_GRIPPER,
+                                    State::MOVE_ABOVE_OBJECT,
+                                    State::DESCEND,
+                                    State::CLOSE_GRIPPER,
+                                    State::ATTACH_GAZEBO,
+                                    State::ATTACH_MOVEIT,
+                                    State::LIFT,
+                                    State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+                                    State::RECOVER_MOVE_ABOVE_PICK,
+                                    State::RECOVER_DESCEND_TO_PICK,
+                                    State::RECOVER_OPEN_GRIPPER,
+                                    State::RECOVER_DETACH_GAZEBO,
+                                    State::RECOVER_DETACH_MOVEIT,
+                                    State::RECOVER_SYNC_WORLD_OBJECT,
+                                    State::RECOVER_RETREAT,
+                                    State::ERROR};
+  EXPECT_EQ(expected, recovered.state_trace);
+}
+
+TEST(PureRunnerIntegration, RecoveryResumeReclassifiesFromCurrentFactsInsteadOfCheckpointHistory)
+{
+  Harness harness;
+  harness.registerAll();
+  auto historical = harness.scenario.world;
+  historical.gazebo_coke_attached = true;
+  historical.moveit_coke_attached = true;
+  auto checkpoint = forwardCheckpoint(State::LIFT, State::RECOVER_LIFT_TO_SAFE_HEIGHT, historical);
+  checkpoint.phase = CheckpointPhase::RECOVERY;
+  checkpoint.failed_state = State::LIFT;
+  checkpoint.original_failure = failure(FailureCategory::EXECUTION, "ORIGINAL_FAILURE");
+  harness.store.latest = checkpoint;
+  harness.scenario.world.gazebo_coke_attached = false;
+  harness.scenario.world.moveit_coke_attached = false;
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+
+  EXPECT_EQ((std::vector<State>{State::RECOVER_RETREAT, State::ERROR}), result.state_trace);
+  EXPECT_EQ(1, harness.recovery.calls);
+}
+
+TEST(PureRunnerIntegration, CancelFailureStopsWithoutRecoveryActions)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_execute = State::MOVE_ABOVE_OBJECT;
+  harness.scenario.cancel_result = {ActionStatus::FAILED,
+                                    failure(FailureCategory::EXECUTION, "CANCEL_INJECTED")};
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("CANCEL_INJECTED", result.failure->code);
+  EXPECT_EQ(0, harness.recovery.calls);
+}
+
+TEST(PureRunnerIntegration, RegistriesRegisterQueryAndReportCoverage)
+{
+  Harness harness;
+  harness.registerAll();
+  for (const auto state : kActionStates) {
+    EXPECT_NE(nullptr, harness.actions.findExecutor(state));
+  }
+  EXPECT_EQ(nullptr, harness.actions.findExecutor(State::DONE));
+  EXPECT_FALSE(harness.contracts.validateExecuteCoverage().has_value());
+
+  pick_place::TransitionContractRegistry incomplete;
+  ASSERT_TRUE(incomplete.validateExecuteCoverage().has_value());
+  EXPECT_EQ("MISSING_TRANSITION_CONTRACT", incomplete.validateExecuteCoverage()->code);
+}
+
+TEST(PureRunnerIntegration, FailAtOutsideDryRunAndInvalidTransitionLimitFailClosed)
+{
+  Harness harness;
+  const auto fail_at =
+    harness.runner().run({RunMode::EXECUTE, std::nullopt, false, State::MOVE_ABOVE_OBJECT, 20});
+  ASSERT_TRUE(fail_at.failure);
+  EXPECT_EQ("FAIL_AT_MODE_MISMATCH", fail_at.failure->code);
+
+  const auto no_transitions =
+    harness.runner().run({RunMode::DRY_RUN, std::nullopt, false, std::nullopt, 0});
+  ASSERT_TRUE(no_transitions.failure);
+  EXPECT_EQ("INVALID_MAX_TRANSITIONS", no_transitions.failure->code);
+  EXPECT_EQ(0, harness.scenario.executor_calls);
+}
+
+}  // namespace

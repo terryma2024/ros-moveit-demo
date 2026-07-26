@@ -69,6 +69,13 @@ bool poseMapsMatch(const std::map<std::string, Pose3d> & expected,
   return true;
 }
 
+bool finitePoseMap(const std::map<std::string, Pose3d> & poses)
+{
+  return std::all_of(poses.begin(), poses.end(), [](const auto & item) {
+    return !item.first.empty() && poseIsFinite(item.second);
+  });
+}
+
 bool optionalPosesMatch(const std::optional<Pose3d> & expected,
                         const std::optional<Pose3d> & current, double tolerance)
 {
@@ -91,6 +98,7 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
                                                  const WorldSnapshot & current) const
 {
   ValidationResult result{true, {}, {}};
+  const bool forward_boundary = checkpoint.phase == CheckpointPhase::FORWARD;
   if (!std::isfinite(tolerance_) || tolerance_ < 0.0) {
     addFailure(result, "RESUME_VALIDATOR_CONFIGURATION_INVALID",
                "Resume boundary tolerance must be finite and non-negative");
@@ -131,7 +139,8 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
                                  checkpoint.expected.gazebo_coke_stationary.has_value() &&
                                  !checkpoint.expected.required_world_objects.empty();
   if (!expected_complete || !poseIsFinite(checkpoint.expected.tcp_pose_world) ||
-      !finitePositionMap(checkpoint.expected.joint_positions)) {
+      !finitePositionMap(checkpoint.expected.joint_positions) ||
+      !finitePoseMap(checkpoint.expected.moveit_world_object_poses)) {
     addFailure(result, "CHECKPOINT_EXPECTATION_INCOMPLETE",
                "Checkpoint is missing complete finite cross-world boundary evidence");
   }
@@ -140,7 +149,9 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
     current.moveit_coke_attached.has_value() && current.gazebo_coke_pose_world.has_value() &&
     current.gazebo_coke_attached.has_value() && current.gazebo_coke_stationary.has_value();
   if (!current_complete || !poseIsFinite(current.tcp_pose_world) ||
-      !finitePositionMap(current.joint_positions)) {
+      !finitePositionMap(current.joint_positions) ||
+      !finitePoseMap(current.moveit_world_object_poses) ||
+      !poseIsFinite(*current.gazebo_coke_pose_world)) {
     addFailure(result, "RESUME_SNAPSHOT_INCOMPLETE",
                "Current observation is missing complete finite cross-world boundary evidence");
   }
@@ -151,11 +162,12 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
     orientationError(checkpoint.expected.tcp_pose_world, current.tcp_pose_world);
   result.metrics["resume_tcp_position_error"] = tcp_position_error;
   result.metrics["resume_tcp_orientation_error"] = tcp_orientation_error;
-  if (!posesMatch(checkpoint.expected.tcp_pose_world, current.tcp_pose_world, tolerance_)) {
+  if (forward_boundary &&
+      !posesMatch(checkpoint.expected.tcp_pose_world, current.tcp_pose_world, tolerance_)) {
     addFailure(result, "RESUME_TCP_POSE_MISMATCH",
                "Current TCP pose differs from the checkpoint expectation");
   }
-  if (checkpoint.expected.gripper_open != current.gripper_open) {
+  if (forward_boundary && checkpoint.expected.gripper_open != current.gripper_open) {
     addFailure(result, "RESUME_GRIPPER_STATE_MISMATCH",
                "Current gripper state differs from the checkpoint expectation");
   }
@@ -174,13 +186,13 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
     joints_match = joints_match && error <= tolerance_;
   }
   result.metrics["resume_joint_position_error_max"] = maximum_joint_error;
-  if (!joints_match) {
+  if (forward_boundary && !joints_match) {
     addFailure(result, "RESUME_JOINT_POSITION_MISMATCH",
                "Current named joint positions differ from the checkpoint expectation");
   }
 
-  if (!poseMapsMatch(checkpoint.expected.moveit_world_object_poses,
-                     current.moveit_world_object_poses, tolerance_)) {
+  if (forward_boundary && !poseMapsMatch(checkpoint.expected.moveit_world_object_poses,
+                                         current.moveit_world_object_poses, tolerance_)) {
     addFailure(result, "RESUME_MOVEIT_WORLD_MISMATCH",
                "Current MoveIt world poses differ from the checkpoint expectation");
   }
@@ -192,24 +204,27 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
                                checkpoint.expected.moveit_world_object_poses.count(name) != 0 &&
                                current.moveit_world_object_poses.count(name) != 0;
   }
-  if (!required_objects_present) {
+  if (forward_boundary && !required_objects_present) {
     addFailure(result, "RESUME_REQUIRED_WORLD_OBJECT_MISSING",
                "A required world object is absent or duplicated at the resume boundary");
   }
-  if (checkpoint.expected.moveit_coke_attached != current.moveit_coke_attached) {
+  if (forward_boundary &&
+      checkpoint.expected.moveit_coke_attached != current.moveit_coke_attached) {
     addFailure(result, "RESUME_MOVEIT_ATTACHMENT_MISMATCH",
                "Current MoveIt attachment state differs from the checkpoint expectation");
   }
-  if (!optionalPosesMatch(checkpoint.expected.gazebo_coke_pose_world,
-                          current.gazebo_coke_pose_world, tolerance_)) {
+  if (forward_boundary && !optionalPosesMatch(checkpoint.expected.gazebo_coke_pose_world,
+                                              current.gazebo_coke_pose_world, tolerance_)) {
     addFailure(result, "RESUME_GAZEBO_POSE_MISMATCH",
                "Current Gazebo object pose differs from the checkpoint expectation");
   }
-  if (checkpoint.expected.gazebo_coke_attached != current.gazebo_coke_attached) {
+  if (forward_boundary &&
+      checkpoint.expected.gazebo_coke_attached != current.gazebo_coke_attached) {
     addFailure(result, "RESUME_GAZEBO_ATTACHMENT_MISMATCH",
                "Current Gazebo attachment state differs from the checkpoint expectation");
   }
-  if (checkpoint.expected.gazebo_coke_stationary != current.gazebo_coke_stationary) {
+  if (forward_boundary &&
+      checkpoint.expected.gazebo_coke_stationary != current.gazebo_coke_stationary) {
     addFailure(result, "RESUME_GAZEBO_STATIONARY_MISMATCH",
                "Current Gazebo stationary state differs from the checkpoint expectation");
   }

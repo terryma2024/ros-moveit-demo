@@ -402,9 +402,12 @@ TEST(CommonResumeValidator, AcceptsOnlyACompleteMatchingWorldBoundary)
   EXPECT_TRUE(result.failures.empty());
 }
 
-TEST(CommonResumeValidator, FailsClosedForEveryExpectedWorldBoundaryMismatch)
+TEST(CommonResumeValidator, ForwardResumeFailsClosedForEveryExpectedWorldBoundaryMismatch)
 {
   auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.phase = pick_place::CheckpointPhase::FORWARD;
+  checkpoint.failed_state.reset();
+  checkpoint.original_failure.reset();
   checkpoint.resumable = true;
   const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
                                                     checkpoint.simulation_session_id);
