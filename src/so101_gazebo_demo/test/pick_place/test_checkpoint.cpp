@@ -41,7 +41,7 @@ pick_place::Checkpoint makeRecoveryCheckpoint()
   checkpoint.schema_version = 3;
   checkpoint.run_id = "run-42";
   checkpoint.sequence = 42;
-  checkpoint.source_mode = pick_place::RunMode::PLAN_ONLY;
+  checkpoint.source_mode = pick_place::RunMode::EXECUTE;
   checkpoint.phase = pick_place::CheckpointPhase::RECOVERY;
   checkpoint.last_completed_state = pick_place::State::MOVE_ABOVE_PLACE;
   checkpoint.failed_state = pick_place::State::DESCEND_TO_PLACE;
@@ -62,7 +62,7 @@ pick_place::Checkpoint makeRecoveryCheckpoint()
   checkpoint.expected.required_world_objects = {"object", "table"};
   checkpoint.configuration_hash = "configuration-sha256";
   checkpoint.simulation_session_id = "simulation-session";
-  checkpoint.resumable = false;
+  checkpoint.resumable = true;
   return checkpoint;
 }
 
@@ -218,6 +218,37 @@ TEST(CheckpointV3, OptionalWorldAndRecoveryEvidenceRoundTripsAsJsonNull)
   EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_pose_world);
   EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_attached);
   EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_stationary);
+  std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, SchemaV3IntentionallyExcludesRuntimeAttachmentMetadata)
+{
+  const auto path = checkpointPath("attachment_metadata_excluded");
+  pick_place::FileCheckpointStore store(path);
+  ASSERT_FALSE(store.commit(makeRecoveryCheckpoint()));
+
+  const auto expected = readJson(path).at("expected");
+  EXPECT_FALSE(expected.contains("moveit_coke_attached_link"));
+  EXPECT_FALSE(expected.contains("moveit_coke_touch_links"));
+  std::filesystem::remove(path);
+}
+
+TEST(CheckpointV3, RejectsPlanOnlyRecoveryCombinationOnCommitAndLoad)
+{
+  const auto path = checkpointPath("plan_only_recovery");
+  pick_place::FileCheckpointStore store(path);
+  auto invalid = makeRecoveryCheckpoint();
+  invalid.source_mode = pick_place::RunMode::PLAN_ONLY;
+
+  const auto commit_failure = store.commit(invalid);
+  ASSERT_TRUE(commit_failure);
+  EXPECT_EQ("CHECKPOINT_INVALID_DATA", commit_failure->code);
+
+  ASSERT_FALSE(store.commit(makeRecoveryCheckpoint()));
+  auto json = readJson(path);
+  json["source_mode"] = "plan_only";
+  writeJson(path, json);
+  expectLoadFailure(path, "CHECKPOINT_INVALID_DATA");
   std::filesystem::remove(path);
 }
 

@@ -19,6 +19,25 @@ bool isForwardAction(State state) noexcept
   return state >= State::PREPARE_OPEN_GRIPPER && state <= State::RETREAT;
 }
 
+bool requiresPlanning(State state) noexcept
+{
+  switch (state) {
+    case State::MOVE_ABOVE_OBJECT:
+    case State::DESCEND:
+    case State::LIFT:
+    case State::MOVE_ABOVE_PLACE:
+    case State::DESCEND_TO_PLACE:
+    case State::RETREAT:
+    case State::RECOVER_LIFT_TO_SAFE_HEIGHT:
+    case State::RECOVER_MOVE_ABOVE_PICK:
+    case State::RECOVER_DESCEND_TO_PICK:
+    case State::RECOVER_RETREAT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 WorldSnapshot snapshotFromExpected(const ExpectedWorldState & expected,
                                    const std::string & simulation_session_id)
 {
@@ -111,6 +130,11 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
                   "fail_at is supported only in dry_run mode",
                   {}});
   }
+  if (request.mode == RunMode::EXECUTE) {
+    if (const auto configuration_failure = validateExecuteConfiguration()) {
+      return error(*configuration_failure);
+    }
+  }
   if (request.resume) {
     return runResume(request);
   }
@@ -124,6 +148,56 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
                                 CheckpointPhase::FORWARD, std::nullopt, std::nullopt, true);
   }
   return error({FailureCategory::INTERNAL, "UNKNOWN_MODE", "unknown run mode", {}});
+}
+
+std::optional<Failure> StateMachineRunner::validateExecuteConfiguration() const
+{
+  if (!observer_ || !checkpoint_store_ || !common_resume_validator_) {
+    return Failure{FailureCategory::CONFIGURATION,
+                   "EXECUTE_INFRASTRUCTURE_MISSING",
+                   "execute requires observer, checkpoint store, and common resume validator",
+                   {}};
+  }
+  if (!recovery_policy_) {
+    return Failure{FailureCategory::CONFIGURATION,
+                   "RECOVERY_POLICY_MISSING",
+                   "execute requires a recovery policy before any action",
+                   {}};
+  }
+  for (const auto & [state, transitions] : TransitionTable::entries()) {
+    if (state == State::IDLE || isTerminal(state)) {
+      continue;
+    }
+    if (!actions_.findExecutor(state)) {
+      return Failure{FailureCategory::CONFIGURATION,
+                     "EXECUTE_ACTION_NOT_REGISTERED",
+                     std::string("State requires an executor: ") + toString(state),
+                     {}};
+    }
+    if (!contracts_.hasContract({state, transitions.succeeded})) {
+      return Failure{FailureCategory::CONFIGURATION,
+                     "MISSING_TRANSITION_CONTRACT",
+                     std::string("Missing execute contract for ") + toString(state) + " -> " +
+                       toString(transitions.succeeded),
+                     {}};
+    }
+    if (!requiresPlanning(state)) {
+      continue;
+    }
+    if (!actions_.findPlanner(state)) {
+      return Failure{FailureCategory::CONFIGURATION,
+                     "PLANNER_NOT_REGISTERED",
+                     std::string("State requires a planner: ") + toString(state),
+                     {}};
+    }
+    if (!plan_validators_ || !plan_validators_->hasValidator(state)) {
+      return Failure{FailureCategory::CONFIGURATION,
+                     "PLAN_VALIDATOR_NOT_REGISTERED",
+                     std::string("State requires a plan validator: ") + toString(state),
+                     {}};
+    }
+  }
+  return std::nullopt;
 }
 
 RunResult StateMachineRunner::runDryRun(const RunRequest & request)
@@ -501,8 +575,10 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
        checkpoint.next_state);
   const bool invalid_recovery_context = checkpoint.phase == CheckpointPhase::RECOVERY &&
                                         (!checkpoint.failed_state || !checkpoint.original_failure);
+  const bool invalid_recovery_source =
+    checkpoint.phase == CheckpointPhase::RECOVERY && checkpoint.source_mode != RunMode::EXECUTE;
   if (checkpoint.schema_version != 3 || !source_mode_supported || !checkpoint.resumable ||
-      invalid_forward_transition || invalid_recovery_context) {
+      invalid_forward_transition || invalid_recovery_context || invalid_recovery_source) {
     return error({FailureCategory::RESUME_VALIDATION,
                   "CHECKPOINT_INCOMPATIBLE",
                   "checkpoint does not describe a resumable boundary",
