@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -7,10 +8,21 @@ import yaml
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 CONFIG_DIR = PACKAGE_DIR / 'config'
+XACRO_PATH = PACKAGE_DIR / 'urdf' / 'so101.urdf.xacro'
 
 
 def load_yaml(name):
     return yaml.safe_load((CONFIG_DIR / name).read_text())
+
+
+def generated_robot(*mappings):
+    completed = subprocess.run(
+        ['xacro', str(XACRO_PATH), *mappings],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return ET.fromstring(completed.stdout)
 
 
 def test_ros2_control_joint_and_interface_contract():
@@ -31,6 +43,65 @@ def test_ros2_control_joint_and_interface_contract():
         controller = controllers[controller_name]['ros__parameters']
         assert controller['command_interfaces'] == ['position']
         assert controller['state_interfaces'] == ['position']
+
+
+def test_ros2_control_exposes_position_and_velocity_for_every_joint():
+    """Catch missing velocity evidence being silently reported as stationary."""
+    robot = generated_robot()
+    control = robot.find("./ros2_control[@name='RobotSystem']")
+    assert control is not None
+
+    interfaces = {
+        joint.attrib['name']: {
+            interface.attrib['name'] for interface in joint.findall('state_interface')
+        }
+        for joint in control.findall('joint')
+    }
+    assert interfaces == {
+        str(number): {'position', 'velocity'} for number in range(1, 7)
+    }
+
+
+def test_gazebo_contact_profile_uses_supported_gripper_pad_geometry():
+    """Catch Gazebo falling back to visual-only gripper contact geometry."""
+    robot = generated_robot('gazebo_collision_primitives:=true')
+
+    for link_name, collision_name in (
+        ('gripper', 'fixed_finger_contact'),
+        ('jaw', 'moving_finger_contact'),
+    ):
+        link = robot.find(f"./link[@name='{link_name}']")
+        assert link is not None
+        assert link.find('./visual/geometry/mesh') is not None
+        assert link.findall('./collision/geometry/mesh') == []
+        collision = link.find(f"./collision[@name='{collision_name}']")
+        assert collision is not None
+        box = collision.find('./geometry/box')
+        assert box is not None
+        assert all(float(value) > 0.0 for value in box.attrib['size'].split())
+
+    moveit_robot = generated_robot()
+    for link_name in ('gripper', 'jaw'):
+        link = moveit_robot.find(f"./link[@name='{link_name}']")
+        assert link is not None
+        assert link.find('./collision/geometry/mesh') is not None
+
+
+def test_detachable_joint_uses_runtime_gripper_entity_and_raw_event_topic():
+    """Catch a planning-only link name or durable-state topic in Gazebo config."""
+    robot = generated_robot('gazebo_collision_primitives:=true')
+    plugin = robot.find(
+        ".//plugin[@name='gz::sim::systems::DetachableJoint']"
+    )
+    assert plugin is not None
+    assert plugin.attrib['filename'] == 'gz-sim-detachable-joint-system'
+    assert plugin.findtext('parent_link') == 'gripper'
+    assert plugin.findtext('child_model') == 'coke'
+    assert plugin.findtext('child_link') == 'body'
+    assert plugin.findtext('initially_detached') == 'true'
+    assert plugin.findtext('attach_topic') == '/so101/attach_coke'
+    assert plugin.findtext('detach_topic') == '/so101/detach_coke'
+    assert plugin.findtext('output_topic') == '/so101/coke_attached_event'
 
 
 def test_moveit_controller_mapping_contract():

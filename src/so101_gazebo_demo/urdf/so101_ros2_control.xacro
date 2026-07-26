@@ -13,6 +13,7 @@
                 <param name="max">1.91986</param>
             </command_interface>
             <state_interface name="position" />
+            <state_interface name="velocity" />
         </joint>
 
         <joint name="2">
@@ -21,6 +22,7 @@
                 <param name="max">1.74533</param>
             </command_interface>
             <state_interface name="position" />
+            <state_interface name="velocity" />
         </joint>
 
         <joint name="3">
@@ -29,6 +31,7 @@
                 <param name="max">1.5708</param>
             </command_interface>
             <state_interface name="position" />
+            <state_interface name="velocity" />
         </joint>
 
         <joint name="4">
@@ -37,6 +40,7 @@
                 <param name="max">1.65806</param>
             </command_interface>
             <state_interface name="position" />
+            <state_interface name="velocity" />
         </joint>
         <joint name="5">
             <command_interface name="position">
@@ -44,6 +48,7 @@
                 <param name="max">2.79253</param>
             </command_interface>
             <state_interface name="position" />
+            <state_interface name="velocity" />
         </joint>
 
         <joint name="6">
@@ -52,6 +57,7 @@
                 <param name="max">1.74533</param>
             </command_interface>
             <state_interface name="position" />
+            <state_interface name="velocity" />
         </joint>
     </ros2_control>
 

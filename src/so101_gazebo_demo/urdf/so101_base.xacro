@@ -7,6 +7,8 @@
 -->
 
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+	<!-- Keep MoveIt on the detailed meshes; Gazebo opts into contact pads. -->
+	<xacro:arg name="gazebo_collision_primitives" default="false" />
 
 	<!-- Links -->
 	<link name="world" />
@@ -301,12 +303,14 @@
 			</geometry>
 			<material name="sts3215" />
 		</visual>
-		<collision>
-			<origin xyz="0.0077 0.0001 -0.0234" rpy="-1.5708 -5.55112e-17 -1.38213e-14" />
-			<geometry>
-				<mesh filename="package://so101_gazebo_demo/meshes/so101/sts3215_03a_v1.stl" />
-			</geometry>
-		</collision>
+		<xacro:unless value="$(arg gazebo_collision_primitives)">
+			<collision>
+				<origin xyz="0.0077 0.0001 -0.0234" rpy="-1.5708 -5.55112e-17 -1.38213e-14" />
+				<geometry>
+					<mesh filename="package://so101_gazebo_demo/meshes/so101/sts3215_03a_v1.stl" />
+				</geometry>
+			</collision>
+		</xacro:unless>
 		<!-- Part wrist_roll_follower_so101_v1 -->
 		<visual>
 			<origin xyz="5.55112e-17 -0.000218214 0.000949706"
@@ -317,14 +321,25 @@
 			</geometry>
 			<material name="3d_printed" />
 		</visual>
-		<collision>
-			<origin xyz="5.55112e-17 -0.000218214 0.000949706"
-				rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
-			<geometry>
-				<mesh
-					filename="package://so101_gazebo_demo/meshes/so101/wrist_roll_follower_so101_v1.stl" />
-			</geometry>
-		</collision>
+		<xacro:unless value="$(arg gazebo_collision_primitives)">
+			<collision>
+				<origin xyz="5.55112e-17 -0.000218214 0.000949706"
+					rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
+				<geometry>
+					<mesh
+						filename="package://so101_gazebo_demo/meshes/so101/wrist_roll_follower_so101_v1.stl" />
+				</geometry>
+			</collision>
+		</xacro:unless>
+		<xacro:if value="$(arg gazebo_collision_primitives)">
+			<!-- Convex fingertip pad used for load-bearing Coke contact in DART. -->
+			<collision name="fixed_finger_contact">
+				<origin xyz="-0.004 0 -0.084" rpy="0 0 0" />
+				<geometry>
+					<box size="0.016 0.020 0.042" />
+				</geometry>
+			</collision>
+		</xacro:if>
 	</link>
 
 	<!-- Link jaw -->
@@ -343,12 +358,23 @@
 			</geometry>
 			<material name="3d_printed" />
 		</visual>
-		<collision>
-			<origin xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
-			<geometry>
-				<mesh filename="package://so101_gazebo_demo/meshes/so101/moving_jaw_so101_v1.stl" />
-			</geometry>
-		</collision>
+		<xacro:unless value="$(arg gazebo_collision_primitives)">
+			<collision>
+				<origin xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+				<geometry>
+					<mesh filename="package://so101_gazebo_demo/meshes/so101/moving_jaw_so101_v1.stl" />
+				</geometry>
+			</collision>
+		</xacro:unless>
+		<xacro:if value="$(arg gazebo_collision_primitives)">
+			<!-- Moving fingertip pad follows joint 6 and supports Coke contact. -->
+			<collision name="moving_finger_contact">
+				<origin xyz="-0.009 -0.070 0" rpy="0 0 0" />
+				<geometry>
+					<box size="0.010 0.026 0.028" />
+				</geometry>
+			</collision>
+		</xacro:if>
 	</link>
 
 	<!-- Joint from gripper to jaw -->
