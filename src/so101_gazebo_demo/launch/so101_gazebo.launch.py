@@ -181,6 +181,11 @@ def generate_launch_description():
         gripper_controller_spawner,
     ) = controller_spawner_nodes()
     gz_ros2_bridge = attachment_bridge_node()
+    attachment_state_relay = Node(
+        package="so101_gazebo_demo",
+        executable="gazebo_attachment_state_relay",
+        output="screen",
+    )
 
     # Gazebo Sim 8 starts DetachableJoint attached despite the SDF option.  The
     # initializer waits for the plugin's real Gazebo Transport subscription,
@@ -207,6 +212,7 @@ def generate_launch_description():
                 event,
                 [
                     gz_ros2_bridge,
+                    attachment_state_relay,
                     joint_state_broadcaster_spawner,
                     arm_controller_spawner,
                     gripper_controller_spawner,
