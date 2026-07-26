@@ -39,3 +39,12 @@ def test_d20_section_produces_coke_preopen_and_contact_targets():
     assert result.fixed_inward_dot > 0.99
     assert result.preopen_moving_inward_dot > 0.70
     assert result.contact_moving_inward_dot > 0.70
+
+
+def test_default_mesh_dir_resolves_installed_package_meshes():
+    calculator = load_calculator_module()
+
+    mesh_dir = calculator.default_mesh_dir()
+
+    assert (mesh_dir / 'moving_jaw_so101_v1.stl').is_file()
+    assert (mesh_dir / 'wrist_roll_follower_so101_v1.stl').is_file()

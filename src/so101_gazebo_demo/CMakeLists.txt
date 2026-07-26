@@ -19,6 +19,14 @@ if(BUILD_TESTING)
     test/test_so101_launch_contract.py
   )
   ament_add_pytest_test(test_so101_srdf test/test_so101_srdf.py)
+  ament_add_pytest_test(
+    test_tile_ai_station_guis
+    test/test_tile_ai_station_guis.py
+  )
+  ament_add_pytest_test(
+    test_self_containment
+    test/test_self_containment.py
+  )
 endif()
 
 install(
@@ -29,7 +37,9 @@ install(
 )
 
 install(
-  PROGRAMS scripts/gripper_preopen_calc.py
+  PROGRAMS
+    scripts/gripper_preopen_calc.py
+    scripts/tile_ai_station_guis.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

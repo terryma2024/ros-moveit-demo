@@ -24,6 +24,16 @@ from typing import NamedTuple
 
 import numpy as np
 import trimesh
+from ament_index_python.packages import get_package_share_directory
+
+
+def default_mesh_dir() -> Path:
+    """Return the installed package's SO-101 mesh directory."""
+    return (
+        Path(get_package_share_directory('so101_gazebo_demo'))
+        / 'meshes'
+        / 'so101'
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +420,7 @@ def main() -> None:
     parser.add_argument(
         '--mesh-dir',
         type=Path,
-        default=Path(__file__).resolve().parents[1] / 'meshes' / 'so101',
+        default=default_mesh_dir(),
         help='Directory containing SO-101 STL files',
     )
     parser.add_argument(
