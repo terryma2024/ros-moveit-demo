@@ -151,6 +151,25 @@ def publish_attachment_command(environment, command):
     )
 
 
+def wait_for_durable_attachment_state(environment, expected, timeout=5):
+    """Read the relay's periodic durable state, never the edge-triggered event."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        completed = subprocess.run(
+            [
+                'gz', 'topic', '-e', '-n', '1',
+                '-t', '/so101/coke_attached',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            env=environment,
+        )
+        if completed.returncode == 0 and f'data: "{expected}"' in completed.stdout:
+            return completed.stdout.strip()
+    pytest.fail(f'durable attachment state did not become {expected}')
+
+
 def command_arm(environment, joint_1):
     message = (
         "{joint_names: ['1', '2', '3', '4', '5'], points: ["
@@ -423,6 +442,9 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             assert joint_sample['name'] == [str(number) for number in range(1, 7)]
             assert len(joint_sample['velocity']) == 6
             assert all(math.isfinite(value) for value in joint_sample['velocity'])
+            durable_initial = wait_for_durable_attachment_state(
+                environment, 'detached'
+            )
 
             initial_detached = sample_dynamic_positions(environment)
             command_arm(environment, 0.25)
@@ -439,6 +461,9 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             command_arm(environment, 0.0)
             before_attach = sample_dynamic_positions(environment)
             publish_attachment_command(environment, 'attach')
+            durable_attached = wait_for_durable_attachment_state(
+                environment, 'attached'
+            )
             after_attach = sample_dynamic_positions(environment)
             attach_jump = distance(before_attach['coke'], after_attach['coke'])
             assert attach_jump < 0.005
@@ -453,6 +478,9 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             ) < 0.01
 
             publish_attachment_command(environment, 'detach')
+            durable_detached = wait_for_durable_attachment_state(
+                environment, 'detached'
+            )
             detached = sample_dynamic_positions(environment)
             command_arm(environment, 0.0)
             after_detached_motion = sample_dynamic_positions(environment)
@@ -477,6 +505,9 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
                 f'before_attach={before_attach["coke"]} '
                 f'carried={carried["coke"]} '
                 f'after_detached_motion={after_detached_motion["coke"]}'
+                f' durable_initial={durable_initial!r}'
+                f' durable_attached={durable_attached!r}'
+                f' durable_detached={durable_detached!r}'
             )
         finally:
             if launch.poll() is None:
