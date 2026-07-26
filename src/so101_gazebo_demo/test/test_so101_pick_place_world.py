@@ -1,7 +1,9 @@
 """Contract tests for the SO-101 pick-place Gazebo world."""
 
-import os
+import ctypes
+import itertools
 import math
+import os
 from pathlib import Path
 import re
 import signal
@@ -27,6 +29,7 @@ LOAD_BEARING_COLLISIONS = (
     'fixed_finger_contact',
     'moving_finger_contact',
 )
+RUNTIME_ROS_DOMAIN_IDS = itertools.count(100 + os.getpid() % 100)
 
 
 def parse_vector(text):
@@ -57,6 +60,28 @@ def run(command, environment, timeout=15):
         timeout=timeout,
         env=environment,
     )
+
+
+def isolated_runtime_environment(partition_prefix):
+    """Return fresh ROS and Gazebo transport namespaces for one launch."""
+    environment = os.environ.copy()
+    environment.update({
+        'GZ_PARTITION': f'{partition_prefix}_{uuid.uuid4().hex}',
+        'ROS_DOMAIN_ID': str(next(RUNTIME_ROS_DOMAIN_IDS)),
+        'ROS2CLI_DISABLE_DAEMON': '1',
+    })
+    return environment
+
+
+def arm_parent_death_signal():
+    """Make a launch process receive SIGINT if its pytest parent disappears."""
+    parent_pid = os.getppid()
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(1, signal.SIGINT) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+    if os.getppid() != parent_pid:
+        os.kill(os.getpid(), signal.SIGINT)
 
 
 def wait_for_ros_topics(environment, required, launch, log, timeout=45):
@@ -281,14 +306,9 @@ def test_load_bearing_collision_failure_scanner_covers_runtime_variants(message)
     assert load_bearing_collision_failures(message) == [message]
 
 
-def test_runtime_joint_and_detachable_joint_observation_smoke():
-    """Prove finite joint evidence and physical attach/follow/detach behavior."""
-    environment = os.environ.copy()
-    environment.update({
-        'GZ_PARTITION': f'so101_task1_{uuid.uuid4().hex}',
-        'ROS_DOMAIN_ID': str(100 + os.getpid() % 100),
-        'ROS2CLI_DISABLE_DAEMON': '1',
-    })
+def prove_runtime_attachment_ready_has_no_delayed_initializer_detach():
+    """Catch a startup helper that detaches a valid early client attachment."""
+    environment = isolated_runtime_environment('so101_task1_ready')
 
     with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as log:
         launch = subprocess.Popen(
@@ -301,6 +321,89 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             text=True,
             env=environment,
             start_new_session=True,
+            preexec_fn=arm_parent_death_signal,
+        )
+        try:
+            wait_for_ros_topics(
+                environment,
+                {'/so101/attach_coke'},
+                launch,
+                log,
+            )
+            readiness_observed_at = time.monotonic()
+            publish_attachment_command(environment, 'attach')
+
+            wait_for_ros_topics(
+                environment,
+                {
+                    '/joint_states',
+                    '/arm_controller/joint_trajectory',
+                },
+                launch,
+                log,
+            )
+            old_initializer_window = 5.1
+            time.sleep(max(
+                0.0,
+                old_initializer_window
+                - (time.monotonic() - readiness_observed_at),
+            ))
+
+            before_motion = sample_dynamic_positions(environment)
+            command_arm(environment, 0.25)
+            carried = sample_dynamic_positions(environment)
+            gripper_delta = distance(
+                before_motion['gripper'], carried['gripper']
+            )
+            coke_delta = distance(before_motion['coke'], carried['coke'])
+            relative_delta = distance(
+                relative_position(
+                    before_motion['coke'], before_motion['gripper']
+                ),
+                relative_position(carried['coke'], carried['gripper']),
+            )
+
+            assert gripper_delta > 0.01
+            assert coke_delta > 0.01
+            assert relative_delta < 0.01
+            print(
+                'SO101_READY_ATTACHMENT_EVIDENCE '
+                f'wait_after_readiness={old_initializer_window:.1f} '
+                f'gripper_delta={gripper_delta:.9f} '
+                f'coke_delta={coke_delta:.9f} '
+                f'relative_delta={relative_delta:.9f}'
+            )
+        finally:
+            if launch.poll() is None:
+                os.killpg(launch.pid, signal.SIGINT)
+                try:
+                    launch.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    os.killpg(launch.pid, signal.SIGKILL)
+                    launch.wait(timeout=5)
+
+        log.seek(0)
+        output = log.read()
+        assert not load_bearing_collision_failures(output), output
+        assert 'Failed to initialize' not in output, output
+
+
+def test_runtime_joint_and_detachable_joint_observation_smoke():
+    """Prove finite joint evidence and physical attach/follow/detach behavior."""
+    environment = isolated_runtime_environment('so101_task1')
+
+    with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as log:
+        launch = subprocess.Popen(
+            [
+                'ros2', 'launch', 'so101_gazebo_demo',
+                'so101_gazebo.launch.py', 'headless:=true',
+            ],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=environment,
+            start_new_session=True,
+            preexec_fn=arm_parent_death_signal,
         )
         try:
             wait_for_ros_topics(
