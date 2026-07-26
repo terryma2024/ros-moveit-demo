@@ -46,14 +46,22 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
-class FollowJointTrajectoryGripperAdapter
+class ISO101GripperCommand
+{
+public:
+  virtual ~ISO101GripperCommand() = default;
+  [[nodiscard]] virtual ActionResult command(double q6) = 0;
+  [[nodiscard]] virtual ActionResult cancelAndWait() = 0;
+};
+
+class FollowJointTrajectoryGripperAdapter final : public ISO101GripperCommand
 {
 public:
   FollowJointTrajectoryGripperAdapter(std::shared_ptr<ITrajectoryActionClient> client,
                                       double trajectory_duration_seconds,
                                       double action_timeout_seconds);
-  [[nodiscard]] ActionResult command(double q6);
-  [[nodiscard]] ActionResult cancelAndWait();
+  [[nodiscard]] ActionResult command(double q6) override;
+  [[nodiscard]] ActionResult cancelAndWait() override;
 
 private:
   std::shared_ptr<ITrajectoryActionClient> client_;
