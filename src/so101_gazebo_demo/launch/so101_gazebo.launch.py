@@ -12,7 +12,7 @@ from launch.actions import (
     SetEnvironmentVariable,
 )
 from launch.conditions import IfCondition, UnlessCondition
-from launch.event_handlers import OnProcessExit
+from launch.event_handlers import OnProcessExit, OnProcessStart
 from launch.events import Shutdown
 from launch.substitutions import Command, LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -28,19 +28,23 @@ COKE_CONTACT_GZ_TOPIC = (
 )
 
 
-def initial_detach_command():
-    """Wait for the Gazebo plugin, publish one detach, and always terminate."""
+def initial_detach_command(timeout_seconds=INITIAL_DETACH_TIMEOUT_SECONDS):
+    """Publish detach only after the relay listens, then require durable evidence."""
     wait_and_publish = (
+        "while ! gz topic -i -t /so101/coke_attached_event 2>&1 "
+        "| grep -q '^Subscribers \\['; do sleep 0.1; done; "
         "while ! gz topic -i -t /so101/detach_coke 2>&1 "
         "| grep -q '^Subscribers \\['; do sleep 0.1; done; "
-        "exec gz topic -t /so101/detach_coke "
-        "-m gz.msgs.Empty -p 'unused: true'"
+        "gz topic -t /so101/detach_coke "
+        "-m gz.msgs.Empty -p 'unused: true'; "
+        "while ! gz topic -e -t /so101/coke_attached -n 1 2>&1 "
+        "| grep -q 'data: \"detached\"'; do sleep 0.1; done"
     )
     return [
         "/usr/bin/timeout",
         "--signal=TERM",
         "--kill-after=1",
-        str(INITIAL_DETACH_TIMEOUT_SECONDS),
+        str(timeout_seconds),
         "/bin/bash",
         "-c",
         wait_and_publish,
@@ -188,21 +192,28 @@ def generate_launch_description():
     )
 
     # Gazebo Sim 8 starts DetachableJoint attached despite the SDF option.  The
-    # initializer waits for the plugin's real Gazebo Transport subscription,
-    # publishes exactly once, and has an outer total timeout.  Public command
-    # bridging and controllers remain unavailable until initialization passes.
+    # The relay starts first and subscribes to the raw plugin event.  Only then
+    # does the initializer publish detach, and it succeeds only after observing
+    # the relay's durable detached state.  Public command bridging and
+    # controllers remain unavailable until that evidence chain completes.
     initial_detach_publisher = ExecuteProcess(
         cmd=initial_detach_command(),
         output="screen",
     )
-    start_detach_after_spawn = RegisterEventHandler(
+    start_relay_after_spawn = RegisterEventHandler(
         OnProcessExit(
             target_action=gz_spawn_entity,
             on_exit=lambda event, context: actions_after_success_or_shutdown(
                 event,
-                [initial_detach_publisher],
+                [attachment_state_relay],
                 "SO-101 robot spawn",
             ),
+        )
+    )
+    start_detach_after_relay = RegisterEventHandler(
+        OnProcessStart(
+            target_action=attachment_state_relay,
+            on_start=[initial_detach_publisher],
         )
     )
     start_readiness_after_detach = RegisterEventHandler(
@@ -212,7 +223,6 @@ def generate_launch_description():
                 event,
                 [
                     gz_ros2_bridge,
-                    attachment_state_relay,
                     joint_state_broadcaster_spawner,
                     arm_controller_spawner,
                     gripper_controller_spawner,
@@ -231,7 +241,8 @@ def generate_launch_description():
         robot_state_publisher_node,
         gazebo,
         gazebo_headless,
-        start_detach_after_spawn,
+        start_relay_after_spawn,
+        start_detach_after_relay,
         start_readiness_after_detach,
         gz_spawn_entity,
     ])
