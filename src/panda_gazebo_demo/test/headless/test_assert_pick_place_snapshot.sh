@@ -16,6 +16,15 @@ run_validator() {
 
 run_validator
 
+sed 's/- 0.002/- 0.040/g' "${fixtures}/snapshot_joint_states.txt" \
+  >"${tmp_dir}/open_joints.txt"
+if run_validator '' "${tmp_dir}/open_joints.txt" \
+    >"${tmp_dir}/open.out" 2>"${tmp_dir}/open.err"; then
+  echo 'FAIL: snapshot validator accepted an open final gripper' >&2
+  exit 1
+fi
+grep -Fq 'not safely closed' "${tmp_dir}/open.err"
+
 sed 's/\[0.000000 0.000000 0.000000\]/[0.523599 0.000000 0.000000]/' \
   "${fixtures}/snapshot_gazebo.txt" >"${tmp_dir}/tipped_gazebo.txt"
 if run_validator "${tmp_dir}/tipped_gazebo.txt" \

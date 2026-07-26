@@ -97,8 +97,8 @@ if not all(math.isfinite(value) for value in positions + velocities):
     fail('joint-state evidence is non-finite')
 joint_positions = dict(zip(names, positions))
 for finger in ('panda_finger_joint1', 'panda_finger_joint2'):
-    if joint_positions.get(finger, -math.inf) < 0.038:
-        fail(f'{finger} is not safely open')
+    if joint_positions.get(finger, math.inf) > 0.004:
+        fail(f'{finger} is not safely closed')
 if any(abs(velocity) > 0.01 for velocity in velocities):
     fail('robot is not stationary in final joint-state evidence')
 

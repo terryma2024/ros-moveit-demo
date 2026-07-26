@@ -32,9 +32,13 @@ sed 's/PLANNED_END_TCP_POSE state=LIFT x=0.300000/PLANNED_END_TCP_POSE state=LIF
   "$fixtures/complete.log" >"${tmp_dir}/bad_planned_endpoint.log"
 assert_rejected bad_planned_endpoint 'LIFT planned endpoint position error'
 
-sed 's/EXECUTED_END_TCP_POSE state=RETREAT x=0.300000/EXECUTED_END_TCP_POSE state=RETREAT x=0.350000/' \
-  "$fixtures/complete.log" >"${tmp_dir}/bad_executed_endpoint.log"
-assert_rejected bad_executed_endpoint 'RETREAT executed endpoint position error'
+sed 's/NAMED_JOINT_TARGET state=RETREAT target=ready/NAMED_JOINT_TARGET state=RETREAT target=park/' \
+  "$fixtures/complete.log" >"${tmp_dir}/wrong_retreat_target.log"
+assert_rejected wrong_retreat_target 'RETREAT named target mismatch'
+
+sed 's/FINGER1_POSITION=0.002000 FINGER2_POSITION=0.002000/FINGER1_POSITION=0.040000 FINGER2_POSITION=0.040000/' \
+  "$fixtures/complete.log" >"${tmp_dir}/open_final_gripper.log"
+assert_rejected open_final_gripper 'final gripper is not safely closed'
 
 sed 's/TARGET_TCP_POSE state=DESCEND x=0.300000 y=0.000000 z=0.870000 roll=3.141593/TARGET_TCP_POSE state=DESCEND x=0.300000 y=0.000000 z=0.870000 roll=1.570796/' \
   "$fixtures/complete.log" >"${tmp_dir}/bad_target_orientation.log"
