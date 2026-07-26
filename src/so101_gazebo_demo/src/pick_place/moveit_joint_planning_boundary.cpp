@@ -38,6 +38,13 @@ Pose3d poseFrom(const Eigen::Isometry3d & transform)
   return {p.x(), p.y(), p.z(), q.x(), q.y(), q.z(), q.w()};
 }
 
+Pose3d poseFrom(const geometry_msgs::msg::Pose & pose)
+{
+  return {pose.position.x, pose.position.y, pose.position.z,
+          pose.orientation.x, pose.orientation.y, pose.orientation.z,
+          pose.orientation.w};
+}
+
 double distance(const Pose3d & pose, const Vec3 & target)
 {
   const double dx = pose.x - target.x;
@@ -211,7 +218,12 @@ std::optional<CurrentJointStateEvidence> MoveItJointPlanningBoundary::currentSta
   if (!state) return std::nullopt;
   CurrentJointStateEvidence result;
   result.joint_names = impl_->profile.arm_joints;
-  for (const auto & name : result.joint_names) result.positions.push_back(state->getVariablePosition(name));
+  for (const auto & name : result.joint_names) {
+    result.positions.push_back(state->getVariablePosition(name));
+    result.velocities.push_back(state->getVariableVelocity(name));
+  }
+  result.gripper_position = state->getVariablePosition(impl_->profile.gripper_joint);
+  result.gripper_velocity = state->getVariableVelocity(impl_->profile.gripper_joint);
   result.observed_stamp_nanoseconds = static_cast<std::uint64_t>(impl_->node->now().nanoseconds());
   return result;
 }
@@ -224,12 +236,26 @@ std::optional<MotionPlanningSceneFacts> MoveItJointPlanningBoundary::sceneFacts(
     {impl_->profile.table_object, impl_->profile.coke_model});
   facts.table_in_world = objects.count(impl_->profile.table_object) == 1;
   facts.coke_in_world = objects.count(impl_->profile.coke_model) == 1;
+  if (facts.table_in_world) {
+    facts.table_world_pose = poseFrom(objects.at(impl_->profile.table_object).pose);
+  }
+  if (facts.coke_in_world) {
+    facts.coke_world_pose = poseFrom(objects.at(impl_->profile.coke_model).pose);
+  }
   const auto attached = impl_->planning_scene_interface.getAttachedObjects({impl_->profile.coke_model});
   const auto found = attached.find(impl_->profile.coke_model);
   facts.coke_attached = found != attached.end();
   if (found != attached.end()) {
     facts.attached_link = found->second.link_name;
     facts.touch_links.insert(found->second.touch_links.begin(), found->second.touch_links.end());
+    facts.attached_relative_pose = poseFrom(found->second.object.pose);
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->scene_mutex);
+    if (impl_->scene && impl_->scene->knowsFrameTransform(impl_->profile.moveit_attach_link)) {
+      facts.current_gripper_pose_world = poseFrom(
+        impl_->scene->getCurrentState().getGlobalLinkTransform(impl_->profile.moveit_attach_link));
+    }
   }
   return facts;
 }
@@ -420,6 +446,12 @@ std::optional<RobotStateEvidence> MoveItJointPlanningBoundary::evaluate(
   if (!state.satisfiesBounds()) return std::nullopt;
   RobotStateEvidence evidence;
   evidence.tcp_pose = poseFrom(state.getGlobalLinkTransform(impl_->profile.tcp_link));
+  if (const auto * attached = state.getAttachedBody(impl_->profile.coke_model)) {
+    const auto & transforms = attached->getGlobalCollisionBodyTransforms();
+    if (!transforms.empty()) {
+      evidence.attached_coke_pose_world = poseFrom(transforms.front());
+    }
+  }
   collision_detection::CollisionRequest request;
   request.group_name = impl_->profile.planning_group;
   request.contacts = true;

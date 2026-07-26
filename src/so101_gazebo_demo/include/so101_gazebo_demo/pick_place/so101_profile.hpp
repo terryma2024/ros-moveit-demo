@@ -29,6 +29,10 @@ struct SO101Profile
   double coke_radius{0.033};
   double coke_height{0.122};
   Pose3d coke_pose{0.02, -0.28, 0.181, 0.0, 0.0, 0.0, 1.0};
+  Pose3d place_coke_pose{-0.08, -0.25, 0.181, 0.0, 0.0, 0.0, 1.0};
+  Pose3d calibrated_grasp_relative_pose{
+    0.0214000012, -0.0000000417348703, -0.124949,
+    -0.000000365, 0.000000355, 0.717237013, 0.696829296};
   double q6_preopen{0.707194871};
   double q6_contact{0.662818811};
   double q6_full_open{1.7};

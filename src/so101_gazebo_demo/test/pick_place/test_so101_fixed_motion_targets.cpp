@@ -58,6 +58,13 @@ std::string policyFingerprint(const spp::SO101FixedMotionTargetPolicy & policy)
 {
   std::ostringstream serialized;
   serialized << std::setprecision(17);
+  const auto & profile = spp::SO101Profile::canonical();
+  for (const auto & pose : {profile.table_pose, profile.coke_pose,
+                            profile.place_coke_pose,
+                            profile.calibrated_grasp_relative_pose}) {
+    serialized << pose.x << ',' << pose.y << ',' << pose.z << ','
+               << pose.qx << ',' << pose.qy << ',' << pose.qz << ',' << pose.qw << '|';
+  }
   for (const auto state : {spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
                            spp::State::LIFT, spp::State::MOVE_ABOVE_PLACE,
                            spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
@@ -135,7 +142,7 @@ TEST(SO101FixedMotionTargets, BindsPolicyVersionToAllMotionConstants)
 {
   const spp::SO101FixedMotionTargetPolicy policy;
   const std::map<std::string, std::string> version_to_golden_fingerprint{
-    {"so101-fixed-table-d20-v1", "5d21eeb1e57f3f41"},
+    {"so101-fixed-table-d20-v1", "a73316019c50dbe4"},
   };
   ASSERT_EQ(version_to_golden_fingerprint.count(policy.version()), 1U);
   EXPECT_EQ(policyFingerprint(policy), version_to_golden_fingerprint.at(policy.version()));
@@ -186,6 +193,22 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
         << index << ":" << joint;
     }
   }
+  state.setToDefaultValues();
+  state.setVariablePositions(profile.arm_joints, kGoldenWaypoints[3]);
+  state.setVariablePosition(profile.gripper_joint, profile.q6_contact);
+  state.update();
+  Eigen::Isometry3d gripper_coke = Eigen::Isometry3d::Identity();
+  const auto & relative = profile.calibrated_grasp_relative_pose;
+  gripper_coke.translation() = Eigen::Vector3d(relative.x, relative.y, relative.z);
+  gripper_coke.linear() = Eigen::Quaterniond(
+    relative.qw, relative.qx, relative.qy, relative.qz).normalized().toRotationMatrix();
+  const auto world_coke =
+    state.getGlobalLinkTransform(profile.moveit_attach_link) * gripper_coke;
+  EXPECT_NEAR(world_coke.translation().x(), profile.coke_pose.x, 2e-6);
+  EXPECT_NEAR(world_coke.translation().y(), profile.coke_pose.y, 2e-6);
+  EXPECT_NEAR(world_coke.translation().z(), profile.coke_pose.z, 2e-6);
+  const Eigen::Quaterniond world_orientation(world_coke.rotation());
+  EXPECT_NEAR(std::abs(world_orientation.normalized().w()), 1.0, 2e-6);
   rclcpp::shutdown();
 }
 

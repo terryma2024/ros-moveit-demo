@@ -1,6 +1,7 @@
 #include <limits>
 #include <memory>
 
+#include <Eigen/Geometry>
 #include <gtest/gtest.h>
 
 #include "so101_gazebo_demo/pick_place/so101_joint_motion_adapter.hpp"
@@ -9,6 +10,33 @@ namespace spp = so101_gazebo_demo::pick_place;
 
 namespace
 {
+
+spp::Pose3d tablePose()
+{
+  return {0.0, -0.20, 0.10, 0.0, 0.0, 0.0, 1.0};
+}
+
+spp::Pose3d pickPose()
+{
+  return {0.02, -0.28, 0.181, 0.0, 0.0, 0.0, 1.0};
+}
+
+spp::Pose3d graspRelativePose()
+{
+  return {0.0214000012, -0.0000000417348703, -0.124949,
+          -0.000000365, 0.000000355, 0.717237013, 0.696829296};
+}
+
+spp::Pose3d compose(const spp::Pose3d & parent, const spp::Pose3d & child)
+{
+  const Eigen::Quaterniond q_parent(parent.qw, parent.qx, parent.qy, parent.qz);
+  const Eigen::Quaterniond q_child(child.qw, child.qx, child.qy, child.qz);
+  const Eigen::Vector3d translated =
+    Eigen::Vector3d(parent.x, parent.y, parent.z) +
+    q_parent.normalized() * Eigen::Vector3d(child.x, child.y, child.z);
+  const Eigen::Quaterniond q = (q_parent.normalized() * q_child.normalized()).normalized();
+  return {translated.x(), translated.y(), translated.z(), q.x(), q.y(), q.z(), q.w()};
+}
 
 class FakeBoundary final : public spp::IJointPlanningBoundary,
                            public spp::IRobotStateEvidenceProvider
@@ -59,7 +87,8 @@ public:
 
   spp::CurrentJointStateEvidence current{{"1", "2", "3", "4", "5"},
                                          {0, 0, 0, 0, 0}, 1234};
-  spp::MotionPlanningSceneFacts scene{true, true, false, std::nullopt, {}};
+  spp::MotionPlanningSceneFacts scene{true, true, false, std::nullopt, {},
+                                      tablePose(), pickPose(), std::nullopt, std::nullopt};
   int plan_calls{0};
   int current_state_calls{0};
   int scene_fact_calls{0};
@@ -78,7 +107,26 @@ spp::ObservationResult observation(double q6 = 0.707194871, double velocity = 0.
   snapshot.arm_stationary = true;
   snapshot.joint_positions.emplace("6", q6);
   snapshot.joint_velocities.emplace("6", velocity);
+  snapshot.gazebo_coke_pose_world = pickPose();
+  snapshot.gazebo_coke_attached = false;
+  snapshot.gazebo_coke_stationary = true;
   return {snapshot, std::nullopt};
+}
+
+spp::ObservationResult carryingObservation()
+{
+  auto result = observation(0.662818811, 0.0);
+  const spp::Pose3d gripper{0.25, -0.10, 0.40, 0.0, 0.0, 0.0, 1.0};
+  result.snapshot->gazebo_coke_pose_world = compose(gripper, graspRelativePose());
+  result.snapshot->gazebo_coke_attached = true;
+  return result;
+}
+
+spp::MotionPlanningSceneFacts carryingScene()
+{
+  return {true, false, true, std::string("gripper"), {"gripper", "jaw"},
+          tablePose(), std::nullopt, graspRelativePose(),
+          spp::Pose3d{0.25, -0.10, 0.40, 0.0, 0.0, 0.0, 1.0}};
 }
 
 spp::JointMotionRequest goalRequest()
@@ -155,25 +203,27 @@ TEST(SO101JointMotionAdapter, RejectsWrongDetachedSceneBeforePlanning)
 
   EXPECT_EQ(result.action.status, spp::ActionStatus::FAILED);
   ASSERT_TRUE(result.action.failure);
-  EXPECT_EQ(result.action.failure->category, spp::FailureCategory::MOVEIT_SCENE);
-  EXPECT_EQ(result.action.failure->code, "DETACHED_PLANNING_SCENE_INVALID");
+  EXPECT_EQ(result.action.failure->category, spp::FailureCategory::OBSERVATION);
+  EXPECT_EQ(result.action.failure->code, "DETACHED_ENVIRONMENT_OBSERVATION_INVALID");
   EXPECT_EQ(boundary->plan_calls, 0);
 }
 
 TEST(SO101JointMotionAdapter, RejectsWrongCarryingAttachmentBeforePlanning)
 {
   auto boundary = std::make_shared<FakeBoundary>();
-  boundary->scene = {true, false, true, std::string("wrong_link"), {"gripper", "jaw"}};
+  boundary->scene = carryingScene();
+  boundary->scene.attached_link = "wrong_link";
   auto request = goalRequest();
   request.state = spp::State::LIFT;
   request.carrying = true;
+  request.gripper_position = 0.662818811;
   spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
-  const auto result = adapter.plan(request, observation());
+  const auto result = adapter.plan(request, carryingObservation());
 
   EXPECT_EQ(result.action.status, spp::ActionStatus::FAILED);
   ASSERT_TRUE(result.action.failure);
-  EXPECT_EQ(result.action.failure->category, spp::FailureCategory::MOVEIT_SCENE);
-  EXPECT_EQ(result.action.failure->code, "CARRYING_PLANNING_SCENE_INVALID");
+  EXPECT_EQ(result.action.failure->category, spp::FailureCategory::OBSERVATION);
+  EXPECT_EQ(result.action.failure->code, "CARRYING_ENVIRONMENT_OBSERVATION_INVALID");
   EXPECT_EQ(boundary->plan_calls, 0);
 }
 
@@ -202,13 +252,81 @@ TEST(SO101JointMotionAdapter, StitchesLadderWithoutDuplicateBoundaryAndWithIncre
 TEST(SO101JointMotionAdapter, AcceptsExactCarryingAttachmentFacts)
 {
   auto boundary = std::make_shared<FakeBoundary>();
-  boundary->scene = {true, false, true, std::string("gripper"), {"gripper", "jaw"}};
+  boundary->scene = carryingScene();
   auto request = goalRequest();
   request.state = spp::State::LIFT;
   request.carrying = true;
+  request.gripper_position = 0.662818811;
   spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
-  EXPECT_EQ(adapter.plan(request, observation()).action.status, spp::ActionStatus::SUCCEEDED);
+  EXPECT_EQ(adapter.plan(request, carryingObservation()).action.status,
+            spp::ActionStatus::SUCCEEDED);
   EXPECT_EQ(boundary->plan_calls, 1);
+}
+
+
+TEST(SO101JointMotionAdapter, RejectsMovedDetachedCokeAndMoveItGazeboWorldMismatch)
+{
+  for (const int mutation : {0, 1}) {
+    auto boundary = std::make_shared<FakeBoundary>();
+    auto observed = observation();
+    if (mutation == 0) observed.snapshot->gazebo_coke_pose_world->x += 0.02;
+    if (mutation == 1) boundary->scene.coke_world_pose->y += 0.02;
+    spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+    const auto result = adapter.plan(goalRequest(), observed);
+    ASSERT_EQ(result.action.status, spp::ActionStatus::FAILED) << mutation;
+    ASSERT_TRUE(result.action.failure) << mutation;
+    EXPECT_EQ(result.action.failure->category, spp::FailureCategory::OBSERVATION) << mutation;
+    EXPECT_EQ(boundary->plan_calls, 0) << mutation;
+  }
+}
+
+TEST(SO101JointMotionAdapter, RejectsBadAttachedRelativeOrientationBeforePlanning)
+{
+  auto boundary = std::make_shared<FakeBoundary>();
+  boundary->scene = carryingScene();
+  boundary->scene.attached_relative_pose->qx = 0.0;
+  boundary->scene.attached_relative_pose->qy = 0.0;
+  boundary->scene.attached_relative_pose->qz = 0.0;
+  boundary->scene.attached_relative_pose->qw = 1.0;
+  auto request = goalRequest();
+  request.state = spp::State::LIFT;
+  request.carrying = true;
+  request.gripper_position = 0.662818811;
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+  const auto result = adapter.plan(request, carryingObservation());
+  ASSERT_EQ(result.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(result.action.failure);
+  EXPECT_EQ(result.action.failure->category, spp::FailureCategory::OBSERVATION);
+  EXPECT_EQ(boundary->plan_calls, 0);
+}
+
+TEST(SO101JointMotionAdapter, RejectsMissingSixDegreeSceneFactsBeforePlanning)
+{
+  for (const int mutation : {0, 1, 2, 3, 4}) {
+    auto boundary = std::make_shared<FakeBoundary>();
+    auto observed = observation();
+    if (mutation == 0) boundary->scene.table_world_pose.reset();
+    if (mutation == 1) boundary->scene.coke_world_pose.reset();
+    if (mutation == 2) observed.snapshot->gazebo_coke_pose_world.reset();
+    if (mutation >= 3) {
+      boundary->scene = carryingScene();
+      observed = carryingObservation();
+      if (mutation == 3) boundary->scene.attached_relative_pose.reset();
+      if (mutation == 4) boundary->scene.current_gripper_pose_world.reset();
+    }
+    auto request = goalRequest();
+    if (mutation >= 3) {
+      request.state = spp::State::LIFT;
+      request.carrying = true;
+      request.gripper_position = 0.662818811;
+    }
+    spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+    const auto result = adapter.plan(request, observed);
+    ASSERT_EQ(result.action.status, spp::ActionStatus::FAILED) << mutation;
+    ASSERT_TRUE(result.action.failure) << mutation;
+    EXPECT_EQ(result.action.failure->category, spp::FailureCategory::OBSERVATION) << mutation;
+    EXPECT_EQ(boundary->plan_calls, 0) << mutation;
+  }
 }
 
 TEST(SO101JointMotionAdapter, RejectsSegmentWhoseFirstPointDoesNotMatchRequestedStart)

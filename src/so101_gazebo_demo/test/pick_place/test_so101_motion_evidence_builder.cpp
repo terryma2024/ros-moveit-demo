@@ -28,7 +28,8 @@ public:
     const double sum = joint_positions[0] + joint_positions[1] + joint_positions[2] +
                        joint_positions[3] + joint_positions[4];
     return spp::RobotStateEvidence{{sum, -0.28, 0.30 - sum, 0, 0, 0, 1},
-                                   collision_at != seen_positions.size()};
+                                   collision_at != seen_positions.size(), {},
+                                   attached_pose};
   }
 
   mutable std::vector<std::vector<std::string>> seen_names;
@@ -37,6 +38,7 @@ public:
   mutable std::vector<double> seen_gripper_positions;
   std::optional<std::size_t> fail_at;
   std::size_t collision_at{0};
+  std::optional<spp::Pose3d> attached_pose;
 };
 
 spp::TrajectoryEvidenceInput input()
@@ -55,6 +57,20 @@ spp::TrajectoryEvidenceInput input()
   value.allowed_touch_pairs = {"coke:gripper", "coke:jaw"};
   value.gripper_position = 0.707194871;
   return value;
+}
+
+TEST(SO101MotionEvidenceBuilder, PreservesPerPointAttachedCokeWorldPose)
+{
+  RecordingStateEvaluator evaluator;
+  evaluator.attached_pose = spp::Pose3d{0.2, -0.1, 0.4, 0.1, 0.2, 0.3, 0.9};
+  const auto result = spp::buildMotionPlanEvidence(input(), evaluator);
+  ASSERT_TRUE(result.artifact);
+  ASSERT_EQ(result.artifact->samples.size(), 3U);
+  for (const auto & sample : result.artifact->samples) {
+    ASSERT_TRUE(sample.attached_coke_pose_world);
+    EXPECT_DOUBLE_EQ(sample.attached_coke_pose_world->x, 0.2);
+    EXPECT_DOUBLE_EQ(sample.attached_coke_pose_world->qz, 0.3);
+  }
 }
 
 }  // namespace

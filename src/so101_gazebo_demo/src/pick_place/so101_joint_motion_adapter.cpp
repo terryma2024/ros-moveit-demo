@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace so101_gazebo_demo::pick_place
@@ -37,18 +38,114 @@ bool positionsWithin(const std::vector<double> & a, const std::vector<double> & 
   return true;
 }
 
-bool validScene(const MotionPlanningSceneFacts & facts, bool carrying,
-                const SO101Profile & profile)
+bool finitePose(const Pose3d & pose)
 {
-  if (!facts.table_in_world) return false;
+  const double norm = std::sqrt(pose.qx * pose.qx + pose.qy * pose.qy +
+                                pose.qz * pose.qz + pose.qw * pose.qw);
+  return std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
+         std::isfinite(pose.qx) && std::isfinite(pose.qy) && std::isfinite(pose.qz) &&
+         std::isfinite(pose.qw) && std::isfinite(norm) && norm > 1e-12;
+}
+
+double positionDistance(const Pose3d & first, const Pose3d & second)
+{
+  return std::hypot(std::hypot(first.x - second.x, first.y - second.y),
+                    first.z - second.z);
+}
+
+double orientationDistance(const Pose3d & first, const Pose3d & second)
+{
+  if (!finitePose(first) || !finitePose(second)) {
+    return std::numeric_limits<double>::infinity();
+  }
+  const double first_norm = std::sqrt(first.qx * first.qx + first.qy * first.qy +
+                                      first.qz * first.qz + first.qw * first.qw);
+  const double second_norm = std::sqrt(second.qx * second.qx + second.qy * second.qy +
+                                       second.qz * second.qz + second.qw * second.qw);
+  const double dot = std::abs((first.qx * second.qx + first.qy * second.qy +
+                               first.qz * second.qz + first.qw * second.qw) /
+                              (first_norm * second_norm));
+  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
+}
+
+bool posesMatch(const Pose3d & first, const Pose3d & second, const SO101Profile & profile)
+{
+  return finitePose(first) && finitePose(second) &&
+         positionDistance(first, second) <= profile.coke_position_drift_tolerance &&
+         orientationDistance(first, second) <= profile.coke_orientation_drift_tolerance_rad;
+}
+
+Pose3d compose(const Pose3d & parent, const Pose3d & child)
+{
+  if (!finitePose(parent) || !finitePose(child)) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    return {nan, nan, nan, nan, nan, nan, nan};
+  }
+  const double parent_norm = std::sqrt(parent.qx * parent.qx + parent.qy * parent.qy +
+                                       parent.qz * parent.qz + parent.qw * parent.qw);
+  const double child_norm = std::sqrt(child.qx * child.qx + child.qy * child.qy +
+                                      child.qz * child.qz + child.qw * child.qw);
+  const double x = parent.qx / parent_norm;
+  const double y = parent.qy / parent_norm;
+  const double z = parent.qz / parent_norm;
+  const double w = parent.qw / parent_norm;
+  const double cx = child.qx / child_norm;
+  const double cy = child.qy / child_norm;
+  const double cz = child.qz / child_norm;
+  const double cw = child.qw / child_norm;
+  const double rx =
+    (1.0 - 2.0 * (y * y + z * z)) * child.x + 2.0 * (x * y - z * w) * child.y +
+    2.0 * (x * z + y * w) * child.z;
+  const double ry =
+    2.0 * (x * y + z * w) * child.x + (1.0 - 2.0 * (x * x + z * z)) * child.y +
+    2.0 * (y * z - x * w) * child.z;
+  const double rz =
+    2.0 * (x * z - y * w) * child.x + 2.0 * (y * z + x * w) * child.y +
+    (1.0 - 2.0 * (x * x + y * y)) * child.z;
+  return {parent.x + rx, parent.y + ry, parent.z + rz,
+          w * cx + x * cw + y * cz - z * cy,
+          w * cy - x * cz + y * cw + z * cx,
+          w * cz + x * cy - y * cx + z * cw,
+          w * cw - x * cx - y * cy - z * cz};
+}
+
+const Pose3d & expectedDetachedCokePose(State state, const SO101Profile & profile)
+{
+  return state == State::RETREAT ? profile.place_coke_pose : profile.coke_pose;
+}
+
+bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & observed,
+                State state, bool carrying, const SO101Profile & profile)
+{
+  if (!facts.table_in_world || !facts.table_world_pose ||
+      !posesMatch(*facts.table_world_pose, profile.table_pose, profile) ||
+      !observed.gazebo_coke_pose_world || !observed.gazebo_coke_attached ||
+      !observed.gazebo_coke_stationary || !*observed.gazebo_coke_stationary) {
+    return false;
+  }
   if (carrying) {
-    return !facts.coke_in_world && facts.coke_attached && facts.attached_link &&
+    if (!*observed.gazebo_coke_attached || facts.coke_in_world || !facts.coke_attached ||
+        !facts.attached_link || !facts.attached_relative_pose ||
+        !facts.current_gripper_pose_world) {
+      return false;
+    }
+    const auto expected_coke =
+      compose(*facts.current_gripper_pose_world, *facts.attached_relative_pose);
+    return posesMatch(*facts.attached_relative_pose, profile.calibrated_grasp_relative_pose,
+                      profile) &&
+           posesMatch(*observed.gazebo_coke_pose_world, expected_coke, profile) &&
            *facts.attached_link == profile.moveit_attach_link &&
            facts.touch_links == std::set<std::string>(profile.moveit_touch_links.begin(),
                                                        profile.moveit_touch_links.end());
   }
-  return facts.coke_in_world && !facts.coke_attached && !facts.attached_link &&
-         facts.touch_links.empty();
+  if (*observed.gazebo_coke_attached || !facts.coke_in_world || facts.coke_attached ||
+      facts.attached_link || !facts.touch_links.empty() || !facts.coke_world_pose) {
+    return false;
+  }
+  const auto & expected = expectedDetachedCokePose(state, profile);
+  return posesMatch(*facts.coke_world_pose, *observed.gazebo_coke_pose_world, profile) &&
+         posesMatch(*facts.coke_world_pose, expected, profile) &&
+         posesMatch(*observed.gazebo_coke_pose_world, expected, profile);
 }
 
 }  // namespace
@@ -110,11 +207,11 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     return fail(FailureCategory::MOVEIT_SCENE, "PLANNING_SCENE_OBSERVATION_UNAVAILABLE",
                 "Current MoveIt Planning Scene facts are unavailable");
   }
-  if (!validScene(*scene, request.carrying, profile_)) {
-    return fail(FailureCategory::MOVEIT_SCENE,
-                request.carrying ? "CARRYING_PLANNING_SCENE_INVALID"
-                                 : "DETACHED_PLANNING_SCENE_INVALID",
-                "MoveIt Coke membership or attachment metadata does not match the motion mode");
+  if (!validScene(*scene, *observation.snapshot, request.state, request.carrying, profile_)) {
+    return fail(FailureCategory::OBSERVATION,
+                request.carrying ? "CARRYING_ENVIRONMENT_OBSERVATION_INVALID"
+                                 : "DETACHED_ENVIRONMENT_OBSERVATION_INVALID",
+                "Independent Gazebo, MoveIt, support, or attachment 6D facts are missing or inconsistent");
   }
   const auto current = boundary_->currentState();
   if (!current || current->joint_names != profile_.arm_joints ||

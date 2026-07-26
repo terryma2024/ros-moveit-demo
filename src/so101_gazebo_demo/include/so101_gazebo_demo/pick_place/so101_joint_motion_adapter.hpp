@@ -19,6 +19,9 @@ struct CurrentJointStateEvidence
   std::vector<std::string> joint_names;
   std::vector<double> positions;
   std::uint64_t observed_stamp_nanoseconds{0};
+  std::vector<double> velocities;
+  std::optional<double> gripper_position;
+  std::optional<double> gripper_velocity;
 };
 
 struct MotionPlanningSceneFacts
@@ -28,6 +31,10 @@ struct MotionPlanningSceneFacts
   bool coke_attached{false};
   std::optional<std::string> attached_link;
   std::set<std::string> touch_links;
+  std::optional<Pose3d> table_world_pose;
+  std::optional<Pose3d> coke_world_pose;
+  std::optional<Pose3d> attached_relative_pose;
+  std::optional<Pose3d> current_gripper_pose_world;
 };
 
 struct JointSegmentPlan
