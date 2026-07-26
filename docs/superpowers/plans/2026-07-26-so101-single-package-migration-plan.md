@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Work directly in `/data/work/ws_moveit` on the current branch; do not create or switch worktrees unless the user changes this instruction.
-- Preserve the six existing uncommitted files under `src/panda_gazebo_demo/test/headless/`; never reset, checkout, clean, stage, or edit them.
+- Preserve the committed Panda subtree baseline `75fb2e1e66ad1440f47f52f708b91887384084fd` (`HEAD:src/panda_gazebo_demo` at `54aefa0`); never reset, checkout, clean, stage, or edit Panda files during Phase 1.
 - Stage only explicit paths under `src/so101_gazebo_demo` and this plan/spec; never use `git add -A` or `git add .`.
 - Copy from the verified source baseline `/data/work/so101_lerobot_ws` at commit `65c371e`; do not copy `.git`, `build`, `install`, `log`, `.pytest_cache`, `__pycache__`, or `*.pyc`.
 - The new package must not depend at runtime or test time on `/data/work/so101_lerobot_ws`, `lerobot_description`, `lerobot_controller`, or `lerobot_moveit`.
@@ -67,17 +67,17 @@
 - Consumes: verified source commit `65c371e`; workspace-level ament/colcon conventions.
 - Produces: ROS package `so101_gazebo_demo`; install roots `share/so101_gazebo_demo` and `lib/so101_gazebo_demo` used by all later tasks.
 
-- [ ] **Step 1: Record the pre-existing Panda dirty-state fingerprint**
+- [ ] **Step 1: Record the committed Panda subtree baseline**
 
 Run:
 
 ```bash
 cd /data/work/ws_moveit
 git status --short -- src/panda_gazebo_demo
-git diff -- src/panda_gazebo_demo | sha256sum
+git rev-parse HEAD:src/panda_gazebo_demo
 ```
 
-Expected: exactly the six known `test/headless` paths are modified. Save the printed SHA-256 in the task report; do not write it into the repository.
+Expected: no Panda working-tree changes and tree object `75fb2e1e66ad1440f47f52f708b91887384084fd`. Save both results in the task report.
 
 - [ ] **Step 2: Write the failing package-layout test before metadata exists**
 
@@ -161,9 +161,9 @@ colcon list | grep '^so101_gazebo_demo[[:space:]]'
 
 Expected: 2 tests PASS; one `so101_gazebo_demo` package is listed.
 
-- [ ] **Step 6: Verify Panda fingerprint and commit only Task 1 files**
+- [ ] **Step 6: Verify the Panda subtree baseline and commit only Task 1 files**
 
-Re-run the two Panda fingerprint commands from Step 1 and require the same paths and SHA-256. Then:
+Re-run the two Panda baseline commands from Step 1 and require a clean status plus the same tree object. Then:
 
 ```bash
 git add \
@@ -621,9 +621,9 @@ zsh -lc '
 
 Expected: the SDF server iteration exits zero; all four launch descriptions load and print their arguments without a missing package, mesh, controller YAML, SRDF, or RViz config error.
 
-- [ ] **Step 6: Verify Panda fingerprint, source scan, and commit any test-driven fixes**
+- [ ] **Step 6: Verify the Panda subtree baseline, source scan, and commit any test-driven fixes**
 
-Require the Task 1 Panda fingerprint to remain identical. Run:
+Require the Task 1 Panda subtree status and tree object to remain identical. Run:
 
 ```bash
 rg -n 'lerobot_description|lerobot_controller|lerobot_moveit|/data/work/so101_lerobot_ws' \
@@ -735,7 +735,7 @@ Inspect the returned `desktop.png` at original resolution. Require:
 
 - [ ] **Step 6: Final package-only verification and commit runtime fixes if needed**
 
-Re-run Task 5 build/tests, `git diff --check`, new-package legacy-reference scan, and Panda fingerprint. If runtime testing required a source fix, commit only explicit `src/so101_gazebo_demo` paths:
+Re-run Task 5 build/tests, `git diff --check`, new-package legacy-reference scan, and Panda subtree baseline check. If runtime testing required a source fix, commit only explicit `src/so101_gazebo_demo` paths:
 
 ```bash
 git commit -m "fix: validate SO-101 standalone runtime"
@@ -753,6 +753,6 @@ Do not create an empty commit. Leave `/data/work/so101_lerobot_ws` intact as a r
 - [ ] Installed Xacro, meshes, controllers, MoveIt config, scripts, and world resolve from the new package.
 - [ ] Gazebo and MoveIt share the same URDF and `base_height=0.1899186`.
 - [ ] Controllers, TF, Gazebo entity poses, GUI split, and actual screenshot pass.
-- [ ] All six pre-existing Panda modified paths and their diff SHA-256 are unchanged.
+- [ ] `src/panda_gazebo_demo` remains clean and its tree object is still `75fb2e1e66ad1440f47f52f708b91887384084fd`.
 - [ ] No Panda pick-place code or generic refactor was introduced in Phase 1.
 - [ ] Independent code review reports no open Critical or Important finding.
