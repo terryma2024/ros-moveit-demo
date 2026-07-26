@@ -181,16 +181,29 @@ std::optional<Failure> StateMachineRunner::validateExecuteConfiguration() const
                        toString(transitions.succeeded),
                      {}};
     }
+    const bool has_planner = actions_.findPlanner(state) != nullptr;
+    const bool has_plan_validator = plan_validators_ && plan_validators_->hasValidator(state);
+    if (has_planner != has_plan_validator) {
+      return has_planner
+               ? Failure{FailureCategory::CONFIGURATION,
+                         "PLAN_VALIDATOR_NOT_REGISTERED",
+                         std::string("Planner has no paired plan validator for ") + toString(state),
+                         {}}
+               : Failure{FailureCategory::CONFIGURATION,
+                         "PLANNER_NOT_REGISTERED",
+                         std::string("Plan validator has no paired planner for ") + toString(state),
+                         {}};
+    }
     if (!requiresPlanning(state)) {
       continue;
     }
-    if (!actions_.findPlanner(state)) {
+    if (!has_planner) {
       return Failure{FailureCategory::CONFIGURATION,
                      "PLANNER_NOT_REGISTERED",
                      std::string("State requires a planner: ") + toString(state),
                      {}};
     }
-    if (!plan_validators_ || !plan_validators_->hasValidator(state)) {
+    if (!has_plan_validator) {
       return Failure{FailureCategory::CONFIGURATION,
                      "PLAN_VALIDATOR_NOT_REGISTERED",
                      std::string("State requires a plan validator: ") + toString(state),
