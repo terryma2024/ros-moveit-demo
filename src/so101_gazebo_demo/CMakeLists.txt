@@ -7,6 +7,7 @@ find_package(gz-msgs10 REQUIRED)
 find_package(gz-transport13 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
+find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -35,6 +36,7 @@ add_library(pick_place_core
   src/pick_place/so101_motion_evidence_builder.cpp
   src/pick_place/so101_motion_planner.cpp
   src/pick_place/so101_joint_motion_adapter.cpp
+  src/pick_place/moveit_joint_planning_boundary.cpp
   src/pick_place/follow_joint_trajectory_gripper_adapter.cpp
   src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_reset_adapter.cpp
@@ -49,7 +51,7 @@ target_include_directories(pick_place_core PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(pick_place_core PUBLIC nlohmann_json::nlohmann_json gz-msgs10::core gz-transport13::core)
 ament_target_dependencies(pick_place_core PUBLIC control_msgs geometry_msgs moveit_msgs
-  moveit_ros_planning_interface rclcpp rclcpp_action shape_msgs trajectory_msgs)
+  moveit_core moveit_ros_planning_interface rclcpp rclcpp_action shape_msgs trajectory_msgs)
 
 add_executable(pick_place_state_machine src/pick_place/pick_place_state_machine.cpp)
 target_link_libraries(pick_place_state_machine pick_place_core)
@@ -65,6 +67,10 @@ ament_target_dependencies(reset_so101_world rclcpp)
 add_executable(so101_moveit_scene src/nodes/so101_moveit_scene.cpp)
 target_link_libraries(so101_moveit_scene pick_place_core)
 ament_target_dependencies(so101_moveit_scene rclcpp)
+
+add_executable(calibrate_so101_motion src/nodes/calibrate_so101_motion.cpp)
+target_link_libraries(calibrate_so101_motion pick_place_core)
+ament_target_dependencies(calibrate_so101_motion rclcpp)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -118,6 +124,9 @@ if(BUILD_TESTING)
   add_test(NAME test_so101_reset_cli
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_so101_reset_cli.sh
       $<TARGET_FILE:reset_so101_world> $<TARGET_FILE:so101_moveit_scene>)
+  add_test(NAME test_so101_calibration_cli
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_so101_calibration_cli.sh
+      $<TARGET_FILE:calibrate_so101_motion>)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_package_layout test/test_package_layout.py)
   ament_add_pytest_test(
@@ -150,6 +159,7 @@ endif()
 install(
   TARGETS pick_place_core pick_place_state_machine gazebo_attachment_state_relay
     reset_so101_world so101_moveit_scene
+    calibrate_so101_motion
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
