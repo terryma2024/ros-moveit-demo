@@ -49,6 +49,14 @@ add_executable(gazebo_attachment_state_relay src/nodes/gazebo_attachment_state_r
 target_link_libraries(gazebo_attachment_state_relay pick_place_core gz-msgs10::core gz-transport13::core)
 ament_target_dependencies(gazebo_attachment_state_relay rclcpp)
 
+add_executable(reset_so101_world src/nodes/reset_so101_world.cpp)
+target_link_libraries(reset_so101_world pick_place_core)
+ament_target_dependencies(reset_so101_world rclcpp)
+
+add_executable(so101_moveit_scene src/nodes/so101_moveit_scene.cpp)
+target_link_libraries(so101_moveit_scene pick_place_core)
+ament_target_dependencies(so101_moveit_scene rclcpp)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_pick_place_dry_run test/pick_place/test_dry_run.cpp)
@@ -72,6 +80,9 @@ if(BUILD_TESTING)
     test/pick_place/test_so101_gazebo_reset_adapter.cpp)
   target_link_libraries(test_so101_gazebo_reset_adapter pick_place_core
     gz-msgs10::core gz-transport13::core)
+  add_test(NAME test_so101_reset_cli
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_so101_reset_cli.sh
+      $<TARGET_FILE:reset_so101_world> $<TARGET_FILE:so101_moveit_scene>)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_package_layout test/test_package_layout.py)
   ament_add_pytest_test(
@@ -103,6 +114,7 @@ endif()
 
 install(
   TARGETS pick_place_core pick_place_state_machine gazebo_attachment_state_relay
+    reset_so101_world so101_moveit_scene
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
