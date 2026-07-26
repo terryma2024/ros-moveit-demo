@@ -5,19 +5,99 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    EmitEvent,
     ExecuteProcess,
     IncludeLaunchDescription,
     RegisterEventHandler,
     SetEnvironmentVariable,
-    TimerAction,
 )
 from launch.conditions import IfCondition, UnlessCondition
 from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from launch.substitutions import Command, LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+
+INITIAL_DETACH_TIMEOUT_SECONDS = 8
+COKE_CONTACT_GZ_TOPIC = (
+    "/world/so101_pick_place/model/coke/link/body/"
+    "sensor/coke_contact_sensor/contact"
+)
+
+
+def initial_detach_command():
+    """Wait for the Gazebo plugin, publish one detach, and always terminate."""
+    wait_and_publish = (
+        "while ! gz topic -i -t /so101/detach_coke 2>&1 "
+        "| grep -q '^Subscribers \\['; do sleep 0.1; done; "
+        "exec gz topic -t /so101/detach_coke "
+        "-m gz.msgs.Empty -p 'unused: true'"
+    )
+    return [
+        "/usr/bin/timeout",
+        "--signal=TERM",
+        "--kill-after=1",
+        str(INITIAL_DETACH_TIMEOUT_SECONDS),
+        "/bin/bash",
+        "-c",
+        wait_and_publish,
+    ]
+
+
+def actions_after_success_or_shutdown(event, success_actions, operation):
+    """Continue a launch stage only after its prerequisite exits cleanly."""
+    if event.returncode == 0:
+        return success_actions
+
+    reason = f"{operation} failed with exit code {event.returncode}"
+    return [EmitEvent(event=Shutdown(reason=reason))]
+
+
+def controller_spawner_nodes():
+    """Build the controllers exposed only after detach initialization."""
+    return [
+        Node(
+            package="controller_manager",
+            executable="spawner",
+            arguments=[
+                controller,
+                "--controller-manager",
+                "/controller_manager",
+            ],
+        )
+        for controller in (
+            "joint_state_broadcaster",
+            "arm_controller",
+            "gripper_controller",
+        )
+    ]
+
+
+def attachment_bridge_node():
+    """Build the public ROS bridge exposed after detach initialization."""
+    return Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
+            "/so101/attach_coke@std_msgs/msg/Empty]gz.msgs.Empty",
+            "/so101/detach_coke@std_msgs/msg/Empty]gz.msgs.Empty",
+            (
+                "/so101/coke_attached_event"
+                "@std_msgs/msg/String[gz.msgs.StringMsg"
+            ),
+            (
+                f"{COKE_CONTACT_GZ_TOPIC}"
+                "@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts"
+            ),
+        ],
+        remappings=[
+            (COKE_CONTACT_GZ_TOPIC, "/coke/contacts"),
+        ],
+    )
 
 
 def generate_launch_description():
@@ -95,90 +175,44 @@ def generate_launch_description():
                    "-name", "so101"],
     )
 
-    joint_state_broadcaster_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=[
-            "joint_state_broadcaster",
-            "--controller-manager",
-            "/controller_manager",
-        ],
-    )
-    arm_controller_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=[
-            "arm_controller",
-            "--controller-manager",
-            "/controller_manager",
-        ],
-    )
-    gripper_controller_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=[
-            "gripper_controller",
-            "--controller-manager",
-            "/controller_manager",
-        ],
-    )
+    (
+        joint_state_broadcaster_spawner,
+        arm_controller_spawner,
+        gripper_controller_spawner,
+    ) = controller_spawner_nodes()
+    gz_ros2_bridge = attachment_bridge_node()
 
-    coke_contact_gz_topic = (
-        "/world/so101_pick_place/model/coke/link/body/"
-        "sensor/coke_contact_sensor/contact"
-    )
-
-    gz_ros2_bridge = Node(
-        package="ros_gz_bridge",
-        executable="parameter_bridge",
-        arguments=[
-            "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
-            "/so101/attach_coke@std_msgs/msg/Empty]gz.msgs.Empty",
-            "/so101/detach_coke@std_msgs/msg/Empty]gz.msgs.Empty",
-            (
-                "/so101/coke_attached_event"
-                "@std_msgs/msg/String[gz.msgs.StringMsg"
-            ),
-            (
-                f"{coke_contact_gz_topic}"
-                "@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts"
-            ),
-        ],
-        remappings=[
-            (coke_contact_gz_topic, "/coke/contacts"),
-        ]
-    )
-
-    # Gazebo Sim 8's DetachableJoint starts attached even when the SDF contains
-    # <initially_detached>true</initially_detached>.  Repeatedly publish the
-    # detach command after spawning so the public launch contract is genuinely
-    # detached before clients begin an attach / move / detach sequence.
+    # Gazebo Sim 8 starts DetachableJoint attached despite the SDF option.  The
+    # initializer waits for the plugin's real Gazebo Transport subscription,
+    # publishes exactly once, and has an outer total timeout.  Public command
+    # bridging and controllers remain unavailable until initialization passes.
     initial_detach_publisher = ExecuteProcess(
-        cmd=[
-            "ros2",
-            "topic",
-            "pub",
-            "--rate",
-            "10",
-            "--times",
-            "50",
-            "--wait-matching-subscriptions",
-            "1",
-            "/so101/detach_coke",
-            "std_msgs/msg/Empty",
-            "{}",
-        ],
+        cmd=initial_detach_command(),
         output="screen",
     )
-    detach_after_spawn = RegisterEventHandler(
+    start_detach_after_spawn = RegisterEventHandler(
         OnProcessExit(
             target_action=gz_spawn_entity,
-            on_exit=[
-                TimerAction(
-                    period=1.0,
-                    actions=[initial_detach_publisher],
-                )
-            ],
+            on_exit=lambda event, context: actions_after_success_or_shutdown(
+                event,
+                [initial_detach_publisher],
+                "SO-101 robot spawn",
+            ),
+        )
+    )
+    start_readiness_after_detach = RegisterEventHandler(
+        OnProcessExit(
+            target_action=initial_detach_publisher,
+            on_exit=lambda event, context: actions_after_success_or_shutdown(
+                event,
+                [
+                    gz_ros2_bridge,
+                    joint_state_broadcaster_spawner,
+                    arm_controller_spawner,
+                    gripper_controller_spawner,
+                ],
+                "SO-101 initial detach",
+            ),
         )
     )
 
@@ -191,10 +225,7 @@ def generate_launch_description():
         robot_state_publisher_node,
         gazebo,
         gazebo_headless,
+        start_detach_after_spawn,
+        start_readiness_after_detach,
         gz_spawn_entity,
-        joint_state_broadcaster_spawner,
-        arm_controller_spawner,
-        gripper_controller_spawner,
-        gz_ros2_bridge,
-        detach_after_spawn,
     ])

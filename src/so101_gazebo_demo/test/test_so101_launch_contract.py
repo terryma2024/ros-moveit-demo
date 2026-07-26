@@ -1,7 +1,14 @@
 """Public launch-argument contract for the SO-101 simulation stack."""
 
 import importlib.util
+import os
 from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+from types import SimpleNamespace
+import uuid
 
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
@@ -12,16 +19,22 @@ GAZEBO_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_gazebo.launch.py'
 CONTROLLER_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_controller.launch.py'
 DISPLAY_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_display.launch.py'
 MOVEIT_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_moveit.launch.py'
+PICK_PLACE_WORLD_TEST = PACKAGE_DIR / 'test' / 'test_so101_pick_place_world.py'
 
 
-def load_launch_description(path):
-    """Load a launch description directly from source."""
+def load_launch_module(path):
+    """Load a launch module directly from source."""
     module_name = f'{path.parent.parent.name}_{path.stem}'.replace('.', '_')
     spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
-    return module.generate_launch_description()
+    return module
+
+
+def load_launch_description(path):
+    """Load a launch description directly from source."""
+    return load_launch_module(path).generate_launch_description()
 
 
 def declared_arguments(path):
@@ -82,10 +95,10 @@ def test_controller_and_display_launch_expose_their_public_arguments():
 
 def test_gazebo_launch_starts_expected_controller_spawners():
     """Catch a simulation launch that leaves all controllers unloaded."""
-    description = load_launch_description(GAZEBO_LAUNCH)
+    module = load_launch_module(GAZEBO_LAUNCH)
     spawners = {
         entity._Node__arguments[0]
-        for entity in description.entities
+        for entity in module.controller_spawner_nodes()
         if isinstance(entity, Node)
         and entity.node_package == 'controller_manager'
         and entity.node_executable == 'spawner'
@@ -122,14 +135,8 @@ def test_gazebo_launch_bridges_scoped_coke_contacts_to_ros_name():
     expected_argument = (
         f'{raw_topic}@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts'
     )
-    description = load_launch_description(GAZEBO_LAUNCH)
-    bridge = next(
-        entity
-        for entity in description.entities
-        if isinstance(entity, Node)
-        and entity.node_package == 'ros_gz_bridge'
-        and entity.node_executable == 'parameter_bridge'
-    )
+    module = load_launch_module(GAZEBO_LAUNCH)
+    bridge = module.attachment_bridge_node()
 
     assert expected_argument in bridge._Node__arguments
     remappings = {
@@ -144,14 +151,8 @@ def test_gazebo_launch_bridges_scoped_coke_contacts_to_ros_name():
 
 def test_gazebo_launch_bridges_only_attachment_commands_and_raw_event():
     """Catch attachment topics that later ROS consumers cannot observe or drive."""
-    description = load_launch_description(GAZEBO_LAUNCH)
-    bridge = next(
-        entity
-        for entity in description.entities
-        if isinstance(entity, Node)
-        and entity.node_package == 'ros_gz_bridge'
-        and entity.node_executable == 'parameter_bridge'
-    )
+    module = load_launch_module(GAZEBO_LAUNCH)
+    bridge = module.attachment_bridge_node()
 
     assert {
         '/so101/attach_coke@std_msgs/msg/Empty]gz.msgs.Empty',
@@ -159,3 +160,93 @@ def test_gazebo_launch_bridges_only_attachment_commands_and_raw_event():
         '/so101/coke_attached_event@std_msgs/msg/String[gz.msgs.StringMsg',
     } <= set(bridge._Node__arguments)
     assert not any('/pose/info@' in argument for argument in bridge._Node__arguments)
+
+
+def test_initial_detach_helper_is_bounded_without_gazebo_plugin_subscription():
+    """Catch an initialization helper that can wait forever for Gazebo."""
+    module = load_launch_module(GAZEBO_LAUNCH)
+    assert hasattr(module, 'initial_detach_command')
+
+    environment = os.environ.copy()
+    environment['GZ_PARTITION'] = f'so101_missing_plugin_{uuid.uuid4().hex}'
+    started = time.monotonic()
+    completed = subprocess.run(
+        module.initial_detach_command(),
+        capture_output=True,
+        text=True,
+        timeout=12,
+        env=environment,
+    )
+    elapsed = time.monotonic() - started
+
+    assert completed.returncode == 124
+    assert 7 <= elapsed < 10
+
+
+def test_failed_prerequisite_stops_before_downstream_readiness_actions():
+    """Catch spawn/init failure paths that still expose public readiness."""
+    module = load_launch_module(GAZEBO_LAUNCH)
+    assert hasattr(module, 'actions_after_success_or_shutdown')
+    readiness_action = object()
+
+    actions = module.actions_after_success_or_shutdown(
+        SimpleNamespace(returncode=23),
+        [readiness_action],
+        'robot spawn',
+    )
+
+    assert readiness_action not in actions
+    assert any(action.__class__.__name__ == 'EmitEvent' for action in actions)
+
+
+def test_runtime_launch_child_exits_when_pytest_parent_is_terminated():
+    """Catch CTest timeout cleanup that leaves an orphan simulation session."""
+    runtime = load_launch_module(PICK_PLACE_WORLD_TEST)
+    assert hasattr(runtime, 'arm_parent_death_signal')
+    supervisor_script = f"""
+import importlib.util
+import signal
+import subprocess
+
+spec = importlib.util.spec_from_file_location(
+    'so101_runtime_cleanup',
+    {str(PICK_PLACE_WORLD_TEST)!r},
+)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+child = subprocess.Popen(
+    ['/bin/sleep', '30'],
+    start_new_session=True,
+    preexec_fn=module.arm_parent_death_signal,
+)
+print(child.pid, flush=True)
+signal.pause()
+"""
+    supervisor = subprocess.Popen(
+        [sys.executable, '-c', supervisor_script],
+        stdout=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    child_pid = int(supervisor.stdout.readline())
+    try:
+        os.kill(supervisor.pid, signal.SIGTERM)
+        supervisor.wait(timeout=5)
+
+        deadline = time.monotonic() + 5
+        child_proc = Path(f'/proc/{child_pid}')
+        while child_proc.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not child_proc.exists()
+    finally:
+        if supervisor.poll() is None:
+            os.kill(supervisor.pid, signal.SIGKILL)
+            supervisor.wait(timeout=5)
+        if Path(f'/proc/{child_pid}').exists():
+            os.kill(child_pid, signal.SIGKILL)
+
+
+def test_runtime_attachment_ready_has_no_delayed_initializer_detach():
+    """Keep early valid attachment after the old five-second window."""
+    runtime = load_launch_module(PICK_PLACE_WORLD_TEST)
+    runtime.prove_runtime_attachment_ready_has_no_delayed_initializer_detach()
