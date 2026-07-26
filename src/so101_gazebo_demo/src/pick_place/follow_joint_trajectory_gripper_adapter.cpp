@@ -36,6 +36,8 @@ public:
   std::mutex mutex;
   std::optional<std::shared_future<GoalHandle::SharedPtr>> pending;
   GoalHandle::SharedPtr active;
+  std::optional<std::shared_future<GoalHandle::WrappedResult>> result;
+  bool cancel_accepted{false};
 };
 
 RosTrajectoryActionClient::RosTrajectoryActionClient(std::shared_ptr<rclcpp::Node> node,
@@ -86,12 +88,17 @@ ActionResult RosTrajectoryActionClient::send(const SingleJointTrajectoryGoal & r
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->pending.reset();
     impl_->active = handle;
+    impl_->cancel_accepted = false;
   }
   if (!handle) {
     return failure(ActionStatus::FAILED, "GRIPPER_GOAL_REJECTED",
                    "The joint 6 trajectory goal was rejected");
   }
   auto result_future = impl_->client->async_get_result(handle);
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->result = result_future;
+  }
   if (result_future.wait_for(timeout) != std::future_status::ready) {
     return failure(ActionStatus::TIMED_OUT, "GRIPPER_RESULT_TIMEOUT",
                    "Timed out waiting for the joint 6 trajectory result");
@@ -99,7 +106,10 @@ ActionResult RosTrajectoryActionClient::send(const SingleJointTrajectoryGoal & r
   const auto result = result_future.get();
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->pending.reset();
     impl_->active.reset();
+    impl_->result.reset();
+    impl_->cancel_accepted = false;
   }
   if (result.code == rclcpp_action::ResultCode::SUCCEEDED && result.result &&
       result.result->error_code == Follow::Result::SUCCESSFUL) {
@@ -117,37 +127,78 @@ ActionResult RosTrajectoryActionClient::cancelAndWait(double timeout_seconds)
 {
   std::optional<std::shared_future<GoalHandle::SharedPtr>> pending;
   GoalHandle::SharedPtr active;
+  std::optional<std::shared_future<GoalHandle::WrappedResult>> result;
+  bool cancel_accepted{false};
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     pending = impl_->pending;
     active = impl_->active;
+    result = impl_->result;
+    cancel_accepted = impl_->cancel_accepted;
   }
-  const auto timeout = std::chrono::duration<double>(timeout_seconds);
+  if (!std::isfinite(timeout_seconds) || timeout_seconds <= 0.0) {
+    return failure(ActionStatus::FAILED, "GRIPPER_CANCEL_TIMEOUT_INVALID",
+                   "Cancellation requires a finite positive timeout");
+  }
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::duration<double>(timeout_seconds);
   if (pending) {
-    if (pending->wait_for(timeout) != std::future_status::ready) {
+    if (pending->wait_until(deadline) != std::future_status::ready) {
       return failure(ActionStatus::TIMED_OUT, "GRIPPER_PENDING_GOAL_UNRESOLVED",
                      "Could not prove whether the timed-out joint 6 goal was accepted");
     }
     active = pending->get();
+    if (active && !result) {
+      result = impl_->client->async_get_result(active);
+    }
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      impl_->pending.reset();
+      impl_->active = active;
+      impl_->result = result;
+      impl_->cancel_accepted = false;
+    }
+    cancel_accepted = false;
   }
   if (!active) {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
-  auto future = impl_->client->async_cancel_goal(active);
-  if (future.wait_for(timeout) != std::future_status::ready) {
-    return failure(ActionStatus::TIMED_OUT, "GRIPPER_CANCEL_RESPONSE_TIMEOUT",
-                   "Timed out waiting for joint 6 cancel response");
+  if (!result) {
+    result = impl_->client->async_get_result(active);
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->result = result;
   }
-  const auto response = future.get();
-  if (!response || response->return_code != CancelResponse::ERROR_NONE ||
-      response->goals_canceling.empty()) {
-    return failure(ActionStatus::FAILED, "GRIPPER_CANCEL_REJECTED",
-                   "The joint 6 controller rejected cancellation");
+  if (!cancel_accepted) {
+    auto future = impl_->client->async_cancel_goal(active);
+    if (future.wait_until(deadline) != std::future_status::ready) {
+      return failure(ActionStatus::TIMED_OUT, "GRIPPER_CANCEL_RESPONSE_TIMEOUT",
+                     "Timed out waiting for joint 6 cancel response");
+    }
+    const auto response = future.get();
+    if (!response || response->return_code != CancelResponse::ERROR_NONE ||
+        response->goals_canceling.empty()) {
+      return failure(ActionStatus::FAILED, "GRIPPER_CANCEL_REJECTED",
+                     "The joint 6 controller rejected cancellation");
+    }
+    cancel_accepted = true;
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->cancel_accepted = true;
   }
+  if (result->wait_until(deadline) != std::future_status::ready) {
+    return failure(ActionStatus::TIMED_OUT, "GRIPPER_CANCEL_TERMINAL_TIMEOUT",
+                   "Cancel was accepted but the joint 6 goal did not become terminal");
+  }
+  const auto terminal = result->get();
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->pending.reset();
     impl_->active.reset();
+    impl_->result.reset();
+    impl_->cancel_accepted = false;
+  }
+  if (terminal.code != rclcpp_action::ResultCode::CANCELED) {
+    return failure(ActionStatus::FAILED, "GRIPPER_CANCEL_TERMINAL_NOT_CANCELLED",
+                   "The joint 6 goal became terminal without a cancelled result");
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
