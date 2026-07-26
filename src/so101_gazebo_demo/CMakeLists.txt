@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 project(so101_gazebo_demo)
 
 find_package(ament_cmake REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 add_library(pick_place_core
   src/pick_place/domain_types.cpp
@@ -18,6 +19,7 @@ target_compile_features(pick_place_core PUBLIC cxx_std_17)
 target_include_directories(pick_place_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
+target_link_libraries(pick_place_core PUBLIC nlohmann_json::nlohmann_json)
 
 add_executable(pick_place_state_machine src/pick_place/pick_place_state_machine.cpp)
 target_link_libraries(pick_place_state_machine pick_place_core)
