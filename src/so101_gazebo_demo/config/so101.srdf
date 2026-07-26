@@ -71,12 +71,10 @@ are defined
     specified pair of links. -->
     <disable_collisions link1="base" link2="shoulder" reason="Adjacent" />
     <disable_collisions link1="base" link2="lower_arm" reason="Never" />
-    <disable_collisions link1="base" link2="lower_arm" reason="Never" />
     <disable_collisions link1="shoulder" link2="upper_arm" reason="Adjacent" />
     <disable_collisions link1="shoulder" link2="lower_arm" reason="Never" />
     <disable_collisions link1="lower_arm" link2="upper_arm" reason="Adjacent" />
     <disable_collisions link1="lower_arm" link2="gripper" reason="Never" />
-    <disable_collisions link1="lower_arm" link2="upper_arm" reason="Adjacent" />
     <disable_collisions link1="lower_arm" link2="wrist" reason="Adjacent" />
     <disable_collisions link1="wrist" link2="gripper" reason="Adjacent" />
     <disable_collisions link1="wrist" link2="jaw" reason="Never" />

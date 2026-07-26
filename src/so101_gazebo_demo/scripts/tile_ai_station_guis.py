@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import ctypes
 import ctypes.util
 import os
+import shutil
 import subprocess
 import re
 
@@ -166,6 +167,22 @@ class XEvent(ctypes.Union):
     _fields_ = [('xclient', XClientMessageEvent), ('pad', ctypes.c_long * 24)]
 
 
+def validate_runtime_prerequisites(
+    which=shutil.which,
+    find_library=ctypes.util.find_library,
+):
+    """Fail early with the exact system packages needed by the X11 backend."""
+    missing = []
+    if find_library('X11') is None:
+        missing.append('libX11')
+    missing.extend(command for command in ('xprop', 'xwininfo') if which(command) is None)
+    if missing:
+        raise RuntimeError(
+            f"missing X11 prerequisites: {', '.join(missing)}; "
+            'install Ubuntu packages libx11-6 and x11-utils'
+        )
+
+
 class X11EwmhBackend:
     CLIENT_MESSAGE = 33
     SUBSTRUCTURE_NOTIFY_MASK = 1 << 19
@@ -173,6 +190,7 @@ class X11EwmhBackend:
 
     def __init__(self, environment=None):
         self.environment = dict(os.environ if environment is None else environment)
+        validate_runtime_prerequisites()
         if not self.environment.get('DISPLAY'):
             raise RuntimeError('DISPLAY is not set; source ~/gui-env.zsh first')
         library_name = ctypes.util.find_library('X11')
