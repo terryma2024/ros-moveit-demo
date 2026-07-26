@@ -42,6 +42,7 @@ struct MotionPlanSample
   double time_from_start_seconds{0.0};
   bool collision_free{false};
   std::set<std::string> raw_contact_pairs;
+  std::optional<Pose3d> attached_coke_pose_world;
 };
 
 struct MotionPlanArtifact : PlanArtifact

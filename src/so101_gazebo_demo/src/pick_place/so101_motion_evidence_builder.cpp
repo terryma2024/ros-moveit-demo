@@ -70,7 +70,8 @@ MotionEvidenceBuildResult buildMotionPlanEvidence(const TrajectoryEvidenceInput 
     }
     artifact->samples.push_back({state->tcp_pose, point.joint_positions,
                                  point.time_from_start_seconds, state->collision_free,
-                                 state->raw_contact_pairs});
+                                 state->raw_contact_pairs,
+                                 state->attached_coke_pose_world});
     artifact->raw_contact_pairs.insert(state->raw_contact_pairs.begin(),
                                        state->raw_contact_pairs.end());
     previous_time = point.time_from_start_seconds;
