@@ -37,6 +37,8 @@ struct SO101Profile
   double q6_tolerance{0.002};
   double width_tolerance{0.0005};
   double q6_velocity_tolerance{0.01};
+  double coke_position_drift_tolerance{0.003};
+  double coke_orientation_drift_tolerance_rad{0.035};
   std::string attach_topic{"/so101/attach_coke"};
   std::string detach_topic{"/so101/detach_coke"};
   std::string attachment_event_topic{"/so101/coke_attached_event"};
