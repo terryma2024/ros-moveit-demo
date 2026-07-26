@@ -4,6 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
@@ -31,6 +32,11 @@ def generate_launch_description():
         default_value="0.1899186",
         description="SO-101 base height above world ground in metres",
     )
+    headless_arg = DeclareLaunchArgument(
+        name="headless",
+        default_value="false",
+        description="Run only the Gazebo server for automated smoke tests",
+    )
 
     gazebo_resource_path = SetEnvironmentVariable(
         name="GZ_SIM_RESOURCE_PATH",
@@ -44,6 +50,7 @@ def generate_launch_description():
             LaunchConfiguration("model"),
             " base_height:=",
             LaunchConfiguration("base_height"),
+            " gazebo_collision_primitives:=true",
         ]),
         value_type=str
     )
@@ -60,7 +67,16 @@ def generate_launch_description():
                     get_package_share_directory("ros_gz_sim"), "launch"), "/gz_sim.launch.py"]),
                 launch_arguments={
                     "gz_args": [" -v 4 -r ", LaunchConfiguration("world")]
-                }.items()
+                }.items(),
+                condition=UnlessCondition(LaunchConfiguration("headless")),
+             )
+    gazebo_headless = IncludeLaunchDescription(
+                PythonLaunchDescriptionSource([os.path.join(
+                    get_package_share_directory("ros_gz_sim"), "launch"), "/gz_sim.launch.py"]),
+                launch_arguments={
+                    "gz_args": [" -s -v 4 -r ", LaunchConfiguration("world")]
+                }.items(),
+                condition=IfCondition(LaunchConfiguration("headless")),
              )
 
     gz_spawn_entity = Node(
@@ -109,6 +125,12 @@ def generate_launch_description():
         executable="parameter_bridge",
         arguments=[
             "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
+            "/so101/attach_coke@std_msgs/msg/Empty]gz.msgs.Empty",
+            "/so101/detach_coke@std_msgs/msg/Empty]gz.msgs.Empty",
+            (
+                "/so101/coke_attached_event"
+                "@std_msgs/msg/String[gz.msgs.StringMsg"
+            ),
             (
                 f"{coke_contact_gz_topic}"
                 "@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts"
@@ -123,9 +145,11 @@ def generate_launch_description():
         model_arg,
         world_arg,
         base_height_arg,
+        headless_arg,
         gazebo_resource_path,
         robot_state_publisher_node,
         gazebo,
+        gazebo_headless,
         gz_spawn_entity,
         joint_state_broadcaster_spawner,
         arm_controller_spawner,

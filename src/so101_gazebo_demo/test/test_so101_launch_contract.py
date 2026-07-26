@@ -70,7 +70,9 @@ def test_moveit_uses_canonical_base_height_and_same_package_resources():
 
 def test_gazebo_launch_exposes_world_and_base_height():
     """Catch a Gazebo launch that cannot select world or base height."""
-    assert {'model', 'world', 'base_height'} <= declared_arguments(GAZEBO_LAUNCH)
+    assert {'model', 'world', 'base_height', 'headless'} <= declared_arguments(
+        GAZEBO_LAUNCH
+    )
 
 
 def test_controller_and_display_launch_expose_their_public_arguments():
@@ -138,3 +140,22 @@ def test_gazebo_launch_bridges_scoped_coke_contacts_to_ros_name():
         for source, destination in bridge._Node__remappings
     }
     assert (raw_topic, '/coke/contacts') in remappings
+
+
+def test_gazebo_launch_bridges_only_attachment_commands_and_raw_event():
+    """Catch attachment topics that later ROS consumers cannot observe or drive."""
+    description = load_launch_description(GAZEBO_LAUNCH)
+    bridge = next(
+        entity
+        for entity in description.entities
+        if isinstance(entity, Node)
+        and entity.node_package == 'ros_gz_bridge'
+        and entity.node_executable == 'parameter_bridge'
+    )
+
+    assert {
+        '/so101/attach_coke@std_msgs/msg/Empty]gz.msgs.Empty',
+        '/so101/detach_coke@std_msgs/msg/Empty]gz.msgs.Empty',
+        '/so101/coke_attached_event@std_msgs/msg/String[gz.msgs.StringMsg',
+    } <= set(bridge._Node__arguments)
+    assert not any('/pose/info@' in argument for argument in bridge._Node__arguments)

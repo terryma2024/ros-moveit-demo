@@ -1,16 +1,24 @@
 """Contract tests for the SO-101 pick-place Gazebo world."""
 
 import os
+import math
 from pathlib import Path
+import re
+import signal
 import subprocess
+import tempfile
+import time
+import uuid
 import xml.etree.ElementTree as ET
 
 import pytest
+import yaml
 
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 WORLD_PATH = PACKAGE_DIR / 'worlds' / 'so101_pick_place.sdf'
 XACRO_PATH = PACKAGE_DIR / 'urdf' / 'so101.urdf.xacro'
+DYNAMIC_POSE_TOPIC = '/world/so101_pick_place/dynamic_pose/info'
 
 
 def parse_vector(text):
@@ -30,6 +38,116 @@ def joint(robot, name):
     result = robot.find(f"./joint[@name='{name}']")
     assert result is not None, f'missing joint {name}'
     return result
+
+
+def run(command, environment, timeout=15):
+    return subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env=environment,
+    )
+
+
+def wait_for_ros_topics(environment, required, launch, log, timeout=45):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if launch.poll() is not None:
+            log.seek(0)
+            pytest.fail(f'simulation launch exited early:\n{log.read()}')
+        completed = subprocess.run(
+            ['ros2', 'topic', 'list'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=environment,
+        )
+        if completed.returncode == 0 and required <= set(completed.stdout.split()):
+            return
+        time.sleep(0.25)
+    pytest.fail(f'timed out waiting for ROS topics: {sorted(required)}')
+
+
+def pose_positions(payload):
+    positions = {}
+    for match in re.finditer(
+        r'pose \{.*?name: "([^"]+)".*?position \{(.*?)\n\s*\}',
+        payload,
+        re.DOTALL,
+    ):
+        position = []
+        for axis in ('x', 'y', 'z'):
+            value = re.search(rf'\b{axis}: ([^\s]+)', match.group(2))
+            position.append(float(value.group(1)) if value else 0.0)
+        positions[match.group(1)] = tuple(position)
+    return positions
+
+
+def sample_dynamic_positions(environment):
+    completed = run(
+        ['gz', 'topic', '-e', '-n', '1', '-t', DYNAMIC_POSE_TOPIC],
+        environment,
+        timeout=10,
+    )
+    positions = pose_positions(completed.stdout)
+    assert {'coke', 'gripper'} <= positions.keys(), completed.stdout
+    return positions
+
+
+def sample_joint_state(environment):
+    output = run(
+        ['ros2', 'topic', 'echo', '/joint_states', '--once'],
+        environment,
+        timeout=10,
+    ).stdout
+    payload_start = output.find('header:')
+    assert payload_start >= 0, output
+    return yaml.safe_load(output[payload_start:].split('---', 1)[0])
+
+
+def publish_attachment_command(environment, command):
+    run(
+        [
+            'ros2', 'topic', 'pub', '--once',
+            f'/so101/{command}_coke', 'std_msgs/msg/Empty', '{}',
+        ],
+        environment,
+        timeout=10,
+    )
+
+
+def command_arm(environment, joint_1):
+    message = (
+        "{joint_names: ['1', '2', '3', '4', '5'], points: ["
+        f"{{positions: [{joint_1}, 0.0, 0.0, 0.0, 0.0], "
+        "time_from_start: {sec: 2, nanosec: 0}}]}"
+    )
+    run(
+        [
+            'ros2', 'topic', 'pub', '--once',
+            '/arm_controller/joint_trajectory',
+            'trajectory_msgs/msg/JointTrajectory', message,
+        ],
+        environment,
+        timeout=15,
+    )
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        sample = sample_joint_state(environment)
+        position = dict(zip(sample['name'], sample['position']))
+        if abs(position['1'] - joint_1) < 0.01:
+            return
+    pytest.fail(f'joint 1 did not reach {joint_1}')
+
+
+def distance(first, second):
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(first, second)))
+
+
+def relative_position(child, parent):
+    return tuple(a - b for a, b in zip(child, parent))
 
 
 def test_pick_place_world_has_canonical_support_and_coke_geometry():
@@ -98,6 +216,120 @@ def test_pick_place_world_starts_without_system_initialization_errors():
     output = completed.stdout + completed.stderr
     assert 'Failed to initialize' not in output
     assert 'should be attached to a model entity' not in output
+
+
+def test_runtime_joint_and_detachable_joint_observation_smoke():
+    """Prove finite joint evidence and physical attach/follow/detach behavior."""
+    environment = os.environ.copy()
+    environment.update({
+        'GZ_PARTITION': f'so101_task1_{uuid.uuid4().hex}',
+        'ROS_DOMAIN_ID': str(100 + os.getpid() % 100),
+        'ROS2CLI_DISABLE_DAEMON': '1',
+    })
+
+    with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as log:
+        launch = subprocess.Popen(
+            [
+                'ros2', 'launch', 'so101_gazebo_demo',
+                'so101_gazebo.launch.py', 'headless:=true',
+            ],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=environment,
+            start_new_session=True,
+        )
+        try:
+            wait_for_ros_topics(
+                environment,
+                {
+                    '/joint_states',
+                    '/arm_controller/joint_trajectory',
+                    '/so101/attach_coke',
+                    '/so101/detach_coke',
+                    '/so101/coke_attached_event',
+                },
+                launch,
+                log,
+            )
+
+            joint_sample = sample_joint_state(environment)
+            assert joint_sample['name'] == [str(number) for number in range(1, 7)]
+            assert len(joint_sample['velocity']) == 6
+            assert all(math.isfinite(value) for value in joint_sample['velocity'])
+
+            before_attach = sample_dynamic_positions(environment)
+            publish_attachment_command(environment, 'attach')
+            after_attach = sample_dynamic_positions(environment)
+            attach_jump = distance(before_attach['coke'], after_attach['coke'])
+            assert attach_jump < 0.005
+
+            command_arm(environment, 0.25)
+            carried = sample_dynamic_positions(environment)
+            carried_delta = distance(after_attach['coke'], carried['coke'])
+            assert carried_delta > 0.01
+            assert distance(
+                relative_position(after_attach['coke'], after_attach['gripper']),
+                relative_position(carried['coke'], carried['gripper']),
+            ) < 0.01
+
+            publish_attachment_command(environment, 'detach')
+            detached = sample_dynamic_positions(environment)
+            command_arm(environment, 0.0)
+            after_detached_motion = sample_dynamic_positions(environment)
+            gripper_delta = distance(
+                detached['gripper'], after_detached_motion['gripper']
+            )
+            independent_coke_delta = distance(
+                detached['coke'], after_detached_motion['coke']
+            )
+            assert gripper_delta > 0.01
+            assert independent_coke_delta < 0.01
+
+            print(
+                'SO101_RUNTIME_EVIDENCE '
+                f'velocity={joint_sample["velocity"]} '
+                f'attach_jump={attach_jump:.9f} '
+                f'carried_coke_delta={carried_delta:.9f} '
+                f'detached_gripper_delta={gripper_delta:.9f} '
+                f'detached_coke_delta={independent_coke_delta:.9f} '
+                f'before_attach={before_attach["coke"]} '
+                f'carried={carried["coke"]} '
+                f'after_detached_motion={after_detached_motion["coke"]}'
+            )
+        finally:
+            if launch.poll() is None:
+                os.killpg(launch.pid, signal.SIGINT)
+                try:
+                    launch.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    os.killpg(launch.pid, signal.SIGKILL)
+                    launch.wait(timeout=5)
+
+        log.seek(0)
+        output = log.read()
+        output_without_ansi = re.sub(r'\x1b\[[0-9;]*m', '', output)
+        load_bearing_collisions = (
+            'gripper_collision',
+            'gripper_collision_1',
+            'jaw_collision',
+            'fixed_finger_contact',
+            'moving_finger_contact',
+        )
+        assert not [
+            name
+            for name in load_bearing_collisions
+            if (
+                f'The geometry element of collision [{name}] '
+                "couldn't be created"
+            ) in output_without_ansi
+        ], output
+        forbidden = (
+            'Failed to initialize',
+            'Failed to construct DART',
+            'should be attached to a model entity',
+        )
+        assert not [message for message in forbidden if message in output], output
 
 
 def test_pick_place_world_has_approved_gui_presentation():
