@@ -34,6 +34,9 @@ struct SO101Profile
   double preopen_width{0.070};
   double contact_width{0.066};
   double grasp_section_depth{0.020};
+  std::string gripper_geometry_model_version{"so101-gripper-d20-mesh-v1"};
+  std::string gripper_geometry_model_fingerprint{
+    "33be401ad080298b31265a7ab60f4e233da4d3abd6aafb090f6a4fce7bed2a4e"};
   double q6_tolerance{0.002};
   double width_tolerance{0.0005};
   double q6_velocity_tolerance{0.01};

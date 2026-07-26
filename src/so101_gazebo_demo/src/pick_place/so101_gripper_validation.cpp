@@ -1,20 +1,41 @@
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <utility>
+
+#include "so101_gazebo_demo/pick_place/gripper_width_calibration_data.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
 
 double gripperWidthAtSection(double q6, const SO101Profile & profile)
 {
-  const double q_span = profile.q6_preopen - profile.q6_contact;
-  if (!std::isfinite(q6) || !std::isfinite(q_span) || std::abs(q_span) < 1e-12) {
+  namespace calibration = gripper_calibration;
+  if (!std::isfinite(q6) ||
+      profile.gripper_geometry_model_version != calibration::kModelVersion ||
+      profile.gripper_geometry_model_fingerprint != calibration::kModelFingerprint ||
+      std::abs(profile.grasp_section_depth - calibration::kGraspDepth) > 1e-12 ||
+      std::abs(profile.coke_radius * 2.0 - calibration::kCokeDiameter) > 1e-12 ||
+      q6 < calibration::kSamples.front().q6 || q6 > calibration::kSamples.back().q6) {
     return std::numeric_limits<double>::quiet_NaN();
   }
-  return profile.contact_width +
-         (q6 - profile.q6_contact) * (profile.preopen_width - profile.contact_width) / q_span;
+  const auto upper = std::lower_bound(
+    calibration::kSamples.begin(), calibration::kSamples.end(), q6,
+    [](const calibration::CalibrationSample & sample, double value) {
+      return sample.q6 < value;
+    });
+  if (upper == calibration::kSamples.begin()) {
+    return upper->width;
+  }
+  if (upper == calibration::kSamples.end()) {
+    return calibration::kSamples.back().width;
+  }
+  const auto lower = std::prev(upper);
+  const auto ratio = (q6 - lower->q6) / (upper->q6 - lower->q6);
+  return lower->width + ratio * (upper->width - lower->width);
 }
 
 ValidationResult validateQ6Target(const WorldSnapshot & snapshot, double target_q6,
@@ -44,8 +65,18 @@ ValidationResult validateQ6Target(const WorldSnapshot & snapshot, double target_
                                "Joint 6 is outside the configured target tolerance",
                                {}});
   }
-  if (!std::isfinite(width) || !std::isfinite(target_width) ||
-      std::abs(width - target_width) > profile.width_tolerance) {
+  const bool geometry_model_matches =
+    profile.gripper_geometry_model_version == gripper_calibration::kModelVersion &&
+    profile.gripper_geometry_model_fingerprint == gripper_calibration::kModelFingerprint &&
+    std::abs(profile.grasp_section_depth - gripper_calibration::kGraspDepth) <= 1e-12 &&
+    std::abs(profile.coke_radius * 2.0 - gripper_calibration::kCokeDiameter) <= 1e-12;
+  if (!geometry_model_matches) {
+    result.failures.push_back({FailureCategory::GRIPPER,
+                               "Q6_GEOMETRY_MODEL_MISMATCH",
+                               "The q6 width calibration does not match the configured mesh/URDF model",
+                               {}});
+  } else if (!std::isfinite(width) || !std::isfinite(target_width) ||
+             std::abs(width - target_width) > profile.width_tolerance) {
     result.failures.push_back({FailureCategory::GRIPPER,
                                "Q6_WIDTH_OUT_OF_TOLERANCE",
                                "Joint 6 does not produce the required 20 mm-section width",

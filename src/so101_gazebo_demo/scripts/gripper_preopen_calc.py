@@ -17,6 +17,7 @@ ray/triangle intersections at the configured physical depth.
 """
 
 import argparse
+import hashlib
 import math
 from pathlib import Path
 import struct
@@ -33,6 +34,15 @@ def default_mesh_dir() -> Path:
         Path(get_package_share_directory('so101_gazebo_demo'))
         / 'meshes'
         / 'so101'
+    )
+
+
+def default_urdf_path() -> Path:
+    """Return the installed package's geometry-bearing xacro."""
+    return (
+        Path(get_package_share_directory('so101_gazebo_demo'))
+        / 'urdf'
+        / 'so101_base.xacro'
     )
 
 
@@ -59,6 +69,16 @@ OPENING_AXIS_GRIPPER = np.array([1.0, 0.0, 0.0])
 DEFAULT_GRASP_DEPTH = 0.020
 DEFAULT_COKE_DIAMETER = 0.066
 DEFAULT_PREOPEN_CLEARANCE = 0.004
+GEOMETRY_MODEL_VERSION = 'so101-gripper-d20-mesh-v1'
+GEOMETRY_CONSTANTS_CANONICAL = (
+    'J6_XYZ=0.0202,0.0188,-0.0234\n'
+    'J6_RPY=1.5708,0,0\n'
+    'FIXED_VISUAL_XYZ=0,-0.000218214,0.000949706\n'
+    'FIXED_VISUAL_RPY=-pi,0,0\n'
+    'MOVING_VISUAL_XYZ=0,0,0.0189\n'
+    'MOVING_VISUAL_RPY=0,0,0\n'
+    'OPENING_AXIS_GRIPPER=1,0,0\n'
+)
 
 
 class RayHit(NamedTuple):
@@ -88,6 +108,18 @@ class GripperTargets(NamedTuple):
     fixed_inward_dot: float
     preopen_moving_inward_dot: float
     contact_moving_inward_dot: float
+
+
+class WidthCalibration(NamedTuple):
+    model_version: str
+    fixed_mesh_sha256: str
+    moving_mesh_sha256: str
+    urdf_sha256: str
+    constants_sha256: str
+    model_fingerprint: str
+    grasp_depth: float
+    coke_diameter: float
+    samples: tuple[tuple[float, float], ...]
 
 
 class TriangleMesh(NamedTuple):
@@ -469,6 +501,157 @@ def calculate_gripper_targets(
     )
 
 
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _width_geometry(
+    mesh_dir: Path,
+    grasp_depth: float,
+    coke_diameter: float,
+) -> tuple[TriangleMesh, FixedContactGeometry]:
+    if coke_diameter <= 0.0:
+        raise ValueError('coke_diameter must be positive')
+    fixed_mesh = load_mesh_in_link_frame(
+        mesh_dir / 'wrist_roll_follower_so101_v1.stl',
+        FIXED_VISUAL_XYZ,
+        FIXED_VISUAL_RPY,
+    )
+    moving_mesh = load_mesh_in_link_frame(
+        mesh_dir / 'moving_jaw_so101_v1.stl',
+        MOVING_VISUAL_XYZ,
+        MOVING_VISUAL_RPY,
+    )
+    fixed = fixed_contact_geometry(
+        fixed_mesh,
+        grasp_depth,
+        coke_diameter / 2.0,
+        OPENING_AXIS_GRIPPER,
+    )
+    return moving_mesh, fixed
+
+
+def gripper_width_at_q6(
+    mesh_dir: Path,
+    grasp_depth: float,
+    coke_diameter: float,
+    q6: float,
+) -> float:
+    """Evaluate the real STL ray-intersection width at one q6 value."""
+    moving_mesh, fixed = _width_geometry(mesh_dir, grasp_depth, coke_diameter)
+    hit = moving_contact_at_q6(
+        moving_mesh, fixed.coke_center, q6, OPENING_AXIS_GRIPPER
+    )
+    return float(
+        np.dot(hit.point - fixed.contact_point, OPENING_AXIS_GRIPPER)
+    )
+
+
+def calculate_width_calibration(
+    mesh_dir: Path,
+    urdf_path: Path,
+    grasp_depth: float,
+    coke_diameter: float,
+    q_min: float,
+    q_max: float,
+    sample_count: int,
+) -> WidthCalibration:
+    """Generate a fingerprinted dense q6/width table from the real STL meshes."""
+    if not (math.isfinite(q_min) and math.isfinite(q_max) and q_min < q_max):
+        raise ValueError('q_min and q_max must form a finite increasing range')
+    if sample_count < 2:
+        raise ValueError('sample_count must be at least two')
+    moving_mesh, fixed = _width_geometry(mesh_dir, grasp_depth, coke_diameter)
+    samples = []
+    for q6 in np.linspace(q_min, q_max, sample_count):
+        q6 = float(q6)
+        hit = moving_contact_at_q6(
+            moving_mesh, fixed.coke_center, q6, OPENING_AXIS_GRIPPER
+        )
+        width = float(
+            np.dot(hit.point - fixed.contact_point, OPENING_AXIS_GRIPPER)
+        )
+        samples.append((q6, width))
+
+    fixed_sha = _sha256_file(
+        mesh_dir / 'wrist_roll_follower_so101_v1.stl'
+    )
+    moving_sha = _sha256_file(mesh_dir / 'moving_jaw_so101_v1.stl')
+    urdf_sha = _sha256_file(urdf_path)
+    constants_sha = hashlib.sha256(
+        GEOMETRY_CONSTANTS_CANONICAL.encode('utf-8')
+    ).hexdigest()
+    fingerprint_payload = (
+        f'version={GEOMETRY_MODEL_VERSION}\n'
+        f'fixed_mesh_sha256={fixed_sha}\n'
+        f'moving_mesh_sha256={moving_sha}\n'
+        f'urdf_sha256={urdf_sha}\n'
+        f'constants_sha256={constants_sha}\n'
+        f'grasp_depth={grasp_depth:.12f}\n'
+        f'coke_diameter={coke_diameter:.12f}\n'
+    )
+    model_fingerprint = hashlib.sha256(
+        fingerprint_payload.encode('utf-8')
+    ).hexdigest()
+    return WidthCalibration(
+        GEOMETRY_MODEL_VERSION,
+        fixed_sha,
+        moving_sha,
+        urdf_sha,
+        constants_sha,
+        model_fingerprint,
+        grasp_depth,
+        coke_diameter,
+        tuple(samples),
+    )
+
+
+def render_width_calibration_header(calibration: WidthCalibration) -> str:
+    """Render the deterministic C++ table consumed by the runtime validator."""
+    lines = [
+        '#pragma once',
+        '',
+        '// DO NOT EDIT: generated from the real SO-101 STL meshes by:',
+        '// python3 scripts/gripper_preopen_calc.py --mesh-dir meshes/so101 \\',
+        '//   --urdf-path urdf/so101_base.xacro --print-calibration-header \\',
+        '//   --calibration-q-min 0.660818811 --calibration-q-max 0.709194871 \\',
+        '//   --calibration-samples 49',
+        '',
+        '#include <array>',
+        '#include <string_view>',
+        '',
+        'namespace so101_gazebo_demo::pick_place::gripper_calibration',
+        '{',
+        '',
+        'struct CalibrationSample',
+        '{',
+        '  double q6;',
+        '  double width;',
+        '};',
+        '',
+        f'inline constexpr std::string_view kModelVersion{{"{calibration.model_version}"}};',
+        f'inline constexpr std::string_view kFixedMeshSha256{{"{calibration.fixed_mesh_sha256}"}};',
+        f'inline constexpr std::string_view kMovingMeshSha256{{"{calibration.moving_mesh_sha256}"}};',
+        f'inline constexpr std::string_view kUrdfSha256{{"{calibration.urdf_sha256}"}};',
+        f'inline constexpr std::string_view kConstantsSha256{{"{calibration.constants_sha256}"}};',
+        f'inline constexpr std::string_view kModelFingerprint{{"{calibration.model_fingerprint}"}};',
+        f'inline constexpr double kGraspDepth{{{calibration.grasp_depth:.12f}}};',
+        f'inline constexpr double kCokeDiameter{{{calibration.coke_diameter:.12f}}};',
+        f'inline constexpr std::array<CalibrationSample, {len(calibration.samples)}> kSamples{{{{',
+    ]
+    lines.extend(
+        f'  CalibrationSample{{{q6:.12f}, {width:.12f}}},'
+        for q6, width in calibration.samples
+    )
+    lines.extend([
+        '}};',
+        '',
+        '}  // namespace so101_gazebo_demo::pick_place::gripper_calibration',
+        '',
+    ])
+    return '\n'.join(lines)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -501,6 +684,14 @@ def main() -> None:
         default=4.0,
         help='Clearance placed entirely on the moving-jaw side (default: 4 mm)',
     )
+    parser.add_argument(
+        '--urdf-path', type=Path, default=default_urdf_path(),
+        help='Geometry-bearing SO-101 xacro used for fingerprinting',
+    )
+    parser.add_argument('--print-calibration-header', action='store_true')
+    parser.add_argument('--calibration-q-min', type=float, default=0.660818811)
+    parser.add_argument('--calibration-q-max', type=float, default=0.709194871)
+    parser.add_argument('--calibration-samples', type=int, default=49)
     args = parser.parse_args()
 
     try:
@@ -513,6 +704,23 @@ def main() -> None:
     except (OSError, ValueError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)
         raise SystemExit(1) from exc
+
+    if args.print_calibration_header:
+        try:
+            calibration = calculate_width_calibration(
+                mesh_dir=args.mesh_dir,
+                urdf_path=args.urdf_path,
+                grasp_depth=args.grasp_depth_mm / 1000.0,
+                coke_diameter=args.coke_diameter_mm / 1000.0,
+                q_min=args.calibration_q_min,
+                q_max=args.calibration_q_max,
+                sample_count=args.calibration_samples,
+            )
+        except (OSError, ValueError) as exc:
+            print(f'ERROR: {exc}', file=sys.stderr)
+            raise SystemExit(1) from exc
+        print(render_width_calibration_header(calibration), end='')
+        return
 
     print('SO-101 Coke grasp geometry')
     print(f'  grasp depth d:       {result.grasp_depth * 1000:.2f} mm')
