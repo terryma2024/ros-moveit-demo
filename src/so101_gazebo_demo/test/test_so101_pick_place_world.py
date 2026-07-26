@@ -493,6 +493,23 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             assert gripper_delta > 0.01
             assert independent_coke_delta < 0.01
 
+            log.seek(0)
+            startup_log = log.read()
+            raw_detached = startup_log.index(
+                'RAW_ATTACHMENT_EVENT state=detached'
+            )
+            durable_detached_log = startup_log.index(
+                'DURABLE_ATTACHMENT_STATE state=detached'
+            )
+            bridge_started = startup_log.index(
+                '[parameter_bridge-', durable_detached_log
+            )
+            controller_started = startup_log.index(
+                '[spawner-', durable_detached_log
+            )
+            assert raw_detached < durable_detached_log < bridge_started
+            assert raw_detached < durable_detached_log < controller_started
+
             print(
                 'SO101_RUNTIME_EVIDENCE '
                 f'velocity={joint_sample["velocity"]} '

@@ -15,6 +15,7 @@ find_package(trajectory_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 
 add_library(pick_place_core
+  src/pick_place/attachment_state_reducer.cpp
   src/pick_place/domain_types.cpp
   src/pick_place/file_checkpoint_store.cpp
   src/pick_place/common_resume_validator.cpp
@@ -77,6 +78,9 @@ if(BUILD_TESTING)
   target_link_libraries(test_so101_gripper_state pick_place_core)
   ament_add_gtest(test_so101_gazebo_attachment test/pick_place/test_so101_gazebo_attachment.cpp)
   target_link_libraries(test_so101_gazebo_attachment pick_place_core gz-msgs10::core gz-transport13::core)
+  ament_add_gtest(test_attachment_state_reducer
+    test/pick_place/test_attachment_state_reducer.cpp)
+  target_link_libraries(test_attachment_state_reducer pick_place_core)
   ament_add_gtest(test_so101_attachment_contracts
     test/pick_place/test_so101_attachment_contracts.cpp)
   target_link_libraries(test_so101_attachment_contracts pick_place_core)

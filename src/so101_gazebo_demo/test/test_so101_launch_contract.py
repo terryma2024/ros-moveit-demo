@@ -1,6 +1,7 @@
 """Public launch-argument contract for the SO-101 simulation stack."""
 
 import importlib.util
+import inspect
 import os
 from pathlib import Path
 import signal
@@ -10,6 +11,7 @@ import time
 from types import SimpleNamespace
 import uuid
 
+import pytest
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
 
@@ -181,6 +183,54 @@ def test_initial_detach_helper_is_bounded_without_gazebo_plugin_subscription():
 
     assert completed.returncode == 124
     assert 7 <= elapsed < 10
+
+
+def test_initial_detach_command_without_raw_detached_event_fails_closed(tmp_path):
+    """A delivered command is not proof that the detachable joint changed state."""
+    module = load_launch_module(GAZEBO_LAUNCH)
+    environment = os.environ.copy()
+    marker = tmp_path / 'detach-command-observed'
+    fake_gz = tmp_path / 'gz'
+    fake_gz.write_text(
+        '#!/bin/sh\n'
+        'case "$*" in\n'
+        '  *"topic -i -t /so101/coke_attached_event"*)\n'
+        '    echo "Subscribers [fake-relay]" ;;\n'
+        '  *"topic -i -t /so101/detach_coke"*)\n'
+        '    echo "Subscribers [fake-plugin]" ;;\n'
+        '  *"topic -t /so101/detach_coke"*)\n'
+        '    : > "$SO101_DETACH_MARKER" ;;\n'
+        '  *"topic -e -t /so101/coke_attached"*)\n'
+        '    exit 0 ;;\n'
+        'esac\n'
+    )
+    fake_gz.chmod(0o755)
+    environment['PATH'] = f'{tmp_path}:{environment["PATH"]}'
+    environment['SO101_DETACH_MARKER'] = str(marker)
+
+    completed = subprocess.run(
+        module.initial_detach_command(timeout_seconds=2),
+        capture_output=True,
+        text=True,
+        timeout=4,
+        env=environment,
+    )
+
+    assert marker.exists(), 'detach command must have been delivered in this scenario'
+    assert completed.returncode == 124
+
+
+def test_launch_starts_relay_before_initial_detach_and_gates_on_durable_state():
+    """Lock the evidence chain: subscribe raw -> command -> raw event -> durable state."""
+    module = load_launch_module(GAZEBO_LAUNCH)
+    source = inspect.getsource(module.generate_launch_description)
+    command = ' '.join(module.initial_detach_command(timeout_seconds=2))
+
+    assert 'OnProcessStart' in source
+    assert 'target_action=attachment_state_relay' in source
+    assert '/so101/coke_attached_event' in command
+    assert '/so101/coke_attached' in command
+    assert 'detached' in command
 
 
 def test_failed_prerequisite_stops_before_downstream_readiness_actions():
