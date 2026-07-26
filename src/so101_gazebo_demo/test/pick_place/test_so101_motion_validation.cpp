@@ -90,6 +90,75 @@ TEST(SO101MotionLadder, AcceptsCompleteNearVerticalCollisionAwarePath)
   EXPECT_NEAR(result.metrics.at("axis_error"), 0.0, 1e-12);
 }
 
+TEST(SO101MotionConfiguration, RejectsNonfiniteNegativeAndIllegalZeroValuesAtEntry)
+{
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  for (const int mutation : {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                             12, 13, 14, 15, 16, 17, 18}) {
+    auto config = descendConfig();
+    switch (mutation) {
+      case 0: config.endpoint_position.x = nan; break;
+      case 1: config.local_approach_axis = {0, 0, 0}; break;
+      case 2: config.target_approach_axis.y = inf; break;
+      case 3: config.path_direction = {0, 0, 0}; break;
+      case 4: config.position_tolerance = 0.0; break;
+      case 5: config.position_tolerance = -0.1; break;
+      case 6: config.position_tolerance = nan; break;
+      case 7: config.axis_tolerance_rad = 0.0; break;
+      case 8: config.axis_tolerance_rad = M_PI + 0.01; break;
+      case 9: config.max_lateral_deviation = -0.1; break;
+      case 10: config.max_lateral_deviation = 0.0; break;
+      case 11: config.max_joint_jump = inf; break;
+      case 12: config.max_joint_jump = 0.0; break;
+      case 13: config.joint_endpoint_tolerance = -0.001; break;
+      case 14: config.joint_endpoint_tolerance = 0.0; break;
+      case 15: config.min_duration_seconds = nan; break;
+      case 16: config.min_duration_seconds = 0.0; break;
+      case 17: config.monotonic_tolerance = -1e-5; break;
+      case 18: config.monotonic_tolerance = inf; break;
+    }
+    const auto result = spp::validateWaypointLadder(validLadder(), config);
+    ASSERT_FALSE(result.ok) << mutation;
+    ASSERT_FALSE(result.failures.empty()) << mutation;
+    EXPECT_EQ(result.failures.front().category, spp::FailureCategory::CONFIGURATION) << mutation;
+    EXPECT_EQ(result.failures.front().code, "MOTION_VALIDATION_CONFIG_INVALID") << mutation;
+  }
+}
+
+TEST(SO101MotionConfiguration, AllowsZeroOnlyForNonnegativeMonotonicTolerance)
+{
+  auto config = descendConfig();
+  config.monotonic_tolerance = 0.0;
+  EXPECT_TRUE(spp::validateWaypointLadder(validLadder(), config).ok);
+}
+
+TEST(SO101MotionConfiguration, RejectsMalformedTemporalPolicyAtEntry)
+{
+  for (const double clearance : {0.0, -0.001,
+                                 std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::infinity()}) {
+    auto config = descendConfig();
+    config.temporal_contact_policy = spp::TemporalContactPolicy{
+      {"coke:gripper"}, spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
+      clearance};
+    auto plan = validLadder();
+    plan.temporal_contact_policy = config.temporal_contact_policy;
+    const auto result = spp::validateWaypointLadder(plan, config);
+    ASSERT_FALSE(result.ok);
+    ASSERT_FALSE(result.failures.empty());
+    EXPECT_EQ(result.failures.front().category, spp::FailureCategory::CONFIGURATION);
+    EXPECT_EQ(result.failures.front().code, "MOTION_VALIDATION_CONFIG_INVALID");
+  }
+
+  auto config = descendConfig();
+  config.temporal_contact_policy = spp::TemporalContactPolicy{
+    {"coke:table"}, spp::TemporalContactLocation::FIRST_ONLY, 0.001};
+  auto plan = validLadder();
+  plan.temporal_contact_policy = config.temporal_contact_policy;
+  EXPECT_FALSE(spp::validateWaypointLadder(plan, config).ok);
+}
+
 TEST(SO101MotionLadder, RejectsLateralDrift)
 {
   auto plan = validLadder();
