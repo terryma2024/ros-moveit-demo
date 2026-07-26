@@ -64,9 +64,57 @@ ValidationResult failure(std::string code, std::string message,
   return {false, {std::move(item)}, std::move(metrics)};
 }
 
+ValidationResult configurationFailure()
+{
+  Failure item{FailureCategory::CONFIGURATION, "MOTION_VALIDATION_CONFIG_INVALID",
+               "Motion validation configuration must be finite and use valid positive or non-negative bounds",
+               {}};
+  return {false, {std::move(item)}, {}};
+}
+
+bool validConfiguration(const MotionValidationConfig & config)
+{
+  const auto positive = [](double value) {
+    return std::isfinite(value) && value > 0.0;
+  };
+  const auto valid_axis = [](const Vec3 & axis) {
+    const double magnitude = norm(axis);
+    return finite(axis) && std::isfinite(magnitude) && magnitude > kTiny;
+  };
+  if (config.expected_joint_names.empty() || !finite(config.endpoint_position) ||
+      !valid_axis(config.local_approach_axis) ||
+      !valid_axis(config.target_approach_axis) || !valid_axis(config.path_direction) ||
+      !positive(config.position_tolerance) || !positive(config.axis_tolerance_rad) ||
+      config.axis_tolerance_rad > M_PI || !positive(config.max_lateral_deviation) ||
+      !positive(config.max_joint_jump) || !positive(config.joint_endpoint_tolerance) ||
+      !positive(config.min_duration_seconds) || !std::isfinite(config.monotonic_tolerance) ||
+      config.monotonic_tolerance < 0.0) {
+    return false;
+  }
+  std::set<std::string> unique_names;
+  for (const auto & name : config.expected_joint_names) {
+    if (name.empty() || !unique_names.insert(name).second) return false;
+  }
+  for (const auto & pair : config.allowed_touch_pairs) {
+    if (pair.empty()) return false;
+  }
+  if (!config.temporal_contact_policy) return true;
+  const auto & temporal = *config.temporal_contact_policy;
+  if (temporal.allowed_pairs.empty()) return false;
+  for (const auto & pair : temporal.allowed_pairs) {
+    if (pair.empty()) return false;
+  }
+  if (!std::isfinite(temporal.max_axial_clearance_m)) return false;
+  if (temporal.location == TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE) {
+    return temporal.max_axial_clearance_m > 0.0;
+  }
+  return temporal.max_axial_clearance_m == 0.0;
+}
+
 ValidationResult validateCommon(const MotionPlanArtifact & plan,
                                 const MotionValidationConfig & config)
 {
+  if (!validConfiguration(config)) return configurationFailure();
   if (plan.allowed_touch_pairs != config.allowed_touch_pairs) {
     return failure("TOUCH_WHITELIST_CONTEXT_MISMATCH",
                    "Artifact touch exceptions do not match the state validator context");
