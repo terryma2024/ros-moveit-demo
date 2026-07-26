@@ -14,7 +14,12 @@ enum class SO101GripperTarget
 {
   PREOPEN,
   CONTACT,
+  FULL_OPEN,
 };
+
+[[nodiscard]] ValidationResult validateSO101GripperTarget(
+  const WorldSnapshot & snapshot, SO101GripperTarget target,
+  const SO101Profile & profile = SO101Profile::canonical());
 
 struct SO101GripperStateConfig
 {

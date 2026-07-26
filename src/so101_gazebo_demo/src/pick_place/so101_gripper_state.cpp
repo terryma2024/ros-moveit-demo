@@ -11,9 +11,15 @@ namespace
 
 std::pair<double, double> targetFor(SO101GripperTarget target, const SO101Profile & profile)
 {
-  return target == SO101GripperTarget::PREOPEN
-           ? std::pair{profile.q6_preopen, profile.preopen_width}
-           : std::pair{profile.q6_contact, profile.contact_width};
+  switch (target) {
+    case SO101GripperTarget::PREOPEN:
+      return {profile.q6_preopen, profile.preopen_width};
+    case SO101GripperTarget::CONTACT:
+      return {profile.q6_contact, profile.contact_width};
+    case SO101GripperTarget::FULL_OPEN:
+      return {profile.q6_full_open, gripperWidthAtSection(profile.q6_full_open, profile)};
+  }
+  return {NAN, NAN};
 }
 
 ActionResult failure(ActionStatus status, FailureCategory category, std::string code,
@@ -102,7 +108,7 @@ public:
                                  "The arm must remain stationary after gripper execution", {}});
     }
     const auto [target_q6, target_width] = targetFor(config_.target, profile_);
-    append(result, validateQ6Target(after, target_q6, target_width, profile_));
+    append(result, validateSO101GripperTarget(after, config_.target, profile_));
     if (config_.state == State::CLOSE_GRIPPER) {
       if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
         result.failures.push_back({FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
@@ -163,10 +169,40 @@ ActionResult SO101GripperStateExecutor::execute(const ExecutionContext & context
   }
   const auto [target_q6, target_width] = targetFor(config_.target, profile_);
   if (config_.no_op_if_at_target &&
-      validateQ6Target(context.before, target_q6, target_width, profile_).ok) {
+      validateSO101GripperTarget(context.before, config_.target, profile_).ok) {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
   return command_->command(target_q6);
+}
+
+ValidationResult validateSO101GripperTarget(const WorldSnapshot & snapshot,
+                                            SO101GripperTarget target,
+                                            const SO101Profile & profile)
+{
+  if (target != SO101GripperTarget::FULL_OPEN) {
+    const auto [q6, width] = targetFor(target, profile);
+    return validateQ6Target(snapshot, q6, width, profile);
+  }
+  const auto position = snapshot.joint_positions.find(profile.gripper_joint);
+  const auto velocity = snapshot.joint_velocities.find(profile.gripper_joint);
+  if (!snapshot.fresh || position == snapshot.joint_positions.end() ||
+      velocity == snapshot.joint_velocities.end() || !std::isfinite(position->second) ||
+      !std::isfinite(velocity->second)) {
+    return validationFailure(FailureCategory::GRIPPER, "Q6_EVIDENCE_INCOMPLETE",
+                             "Fresh finite joint 6 position and velocity are required");
+  }
+  ValidationResult result{true, {}, {{"q6", position->second},
+                                     {"q6_velocity", velocity->second}}};
+  if (std::abs(position->second - profile.q6_full_open) > profile.q6_tolerance) {
+    result.failures.push_back({FailureCategory::GRIPPER, "Q6_TARGET_OUT_OF_TOLERANCE",
+                               "Joint 6 is outside the full-open tolerance", {}});
+  }
+  if (std::abs(velocity->second) > profile.q6_velocity_tolerance) {
+    result.failures.push_back({FailureCategory::GRIPPER, "Q6_NOT_STATIONARY",
+                               "Joint 6 velocity exceeds the stop threshold", {}});
+  }
+  result.ok = result.failures.empty();
+  return result;
 }
 
 ActionResult SO101GripperStateExecutor::cancel()

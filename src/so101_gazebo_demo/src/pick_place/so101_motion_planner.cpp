@@ -21,8 +21,9 @@ bool isCarryingMotionState(State state) noexcept
 }
 
 SO101MotionPlanner::SO101MotionPlanner(std::shared_ptr<const IJointMotionTargetPolicy> policy,
-                                       std::shared_ptr<IMoveItJointMotionAdapter> adapter)
-: policy_(std::move(policy)), adapter_(std::move(adapter))
+                                       std::shared_ptr<IMoveItJointMotionAdapter> adapter,
+                                       SO101Profile profile)
+: policy_(std::move(policy)), adapter_(std::move(adapter)), profile_(std::move(profile))
 {
 }
 
@@ -45,7 +46,14 @@ PlanResult SO101MotionPlanner::plan(State state, State next_state,
   }
   const auto & target = *selected.target;
   JointMotionRequest request{state, next_state, target.joint_names, target.joint_waypoints,
-                             target.ladder, isCarryingMotionState(state)};
+                             target.ladder, isCarryingMotionState(state), {},
+                             target.gripper_position,
+                             target.temporal_contact_policy};
+  if (state == State::DESCEND) {
+    for (const auto & link : profile_.moveit_touch_links) {
+      request.allowed_touch_pairs.insert(profile_.coke_model + ":" + link);
+    }
+  }
   return adapter_->plan(request, observation);
 }
 

@@ -46,6 +46,8 @@ MotionEvidenceBuildResult buildMotionPlanEvidence(const TrajectoryEvidenceInput 
   artifact->start_state_stamp_nanoseconds = input.start_state_stamp_nanoseconds;
   artifact->collision_aware = input.collision_aware_planner;
   artifact->time_parameterized = true;
+  artifact->allowed_touch_pairs = input.allowed_touch_pairs;
+  artifact->temporal_contact_policy = input.temporal_contact_policy;
 
   double previous_time = -1.0;
   for (const auto & point : input.points) {
@@ -58,13 +60,19 @@ MotionEvidenceBuildResult buildMotionPlanEvidence(const TrajectoryEvidenceInput 
         (previous_time >= 0.0 && point.time_from_start_seconds <= previous_time)) {
       artifact->time_parameterized = false;
     }
-    auto state = evaluator.evaluate(input.joint_names, point.joint_positions);
+    auto state = evaluator.evaluate(input.joint_names, point.joint_positions,
+                                    input.allowed_touch_pairs,
+                                    input.temporal_contact_policy,
+                                    input.gripper_position);
     if (!state) {
       return fail("MOTION_STATE_EVIDENCE_UNAVAILABLE",
                   "FK or independent collision evidence is unavailable for a trajectory point");
     }
-    artifact->samples.push_back(
-      {state->tcp_pose, point.joint_positions, point.time_from_start_seconds, state->collision_free});
+    artifact->samples.push_back({state->tcp_pose, point.joint_positions,
+                                 point.time_from_start_seconds, state->collision_free,
+                                 state->raw_contact_pairs});
+    artifact->raw_contact_pairs.insert(state->raw_contact_pairs.begin(),
+                                       state->raw_contact_pairs.end());
     previous_time = point.time_from_start_seconds;
   }
   artifact->goal_joint_positions = input.points.back().joint_positions;

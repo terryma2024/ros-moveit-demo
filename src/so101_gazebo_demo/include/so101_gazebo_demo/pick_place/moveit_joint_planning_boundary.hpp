@@ -18,6 +18,8 @@ struct CalibrationCandidate
   double position_error{0.0};
   double axis_error{0.0};
   bool collision_free{false};
+  double minimum_distance{0.0};
+  std::vector<std::string> collision_pairs;
 };
 
 class MoveItJointPlanningBoundary final : public IJointPlanningBoundary,
@@ -36,14 +38,21 @@ public:
   std::optional<MotionPlanningSceneFacts> sceneFacts() override;
   JointSegmentPlanResult planSegment(const std::vector<std::string> & joint_names,
                                      const std::vector<double> & start,
-                                     const std::vector<double> & goal) override;
+                                     const std::vector<double> & goal,
+                                     const std::set<std::string> & allowed_touch_pairs,
+                                     const std::optional<TemporalContactPolicy> & temporal_contact_policy,
+                                     double gripper_position) override;
   std::optional<RobotStateEvidence>
   evaluate(const std::vector<std::string> & joint_names,
-           const std::vector<double> & joint_positions) const override;
+           const std::vector<double> & joint_positions,
+           const std::set<std::string> & allowed_touch_pairs,
+           const std::optional<TemporalContactPolicy> & temporal_contact_policy,
+           double gripper_position) const override;
 
   std::vector<CalibrationCandidate>
   search(const Vec3 & target_position, const Vec3 & local_axis, const Vec3 & target_axis,
-         std::size_t seed_count = 4096, std::size_t result_count = 8);
+         std::size_t seed_count = 4096, std::size_t result_count = 8,
+         double gripper_q6 = 0.707194871);
 
 private:
   class Impl;

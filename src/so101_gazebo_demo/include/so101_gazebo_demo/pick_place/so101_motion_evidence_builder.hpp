@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -27,12 +28,16 @@ struct TrajectoryEvidenceInput
   std::string planner_id;
   std::uint64_t start_state_stamp_nanoseconds{0};
   bool collision_aware_planner{false};
+  std::set<std::string> allowed_touch_pairs;
+  double gripper_position{0.0};
+  std::optional<TemporalContactPolicy> temporal_contact_policy;
 };
 
 struct RobotStateEvidence
 {
   Pose3d tcp_pose;
   bool collision_free{false};
+  std::set<std::string> raw_contact_pairs;
 };
 
 class IRobotStateEvidenceProvider
@@ -41,7 +46,10 @@ public:
   virtual ~IRobotStateEvidenceProvider() = default;
   [[nodiscard]] virtual std::optional<RobotStateEvidence>
   evaluate(const std::vector<std::string> & joint_names,
-           const std::vector<double> & joint_positions) const = 0;
+           const std::vector<double> & joint_positions,
+           const std::set<std::string> & allowed_touch_pairs,
+           const std::optional<TemporalContactPolicy> & temporal_contact_policy,
+           double gripper_position) const = 0;
 };
 
 struct MotionEvidenceBuildResult

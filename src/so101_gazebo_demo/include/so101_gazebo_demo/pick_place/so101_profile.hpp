@@ -31,6 +31,7 @@ struct SO101Profile
   Pose3d coke_pose{0.02, -0.28, 0.181, 0.0, 0.0, 0.0, 1.0};
   double q6_preopen{0.707194871};
   double q6_contact{0.662818811};
+  double q6_full_open{1.7};
   double preopen_width{0.070};
   double contact_width{0.066};
   double grasp_section_depth{0.020};

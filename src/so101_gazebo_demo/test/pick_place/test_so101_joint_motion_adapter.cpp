@@ -17,11 +17,16 @@ public:
   std::optional<spp::MotionPlanningSceneFacts> sceneFacts() override { return scene; }
   spp::JointSegmentPlanResult planSegment(const std::vector<std::string> & names,
                                           const std::vector<double> & start,
-                                          const std::vector<double> & goal) override
+                                          const std::vector<double> & goal,
+                                          const std::set<std::string> & allowed_touch_pairs,
+                                          const std::optional<spp::TemporalContactPolicy> &,
+                                          double gripper_position) override
   {
     ++plan_calls;
     starts.push_back(start);
     goals.push_back(goal);
+    allowed_pairs.push_back(allowed_touch_pairs);
+    gripper_positions.push_back(gripper_position);
     spp::JointSegmentPlan segment;
     segment.joint_names = names;
     segment.moveit_success = true;
@@ -30,11 +35,14 @@ public:
     segment.collision_aware = true;
     auto reported_start = start;
     if (wrong_segment_start) reported_start[0] += 0.01;
-    segment.points = {{reported_start, 0.0}, {goal, 1.0}};
+    const double origin = offset_segment_timestamps ? 4.0 : 0.0;
+    segment.points = {{reported_start, origin}, {goal, origin + 1.0}};
     return {{spp::ActionStatus::SUCCEEDED, std::nullopt}, segment};
   }
   std::optional<spp::RobotStateEvidence>
-  evaluate(const std::vector<std::string> &, const std::vector<double> & positions) const override
+  evaluate(const std::vector<std::string> &, const std::vector<double> & positions,
+           const std::set<std::string> &,
+           const std::optional<spp::TemporalContactPolicy> &, double) const override
   {
     return spp::RobotStateEvidence{{positions[0], positions[1], 0.3 - positions[2], 0, 0, 0, 1},
                                    true};
@@ -45,8 +53,11 @@ public:
   spp::MotionPlanningSceneFacts scene{true, true, false, std::nullopt, {}};
   int plan_calls{0};
   bool wrong_segment_start{false};
+  bool offset_segment_timestamps{false};
   std::vector<std::vector<double>> starts;
   std::vector<std::vector<double>> goals;
+  std::vector<std::set<std::string>> allowed_pairs;
+  std::vector<double> gripper_positions;
 };
 
 spp::ObservationResult observation()
@@ -116,6 +127,7 @@ TEST(SO101JointMotionAdapter, RejectsWrongCarryingAttachmentBeforePlanning)
 TEST(SO101JointMotionAdapter, StitchesLadderWithoutDuplicateBoundaryAndWithIncreasingTime)
 {
   auto boundary = std::make_shared<FakeBoundary>();
+  boundary->offset_segment_timestamps = true;
   auto request = goalRequest();
   request.ladder = true;
   request.joint_waypoints = {{0.05, 0.05, 0.05, 0.05, 0.05},

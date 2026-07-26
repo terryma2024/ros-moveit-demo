@@ -14,6 +14,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 add_library(pick_place_core
   src/pick_place/attachment_state_reducer.cpp
@@ -35,8 +36,10 @@ add_library(pick_place_core
   src/pick_place/so101_motion_validation.cpp
   src/pick_place/so101_motion_evidence_builder.cpp
   src/pick_place/so101_motion_planner.cpp
+  src/pick_place/so101_fixed_motion_targets.cpp
   src/pick_place/so101_joint_motion_adapter.cpp
   src/pick_place/moveit_joint_planning_boundary.cpp
+  src/pick_place/calibration_cli_options.cpp
   src/pick_place/follow_joint_trajectory_gripper_adapter.cpp
   src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_reset_adapter.cpp
@@ -71,6 +74,10 @@ ament_target_dependencies(so101_moveit_scene rclcpp)
 add_executable(calibrate_so101_motion src/nodes/calibrate_so101_motion.cpp)
 target_link_libraries(calibrate_so101_motion pick_place_core)
 ament_target_dependencies(calibrate_so101_motion rclcpp)
+
+add_executable(validate_so101_motion_matrix src/nodes/validate_so101_motion_matrix.cpp)
+target_link_libraries(validate_so101_motion_matrix pick_place_core)
+ament_target_dependencies(validate_so101_motion_matrix rclcpp)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -109,9 +116,18 @@ if(BUILD_TESTING)
   target_link_libraries(test_so101_motion_evidence_builder pick_place_core)
   ament_add_gtest(test_so101_motion_planner test/pick_place/test_so101_motion_planner.cpp)
   target_link_libraries(test_so101_motion_planner pick_place_core)
+  ament_add_gtest(test_so101_fixed_motion_targets
+    test/pick_place/test_so101_fixed_motion_targets.cpp)
+  target_link_libraries(test_so101_fixed_motion_targets pick_place_core)
   ament_add_gtest(test_so101_joint_motion_adapter
     test/pick_place/test_so101_joint_motion_adapter.cpp)
   target_link_libraries(test_so101_joint_motion_adapter pick_place_core)
+  ament_add_gtest(test_so101_node_spinner test/pick_place/test_node_spinner.cpp)
+  target_link_libraries(test_so101_node_spinner pick_place_core)
+  ament_target_dependencies(test_so101_node_spinner rclcpp std_msgs)
+  ament_add_gtest(test_so101_calibration_cli_options
+    test/pick_place/test_calibration_cli_options.cpp)
+  target_link_libraries(test_so101_calibration_cli_options pick_place_core)
   ament_add_gtest(test_so101_moveit_scene test/pick_place/test_so101_moveit_scene.cpp)
   target_link_libraries(test_so101_moveit_scene pick_place_core)
   ament_target_dependencies(test_so101_moveit_scene moveit_msgs shape_msgs)
@@ -159,7 +175,7 @@ endif()
 install(
   TARGETS pick_place_core pick_place_state_machine gazebo_attachment_state_relay
     reset_so101_world so101_moveit_scene
-    calibrate_so101_motion
+    calibrate_so101_motion validate_so101_motion_matrix
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
