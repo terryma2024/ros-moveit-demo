@@ -36,10 +36,15 @@ TEST(CheckpointV3, FileStoreRoundTripsAndResumeValidatorBindsConfigurationAndSes
   ASSERT_TRUE(loaded.checkpoint);
   EXPECT_EQ(3U, loaded.checkpoint->schema_version);
   EXPECT_EQ(pick_place::State::ATTACH_MOVEIT, loaded.checkpoint->next_state);
+  pick_place::WorldSnapshot observed;
+  observed.fresh = true;
+  observed.arm_stationary = true;
+  observed.simulation_session_id = "session-a";
   const pick_place::CommonResumeValidator matching("config-a", "session-a");
-  EXPECT_FALSE(matching.validate(*loaded.checkpoint));
+  EXPECT_TRUE(matching.validate(*loaded.checkpoint, observed).ok);
   const pick_place::CommonResumeValidator stale("config-b", "session-a");
-  ASSERT_TRUE(stale.validate(*loaded.checkpoint));
-  EXPECT_EQ("CHECKPOINT_BOUNDARY_MISMATCH", stale.validate(*loaded.checkpoint)->code);
+  ASSERT_FALSE(stale.validate(*loaded.checkpoint, observed).ok);
+  EXPECT_EQ("RESUME_CONFIGURATION_MISMATCH",
+            stale.validate(*loaded.checkpoint, observed).failures.front().code);
   std::filesystem::remove(path);
 }

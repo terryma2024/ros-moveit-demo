@@ -2,11 +2,14 @@ cmake_minimum_required(VERSION 3.22)
 project(so101_gazebo_demo)
 
 find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_gtest REQUIRED)
 
 add_library(pick_place_core
   src/pick_place/domain_types.cpp
   src/pick_place/file_checkpoint_store.cpp
+  src/pick_place/common_resume_validator.cpp
+  src/pick_place/plan_validation.cpp
+  src/pick_place/state_action.cpp
+  src/pick_place/transition_contract.cpp
   src/pick_place/transition_table.cpp
   src/pick_place/runner.cpp
   src/pick_place/simulation_session_id.cpp
@@ -20,12 +23,15 @@ add_executable(pick_place_state_machine src/pick_place/pick_place_state_machine.
 target_link_libraries(pick_place_state_machine pick_place_core)
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_pick_place_dry_run test/pick_place/test_dry_run.cpp)
   target_link_libraries(test_pick_place_dry_run pick_place_core)
   ament_add_gtest(test_pick_place_checkpoint test/pick_place/test_checkpoint.cpp)
   target_link_libraries(test_pick_place_checkpoint pick_place_core)
   ament_add_gtest(test_pick_place_transition_table test/pick_place/test_transition_table.cpp)
   target_link_libraries(test_pick_place_transition_table pick_place_core)
+  ament_add_gtest(test_pick_place_runner test/pick_place/test_pick_place_runner.cpp)
+  target_link_libraries(test_pick_place_runner pick_place_core)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_package_layout test/test_package_layout.py)
   ament_add_pytest_test(
