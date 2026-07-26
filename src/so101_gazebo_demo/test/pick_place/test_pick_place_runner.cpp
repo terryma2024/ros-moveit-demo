@@ -792,6 +792,35 @@ TEST(PureRunnerIntegration, ExecutePreflightRejectsEveryLateRegistrationGapWitho
   EXPECT_TRUE(missing_recovery.scenario.events.empty());
 }
 
+TEST(PureRunnerIntegration, ExecutePreflightRejectsLateNonPlanningPlannerValidatorAsymmetry)
+{
+  constexpr auto late_non_planning_state = State::RECOVER_SYNC_WORLD_OBJECT;
+  for (const bool planner_only : {true, false}) {
+    Harness harness;
+    harness.registerAll();
+    if (planner_only) {
+      harness.actions.registerPlanner(
+        late_non_planning_state,
+        std::make_shared<FakePlanner>(late_non_planning_state, harness.scenario));
+    } else {
+      harness.validators.registerValidator(
+        late_non_planning_state,
+        std::make_shared<FakePlanValidator>(late_non_planning_state, harness.scenario));
+    }
+
+    const auto result = harness.runner().run(
+      {RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ(planner_only ? "PLAN_VALIDATOR_NOT_REGISTERED" : "PLANNER_NOT_REGISTERED",
+              result.failure->code);
+    EXPECT_TRUE(harness.scenario.events.empty());
+    EXPECT_EQ(0, harness.scenario.observation_calls);
+    EXPECT_EQ(0, harness.scenario.planner_calls);
+    EXPECT_EQ(0, harness.scenario.executor_calls);
+  }
+}
+
 TEST(PureRunnerIntegration, CancelFailureStopsWithoutRecoveryActions)
 {
   Harness harness;
