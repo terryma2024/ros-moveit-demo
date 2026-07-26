@@ -24,13 +24,12 @@ FORWARD_STATES = [
     'SYNC_WORLD_OBJECT',
     'RETREAT',
 ]
-MOTION_STATES = [
+CARTESIAN_MOTION_STATES = [
     'MOVE_ABOVE_OBJECT',
     'DESCEND',
     'LIFT',
     'MOVE_ABOVE_PLACE',
     'DESCEND_TO_PLACE',
-    'RETREAT',
 ]
 MOTION_TARGETS = {
     'MOVE_ABOVE_OBJECT': (0.30, 0.00, 0.987),
@@ -38,8 +37,8 @@ MOTION_TARGETS = {
     'LIFT': (0.30, 0.00, 0.987),
     'MOVE_ABOVE_PLACE': (0.30, 0.20, 0.987),
     'DESCEND_TO_PLACE': (0.30, 0.20, 0.870),
-    'RETREAT': (0.30, 0.20, 0.987),
 }
+NAMED_TARGET_STATES = {'RETREAT': 'ready'}
 NUMBER = r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?'
 
 
@@ -137,7 +136,7 @@ def validate(
         'MAX_JOINT_JUMP',
         'TRAJECTORY_DURATION',
     ]
-    for state in MOTION_STATES:
+    for state in CARTESIAN_MOTION_STATES:
         for label in evidence_labels:
             if not re.search(
                 rf'{label}[^\n]*\bstate={re.escape(state)}\b', text
@@ -203,6 +202,24 @@ def validate(
                     f'{orientation_error:.6f} > {orientation_tolerance:.6f}'
                 )
 
+    for state, target in NAMED_TARGET_STATES.items():
+        if not re.search(
+            rf'NAMED_JOINT_TARGET[^\n]*\bstate={re.escape(state)}\b'
+            rf'[^\n]*\btarget={re.escape(target)}\b',
+            text,
+        ):
+            errors.append(f'{state} named target mismatch: expected {target}')
+        for label in (
+            'START_TCP_POSE',
+            'PLANNED_END_TCP_POSE',
+            'EXECUTED_END_TCP_POSE',
+        ):
+            if state_pose(text, label, state) is None:
+                errors.append(f'{state} {label} 6DoF value is missing or non-finite')
+        points = state_value(text, 'TRAJECTORY_POINTS', state)
+        if points is None or not math.isfinite(points) or points < 1:
+            errors.append(f'{state} trajectory is empty or non-finite')
+
     gripper = last_match(
         text,
         rf'GRIPPER_EVIDENCE[^\n]*\bstate=RETREAT\b[^\n]*\bsample=AFTER\b'
@@ -213,8 +230,8 @@ def validate(
         errors.append('missing final gripper evidence')
     else:
         finger1, finger2, velocity1, velocity2 = map(float, gripper.groups())
-        if min(finger1, finger2) < 0.038:
-            errors.append('final gripper is not safely open')
+        if max(finger1, finger2) > 0.004:
+            errors.append('final gripper is not safely closed')
         if max(abs(velocity1), abs(velocity2)) > 0.01:
             errors.append('final gripper is not stationary')
 
