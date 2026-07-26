@@ -11,9 +11,13 @@
 
   <depend>nlohmann-json-dev</depend>
   <depend>control_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>moveit_msgs</depend>
+  <depend>moveit_ros_planning_interface</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
   <depend>trajectory_msgs</depend>
+  <depend>shape_msgs</depend>
 
   <depend>xacro</depend>
   <depend>urdf</depend>

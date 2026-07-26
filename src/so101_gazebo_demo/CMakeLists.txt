@@ -5,10 +5,14 @@ find_package(ament_cmake REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(gz-msgs10 REQUIRED)
 find_package(gz-transport13 REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(moveit_msgs REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(trajectory_msgs REQUIRED)
+find_package(shape_msgs REQUIRED)
 
 add_library(pick_place_core
   src/pick_place/domain_types.cpp
@@ -25,13 +29,17 @@ add_library(pick_place_core
   src/pick_place/follow_joint_trajectory_gripper_adapter.cpp
   src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_world_observer.cpp
+  src/pick_place/moveit_scene_adapter.cpp
+  src/pick_place/moveit_scene_executor.cpp
+  src/pick_place/world_reset_coordinator.cpp
 )
 target_compile_features(pick_place_core PUBLIC cxx_std_17)
 target_include_directories(pick_place_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(pick_place_core PUBLIC nlohmann_json::nlohmann_json gz-msgs10::core gz-transport13::core)
-ament_target_dependencies(pick_place_core PUBLIC control_msgs rclcpp rclcpp_action trajectory_msgs)
+ament_target_dependencies(pick_place_core PUBLIC control_msgs geometry_msgs moveit_msgs
+  moveit_ros_planning_interface rclcpp rclcpp_action shape_msgs trajectory_msgs)
 
 add_executable(pick_place_state_machine src/pick_place/pick_place_state_machine.cpp)
 target_link_libraries(pick_place_state_machine pick_place_core)
@@ -54,6 +62,11 @@ if(BUILD_TESTING)
   target_link_libraries(test_so101_gripper_adapter pick_place_core)
   ament_add_gtest(test_so101_gazebo_attachment test/pick_place/test_so101_gazebo_attachment.cpp)
   target_link_libraries(test_so101_gazebo_attachment pick_place_core gz-msgs10::core gz-transport13::core)
+  ament_add_gtest(test_so101_moveit_scene test/pick_place/test_so101_moveit_scene.cpp)
+  target_link_libraries(test_so101_moveit_scene pick_place_core)
+  ament_target_dependencies(test_so101_moveit_scene moveit_msgs shape_msgs)
+  ament_add_gtest(test_so101_world_reset test/pick_place/test_so101_world_reset.cpp)
+  target_link_libraries(test_so101_world_reset pick_place_core)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_package_layout test/test_package_layout.py)
   ament_add_pytest_test(

@@ -12,6 +12,7 @@ namespace so101_gazebo_demo::pick_place
 struct SO101Profile
 {
   std::string world_frame{"world"};
+  std::string gazebo_world{"so101_pick_place"};
   std::string planning_group{"arm"};
   std::string tcp_link{"so101_tcp"};
   std::vector<std::string> arm_joints{"1", "2", "3", "4", "5"};
@@ -22,6 +23,7 @@ struct SO101Profile
   std::vector<std::string> moveit_touch_links{"gripper", "jaw"};
   std::string coke_model{"coke"};
   std::string coke_link{"body"};
+  std::string table_object{"table"};
   std::array<double, 3> table_size{0.50, 0.60, 0.04};
   Pose3d table_pose{0.0, -0.20, 0.10, 0.0, 0.0, 0.0, 1.0};
   double coke_radius{0.033};
