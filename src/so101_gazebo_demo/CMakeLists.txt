@@ -32,6 +32,7 @@ add_library(pick_place_core
   src/pick_place/so101_recovery_policy.cpp
   src/pick_place/so101_task3_runtime.cpp
   src/pick_place/so101_motion_validation.cpp
+  src/pick_place/so101_motion_evidence_builder.cpp
   src/pick_place/follow_joint_trajectory_gripper_adapter.cpp
   src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_reset_adapter.cpp
@@ -95,6 +96,9 @@ if(BUILD_TESTING)
   ament_add_gtest(test_so101_motion_validation
     test/pick_place/test_so101_motion_validation.cpp)
   target_link_libraries(test_so101_motion_validation pick_place_core)
+  ament_add_gtest(test_so101_motion_evidence_builder
+    test/pick_place/test_so101_motion_evidence_builder.cpp)
+  target_link_libraries(test_so101_motion_evidence_builder pick_place_core)
   ament_add_gtest(test_so101_moveit_scene test/pick_place/test_so101_moveit_scene.cpp)
   target_link_libraries(test_so101_moveit_scene pick_place_core)
   ament_target_dependencies(test_so101_moveit_scene moveit_msgs shape_msgs)
