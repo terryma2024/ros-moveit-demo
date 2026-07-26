@@ -157,6 +157,12 @@ std::optional<Failure> validateCheckpoint(const Checkpoint & checkpoint)
   }
   const bool has_failed_state = checkpoint.failed_state.has_value();
   const bool has_original_failure = checkpoint.original_failure.has_value();
+  if (checkpoint.source_mode == RunMode::DRY_RUN ||
+      (checkpoint.phase == CheckpointPhase::RECOVERY &&
+       (checkpoint.source_mode != RunMode::EXECUTE || !checkpoint.resumable))) {
+    return checkpointFailure("CHECKPOINT_INVALID_DATA",
+                             "Recovery checkpoints require execute mode and a resumable context");
+  }
   if (has_failed_state != has_original_failure ||
       (checkpoint.phase == CheckpointPhase::RECOVERY && !has_failed_state) ||
       (checkpoint.phase == CheckpointPhase::FORWARD && has_failed_state)) {

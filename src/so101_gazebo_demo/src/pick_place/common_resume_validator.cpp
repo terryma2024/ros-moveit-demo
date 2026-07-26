@@ -109,6 +109,12 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
   }
   const bool has_failed_state = checkpoint.failed_state.has_value();
   const bool has_original_failure = checkpoint.original_failure.has_value();
+  if (checkpoint.source_mode == RunMode::DRY_RUN ||
+      (checkpoint.phase == CheckpointPhase::RECOVERY &&
+       checkpoint.source_mode != RunMode::EXECUTE)) {
+    addFailure(result, "CHECKPOINT_INCOMPATIBLE",
+               "Recovery checkpoints must originate from execute mode");
+  }
   if (has_failed_state != has_original_failure ||
       (checkpoint.phase == CheckpointPhase::RECOVERY && !has_failed_state) ||
       (checkpoint.phase == CheckpointPhase::FORWARD && has_failed_state)) {
@@ -129,6 +135,11 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
   if (!current.fresh || !current.arm_stationary) {
     addFailure(result, "RESUME_ARM_NOT_QUIESCENT",
                "Current robot observation must be fresh and stationary before resume");
+  }
+  if (checkpoint.phase == CheckpointPhase::RECOVERY &&
+      (!current.gazebo_coke_stationary || !*current.gazebo_coke_stationary)) {
+    addFailure(result, "RECOVERY_COKE_NOT_STATIONARY",
+               "Recovery resume requires stationary Gazebo object evidence");
   }
 
   const bool expected_complete = !checkpoint.expected.joint_positions.empty() &&

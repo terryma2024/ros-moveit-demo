@@ -41,6 +41,7 @@ private:
                                          std::optional<State> failed_state,
                                          std::optional<Failure> original_failure) const;
   [[nodiscard]] RunResult runResume(const RunRequest & request) const;
+  [[nodiscard]] std::optional<Failure> validateExecuteConfiguration() const;
   [[nodiscard]] RunResult handleActionFailure(State state, IStateExecutor & executor,
                                               Failure original_failure,
                                               std::uint64_t checkpoint_sequence) const;
