@@ -3,8 +3,16 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.conditions import IfCondition, UnlessCondition
+from launch.event_handlers import OnProcessExit
 from launch.substitutions import Command, LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
@@ -141,6 +149,39 @@ def generate_launch_description():
         ]
     )
 
+    # Gazebo Sim 8's DetachableJoint starts attached even when the SDF contains
+    # <initially_detached>true</initially_detached>.  Repeatedly publish the
+    # detach command after spawning so the public launch contract is genuinely
+    # detached before clients begin an attach / move / detach sequence.
+    initial_detach_publisher = ExecuteProcess(
+        cmd=[
+            "ros2",
+            "topic",
+            "pub",
+            "--rate",
+            "10",
+            "--times",
+            "50",
+            "--wait-matching-subscriptions",
+            "1",
+            "/so101/detach_coke",
+            "std_msgs/msg/Empty",
+            "{}",
+        ],
+        output="screen",
+    )
+    detach_after_spawn = RegisterEventHandler(
+        OnProcessExit(
+            target_action=gz_spawn_entity,
+            on_exit=[
+                TimerAction(
+                    period=1.0,
+                    actions=[initial_detach_publisher],
+                )
+            ],
+        )
+    )
+
     return LaunchDescription([
         model_arg,
         world_arg,
@@ -154,5 +195,6 @@ def generate_launch_description():
         joint_state_broadcaster_spawner,
         arm_controller_spawner,
         gripper_controller_spawner,
-        gz_ros2_bridge
+        gz_ros2_bridge,
+        detach_after_spawn,
     ])

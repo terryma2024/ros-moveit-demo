@@ -26,3 +26,15 @@ def test_installed_tool_dependencies_are_declared_directly():
     }
 
     assert {'ament_index_python', 'python3-numpy', 'libx11'} <= dependencies
+
+
+def test_attachment_bridge_message_dependency_is_declared_directly():
+    """Catch a package that launches std_msgs bridges without declaring them."""
+    package = ET.parse(PACKAGE_DIR / 'package.xml').getroot()
+    dependencies = {
+        element.text
+        for tag in ('depend', 'exec_depend')
+        for element in package.findall(tag)
+    }
+
+    assert 'std_msgs' in dependencies

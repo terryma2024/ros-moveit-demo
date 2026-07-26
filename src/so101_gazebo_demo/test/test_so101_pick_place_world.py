@@ -19,6 +19,14 @@ PACKAGE_DIR = Path(__file__).resolve().parents[1]
 WORLD_PATH = PACKAGE_DIR / 'worlds' / 'so101_pick_place.sdf'
 XACRO_PATH = PACKAGE_DIR / 'urdf' / 'so101.urdf.xacro'
 DYNAMIC_POSE_TOPIC = '/world/so101_pick_place/dynamic_pose/info'
+LOAD_BEARING_COLLISIONS = (
+    'collision',
+    'gripper_collision',
+    'gripper_collision_1',
+    'jaw_collision',
+    'fixed_finger_contact',
+    'moving_finger_contact',
+)
 
 
 def parse_vector(text):
@@ -150,6 +158,44 @@ def relative_position(child, parent):
     return tuple(a - b for a, b in zip(child, parent))
 
 
+def load_bearing_collision_failures(output):
+    """Return only DART failures relevant to Coke and finger contact geometry."""
+    output_without_ansi = re.sub(r'\x1b\[[0-9;]*m', '', output)
+    failures = []
+    for line in output_without_ansi.splitlines():
+        lowered = line.lower()
+        named_failure = any(
+            f'collision [{name}]' in line
+            and any(
+                marker in lowered
+                for marker in (
+                    "couldn't be created",
+                    'failed to create',
+                    'failed to construct',
+                    'unable to create',
+                    'unable to construct',
+                )
+            )
+            for name in LOAD_BEARING_COLLISIONS
+        )
+        primitive_dart_failure = (
+            ('dart' in lowered or 'dartsim' in lowered)
+            and ('cylinder' in lowered or 'box' in lowered)
+            and any(
+                marker in lowered
+                for marker in (
+                    "couldn't",
+                    'failed',
+                    'unable',
+                    'not been implemented',
+                )
+            )
+        )
+        if named_failure or primitive_dart_failure:
+            failures.append(line)
+    return failures
+
+
 def test_pick_place_world_has_canonical_support_and_coke_geometry():
     """Catch missing, separated, or dimensionally inconsistent geometry."""
     world = ET.parse(WORLD_PATH).getroot().find(
@@ -179,6 +225,10 @@ def test_pick_place_world_has_canonical_support_and_coke_geometry():
     assert float(coke.findtext('.//cylinder/length')) == pytest.approx(0.122)
     assert float(coke.findtext('.//mass')) == pytest.approx(0.1)
     assert float(coke.findtext('.//sensor/update_rate')) == pytest.approx(200.0)
+    coke_collision = coke.find("./link/collision[@name='collision']")
+    assert coke_collision is not None
+    assert coke_collision.find('./geometry/cylinder') is not None
+    assert coke_collision.find('./geometry/mesh') is None
 
     table_top = table_pose[2] + table_size[2] / 2
     table_rear_edge = table_pose[1] + table_size[1] / 2
@@ -216,6 +266,19 @@ def test_pick_place_world_starts_without_system_initialization_errors():
     output = completed.stdout + completed.stderr
     assert 'Failed to initialize' not in output
     assert 'should be attached to a model entity' not in output
+
+
+@pytest.mark.parametrize(
+    'message',
+    (
+        "The geometry element of collision [collision] couldn't be created",
+        'Failed to construct DART collision [fixed_finger_contact]',
+        'Unable to create shape for collision [moving_finger_contact]',
+        'dartsim cylinder construction has not been implemented',
+    ),
+)
+def test_load_bearing_collision_failure_scanner_covers_runtime_variants(message):
+    assert load_bearing_collision_failures(message) == [message]
 
 
 def test_runtime_joint_and_detachable_joint_observation_smoke():
@@ -258,6 +321,19 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             assert len(joint_sample['velocity']) == 6
             assert all(math.isfinite(value) for value in joint_sample['velocity'])
 
+            initial_detached = sample_dynamic_positions(environment)
+            command_arm(environment, 0.25)
+            detached_probe = sample_dynamic_positions(environment)
+            initial_detached_gripper_delta = distance(
+                initial_detached['gripper'], detached_probe['gripper']
+            )
+            initial_detached_coke_delta = distance(
+                initial_detached['coke'], detached_probe['coke']
+            )
+            assert initial_detached_gripper_delta > 0.01
+            assert initial_detached_coke_delta < 0.01
+
+            command_arm(environment, 0.0)
             before_attach = sample_dynamic_positions(environment)
             publish_attachment_command(environment, 'attach')
             after_attach = sample_dynamic_positions(environment)
@@ -289,6 +365,8 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             print(
                 'SO101_RUNTIME_EVIDENCE '
                 f'velocity={joint_sample["velocity"]} '
+                f'initial_detached_gripper_delta={initial_detached_gripper_delta:.9f} '
+                f'initial_detached_coke_delta={initial_detached_coke_delta:.9f} '
                 f'attach_jump={attach_jump:.9f} '
                 f'carried_coke_delta={carried_delta:.9f} '
                 f'detached_gripper_delta={gripper_delta:.9f} '
@@ -308,22 +386,7 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
 
         log.seek(0)
         output = log.read()
-        output_without_ansi = re.sub(r'\x1b\[[0-9;]*m', '', output)
-        load_bearing_collisions = (
-            'gripper_collision',
-            'gripper_collision_1',
-            'jaw_collision',
-            'fixed_finger_contact',
-            'moving_finger_contact',
-        )
-        assert not [
-            name
-            for name in load_bearing_collisions
-            if (
-                f'The geometry element of collision [{name}] '
-                "couldn't be created"
-            ) in output_without_ansi
-        ], output
+        assert not load_bearing_collision_failures(output), output
         forbidden = (
             'Failed to initialize',
             'Failed to construct DART',
