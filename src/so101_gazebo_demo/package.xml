@@ -10,6 +10,10 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>nlohmann-json-dev</depend>
+  <depend>control_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>trajectory_msgs</depend>
 
   <depend>xacro</depend>
   <depend>urdf</depend>
