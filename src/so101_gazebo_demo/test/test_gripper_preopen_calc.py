@@ -1,6 +1,8 @@
 import importlib.util
 import math
+import os
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -48,3 +50,25 @@ def test_default_mesh_dir_resolves_installed_package_meshes():
 
     assert (mesh_dir / 'moving_jaw_so101_v1.stl').is_file()
     assert (mesh_dir / 'wrist_roll_follower_so101_v1.stl').is_file()
+
+
+def test_calculator_runs_without_python_user_site_packages():
+    environment = os.environ.copy()
+    environment['PYTHONNOUSERSITE'] = '1'
+
+    completed = subprocess.run(
+        [
+            'python3',
+            str(SCRIPT_PATH),
+            '--mesh-dir',
+            str(MESH_DIR),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert 'q_preopen = 40.519281 deg  (0.707194871 rad)' in completed.stdout
+    assert 'q_contact = 37.976720 deg  (0.662818811 rad)' in completed.stdout

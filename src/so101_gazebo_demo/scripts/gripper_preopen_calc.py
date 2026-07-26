@@ -19,11 +19,11 @@ ray/triangle intersections at the configured physical depth.
 import argparse
 import math
 from pathlib import Path
+import struct
 import sys
 from typing import NamedTuple
 
 import numpy as np
-import trimesh
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -90,6 +90,18 @@ class GripperTargets(NamedTuple):
     contact_moving_inward_dot: float
 
 
+class TriangleMesh(NamedTuple):
+    """Minimal triangle mesh representation required by this calculator."""
+
+    vertices: np.ndarray
+    faces: np.ndarray
+    face_normals: np.ndarray
+
+    @property
+    def triangles(self) -> np.ndarray:
+        return self.vertices[self.faces]
+
+
 # ---------------------------------------------------------------------------
 # Transform helpers
 # ---------------------------------------------------------------------------
@@ -135,10 +147,58 @@ def load_mesh_in_link_frame(
     stl_path: Path,
     visual_xyz: np.ndarray,
     visual_rpy: np.ndarray,
-) -> trimesh.Trimesh:
-    mesh = trimesh.load(str(stl_path), force='mesh')
-    mesh.apply_transform(make_transform(visual_xyz, visual_rpy))
-    return mesh
+) -> TriangleMesh:
+    """Load a binary STL and transform it into the owning link frame.
+
+    The calculator only needs triangle vertices, faces, and geometric normals.
+    Keeping that representation here avoids depending on the large ``trimesh``
+    package and its optional acceleration dependencies.
+    """
+    payload = stl_path.read_bytes()
+    if len(payload) < 84:
+        raise ValueError(f'Invalid binary STL header: {stl_path}')
+
+    triangle_count = struct.unpack_from('<I', payload, 80)[0]
+    expected_size = 84 + triangle_count * 50
+    if len(payload) != expected_size:
+        raise ValueError(
+            f'Expected binary STL with {triangle_count} triangles at '
+            f'{stl_path}; file size is {len(payload)}, expected {expected_size}'
+        )
+
+    record_dtype = np.dtype(
+        [
+            ('stored_normal', '<f4', (3,)),
+            ('vertices', '<f4', (3, 3)),
+            ('attribute_byte_count', '<u2'),
+        ]
+    )
+    records = np.frombuffer(
+        payload,
+        dtype=record_dtype,
+        count=triangle_count,
+        offset=84,
+    )
+    triangles = records['vertices'].astype(np.float64)
+    edge1 = triangles[:, 1] - triangles[:, 0]
+    edge2 = triangles[:, 2] - triangles[:, 0]
+    normals = np.cross(edge1, edge2)
+    normal_lengths = np.linalg.norm(normals, axis=1)
+    valid_triangles = normal_lengths > 1e-12
+    triangles = triangles[valid_triangles]
+    normals = normals[valid_triangles]
+    normal_lengths = normal_lengths[valid_triangles]
+    if len(triangles) == 0:
+        raise ValueError(f'STL contains no non-degenerate triangles: {stl_path}')
+    normals /= normal_lengths[:, None]
+
+    transform = make_transform(visual_xyz, visual_rpy)
+    rotation = transform[:3, :3]
+    translation = transform[:3, 3]
+    vertices = triangles.reshape(-1, 3) @ rotation.T + translation
+    normals = normals @ rotation.T
+    faces = np.arange(len(triangles) * 3, dtype=np.int64).reshape(-1, 3)
+    return TriangleMesh(vertices, faces, normals)
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +213,7 @@ def _unit(vector: np.ndarray) -> np.ndarray:
 
 
 def ray_mesh_first_hit(
-    mesh: trimesh.Trimesh,
+    mesh: TriangleMesh,
     origin: np.ndarray,
     direction: np.ndarray,
 ) -> RayHit:
@@ -202,7 +262,7 @@ def ray_mesh_first_hit(
 
 
 def fixed_contact_geometry(
-    fixed_mesh: trimesh.Trimesh,
+    fixed_mesh: TriangleMesh,
     grasp_depth: float,
     coke_radius: float,
     opening_axis: np.ndarray = OPENING_AXIS_GRIPPER,
@@ -243,7 +303,7 @@ def fixed_contact_geometry(
 
 
 def moving_contact_at_q6(
-    moving_mesh_jaw: trimesh.Trimesh,
+    moving_mesh_jaw: TriangleMesh,
     coke_center_gripper: np.ndarray,
     q6: float,
     opening_axis: np.ndarray = OPENING_AXIS_GRIPPER,
@@ -267,7 +327,7 @@ def moving_contact_at_q6(
 
 
 def find_q_for_moving_clearance(
-    moving_mesh_jaw: trimesh.Trimesh,
+    moving_mesh_jaw: TriangleMesh,
     coke_center_gripper: np.ndarray,
     target_distance: float,
     opening_axis: np.ndarray = OPENING_AXIS_GRIPPER,

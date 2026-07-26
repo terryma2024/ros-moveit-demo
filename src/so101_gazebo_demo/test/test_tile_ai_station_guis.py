@@ -102,6 +102,19 @@ def test_geometry_comparison_uses_decoration_tolerance():
         MODULE.Rect(100, 36, 1879, 2120), target, 12
     )
 
+
+def test_runtime_preflight_reports_missing_system_prerequisites():
+    commands = {'xprop': '/usr/bin/xprop', 'xwininfo': None}
+
+    with pytest.raises(
+        RuntimeError,
+        match=r'missing X11 prerequisites: libX11, xwininfo.*x11-utils',
+    ):
+        MODULE.validate_runtime_prerequisites(
+            which=commands.get,
+            find_library=lambda _: None,
+        )
+
 class FakeX11:
     ATOMS = {
         '_TEST_MESSAGE': 0x901,

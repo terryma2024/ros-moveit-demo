@@ -15,3 +15,14 @@ def test_package_records_verified_source_provenance():
     readme = (PACKAGE_DIR / 'README.md').read_text()
     assert '/data/work/so101_lerobot_ws' in readme
     assert '65c371e' in readme
+
+
+def test_installed_tool_dependencies_are_declared_directly():
+    package = ET.parse(PACKAGE_DIR / 'package.xml').getroot()
+    dependencies = {
+        element.text
+        for tag in ('depend', 'exec_depend')
+        for element in package.findall(tag)
+    }
+
+    assert {'ament_index_python', 'python3-numpy', 'libx11'} <= dependencies

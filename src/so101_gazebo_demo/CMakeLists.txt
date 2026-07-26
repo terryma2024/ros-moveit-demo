@@ -27,6 +27,10 @@ if(BUILD_TESTING)
     test_self_containment
     test/test_self_containment.py
   )
+  ament_add_pytest_test(
+    test_configuration_contract
+    test/test_configuration_contract.py
+  )
 endif()
 
 install(
