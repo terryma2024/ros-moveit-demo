@@ -28,6 +28,7 @@ add_library(pick_place_core
   src/pick_place/so101_gripper_validation.cpp
   src/pick_place/so101_gripper_state.cpp
   src/pick_place/so101_attachment_contracts.cpp
+  src/pick_place/so101_recovery_policy.cpp
   src/pick_place/follow_joint_trajectory_gripper_adapter.cpp
   src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_reset_adapter.cpp
@@ -78,6 +79,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_so101_attachment_contracts
     test/pick_place/test_so101_attachment_contracts.cpp)
   target_link_libraries(test_so101_attachment_contracts pick_place_core)
+  ament_add_gtest(test_so101_recovery_policy test/pick_place/test_so101_recovery_policy.cpp)
+  target_link_libraries(test_so101_recovery_policy pick_place_core)
   ament_add_gtest(test_so101_moveit_scene test/pick_place/test_so101_moveit_scene.cpp)
   target_link_libraries(test_so101_moveit_scene pick_place_core)
   ament_target_dependencies(test_so101_moveit_scene moveit_msgs shape_msgs)
