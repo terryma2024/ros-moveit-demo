@@ -152,3 +152,216 @@ TEST(SO101MotionGoal, RequiresEndpointAxisStartCollisionAndTimingEvidence)
   plan.start_joint_positions.clear();
   EXPECT_FALSE(spp::validateJointGoalPlan(plan, config).ok);
 }
+
+TEST(SO101MotionTouchException, AcceptsOnlyExactStateScopedDescendWhitelist)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  config.allowed_touch_pairs = {"coke:gripper", "coke:jaw"};
+  plan.allowed_touch_pairs = config.allowed_touch_pairs;
+  plan.raw_contact_pairs = {"coke:gripper", "coke:jaw"};
+  plan.samples[1].raw_contact_pairs = plan.raw_contact_pairs;
+  EXPECT_TRUE(spp::validateWaypointLadder(plan, config).ok);
+
+  plan.raw_contact_pairs.insert("coke:lower_arm");
+  plan.samples[1].raw_contact_pairs.insert("coke:lower_arm");
+  auto result = spp::validateWaypointLadder(plan, config);
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "RAW_CONTACT_OUTSIDE_TOUCH_WHITELIST");
+}
+
+TEST(SO101MotionTouchException, RejectsWorldTouchExceptionForNonDescendState)
+{
+  auto plan = validLadder();
+  plan.allowed_touch_pairs = {"coke:gripper"};
+  plan.raw_contact_pairs = {"coke:gripper"};
+  plan.samples[1].raw_contact_pairs = plan.raw_contact_pairs;
+  const auto result = spp::validateJointGoalPlan(plan, descendConfig());
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "TOUCH_WHITELIST_CONTEXT_MISMATCH");
+}
+
+TEST(SO101MotionTouchException, RejectsTableOrOtherRobotContact)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  config.allowed_touch_pairs = {"coke:gripper", "coke:jaw"};
+  plan.allowed_touch_pairs = config.allowed_touch_pairs;
+  for (const std::string pair : {"table:jaw", "coke:lower_arm"}) {
+    plan.raw_contact_pairs = {pair};
+    plan.samples[1].raw_contact_pairs = {pair};
+    EXPECT_FALSE(spp::validateWaypointLadder(plan, config).ok) << pair;
+  }
+}
+
+TEST(SO101MotionTemporalContact, AllowsFirstOnlyCokeTableAtSampleZero)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  config.path_direction = {0, 0, -1};
+  config.temporal_contact_policy =
+    spp::TemporalContactPolicy{{"coke:table"}, spp::TemporalContactLocation::FIRST_ONLY};
+  plan.temporal_contact_policy = config.temporal_contact_policy;
+  plan.samples[0].raw_contact_pairs = {"coke:table"};
+  plan.raw_contact_pairs = {"coke:table"};
+  EXPECT_TRUE(spp::validateWaypointLadder(plan, config).ok);
+}
+
+TEST(SO101MotionTemporalContact, RejectsFirstOnlyPersistenceOrRecurrenceAfterSampleZero)
+{
+  for (const auto index : {1U, 2U}) {
+    auto plan = validLadder();
+    auto config = descendConfig();
+    config.temporal_contact_policy =
+      spp::TemporalContactPolicy{{"coke:table"}, spp::TemporalContactLocation::FIRST_ONLY};
+    plan.temporal_contact_policy = config.temporal_contact_policy;
+    plan.samples[0].raw_contact_pairs = {"coke:table"};
+    plan.samples[index].raw_contact_pairs = {"coke:table"};
+    const auto result = spp::validateWaypointLadder(plan, config);
+    ASSERT_FALSE(result.ok);
+    EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_AT_WRONG_SAMPLE");
+  }
+}
+
+TEST(SO101MotionTemporalContact, AllowsLastOnlyCokeTableAtFinalSample)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  config.temporal_contact_policy =
+    spp::TemporalContactPolicy{{"coke:table"}, spp::TemporalContactLocation::LAST_ONLY};
+  plan.temporal_contact_policy = config.temporal_contact_policy;
+  plan.samples.back().raw_contact_pairs = {"coke:table"};
+  plan.raw_contact_pairs = {"coke:table"};
+  EXPECT_TRUE(spp::validateWaypointLadder(plan, config).ok);
+}
+
+TEST(SO101MotionTemporalContact, RejectsLastOnlyContactBeforeFinalSample)
+{
+  for (const auto index : {0U, 1U}) {
+    auto plan = validLadder();
+    auto config = descendConfig();
+    config.temporal_contact_policy =
+      spp::TemporalContactPolicy{{"coke:table"}, spp::TemporalContactLocation::LAST_ONLY};
+    plan.temporal_contact_policy = config.temporal_contact_policy;
+    plan.samples[index].raw_contact_pairs = {"coke:table"};
+    const auto result = spp::validateWaypointLadder(plan, config);
+    ASSERT_FALSE(result.ok);
+    EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_AT_WRONG_SAMPLE");
+  }
+}
+
+TEST(SO101MotionTemporalContact, AllowsExactGripperPairOnlyAtFirstSample)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  config.temporal_contact_policy = spp::TemporalContactPolicy{
+    {"coke:gripper", "coke:jaw"}, spp::TemporalContactLocation::FIRST_ONLY};
+  plan.temporal_contact_policy = config.temporal_contact_policy;
+  plan.samples.front().raw_contact_pairs = {"coke:gripper"};
+  plan.raw_contact_pairs = {"coke:gripper"};
+  EXPECT_TRUE(spp::validateWaypointLadder(plan, config).ok);
+
+  plan.samples[1].raw_contact_pairs = {"coke:jaw"};
+  const auto result = spp::validateWaypointLadder(plan, config);
+  ASSERT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_AT_WRONG_SAMPLE");
+}
+
+TEST(SO101MotionTemporalContact, AllowsContiguousPrefixWithinAxialClearance)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  plan.samples[0].tcp_pose.z = 0.300;
+  plan.samples[1].tcp_pose.z = 0.280;
+  plan.samples[2].tcp_pose.z = 0.250;
+  config.endpoint_position.z = 0.250;
+  const spp::TemporalContactPolicy policy{
+    {"coke:gripper", "coke:jaw"},
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+  config.temporal_contact_policy = policy;
+  plan.temporal_contact_policy = policy;
+  plan.samples[0].raw_contact_pairs = {"coke:gripper"};
+  plan.samples[1].raw_contact_pairs = {"coke:gripper"};
+  plan.raw_contact_pairs = {"coke:gripper"};
+  EXPECT_TRUE(spp::validateWaypointLadder(plan, config).ok);
+}
+
+TEST(SO101MotionTemporalContact, RejectsPrefixContactBeyondAxialClearance)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  plan.samples[0].tcp_pose.z = 0.300;
+  plan.samples[1].tcp_pose.z = 0.280;
+  plan.samples[2].tcp_pose.z = 0.250;
+  config.endpoint_position.z = 0.250;
+  const spp::TemporalContactPolicy policy{
+    {"coke:gripper", "coke:jaw"},
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+  config.temporal_contact_policy = policy;
+  plan.temporal_contact_policy = policy;
+  for (auto & sample : plan.samples) sample.raw_contact_pairs = {"coke:gripper"};
+  plan.raw_contact_pairs = {"coke:gripper"};
+  const auto result = spp::validateWaypointLadder(plan, config);
+  ASSERT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_BEYOND_AXIAL_CLEARANCE");
+}
+
+TEST(SO101MotionTemporalContact, RejectsPrefixContactAfterItDisappears)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  plan.samples[0].tcp_pose.z = 0.300;
+  plan.samples[1].tcp_pose.z = 0.280;
+  plan.samples[2].tcp_pose.z = 0.260;
+  config.endpoint_position.z = 0.260;
+  const spp::TemporalContactPolicy policy{
+    {"coke:gripper", "coke:jaw"},
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+  config.temporal_contact_policy = policy;
+  plan.temporal_contact_policy = policy;
+  plan.samples[0].raw_contact_pairs = {"coke:gripper"};
+  plan.samples[2].raw_contact_pairs = {"coke:gripper"};
+  plan.raw_contact_pairs = {"coke:gripper"};
+  const auto result = spp::validateWaypointLadder(plan, config);
+  ASSERT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_RECURRED_AFTER_CLEARANCE");
+}
+
+TEST(SO101MotionTemporalContact, RejectsPrefixContactWithNegativeAxialProgress)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  plan.samples[0].tcp_pose.z = 0.300;
+  plan.samples[1].tcp_pose.z = 0.310;
+  plan.samples[2].tcp_pose.z = 0.250;
+  config.endpoint_position.z = 0.250;
+  const spp::TemporalContactPolicy policy{
+    {"coke:gripper", "coke:jaw"},
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+  config.temporal_contact_policy = policy;
+  plan.temporal_contact_policy = policy;
+  plan.samples[0].raw_contact_pairs = {"coke:gripper"};
+  plan.samples[1].raw_contact_pairs = {"coke:gripper"};
+  plan.raw_contact_pairs = {"coke:gripper"};
+  const auto result = spp::validateWaypointLadder(plan, config);
+  ASSERT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_NEGATIVE_AXIAL_PROGRESS");
+}
+
+TEST(SO101MotionTemporalContact, RejectsMismatchedContextOrAnyOtherPair)
+{
+  auto plan = validLadder();
+  plan.temporal_contact_policy =
+    spp::TemporalContactPolicy{{"coke:table"}, spp::TemporalContactLocation::FIRST_ONLY};
+  plan.samples[0].raw_contact_pairs = {"coke:table"};
+  auto result = spp::validateWaypointLadder(plan, descendConfig());
+  ASSERT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_CONTEXT_MISMATCH");
+
+  auto config = descendConfig();
+  config.temporal_contact_policy = plan.temporal_contact_policy;
+  plan.samples[0].raw_contact_pairs = {"coke:lower_arm"};
+  result = spp::validateWaypointLadder(plan, config);
+  ASSERT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "RAW_CONTACT_OUTSIDE_TOUCH_WHITELIST");
+}

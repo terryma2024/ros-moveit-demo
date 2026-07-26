@@ -21,8 +21,8 @@ void registerGripper(SO101Task3Runtime & runtime,
   const std::array<SO101GripperStateConfig, 4> configs{{
     {State::PREPARE_OPEN_GRIPPER, SO101GripperTarget::PREOPEN, false},
     {State::CLOSE_GRIPPER, SO101GripperTarget::CONTACT, false},
-    {State::OPEN_GRIPPER, SO101GripperTarget::PREOPEN, false},
-    {State::RECOVER_OPEN_GRIPPER, SO101GripperTarget::PREOPEN, true},
+    {State::OPEN_GRIPPER, SO101GripperTarget::FULL_OPEN, false},
+    {State::RECOVER_OPEN_GRIPPER, SO101GripperTarget::FULL_OPEN, true},
   }};
   for (const auto & config : configs) {
     if (dependencies.gripper) {

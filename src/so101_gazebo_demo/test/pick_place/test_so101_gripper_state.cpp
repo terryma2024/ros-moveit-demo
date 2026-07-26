@@ -75,10 +75,10 @@ TEST(SO101GripperStateExecutor, CommandsExactProfileTargetForAllFourStates)
      profile.q6_preopen},
     {pick_place::State::CLOSE_GRIPPER, pick_place::SO101GripperTarget::CONTACT,
      profile.q6_contact},
-    {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::PREOPEN,
-     profile.q6_preopen},
-    {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::PREOPEN,
-     profile.q6_preopen},
+    {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN,
+     profile.q6_full_open},
+    {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN,
+     profile.q6_full_open},
   };
 
   for (const auto & test_case : cases) {
@@ -100,9 +100,9 @@ TEST(SO101GripperStateExecutor, RecoveryNoOpUsesCurrentQ6AndNeedsNoAttachment)
   auto command = std::make_shared<FakeGripperCommand>();
   pick_place::SO101GripperStateExecutor executor(
     command,
-    {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::PREOPEN, true},
+    {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, true},
     profile);
-  auto current = snapshot(profile.q6_preopen);
+  auto current = snapshot(profile.q6_full_open);
   current.gazebo_coke_attached = false;
   current.moveit_coke_attached = false;
 
@@ -162,12 +162,15 @@ TEST(SO101GripperTransitionContract, OpenStatesDoNotRequireAttachmentFacts)
   for (const auto state : {pick_place::State::PREPARE_OPEN_GRIPPER,
                            pick_place::State::OPEN_GRIPPER,
                            pick_place::State::RECOVER_OPEN_GRIPPER}) {
+    const auto target = state == pick_place::State::PREPARE_OPEN_GRIPPER
+                          ? pick_place::SO101GripperTarget::PREOPEN
+                          : pick_place::SO101GripperTarget::FULL_OPEN;
     const auto contract = pick_place::makeSO101GripperContract(
-      {state, pick_place::SO101GripperTarget::PREOPEN, state ==
-                                                          pick_place::State::RECOVER_OPEN_GRIPPER},
+      {state, target, state == pick_place::State::RECOVER_OPEN_GRIPPER},
       profile);
     auto before = snapshot(profile.q6_contact);
-    auto after = snapshot(profile.q6_preopen);
+    auto after = snapshot(state == pick_place::State::PREPARE_OPEN_GRIPPER
+                            ? profile.q6_preopen : profile.q6_full_open);
     before.gazebo_coke_attached.reset();
     before.moveit_coke_attached.reset();
     after.gazebo_coke_attached.reset();

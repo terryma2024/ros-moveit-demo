@@ -15,10 +15,15 @@ class RecordingStateEvaluator final : public spp::IRobotStateEvidenceProvider
 public:
   std::optional<spp::RobotStateEvidence>
   evaluate(const std::vector<std::string> & joint_names,
-           const std::vector<double> & joint_positions) const override
+           const std::vector<double> & joint_positions,
+           const std::set<std::string> & allowed_touch_pairs,
+           const std::optional<spp::TemporalContactPolicy> &,
+           double gripper_position) const override
   {
     seen_names.push_back(joint_names);
     seen_positions.push_back(joint_positions);
+    seen_allowed_touch_pairs.push_back(allowed_touch_pairs);
+    seen_gripper_positions.push_back(gripper_position);
     if (fail_at && seen_positions.size() == *fail_at) return std::nullopt;
     const double sum = joint_positions[0] + joint_positions[1] + joint_positions[2] +
                        joint_positions[3] + joint_positions[4];
@@ -28,6 +33,8 @@ public:
 
   mutable std::vector<std::vector<std::string>> seen_names;
   mutable std::vector<std::vector<double>> seen_positions;
+  mutable std::vector<std::set<std::string>> seen_allowed_touch_pairs;
+  mutable std::vector<double> seen_gripper_positions;
   std::optional<std::size_t> fail_at;
   std::size_t collision_at{0};
 };
@@ -45,6 +52,8 @@ spp::TrajectoryEvidenceInput input()
   value.planner_id = "RRTConnectkConfigDefault";
   value.start_state_stamp_nanoseconds = 4242000000ULL;
   value.collision_aware_planner = true;
+  value.allowed_touch_pairs = {"coke:gripper", "coke:jaw"};
+  value.gripper_position = 0.707194871;
   return value;
 }
 
@@ -57,6 +66,9 @@ TEST(SO101MotionEvidenceBuilder, ReconstructsEveryTcpAndCollisionSample)
   ASSERT_TRUE(result.artifact);
   EXPECT_FALSE(result.failure);
   EXPECT_EQ(evaluator.seen_positions.size(), 3U);
+  EXPECT_EQ(evaluator.seen_allowed_touch_pairs[0], input().allowed_touch_pairs);
+  EXPECT_EQ(result.artifact->allowed_touch_pairs, input().allowed_touch_pairs);
+  EXPECT_NEAR(evaluator.seen_gripper_positions[0], 0.707194871, 1e-12);
   EXPECT_EQ(result.artifact->trajectory_points, 3U);
   EXPECT_EQ(result.artifact->joint_names,
             (std::vector<std::string>{"1", "2", "3", "4", "5"}));

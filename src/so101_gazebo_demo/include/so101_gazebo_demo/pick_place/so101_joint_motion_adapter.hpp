@@ -54,7 +54,10 @@ public:
   [[nodiscard]] virtual std::optional<MotionPlanningSceneFacts> sceneFacts() = 0;
   [[nodiscard]] virtual JointSegmentPlanResult
   planSegment(const std::vector<std::string> & joint_names,
-              const std::vector<double> & start, const std::vector<double> & goal) = 0;
+              const std::vector<double> & start, const std::vector<double> & goal,
+              const std::set<std::string> & allowed_touch_pairs,
+              const std::optional<TemporalContactPolicy> & temporal_contact_policy,
+              double gripper_position) = 0;
   [[nodiscard]] virtual ActionResult execute(const MotionPlanArtifact &)
   {
     return {ActionStatus::NOT_SUPPORTED,

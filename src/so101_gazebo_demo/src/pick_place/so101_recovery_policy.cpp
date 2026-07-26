@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
+#include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -91,8 +92,8 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
 
   const bool gazebo_attached = *current.gazebo_coke_attached;
   const bool moveit_attached = *current.moveit_coke_attached;
-  const bool gripper_preopen =
-    validateQ6Target(current, profile_.q6_preopen, profile_.preopen_width, profile_).ok;
+  const bool gripper_full_open =
+    validateSO101GripperTarget(current, SO101GripperTarget::FULL_OPEN, profile_).ok;
 
   if ((gazebo_attached || moveit_attached) &&
       !nearPose(*current.gazebo_coke_pose_world, profile_.coke_pose, profile_)) {
@@ -100,7 +101,7 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
                  "Attached Coke is not on the known support pose; carrying recovery is not yet "
                  "configured");
   }
-  if (!gripper_preopen) {
+  if (!gripper_full_open) {
     return {State::RECOVER_OPEN_GRIPPER, std::nullopt};
   }
   if (gazebo_attached) {

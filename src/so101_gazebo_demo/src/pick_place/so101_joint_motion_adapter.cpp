@@ -26,6 +26,17 @@ bool samePositions(const std::vector<double> & a, const std::vector<double> & b)
   return true;
 }
 
+bool positionsWithin(const std::vector<double> & a, const std::vector<double> & b,
+                     double tolerance)
+{
+  if (a.size() != b.size()) return false;
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    if (!std::isfinite(a[i]) || !std::isfinite(b[i]) ||
+        std::abs(a[i] - b[i]) > tolerance) return false;
+  }
+  return true;
+}
+
 bool validScene(const MotionPlanningSceneFacts & facts, bool carrying,
                 const SO101Profile & profile)
 {
@@ -99,11 +110,17 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
   combined.start_state_stamp_nanoseconds = current->observed_stamp_nanoseconds;
   combined.moveit_success = true;
   combined.collision_aware_planner = true;
+  combined.allowed_touch_pairs = request.allowed_touch_pairs;
+  combined.gripper_position = request.gripper_position;
+  combined.temporal_contact_policy = request.temporal_contact_policy;
   std::vector<double> segment_start = current->positions;
   double time_offset = 0.0;
 
   for (const auto & waypoint : request.joint_waypoints) {
-    auto result = boundary_->planSegment(profile_.arm_joints, segment_start, waypoint);
+    auto result = boundary_->planSegment(profile_.arm_joints, segment_start, waypoint,
+                                         request.allowed_touch_pairs,
+                                         request.temporal_contact_policy,
+                                         request.gripper_position);
     if (result.action.status != ActionStatus::SUCCEEDED || !result.segment) {
       return {result.action, nullptr};
     }
@@ -123,14 +140,18 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
                   "All ladder segments must use the same configured planner");
     }
     combined.moveit_error_code = segment.moveit_error_code;
-    std::size_t first = 0;
-    if (!combined.points.empty() && samePositions(combined.points.back().joint_positions,
-                                                  segment.points.front().joint_positions)) {
-      first = 1;
+    const double segment_time_origin = segment.points.front().time_from_start_seconds;
+    const std::size_t first = combined.points.empty() ? 0 : 1;
+    if (!combined.points.empty() &&
+        !positionsWithin(combined.points.back().joint_positions, segment_start,
+                         profile_.q6_tolerance)) {
+      return fail(FailureCategory::PLAN_VALIDATION, "SEGMENT_BOUNDARY_DISCONTINUITY",
+                  "Prior segment endpoint is outside continuity tolerance of the next start");
     }
     for (std::size_t i = first; i < segment.points.size(); ++i) {
       auto point = segment.points[i];
-      point.time_from_start_seconds += time_offset;
+      point.time_from_start_seconds =
+        time_offset + point.time_from_start_seconds - segment_time_origin;
       if (!combined.points.empty() &&
           point.time_from_start_seconds <= combined.points.back().time_from_start_seconds) {
         return fail(FailureCategory::PLAN_VALIDATION, "SEGMENT_TIME_NOT_INCREASING",

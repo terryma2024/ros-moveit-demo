@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -16,12 +18,30 @@ struct Vec3
   double z{0.0};
 };
 
+enum class TemporalContactLocation
+{
+  FIRST_ONLY,
+  LAST_ONLY,
+  PREFIX_UNTIL_AXIAL_CLEARANCE
+};
+
+struct TemporalContactPolicy
+{
+  std::set<std::string> allowed_pairs;
+  TemporalContactLocation location{TemporalContactLocation::FIRST_ONLY};
+  double max_axial_clearance_m{0.0};
+};
+
+[[nodiscard]] bool operator==(const TemporalContactPolicy & first,
+                              const TemporalContactPolicy & second) noexcept;
+
 struct MotionPlanSample
 {
   Pose3d tcp_pose{};
   std::vector<double> joint_positions;
   double time_from_start_seconds{0.0};
   bool collision_free{false};
+  std::set<std::string> raw_contact_pairs;
 };
 
 struct MotionPlanArtifact : PlanArtifact
@@ -37,6 +57,11 @@ struct MotionPlanArtifact : PlanArtifact
   std::string planner_id;
   std::uint64_t start_state_stamp_nanoseconds{0};
   std::vector<double> current_joint_snapshot;
+  // Raw contacts are measured with no world-object touch exemption.  The
+  // allowed set is the exact, state-scoped exception used for this artifact.
+  std::set<std::string> allowed_touch_pairs;
+  std::set<std::string> raw_contact_pairs;
+  std::optional<TemporalContactPolicy> temporal_contact_policy;
 };
 
 struct MotionValidationConfig
@@ -53,6 +78,8 @@ struct MotionValidationConfig
   double joint_endpoint_tolerance{1e-4};
   double min_duration_seconds{0.1};
   double monotonic_tolerance{1e-5};
+  std::set<std::string> allowed_touch_pairs;
+  std::optional<TemporalContactPolicy> temporal_contact_policy;
 };
 
 // Returns +infinity when either axis or the quaternion is zero/non-finite.

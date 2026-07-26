@@ -88,6 +88,33 @@ TEST(SO101MotionPlanner, PreservesLadderAndCarryingSemantics)
   ASSERT_TRUE(adapter->seen);
   EXPECT_TRUE(adapter->seen->ladder);
   EXPECT_TRUE(adapter->seen->carrying);
+  EXPECT_TRUE(adapter->seen->allowed_touch_pairs.empty());
+  EXPECT_FALSE(adapter->seen->temporal_contact_policy.has_value());
+}
+
+TEST(SO101MotionPlanner, ScopesPersistentWorldTouchWhitelistToDescendOnly)
+{
+  auto policy = std::make_shared<FakePolicy>();
+  policy->result.target = spp::JointMotionTarget{{"1", "2", "3", "4", "5"},
+                                                 {{0, 0, 0, 0, 0}}, false};
+  auto adapter = std::make_shared<FakeAdapter>();
+  adapter->result = {{spp::ActionStatus::SUCCEEDED, std::nullopt},
+                     std::make_shared<spp::MotionPlanArtifact>()};
+  spp::SO101MotionPlanner planner(policy, adapter);
+
+  planner.plan(spp::State::DESCEND, spp::State::CLOSE_GRIPPER, observation());
+  ASSERT_TRUE(adapter->seen);
+  EXPECT_EQ(adapter->seen->allowed_touch_pairs,
+            (std::set<std::string>{"coke:gripper", "coke:jaw"}));
+
+  planner.plan(spp::State::RECOVER_RETREAT, spp::State::ERROR, observation());
+  EXPECT_TRUE(adapter->seen->allowed_touch_pairs.empty());
+
+  planner.plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, observation());
+  EXPECT_TRUE(adapter->seen->allowed_touch_pairs.empty());
+
+  planner.plan(spp::State::LIFT, spp::State::MOVE_ABOVE_PLACE, observation());
+  EXPECT_TRUE(adapter->seen->allowed_touch_pairs.empty());
 }
 
 TEST(SO101MotionPlanner, FailsBeforeAdapterWhenPolicyHasNoTarget)

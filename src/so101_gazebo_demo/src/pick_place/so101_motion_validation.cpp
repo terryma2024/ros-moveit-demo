@@ -67,6 +67,19 @@ ValidationResult failure(std::string code, std::string message,
 ValidationResult validateCommon(const MotionPlanArtifact & plan,
                                 const MotionValidationConfig & config)
 {
+  if (plan.allowed_touch_pairs != config.allowed_touch_pairs) {
+    return failure("TOUCH_WHITELIST_CONTEXT_MISMATCH",
+                   "Artifact touch exceptions do not match the state validator context");
+  }
+  if (!(plan.temporal_contact_policy == config.temporal_contact_policy)) {
+    return failure("TEMPORAL_CONTACT_CONTEXT_MISMATCH",
+                   "Artifact temporal-contact policy does not match validator context");
+  }
+  const auto path_axis = normalized(config.path_direction);
+  const auto temporal_origin = position(plan.samples.empty() ? Pose3d{} :
+                                         plan.samples.front().tcp_pose);
+  bool temporal_prefix_cleared = false;
+  double previous_temporal_axial = 0.0;
   if (plan.joint_names != config.expected_joint_names) {
     return failure("ARM_JOINT_ORDER_MISMATCH", "Plan must contain SO-101 arm joints in profile order");
   }
@@ -100,6 +113,71 @@ ValidationResult validateCommon(const MotionPlanArtifact & plan,
     if (!sample.collision_free) {
       return failure("MOTION_SAMPLE_IN_COLLISION", "At least one sampled robot state is in collision",
                      {{"sample_index", static_cast<double>(i)}});
+    }
+    bool has_temporal_contact = false;
+    for (const auto & pair : sample.raw_contact_pairs) {
+      if (config.allowed_touch_pairs.find(pair) != config.allowed_touch_pairs.end()) continue;
+      const auto & temporal = config.temporal_contact_policy;
+      const bool policy_pair = temporal && temporal->allowed_pairs.find(pair) !=
+                                            temporal->allowed_pairs.end();
+      if (policy_pair && temporal->location ==
+                           TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE) {
+        has_temporal_contact = true;
+        continue;
+      }
+      const bool correct_location = temporal &&
+        ((temporal->location == TemporalContactLocation::FIRST_ONLY && i == 0) ||
+         (temporal->location == TemporalContactLocation::LAST_ONLY &&
+          i + 1 == plan.samples.size()));
+      if (policy_pair && correct_location) continue;
+      if (policy_pair) {
+        return failure("TEMPORAL_CONTACT_AT_WRONG_SAMPLE",
+                       "Boundary contact persisted, recurred, or appeared at the wrong sample",
+                       {{"sample_index", static_cast<double>(i)}});
+      }
+      return failure("RAW_CONTACT_OUTSIDE_TOUCH_WHITELIST",
+                     "Raw collision evidence contains a contact outside state-scoped policy",
+                     {{"sample_index", static_cast<double>(i)}});
+    }
+    if (config.temporal_contact_policy &&
+        config.temporal_contact_policy->location ==
+          TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE) {
+      if (!has_temporal_contact) {
+        temporal_prefix_cleared = true;
+      } else {
+        if (temporal_prefix_cleared) {
+          return failure("TEMPORAL_CONTACT_RECURRED_AFTER_CLEARANCE",
+                         "Boundary contact reappeared after the trajectory became clear",
+                         {{"sample_index", static_cast<double>(i)}});
+        }
+        const auto displacement = subtract(position(sample.tcp_pose), temporal_origin);
+        const double axial = dot(displacement, path_axis);
+        const auto lateral_vector = subtract(displacement, scale(path_axis, axial));
+        const double lateral = norm(lateral_vector);
+        if (!finite(axial) || axial < -config.monotonic_tolerance) {
+          return failure("TEMPORAL_CONTACT_NEGATIVE_AXIAL_PROGRESS",
+                         "Boundary contact occurred behind the retreat start",
+                         {{"sample_index", static_cast<double>(i)}, {"axial_progress", axial}});
+        }
+        if (i > 0 && axial + config.monotonic_tolerance < previous_temporal_axial) {
+          return failure("TEMPORAL_CONTACT_NON_MONOTONIC",
+                         "Boundary contact prefix did not make monotonic axial progress",
+                         {{"sample_index", static_cast<double>(i)}, {"axial_progress", axial}});
+        }
+        if (axial > config.temporal_contact_policy->max_axial_clearance_m +
+                      config.monotonic_tolerance) {
+          return failure("TEMPORAL_CONTACT_BEYOND_AXIAL_CLEARANCE",
+                         "Boundary contact persisted beyond the measured clearance envelope",
+                         {{"sample_index", static_cast<double>(i)}, {"axial_progress", axial}});
+        }
+        if (!finite(lateral) || lateral > config.max_lateral_deviation) {
+          return failure("TEMPORAL_CONTACT_LATERAL_DEVIATION",
+                         "Boundary contact prefix left the configured lateral corridor",
+                         {{"sample_index", static_cast<double>(i)},
+                          {"lateral_deviation", lateral}});
+        }
+        previous_temporal_axial = axial;
+      }
     }
     for (double value : sample.joint_positions) {
       if (!finite(value)) return failure("MOTION_SAMPLE_INVALID", "Joint sample is non-finite");
@@ -171,6 +249,13 @@ ValidationResult validateCommon(const MotionPlanArtifact & plan,
 }
 
 }  // namespace
+
+bool operator==(const TemporalContactPolicy & first,
+                const TemporalContactPolicy & second) noexcept
+{
+  return first.location == second.location && first.allowed_pairs == second.allowed_pairs &&
+         first.max_axial_clearance_m == second.max_axial_clearance_m;
+}
 
 double approachAxisError(const Pose3d & pose, const Vec3 & local_axis,
                          const Vec3 & target_axis) noexcept
