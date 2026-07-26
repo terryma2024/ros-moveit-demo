@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -23,7 +24,7 @@ struct MotionPlanSample
   bool collision_free{false};
 };
 
-struct MotionPlanArtifact final : PlanArtifact
+struct MotionPlanArtifact : PlanArtifact
 {
   std::vector<std::string> joint_names;
   std::vector<double> start_joint_positions;
@@ -31,6 +32,11 @@ struct MotionPlanArtifact final : PlanArtifact
   std::vector<MotionPlanSample> samples;
   bool collision_aware{false};
   bool time_parameterized{false};
+  bool moveit_success{false};
+  int moveit_error_code{0};
+  std::string planner_id;
+  std::uint64_t start_state_stamp_nanoseconds{0};
+  std::vector<double> current_joint_snapshot;
 };
 
 struct MotionValidationConfig
