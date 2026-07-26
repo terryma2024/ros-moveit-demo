@@ -1,11 +1,16 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
+#include <future>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -203,6 +208,48 @@ public:
 private:
   State state_;
   Scenario & scenario_;
+};
+
+class BlockingCancelExecutor final : public pick_place::IStateExecutor
+{
+public:
+  ActionResult execute(const pick_place::ExecutionContext &) override
+  {
+    return {ActionStatus::FAILED, failure(FailureCategory::EXECUTION, "EXECUTION_INJECTED")};
+  }
+
+  ActionResult cancel() override
+  {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      cancel_entered_ = true;
+    }
+    condition_.notify_all();
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [this]() { return terminal_; });
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+
+  bool waitForCancel(std::chrono::milliseconds timeout)
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    return condition_.wait_for(lock, timeout, [this]() { return cancel_entered_; });
+  }
+
+  void makeTerminal()
+  {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      terminal_ = true;
+    }
+    condition_.notify_all();
+  }
+
+private:
+  std::mutex mutex_;
+  std::condition_variable condition_;
+  bool cancel_entered_{false};
+  bool terminal_{false};
 };
 
 class FakeContract final : public pick_place::TransitionContractRegistry::ITransitionContract
@@ -638,6 +685,27 @@ TEST(PureRunnerIntegration, PlanningAndExecutionFailuresKeepTheirClassificationA
     EXPECT_GE(harness.scenario.cancel_calls, 1) << which;
     EXPECT_EQ(State::ERROR, result.state_trace.back()) << which;
   }
+}
+
+TEST(PureRunnerIntegration, DoesNotObserveOrRecoverBeforeCancelReachesTerminal)
+{
+  Harness harness;
+  harness.registerAll();
+  auto blocking = std::make_shared<BlockingCancelExecutor>();
+  harness.actions.registerExecutor(State::PREPARE_OPEN_GRIPPER, blocking);
+
+  auto run = std::async(std::launch::async, [&harness]() {
+    return harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+  });
+  ASSERT_TRUE(blocking->waitForCancel(std::chrono::milliseconds(500)));
+  EXPECT_EQ(std::future_status::timeout, run.wait_for(std::chrono::milliseconds(100)));
+  EXPECT_EQ(1, harness.scenario.observation_calls);
+  EXPECT_EQ(0, harness.recovery.calls);
+
+  blocking->makeTerminal();
+  EXPECT_EQ(std::future_status::ready, run.wait_for(std::chrono::seconds(2)));
+  EXPECT_EQ(pick_place::RunStatus::ERROR, run.get().status);
+  EXPECT_GT(harness.scenario.observation_calls, 1);
 }
 
 TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTraces)
