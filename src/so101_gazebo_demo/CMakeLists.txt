@@ -18,6 +18,7 @@ if(BUILD_TESTING)
     test_so101_launch_contract
     test/test_so101_launch_contract.py
   )
+  ament_add_pytest_test(test_so101_srdf test/test_so101_srdf.py)
 endif()
 
 install(
