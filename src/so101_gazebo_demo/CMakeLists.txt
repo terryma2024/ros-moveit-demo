@@ -28,6 +28,7 @@ add_library(pick_place_core
   src/pick_place/so101_gripper_validation.cpp
   src/pick_place/follow_joint_trajectory_gripper_adapter.cpp
   src/pick_place/gazebo_attachment_executor.cpp
+  src/pick_place/gazebo_reset_adapter.cpp
   src/pick_place/gazebo_world_observer.cpp
   src/pick_place/moveit_scene_adapter.cpp
   src/pick_place/moveit_scene_executor.cpp
@@ -67,6 +68,10 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_so101_moveit_scene moveit_msgs shape_msgs)
   ament_add_gtest(test_so101_world_reset test/pick_place/test_so101_world_reset.cpp)
   target_link_libraries(test_so101_world_reset pick_place_core)
+  ament_add_gtest(test_so101_gazebo_reset_adapter
+    test/pick_place/test_so101_gazebo_reset_adapter.cpp)
+  target_link_libraries(test_so101_gazebo_reset_adapter pick_place_core
+    gz-msgs10::core gz-transport13::core)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_package_layout test/test_package_layout.py)
   ament_add_pytest_test(
