@@ -319,6 +319,20 @@ TEST(SO101MotionTemporalContact, RejectsLastOnlyContactBeforeFinalSample)
   }
 }
 
+TEST(SO101MotionTemporalContact, RejectsLastOnlyUnexpectedPairAtFinalSample)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  config.temporal_contact_policy =
+    spp::TemporalContactPolicy{{"coke:table"}, spp::TemporalContactLocation::LAST_ONLY};
+  plan.temporal_contact_policy = config.temporal_contact_policy;
+  plan.samples.back().raw_contact_pairs = {"coke:jaw"};
+  plan.raw_contact_pairs = {"coke:jaw"};
+  const auto result = spp::validateWaypointLadder(plan, config);
+  ASSERT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "RAW_CONTACT_OUTSIDE_TOUCH_WHITELIST");
+}
+
 TEST(SO101MotionTemporalContact, AllowsExactGripperPairOnlyAtFirstSample)
 {
   auto plan = validLadder();

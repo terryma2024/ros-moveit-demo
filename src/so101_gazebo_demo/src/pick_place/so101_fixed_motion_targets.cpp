@@ -82,9 +82,15 @@ std::optional<SO101FixedMotionSpec> SO101FixedMotionTargetPolicy::spec(State sta
       return SO101FixedMotionSpec{state, kAbovePick, goal(profile_, kAbovePlace, contact),
         config(profile_, {-0.08, -0.25, 0.282}, {0, 0, -1}, false), contact};
     case State::DESCEND_TO_PLACE:
+    {
+      auto validation = config(profile_, {-0.08, -0.25, 0.222}, {0, 0, -1}, false);
+      const TemporalContactPolicy temporal{
+        {"coke:table"}, TemporalContactLocation::LAST_ONLY};
+      validation.temporal_contact_policy = temporal;
       return SO101FixedMotionSpec{state, kAbovePlace,
-        ladder(profile_, {kPlace262, kPlace242, kPlace}, contact),
-        config(profile_, {-0.08, -0.25, 0.222}, {0, 0, -1}, false), contact};
+        ladder(profile_, {kPlace262, kPlace242, kPlace}, contact, temporal),
+        std::move(validation), contact};
+    }
     case State::RETREAT:
     case State::RECOVER_LIFT_TO_SAFE_HEIGHT:
     {
