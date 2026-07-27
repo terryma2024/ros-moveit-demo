@@ -89,6 +89,7 @@ struct Scenario
   std::optional<State> fail_precondition;
   std::optional<State> fail_transition;
   std::optional<int> fail_observation_call;
+  bool precondition_has_late_environment_failure{false};
   ActionResult cancel_result{ActionStatus::SUCCEEDED, std::nullopt};
   int observation_calls{0};
   int planner_calls{0};
@@ -263,6 +264,12 @@ public:
     ++scenario_.precondition_calls;
     if (scenario_.fail_precondition == state_) {
       return {false, {failure(FailureCategory::PRECONDITION, "PRECONDITION_INJECTED")}, {}};
+    }
+    if (scenario_.precondition_has_late_environment_failure) {
+      return {false,
+              {failure(FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT"),
+               failure(FailureCategory::OBSERVATION, "STALE_SECONDARY_EVIDENCE")},
+              {}};
     }
     return {true, {}, {}};
   }
@@ -943,6 +950,23 @@ TEST(PureRunnerIntegration, PreExecutionObservationFailureStopsWithoutBlindRecov
   EXPECT_EQ(result.failure->category, FailureCategory::OBSERVATION);
   EXPECT_EQ(result.failure->code, "OBSERVATION_INJECTED");
   EXPECT_EQ(harness.scenario.observation_calls, 1);
+  EXPECT_EQ(harness.scenario.cancel_calls, 0);
+  EXPECT_EQ(harness.recovery.calls, 0);
+  EXPECT_EQ(harness.store.commit_calls, 0);
+}
+
+TEST(PureRunnerIntegration, AnyEnvironmentPreconditionFailureStopsWithoutCancelOrRecovery)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.precondition_has_late_environment_failure = true;
+
+  const auto result = harness.runner().run({RunMode::EXECUTE});
+
+  EXPECT_EQ(result.status, pick_place::RunStatus::ERROR);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->category, FailureCategory::OBSERVATION);
+  EXPECT_EQ(result.failure->code, "STALE_SECONDARY_EVIDENCE");
   EXPECT_EQ(harness.scenario.cancel_calls, 0);
   EXPECT_EQ(harness.recovery.calls, 0);
   EXPECT_EQ(harness.store.commit_calls, 0);

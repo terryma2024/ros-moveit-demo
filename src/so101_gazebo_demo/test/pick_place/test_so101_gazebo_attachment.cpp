@@ -60,11 +60,21 @@ class BaseObserver final : public pick_place::IWorldObserver
 public:
   pick_place::ObservationResult observe() override
   {
+    ++calls;
+    if (fail_on_second && calls > 1) {
+      return {std::nullopt,
+              pick_place::Failure{pick_place::FailureCategory::OBSERVATION,
+                                  "MOVEIT_REFRESH_FAILED",
+                                  "MoveIt refresh failed after Gazebo wait", {}}};
+    }
     pick_place::WorldSnapshot snapshot;
     snapshot.fresh = true;
     snapshot.arm_stationary = true;
     return {snapshot, std::nullopt};
   }
+
+  int calls{0};
+  bool fail_on_second{false};
 };
 }  // namespace
 
@@ -211,4 +221,44 @@ TEST(SO101GazeboWorldObserver, RejectsNonfiniteCokePoseEvidence)
   EXPECT_FALSE(result.snapshot);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("GAZEBO_COKE_POSE_NONFINITE", result.failure->code);
+}
+
+TEST(SO101GazeboWorldObserver, ReobservesMoveItAfterGazeboWait)
+{
+  configurePartition();
+  BaseObserver base;
+  base.fail_on_second = true;
+  const auto world = unique("world_moveit_refresh").substr(1);
+  const auto state_topic = unique("durable_moveit_refresh");
+  pick_place::GazeboWorldObserver observer(base, world, "coke", state_topic, "session", 0.2, 2,
+                                           0.005, 0.002, 0.02);
+  gz::transport::Node peer;
+  auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
+  auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);
+  ASSERT_TRUE(connected(poses));
+  ASSERT_TRUE(connected(state));
+  std::thread publish([&]() {
+    for (int i = 0; i < 2; ++i) {
+      gz::msgs::Pose_V message;
+      auto * pose = message.add_pose();
+      pose->set_name("coke");
+      pose->mutable_position()->set_x(0.02);
+      pose->mutable_position()->set_y(-0.28);
+      pose->mutable_position()->set_z(0.181);
+      pose->mutable_orientation()->set_w(1.0);
+      poses.Publish(message);
+      gz::msgs::StringMsg detached;
+      detached.set_data("detached");
+      state.Publish(detached);
+      std::this_thread::sleep_for(10ms);
+    }
+  });
+
+  const auto result = observer.observe();
+  publish.join();
+
+  EXPECT_FALSE(result.snapshot);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("MOVEIT_REFRESH_FAILED", result.failure->code);
+  EXPECT_EQ(2, base.calls);
 }

@@ -120,13 +120,45 @@ void requireNoCokeJump(ValidationResult & result, const WorldSnapshot & before,
     orientationDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
   result.metrics["coke_position_drift"] = position;
   result.metrics["coke_orientation_drift_rad"] = orientation;
-  if (position > profile.coke_position_drift_tolerance) {
+  if (!std::isfinite(position) || position > profile.coke_position_drift_tolerance) {
     add(result, FailureCategory::POSTCONDITION, "COKE_POSITION_DRIFT",
         "Attachment moved Coke beyond the configured position tolerance");
   }
-  if (orientation > profile.coke_orientation_drift_tolerance_rad) {
+  if (!std::isfinite(orientation) ||
+      orientation > profile.coke_orientation_drift_tolerance_rad) {
     add(result, FailureCategory::POSTCONDITION, "COKE_ORIENTATION_DRIFT",
         "Attachment rotated Coke beyond the configured orientation tolerance");
+  }
+}
+
+bool requiresStableSupport(TransitionKey key)
+{
+  return key.from == State::DETACH_GAZEBO || key.from == State::DETACH_MOVEIT ||
+         key.from == State::SYNC_WORLD_OBJECT || isRecovery(key);
+}
+
+void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot & before,
+                                const WorldSnapshot & after, TransitionKey key,
+                                const SO101Profile & profile)
+{
+  if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) return;
+  const auto & expected = isRecovery(key) ? profile.coke_pose : profile.place_coke_pose;
+  const double before_position = positionDistance(*before.gazebo_coke_pose_world, expected);
+  const double before_orientation = orientationDistance(*before.gazebo_coke_pose_world, expected);
+  const double after_position = positionDistance(*after.gazebo_coke_pose_world, expected);
+  const double after_orientation = orientationDistance(*after.gazebo_coke_pose_world, expected);
+  result.metrics["coke_support_before_position_error"] = before_position;
+  result.metrics["coke_support_before_orientation_error_rad"] = before_orientation;
+  result.metrics["coke_support_after_position_error"] = after_position;
+  result.metrics["coke_support_after_orientation_error_rad"] = after_orientation;
+  if (!std::isfinite(before_position) || !std::isfinite(before_orientation) ||
+      !std::isfinite(after_position) || !std::isfinite(after_orientation) ||
+      before_position > profile.coke_position_drift_tolerance ||
+      before_orientation > profile.coke_orientation_drift_tolerance_rad ||
+      after_position > profile.coke_position_drift_tolerance ||
+      after_orientation > profile.coke_orientation_drift_tolerance_rad) {
+    add(result, FailureCategory::WORLD_INCONSISTENCY, "COKE_SUPPORT_POSE_MISMATCH",
+        "Detach and sync transitions require Coke at the state-specific support pose");
   }
 }
 
@@ -189,6 +221,9 @@ public:
                       key_.from == State::DETACH_MOVEIT ||
                       key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_);
     requireQ6(result, before, open, profile_);
+    if (requiresStableSupport(key_)) {
+      requireExpectedSupportPose(result, before, before, key_, profile_);
+    }
     if (key_.from == State::ATTACH_GAZEBO) {
       requireAttachments(result, before, false, false);
     } else if (key_.from == State::ATTACH_MOVEIT) {
@@ -219,6 +254,10 @@ public:
                       key_.from == State::DETACH_MOVEIT ||
                       key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_);
     requireQ6(result, after, open, profile_);
+    if (requiresStableSupport(key_)) {
+      requireNoCokeJump(result, before, after, profile_);
+      requireExpectedSupportPose(result, before, after, key_, profile_);
+    }
     if (key_.from == State::ATTACH_GAZEBO) {
       requireAttachments(result, after, true, false);
       requireNoCokeJump(result, before, after, profile_);

@@ -1,6 +1,7 @@
 #include "so101_gazebo_demo/pick_place/gazebo_world_observer.hpp"
-#include <chrono>
+
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <deque>
@@ -226,11 +227,19 @@ GazeboWorldObserver::~GazeboWorldObserver() = default;
 
 ObservationResult GazeboWorldObserver::observe()
 {
-  auto moveit = moveit_observer_.observe();
-  if (!moveit.snapshot) {
-    return moveit;
+  auto initial_moveit = moveit_observer_.observe();
+  if (!initial_moveit.snapshot) {
+    return initial_moveit;
   }
-  return impl_->enrich(*moveit.snapshot);
+  auto gazebo_ready = impl_->enrich(*initial_moveit.snapshot);
+  if (!gazebo_ready.snapshot) {
+    return gazebo_ready;
+  }
+  auto final_moveit = moveit_observer_.observe();
+  if (!final_moveit.snapshot) {
+    return final_moveit;
+  }
+  return impl_->enrich(*final_moveit.snapshot);
 }
 
 }  // namespace so101_gazebo_demo::pick_place

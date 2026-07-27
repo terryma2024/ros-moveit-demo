@@ -1,5 +1,6 @@
 #include "so101_gazebo_demo/pick_place/runner.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <utility>
@@ -488,8 +489,11 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   }
   const auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
   if (!precondition.ok) {
-    if (environmentEvidenceUnavailable(precondition.failures.front())) {
-      return error(precondition.failures.front());
+    const auto environment_failure =
+      std::find_if(precondition.failures.begin(), precondition.failures.end(),
+                   environmentEvidenceUnavailable);
+    if (environment_failure != precondition.failures.end()) {
+      return error(*environment_failure);
     }
     return phase == CheckpointPhase::FORWARD
              ? handleActionFailure(state, *executor, precondition.failures.front(),

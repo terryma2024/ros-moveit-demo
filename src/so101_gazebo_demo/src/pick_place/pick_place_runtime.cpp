@@ -166,6 +166,10 @@ void requireCompleteSnapshot(ValidationResult & result, const WorldSnapshot & sn
     addFailure(result, FailureCategory::OBSERVATION, "ENVIRONMENT_EVIDENCE_INCOMPLETE",
                "Independent finite Gazebo and MoveIt Coke evidence is required");
   }
+  if (snapshot.gazebo_coke_stationary && !*snapshot.gazebo_coke_stationary) {
+    addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_NOT_STATIONARY",
+               "Gazebo Coke must be stationary at every motion boundary");
+  }
 }
 
 void requireMotionEnvironment(ValidationResult & result, const WorldSnapshot & snapshot,
@@ -477,37 +481,45 @@ ObservationResult SO101MoveItWorldObserver::observe()
   std::optional<CurrentJointStateEvidence> previous;
   std::optional<CurrentJointStateEvidence> current;
   bool stationary = true;
+  const auto validate_current = [this](
+    const std::optional<CurrentJointStateEvidence> & evidence) -> std::optional<Failure> {
+      if (!evidence || evidence->joint_names != profile_.arm_joints ||
+          evidence->positions.size() != profile_.arm_joints.size() ||
+          evidence->velocities.size() != profile_.arm_joints.size() ||
+          !evidence->gripper_position || !evidence->gripper_velocity) {
+        return observationFailure("JOINT_EVIDENCE_INCOMPLETE",
+                                  "Joint 1 through 6 evidence is incomplete");
+      }
+      const auto now = std::chrono::steady_clock::now();
+      if (evidence->received_at == std::chrono::steady_clock::time_point{} ||
+          evidence->received_at > now ||
+          now - evidence->received_at >
+            std::chrono::duration<double>(config_.max_age_seconds)) {
+        return observationFailure("JOINT_EVIDENCE_STALE",
+                                  "Joint 1 through 6 evidence is stale");
+      }
+      for (std::size_t i = 0; i < evidence->positions.size(); ++i) {
+        if (!finite(evidence->positions[i]) || !finite(evidence->velocities[i])) {
+          return observationFailure("JOINT_EVIDENCE_NONFINITE",
+                                    "Joint position or velocity is non-finite");
+        }
+      }
+      if (!finite(*evidence->gripper_position) || !finite(*evidence->gripper_velocity)) {
+        return observationFailure("JOINT_EVIDENCE_NONFINITE",
+                                  "Joint 6 evidence is non-finite");
+      }
+      return std::nullopt;
+    };
   for (std::size_t sample = 0; sample < config_.settle_samples; ++sample) {
     current = boundary_->currentState();
-    if (!current || current->joint_names != profile_.arm_joints ||
-        current->positions.size() != profile_.arm_joints.size() ||
-        current->velocities.size() != profile_.arm_joints.size() ||
-        !current->gripper_position || !current->gripper_velocity) {
-      return {std::nullopt, observationFailure("JOINT_EVIDENCE_INCOMPLETE",
-                                               "Joint 1 through 6 evidence is incomplete")};
-    }
-    const auto now = std::chrono::steady_clock::now();
-    if (current->received_at == std::chrono::steady_clock::time_point{} ||
-        current->received_at > now ||
-        now - current->received_at > std::chrono::duration<double>(config_.max_age_seconds)) {
-      return {std::nullopt, observationFailure("JOINT_EVIDENCE_STALE",
-                                               "Joint 1 through 6 evidence is stale")};
-    }
+    if (auto failure = validate_current(current)) return {std::nullopt, std::move(failure)};
     for (std::size_t i = 0; i < current->positions.size(); ++i) {
-      if (!finite(current->positions[i]) || !finite(current->velocities[i])) {
-        return {std::nullopt, observationFailure("JOINT_EVIDENCE_NONFINITE",
-                                                 "Joint position or velocity is non-finite")};
-      }
       stationary = stationary &&
                    std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
       if (previous && std::abs(previous->positions[i] - current->positions[i]) >
                         config_.joint_settle_tolerance) {
         stationary = false;
       }
-    }
-    if (!finite(*current->gripper_position) || !finite(*current->gripper_velocity)) {
-      return {std::nullopt, observationFailure("JOINT_EVIDENCE_NONFINITE",
-                                               "Joint 6 evidence is non-finite")};
     }
     stationary = stationary &&
                  std::abs(*current->gripper_velocity) <= profile_.q6_velocity_tolerance;
@@ -548,6 +560,28 @@ ObservationResult SO101MoveItWorldObserver::observe()
     return {std::nullopt, observationFailure("MOVEIT_COKE_MEMBERSHIP_INCONSISTENT",
                                              "Detached Coke retains attachment metadata")};
   }
+
+  previous = current;
+  current = boundary_->currentState();
+  if (auto failure = validate_current(current)) return {std::nullopt, std::move(failure)};
+  for (std::size_t i = 0; i < current->positions.size(); ++i) {
+    if (std::abs(previous->positions[i] - current->positions[i]) >
+        config_.joint_settle_tolerance) {
+      return {std::nullopt,
+              observationFailure("ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION",
+                                 "Arm joints changed while MoveIt scene evidence was collected")};
+    }
+    stationary = stationary &&
+                 std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
+  }
+  if (std::abs(*previous->gripper_position - *current->gripper_position) >
+      config_.joint_settle_tolerance) {
+    return {std::nullopt,
+            observationFailure("ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION",
+                               "Gripper joint changed while MoveIt scene evidence was collected")};
+  }
+  stationary = stationary &&
+               std::abs(*current->gripper_velocity) <= profile_.q6_velocity_tolerance;
 
   WorldSnapshot snapshot;
   snapshot.observed_at = current->received_at;

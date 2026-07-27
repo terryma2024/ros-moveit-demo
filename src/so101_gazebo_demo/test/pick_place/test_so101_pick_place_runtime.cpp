@@ -133,6 +133,7 @@ public:
   std::optional<spp::CurrentJointStateEvidence> currentState() override
   {
     ++current_calls;
+    if (current_after_scene && scene_calls > 0) return current_after_scene;
     return current;
   }
   std::optional<spp::MotionPlanningSceneFacts> sceneFacts() override
@@ -149,6 +150,7 @@ public:
   }
 
   spp::CurrentJointStateEvidence current;
+  std::optional<spp::CurrentJointStateEvidence> current_after_scene;
   spp::MotionPlanningSceneFacts scene;
   int current_calls{0};
   int scene_calls{0};
@@ -401,6 +403,48 @@ TEST(SO101MoveItWorldObserver, RejectsMissingStaleNonfiniteOrInconsistentEvidenc
   }
 }
 
+TEST(SO101MoveItWorldObserver, RejectsJointEvidenceThatGoesStaleWhileSceneIsCollected)
+{
+  auto boundary = validBoundary();
+  boundary->current_after_scene = boundary->current;
+  boundary->current_after_scene->received_at =
+    std::chrono::steady_clock::now() - std::chrono::seconds(2);
+  spp::SO101MoveItWorldObserver observer(
+    boundary, spp::SO101Profile::canonical(),
+    spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
+
+  const auto result = observer.observe();
+
+  EXPECT_FALSE(result.snapshot);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("JOINT_EVIDENCE_STALE", result.failure->code);
+  EXPECT_GE(boundary->current_calls, 2);
+}
+
+TEST(SO101MoveItWorldObserver, RejectsJointOrGripperChangeWhileSceneIsCollected)
+{
+  for (const bool mutate_gripper : {false, true}) {
+    auto boundary = validBoundary();
+    boundary->current_after_scene = boundary->current;
+    boundary->current_after_scene->received_at = std::chrono::steady_clock::now();
+    if (mutate_gripper) {
+      *boundary->current_after_scene->gripper_position += 0.01;
+    } else {
+      boundary->current_after_scene->positions[0] += 0.01;
+    }
+    spp::SO101MoveItWorldObserver observer(
+      boundary, spp::SO101Profile::canonical(),
+      spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
+
+    const auto result = observer.observe();
+
+    EXPECT_FALSE(result.snapshot) << mutate_gripper;
+    ASSERT_TRUE(result.failure) << mutate_gripper;
+    EXPECT_EQ("ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION", result.failure->code)
+      << mutate_gripper;
+  }
+}
+
 TEST(SO101RuntimeRegistries, RejectNullAndDuplicateEntries)
 {
   auto action = std::make_shared<StubPlannerExecutor>();
@@ -463,5 +507,45 @@ TEST(SO101MotionContract, RetreatProvesDetachedCokeStayedFixedWhileArmLeft)
   EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(), [](const auto & failure) {
               return failure.category == spp::FailureCategory::POSTCONDITION &&
                      failure.code == "DETACHED_COKE_DRIFT";
+            }), result.failures.end());
+}
+
+TEST(SO101MotionContract, RequiresTrueGazeboCokeStationarityBeforeMotion)
+{
+  const auto & profile = spp::SO101Profile::canonical();
+  const auto spec = spp::SO101FixedMotionTargetPolicy(profile).spec(
+    spp::State::MOVE_ABOVE_OBJECT);
+  ASSERT_TRUE(spec);
+  const auto contract = spp::makeSO101MotionContract(*spec, profile);
+  auto before = detachedMotionWorld(*spec, profile);
+  before.gazebo_coke_stationary = false;
+
+  const auto result = contract->validatePrecondition(before);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(), [](const auto & failure) {
+              return failure.category == spp::FailureCategory::OBSERVATION &&
+                     failure.code == "GAZEBO_COKE_NOT_STATIONARY";
+            }), result.failures.end());
+}
+
+TEST(SO101MotionContract, RequiresTrueGazeboCokeStationarityAfterMotion)
+{
+  const auto & profile = spp::SO101Profile::canonical();
+  const auto spec = spp::SO101FixedMotionTargetPolicy(profile).spec(
+    spp::State::MOVE_ABOVE_OBJECT);
+  ASSERT_TRUE(spec);
+  const auto contract = spp::makeSO101MotionContract(*spec, profile);
+  const auto before = detachedMotionWorld(*spec, profile);
+  auto after = before;
+  after.gazebo_coke_stationary = false;
+
+  const auto result = contract->validate(
+    before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(), [](const auto & failure) {
+              return failure.category == spp::FailureCategory::OBSERVATION &&
+                     failure.code == "GAZEBO_COKE_NOT_STATIONARY";
             }), result.failures.end());
 }
