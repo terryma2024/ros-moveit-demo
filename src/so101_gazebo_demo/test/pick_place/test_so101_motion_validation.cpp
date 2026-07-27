@@ -90,6 +90,46 @@ TEST(SO101MotionLadder, AcceptsCompleteNearVerticalCollisionAwarePath)
   EXPECT_NEAR(result.metrics.at("axis_error"), 0.0, 1e-12);
 }
 
+TEST(SO101MotionPlanValidator, CarryingStateRequiresFiniteAttachedCokePoseAtEverySample)
+{
+  auto plan = validLadder();
+  for (auto & sample : plan.samples) sample.attached_coke_pose_world = pose(0.1, 0.2, 0.3);
+  const spp::SO101MotionPlanValidator validator(descendConfig(), true);
+  const auto result = validator.validate(spp::State::LIFT, {}, plan);
+  EXPECT_TRUE(result.ok);
+}
+
+TEST(SO101MotionPlanValidator, CarryingStateRejectsMissingAttachedCokePose)
+{
+  auto plan = validLadder();
+  for (auto & sample : plan.samples) sample.attached_coke_pose_world = pose(0.1, 0.2, 0.3);
+  plan.samples[1].attached_coke_pose_world.reset();
+  const spp::SO101MotionPlanValidator validator(descendConfig(), true);
+  const auto result = validator.validate(spp::State::LIFT, {}, plan);
+  ASSERT_FALSE(result.ok);
+  ASSERT_FALSE(result.failures.empty());
+  EXPECT_EQ(result.failures.front().code, "ATTACHED_COKE_POSE_EVIDENCE_MISSING");
+}
+
+TEST(SO101MotionPlanValidator, CarryingStateRejectsNonfiniteAttachedCokePose)
+{
+  auto plan = validLadder();
+  for (auto & sample : plan.samples) sample.attached_coke_pose_world = pose(0.1, 0.2, 0.3);
+  plan.samples[2].attached_coke_pose_world->qz =
+    std::numeric_limits<double>::quiet_NaN();
+  const spp::SO101MotionPlanValidator validator(descendConfig(), true);
+  const auto result = validator.validate(spp::State::MOVE_ABOVE_PLACE, {}, plan);
+  ASSERT_FALSE(result.ok);
+  ASSERT_FALSE(result.failures.empty());
+  EXPECT_EQ(result.failures.front().code, "ATTACHED_COKE_POSE_EVIDENCE_NONFINITE");
+}
+
+TEST(SO101MotionPlanValidator, DetachedStateDoesNotRequireAttachedCokePose)
+{
+  const spp::SO101MotionPlanValidator validator(descendConfig(), true);
+  EXPECT_TRUE(validator.validate(spp::State::DESCEND, {}, validLadder()).ok);
+}
+
 TEST(SO101MotionConfiguration, RejectsNonfiniteNegativeAndIllegalZeroValuesAtEntry)
 {
   const double nan = std::numeric_limits<double>::quiet_NaN();

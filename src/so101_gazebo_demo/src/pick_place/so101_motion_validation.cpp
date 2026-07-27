@@ -1,5 +1,7 @@
 #include "so101_gazebo_demo/pick_place/so101_motion_validation.hpp"
 
+#include "so101_gazebo_demo/pick_place/so101_motion_planner.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -70,6 +72,24 @@ ValidationResult configurationFailure()
                "Motion validation configuration must be finite and use valid positive or non-negative bounds",
                {}};
   return {false, {std::move(item)}, {}};
+}
+
+ValidationResult validateAttachedCokePoseEvidence(const MotionPlanArtifact & plan)
+{
+  for (std::size_t i = 0; i < plan.samples.size(); ++i) {
+    const auto & attached_coke_pose = plan.samples[i].attached_coke_pose_world;
+    if (!attached_coke_pose) {
+      return failure("ATTACHED_COKE_POSE_EVIDENCE_MISSING",
+                     "A carrying motion sample lacks attached Coke world-pose evidence",
+                     {{"sample_index", static_cast<double>(i)}});
+    }
+    if (!finitePose(*attached_coke_pose)) {
+      return failure("ATTACHED_COKE_POSE_EVIDENCE_NONFINITE",
+                     "A carrying motion sample has non-finite attached Coke world-pose evidence",
+                     {{"sample_index", static_cast<double>(i)}});
+    }
+  }
+  return {true, {}, {}};
 }
 
 bool validConfiguration(const MotionValidationConfig & config)
@@ -386,12 +406,16 @@ SO101MotionPlanValidator::SO101MotionPlanValidator(MotionValidationConfig config
 {
 }
 
-ValidationResult SO101MotionPlanValidator::validate(State, const WorldSnapshot &,
+ValidationResult SO101MotionPlanValidator::validate(State state, const WorldSnapshot &,
                                                     const PlanArtifact & artifact) const
 {
   const auto * motion = dynamic_cast<const MotionPlanArtifact *>(&artifact);
   if (!motion) {
     return failure("MOTION_PLAN_ARTIFACT_REQUIRED", "SO-101 motion validator needs FK motion evidence");
+  }
+  if (isCarryingMotionState(state)) {
+    const auto attached_coke_evidence = validateAttachedCokePoseEvidence(*motion);
+    if (!attached_coke_evidence.ok) return attached_coke_evidence;
   }
   return require_ladder_ ? validateWaypointLadder(*motion, config_)
                          : validateJointGoalPlan(*motion, config_);
