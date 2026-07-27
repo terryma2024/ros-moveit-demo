@@ -29,7 +29,7 @@ public:
 
 private:
   SO101Profile profile_;
-  std::string version_{"so101-fixed-table-d20-v3"};
+  std::string version_{"so101-fixed-table-d20-v5"};
 };
 
 }  // namespace so101_gazebo_demo::pick_place

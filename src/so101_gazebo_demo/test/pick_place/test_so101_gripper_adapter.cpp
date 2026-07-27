@@ -62,7 +62,7 @@ TEST(SO101Profile, OwnsExactRobotSceneAndAttachmentContract)
   EXPECT_EQ("/gripper_controller/follow_joint_trajectory", profile.gripper_action);
   EXPECT_EQ("gripper", profile.moveit_attach_link);
   EXPECT_EQ((std::vector<std::string>{"gripper", "jaw"}), profile.moveit_touch_links);
-  EXPECT_DOUBLE_EQ(0.707194871, profile.q6_preopen);
+  EXPECT_DOUBLE_EQ(0.795386732, profile.q6_preopen);
   EXPECT_DOUBLE_EQ(0.662818811, profile.q6_contact);
   EXPECT_DOUBLE_EQ(0.020, profile.grasp_section_depth);
   EXPECT_DOUBLE_EQ(0.50, profile.table_size[0]);
@@ -76,7 +76,7 @@ TEST(SO101Profile, OwnsExactRobotSceneAndAttachmentContract)
 TEST(SO101GripperGeometry, UsesTwentyMillimeterSectionCalibrationForBothTargets)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
-  EXPECT_NEAR(0.070, pick_place::gripperWidthAtSection(profile.q6_preopen, profile), 2e-9);
+  EXPECT_NEAR(0.076, pick_place::gripperWidthAtSection(profile.q6_preopen, profile), 2e-9);
   EXPECT_NEAR(0.066, pick_place::gripperWidthAtSection(profile.q6_contact, profile), 2e-9);
 }
 
@@ -86,10 +86,25 @@ TEST(SO101GripperGeometry, MatchesRealMeshTruthAtNonEndpointAndRejectsExtrapolat
   constexpr double midpoint_q6 = 0.685006841;
   constexpr double mesh_truth_width = 0.0679670145369185;
 
-  EXPECT_NEAR(mesh_truth_width, pick_place::gripperWidthAtSection(midpoint_q6, profile), 1e-10);
+  // The runtime linearly interpolates an 80-sample table.  Bound interpolation
+  // error to 0.1 micrometre at a point that is not itself a table sample.
+  EXPECT_NEAR(mesh_truth_width, pick_place::gripperWidthAtSection(midpoint_q6, profile), 1e-7);
   EXPECT_TRUE(std::isnan(
     pick_place::gripperWidthAtSection(profile.q6_contact - profile.q6_tolerance - 1e-6,
                                       profile)));
+}
+
+TEST(SO101GripperGeometry, ClampsOnlyFloatingPointNoiseAtCalibrationEndpoints)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  EXPECT_NEAR(0.066,
+              pick_place::gripperWidthAtSection(profile.q6_contact - 5e-10, profile), 2e-9);
+  EXPECT_NEAR(0.076,
+              pick_place::gripperWidthAtSection(profile.q6_preopen + 5e-10, profile), 2e-9);
+  EXPECT_TRUE(std::isnan(
+    pick_place::gripperWidthAtSection(profile.q6_contact - 2e-9, profile)));
+  EXPECT_TRUE(std::isnan(
+    pick_place::gripperWidthAtSection(profile.q6_preopen + 2e-9, profile)));
 }
 
 TEST(SO101GripperValidation, RejectsWidthAndGeometryModelIndependentlyOfExactQ6)
@@ -141,7 +156,7 @@ TEST(FollowJointTrajectoryGripperAdapter, SendsOnlyJointSixWithExactTargetAndDur
   EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, result.status);
   ASSERT_EQ(1, client->send_calls);
   EXPECT_EQ((std::vector<std::string>{"6"}), client->last_goal.joint_names);
-  EXPECT_EQ((std::vector<double>{0.707194871}), client->last_goal.positions);
+  EXPECT_EQ((std::vector<double>{0.795386732}), client->last_goal.positions);
   EXPECT_DOUBLE_EQ(0.75, client->last_goal.duration_seconds);
   EXPECT_DOUBLE_EQ(2.0, client->last_timeout);
 }

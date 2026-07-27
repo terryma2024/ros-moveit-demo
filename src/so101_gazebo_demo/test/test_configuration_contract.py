@@ -80,6 +80,15 @@ def test_gazebo_contact_profile_uses_supported_gripper_pad_geometry():
         assert box is not None
         assert all(float(value) > 0.0 for value in box.attrib['size'].split())
 
+    fixed = robot.find("./link[@name='gripper']/collision[@name='fixed_finger_contact']")
+    moving = robot.find("./link[@name='jaw']/collision[@name='moving_finger_contact']")
+    assert [float(value) for value in fixed.find('origin').attrib['xyz'].split()] == pytest.approx(
+        [-0.0216, 0.0, -0.084], abs=1e-7
+    )
+    assert [float(value) for value in moving.find('origin').attrib['xyz'].split()] == pytest.approx(
+        [-0.01599174, -0.09546963, 0.0], abs=1e-7
+    )
+
     moveit_robot = generated_robot()
     for link_name in ('gripper', 'jaw'):
         link = moveit_robot.find(f"./link[@name='{link_name}']")

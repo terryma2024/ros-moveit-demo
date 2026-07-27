@@ -239,7 +239,14 @@ ValidationResult validateSO101GripperTarget(const WorldSnapshot & snapshot,
                                             SO101GripperTarget target,
                                             const SO101Profile & profile)
 {
-  if (target != SO101GripperTarget::FULL_OPEN) {
+  if (target == SO101GripperTarget::CONTACT) {
+    auto contact_profile = profile;
+    contact_profile.q6_tolerance = profile.contact_q6_stop_tolerance;
+    contact_profile.width_tolerance = profile.contact_width_oversize_tolerance;
+    const auto [q6, width] = targetFor(target, profile);
+    return validateQ6Target(snapshot, q6, width, contact_profile);
+  }
+  if (target == SO101GripperTarget::PREOPEN) {
     const auto [q6, width] = targetFor(target, profile);
     return validateQ6Target(snapshot, q6, width, profile);
   }

@@ -10,7 +10,7 @@ namespace so101_gazebo_demo::pick_place
 namespace
 {
 
-constexpr auto kStationaryTimeout = std::chrono::seconds(2);
+constexpr auto kStationaryTimeout = std::chrono::seconds(12);
 constexpr auto kStationaryPollInterval = std::chrono::milliseconds(25);
 StateActionRegistry kEmptyActions;
 TransitionContractRegistry kEmptyContracts;
@@ -106,6 +106,17 @@ bool environmentEvidenceUnavailable(const Failure & failure) noexcept
          failure.category == FailureCategory::WORLD_INCONSISTENCY ||
          failure.category == FailureCategory::MOVEIT_SCENE ||
          failure.category == FailureCategory::TF;
+}
+
+bool endpointConvergenceFailure(const ValidationResult & validation) noexcept
+{
+  if (validation.failures.empty()) return false;
+  return std::all_of(validation.failures.begin(), validation.failures.end(),
+                     [](const Failure & failure) {
+                       return failure.code == "MOTION_JOINT_ENDPOINT_MISMATCH" ||
+                              failure.code == "TCP_ENDPOINT_OUTSIDE_TOLERANCE" ||
+                              failure.code == "TCP_AXIS_OUTSIDE_TOLERANCE";
+                     });
 }
 
 }  // namespace
@@ -540,7 +551,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
         Failure{FailureCategory::EXECUTION, "EXECUTION_FAILED", "trajectory execution failed", {}}),
       checkpoint_sequence);
   }
-  const auto after = observer_->observe();
+  auto after = observeAfterSuccessfulAction(state);
   if (!after.snapshot) {
     return handleActionFailure(state, *executor,
                                after.failure.value_or(Failure{FailureCategory::OBSERVATION,
@@ -549,8 +560,32 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                                                               {}}),
                                checkpoint_sequence);
   }
-  const auto transition =
+  auto transition =
     contracts_.validate({state, next_state}, *before, *after.snapshot, action);
+  if (!transition.ok && requiresPlanning(state) && endpointConvergenceFailure(transition)) {
+    const auto deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
+    do {
+      std::this_thread::sleep_for(kStationaryPollInterval);
+      const auto observed = observer_->observe();
+      if (!observed.snapshot) {
+        if (observed.failure &&
+            observed.failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION") {
+          continue;
+        }
+        return handleActionFailure(
+          state, *executor,
+          observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                            "POST_EXECUTION_OBSERVATION_FAILED",
+                                            "could not observe endpoint convergence",
+                                            {}}),
+          checkpoint_sequence);
+      }
+      if (!observed.snapshot->fresh || !observed.snapshot->arm_stationary) continue;
+      after = {*observed.snapshot, std::nullopt};
+      transition = contracts_.validate({state, next_state}, *before, *after.snapshot, action);
+      if (transition.ok || !endpointConvergenceFailure(transition)) break;
+    } while (std::chrono::steady_clock::now() < deadline);
+  }
   if (!transition.ok) {
     return handleActionFailure(state, *executor, transition.failures.front(), checkpoint_sequence);
   }
@@ -723,6 +758,45 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
     original_failure.metrics["recovery_checkpoint_persisted"] = 1.0;
   }
   return {RunStatus::RUNNING, state, route.next_state, std::move(original_failure), 1, {}};
+}
+
+StateMachineRunner::StopObservationResult
+StateMachineRunner::observeAfterSuccessfulAction(State state) const
+{
+  const bool motion_state = requiresPlanning(state);
+  const auto deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
+  std::size_t observation_attempts = 0;
+  do {
+    ++observation_attempts;
+    const auto observed = observer_->observe();
+    if (observed.snapshot && observed.snapshot->fresh &&
+        (!motion_state || observed.snapshot->arm_stationary)) {
+      return {*observed.snapshot, std::nullopt};
+    }
+    if (!observed.snapshot &&
+        (!observed.failure ||
+         observed.failure->code != "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION")) {
+      return {std::nullopt,
+              observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                                "POST_EXECUTION_OBSERVATION_FAILED",
+                                                "could not observe after execution",
+                                                {}})};
+    }
+    std::this_thread::sleep_for(kStationaryPollInterval);
+  } while (observation_attempts < 4 || std::chrono::steady_clock::now() < deadline);
+
+  if (!motion_state) {
+    return {std::nullopt,
+            Failure{FailureCategory::POSTCONDITION,
+                    "POST_ACTION_OBSERVATION_DID_NOT_CONVERGE",
+                    "action succeeded but no fresh consistent post-action observation was available",
+                    {{"execution_succeeded", 1.0}}}};
+  }
+  return {std::nullopt,
+          Failure{FailureCategory::POSTCONDITION,
+                  "ARM_NOT_QUIESCENT_AFTER_EXECUTION",
+                  "motion execution succeeded but the arm did not become stationary",
+                  {{"execution_succeeded", 1.0}, {"arm_stationary_after_execution", 0.0}}}};
 }
 
 StateMachineRunner::StopObservationResult

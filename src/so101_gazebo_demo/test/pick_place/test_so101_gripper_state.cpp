@@ -128,6 +128,25 @@ TEST(SO101GripperStateExecutor, RecoveryNoOpUsesCurrentQ6AndNeedsNoAttachment)
   EXPECT_EQ(0, command->command_calls);
 }
 
+TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayExact)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  EXPECT_DOUBLE_EQ(0.010, profile.contact_q6_stop_tolerance);
+  EXPECT_DOUBLE_EQ(0.001, profile.contact_width_oversize_tolerance);
+
+  const auto physical_contact = snapshot(profile.q6_contact + 0.0067);
+  EXPECT_TRUE(pick_place::validateSO101GripperTarget(
+    physical_contact, pick_place::SO101GripperTarget::CONTACT, profile).ok);
+
+  const auto still_too_wide = snapshot(profile.q6_contact + 0.012);
+  EXPECT_FALSE(pick_place::validateSO101GripperTarget(
+    still_too_wide, pick_place::SO101GripperTarget::CONTACT, profile).ok);
+
+  const auto imprecise_preopen = snapshot(profile.q6_preopen - 0.0067);
+  EXPECT_FALSE(pick_place::validateSO101GripperTarget(
+    imprecise_preopen, pick_place::SO101GripperTarget::PREOPEN, profile).ok);
+}
+
 TEST(SO101GripperTransitionContract, ActionSuccessCannotReplaceFreshStoppedQ6Postcondition)
 {
   const auto & profile = pick_place::SO101Profile::canonical();

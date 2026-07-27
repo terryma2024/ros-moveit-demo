@@ -332,9 +332,11 @@
 			</collision>
 		</xacro:unless>
 		<xacro:if value="$(arg gazebo_collision_primitives)">
-			<!-- Convex fingertip pad used for load-bearing Coke contact in DART. -->
+			<!-- Convex fingertip pad used for load-bearing Coke contact in DART.
+			     Keep 2 mm pre-open clearance from the nominal Coke surface: an
+			     exactly tangent rigid-body start is unstable in the simulator. -->
 			<collision name="fixed_finger_contact">
-				<origin xyz="-0.004 0 -0.084" rpy="0 0 0" />
+				<origin xyz="-0.0216 0 -0.084" rpy="0 0 0" />
 				<geometry>
 					<box size="0.016 0.020 0.042" />
 				</geometry>
@@ -369,7 +371,7 @@
 		<xacro:if value="$(arg gazebo_collision_primitives)">
 			<!-- Moving fingertip pad follows joint 6 and supports Coke contact. -->
 			<collision name="moving_finger_contact">
-				<origin xyz="-0.009 -0.070 0" rpy="0 0 0" />
+				<origin xyz="-0.01599174 -0.09546963 0" rpy="0 0 0" />
 				<geometry>
 					<box size="0.010 0.026 0.028" />
 				</geometry>
