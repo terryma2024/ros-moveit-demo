@@ -49,6 +49,7 @@ add_library(pick_place_core
   src/pick_place/moveit_scene_adapter.cpp
   src/pick_place/moveit_scene_executor.cpp
   src/pick_place/world_reset_coordinator.cpp
+  src/pick_place/robot_home_reset_adapter.cpp
 )
 target_compile_features(pick_place_core PUBLIC cxx_std_17)
 target_include_directories(pick_place_core PUBLIC
@@ -156,6 +157,9 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_so101_moveit_scene moveit_msgs shape_msgs)
   ament_add_gtest(test_so101_world_reset test/pick_place/test_so101_world_reset.cpp)
   target_link_libraries(test_so101_world_reset pick_place_core)
+  ament_add_gtest(test_robot_home_reset_adapter
+    test/pick_place/test_robot_home_reset_adapter.cpp)
+  target_link_libraries(test_robot_home_reset_adapter pick_place_core)
   ament_add_gtest(test_so101_gazebo_reset_adapter
     test/pick_place/test_so101_gazebo_reset_adapter.cpp)
   target_link_libraries(test_so101_gazebo_reset_adapter pick_place_core

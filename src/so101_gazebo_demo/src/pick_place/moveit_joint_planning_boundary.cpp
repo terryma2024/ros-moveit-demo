@@ -4,6 +4,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <future>
 #include <limits>
@@ -343,8 +344,11 @@ public:
       [this](sensor_msgs::msg::JointState::ConstSharedPtr message) {
         auto evidence = currentJointStateEvidenceFromMessage(
           *message, this->profile, std::chrono::steady_clock::now());
-        std::lock_guard<std::mutex> lock(joint_state_mutex);
-        latest_joint_state = std::move(evidence);
+        {
+          std::lock_guard<std::mutex> lock(joint_state_mutex);
+          latest_joint_state = std::move(evidence);
+        }
+        joint_state_condition.notify_all();
       });
   }
 
@@ -407,6 +411,7 @@ public:
   std::shared_ptr<planning_scene::PlanningScene> scene;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscription;
   mutable std::mutex joint_state_mutex;
+  std::condition_variable joint_state_condition;
   std::optional<CurrentJointStateEvidence> latest_joint_state;
 };
 
@@ -422,7 +427,12 @@ MoveItJointPlanningBoundary::~MoveItJointPlanningBoundary() = default;
 
 std::optional<CurrentJointStateEvidence> MoveItJointPlanningBoundary::currentState()
 {
-  std::lock_guard<std::mutex> lock(impl_->joint_state_mutex);
+  std::unique_lock<std::mutex> lock(impl_->joint_state_mutex);
+  if (!impl_->joint_state_condition.wait_for(
+        lock, std::chrono::duration<double>(impl_->state_timeout_seconds),
+        [this] { return impl_->latest_joint_state.has_value(); })) {
+    return std::nullopt;
+  }
   return impl_->latest_joint_state;
 }
 
@@ -431,11 +441,15 @@ std::optional<MotionPlanningSceneFacts> MoveItJointPlanningBoundary::sceneFacts(
   if (!impl_->refreshScene()) return std::nullopt;
   MotionPlanningSceneFacts facts;
   const auto objects = impl_->planning_scene_interface.getObjects(
-    {impl_->profile.table_object, impl_->profile.coke_model});
+    {impl_->profile.table_object, impl_->profile.pedestal_object, impl_->profile.coke_model});
   facts.table_in_world = objects.count(impl_->profile.table_object) == 1;
+  facts.pedestal_in_world = objects.count(impl_->profile.pedestal_object) == 1;
   facts.coke_in_world = objects.count(impl_->profile.coke_model) == 1;
   if (facts.table_in_world) {
     facts.table_world_pose = poseFrom(objects.at(impl_->profile.table_object).pose);
+  }
+  if (facts.pedestal_in_world) {
+    facts.pedestal_world_pose = poseFrom(objects.at(impl_->profile.pedestal_object).pose);
   }
   if (facts.coke_in_world) {
     facts.coke_world_pose = poseFrom(objects.at(impl_->profile.coke_model).pose);

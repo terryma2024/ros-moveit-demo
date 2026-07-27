@@ -119,7 +119,7 @@ public:
 
   bool seedCarrying()
   {
-    if (!ensureTable() || !removeAttached()) return false;
+    if (!ensureStaticScene() || !removeAttached()) return false;
     auto remove = worldCoke(profile_.coke_pose);
     remove.operation = moveit_msgs::msg::CollisionObject::REMOVE;
     if (!scene_.applyCollisionObject(remove)) return false;
@@ -155,34 +155,42 @@ public:
 
   bool seedDetached(const spp::Pose3d & coke_pose)
   {
-    if (!ensureTable() || !removeAttached() ||
+    if (!ensureStaticScene() || !removeAttached() ||
         !scene_.applyCollisionObject(worldCoke(coke_pose))) return false;
-    const auto objects = scene_.getObjects({profile_.table_object, profile_.coke_model});
+    const auto objects = scene_.getObjects(
+      {profile_.table_object, profile_.pedestal_object, profile_.coke_model});
     const auto found = objects.find(profile_.coke_model);
     const auto table = objects.find(profile_.table_object);
+    const auto pedestal = objects.find(profile_.pedestal_object);
     return scene_.getAttachedObjects({profile_.coke_model}).empty() &&
-           found != objects.end() && table != objects.end() &&
+           found != objects.end() && table != objects.end() && pedestal != objects.end() &&
            poseMatches(pose(found->second.pose), coke_pose, profile_) &&
-           poseMatches(pose(table->second.pose), profile_.table_pose, profile_);
+           poseMatches(pose(table->second.pose), profile_.table_pose, profile_) &&
+           poseMatches(pose(pedestal->second.pose), profile_.pedestal_pose, profile_);
   }
 
   double relativePositionError() const noexcept { return relative_position_error_; }
   double relativeOrientationError() const noexcept { return relative_orientation_error_; }
 
 private:
-  bool ensureTable()
+  bool ensureStaticScene()
   {
     const spp::MoveItSceneGeometry geometry{
       profile_.world_frame, profile_.table_object, profile_.table_size,
+      profile_.pedestal_object, profile_.pedestal_size,
       profile_.coke_model, profile_.coke_height, profile_.coke_radius};
     if (!scene_.applyCollisionObject(
-          spp::makeTableCollisionObject(geometry, profile_.table_pose))) {
+          spp::makeTableCollisionObject(geometry, profile_.table_pose)) ||
+        !scene_.applyCollisionObject(
+          spp::makePedestalCollisionObject(geometry, profile_.pedestal_pose))) {
       return false;
     }
-    const auto objects = scene_.getObjects({profile_.table_object});
-    const auto found = objects.find(profile_.table_object);
-    return found != objects.end() &&
-           poseMatches(pose(found->second.pose), profile_.table_pose, profile_);
+    const auto objects = scene_.getObjects({profile_.table_object, profile_.pedestal_object});
+    const auto table = objects.find(profile_.table_object);
+    const auto pedestal = objects.find(profile_.pedestal_object);
+    return table != objects.end() && pedestal != objects.end() &&
+           poseMatches(pose(table->second.pose), profile_.table_pose, profile_) &&
+           poseMatches(pose(pedestal->second.pose), profile_.pedestal_pose, profile_);
   }
 
   bool removeAttached()
@@ -202,6 +210,7 @@ private:
   {
     return spp::makeCokeCollisionObject(
       {profile_.world_frame, profile_.table_object, profile_.table_size,
+       profile_.pedestal_object, profile_.pedestal_size,
        profile_.coke_model, profile_.coke_height, profile_.coke_radius}, pose);
   }
 
@@ -290,6 +299,9 @@ public:
     snapshot.joint_velocities[profile_.gripper_joint] = *current->gripper_velocity;
     if (scene->table_world_pose) {
       snapshot.moveit_world_object_poses[profile_.table_object] = *scene->table_world_pose;
+    }
+    if (scene->pedestal_world_pose) {
+      snapshot.moveit_world_object_poses[profile_.pedestal_object] = *scene->pedestal_world_pose;
     }
     if (scene->coke_world_pose) {
       snapshot.moveit_world_object_poses[profile_.coke_model] = *scene->coke_world_pose;

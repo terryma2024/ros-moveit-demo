@@ -115,7 +115,10 @@ bool endpointConvergenceFailure(const ValidationResult & validation) noexcept
                      [](const Failure & failure) {
                        return failure.code == "MOTION_JOINT_ENDPOINT_MISMATCH" ||
                               failure.code == "TCP_ENDPOINT_OUTSIDE_TOLERANCE" ||
-                              failure.code == "TCP_AXIS_OUTSIDE_TOLERANCE";
+                              failure.code == "TCP_AXIS_OUTSIDE_TOLERANCE" ||
+                              failure.code == "Q6_TARGET_OUT_OF_TOLERANCE" ||
+                              failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE" ||
+                              failure.code == "Q6_NOT_STATIONARY";
                      });
 }
 
@@ -562,7 +565,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   }
   auto transition =
     contracts_.validate({state, next_state}, *before, *after.snapshot, action);
-  if (!transition.ok && requiresPlanning(state) && endpointConvergenceFailure(transition)) {
+  if (!transition.ok && endpointConvergenceFailure(transition)) {
     const auto deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
     do {
       std::this_thread::sleep_for(kStationaryPollInterval);

@@ -258,8 +258,9 @@ ValidationResult validateSO101GripperTarget(const WorldSnapshot & snapshot,
     return validationFailure(FailureCategory::GRIPPER, "Q6_EVIDENCE_INCOMPLETE",
                              "Fresh finite joint 6 position and velocity are required");
   }
-  ValidationResult result{true, {}, {{"q6", position->second},
-                                     {"q6_velocity", velocity->second}}};
+  ValidationResult result{true, {}, {{"expected_q6", profile.q6_full_open},
+                                     {"actual_q6", position->second},
+                                     {"actual_q6_velocity", velocity->second}}};
   if (std::abs(position->second - profile.q6_full_open) > profile.q6_tolerance) {
     result.failures.push_back({FailureCategory::GRIPPER, "Q6_TARGET_OUT_OF_TOLERANCE",
                                "Joint 6 is outside the full-open tolerance", {}});

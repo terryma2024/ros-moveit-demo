@@ -636,6 +636,26 @@ TEST(PureRunnerIntegration, MotionWaitsForEndpointPostconditionConvergence)
   EXPECT_EQ(0, harness.scenario.cancel_calls);
 }
 
+TEST(PureRunnerIntegration, GripperActionWaitsForEndpointPostconditionConvergence)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.transient_transition_state = State::PREPARE_OPEN_GRIPPER;
+  harness.scenario.transient_transition_failures = 1;
+  harness.scenario.transient_transition_failure_code = "Q6_TARGET_OUT_OF_TOLERANCE";
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER,
+                          false, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, result.current_state);
+  EXPECT_EQ(State::MOVE_ABOVE_OBJECT, result.next_state);
+  EXPECT_EQ(3, harness.scenario.observation_calls);
+  EXPECT_EQ(2, harness.scenario.transition_calls);
+  EXPECT_EQ(0, harness.scenario.cancel_calls);
+}
+
 TEST(PureRunnerIntegration, ResumeValidatesCommonAndTransitionBoundaryBeforeAnyAction)
 {
   Harness harness;

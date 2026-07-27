@@ -93,7 +93,7 @@ void print(const spp::RunResult & result)
     std::cout << (i ? " -> " : "") << spp::toString(result.state_trace[i]);
   }
   std::cout << '\n';
-  if (result.failure) std::cout << "failure=" << result.failure->code << '\n';
+  if (result.failure) std::cout << spp::formatFailure(*result.failure) << '\n';
 }
 
 int runProduction(const CliOptions & options, int argc, char ** argv)
@@ -132,7 +132,8 @@ int runProduction(const CliOptions & options, int argc, char ** argv)
       auto scene = std::make_shared<spp::MoveItSceneAdapter>(
         node, profile.planning_group,
         spp::MoveItSceneGeometry{profile.world_frame, profile.table_object,
-                                profile.table_size, profile.coke_model,
+                                profile.table_size, profile.pedestal_object,
+                                profile.pedestal_size, profile.coke_model,
                                 profile.coke_height, profile.coke_radius});
       auto gazebo_attach = std::make_shared<spp::GazeboAttachmentExecutor>(
         spp::State::ATTACH_GAZEBO, true, profile.attach_topic, profile.detach_topic,

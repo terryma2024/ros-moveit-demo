@@ -536,11 +536,14 @@ ObservationResult SO101MoveItWorldObserver::observe()
 
   const auto scene = boundary_->sceneFacts();
   if (!scene || !scene->table_in_world || !scene->table_world_pose ||
-      !finitePose(*scene->table_world_pose) || !scene->current_tcp_pose_world ||
+      !finitePose(*scene->table_world_pose) || !scene->pedestal_in_world ||
+      !scene->pedestal_world_pose || !finitePose(*scene->pedestal_world_pose) ||
+      !scene->current_tcp_pose_world ||
       !finitePose(*scene->current_tcp_pose_world) ||
-      !poseWithin(*scene->table_world_pose, profile_.table_pose, 1e-5, 1e-4)) {
+      !poseWithin(*scene->table_world_pose, profile_.table_pose, 1e-5, 1e-4) ||
+      !poseWithin(*scene->pedestal_world_pose, profile_.pedestal_pose, 1e-5, 1e-4)) {
     return {std::nullopt, observationFailure("MOVEIT_SCENE_EVIDENCE_INCOMPLETE",
-                                             "Canonical table and finite TCP evidence are required")};
+                                             "Canonical table, pedestal, and finite TCP evidence are required")};
   }
   if (scene->coke_in_world == scene->coke_attached) {
     return {std::nullopt, observationFailure("MOVEIT_COKE_MEMBERSHIP_INCONSISTENT",
@@ -596,6 +599,7 @@ ObservationResult SO101MoveItWorldObserver::observe()
   snapshot.joint_velocities[profile_.gripper_joint] = *current->gripper_velocity;
   snapshot.gripper_open = *current->gripper_position >= profile_.q6_preopen - profile_.q6_tolerance;
   snapshot.moveit_world_object_poses[profile_.table_object] = *scene->table_world_pose;
+  snapshot.moveit_world_object_poses[profile_.pedestal_object] = *scene->pedestal_world_pose;
   if (scene->coke_world_pose) {
     snapshot.moveit_world_object_poses[profile_.coke_model] = *scene->coke_world_pose;
   }

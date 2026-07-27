@@ -78,13 +78,20 @@ public:
   {
     return {spp::ActionStatus::SUCCEEDED, std::nullopt};
   }
+  spp::ActionResult upsertPedestalWorldPose(const spp::Pose3d & pose) override
+  {
+    state.pedestal_in_world = true;
+    state.pedestal_world_pose = pose;
+    return {spp::ActionStatus::SUCCEEDED, std::nullopt};
+  }
   std::optional<spp::MoveItSceneState> observe() override
   {
     return state;
   }
 
   spp::MoveItSceneState state{true, false, {}, {}, spp::SO101Profile::canonical().coke_pose,
-                              true, spp::SO101Profile::canonical().table_pose};
+                              true, spp::SO101Profile::canonical().table_pose,
+                              true, spp::SO101Profile::canonical().pedestal_pose};
   int attach_calls{0};
 };
 
@@ -216,9 +223,11 @@ std::shared_ptr<FakeBoundary> validBoundary()
   boundary->current.observed_stamp_nanoseconds = 1234;
   boundary->current.received_at = std::chrono::steady_clock::now();
   boundary->scene.table_in_world = true;
+  boundary->scene.pedestal_in_world = true;
   boundary->scene.coke_in_world = true;
   boundary->scene.coke_attached = false;
   boundary->scene.table_world_pose = profile.table_pose;
+  boundary->scene.pedestal_world_pose = profile.pedestal_pose;
   boundary->scene.coke_world_pose = profile.coke_pose;
   boundary->scene.current_gripper_pose_world =
     spp::Pose3d{0.0, -0.28, 0.25, 0.0, 0.0, 0.0, 1.0};

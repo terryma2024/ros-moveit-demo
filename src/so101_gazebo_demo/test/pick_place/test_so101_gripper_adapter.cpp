@@ -100,11 +100,11 @@ TEST(SO101GripperGeometry, ClampsOnlyFloatingPointNoiseAtCalibrationEndpoints)
   EXPECT_NEAR(0.066,
               pick_place::gripperWidthAtSection(profile.q6_contact - 5e-10, profile), 2e-9);
   EXPECT_NEAR(0.076,
-              pick_place::gripperWidthAtSection(profile.q6_preopen + 5e-10, profile), 2e-9);
+              pick_place::gripperWidthAtSection(profile.q6_preopen + 1.5e-8, profile), 2e-9);
   EXPECT_TRUE(std::isnan(
-    pick_place::gripperWidthAtSection(profile.q6_contact - 2e-9, profile)));
+    pick_place::gripperWidthAtSection(profile.q6_contact - 2e-6, profile)));
   EXPECT_TRUE(std::isnan(
-    pick_place::gripperWidthAtSection(profile.q6_preopen + 2e-9, profile)));
+    pick_place::gripperWidthAtSection(profile.q6_preopen + 2e-6, profile)));
 }
 
 TEST(SO101GripperValidation, RejectsWidthAndGeometryModelIndependentlyOfExactQ6)

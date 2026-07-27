@@ -21,6 +21,11 @@ spp::Pose3d pickPose()
   return {0.02, -0.28, 0.181, 0.0, 0.0, 0.0, 1.0};
 }
 
+spp::Pose3d pedestalPose()
+{
+  return {0.0, 0.0, 0.17, 0.0, 0.0, 0.0, 1.0};
+}
+
 spp::Pose3d graspRelativePose()
 {
   return {0.0214000012, -0.0000000417348703, -0.124949,
@@ -88,7 +93,8 @@ public:
   spp::CurrentJointStateEvidence current{{"1", "2", "3", "4", "5"},
                                          {0, 0, 0, 0, 0}, 1234};
   spp::MotionPlanningSceneFacts scene{true, true, false, std::nullopt, {},
-                                      tablePose(), pickPose(), std::nullopt, std::nullopt};
+                                      tablePose(), pickPose(), std::nullopt, std::nullopt,
+                                      std::nullopt, true, pedestalPose()};
   int plan_calls{0};
   int current_state_calls{0};
   int scene_fact_calls{0};
@@ -126,7 +132,8 @@ spp::MotionPlanningSceneFacts carryingScene()
 {
   return {true, false, true, std::string("gripper"), {"gripper", "jaw"},
           tablePose(), std::nullopt, graspRelativePose(),
-          spp::Pose3d{0.25, -0.10, 0.40, 0.0, 0.0, 0.0, 1.0}};
+          spp::Pose3d{0.25, -0.10, 0.40, 0.0, 0.0, 0.0, 1.0},
+          std::nullopt, true, pedestalPose()};
 }
 
 spp::JointMotionRequest goalRequest()

@@ -5,9 +5,11 @@
 #include <mutex>
 
 #include <gtest/gtest.h>
+#include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
 #include "so101_gazebo_demo/pick_place/moveit_joint_planning_boundary.hpp"
+#include "so101_gazebo_demo/pick_place/node_spinner.hpp"
 
 namespace spp = so101_gazebo_demo::pick_place;
 
@@ -175,4 +177,45 @@ TEST(CurrentJointStateEvidence, UsesTheReceivedJointMessageForAllSixJointsAndSou
 
   message.velocity.clear();
   EXPECT_FALSE(spp::currentJointStateEvidenceFromMessage(message, profile, received_at));
+}
+
+TEST(MoveItJointPlanningBoundary, WaitsForTheFirstCompleteJointState)
+{
+  if (!rclcpp::ok()) rclcpp::init(0, nullptr);
+  const auto isolated_topic = "/test/joint_state_wait";
+  auto observer_node = std::make_shared<rclcpp::Node>(
+    "joint_state_wait_observer",
+    rclcpp::NodeOptions().arguments(
+      {"--ros-args", "-r", "/joint_states:=" + std::string(isolated_topic)}));
+  spp::NodeSpinner spinner(observer_node);
+  spp::MoveItJointPlanningBoundary boundary(
+    observer_node, spp::SO101Profile::canonical(), "RRTConnectkConfigDefault",
+    0.1, 0.1, 0.5);
+  auto publisher_node = std::make_shared<rclcpp::Node>("joint_state_wait_publisher");
+  auto publisher = publisher_node->create_publisher<sensor_msgs::msg::JointState>(
+    isolated_topic, rclcpp::SensorDataQoS());
+  const auto discovery_deadline = std::chrono::steady_clock::now() +
+                                  std::chrono::seconds(2);
+  while (publisher->get_subscription_count() == 0 &&
+         std::chrono::steady_clock::now() < discovery_deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_GT(publisher->get_subscription_count(), 0U);
+
+  auto state = std::async(std::launch::async, [&boundary] { return boundary.currentState(); });
+  EXPECT_EQ(std::future_status::timeout,
+            state.wait_for(std::chrono::milliseconds(30)));
+
+  sensor_msgs::msg::JointState message;
+  message.name = {"1", "2", "3", "4", "5", "6"};
+  message.position = {0.1, 0.2, 0.3, 0.4, 0.5, 0.795386732};
+  message.velocity = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+  publisher->publish(message);
+
+  ASSERT_EQ(std::future_status::ready,
+            state.wait_for(std::chrono::milliseconds(500)));
+  const auto evidence = state.get();
+  ASSERT_TRUE(evidence);
+  EXPECT_EQ((std::vector<double>{0.1, 0.2, 0.3, 0.4, 0.5}), evidence->positions);
+  EXPECT_DOUBLE_EQ(0.795386732, *evidence->gripper_position);
 }

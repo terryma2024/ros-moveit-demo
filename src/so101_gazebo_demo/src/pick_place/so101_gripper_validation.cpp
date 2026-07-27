@@ -14,7 +14,11 @@ namespace so101_gazebo_demo::pick_place
 double gripperWidthAtSection(double q6, const SO101Profile & profile)
 {
   namespace calibration = gripper_calibration;
-  constexpr double kCalibrationEndpointEpsilon = 1e-9;
+  // Gazebo's trajectory controller can settle a few tens of nanoradians past
+  // the commanded endpoint.  Treat up to one microradian as endpoint noise;
+  // this remains 2000x tighter than the configured q6 acceptance tolerance
+  // and avoids extrapolating the mesh-derived calibration curve.
+  constexpr double kCalibrationEndpointEpsilon = 1e-6;
   if (!std::isfinite(q6) ||
       profile.gripper_geometry_model_version != calibration::kModelVersion ||
       profile.gripper_geometry_model_fingerprint != calibration::kModelFingerprint ||
@@ -59,10 +63,12 @@ ValidationResult validateQ6Target(const WorldSnapshot & snapshot, double target_
             {}};
   }
   const auto width = gripperWidthAtSection(position->second, profile);
-  result.metrics = {{"q6", position->second},
-                    {"q6_velocity", velocity->second},
+  result.metrics = {{"expected_q6", target_q6},
+                    {"actual_q6", position->second},
+                    {"actual_q6_velocity", velocity->second},
                     {"section_depth", profile.grasp_section_depth},
-                    {"gripper_width", width}};
+                    {"expected_gripper_width", target_width},
+                    {"actual_gripper_width", width}};
   if (!std::isfinite(target_q6) || std::abs(position->second - target_q6) > profile.q6_tolerance) {
     result.failures.push_back({FailureCategory::GRIPPER,
                                "Q6_TARGET_OUT_OF_TOLERANCE",

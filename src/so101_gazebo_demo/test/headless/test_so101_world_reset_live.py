@@ -15,6 +15,7 @@ from pathlib import Path
 
 
 CANONICAL = (0.02, -0.28, 0.181, 0.0, 0.0, 0.0)
+HOME_JOINTS = {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.0, "6": 0.0}
 SCENARIOS = (
     ("detached", False, False),
     ("gazebo_only", True, False),
@@ -117,21 +118,88 @@ def require_moveit(line, attached):
             "table_in_world=true",
             "table_pose=0,-0.2,0.1,0,0,0,1",
         )
+    required += (
+        "pedestal_in_world=true",
+        "pedestal_pose=0,0,0.17,0,0,0,1",
+    )
     missing = [token for token in required if token not in line]
     if missing:
         raise RuntimeError(f"MoveIt state missing {missing}: {line}")
 
 
+def joint_state(environment):
+    output = run(["ros2", "topic", "echo", "/joint_states", "--once"], environment)
+
+    def sequence(label, next_label):
+        match = re.search(rf"{label}:\n((?:- .+\n)+){next_label}:", output)
+        if not match:
+            raise RuntimeError(f"joint state missing {label}: {output}")
+        return [line[2:].strip().strip("'") for line in match.group(1).splitlines()]
+
+    names = sequence("name", "position")
+    positions = [float(value) for value in sequence("position", "velocity")]
+    velocities = [float(value) for value in sequence("velocity", "effort")]
+    if len(names) != 6 or len(positions) != 6 or len(velocities) != 6:
+        raise RuntimeError(f"incomplete joint state: {output}")
+    return dict(zip(names, positions)), dict(zip(names, velocities)), output
+
+
+def controllers_active(environment):
+    output = run(["ros2", "control", "list_controllers"], environment, timeout=5)
+    required = ("joint_state_broadcaster", "arm_controller", "gripper_controller")
+    active = all(
+        re.search(rf"^{re.escape(name)}\s+.+\bactive\b", output, re.MULTILINE)
+        for name in required
+    )
+    return active, output.strip()
+
+
+def require_robot_home(environment):
+    positions, velocities, output = joint_state(environment)
+    for name, target in HOME_JOINTS.items():
+        if name not in positions or abs(positions[name] - target) > 0.002:
+            raise RuntimeError(f"joint {name} not home: {output}")
+        if name not in velocities or abs(velocities[name]) > 0.01:
+            raise RuntimeError(f"joint {name} not stationary: {output}")
+    return positions, velocities
+
+
+def disturb_robot(environment):
+    arm_goal = (
+        "{trajectory: {joint_names: ['1', '2', '3', '4', '5'], points: "
+        "[{positions: [0.15, -0.1, 0.1, -0.1, 0.1], "
+        "time_from_start: {sec: 2, nanosec: 0}}]}}"
+    )
+    gripper_goal = (
+        "{trajectory: {joint_names: ['6'], points: "
+        "[{positions: [1.2], time_from_start: {sec: 1, nanosec: 0}}]}}"
+    )
+    run(["ros2", "action", "send_goal", "/arm_controller/follow_joint_trajectory",
+         "control_msgs/action/FollowJointTrajectory", arm_goal], environment, timeout=12)
+    run(["ros2", "action", "send_goal", "/gripper_controller/follow_joint_trajectory",
+         "control_msgs/action/FollowJointTrajectory", gripper_goal], environment, timeout=12)
+
+
 def terminate(processes):
+    def group_alive(process):
+        try:
+            os.killpg(process.pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+
     for process in reversed(processes):
-        if process.poll() is None:
+        try:
             os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
     deadline = time.monotonic() + 8
+    while any(group_alive(process) for process in processes) and time.monotonic() < deadline:
+        time.sleep(0.1)
     for process in reversed(processes):
-        while process.poll() is None and time.monotonic() < deadline:
-            time.sleep(0.1)
-        if process.poll() is None:
+        if group_alive(process):
             os.killpg(process.pid, signal.SIGKILL)
+        if process.poll() is None:
             process.wait(timeout=3)
 
 
@@ -188,6 +256,17 @@ def main():
                     "ROS nodes",
                 ),
             )
+            wait_for(
+                "all SO-101 controllers active",
+                lambda: controllers_active(environment),
+            )
+            wait_for(
+                "complete six-joint state",
+                lambda: (
+                    set(joint_state(environment)[0]) == set(HOME_JOINTS),
+                    joint_state(environment)[2],
+                ),
+            )
 
             for name, seed_gazebo, seed_moveit in SCENARIOS:
                 run(
@@ -195,6 +274,8 @@ def main():
                     environment,
                     timeout=25,
                 )
+                if name == "detached":
+                    disturb_robot(environment)
                 if seed_gazebo:
                     run(
                         [
@@ -236,6 +317,12 @@ def main():
                     environment,
                     timeout=25,
                 )
+                expected_success = (
+                    "Gazebo, MoveIt, arm, and gripper converged to canonical SO-101 reset facts"
+                )
+                if expected_success not in reset_output:
+                    raise RuntimeError(f"{name}: reset success contract missing: {reset_output}")
+                home_positions, home_velocities = require_robot_home(environment)
                 gazebo_after, gazebo_after_text = gazebo_attachment(environment)
                 pose_after, pose_after_text = gazebo_pose(environment)
                 moveit_after = moveit_state(environment)
@@ -253,6 +340,7 @@ def main():
                 print(
                     f"PASS {name}: before(gazebo={str(seed_gazebo).lower()},"
                     f"moveit={str(seed_moveit).lower()}) -> detached canonical; "
+                    f"joints={home_positions} velocities={home_velocities}; "
                     f"reset={reset_output.strip().splitlines()[-1]}"
                 )
             succeeded = True
