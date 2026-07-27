@@ -119,6 +119,8 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
 {
   if (!facts.table_in_world || !facts.table_world_pose ||
       !posesMatch(*facts.table_world_pose, profile.table_pose, profile) ||
+      !facts.pedestal_in_world || !facts.pedestal_world_pose ||
+      !posesMatch(*facts.pedestal_world_pose, profile.pedestal_pose, profile) ||
       !observed.gazebo_coke_pose_world || !observed.gazebo_coke_attached ||
       !observed.gazebo_coke_stationary || !*observed.gazebo_coke_stationary) {
     return false;

@@ -81,6 +81,17 @@ moveit_msgs::msg::CollisionObject makeTableCollisionObject(const MoveItSceneGeom
   return object;
 }
 
+moveit_msgs::msg::CollisionObject makePedestalCollisionObject(
+  const MoveItSceneGeometry & geometry, const Pose3d & pose)
+{
+  auto object = baseObject(geometry, geometry.pedestal_id, pose);
+  shape_msgs::msg::SolidPrimitive primitive;
+  primitive.type = shape_msgs::msg::SolidPrimitive::BOX;
+  primitive.dimensions.assign(geometry.pedestal_size.begin(), geometry.pedestal_size.end());
+  object.primitives.push_back(primitive);
+  return object;
+}
+
 class MoveItSceneAdapter::Impl
 {
 public:
@@ -148,10 +159,20 @@ ActionResult MoveItSceneAdapter::upsertTableWorldPose(const Pose3d & pose)
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
+ActionResult MoveItSceneAdapter::upsertPedestalWorldPose(const Pose3d & pose)
+{
+  if (!impl_->planning_scene.applyCollisionObject(
+        makePedestalCollisionObject(impl_->geometry, pose))) {
+    return sceneFailure("MOVEIT_PEDESTAL_UPSERT_APPLY_FAILED",
+                        "Failed to apply the canonical pedestal collision object");
+  }
+  return {ActionStatus::SUCCEEDED, std::nullopt};
+}
+
 std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
 {
-  const auto objects =
-    impl_->planning_scene.getObjects({impl_->geometry.coke_id, impl_->geometry.table_id});
+  const auto objects = impl_->planning_scene.getObjects(
+    {impl_->geometry.coke_id, impl_->geometry.table_id, impl_->geometry.pedestal_id});
   const auto attached_objects = impl_->planning_scene.getAttachedObjects({impl_->geometry.coke_id});
 
   MoveItSceneState state;
@@ -164,6 +185,11 @@ std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
   state.table_in_world = table != objects.end();
   if (state.table_in_world) {
     state.table_world_pose = fromMessage(table->second.pose);
+  }
+  const auto pedestal = objects.find(impl_->geometry.pedestal_id);
+  state.pedestal_in_world = pedestal != objects.end();
+  if (state.pedestal_in_world) {
+    state.pedestal_world_pose = fromMessage(pedestal->second.pose);
   }
   const auto attached = attached_objects.find(impl_->geometry.coke_id);
   state.coke_attached = attached != attached_objects.end();

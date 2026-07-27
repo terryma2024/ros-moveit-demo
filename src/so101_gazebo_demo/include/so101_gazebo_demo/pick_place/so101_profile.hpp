@@ -26,6 +26,9 @@ struct SO101Profile
   std::string table_object{"table"};
   std::array<double, 3> table_size{0.50, 0.60, 0.04};
   Pose3d table_pose{0.0, -0.20, 0.10, 0.0, 0.0, 0.0, 1.0};
+  std::string pedestal_object{"base_pedestal"};
+  std::array<double, 3> pedestal_size{0.18, 0.18, 0.10};
+  Pose3d pedestal_pose{0.0, 0.0, 0.17, 0.0, 0.0, 0.0, 1.0};
   double coke_radius{0.033};
   double coke_height{0.122};
   Pose3d coke_pose{0.02, -0.28, 0.181, 0.0, 0.0, 0.0, 1.0};
@@ -33,6 +36,8 @@ struct SO101Profile
   Pose3d calibrated_grasp_relative_pose{
     0.0214000012, -0.0000000417348703, -0.124949,
     -0.000000365, 0.000000355, 0.717237013, 0.696829296};
+  std::vector<double> arm_home_positions{0.0, 0.0, 0.0, 0.0, 0.0};
+  double q6_home{0.0};
   double q6_preopen{0.795386732};
   double q6_contact{0.662818811};
   double q6_full_open{1.7};

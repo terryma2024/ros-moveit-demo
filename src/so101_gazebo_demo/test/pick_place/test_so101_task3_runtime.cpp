@@ -61,6 +61,10 @@ public:
   {
     return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
   }
+  pick_place::ActionResult upsertPedestalWorldPose(const pick_place::Pose3d &) override
+  {
+    return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+  }
   std::optional<pick_place::MoveItSceneState> observe() override
   {
     return pick_place::MoveItSceneState{};

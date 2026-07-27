@@ -34,6 +34,7 @@ struct RunResult { RunStatus status{RunStatus::ERROR}; State current_state{State
 [[nodiscard]] const char * toString(RunMode) noexcept;
 [[nodiscard]] std::optional<State> stateFromString(std::string_view);
 [[nodiscard]] std::optional<RunMode> runModeFromString(std::string_view);
+[[nodiscard]] std::string formatFailure(const Failure &);
 [[nodiscard]] bool isTerminal(State) noexcept;
 [[nodiscard]] bool isAction(State) noexcept;
 }  // namespace so101_gazebo_demo::pick_place

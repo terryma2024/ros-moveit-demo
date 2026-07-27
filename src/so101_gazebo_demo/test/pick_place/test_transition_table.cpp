@@ -30,3 +30,18 @@ TEST(TransitionTable, AttachMoveItFailureSelectsCompleteSafeRecoveryChain)
     EXPECT_EQ(expected[index], state_machine.advance(pick_place::ActionStatus::SUCCEEDED));
   }
 }
+
+TEST(FailureFormatting, PrintsMessageAndSortedMetricsForRuntimeDiagnosis)
+{
+  const pick_place::Failure failure{
+    pick_place::FailureCategory::GRIPPER,
+    "Q6_TARGET_OUT_OF_TOLERANCE",
+    "Joint 6 is outside the configured target tolerance",
+    {{"expected_q6", 0.795386732}, {"actual_q6", 1.7}}};
+
+  EXPECT_EQ(
+    "failure=Q6_TARGET_OUT_OF_TOLERANCE\n"
+    "failure_message=Joint 6 is outside the configured target tolerance\n"
+    "failure_metrics actual_q6=1.7 expected_q6=0.795386732",
+    pick_place::formatFailure(failure));
+}

@@ -70,7 +70,9 @@ void printState(const pick_place::MoveItSceneState & state)
             << " touch_links=" << (state.touch_links.empty() ? "-" : touch_links.str())
             << " coke_pose=" << poseText(state.coke_world_pose)
             << " table_in_world=" << state.table_in_world
-            << " table_pose=" << poseText(state.table_world_pose) << '\n';
+            << " table_pose=" << poseText(state.table_world_pose)
+            << " pedestal_in_world=" << state.pedestal_in_world
+            << " pedestal_pose=" << poseText(state.pedestal_world_pose) << '\n';
 }
 
 pick_place::ActionResult timedOut(std::string code, std::string message)
@@ -103,7 +105,8 @@ int main(int argc, char * argv[])
   pick_place::ActionResult result;
   try {
     const pick_place::MoveItSceneGeometry geometry{profile.world_frame, profile.table_object,
-                                                   profile.table_size,  profile.coke_model,
+                                                   profile.table_size, profile.pedestal_object,
+                                                   profile.pedestal_size, profile.coke_model,
                                                    profile.coke_height, profile.coke_radius};
     auto adapter =
       std::make_shared<pick_place::MoveItSceneAdapter>(node, profile.planning_group, geometry);
@@ -136,6 +139,9 @@ int main(int argc, char * argv[])
     } else if (operation == "upsert") {
       result = adapter->upsertTableWorldPose(profile.table_pose);
       if (result.status == pick_place::ActionStatus::SUCCEEDED) {
+        result = adapter->upsertPedestalWorldPose(profile.pedestal_pose);
+      }
+      if (result.status == pick_place::ActionStatus::SUCCEEDED) {
         result = adapter->upsertCokeWorldPose(profile.coke_pose);
       }
       if (result.status == pick_place::ActionStatus::SUCCEEDED) {
@@ -147,7 +153,9 @@ int main(int argc, char * argv[])
           if (state && !state->coke_attached && state->coke_in_world && state->coke_world_pose &&
               poseMatches(*state->coke_world_pose, profile.coke_pose) && state->table_in_world &&
               state->table_world_pose &&
-              poseMatches(*state->table_world_pose, profile.table_pose)) {
+              poseMatches(*state->table_world_pose, profile.table_pose) &&
+              state->pedestal_in_world && state->pedestal_world_pose &&
+              poseMatches(*state->pedestal_world_pose, profile.pedestal_pose)) {
             printState(*state);
             converged = true;
             break;

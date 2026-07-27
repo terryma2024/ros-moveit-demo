@@ -165,6 +165,27 @@ TEST(SO101GripperTransitionContract, ActionSuccessCannotReplaceFreshStoppedQ6Pos
   EXPECT_TRUE(contract->validate(before, correct, action).ok);
 }
 
+TEST(SO101GripperTransitionContract, FailureReportsExpectedAndActualEndpointEvidence)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto contract = pick_place::makeSO101GripperContract(
+    {pick_place::State::PREPARE_OPEN_GRIPPER,
+     pick_place::SO101GripperTarget::PREOPEN, false}, profile);
+  const auto before = snapshot(profile.q6_full_open);
+  const auto after = snapshot(profile.q6_full_open, 0.125);
+  const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+
+  const auto validation = contract->validate(before, after, action);
+
+  ASSERT_FALSE(validation.ok);
+  ASSERT_FALSE(validation.failures.empty());
+  const auto & metrics = validation.failures.front().metrics;
+  EXPECT_DOUBLE_EQ(profile.q6_preopen, metrics.at("expected_q6"));
+  EXPECT_DOUBLE_EQ(profile.q6_full_open, metrics.at("actual_q6"));
+  EXPECT_DOUBLE_EQ(profile.preopen_width, metrics.at("expected_gripper_width"));
+  EXPECT_DOUBLE_EQ(0.125, metrics.at("actual_q6_velocity"));
+}
+
 TEST(SO101GripperTransitionContract, CloseRejectsCokeSixDegreeDriftUsingProfileTolerance)
 {
   const auto & profile = pick_place::SO101Profile::canonical();

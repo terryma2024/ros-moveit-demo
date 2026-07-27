@@ -25,8 +25,9 @@ ActionResult succeeded()
 MoveItSceneGeometry canonicalGeometry()
 {
   const auto & profile = SO101Profile::canonical();
-  return {profile.world_frame, "table", profile.table_size, profile.coke_model, profile.coke_height,
-          profile.coke_radius};
+  return {profile.world_frame, "table", profile.table_size,
+          "base_pedestal", profile.pedestal_size,
+          profile.coke_model, profile.coke_height, profile.coke_radius};
 }
 
 MoveItAttachmentSpec canonicalAttachment()
@@ -82,6 +83,11 @@ public:
     return succeeded();
   }
 
+  ActionResult upsertPedestalWorldPose(const Pose3d &) override
+  {
+    return succeeded();
+  }
+
   std::optional<MoveItSceneState> observe() override
   {
     ++observe_calls;
@@ -129,6 +135,20 @@ TEST(SO101MoveItSceneGeometry, BuildsExactProfileDrivenCollisionObjects)
   EXPECT_DOUBLE_EQ(-0.20, table.pose.position.y);
   EXPECT_DOUBLE_EQ(0.10, table.pose.position.z);
   EXPECT_DOUBLE_EQ(1.0, table.pose.orientation.w);
+
+  const auto pedestal = makePedestalCollisionObject(geometry, profile.pedestal_pose);
+  ASSERT_EQ(1U, pedestal.primitives.size());
+  EXPECT_EQ("world", pedestal.header.frame_id);
+  EXPECT_EQ("base_pedestal", pedestal.id);
+  EXPECT_EQ(shape_msgs::msg::SolidPrimitive::BOX, pedestal.primitives.front().type);
+  ASSERT_EQ(3U, pedestal.primitives.front().dimensions.size());
+  EXPECT_DOUBLE_EQ(0.18, pedestal.primitives.front().dimensions[0]);
+  EXPECT_DOUBLE_EQ(0.18, pedestal.primitives.front().dimensions[1]);
+  EXPECT_DOUBLE_EQ(0.10, pedestal.primitives.front().dimensions[2]);
+  EXPECT_DOUBLE_EQ(0.0, pedestal.pose.position.x);
+  EXPECT_DOUBLE_EQ(0.0, pedestal.pose.position.y);
+  EXPECT_DOUBLE_EQ(0.17, pedestal.pose.position.z);
+  EXPECT_DOUBLE_EQ(1.0, pedestal.pose.orientation.w);
 
   const auto coke = makeCokeCollisionObject(geometry, profile.coke_pose);
   ASSERT_EQ(1U, coke.primitives.size());

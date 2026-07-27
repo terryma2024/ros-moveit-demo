@@ -38,6 +38,8 @@ struct MotionPlanningSceneFacts
   std::optional<Pose3d> attached_relative_pose;
   std::optional<Pose3d> current_gripper_pose_world;
   std::optional<Pose3d> current_tcp_pose_world;
+  bool pedestal_in_world{false};
+  std::optional<Pose3d> pedestal_world_pose;
 };
 
 struct JointSegmentPlan
