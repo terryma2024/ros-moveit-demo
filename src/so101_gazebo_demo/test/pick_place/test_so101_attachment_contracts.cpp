@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
 #include <set>
+#include <vector>
 
 #include "so101_gazebo_demo/pick_place/so101_attachment_contracts.hpp"
 
@@ -41,6 +44,15 @@ pick_place::ActionResult succeeded()
 pick_place::TransitionKey key(pick_place::State from, pick_place::State to)
 {
   return {from, to};
+}
+
+void setCokePose(pick_place::WorldSnapshot & snapshot, const pick_place::Pose3d & pose)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  snapshot.gazebo_coke_pose_world = pose;
+  if (!snapshot.moveit_coke_attached.value_or(true)) {
+    snapshot.moveit_world_object_poses[profile.coke_model] = pose;
+  }
 }
 
 }  // namespace
@@ -114,6 +126,8 @@ TEST(SO101AttachmentContracts, ForwardDetachOrderUsesCurrentDualWorldFacts)
   auto after_gazebo = world(false, true);
   before.joint_positions[profile.gripper_joint] = profile.q6_preopen;
   after_gazebo.joint_positions[profile.gripper_joint] = profile.q6_preopen;
+  setCokePose(before, profile.place_coke_pose);
+  setCokePose(after_gazebo, profile.place_coke_pose);
   EXPECT_TRUE(gazebo_contract->validate(before, after_gazebo, succeeded()).ok);
   after_gazebo.gazebo_coke_attached = true;
   EXPECT_FALSE(gazebo_contract->validate(before, after_gazebo, succeeded()).ok);
@@ -127,6 +141,8 @@ TEST(SO101AttachmentContracts, ForwardDetachOrderUsesCurrentDualWorldFacts)
   auto after_moveit = world(false, false);
   before.joint_positions[profile.gripper_joint] = profile.q6_preopen;
   after_moveit.joint_positions[profile.gripper_joint] = profile.q6_preopen;
+  setCokePose(before, profile.place_coke_pose);
+  setCokePose(after_moveit, profile.place_coke_pose);
   EXPECT_TRUE(moveit_contract->validate(before, after_moveit, succeeded()).ok);
   after_moveit.moveit_world_object_poses.erase(profile.coke_model);
   EXPECT_FALSE(moveit_contract->validate(before, after_moveit, succeeded()).ok);
@@ -141,13 +157,15 @@ TEST(SO101AttachmentContracts, SyncComparesIndependentGazeboAndMoveItSixDegreePo
   auto after = world(false, false);
   before.joint_positions[profile.gripper_joint] = profile.q6_preopen;
   after.joint_positions[profile.gripper_joint] = profile.q6_preopen;
-  pick_place::Pose3d observed{0.11, -0.24, 0.183, 0.0, 0.0, 0.198669331, 0.980066578};
-  after.gazebo_coke_pose_world = observed;
-  after.moveit_world_object_poses[profile.coke_model] = observed;
+  const auto observed = profile.place_coke_pose;
+  setCokePose(before, observed);
+  setCokePose(after, observed);
   EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
 
-  after.moveit_world_object_poses[profile.coke_model].qz = 0.0;
-  after.moveit_world_object_poses[profile.coke_model].qw = 1.0;
+  after.moveit_world_object_poses[profile.coke_model].qz =
+    std::sin(profile.coke_orientation_drift_tolerance_rad);
+  after.moveit_world_object_poses[profile.coke_model].qw =
+    std::cos(profile.coke_orientation_drift_tolerance_rad);
   EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
 }
 
@@ -176,4 +194,78 @@ TEST(SO101AttachmentContracts, ActionSuccessAloneNeverSatisfiesMissingObservatio
     pick_place::SO101Profile::canonical());
   pick_place::WorldSnapshot empty;
   EXPECT_FALSE(contract->validate(empty, empty, succeeded()).ok);
+}
+
+TEST(SO101AttachmentContracts, EveryDetachAndSyncRequiresNoDriftAtExpectedSupport)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  struct Case
+  {
+    pick_place::TransitionKey transition;
+    pick_place::WorldSnapshot before;
+    pick_place::WorldSnapshot after;
+    pick_place::Pose3d expected_support;
+  };
+  std::vector<Case> cases{
+    {key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT),
+     world(true, true), world(false, true), profile.place_coke_pose},
+    {key(pick_place::State::DETACH_MOVEIT, pick_place::State::SYNC_WORLD_OBJECT),
+     world(false, true), world(false, false), profile.place_coke_pose},
+    {key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT),
+     world(false, false), world(false, false), profile.place_coke_pose},
+    {key(pick_place::State::RECOVER_DETACH_GAZEBO,
+         pick_place::State::RECOVER_DETACH_MOVEIT),
+     world(false, false), world(false, false), profile.coke_pose},
+    {key(pick_place::State::RECOVER_DETACH_MOVEIT,
+         pick_place::State::RECOVER_SYNC_WORLD_OBJECT),
+     world(false, false), world(false, false), profile.coke_pose},
+    {key(pick_place::State::RECOVER_SYNC_WORLD_OBJECT,
+         pick_place::State::RECOVER_RETREAT),
+     world(false, false), world(false, false), profile.coke_pose},
+  };
+  for (auto & test_case : cases) {
+    for (auto * snapshot : {&test_case.before, &test_case.after}) {
+      snapshot->joint_positions[profile.gripper_joint] = profile.q6_preopen;
+      snapshot->gazebo_coke_pose_world = test_case.expected_support;
+      if (!snapshot->moveit_coke_attached.value_or(true)) {
+        snapshot->moveit_world_object_poses[profile.coke_model] = test_case.expected_support;
+      }
+    }
+    const auto contract = pick_place::makeSO101AttachmentContract(
+      test_case.transition, profile);
+    ASSERT_TRUE(contract->validate(test_case.before, test_case.after, succeeded()).ok)
+      << pick_place::toString(test_case.transition.from);
+
+    auto drifted = test_case.after;
+    drifted.gazebo_coke_pose_world->x += profile.coke_position_drift_tolerance * 2.0;
+    if (!drifted.moveit_coke_attached.value_or(true)) {
+      drifted.moveit_world_object_poses[profile.coke_model] = *drifted.gazebo_coke_pose_world;
+    }
+    EXPECT_FALSE(contract->validate(test_case.before, drifted, succeeded()).ok)
+      << pick_place::toString(test_case.transition.from) << " accepted Coke drift";
+
+    auto unsupported_before = test_case.before;
+    auto unsupported_after = test_case.after;
+    unsupported_before.gazebo_coke_pose_world->y +=
+      profile.coke_position_drift_tolerance * 2.0;
+    unsupported_after.gazebo_coke_pose_world = unsupported_before.gazebo_coke_pose_world;
+    if (!unsupported_after.moveit_coke_attached.value_or(true)) {
+      unsupported_after.moveit_world_object_poses[profile.coke_model] =
+        *unsupported_after.gazebo_coke_pose_world;
+    }
+    EXPECT_FALSE(contract->validatePrecondition(unsupported_before).ok)
+      << pick_place::toString(test_case.transition.from)
+      << " accepted unsupported Coke precondition";
+    EXPECT_FALSE(contract->validate(unsupported_before, unsupported_after, succeeded()).ok)
+      << pick_place::toString(test_case.transition.from) << " accepted unsupported Coke pose";
+
+    auto nonfinite = test_case.after;
+    nonfinite.gazebo_coke_pose_world->x = std::numeric_limits<double>::quiet_NaN();
+    if (!nonfinite.moveit_coke_attached.value_or(true)) {
+      nonfinite.moveit_world_object_poses[profile.coke_model] =
+        *nonfinite.gazebo_coke_pose_world;
+    }
+    EXPECT_FALSE(contract->validate(test_case.before, nonfinite, succeeded()).ok)
+      << pick_place::toString(test_case.transition.from) << " accepted nonfinite Coke pose";
+  }
 }
