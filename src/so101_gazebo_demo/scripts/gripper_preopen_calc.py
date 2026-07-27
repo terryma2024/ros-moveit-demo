@@ -614,8 +614,9 @@ def render_width_calibration_header(calibration: WidthCalibration) -> str:
         '// DO NOT EDIT: generated from the real SO-101 STL meshes by:',
         '// python3 scripts/gripper_preopen_calc.py --mesh-dir meshes/so101 \\',
         '//   --urdf-path urdf/so101_base.xacro --print-calibration-header \\',
-        '//   --calibration-q-min 0.660818811 --calibration-q-max 0.709194871 \\',
-        '//   --calibration-samples 49',
+        f'//   --calibration-q-min {calibration.samples[0][0]:.9f} '
+        f'--calibration-q-max {calibration.samples[-1][0]:.9f} \\',
+        f'//   --calibration-samples {len(calibration.samples)}',
         '',
         '#include <array>',
         '#include <string_view>',

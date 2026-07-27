@@ -51,6 +51,7 @@ private:
     std::optional<WorldSnapshot> snapshot;
     std::optional<Failure> failure;
   };
+  [[nodiscard]] StopObservationResult observeAfterSuccessfulAction(State state) const;
   [[nodiscard]] StopObservationResult stopAndObserveAfterFailure(IStateExecutor & executor) const;
   [[nodiscard]] static RunResult error(Failure failure, std::uint64_t transition_count = 0);
 

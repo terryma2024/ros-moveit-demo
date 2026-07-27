@@ -88,7 +88,13 @@ struct Scenario
   std::optional<State> fail_execute;
   std::optional<State> fail_precondition;
   std::optional<State> fail_transition;
+  std::optional<State> transient_transition_state;
+  int transient_transition_failures{0};
+  std::string transient_transition_failure_code{"MOTION_JOINT_ENDPOINT_MISMATCH"};
   std::optional<int> fail_observation_call;
+  int observation_failure_count{1};
+  std::string observation_failure_code{"OBSERVATION_INJECTED"};
+  std::chrono::milliseconds observation_failure_delay{0};
   bool precondition_has_late_environment_failure{false};
   ActionResult cancel_result{ActionStatus::SUCCEEDED, std::nullopt};
   int observation_calls{0};
@@ -111,8 +117,13 @@ public:
   {
     scenario_.events.push_back("observe");
     ++scenario_.observation_calls;
-    if (scenario_.fail_observation_call == scenario_.observation_calls) {
-      return {std::nullopt, failure(FailureCategory::OBSERVATION, "OBSERVATION_INJECTED")};
+    if (scenario_.fail_observation_call &&
+        scenario_.observation_calls >= *scenario_.fail_observation_call &&
+        scenario_.observation_calls <
+          *scenario_.fail_observation_call + scenario_.observation_failure_count) {
+      std::this_thread::sleep_for(scenario_.observation_failure_delay);
+      return {std::nullopt,
+              failure(FailureCategory::OBSERVATION, scenario_.observation_failure_code)};
     }
     return {scenario_.world, std::nullopt};
   }
@@ -279,6 +290,14 @@ public:
   {
     scenario_.events.push_back(event("transition-validate", state_));
     ++scenario_.transition_calls;
+    if (scenario_.transient_transition_state == state_ &&
+        scenario_.transient_transition_failures > 0) {
+      --scenario_.transient_transition_failures;
+      return {false,
+              {failure(FailureCategory::POSTCONDITION,
+                       scenario_.transient_transition_failure_code)},
+              {}};
+    }
     if (scenario_.fail_transition == state_) {
       return {false, {failure(FailureCategory::POSTCONDITION, "POSTCONDITION_INJECTED")}, {}};
     }
@@ -553,6 +572,68 @@ TEST(PureRunnerIntegration, ExecuteStopCheckpointResumesWithFreshRunnerAndObserv
   EXPECT_EQ((std::vector<State>{State::MOVE_ABOVE_OBJECT, State::DESCEND}), result.state_trace);
   EXPECT_EQ(1, resumed.scenario.executor_calls);
   EXPECT_EQ(1, resumed.store.load_calls);
+}
+
+TEST(PureRunnerIntegration, MotionWaitsForAStablePostExecutionObservation)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_observation_call = 4;
+  harness.scenario.observation_failure_code =
+    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
+  harness.scenario.observation_failure_count = 16;
+  harness.scenario.observation_failure_delay = std::chrono::milliseconds(600);
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(State::MOVE_ABOVE_OBJECT, result.current_state);
+  EXPECT_EQ(State::DESCEND, result.next_state);
+  EXPECT_EQ(20, harness.scenario.observation_calls);
+  EXPECT_EQ(0, harness.scenario.cancel_calls);
+  ASSERT_TRUE(harness.store.latest);
+  EXPECT_EQ(State::MOVE_ABOVE_OBJECT, harness.store.latest->last_completed_state);
+}
+
+TEST(PureRunnerIntegration, SuccessfulNonMotionActionWaitsForAConsistentObservation)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_observation_call = 2;
+  harness.scenario.observation_failure_code =
+    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
+  harness.scenario.observation_failure_count = 2;
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, result.current_state);
+  EXPECT_EQ(State::MOVE_ABOVE_OBJECT, result.next_state);
+  EXPECT_EQ(4, harness.scenario.observation_calls);
+  EXPECT_EQ(1, harness.scenario.executor_calls);
+  EXPECT_EQ(0, harness.scenario.cancel_calls);
+  ASSERT_TRUE(harness.store.latest);
+  EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, harness.store.latest->last_completed_state);
+}
+
+TEST(PureRunnerIntegration, MotionWaitsForEndpointPostconditionConvergence)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.transient_transition_state = State::MOVE_ABOVE_OBJECT;
+  harness.scenario.transient_transition_failures = 1;
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(State::MOVE_ABOVE_OBJECT, result.current_state);
+  EXPECT_EQ(State::DESCEND, result.next_state);
+  EXPECT_EQ(5, harness.scenario.observation_calls);
+  EXPECT_EQ(3, harness.scenario.transition_calls);
+  EXPECT_EQ(0, harness.scenario.cancel_calls);
 }
 
 TEST(PureRunnerIntegration, ResumeValidatesCommonAndTransitionBoundaryBeforeAnyAction)

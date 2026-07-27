@@ -14,14 +14,18 @@ namespace so101_gazebo_demo::pick_place
 double gripperWidthAtSection(double q6, const SO101Profile & profile)
 {
   namespace calibration = gripper_calibration;
+  constexpr double kCalibrationEndpointEpsilon = 1e-9;
   if (!std::isfinite(q6) ||
       profile.gripper_geometry_model_version != calibration::kModelVersion ||
       profile.gripper_geometry_model_fingerprint != calibration::kModelFingerprint ||
       std::abs(profile.grasp_section_depth - calibration::kGraspDepth) > 1e-12 ||
       std::abs(profile.coke_radius * 2.0 - calibration::kCokeDiameter) > 1e-12 ||
-      q6 < calibration::kSamples.front().q6 || q6 > calibration::kSamples.back().q6) {
+      q6 < calibration::kSamples.front().q6 - kCalibrationEndpointEpsilon ||
+      q6 > calibration::kSamples.back().q6 + kCalibrationEndpointEpsilon) {
     return std::numeric_limits<double>::quiet_NaN();
   }
+  q6 = std::clamp(q6, calibration::kSamples.front().q6,
+                  calibration::kSamples.back().q6);
   const auto upper = std::lower_bound(
     calibration::kSamples.begin(), calibration::kSamples.end(), q6,
     [](const calibration::CalibrationSample & sample, double value) {

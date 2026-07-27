@@ -33,17 +33,19 @@ struct SO101Profile
   Pose3d calibrated_grasp_relative_pose{
     0.0214000012, -0.0000000417348703, -0.124949,
     -0.000000365, 0.000000355, 0.717237013, 0.696829296};
-  double q6_preopen{0.707194871};
+  double q6_preopen{0.795386732};
   double q6_contact{0.662818811};
   double q6_full_open{1.7};
-  double preopen_width{0.070};
+  double preopen_width{0.076};
   double contact_width{0.066};
   double grasp_section_depth{0.020};
   std::string gripper_geometry_model_version{"so101-gripper-d20-mesh-v1"};
   std::string gripper_geometry_model_fingerprint{
-    "33be401ad080298b31265a7ab60f4e233da4d3abd6aafb090f6a4fce7bed2a4e"};
+    "09bca45c3397d9c53fbbf995944d002a52b28eb902cf854f0e5fe9e58dcc51bb"};
   double q6_tolerance{0.002};
   double width_tolerance{0.0005};
+  double contact_q6_stop_tolerance{0.010};
+  double contact_width_oversize_tolerance{0.001};
   double q6_velocity_tolerance{0.01};
   double coke_position_drift_tolerance{0.003};
   double coke_orientation_drift_tolerance_rad{0.035};

@@ -133,7 +133,7 @@ TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
     spp::State::MOVE_ABOVE_PLACE, spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
     spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT, spp::State::RECOVER_MOVE_ABOVE_PICK,
     spp::State::RECOVER_DESCEND_TO_PICK, spp::State::RECOVER_RETREAT};
-  EXPECT_EQ(policy.version(), "so101-fixed-table-d20-v3");
+  EXPECT_EQ(policy.version(), "so101-fixed-table-d20-v5");
   for (const auto state : states) {
     const auto spec = policy.spec(state);
     ASSERT_TRUE(spec) << spp::toString(state);
@@ -141,7 +141,7 @@ TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
     EXPECT_EQ(spec->target.joint_names,
               (std::vector<std::string>{"1", "2", "3", "4", "5"}));
     EXPECT_FALSE(spec->target.joint_waypoints.empty());
-    EXPECT_TRUE(spec->expected_gripper_q6 == 0.707194871 ||
+    EXPECT_TRUE(spec->expected_gripper_q6 == 0.795386732 ||
                 spec->expected_gripper_q6 == 0.662818811 ||
                 spec->expected_gripper_q6 == 1.7);
   }
@@ -154,6 +154,8 @@ TEST(SO101FixedMotionTargets, BindsPolicyVersionToAllMotionConstants)
     {"so101-fixed-table-d20-v1", "a73316019c50dbe4"},
     {"so101-fixed-table-d20-v2", "7a4e38c05f8d9057"},
     {"so101-fixed-table-d20-v3", "d139c196ee64caed"},
+    {"so101-fixed-table-d20-v4", "d641dd0229d61b17"},
+    {"so101-fixed-table-d20-v5", "d641dd0229d61b17"},
   };
   ASSERT_EQ(version_to_golden_fingerprint.count(policy.version()), 1U);
   EXPECT_EQ(policyFingerprint(policy), version_to_golden_fingerprint.at(policy.version()));
@@ -338,7 +340,7 @@ TEST(SO101FixedMotionTargets, LocksPlaceCoordinatesContinuityQ6AndJointMargins)
   EXPECT_DOUBLE_EQ(above_place->validation.endpoint_position.y, -0.25);
   EXPECT_DOUBLE_EQ(place->validation.endpoint_position.x, -0.08);
   EXPECT_DOUBLE_EQ(place->validation.endpoint_position.y, -0.25);
-  EXPECT_DOUBLE_EQ(descend->expected_gripper_q6, 0.707194871);
+  EXPECT_DOUBLE_EQ(descend->expected_gripper_q6, 0.795386732);
   EXPECT_DOUBLE_EQ(lift->expected_gripper_q6, 0.662818811);
   EXPECT_DOUBLE_EQ(policy.spec(spp::State::RETREAT)->expected_gripper_q6, 1.7);
   EXPECT_DOUBLE_EQ(policy.spec(spp::State::RECOVER_RETREAT)->expected_gripper_q6, 1.7);
