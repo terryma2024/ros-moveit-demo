@@ -63,6 +63,60 @@ double orientationDistance(const Pose3d & first, const Pose3d & second)
   return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
 }
 
+void requireAttachmentEvidence(ValidationResult & result, const WorldSnapshot & world,
+                               const SO101GripperStateConfig & config,
+                               const SO101Profile & profile)
+{
+  const auto table = world.moveit_world_object_poses.find(profile.table_object);
+  if (!world.gazebo_coke_pose_world || !world.gazebo_coke_stationary ||
+      !*world.gazebo_coke_stationary || !world.gazebo_coke_attached ||
+      !world.moveit_coke_attached || table == world.moveit_world_object_poses.end()) {
+    result.failures.push_back({FailureCategory::OBSERVATION,
+                               "GRIPPER_ENVIRONMENT_EVIDENCE_INCOMPLETE",
+                               "Gripper transitions require independent Coke and table evidence",
+                               {}});
+    return;
+  }
+  const auto exact_moveit_detached = [&]() {
+    return !*world.moveit_coke_attached &&
+           world.moveit_world_object_poses.count(profile.coke_model) == 1 &&
+           !world.moveit_coke_attached_link && world.moveit_coke_touch_links.empty() &&
+           !world.moveit_coke_attached_relative_pose;
+  };
+  const std::set<std::string> touch_links(profile.moveit_touch_links.begin(),
+                                          profile.moveit_touch_links.end());
+  const auto exact_moveit_attached = [&]() {
+    return *world.moveit_coke_attached &&
+           world.moveit_world_object_poses.count(profile.coke_model) == 0 &&
+           world.moveit_coke_attached_link &&
+           *world.moveit_coke_attached_link == profile.moveit_attach_link &&
+           world.moveit_coke_touch_links == touch_links &&
+           world.moveit_coke_attached_relative_pose &&
+           positionDistance(*world.moveit_coke_attached_relative_pose,
+                            profile.calibrated_grasp_relative_pose) <=
+             profile.coke_position_drift_tolerance &&
+           orientationDistance(*world.moveit_coke_attached_relative_pose,
+                               profile.calibrated_grasp_relative_pose) <=
+             profile.coke_orientation_drift_tolerance_rad;
+  };
+  bool valid = false;
+  if (config.state == State::PREPARE_OPEN_GRIPPER || config.state == State::CLOSE_GRIPPER) {
+    valid = !*world.gazebo_coke_attached && exact_moveit_detached();
+  } else if (config.state == State::OPEN_GRIPPER) {
+    valid = *world.gazebo_coke_attached && exact_moveit_attached();
+  } else {
+    valid = *world.moveit_coke_attached ? exact_moveit_attached()
+                                        : exact_moveit_detached();
+  }
+  if (!valid) {
+    result.failures.push_back({FailureCategory::WORLD_INCONSISTENCY,
+                               "GRIPPER_ATTACHMENT_STATE_INVALID",
+                               "Attachment facts do not match the gripper state's safety boundary",
+                               {}});
+  }
+  result.ok = result.failures.empty();
+}
+
 class GripperContract final : public SO101Contract
 {
 public:
@@ -92,7 +146,9 @@ public:
       return validationFailure(FailureCategory::GRIPPER, "Q6_NOT_STATIONARY",
                                "Joint 6 must be stationary before a new command");
     }
-    return {true, {}, {}};
+    ValidationResult result{true, {}, {}};
+    requireAttachmentEvidence(result, before, config_, profile_);
+    return result;
   }
 
   ValidationResult validate(const WorldSnapshot & before, const WorldSnapshot & after,
@@ -109,7 +165,11 @@ public:
     }
     const auto [target_q6, target_width] = targetFor(config_.target, profile_);
     append(result, validateSO101GripperTarget(after, config_.target, profile_));
-    if (config_.state == State::CLOSE_GRIPPER) {
+    requireAttachmentEvidence(result, after, config_, profile_);
+    if (config_.state == State::PREPARE_OPEN_GRIPPER ||
+        config_.state == State::CLOSE_GRIPPER ||
+        config_.state == State::OPEN_GRIPPER ||
+        config_.state == State::RECOVER_OPEN_GRIPPER) {
       if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
         result.failures.push_back({FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
                                    "Coke poses are required before and after close", {}});
@@ -122,13 +182,13 @@ public:
         result.metrics["coke_orientation_drift_rad"] = orientation_drift;
         if (position_drift > profile_.coke_position_drift_tolerance) {
           result.failures.push_back({FailureCategory::POSTCONDITION, "COKE_POSITION_DRIFT",
-                                     "Close pushed Coke beyond the configured position tolerance",
+                                     "Gripper motion moved Coke beyond the configured position tolerance",
                                      {}});
         }
         if (orientation_drift > profile_.coke_orientation_drift_tolerance_rad) {
           result.failures.push_back(
             {FailureCategory::POSTCONDITION, "COKE_ORIENTATION_DRIFT",
-             "Close rotated Coke beyond the configured orientation tolerance", {}});
+             "Gripper motion rotated Coke beyond the configured orientation tolerance", {}});
         }
       }
       if (!after.gazebo_coke_stationary || !*after.gazebo_coke_stationary) {

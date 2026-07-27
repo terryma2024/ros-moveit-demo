@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <set>
@@ -22,6 +23,7 @@ struct CurrentJointStateEvidence
   std::vector<double> velocities;
   std::optional<double> gripper_position;
   std::optional<double> gripper_velocity;
+  std::chrono::steady_clock::time_point received_at{};
 };
 
 struct MotionPlanningSceneFacts
@@ -35,6 +37,7 @@ struct MotionPlanningSceneFacts
   std::optional<Pose3d> coke_world_pose;
   std::optional<Pose3d> attached_relative_pose;
   std::optional<Pose3d> current_gripper_pose_world;
+  std::optional<Pose3d> current_tcp_pose_world;
 };
 
 struct JointSegmentPlan

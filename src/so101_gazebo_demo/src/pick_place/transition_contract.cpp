@@ -1,13 +1,16 @@
 #include "so101_gazebo_demo/pick_place/transition_contract.hpp"
 
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
+#include <stdexcept>
 
 namespace so101_gazebo_demo::pick_place
 {
 void TransitionContractRegistry::registerContract(
   TransitionKey key, std::shared_ptr<const ITransitionContract> contract)
 {
-  contracts_[key] = std::move(contract);
+  if (!contract) throw std::invalid_argument("null contract");
+  if (contracts_.count(key)) throw std::logic_error("duplicate contract");
+  contracts_.emplace(key, std::move(contract));
 }
 
 bool TransitionContractRegistry::hasContract(TransitionKey key) const noexcept

@@ -50,7 +50,22 @@ pick_place::WorldSnapshot snapshot(double q6, double velocity = 0.0)
   world.gazebo_coke_stationary = true;
   world.gazebo_coke_attached = false;
   world.moveit_coke_attached = false;
+  const auto & profile = pick_place::SO101Profile::canonical();
+  world.moveit_world_object_poses[profile.table_object] = profile.table_pose;
+  world.moveit_world_object_poses[profile.coke_model] = profile.coke_pose;
   return world;
+}
+
+void setAttached(pick_place::WorldSnapshot & world)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  world.gazebo_coke_attached = true;
+  world.moveit_coke_attached = true;
+  world.moveit_world_object_poses.erase(profile.coke_model);
+  world.moveit_coke_attached_link = profile.moveit_attach_link;
+  world.moveit_coke_touch_links = {profile.moveit_touch_links.begin(),
+                                   profile.moveit_touch_links.end()};
+  world.moveit_coke_attached_relative_pose = profile.calibrated_grasp_relative_pose;
 }
 
 pick_place::ExecutionContext context(pick_place::State state,
@@ -155,26 +170,60 @@ TEST(SO101GripperTransitionContract, CloseRejectsCokeSixDegreeDriftUsingProfileT
   EXPECT_FALSE(orientation_drift.ok);
 }
 
-TEST(SO101GripperTransitionContract, OpenStatesDoNotRequireAttachmentFacts)
+TEST(SO101GripperTransitionContract, EnforcesStateSpecificIndependentAttachmentFacts)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
-  for (const auto state : {pick_place::State::PREPARE_OPEN_GRIPPER,
-                           pick_place::State::OPEN_GRIPPER,
-                           pick_place::State::RECOVER_OPEN_GRIPPER}) {
-    const auto target = state == pick_place::State::PREPARE_OPEN_GRIPPER
-                          ? pick_place::SO101GripperTarget::PREOPEN
-                          : pick_place::SO101GripperTarget::FULL_OPEN;
-    const auto contract = pick_place::makeSO101GripperContract(
-      {state, target, state == pick_place::State::RECOVER_OPEN_GRIPPER},
-      profile);
-    auto before = snapshot(profile.q6_contact);
-    auto after = snapshot(state == pick_place::State::PREPARE_OPEN_GRIPPER
-                            ? profile.q6_preopen : profile.q6_full_open);
-    before.gazebo_coke_attached.reset();
-    before.moveit_coke_attached.reset();
-    after.gazebo_coke_attached.reset();
-    after.moveit_coke_attached.reset();
-    EXPECT_TRUE(contract->validate(before, after, action).ok);
-  }
+  const auto prepare = pick_place::makeSO101GripperContract(
+    {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::SO101GripperTarget::PREOPEN, false},
+    profile);
+  auto detached_before = snapshot(profile.q6_contact);
+  auto detached_after = snapshot(profile.q6_preopen);
+  EXPECT_TRUE(prepare->validate(detached_before, detached_after, action).ok);
+  detached_after.gazebo_coke_attached.reset();
+  EXPECT_FALSE(prepare->validate(detached_before, detached_after, action).ok);
+
+  const auto open = pick_place::makeSO101GripperContract(
+    {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
+  auto attached_before = snapshot(profile.q6_contact);
+  auto attached_after = snapshot(profile.q6_full_open);
+  setAttached(attached_before);
+  setAttached(attached_after);
+  EXPECT_TRUE(open->validate(attached_before, attached_after, action).ok);
+  attached_after.moveit_coke_attached_link = "wrong";
+  EXPECT_FALSE(open->validate(attached_before, attached_after, action).ok);
+
+  const auto recovery = pick_place::makeSO101GripperContract(
+    {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, true},
+    profile);
+  EXPECT_TRUE(recovery->validate(snapshot(profile.q6_contact),
+                                 snapshot(profile.q6_full_open), action).ok);
+}
+
+TEST(SO101GripperTransitionContract, RecoveryOpenAcceptsOnlyInternallyExactMixedAttachmentFacts)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto recovery = pick_place::makeSO101GripperContract(
+    {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, true},
+    profile);
+  const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+
+  auto gazebo_only_before = snapshot(profile.q6_contact);
+  auto gazebo_only_after = snapshot(profile.q6_full_open);
+  gazebo_only_before.gazebo_coke_attached = true;
+  gazebo_only_after.gazebo_coke_attached = true;
+  EXPECT_TRUE(recovery->validatePrecondition(gazebo_only_before).ok);
+  EXPECT_TRUE(recovery->validate(gazebo_only_before, gazebo_only_after, action).ok);
+
+  auto moveit_only_before = snapshot(profile.q6_contact);
+  auto moveit_only_after = snapshot(profile.q6_full_open);
+  setAttached(moveit_only_before);
+  setAttached(moveit_only_after);
+  moveit_only_before.gazebo_coke_attached = false;
+  moveit_only_after.gazebo_coke_attached = false;
+  EXPECT_TRUE(recovery->validatePrecondition(moveit_only_before).ok);
+  EXPECT_TRUE(recovery->validate(moveit_only_before, moveit_only_after, action).ok);
+
+  moveit_only_after.moveit_coke_attached_link = "wrong";
+  EXPECT_FALSE(recovery->validate(moveit_only_before, moveit_only_after, action).ok);
 }

@@ -144,6 +144,16 @@ void requireExactMoveItAttachment(ValidationResult & result, const WorldSnapshot
     add(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_TOUCH_LINKS_MISMATCH",
         "MoveIt Coke touch links do not match the SO-101 profile");
   }
+  if (!snapshot.moveit_coke_attached_relative_pose ||
+      positionDistance(*snapshot.moveit_coke_attached_relative_pose,
+                       profile.calibrated_grasp_relative_pose) >
+        profile.coke_position_drift_tolerance ||
+      orientationDistance(*snapshot.moveit_coke_attached_relative_pose,
+                          profile.calibrated_grasp_relative_pose) >
+        profile.coke_orientation_drift_tolerance_rad) {
+    add(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_ATTACHED_RELATIVE_POSE_MISMATCH",
+        "MoveIt Coke attachment must preserve the calibrated full 6D relative pose");
+  }
   if (snapshot.moveit_world_object_poses.count(profile.coke_model) != 0) {
     add(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_ATTACHED_COKE_STILL_IN_WORLD",
         "Attached Coke must not remain in the MoveIt world");

@@ -21,6 +21,7 @@ GAZEBO_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_gazebo.launch.py'
 CONTROLLER_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_controller.launch.py'
 DISPLAY_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_display.launch.py'
 MOVEIT_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_moveit.launch.py'
+PICK_PLACE_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_pick_place.launch.py'
 PICK_PLACE_WORLD_TEST = PACKAGE_DIR / 'test' / 'test_so101_pick_place_world.py'
 
 
@@ -69,6 +70,30 @@ def test_gazebo_uses_canonical_base_height_default():
         declared_argument(GAZEBO_LAUNCH, 'base_height')
     )
     assert gazebo_default == '0.1899186'
+
+
+def test_pick_place_runtime_launch_is_safe_by_default_and_wires_all_cli_gates():
+    description = load_launch_description(PICK_PLACE_LAUNCH)
+    arguments = {
+        entity.name: launch_default_text(entity)
+        for entity in description.entities
+        if isinstance(entity, DeclareLaunchArgument)
+    }
+    assert arguments['run_mode'] == 'dry_run'
+    assert arguments['start_simulation'] == 'false'
+    assert {'stop_after', 'resume', 'checkpoint_path', 'simulation_session_id'} <= set(arguments)
+
+    runtime = next(
+        entity
+        for entity in description.entities
+        if isinstance(entity, Node)
+        and entity.node_package == 'so101_gazebo_demo'
+        and entity.node_executable == 'pick_place_state_machine'
+    )
+    source = PICK_PLACE_LAUNCH.read_text()
+    assert '--mode' in source
+    assert '--checkpoint' in source
+    assert '--session-id' in source
 
 
 def test_moveit_uses_canonical_base_height_and_same_package_resources():

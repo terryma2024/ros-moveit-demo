@@ -26,6 +26,7 @@ pick_place::WorldSnapshot world(bool gazebo_attached, bool moveit_attached)
     snapshot.moveit_coke_attached_link = profile.moveit_attach_link;
     snapshot.moveit_coke_touch_links =
       std::set<std::string>(profile.moveit_touch_links.begin(), profile.moveit_touch_links.end());
+    snapshot.moveit_coke_attached_relative_pose = profile.calibrated_grasp_relative_pose;
   } else {
     snapshot.moveit_world_object_poses.emplace(profile.coke_model, profile.coke_pose);
   }
@@ -98,6 +99,9 @@ TEST(SO101AttachmentContracts, MoveItAttachNeedsIndependentExactMetadataAndBothW
   EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
   after = world(true, true);
   after.moveit_world_object_poses.emplace(profile.coke_model, profile.coke_pose);
+  EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
+  after = world(true, true);
+  after.moveit_coke_attached_relative_pose->x += profile.coke_position_drift_tolerance * 2.0;
   EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
 }
 

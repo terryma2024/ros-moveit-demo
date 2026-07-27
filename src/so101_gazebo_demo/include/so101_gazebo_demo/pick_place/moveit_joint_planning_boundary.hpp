@@ -1,8 +1,13 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <vector>
+
+#include <moveit_msgs/msg/robot_trajectory.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 #include "so101_gazebo_demo/pick_place/so101_joint_motion_adapter.hpp"
 
@@ -14,6 +19,41 @@ namespace so101_gazebo_demo::pick_place
 
 [[nodiscard]] std::optional<Pose3d>
 updatedLinkPose(const moveit::core::RobotState & source, const std::string & link_name);
+
+[[nodiscard]] std::optional<Pose3d>
+updatedAttachedBodyPose(const moveit::core::RobotState & source,
+                        const std::string & attached_body_name);
+
+enum class RequestScopedGoalTerminal
+{
+  SUCCEEDED,
+  ABORTED,
+  CANCELED
+};
+
+class IRequestScopedGoalCancellation
+{
+public:
+  virtual ~IRequestScopedGoalCancellation() = default;
+  virtual ActionResult requestCancel(double timeout_seconds) = 0;
+  virtual std::optional<RequestScopedGoalTerminal> waitForTerminal(double timeout_seconds) = 0;
+};
+
+[[nodiscard]] ActionResult cancelRequestScopedGoalAndWait(
+  IRequestScopedGoalCancellation & goal, double cancel_ack_timeout_seconds,
+  double terminal_timeout_seconds);
+
+/// Rebuilds an execution message solely from the artifact that passed runtime
+/// validation. It never invokes MoveIt planning or target selection.
+[[nodiscard]] std::optional<moveit_msgs::msg::RobotTrajectory>
+executableTrajectoryFromValidatedArtifact(
+  const MotionPlanArtifact & artifact,
+  const std::vector<std::string> & expected_joint_names);
+
+[[nodiscard]] std::optional<CurrentJointStateEvidence>
+currentJointStateEvidenceFromMessage(
+  const sensor_msgs::msg::JointState & message, const SO101Profile & profile,
+  std::chrono::steady_clock::time_point received_at);
 
 struct CalibrationCandidate
 {
@@ -46,6 +86,8 @@ public:
                                      const std::set<std::string> & allowed_touch_pairs,
                                      const std::optional<TemporalContactPolicy> & temporal_contact_policy,
                                      double gripper_position) override;
+  ActionResult execute(const MotionPlanArtifact & artifact) override;
+  ActionResult cancel() override;
   std::optional<RobotStateEvidence>
   evaluate(const std::vector<std::string> & joint_names,
            const std::vector<double> & joint_positions,

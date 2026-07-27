@@ -30,6 +30,8 @@ struct WorldSnapshot
   std::optional<bool> moveit_coke_attached;
   std::optional<std::string> moveit_coke_attached_link;
   std::set<std::string> moveit_coke_touch_links;
+  std::optional<Pose3d> moveit_coke_attached_relative_pose;
+  std::optional<Pose3d> moveit_gripper_pose_world;
   std::optional<Pose3d> gazebo_coke_pose_world;
   std::optional<bool> gazebo_coke_attached;
   std::optional<bool> gazebo_coke_stationary;
