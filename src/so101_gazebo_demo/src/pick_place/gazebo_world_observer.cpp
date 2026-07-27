@@ -30,6 +30,13 @@ Failure observationFailure(std::string code, std::string message)
   return {FailureCategory::OBSERVATION, std::move(code), std::move(message), {}};
 }
 
+bool finitePose(const Pose3d & pose)
+{
+  return std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
+         std::isfinite(pose.qx) && std::isfinite(pose.qy) && std::isfinite(pose.qz) &&
+         std::isfinite(pose.qw);
+}
+
 double positionDistance(const Pose3d & a, const Pose3d & b)
 {
   return std::hypot(std::hypot(a.x - b.x, a.y - b.y), a.z - b.z);
@@ -160,6 +167,11 @@ public:
     if (!coke_pose_) {
       return {std::nullopt, observationFailure("GAZEBO_COKE_POSE_UNAVAILABLE",
                                                "Gazebo Coke pose is missing or stale")};
+    }
+    if (!finitePose(*coke_pose_)) {
+      return {std::nullopt,
+              observationFailure("GAZEBO_COKE_POSE_NONFINITE",
+                                 "Gazebo Coke pose contains nonfinite evidence")};
     }
     if (!coke_attached_ || now - attachment_received_at_ > max_observation_age_) {
       return {std::nullopt,

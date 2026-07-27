@@ -656,12 +656,6 @@ TEST(PureRunnerIntegration, PlanningAndExecutionFailuresKeepTheirClassificationA
   for (const auto & [which, category] : cases) {
     Harness harness;
     harness.registerAll();
-    harness.actions.registerPlanner(
-      State::MOVE_ABOVE_OBJECT,
-      std::make_shared<FakePlanner>(State::MOVE_ABOVE_OBJECT, harness.scenario));
-    harness.validators.registerValidator(
-      State::MOVE_ABOVE_OBJECT,
-      std::make_shared<FakePlanValidator>(State::MOVE_ABOVE_OBJECT, harness.scenario));
     if (which == "precondition") {
       harness.scenario.fail_precondition = State::MOVE_ABOVE_OBJECT;
     } else if (which == "plan") {
@@ -690,7 +684,8 @@ TEST(PureRunnerIntegration, PlanningAndExecutionFailuresKeepTheirClassificationA
 TEST(PureRunnerIntegration, DoesNotObserveOrRecoverBeforeCancelReachesTerminal)
 {
   Harness harness;
-  harness.registerAll();
+  harness.registerAllExcept(State::PREPARE_OPEN_GRIPPER, std::nullopt, std::nullopt,
+                            std::nullopt);
   auto blocking = std::make_shared<BlockingCancelExecutor>();
   harness.actions.registerExecutor(State::PREPARE_OPEN_GRIPPER, blocking);
 
@@ -933,6 +928,24 @@ TEST(PureRunnerIntegration, FailAtOutsideDryRunAndInvalidTransitionLimitFailClos
   ASSERT_TRUE(no_transitions.failure);
   EXPECT_EQ("INVALID_MAX_TRANSITIONS", no_transitions.failure->code);
   EXPECT_EQ(0, harness.scenario.executor_calls);
+}
+
+TEST(PureRunnerIntegration, PreExecutionObservationFailureStopsWithoutBlindRecovery)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_observation_call = 1;
+
+  const auto result = harness.runner().run({RunMode::EXECUTE});
+
+  EXPECT_EQ(result.status, pick_place::RunStatus::ERROR);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->category, FailureCategory::OBSERVATION);
+  EXPECT_EQ(result.failure->code, "OBSERVATION_INJECTED");
+  EXPECT_EQ(harness.scenario.observation_calls, 1);
+  EXPECT_EQ(harness.scenario.cancel_calls, 0);
+  EXPECT_EQ(harness.recovery.calls, 0);
+  EXPECT_EQ(harness.store.commit_calls, 0);
 }
 
 }  // namespace

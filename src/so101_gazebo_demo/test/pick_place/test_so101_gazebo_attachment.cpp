@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <thread>
 
@@ -174,4 +175,40 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
   EXPECT_FALSE(*result.snapshot->gazebo_coke_attached);
   ASSERT_TRUE(result.snapshot->gazebo_coke_stationary);
   EXPECT_TRUE(*result.snapshot->gazebo_coke_stationary);
+}
+
+TEST(SO101GazeboWorldObserver, RejectsNonfiniteCokePoseEvidence)
+{
+  configurePartition();
+  BaseObserver base;
+  const auto world = unique("world_nonfinite").substr(1);
+  const auto state_topic = unique("durable_nonfinite");
+  pick_place::GazeboWorldObserver observer(base, world, "coke", state_topic, "session", 0.2, 3,
+                                           0.005, 0.002, 0.02);
+  gz::transport::Node peer;
+  auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
+  auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);
+  ASSERT_TRUE(connected(poses));
+  ASSERT_TRUE(connected(state));
+  std::thread publish([&]() {
+    for (int i = 0; i < 3; ++i) {
+      gz::msgs::Pose_V message;
+      auto * pose = message.add_pose();
+      pose->set_name("coke");
+      pose->mutable_position()->set_x(std::numeric_limits<double>::quiet_NaN());
+      pose->mutable_orientation()->set_w(1.0);
+      poses.Publish(message);
+      gz::msgs::StringMsg detached;
+      detached.set_data("detached");
+      state.Publish(detached);
+      std::this_thread::sleep_for(10ms);
+    }
+  });
+
+  const auto result = observer.observe();
+  publish.join();
+
+  EXPECT_FALSE(result.snapshot);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("GAZEBO_COKE_POSE_NONFINITE", result.failure->code);
 }

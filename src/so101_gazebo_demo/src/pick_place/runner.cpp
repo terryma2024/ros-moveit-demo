@@ -99,6 +99,14 @@ Failure withOriginalFailure(Failure recovery_failure, const Failure & original_f
   return recovery_failure;
 }
 
+bool environmentEvidenceUnavailable(const Failure & failure) noexcept
+{
+  return failure.category == FailureCategory::OBSERVATION ||
+         failure.category == FailureCategory::WORLD_INCONSISTENCY ||
+         failure.category == FailureCategory::MOVEIT_SCENE ||
+         failure.category == FailureCategory::TF;
+}
+
 }  // namespace
 
 StateMachineRunner::StateMachineRunner() : StateMachineRunner(kEmptyActions, kEmptyContracts) {}
@@ -474,14 +482,15 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                                           "PRE_EXECUTION_OBSERVATION_FAILED",
                                           "could not observe before execution",
                                           {}});
-      return phase == CheckpointPhase::FORWARD
-               ? handleActionFailure(state, *executor, observation_failure, checkpoint_sequence)
-               : error(observation_failure);
+      return error(observation_failure);
     }
     before = *observed.snapshot;
   }
   const auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
   if (!precondition.ok) {
+    if (environmentEvidenceUnavailable(precondition.failures.front())) {
+      return error(precondition.failures.front());
+    }
     return phase == CheckpointPhase::FORWARD
              ? handleActionFailure(state, *executor, precondition.failures.front(),
                                    checkpoint_sequence)
@@ -503,6 +512,9 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                                              "EMPTY_PLAN_ARTIFACT",
                                              "planner returned no usable trajectory",
                                              {}});
+      if (environmentEvidenceUnavailable(planning_failure)) {
+        return error(planning_failure);
+      }
       return phase == CheckpointPhase::FORWARD
                ? handleActionFailure(state, *executor, planning_failure, checkpoint_sequence)
                : error(planning_failure);

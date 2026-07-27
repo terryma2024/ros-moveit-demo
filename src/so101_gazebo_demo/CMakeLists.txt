@@ -12,6 +12,7 @@ find_package(moveit_ros_planning_interface REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -33,6 +34,7 @@ add_library(pick_place_core
   src/pick_place/so101_attachment_contracts.cpp
   src/pick_place/so101_recovery_policy.cpp
   src/pick_place/so101_task3_runtime.cpp
+  src/pick_place/pick_place_runtime.cpp
   src/pick_place/so101_motion_validation.cpp
   src/pick_place/so101_motion_evidence_builder.cpp
   src/pick_place/so101_motion_planner.cpp
@@ -54,7 +56,8 @@ target_include_directories(pick_place_core PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(pick_place_core PUBLIC nlohmann_json::nlohmann_json gz-msgs10::core gz-transport13::core)
 ament_target_dependencies(pick_place_core PUBLIC control_msgs geometry_msgs moveit_msgs
-  moveit_core moveit_ros_planning_interface rclcpp rclcpp_action shape_msgs trajectory_msgs)
+  moveit_core moveit_ros_planning_interface rclcpp rclcpp_action sensor_msgs shape_msgs
+  trajectory_msgs)
 
 add_executable(pick_place_state_machine src/pick_place/pick_place_state_machine.cpp)
 target_link_libraries(pick_place_state_machine pick_place_core)
@@ -106,6 +109,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_so101_attachment_contracts pick_place_core)
   ament_add_gtest(test_so101_recovery_policy test/pick_place/test_so101_recovery_policy.cpp)
   target_link_libraries(test_so101_recovery_policy pick_place_core)
+  ament_add_gtest(test_so101_pick_place_runtime test/pick_place/test_so101_pick_place_runtime.cpp)
+  target_link_libraries(test_so101_pick_place_runtime pick_place_core)
   ament_add_gtest(test_so101_task3_runtime test/pick_place/test_so101_task3_runtime.cpp)
   target_link_libraries(test_so101_task3_runtime pick_place_core)
   ament_add_gtest(test_so101_motion_validation
@@ -134,6 +139,9 @@ if(BUILD_TESTING)
   target_compile_definitions(test_so101_fixed_motion_targets PRIVATE
     SO101_TEST_URDF="${SO101_TEST_URDF}"
     SO101_TEST_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/config/so101.srdf")
+  ament_add_gtest(test_request_scoped_goal_cancellation
+    test/pick_place/test_request_scoped_goal_cancellation.cpp)
+  target_link_libraries(test_request_scoped_goal_cancellation pick_place_core)
   ament_add_gtest(test_so101_joint_motion_adapter
     test/pick_place/test_so101_joint_motion_adapter.cpp)
   target_link_libraries(test_so101_joint_motion_adapter pick_place_core)

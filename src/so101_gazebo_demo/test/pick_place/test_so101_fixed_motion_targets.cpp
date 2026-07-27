@@ -103,6 +103,14 @@ std::string policyFingerprint(const spp::SO101FixedMotionTargetPolicy & policy)
         serialized << pair << ',';
       }
     }
+    serialized << "|target-temporal:";
+    if (spec->target.temporal_contact_policy) {
+      serialized << static_cast<int>(spec->target.temporal_contact_policy->location) << ','
+                 << spec->target.temporal_contact_policy->max_axial_clearance_m << ',';
+      for (const auto & pair : spec->target.temporal_contact_policy->allowed_pairs) {
+        serialized << pair << ',';
+      }
+    }
     serialized << '\n';
   }
   std::uint64_t hash = 1469598103934665603ULL;
@@ -125,7 +133,7 @@ TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
     spp::State::MOVE_ABOVE_PLACE, spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
     spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT, spp::State::RECOVER_MOVE_ABOVE_PICK,
     spp::State::RECOVER_DESCEND_TO_PICK, spp::State::RECOVER_RETREAT};
-  EXPECT_EQ(policy.version(), "so101-fixed-table-d20-v2");
+  EXPECT_EQ(policy.version(), "so101-fixed-table-d20-v3");
   for (const auto state : states) {
     const auto spec = policy.spec(state);
     ASSERT_TRUE(spec) << spp::toString(state);
@@ -145,9 +153,32 @@ TEST(SO101FixedMotionTargets, BindsPolicyVersionToAllMotionConstants)
   const std::map<std::string, std::string> version_to_golden_fingerprint{
     {"so101-fixed-table-d20-v1", "a73316019c50dbe4"},
     {"so101-fixed-table-d20-v2", "7a4e38c05f8d9057"},
+    {"so101-fixed-table-d20-v3", "d139c196ee64caed"},
   };
   ASSERT_EQ(version_to_golden_fingerprint.count(policy.version()), 1U);
   EXPECT_EQ(policyFingerprint(policy), version_to_golden_fingerprint.at(policy.version()));
+}
+
+TEST(SO101FixedMotionTargets, DetachedRobotStateDoesNotEmitMissingAttachedBodyError)
+{
+  if (!rclcpp::ok()) rclcpp::init(0, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("so101_detached_body_lookup_test");
+  robot_model_loader::RobotModelLoader::Options options(
+    readFile(SO101_TEST_URDF), readFile(SO101_TEST_SRDF));
+  options.load_kinematics_solvers = false;
+  robot_model_loader::RobotModelLoader loader(node, options);
+  const auto model = loader.getModel();
+  ASSERT_TRUE(model);
+  moveit::core::RobotState state(model);
+  state.setToDefaultValues();
+  state.update();
+
+  testing::internal::CaptureStderr();
+  const auto pose = spp::updatedAttachedBodyPose(state, "coke");
+  const auto stderr_output = testing::internal::GetCapturedStderr();
+
+  EXPECT_FALSE(pose);
+  EXPECT_EQ(stderr_output.find("does not have attached body"), std::string::npos);
 }
 
 TEST(SO101FixedMotionTargets, LocksAllEightCalibratedJointVectorsExactly)
