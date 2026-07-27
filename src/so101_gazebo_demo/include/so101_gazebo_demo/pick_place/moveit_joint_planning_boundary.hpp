@@ -7,9 +7,13 @@
 #include "so101_gazebo_demo/pick_place/so101_joint_motion_adapter.hpp"
 
 namespace rclcpp { class Node; }
+namespace moveit::core { class RobotState; }
 
 namespace so101_gazebo_demo::pick_place
 {
+
+[[nodiscard]] std::optional<Pose3d>
+updatedLinkPose(const moveit::core::RobotState & source, const std::string & link_name);
 
 struct CalibrationCandidate
 {

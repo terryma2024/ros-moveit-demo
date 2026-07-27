@@ -14,6 +14,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "so101_gazebo_demo/pick_place/so101_fixed_motion_targets.hpp"
+#include "so101_gazebo_demo/pick_place/moveit_joint_planning_boundary.hpp"
 
 namespace spp = so101_gazebo_demo::pick_place;
 
@@ -124,7 +125,7 @@ TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
     spp::State::MOVE_ABOVE_PLACE, spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
     spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT, spp::State::RECOVER_MOVE_ABOVE_PICK,
     spp::State::RECOVER_DESCEND_TO_PICK, spp::State::RECOVER_RETREAT};
-  EXPECT_EQ(policy.version(), "so101-fixed-table-d20-v1");
+  EXPECT_EQ(policy.version(), "so101-fixed-table-d20-v2");
   for (const auto state : states) {
     const auto spec = policy.spec(state);
     ASSERT_TRUE(spec) << spp::toString(state);
@@ -143,6 +144,7 @@ TEST(SO101FixedMotionTargets, BindsPolicyVersionToAllMotionConstants)
   const spp::SO101FixedMotionTargetPolicy policy;
   const std::map<std::string, std::string> version_to_golden_fingerprint{
     {"so101-fixed-table-d20-v1", "a73316019c50dbe4"},
+    {"so101-fixed-table-d20-v2", "7a4e38c05f8d9057"},
   };
   ASSERT_EQ(version_to_golden_fingerprint.count(policy.version()), 1U);
   EXPECT_EQ(policyFingerprint(policy), version_to_golden_fingerprint.at(policy.version()));
@@ -157,6 +159,7 @@ TEST(SO101FixedMotionTargets, LocksAllEightCalibratedJointVectorsExactly)
 TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEveryGoldenWaypoint)
 {
   if (!rclcpp::ok()) rclcpp::init(0, nullptr);
+  {
   auto node = std::make_shared<rclcpp::Node>("so101_fixed_target_robot_model_test");
   robot_model_loader::RobotModelLoader::Options options(
     readFile(SO101_TEST_URDF), readFile(SO101_TEST_SRDF));
@@ -209,7 +212,36 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
   EXPECT_NEAR(world_coke.translation().z(), profile.coke_pose.z, 2e-6);
   const Eigen::Quaterniond world_orientation(world_coke.rotation());
   EXPECT_NEAR(std::abs(world_orientation.normalized().w()), 1.0, 2e-6);
-  rclcpp::shutdown();
+  }
+}
+
+TEST(SO101MoveItJointPlanningBoundary, UpdatesDirtyRobotStateBeforeReadingLinkPose)
+{
+  if (!rclcpp::ok()) rclcpp::init(0, nullptr);
+  {
+  auto node = std::make_shared<rclcpp::Node>("so101_dirty_robot_state_pose_test");
+  robot_model_loader::RobotModelLoader::Options options(
+    readFile(SO101_TEST_URDF), readFile(SO101_TEST_SRDF));
+  options.load_kinematics_solvers = false;
+  robot_model_loader::RobotModelLoader loader(node, options);
+  const auto model = loader.getModel();
+  ASSERT_TRUE(model);
+  moveit::core::RobotState dirty(model);
+  dirty.setToDefaultValues();
+  dirty.update();
+  dirty.setVariablePosition("2", 0.25);
+
+  const auto actual = spp::updatedLinkPose(dirty, "gripper");
+  ASSERT_TRUE(actual);
+  EXPECT_TRUE(std::isfinite(actual->x));
+  EXPECT_TRUE(std::isfinite(actual->y));
+  EXPECT_TRUE(std::isfinite(actual->z));
+  EXPECT_TRUE(std::isfinite(actual->qx));
+  EXPECT_TRUE(std::isfinite(actual->qy));
+  EXPECT_TRUE(std::isfinite(actual->qz));
+  EXPECT_TRUE(std::isfinite(actual->qw));
+  EXPECT_FALSE(spp::updatedLinkPose(dirty, "missing_link"));
+  }
 }
 
 TEST(SO101FixedMotionTargets, ScopesPersistentAndBoundaryTouchPolicies)
@@ -225,6 +257,13 @@ TEST(SO101FixedMotionTargets, ScopesPersistentAndBoundaryTouchPolicies)
             lift_policy);
   EXPECT_EQ(policy.spec(spp::State::LIFT)->target.temporal_contact_policy,
             lift_policy);
+  const auto place_policy = spp::TemporalContactPolicy{
+    {"coke:table"}, spp::TemporalContactLocation::LAST_ONLY};
+  EXPECT_TRUE(policy.spec(spp::State::DESCEND_TO_PLACE)->validation.allowed_touch_pairs.empty());
+  EXPECT_EQ(policy.spec(spp::State::DESCEND_TO_PLACE)->validation.temporal_contact_policy,
+            place_policy);
+  EXPECT_EQ(policy.spec(spp::State::DESCEND_TO_PLACE)->target.temporal_contact_policy,
+            place_policy);
   EXPECT_TRUE(policy.spec(spp::State::RECOVER_DESCEND_TO_PICK)->validation.allowed_touch_pairs.empty());
   EXPECT_EQ(policy.spec(spp::State::RECOVER_DESCEND_TO_PICK)->validation.temporal_contact_policy,
             (spp::TemporalContactPolicy{{"coke:table"},

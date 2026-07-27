@@ -130,6 +130,15 @@ bool validTemporalContact(const std::optional<TemporalContactPolicy> & requested
 
 }  // namespace
 
+std::optional<Pose3d>
+updatedLinkPose(const moveit::core::RobotState & source, const std::string & link_name)
+{
+  if (!source.getRobotModel()->hasLinkModel(link_name)) return std::nullopt;
+  moveit::core::RobotState current(source);
+  current.update();
+  return poseFrom(current.getGlobalLinkTransform(link_name));
+}
+
 class MoveItJointPlanningBoundary::Impl
 {
 public:
@@ -253,8 +262,8 @@ std::optional<MotionPlanningSceneFacts> MoveItJointPlanningBoundary::sceneFacts(
   {
     std::lock_guard<std::mutex> lock(impl_->scene_mutex);
     if (impl_->scene && impl_->scene->knowsFrameTransform(impl_->profile.moveit_attach_link)) {
-      facts.current_gripper_pose_world = poseFrom(
-        impl_->scene->getCurrentState().getGlobalLinkTransform(impl_->profile.moveit_attach_link));
+      facts.current_gripper_pose_world = updatedLinkPose(
+        impl_->scene->getCurrentState(), impl_->profile.moveit_attach_link);
     }
   }
   return facts;
