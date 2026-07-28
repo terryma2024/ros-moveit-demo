@@ -25,6 +25,31 @@
 
 ---
 
+## Preflight: isolate execution without losing prerequisite dirty work
+
+The current ai-station workspace is on `main` and contains prerequisite uncommitted
+SO-101 work that cannot be reproduced in a clean worktree. Before Task 1, create a branch
+in place while preserving the index and working tree exactly:
+
+```bash
+cd /data/work/ws_moveit
+git status --short
+git switch -c codex/direct-tpu-tongues
+git rev-parse --short HEAD
+git branch --show-current
+tmux list-sessions
+pgrep -af 'gz sim|move_group|rviz2|pick_place_state_machine'
+```
+
+Expected: branch is `codex/direct-tpu-tongues`; all pre-existing staged, unstaged, and
+untracked entries remain byte-for-byte present; the active GUI stack and its owning tmux
+session are recorded. Save this snapshot under `/tmp/so101-direct-tpu-<timestamp>/`.
+
+Before every task commit, inspect `git diff`, `git diff --cached`, and `git status --short`.
+Use `git add -p -- <task paths>` to stage only hunks introduced by that task. If a new hunk
+cannot be separated from pre-existing work, leave it uncommitted and report the overlap;
+never stage a whole dirty directory or the pre-existing `.idea/misc.xml` change.
+
 ## File Responsibility Map
 
 | Area | Files | Responsibility after implementation |
@@ -187,10 +212,25 @@
   ctest --test-dir build/so101_gazebo_demo -R 'test_so101_fixed_motion_targets|test_so101_motion_validation' --output-on-failure
   ```
   Expected: failure because existing targets were calibrated for long stem pads and z=0.235.
-- [ ] **Step 3: Calibrate in GUI before freezing values.** In `so101-moveit`, source `~/gui-env.zsh`; verify CUA session state; run a clean task reset; use the calculated z as the only initial depth change and calibrate x/y under the preserved wrist orientation. Record the measured TCP, all joint waypoints, and cup-to-gripper pinch transform in `/tmp/so101-direct-tpu-<timestamp>/tcp-calibration.yaml`.
-- [ ] **Step 4: Implement YAML literals and attachment transform.** Copy the measured waypoint ladder, validation endpoints, and attachment-relative pose into the three YAML files. Preserve all place/recovery semantics, update only values derived by the direct-tongue calibration, and lock them in fixed-motion tests.
-- [ ] **Step 5: Run GREEN.** Repeat the RED command. Expected: FK, YAML hot-restart fixture, axis, joint jump, and temporal-contact tests pass.
-- [ ] **Step 6: Commit.**
+- [ ] **Step 3: Build, prove provenance, and restart the owned GUI stack before calibration.** Run:
+  ```bash
+  cd /data/work/ws_moveit
+  source /opt/ros/jazzy/setup.zsh
+  colcon build --packages-select so101_gazebo_demo --symlink-install
+  source install/setup.zsh
+  ros2 pkg prefix so101_gazebo_demo
+  stat install/so101_gazebo_demo/share/so101_gazebo_demo/urdf/so101_base.xacro
+  ```
+  Expected: the prefix is `/data/work/ws_moveit/install/so101_gazebo_demo` and the installed
+  xacro timestamp is newer than the Task 3 source change. In tmux `so101-moveit`, source
+  `~/gui-env.zsh`, stop only the recorded Gazebo/MoveIt/RViz processes owned by that
+  session, then relaunch the stack so the new robot description is loaded. Confirm there is
+  exactly one `gz sim`, one `/move_group`, and one RViz. Run `ai-station-capture.sh` and
+  inspect a fresh baseline screenshot before commanding motion.
+- [ ] **Step 4: Calibrate in GUI before freezing values.** Verify CUA session state; run a clean task reset; use the calculated z as the only initial depth change and calibrate x/y under the preserved wrist orientation. Record the measured TCP, all joint waypoints, and cup-to-gripper pinch transform in `/tmp/so101-direct-tpu-<timestamp>/tcp-calibration.yaml`.
+- [ ] **Step 5: Implement YAML literals and attachment transform.** Copy the measured waypoint ladder, validation endpoints, and attachment-relative pose into the three YAML files. Preserve all place/recovery semantics, update only values derived by the direct-tongue calibration, and lock them in fixed-motion tests.
+- [ ] **Step 6: Run GREEN.** Repeat the RED command. Expected: FK, YAML hot-restart fixture, axis, joint jump, and temporal-contact tests pass.
+- [ ] **Step 7: Commit.**
   ```bash
   git add src/so101_gazebo_demo/config/motion_policies/light_cup_wall_pick.yaml src/so101_gazebo_demo/config/validation_policies/light_cup_wall_pick.yaml src/so101_gazebo_demo/config/task_objects/light_plastic_cup.yaml src/so101_gazebo_demo/src/pick_place/so101_fixed_motion_targets.cpp src/so101_gazebo_demo/test/pick_place/test_so101_fixed_motion_targets.cpp src/so101_gazebo_demo/test/pick_place/test_so101_motion_validation.cpp
   git commit -m "feat: calibrate direct tongue cup motion"
@@ -281,7 +321,7 @@
   ```
   Expected: failure until direct collision names and current runtime evidence assertions are implemented.
 - [ ] **Step 3: Run a clean staged GUI session.** In tmux `so101-moveit`, source `~/gui-env.zsh`, inspect CUA status, and create `/tmp/so101-direct-tpu-<timestamp>`. Use `reset_so101_world`, then execute and inspect one boundary at a time: `MOVE_ABOVE_OBJECT`, `DESCEND`, `CLOSE_GRIPPER`, `ATTACH_GAZEBO`, `ATTACH_MOVEIT`, `LIFT`, `MOVE_ABOVE_PLACE`, `DESCEND_TO_PLACE`, `DETACH_GAZEBO`, `DETACH_MOVEIT`, `SYNC_WORLD_OBJECT`, and `RETREAT`. At CLOSE and ATTACH save raw contact names, local heights/normals, depth, q6 actual/target/error/velocity, RTF, and attachment states. If a stage fails, stop the chain, preserve the first failure and recovery trace, and do not report a later recovery observation as the root cause.
-- [ ] **Step 4: Validate Bullet A/B and complete the successful chain.** Hold geometry, mass, q6, force, and penetration limit fixed; run friction 1.2 versus the baseline supported surface value and save the tangential-slip comparison. Continue only if the 1.2 field demonstrably changes slip and every gate remains valid. Verify lift clears the table, MoveIt/Gazebo attachment states agree, detach restores collision/world membership, the cup is stable at place pose, final state is `DONE`, and recovery after one injected attach failure safely opens/detaches/retreats without below-floor q6.
+- [ ] **Step 4: Validate Bullet friction A/B and complete the successful chain.** Run exactly two otherwise identical trials with isotropic `mu=0.2` and `mu=1.2`. For both trials keep the same generated robot/cup geometry, 20 g mass, q6 command, arm pose, Bullet Featherstone engine, solver settings, initial cup pose, and 5.0 s measurement window. Record the cup pose relative to the two tongue frames at window start/end and compute tangential displacement in metres. Accept the friction field as effective only if `mu=1.2` produces a smaller repeatable displacement than `mu=0.2`; otherwise omit the unproven friction override and report the A/B as inconclusive. Save both launch commands, timestamps, raw poses, and computed displacement in the evidence directory. Then verify lift clears the table, MoveIt/Gazebo attachment states agree, detach restores collision/world membership, the cup is stable at place pose, final state is `DONE`, and recovery after one injected attach failure safely opens/detaches/retreats without below-floor q6.
 - [ ] **Step 5: Capture and review visual evidence.** Use `ai-station-capture.sh` after checking CUA state, inspect the fresh Gazebo/RViz screenshot through CUA, and save the image path with the action/session logs. Require direct tongues visibly distinct from the original gripper, cup held at the same near wall during lift/carry, and cup released onto the table.
 - [ ] **Step 6: Run GREEN regression and benchmark.**
   ```bash
