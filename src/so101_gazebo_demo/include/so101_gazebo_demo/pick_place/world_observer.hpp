@@ -35,6 +35,8 @@ struct WorldSnapshot
   std::optional<Pose3d> gazebo_coke_pose_world;
   std::optional<bool> gazebo_coke_attached;
   std::optional<bool> gazebo_coke_stationary;
+  std::optional<bool> gazebo_coke_gripper_contact;
+  std::optional<double> gazebo_coke_gripper_max_depth;
   std::string simulation_session_id;
 };
 struct ObservationResult

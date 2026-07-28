@@ -374,8 +374,14 @@ public:
     }
     requireMotionEnvironment(result, after, spec_.state, profile_);
     merge(result, validateMotionQ6(after, spec_.expected_gripper_q6, profile_));
+    double max_joint_endpoint_error = 0.0;
     for (std::size_t i = 0; i < profile_.arm_joints.size(); ++i) {
       const auto joint = after.joint_positions.find(profile_.arm_joints[i]);
+      if (joint != after.joint_positions.end() && finite(joint->second)) {
+        max_joint_endpoint_error = std::max(
+          max_joint_endpoint_error,
+          std::abs(joint->second - spec_.target.joint_waypoints.back()[i]));
+      }
       if (joint == after.joint_positions.end() || !finite(joint->second) ||
           std::abs(joint->second - spec_.target.joint_waypoints.back()[i]) >
             spec_.validation.joint_endpoint_tolerance) {
@@ -385,6 +391,7 @@ public:
         break;
       }
     }
+    result.metrics["max_joint_endpoint_error"] = max_joint_endpoint_error;
     const Pose3d endpoint{spec_.validation.endpoint_position.x,
                           spec_.validation.endpoint_position.y,
                           spec_.validation.endpoint_position.z, 0.0, 0.0, 0.0, 1.0};

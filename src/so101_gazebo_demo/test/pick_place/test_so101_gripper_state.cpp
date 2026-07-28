@@ -89,7 +89,7 @@ TEST(SO101GripperStateExecutor, CommandsExactProfileTargetForAllFourStates)
     {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::SO101GripperTarget::PREOPEN,
      profile.q6_preopen},
     {pick_place::State::CLOSE_GRIPPER, pick_place::SO101GripperTarget::CONTACT,
-     profile.q6_contact},
+     profile.q6_close},
     {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN,
      profile.q6_full_open},
     {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN,
@@ -134,7 +134,7 @@ TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayE
   EXPECT_DOUBLE_EQ(0.010, profile.contact_q6_stop_tolerance);
   EXPECT_DOUBLE_EQ(0.001, profile.contact_width_oversize_tolerance);
 
-  const auto physical_contact = snapshot(profile.q6_contact + 0.0067);
+  const auto physical_contact = snapshot(profile.q6_contact + 0.0060);
   EXPECT_TRUE(pick_place::validateSO101GripperTarget(
     physical_contact, pick_place::SO101GripperTarget::CONTACT, profile).ok);
 
@@ -145,6 +145,21 @@ TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayE
   const auto imprecise_preopen = snapshot(profile.q6_preopen - 0.0067);
   EXPECT_FALSE(pick_place::validateSO101GripperTarget(
     imprecise_preopen, pick_place::SO101GripperTarget::PREOPEN, profile).ok);
+}
+
+TEST(SO101GripperValidation, GazeboJawContactAcceptsPhysicalStopBeforeCommandedQ6)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  auto physical_stop = snapshot(profile.q6_contact + 0.25, 0.0);
+  physical_stop.gazebo_coke_gripper_contact = true;
+  physical_stop.gazebo_coke_gripper_max_depth = 0.0012;
+
+  const auto result = pick_place::validateSO101GripperTarget(
+    physical_stop, pick_place::SO101GripperTarget::CONTACT, profile);
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_DOUBLE_EQ(result.metrics.at("gazebo_coke_gripper_contact"), 1.0);
+  EXPECT_DOUBLE_EQ(result.metrics.at("gazebo_coke_gripper_max_depth"), 0.0012);
 }
 
 TEST(SO101GripperTransitionContract, ActionSuccessCannotReplaceFreshStoppedQ6Postcondition)

@@ -15,6 +15,7 @@ def generate_launch_description():
     package_share = get_package_share_directory("so101_gazebo_demo")
     run_mode = LaunchConfiguration("run_mode")
     start_simulation = LaunchConfiguration("start_simulation")
+    headless = LaunchConfiguration("headless")
     stop_after = LaunchConfiguration("stop_after")
     resume = LaunchConfiguration("resume")
     checkpoint_path = LaunchConfiguration("checkpoint_path")
@@ -23,6 +24,7 @@ def generate_launch_description():
     arguments = [
         DeclareLaunchArgument("run_mode", default_value="dry_run"),
         DeclareLaunchArgument("start_simulation", default_value="false"),
+        DeclareLaunchArgument("headless", default_value="false"),
         DeclareLaunchArgument("stop_after", default_value=""),
         DeclareLaunchArgument("resume", default_value="false"),
         DeclareLaunchArgument(
@@ -35,6 +37,7 @@ def generate_launch_description():
             os.path.join(package_share, "launch", "so101_gazebo.launch.py")
         ),
         condition=IfCondition(start_simulation),
+        launch_arguments={"headless": headless}.items(),
     )
     move_group = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(

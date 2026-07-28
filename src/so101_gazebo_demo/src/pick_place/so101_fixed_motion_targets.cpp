@@ -13,12 +13,12 @@ using Joints = std::vector<double>;
 const Joints kHome{0.0, 0.0, 0.0, 0.0, 0.0};
 const Joints kAbovePick{-0.000074896, 0.406242712, -0.335892969, 1.500452910, -0.029650203};
 const Joints kPick262{-0.004520982, 0.427298423, -0.219093530, 1.362597749, -0.083117591};
-const Joints kPick242{-0.000416079, 0.471283543, -0.135531958, 1.235051068, -0.033743502};
-const Joints kPick{-0.000011454, 0.536286226, -0.082912794, 1.117429221, -0.028880766};
+const Joints kPick227{-0.000002229, 0.518253213, -0.093375529, 1.145924970, -0.028770584};
+const Joints kPick{-0.000054474, 0.596982924, -0.061926975, 1.035746704, -0.029395613};
 const Joints kAbovePlace{0.331019977, 0.550670543, -0.562313463, 1.582446437, -1.600206428};
 const Joints kPlace262{0.331012586, 0.555338833, -0.421537209, 1.437001892, -1.597230266};
-const Joints kPlace242{0.331041085, 0.592207044, -0.331690813, 1.310287286, -1.607707019};
-const Joints kPlace{0.331034755, 0.648891100, -0.272710221, 1.194622637, -1.605735287};
+const Joints kPlace227{0.331134108, 0.613342362, -0.251534461, 1.208995616, -1.511489515};
+const Joints kPlace{0.331007247, 0.702417527, -0.246022105, 1.114408094, -1.595049654};
 
 MotionValidationConfig config(const SO101Profile & profile, Vec3 endpoint, Vec3 direction,
                               bool allow_world_touch)
@@ -66,15 +66,15 @@ std::optional<SO101FixedMotionSpec> SO101FixedMotionTargetPolicy::spec(State sta
         config(profile_, {0.02, -0.28, 0.282}, {0, 0, -1}, false), preopen};
     case State::DESCEND:
       return SO101FixedMotionSpec{state, kAbovePick,
-        ladder(profile_, {kPick262, kPick242, kPick}, preopen),
-        config(profile_, {0.02, -0.28, 0.222}, {0, 0, -1}, true), preopen};
+        ladder(profile_, {kPick262, kPick227, kPick}, preopen),
+        config(profile_, {0.02, -0.28, 0.207}, {0, 0, -1}, true), preopen};
     case State::LIFT:
     {
       auto validation = config(profile_, {0.02, -0.28, 0.282}, {0, 0, 1}, false);
       validation.temporal_contact_policy =
         TemporalContactPolicy{{"coke:table"}, TemporalContactLocation::FIRST_ONLY};
       return SO101FixedMotionSpec{state, kPick,
-        ladder(profile_, {kPick242, kPick262, kAbovePick}, contact,
+        ladder(profile_, {kPick227, kPick262, kAbovePick}, contact,
                TemporalContactPolicy{{"coke:table"}, TemporalContactLocation::FIRST_ONLY}),
         std::move(validation), contact};
     }
@@ -83,12 +83,12 @@ std::optional<SO101FixedMotionSpec> SO101FixedMotionTargetPolicy::spec(State sta
         config(profile_, {-0.08, -0.25, 0.282}, {0, 0, -1}, false), contact};
     case State::DESCEND_TO_PLACE:
     {
-      auto validation = config(profile_, {-0.08, -0.25, 0.222}, {0, 0, -1}, false);
+      auto validation = config(profile_, {-0.08, -0.25, 0.207}, {0, 0, -1}, false);
       const TemporalContactPolicy temporal{
         {"coke:table"}, TemporalContactLocation::LAST_ONLY};
       validation.temporal_contact_policy = temporal;
       return SO101FixedMotionSpec{state, kAbovePlace,
-        ladder(profile_, {kPlace262, kPlace242, kPlace}, contact, temporal),
+        ladder(profile_, {kPlace262, kPlace227, kPlace}, contact, temporal),
         std::move(validation), contact};
     }
     case State::RETREAT:
@@ -102,7 +102,7 @@ std::optional<SO101FixedMotionSpec> SO101FixedMotionTargetPolicy::spec(State sta
         validation.temporal_contact_policy = temporal;
       }
       return SO101FixedMotionSpec{state, kPlace,
-        ladder(profile_, {kPlace242, kPlace262, kAbovePlace},
+        ladder(profile_, {kPlace227, kPlace262, kAbovePlace},
                state == State::RECOVER_LIFT_TO_SAFE_HEIGHT ? contact : full_open, temporal),
         std::move(validation),
         state == State::RECOVER_LIFT_TO_SAFE_HEIGHT ? contact : full_open};
@@ -112,11 +112,11 @@ std::optional<SO101FixedMotionSpec> SO101FixedMotionTargetPolicy::spec(State sta
         config(profile_, {0.02, -0.28, 0.282}, {0, 0, -1}, false), contact};
     case State::RECOVER_DESCEND_TO_PICK:
     {
-      auto validation = config(profile_, {0.02, -0.28, 0.222}, {0, 0, -1}, false);
+      auto validation = config(profile_, {0.02, -0.28, 0.207}, {0, 0, -1}, false);
       validation.temporal_contact_policy =
         TemporalContactPolicy{{"coke:table"}, TemporalContactLocation::LAST_ONLY};
       return SO101FixedMotionSpec{state, kAbovePick,
-        ladder(profile_, {kPick262, kPick242, kPick}, contact,
+        ladder(profile_, {kPick262, kPick227, kPick}, contact,
                TemporalContactPolicy{{"coke:table"}, TemporalContactLocation::LAST_ONLY}),
         std::move(validation), contact};
     }
@@ -127,7 +127,7 @@ std::optional<SO101FixedMotionSpec> SO101FixedMotionTargetPolicy::spec(State sta
         TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
       validation.temporal_contact_policy = temporal;
       return SO101FixedMotionSpec{state, kPick,
-        ladder(profile_, {kPick242, kPick262, kAbovePick}, full_open, temporal),
+        ladder(profile_, {kPick227, kPick262, kAbovePick}, full_open, temporal),
         std::move(validation), full_open};
     }
     default:

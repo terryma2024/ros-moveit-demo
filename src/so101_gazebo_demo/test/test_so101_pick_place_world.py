@@ -28,6 +28,7 @@ LOAD_BEARING_COLLISIONS = (
     'jaw_collision',
     'fixed_finger_contact',
     'moving_finger_contact',
+    'moving_jaw_contact',
 )
 RUNTIME_ROS_DOMAIN_IDS = itertools.count(100 + os.getpid() % 100)
 
@@ -84,7 +85,7 @@ def arm_parent_death_signal():
         os.kill(os.getpid(), signal.SIGINT)
 
 
-def wait_for_ros_topics(environment, required, launch, log, timeout=45):
+def wait_for_ros_topics(environment, required, launch, log, timeout=120):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if launch.poll() is not None:
@@ -577,7 +578,7 @@ def test_pick_place_world_has_approved_gui_presentation():
         (0.8, 0.8, 0.8)
     )
     assert parse_vector(scene.findtext('camera_pose')) == pytest.approx(
-        (0.322, 0.222, 0.62, 0, 0.40, -2.30)
+        (0.3828, -0.2427, 0.2676, 0, -0.0459, 3.0202)
     )
 
 

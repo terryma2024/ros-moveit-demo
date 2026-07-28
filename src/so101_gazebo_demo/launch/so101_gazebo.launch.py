@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+import sys
+import tempfile
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
@@ -21,11 +23,46 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 
-INITIAL_DETACH_TIMEOUT_SECONDS = 8
+# Loading the offline 64-piece jaw compound can take tens of seconds before
+# Gazebo starts the DetachableJoint relay on a cold cache.
+INITIAL_DETACH_TIMEOUT_SECONDS = 120
+VHACD_MAX_CONVEX_HULLS = 64
+VHACD_VOXEL_RESOLUTION = 400000
 COKE_CONTACT_GZ_TOPIC = (
     "/world/so101_pick_place/model/coke/link/body/"
     "sensor/coke_contact_sensor/contact"
 )
+
+
+def physics_engine_arguments():
+    """Return the engine selection shared by GUI and headless servers."""
+    return [
+        "--physics-engine",
+        "gz-physics-bullet-featherstone-plugin",
+    ]
+
+
+def simulation_model_preparation_command(model, output, base_height):
+    """Build the command that preserves VHACD metadata past URDF conversion."""
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "prepare_simulation_model.py"
+    )
+    return [
+        sys.executable,
+        str(script),
+        "--xacro",
+        model,
+        "--output",
+        output,
+        "--base-height",
+        base_height,
+        "--max-convex-hulls",
+        str(VHACD_MAX_CONVEX_HULLS),
+        "--voxel-resolution",
+        str(VHACD_VOXEL_RESOLUTION),
+    ]
 
 
 def initial_detach_command(timeout_seconds=INITIAL_DETACH_TIMEOUT_SECONDS):
@@ -35,6 +72,8 @@ def initial_detach_command(timeout_seconds=INITIAL_DETACH_TIMEOUT_SECONDS):
         "| grep -q '^Subscribers \\['; do sleep 0.1; done; "
         "while ! gz topic -i -t /so101/detach_coke 2>&1 "
         "| grep -q '^Subscribers \\['; do sleep 0.1; done; "
+        "while ! gz topic -e -t /so101/coke_attached_event -n 1 2>&1 "
+        "| grep -q 'data:.*attached'; do sleep 0.1; done; "
         "gz topic -t /so101/detach_coke "
         "-m gz.msgs.Empty -p 'unused: true'; "
         "while ! gz topic -e -t /so101/coke_attached -n 1 2>&1 "
@@ -129,6 +168,9 @@ def generate_launch_description():
         default_value="false",
         description="Run only the Gazebo server for automated smoke tests",
     )
+    simulation_model_path = os.path.join(
+        tempfile.gettempdir(), f"so101-gazebo-{os.getpid()}.sdf"
+    )
 
     gazebo_resource_path = SetEnvironmentVariable(
         name="GZ_SIM_RESOURCE_PATH",
@@ -158,7 +200,11 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource([os.path.join(
                     get_package_share_directory("ros_gz_sim"), "launch"), "/gz_sim.launch.py"]),
                 launch_arguments={
-                    "gz_args": [" -v 4 -r ", LaunchConfiguration("world")]
+                    "gz_args": [
+                        " -v 4 -r ",
+                        *[f"{argument} " for argument in physics_engine_arguments()],
+                        LaunchConfiguration("world"),
+                    ]
                 }.items(),
                 condition=UnlessCondition(LaunchConfiguration("headless")),
              )
@@ -166,17 +212,39 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource([os.path.join(
                     get_package_share_directory("ros_gz_sim"), "launch"), "/gz_sim.launch.py"]),
                 launch_arguments={
-                    "gz_args": [" -s -v 4 -r ", LaunchConfiguration("world")]
+                    "gz_args": [
+                        " -s -v 4 -r ",
+                        *[f"{argument} " for argument in physics_engine_arguments()],
+                        LaunchConfiguration("world"),
+                    ]
                 }.items(),
                 condition=IfCondition(LaunchConfiguration("headless")),
              )
 
+    simulation_model_preparation = ExecuteProcess(
+        cmd=simulation_model_preparation_command(
+            LaunchConfiguration("model"),
+            simulation_model_path,
+            LaunchConfiguration("base_height"),
+        ),
+        output="screen",
+    )
     gz_spawn_entity = Node(
         package="ros_gz_sim",
         executable="create",
         output="screen",
-        arguments=["-topic", "robot_description",
+        arguments=["-file", simulation_model_path,
                    "-name", "so101"],
+    )
+    start_spawn_after_model_preparation = RegisterEventHandler(
+        OnProcessExit(
+            target_action=simulation_model_preparation,
+            on_exit=lambda event, context: actions_after_success_or_shutdown(
+                event,
+                [gz_spawn_entity],
+                "SO-101 VHACD model preparation",
+            ),
+        )
     )
 
     (
@@ -192,9 +260,10 @@ def generate_launch_description():
     )
 
     # Gazebo Sim 8 starts DetachableJoint attached despite the SDF option.  The
-    # The relay starts first and subscribes to the raw plugin event.  Only then
-    # does the initializer publish detach, and it succeeds only after observing
-    # the relay's durable detached state.  Public command bridging and
+    # relay starts first and subscribes to the raw plugin event.  The initializer
+    # waits for the plugin's initial attached event before publishing detach,
+    # then succeeds only after observing the relay's durable detached state.
+    # Public command bridging and
     # controllers remain unavailable until that evidence chain completes.
     initial_detach_publisher = ExecuteProcess(
         cmd=initial_detach_command(),
@@ -244,5 +313,6 @@ def generate_launch_description():
         start_relay_after_spawn,
         start_detach_after_relay,
         start_readiness_after_detach,
-        gz_spawn_entity,
+        start_spawn_after_model_preparation,
+        simulation_model_preparation,
     ])

@@ -1,6 +1,8 @@
 #include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
 
 #include <array>
+#include <chrono>
+#include <thread>
 #include <utility>
 
 #include "so101_gazebo_demo/pick_place/moveit_scene_executor.hpp"
@@ -13,6 +15,43 @@ namespace so101_gazebo_demo::pick_place
 {
 namespace
 {
+
+class AttachThenHoldGripper final : public IStateExecutor
+{
+public:
+  AttachThenHoldGripper(std::shared_ptr<IStateExecutor> attach,
+                        std::shared_ptr<ISO101GripperCommand> gripper, double hold_q6,
+                        double settle_seconds) :
+    attach_(std::move(attach)), gripper_(std::move(gripper)), hold_q6_(hold_q6),
+    settle_seconds_(settle_seconds)
+  {
+  }
+
+  ActionResult execute(const ExecutionContext & context) override
+  {
+    const auto attached = attach_->execute(context);
+    if (attached.status != ActionStatus::SUCCEEDED) return attached;
+    const auto held = gripper_->command(hold_q6_);
+    if (held.status == ActionStatus::SUCCEEDED && settle_seconds_ > 0.0) {
+      std::this_thread::sleep_for(std::chrono::duration<double>(settle_seconds_));
+    }
+    return held;
+  }
+
+  ActionResult cancel() override
+  {
+    const auto gripper_cancelled = gripper_->cancelAndWait();
+    const auto attach_cancelled = attach_->cancel();
+    return gripper_cancelled.status == ActionStatus::SUCCEEDED ? attach_cancelled
+                                                               : gripper_cancelled;
+  }
+
+private:
+  std::shared_ptr<IStateExecutor> attach_;
+  std::shared_ptr<ISO101GripperCommand> gripper_;
+  double hold_q6_;
+  double settle_seconds_;
+};
 
 void registerGripper(SO101Task3Runtime & runtime,
                      const SO101Task3RuntimeDependencies & dependencies,
@@ -37,10 +76,19 @@ void registerGripper(SO101Task3Runtime & runtime,
 }
 
 void registerGazebo(SO101Task3Runtime & runtime,
-                    const SO101Task3RuntimeDependencies & dependencies)
+                    const SO101Task3RuntimeDependencies & dependencies,
+                    const SO101Profile & profile)
 {
   if (dependencies.gazebo_attach) {
-    runtime.actions.registerExecutor(State::ATTACH_GAZEBO, dependencies.gazebo_attach);
+    if (dependencies.gripper) {
+      runtime.actions.registerExecutor(
+        State::ATTACH_GAZEBO,
+        std::make_shared<AttachThenHoldGripper>(
+          dependencies.gazebo_attach, dependencies.gripper, profile.q6_contact,
+          profile.post_attach_hold_settle_seconds));
+    } else {
+      runtime.actions.registerExecutor(State::ATTACH_GAZEBO, dependencies.gazebo_attach);
+    }
   }
   if (dependencies.gazebo_detach) {
     runtime.actions.registerExecutor(State::DETACH_GAZEBO, dependencies.gazebo_detach);
@@ -83,7 +131,7 @@ SO101Task3Runtime makeSO101Task3Runtime(const SO101Task3RuntimeDependencies & de
 {
   SO101Task3Runtime runtime;
   registerGripper(runtime, dependencies, config.profile);
-  registerGazebo(runtime, dependencies);
+  registerGazebo(runtime, dependencies, config.profile);
   registerMoveItScene(runtime, dependencies, config);
   registerSO101AttachmentContracts(runtime.contracts, config.profile);
   runtime.recovery_policy = std::make_shared<SO101RecoveryPolicy>(std::move(config.profile));

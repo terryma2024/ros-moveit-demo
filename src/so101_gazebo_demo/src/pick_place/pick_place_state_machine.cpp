@@ -48,18 +48,19 @@ bool booleanValue(const std::string & value, bool & result)
 std::optional<CliOptions> parse(int argc, char ** argv)
 {
   CliOptions options;
-  for (int i = 1; i < argc; ++i) {
-    const std::string argument = argv[i];
-    if (argument == "--mode" && i + 1 < argc) {
-      const auto mode = spp::runModeFromString(argv[++i]);
+  const auto arguments = rclcpp::remove_ros_arguments(argc, argv);
+  for (std::size_t i = 1; i < arguments.size(); ++i) {
+    const std::string & argument = arguments[i];
+    if (argument == "--mode" && i + 1 < arguments.size()) {
+      const auto mode = spp::runModeFromString(arguments[++i]);
       if (!mode) return std::nullopt;
       options.request.mode = *mode;
-    } else if (argument == "--fail-at" && i + 1 < argc) {
-      const auto state = spp::stateFromString(argv[++i]);
+    } else if (argument == "--fail-at" && i + 1 < arguments.size()) {
+      const auto state = spp::stateFromString(arguments[++i]);
       if (!state) return std::nullopt;
       options.request.fail_at = *state;
-    } else if (argument == "--stop-after" && i + 1 < argc) {
-      const std::string value = argv[++i];
+    } else if (argument == "--stop-after" && i + 1 < arguments.size()) {
+      const std::string value = arguments[++i];
       if (!value.empty()) {
         const auto state = spp::stateFromString(value);
         if (!state) return std::nullopt;
@@ -67,18 +68,18 @@ std::optional<CliOptions> parse(int argc, char ** argv)
       }
     } else if (argument == "--resume") {
       options.request.resume = true;
-      if (i + 1 < argc) {
+      if (i + 1 < arguments.size()) {
         bool value = false;
-        if (booleanValue(argv[i + 1], value)) {
+        if (booleanValue(arguments[i + 1], value)) {
           options.request.resume = value;
           ++i;
         }
       }
-    } else if (argument == "--checkpoint" && i + 1 < argc) {
-      options.checkpoint_path = argv[++i];
+    } else if (argument == "--checkpoint" && i + 1 < arguments.size()) {
+      options.checkpoint_path = arguments[++i];
       if (options.checkpoint_path.empty()) return std::nullopt;
-    } else if (argument == "--session-id" && i + 1 < argc) {
-      options.simulation_session_id = argv[++i];
+    } else if (argument == "--session-id" && i + 1 < arguments.size()) {
+      options.simulation_session_id = arguments[++i];
     } else {
       return std::nullopt;
     }

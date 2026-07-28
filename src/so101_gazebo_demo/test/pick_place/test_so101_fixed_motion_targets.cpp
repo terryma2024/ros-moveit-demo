@@ -30,12 +30,12 @@ std::string readFile(const std::string & path)
 const std::vector<std::vector<double>> kGoldenWaypoints{
   {-0.000074896, 0.406242712, -0.335892969, 1.500452910, -0.029650203},
   {-0.004520982, 0.427298423, -0.219093530, 1.362597749, -0.083117591},
-  {-0.000416079, 0.471283543, -0.135531958, 1.235051068, -0.033743502},
-  {-0.000011454, 0.536286226, -0.082912794, 1.117429221, -0.028880766},
+  {-0.000002229, 0.518253213, -0.093375529, 1.145924970, -0.028770584},
+  {-0.000054474, 0.596982924, -0.061926975, 1.035746704, -0.029395613},
   {0.331019977, 0.550670543, -0.562313463, 1.582446437, -1.600206428},
   {0.331012586, 0.555338833, -0.421537209, 1.437001892, -1.597230266},
-  {0.331041085, 0.592207044, -0.331690813, 1.310287286, -1.607707019},
-  {0.331034755, 0.648891100, -0.272710221, 1.194622637, -1.605735287},
+  {0.331134108, 0.613342362, -0.251534461, 1.208995616, -1.511489515},
+  {0.331007247, 0.702417527, -0.246022105, 1.114408094, -1.595049654},
 };
 
 std::vector<std::vector<double>> calibratedWaypoints(const spp::SO101FixedMotionTargetPolicy & policy)
@@ -133,7 +133,7 @@ TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
     spp::State::MOVE_ABOVE_PLACE, spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
     spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT, spp::State::RECOVER_MOVE_ABOVE_PICK,
     spp::State::RECOVER_DESCEND_TO_PICK, spp::State::RECOVER_RETREAT};
-  EXPECT_EQ(policy.version(), "so101-fixed-table-d20-v5");
+  EXPECT_EQ(policy.version(), "so101-fixed-table-d35-v8");
   for (const auto state : states) {
     const auto spec = policy.spec(state);
     ASSERT_TRUE(spec) << spp::toString(state);
@@ -141,8 +141,8 @@ TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
     EXPECT_EQ(spec->target.joint_names,
               (std::vector<std::string>{"1", "2", "3", "4", "5"}));
     EXPECT_FALSE(spec->target.joint_waypoints.empty());
-    EXPECT_TRUE(spec->expected_gripper_q6 == 0.795386732 ||
-                spec->expected_gripper_q6 == 0.662818811 ||
+    EXPECT_TRUE(spec->expected_gripper_q6 == 1.100000000 ||
+                spec->expected_gripper_q6 == 1.067000000 ||
                 spec->expected_gripper_q6 == 1.7);
   }
 }
@@ -156,6 +156,9 @@ TEST(SO101FixedMotionTargets, BindsPolicyVersionToAllMotionConstants)
     {"so101-fixed-table-d20-v3", "d139c196ee64caed"},
     {"so101-fixed-table-d20-v4", "d641dd0229d61b17"},
     {"so101-fixed-table-d20-v5", "d641dd0229d61b17"},
+    {"so101-fixed-table-d25-v6", "0c3b7c3494d67a32"},
+    {"so101-fixed-table-d35-v7", "8ccd61f4f8067143"},
+    {"so101-fixed-table-d35-v8", "568de287d79792e5"},
   };
   ASSERT_EQ(version_to_golden_fingerprint.count(policy.version()), 1U);
   EXPECT_EQ(policyFingerprint(policy), version_to_golden_fingerprint.at(policy.version()));
@@ -204,9 +207,9 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
   const auto profile = spp::SO101Profile::canonical();
   const std::vector<spp::Vec3> expected_positions{
     {0.02, -0.28, 0.282}, {0.02, -0.28, 0.262},
-    {0.02, -0.28, 0.242}, {0.02, -0.28, 0.222},
+    {0.02, -0.28, 0.227}, {0.02, -0.28, 0.207},
     {-0.08, -0.25, 0.282}, {-0.08, -0.25, 0.262},
-    {-0.08, -0.25, 0.242}, {-0.08, -0.25, 0.222},
+    {-0.08, -0.25, 0.227}, {-0.08, -0.25, 0.207},
   };
   for (std::size_t index = 0; index < kGoldenWaypoints.size(); ++index) {
     state.setToDefaultValues();
@@ -340,8 +343,8 @@ TEST(SO101FixedMotionTargets, LocksPlaceCoordinatesContinuityQ6AndJointMargins)
   EXPECT_DOUBLE_EQ(above_place->validation.endpoint_position.y, -0.25);
   EXPECT_DOUBLE_EQ(place->validation.endpoint_position.x, -0.08);
   EXPECT_DOUBLE_EQ(place->validation.endpoint_position.y, -0.25);
-  EXPECT_DOUBLE_EQ(descend->expected_gripper_q6, 0.795386732);
-  EXPECT_DOUBLE_EQ(lift->expected_gripper_q6, 0.662818811);
+  EXPECT_DOUBLE_EQ(descend->expected_gripper_q6, 1.100000000);
+  EXPECT_DOUBLE_EQ(lift->expected_gripper_q6, 1.067000000);
   EXPECT_DOUBLE_EQ(policy.spec(spp::State::RETREAT)->expected_gripper_q6, 1.7);
   EXPECT_DOUBLE_EQ(policy.spec(spp::State::RECOVER_RETREAT)->expected_gripper_q6, 1.7);
 
