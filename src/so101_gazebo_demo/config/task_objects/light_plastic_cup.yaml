@@ -1,0 +1,44 @@
+schema_version: 1
+object_id: plastic_cup
+model:
+  mass_kg: 0.020
+  height_m: 0.090
+  outer_radius_m: 0.040
+  wall_thickness_m: 0.002
+  bottom_thickness_m: 0.002
+  side_count: 12
+  collision_kind: compound_primitives
+scene:
+  spawn_pose_xyz_xyzw: [0.020, -0.280, 0.165, 0.0, 0.0, 0.0, 1.0]
+  place_pose_xyz_xyzw: [-0.080, -0.250, 0.165, 0.0, 0.0, 0.0, 1.0]
+grasp_frame:
+  near_wall_outward_world: [0.0, 1.0, 0.0]
+  fixed_finger_side: outside
+  moving_jaw_side: inside
+  insertion_depth_below_rim_m: 0.025
+  rim_clearance_m: 0.008
+  bottom_clearance_m: 0.020
+  attachment_relative_pose_xyz_xyzw: [0.047667830272, 0.001804364288, -0.153949432437, -0.000000370000, 0.000000351000, 0.725238049793, 0.688498199803]
+fingertip_adapters:
+  enabled: true
+  material: TPU_95A
+  shore_hardness_a: 95
+  contact_model: rigid_primitive_approximation
+  geometry_reference_q6: 0.30
+  target_reference_gap_m: 0.0025
+  tongue_extension_m: 0.019671037305
+  tongue_width_m: 0.012
+  tongue_height_m: 0.027
+  friction_coefficient: 1.2
+  fixed_tongue:
+    size_xyz: [0.019671037305, 0.012, 0.027]
+    origin_xyz_rpy: [-0.001764481200, 0.0, -0.130449432212, 0.0, 0.0, 0.0]
+  fixed_stem:
+    size_xyz: [0.004, 0.012, 0.038]
+    origin_xyz_rpy: [-0.013599999852, 0.0, -0.100000000000, 0.0, 0.0, 0.0]
+  moving_tongue:
+    size_xyz: [0.019671037305, 0.012, 0.027]
+    origin_xyz_rpy: [-0.031437919338, -0.102329204263, 0.018800393214, -1.5708, 0.0, -0.30]
+  moving_stem:
+    size_xyz: [0.004, 0.012, 0.038]
+    origin_xyz_rpy: [-0.011132594002, -0.076737385516, 0.018800281367, -1.5708, 0.0, -0.30]
