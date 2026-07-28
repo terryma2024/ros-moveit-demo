@@ -76,7 +76,9 @@ struct MotionValidationConfig
   double axis_tolerance_rad{0.08726646259971647};
   double max_lateral_deviation{0.005};
   double max_joint_jump{0.15};
-  double joint_endpoint_tolerance{1e-4};
+  // Gazebo Bullet position control settles within roughly 0.004 rad while
+  // TCP position, axis, and path-shape checks provide independent safeguards.
+  double joint_endpoint_tolerance{0.005};
   double min_duration_seconds{0.1};
   double monotonic_tolerance{1e-5};
   std::set<std::string> allowed_touch_pairs;

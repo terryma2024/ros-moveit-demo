@@ -10,6 +10,16 @@
 	<!-- Keep MoveIt on the detailed meshes; Gazebo opts into contact pads. -->
 	<xacro:arg name="gazebo_collision_primitives" default="false" />
 
+	<xacro:macro name="moving_jaw_convex_collision" params="piece">
+		<collision name="${piece}">
+			<origin xyz="-5.55112e-17 -1.94746e-17 0.0189"
+				rpy="9.53145e-17 -4.66093e-24 0" />
+			<geometry>
+				<mesh filename="package://so101_gazebo_demo/meshes/so101/collision/${piece}.stl" />
+			</geometry>
+		</collision>
+	</xacro:macro>
+
 	<!-- Links -->
 	<link name="world" />
 
@@ -369,13 +379,71 @@
 			</collision>
 		</xacro:unless>
 		<xacro:if value="$(arg gazebo_collision_primitives)">
-			<!-- Moving fingertip pad follows joint 6 and supports Coke contact. -->
-			<collision name="moving_finger_contact">
-				<origin xyz="-0.01599174 -0.09546963 0" rpy="0 0 0" />
-				<geometry>
-					<box size="0.010 0.026 0.028" />
-				</geometry>
-			</collision>
+			<!-- Offline VHACD pieces keep the long jaw's interior concavity open. -->
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_000" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_001" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_002" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_003" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_004" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_005" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_006" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_007" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_008" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_009" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_010" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_011" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_012" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_013" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_014" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_015" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_016" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_017" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_018" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_019" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_020" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_021" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_022" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_023" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_024" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_025" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_026" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_027" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_028" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_029" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_030" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_031" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_032" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_033" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_034" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_035" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_036" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_037" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_038" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_039" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_040" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_041" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_042" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_043" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_044" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_045" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_046" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_047" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_048" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_049" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_050" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_051" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_052" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_053" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_054" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_055" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_056" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_057" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_058" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_059" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_060" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_061" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_062" />
+			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_063" />
 		</xacro:if>
 	</link>
 

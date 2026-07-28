@@ -81,6 +81,7 @@ def test_pick_place_runtime_launch_is_safe_by_default_and_wires_all_cli_gates():
     }
     assert arguments['run_mode'] == 'dry_run'
     assert arguments['start_simulation'] == 'false'
+    assert arguments['headless'] == 'false'
     assert {'stop_after', 'resume', 'checkpoint_path', 'simulation_session_id'} <= set(arguments)
 
     runtime = next(
@@ -94,6 +95,14 @@ def test_pick_place_runtime_launch_is_safe_by_default_and_wires_all_cli_gates():
     assert '--mode' in source
     assert '--checkpoint' in source
     assert '--session-id' in source
+    assert 'launch_arguments={"headless": headless}.items()' in source
+
+
+def test_pick_place_runtime_strips_ros_arguments_before_cli_parsing():
+    source = (
+        PACKAGE_DIR / 'src' / 'pick_place' / 'pick_place_state_machine.cpp'
+    ).read_text()
+    assert 'rclcpp::remove_ros_arguments(argc, argv)' in source
 
 
 def test_moveit_uses_canonical_base_height_and_same_package_resources():
@@ -113,6 +122,35 @@ def test_gazebo_launch_exposes_world_and_base_height():
     assert {'model', 'world', 'base_height', 'headless'} <= declared_arguments(
         GAZEBO_LAUNCH
     )
+
+
+def test_gazebo_launch_selects_bullet_featherstone_for_gui_and_headless():
+    """Catch either server mode silently falling back to the default engine."""
+    module = load_launch_module(GAZEBO_LAUNCH)
+
+    assert module.physics_engine_arguments() == [
+        '--physics-engine',
+        'gz-physics-bullet-featherstone-plugin',
+    ]
+    source = inspect.getsource(module.generate_launch_description)
+    assert source.count('physics_engine_arguments()') == 2
+
+
+def test_gazebo_launch_prepares_vhacd_sdf_before_file_spawn():
+    """Catch a return to direct URDF spawn, which strips mesh optimization."""
+    module = load_launch_module(GAZEBO_LAUNCH)
+    command = module.simulation_model_preparation_command(
+        '/tmp/source.xacro', '/tmp/model.sdf', '0.1899186'
+    )
+
+    assert any('prepare_simulation_model.py' in str(part) for part in command)
+    assert '--max-convex-hulls' in command
+    assert command[command.index('--max-convex-hulls') + 1] == '64'
+    assert '--voxel-resolution' in command
+    assert command[command.index('--voxel-resolution') + 1] == '400000'
+    source = inspect.getsource(module.generate_launch_description)
+    assert 'target_action=simulation_model_preparation' in source
+    assert 'arguments=["-file", simulation_model_path' in source
 
 
 def test_controller_and_display_launch_expose_their_public_arguments():
@@ -198,7 +236,7 @@ def test_initial_detach_helper_is_bounded_without_gazebo_plugin_subscription():
     environment['GZ_PARTITION'] = f'so101_missing_plugin_{uuid.uuid4().hex}'
     started = time.monotonic()
     completed = subprocess.run(
-        module.initial_detach_command(),
+        module.initial_detach_command(timeout_seconds=2),
         capture_output=True,
         text=True,
         timeout=12,
@@ -207,7 +245,7 @@ def test_initial_detach_helper_is_bounded_without_gazebo_plugin_subscription():
     elapsed = time.monotonic() - started
 
     assert completed.returncode == 124
-    assert 7 <= elapsed < 10
+    assert 1 <= elapsed < 4
 
 
 def test_initial_detach_command_without_raw_detached_event_fails_closed(tmp_path):
@@ -223,6 +261,8 @@ def test_initial_detach_command_without_raw_detached_event_fails_closed(tmp_path
         '    echo "Subscribers [fake-relay]" ;;\n'
         '  *"topic -i -t /so101/detach_coke"*)\n'
         '    echo "Subscribers [fake-plugin]" ;;\n'
+        '  *"topic -e -t /so101/coke_attached_event"*)\n'
+        '    echo "data: attached" ;;\n'
         '  *"topic -t /so101/detach_coke"*)\n'
         '    : > "$SO101_DETACH_MARKER" ;;\n'
         '  *"topic -e -t /so101/coke_attached"*)\n'
@@ -256,6 +296,9 @@ def test_launch_starts_relay_before_initial_detach_and_gates_on_durable_state():
     assert '/so101/coke_attached_event' in command
     assert '/so101/coke_attached' in command
     assert 'detached' in command
+    assert command.index('topic -e -t /so101/coke_attached_event') < command.index(
+        'topic -t /so101/detach_coke'
+    )
 
 
 def test_failed_prerequisite_stops_before_downstream_readiness_actions():

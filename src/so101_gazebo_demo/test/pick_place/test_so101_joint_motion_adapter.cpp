@@ -28,8 +28,8 @@ spp::Pose3d pedestalPose()
 
 spp::Pose3d graspRelativePose()
 {
-  return {0.0214000012, -0.0000000417348703, -0.124949,
-          -0.000000365, 0.000000355, 0.717237013, 0.696829296};
+  return {0.0214000012, -0.0000000417348703, -0.109949,
+          -0.000000366, 0.000000355, 0.717401384, 0.696660071};
 }
 
 spp::Pose3d compose(const spp::Pose3d & parent, const spp::Pose3d & child)

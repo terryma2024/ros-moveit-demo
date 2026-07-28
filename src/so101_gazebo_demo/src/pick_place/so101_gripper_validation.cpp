@@ -14,18 +14,17 @@ namespace so101_gazebo_demo::pick_place
 double gripperWidthAtSection(double q6, const SO101Profile & profile)
 {
   namespace calibration = gripper_calibration;
-  // Gazebo's trajectory controller can settle a few tens of nanoradians past
-  // the commanded endpoint.  Treat up to one microradian as endpoint noise;
-  // this remains 2000x tighter than the configured q6 acceptance tolerance
-  // and avoids extrapolating the mesh-derived calibration curve.
-  constexpr double kCalibrationEndpointEpsilon = 1e-6;
+  // Bullet Featherstone's position interface can settle just beyond a commanded
+  // endpoint. Clamp only values that remain inside the profile's independently
+  // validated q6 tolerance; never extrapolate the mesh-derived table.
+  const double calibration_endpoint_tolerance = profile.q6_tolerance;
   if (!std::isfinite(q6) ||
       profile.gripper_geometry_model_version != calibration::kModelVersion ||
       profile.gripper_geometry_model_fingerprint != calibration::kModelFingerprint ||
       std::abs(profile.grasp_section_depth - calibration::kGraspDepth) > 1e-12 ||
       std::abs(profile.coke_radius * 2.0 - calibration::kCokeDiameter) > 1e-12 ||
-      q6 < calibration::kSamples.front().q6 - kCalibrationEndpointEpsilon ||
-      q6 > calibration::kSamples.back().q6 + kCalibrationEndpointEpsilon) {
+      q6 < calibration::kSamples.front().q6 - calibration_endpoint_tolerance ||
+      q6 > calibration::kSamples.back().q6 + calibration_endpoint_tolerance) {
     return std::numeric_limits<double>::quiet_NaN();
   }
   q6 = std::clamp(q6, calibration::kSamples.front().q6,

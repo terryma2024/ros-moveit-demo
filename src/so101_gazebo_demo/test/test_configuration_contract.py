@@ -62,31 +62,30 @@ def test_ros2_control_exposes_position_and_velocity_for_every_joint():
     }
 
 
-def test_gazebo_contact_profile_uses_supported_gripper_pad_geometry():
-    """Catch Gazebo falling back to visual-only gripper contact geometry."""
+def test_gazebo_contact_profile_uses_fixed_pad_and_offline_vhacd_moving_jaw():
+    """Catch the moving jaw regressing to an offset box or a visual-only mesh."""
     robot = generated_robot('gazebo_collision_primitives:=true')
 
-    for link_name, collision_name in (
-        ('gripper', 'fixed_finger_contact'),
-        ('jaw', 'moving_finger_contact'),
-    ):
-        link = robot.find(f"./link[@name='{link_name}']")
-        assert link is not None
-        assert link.find('./visual/geometry/mesh') is not None
-        assert link.findall('./collision/geometry/mesh') == []
-        collision = link.find(f"./collision[@name='{collision_name}']")
-        assert collision is not None
-        box = collision.find('./geometry/box')
-        assert box is not None
-        assert all(float(value) > 0.0 for value in box.attrib['size'].split())
-
+    gripper = robot.find("./link[@name='gripper']")
+    jaw = robot.find("./link[@name='jaw']")
+    assert gripper is not None
+    assert jaw is not None
     fixed = robot.find("./link[@name='gripper']/collision[@name='fixed_finger_contact']")
-    moving = robot.find("./link[@name='jaw']/collision[@name='moving_finger_contact']")
+    moving = jaw.findall('./collision')
+    assert fixed is not None
+    assert len(moving) == 64
+    assert fixed.find('./geometry/box') is not None
+    assert all(piece.find('./geometry/box') is None for piece in moving)
+
+    visual_mesh = jaw.find('./visual/geometry/mesh')
+    assert visual_mesh is not None
+    collision_meshes = [piece.find('./geometry/mesh') for piece in moving]
+    assert all(mesh is not None for mesh in collision_meshes)
+    assert all('/collision/moving_jaw_convex_' in mesh.attrib['filename'] for mesh in collision_meshes)
+    assert all(piece.find('origin').attrib == jaw.find('./visual/origin').attrib for piece in moving)
+
     assert [float(value) for value in fixed.find('origin').attrib['xyz'].split()] == pytest.approx(
         [-0.0216, 0.0, -0.084], abs=1e-7
-    )
-    assert [float(value) for value in moving.find('origin').attrib['xyz'].split()] == pytest.approx(
-        [-0.01599174, -0.09546963, 0.0], abs=1e-7
     )
 
     moveit_robot = generated_robot()

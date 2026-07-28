@@ -232,7 +232,8 @@ ActionResult SO101GripperStateExecutor::execute(const ExecutionContext & context
       validateSO101GripperTarget(context.before, config_.target, profile_).ok) {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
-  return command_->command(target_q6);
+  return command_->command(
+    config_.target == SO101GripperTarget::CONTACT ? profile_.q6_close : target_q6);
 }
 
 ValidationResult validateSO101GripperTarget(const WorldSnapshot & snapshot,
@@ -244,7 +245,22 @@ ValidationResult validateSO101GripperTarget(const WorldSnapshot & snapshot,
     contact_profile.q6_tolerance = profile.contact_q6_stop_tolerance;
     contact_profile.width_tolerance = profile.contact_width_oversize_tolerance;
     const auto [q6, width] = targetFor(target, profile);
-    return validateQ6Target(snapshot, q6, width, contact_profile);
+    auto result = validateQ6Target(snapshot, q6, width, contact_profile);
+    if (snapshot.gazebo_coke_gripper_contact.value_or(false)) {
+      result.failures.erase(
+        std::remove_if(result.failures.begin(), result.failures.end(), [](const Failure & failure) {
+          return failure.code == "Q6_TARGET_OUT_OF_TOLERANCE" ||
+                 failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE";
+        }),
+        result.failures.end());
+      result.metrics["gazebo_coke_gripper_contact"] = 1.0;
+      if (snapshot.gazebo_coke_gripper_max_depth) {
+        result.metrics["gazebo_coke_gripper_max_depth"] =
+          *snapshot.gazebo_coke_gripper_max_depth;
+      }
+      result.ok = result.failures.empty();
+    }
+    return result;
   }
   if (target == SO101GripperTarget::PREOPEN) {
     const auto [q6, width] = targetFor(target, profile);

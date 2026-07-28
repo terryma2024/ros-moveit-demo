@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <gz/msgs/pose_v.pb.h>
+#include <gz/msgs/contacts.pb.h>
 #include <gz/msgs/stringmsg.pb.h>
 #include <gz/transport/Node.hh>
 
@@ -112,8 +113,11 @@ public:
   {
     static_cast<void>(initially_detached);
     const auto pose_topic = "/world/" + world_name + "/pose/info";
+    const auto contact_topic = "/world/" + world_name + "/model/" + coke_model_ +
+      "/link/body/sensor/coke_contact_sensor/contact";
     pose_subscription_ok_ = transport_.Subscribe(pose_topic, &Impl::onPoses, this);
     attachment_subscription_ok_ = transport_.Subscribe(attachment_topic, &Impl::onAttachment, this);
+    contact_subscription_ok_ = transport_.Subscribe(contact_topic, &Impl::onContacts, this);
   }
 
   void onPoses(const gz::msgs::Pose_V & message)
@@ -146,6 +150,31 @@ public:
       return;
     }
     attachment_received_at_ = std::chrono::steady_clock::now();
+    condition_.notify_all();
+  }
+
+  void onContacts(const gz::msgs::Contacts & message)
+  {
+    bool gripper_contact = false;
+    double max_depth = 0.0;
+    for (const auto & contact : message.contact()) {
+      const auto & first = contact.collision1().name();
+      const auto & second = contact.collision2().name();
+      const bool first_coke = first.find(coke_model_ + "::") != std::string::npos;
+      const bool second_coke = second.find(coke_model_ + "::") != std::string::npos;
+      const auto & other = first_coke ? second : first;
+      const bool robot_gripper = other.find("::jaw::") != std::string::npos ||
+        other.find("::gripper::") != std::string::npos;
+      if (!(robot_gripper && (first_coke || second_coke))) continue;
+      gripper_contact = true;
+      for (int index = 0; index < contact.depth_size(); ++index) {
+        max_depth = std::max(max_depth, contact.depth(index));
+      }
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    coke_gripper_contact_ = gripper_contact;
+    coke_gripper_max_depth_ = max_depth;
+    contact_received_at_ = std::chrono::steady_clock::now();
     condition_.notify_all();
   }
 
@@ -187,6 +216,10 @@ public:
     snapshot.gazebo_coke_pose_world = coke_pose_;
     snapshot.gazebo_coke_attached = coke_attached_;
     snapshot.gazebo_coke_stationary = coke_pose_stability_.stationary();
+    if (contact_subscription_ok_ && now - contact_received_at_ <= max_observation_age_) {
+      snapshot.gazebo_coke_gripper_contact = coke_gripper_contact_;
+      snapshot.gazebo_coke_gripper_max_depth = coke_gripper_max_depth_;
+    }
     snapshot.simulation_session_id = simulation_session_id_;
     return {snapshot, std::nullopt};
   }
@@ -198,10 +231,14 @@ private:
   gz::transport::Node transport_;
   bool pose_subscription_ok_{false};
   bool attachment_subscription_ok_{false};
+  bool contact_subscription_ok_{false};
   mutable std::mutex mutex_;
   mutable std::condition_variable condition_;
   std::optional<Pose3d> coke_pose_;
   std::optional<bool> coke_attached_;
+  bool coke_gripper_contact_{false};
+  double coke_gripper_max_depth_{0.0};
+  std::chrono::steady_clock::time_point contact_received_at_{};
   std::chrono::steady_clock::time_point attachment_received_at_{};
   CokePoseStabilityTracker coke_pose_stability_;
   std::chrono::duration<double> coke_settle_interval_;

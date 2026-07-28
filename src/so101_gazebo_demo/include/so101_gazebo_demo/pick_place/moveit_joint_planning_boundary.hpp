@@ -98,7 +98,7 @@ public:
   std::vector<CalibrationCandidate>
   search(const Vec3 & target_position, const Vec3 & local_axis, const Vec3 & target_axis,
          std::size_t seed_count = 4096, std::size_t result_count = 8,
-         double gripper_q6 = 0.795386732);
+         double gripper_q6 = 1.100000000);
 
 private:
   class Impl;

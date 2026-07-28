@@ -69,7 +69,12 @@ OPENING_AXIS_GRIPPER = np.array([1.0, 0.0, 0.0])
 DEFAULT_GRASP_DEPTH = 0.020
 DEFAULT_COKE_DIAMETER = 0.066
 DEFAULT_PREOPEN_CLEARANCE = 0.004
-GEOMETRY_MODEL_VERSION = 'so101-gripper-d20-mesh-v1'
+def geometry_model_version(grasp_depth: float) -> str:
+    """Bind generated calibration data to its integer-millimetre section."""
+    depth_mm = round(grasp_depth * 1000.0)
+    if not math.isclose(grasp_depth * 1000.0, depth_mm, abs_tol=1e-9):
+        raise ValueError('grasp_depth must resolve to an integer millimetre')
+    return f'so101-gripper-d{depth_mm}-mesh-v1'
 GEOMETRY_CONSTANTS_CANONICAL = (
     'J6_XYZ=0.0202,0.0188,-0.0234\n'
     'J6_RPY=1.5708,0,0\n'
@@ -581,8 +586,9 @@ def calculate_width_calibration(
     constants_sha = hashlib.sha256(
         GEOMETRY_CONSTANTS_CANONICAL.encode('utf-8')
     ).hexdigest()
+    model_version = geometry_model_version(grasp_depth)
     fingerprint_payload = (
-        f'version={GEOMETRY_MODEL_VERSION}\n'
+        f'version={model_version}\n'
         f'fixed_mesh_sha256={fixed_sha}\n'
         f'moving_mesh_sha256={moving_sha}\n'
         f'urdf_sha256={urdf_sha}\n'
@@ -594,7 +600,7 @@ def calculate_width_calibration(
         fingerprint_payload.encode('utf-8')
     ).hexdigest()
     return WidthCalibration(
-        GEOMETRY_MODEL_VERSION,
+        model_version,
         fixed_sha,
         moving_sha,
         urdf_sha,
@@ -695,17 +701,6 @@ def main() -> None:
     parser.add_argument('--calibration-samples', type=int, default=49)
     args = parser.parse_args()
 
-    try:
-        result = calculate_gripper_targets(
-            mesh_dir=args.mesh_dir,
-            grasp_depth=args.grasp_depth_mm / 1000.0,
-            coke_diameter=args.coke_diameter_mm / 1000.0,
-            preopen_clearance=args.preopen_clearance_mm / 1000.0,
-        )
-    except (OSError, ValueError) as exc:
-        print(f'ERROR: {exc}', file=sys.stderr)
-        raise SystemExit(1) from exc
-
     if args.print_calibration_header:
         try:
             calibration = calculate_width_calibration(
@@ -722,6 +717,17 @@ def main() -> None:
             raise SystemExit(1) from exc
         print(render_width_calibration_header(calibration), end='')
         return
+
+    try:
+        result = calculate_gripper_targets(
+            mesh_dir=args.mesh_dir,
+            grasp_depth=args.grasp_depth_mm / 1000.0,
+            coke_diameter=args.coke_diameter_mm / 1000.0,
+            preopen_clearance=args.preopen_clearance_mm / 1000.0,
+        )
+    except (OSError, ValueError) as exc:
+        print(f'ERROR: {exc}', file=sys.stderr)
+        raise SystemExit(1) from exc
 
     print('SO-101 Coke grasp geometry')
     print(f'  grasp depth d:       {result.grasp_depth * 1000:.2f} mm')

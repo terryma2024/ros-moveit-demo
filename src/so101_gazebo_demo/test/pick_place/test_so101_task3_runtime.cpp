@@ -15,9 +15,10 @@ namespace
 class FakeGripper final : public pick_place::ISO101GripperCommand
 {
 public:
-  pick_place::ActionResult command(double) override
+  pick_place::ActionResult command(double q6) override
   {
     ++calls;
+    last_q6 = q6;
     return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
   }
   pick_place::ActionResult cancelAndWait() override
@@ -25,6 +26,7 @@ public:
     return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
   }
   int calls{0};
+  double last_q6{0.0};
 };
 
 class FakeExecutor final : public pick_place::IStateExecutor
@@ -165,6 +167,24 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
     EXPECT_TRUE(runtime.contracts.hasContract(transition));
   }
   ASSERT_NE(nullptr, runtime.recovery_policy);
+}
+
+TEST(SO101Task3Runtime, GazeboAttachRetargetsPositionControllerToMeasuredCarryHold)
+{
+  auto gripper = std::make_shared<FakeGripper>();
+  auto attach = std::make_shared<FakeExecutor>();
+  pick_place::SO101Task3RuntimeDependencies deps{
+    gripper, std::make_shared<FakeScene>(), attach,
+    std::make_shared<FakeExecutor>(), std::make_shared<FakeExecutor>()};
+  const auto runtime = pick_place::makeSO101Task3Runtime(deps);
+  auto * executor = runtime.actions.findExecutor(pick_place::State::ATTACH_GAZEBO);
+  ASSERT_NE(nullptr, executor);
+  const pick_place::ExecutionContext context{
+    pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT, {}, nullptr};
+  EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, executor->execute(context).status);
+  EXPECT_EQ(1, attach->calls);
+  EXPECT_EQ(1, gripper->calls);
+  EXPECT_DOUBLE_EQ(pick_place::SO101Profile::canonical().q6_contact, gripper->last_q6);
 }
 
 TEST(SO101Task3Runtime, WholeExecuteGraphFailsClosedBeforeObservationWithoutTask4Motion)

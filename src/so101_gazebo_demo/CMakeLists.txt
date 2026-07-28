@@ -197,6 +197,10 @@ if(BUILD_TESTING)
     test_configuration_contract
     test/test_configuration_contract.py
   )
+  ament_add_pytest_test(
+    test_prepare_simulation_model
+    test/test_prepare_simulation_model.py
+  )
 endif()
 
 install(
@@ -214,7 +218,7 @@ install(
 )
 
 install(
-  DIRECTORY config launch meshes rviz urdf worlds
+  DIRECTORY config launch meshes rviz scripts urdf worlds
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE
@@ -223,6 +227,7 @@ install(
 install(
   PROGRAMS
     scripts/gripper_preopen_calc.py
+    scripts/prepare_simulation_model.py
     scripts/tile_ai_station_guis.py
   DESTINATION lib/${PROJECT_NAME}
 )

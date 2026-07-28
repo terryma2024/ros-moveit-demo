@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
+#include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -101,9 +102,10 @@ void requireAttachments(ValidationResult & result, const WorldSnapshot & snapsho
 void requireQ6(ValidationResult & result, const WorldSnapshot & snapshot, bool open,
                const SO101Profile & profile)
 {
-  merge(result,
-        validateQ6Target(snapshot, open ? profile.q6_preopen : profile.q6_contact,
-                         open ? profile.preopen_width : profile.contact_width, profile));
+  merge(result, validateSO101GripperTarget(
+                  snapshot,
+                  open ? SO101GripperTarget::PREOPEN : SO101GripperTarget::CONTACT,
+                  profile));
 }
 
 void requireNoCokeJump(ValidationResult & result, const WorldSnapshot & before,

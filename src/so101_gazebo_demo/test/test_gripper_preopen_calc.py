@@ -85,11 +85,11 @@ def test_versioned_dense_table_matches_real_mesh_at_nonendpoint():
     calibration = calculator.calculate_width_calibration(
         mesh_dir=MESH_DIR,
         urdf_path=URDF_PATH,
-        grasp_depth=0.020,
+        grasp_depth=0.035,
         coke_diameter=0.066,
-        q_min=0.662818811,
-        q_max=0.795386732,
-        sample_count=80,
+        q_min=0.790272757,
+        q_max=1.100000000,
+        sample_count=160,
     )
     header = CALIBRATION_HEADER.read_text()
     assert header == calculator.render_width_calibration_header(calibration)
@@ -106,12 +106,12 @@ def test_versioned_dense_table_matches_real_mesh_at_nonendpoint():
     assert calibration.urdf_sha256 in header
     assert calibration.constants_sha256 in header
     assert calibration.model_fingerprint in header
-    assert len(samples) == 80
+    assert len(samples) == 160
     midpoint = len(samples) // 2
     assert samples[midpoint][1] == pytest.approx(
         calculator.gripper_width_at_q6(
             mesh_dir=MESH_DIR,
-            grasp_depth=0.020,
+            grasp_depth=0.035,
             coke_diameter=0.066,
             q6=samples[midpoint][0],
         ),
@@ -130,10 +130,11 @@ def test_calibration_header_regenerates_without_user_site_packages():
             '/usr/bin/python3', str(SCRIPT_PATH),
             '--mesh-dir', str(MESH_DIR),
             '--urdf-path', str(URDF_PATH),
+            '--grasp-depth-mm', '35',
             '--print-calibration-header',
-            '--calibration-q-min', '0.662818811',
-            '--calibration-q-max', '0.795386732',
-            '--calibration-samples', '80',
+            '--calibration-q-min', '0.790272757',
+            '--calibration-q-max', '1.100000000',
+            '--calibration-samples', '160',
         ],
         check=False,
         capture_output=True,

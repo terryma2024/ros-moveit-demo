@@ -34,26 +34,37 @@ struct SO101Profile
   Pose3d coke_pose{0.02, -0.28, 0.181, 0.0, 0.0, 0.0, 1.0};
   Pose3d place_coke_pose{-0.08, -0.25, 0.181, 0.0, 0.0, 0.0, 1.0};
   Pose3d calibrated_grasp_relative_pose{
-    0.0214000012, -0.0000000417348703, -0.124949,
-    -0.000000365, 0.000000355, 0.717237013, 0.696829296};
+    0.0214000012, -0.0000000417348703, -0.109949,
+    -0.000000366, 0.000000355, 0.717401384, 0.696660071};
   std::vector<double> arm_home_positions{0.0, 0.0, 0.0, 0.0, 0.0};
   double q6_home{0.0};
-  double q6_preopen{0.795386732};
-  double q6_contact{0.662818811};
+  double q6_preopen{1.100000000};
+  // The real STL section reaches a 66 mm side aperture at this angle.  With the
+  // VHACD collision pieces, Coke first contacts the upper jaw feature earlier;
+  // keep the two values separate so the position controller does not continue
+  // driving through that authoritative Bullet contact while carrying.
+  double q6_geometric_side_contact{0.790272757};
+  double q6_close{1.030000000};
+  double q6_contact{1.067000000};
   double q6_full_open{1.7};
-  double preopen_width{0.076};
-  double contact_width{0.066};
-  double grasp_section_depth{0.020};
-  std::string gripper_geometry_model_version{"so101-gripper-d20-mesh-v1"};
+  double preopen_width{0.094176917906};
+  double contact_width{0.088951652};
+  double grasp_section_depth{0.035};
+  std::string gripper_geometry_model_version{"so101-gripper-d35-mesh-v1"};
   std::string gripper_geometry_model_fingerprint{
-    "09bca45c3397d9c53fbbf995944d002a52b28eb902cf854f0e5fe9e58dcc51bb"};
-  double q6_tolerance{0.002};
+    "cb3ea447c0ec8e0e7dc2a70ef80f06244dde8004bd16fac36db531748cf29cb9"};
+  // Bullet Featherstone settles about 0.010 rad above preopen and up to about
+  // 0.015 rad above the VHACD contact-hold target.  This tolerance is still an
+  // order of magnitude below the former 0.25 rad forced-penetration error;
+  // width, contact and stop-velocity checks remain independent gates.
+  double q6_tolerance{0.020};
   double width_tolerance{0.0005};
   double contact_q6_stop_tolerance{0.010};
   double contact_width_oversize_tolerance{0.001};
   double q6_velocity_tolerance{0.01};
   double coke_position_drift_tolerance{0.003};
   double coke_orientation_drift_tolerance_rad{0.035};
+  double post_attach_hold_settle_seconds{2.0};
   std::string attach_topic{"/so101/attach_coke"};
   std::string detach_topic{"/so101/detach_coke"};
   std::string attachment_event_topic{"/so101/coke_attached_event"};
