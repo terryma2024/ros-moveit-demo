@@ -15,3 +15,5 @@ __pycache__/
 
 # Local Git worktrees
 .worktrees/
+.idea/ctestState.xml
+assets/captures
