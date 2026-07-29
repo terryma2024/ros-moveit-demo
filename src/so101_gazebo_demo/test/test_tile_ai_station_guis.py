@@ -227,6 +227,10 @@ class FakeBackend:
             return self.batches.pop(0)
         return self.batches[0]
 
+    def maximize(self, window_id):
+        self.requests.append(('maximize', window_id))
+        self.targets[window_id] = self.workarea()
+
     def clear_maximize(self, window_id):
         self.requests.append(('clear', window_id))
 
@@ -240,6 +244,7 @@ class FakeBackend:
 
 RVIZ = MODULE.WindowInfo(0x31, 'MoveIt - RViz', ('rviz2', 'rviz2'))
 GAZEBO = MODULE.WindowInfo(0x32, 'Gazebo Sim', ('gz-sim-gui', 'Gazebo GUI'))
+GAZEBO_EXTRA = MODULE.WindowInfo(0x33, 'Gazebo Sim', ('gz-sim-gui', 'Gazebo GUI'))
 
 
 def test_waits_then_tiles_and_verifies_both_windows():
@@ -300,33 +305,50 @@ def test_cli_parses_selected_workarea_maximize_mode():
     assert args.maximize == 'gazebo'
 
 
-def test_maximize_resizes_only_selected_window_to_exact_workarea():
+def test_maximize_gazebo_requests_ewmh_state_and_verifies_workarea():
     backend = FakeBackend([[RVIZ, GAZEBO]])
 
-    result = MODULE.maximize_window(
+    result = MODULE.maximize_role(
         backend,
         'gazebo',
         timeout_sec=1,
         poll_sec=0,
         geometry_tolerance=12,
+        monotonic=lambda: 0,
+        sleep=lambda _: None,
     )
 
     assert result == MODULE.Rect(66, 32, 3774, 2128)
-    assert backend.requests == [
-        ('move', 0x32, MODULE.Rect(66, 32, 3774, 2128)),
-    ]
+    assert backend.requests == [('maximize', 0x32)]
+
+
+def test_maximize_rejects_ambiguous_gazebo_windows():
+    backend = FakeBackend([[RVIZ, GAZEBO, GAZEBO_EXTRA]])
+
+    with pytest.raises(RuntimeError, match='multiple gazebo windows'):
+        MODULE.maximize_role(
+            backend,
+            'gazebo',
+            timeout_sec=1,
+            poll_sec=0,
+            geometry_tolerance=12,
+            monotonic=lambda: 0,
+            sleep=lambda _: None,
+        )
+
+    assert backend.requests == []
 
 
 def test_repeated_selected_workarea_maximize_is_idempotent():
     backend = FakeBackend([[RVIZ, GAZEBO]])
 
-    first = MODULE.maximize_window(backend, 'rviz', 1, 0, 12)
-    second = MODULE.maximize_window(backend, 'rviz', 1, 0, 12)
+    first = MODULE.maximize_role(backend, 'rviz', 1, 0, 12)
+    second = MODULE.maximize_role(backend, 'rviz', 1, 0, 12)
 
     assert first == second == MODULE.Rect(66, 32, 3774, 2128)
     assert backend.requests == [
-        ('move', 0x31, MODULE.Rect(66, 32, 3774, 2128)),
-        ('move', 0x31, MODULE.Rect(66, 32, 3774, 2128)),
+        ('maximize', 0x31),
+        ('maximize', 0x31),
     ]
 
 
@@ -335,7 +357,7 @@ def test_selected_maximize_timeout_reports_missing_selected_window():
     ticks = iter((0.0, 0.5, 1.1))
 
     with pytest.raises(RuntimeError, match='missing gazebo'):
-        MODULE.maximize_window(
+        MODULE.maximize_role(
             backend,
             'gazebo',
             timeout_sec=1,
@@ -351,12 +373,12 @@ def test_selected_maximize_timeout_reports_missing_selected_window():
 def test_default_tile_restores_gazebo_after_workarea_maximize():
     backend = FakeBackend([[RVIZ, GAZEBO]])
 
-    MODULE.maximize_window(backend, 'gazebo', 1, 0, 12)
+    MODULE.maximize_role(backend, 'gazebo', 1, 0, 12)
     restored = MODULE.tile_windows(backend, 1, 0, 12)
 
     assert restored['gazebo'] == MODULE.Rect(1953, 32, 1887, 2128)
     assert backend.requests == [
-        ('move', 0x32, MODULE.Rect(66, 32, 3774, 2128)),
+        ('maximize', 0x32),
         ('clear', 0x31),
         ('clear', 0x32),
         ('move', 0x31, MODULE.Rect(66, 32, 1887, 2128)),
