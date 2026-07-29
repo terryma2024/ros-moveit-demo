@@ -577,9 +577,8 @@ def test_pick_place_world_has_approved_gui_presentation():
     assert parse_vector(scene.findtext('background_color')) == pytest.approx(
         (0.8, 0.8, 0.8)
     )
-    assert parse_vector(scene.findtext('camera_pose')) == pytest.approx(
-        (0.3828, -0.2427, 0.2676, 0, -0.0459, 3.0202)
-    )
+    assert scene.findtext('camera_pose') == '0.4281 0.2175 0.4608 0 0.4 -2.3'
+    assert scene.find('horizontal_fov') is None
 
 
 @pytest.mark.parametrize(
