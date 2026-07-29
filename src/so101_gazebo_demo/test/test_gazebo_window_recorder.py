@@ -115,6 +115,22 @@ def test_build_ffmpeg_command_forces_yuv420p_and_never_overwrites():
     assert command[-1] == '/tmp/run.mkv'
 
 
+def test_build_ffmpeg_command_uses_low_overhead_preset_for_libx264():
+    command = MODULE.build_ffmpeg_command(
+        display=':1', rect=Rect(66, 32, 1920, 1080), fps=30,
+        encoder='libx264', output=Path('/tmp/run.mkv'),
+    )
+    assert command[command.index('-preset') + 1] == 'veryfast'
+
+
+def test_build_ffmpeg_command_omits_libx264_preset_for_nvenc():
+    command = MODULE.build_ffmpeg_command(
+        display=':1', rect=Rect(66, 32, 1920, 1080), fps=30,
+        encoder='h264_nvenc', output=Path('/tmp/run.mkv'),
+    )
+    assert '-preset' not in command
+
+
 def test_even_geometry_crops_odd_dimensions_for_h264():
     assert MODULE.even_geometry(Rect(66, 32, 1919, 1079)) == Rect(66, 32, 1918, 1078)
     assert MODULE.even_geometry(CLIENT) == CLIENT
