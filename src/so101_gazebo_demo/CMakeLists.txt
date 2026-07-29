@@ -190,6 +190,34 @@ if(BUILD_TESTING)
     test/test_tile_ai_station_guis.py
   )
   ament_add_pytest_test(
+    test_ai_station_x11
+    test/test_ai_station_x11.py
+  )
+  ament_add_pytest_test(
+    test_gazebo_camera_pose
+    test/test_gazebo_camera_pose.py
+  )
+  ament_add_pytest_test(
+    test_so101_stack_inventory
+    test/test_so101_stack_inventory.py
+  )
+  ament_add_pytest_test(
+    test_gazebo_window_recorder
+    test/test_gazebo_window_recorder.py
+  )
+  ament_add_pytest_test(
+    test_video_extract_frame
+    test/test_video_extract_frame.py
+  )
+  ament_add_pytest_test(
+    test_video_sample_frames
+    test/test_video_sample_frames.py
+  )
+  ament_add_pytest_test(
+    test_video_mosaic
+    test/test_video_mosaic.py
+  )
+  ament_add_pytest_test(
     test_self_containment
     test/test_self_containment.py
   )
@@ -229,6 +257,17 @@ install(
     scripts/gripper_preopen_calc.py
     scripts/prepare_simulation_model.py
     scripts/tile_ai_station_guis.py
+    scripts/gazebo_camera_pose.py
+    scripts/so101_stack_inventory.py
+    scripts/gazebo_window_recorder.py
+    scripts/video_extract_frame.py
+    scripts/video_sample_frames.py
+    scripts/video_mosaic.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  FILES scripts/ai_station_x11.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
