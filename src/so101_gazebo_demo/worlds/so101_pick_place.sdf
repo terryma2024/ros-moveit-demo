@@ -25,7 +25,7 @@
         <scene>scene</scene>
         <ambient_light>0.4 0.4 0.4</ambient_light>
         <background_color>0.8 0.8 0.8</background_color>
-        <camera_pose>0.3828 -0.2427 0.2676 0 -0.0459 3.0202</camera_pose>
+        <camera_pose>0.4281 0.2175 0.4608 0 0.4 -2.3</camera_pose>
       </plugin>
 
       <plugin filename="GzSceneManager" name="Scene Manager">
