@@ -113,7 +113,7 @@ def even_geometry(rect):
 
 def build_ffmpeg_command(display, rect, fps, encoder, output):
     """Record only the client region: no full display, no audio, no -y."""
-    return [
+    command = [
         'ffmpeg', '-nostdin',
         '-f', 'x11grab',
         '-framerate', str(fps),
@@ -121,9 +121,15 @@ def build_ffmpeg_command(display, rect, fps, encoder, output):
         '-i', f'{display}+{rect.x},{rect.y}',
         '-an',
         '-c:v', encoder,
+    ]
+    if encoder == 'libx264':
+        # Low-overhead preset so software encoding keeps up with live capture.
+        command += ['-preset', 'veryfast']
+    command += [
         '-pix_fmt', 'yuv420p',
         str(output),
     ]
+    return command
 
 
 def probe_encoder(encoder, timeout=PROBE_TIMEOUT_SEC):
