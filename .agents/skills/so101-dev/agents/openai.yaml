@@ -1,0 +1,4 @@
+interface:
+  display_name: "SO-101 Dev Loop"
+  short_description: "Debug SO-101 pick-place on ai-station"
+  default_prompt: "Use $so101-dev to diagnose and verify this SO-101 pick-place problem on ai-station."
