@@ -18,6 +18,7 @@ export type TelemetrySnapshot = {
   revision: number;
   simulation_session_id: string;
   mode?: string;
+  environment?: Record<string, string>;
   joints: Record<string, JointSample>;
   tcp?: Pose6D;
   [key: string]: unknown;
@@ -33,6 +34,7 @@ export type CommandResult = {
   code: string;
   succeeded: boolean;
   message?: string;
+  snapshot_revision?: number;
   layers?: Record<string, string>;
   data?: Record<string, unknown>;
 };

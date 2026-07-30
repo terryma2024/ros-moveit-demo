@@ -178,10 +178,27 @@ RTT（以及显示时的 TTL）在其后的独立区域截断或换行。因此�
 如果不是 `READY`，先排查服务端和 ROS 环境，不要尝试用 Force Continue 绕过。
 
 全局状态、notice、**Current to Target**、诊断下载和 RTF 始终显示在功能 Tabs
-外。七个顶层 Tabs 为 **Joints / TCP / Collision / Target / Gazebo / Workflow /
-Events**，默认 Joints；每次只显示选中面板。切换 Tabs 不会清除 target、plan、
-workflow 或断开 telemetry。窄屏可在 Tab 栏内部横向滚动，不应出现整页横向
-滚动条。
+外。八个顶层 Tabs 为 **Joints / TCP / Collision / Target / Gazebo / Workflow /
+Events / Environment**，默认 Joints；每次只显示选中面板。切换 Tabs 不会清除
+target、plan、workflow 或断开 telemetry。窄屏可在 Tab 栏内部横向滚动，不应
+出现整页横向滚动条。
+
+### Environment
+
+Environment 是只读运行环境面板，用于确认浏览器正在观察哪一套 ROS/Gazebo
+通信域。它只显示服务端明确允许的以下键，不会枚举完整进程环境，也不会显示
+token、密码等其他变量：
+
+- ROS：`ROS_DOMAIN_ID`、`ROS_DISTRO`、`ROS_VERSION`、
+  `ROS_PYTHON_VERSION`、`ROS_AUTOMATIC_DISCOVERY_RANGE`、
+  `AMENT_PREFIX_PATH`、`COLCON_PREFIX_PATH`；
+- Gazebo 与运行时：`GZ_PARTITION`、`GZ_CONFIG_PATH`、
+  `GZ_SIM_RESOURCE_PATH`、`GZ_SIM_SYSTEM_PLUGIN_PATH`、`PYTHONPATH`、
+  `LD_LIBRARY_PATH`。
+
+未设置的变量显示 `—`。长值在表格内部换行，**Copy** 复制未经截断的完整值。
+`ROS_DOMAIN_ID` 和 `GZ_PARTITION` 仅在 Environment Tab 显示，避免页眉动态
+metadata 过长；执行命令前可打开该 Tab 核对通信域。
 
 ## 7. 控制租约（Lease）
 
@@ -189,7 +206,9 @@ workflow 或断开 telemetry。窄屏可在 Tab 栏内部横向滚动，不应�
 
 1. 点击 **Acquire lease**。
 2. 成功后按钮显示 **Lease active**。
-3. 浏览器每 10 秒自动续租；服务端租约有效期为 30 秒。
+3. 浏览器每 10 秒自动续租；服务端租约有效期为 30 秒。合法续租独立于耗时的
+   workflow/MoveIt 命令序列化，因此运行中的长命令不会把续租误拒绝为
+   `SERVER_BUSY`。
 4. 同一时间只有一个操作员能持有租约。
 
 页面刷新、连接中断、Reset 或 session 变化后，旧租约可能失效。重新点击 **Acquire lease** 即可。
@@ -417,6 +436,10 @@ FORCE CONTINUE
 - action 或 controller 失败。
 
 Force Continue 不代表抓取成功。使用前应下载 diagnostic snapshot、截取 Gazebo，并记录失败证据。
+
+Workflow 命令发出后，当前按钮会显示 `Starting…`、`Stepping…`、`Running…`
+等执行中状态，整个 workflow 操作组暂时禁用。只有服务端响应返回后按钮才恢复，
+避免耗时状态边界被重复提交；失败 code 仍由全局 toast 和 Event log 显示。
 
 ## 15. Event log
 

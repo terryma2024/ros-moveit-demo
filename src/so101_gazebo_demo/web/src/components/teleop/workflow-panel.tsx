@@ -1,8 +1,58 @@
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { ConfirmAction } from "./confirm-action";
 
-export function WorkflowPanel({ snapshot, leaseHeld, command }: { snapshot?: any; leaseHeld: boolean; command: (operation: string, body?: Record<string, unknown>) => void }) {
+const operationLabels: Record<string, string> = {
+  start: "Start",
+  step: "Next Step",
+  run: "Run",
+  stop: "Stop",
+  resume: "Resume",
+  reset: "Reset workflow",
+  "force-continue": "Force Continue",
+};
+
+const pendingLabels: Record<string, string> = {
+  start: "Starting…",
+  step: "Stepping…",
+  run: "Running…",
+  stop: "Stopping…",
+  resume: "Resuming…",
+  reset: "Resetting workflow…",
+  "force-continue": "Force Continuing…",
+};
+
+export function WorkflowPanel({ snapshot, leaseHeld, command }: { snapshot?: any; leaseHeld: boolean; command: (operation: string, body?: Record<string, unknown>) => Promise<unknown> }) {
+  const [pendingOperation, setPendingOperation] = useState<string>();
   const validationFailed = snapshot?.current_state === "VALIDATION_FAILED";
-  return <Card><CardTitle>Checkpointed pick-place workflow</CardTitle><p className="my-3">{snapshot?.current_state ?? "IDLE"} → {snapshot?.next_state ?? "—"}; browser never selects a state.</p><div className="flex flex-wrap gap-2"><Button disabled={!leaseHeld} onClick={() => command("start")}>Start</Button><Button disabled={!leaseHeld || !snapshot?.run_id} onClick={() => command("step", { snapshot_revision: snapshot?.snapshot_revision })}>Next Step</Button><Button disabled={!leaseHeld || !snapshot?.run_id} onClick={() => command("run")}>Run</Button><Button disabled={!leaseHeld || !snapshot?.run_id} variant="outline" onClick={() => command("stop")}>Stop</Button><Button disabled={!leaseHeld || !snapshot?.run_id} onClick={() => command("resume")}>Resume</Button><ConfirmAction label="Reset workflow" disabled={!leaseHeld || !snapshot?.run_id} onConfirm={() => command("reset")}/>{validationFailed && <ConfirmAction label="Force Continue" disabled={!leaseHeld} evidence={JSON.stringify(snapshot.validation ?? {}, null, 2)} typedConfirmation="FORCE CONTINUE" onConfirm={() => command("force-continue", { snapshot_revision: snapshot?.snapshot_revision, operator_confirmation: "FORCE CONTINUE" })}/>}</div><p className="mt-3 text-sm text-slate-400">Force Continue is single-use and audited server-side only for a fresh physical-grasp post-validation failure. Lease, readiness, session, stale-checkpoint, action and controller failures cannot be bypassed.</p>{snapshot?.trace && <pre className="mt-3 text-xs">{JSON.stringify(snapshot.trace, null, 2)}</pre>}</Card>;
+  const pending = pendingOperation !== undefined;
+  const execute = async (operation: string, body?: Record<string, unknown>) => {
+    if (pending) return;
+    setPendingOperation(operation);
+    try {
+      await (body === undefined ? command(operation) : command(operation, body));
+    } finally {
+      setPendingOperation(undefined);
+    }
+  };
+  const label = (operation: string) => pendingOperation === operation ? pendingLabels[operation] : operationLabels[operation];
+
+  return <Card>
+    <CardTitle>Checkpointed pick-place workflow</CardTitle>
+    <p className="my-3">{snapshot?.current_state ?? "IDLE"} → {snapshot?.next_state ?? "—"}; browser never selects a state.</p>
+    {pendingOperation && <p role="status" aria-live="polite" className="mb-3 text-sm text-sky-200">Executing {operationLabels[pendingOperation]}…</p>}
+    <div className="flex flex-wrap gap-2">
+      <Button disabled={!leaseHeld || pending} onClick={() => void execute("start")}>{label("start")}</Button>
+      <Button disabled={!leaseHeld || !snapshot?.run_id || pending} onClick={() => void execute("step", { snapshot_revision: snapshot?.snapshot_revision })}>{label("step")}</Button>
+      <Button disabled={!leaseHeld || !snapshot?.run_id || pending} onClick={() => void execute("run")}>{label("run")}</Button>
+      <Button disabled={!leaseHeld || !snapshot?.run_id || pending} variant="outline" onClick={() => void execute("stop")}>{label("stop")}</Button>
+      <Button disabled={!leaseHeld || !snapshot?.run_id || pending} onClick={() => void execute("resume")}>{label("resume")}</Button>
+      <ConfirmAction label="Reset workflow" disabled={!leaseHeld || !snapshot?.run_id || pending} onConfirm={() => void execute("reset")}/>
+      {validationFailed && <ConfirmAction label="Force Continue" disabled={!leaseHeld || pending} evidence={JSON.stringify(snapshot.validation ?? {}, null, 2)} typedConfirmation="FORCE CONTINUE" onConfirm={() => void execute("force-continue", { snapshot_revision: snapshot?.snapshot_revision, operator_confirmation: "FORCE CONTINUE" })}/>}
+    </div>
+    <p className="mt-3 text-sm text-slate-400">Force Continue is single-use and audited server-side only for a fresh physical-grasp post-validation failure. Lease, readiness, session, stale-checkpoint, action and controller failures cannot be bypassed.</p>
+    {snapshot?.trace && <pre className="mt-3 text-xs">{JSON.stringify(snapshot.trace, null, 2)}</pre>}
+  </Card>;
 }

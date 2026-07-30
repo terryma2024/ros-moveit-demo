@@ -90,6 +90,7 @@ class TelemetrySnapshot(BaseModel):
     simulation_session_id: str = ""
     revision: int = 0
     mode: ServerMode = ServerMode.STARTING
+    environment: Dict[str, str] = Field(default_factory=dict)
     source_ages_s: Dict[str, float] = Field(default_factory=dict)
     joints: Dict[str, JointSample] = Field(default_factory=dict)
     tcp: Optional[Pose6D] = None
