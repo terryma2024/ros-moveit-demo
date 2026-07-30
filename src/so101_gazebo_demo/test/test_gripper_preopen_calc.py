@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import subprocess
 import re
+import numpy as np
+import yaml
 
 import pytest
 
@@ -26,14 +28,14 @@ def load_calculator_module():
     return module
 
 
-def test_d20_section_produces_coke_preopen_and_contact_targets():
+def test_d20_section_produces_task_object_preopen_and_contact_targets():
     """Catch centroid/tip-fraction geometry replacing the d=20 mm centre ray."""
     calculator = load_calculator_module()
 
     result = calculator.calculate_gripper_targets(
         mesh_dir=MESH_DIR,
         grasp_depth=0.020,
-        coke_diameter=0.066,
+        task_object_diameter=0.066,
         preopen_clearance=0.004,
     )
 
@@ -47,6 +49,53 @@ def test_d20_section_produces_coke_preopen_and_contact_targets():
     assert result.fixed_inward_dot > 0.99
     assert result.preopen_moving_inward_dot > 0.70
     assert result.contact_moving_inward_dot > 0.70
+
+
+def test_configured_q6_orders_the_native_fingertip_pad_commands():
+    """The native-only geometry owns a negative safe floor and a wall-safe close."""
+    object_policy = yaml.safe_load(
+        (PACKAGE_DIR / 'config/task_objects/light_plastic_cup.yaml').read_text()
+    )
+    motion = yaml.safe_load(
+        (PACKAGE_DIR / 'config/motion_policies/light_cup_wall_pick.yaml').read_text()
+    )
+    calibration = load_calculator_module().calculate_fingertip_pad_gap_calibration(
+        PACKAGE_DIR / 'config/task_objects/light_plastic_cup.yaml',
+        PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo' / 'fingertip_pad_assets',
+        URDF_PATH,
+    )
+    pads = object_policy['fingertip_pads']
+    assert pads['safe_lower_q6'] < motion['gripper_actions']['grasp_close_q6']
+    assert motion['gripper_actions']['grasp_close_q6'] < motion['gripper_actions']['preopen_q6']
+    assert pads['safe_gap_m'] == pytest.approx(0.001)
+    assert pads['grasp_gap_m'] == pytest.approx(calibration.grasp_gap_m, abs=2e-12)
+    assert motion['gripper_actions']['grasp_close_q6'] == pytest.approx(
+        calibration.grasp_q6, abs=2e-12
+    )
+
+
+def test_native_fingertip_pads_keep_the_measured_same_wall_envelope():
+    """The old suspended-box TCP calculation is deliberately not retained."""
+    object_policy = yaml.safe_load(
+        (PACKAGE_DIR / 'config/task_objects/light_plastic_cup.yaml').read_text()
+    )
+    pads = object_policy['fingertip_pads']
+    assert pads['fixed_pad']['profile_points'][0][0] == pytest.approx(0.06622)
+    assert pads['fixed_pad']['profile_points'][-1][0] == pytest.approx(0.104875)
+    assert pads['moving_pad']['profile_points'][0][0] == pytest.approx(-0.0815)
+    assert pads['moving_pad']['profile_points'][-1][0] == pytest.approx(-0.0625)
+
+
+def test_native_fingertip_pad_profiles_are_contained_without_a_stem():
+    object_policy = yaml.safe_load(
+        (PACKAGE_DIR / 'config/task_objects/light_plastic_cup.yaml').read_text()
+    )
+    pads = object_policy['fingertip_pads']
+    assert all('stem' not in name and 'tongue' not in name for name in pads)
+    for pad in (pads['fixed_pad'], pads['moving_pad']):
+        native = pad['native_axial_bounds_m']
+        profile = pad['profile_points']
+        assert native[0] < profile[0][0] < profile[-1][0] < native[1]
 
 
 def test_default_mesh_dir_resolves_installed_package_meshes():
@@ -85,11 +134,11 @@ def test_versioned_dense_table_matches_real_mesh_at_nonendpoint():
     calibration = calculator.calculate_width_calibration(
         mesh_dir=MESH_DIR,
         urdf_path=URDF_PATH,
-        grasp_depth=0.035,
-        coke_diameter=0.066,
-        q_min=0.790272757,
-        q_max=1.100000000,
-        sample_count=160,
+        grasp_depth=0.020,
+        task_object_diameter=0.066,
+        q_min=0.290000000,
+        q_max=0.890000000,
+        sample_count=240,
     )
     header = CALIBRATION_HEADER.read_text()
     assert header == calculator.render_width_calibration_header(calibration)
@@ -106,13 +155,13 @@ def test_versioned_dense_table_matches_real_mesh_at_nonendpoint():
     assert calibration.urdf_sha256 in header
     assert calibration.constants_sha256 in header
     assert calibration.model_fingerprint in header
-    assert len(samples) == 160
+    assert len(samples) == 240
     midpoint = len(samples) // 2
     assert samples[midpoint][1] == pytest.approx(
         calculator.gripper_width_at_q6(
             mesh_dir=MESH_DIR,
-            grasp_depth=0.035,
-            coke_diameter=0.066,
+            grasp_depth=0.020,
+            task_object_diameter=0.066,
             q6=samples[midpoint][0],
         ),
         abs=1e-10,
@@ -130,11 +179,10 @@ def test_calibration_header_regenerates_without_user_site_packages():
             '/usr/bin/python3', str(SCRIPT_PATH),
             '--mesh-dir', str(MESH_DIR),
             '--urdf-path', str(URDF_PATH),
-            '--grasp-depth-mm', '35',
             '--print-calibration-header',
-            '--calibration-q-min', '0.790272757',
-            '--calibration-q-max', '1.100000000',
-            '--calibration-samples', '160',
+            '--calibration-q-min', '0.290000000',
+            '--calibration-q-max', '0.890000000',
+            '--calibration-samples', '240',
         ],
         check=False,
         capture_output=True,

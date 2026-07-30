@@ -7,9 +7,10 @@ namespace pick_place = so101_gazebo_demo::pick_place;
 TEST(TransitionTable, ContainsEveryActionAndOnlyTerminalStatesAreAbsent)
 {
   const auto & entries = pick_place::TransitionTable::entries();
-  EXPECT_EQ(23U, entries.size());
+  EXPECT_EQ(28U, entries.size());
   for (const auto & [state, transitions] : entries) {
-    EXPECT_TRUE(pick_place::isAction(state) || state == pick_place::State::IDLE);
+    EXPECT_TRUE(pick_place::isAction(state) || state == pick_place::State::IDLE ||
+                state == pick_place::State::VALIDATION_FAILED);
     EXPECT_NE(pick_place::State::IDLE, transitions.succeeded);
   }
 }

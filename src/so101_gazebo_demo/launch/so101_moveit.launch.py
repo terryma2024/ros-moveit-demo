@@ -18,11 +18,18 @@ def generate_launch_description():
         default_value="0.1899186",
         description="SO-101 base height above world ground in metres",
     )
+    package_share = Path(get_package_share_directory("so101_gazebo_demo"))
+    object_config_arg = DeclareLaunchArgument(
+        name="object_config",
+        default_value=str(
+            package_share / "config" / "task_objects" / "light_plastic_cup.yaml"
+        ),
+        description="Task-object YAML supplying calibrated adapter primitives",
+    )
 
     is_sim = LaunchConfiguration("is_sim")
     base_height = LaunchConfiguration("base_height")
 
-    package_share = Path(get_package_share_directory("so101_gazebo_demo"))
     so101_urdf_path = package_share / "urdf" / "so101.urdf.xacro"
     srdf_path = package_share / "config" / "so101.srdf"
     controllers_path = package_share / "config" / "moveit_controllers.yaml"
@@ -32,7 +39,10 @@ def generate_launch_description():
         MoveItConfigsBuilder("so101", package_name="so101_gazebo_demo")
         .robot_description(
             file_path=str(so101_urdf_path),
-            mappings={"base_height": base_height},
+            mappings={
+                "base_height": base_height,
+                "object_config": LaunchConfiguration("object_config"),
+            },
         )
         .robot_description_semantic(file_path=str(srdf_path))
         .trajectory_execution(file_path=str(controllers_path))
@@ -69,6 +79,7 @@ def generate_launch_description():
     return LaunchDescription([
         is_sim_arg,
         base_height_arg,
+        object_config_arg,
         move_group_node,
         rviz_node,
     ])

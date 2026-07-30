@@ -31,6 +31,16 @@
 
 namespace so101_gazebo_demo::pick_place
 {
+
+std::set<std::string> exactTaskObjectTouchWhitelist(const SO101Profile & profile)
+{
+  std::set<std::string> result;
+  for (const auto & link : profile.moveit_touch_links) {
+    result.insert(profile.task_object_id + ":" + link);
+  }
+  return result;
+}
+
 namespace
 {
 
@@ -89,34 +99,27 @@ JointSegmentPlanResult planFail(FailureCategory category, std::string code, std:
            Failure{category, std::move(code), std::move(message), {}}}, std::nullopt};
 }
 
-std::string canonicalPair(std::string first, std::string second)
+std::string policyPair(const SO101Profile & profile, std::string first, std::string second)
 {
+  if (second == profile.task_object_id) std::swap(first, second);
+  if (first == profile.task_object_id) return first + ":" + second;
   if (second < first) std::swap(first, second);
   return first + ":" + second;
-}
-
-std::set<std::string> exactWorldTouchWhitelist(const SO101Profile & profile)
-{
-  std::set<std::string> result;
-  for (const auto & link : profile.moveit_touch_links) {
-    result.insert(canonicalPair(profile.coke_model, link));
-  }
-  return result;
 }
 
 bool validTouchWhitelist(const std::set<std::string> & requested,
                          const SO101Profile & profile)
 {
-  return requested.empty() || requested == exactWorldTouchWhitelist(profile);
+  return requested.empty() || requested == exactTaskObjectTouchWhitelist(profile);
 }
 
 bool validTemporalContact(const std::optional<TemporalContactPolicy> & requested,
                           const SO101Profile & profile)
 {
   if (!requested) return true;
-  const auto support = std::set<std::string>{canonicalPair(profile.coke_model,
-                                                            profile.table_object)};
-  const auto gripper = exactWorldTouchWhitelist(profile);
+  const auto support = std::set<std::string>{policyPair(
+    profile, profile.task_object_id, profile.table_object)};
+  const auto gripper = exactTaskObjectTouchWhitelist(profile);
   if (requested->location == TemporalContactLocation::FIRST_ONLY) {
     return requested->max_axial_clearance_m == 0.0 &&
            (requested->allowed_pairs == support || requested->allowed_pairs == gripper);
@@ -151,9 +154,7 @@ updatedAttachedBodyPose(const moveit::core::RobotState & source,
   if (!current.hasAttachedBody(attached_body_name)) return std::nullopt;
   const auto * attached = current.getAttachedBody(attached_body_name);
   if (!attached) return std::nullopt;
-  const auto & transforms = attached->getGlobalCollisionBodyTransforms();
-  if (transforms.empty()) return std::nullopt;
-  return poseFrom(transforms.front());
+  return poseFrom(attached->getGlobalPose());
 }
 
 std::optional<moveit_msgs::msg::RobotTrajectory>
@@ -375,6 +376,15 @@ public:
     return move_group_action;
   }
 
+  moveit::planning_interface::PlanningSceneInterface & planningSceneInterface()
+  {
+    if (!planning_scene_interface) {
+      planning_scene_interface =
+        std::make_unique<moveit::planning_interface::PlanningSceneInterface>();
+    }
+    return *planning_scene_interface;
+  }
+
   bool refreshScene()
   {
     auto & group = moveGroup();
@@ -383,12 +393,13 @@ public:
     if (!current) return false;
     auto next = std::make_shared<planning_scene::PlanningScene>(current->getRobotModel());
     next->setCurrentState(*current);
-    const auto objects = planning_scene_interface.getObjects();
+    auto & scene_interface = planningSceneInterface();
+    const auto objects = scene_interface.getObjects();
     for (const auto & [id, object] : objects) {
       static_cast<void>(id);
       if (!next->processCollisionObjectMsg(object)) return false;
     }
-    const auto attached = planning_scene_interface.getAttachedObjects();
+    const auto attached = scene_interface.getAttachedObjects();
     for (const auto & [id, object] : attached) {
       static_cast<void>(id);
       if (!next->processAttachedCollisionObjectMsg(object)) return false;
@@ -406,7 +417,8 @@ public:
   double state_timeout_seconds;
   std::unique_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
   rclcpp_action::Client<moveit_msgs::action::MoveGroup>::SharedPtr move_group_action;
-  moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+  std::unique_ptr<moveit::planning_interface::PlanningSceneInterface>
+    planning_scene_interface;
   mutable std::mutex scene_mutex;
   std::shared_ptr<planning_scene::PlanningScene> scene;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscription;
@@ -440,23 +452,24 @@ std::optional<MotionPlanningSceneFacts> MoveItJointPlanningBoundary::sceneFacts(
 {
   if (!impl_->refreshScene()) return std::nullopt;
   MotionPlanningSceneFacts facts;
-  const auto objects = impl_->planning_scene_interface.getObjects(
-    {impl_->profile.table_object, impl_->profile.pedestal_object, impl_->profile.coke_model});
+  auto & scene_interface = impl_->planningSceneInterface();
+  const auto objects = scene_interface.getObjects(
+    {impl_->profile.table_object, impl_->profile.pedestal_object, impl_->profile.task_object_id});
   facts.table_in_world = objects.count(impl_->profile.table_object) == 1;
   facts.pedestal_in_world = objects.count(impl_->profile.pedestal_object) == 1;
-  facts.coke_in_world = objects.count(impl_->profile.coke_model) == 1;
+  facts.task_object_in_world = objects.count(impl_->profile.task_object_id) == 1;
   if (facts.table_in_world) {
     facts.table_world_pose = poseFrom(objects.at(impl_->profile.table_object).pose);
   }
   if (facts.pedestal_in_world) {
     facts.pedestal_world_pose = poseFrom(objects.at(impl_->profile.pedestal_object).pose);
   }
-  if (facts.coke_in_world) {
-    facts.coke_world_pose = poseFrom(objects.at(impl_->profile.coke_model).pose);
+  if (facts.task_object_in_world) {
+    facts.task_object_world_pose = poseFrom(objects.at(impl_->profile.task_object_id).pose);
   }
-  const auto attached = impl_->planning_scene_interface.getAttachedObjects({impl_->profile.coke_model});
-  const auto found = attached.find(impl_->profile.coke_model);
-  facts.coke_attached = found != attached.end();
+  const auto attached = scene_interface.getAttachedObjects({impl_->profile.task_object_id});
+  const auto found = attached.find(impl_->profile.task_object_id);
+  facts.task_object_attached = found != attached.end();
   if (found != attached.end()) {
     facts.attached_link = found->second.link_name;
     facts.touch_links.insert(found->second.touch_links.begin(), found->second.touch_links.end());
@@ -500,6 +513,58 @@ ActionResult MoveItJointPlanningBoundary::cancel()
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
+ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(
+  const Pose3d & current_tcp_world, double world_z_delta_m)
+{
+  if (!std::isfinite(current_tcp_world.x) || !std::isfinite(current_tcp_world.y) ||
+      !std::isfinite(current_tcp_world.z) || !std::isfinite(current_tcp_world.qx) ||
+      !std::isfinite(current_tcp_world.qy) || !std::isfinite(current_tcp_world.qz) ||
+      !std::isfinite(current_tcp_world.qw) || !std::isfinite(world_z_delta_m) ||
+      world_z_delta_m <= 0.0 || world_z_delta_m > 0.002) {
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::CONFIGURATION, "MICRO_LIFT_REQUEST_INVALID",
+                    "World-Z physical-grasp probe must be a finite positive lift no larger than 2 mm", {}}};
+  }
+  geometry_msgs::msg::Pose target;
+  target.position.x = current_tcp_world.x;
+  target.position.y = current_tcp_world.y;
+  target.position.z = current_tcp_world.z + world_z_delta_m;
+  target.orientation.x = current_tcp_world.qx;
+  target.orientation.y = current_tcp_world.qy;
+  target.orientation.z = current_tcp_world.qz;
+  target.orientation.w = current_tcp_world.qw;
+  auto & group = impl_->moveGroup();
+  const auto current = group.getCurrentState(impl_->state_timeout_seconds);
+  if (!current) {
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::OBSERVATION, "MICRO_LIFT_CURRENT_STATE_TIMEOUT",
+                    "MoveIt current state was unavailable before world-Z micro lift", {}}};
+  }
+  group.setStartState(*current);
+  group.clearPoseTargets();
+  group.setPoseTarget(target, impl_->profile.tcp_link);
+  moveit::planning_interface::MoveGroupInterface::Plan planned;
+  const auto code = group.plan(planned);
+  group.clearPoseTargets();
+  if (!static_cast<bool>(code)) {
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVEIT_PLAN_FAILED",
+                    "MoveIt could not produce a collision-aware world-Z micro-lift plan", {}}};
+  }
+  const auto executed = group.execute(planned.trajectory);
+  if (!static_cast<bool>(executed)) {
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::EXECUTION, "MICRO_LIFT_MOVEIT_EXECUTION_FAILED",
+                    "MoveIt failed to execute the validated world-Z micro-lift plan", {}}};
+  }
+  return {ActionStatus::SUCCEEDED, std::nullopt};
+}
+
+ActionResult MoveItJointPlanningBoundary::cancelWorldZMicroLift()
+{
+  return cancel();
+}
+
 JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
   const std::vector<std::string> & joint_names, const std::vector<double> & start,
   const std::vector<double> & goal, const std::set<std::string> & allowed_touch_pairs,
@@ -513,7 +578,7 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
   }
   if (!validTouchWhitelist(allowed_touch_pairs, impl_->profile)) {
     return planFail(FailureCategory::CONFIGURATION, "TOUCH_WHITELIST_POLICY_VIOLATION",
-                    "World touch whitelist must be empty or the exact SO-101 Coke touch policy");
+                    "World touch whitelist must be empty or the exact SO-101 TaskObject touch policy");
   }
   if (!validTemporalContact(temporal_contact_policy, impl_->profile)) {
     return planFail(FailureCategory::CONFIGURATION, "TEMPORAL_CONTACT_POLICY_VIOLATION",
@@ -586,20 +651,21 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
         impl_->scene->getAllowedCollisionMatrix());
       for (const auto & link : impl_->profile.moveit_touch_links) {
         if (!allowed_touch_pairs.empty()) {
-          acm.setEntry(impl_->profile.coke_model, link, true);
+          acm.setEntry(impl_->profile.task_object_id, link, true);
         }
       }
       if (temporal_contact_policy) {
         if (temporal_contact_policy->allowed_pairs.find(
-              canonicalPair(impl_->profile.coke_model, impl_->profile.table_object)) !=
+              policyPair(impl_->profile, impl_->profile.task_object_id,
+                         impl_->profile.table_object)) !=
             temporal_contact_policy->allowed_pairs.end()) {
-          acm.setEntry(impl_->profile.coke_model, impl_->profile.table_object, true);
+          acm.setEntry(impl_->profile.task_object_id, impl_->profile.table_object, true);
         }
         for (const auto & link : impl_->profile.moveit_touch_links) {
           if (temporal_contact_policy->allowed_pairs.find(
-                canonicalPair(impl_->profile.coke_model, link)) !=
+                policyPair(impl_->profile, impl_->profile.task_object_id, link)) !=
               temporal_contact_policy->allowed_pairs.end()) {
-            acm.setEntry(impl_->profile.coke_model, link, true);
+            acm.setEntry(impl_->profile.task_object_id, link, true);
           }
         }
       }
@@ -691,8 +757,8 @@ std::optional<RobotStateEvidence> MoveItJointPlanningBoundary::evaluate(
   if (!state.satisfiesBounds()) return std::nullopt;
   RobotStateEvidence evidence;
   evidence.tcp_pose = poseFrom(state.getGlobalLinkTransform(impl_->profile.tcp_link));
-  evidence.attached_coke_pose_world =
-    updatedAttachedBodyPose(state, impl_->profile.coke_model);
+  evidence.attached_task_object_pose_world =
+    updatedAttachedBodyPose(state, impl_->profile.task_object_id);
   collision_detection::CollisionRequest request;
   request.group_name = impl_->profile.planning_group;
   request.contacts = true;
@@ -702,37 +768,39 @@ std::optional<RobotStateEvidence> MoveItJointPlanningBoundary::evaluate(
     impl_->scene->getAllowedCollisionMatrix());
   if (!allowed_touch_pairs.empty()) {
     for (const auto & link : impl_->profile.moveit_touch_links) {
-      raw_acm.setEntry(impl_->profile.coke_model, link, false);
+      raw_acm.setEntry(impl_->profile.task_object_id, link, false);
     }
   }
   if (temporal_contact_policy) {
-    raw_acm.setEntry(impl_->profile.coke_model, impl_->profile.table_object, false);
+    raw_acm.setEntry(impl_->profile.task_object_id, impl_->profile.table_object, false);
     for (const auto & link : impl_->profile.moveit_touch_links) {
-      raw_acm.setEntry(impl_->profile.coke_model, link, false);
+      raw_acm.setEntry(impl_->profile.task_object_id, link, false);
     }
   }
   collision_detection::CollisionResult raw_result;
   impl_->scene->checkCollision(request, raw_result, state, raw_acm);
   for (const auto & item : raw_result.contacts) {
-    evidence.raw_contact_pairs.insert(canonicalPair(item.first.first, item.first.second));
+    evidence.raw_contact_pairs.insert(
+      policyPair(impl_->profile, item.first.first, item.first.second));
   }
   collision_detection::AllowedCollisionMatrix allowed_acm(raw_acm);
   for (const auto & link : impl_->profile.moveit_touch_links) {
     if (!allowed_touch_pairs.empty()) {
-      allowed_acm.setEntry(impl_->profile.coke_model, link, true);
+      allowed_acm.setEntry(impl_->profile.task_object_id, link, true);
     }
   }
   if (temporal_contact_policy) {
     if (temporal_contact_policy->allowed_pairs.find(
-          canonicalPair(impl_->profile.coke_model, impl_->profile.table_object)) !=
+          policyPair(impl_->profile, impl_->profile.task_object_id,
+                     impl_->profile.table_object)) !=
         temporal_contact_policy->allowed_pairs.end()) {
-      allowed_acm.setEntry(impl_->profile.coke_model, impl_->profile.table_object, true);
+      allowed_acm.setEntry(impl_->profile.task_object_id, impl_->profile.table_object, true);
     }
     for (const auto & link : impl_->profile.moveit_touch_links) {
       if (temporal_contact_policy->allowed_pairs.find(
-            canonicalPair(impl_->profile.coke_model, link)) !=
+            policyPair(impl_->profile, impl_->profile.task_object_id, link)) !=
           temporal_contact_policy->allowed_pairs.end()) {
-        allowed_acm.setEntry(impl_->profile.coke_model, link, true);
+        allowed_acm.setEntry(impl_->profile.task_object_id, link, true);
       }
     }
   }

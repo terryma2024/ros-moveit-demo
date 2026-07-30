@@ -38,7 +38,7 @@ struct RobotStateEvidence
   Pose3d tcp_pose;
   bool collision_free{false};
   std::set<std::string> raw_contact_pairs;
-  std::optional<Pose3d> attached_coke_pose_world;
+  std::optional<Pose3d> attached_task_object_pose_world;
 };
 
 class IRobotStateEvidenceProvider

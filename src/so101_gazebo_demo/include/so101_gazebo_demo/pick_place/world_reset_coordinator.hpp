@@ -13,8 +13,8 @@ namespace so101_gazebo_demo::pick_place
 
 struct GazeboResetState
 {
-  bool coke_attached{false};
-  Pose3d coke_world_pose;
+  bool task_object_attached{false};
+  Pose3d task_object_world_pose;
   std::uint64_t pose_revision{0};
   std::uint64_t attachment_revision{0};
 };
@@ -24,8 +24,8 @@ class IGazeboResetAdapter
 public:
   virtual ~IGazeboResetAdapter() = default;
   [[nodiscard]] virtual std::optional<GazeboResetState> observe() = 0;
-  [[nodiscard]] virtual ActionResult detachCoke() = 0;
-  [[nodiscard]] virtual ActionResult setCokeWorldPose(const Pose3d & pose) = 0;
+  [[nodiscard]] virtual ActionResult detachTaskObject() = 0;
+  [[nodiscard]] virtual ActionResult setTaskObjectWorldPose(const Pose3d & pose) = 0;
 };
 
 class IRobotHomeResetAdapter
@@ -43,7 +43,7 @@ struct WorldResetConfig
 {
   Pose3d table_pose;
   Pose3d pedestal_pose;
-  Pose3d coke_pose;
+  Pose3d task_object_pose;
   double timeout_seconds{2.0};
   double poll_interval_seconds{0.05};
   double position_tolerance{0.002};
@@ -52,8 +52,10 @@ struct WorldResetConfig
   std::vector<double> arm_home_positions{0.0, 0.0, 0.0, 0.0, 0.0};
   std::string gripper_joint{"6"};
   double q6_release_position{1.7};
-  double q6_home_position{0.0};
-  double joint_position_tolerance{0.002};
+  double q6_safe_lower{-0.059303612618397};
+  double q6_home_position{-0.059303612618397};
+  double arm_joint_position_tolerance{0.002};
+  double gripper_position_tolerance{0.001};
   double joint_velocity_tolerance{0.01};
 };
 

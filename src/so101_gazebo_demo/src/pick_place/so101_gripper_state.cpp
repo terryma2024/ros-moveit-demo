@@ -68,44 +68,44 @@ void requireAttachmentEvidence(ValidationResult & result, const WorldSnapshot & 
                                const SO101Profile & profile)
 {
   const auto table = world.moveit_world_object_poses.find(profile.table_object);
-  if (!world.gazebo_coke_pose_world || !world.gazebo_coke_stationary ||
-      !*world.gazebo_coke_stationary || !world.gazebo_coke_attached ||
-      !world.moveit_coke_attached || table == world.moveit_world_object_poses.end()) {
+  if (!world.gazebo_task_object_pose_world || !world.gazebo_task_object_stationary ||
+      !*world.gazebo_task_object_stationary || !world.gazebo_task_object_attached ||
+      !world.moveit_task_object_attached || table == world.moveit_world_object_poses.end()) {
     result.failures.push_back({FailureCategory::OBSERVATION,
                                "GRIPPER_ENVIRONMENT_EVIDENCE_INCOMPLETE",
-                               "Gripper transitions require independent Coke and table evidence",
+                               "Gripper transitions require independent TaskObject and table evidence",
                                {}});
     return;
   }
   const auto exact_moveit_detached = [&]() {
-    return !*world.moveit_coke_attached &&
-           world.moveit_world_object_poses.count(profile.coke_model) == 1 &&
-           !world.moveit_coke_attached_link && world.moveit_coke_touch_links.empty() &&
-           !world.moveit_coke_attached_relative_pose;
+    return !*world.moveit_task_object_attached &&
+           world.moveit_world_object_poses.count(profile.task_object_id) == 1 &&
+           !world.moveit_task_object_attached_link && world.moveit_task_object_touch_links.empty() &&
+           !world.moveit_task_object_attached_relative_pose;
   };
   const std::set<std::string> touch_links(profile.moveit_touch_links.begin(),
                                           profile.moveit_touch_links.end());
   const auto exact_moveit_attached = [&]() {
-    return *world.moveit_coke_attached &&
-           world.moveit_world_object_poses.count(profile.coke_model) == 0 &&
-           world.moveit_coke_attached_link &&
-           *world.moveit_coke_attached_link == profile.moveit_attach_link &&
-           world.moveit_coke_touch_links == touch_links &&
-           world.moveit_coke_attached_relative_pose &&
-           positionDistance(*world.moveit_coke_attached_relative_pose,
+    return *world.moveit_task_object_attached &&
+           world.moveit_world_object_poses.count(profile.task_object_id) == 0 &&
+           world.moveit_task_object_attached_link &&
+           *world.moveit_task_object_attached_link == profile.moveit_attach_link &&
+           world.moveit_task_object_touch_links == touch_links &&
+           world.moveit_task_object_attached_relative_pose &&
+           positionDistance(*world.moveit_task_object_attached_relative_pose,
                             profile.calibrated_grasp_relative_pose) <=
-             profile.coke_position_drift_tolerance &&
-           orientationDistance(*world.moveit_coke_attached_relative_pose,
+             profile.task_object_position_drift_tolerance &&
+           orientationDistance(*world.moveit_task_object_attached_relative_pose,
                                profile.calibrated_grasp_relative_pose) <=
-             profile.coke_orientation_drift_tolerance_rad;
+             profile.task_object_orientation_drift_tolerance_rad;
   };
   bool valid = false;
   if (config.state == State::PREPARE_OPEN_GRIPPER || config.state == State::CLOSE_GRIPPER) {
-    valid = !*world.gazebo_coke_attached && exact_moveit_detached();
+    valid = !*world.gazebo_task_object_attached && exact_moveit_detached();
   } else if (config.state == State::OPEN_GRIPPER) {
-    valid = *world.gazebo_coke_attached && exact_moveit_attached();
+    valid = *world.gazebo_task_object_attached && exact_moveit_attached();
   } else {
-    valid = *world.moveit_coke_attached ? exact_moveit_attached()
+    valid = *world.moveit_task_object_attached ? exact_moveit_attached()
                                         : exact_moveit_detached();
   }
   if (!valid) {
@@ -170,30 +170,30 @@ public:
         config_.state == State::CLOSE_GRIPPER ||
         config_.state == State::OPEN_GRIPPER ||
         config_.state == State::RECOVER_OPEN_GRIPPER) {
-      if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
-        result.failures.push_back({FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
-                                   "Coke poses are required before and after close", {}});
+      if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world) {
+        result.failures.push_back({FailureCategory::OBSERVATION, "GAZEBO_TASK_OBJECT_POSE_UNAVAILABLE",
+                                   "TaskObject poses are required before and after close", {}});
       } else {
         const double position_drift =
-          positionDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
+          positionDistance(*before.gazebo_task_object_pose_world, *after.gazebo_task_object_pose_world);
         const double orientation_drift =
-          orientationDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
-        result.metrics["coke_position_drift"] = position_drift;
-        result.metrics["coke_orientation_drift_rad"] = orientation_drift;
-        if (position_drift > profile_.coke_position_drift_tolerance) {
-          result.failures.push_back({FailureCategory::POSTCONDITION, "COKE_POSITION_DRIFT",
-                                     "Gripper motion moved Coke beyond the configured position tolerance",
+          orientationDistance(*before.gazebo_task_object_pose_world, *after.gazebo_task_object_pose_world);
+        result.metrics["task_object_position_drift"] = position_drift;
+        result.metrics["task_object_orientation_drift_rad"] = orientation_drift;
+        if (position_drift > profile_.task_object_position_drift_tolerance) {
+          result.failures.push_back({FailureCategory::POSTCONDITION, "TASK_OBJECT_POSITION_DRIFT",
+                                     "Gripper motion moved TaskObject beyond the configured position tolerance",
                                      {}});
         }
-        if (orientation_drift > profile_.coke_orientation_drift_tolerance_rad) {
+        if (orientation_drift > profile_.task_object_orientation_drift_tolerance_rad) {
           result.failures.push_back(
-            {FailureCategory::POSTCONDITION, "COKE_ORIENTATION_DRIFT",
-             "Gripper motion rotated Coke beyond the configured orientation tolerance", {}});
+            {FailureCategory::POSTCONDITION, "TASK_OBJECT_ORIENTATION_DRIFT",
+             "Gripper motion rotated TaskObject beyond the configured orientation tolerance", {}});
         }
       }
-      if (!after.gazebo_coke_stationary || !*after.gazebo_coke_stationary) {
-        result.failures.push_back({FailureCategory::POSTCONDITION, "COKE_NOT_STATIONARY",
-                                   "Coke must be stationary after close", {}});
+      if (!after.gazebo_task_object_stationary || !*after.gazebo_task_object_stationary) {
+        result.failures.push_back({FailureCategory::POSTCONDITION, "TASK_OBJECT_NOT_STATIONARY",
+                                   "TaskObject must be stationary after close", {}});
       }
     }
     result.ok = result.failures.empty();
@@ -246,17 +246,17 @@ ValidationResult validateSO101GripperTarget(const WorldSnapshot & snapshot,
     contact_profile.width_tolerance = profile.contact_width_oversize_tolerance;
     const auto [q6, width] = targetFor(target, profile);
     auto result = validateQ6Target(snapshot, q6, width, contact_profile);
-    if (snapshot.gazebo_coke_gripper_contact.value_or(false)) {
+    if (snapshot.gazebo_task_object_gripper_contact.value_or(false)) {
       result.failures.erase(
         std::remove_if(result.failures.begin(), result.failures.end(), [](const Failure & failure) {
           return failure.code == "Q6_TARGET_OUT_OF_TOLERANCE" ||
                  failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE";
         }),
         result.failures.end());
-      result.metrics["gazebo_coke_gripper_contact"] = 1.0;
-      if (snapshot.gazebo_coke_gripper_max_depth) {
-        result.metrics["gazebo_coke_gripper_max_depth"] =
-          *snapshot.gazebo_coke_gripper_max_depth;
+      result.metrics["gazebo_task_object_gripper_contact"] = 1.0;
+      if (snapshot.gazebo_task_object_gripper_max_depth) {
+        result.metrics["gazebo_task_object_gripper_max_depth"] =
+          *snapshot.gazebo_task_object_gripper_max_depth;
       }
       result.ok = result.failures.empty();
     }
@@ -277,7 +277,7 @@ ValidationResult validateSO101GripperTarget(const WorldSnapshot & snapshot,
   ValidationResult result{true, {}, {{"expected_q6", profile.q6_full_open},
                                      {"actual_q6", position->second},
                                      {"actual_q6_velocity", velocity->second}}};
-  if (std::abs(position->second - profile.q6_full_open) > profile.q6_tolerance) {
+  if (std::abs(position->second - profile.q6_full_open) > profile.q6_full_open_tolerance) {
     result.failures.push_back({FailureCategory::GRIPPER, "Q6_TARGET_OUT_OF_TOLERANCE",
                                "Joint 6 is outside the full-open tolerance", {}});
   }

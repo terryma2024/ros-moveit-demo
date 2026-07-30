@@ -24,6 +24,8 @@ struct SO101Task3RuntimeDependencies
 struct SO101Task3RuntimeConfig
 {
   SO101Profile profile{SO101Profile::canonical()};
+  TaskObjectConfig object;
+  GraspContactValidationConfig grasp_contact;
   double planning_scene_timeout_seconds{2.0};
   double state_poll_interval_seconds{0.05};
 };

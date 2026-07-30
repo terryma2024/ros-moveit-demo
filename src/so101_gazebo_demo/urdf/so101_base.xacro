@@ -9,15 +9,61 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 	<!-- Keep MoveIt on the detailed meshes; Gazebo opts into contact pads. -->
 	<xacro:arg name="gazebo_collision_primitives" default="false" />
+	<xacro:arg name="object_config" default="" />
 
-	<xacro:macro name="moving_jaw_convex_collision" params="piece">
+	<xacro:macro name="fingertip_convex_collision" params="piece directory xyz rpy">
 		<collision name="${piece}">
-			<origin xyz="-5.55112e-17 -1.94746e-17 0.0189"
-				rpy="9.53145e-17 -4.66093e-24 0" />
+			<origin xyz="${xyz}" rpy="${rpy}" />
 			<geometry>
-				<mesh filename="package://so101_gazebo_demo/meshes/so101/collision/${piece}.stl" />
+				<mesh filename="package://so101_gazebo_demo/meshes/so101/collision/${directory}/${piece}.stl" />
 			</geometry>
 		</collision>
+	</xacro:macro>
+
+	<xacro:macro name="fingertip_pad_visual" params="name xyz rpy mesh">
+		<visual name="${name}_visual">
+			<origin xyz="${xyz}" rpy="${rpy}" />
+			<geometry><mesh filename="${mesh}" /></geometry>
+			<material name="tpu_95a_adapter" />
+		</visual>
+	</xacro:macro>
+
+	<xacro:macro name="fingertip_pad_collision" params="name xyz rpy mesh">
+		<collision name="${name}">
+			<origin xyz="${xyz}" rpy="${rpy}" />
+			<geometry><mesh filename="${mesh}" /></geometry>
+		</collision>
+	</xacro:macro>
+
+	<xacro:macro name="configured_fixed_fingertip_pad" params="xyz rpy">
+		<xacro:if value="${'$(arg object_config)' != ''}">
+			<xacro:property name="pads" value="${xacro.load_yaml('$(arg object_config)')['fingertip_pads']}" />
+			<xacro:if value="${pads['enabled']}">
+				<xacro:fingertip_pad_visual name="fixed_fingertip_pad" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/fixed/fingertip_pad.stl" />
+				<xacro:fingertip_pad_collision name="fixed_fingertip_pad_collision_000" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/fixed/fingertip_pad_collision_000.stl" />
+				<xacro:fingertip_pad_collision name="fixed_fingertip_pad_collision_001" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/fixed/fingertip_pad_collision_001.stl" />
+				<xacro:fingertip_pad_collision name="fixed_fingertip_pad_collision_002" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/fixed/fingertip_pad_collision_002.stl" />
+				<xacro:fingertip_pad_collision name="fixed_fingertip_pad_collision_003" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/fixed/fingertip_pad_collision_003.stl" />
+				<xacro:fingertip_pad_collision name="fixed_fingertip_pad_collision_004" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/fixed/fingertip_pad_collision_004.stl" />
+				<xacro:fingertip_pad_collision name="fixed_fingertip_pad_collision_005" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/fixed/fingertip_pad_collision_005.stl" />
+				<xacro:fingertip_pad_collision name="fixed_fingertip_pad_collision_006" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/fixed/fingertip_pad_collision_006.stl" />
+			</xacro:if>
+		</xacro:if>
+	</xacro:macro>
+
+	<xacro:macro name="configured_moving_fingertip_pad" params="xyz rpy">
+		<xacro:if value="${'$(arg object_config)' != ''}">
+			<xacro:property name="pads" value="${xacro.load_yaml('$(arg object_config)')['fingertip_pads']}" />
+			<xacro:if value="${pads['enabled']}">
+				<xacro:fingertip_pad_visual name="moving_fingertip_pad" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/moving/fingertip_pad.stl" />
+				<xacro:fingertip_pad_collision name="moving_fingertip_pad_collision_000" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/moving/fingertip_pad_collision_000.stl" />
+				<xacro:fingertip_pad_collision name="moving_fingertip_pad_collision_001" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/moving/fingertip_pad_collision_001.stl" />
+				<xacro:fingertip_pad_collision name="moving_fingertip_pad_collision_002" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/moving/fingertip_pad_collision_002.stl" />
+				<xacro:fingertip_pad_collision name="moving_fingertip_pad_collision_003" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/moving/fingertip_pad_collision_003.stl" />
+				<xacro:fingertip_pad_collision name="moving_fingertip_pad_collision_004" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/moving/fingertip_pad_collision_004.stl" />
+				<xacro:fingertip_pad_collision name="moving_fingertip_pad_collision_005" xyz="${xyz}" rpy="${rpy}" mesh="package://so101_gazebo_demo/meshes/so101/generated/moving/fingertip_pad_collision_005.stl" />
+			</xacro:if>
+		</xacro:if>
 	</xacro:macro>
 
 	<!-- Links -->
@@ -35,6 +81,10 @@
 	</material>
 	<material name="sts3215">
 		<color rgba="0.1 0.1 0.1 1.0" />
+	</material>
+	<!-- TPU 95A semantic; Gazebo still uses rigid primitive contact geometry. -->
+	<material name="tpu_95a_adapter">
+		<color rgba="0.10 0.45 0.95 1.0" />
 	</material>
 
 	<!-- Link base -->
@@ -342,16 +392,16 @@
 			</collision>
 		</xacro:unless>
 		<xacro:if value="$(arg gazebo_collision_primitives)">
-			<!-- Convex fingertip pad used for load-bearing Coke contact in DART.
-			     Keep 2 mm pre-open clearance from the nominal Coke surface: an
-			     exactly tangent rigid-body start is unstable in the simulator. -->
-			<collision name="fixed_finger_contact">
-				<origin xyz="-0.0216 0 -0.084" rpy="0 0 0" />
-				<geometry>
-					<box size="0.016 0.020 0.042" />
-				</geometry>
-			</collision>
+			<!-- Offline VHACD for the load-bearing fixed fingertip only. -->
+			<xacro:fingertip_convex_collision piece="fixed_finger_contact_convex_000" directory="fixed_finger_contact" xyz="5.55112e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
+			<xacro:fingertip_convex_collision piece="fixed_finger_contact_convex_001" directory="fixed_finger_contact" xyz="5.55112e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
+			<xacro:fingertip_convex_collision piece="fixed_finger_contact_convex_002" directory="fixed_finger_contact" xyz="5.55112e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
+			<xacro:fingertip_convex_collision piece="fixed_finger_contact_convex_003" directory="fixed_finger_contact" xyz="5.55112e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
+			<xacro:fingertip_convex_collision piece="fixed_finger_contact_convex_004" directory="fixed_finger_contact" xyz="5.55112e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
+			<xacro:fingertip_convex_collision piece="fixed_finger_contact_convex_005" directory="fixed_finger_contact" xyz="5.55112e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
+			<xacro:fingertip_convex_collision piece="fixed_finger_contact_convex_006" directory="fixed_finger_contact" xyz="5.55112e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
 		</xacro:if>
+		<xacro:configured_fixed_fingertip_pad xyz="5.55112e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 -9.17912e-24" />
 	</link>
 
 	<!-- Link jaw -->
@@ -379,72 +429,17 @@
 			</collision>
 		</xacro:unless>
 		<xacro:if value="$(arg gazebo_collision_primitives)">
-			<!-- Offline VHACD pieces keep the long jaw's interior concavity open. -->
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_000" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_001" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_002" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_003" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_004" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_005" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_006" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_007" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_008" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_009" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_010" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_011" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_012" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_013" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_014" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_015" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_016" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_017" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_018" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_019" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_020" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_021" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_022" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_023" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_024" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_025" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_026" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_027" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_028" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_029" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_030" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_031" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_032" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_033" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_034" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_035" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_036" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_037" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_038" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_039" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_040" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_041" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_042" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_043" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_044" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_045" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_046" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_047" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_048" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_049" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_050" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_051" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_052" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_053" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_054" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_055" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_056" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_057" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_058" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_059" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_060" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_061" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_062" />
-			<xacro:moving_jaw_convex_collision piece="moving_jaw_convex_063" />
+			<!-- Offline VHACD for the moving load-bearing fingertip only. -->
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_000" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_001" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_002" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_003" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_004" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_005" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_006" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_007" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
 		</xacro:if>
+		<xacro:configured_moving_fingertip_pad xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
 	</link>
 
 	<!-- Joint from gripper to jaw -->
@@ -453,7 +448,7 @@
 		<parent link="gripper" />
 		<child link="jaw" />
 		<axis xyz="0 0 1" />
-		<limit effort="10" velocity="10" lower="-0.174533" upper="1.74533" />
+		<limit effort="10" velocity="10" lower="-0.059303612618397" upper="1.74533" />
 	</joint>
 
 	<transmission name="6_trans">

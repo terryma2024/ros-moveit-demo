@@ -157,6 +157,13 @@ std::optional<Failure> validateCheckpoint(const Checkpoint & checkpoint)
   }
   const bool has_failed_state = checkpoint.failed_state.has_value();
   const bool has_original_failure = checkpoint.original_failure.has_value();
+  const bool is_physical_validation_checkpoint =
+    checkpoint.phase == CheckpointPhase::FORWARD &&
+    checkpoint.last_completed_state == State::VERIFY_PHYSICAL_GRASP &&
+    checkpoint.failed_state == State::VERIFY_PHYSICAL_GRASP &&
+    checkpoint.next_state == State::VALIDATION_FAILED && checkpoint.original_failure &&
+    checkpoint.original_failure->category == FailureCategory::POSTCONDITION &&
+    checkpoint.original_failure->code.rfind("PHYSICAL_GRASP_", 0) == 0;
   if (checkpoint.source_mode == RunMode::DRY_RUN ||
       (checkpoint.phase == CheckpointPhase::RECOVERY &&
        (checkpoint.source_mode != RunMode::EXECUTE || !checkpoint.resumable))) {
@@ -165,13 +172,14 @@ std::optional<Failure> validateCheckpoint(const Checkpoint & checkpoint)
   }
   if (has_failed_state != has_original_failure ||
       (checkpoint.phase == CheckpointPhase::RECOVERY && !has_failed_state) ||
-      (checkpoint.phase == CheckpointPhase::FORWARD && has_failed_state)) {
+      (checkpoint.phase == CheckpointPhase::FORWARD && has_failed_state &&
+       !is_physical_validation_checkpoint)) {
     return checkpointFailure("CHECKPOINT_INVALID_DATA",
                              "Checkpoint recovery context does not match its phase");
   }
   if (!poseIsFinite(checkpoint.expected.tcp_pose_world) ||
-      (checkpoint.expected.gazebo_coke_pose_world &&
-       !poseIsFinite(*checkpoint.expected.gazebo_coke_pose_world)) ||
+      (checkpoint.expected.gazebo_task_object_pose_world &&
+       !poseIsFinite(*checkpoint.expected.gazebo_task_object_pose_world)) ||
       !mapHasValidNames(checkpoint.expected.joint_positions) ||
       !mapHasValidNames(checkpoint.expected.moveit_world_object_poses)) {
     return checkpointFailure("CHECKPOINT_INVALID_DATA",
@@ -256,20 +264,20 @@ Json checkpointToJson(const Checkpoint & checkpoint)
       {"gripper_open", checkpoint.expected.gripper_open},
       {"joint_positions", checkpoint.expected.joint_positions},
       {"moveit_world_object_poses", poseMapToJson(checkpoint.expected.moveit_world_object_poses)},
-      {"moveit_coke_attached", checkpoint.expected.moveit_coke_attached
-                                 ? Json(*checkpoint.expected.moveit_coke_attached)
+      {"moveit_task_object_attached", checkpoint.expected.moveit_task_object_attached
+                                 ? Json(*checkpoint.expected.moveit_task_object_attached)
                                  : Json(nullptr)},
-      {"gazebo_coke_pose_world", checkpoint.expected.gazebo_coke_pose_world
-                                   ? poseToJson(*checkpoint.expected.gazebo_coke_pose_world)
+      {"gazebo_task_object_pose_world", checkpoint.expected.gazebo_task_object_pose_world
+                                   ? poseToJson(*checkpoint.expected.gazebo_task_object_pose_world)
                                    : Json(nullptr)},
-      {"gazebo_coke_attached", checkpoint.expected.gazebo_coke_attached
-                                 ? Json(*checkpoint.expected.gazebo_coke_attached)
+      {"gazebo_task_object_attached", checkpoint.expected.gazebo_task_object_attached
+                                 ? Json(*checkpoint.expected.gazebo_task_object_attached)
                                  : Json(nullptr)},
-      {"gazebo_coke_stationary", checkpoint.expected.gazebo_coke_stationary
-                                   ? Json(*checkpoint.expected.gazebo_coke_stationary)
+      {"gazebo_task_object_stationary", checkpoint.expected.gazebo_task_object_stationary
+                                   ? Json(*checkpoint.expected.gazebo_task_object_stationary)
                                    : Json(nullptr)},
       {"required_world_objects", checkpoint.expected.required_world_objects}}},
-    {"configuration_hash", checkpoint.configuration_hash},
+    {"policy_bundle_sha256", checkpoint.policy_bundle_sha256},
     {"simulation_session_id", checkpoint.simulation_session_id},
     {"resumable", checkpoint.resumable},
   };
@@ -385,7 +393,7 @@ std::optional<Failure> validateJsonShape(const Json & json)
   if (!hasExactKeys(json,
                     {"schema_version", "run_id", "sequence", "source_mode", "phase",
                      "last_completed_state", "failed_state", "original_failure", "next_state",
-                     "expected", "configuration_hash", "simulation_session_id", "resumable"})) {
+                     "expected", "policy_bundle_sha256", "simulation_session_id", "resumable"})) {
     return checkpointFailure("CHECKPOINT_PARSE_FAILED",
                              "Checkpoint root keys do not match schema v3");
   }
@@ -394,7 +402,7 @@ std::optional<Failure> validateJsonShape(const Json & json)
       !json.at("last_completed_state").is_string() ||
       !(json.at("failed_state").is_null() || json.at("failed_state").is_string()) ||
       !(json.at("original_failure").is_null() || json.at("original_failure").is_object()) ||
-      !json.at("next_state").is_string() || !json.at("configuration_hash").is_string() ||
+      !json.at("next_state").is_string() || !json.at("policy_bundle_sha256").is_string() ||
       !json.at("simulation_session_id").is_string() || !json.at("resumable").is_boolean()) {
     return checkpointFailure("CHECKPOINT_PARSE_FAILED",
                              "Checkpoint scalar or optional fields have the wrong type");
@@ -402,16 +410,16 @@ std::optional<Failure> validateJsonShape(const Json & json)
   const auto & expected = json.at("expected");
   if (!hasExactKeys(expected,
                     {"tcp_pose_world", "gripper_open", "joint_positions",
-                     "moveit_world_object_poses", "moveit_coke_attached", "gazebo_coke_pose_world",
-                     "gazebo_coke_attached", "gazebo_coke_stationary", "required_world_objects"}) ||
+                     "moveit_world_object_poses", "moveit_task_object_attached", "gazebo_task_object_pose_world",
+                     "gazebo_task_object_attached", "gazebo_task_object_stationary", "required_world_objects"}) ||
       !isStrictPose(expected.at("tcp_pose_world")) || !expected.at("gripper_open").is_boolean() ||
       !isFiniteNumberMap(expected.at("joint_positions")) ||
       !isPoseMap(expected.at("moveit_world_object_poses")) ||
-      !isOptionalBool(expected.at("moveit_coke_attached")) ||
-      !(expected.at("gazebo_coke_pose_world").is_null() ||
-        isStrictPose(expected.at("gazebo_coke_pose_world"))) ||
-      !isOptionalBool(expected.at("gazebo_coke_attached")) ||
-      !isOptionalBool(expected.at("gazebo_coke_stationary")) ||
+      !isOptionalBool(expected.at("moveit_task_object_attached")) ||
+      !(expected.at("gazebo_task_object_pose_world").is_null() ||
+        isStrictPose(expected.at("gazebo_task_object_pose_world"))) ||
+      !isOptionalBool(expected.at("gazebo_task_object_attached")) ||
+      !isOptionalBool(expected.at("gazebo_task_object_stationary")) ||
       !isRequiredObjectArray(expected.at("required_world_objects"))) {
     return checkpointFailure("CHECKPOINT_PARSE_FAILED",
                              "Checkpoint world expectation does not match schema v3");
@@ -476,22 +484,22 @@ CheckpointLoadResult checkpointFromJson(const Json & json)
     expected.at("joint_positions").get<std::map<std::string, double>>();
   checkpoint.expected.moveit_world_object_poses =
     poseMapFromJson(expected.at("moveit_world_object_poses"));
-  if (!expected.at("moveit_coke_attached").is_null()) {
-    checkpoint.expected.moveit_coke_attached = expected.at("moveit_coke_attached").get<bool>();
+  if (!expected.at("moveit_task_object_attached").is_null()) {
+    checkpoint.expected.moveit_task_object_attached = expected.at("moveit_task_object_attached").get<bool>();
   }
-  if (!expected.at("gazebo_coke_pose_world").is_null()) {
-    checkpoint.expected.gazebo_coke_pose_world =
-      poseFromJson(expected.at("gazebo_coke_pose_world"));
+  if (!expected.at("gazebo_task_object_pose_world").is_null()) {
+    checkpoint.expected.gazebo_task_object_pose_world =
+      poseFromJson(expected.at("gazebo_task_object_pose_world"));
   }
-  if (!expected.at("gazebo_coke_attached").is_null()) {
-    checkpoint.expected.gazebo_coke_attached = expected.at("gazebo_coke_attached").get<bool>();
+  if (!expected.at("gazebo_task_object_attached").is_null()) {
+    checkpoint.expected.gazebo_task_object_attached = expected.at("gazebo_task_object_attached").get<bool>();
   }
-  if (!expected.at("gazebo_coke_stationary").is_null()) {
-    checkpoint.expected.gazebo_coke_stationary = expected.at("gazebo_coke_stationary").get<bool>();
+  if (!expected.at("gazebo_task_object_stationary").is_null()) {
+    checkpoint.expected.gazebo_task_object_stationary = expected.at("gazebo_task_object_stationary").get<bool>();
   }
   checkpoint.expected.required_world_objects =
     expected.at("required_world_objects").get<std::vector<std::string>>();
-  checkpoint.configuration_hash = json.at("configuration_hash").get<std::string>();
+  checkpoint.policy_bundle_sha256 = json.at("policy_bundle_sha256").get<std::string>();
   checkpoint.simulation_session_id = json.at("simulation_session_id").get<std::string>();
   checkpoint.resumable = json.at("resumable").get<bool>();
   if (const auto validation_failure = validateCheckpoint(checkpoint)) {

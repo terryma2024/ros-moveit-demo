@@ -23,6 +23,11 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 4. 检查现有进程、ROS graph 和 `codex-cua` tmux 状态。不得在不知情时启动第二套 `/move_group`、RViz 或 Gazebo。
 5. 给本轮建立一个 `/tmp/so101-debug-<时间或短ID>/` 证据目录；不要把日志、截图或构建产物写进源码目录。
 
+## Web 工具链
+
+- `src/so101_gazebo_demo/web` 统一使用 Bun 安装依赖、运行 scripts 和调用一次性 CLI；以 `bun.lock` 为锁文件，不用 npm/npx 或 `package-lock.json`。
+- 每个新 shell 先记录 `command -v bun` 和 `bun --version`。项目预构建、本地测试和 shadcn CLI 也必须经 Bun 运行；不得回退使用系统 Node 18。
+
 ## 闭环
 
 每一轮只走下面六步，完成后才开始下一轮。

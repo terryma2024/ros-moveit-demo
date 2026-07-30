@@ -2,6 +2,8 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
+#include <string>
 #include <thread>
 #include <utility>
 
@@ -20,10 +22,11 @@ class AttachThenHoldGripper final : public IStateExecutor
 {
 public:
   AttachThenHoldGripper(std::shared_ptr<IStateExecutor> attach,
-                        std::shared_ptr<ISO101GripperCommand> gripper, double hold_q6,
+                        std::shared_ptr<ISO101GripperCommand> gripper,
+                        std::string gripper_joint,
                         double settle_seconds) :
-    attach_(std::move(attach)), gripper_(std::move(gripper)), hold_q6_(hold_q6),
-    settle_seconds_(settle_seconds)
+    attach_(std::move(attach)), gripper_(std::move(gripper)),
+    gripper_joint_(std::move(gripper_joint)), settle_seconds_(settle_seconds)
   {
   }
 
@@ -31,7 +34,16 @@ public:
   {
     const auto attached = attach_->execute(context);
     if (attached.status != ActionStatus::SUCCEEDED) return attached;
-    const auto held = gripper_->command(hold_q6_);
+    const auto measured_q6 = context.before.joint_positions.find(gripper_joint_);
+    if (measured_q6 == context.before.joint_positions.end() ||
+        !std::isfinite(measured_q6->second)) {
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::OBSERVATION,
+                      "CARRY_HOLD_Q6_UNAVAILABLE",
+                      "A finite measured gripper position is required after Gazebo attachment",
+                      {}}};
+    }
+    const auto held = gripper_->command(measured_q6->second);
     if (held.status == ActionStatus::SUCCEEDED && settle_seconds_ > 0.0) {
       std::this_thread::sleep_for(std::chrono::duration<double>(settle_seconds_));
     }
@@ -49,7 +61,7 @@ public:
 private:
   std::shared_ptr<IStateExecutor> attach_;
   std::shared_ptr<ISO101GripperCommand> gripper_;
-  double hold_q6_;
+  std::string gripper_joint_;
   double settle_seconds_;
 };
 
@@ -84,7 +96,7 @@ void registerGazebo(SO101Task3Runtime & runtime,
       runtime.actions.registerExecutor(
         State::ATTACH_GAZEBO,
         std::make_shared<AttachThenHoldGripper>(
-          dependencies.gazebo_attach, dependencies.gripper, profile.q6_contact,
+          dependencies.gazebo_attach, dependencies.gripper, profile.gripper_joint,
           profile.post_attach_hold_settle_seconds));
     } else {
       runtime.actions.registerExecutor(State::ATTACH_GAZEBO, dependencies.gazebo_attach);
@@ -109,11 +121,13 @@ void registerMoveItScene(SO101Task3Runtime & runtime,
   const MoveItAttachmentSpec attachment{config.profile.moveit_attach_link,
                                         config.profile.moveit_touch_links};
   const std::array<MoveItSceneConfig, 5> configs{{
-    {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false},
-    {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false},
-    {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false},
-    {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true},
-    {State::RECOVER_SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, true},
+    {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, config.profile.task_object_id},
+    {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false, config.profile.task_object_id},
+    {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false, config.profile.task_object_id},
+    {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true,
+     config.profile.task_object_id},
+    {State::RECOVER_SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, true,
+     config.profile.task_object_id},
   }};
   for (const auto & scene_config : configs) {
     runtime.actions.registerExecutor(
@@ -133,7 +147,8 @@ SO101Task3Runtime makeSO101Task3Runtime(const SO101Task3RuntimeDependencies & de
   registerGripper(runtime, dependencies, config.profile);
   registerGazebo(runtime, dependencies, config.profile);
   registerMoveItScene(runtime, dependencies, config);
-  registerSO101AttachmentContracts(runtime.contracts, config.profile);
+  registerSO101AttachmentContracts(
+    runtime.contracts, config.profile, config.object, config.grasp_contact);
   runtime.recovery_policy = std::make_shared<SO101RecoveryPolicy>(std::move(config.profile));
   return runtime;
 }

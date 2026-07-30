@@ -51,12 +51,12 @@ WorldSnapshot snapshot(std::string session = "session-a")
   value.joint_positions = {{"joint_a", 0.25}, {"joint_b", -0.5}};
   value.joint_velocities = {{"joint_a", 0.0}, {"joint_b", 0.0}};
   value.moveit_world_object_poses = {{"object", {0.4, 0.5, 0.6, 0.0, 0.0, 0.0, 1.0}}};
-  value.moveit_coke_attached = false;
-  value.moveit_coke_attached_link = "tool_link";
-  value.moveit_coke_touch_links = {"left_contact", "right_contact"};
-  value.gazebo_coke_pose_world = {0.4, 0.5, 0.6, 0.0, 0.0, 0.0, 1.0};
-  value.gazebo_coke_attached = false;
-  value.gazebo_coke_stationary = true;
+  value.moveit_task_object_attached = false;
+  value.moveit_task_object_attached_link = "tool_link";
+  value.moveit_task_object_touch_links = {"left_contact", "right_contact"};
+  value.gazebo_task_object_pose_world = {0.4, 0.5, 0.6, 0.0, 0.0, 0.0, 1.0};
+  value.gazebo_task_object_attached = false;
+  value.gazebo_task_object_stationary = true;
   value.simulation_session_id = std::move(session);
   return value;
 }
@@ -67,10 +67,10 @@ void setExpected(Checkpoint & checkpoint, const WorldSnapshot & value)
   checkpoint.expected.gripper_open = value.gripper_open;
   checkpoint.expected.joint_positions = value.joint_positions;
   checkpoint.expected.moveit_world_object_poses = value.moveit_world_object_poses;
-  checkpoint.expected.moveit_coke_attached = value.moveit_coke_attached;
-  checkpoint.expected.gazebo_coke_pose_world = value.gazebo_coke_pose_world;
-  checkpoint.expected.gazebo_coke_attached = value.gazebo_coke_attached;
-  checkpoint.expected.gazebo_coke_stationary = value.gazebo_coke_stationary;
+  checkpoint.expected.moveit_task_object_attached = value.moveit_task_object_attached;
+  checkpoint.expected.gazebo_task_object_pose_world = value.gazebo_task_object_pose_world;
+  checkpoint.expected.gazebo_task_object_attached = value.gazebo_task_object_attached;
+  checkpoint.expected.gazebo_task_object_stationary = value.gazebo_task_object_stationary;
   checkpoint.expected.required_world_objects = {"object"};
 }
 
@@ -87,6 +87,9 @@ struct Scenario
   std::optional<State> fail_plan_validation;
   std::optional<State> fail_execute;
   std::optional<State> fail_precondition;
+  std::optional<State> transient_precondition_state;
+  int transient_precondition_failures{0};
+  std::string transient_precondition_failure_code{"ARM_NOT_QUIESCENT"};
   std::optional<State> fail_transition;
   std::optional<State> transient_transition_state;
   int transient_transition_failures{0};
@@ -96,6 +99,8 @@ struct Scenario
   std::string observation_failure_code{"OBSERVATION_INJECTED"};
   std::chrono::milliseconds observation_failure_delay{0};
   bool precondition_has_late_environment_failure{false};
+  bool cancel_makes_arm_nonstationary{false};
+  std::map<std::string, double> execute_failure_metrics;
   ActionResult cancel_result{ActionStatus::SUCCEEDED, std::nullopt};
   int observation_calls{0};
   int planner_calls{0};
@@ -187,22 +192,24 @@ public:
     ++scenario_.executor_calls;
     scenario_.executed_world = context.before;
     if (scenario_.fail_execute == state_) {
-      return {ActionStatus::FAILED, failure(FailureCategory::EXECUTION, "EXECUTION_INJECTED")};
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::EXECUTION, "EXECUTION_INJECTED", "injected test failure",
+                      scenario_.execute_failure_metrics}};
     }
     switch (state_) {
       case State::ATTACH_GAZEBO:
-        scenario_.world.gazebo_coke_attached = true;
+        scenario_.world.gazebo_task_object_attached = true;
         break;
       case State::ATTACH_MOVEIT:
-        scenario_.world.moveit_coke_attached = true;
+        scenario_.world.moveit_task_object_attached = true;
         break;
       case State::DETACH_GAZEBO:
       case State::RECOVER_DETACH_GAZEBO:
-        scenario_.world.gazebo_coke_attached = false;
+        scenario_.world.gazebo_task_object_attached = false;
         break;
       case State::DETACH_MOVEIT:
       case State::RECOVER_DETACH_MOVEIT:
-        scenario_.world.moveit_coke_attached = false;
+        scenario_.world.moveit_task_object_attached = false;
         break;
       default:
         break;
@@ -214,6 +221,9 @@ public:
   {
     scenario_.events.push_back(event("cancel", state_));
     ++scenario_.cancel_calls;
+    if (scenario_.cancel_makes_arm_nonstationary) {
+      scenario_.world.arm_stationary = false;
+    }
     return scenario_.cancel_result;
   }
 
@@ -273,6 +283,14 @@ public:
   {
     scenario_.events.push_back(event("precondition", state_));
     ++scenario_.precondition_calls;
+    if (scenario_.transient_precondition_state == state_ &&
+        scenario_.transient_precondition_failures > 0) {
+      --scenario_.transient_precondition_failures;
+      return {false,
+              {failure(FailureCategory::PRECONDITION,
+                       scenario_.transient_precondition_failure_code)},
+              {}};
+    }
     if (scenario_.fail_precondition == state_) {
       return {false, {failure(FailureCategory::PRECONDITION, "PRECONDITION_INJECTED")}, {}};
     }
@@ -355,12 +373,12 @@ public:
     if (route_failure) {
       return {std::nullopt, route_failure};
     }
-    if (current.gazebo_coke_attached.value_or(false) &&
-        current.moveit_coke_attached.value_or(false)) {
+    if (current.gazebo_task_object_attached.value_or(false) &&
+        current.moveit_task_object_attached.value_or(false)) {
       return {State::RECOVER_LIFT_TO_SAFE_HEIGHT, std::nullopt};
     }
-    if (current.gazebo_coke_attached.value_or(false) ||
-        current.moveit_coke_attached.value_or(false)) {
+    if (current.gazebo_task_object_attached.value_or(false) ||
+        current.moveit_task_object_attached.value_or(false)) {
       return {State::RECOVER_OPEN_GRIPPER, std::nullopt};
     }
     return {State::RECOVER_RETREAT, std::nullopt};
@@ -375,6 +393,10 @@ const std::vector<State> kActionStates{State::PREPARE_OPEN_GRIPPER,
                                        State::MOVE_ABOVE_OBJECT,
                                        State::DESCEND,
                                        State::CLOSE_GRIPPER,
+                                       State::WAIT_GRASP_STABLE,
+                                       State::MICRO_LIFT,
+                                       State::WAIT_MICRO_LIFT_STABLE,
+                                       State::VERIFY_PHYSICAL_GRASP,
                                        State::ATTACH_GAZEBO,
                                        State::ATTACH_MOVEIT,
                                        State::LIFT,
@@ -425,6 +447,8 @@ struct Harness
     for (const auto state : kActionStates) {
       registerState(state, kPlannedStates.count(state) != 0);
     }
+    contracts.registerContract({State::VALIDATION_FAILED, State::ATTACH_GAZEBO},
+      std::make_shared<FakeContract>(State::VALIDATION_FAILED, scenario));
   }
 
   void registerAllExcept(std::optional<State> executor_gap, std::optional<State> planner_gap,
@@ -473,7 +497,7 @@ Checkpoint forwardCheckpoint(State last, State next, const WorldSnapshot & world
   checkpoint.phase = CheckpointPhase::FORWARD;
   checkpoint.last_completed_state = last;
   checkpoint.next_state = next;
-  checkpoint.configuration_hash = "config-a";
+  checkpoint.policy_bundle_sha256 = "config-a";
   checkpoint.simulation_session_id = "session-a";
   setExpected(checkpoint, world);
   return checkpoint;
@@ -486,6 +510,10 @@ std::vector<State> normalTrace()
           State::MOVE_ABOVE_OBJECT,
           State::DESCEND,
           State::CLOSE_GRIPPER,
+          State::WAIT_GRASP_STABLE,
+          State::MICRO_LIFT,
+          State::WAIT_MICRO_LIFT_STABLE,
+          State::VERIFY_PHYSICAL_GRASP,
           State::ATTACH_GAZEBO,
           State::ATTACH_MOVEIT,
           State::LIFT,
@@ -526,9 +554,9 @@ TEST(PureRunnerIntegration, ExecuteUsesTheCompleteBoundaryInOrder)
   ASSERT_TRUE(harness.scenario.planned_world);
   ASSERT_TRUE(harness.scenario.executed_world);
   EXPECT_EQ(std::optional<std::string>("tool_link"),
-            harness.scenario.planned_world->moveit_coke_attached_link);
+            harness.scenario.planned_world->moveit_task_object_attached_link);
   EXPECT_EQ((std::set<std::string>{"left_contact", "right_contact"}),
-            harness.scenario.executed_world->moveit_coke_touch_links);
+            harness.scenario.executed_world->moveit_task_object_touch_links);
 }
 
 TEST(PureRunnerIntegration, PlanOnlyStopBoundaryPlansValidatesAndCheckpointsWithoutActing)
@@ -656,6 +684,72 @@ TEST(PureRunnerIntegration, GripperActionWaitsForEndpointPostconditionConvergenc
   EXPECT_EQ(0, harness.scenario.cancel_calls);
 }
 
+TEST(PureRunnerIntegration, GripperActionWaitsForArmQuiescenceAfterContact)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.transient_transition_state = State::CLOSE_GRIPPER;
+  harness.scenario.transient_transition_failures = 1;
+  harness.scenario.transient_transition_failure_code = "ARM_NOT_QUIESCENT";
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::CLOSE_GRIPPER,
+                          false, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(State::CLOSE_GRIPPER, result.current_state);
+  EXPECT_EQ(State::WAIT_GRASP_STABLE, result.next_state);
+  EXPECT_GE(harness.scenario.observation_calls, 3);
+  EXPECT_GE(harness.scenario.transition_calls, 2);
+  EXPECT_EQ(0, harness.scenario.cancel_calls);
+}
+
+TEST(PureRunnerIntegration, AttachmentWaitsForArmQuiescenceBeforeSideEffect)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.transient_precondition_state = State::ATTACH_GAZEBO;
+  harness.scenario.transient_precondition_failures = 1;
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::ATTACH_GAZEBO,
+                          false, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(State::ATTACH_GAZEBO, result.current_state);
+  EXPECT_EQ(State::ATTACH_MOVEIT, result.next_state);
+  EXPECT_GE(harness.scenario.observation_calls, 3);
+  EXPECT_GE(harness.scenario.precondition_calls, 2);
+  EXPECT_EQ(1, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
+                          "execute:ATTACH_GAZEBO"));
+  EXPECT_EQ(0, harness.scenario.cancel_calls);
+}
+
+TEST(PureRunnerIntegration, DescendPostconditionFailureNeverExecutesCloseOrAttach)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_transition = State::DESCEND;
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::DESCEND, false, std::nullopt, 20});
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("POSTCONDITION_INJECTED", result.failure->code);
+  EXPECT_EQ((std::vector<State>{State::IDLE, State::PREPARE_OPEN_GRIPPER,
+                                State::MOVE_ABOVE_OBJECT, State::DESCEND,
+                                State::RECOVER_RETREAT, State::ERROR}),
+            result.state_trace);
+  EXPECT_NE(std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
+                      "execute:DESCEND"), harness.scenario.events.end());
+  EXPECT_EQ(std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
+                      "execute:CLOSE_GRIPPER"), harness.scenario.events.end());
+  EXPECT_EQ(std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
+                      "execute:ATTACH_GAZEBO"), harness.scenario.events.end());
+  EXPECT_EQ(std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
+                      "execute:ATTACH_MOVEIT"), harness.scenario.events.end());
+}
+
 TEST(PureRunnerIntegration, ResumeValidatesCommonAndTransitionBoundaryBeforeAnyAction)
 {
   Harness harness;
@@ -689,7 +783,7 @@ TEST(PureRunnerIntegration, ResumeMismatchStaleSessionConfigAndSkippedBoundaryFa
     } else if (which == "session") {
       harness.scenario.world.simulation_session_id = "other-session";
     } else if (which == "config") {
-      harness.store.latest->configuration_hash = "other-config";
+      harness.store.latest->policy_bundle_sha256 = "other-config";
     } else {
       harness.store.latest->next_state = State::DESCEND;
     }
@@ -789,6 +883,48 @@ TEST(PureRunnerIntegration, PlanningAndExecutionFailuresKeepTheirClassificationA
   }
 }
 
+TEST(PureRunnerIntegration, StopObservationRetriesTransientRobotStateChangesAndKeepsFirstFailure)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_transition = State::MOVE_ABOVE_OBJECT;
+  // Calls 1-4 cover the initial and successful-action observations through
+  // MOVE_ABOVE_OBJECT.  The first stop observation is call 5.
+  harness.scenario.fail_observation_call = 5;
+  harness.scenario.observation_failure_code =
+    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
+  harness.scenario.observation_failure_count = 2;
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(FailureCategory::POSTCONDITION, result.failure->category);
+  EXPECT_EQ("POSTCONDITION_INJECTED", result.failure->code);
+  EXPECT_GE(harness.scenario.observation_calls, 7);
+  EXPECT_GE(harness.scenario.cancel_calls, 1);
+}
+
+TEST(PureRunnerIntegration, PostCancelQuiescenceFailureRetainsOriginalActionFailureContext)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_execute = State::PREPARE_OPEN_GRIPPER;
+  harness.scenario.execute_failure_metrics = {{"observed_q6", -0.059303}};
+  harness.scenario.cancel_makes_arm_nonstationary = true;
+
+  const auto result = harness.runner().run(
+    {RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("ARM_NOT_QUIESCENT_AFTER_CANCEL", result.failure->code);
+  EXPECT_NE(std::string::npos,
+            result.failure->message.find("original failure EXECUTION_INJECTED: injected test failure"));
+  const auto original_q6 = result.failure->metrics.find("original_observed_q6");
+  ASSERT_NE(result.failure->metrics.end(), original_q6);
+  EXPECT_DOUBLE_EQ(-0.059303, original_q6->second);
+}
+
 TEST(PureRunnerIntegration, DoesNotObserveOrRecoverBeforeCancelReachesTerminal)
 {
   Harness harness;
@@ -830,6 +966,10 @@ TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTra
                                     State::MOVE_ABOVE_OBJECT,
                                     State::DESCEND,
                                     State::CLOSE_GRIPPER,
+                                    State::WAIT_GRASP_STABLE,
+                                    State::MICRO_LIFT,
+                                    State::WAIT_MICRO_LIFT_STABLE,
+                                    State::VERIFY_PHYSICAL_GRASP,
                                     State::ATTACH_GAZEBO,
                                     State::ATTACH_MOVEIT,
                                     State::LIFT,
@@ -850,15 +990,15 @@ TEST(PureRunnerIntegration, RecoveryResumeReclassifiesFromCurrentFactsInsteadOfC
   Harness harness;
   harness.registerAll();
   auto historical = harness.scenario.world;
-  historical.gazebo_coke_attached = true;
-  historical.moveit_coke_attached = true;
+  historical.gazebo_task_object_attached = true;
+  historical.moveit_task_object_attached = true;
   auto checkpoint = forwardCheckpoint(State::LIFT, State::RECOVER_LIFT_TO_SAFE_HEIGHT, historical);
   checkpoint.phase = CheckpointPhase::RECOVERY;
   checkpoint.failed_state = State::LIFT;
   checkpoint.original_failure = failure(FailureCategory::EXECUTION, "ORIGINAL_FAILURE");
   harness.store.latest = checkpoint;
-  harness.scenario.world.gazebo_coke_attached = false;
-  harness.scenario.world.moveit_coke_attached = false;
+  harness.scenario.world.gazebo_task_object_attached = false;
+  harness.scenario.world.moveit_task_object_attached = false;
 
   const auto result =
     harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
@@ -879,9 +1019,9 @@ TEST(PureRunnerIntegration, RecoveryResumeRequiresStationaryObjectBeforePolicyOr
     checkpoint.original_failure = failure(FailureCategory::EXECUTION, "ORIGINAL_FAILURE");
     harness.store.latest = checkpoint;
     if (omit_stationary_evidence) {
-      harness.scenario.world.gazebo_coke_stationary.reset();
+      harness.scenario.world.gazebo_task_object_stationary.reset();
     } else {
-      harness.scenario.world.gazebo_coke_stationary = false;
+      harness.scenario.world.gazebo_task_object_stationary = false;
     }
 
     const auto result =

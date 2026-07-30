@@ -8,6 +8,7 @@
 #include "so101_gazebo_demo/pick_place/so101_fixed_motion_targets.hpp"
 #include "so101_gazebo_demo/pick_place/so101_joint_motion_adapter.hpp"
 #include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_validator.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -17,7 +18,7 @@ struct SO101WorldObservationConfig
   double max_age_seconds{0.5};
   std::size_t settle_samples{3};
   double settle_interval_seconds{0.05};
-  double joint_settle_tolerance{0.001};
+  double joint_settle_tolerance{0.003};
 };
 
 /// Produces the robot and MoveIt half of a complete world observation. The
@@ -41,8 +42,10 @@ private:
 
 struct SO101PickPlaceRuntimeDependencies : SO101Task3RuntimeDependencies
 {
-  std::shared_ptr<const SO101FixedMotionTargetPolicy> motion_policy;
+  std::shared_ptr<const SO101ConfiguredMotionTargetPolicy> motion_policy;
   std::shared_ptr<IMoveItJointMotionAdapter> motion;
+  std::shared_ptr<IWorldZMicroLift> micro_lift;
+  std::shared_ptr<IWorldObserver> physical_observer;
 };
 
 struct SO101PickPlaceRuntimeConfig : SO101Task3RuntimeConfig

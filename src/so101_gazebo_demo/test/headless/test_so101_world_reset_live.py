@@ -61,7 +61,7 @@ def moveit_state(environment):
         environment,
         timeout=15,
     )
-    line = next((line for line in output.splitlines() if "coke_in_world=" in line), "")
+    line = next((line for line in output.splitlines() if "task_object_in_world=" in line), "")
     if not line:
         raise RuntimeError(f"MoveIt query did not emit state: {output}")
     return line
@@ -69,7 +69,7 @@ def moveit_state(environment):
 
 def gazebo_attachment(environment):
     output = run(
-        ["timeout", "3", "gz", "topic", "-e", "-t", "/so101/coke_attached", "-n", "1"],
+        ["timeout", "3", "gz", "topic", "-e", "-t", "/so101/object_attached", "-n", "1"],
         environment,
         timeout=5,
     )
@@ -81,7 +81,7 @@ def gazebo_attachment(environment):
 
 
 def gazebo_pose(environment):
-    output = run(["gz", "model", "-m", "coke", "-p"], environment, timeout=5)
+    output = run(["gz", "model", "-m", "plastic_cup", "-p"], environment, timeout=5)
     match = re.search(
         r"Pose \[ XYZ \(m\) \] \[ RPY \(rad\) \]:\s*"
         r"\[\s*([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s*\]\s*"
@@ -105,16 +105,16 @@ def pose_errors(pose):
 
 def require_moveit(line, attached):
     expected = "true" if attached else "false"
-    if f"coke_attached={expected}" not in line:
+    if f"task_object_attached={expected}" not in line:
         raise RuntimeError(f"wrong MoveIt attachment fact: {line}")
     if attached:
-        required = ("coke_in_world=false", "attached_link=gripper", "touch_links=gripper,jaw")
+        required = ("task_object_in_world=false", "attached_link=gripper", "touch_links=gripper,jaw")
     else:
         required = (
-            "coke_in_world=true",
+            "task_object_in_world=true",
             "attached_link=-",
             "touch_links=-",
-            "coke_pose=0.02,-0.28,0.181,0,0,0,1",
+            "task_object_pose=0.02,-0.28,0.181,0,0,0,1",
             "table_in_world=true",
             "table_pose=0,-0.2,0.1,0,0,0,1",
         )
@@ -244,7 +244,7 @@ def main():
                 lambda: (
                     "/world/so101_pick_place/set_pose"
                     in run(["gz", "service", "-l"], environment, timeout=3)
-                    and "/so101/coke_attached"
+                    and "/so101/object_attached"
                     in run(["gz", "topic", "-l"], environment, timeout=3),
                     "Gazebo interfaces",
                 ),
@@ -279,7 +279,7 @@ def main():
                 if seed_gazebo:
                     run(
                         [
-                            "gz", "topic", "-t", "/so101/attach_coke", "-m",
+                            "gz", "topic", "-t", "/so101/attach_object", "-m",
                             "gz.msgs.Empty", "-p", "unused: true",
                         ],
                         environment,
@@ -298,7 +298,7 @@ def main():
                         environment,
                         timeout=20,
                     )
-                    line = next(line for line in output.splitlines() if "coke_in_world=" in line)
+                    line = next(line for line in output.splitlines() if "task_object_in_world=" in line)
                     require_moveit(line, True)
 
                 gazebo_before, gazebo_before_text = gazebo_attachment(environment)
