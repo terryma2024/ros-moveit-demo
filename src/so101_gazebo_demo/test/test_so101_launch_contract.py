@@ -91,6 +91,7 @@ def test_teleop_launch_declares_web_preflight_and_defers_server_node():
     }
     assert arguments['build_web_if_needed'] == 'true'
     assert arguments['web_source_dir'] == ''
+    assert 'gz_partition' in arguments
     assert any(isinstance(entity, OpaqueFunction) for entity in description.entities)
     assert not any(isinstance(entity, Node) for entity in description.entities)
     assert 'name="so101_teleop_server_process"' not in TELEOP_LAUNCH.read_text()
@@ -109,6 +110,7 @@ def test_teleop_launch_preflight_completes_before_server_node(monkeypatch, tmp_p
     context.launch_configurations.update({
         'bind_address': '127.0.0.1', 'port': '8000', 'world_name': 'world',
         'tcp_frame': 'tcp', 'simulation_session_id': 'session',
+        'gz_partition': 'camera-test-partition',
         'web_source_dir': str(source), 'build_web_if_needed': 'true',
     })
     nodes = module.launch_setup(context)
@@ -120,6 +122,7 @@ def test_teleop_launch_preflight_completes_before_server_node(monkeypatch, tmp_p
         for key, value in vars(process)['_Executable__additional_env']
     }
     assert additional_env['SO101_TELEOP_WEB_ROOT'] == str(dist)
+    assert additional_env['GZ_PARTITION'] == 'camera-test-partition'
 
 
 def test_teleop_launch_preflight_failure_prevents_server_node(monkeypatch, tmp_path):
@@ -132,6 +135,7 @@ def test_teleop_launch_preflight_failure_prevents_server_node(monkeypatch, tmp_p
     context.launch_configurations.update({
         'bind_address': '127.0.0.1', 'port': '8000', 'world_name': 'world',
         'tcp_frame': 'tcp', 'simulation_session_id': 'session',
+        'gz_partition': 'camera-test-partition',
         'web_source_dir': str(source), 'build_web_if_needed': 'true',
     })
     with pytest.raises(RuntimeError, match='build failed'):

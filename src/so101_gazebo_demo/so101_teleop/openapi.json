@@ -230,6 +230,70 @@
         "summary": "Cancel"
       }
     },
+    "/gazebo/camera/presets": {
+      "get": {
+        "operationId": "camera_presets_gazebo_camera_presets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Camera Presets"
+      }
+    },
+    "/gazebo/camera/presets/{preset}": {
+      "post": {
+        "operationId": "camera_preset_gazebo_camera_presets__preset__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "preset",
+            "required": true,
+            "schema": {
+              "title": "Preset",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Camera Preset"
+      }
+    },
     "/gazebo/screenshot": {
       "post": {
         "operationId": "screenshot_gazebo_screenshot_post",

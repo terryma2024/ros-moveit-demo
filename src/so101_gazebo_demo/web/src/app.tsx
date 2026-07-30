@@ -42,6 +42,7 @@ export function App() {
   const [events, setEvents] = useState<EventEntry[]>([]);
   const [rttMs, setRttMs] = useState<number>();
   const [tcpPlanning, setTcpPlanning] = useState(false);
+  const [cameraPresets, setCameraPresets] = useState<string[]>([]);
   const sessionRef = useRef("");
   const snapshot = state.actual as LiveSnapshot;
   const environment = snapshot.environment ?? {};
@@ -81,6 +82,15 @@ export function App() {
     };
     return () => { active = false; window.clearInterval(timer); websocket.close(); };
   }, [acceptSnapshot]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/gazebo/camera/presets")
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP_${response.status}`)))
+      .then((payload: { presets?: string[] }) => { if (active) setCameraPresets(payload.presets ?? []); })
+      .catch(() => { if (active) setNotice("Camera presets unavailable"); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!lease) return;
@@ -185,7 +195,7 @@ export function App() {
         sourceAges={(snapshot.source_ages_s as Record<string, number> | undefined) ?? {}}
       /></TabsContent>
       <TabsContent value="target"><TargetYamlControls target={replayableTarget} onImport={importTarget} onError={setNotice}/></TabsContent>
-      <TabsContent value="gazebo"><GazeboPanel leaseHeld={Boolean(lease)} gazeboAttached={snapshot.gazebo_attached} moveitAttached={snapshot.moveit_attached} shot={shot} onScreenshot={async () => { const result = await call("/gazebo/screenshot"); const data = result.data as any; if (data?.url) setShot(data.url); }} onAttach={() => call("/attachment/attach")} onDetach={() => call("/attachment/detach")} onRepair={() => call("/scene/repair", { confirmation: "CONFIRM SCENE_REPAIR" })} onHome={() => call("/robot/home", { confirmation: "CONFIRM ROBOT_HOME" })} onReset={() => call("/simulation/reset", { confirmation: "CONFIRM SIMULATION_RESET" })}/></TabsContent>
+      <TabsContent value="gazebo"><GazeboPanel leaseHeld={Boolean(lease)} gazeboAttached={snapshot.gazebo_attached} moveitAttached={snapshot.moveit_attached} shot={shot} cameraPresets={cameraPresets} onCameraPreset={(preset) => call(`/gazebo/camera/presets/${preset}`)} onScreenshot={async () => { const result = await call("/gazebo/screenshot"); const data = result.data as any; if (data?.url) setShot(data.url); }} onAttach={() => call("/attachment/attach")} onDetach={() => call("/attachment/detach")} onRepair={() => call("/scene/repair", { confirmation: "CONFIRM SCENE_REPAIR" })} onHome={() => call("/robot/home", { confirmation: "CONFIRM ROBOT_HOME" })} onReset={() => call("/simulation/reset", { confirmation: "CONFIRM SIMULATION_RESET" })}/></TabsContent>
       <TabsContent value="workflow"><WorkflowPanel snapshot={workflow} leaseHeld={Boolean(lease)} command={workflowCommand}/></TabsContent>
       <TabsContent value="events"><EventLog entries={events}/></TabsContent>
       <TabsContent value="environment"><EnvironmentPanel environment={environment}/></TabsContent>

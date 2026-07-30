@@ -16,3 +16,5 @@ def test_openapi_export_is_byte_deterministic_and_contains_control_routes(tmp_pa
     assert schema["info"]["title"] == "SO-101 Teleop"
     assert "/plan/tcp" in schema["paths"]
     assert "/workflow/{operation}" in schema["paths"]
+    assert "/gazebo/camera/presets" in schema["paths"]
+    assert "/gazebo/camera/presets/{preset}" in schema["paths"]
