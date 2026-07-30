@@ -36,25 +36,25 @@ public:
     return observation_available ? std::optional<GazeboResetState>(state) : std::nullopt;
   }
 
-  ActionResult detachCoke() override
+  ActionResult detachTaskObject() override
   {
     ++detach_calls;
     commands.emplace_back("gazebo_detach");
     if (events) events->emplace_back("gazebo_detach");
     if (detach_result.status == ActionStatus::SUCCEEDED && detach_converges) {
-      state.coke_attached = false;
+      state.task_object_attached = false;
       ++state.attachment_revision;
     }
     return detach_result;
   }
 
-  ActionResult setCokeWorldPose(const Pose3d & pose) override
+  ActionResult setTaskObjectWorldPose(const Pose3d & pose) override
   {
     ++set_pose_calls;
     commands.emplace_back("gazebo_pose");
     if (events) events->emplace_back("gazebo_pose");
     if (set_pose_result.status == ActionStatus::SUCCEEDED && pose_converges) {
-      state.coke_world_pose = pose;
+      state.task_object_world_pose = pose;
       ++state.pose_revision;
     }
     return set_pose_result;
@@ -76,36 +76,36 @@ public:
 class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(const MoveItAttachmentSpec &) override
+  ActionResult attachTaskObject(const MoveItAttachmentSpec &) override
   {
     return succeeded();
   }
 
-  ActionResult detachCoke() override
+  ActionResult detachTaskObject() override
   {
     ++detach_calls;
     commands.emplace_back("moveit_detach");
     if (events) events->emplace_back("moveit_detach");
     if (detach_result.status == ActionStatus::SUCCEEDED && detach_converges) {
-      state.coke_attached = false;
-      state.coke_in_world = true;
+      state.task_object_attached = false;
+      state.task_object_in_world = true;
       state.attached_link.clear();
       state.touch_links.clear();
     }
     return detach_result;
   }
 
-  ActionResult upsertCokeWorldPose(const Pose3d & pose) override
+  ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
-    ++coke_upsert_calls;
-    commands.emplace_back("moveit_coke");
-    if (events) events->emplace_back("moveit_coke");
-    if (coke_upsert_result.status == ActionStatus::SUCCEEDED && upsert_converges) {
-      state.coke_attached = false;
-      state.coke_in_world = true;
-      state.coke_world_pose = pose;
+    ++task_object_upsert_calls;
+    commands.emplace_back("moveit_task_object");
+    if (events) events->emplace_back("moveit_task_object");
+    if (task_object_upsert_result.status == ActionStatus::SUCCEEDED && upsert_converges) {
+      state.task_object_attached = false;
+      state.task_object_in_world = true;
+      state.task_object_world_pose = pose;
     }
-    return coke_upsert_result;
+    return task_object_upsert_result;
   }
 
   ActionResult upsertTableWorldPose(const Pose3d & pose) override
@@ -143,12 +143,12 @@ public:
   bool detach_converges{true};
   bool upsert_converges{true};
   ActionResult detach_result{succeeded()};
-  ActionResult coke_upsert_result{succeeded()};
+  ActionResult task_object_upsert_result{succeeded()};
   ActionResult table_upsert_result{succeeded()};
   ActionResult pedestal_upsert_result{succeeded()};
   int observe_calls{0};
   int detach_calls{0};
-  int coke_upsert_calls{0};
+  int task_object_upsert_calls{0};
   int table_upsert_calls{0};
   int pedestal_upsert_calls{0};
   std::vector<std::string> commands;
@@ -170,8 +170,8 @@ public:
     gripper_targets.push_back(q6);
     if (events) events->emplace_back("gripper:" + std::to_string(q6));
     if (gripper_result.status == ActionStatus::SUCCEEDED &&
-        (q6 != 0.0 || home_gripper_converges)) {
-      joints->gripper_position = q6;
+        (q6 != -0.059303612618397 || home_gripper_converges)) {
+      joints->gripper_position = q6 + home_gripper_offset;
       joints->gripper_velocity = 0.0;
     }
     return gripper_result;
@@ -189,6 +189,9 @@ public:
     if (events) events->emplace_back("execute_arm_home");
     if (execute_result.status == ActionStatus::SUCCEEDED && arm_converges) {
       joints->positions = last_arm_goal;
+      if (!joints->positions.empty()) {
+        joints->positions.back() += arm_home_residual;
+      }
       joints->velocities.assign(last_arm_goal.size(), 0.0);
     }
     return execute_result;
@@ -204,6 +207,8 @@ public:
   bool observation_available{true};
   bool home_gripper_converges{true};
   bool arm_converges{true};
+  double home_gripper_offset{0.0};
+  double arm_home_residual{0.0};
   ActionResult gripper_result{succeeded()};
   ActionResult plan_result{succeeded()};
   ActionResult execute_result{succeeded()};
@@ -233,7 +238,7 @@ std::shared_ptr<FakeRobotHomeResetAdapter> robotAdapter()
 WorldResetConfig canonicalConfig()
 {
   const auto & profile = SO101Profile::canonical();
-  return {profile.table_pose, profile.pedestal_pose, profile.coke_pose,
+  return {profile.table_pose, profile.pedestal_pose, profile.task_object_pose,
           0.02, 0.001, 1e-5, 1e-4};
 }
 
@@ -241,12 +246,12 @@ void seed(const std::shared_ptr<FakeGazeboResetAdapter> & gazebo,
           const std::shared_ptr<FakeMoveItSceneAdapter> & moveit, bool gazebo_attached,
           bool moveit_attached)
 {
-  gazebo->state.coke_attached = gazebo_attached;
-  gazebo->state.coke_world_pose = {0.3, 0.2, 0.4, 0.1, 0.2, 0.3, 0.9};
+  gazebo->state.task_object_attached = gazebo_attached;
+  gazebo->state.task_object_world_pose = {0.3, 0.2, 0.4, 0.1, 0.2, 0.3, 0.9};
   gazebo->state.pose_revision = 10;
   gazebo->state.attachment_revision = 10;
-  moveit->state.coke_attached = moveit_attached;
-  moveit->state.coke_in_world = !moveit_attached;
+  moveit->state.task_object_attached = moveit_attached;
+  moveit->state.task_object_in_world = !moveit_attached;
   if (moveit_attached) {
     moveit->state.attached_link = "gripper";
     moveit->state.touch_links = {"gripper", "jaw"};
@@ -275,10 +280,10 @@ TEST(SO101WorldResetCoordinator, FourInitialStatesUseOnlyNecessaryDetachCalls)
     EXPECT_EQ(1, gazebo->set_pose_calls);
     EXPECT_EQ(1, moveit->table_upsert_calls);
     EXPECT_EQ(1, moveit->pedestal_upsert_calls);
-    EXPECT_EQ(1, moveit->coke_upsert_calls);
-    EXPECT_FALSE(gazebo->state.coke_attached);
-    EXPECT_FALSE(moveit->state.coke_attached);
-    EXPECT_TRUE(moveit->state.coke_in_world);
+    EXPECT_EQ(1, moveit->task_object_upsert_calls);
+    EXPECT_FALSE(gazebo->state.task_object_attached);
+    EXPECT_FALSE(moveit->state.task_object_attached);
+    EXPECT_TRUE(moveit->state.task_object_in_world);
   }
 }
 
@@ -297,7 +302,7 @@ TEST(SO101WorldResetCoordinator, RepeatedResetDoesNotIssueHistoricalDetachCalls)
   EXPECT_EQ(2, gazebo->set_pose_calls);
   EXPECT_EQ(2, moveit->table_upsert_calls);
   EXPECT_EQ(2, moveit->pedestal_upsert_calls);
-  EXPECT_EQ(2, moveit->coke_upsert_calls);
+  EXPECT_EQ(2, moveit->task_object_upsert_calls);
 }
 
 TEST(SO101WorldResetCoordinator, StopsAfterGazeboDetachCommandFailure)
@@ -315,7 +320,7 @@ TEST(SO101WorldResetCoordinator, StopsAfterGazeboDetachCommandFailure)
   EXPECT_EQ("GAZEBO_DETACH_REJECTED", result.failure->code);
   EXPECT_EQ(0, moveit->detach_calls);
   EXPECT_EQ(0, gazebo->set_pose_calls);
-  EXPECT_EQ(0, moveit->coke_upsert_calls);
+  EXPECT_EQ(0, moveit->task_object_upsert_calls);
 }
 
 TEST(SO101WorldResetCoordinator, ApiSuccessWithoutDetachConvergenceTimesOut)
@@ -373,7 +378,7 @@ TEST(SO101ProfileCanonical, RobotHomeMatchesTheSrdfNamedState)
 {
   const auto & profile = SO101Profile::canonical();
   EXPECT_EQ((std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0}), profile.arm_home_positions);
-  EXPECT_DOUBLE_EQ(0.0, profile.q6_home);
+  EXPECT_DOUBLE_EQ(-0.059303612618397, profile.q6_home);
   EXPECT_DOUBLE_EQ(1.7, profile.q6_full_open);
 }
 
@@ -414,8 +419,8 @@ TEST(SO101WorldResetCoordinator, UsesReleaseArmHomeWorldSyncThenFinalGripperHome
   }
   EXPECT_EQ((std::vector<std::string>{
               "gripper:1.700000", "plan_arm_home", "execute_arm_home",
-              "gazebo_pose", "moveit_table", "moveit_pedestal", "moveit_coke",
-              "gripper:0.000000"}), commands);
+              "gazebo_pose", "moveit_table", "moveit_pedestal", "moveit_task_object",
+              "gripper:-0.059304"}), commands);
   EXPECT_EQ((std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0}), robot->last_arm_goal);
 }
 
@@ -454,7 +459,7 @@ TEST(SO101WorldResetCoordinator, FailedArmPlanNeverExecutesOrResetsWorld)
   EXPECT_EQ("ARM_HOME_PLAN_FAILED", result.failure->code);
   EXPECT_EQ(0, robot->execute_calls);
   EXPECT_EQ(0, gazebo->set_pose_calls);
-  EXPECT_EQ(0, moveit->coke_upsert_calls);
+  EXPECT_EQ(0, moveit->task_object_upsert_calls);
 }
 
 TEST(SO101WorldResetCoordinator, FinalGripperMismatchReportsExpectedAndActualQ6)
@@ -473,8 +478,47 @@ TEST(SO101WorldResetCoordinator, FinalGripperMismatchReportsExpectedAndActualQ6)
   EXPECT_EQ(ActionStatus::TIMED_OUT, result.status);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("WORLD_RESET_GRIPPER_HOME_TIMEOUT", result.failure->code);
-  EXPECT_DOUBLE_EQ(0.0, result.failure->metrics.at("expected_q6"));
+  EXPECT_DOUBLE_EQ(-0.059303612618397, result.failure->metrics.at("expected_q6"));
   EXPECT_DOUBLE_EQ(1.7, result.failure->metrics.at("actual_q6"));
+}
+
+TEST(SO101WorldResetCoordinator, UsesIndependentArmAndNativePadEndpointTolerances)
+{
+  auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
+  auto moveit = std::make_shared<FakeMoveItSceneAdapter>();
+  auto robot = robotAdapter();
+  robot->arm_home_residual = 0.0010310361394658685;
+  seed(gazebo, moveit, false, false);
+  auto config = canonicalConfig();
+  config.arm_joint_position_tolerance = 0.002;
+  config.gripper_position_tolerance = 0.001;
+  WorldResetCoordinator resetter(gazebo, moveit, robot, config);
+
+  const auto result = resetter.reset();
+
+  EXPECT_EQ(ActionStatus::SUCCEEDED, result.status);
+}
+
+TEST(SO101WorldResetCoordinator, NativePadSafeFloorRemainsStrictWhenArmHasEndpointAllowance)
+{
+  auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
+  auto moveit = std::make_shared<FakeMoveItSceneAdapter>();
+  auto robot = robotAdapter();
+  robot->arm_home_residual = 0.0010310361394658685;
+  robot->home_gripper_offset = -0.000101;
+  seed(gazebo, moveit, false, false);
+  auto config = canonicalConfig();
+  config.timeout_seconds = 0.004;
+  config.arm_joint_position_tolerance = 0.002;
+  config.gripper_position_tolerance = 0.001;
+  WorldResetCoordinator resetter(gazebo, moveit, robot, config);
+
+  const auto result = resetter.reset();
+
+  EXPECT_EQ(ActionStatus::TIMED_OUT, result.status);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("WORLD_RESET_GRIPPER_HOME_TIMEOUT", result.failure->code);
+  EXPECT_LT(result.failure->metrics.at("actual_q6"), config.q6_home_position);
 }
 
 }  // namespace

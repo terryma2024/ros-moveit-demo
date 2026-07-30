@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -14,6 +15,8 @@
 
 #include <openssl/evp.h>
 #include <yaml-cpp/yaml.h>
+
+#include "so101_gazebo_demo/pick_place/fingertip_pad_gap_calibration_data.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -144,20 +147,44 @@ Pose3d parsePose(const YAML::Node & node, std::string_view context)
   return {values[0], values[1], values[2], values[3], values[4], values[5], values[6]};
 }
 
-AdapterPrimitiveConfig parseAdapterPrimitive(const YAML::Node & node,
-                                              const std::string & context)
+FingertipPadGeometryConfig parseFingertipPadGeometry(
+  const YAML::Node & node, const std::string & context, const std::string & expected_axis,
+  double expected_direction, std::size_t expected_profile_count)
 {
-  rejectUnknownFields(node, {"size_xyz", "origin_xyz_rpy"}, context);
-  AdapterPrimitiveConfig result;
-  const auto size = parseVector(requireField(node, "size_xyz", context), 3,
-                                context + ".size_xyz");
-  const auto origin = parseVector(requireField(node, "origin_xyz_rpy", context), 6,
-                                  context + ".origin_xyz_rpy");
-  if (std::any_of(size.begin(), size.end(), [](double value) {return value <= 0.0;})) {
-    throw PolicyError("POLICY_INVALID_VALUE", context + ".size_xyz must be positive");
+  rejectUnknownFields(node, {"opening_axis_thickness_m", "contact_direction_x", "axial_axis",
+                             "native_axial_bounds_m", "profile_points"}, context);
+  FingertipPadGeometryConfig result;
+  result.opening_axis_thickness_m = parsePositive(
+    requireField(node, "opening_axis_thickness_m", context), context + ".opening_axis_thickness_m");
+  result.contact_direction_x = parseFinite(
+    requireField(node, "contact_direction_x", context), context + ".contact_direction_x");
+  result.axial_axis = parseString(requireField(node, "axial_axis", context), context + ".axial_axis");
+  const auto native = parseVector(requireField(node, "native_axial_bounds_m", context), 2,
+                                  context + ".native_axial_bounds_m");
+  const auto points = requireField(node, "profile_points", context);
+  if (!points.IsSequence() || points.size() != expected_profile_count) {
+    throw PolicyError("POLICY_INVALID_VALUE", context + ".profile_points has wrong element count");
   }
-  std::copy(size.begin(), size.end(), result.size_xyz.begin());
-  std::copy(origin.begin(), origin.end(), result.origin_xyz_rpy.begin());
+  if (result.opening_axis_thickness_m != 0.005 ||
+      result.contact_direction_x != expected_direction || result.axial_axis != expected_axis ||
+      !(native[0] < native[1])) {
+    throw PolicyError("POLICY_INVALID_VALUE", context + " must retain the measured native pad envelope");
+  }
+  result.native_axial_bounds_m = {native[0], native[1]};
+  double previous_axis = -std::numeric_limits<double>::infinity();
+  for (std::size_t index = 0; index < points.size(); ++index) {
+    const auto point = parseVec3(points[index], context + ".profile_points[" +
+      std::to_string(index) + "]");
+    if (!(previous_axis < point.x && point.y > 0.0)) {
+      throw PolicyError("POLICY_INVALID_VALUE", context + ".profile_points must be ordered and tapered");
+    }
+    previous_axis = point.x;
+    result.profile_points.push_back(point);
+  }
+  if (!(native[0] < result.profile_points.front().x &&
+        result.profile_points.back().x < native[1])) {
+    throw PolicyError("POLICY_INVALID_VALUE", context + " extends past the native fingertip");
+  }
   return result;
 }
 
@@ -233,7 +260,7 @@ void requireAllValidationStates(const std::map<State, StateValidationConfig> & s
 TaskObjectConfig parseObject(const YAML::Node & root)
 {
   rejectUnknownFields(root, {"schema_version", "object_id", "model", "scene", "grasp_frame",
-                             "fingertip_adapters"},
+                             "fingertip_pads"},
                       "object config");
   TaskObjectConfig result;
   result.schema_version = parseSchemaVersion(root, "object config");
@@ -299,59 +326,44 @@ TaskObjectConfig parseObject(const YAML::Node & root)
     requireField(grasp, "attachment_relative_pose_xyz_xyzw", "grasp_frame"),
     "attachment_relative_pose_xyz_xyzw");
 
-  const auto adapters = requireField(root, "fingertip_adapters", "object config");
+  const auto pads = requireField(root, "fingertip_pads", "object config");
   rejectUnknownFields(
-    adapters, {"enabled", "material", "shore_hardness_a", "contact_model",
-               "geometry_reference_q6", "target_reference_gap_m", "tongue_extension_m",
-               "tongue_width_m", "tongue_height_m", "friction_coefficient", "fixed_tongue",
-               "fixed_stem", "moving_tongue", "moving_stem"},
-    "fingertip_adapters");
-  auto & adapter = result.fingertip_adapters;
-  adapter.enabled = requireField(adapters, "enabled", "fingertip_adapters").as<bool>();
-  adapter.material = parseString(
-    requireField(adapters, "material", "fingertip_adapters"),
-    "fingertip_adapters.material");
-  adapter.shore_hardness_a = parsePositive(
-    requireField(adapters, "shore_hardness_a", "fingertip_adapters"),
-    "fingertip_adapters.shore_hardness_a");
-  adapter.contact_model = parseString(
-    requireField(adapters, "contact_model", "fingertip_adapters"),
-    "fingertip_adapters.contact_model");
-  adapter.geometry_reference_q6 = parseFinite(
-    requireField(adapters, "geometry_reference_q6", "fingertip_adapters"),
-    "fingertip_adapters.geometry_reference_q6");
-  adapter.target_reference_gap_m = parsePositive(
-    requireField(adapters, "target_reference_gap_m", "fingertip_adapters"),
-    "fingertip_adapters.target_reference_gap_m");
-  adapter.tongue_extension_m = parsePositive(
-    requireField(adapters, "tongue_extension_m", "fingertip_adapters"),
-    "fingertip_adapters.tongue_extension_m");
-  adapter.tongue_width_m = parsePositive(
-    requireField(adapters, "tongue_width_m", "fingertip_adapters"),
-    "fingertip_adapters.tongue_width_m");
-  adapter.tongue_height_m = parsePositive(
-    requireField(adapters, "tongue_height_m", "fingertip_adapters"),
-    "fingertip_adapters.tongue_height_m");
-  adapter.friction_coefficient = parsePositive(
-    requireField(adapters, "friction_coefficient", "fingertip_adapters"),
-    "fingertip_adapters.friction_coefficient");
-  adapter.fixed_tongue = parseAdapterPrimitive(
-    requireField(adapters, "fixed_tongue", "fingertip_adapters"),
-    "fingertip_adapters.fixed_tongue");
-  adapter.fixed_stem = parseAdapterPrimitive(
-    requireField(adapters, "fixed_stem", "fingertip_adapters"),
-    "fingertip_adapters.fixed_stem");
-  adapter.moving_tongue = parseAdapterPrimitive(
-    requireField(adapters, "moving_tongue", "fingertip_adapters"),
-    "fingertip_adapters.moving_tongue");
-  adapter.moving_stem = parseAdapterPrimitive(
-    requireField(adapters, "moving_stem", "fingertip_adapters"),
-    "fingertip_adapters.moving_stem");
-  if (!adapter.enabled || adapter.material != "TPU_95A" ||
-      adapter.shore_hardness_a != 95.0 ||
-      adapter.contact_model != "rigid_primitive_approximation") {
+    pads, {"enabled", "material", "shore_hardness_a", "contact_model",
+               "geometry_reference_q6",
+               "safe_lower_q6", "safe_gap_m", "grasp_gap_m", "calibration_fingerprint", "friction_coefficient",
+               "fixed_pad", "moving_pad"},
+    "fingertip_pads");
+  auto & pad = result.fingertip_pads;
+  pad.enabled = requireField(pads, "enabled", "fingertip_pads").as<bool>();
+  pad.material = parseString(requireField(pads, "material", "fingertip_pads"),
+                             "fingertip_pads.material");
+  pad.shore_hardness_a = parsePositive(requireField(pads, "shore_hardness_a", "fingertip_pads"),
+                                       "fingertip_pads.shore_hardness_a");
+  pad.contact_model = parseString(requireField(pads, "contact_model", "fingertip_pads"),
+                                   "fingertip_pads.contact_model");
+  pad.geometry_reference_q6 = parseFinite(
+    requireField(pads, "geometry_reference_q6", "fingertip_pads"),
+    "fingertip_pads.geometry_reference_q6");
+  pad.safe_lower_q6 = parseFinite(requireField(pads, "safe_lower_q6", "fingertip_pads"),
+                                   "fingertip_pads.safe_lower_q6");
+  pad.safe_gap_m = parsePositive(requireField(pads, "safe_gap_m", "fingertip_pads"),
+                                  "fingertip_pads.safe_gap_m");
+  pad.grasp_gap_m = parsePositive(requireField(pads, "grasp_gap_m", "fingertip_pads"),
+                                   "fingertip_pads.grasp_gap_m");
+  pad.calibration_fingerprint = parseString(
+    requireField(pads, "calibration_fingerprint", "fingertip_pads"),
+    "fingertip_pads.calibration_fingerprint");
+  pad.friction_coefficient = parsePositive(requireField(pads, "friction_coefficient", "fingertip_pads"),
+                                            "fingertip_pads.friction_coefficient");
+  pad.fixed_pad = parseFingertipPadGeometry(requireField(pads, "fixed_pad", "fingertip_pads"),
+    "fingertip_pads.fixed_pad", "z", 1.0, 8U);
+  pad.moving_pad = parseFingertipPadGeometry(requireField(pads, "moving_pad", "fingertip_pads"),
+    "fingertip_pads.moving_pad", "y", -1.0, 7U);
+  if (!pad.enabled || pad.material != "TPU_95A" || pad.shore_hardness_a != 95.0 ||
+      pad.contact_model != "rigid_link_local_mesh" || pad.safe_gap_m != 0.001 ||
+      std::abs(pad.grasp_gap_m - fingertip_pad_calibration::kGraspGapM) > 1e-12) {
     throw PolicyError("POLICY_INVALID_VALUE",
-                      "fingertip adapters must use the enabled TPU 95A rigid approximation");
+                      "fingertip pads must use the enabled TPU 95A native-only mesh approximation");
   }
   return result;
 }
@@ -380,15 +392,17 @@ MotionPolicyConfig parseMotion(const YAML::Node & root)
                       "approach_outside_clearance_m must not exceed 10 mm");
   }
   const auto gripper = requireField(root, "gripper_actions", "motion policy");
-  rejectUnknownFields(gripper, {"preopen_q6", "close_q6", "release_q6"},
+  rejectUnknownFields(gripper, {"preopen_q6", "grasp_close_q6", "release_q6"},
                       "gripper_actions");
   result.gripper_actions.preopen_q6 = parseFinite(
     requireField(gripper, "preopen_q6", "gripper_actions"), "gripper_actions.preopen_q6");
-  result.gripper_actions.close_q6 = parseFinite(
-    requireField(gripper, "close_q6", "gripper_actions"), "gripper_actions.close_q6");
+  result.gripper_actions.grasp_close_q6 = parseFinite(
+    requireField(gripper, "grasp_close_q6", "gripper_actions"),
+    "gripper_actions.grasp_close_q6");
+  result.gripper_actions.close_q6 = result.gripper_actions.grasp_close_q6;
   result.gripper_actions.release_q6 = parseFinite(
     requireField(gripper, "release_q6", "gripper_actions"), "gripper_actions.release_q6");
-  if (!(result.gripper_actions.close_q6 < result.gripper_actions.preopen_q6 &&
+  if (!(result.gripper_actions.grasp_close_q6 < result.gripper_actions.preopen_q6 &&
         result.gripper_actions.preopen_q6 <= result.gripper_actions.release_q6)) {
     throw PolicyError("POLICY_INVALID_VALUE", "gripper action q6 values are not ordered");
   }
@@ -399,7 +413,7 @@ MotionPolicyConfig parseMotion(const YAML::Node & root)
     const auto state = parseRequiredState(name);
     const auto node = entry.second;
     rejectUnknownFields(node, {"logical_start", "waypoints", "require_waypoint_ladder",
-                               "gripper_q6"}, name);
+                               "require_axial_path_validation", "gripper_q6"}, name);
     StateMotionConfig config;
     config.state = state;
     config.logical_start =
@@ -414,6 +428,8 @@ MotionPolicyConfig parseMotion(const YAML::Node & root)
     }
     config.require_waypoint_ladder =
       requireField(node, "require_waypoint_ladder", name).as<bool>();
+    config.require_axial_path_validation =
+      requireField(node, "require_axial_path_validation", name).as<bool>();
     config.gripper_q6 = parseFinite(requireField(node, "gripper_q6", name), name + ".gripper_q6");
     result.states.emplace(state, std::move(config));
   }
@@ -524,6 +540,7 @@ ValidationPolicyConfig parseValidation(const YAML::Node & root)
                                "position_tolerance_m", "axis_tolerance_rad",
                                "max_lateral_deviation_m", "max_joint_jump_rad",
                                "joint_endpoint_tolerance_rad", "min_duration_s",
+                               "contact_wall_normal_endpoint_tolerance_m",
                                "monotonic_tolerance_m", "allowed_touch_pairs",
                                "temporal_contact"}, name);
     StateValidationConfig config;
@@ -549,6 +566,11 @@ ValidationPolicyConfig parseValidation(const YAML::Node & root)
     motion.joint_endpoint_tolerance = parseNonNegative(
       requireField(node, "joint_endpoint_tolerance_rad", name),
       name + ".joint_endpoint_tolerance_rad");
+    if (node["contact_wall_normal_endpoint_tolerance_m"]) {
+      motion.contact_wall_normal_endpoint_tolerance = parsePositive(
+        node["contact_wall_normal_endpoint_tolerance_m"],
+        name + ".contact_wall_normal_endpoint_tolerance_m");
+    }
     motion.min_duration_seconds = parsePositive(
       requireField(node, "min_duration_s", name), name + ".min_duration_s");
     motion.monotonic_tolerance = parseNonNegative(
@@ -619,6 +641,13 @@ PolicyLoadResult loadPolicyBundle(const PolicyPaths & paths)
     }
     if (bundle.motion.policy_id != bundle.validation.policy_id) {
       throw PolicyError("POLICY_ID_MISMATCH", "policy_id differs across motion and validation");
+    }
+    const auto & pad = bundle.object.fingertip_pads;
+    const auto & actions = bundle.motion.gripper_actions;
+    if (!(pad.safe_lower_q6 <= actions.grasp_close_q6 &&
+          actions.grasp_close_q6 < actions.preopen_q6 &&
+          actions.preopen_q6 <= actions.release_q6)) {
+      throw PolicyError("POLICY_INVALID_VALUE", "fingertip-pad q6 commands are not ordered");
     }
     for (std::size_t index = 0; index < bytes.size(); ++index) {
       bundle.sha256[index] = sha256(bytes[index]);

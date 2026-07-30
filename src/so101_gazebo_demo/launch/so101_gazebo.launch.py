@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import shlex
 import sys
 import tempfile
 from ament_index_python.packages import get_package_share_directory
@@ -23,14 +24,19 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 
-# Loading the offline 64-piece jaw compound can take tens of seconds before
-# Gazebo starts the DetachableJoint relay on a cold cache.
+# Loading fingertip convex compounds can delay the DetachableJoint relay on a
+# cold physics cache, so initialization remains condition-based and bounded.
 INITIAL_DETACH_TIMEOUT_SECONDS = 120
-VHACD_MAX_CONVEX_HULLS = 64
-VHACD_VOXEL_RESOLUTION = 400000
-COKE_CONTACT_GZ_TOPIC = (
-    "/world/so101_pick_place/model/coke/link/body/"
-    "sensor/coke_contact_sensor/contact"
+TASK_OBJECT_CONTACT_SENSOR_NAMES = (
+    "task_object_contact_wall_near",
+    *("task_object_contact_wall_opposite" if index == 6
+      else f"task_object_contact_wall_{index:02d}" for index in range(1, 12)),
+    "task_object_contact_bottom",
+)
+TASK_OBJECT_CONTACT_GZ_TOPICS = tuple(
+    "/world/so101_pick_place/model/plastic_cup/link/body/"
+    f"sensor/{sensor_name}/contact"
+    for sensor_name in TASK_OBJECT_CONTACT_SENSOR_NAMES
 )
 
 
@@ -42,13 +48,11 @@ def physics_engine_arguments():
     ]
 
 
-def simulation_model_preparation_command(model, output, base_height):
+def simulation_model_preparation_command(model, output, base_height, object_config):
     """Build the command that preserves VHACD metadata past URDF conversion."""
-    script = (
-        Path(__file__).resolve().parents[1]
-        / "scripts"
-        / "prepare_simulation_model.py"
-    )
+    package_root = Path(__file__).resolve().parents[1]
+    script = package_root / "scripts" / "prepare_simulation_model.py"
+    collision_root = package_root / "meshes" / "so101" / "collision"
     return [
         sys.executable,
         str(script),
@@ -58,25 +62,25 @@ def simulation_model_preparation_command(model, output, base_height):
         output,
         "--base-height",
         base_height,
-        "--max-convex-hulls",
-        str(VHACD_MAX_CONVEX_HULLS),
-        "--voxel-resolution",
-        str(VHACD_VOXEL_RESOLUTION),
+        "--manifest",
+        str(collision_root / "fixed_finger_contact" / "manifest.json"),
+        "--manifest",
+        str(collision_root / "moving_jaw_contact" / "manifest.json"),
+        "--object-config",
+        object_config,
     ]
 
 
 def initial_detach_command(timeout_seconds=INITIAL_DETACH_TIMEOUT_SECONDS):
-    """Publish detach only after the relay listens, then require durable evidence."""
+    """Require relay evidence of the initial attach before publishing detach."""
     wait_and_publish = (
-        "while ! gz topic -i -t /so101/coke_attached_event 2>&1 "
-        "| grep -q '^Subscribers \\['; do sleep 0.1; done; "
-        "while ! gz topic -i -t /so101/detach_coke 2>&1 "
-        "| grep -q '^Subscribers \\['; do sleep 0.1; done; "
-        "while ! gz topic -e -t /so101/coke_attached_event -n 1 2>&1 "
+        "while ! gz topic -e -t /so101/object_attached -n 1 2>&1 "
         "| grep -q 'data:.*attached'; do sleep 0.1; done; "
-        "gz topic -t /so101/detach_coke "
+        "while ! gz topic -i -t /so101/detach_object 2>&1 "
+        "| grep -q '^Subscribers \\['; do sleep 0.1; done; "
+        "gz topic -t /so101/detach_object "
         "-m gz.msgs.Empty -p 'unused: true'; "
-        "while ! gz topic -e -t /so101/coke_attached -n 1 2>&1 "
+        "while ! gz topic -e -t /so101/object_attached -n 1 2>&1 "
         "| grep -q 'data: \"detached\"'; do sleep 0.1; done"
     )
     return [
@@ -87,6 +91,26 @@ def initial_detach_command(timeout_seconds=INITIAL_DETACH_TIMEOUT_SECONDS):
         "/bin/bash",
         "-c",
         wait_and_publish,
+    ]
+
+
+def attachment_relay_ready_command(
+    ready_topic="/so101/object_attachment_relay_ready",
+    timeout_seconds=INITIAL_DETACH_TIMEOUT_SECONDS,
+):
+    """Wait for the launched relay's durable post-subscription ready signal."""
+    wait_for_relay = (
+        "ros2 topic echo --once --qos-durability transient_local "
+        f"{shlex.quote(ready_topic)} std_msgs/msg/Empty"
+    )
+    return [
+        "/usr/bin/timeout",
+        "--signal=TERM",
+        "--kill-after=1",
+        str(timeout_seconds),
+        "/bin/bash",
+        "-c",
+        wait_for_relay,
     ]
 
 
@@ -126,19 +150,29 @@ def attachment_bridge_node():
         executable="parameter_bridge",
         arguments=[
             "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
-            "/so101/attach_coke@std_msgs/msg/Empty]gz.msgs.Empty",
-            "/so101/detach_coke@std_msgs/msg/Empty]gz.msgs.Empty",
+            "/so101/attach_object@std_msgs/msg/Empty]gz.msgs.Empty",
+            "/so101/detach_object@std_msgs/msg/Empty]gz.msgs.Empty",
             (
-                "/so101/coke_attached_event"
+                "/so101/object_attached_event"
                 "@std_msgs/msg/String[gz.msgs.StringMsg"
             ),
             (
-                f"{COKE_CONTACT_GZ_TOPIC}"
-                "@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts"
+                "/world/so101_pick_place/pose/info"
+                "@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V"
+            ),
+            (
+                "/world/so101_pick_place/stats"
+                "@ros_gz_interfaces/msg/WorldStatistics[gz.msgs.WorldStatistics"
+            ),
+            *(
+                f"{topic}@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts"
+                for topic in TASK_OBJECT_CONTACT_GZ_TOPICS
             ),
         ],
         remappings=[
-            (COKE_CONTACT_GZ_TOPIC, "/coke/contacts"),
+            ("/world/so101_pick_place/pose/info", "/so101/gazebo_pose_info"),
+            ("/world/so101_pick_place/stats", "/so101/gazebo_world_stats"),
+            *((topic, "/task_object/contacts") for topic in TASK_OBJECT_CONTACT_GZ_TOPICS),
         ],
     )
 
@@ -168,8 +202,18 @@ def generate_launch_description():
         default_value="false",
         description="Run only the Gazebo server for automated smoke tests",
     )
+    object_config_arg = DeclareLaunchArgument(
+        name="object_config",
+        default_value=os.path.join(
+            package_share, "config", "task_objects", "light_plastic_cup.yaml"
+        ),
+        description="Task-object YAML supplying calibrated adapter primitives",
+    )
     simulation_model_path = os.path.join(
         tempfile.gettempdir(), f"so101-gazebo-{os.getpid()}.sdf"
+    )
+    attachment_relay_ready_topic = (
+        f"/so101/object_attachment_relay_ready_{os.getpid()}"
     )
 
     gazebo_resource_path = SetEnvironmentVariable(
@@ -185,6 +229,8 @@ def generate_launch_description():
             " base_height:=",
             LaunchConfiguration("base_height"),
             " gazebo_collision_primitives:=true",
+            " object_config:=",
+            LaunchConfiguration("object_config"),
         ]),
         value_type=str
     )
@@ -226,6 +272,7 @@ def generate_launch_description():
             LaunchConfiguration("model"),
             simulation_model_path,
             LaunchConfiguration("base_height"),
+            LaunchConfiguration("object_config"),
         ),
         output="screen",
     )
@@ -236,12 +283,12 @@ def generate_launch_description():
         arguments=["-file", simulation_model_path,
                    "-name", "so101"],
     )
-    start_spawn_after_model_preparation = RegisterEventHandler(
+    start_relay_after_model_preparation = RegisterEventHandler(
         OnProcessExit(
             target_action=simulation_model_preparation,
             on_exit=lambda event, context: actions_after_success_or_shutdown(
                 event,
-                [gz_spawn_entity],
+                [attachment_state_relay],
                 "SO-101 VHACD model preparation",
             ),
         )
@@ -257,25 +304,37 @@ def generate_launch_description():
         package="so101_gazebo_demo",
         executable="gazebo_attachment_state_relay",
         output="screen",
+        parameters=[{"ready_topic": attachment_relay_ready_topic}],
     )
 
     # Gazebo Sim 8 starts DetachableJoint attached despite the SDF option.  The
-    # relay starts first and subscribes to the raw plugin event.  The initializer
-    # waits for the plugin's initial attached event before publishing detach,
-    # then succeeds only after observing the relay's durable detached state.
+    # relay must subscribe to the non-durable raw plugin event before spawning
+    # the robot can publish it.  The initializer waits for the relay's durable
+    # attached state (which is derived from that raw event) before publishing
+    # detach, then succeeds only after observing durable detached state.
     # Public command bridging and
     # controllers remain unavailable until that evidence chain completes.
     initial_detach_publisher = ExecuteProcess(
         cmd=initial_detach_command(),
         output="screen",
     )
-    start_relay_after_spawn = RegisterEventHandler(
+    attachment_relay_ready = ExecuteProcess(
+        cmd=attachment_relay_ready_command(attachment_relay_ready_topic),
+        output="screen",
+    )
+    start_relay_ready_after_relay = RegisterEventHandler(
+        OnProcessStart(
+            target_action=attachment_state_relay,
+            on_start=[attachment_relay_ready],
+        )
+    )
+    start_spawn_after_relay_ready = RegisterEventHandler(
         OnProcessExit(
-            target_action=gz_spawn_entity,
+            target_action=attachment_relay_ready,
             on_exit=lambda event, context: actions_after_success_or_shutdown(
                 event,
-                [attachment_state_relay],
-                "SO-101 robot spawn",
+                [gz_spawn_entity],
+                "SO-101 attachment relay readiness",
             ),
         )
     )
@@ -306,13 +365,15 @@ def generate_launch_description():
         world_arg,
         base_height_arg,
         headless_arg,
+        object_config_arg,
         gazebo_resource_path,
         robot_state_publisher_node,
         gazebo,
         gazebo_headless,
-        start_relay_after_spawn,
+        start_relay_after_model_preparation,
+        start_relay_ready_after_relay,
+        start_spawn_after_relay_ready,
         start_detach_after_relay,
         start_readiness_after_detach,
-        start_spawn_after_model_preparation,
         simulation_model_preparation,
     ])

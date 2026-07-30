@@ -92,7 +92,7 @@ TEST(SO101MotionPlanner, PreservesLadderAndCarryingSemantics)
   EXPECT_FALSE(adapter->seen->temporal_contact_policy.has_value());
 }
 
-TEST(SO101MotionPlanner, ScopesPersistentWorldTouchWhitelistToDescendOnly)
+TEST(SO101MotionPlanner, KeepsPreopenDescendCollisionFreeInMoveIt)
 {
   auto policy = std::make_shared<FakePolicy>();
   policy->result.target = spp::JointMotionTarget{{"1", "2", "3", "4", "5"},
@@ -104,8 +104,10 @@ TEST(SO101MotionPlanner, ScopesPersistentWorldTouchWhitelistToDescendOnly)
 
   planner.plan(spp::State::DESCEND, spp::State::CLOSE_GRIPPER, observation());
   ASSERT_TRUE(adapter->seen);
-  EXPECT_EQ(adapter->seen->allowed_touch_pairs,
-            (std::set<std::string>{"coke:gripper", "coke:jaw"}));
+  // DESCEND runs at preopen q6.  Its full native-pad and legacy collision
+  // envelopes must remain in MoveIt's collision check; CLOSE_GRIPPER is not
+  // an arm trajectory and therefore cannot require a DESCEND touch waiver.
+  EXPECT_TRUE(adapter->seen->allowed_touch_pairs.empty());
 
   planner.plan(spp::State::RECOVER_RETREAT, spp::State::ERROR, observation());
   EXPECT_TRUE(adapter->seen->allowed_touch_pairs.empty());

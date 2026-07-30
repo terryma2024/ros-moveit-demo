@@ -18,27 +18,42 @@ grasp_frame:
   insertion_depth_below_rim_m: 0.025
   rim_clearance_m: 0.008
   bottom_clearance_m: 0.020
-  attachment_relative_pose_xyz_xyzw: [0.047667830272, 0.001804364288, -0.153949432437, -0.000000370000, 0.000000351000, 0.725238049793, 0.688498199803]
-fingertip_adapters:
+  attachment_relative_pose_xyz_xyzw: [0.036677093233, -0.000674520721, -0.124533558176, 0.007402239728, 0.007407098723, 0.707067984659, 0.707068035486]
+fingertip_pads:
   enabled: true
   material: TPU_95A
   shore_hardness_a: 95
-  contact_model: rigid_primitive_approximation
+  contact_model: rigid_link_local_mesh
   geometry_reference_q6: 0.30
-  target_reference_gap_m: 0.0025
-  tongue_extension_m: 0.019671037305
-  tongue_width_m: 0.012
-  tongue_height_m: 0.027
+  safe_lower_q6: -0.059303612618397
+  safe_gap_m: 0.001
+  grasp_gap_m: 0.001960000000000000
+  calibration_fingerprint: b101b7db33a13c82797eb80c2356f1c6b509e04bdae7999efd4b6a8ce0d1094f
   friction_coefficient: 1.2
-  fixed_tongue:
-    size_xyz: [0.019671037305, 0.012, 0.027]
-    origin_xyz_rpy: [-0.001764481200, 0.0, -0.130449432212, 0.0, 0.0, 0.0]
-  fixed_stem:
-    size_xyz: [0.004, 0.012, 0.038]
-    origin_xyz_rpy: [-0.013599999852, 0.0, -0.100000000000, 0.0, 0.0, 0.0]
-  moving_tongue:
-    size_xyz: [0.019671037305, 0.012, 0.027]
-    origin_xyz_rpy: [-0.031437919338, -0.102329204263, 0.018800393214, -1.5708, 0.0, -0.30]
-  moving_stem:
-    size_xyz: [0.004, 0.012, 0.038]
-    origin_xyz_rpy: [-0.011132594002, -0.076737385516, 0.018800281367, -1.5708, 0.0, -0.30]
+  fixed_pad:
+    opening_axis_thickness_m: 0.005
+    contact_direction_x: 1.0
+    axial_axis: z
+    native_axial_bounds_m: [0.065720335, 0.105374999]
+    profile_points:
+      - [0.06622, 0.00720, -0.01160]
+      - [0.07500, 0.00715, -0.01160]
+      - [0.084875, 0.00680, -0.01160]
+      - [0.085875, 0.00580, -0.00990]
+      - [0.094875, 0.00545, -0.00990]
+      - [0.095875, 0.00490, -0.00790]
+      - [0.10000, 0.00410, -0.00790]
+      - [0.104875, 0.00145, -0.00790]
+  moving_pad:
+    opening_axis_thickness_m: 0.005
+    contact_direction_x: -1.0
+    axial_axis: y
+    native_axial_bounds_m: [-0.082000002, -0.061999999]
+    profile_points:
+      - [-0.0815, 0.0036, -0.01230]
+      - [-0.0780, 0.0045, -0.01230]
+      - [-0.0730, 0.0054, -0.01230]
+      - [-0.0722, 0.0057, -0.01230]
+      - [-0.0718, 0.0058, -0.01030]
+      - [-0.0670, 0.0060, -0.01030]
+      - [-0.0625, 0.0060, -0.01030]

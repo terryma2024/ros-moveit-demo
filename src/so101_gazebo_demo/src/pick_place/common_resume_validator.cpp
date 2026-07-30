@@ -87,9 +87,9 @@ bool optionalPosesMatch(const std::optional<Pose3d> & expected,
 
 }  // namespace
 
-CommonResumeValidator::CommonResumeValidator(std::string configuration_hash,
+CommonResumeValidator::CommonResumeValidator(std::string policy_bundle_sha256,
                                              std::string simulation_session_id, double tolerance) :
-    configuration_hash_(std::move(configuration_hash)),
+    policy_bundle_sha256_(std::move(policy_bundle_sha256)),
     simulation_session_id_(std::move(simulation_session_id)), tolerance_(tolerance)
 {
 }
@@ -121,10 +121,10 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
     addFailure(result, "RECOVERY_CHECKPOINT_CONTEXT_INCOMPLETE",
                "Checkpoint recovery context must match its phase");
   }
-  if (checkpoint.configuration_hash.empty() || configuration_hash_.empty() ||
-      checkpoint.configuration_hash != configuration_hash_) {
-    addFailure(result, "RESUME_CONFIGURATION_MISMATCH",
-               "Checkpoint configuration hash differs from the active configuration");
+  if (checkpoint.policy_bundle_sha256.empty() || policy_bundle_sha256_.empty() ||
+      checkpoint.policy_bundle_sha256 != policy_bundle_sha256_) {
+    addFailure(result, "CHECKPOINT_POLICY_MISMATCH",
+               "Checkpoint policy bundle SHA-256 differs from the active policy bundle");
   }
   if (checkpoint.simulation_session_id.empty() || simulation_session_id_.empty() ||
       checkpoint.simulation_session_id != simulation_session_id_ ||
@@ -137,17 +137,17 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
                "Current robot observation must be fresh and stationary before resume");
   }
   if (checkpoint.phase == CheckpointPhase::RECOVERY &&
-      (!current.gazebo_coke_stationary || !*current.gazebo_coke_stationary)) {
-    addFailure(result, "RECOVERY_COKE_NOT_STATIONARY",
+      (!current.gazebo_task_object_stationary || !*current.gazebo_task_object_stationary)) {
+    addFailure(result, "RECOVERY_TASK_OBJECT_NOT_STATIONARY",
                "Recovery resume requires stationary Gazebo object evidence");
   }
 
   const bool expected_complete = !checkpoint.expected.joint_positions.empty() &&
                                  !checkpoint.expected.moveit_world_object_poses.empty() &&
-                                 checkpoint.expected.moveit_coke_attached.has_value() &&
-                                 checkpoint.expected.gazebo_coke_pose_world.has_value() &&
-                                 checkpoint.expected.gazebo_coke_attached.has_value() &&
-                                 checkpoint.expected.gazebo_coke_stationary.has_value() &&
+                                 checkpoint.expected.moveit_task_object_attached.has_value() &&
+                                 checkpoint.expected.gazebo_task_object_pose_world.has_value() &&
+                                 checkpoint.expected.gazebo_task_object_attached.has_value() &&
+                                 checkpoint.expected.gazebo_task_object_stationary.has_value() &&
                                  !checkpoint.expected.required_world_objects.empty();
   if (!expected_complete || !poseIsFinite(checkpoint.expected.tcp_pose_world) ||
       !finitePositionMap(checkpoint.expected.joint_positions) ||
@@ -157,12 +157,12 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
   }
   const bool current_complete =
     !current.joint_positions.empty() && !current.moveit_world_object_poses.empty() &&
-    current.moveit_coke_attached.has_value() && current.gazebo_coke_pose_world.has_value() &&
-    current.gazebo_coke_attached.has_value() && current.gazebo_coke_stationary.has_value();
+    current.moveit_task_object_attached.has_value() && current.gazebo_task_object_pose_world.has_value() &&
+    current.gazebo_task_object_attached.has_value() && current.gazebo_task_object_stationary.has_value();
   if (!current_complete || !poseIsFinite(current.tcp_pose_world) ||
       !finitePositionMap(current.joint_positions) ||
       !finitePoseMap(current.moveit_world_object_poses) ||
-      !poseIsFinite(*current.gazebo_coke_pose_world)) {
+      !poseIsFinite(*current.gazebo_task_object_pose_world)) {
     addFailure(result, "RESUME_SNAPSHOT_INCOMPLETE",
                "Current observation is missing complete finite cross-world boundary evidence");
   }
@@ -220,22 +220,22 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
                "A required world object is absent or duplicated at the resume boundary");
   }
   if (forward_boundary &&
-      checkpoint.expected.moveit_coke_attached != current.moveit_coke_attached) {
+      checkpoint.expected.moveit_task_object_attached != current.moveit_task_object_attached) {
     addFailure(result, "RESUME_MOVEIT_ATTACHMENT_MISMATCH",
                "Current MoveIt attachment state differs from the checkpoint expectation");
   }
-  if (forward_boundary && !optionalPosesMatch(checkpoint.expected.gazebo_coke_pose_world,
-                                              current.gazebo_coke_pose_world, tolerance_)) {
+  if (forward_boundary && !optionalPosesMatch(checkpoint.expected.gazebo_task_object_pose_world,
+                                              current.gazebo_task_object_pose_world, tolerance_)) {
     addFailure(result, "RESUME_GAZEBO_POSE_MISMATCH",
                "Current Gazebo object pose differs from the checkpoint expectation");
   }
   if (forward_boundary &&
-      checkpoint.expected.gazebo_coke_attached != current.gazebo_coke_attached) {
+      checkpoint.expected.gazebo_task_object_attached != current.gazebo_task_object_attached) {
     addFailure(result, "RESUME_GAZEBO_ATTACHMENT_MISMATCH",
                "Current Gazebo attachment state differs from the checkpoint expectation");
   }
   if (forward_boundary &&
-      checkpoint.expected.gazebo_coke_stationary != current.gazebo_coke_stationary) {
+      checkpoint.expected.gazebo_task_object_stationary != current.gazebo_task_object_stationary) {
     addFailure(result, "RESUME_GAZEBO_STATIONARY_MISMATCH",
                "Current Gazebo stationary state differs from the checkpoint expectation");
   }
@@ -243,9 +243,9 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
   return result;
 }
 
-const std::string & CommonResumeValidator::configurationHash() const noexcept
+const std::string & CommonResumeValidator::policyBundleSha256() const noexcept
 {
-  return configuration_hash_;
+  return policy_bundle_sha256_;
 }
 
 const std::string & CommonResumeValidator::simulationSessionId() const noexcept

@@ -49,11 +49,9 @@ PlanResult SO101MotionPlanner::plan(State state, State next_state,
                              target.ladder, isCarryingMotionState(state), {},
                              target.gripper_position,
                              target.temporal_contact_policy};
-  if (state == State::DESCEND) {
-    for (const auto & link : profile_.moveit_touch_links) {
-      request.allowed_touch_pairs.insert(profile_.coke_model + ":" + link);
-    }
-  }
+  // DESCEND is executed at preopen q6.  Its fixed and moving native-pad
+  // envelopes, together with the retained body collisions, must remain
+  // collision checked until the non-arm CLOSE_GRIPPER transition.
   return adapter_->plan(request, observation);
 }
 

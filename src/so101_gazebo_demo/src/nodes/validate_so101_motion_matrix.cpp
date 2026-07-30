@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <chrono>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -14,6 +15,7 @@
 #include <vector>
 
 #include <Eigen/Geometry>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <moveit/planning_scene_interface/planning_scene_interface.hpp>
 #include <moveit/robot_model_loader/robot_model_loader.hpp>
 #include <moveit/robot_state/robot_state.hpp>
@@ -96,8 +98,8 @@ double orientationError(const spp::Pose3d & first, const spp::Pose3d & second)
 bool poseMatches(const spp::Pose3d & first, const spp::Pose3d & second,
                  const spp::SO101Profile & profile)
 {
-  return positionError(first, second) <= profile.coke_position_drift_tolerance &&
-         orientationError(first, second) <= profile.coke_orientation_drift_tolerance_rad;
+  return positionError(first, second) <= profile.task_object_position_drift_tolerance &&
+         orientationError(first, second) <= profile.task_object_orientation_drift_tolerance_rad;
 }
 
 spp::Pose3d compose(const spp::Pose3d & parent, const spp::Pose3d & child)
@@ -110,7 +112,7 @@ class SceneSeeder
 public:
   SceneSeeder(std::shared_ptr<rclcpp::Node> node, spp::SO101Profile profile)
   : profile_(std::move(profile)), loader_(node, "robot_description", false),
-    gripper_coke_(transform(profile_.calibrated_grasp_relative_pose))
+    gripper_task_object_(transform(profile_.calibrated_grasp_relative_pose))
   {
     if (!loader_.getModel()) {
       throw std::runtime_error("robot model unavailable for matrix scene seed");
@@ -120,7 +122,7 @@ public:
   bool seedCarrying()
   {
     if (!ensureStaticScene() || !removeAttached()) return false;
-    auto remove = worldCoke(profile_.coke_pose);
+    auto remove = worldTaskObject(profile_.task_object_pose);
     remove.operation = moveit_msgs::msg::CollisionObject::REMOVE;
     if (!scene_.applyCollisionObject(remove)) return false;
 
@@ -130,15 +132,15 @@ public:
     moveit_msgs::msg::AttachedCollisionObject attached;
     attached.link_name = profile_.moveit_attach_link;
     attached.touch_links = profile_.moveit_touch_links;
-    attached.object = worldCoke(profile_.coke_pose);
+    attached.object = worldTaskObject(profile_.task_object_pose);
     attached.object.header.frame_id = profile_.moveit_attach_link;
-    attached.object.pose = poseMessage(gripper_coke_);
+    attached.object.pose = poseMessage(gripper_task_object_);
     attached.object.operation = moveit_msgs::msg::CollisionObject::ADD;
     diff.robot_state.attached_collision_objects.push_back(attached);
     if (!scene_.applyPlanningScene(diff)) return false;
-    const auto world = scene_.getObjects({profile_.coke_model});
-    const auto attached_readback = scene_.getAttachedObjects({profile_.coke_model});
-    const auto found = attached_readback.find(profile_.coke_model);
+    const auto world = scene_.getObjects({profile_.task_object_id});
+    const auto attached_readback = scene_.getAttachedObjects({profile_.task_object_id});
+    const auto found = attached_readback.find(profile_.task_object_id);
     if (!world.empty() || found == attached_readback.end() ||
         found->second.link_name != profile_.moveit_attach_link ||
         std::set<std::string>(found->second.touch_links.begin(), found->second.touch_links.end()) !=
@@ -153,18 +155,18 @@ public:
     return relative_position_error_ <= 1e-9 && relative_orientation_error_ <= 1e-9;
   }
 
-  bool seedDetached(const spp::Pose3d & coke_pose)
+  bool seedDetached(const spp::Pose3d & task_object_pose)
   {
     if (!ensureStaticScene() || !removeAttached() ||
-        !scene_.applyCollisionObject(worldCoke(coke_pose))) return false;
+        !scene_.applyCollisionObject(worldTaskObject(task_object_pose))) return false;
     const auto objects = scene_.getObjects(
-      {profile_.table_object, profile_.pedestal_object, profile_.coke_model});
-    const auto found = objects.find(profile_.coke_model);
+      {profile_.table_object, profile_.pedestal_object, profile_.task_object_id});
+    const auto found = objects.find(profile_.task_object_id);
     const auto table = objects.find(profile_.table_object);
     const auto pedestal = objects.find(profile_.pedestal_object);
-    return scene_.getAttachedObjects({profile_.coke_model}).empty() &&
+    return scene_.getAttachedObjects({profile_.task_object_id}).empty() &&
            found != objects.end() && table != objects.end() && pedestal != objects.end() &&
-           poseMatches(pose(found->second.pose), coke_pose, profile_) &&
+           poseMatches(pose(found->second.pose), task_object_pose, profile_) &&
            poseMatches(pose(table->second.pose), profile_.table_pose, profile_) &&
            poseMatches(pose(pedestal->second.pose), profile_.pedestal_pose, profile_);
   }
@@ -178,7 +180,9 @@ private:
     const spp::MoveItSceneGeometry geometry{
       profile_.world_frame, profile_.table_object, profile_.table_size,
       profile_.pedestal_object, profile_.pedestal_size,
-      profile_.coke_model, profile_.coke_height, profile_.coke_radius};
+      profile_.task_object_id, profile_.task_object_height, profile_.task_object_outer_radius,
+      profile_.task_object_wall_thickness, profile_.task_object_bottom_thickness,
+      profile_.task_object_side_count};
     if (!scene_.applyCollisionObject(
           spp::makeTableCollisionObject(geometry, profile_.table_pose)) ||
         !scene_.applyCollisionObject(
@@ -200,24 +204,26 @@ private:
     diff.robot_state.is_diff = true;
     moveit_msgs::msg::AttachedCollisionObject remove;
     remove.link_name = profile_.moveit_attach_link;
-    remove.object.id = profile_.coke_model;
+    remove.object.id = profile_.task_object_id;
     remove.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
     diff.robot_state.attached_collision_objects.push_back(remove);
     return scene_.applyPlanningScene(diff);
   }
 
-  moveit_msgs::msg::CollisionObject worldCoke(const spp::Pose3d & pose) const
+  moveit_msgs::msg::CollisionObject worldTaskObject(const spp::Pose3d & pose) const
   {
-    return spp::makeCokeCollisionObject(
+    return spp::makeTaskObjectCollisionObject(
       {profile_.world_frame, profile_.table_object, profile_.table_size,
        profile_.pedestal_object, profile_.pedestal_size,
-       profile_.coke_model, profile_.coke_height, profile_.coke_radius}, pose);
+       profile_.task_object_id, profile_.task_object_height, profile_.task_object_outer_radius,
+       profile_.task_object_wall_thickness, profile_.task_object_bottom_thickness,
+       profile_.task_object_side_count}, pose);
   }
 
   spp::SO101Profile profile_;
   robot_model_loader::RobotModelLoader loader_;
   moveit::planning_interface::PlanningSceneInterface scene_;
-  Eigen::Isometry3d gripper_coke_;
+  Eigen::Isometry3d gripper_task_object_;
   double relative_position_error_{0.0};
   double relative_orientation_error_{0.0};
 };
@@ -303,12 +309,12 @@ public:
     if (scene->pedestal_world_pose) {
       snapshot.moveit_world_object_poses[profile_.pedestal_object] = *scene->pedestal_world_pose;
     }
-    if (scene->coke_world_pose) {
-      snapshot.moveit_world_object_poses[profile_.coke_model] = *scene->coke_world_pose;
+    if (scene->task_object_world_pose) {
+      snapshot.moveit_world_object_poses[profile_.task_object_id] = *scene->task_object_world_pose;
     }
-    snapshot.moveit_coke_attached = scene->coke_attached;
-    snapshot.moveit_coke_attached_link = scene->attached_link;
-    snapshot.moveit_coke_touch_links = scene->touch_links;
+    snapshot.moveit_task_object_attached = scene->task_object_attached;
+    snapshot.moveit_task_object_attached_link = scene->attached_link;
+    snapshot.moveit_task_object_touch_links = scene->touch_links;
     return {snapshot, std::nullopt};
   }
 
@@ -343,8 +349,8 @@ bool waitForGazebo(const std::shared_ptr<spp::GazeboResetAdapter> & adapter,
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
   while (std::chrono::steady_clock::now() < deadline) {
     const auto observed = adapter->observe();
-    if (observed && observed->coke_attached == attached &&
-        poseMatches(observed->coke_world_pose, expected, profile)) {
+    if (observed && observed->task_object_attached == attached &&
+        poseMatches(observed->task_object_world_pose, expected, profile)) {
       return true;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -366,9 +372,9 @@ bool setupDetachedGazebo(const std::shared_ptr<spp::GazeboResetAdapter> & adapte
                          const spp::SO101Profile & profile)
 {
   const auto before = adapter->observe();
-  if (!before || (before->coke_attached &&
+  if (!before || (before->task_object_attached &&
                   !commandAttachment(detach, spp::State::DETACH_GAZEBO)) ||
-      adapter->setCokeWorldPose(expected).status != spp::ActionStatus::SUCCEEDED) {
+      adapter->setTaskObjectWorldPose(expected).status != spp::ActionStatus::SUCCEEDED) {
     return false;
   }
   return waitForGazebo(adapter, false, expected, profile);
@@ -461,25 +467,37 @@ std::string rawSampleDetails(const spp::MotionPlanArtifact & artifact,
 
 int main(int argc, char ** argv)
 {
+  const std::filesystem::path share =
+    ament_index_cpp::get_package_share_directory("so101_gazebo_demo");
+  const auto loaded = spp::loadPolicyBundle({
+    (share / "config/task_objects/light_plastic_cup.yaml").string(),
+    (share / "config/motion_policies/light_cup_wall_pick.yaml").string(),
+    (share / "config/validation_policies/light_cup_wall_pick.yaml").string()});
+  if (!loaded.bundle) {
+    std::cerr << spp::formatFailure(loaded.failure.value()) << '\n';
+    return 2;
+  }
   rclcpp::init(argc, argv);
   rclcpp::NodeOptions options;
   options.automatically_declare_parameters_from_overrides(true);
   options.parameter_overrides({rclcpp::Parameter("use_sim_time", true)});
   auto node = std::make_shared<rclcpp::Node>("validate_so101_motion_matrix", options);
   auto spinner = std::make_unique<spp::NodeSpinner>(node);
-  const auto profile = spp::SO101Profile::canonical();
-  spp::SO101FixedMotionTargetPolicy policy(profile);
+  const auto profile = spp::SO101Profile::configured(
+    loaded.bundle->object, loaded.bundle->motion, loaded.bundle->validation);
+  auto policy_ptr = std::make_shared<spp::SO101ConfiguredMotionTargetPolicy>(
+    loaded.bundle->motion, loaded.bundle->validation);
+  const auto & policy = *policy_ptr;
   SceneSeeder seeder(node, profile);
   auto real = std::make_shared<spp::MoveItJointPlanningBoundary>(node, profile);
   auto boundary = std::make_shared<MatrixBoundary>(real);
   auto adapter = std::make_shared<spp::ProfiledJointMotionAdapter>(boundary, boundary, profile);
-  auto policy_ptr = std::make_shared<spp::SO101FixedMotionTargetPolicy>(profile);
   spp::SO101MotionPlanner planner(policy_ptr, adapter, profile);
   auto trajectory_client =
     std::make_shared<spp::RosTrajectoryActionClient>(node, profile.gripper_action);
   spp::FollowJointTrajectoryGripperAdapter gripper(trajectory_client, 1.0, 8.0);
   auto gazebo_reset = std::make_shared<spp::GazeboResetAdapter>(
-    profile.gazebo_world, profile.coke_model, profile.detach_topic,
+    profile.gazebo_world, profile.task_object_id, profile.detach_topic,
     profile.attachment_state_topic, 2.0, 3000);
   spp::GazeboAttachmentExecutor gazebo_attach(
     spp::State::ATTACH_GAZEBO, true, profile.attach_topic, profile.detach_topic,
@@ -489,10 +507,10 @@ int main(int argc, char ** argv)
     profile.attachment_event_topic, 3.0, 0.05, false);
   MatrixMoveItObserver moveit_observer(real, profile);
   spp::GazeboWorldObserver observer(
-    moveit_observer, profile.gazebo_world, profile.coke_model,
+    moveit_observer, profile.gazebo_world, profile.task_object_id,
     profile.attachment_state_topic, "task4-live-matrix", 2.0, 3, 0.02,
-    profile.coke_position_drift_tolerance,
-    profile.coke_orientation_drift_tolerance_rad, false);
+    profile.task_object_position_drift_tolerance,
+    profile.task_object_orientation_drift_tolerance_rad, false);
   const std::vector<spp::State> states{
     spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, spp::State::LIFT,
     spp::State::MOVE_ABOVE_PLACE, spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
@@ -516,7 +534,7 @@ int main(int argc, char ** argv)
       poseMatches(*physical_scene->current_gripper_pose_world,
                   *physical_scene->current_gripper_pose_world, profile);
     const auto detached_pose = state == spp::State::RETREAT ?
-      profile.place_coke_pose : profile.coke_pose;
+      profile.place_task_object_pose : profile.task_object_pose;
     const auto carrying_pose = physical_scene && physical_scene->current_gripper_pose_world ?
       std::optional<spp::Pose3d>{compose(*physical_scene->current_gripper_pose_world,
                                         profile.calibrated_grasp_relative_pose)} :
@@ -548,12 +566,13 @@ int main(int argc, char ** argv)
     const auto artifact = std::dynamic_pointer_cast<const spp::MotionPlanArtifact>(planned.artifact);
     spp::ValidationResult validated;
     if (artifact) {
-      validated = spec->target.ladder ? spp::validateWaypointLadder(*artifact, spec->validation)
-                                      : spp::validateJointGoalPlan(*artifact, spec->validation);
+      validated = spec->require_axial_path_validation
+        ? spp::validateWaypointLadder(*artifact, spec->validation)
+        : spp::validateJointGoalPlan(*artifact, spec->validation);
     }
     const bool attached_samples_complete = artifact &&
       (!carrying || std::all_of(artifact->samples.begin(), artifact->samples.end(),
-        [](const auto & sample) { return sample.attached_coke_pose_world.has_value(); }));
+        [](const auto & sample) { return sample.attached_task_object_pose_world.has_value(); }));
     const bool pass = artifact && validated.ok && attached_samples_complete;
     if (!pass) ++failures;
     const auto start_evidence = real->evaluate(profile.arm_joints, spec->logical_start,
@@ -567,7 +586,7 @@ int main(int argc, char ** argv)
               << observation.snapshot->joint_positions.at(profile.gripper_joint)
               << " q6_velocity_observed="
               << observation.snapshot->joint_velocities.at(profile.gripper_joint)
-              << " gazebo_attached=" << *observation.snapshot->gazebo_coke_attached
+              << " gazebo_attached=" << *observation.snapshot->gazebo_task_object_attached
               << " touch=" << pairs(spec->validation.allowed_touch_pairs)
               << " temporal=" << temporal(spec->validation.temporal_contact_policy)
               << " start=" << joins(spec->logical_start)
@@ -581,7 +600,7 @@ int main(int argc, char ** argv)
       std::cout << " points=" << artifact->trajectory_points
                 << " attached_pose_samples="
                 << std::count_if(artifact->samples.begin(), artifact->samples.end(),
-                  [](const auto & sample) { return sample.attached_coke_pose_world.has_value(); })
+                  [](const auto & sample) { return sample.attached_task_object_pose_world.has_value(); })
                 << " raw=" << pairs(artifact->raw_contact_pairs)
                 << " raw_samples=" << rawSampleDetails(*artifact,
                                                         spec->validation.path_direction);
@@ -598,17 +617,17 @@ int main(int argc, char ** argv)
   const bool final_reset =
     gripper.command(profile.q6_preopen).status == spp::ActionStatus::SUCCEEDED &&
     waitForQ6(real, profile.q6_preopen, profile).has_value() &&
-    setupDetachedGazebo(gazebo_reset, gazebo_detach, profile.coke_pose, profile) &&
-    seeder.seedDetached(profile.coke_pose);
+    setupDetachedGazebo(gazebo_reset, gazebo_detach, profile.task_object_pose, profile) &&
+    seeder.seedDetached(profile.task_object_pose);
   const auto final_observation = final_reset ? observer.observe() : spp::ObservationResult{};
   const bool final_readback = final_observation.snapshot &&
-    final_observation.snapshot->gazebo_coke_attached &&
-    !*final_observation.snapshot->gazebo_coke_attached &&
-    final_observation.snapshot->gazebo_coke_pose_world &&
-    poseMatches(*final_observation.snapshot->gazebo_coke_pose_world, profile.coke_pose, profile) &&
-    final_observation.snapshot->moveit_world_object_poses.count(profile.coke_model) == 1 &&
-    poseMatches(final_observation.snapshot->moveit_world_object_poses.at(profile.coke_model),
-                profile.coke_pose, profile);
+    final_observation.snapshot->gazebo_task_object_attached &&
+    !*final_observation.snapshot->gazebo_task_object_attached &&
+    final_observation.snapshot->gazebo_task_object_pose_world &&
+    poseMatches(*final_observation.snapshot->gazebo_task_object_pose_world, profile.task_object_pose, profile) &&
+    final_observation.snapshot->moveit_world_object_poses.count(profile.task_object_id) == 1 &&
+    poseMatches(final_observation.snapshot->moveit_world_object_poses.at(profile.task_object_id),
+                profile.task_object_pose, profile);
   std::cout << "MATRIX_FINAL_RESET status=" << (final_readback ? "PASS" : "FAIL") << '\n';
   if (!final_readback) ++failures;
   spinner.reset();

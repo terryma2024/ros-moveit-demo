@@ -17,7 +17,8 @@ TransitionContractRegistry kEmptyContracts;
 
 bool isForwardAction(State state) noexcept
 {
-  return state >= State::PREPARE_OPEN_GRIPPER && state <= State::RETREAT;
+  return state >= State::PREPARE_OPEN_GRIPPER && state <= State::RETREAT &&
+         state != State::VALIDATION_FAILED;
 }
 
 bool requiresPlanning(State state) noexcept
@@ -50,10 +51,10 @@ WorldSnapshot snapshotFromExpected(const ExpectedWorldState & expected,
   snapshot.tcp_pose_world = expected.tcp_pose_world;
   snapshot.joint_positions = expected.joint_positions;
   snapshot.moveit_world_object_poses = expected.moveit_world_object_poses;
-  snapshot.moveit_coke_attached = expected.moveit_coke_attached;
-  snapshot.gazebo_coke_pose_world = expected.gazebo_coke_pose_world;
-  snapshot.gazebo_coke_attached = expected.gazebo_coke_attached;
-  snapshot.gazebo_coke_stationary = expected.gazebo_coke_stationary;
+  snapshot.moveit_task_object_attached = expected.moveit_task_object_attached;
+  snapshot.gazebo_task_object_pose_world = expected.gazebo_task_object_pose_world;
+  snapshot.gazebo_task_object_attached = expected.gazebo_task_object_attached;
+  snapshot.gazebo_task_object_stationary = expected.gazebo_task_object_stationary;
   snapshot.simulation_session_id = simulation_session_id;
   return snapshot;
 }
@@ -64,10 +65,10 @@ void setExpectedWorldState(Checkpoint & checkpoint, const WorldSnapshot & snapsh
   checkpoint.expected.gripper_open = snapshot.gripper_open;
   checkpoint.expected.joint_positions = snapshot.joint_positions;
   checkpoint.expected.moveit_world_object_poses = snapshot.moveit_world_object_poses;
-  checkpoint.expected.moveit_coke_attached = snapshot.moveit_coke_attached;
-  checkpoint.expected.gazebo_coke_pose_world = snapshot.gazebo_coke_pose_world;
-  checkpoint.expected.gazebo_coke_attached = snapshot.gazebo_coke_attached;
-  checkpoint.expected.gazebo_coke_stationary = snapshot.gazebo_coke_stationary;
+  checkpoint.expected.moveit_task_object_attached = snapshot.moveit_task_object_attached;
+  checkpoint.expected.gazebo_task_object_pose_world = snapshot.gazebo_task_object_pose_world;
+  checkpoint.expected.gazebo_task_object_attached = snapshot.gazebo_task_object_attached;
+  checkpoint.expected.gazebo_task_object_stationary = snapshot.gazebo_task_object_stationary;
   checkpoint.expected.required_world_objects.clear();
   for (const auto & [object_name, unused] : snapshot.moveit_world_object_poses) {
     static_cast<void>(unused);
@@ -118,7 +119,8 @@ bool endpointConvergenceFailure(const ValidationResult & validation) noexcept
                               failure.code == "TCP_AXIS_OUTSIDE_TOLERANCE" ||
                               failure.code == "Q6_TARGET_OUT_OF_TOLERANCE" ||
                               failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE" ||
-                              failure.code == "Q6_NOT_STATIONARY";
+                              failure.code == "Q6_NOT_STATIONARY" ||
+                              failure.code == "ARM_NOT_QUIESCENT";
                      });
 }
 
@@ -151,6 +153,12 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
     return error({FailureCategory::CONFIGURATION,
                   "FAIL_AT_MODE_MISMATCH",
                   "fail_at is supported only in dry_run mode",
+                  {}});
+  }
+  if (request.force_continue && (!request.resume || request.mode != RunMode::EXECUTE)) {
+    return error({FailureCategory::CONFIGURATION,
+                  "FORCE_CONTINUE_REQUEST_INVALID",
+                  "force_continue is available only for an execute resume from VALIDATION_FAILED",
                   {}});
   }
   if (request.mode == RunMode::EXECUTE) {
@@ -188,7 +196,7 @@ std::optional<Failure> StateMachineRunner::validateExecuteConfiguration() const
                    {}};
   }
   for (const auto & [state, transitions] : TransitionTable::entries()) {
-    if (state == State::IDLE || isTerminal(state)) {
+    if (state == State::IDLE || isTerminal(state) || !isAction(state)) {
       continue;
     }
     if (!actions_.findExecutor(state)) {
@@ -352,7 +360,7 @@ RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & reques
   checkpoint.phase = CheckpointPhase::FORWARD;
   checkpoint.last_completed_state = *predecessor;
   checkpoint.next_state = state;
-  checkpoint.configuration_hash = common_resume_validator_->configurationHash();
+  checkpoint.policy_bundle_sha256 = common_resume_validator_->policyBundleSha256();
   checkpoint.simulation_session_id = common_resume_validator_->simulationSessionId();
   setExpectedWorldState(checkpoint, *observation->snapshot);
   if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
@@ -376,6 +384,10 @@ RunResult StateMachineRunner::runExecuteWorkflow(
   }
   trace.push_back(state);
   while (!isTerminal(state) && transition_count < request.max_state_transitions) {
+    if (state == State::VALIDATION_FAILED) {
+      return {RunStatus::CHECKPOINT_COMPLETE, state, state, workflow_failure,
+              transition_count, std::move(trace)};
+    }
     const auto step = runExecuteStep(state, initial_snapshot, checkpoint_sequence, phase,
                                      failed_state, workflow_failure);
     initial_snapshot.reset();
@@ -401,7 +413,8 @@ RunResult StateMachineRunner::runExecuteWorkflow(
       return failed;
     }
     trace.push_back(*step.next_state);
-    if (step.status == RunStatus::CHECKPOINT_COMPLETE && request.stop_after == state) {
+    if (step.status == RunStatus::CHECKPOINT_COMPLETE &&
+        (request.stop_after == state || request.single_step)) {
       auto stopped = step;
       stopped.transition_count = transition_count;
       stopped.state_trace = std::move(trace);
@@ -501,7 +514,27 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
     }
     before = *observed.snapshot;
   }
-  const auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
+  auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
+  if (!precondition.ok && endpointConvergenceFailure(precondition)) {
+    const auto deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
+    do {
+      std::this_thread::sleep_for(kStationaryPollInterval);
+      const auto observed = observer_->observe();
+      if (!observed.snapshot) {
+        if (observed.failure &&
+            observed.failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION") {
+          continue;
+        }
+        return error(observed.failure.value_or(
+          Failure{FailureCategory::OBSERVATION,
+                  "PRE_EXECUTION_OBSERVATION_FAILED",
+                  "could not observe precondition convergence", {}}));
+      }
+      before = *observed.snapshot;
+      precondition = contracts_.validatePrecondition({state, next_state}, *before);
+      if (precondition.ok || !endpointConvergenceFailure(precondition)) break;
+    } while (std::chrono::steady_clock::now() < deadline);
+  }
   if (!precondition.ok) {
     const auto environment_failure =
       std::find_if(precondition.failures.begin(), precondition.failures.end(),
@@ -548,6 +581,27 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   }
   const auto action = executor->execute({state, next_state, *before, plan_artifact});
   if (action.status != ActionStatus::SUCCEEDED) {
+    if (state == State::VERIFY_PHYSICAL_GRASP && action.failure &&
+        action.failure->category == FailureCategory::POSTCONDITION &&
+        action.failure->code.rfind("PHYSICAL_GRASP_", 0) == 0) {
+      Checkpoint checkpoint;
+      checkpoint.run_id = "pick_place_state_machine";
+      checkpoint.sequence = checkpoint_sequence;
+      checkpoint.source_mode = RunMode::EXECUTE;
+      checkpoint.phase = CheckpointPhase::FORWARD;
+      checkpoint.last_completed_state = state;
+      checkpoint.failed_state = state;
+      checkpoint.original_failure = *action.failure;
+      checkpoint.next_state = State::VALIDATION_FAILED;
+      checkpoint.policy_bundle_sha256 = common_resume_validator_->policyBundleSha256();
+      checkpoint.simulation_session_id = common_resume_validator_->simulationSessionId();
+      setExpectedWorldState(checkpoint, *before);
+      if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
+        return error(*checkpoint_failure);
+      }
+      return {RunStatus::CHECKPOINT_COMPLETE, state, State::VALIDATION_FAILED,
+              *action.failure, 1, {}};
+    }
     return handleActionFailure(
       state, *executor,
       action.failure.value_or(
@@ -601,7 +655,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   checkpoint.failed_state = failed_state;
   checkpoint.original_failure = original_failure;
   checkpoint.next_state = next_state;
-  checkpoint.configuration_hash = common_resume_validator_->configurationHash();
+  checkpoint.policy_bundle_sha256 = common_resume_validator_->policyBundleSha256();
   checkpoint.simulation_session_id = common_resume_validator_->simulationSessionId();
   setExpectedWorldState(checkpoint, *after.snapshot);
   if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
@@ -635,11 +689,17 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
   const auto & checkpoint = *loaded.checkpoint;
   const bool source_mode_supported =
     checkpoint.source_mode == RunMode::EXECUTE || checkpoint.source_mode == RunMode::PLAN_ONLY;
+  const bool validation_failed_checkpoint =
+    checkpoint.phase == CheckpointPhase::FORWARD &&
+    checkpoint.last_completed_state == State::VERIFY_PHYSICAL_GRASP &&
+    checkpoint.next_state == State::VALIDATION_FAILED && checkpoint.original_failure &&
+    checkpoint.original_failure->category == FailureCategory::POSTCONDITION &&
+    checkpoint.original_failure->code.rfind("PHYSICAL_GRASP_", 0) == 0;
   const bool invalid_forward_transition =
     checkpoint.phase == CheckpointPhase::FORWARD &&
     (isTerminal(checkpoint.last_completed_state) ||
      TransitionTable::resolve(checkpoint.last_completed_state, ActionStatus::SUCCEEDED) !=
-       checkpoint.next_state);
+       checkpoint.next_state) && !validation_failed_checkpoint;
   const bool invalid_recovery_context = checkpoint.phase == CheckpointPhase::RECOVERY &&
                                         (!checkpoint.failed_state || !checkpoint.original_failure);
   const bool invalid_recovery_source =
@@ -661,6 +721,15 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
   const auto common = common_resume_validator_->validate(checkpoint, *observation.snapshot);
   if (!common.ok) {
     return error(common.failures.front());
+  }
+  if (validation_failed_checkpoint) {
+    if (!request.force_continue) {
+      return {RunStatus::CHECKPOINT_COMPLETE, State::VALIDATION_FAILED,
+              State::VALIDATION_FAILED, checkpoint.original_failure, 0,
+              {State::VALIDATION_FAILED}};
+    }
+    return runExecuteWorkflow(State::ATTACH_GAZEBO, request, *observation.snapshot,
+                              checkpoint.sequence + 1, 0);
   }
   if (checkpoint.phase == CheckpointPhase::RECOVERY) {
     if (!recovery_policy_) {
@@ -714,10 +783,10 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
 {
   const auto stopped = stopAndObserveAfterFailure(executor);
   if (!stopped.snapshot) {
-    return error(stopped.failure.value_or(Failure{FailureCategory::OBSERVATION,
-                                                  "POST_FAILURE_OBSERVATION_FAILED",
-                                                  "unable to establish a stopped world",
-                                                  {}}));
+    auto stop_failure = stopped.failure.value_or(
+      Failure{FailureCategory::OBSERVATION, "POST_FAILURE_OBSERVATION_FAILED",
+              "unable to establish a stopped world", {}});
+    return error(withOriginalFailure(std::move(stop_failure), original_failure));
   }
   original_failure.metrics["cancel_succeeded"] = 1.0;
   original_failure.metrics["arm_stationary_after_cancel"] = 1.0;
@@ -751,7 +820,7 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
   checkpoint.failed_state = state;
   checkpoint.original_failure = original_failure;
   checkpoint.next_state = *route.next_state;
-  checkpoint.configuration_hash = common_resume_validator_->configurationHash();
+  checkpoint.policy_bundle_sha256 = common_resume_validator_->policyBundleSha256();
   checkpoint.simulation_session_id = common_resume_validator_->simulationSessionId();
   setExpectedWorldState(checkpoint, *stopped.snapshot);
   if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
@@ -815,6 +884,11 @@ StateMachineRunner::stopAndObserveAfterFailure(IStateExecutor & executor) const
   do {
     const auto observed = observer_->observe();
     if (!observed.snapshot) {
+      if (observed.failure &&
+          observed.failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION") {
+        std::this_thread::sleep_for(kStationaryPollInterval);
+        continue;
+      }
       return {std::nullopt, observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
                                                               "POST_FAILURE_OBSERVATION_FAILED",
                                                               "unable to observe after cancel",

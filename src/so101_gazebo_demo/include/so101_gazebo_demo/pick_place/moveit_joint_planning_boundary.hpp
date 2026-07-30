@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <set>
+#include <string>
 #include <vector>
 
 #include <moveit_msgs/msg/robot_trajectory.hpp>
@@ -16,6 +18,9 @@ namespace moveit::core { class RobotState; }
 
 namespace so101_gazebo_demo::pick_place
 {
+
+[[nodiscard]] std::set<std::string>
+exactTaskObjectTouchWhitelist(const SO101Profile & profile);
 
 [[nodiscard]] std::optional<Pose3d>
 updatedLinkPose(const moveit::core::RobotState & source, const std::string & link_name);
@@ -67,7 +72,8 @@ struct CalibrationCandidate
 };
 
 class MoveItJointPlanningBoundary final : public IJointPlanningBoundary,
-                                           public IRobotStateEvidenceProvider
+                                           public IRobotStateEvidenceProvider,
+                                           public IWorldZMicroLift
 {
 public:
   MoveItJointPlanningBoundary(std::shared_ptr<rclcpp::Node> node,
@@ -88,6 +94,9 @@ public:
                                      double gripper_position) override;
   ActionResult execute(const MotionPlanArtifact & artifact) override;
   ActionResult cancel() override;
+  ActionResult executeWorldZMicroLift(const Pose3d & current_tcp_world,
+                                      double world_z_delta_m) override;
+  ActionResult cancelWorldZMicroLift() override;
   std::optional<RobotStateEvidence>
   evaluate(const std::vector<std::string> & joint_names,
            const std::vector<double> & joint_positions,

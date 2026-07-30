@@ -8,6 +8,7 @@
 #include <gz/msgs/stringmsg.pb.h>
 #include <gz/transport/Node.hh>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/empty.hpp>
 
 #include "so101_gazebo_demo/pick_place/attachment_state_reducer.hpp"
 #include "so101_gazebo_demo/pick_place/so101_profile.hpp"
@@ -22,8 +23,11 @@ public:
     const auto & profile = so101_gazebo_demo::pick_place::SO101Profile::canonical();
     const auto event_topic = declare_parameter("event_topic", profile.attachment_event_topic);
     const auto state_topic = declare_parameter("state_topic", profile.attachment_state_topic);
+    const auto ready_topic = declare_parameter(
+      "ready_topic", "/so101/object_attachment_relay_ready");
     const auto period_seconds = declare_parameter("publish_period_seconds", 0.05);
-    if (event_topic.empty() || state_topic.empty() || event_topic == state_topic ||
+    if (event_topic.empty() || state_topic.empty() || ready_topic.empty() ||
+        event_topic == state_topic ||
         !std::isfinite(period_seconds) || period_seconds <= 0.0) {
       throw std::invalid_argument("invalid SO-101 attachment relay configuration");
     }
@@ -32,6 +36,10 @@ public:
         !transport_.Subscribe(event_topic, &GazeboAttachmentStateRelay::onEvent, this)) {
       throw std::runtime_error("unable to configure SO-101 attachment relay transport");
     }
+    ready_publisher_ = create_publisher<std_msgs::msg::Empty>(
+      ready_topic, rclcpp::QoS(1).transient_local());
+    ready_publisher_->publish(std_msgs::msg::Empty{});
+    RCLCPP_INFO(get_logger(), "RAW_ATTACHMENT_RELAY_READY topic=%s", ready_topic.c_str());
     timer_ = create_wall_timer(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                  std::chrono::duration<double>(period_seconds)),
                                [this]() { publish(); });
@@ -47,6 +55,7 @@ private:
 
   void publish()
   {
+    ready_publisher_->publish(std_msgs::msg::Empty{});
     const auto state_value = reducer_.state();
     if (!state_value) {
       return;
@@ -63,6 +72,7 @@ private:
 
   gz::transport::Node transport_;
   gz::transport::Node::Publisher state_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr ready_publisher_;
   so101_gazebo_demo::pick_place::AttachmentStateReducer reducer_;
   std::optional<bool> last_logged_state_;
   rclcpp::TimerBase::SharedPtr timer_;

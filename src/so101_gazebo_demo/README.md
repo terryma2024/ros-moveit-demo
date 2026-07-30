@@ -86,3 +86,40 @@ environment is proven from this workspace.
 Phase 2 will copy and adapt the Panda pick-place state-machine structure for
 SO-101. Shared abstractions are intentionally deferred until both robot-specific
 implementations have passed their own runtime gates.
+
+## Simulation-only Teleop Web UI
+
+The full operator guide, Target YAML schema, workflow safety boundary and
+shutdown procedure are documented in
+[`docs/so101-teleop-web-ui.md`](docs/so101-teleop-web-ui.md).
+
+The installable `so101_teleop_server.py` serves the production Vite bundle and
+owns its ROS 2 worker.  It is intentionally simulation-only: it binds only to
+`127.0.0.1` or a Tailscale `100.64.0.0/10` address and rejects every other
+bind address.  Never use it with hardware.
+
+Build the Web package with Bun (`bun.lock` is authoritative), then use the
+single launch command in a tmux-held shell. The launch preflight builds a
+missing or stale Web bundle before FastAPI starts; no persistent Vite server is
+used:
+
+```bash
+cd /data/work/ws_moveit
+source ~/gui-env.zsh
+source /opt/ros/jazzy/setup.zsh
+source install/setup.zsh
+export ROS_DOMAIN_ID=<existing-simulation-domain>
+export GZ_PARTITION=<existing-gazebo-partition>
+command -v bun && bun --version
+ros2 launch so101_gazebo_demo so101_teleop.launch.py \
+  bind_address:=127.0.0.1 \
+  simulation_session_id:=<new-session-id>
+```
+
+The server uses `rclpy` subscriptions/TF, MoveIt's
+`/plan_kinematic_path`, `/compute_ik`, and `/execute_trajectory`, plus the
+controller actions.  Browser commands require a short-lived lease, an idempotent
+command id, and a non-stale plan.  The web UI treats axes 1–5 as the arm and
+axis 6 as gripper opening; it never makes axis 6 a Cartesian planning target.
+`Force Continue` is limited to a fresh, auditable physical-grasp
+post-validation failure and is never evidence of a successful grasp.

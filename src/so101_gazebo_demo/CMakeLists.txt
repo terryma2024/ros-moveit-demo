@@ -2,8 +2,13 @@ cmake_minimum_required(VERSION 3.22)
 project(so101_gazebo_demo)
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(OpenSSL REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(gz-msgs10 REQUIRED)
+find_package(gz-plugin2 REQUIRED)
+find_package(gz-sim8 REQUIRED)
 find_package(gz-transport13 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
@@ -16,6 +21,55 @@ find_package(sensor_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+# The Teleop frontend uses Bun consistently for dependency resolution and scripts.
+if(DEFINED ENV{SO101_TELEOP_BUN})
+  set(BUN_EXECUTABLE "$ENV{SO101_TELEOP_BUN}")
+elseif(EXISTS "/home/lenovo/.bun/bin/bun")
+  set(BUN_EXECUTABLE "/home/lenovo/.bun/bin/bun")
+else()
+  find_program(BUN_EXECUTABLE bun REQUIRED)
+endif()
+if(NOT EXISTS "${BUN_EXECUTABLE}")
+  message(FATAL_ERROR "Bun is required; set SO101_TELEOP_BUN to its executable")
+endif()
+get_filename_component(SO101_TELEOP_BUN_BIN "${BUN_EXECUTABLE}" DIRECTORY)
+
+# The production FastAPI server serves this Vite bundle from the installed
+# package. Keep it generated (never committed) while making a clean colcon
+# build reproduce it under the project Bun toolchain.
+set(SO101_TELEOP_WEB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/web)
+set(SO101_TELEOP_WEB_INDEX ${SO101_TELEOP_WEB_ROOT}/dist/index.html)
+file(GLOB_RECURSE SO101_TELEOP_WEB_SOURCES CONFIGURE_DEPENDS
+  ${SO101_TELEOP_WEB_ROOT}/src/*.ts
+  ${SO101_TELEOP_WEB_ROOT}/src/*.tsx
+  ${SO101_TELEOP_WEB_ROOT}/e2e/*.ts
+)
+add_custom_command(
+  OUTPUT ${SO101_TELEOP_WEB_INDEX}
+  COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} install --frozen-lockfile
+  COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} run build
+  WORKING_DIRECTORY ${SO101_TELEOP_WEB_ROOT}
+  DEPENDS ${SO101_TELEOP_WEB_ROOT}/package.json ${SO101_TELEOP_WEB_ROOT}/bun.lock
+    ${SO101_TELEOP_WEB_ROOT}/vite.config.ts ${SO101_TELEOP_WEB_ROOT}/tailwind.config.ts
+    ${SO101_TELEOP_WEB_ROOT}/postcss.config.cjs ${SO101_TELEOP_WEB_SOURCES}
+  VERBATIM)
+add_custom_target(so101_teleop_web ALL DEPENDS ${SO101_TELEOP_WEB_INDEX})
+
+set(SO101_FINGERTIP_PAD_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/fingertip_pad_assets)
+set(SO101_FINGERTIP_PAD_MANIFEST ${SO101_FINGERTIP_PAD_ASSET_DIR}/fixed/manifest.yaml)
+add_custom_command(
+  OUTPUT ${SO101_FINGERTIP_PAD_MANIFEST}
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_fingertip_pad_meshes.py
+    --config ${CMAKE_CURRENT_SOURCE_DIR}/config/task_objects/light_plastic_cup.yaml
+    --output-root ${SO101_FINGERTIP_PAD_ASSET_DIR}
+  DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_fingertip_pad_meshes.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/config/task_objects/light_plastic_cup.yaml
+  VERBATIM)
+add_custom_target(so101_fingertip_pad_assets ALL DEPENDS ${SO101_FINGERTIP_PAD_MANIFEST})
 
 add_library(pick_place_core
   src/pick_place/attachment_state_reducer.cpp
@@ -23,6 +77,8 @@ add_library(pick_place_core
   src/pick_place/file_checkpoint_store.cpp
   src/pick_place/common_resume_validator.cpp
   src/pick_place/plan_validation.cpp
+  src/pick_place/policy_config.cpp
+  src/pick_place/physical_grasp_validator.cpp
   src/pick_place/state_action.cpp
   src/pick_place/transition_contract.cpp
   src/pick_place/transition_table.cpp
@@ -46,7 +102,9 @@ add_library(pick_place_core
   src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_reset_adapter.cpp
   src/pick_place/gazebo_world_observer.cpp
+  src/pick_place/world_readiness_gate.cpp
   src/pick_place/moveit_scene_adapter.cpp
+  src/pick_place/moveit_scene_initializer.cpp
   src/pick_place/moveit_scene_executor.cpp
   src/pick_place/world_reset_coordinator.cpp
   src/pick_place/robot_home_reset_adapter.cpp
@@ -55,17 +113,19 @@ target_compile_features(pick_place_core PUBLIC cxx_std_17)
 target_include_directories(pick_place_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-target_link_libraries(pick_place_core PUBLIC nlohmann_json::nlohmann_json gz-msgs10::core gz-transport13::core)
+target_link_libraries(pick_place_core PUBLIC nlohmann_json::nlohmann_json OpenSSL::Crypto
+  yaml-cpp gz-msgs10::core gz-transport13::core)
 ament_target_dependencies(pick_place_core PUBLIC control_msgs geometry_msgs moveit_msgs
   moveit_core moveit_ros_planning_interface rclcpp rclcpp_action sensor_msgs shape_msgs
   trajectory_msgs)
 
 add_executable(pick_place_state_machine src/pick_place/pick_place_state_machine.cpp)
 target_link_libraries(pick_place_state_machine pick_place_core)
+ament_target_dependencies(pick_place_state_machine ament_index_cpp)
 
 add_executable(gazebo_attachment_state_relay src/nodes/gazebo_attachment_state_relay.cpp)
 target_link_libraries(gazebo_attachment_state_relay pick_place_core gz-msgs10::core gz-transport13::core)
-ament_target_dependencies(gazebo_attachment_state_relay rclcpp)
+ament_target_dependencies(gazebo_attachment_state_relay rclcpp std_msgs)
 
 add_executable(reset_so101_world src/nodes/reset_so101_world.cpp)
 target_link_libraries(reset_so101_world pick_place_core)
@@ -81,7 +141,13 @@ ament_target_dependencies(calibrate_so101_motion rclcpp)
 
 add_executable(validate_so101_motion_matrix src/nodes/validate_so101_motion_matrix.cpp)
 target_link_libraries(validate_so101_motion_matrix pick_place_core)
-ament_target_dependencies(validate_so101_motion_matrix rclcpp)
+ament_target_dependencies(validate_so101_motion_matrix ament_index_cpp rclcpp)
+
+add_library(so101_attachment_collision_system SHARED
+  src/gazebo/attachment_collision_system.cpp)
+target_compile_features(so101_attachment_collision_system PUBLIC cxx_std_17)
+target_link_libraries(so101_attachment_collision_system
+  gz-msgs10::core gz-plugin2::gz-plugin2 gz-sim8::gz-sim8 gz-transport13::core)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -93,6 +159,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_pick_place_transition_table pick_place_core)
   ament_add_gtest(test_pick_place_runner test/pick_place/test_pick_place_runner.cpp)
   target_link_libraries(test_pick_place_runner pick_place_core)
+  ament_add_gtest(test_physical_grasp_validator test/pick_place/test_physical_grasp_validator.cpp)
+  target_link_libraries(test_physical_grasp_validator pick_place_core)
   ament_add_gtest(test_so101_gripper_adapter test/pick_place/test_so101_gripper_adapter.cpp)
   target_link_libraries(test_so101_gripper_adapter pick_place_core)
   ament_add_gtest(test_ros_trajectory_action_client
@@ -112,6 +180,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_so101_recovery_policy pick_place_core)
   ament_add_gtest(test_so101_pick_place_runtime test/pick_place/test_so101_pick_place_runtime.cpp)
   target_link_libraries(test_so101_pick_place_runtime pick_place_core)
+  target_compile_definitions(test_so101_pick_place_runtime PRIVATE
+    SO101_TEST_POLICY_CONFIG_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/config")
   ament_add_gtest(test_so101_task3_runtime test/pick_place/test_so101_task3_runtime.cpp)
   target_link_libraries(test_so101_task3_runtime pick_place_core)
   ament_add_gtest(test_so101_motion_validation
@@ -125,6 +195,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_so101_fixed_motion_targets
     test/pick_place/test_so101_fixed_motion_targets.cpp)
   target_link_libraries(test_so101_fixed_motion_targets pick_place_core)
+  ament_add_gtest(test_policy_config test/pick_place/test_policy_config.cpp)
+  target_link_libraries(test_policy_config pick_place_core)
   find_program(XACRO_EXECUTABLE xacro REQUIRED)
   set(SO101_TEST_URDF ${CMAKE_CURRENT_BINARY_DIR}/so101_fixed_target_test.urdf)
   add_custom_command(
@@ -139,7 +211,8 @@ if(BUILD_TESTING)
   add_dependencies(test_so101_fixed_motion_targets so101_fixed_target_test_urdf)
   target_compile_definitions(test_so101_fixed_motion_targets PRIVATE
     SO101_TEST_URDF="${SO101_TEST_URDF}"
-    SO101_TEST_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/config/so101.srdf")
+    SO101_TEST_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/config/so101.srdf"
+    SO101_TEST_POLICY_CONFIG_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/config")
   ament_add_gtest(test_request_scoped_goal_cancellation
     test/pick_place/test_request_scoped_goal_cancellation.cpp)
   target_link_libraries(test_request_scoped_goal_cancellation pick_place_core)
@@ -155,6 +228,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_so101_moveit_scene test/pick_place/test_so101_moveit_scene.cpp)
   target_link_libraries(test_so101_moveit_scene pick_place_core)
   ament_target_dependencies(test_so101_moveit_scene moveit_msgs shape_msgs)
+  ament_add_gtest(test_moveit_scene_initializer test/pick_place/test_moveit_scene_initializer.cpp)
+  target_link_libraries(test_moveit_scene_initializer pick_place_core)
+  ament_target_dependencies(test_moveit_scene_initializer moveit_msgs shape_msgs)
+  ament_add_gtest(test_world_readiness_gate test/pick_place/test_world_readiness_gate.cpp)
+  target_link_libraries(test_world_readiness_gate pick_place_core)
   ament_add_gtest(test_so101_world_reset test/pick_place/test_so101_world_reset.cpp)
   target_link_libraries(test_so101_world_reset pick_place_core)
   ament_add_gtest(test_robot_home_reset_adapter
@@ -179,6 +257,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_so101_pick_place_world
     test/test_so101_pick_place_world.py
+    TIMEOUT 300
   )
   ament_add_pytest_test(
     test_so101_launch_contract
@@ -201,10 +280,42 @@ if(BUILD_TESTING)
     test_prepare_simulation_model
     test/test_prepare_simulation_model.py
   )
+  ament_add_pytest_test(
+    test_benchmark_gazebo_startup
+    test/test_benchmark_gazebo_startup.py
+  )
+  ament_add_pytest_test(
+    test_generate_fingertip_convex_collision
+    test/test_generate_fingertip_convex_collision.py
+  )
+  ament_add_pytest_test(
+    test_audit_contact_depth_evidence
+    test/test_audit_contact_depth_evidence.py
+  )
+  ament_add_pytest_test(
+    test_fingertip_pad_geometry
+    test/test_fingertip_pad_geometry.py
+  )
+  # Direct installed-overlay run is 58.753 s under the live GUI stack and the
+  # 60 s CTest wrapper expired at 60.03 s; retain assertion coverage while
+  # allowing bounded wrapper/scheduler headroom.
+  set_tests_properties(test_fingertip_pad_geometry PROPERTIES TIMEOUT 90)
+  ament_add_pytest_test(test_teleop_api test/teleop/test_api.py)
+  ament_add_pytest_test(test_teleop_control test/teleop/test_control.py)
+  ament_add_pytest_test(test_teleop_geometry test/teleop/test_geometry.py)
+  ament_add_pytest_test(test_teleop_models test/teleop/test_models.py)
+  ament_add_pytest_test(test_teleop_openapi_export test/teleop/test_openapi_export.py)
+  ament_add_pytest_test(test_teleop_moveit_gateway test/teleop/test_moveit_gateway.py)
+  ament_add_pytest_test(test_teleop_scene_gateway test/teleop/test_scene_gateway.py)
+  ament_add_pytest_test(test_teleop_screenshot test/teleop/test_screenshot.py)
+  ament_add_pytest_test(test_teleop_telemetry test/teleop/test_telemetry.py)
+  ament_add_pytest_test(test_teleop_workflow_gateway test/teleop/test_workflow_gateway.py)
+  ament_add_pytest_test(test_teleop_server_safety test/teleop/test_server_safety.py)
 endif()
 
 install(
   TARGETS pick_place_core pick_place_state_machine gazebo_attachment_state_relay
+    so101_attachment_collision_system
     reset_so101_world so101_moveit_scene
     calibrate_so101_motion validate_so101_motion_matrix
   ARCHIVE DESTINATION lib
@@ -217,18 +328,34 @@ install(
   DESTINATION include
 )
 
+ament_python_install_package(so101_teleop)
+
+install(DIRECTORY web/dist/
+  DESTINATION share/${PROJECT_NAME}/web
+)
+
 install(
-  DIRECTORY config launch meshes rviz scripts urdf worlds
+  DIRECTORY config docs launch meshes rviz scripts urdf worlds
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE
 )
 
 install(
+  DIRECTORY ${SO101_FINGERTIP_PAD_ASSET_DIR}/
+  DESTINATION share/${PROJECT_NAME}/meshes/so101/generated
+)
+
+install(
   PROGRAMS
+    scripts/benchmark_gazebo_startup.py
+    scripts/audit_contact_depth_evidence.py
+    scripts/generate_fingertip_convex_collision.py
+    scripts/generate_fingertip_pad_meshes.py
     scripts/gripper_preopen_calc.py
     scripts/prepare_simulation_model.py
     scripts/tile_ai_station_guis.py
+    scripts/so101_teleop_server.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

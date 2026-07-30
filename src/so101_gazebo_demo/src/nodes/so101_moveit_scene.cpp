@@ -64,11 +64,11 @@ void printState(const pick_place::MoveItSceneState & state)
     }
     touch_links << state.touch_links[index];
   }
-  std::cout << std::boolalpha << "coke_in_world=" << state.coke_in_world
-            << " coke_attached=" << state.coke_attached
+  std::cout << std::boolalpha << "task_object_in_world=" << state.task_object_in_world
+            << " task_object_attached=" << state.task_object_attached
             << " attached_link=" << (state.attached_link.empty() ? "-" : state.attached_link)
             << " touch_links=" << (state.touch_links.empty() ? "-" : touch_links.str())
-            << " coke_pose=" << poseText(state.coke_world_pose)
+            << " task_object_pose=" << poseText(state.task_object_world_pose)
             << " table_in_world=" << state.table_in_world
             << " table_pose=" << poseText(state.table_world_pose)
             << " pedestal_in_world=" << state.pedestal_in_world
@@ -106,8 +106,11 @@ int main(int argc, char * argv[])
   try {
     const pick_place::MoveItSceneGeometry geometry{profile.world_frame, profile.table_object,
                                                    profile.table_size, profile.pedestal_object,
-                                                   profile.pedestal_size, profile.coke_model,
-                                                   profile.coke_height, profile.coke_radius};
+                                                   profile.pedestal_size, profile.task_object_id,
+                                                   profile.task_object_height, profile.task_object_outer_radius,
+                                                   profile.task_object_wall_thickness,
+                                                   profile.task_object_bottom_thickness,
+                                                   profile.task_object_side_count};
     auto adapter =
       std::make_shared<pick_place::MoveItSceneAdapter>(node, profile.planning_group, geometry);
     const pick_place::MoveItAttachmentSpec attachment{profile.moveit_attach_link,
@@ -125,8 +128,9 @@ int main(int argc, char * argv[])
         operation == "attach" ? pick_place::State::ATTACH_MOVEIT : pick_place::State::DETACH_MOVEIT;
       const auto scene_operation = operation == "attach" ? pick_place::MoveItSceneOperation::ATTACH
                                                          : pick_place::MoveItSceneOperation::DETACH;
-      pick_place::MoveItSceneExecutor executor(adapter, {state, scene_operation, false}, attachment,
-                                               timeout_seconds, poll_interval_seconds);
+      pick_place::MoveItSceneExecutor executor(
+        adapter, {state, scene_operation, false, profile.task_object_id}, attachment,
+        timeout_seconds, poll_interval_seconds);
       const pick_place::ExecutionContext context{state, pick_place::State::ERROR,
                                                  pick_place::WorldSnapshot{}, nullptr};
       result = executor.execute(context);
@@ -142,7 +146,7 @@ int main(int argc, char * argv[])
         result = adapter->upsertPedestalWorldPose(profile.pedestal_pose);
       }
       if (result.status == pick_place::ActionStatus::SUCCEEDED) {
-        result = adapter->upsertCokeWorldPose(profile.coke_pose);
+        result = adapter->upsertTaskObjectWorldPose(profile.task_object_pose);
       }
       if (result.status == pick_place::ActionStatus::SUCCEEDED) {
         const auto deadline =
@@ -150,8 +154,8 @@ int main(int argc, char * argv[])
         bool converged = false;
         while (std::chrono::steady_clock::now() < deadline) {
           const auto state = adapter->observe();
-          if (state && !state->coke_attached && state->coke_in_world && state->coke_world_pose &&
-              poseMatches(*state->coke_world_pose, profile.coke_pose) && state->table_in_world &&
+          if (state && !state->task_object_attached && state->task_object_in_world && state->task_object_world_pose &&
+              poseMatches(*state->task_object_world_pose, profile.task_object_pose) && state->table_in_world &&
               state->table_world_pose &&
               poseMatches(*state->table_world_pose, profile.table_pose) &&
               state->pedestal_in_world && state->pedestal_world_pose &&

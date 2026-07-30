@@ -47,28 +47,29 @@ struct TaskObjectGraspFrameConfig
   Pose3d attachment_relative_pose;
 };
 
-struct AdapterPrimitiveConfig
+struct FingertipPadGeometryConfig
 {
-  std::array<double, 3> size_xyz{};
-  std::array<double, 6> origin_xyz_rpy{};
+  double opening_axis_thickness_m{0.0};
+  double contact_direction_x{0.0};
+  std::string axial_axis;
+  std::array<double, 2> native_axial_bounds_m{};
+  std::vector<Vec3> profile_points;
 };
 
-struct FingertipAdapterConfig
+struct FingertipPadConfig
 {
   bool enabled{false};
   std::string material;
   double shore_hardness_a{0.0};
   std::string contact_model;
   double geometry_reference_q6{0.0};
-  double target_reference_gap_m{0.0};
-  double tongue_extension_m{0.0};
-  double tongue_width_m{0.0};
-  double tongue_height_m{0.0};
+  double safe_lower_q6{0.0};
+  double safe_gap_m{0.0};
+  double grasp_gap_m{0.0};
+  std::string calibration_fingerprint;
   double friction_coefficient{0.0};
-  AdapterPrimitiveConfig fixed_tongue;
-  AdapterPrimitiveConfig fixed_stem;
-  AdapterPrimitiveConfig moving_tongue;
-  AdapterPrimitiveConfig moving_stem;
+  FingertipPadGeometryConfig fixed_pad;
+  FingertipPadGeometryConfig moving_pad;
 };
 
 struct TaskObjectConfig
@@ -78,7 +79,7 @@ struct TaskObjectConfig
   TaskObjectModelConfig model;
   TaskObjectSceneConfig scene;
   TaskObjectGraspFrameConfig grasp_frame;
-  FingertipAdapterConfig fingertip_adapters;
+  FingertipPadConfig fingertip_pads;
 };
 
 struct StateMotionConfig
@@ -86,7 +87,11 @@ struct StateMotionConfig
   State state{State::ERROR};
   std::vector<double> logical_start;
   std::vector<std::vector<double>> waypoints;
+  // Planner waypoint usage and TCP axial-path validation are deliberately
+  // independent: transfers may need collision-safe joint waypoints without
+  // being a straight approach/descent path.
   bool require_waypoint_ladder{false};
+  bool require_axial_path_validation{false};
   double gripper_q6{0.0};
 };
 
@@ -95,6 +100,9 @@ struct MotionPolicyConfig
   struct GripperActions
   {
     double preopen_q6{0.0};
+    double grasp_close_q6{0.0};
+    // Temporary source-compatibility alias while runtime consumers migrate to
+    // grasp_close_q6. It is never read from YAML.
     double close_q6{0.0};
     double release_q6{0.0};
   };
