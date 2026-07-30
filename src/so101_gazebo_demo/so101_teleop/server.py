@@ -605,7 +605,8 @@ class TeleopService:
                         if body.get("confirmation") != "CONFIRM WORKFLOW_RESET": return self._result(body,False,"CONFIRMATION_REQUIRED","second server-side confirmation required")
                         self._workflow.pop(run_id, None); return self._result(body,True,"OK","workflow checkpoint invalidated")
                     args=["--mode","execute","--checkpoint",str(checkpoint),"--session-id",self._worker.snapshot().simulation_session_id]
-                    if operation in ("step","start"): args.append("--step")
+                    if operation == "start": args.append("--step")
+                    if operation == "step": args.extend(["--resume","true","--step"])
                     if operation in ("resume","force-continue"): args.extend(["--resume","true"])
                     if operation == "force-continue":
                         if body.get("operator_confirmation") != "FORCE CONTINUE": return self._result(body,False,"OVERRIDE_NOT_ALLOWED","physical validation confirmation required")
