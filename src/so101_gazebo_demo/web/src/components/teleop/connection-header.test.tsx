@@ -18,5 +18,8 @@ describe("ConnectionHeader", () => {
     expect(title.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(badge.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(button.compareDocumentPosition(metadata) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(metadata.textContent).not.toContain("ROS domain");
+    expect(metadata.textContent).not.toContain("GZ partition");
+    expect(metadata.textContent).toContain("simulation-only · session");
   });
 });

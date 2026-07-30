@@ -1,7 +1,30 @@
 import { expect, test } from "@playwright/test";
 
 const hardLimits: Record<string, [number, number]> = { "1": [-1.91986, 1.91986], "2": [-1.74533, 1.74533], "3": [-1.74533, 1.5708], "4": [-1.65806, 1.65806], "5": [-2.79253, 2.79253], "6": [-0.059303612618397, 1.74533] };
-const snapshot = { mode: "READY", revision: 9, simulation_session_id: "e2e-session", joints: Object.fromEntries(["1", "2", "3", "4", "5", "6"].map((name) => [name, { position_rad: 0, velocity_rad_s: 0, lower_limit_rad: hardLimits[name][0], upper_limit_rad: hardLimits[name][1] }])), tcp: { frame_id: "world", tcp_frame: "so101_tcp", x_m: 0.1, y_m: 0.2, z_m: 0.3, roll_rad: 0, pitch_rad: 0, yaw_rad: 0 }, moveit_collisions: [], gazebo_contacts: [] };
+const environment = {
+  ROS_DOMAIN_ID: "55", ROS_DISTRO: "jazzy", ROS_VERSION: "2", ROS_PYTHON_VERSION: "3",
+  ROS_AUTOMATIC_DISCOVERY_RANGE: "SUBNET", AMENT_PREFIX_PATH: "/data/work/ws_moveit/install:/opt/ros/jazzy",
+  COLCON_PREFIX_PATH: "/data/work/ws_moveit/install", GZ_PARTITION: "so101_teleop_live_final",
+  GZ_CONFIG_PATH: "/opt/ros/jazzy/opt/gz:".repeat(20), GZ_SIM_RESOURCE_PATH: "/opt/ros/jazzy/share",
+  GZ_SIM_SYSTEM_PLUGIN_PATH: "/data/work/ws_moveit/install/so101_gazebo_demo/lib:/opt/ros/jazzy/lib",
+  PYTHONPATH: "/data/work/ws_moveit/install/so101_gazebo_demo/lib/python3.12/site-packages",
+  LD_LIBRARY_PATH: "/data/work/ws_moveit/install/so101_gazebo_demo/lib:/opt/ros/jazzy/lib",
+};
+const snapshot = { mode: "READY", revision: 9, simulation_session_id: "e2e-session", environment, joints: Object.fromEntries(["1", "2", "3", "4", "5", "6"].map((name) => [name, { position_rad: 0, velocity_rad_s: 0, lower_limit_rad: hardLimits[name][0], upper_limit_rad: hardLimits[name][1] }])), tcp: { frame_id: "world", tcp_frame: "so101_tcp", x_m: 0.1, y_m: 0.2, z_m: 0.3, roll_rad: 0, pitch_rad: 0, yaw_rad: 0 }, moveit_collisions: [], gazebo_contacts: [] };
+
+test("runtime environment is visible, bounded and copyable", async ({ page }) => {
+  await page.route("**/snapshot", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(snapshot) }));
+  await page.goto("/");
+  await expect(page.getByLabel("Connection metadata")).not.toContainText("ROS domain");
+  await expect(page.getByLabel("Connection metadata")).not.toContainText("GZ partition");
+  await page.getByRole("tab", { name: "Environment" }).click();
+  await expect(page.getByRole("table", { name: "Runtime environment" })).toBeVisible();
+  await expect(page.getByTitle(`GZ_CONFIG_PATH=${environment.GZ_CONFIG_PATH}`)).toBeVisible();
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: (value: string) => { (window as any).__copiedEnvironment = value; return Promise.resolve(); } } }));
+  await page.getByRole("button", { name: "Copy GZ_PARTITION" }).click();
+  expect(await page.evaluate(() => (window as any).__copiedEnvironment)).toBe("so101_teleop_live_final");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
 
 test("production styles are applied to the operator UI", async ({ page }) => {
   await page.route("**/snapshot", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(snapshot) }));
@@ -71,7 +94,11 @@ test("operator controls preserve targets and send audited command payloads", asy
     if (path === "/control/lease") return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, layers: { lease_id: "lease-e2e" } }) });
     if (path === "/plan/joints") return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, layers: { plan_id: "plan-e2e" } }) });
     if (path === "/gazebo/screenshot") return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, data: { url: "/captures/e2e.png" } }) });
-    if (path === "/workflow/start") return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, data: { workflow: { run_id: "run-e2e", current_state: "WAIT_GRASP_STABLE", next_state: "MICRO_LIFT" } } }) });
+    if (path === "/workflow/start") {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, snapshot_revision: 123, data: { workflow: { run_id: "run-e2e", current_state: "WAIT_GRASP_STABLE", next_state: "MICRO_LIFT" } } }) });
+    }
+    if (path === "/workflow/step") return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, snapshot_revision: 124, data: { workflow: { run_id: "run-e2e", current_state: "MICRO_LIFT", next_state: "ATTACH_GAZEBO" } } }) });
     return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true }) });
   });
   await page.goto("/");
@@ -95,7 +122,11 @@ test("operator controls preserve targets and send audited command payloads", asy
   await page.getByRole("button", { name: "Capture Gazebo window" }).click(); await expect(page.getByRole("link", { name: "Download latest Gazebo PNG" })).toHaveAttribute("href", "/captures/e2e.png");
   await expect(page.evaluate(async () => (await fetch("/captures/e2e.png")).headers.get("content-type"))).resolves.toContain("image/png");
   await page.getByRole("tab", { name: "Workflow" }).click();
-  await page.getByRole("button", { name: "Start" }).click(); await expect(page.getByText(/WAIT_GRASP_STABLE/)).toBeVisible();
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page.getByRole("button", { name: "Starting…" })).toBeDisabled();
+  await expect(page.getByText(/WAIT_GRASP_STABLE/)).toBeVisible();
+  await page.getByRole("button", { name: "Next Step" }).click();
+  await expect.poll(() => payloads.findLast((entry) => entry.path === "/workflow/step")?.body.snapshot_revision).toBe(123);
   await page.getByRole("button", { name: "Reset workflow" }).click(); await page.getByRole("button", { name: "Confirm Reset workflow" }).click(); await expect.poll(() => payloads.at(-1)?.body.confirmation).toBe("CONFIRM WORKFLOW_RESET");
   expect(consoleErrors).toEqual([]);
 });

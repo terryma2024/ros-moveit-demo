@@ -18,6 +18,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Mapping
 
 import rclpy
 from control_msgs.action import FollowJointTrajectory
@@ -54,6 +55,17 @@ SO101_JOINT_POSITION_LIMITS_RAD: dict[str, tuple[float, float]] = {
     "5": (-2.79253, 2.79253),
     "6": (-0.059303612618397, 1.74533),
 }
+TELEOP_ENVIRONMENT_KEYS = (
+    "ROS_DOMAIN_ID", "ROS_DISTRO", "ROS_VERSION", "ROS_PYTHON_VERSION",
+    "ROS_AUTOMATIC_DISCOVERY_RANGE", "AMENT_PREFIX_PATH", "COLCON_PREFIX_PATH",
+    "GZ_PARTITION", "GZ_CONFIG_PATH", "GZ_SIM_RESOURCE_PATH",
+    "GZ_SIM_SYSTEM_PLUGIN_PATH", "PYTHONPATH", "LD_LIBRARY_PATH",
+)
+
+
+def read_teleop_environment(environment: Mapping[str, str]) -> dict[str, str]:
+    """Return only environment metadata approved for operator diagnostics."""
+    return {key: environment[key] for key in TELEOP_ENVIRONMENT_KEYS if environment.get(key)}
 
 
 def _quaternion_to_rpy(x: float, y: float, z: float, w: float) -> tuple[float, float, float]:
@@ -91,7 +103,8 @@ class RosTelemetryWorker:
     """The sole owner of ROS graph objects and live MoveIt/controller calls."""
     def __init__(self) -> None:
         self._collector = TelemetryCollector(); self._lock = threading.Lock()
-        self._latest = TelemetrySnapshot(mode=ServerMode.STARTING)
+        self._environment = read_teleop_environment(os.environ)
+        self._latest = TelemetrySnapshot(mode=ServerMode.STARTING, environment=self._environment)
         self._joints: dict[str, JointSample] = {}; self._joint_stamp = 0.0
         # A session must be non-empty even when a launch file did not provide
         # one: leases, plans and checkpoints use it as a stale-state boundary.
@@ -277,6 +290,7 @@ class RosTelemetryWorker:
         mode = ServerMode.READY if fresh and len(self._joints) == 6 and tcp and all(
             controllers.get(name) == "active" for name in ("arm_controller", "gripper_controller")) else ServerMode.READ_ONLY
         snapshot = TelemetrySnapshot(mode=mode, simulation_session_id=self._session_id,
+            environment=self._environment,
             joints=dict(self._joints), tcp=tcp, object_pose=self._object_pose if object_age <= 2.0 else None,
             controllers=controllers, gazebo_attached=self._attached, moveit_attached=self._moveit_attached,
             gazebo_contacts=gazebo_contacts, moveit_collisions=moveit_collisions,
@@ -507,15 +521,19 @@ class TeleopService:
     async def command(self, name: str, body: dict):
         command_id=body.get("command_id", "")
         if not command_id: return self._result(body, False, "COMMAND_ID_REQUIRED", "command_id is required")
+        # Lease liveness is independent of mutation serialization.  A valid
+        # operator must be able to renew while a long MoveIt/workflow owner
+        # holds the command lock, otherwise the UI loses its lease even though
+        # the command it started is still progressing.
+        if name == "lease_renew":
+            if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
+            self._lease=(self._lease[0],time.monotonic()+30); return self._result(body,True,"OK","lease renewed")
         async def operation():
             try:
                 if name == "lease":
                     if self._lease is not None and self._lease[1] > time.monotonic():
                         return self._result(body,False,"LEASE_BUSY","another operator holds the control lease")
                     lease_id=str(uuid.uuid4()); self._lease=(lease_id,time.monotonic()+30); return self._result(body,True,"OK","lease acquired",layers={"lease_id":lease_id})
-                if name == "lease_renew":
-                    if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
-                    self._lease=(self._lease[0],time.monotonic()+30); return self._result(body,True,"OK","lease renewed")
                 if name in ("plan_joints", "plan_tcp"):
                     if gate:=self._mutation_gate(body): return gate
                     if name == "plan_joints": stored=await asyncio.to_thread(self._worker.plan_joints, body.get("target_joints_rad", {}))

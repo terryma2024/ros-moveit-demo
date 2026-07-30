@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollisionPanel } from "@/components/teleop/collision-panel";
 import { ConnectionHeader } from "@/components/teleop/connection-header";
 import { EventLog, type EventEntry } from "@/components/teleop/event-log";
+import { EnvironmentPanel } from "@/components/teleop/environment-panel";
 import { GazeboPanel } from "@/components/teleop/gazebo-panel";
 import { JointPanel } from "@/components/teleop/joint-panel";
 import { TargetYamlControls } from "@/components/teleop/target-yaml-controls";
@@ -43,6 +44,7 @@ export function App() {
   const [tcpPlanning, setTcpPlanning] = useState(false);
   const sessionRef = useRef("");
   const snapshot = state.actual as LiveSnapshot;
+  const environment = snapshot.environment ?? {};
 
   const acceptSnapshot = useCallback((next: LiveSnapshot) => {
     if (sessionRef.current && sessionRef.current !== next.simulation_session_id) {
@@ -107,7 +109,7 @@ export function App() {
     if (result.layers?.lease_id) setLease(result.layers.lease_id);
     if (result.layers?.plan_id) dispatch({ type: "plan-created", planId: result.layers.plan_id });
     const data = result.data as any;
-    if (data?.workflow) setWorkflow(data.workflow);
+    if (data?.workflow) setWorkflow({ ...data.workflow, snapshot_revision: result.snapshot_revision });
     return result;
   };
 
@@ -171,7 +173,7 @@ export function App() {
     <div className="my-4 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-sky-200">{notice}</p><Button size="sm" variant="outline" onClick={() => dispatch({ type: "current-to-target" })}>Current to Target</Button><Button size="sm" variant="outline" onClick={diagnosticSnapshot}>Download diagnostic snapshot</Button><span className="text-sm text-slate-400">RTF {snapshot.real_time_factor == null ? "—" : snapshot.real_time_factor.toFixed(3)}</span></div>
     <Tabs defaultValue="joints" className="min-w-0">
       <TabsList aria-label="Teleop panel navigation" className="w-full max-w-full justify-start overflow-x-auto overflow-y-hidden bg-slate-900 text-slate-300">
-        {([['joints', 'Joints'], ['tcp', 'TCP'], ['collision', 'Collision'], ['target', 'Target'], ['gazebo', 'Gazebo'], ['workflow', 'Workflow'], ['events', 'Events']] as const).map(([value, label]) => <TabsTrigger className="shrink-0 data-[state=active]:bg-sky-700 data-[state=active]:text-white" key={value} value={value}>{label}</TabsTrigger>)}
+        {([['joints', 'Joints'], ['tcp', 'TCP'], ['collision', 'Collision'], ['target', 'Target'], ['gazebo', 'Gazebo'], ['workflow', 'Workflow'], ['events', 'Events'], ['environment', 'Environment']] as const).map(([value, label]) => <TabsTrigger className="shrink-0 data-[state=active]:bg-sky-700 data-[state=active]:text-white" key={value} value={value}>{label}</TabsTrigger>)}
       </TabsList>
       <TabsContent value="joints"><JointPanel joints={snapshot.joints} targets={state.target.joints} leaseHeld={Boolean(lease)} plan={state.plan} onEdit={(joint, value) => dispatch({ type: "edit-joint", joint, value })} onClampNotice={setNotice} onPlan={planJoints} onExecute={execute} onExecuteGripper={() => call("/gripper/execute", { target_position_rad: state.target.joints["6"] })} onExecuteAll={executeAll} onCancel={() => call("/execution/cancel")}/></TabsContent>
       <TabsContent value="tcp"><TcpPanel pose={targetPose} frame={state.target.stepFrame} leaseHeld={Boolean(lease)} planning={tcpPlanning} plan={state.plan} onFrame={(frame) => dispatch({ type: "set-step-frame", frame })} onEdit={(tcp) => dispatch({ type: "edit-tcp", tcp })} onStep={(axis, direction) => dispatch({ type: "edit-tcp", tcp: applyPoseStep(targetPose, axis, direction, state.target.stepFrame) })} onPlan={planTcp} onExecute={execute} onCancel={() => call("/execution/cancel")}/></TabsContent>
@@ -186,6 +188,7 @@ export function App() {
       <TabsContent value="gazebo"><GazeboPanel leaseHeld={Boolean(lease)} gazeboAttached={snapshot.gazebo_attached} moveitAttached={snapshot.moveit_attached} shot={shot} onScreenshot={async () => { const result = await call("/gazebo/screenshot"); const data = result.data as any; if (data?.url) setShot(data.url); }} onAttach={() => call("/attachment/attach")} onDetach={() => call("/attachment/detach")} onRepair={() => call("/scene/repair", { confirmation: "CONFIRM SCENE_REPAIR" })} onHome={() => call("/robot/home", { confirmation: "CONFIRM ROBOT_HOME" })} onReset={() => call("/simulation/reset", { confirmation: "CONFIRM SIMULATION_RESET" })}/></TabsContent>
       <TabsContent value="workflow"><WorkflowPanel snapshot={workflow} leaseHeld={Boolean(lease)} command={workflowCommand}/></TabsContent>
       <TabsContent value="events"><EventLog entries={events}/></TabsContent>
+      <TabsContent value="environment"><EnvironmentPanel environment={environment}/></TabsContent>
     </Tabs>
   </main>;
 }

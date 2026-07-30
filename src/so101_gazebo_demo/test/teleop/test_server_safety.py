@@ -7,7 +7,14 @@ from types import SimpleNamespace
 import pytest
 
 from so101_teleop.models import PlanSummary, Pose6D, ServerMode, TelemetrySnapshot
-from so101_teleop.server import RosTelemetryWorker, StoredTrajectory, TeleopService, _joint_fingerprint
+from so101_teleop.server import (
+    TELEOP_ENVIRONMENT_KEYS,
+    RosTelemetryWorker,
+    StoredTrajectory,
+    TeleopService,
+    _joint_fingerprint,
+    read_teleop_environment,
+)
 from so101_teleop.control import PlanRejected, PlanStore
 from so101_teleop.main import installed_web_assets
 
@@ -47,6 +54,35 @@ def test_invalid_web_root_override_is_rejected_without_fallback(monkeypatch, tmp
         installed_web_assets()
 
 
+def test_telemetry_environment_exposes_only_the_operator_diagnostic_allowlist():
+    allowed = [
+        "ROS_DOMAIN_ID", "ROS_DISTRO", "ROS_VERSION", "ROS_PYTHON_VERSION",
+        "ROS_AUTOMATIC_DISCOVERY_RANGE", "AMENT_PREFIX_PATH", "COLCON_PREFIX_PATH",
+        "GZ_PARTITION", "GZ_CONFIG_PATH", "GZ_SIM_RESOURCE_PATH",
+        "GZ_SIM_SYSTEM_PLUGIN_PATH", "PYTHONPATH", "LD_LIBRARY_PATH",
+    ]
+    environment = {key: f"value-{index}" for index, key in enumerate(allowed)}
+    environment["SECRET_TOKEN"] = "must-not-leak"
+
+    assert list(TELEOP_ENVIRONMENT_KEYS) == allowed
+    assert read_teleop_environment(environment) == {
+        key: f"value-{index}" for index, key in enumerate(allowed)
+    }
+    assert "SECRET_TOKEN" not in read_teleop_environment(environment)
+
+
+def test_worker_snapshot_captures_runtime_ros_and_gazebo_environment(monkeypatch):
+    monkeypatch.setenv("ROS_DOMAIN_ID", "55")
+    monkeypatch.setenv("GZ_PARTITION", "partition-a")
+    monkeypatch.setenv("SECRET_TOKEN", "must-not-leak")
+
+    snapshot = RosTelemetryWorker().snapshot()
+
+    assert snapshot.environment["ROS_DOMAIN_ID"] == "55"
+    assert snapshot.environment["GZ_PARTITION"] == "partition-a"
+    assert "SECRET_TOKEN" not in snapshot.environment
+
+
 def test_second_client_cannot_silently_replace_an_unexpired_control_lease():
     """A diagnostic browser must not steal the operator's one-writer lease."""
     async def scenario():
@@ -61,6 +97,44 @@ def test_second_client_cannot_silently_replace_an_unexpired_control_lease():
         assert second.succeeded is False
         assert second.code == "LEASE_BUSY"
         assert renewed.succeeded is True
+    asyncio.run(scenario())
+
+
+def test_valid_lease_renewal_is_not_rejected_while_workflow_owner_is_running():
+    """A long workflow command must not make its own operator lose the lease."""
+    async def scenario():
+        worker = Worker()
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocking_owner(executable, arguments, timeout_s=45.0):
+            started.set()
+            assert release.wait(timeout=2.0)
+            return "trace=WAIT_GRASP_STABLE"
+
+        worker.package_cli = blocking_owner
+        service = TeleopService(worker)
+        acquired = await service.command("lease", {"command_id": "lease"})
+        lease_id = acquired.layers["lease_id"]
+        workflow = asyncio.create_task(service.command("workflow_start", {
+            "command_id": "workflow-start",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        }))
+        assert await asyncio.to_thread(started.wait, 1.0)
+
+        renewed = await service.command("lease_renew", {
+            "command_id": "renew-during-workflow",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+        release.set()
+        completed = await workflow
+
+        assert renewed.succeeded is True
+        assert renewed.code == "OK"
+        assert completed.succeeded is True
+
     asyncio.run(scenario())
 
 
