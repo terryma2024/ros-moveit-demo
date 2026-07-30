@@ -1,5 +1,6 @@
 #include "so101_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
 
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <string>
@@ -49,24 +50,56 @@ moveit_msgs::msg::CollisionObject baseObject(const MoveItSceneGeometry & geometr
   object.id = id;
   object.pose = toMessage(pose);
   object.operation = moveit_msgs::msg::CollisionObject::ADD;
-  geometry_msgs::msg::Pose local_pose;
-  local_pose.orientation.w = 1.0;
-  object.primitive_poses.push_back(local_pose);
   return object;
+}
+
+geometry_msgs::msg::Pose identityPose()
+{
+  geometry_msgs::msg::Pose pose;
+  pose.orientation.w = 1.0;
+  return pose;
 }
 
 }  // namespace
 
-moveit_msgs::msg::CollisionObject makeCokeCollisionObject(const MoveItSceneGeometry & geometry,
-                                                          const Pose3d & pose)
+moveit_msgs::msg::CollisionObject makeTaskObjectCollisionObject(
+  const MoveItSceneGeometry & geometry, const Pose3d & pose)
 {
-  auto object = baseObject(geometry, geometry.coke_id, pose);
-  shape_msgs::msg::SolidPrimitive primitive;
-  primitive.type = shape_msgs::msg::SolidPrimitive::CYLINDER;
-  primitive.dimensions.resize(2);
-  primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_HEIGHT] = geometry.coke_height;
-  primitive.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_RADIUS] = geometry.coke_radius;
-  object.primitives.push_back(primitive);
+  auto object = baseObject(geometry, geometry.task_object_id, pose);
+  constexpr double pi = 3.14159265358979323846;
+  const double angle_step = 2.0 * pi / geometry.task_object_side_count;
+  const double radial_center =
+    geometry.task_object_outer_radius - geometry.task_object_wall_thickness / 2.0;
+  const double chord =
+    2.0 * geometry.task_object_outer_radius * std::sin(angle_step / 2.0);
+  const double wall_height =
+    geometry.task_object_height - geometry.task_object_bottom_thickness;
+  for (int index = 0; index < geometry.task_object_side_count; ++index) {
+    const double angle = index * angle_step;
+    shape_msgs::msg::SolidPrimitive wall;
+    wall.type = shape_msgs::msg::SolidPrimitive::BOX;
+    wall.dimensions = {chord, geometry.task_object_wall_thickness, wall_height};
+    object.primitives.push_back(wall);
+    auto wall_pose = identityPose();
+    wall_pose.position.x = radial_center * std::sin(angle);
+    wall_pose.position.y = radial_center * std::cos(angle);
+    wall_pose.position.z = geometry.task_object_bottom_thickness / 2.0;
+    wall_pose.orientation.z = std::sin(-angle / 2.0);
+    wall_pose.orientation.w = std::cos(-angle / 2.0);
+    object.primitive_poses.push_back(wall_pose);
+  }
+  shape_msgs::msg::SolidPrimitive bottom;
+  bottom.type = shape_msgs::msg::SolidPrimitive::CYLINDER;
+  bottom.dimensions.resize(2);
+  bottom.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_HEIGHT] =
+    geometry.task_object_bottom_thickness;
+  bottom.dimensions[shape_msgs::msg::SolidPrimitive::CYLINDER_RADIUS] =
+    geometry.task_object_outer_radius;
+  object.primitives.push_back(bottom);
+  auto bottom_pose = identityPose();
+  bottom_pose.position.z =
+    -geometry.task_object_height / 2.0 + geometry.task_object_bottom_thickness / 2.0;
+  object.primitive_poses.push_back(bottom_pose);
   return object;
 }
 
@@ -78,6 +111,7 @@ moveit_msgs::msg::CollisionObject makeTableCollisionObject(const MoveItSceneGeom
   primitive.type = shape_msgs::msg::SolidPrimitive::BOX;
   primitive.dimensions.assign(geometry.table_size.begin(), geometry.table_size.end());
   object.primitives.push_back(primitive);
+  object.primitive_poses.push_back(identityPose());
   return object;
 }
 
@@ -89,6 +123,7 @@ moveit_msgs::msg::CollisionObject makePedestalCollisionObject(
   primitive.type = shape_msgs::msg::SolidPrimitive::BOX;
   primitive.dimensions.assign(geometry.pedestal_size.begin(), geometry.pedestal_size.end());
   object.primitives.push_back(primitive);
+  object.primitive_poses.push_back(identityPose());
   return object;
 }
 
@@ -115,36 +150,36 @@ MoveItSceneAdapter::MoveItSceneAdapter(const std::shared_ptr<rclcpp::Node> & nod
 
 MoveItSceneAdapter::~MoveItSceneAdapter() = default;
 
-ActionResult MoveItSceneAdapter::attachCoke(const MoveItAttachmentSpec & spec)
+ActionResult MoveItSceneAdapter::attachTaskObject(const MoveItAttachmentSpec & spec)
 {
   if (spec.link_name.empty() || spec.touch_links.empty()) {
     return sceneFailure("MOVEIT_ATTACH_METADATA_INVALID",
                         "MoveIt attach link and touch links must not be empty");
   }
-  if (!impl_->move_group.attachObject(impl_->geometry.coke_id, spec.link_name, spec.touch_links)) {
-    return sceneFailure("MOVEIT_ATTACH_REQUEST_FAILED", "MoveIt rejected the Coke attach request");
+  if (!impl_->move_group.attachObject(impl_->geometry.task_object_id, spec.link_name, spec.touch_links)) {
+    return sceneFailure("MOVEIT_ATTACH_REQUEST_FAILED", "MoveIt rejected the TaskObject attach request");
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
-ActionResult MoveItSceneAdapter::detachCoke()
+ActionResult MoveItSceneAdapter::detachTaskObject()
 {
-  if (!impl_->move_group.detachObject(impl_->geometry.coke_id)) {
-    return sceneFailure("MOVEIT_DETACH_REQUEST_FAILED", "MoveIt rejected the Coke detach request");
+  if (!impl_->move_group.detachObject(impl_->geometry.task_object_id)) {
+    return sceneFailure("MOVEIT_DETACH_REQUEST_FAILED", "MoveIt rejected the TaskObject detach request");
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
-ActionResult MoveItSceneAdapter::upsertCokeWorldPose(const Pose3d & pose)
+ActionResult MoveItSceneAdapter::upsertTaskObjectWorldPose(const Pose3d & pose)
 {
-  if (impl_->planning_scene.getAttachedObjects({impl_->geometry.coke_id})
-        .count(impl_->geometry.coke_id) != 0) {
+  if (impl_->planning_scene.getAttachedObjects({impl_->geometry.task_object_id})
+        .count(impl_->geometry.task_object_id) != 0) {
     return sceneFailure("MOVEIT_UPSERT_OBJECT_ATTACHED",
-                        "Cannot upsert Coke while it is attached in MoveIt");
+                        "Cannot upsert TaskObject while it is attached in MoveIt");
   }
-  if (!impl_->planning_scene.applyCollisionObject(makeCokeCollisionObject(impl_->geometry, pose))) {
-    return sceneFailure("MOVEIT_COKE_UPSERT_APPLY_FAILED",
-                        "Failed to apply the canonical Coke collision object");
+  if (!impl_->planning_scene.applyCollisionObject(makeTaskObjectCollisionObject(impl_->geometry, pose))) {
+    return sceneFailure("MOVEIT_TASK_OBJECT_UPSERT_APPLY_FAILED",
+                        "Failed to apply the canonical TaskObject collision object");
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
@@ -172,14 +207,14 @@ ActionResult MoveItSceneAdapter::upsertPedestalWorldPose(const Pose3d & pose)
 std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
 {
   const auto objects = impl_->planning_scene.getObjects(
-    {impl_->geometry.coke_id, impl_->geometry.table_id, impl_->geometry.pedestal_id});
-  const auto attached_objects = impl_->planning_scene.getAttachedObjects({impl_->geometry.coke_id});
+    {impl_->geometry.task_object_id, impl_->geometry.table_id, impl_->geometry.pedestal_id});
+  const auto attached_objects = impl_->planning_scene.getAttachedObjects({impl_->geometry.task_object_id});
 
   MoveItSceneState state;
-  const auto coke = objects.find(impl_->geometry.coke_id);
-  state.coke_in_world = coke != objects.end();
-  if (state.coke_in_world) {
-    state.coke_world_pose = fromMessage(coke->second.pose);
+  const auto task_object = objects.find(impl_->geometry.task_object_id);
+  state.task_object_in_world = task_object != objects.end();
+  if (state.task_object_in_world) {
+    state.task_object_world_pose = fromMessage(task_object->second.pose);
   }
   const auto table = objects.find(impl_->geometry.table_id);
   state.table_in_world = table != objects.end();
@@ -191,9 +226,9 @@ std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
   if (state.pedestal_in_world) {
     state.pedestal_world_pose = fromMessage(pedestal->second.pose);
   }
-  const auto attached = attached_objects.find(impl_->geometry.coke_id);
-  state.coke_attached = attached != attached_objects.end();
-  if (state.coke_attached) {
+  const auto attached = attached_objects.find(impl_->geometry.task_object_id);
+  state.task_object_attached = attached != attached_objects.end();
+  if (state.task_object_attached) {
     state.attached_link = attached->second.link_name;
     state.touch_links = attached->second.touch_links;
   }

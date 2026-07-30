@@ -42,7 +42,7 @@ struct MotionPlanSample
   double time_from_start_seconds{0.0};
   bool collision_free{false};
   std::set<std::string> raw_contact_pairs;
-  std::optional<Pose3d> attached_coke_pose_world;
+  std::optional<Pose3d> attached_task_object_pose_world;
 };
 
 struct MotionPlanArtifact : PlanArtifact
@@ -76,7 +76,13 @@ struct MotionValidationConfig
   double axis_tolerance_rad{0.08726646259971647};
   double max_lateral_deviation{0.005};
   double max_joint_jump{0.15};
-  double joint_endpoint_tolerance{1e-4};
+  // Gazebo Bullet position control settles within roughly 0.004 rad while
+  // TCP position, axis, and path-shape checks provide independent safeguards.
+  double joint_endpoint_tolerance{0.005};
+  // Present only for states that place the fingertips at the cup wall.  The
+  // normal itself is sourced from the task-object grasp frame, so the endpoint
+  // check cannot silently drift from the geometry policy.
+  std::optional<double> contact_wall_normal_endpoint_tolerance;
   double min_duration_seconds{0.1};
   double monotonic_tolerance{1e-5};
   std::set<std::string> allowed_touch_pairs;

@@ -21,10 +21,10 @@ struct ExpectedWorldState
   bool gripper_open{false};
   std::map<std::string, double> joint_positions;
   std::map<std::string, Pose3d> moveit_world_object_poses;
-  std::optional<bool> moveit_coke_attached;
-  std::optional<Pose3d> gazebo_coke_pose_world;
-  std::optional<bool> gazebo_coke_attached;
-  std::optional<bool> gazebo_coke_stationary;
+  std::optional<bool> moveit_task_object_attached;
+  std::optional<Pose3d> gazebo_task_object_pose_world;
+  std::optional<bool> gazebo_task_object_attached;
+  std::optional<bool> gazebo_task_object_stationary;
   std::vector<std::string> required_world_objects;
 };
 struct Checkpoint
@@ -39,7 +39,7 @@ struct Checkpoint
   std::optional<Failure> original_failure;
   State next_state{State::IDLE};
   ExpectedWorldState expected;
-  std::string configuration_hash;
+  std::string policy_bundle_sha256;
   std::string simulation_session_id;
   bool resumable{true};
 };

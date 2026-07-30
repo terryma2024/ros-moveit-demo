@@ -74,18 +74,18 @@ ValidationResult configurationFailure()
   return {false, {std::move(item)}, {}};
 }
 
-ValidationResult validateAttachedCokePoseEvidence(const MotionPlanArtifact & plan)
+ValidationResult validateAttachedTaskObjectPoseEvidence(const MotionPlanArtifact & plan)
 {
   for (std::size_t i = 0; i < plan.samples.size(); ++i) {
-    const auto & attached_coke_pose = plan.samples[i].attached_coke_pose_world;
-    if (!attached_coke_pose) {
-      return failure("ATTACHED_COKE_POSE_EVIDENCE_MISSING",
-                     "A carrying motion sample lacks attached Coke world-pose evidence",
+    const auto & attached_task_object_pose = plan.samples[i].attached_task_object_pose_world;
+    if (!attached_task_object_pose) {
+      return failure("ATTACHED_TASK_OBJECT_POSE_EVIDENCE_MISSING",
+                     "A carrying motion sample lacks attached TaskObject world-pose evidence",
                      {{"sample_index", static_cast<double>(i)}});
     }
-    if (!finitePose(*attached_coke_pose)) {
-      return failure("ATTACHED_COKE_POSE_EVIDENCE_NONFINITE",
-                     "A carrying motion sample has non-finite attached Coke world-pose evidence",
+    if (!finitePose(*attached_task_object_pose)) {
+      return failure("ATTACHED_TASK_OBJECT_POSE_EVIDENCE_NONFINITE",
+                     "A carrying motion sample has non-finite attached TaskObject world-pose evidence",
                      {{"sample_index", static_cast<double>(i)}});
     }
   }
@@ -109,6 +109,10 @@ bool validConfiguration(const MotionValidationConfig & config)
       !positive(config.max_joint_jump) || !positive(config.joint_endpoint_tolerance) ||
       !positive(config.min_duration_seconds) || !std::isfinite(config.monotonic_tolerance) ||
       config.monotonic_tolerance < 0.0) {
+    return false;
+  }
+  if (config.contact_wall_normal_endpoint_tolerance &&
+      !positive(*config.contact_wall_normal_endpoint_tolerance)) {
     return false;
   }
   std::set<std::string> unique_names;
@@ -414,8 +418,8 @@ ValidationResult SO101MotionPlanValidator::validate(State state, const WorldSnap
     return failure("MOTION_PLAN_ARTIFACT_REQUIRED", "SO-101 motion validator needs FK motion evidence");
   }
   if (isCarryingMotionState(state)) {
-    const auto attached_coke_evidence = validateAttachedCokePoseEvidence(*motion);
-    if (!attached_coke_evidence.ok) return attached_coke_evidence;
+    const auto attached_task_object_evidence = validateAttachedTaskObjectPoseEvidence(*motion);
+    if (!attached_task_object_evidence.ok) return attached_task_object_evidence;
   }
   return require_ladder_ ? validateWaypointLadder(*motion, config_)
                          : validateJointGoalPlan(*motion, config_);

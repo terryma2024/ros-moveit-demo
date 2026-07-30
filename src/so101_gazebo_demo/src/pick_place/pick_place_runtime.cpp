@@ -7,6 +7,7 @@
 #include <limits>
 #include <set>
 #include <sstream>
+#include <mutex>
 #include <thread>
 #include <utility>
 
@@ -34,6 +35,13 @@ constexpr std::array<State, 10> kMotionStates{{
   State::RECOVER_RETREAT,
 }};
 
+constexpr std::array<State, 4> kPhysicalGraspStates{{
+  State::WAIT_GRASP_STABLE,
+  State::MICRO_LIFT,
+  State::WAIT_MICRO_LIFT_STABLE,
+  State::VERIFY_PHYSICAL_GRASP,
+}};
+
 bool finite(double value) { return std::isfinite(value); }
 
 bool finitePose(const Pose3d & pose)
@@ -49,6 +57,18 @@ double positionDistance(const Pose3d & first, const Pose3d & second)
 {
   return std::hypot(std::hypot(first.x - second.x, first.y - second.y),
                     first.z - second.z);
+}
+
+double wallNormalPositionError(const Pose3d & actual, const Pose3d & expected,
+                               const Vec3 & outward)
+{
+  const double magnitude = std::hypot(outward.x, std::hypot(outward.y, outward.z));
+  if (!finitePose(actual) || !finitePose(expected) || !finite(magnitude) || magnitude <= 1e-12) {
+    return std::numeric_limits<double>::infinity();
+  }
+  const double projected = (actual.x - expected.x) * outward.x +
+    (actual.y - expected.y) * outward.y + (actual.z - expected.z) * outward.z;
+  return std::abs(projected) / magnitude;
 }
 
 double orientationDistance(const Pose3d & first, const Pose3d & second)
@@ -123,7 +143,7 @@ ValidationResult validateMotionQ6(const WorldSnapshot & snapshot,
 
 const Pose3d & expectedDetachedPose(State state, const SO101Profile & profile)
 {
-  return state == State::RETREAT ? profile.place_coke_pose : profile.coke_pose;
+  return state == State::RETREAT ? profile.place_task_object_pose : profile.task_object_pose;
 }
 
 void requireCompleteSnapshot(ValidationResult & result, const WorldSnapshot & snapshot,
@@ -160,15 +180,15 @@ void requireCompleteSnapshot(ValidationResult & result, const WorldSnapshot & sn
     addFailure(result, FailureCategory::MOVEIT_SCENE, "TABLE_WORLD_POSE_MISMATCH",
                "The canonical MoveIt table pose is required");
   }
-  if (!snapshot.gazebo_coke_pose_world || !finitePose(*snapshot.gazebo_coke_pose_world) ||
-      !snapshot.gazebo_coke_attached || !snapshot.gazebo_coke_stationary ||
-      !snapshot.moveit_coke_attached) {
+  if (!snapshot.gazebo_task_object_pose_world || !finitePose(*snapshot.gazebo_task_object_pose_world) ||
+      !snapshot.gazebo_task_object_attached || !snapshot.gazebo_task_object_stationary ||
+      !snapshot.moveit_task_object_attached) {
     addFailure(result, FailureCategory::OBSERVATION, "ENVIRONMENT_EVIDENCE_INCOMPLETE",
-               "Independent finite Gazebo and MoveIt Coke evidence is required");
+               "Independent finite Gazebo and MoveIt TaskObject evidence is required");
   }
-  if (snapshot.gazebo_coke_stationary && !*snapshot.gazebo_coke_stationary) {
-    addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_NOT_STATIONARY",
-               "Gazebo Coke must be stationary at every motion boundary");
+  if (snapshot.gazebo_task_object_stationary && !*snapshot.gazebo_task_object_stationary) {
+    addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_TASK_OBJECT_NOT_STATIONARY",
+               "Gazebo TaskObject must be stationary at every motion boundary");
   }
 }
 
@@ -176,54 +196,54 @@ void requireMotionEnvironment(ValidationResult & result, const WorldSnapshot & s
                               State state, const SO101Profile & profile)
 {
   requireCompleteSnapshot(result, snapshot, profile);
-  if (!snapshot.gazebo_coke_attached || !snapshot.moveit_coke_attached ||
-      !snapshot.gazebo_coke_pose_world) {
+  if (!snapshot.gazebo_task_object_attached || !snapshot.moveit_task_object_attached ||
+      !snapshot.gazebo_task_object_pose_world) {
     return;
   }
   const std::set<std::string> expected_touch_links(profile.moveit_touch_links.begin(),
                                                     profile.moveit_touch_links.end());
   if (carrying(state)) {
-    if (!*snapshot.gazebo_coke_attached || !*snapshot.moveit_coke_attached ||
-        snapshot.moveit_world_object_poses.count(profile.coke_model) != 0 ||
-        !snapshot.moveit_coke_attached_link ||
-        *snapshot.moveit_coke_attached_link != profile.moveit_attach_link ||
-        snapshot.moveit_coke_touch_links != expected_touch_links ||
-        !snapshot.moveit_coke_attached_relative_pose ||
+    if (!*snapshot.gazebo_task_object_attached || !*snapshot.moveit_task_object_attached ||
+        snapshot.moveit_world_object_poses.count(profile.task_object_id) != 0 ||
+        !snapshot.moveit_task_object_attached_link ||
+        *snapshot.moveit_task_object_attached_link != profile.moveit_attach_link ||
+        snapshot.moveit_task_object_touch_links != expected_touch_links ||
+        !snapshot.moveit_task_object_attached_relative_pose ||
         !snapshot.moveit_gripper_pose_world ||
-        !poseWithin(*snapshot.moveit_coke_attached_relative_pose,
+        !poseWithin(*snapshot.moveit_task_object_attached_relative_pose,
                     profile.calibrated_grasp_relative_pose,
-                    profile.coke_position_drift_tolerance,
-                    profile.coke_orientation_drift_tolerance_rad)) {
+                    profile.task_object_position_drift_tolerance,
+                    profile.task_object_orientation_drift_tolerance_rad)) {
       addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
                  "CARRYING_ATTACHMENT_EVIDENCE_INVALID",
                  "Carrying requires exact independent Gazebo and MoveIt attachment facts");
     }
     if (snapshot.moveit_gripper_pose_world &&
         !poseWithin(relativePose(*snapshot.moveit_gripper_pose_world,
-                                 *snapshot.gazebo_coke_pose_world),
+                                 *snapshot.gazebo_task_object_pose_world),
                     profile.calibrated_grasp_relative_pose,
-                    profile.coke_position_drift_tolerance,
-                    profile.coke_orientation_drift_tolerance_rad)) {
+                    profile.task_object_position_drift_tolerance,
+                    profile.task_object_orientation_drift_tolerance_rad)) {
       addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
-                 "GAZEBO_COKE_GRIPPER_RELATIVE_POSE_INVALID",
-                 "Gazebo Coke must match the independently observed gripper-relative pose");
+                 "GAZEBO_TASK_OBJECT_GRIPPER_RELATIVE_POSE_INVALID",
+                 "Gazebo TaskObject must match the independently observed gripper-relative pose");
     }
     return;
   }
-  const auto moveit_coke = snapshot.moveit_world_object_poses.find(profile.coke_model);
+  const auto moveit_task_object = snapshot.moveit_world_object_poses.find(profile.task_object_id);
   const auto & expected = expectedDetachedPose(state, profile);
-  if (*snapshot.gazebo_coke_attached || *snapshot.moveit_coke_attached ||
-      snapshot.moveit_coke_attached_link || !snapshot.moveit_coke_touch_links.empty() ||
-      snapshot.moveit_coke_attached_relative_pose || moveit_coke == snapshot.moveit_world_object_poses.end() ||
-      !poseWithin(moveit_coke->second, *snapshot.gazebo_coke_pose_world,
-                  profile.coke_position_drift_tolerance,
-                  profile.coke_orientation_drift_tolerance_rad) ||
-      !poseWithin(*snapshot.gazebo_coke_pose_world, expected,
-                  profile.coke_position_drift_tolerance,
-                  profile.coke_orientation_drift_tolerance_rad)) {
+  if (*snapshot.gazebo_task_object_attached || *snapshot.moveit_task_object_attached ||
+      snapshot.moveit_task_object_attached_link || !snapshot.moveit_task_object_touch_links.empty() ||
+      snapshot.moveit_task_object_attached_relative_pose || moveit_task_object == snapshot.moveit_world_object_poses.end() ||
+      !poseWithin(moveit_task_object->second, *snapshot.gazebo_task_object_pose_world,
+                  profile.task_object_position_drift_tolerance,
+                  profile.task_object_orientation_drift_tolerance_rad) ||
+      !poseWithin(*snapshot.gazebo_task_object_pose_world, expected,
+                  profile.task_object_position_drift_tolerance,
+                  profile.task_object_orientation_drift_tolerance_rad)) {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
                "DETACHED_SUPPORT_EVIDENCE_INVALID",
-               "Detached motion requires matching supported Gazebo and MoveIt Coke poses");
+               "Detached motion requires matching supported Gazebo and MoveIt TaskObject poses");
   }
 }
 
@@ -231,7 +251,7 @@ class MotionAction final : public IStatePlanner, public IStateExecutor
 {
 public:
   MotionAction(State state, State next_state,
-               std::shared_ptr<const SO101FixedMotionTargetPolicy> policy,
+               std::shared_ptr<const SO101ConfiguredMotionTargetPolicy> policy,
                std::shared_ptr<IMoveItJointMotionAdapter> motion, SO101Profile profile)
   : state_(state), next_state_(next_state), planner_(std::move(policy), motion, std::move(profile)),
     motion_(std::move(motion))
@@ -288,7 +308,7 @@ class RuntimeMotionPlanValidator final : public IPlanValidator
 public:
   RuntimeMotionPlanValidator(SO101FixedMotionSpec spec, SO101Profile profile)
   : spec_(std::move(spec)), profile_(std::move(profile)),
-    delegate_(spec_.validation, spec_.target.ladder)
+    delegate_(spec_.validation, spec_.require_axial_path_validation)
   {
   }
 
@@ -321,18 +341,18 @@ public:
         break;
       }
     }
-    if (carrying(state) && before.gazebo_coke_pose_world && finitePose(before.tcp_pose_world)) {
+    if (carrying(state) && before.gazebo_task_object_pose_world && finitePose(before.tcp_pose_world)) {
       const auto expected_relative =
-        relativePose(before.tcp_pose_world, *before.gazebo_coke_pose_world);
+        relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
       for (std::size_t i = 0; i < motion->samples.size(); ++i) {
-        if (!motion->samples[i].attached_coke_pose_world ||
+        if (!motion->samples[i].attached_task_object_pose_world ||
             !poseWithin(relativePose(motion->samples[i].tcp_pose,
-                                     *motion->samples[i].attached_coke_pose_world),
-                        expected_relative, profile_.coke_position_drift_tolerance,
-                        profile_.coke_orientation_drift_tolerance_rad)) {
+                                     *motion->samples[i].attached_task_object_pose_world),
+                        expected_relative, profile_.task_object_position_drift_tolerance,
+                        profile_.task_object_orientation_drift_tolerance_rad)) {
           addFailure(result, FailureCategory::PLAN_VALIDATION,
-                     "ATTACHED_COKE_RELATIVE_PATH_MISMATCH",
-                     "Every carrying sample must preserve the observed TCP-Coke relative pose");
+                     "ATTACHED_TASK_OBJECT_RELATIVE_PATH_MISMATCH",
+                     "Every carrying sample must preserve the observed TCP-TaskObject relative pose");
           break;
         }
       }
@@ -374,8 +394,14 @@ public:
     }
     requireMotionEnvironment(result, after, spec_.state, profile_);
     merge(result, validateMotionQ6(after, spec_.expected_gripper_q6, profile_));
+    double max_joint_endpoint_error = 0.0;
     for (std::size_t i = 0; i < profile_.arm_joints.size(); ++i) {
       const auto joint = after.joint_positions.find(profile_.arm_joints[i]);
+      if (joint != after.joint_positions.end() && finite(joint->second)) {
+        max_joint_endpoint_error = std::max(
+          max_joint_endpoint_error,
+          std::abs(joint->second - spec_.target.joint_waypoints.back()[i]));
+      }
       if (joint == after.joint_positions.end() || !finite(joint->second) ||
           std::abs(joint->second - spec_.target.joint_waypoints.back()[i]) >
             spec_.validation.joint_endpoint_tolerance) {
@@ -385,6 +411,7 @@ public:
         break;
       }
     }
+    result.metrics["max_joint_endpoint_error"] = max_joint_endpoint_error;
     const Pose3d endpoint{spec_.validation.endpoint_position.x,
                           spec_.validation.endpoint_position.y,
                           spec_.validation.endpoint_position.z, 0.0, 0.0, 0.0, 1.0};
@@ -398,31 +425,44 @@ public:
       addFailure(result, FailureCategory::POSTCONDITION, "TCP_ENDPOINT_OUTSIDE_TOLERANCE",
                  "Observed TCP endpoint is outside the state-specific tolerance");
     }
+    if (spec_.validation.contact_wall_normal_endpoint_tolerance) {
+      const double normal_error = wallNormalPositionError(
+        after.tcp_pose_world, endpoint, profile_.task_object_near_wall_outward);
+      result.metrics["contact_wall_normal_endpoint_error"] = normal_error;
+      result.metrics["contact_wall_normal_endpoint_tolerance"] =
+        *spec_.validation.contact_wall_normal_endpoint_tolerance;
+      if (!finite(normal_error) ||
+          normal_error > *spec_.validation.contact_wall_normal_endpoint_tolerance) {
+        addFailure(result, FailureCategory::POSTCONDITION,
+                   "CONTACT_CRITICAL_WALL_NORMAL_ENDPOINT_MISMATCH",
+                   "Observed URDF-FK TCP endpoint is outside the contact-critical wall-normal tolerance");
+      }
+    }
     if (!finite(axis_error) || axis_error > spec_.validation.axis_tolerance_rad) {
       addFailure(result, FailureCategory::POSTCONDITION, "TCP_AXIS_OUTSIDE_TOLERANCE",
                  "Observed TCP tool axis is outside the state-specific tolerance");
     }
-    if (before.gazebo_coke_pose_world && after.gazebo_coke_pose_world) {
-      Pose3d before_evidence = *before.gazebo_coke_pose_world;
-      Pose3d after_evidence = *after.gazebo_coke_pose_world;
+    if (before.gazebo_task_object_pose_world && after.gazebo_task_object_pose_world) {
+      Pose3d before_evidence = *before.gazebo_task_object_pose_world;
+      Pose3d after_evidence = *after.gazebo_task_object_pose_world;
       if (carrying(spec_.state)) {
         before_evidence = relativePose(before.tcp_pose_world, before_evidence);
         after_evidence = relativePose(after.tcp_pose_world, after_evidence);
       }
-      const double coke_position = positionDistance(before_evidence, after_evidence);
-      const double coke_orientation = orientationDistance(before_evidence, after_evidence);
-      result.metrics[carrying(spec_.state) ? "coke_follow_position_error"
-                                           : "coke_position_drift"] = coke_position;
-      result.metrics[carrying(spec_.state) ? "coke_follow_orientation_error_rad"
-                                           : "coke_orientation_drift_rad"] = coke_orientation;
-      if (coke_position > profile_.coke_position_drift_tolerance ||
-          coke_orientation > profile_.coke_orientation_drift_tolerance_rad) {
+      const double task_object_position = positionDistance(before_evidence, after_evidence);
+      const double task_object_orientation = orientationDistance(before_evidence, after_evidence);
+      result.metrics[carrying(spec_.state) ? "task_object_follow_position_error"
+                                           : "task_object_position_drift"] = task_object_position;
+      result.metrics[carrying(spec_.state) ? "task_object_follow_orientation_error_rad"
+                                           : "task_object_orientation_drift_rad"] = task_object_orientation;
+      if (task_object_position > profile_.task_object_position_drift_tolerance ||
+          task_object_orientation > profile_.task_object_orientation_drift_tolerance_rad) {
         addFailure(result, FailureCategory::POSTCONDITION,
-                   carrying(spec_.state) ? "COKE_DID_NOT_FOLLOW_GRIPPER"
-                                         : "DETACHED_COKE_DRIFT",
+                   carrying(spec_.state) ? "TASK_OBJECT_DID_NOT_FOLLOW_GRIPPER"
+                                         : "DETACHED_TASK_OBJECT_DRIFT",
                    carrying(spec_.state)
-                     ? "Gazebo Coke did not preserve its relative pose while carried"
-                     : "Detached Gazebo Coke moved while the arm moved");
+                     ? "Gazebo TaskObject did not preserve its relative pose while carried"
+                     : "Detached Gazebo TaskObject moved while the arm moved");
       }
     }
     result.ok = result.failures.empty();
@@ -437,6 +477,173 @@ private:
   SO101Profile profile_;
 };
 
+struct PhysicalGraspEvidence
+{
+  std::mutex mutex;
+  std::optional<WorldSnapshot> before_lift;
+  std::optional<WorldSnapshot> after_lift;
+  std::optional<PhysicalGraspResult> result;
+};
+
+class StablePhysicalGraspAction final : public IStateExecutor
+{
+public:
+  StablePhysicalGraspAction(State state, bool before_lift,
+                            std::shared_ptr<IWorldObserver> observer,
+                            std::shared_ptr<PhysicalGraspEvidence> evidence)
+  : state_(state), before_lift_(before_lift), observer_(std::move(observer)), evidence_(std::move(evidence)) {}
+
+  ActionResult execute(const ExecutionContext & context) override
+  {
+    if (!observer_ || !evidence_) {
+      return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+              "PHYSICAL_GRASP_EVIDENCE_DEPENDENCY_MISSING",
+              "Physical-grasp stability checks require the production world observer", {}}};
+    }
+    std::optional<WorldSnapshot> last;
+    for (int sample = 0; sample < 3; ++sample) {
+      const auto observed = observer_->observe();
+      if (!observed.snapshot) {
+        return {ActionStatus::FAILED, observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                "PHYSICAL_GRASP_STABILITY_OBSERVATION_FAILED",
+                "Unable to collect physical-grasp stability evidence", {}})};
+      }
+      const auto & snapshot = *observed.snapshot;
+      if (!snapshot.fresh || !snapshot.arm_stationary || !snapshot.gazebo_task_object_stationary ||
+          !*snapshot.gazebo_task_object_stationary || !snapshot.gazebo_task_object_pose_world ||
+          !snapshot.gazebo_task_object_gripper_contact.value_or(false)) {
+        return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
+                "PHYSICAL_GRASP_NOT_STABLE", "Cup/contact/arm evidence was not stable for three samples", {}}};
+      }
+      last = snapshot;
+      if (sample < 2) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    std::lock_guard<std::mutex> lock(evidence_->mutex);
+    if (before_lift_) evidence_->before_lift = *last;
+    else evidence_->after_lift = *last;
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+
+  ActionResult cancel() override { return {ActionStatus::SUCCEEDED, std::nullopt}; }
+
+private:
+  State state_;
+  bool before_lift_;
+  std::shared_ptr<IWorldObserver> observer_;
+  std::shared_ptr<PhysicalGraspEvidence> evidence_;
+};
+
+class WorldZMicroLiftAction final : public IStateExecutor
+{
+public:
+  explicit WorldZMicroLiftAction(std::shared_ptr<IWorldZMicroLift> micro_lift)
+  : micro_lift_(std::move(micro_lift)) {}
+
+  ActionResult execute(const ExecutionContext & context) override
+  {
+    if (!micro_lift_) {
+      return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+              "MICRO_LIFT_DEPENDENCY_MISSING", "World-Z micro-lift requires the MoveIt boundary", {}}};
+    }
+    return micro_lift_->executeWorldZMicroLift(context.before.tcp_pose_world, 0.001);
+  }
+  ActionResult cancel() override
+  {
+    return micro_lift_ ? micro_lift_->cancelWorldZMicroLift()
+                       : ActionResult{ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+                           "MICRO_LIFT_DEPENDENCY_MISSING", "World-Z micro-lift requires the MoveIt boundary", {}}};
+  }
+private:
+  std::shared_ptr<IWorldZMicroLift> micro_lift_;
+};
+
+class VerifyPhysicalGraspAction final : public IStateExecutor
+{
+public:
+  VerifyPhysicalGraspAction(std::shared_ptr<PhysicalGraspEvidence> evidence,
+                            PhysicalGraspValidator validator, PhysicalGraspGeometry geometry)
+  : evidence_(std::move(evidence)), validator_(std::move(validator)), geometry_(geometry) {}
+
+  ActionResult execute(const ExecutionContext &) override
+  {
+    if (!evidence_) {
+      return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+              "PHYSICAL_GRASP_EVIDENCE_DEPENDENCY_MISSING", "Physical-grasp evidence store is missing", {}}};
+    }
+    std::lock_guard<std::mutex> lock(evidence_->mutex);
+    if (!evidence_->before_lift || !evidence_->after_lift) {
+      return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
+              "PHYSICAL_GRASP_EVIDENCE_INCOMPLETE", "Both stable windows are required before attachment", {}}};
+    }
+    auto result = validator_.evaluate(*evidence_->before_lift, *evidence_->after_lift, geometry_);
+    evidence_->result = result;
+    if (!result.passed) return {ActionStatus::FAILED, result.failure};
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+  ActionResult cancel() override { return {ActionStatus::SUCCEEDED, std::nullopt}; }
+private:
+  std::shared_ptr<PhysicalGraspEvidence> evidence_;
+  PhysicalGraspValidator validator_;
+  PhysicalGraspGeometry geometry_;
+};
+
+class PhysicalGraspContract final : public TransitionContractRegistry::ITransitionContract
+{
+public:
+  ValidationResult validatePrecondition(const WorldSnapshot & snapshot) const override
+  {
+    ValidationResult result{true, {}, {}};
+    if (!snapshot.fresh || !snapshot.arm_stationary || !snapshot.gazebo_task_object_pose_world) {
+      addFailure(result, FailureCategory::OBSERVATION, "PHYSICAL_GRASP_PRECONDITION_INVALID",
+                 "Physical-grasp gate requires fresh stationary TCP and Gazebo cup evidence");
+    }
+    result.ok = result.failures.empty();
+    return result;
+  }
+  ValidationResult validate(const WorldSnapshot &, const WorldSnapshot & after,
+                            const ActionResult & action) const override
+  {
+    ValidationResult result{true, {}, {}};
+    if (action.status != ActionStatus::SUCCEEDED) {
+      addFailure(result, FailureCategory::POSTCONDITION, "PHYSICAL_GRASP_ACTION_FAILED",
+                 "Physical-grasp gate action did not succeed");
+    }
+    if (!after.fresh || !after.gazebo_task_object_pose_world) {
+      addFailure(result, FailureCategory::OBSERVATION, "PHYSICAL_GRASP_POSTCONDITION_INVALID",
+                 "Physical-grasp gate requires fresh post-action cup evidence");
+    }
+    result.ok = result.failures.empty();
+    return result;
+  }
+};
+
+void registerPhysicalGrasp(SO101PickPlaceRuntimeRegistries & runtime,
+                           const SO101PickPlaceRuntimeDependencies & dependencies,
+                           const SO101PickPlaceRuntimeConfig & config)
+{
+  if (!dependencies.physical_observer || !dependencies.micro_lift) return;
+  const auto evidence = std::make_shared<PhysicalGraspEvidence>();
+  const PhysicalGraspGeometry geometry{
+    config.profile.table_pose.z + config.profile.table_size[2] * 0.5,
+    -config.profile.task_object_height * 0.5};
+  runtime.actions.registerExecutor(State::WAIT_GRASP_STABLE,
+    std::make_shared<StablePhysicalGraspAction>(State::WAIT_GRASP_STABLE, true,
+      dependencies.physical_observer, evidence));
+  runtime.actions.registerExecutor(State::MICRO_LIFT,
+    std::make_shared<WorldZMicroLiftAction>(dependencies.micro_lift));
+  runtime.actions.registerExecutor(State::WAIT_MICRO_LIFT_STABLE,
+    std::make_shared<StablePhysicalGraspAction>(State::WAIT_MICRO_LIFT_STABLE, false,
+      dependencies.physical_observer, evidence));
+  runtime.actions.registerExecutor(State::VERIFY_PHYSICAL_GRASP,
+    std::make_shared<VerifyPhysicalGraspAction>(evidence, PhysicalGraspValidator{}, geometry));
+  for (const auto state : kPhysicalGraspStates) {
+    runtime.contracts.registerContract({state, TransitionTable::resolve(state, ActionStatus::SUCCEEDED)},
+      std::make_shared<PhysicalGraspContract>());
+  }
+  runtime.contracts.registerContract({State::VALIDATION_FAILED, State::ATTACH_GAZEBO},
+    std::make_shared<PhysicalGraspContract>());
+}
+
 std::optional<Failure> missingDependencyFailure(
   const SO101PickPlaceRuntimeDependencies & dependencies)
 {
@@ -448,6 +655,8 @@ std::optional<Failure> missingDependencyFailure(
   if (!dependencies.recovery_gazebo_detach) missing.emplace_back("recovery_gazebo_detach");
   if (!dependencies.motion_policy) missing.emplace_back("motion_policy");
   if (!dependencies.motion) missing.emplace_back("motion");
+  if (!dependencies.micro_lift) missing.emplace_back("micro_lift");
+  if (!dependencies.physical_observer) missing.emplace_back("physical_observer");
   if (missing.empty()) return std::nullopt;
   std::ostringstream message;
   message << "Production SO-101 runtime dependencies are missing:";
@@ -521,8 +730,6 @@ ObservationResult SO101MoveItWorldObserver::observe()
         stationary = false;
       }
     }
-    stationary = stationary &&
-                 std::abs(*current->gripper_velocity) <= profile_.q6_velocity_tolerance;
     if (previous && std::abs(*previous->gripper_position - *current->gripper_position) >
                       config_.joint_settle_tolerance) {
       stationary = false;
@@ -545,23 +752,23 @@ ObservationResult SO101MoveItWorldObserver::observe()
     return {std::nullopt, observationFailure("MOVEIT_SCENE_EVIDENCE_INCOMPLETE",
                                              "Canonical table, pedestal, and finite TCP evidence are required")};
   }
-  if (scene->coke_in_world == scene->coke_attached) {
-    return {std::nullopt, observationFailure("MOVEIT_COKE_MEMBERSHIP_INCONSISTENT",
-                                             "Coke must be exactly world or attached in MoveIt")};
+  if (scene->task_object_in_world == scene->task_object_attached) {
+    return {std::nullopt, observationFailure("MOVEIT_TASK_OBJECT_MEMBERSHIP_INCONSISTENT",
+                                             "TaskObject must be exactly world or attached in MoveIt")};
   }
-  if ((scene->coke_in_world && (!scene->coke_world_pose || !finitePose(*scene->coke_world_pose))) ||
-      (scene->coke_attached && (!scene->attached_link || scene->touch_links.empty() ||
+  if ((scene->task_object_in_world && (!scene->task_object_world_pose || !finitePose(*scene->task_object_world_pose))) ||
+      (scene->task_object_attached && (!scene->attached_link || scene->touch_links.empty() ||
                                 !scene->attached_relative_pose ||
                                 !finitePose(*scene->attached_relative_pose) ||
                                 !scene->current_gripper_pose_world ||
                                 !finitePose(*scene->current_gripper_pose_world)))) {
-    return {std::nullopt, observationFailure("MOVEIT_COKE_POSE_EVIDENCE_INCOMPLETE",
-                                             "MoveIt Coke 6D pose and attachment metadata are incomplete")};
+    return {std::nullopt, observationFailure("MOVEIT_TASK_OBJECT_POSE_EVIDENCE_INCOMPLETE",
+                                             "MoveIt TaskObject 6D pose and attachment metadata are incomplete")};
   }
-  if (!scene->coke_attached &&
+  if (!scene->task_object_attached &&
       (scene->attached_link || !scene->touch_links.empty() || scene->attached_relative_pose)) {
-    return {std::nullopt, observationFailure("MOVEIT_COKE_MEMBERSHIP_INCONSISTENT",
-                                             "Detached Coke retains attachment metadata")};
+    return {std::nullopt, observationFailure("MOVEIT_TASK_OBJECT_MEMBERSHIP_INCONSISTENT",
+                                             "Detached TaskObject retains attachment metadata")};
   }
 
   previous = current;
@@ -583,9 +790,6 @@ ObservationResult SO101MoveItWorldObserver::observe()
             observationFailure("ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION",
                                "Gripper joint changed while MoveIt scene evidence was collected")};
   }
-  stationary = stationary &&
-               std::abs(*current->gripper_velocity) <= profile_.q6_velocity_tolerance;
-
   WorldSnapshot snapshot;
   snapshot.observed_at = current->received_at;
   snapshot.fresh = true;
@@ -600,13 +804,13 @@ ObservationResult SO101MoveItWorldObserver::observe()
   snapshot.gripper_open = *current->gripper_position >= profile_.q6_preopen - profile_.q6_tolerance;
   snapshot.moveit_world_object_poses[profile_.table_object] = *scene->table_world_pose;
   snapshot.moveit_world_object_poses[profile_.pedestal_object] = *scene->pedestal_world_pose;
-  if (scene->coke_world_pose) {
-    snapshot.moveit_world_object_poses[profile_.coke_model] = *scene->coke_world_pose;
+  if (scene->task_object_world_pose) {
+    snapshot.moveit_world_object_poses[profile_.task_object_id] = *scene->task_object_world_pose;
   }
-  snapshot.moveit_coke_attached = scene->coke_attached;
-  snapshot.moveit_coke_attached_link = scene->attached_link;
-  snapshot.moveit_coke_touch_links = scene->touch_links;
-  snapshot.moveit_coke_attached_relative_pose = scene->attached_relative_pose;
+  snapshot.moveit_task_object_attached = scene->task_object_attached;
+  snapshot.moveit_task_object_attached_link = scene->attached_link;
+  snapshot.moveit_task_object_touch_links = scene->touch_links;
+  snapshot.moveit_task_object_attached_relative_pose = scene->attached_relative_pose;
   snapshot.moveit_gripper_pose_world = scene->current_gripper_pose_world;
   return {std::move(snapshot), std::nullopt};
 }
@@ -631,6 +835,8 @@ SO101PickPlaceRuntimeRegistries makeSO101PickPlaceRuntimeRegistries(
   runtime.configuration_failure = missingDependencyFailure(dependencies);
   if (!dependencies.motion_policy || !dependencies.motion) return runtime;
 
+  registerPhysicalGrasp(runtime, dependencies, config);
+
   for (const auto state : kMotionStates) {
     const auto spec = dependencies.motion_policy->spec(state);
     if (!spec) {
@@ -651,7 +857,7 @@ SO101PickPlaceRuntimeRegistries makeSO101PickPlaceRuntimeRegistries(
   }
   if (runtime.configuration_failure) return runtime;
   for (const auto & [state, transitions] : TransitionTable::entries()) {
-    if (state == State::IDLE || isTerminal(state)) continue;
+    if (state == State::IDLE || isTerminal(state) || !isAction(state)) continue;
     if (!runtime.actions.findExecutor(state) ||
         !runtime.contracts.hasContract({state, transitions.succeeded})) {
       runtime.configuration_failure =

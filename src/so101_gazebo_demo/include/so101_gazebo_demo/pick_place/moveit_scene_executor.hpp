@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 
 #include "so101_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
 #include "so101_gazebo_demo/pick_place/state_action.hpp"
@@ -23,6 +24,7 @@ struct MoveItSceneConfig
   State state;
   MoveItSceneOperation operation;
   bool idempotent{false};
+  std::string task_object_id;
 };
 
 class MoveItSceneExecutor final : public IStateExecutor

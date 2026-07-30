@@ -26,9 +26,12 @@ struct MoveItSceneGeometry
   std::array<double, 3> table_size;
   std::string pedestal_id;
   std::array<double, 3> pedestal_size;
-  std::string coke_id;
-  double coke_height;
-  double coke_radius;
+  std::string task_object_id;
+  double task_object_height;
+  double task_object_outer_radius;
+  double task_object_wall_thickness;
+  double task_object_bottom_thickness;
+  int task_object_side_count;
 };
 
 struct MoveItAttachmentSpec
@@ -39,11 +42,11 @@ struct MoveItAttachmentSpec
 
 struct MoveItSceneState
 {
-  bool coke_in_world{false};
-  bool coke_attached{false};
+  bool task_object_in_world{false};
+  bool task_object_attached{false};
   std::string attached_link;
   std::vector<std::string> touch_links;
-  std::optional<Pose3d> coke_world_pose;
+  std::optional<Pose3d> task_object_world_pose;
   bool table_in_world{false};
   std::optional<Pose3d> table_world_pose;
   bool pedestal_in_world{false};
@@ -51,7 +54,7 @@ struct MoveItSceneState
 };
 
 [[nodiscard]] moveit_msgs::msg::CollisionObject
-makeCokeCollisionObject(const MoveItSceneGeometry & geometry, const Pose3d & pose);
+makeTaskObjectCollisionObject(const MoveItSceneGeometry & geometry, const Pose3d & pose);
 
 [[nodiscard]] moveit_msgs::msg::CollisionObject
 makeTableCollisionObject(const MoveItSceneGeometry & geometry, const Pose3d & pose);
@@ -63,9 +66,9 @@ class IMoveItSceneAdapter
 {
 public:
   virtual ~IMoveItSceneAdapter() = default;
-  [[nodiscard]] virtual ActionResult attachCoke(const MoveItAttachmentSpec & spec) = 0;
-  [[nodiscard]] virtual ActionResult detachCoke() = 0;
-  [[nodiscard]] virtual ActionResult upsertCokeWorldPose(const Pose3d & pose) = 0;
+  [[nodiscard]] virtual ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) = 0;
+  [[nodiscard]] virtual ActionResult detachTaskObject() = 0;
+  [[nodiscard]] virtual ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual ActionResult upsertTableWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual ActionResult upsertPedestalWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual std::optional<MoveItSceneState> observe() = 0;
@@ -78,9 +81,9 @@ public:
                      MoveItSceneGeometry geometry);
   ~MoveItSceneAdapter() override;
 
-  [[nodiscard]] ActionResult attachCoke(const MoveItAttachmentSpec & spec) override;
-  [[nodiscard]] ActionResult detachCoke() override;
-  [[nodiscard]] ActionResult upsertCokeWorldPose(const Pose3d & pose) override;
+  [[nodiscard]] ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) override;
+  [[nodiscard]] ActionResult detachTaskObject() override;
+  [[nodiscard]] ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override;
   [[nodiscard]] ActionResult upsertTableWorldPose(const Pose3d & pose) override;
   [[nodiscard]] ActionResult upsertPedestalWorldPose(const Pose3d & pose) override;
   [[nodiscard]] std::optional<MoveItSceneState> observe() override;

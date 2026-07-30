@@ -29,12 +29,12 @@ struct CurrentJointStateEvidence
 struct MotionPlanningSceneFacts
 {
   bool table_in_world{false};
-  bool coke_in_world{false};
-  bool coke_attached{false};
+  bool task_object_in_world{false};
+  bool task_object_attached{false};
   std::optional<std::string> attached_link;
   std::set<std::string> touch_links;
   std::optional<Pose3d> table_world_pose;
-  std::optional<Pose3d> coke_world_pose;
+  std::optional<Pose3d> task_object_world_pose;
   std::optional<Pose3d> attached_relative_pose;
   std::optional<Pose3d> current_gripper_pose_world;
   std::optional<Pose3d> current_tcp_pose_world;
@@ -80,6 +80,18 @@ public:
   {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
+};
+
+/// Executes a collision-aware Cartesian request whose displacement is expressed
+/// in the fixed world frame.  This deliberately avoids interpreting the 1 mm
+/// physical-grasp probe in the tool frame.
+class IWorldZMicroLift
+{
+public:
+  virtual ~IWorldZMicroLift() = default;
+  [[nodiscard]] virtual ActionResult executeWorldZMicroLift(
+    const Pose3d & current_tcp_world, double world_z_delta_m) = 0;
+  [[nodiscard]] virtual ActionResult cancelWorldZMicroLift() = 0;
 };
 
 class ProfiledJointMotionAdapter final : public IMoveItJointMotionAdapter

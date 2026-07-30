@@ -26,7 +26,7 @@ void usage()
                " [seeds] [gripper_q6]\n"
             << "  fk q1 q2 q3 q4 q5\n"
             << "  plan q1 q2 q3 q4 q5\n"
-            << "  fk-touch q1 q2 q3 q4 q5  # exact Coke/gripper,jaw evidence\n"
+            << "  fk-touch q1 q2 q3 q4 q5  # exact TaskObject/gripper,jaw evidence\n"
             << "  plan-touch q1 q2 q3 q4 q5  # request-scoped ACM, plan only\n"
             << "  clock\n";
 }
@@ -36,7 +36,7 @@ std::set<std::string> touchWhitelist()
   const auto & profile = spp::SO101Profile::canonical();
   std::set<std::string> result;
   for (const auto & link : profile.moveit_touch_links) {
-    result.insert(profile.coke_model + ":" + link);
+    result.insert(profile.task_object_id + ":" + link);
   }
   return result;
 }

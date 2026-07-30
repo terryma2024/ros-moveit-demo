@@ -54,12 +54,12 @@ spp::TrajectoryEvidenceInput input()
   value.planner_id = "RRTConnectkConfigDefault";
   value.start_state_stamp_nanoseconds = 4242000000ULL;
   value.collision_aware_planner = true;
-  value.allowed_touch_pairs = {"coke:gripper", "coke:jaw"};
+  value.allowed_touch_pairs = {"plastic_cup:gripper", "plastic_cup:jaw"};
   value.gripper_position = 0.707194871;
   return value;
 }
 
-TEST(SO101MotionEvidenceBuilder, PreservesPerPointAttachedCokeWorldPose)
+TEST(SO101MotionEvidenceBuilder, PreservesPerPointAttachedTaskObjectWorldPose)
 {
   RecordingStateEvaluator evaluator;
   evaluator.attached_pose = spp::Pose3d{0.2, -0.1, 0.4, 0.1, 0.2, 0.3, 0.9};
@@ -67,9 +67,9 @@ TEST(SO101MotionEvidenceBuilder, PreservesPerPointAttachedCokeWorldPose)
   ASSERT_TRUE(result.artifact);
   ASSERT_EQ(result.artifact->samples.size(), 3U);
   for (const auto & sample : result.artifact->samples) {
-    ASSERT_TRUE(sample.attached_coke_pose_world);
-    EXPECT_DOUBLE_EQ(sample.attached_coke_pose_world->x, 0.2);
-    EXPECT_DOUBLE_EQ(sample.attached_coke_pose_world->qz, 0.3);
+    ASSERT_TRUE(sample.attached_task_object_pose_world);
+    EXPECT_DOUBLE_EQ(sample.attached_task_object_pose_world->x, 0.2);
+    EXPECT_DOUBLE_EQ(sample.attached_task_object_pose_world->qz, 0.3);
   }
 }
 

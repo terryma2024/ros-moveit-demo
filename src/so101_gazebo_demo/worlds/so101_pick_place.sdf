@@ -25,7 +25,7 @@
         <scene>scene</scene>
         <ambient_light>0.4 0.4 0.4</ambient_light>
         <background_color>0.8 0.8 0.8</background_color>
-        <camera_pose>0.322 0.222 0.62 0 0.40 -2.30</camera_pose>
+        <camera_pose>0.4281 0.2175 0.4608 0 0.4 -2.3</camera_pose>
       </plugin>
 
       <plugin filename="GzSceneManager" name="Scene Manager">
@@ -206,36 +206,58 @@
       </link>
     </model>
 
-    <model name="coke">
-      <pose>0.02 -0.28 0.181 0 0 0</pose>
+    <model name="plastic_cup">
+      <pose>0.02 -0.28 0.165 0 0 0</pose>
       <link name="body">
         <inertial>
-          <mass>0.1</mass>
+          <mass>0.020</mass>
           <inertia>
-            <ixx>0.0005294</ixx>
-            <iyy>0.0005294</iyy>
-            <izz>0.0001906</izz>
+            <ixx>0.0000295</ixx>
+            <iyy>0.0000295</iyy>
+            <izz>0.0000320</izz>
           </inertia>
         </inertial>
-        <collision name="collision">
-          <geometry>
-            <cylinder><radius>0.033</radius><length>0.122</length></cylinder>
-          </geometry>
-        </collision>
-        <sensor name="coke_contact_sensor" type="contact">
-          <always_on>true</always_on>
-          <update_rate>200</update_rate>
-          <contact><collision>collision</collision></contact>
-        </sensor>
-        <visual name="visual">
-          <geometry>
-            <cylinder><radius>0.033</radius><length>0.122</length></cylinder>
-          </geometry>
-          <material>
-            <ambient>0.55 0.01 0.01 1</ambient>
-            <diffuse>0.80 0.02 0.02 1</diffuse>
-          </material>
-        </visual>
+        <collision name="wall_near"><pose>0 0.039 0.001 0 0 0</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_01"><pose>0.0195 0.033775 0.001 0 0 -0.523598776</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_02"><pose>0.033775 0.0195 0.001 0 0 -1.047197551</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_03"><pose>0.039 0 0.001 0 0 -1.570796327</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_04"><pose>0.033775 -0.0195 0.001 0 0 -2.094395102</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_05"><pose>0.0195 -0.033775 0.001 0 0 -2.617993878</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_opposite"><pose>0 -0.039 0.001 0 0 3.141592654</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_07"><pose>-0.0195 -0.033775 0.001 0 0 2.617993878</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_08"><pose>-0.033775 -0.0195 0.001 0 0 2.094395102</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_09"><pose>-0.039 0 0.001 0 0 1.570796327</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_10"><pose>-0.033775 0.0195 0.001 0 0 1.047197551</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="wall_11"><pose>-0.0195 0.033775 0.001 0 0 0.523598776</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry></collision>
+        <collision name="bottom"><pose>0 0 -0.044 0 0 0</pose><geometry><cylinder><radius>0.040</radius><length>0.002</length></cylinder></geometry></collision>
+
+        <sensor name="task_object_contact_wall_near" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_near</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_01" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_01</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_02" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_02</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_03" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_03</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_04" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_04</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_05" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_05</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_opposite" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_opposite</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_07" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_07</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_08" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_08</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_09" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_09</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_10" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_10</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_11" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_11</collision></contact></sensor>
+        <sensor name="task_object_contact_bottom" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>bottom</collision></contact></sensor>
+
+        <visual name="wall_near"><pose>0 0.039 0.001 0 0 0</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_01"><pose>0.0195 0.033775 0.001 0 0 -0.523598776</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_02"><pose>0.033775 0.0195 0.001 0 0 -1.047197551</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_03"><pose>0.039 0 0.001 0 0 -1.570796327</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_04"><pose>0.033775 -0.0195 0.001 0 0 -2.094395102</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_05"><pose>0.0195 -0.033775 0.001 0 0 -2.617993878</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_opposite"><pose>0 -0.039 0.001 0 0 3.141592654</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_07"><pose>-0.0195 -0.033775 0.001 0 0 2.617993878</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_08"><pose>-0.033775 -0.0195 0.001 0 0 2.094395102</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_09"><pose>-0.039 0 0.001 0 0 1.570796327</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_10"><pose>-0.033775 0.0195 0.001 0 0 1.047197551</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_11"><pose>-0.0195 0.033775 0.001 0 0 0.523598776</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="bottom"><pose>0 0 -0.044 0 0 0</pose><geometry><cylinder><radius>0.040</radius><length>0.002</length></cylinder></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
       </link>
     </model>
   </world>

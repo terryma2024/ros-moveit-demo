@@ -22,6 +22,7 @@ ActionResult sceneFailure(ActionStatus status, std::string code, std::string mes
 
 bool validConfiguration(const MoveItSceneConfig & config) noexcept
 {
+  if (config.task_object_id.empty()) return false;
   switch (config.operation) {
     case MoveItSceneOperation::ATTACH:
       return config.state == State::ATTACH_MOVEIT;
@@ -91,24 +92,24 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
   std::optional<Pose3d> pose;
   switch (config_.operation) {
     case MoveItSceneOperation::ATTACH:
-      command = adapter_->attachCoke(attachment_);
+      command = adapter_->attachTaskObject(attachment_);
       break;
     case MoveItSceneOperation::DETACH:
-      if (config_.idempotent && context.before.fresh && context.before.moveit_coke_attached &&
-          !*context.before.moveit_coke_attached && !context.before.moveit_coke_attached_link &&
-          context.before.moveit_coke_touch_links.empty() &&
-          context.before.moveit_world_object_poses.count("coke") == 1) {
+      if (config_.idempotent && context.before.fresh && context.before.moveit_task_object_attached &&
+          !*context.before.moveit_task_object_attached && !context.before.moveit_task_object_attached_link &&
+          context.before.moveit_task_object_touch_links.empty() &&
+          context.before.moveit_world_object_poses.count(config_.task_object_id) == 1) {
         return {ActionStatus::SUCCEEDED, std::nullopt};
       }
-      command = adapter_->detachCoke();
+      command = adapter_->detachTaskObject();
       break;
     case MoveItSceneOperation::SYNC:
-      if (!context.before.gazebo_coke_pose_world) {
-        return sceneFailure(ActionStatus::FAILED, "GAZEBO_COKE_POSE_MISSING",
-                            "Cannot synchronize MoveIt without an observed Gazebo Coke pose");
+      if (!context.before.gazebo_task_object_pose_world) {
+        return sceneFailure(ActionStatus::FAILED, "GAZEBO_TASK_OBJECT_POSE_MISSING",
+                            "Cannot synchronize MoveIt without an observed Gazebo TaskObject pose");
       }
-      pose = context.before.gazebo_coke_pose_world;
-      command = adapter_->upsertCokeWorldPose(*pose);
+      pose = context.before.gazebo_task_object_pose_world;
+      command = adapter_->upsertTaskObjectWorldPose(*pose);
       break;
   }
   if (command.status != ActionStatus::SUCCEEDED) {
@@ -137,17 +138,17 @@ ActionResult MoveItSceneExecutor::waitForConvergence(const std::optional<Pose3d>
       bool converged = false;
       switch (config_.operation) {
         case MoveItSceneOperation::ATTACH:
-          converged = state->coke_attached && !state->coke_in_world &&
+          converged = state->task_object_attached && !state->task_object_in_world &&
                       state->attached_link == attachment_.link_name &&
                       state->touch_links == attachment_.touch_links;
           break;
         case MoveItSceneOperation::DETACH:
-          converged = !state->coke_attached && state->coke_in_world &&
+          converged = !state->task_object_attached && state->task_object_in_world &&
                       state->attached_link.empty() && state->touch_links.empty();
           break;
         case MoveItSceneOperation::SYNC:
-          converged = !state->coke_attached && state->coke_in_world && pose &&
-                      state->coke_world_pose && poseMatches(*state->coke_world_pose, *pose);
+          converged = !state->task_object_attached && state->task_object_in_world && pose &&
+                      state->task_object_world_pose && poseMatches(*state->task_object_world_pose, *pose);
           break;
       }
       if (converged) {

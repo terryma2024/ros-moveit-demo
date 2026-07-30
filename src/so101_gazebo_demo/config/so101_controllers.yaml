@@ -1,6 +1,16 @@
+gz_ros_control:
+  ros__parameters:
+    # gz_ros2_control maps position error to a discrete joint velocity.
+    # Keep gain at 1.0: the Jazzy contract permits at most 1.0 without
+    # oscillation; the controller-manager rate below sets response time.
+    position_proportional_gain: 1.0
+
 controller_manager:
   ros__parameters:
-    update_rate: 10 # Hz
+    # position velocity = gain * position error * update_rate.  At gain 1.0,
+    # 1000 Hz matches Gazebo's measured 1 ms physics step without raising
+    # the stable gain.
+    update_rate: 1000 # Hz
 
     arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
@@ -29,8 +39,21 @@ arm_controller:
     state_interfaces:
       - position
 
-    open_loop_control: true
+    # Contact-critical DESCEND success must be evaluated against measured arm
+    # state; a commanded setpoint is not endpoint evidence.
+    open_loop_control: false
     allow_integration_in_goal_trajectories: true
+
+    constraints:
+      goal_time: 1.0
+      # Joint 1 reproducibly peaks near 1.6 mrad during the unloaded DESCEND,
+      # then settles within the independent 0.25 mrad endpoint gate.  Allow
+      # that bounded transient without weakening endpoint evidence.
+      "1": {trajectory: 0.0020, goal: 0.00025}
+      "2": {trajectory: 0.0015, goal: 0.00025}
+      "3": {trajectory: 0.0015, goal: 0.00025}
+      "4": {trajectory: 0.0015, goal: 0.00025}
+      "5": {trajectory: 0.0015, goal: 0.00025}
 
 gripper_controller:
   ros__parameters:
@@ -44,5 +67,15 @@ gripper_controller:
     state_interfaces:
       - position
 
-    open_loop_control: true
+    # The joint-6 action result is evidence of physical convergence only when
+    # the controller evaluates its trajectory against the measured position.
+    open_loop_control: false
     allow_integration_in_goal_trajectories: true
+
+    constraints:
+      # Permit a bounded settling interval, but reject a terminal action whose
+      # measured jaw position remains materially away from the commanded q6.
+      goal_time: 1.0
+      "6":
+        trajectory: 0.05
+        goal: 0.001

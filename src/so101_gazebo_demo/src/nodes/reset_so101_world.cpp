@@ -45,23 +45,28 @@ int main(int argc, char * argv[])
     node->declare_parameter<double>("gripper_trajectory_seconds", 1.0);
   const auto gripper_action_timeout_seconds =
     node->declare_parameter<double>("gripper_action_timeout_seconds", 8.0);
+  const auto arm_home_position_tolerance =
+    node->declare_parameter<double>("arm_home_position_tolerance", 0.002);
 
   try {
     const pick_place::MoveItSceneGeometry geometry{profile.world_frame, profile.table_object,
                                                    profile.table_size, profile.pedestal_object,
-                                                   profile.pedestal_size, profile.coke_model,
-                                                   profile.coke_height, profile.coke_radius};
+                                                   profile.pedestal_size, profile.task_object_id,
+                                                   profile.task_object_height, profile.task_object_outer_radius,
+                                                   profile.task_object_wall_thickness,
+                                                   profile.task_object_bottom_thickness,
+                                                   profile.task_object_side_count};
     auto moveit =
       std::make_shared<pick_place::MoveItSceneAdapter>(node, profile.planning_group, geometry);
     auto gazebo = std::make_shared<pick_place::GazeboResetAdapter>(
-      profile.gazebo_world, profile.coke_model, profile.detach_topic,
+      profile.gazebo_world, profile.task_object_id, profile.detach_topic,
       profile.attachment_state_topic, gazebo_observation_timeout_seconds,
       service_timeout_ms > 0 ? static_cast<unsigned int>(service_timeout_ms) : 0U);
     auto joints = std::make_shared<pick_place::MoveItJointPlanningBoundary>(
       node, profile, "RRTConnectkConfigDefault", arm_velocity_scaling,
       arm_acceleration_scaling, joint_state_timeout_seconds);
     auto arm = std::make_shared<pick_place::MoveGroupArmHomePlanningBoundary>(
-      node, profile.planning_group, profile.q6_tolerance,
+      node, profile.planning_group, arm_home_position_tolerance,
       arm_velocity_scaling, arm_acceleration_scaling);
     auto gripper_client = std::make_shared<pick_place::RosTrajectoryActionClient>(
       node, profile.gripper_action);
@@ -70,14 +75,16 @@ int main(int argc, char * argv[])
     auto robot = std::make_shared<pick_place::MoveItRobotHomeResetAdapter>(
       arm, joints, gripper, profile);
     pick_place::WorldResetConfig config{
-      profile.table_pose, profile.pedestal_pose, profile.coke_pose,
+      profile.table_pose, profile.pedestal_pose, profile.task_object_pose,
       timeout_seconds, poll_interval_seconds, 0.002, 0.02};
     config.arm_joints = profile.arm_joints;
     config.arm_home_positions = profile.arm_home_positions;
     config.gripper_joint = profile.gripper_joint;
     config.q6_release_position = profile.q6_full_open;
-    config.q6_home_position = profile.q6_home;
-    config.joint_position_tolerance = profile.q6_tolerance;
+    config.q6_safe_lower = profile.q6_safe_lower;
+    config.q6_home_position = profile.q6_safe_lower;
+    config.arm_joint_position_tolerance = arm_home_position_tolerance;
+    config.gripper_position_tolerance = profile.q6_tolerance;
     config.joint_velocity_tolerance = profile.q6_velocity_tolerance;
     pick_place::WorldResetCoordinator resetter(gazebo, moveit, robot, config);
     const auto result = resetter.reset();

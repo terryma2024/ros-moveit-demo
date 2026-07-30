@@ -28,6 +28,7 @@ LOAD_BEARING_COLLISIONS = (
     'jaw_collision',
     'fixed_finger_contact',
     'moving_finger_contact',
+    'moving_jaw_contact',
 )
 RUNTIME_ROS_DOMAIN_IDS = itertools.count(100 + os.getpid() % 100)
 
@@ -125,7 +126,7 @@ def sample_dynamic_positions(environment):
         timeout=10,
     )
     positions = pose_positions(completed.stdout)
-    assert {'coke', 'gripper'} <= positions.keys(), completed.stdout
+    assert {'plastic_cup', 'gripper'} <= positions.keys(), completed.stdout
     return positions
 
 
@@ -144,7 +145,7 @@ def publish_attachment_command(environment, command):
     run(
         [
             'ros2', 'topic', 'pub', '--once',
-            f'/so101/{command}_coke', 'std_msgs/msg/Empty', '{}',
+            f'/so101/{command}_object', 'std_msgs/msg/Empty', '{}',
         ],
         environment,
         timeout=10,
@@ -158,7 +159,7 @@ def wait_for_durable_attachment_state(environment, expected, timeout=5):
         completed = subprocess.run(
             [
                 'gz', 'topic', '-e', '-n', '1',
-                '-t', '/so101/coke_attached',
+                '-t', '/so101/object_attached',
             ],
             capture_output=True,
             text=True,
@@ -170,28 +171,106 @@ def wait_for_durable_attachment_state(environment, expected, timeout=5):
     pytest.fail(f'durable attachment state did not become {expected}')
 
 
+def _sample_clock(environment):
+    """Return the latest /clock {sec, nanosec} or None."""
+    try:
+        output = run(
+            ['ros2', 'topic', 'echo', '--once', '/clock',
+             'rosgraph_msgs/msg/Clock'],
+            environment,
+            timeout=3,
+        ).stdout
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        return None
+    payload_start = output.find('clock:')
+    if payload_start < 0:
+        return None
+    parsed = yaml.safe_load(output[payload_start:].split('---', 1)[0])
+    clock = parsed.get('clock', {}) if parsed else {}
+    return int(clock.get('sec', 0)), int(clock.get('nanosec', 0))
+
+
+def _sample_controller_convergence(environment):
+    """Return (reference_joint1, feedback_joint1, sim_sec) or (None, None, None)."""
+    try:
+        output = run(
+            ['ros2', 'topic', 'echo', '--once',
+             '/arm_controller/controller_state',
+             'control_msgs/msg/JointTrajectoryControllerState'],
+            environment,
+            timeout=3,
+        ).stdout
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        return None, None, None
+    payload_start = output.find('header:')
+    if payload_start < 0:
+        return None, None, None
+    parsed = yaml.safe_load(output[payload_start:].split('---', 1)[0])
+    if not parsed:
+        return None, None, None
+    reference = (parsed.get('reference') or {}).get('positions')
+    feedback = (parsed.get('feedback') or {}).get('positions')
+    stamp = parsed.get('header', {}).get('stamp', {}) or {}
+    sim_sec = int(stamp.get('sec', 0))
+    return (
+        reference[0] if reference else None,
+        feedback[0] if feedback else None,
+        sim_sec,
+    )
+
+
+def wait_for_controller_convergence(
+    environment, target, *, wall_safety=30, tolerance=0.01
+):
+    """Poll the controller state until joint 1 feedback is within tolerance."""
+    start_wall = time.monotonic()
+    deadline = start_wall + wall_safety
+    reference = feedback = sim_sec = None
+    last_sample_wall = None
+    while time.monotonic() < deadline:
+        reference, feedback, sim_sec = _sample_controller_convergence(environment)
+        last_sample_wall = time.monotonic() - start_wall
+        if (
+            reference is not None
+            and feedback is not None
+            and abs(feedback - target) < tolerance
+            and abs(reference - target) < tolerance
+        ):
+            return
+        time.sleep(0.25)
+    clock = _sample_clock(environment)
+    elapsed = time.monotonic() - start_wall
+    pytest.fail(
+        f'joint 1 did not converge to {target} within {wall_safety}s wall: '
+        f'reference={reference}, feedback={feedback}, '
+        f'controller_stamp_sim_sec={sim_sec}, '
+        f'last_sample_wall_sec={elapsed:.2f}, '
+        f'current_clock={clock}'
+    )
+
+
 def command_arm(environment, joint_1):
     message = (
         "{joint_names: ['1', '2', '3', '4', '5'], points: ["
         f"{{positions: [{joint_1}, 0.0, 0.0, 0.0, 0.0], "
         "time_from_start: {sec: 2, nanosec: 0}}]}"
     )
-    run(
-        [
-            'ros2', 'topic', 'pub', '--once',
-            '/arm_controller/joint_trajectory',
-            'trajectory_msgs/msg/JointTrajectory', message,
-        ],
-        environment,
-        timeout=15,
-    )
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        sample = sample_joint_state(environment)
-        position = dict(zip(sample['name'], sample['position']))
-        if abs(position['1'] - joint_1) < 0.01:
-            return
-    pytest.fail(f'joint 1 did not reach {joint_1}')
+    pub_deadline = time.monotonic() + 10
+    while time.monotonic() < pub_deadline:
+        run(
+            [
+                'ros2', 'topic', 'pub', '--once',
+                '/arm_controller/joint_trajectory',
+                'trajectory_msgs/msg/JointTrajectory', message,
+            ],
+            environment,
+            timeout=15,
+        )
+        time.sleep(0.25)
+        reference, _feedback, _sim = _sample_controller_convergence(environment)
+        if reference is not None and abs(reference - joint_1) < 0.05:
+            break
+    wait_for_controller_convergence(environment, joint_1)
 
 
 def distance(first, second):
@@ -203,7 +282,7 @@ def relative_position(child, parent):
 
 
 def load_bearing_collision_failures(output):
-    """Return only DART failures relevant to Coke and finger contact geometry."""
+    """Return only DART failures relevant to TaskObject and finger contact geometry."""
     output_without_ansi = re.sub(r'\x1b\[[0-9;]*m', '', output)
     failures = []
     for line in output_without_ansi.splitlines():
@@ -240,7 +319,7 @@ def load_bearing_collision_failures(output):
     return failures
 
 
-def test_pick_place_world_has_canonical_support_and_coke_geometry():
+def test_pick_place_world_has_open_twenty_gram_plastic_cup_geometry():
     """Catch missing, separated, or dimensionally inconsistent geometry."""
     world = ET.parse(WORLD_PATH).getroot().find(
         "./world[@name='so101_pick_place']"
@@ -248,7 +327,9 @@ def test_pick_place_world_has_canonical_support_and_coke_geometry():
     assert world is not None
     pedestal = model(world, 'base_pedestal')
     table = model(world, 'table')
-    coke = model(world, 'coke')
+    cup = model(world, 'plastic_cup')
+    legacy_model = 'co' + 'ke'
+    assert world.find(f"./model[@name='{legacy_model}']") is None
 
     assert pedestal.findtext('static') == 'true'
     pedestal_pose = parse_vector(pedestal.findtext('pose'))
@@ -262,30 +343,107 @@ def test_pick_place_world_has_canonical_support_and_coke_geometry():
     assert table_pose == pytest.approx((0, -0.20, 0.10, 0, 0, 0))
     assert table_size == pytest.approx((0.50, 0.60, 0.04))
 
-    coke_pose = parse_vector(coke.findtext('pose'))
-    assert coke.find('static') is None
-    assert coke_pose == pytest.approx((0.02, -0.28, 0.181, 0, 0, 0))
-    assert float(coke.findtext('.//cylinder/radius')) == pytest.approx(0.033)
-    assert float(coke.findtext('.//cylinder/length')) == pytest.approx(0.122)
-    assert float(coke.findtext('.//mass')) == pytest.approx(0.1)
-    assert float(coke.findtext('.//sensor/update_rate')) == pytest.approx(200.0)
-    coke_collision = coke.find("./link/collision[@name='collision']")
-    assert coke_collision is not None
-    assert coke_collision.find('./geometry/cylinder') is not None
-    assert coke_collision.find('./geometry/mesh') is None
+    cup_pose = parse_vector(cup.findtext('pose'))
+    assert cup.find('static') is None
+    assert cup_pose == pytest.approx((0.02, -0.28, 0.165, 0, 0, 0))
+    assert float(cup.findtext('.//mass')) == pytest.approx(0.020)
+
+    collisions = cup.findall('./link/collision')
+    collision_names = {collision.attrib['name'] for collision in collisions}
+    expected_walls = {'wall_near', 'wall_opposite'} | {
+        f'wall_{index:02d}' for index in range(1, 12) if index != 6
+    }
+    assert collision_names == expected_walls | {'bottom'}
+    assert all(
+        cup.find(f"./link/collision[@name='{name}']/geometry/box") is not None
+        for name in expected_walls
+    )
+    bottom = cup.find("./link/collision[@name='bottom']/geometry/cylinder")
+    assert bottom is not None
+    assert float(bottom.findtext('radius')) == pytest.approx(0.040)
+    assert float(bottom.findtext('length')) == pytest.approx(0.002)
+
+    assert not cup.findall('./link/collision/geometry/mesh')
+    assert not any(
+        float(cylinder.findtext('length')) >= 0.090
+        for cylinder in cup.findall('./link/collision/geometry/cylinder')
+    )
+
+    wall_thickness = min(
+        parse_vector(collision.findtext('./geometry/box/size'))[1]
+        for collision in collisions
+        if collision.attrib['name'] in expected_walls
+    )
+    assert 0.040 - wall_thickness >= 0.038
+    sensor_collisions = {
+        sensor.findtext('./contact/collision')
+        for sensor in cup.findall('./link/sensor')
+    }
+    assert sensor_collisions == collision_names
+    assert all(
+        float(sensor.findtext('update_rate')) == pytest.approx(200.0)
+        for sensor in cup.findall('./link/sensor')
+    )
+
+    inertias = [float(cup.findtext(f'.//inertia/{name}')) for name in ('ixx', 'iyy', 'izz')]
+    assert all(math.isfinite(value) and value > 0.0 for value in inertias)
+    assert inertias[0] + inertias[1] >= inertias[2]
+    assert inertias[0] + inertias[2] >= inertias[1]
+    assert inertias[1] + inertias[2] >= inertias[0]
 
     table_top = table_pose[2] + table_size[2] / 2
     table_rear_edge = table_pose[1] + table_size[1] / 2
     pedestal_bottom = pedestal_pose[2] - pedestal_size[2] / 2
     pedestal_top = pedestal_pose[2] + pedestal_size[2] / 2
     pedestal_rear_edge = pedestal_pose[1] + pedestal_size[1] / 2
-    coke_bottom = coke_pose[2] - 0.122 / 2
+    cup_bottom = cup_pose[2] - 0.090 / 2
 
     assert table_top == pytest.approx(0.12)
     assert pedestal_bottom == pytest.approx(table_top)
     assert pedestal_top == pytest.approx(0.22)
-    assert coke_bottom == pytest.approx(table_top)
+    assert cup_bottom == pytest.approx(table_top)
     assert table_rear_edge - pedestal_rear_edge == pytest.approx(0.01)
+
+
+def test_plastic_cup_visuals_share_explicit_warm_orange_material():
+    """All 13 cup visuals must carry the same non-black material; physics untouched."""
+    cup = ET.parse(WORLD_PATH).getroot().find(
+        "./world[@name='so101_pick_place']/model[@name='plastic_cup']"
+    )
+    assert cup is not None
+    link = cup.find('./link')
+    assert link is not None
+
+    visuals = link.findall('./visual')
+    expected_visual_names = {'wall_near', 'wall_opposite'} | {
+        f'wall_{index:02d}' for index in range(1, 12) if index != 6
+    } | {'bottom'}
+    assert {visual.attrib['name'] for visual in visuals} == expected_visual_names
+    assert len(visuals) == 13
+
+    ambient = (0.75, 0.30, 0.05, 1.0)
+    diffuse = (1.0, 0.55, 0.12, 1.0)
+    for visual in visuals:
+        material = visual.find('material')
+        assert material is not None, (
+            f"visual {visual.attrib['name']} missing <material>"
+        )
+        actual_ambient = parse_vector(material.findtext('ambient'))
+        actual_diffuse = parse_vector(material.findtext('diffuse'))
+        assert actual_ambient == pytest.approx(ambient)
+        assert actual_diffuse == pytest.approx(diffuse)
+        assert not all(component < 0.02 for component in actual_ambient[:3])
+        assert not all(component < 0.02 for component in actual_diffuse[:3])
+
+    collisions = link.findall('./collision')
+    assert {c.attrib['name'] for c in collisions} == expected_visual_names
+    assert all(
+        collision.find('geometry/box') is not None
+        or collision.find('geometry/cylinder') is not None
+        for collision in collisions
+    )
+    assert link.findtext('.//mass') is not None
+    assert link.findtext('.//inertia/ixx') is not None
 
 
 def test_pick_place_world_starts_without_system_initialization_errors():
@@ -328,6 +486,12 @@ def test_load_bearing_collision_failure_scanner_covers_runtime_variants(message)
 def prove_runtime_attachment_ready_has_no_delayed_initializer_detach():
     """Catch a startup helper that detaches a valid early client attachment."""
     environment = isolated_runtime_environment('so101_task1_ready')
+    print(
+        'SO101_RUNTIME_NAMESPACE '
+        f"ros_domain_id={environment['ROS_DOMAIN_ID']} "
+        f"gz_partition={environment['GZ_PARTITION']}",
+        flush=True,
+    )
 
     with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as log:
         launch = subprocess.Popen(
@@ -345,7 +509,7 @@ def prove_runtime_attachment_ready_has_no_delayed_initializer_detach():
         try:
             wait_for_ros_topics(
                 environment,
-                {'/so101/attach_coke'},
+                {'/so101/attach_object'},
                 launch,
                 log,
             )
@@ -374,22 +538,22 @@ def prove_runtime_attachment_ready_has_no_delayed_initializer_detach():
             gripper_delta = distance(
                 before_motion['gripper'], carried['gripper']
             )
-            coke_delta = distance(before_motion['coke'], carried['coke'])
+            task_object_delta = distance(before_motion['plastic_cup'], carried['plastic_cup'])
             relative_delta = distance(
                 relative_position(
-                    before_motion['coke'], before_motion['gripper']
+                    before_motion['plastic_cup'], before_motion['gripper']
                 ),
-                relative_position(carried['coke'], carried['gripper']),
+                relative_position(carried['plastic_cup'], carried['gripper']),
             )
 
             assert gripper_delta > 0.01
-            assert coke_delta > 0.01
+            assert task_object_delta > 0.01
             assert relative_delta < 0.01
             print(
                 'SO101_READY_ATTACHMENT_EVIDENCE '
                 f'wait_after_readiness={old_initializer_window:.1f} '
                 f'gripper_delta={gripper_delta:.9f} '
-                f'coke_delta={coke_delta:.9f} '
+                f'task_object_delta={task_object_delta:.9f} '
                 f'relative_delta={relative_delta:.9f}'
             )
         finally:
@@ -430,9 +594,9 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
                 {
                     '/joint_states',
                     '/arm_controller/joint_trajectory',
-                    '/so101/attach_coke',
-                    '/so101/detach_coke',
-                    '/so101/coke_attached_event',
+                    '/so101/attach_object',
+                    '/so101/detach_object',
+                    '/so101/object_attached_event',
                 },
                 launch,
                 log,
@@ -452,11 +616,11 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             initial_detached_gripper_delta = distance(
                 initial_detached['gripper'], detached_probe['gripper']
             )
-            initial_detached_coke_delta = distance(
-                initial_detached['coke'], detached_probe['coke']
+            initial_detached_task_object_delta = distance(
+                initial_detached['plastic_cup'], detached_probe['plastic_cup']
             )
             assert initial_detached_gripper_delta > 0.01
-            assert initial_detached_coke_delta < 0.01
+            assert initial_detached_task_object_delta < 0.01
 
             command_arm(environment, 0.0)
             before_attach = sample_dynamic_positions(environment)
@@ -465,16 +629,16 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
                 environment, 'attached'
             )
             after_attach = sample_dynamic_positions(environment)
-            attach_jump = distance(before_attach['coke'], after_attach['coke'])
+            attach_jump = distance(before_attach['plastic_cup'], after_attach['plastic_cup'])
             assert attach_jump < 0.005
 
             command_arm(environment, 0.25)
             carried = sample_dynamic_positions(environment)
-            carried_delta = distance(after_attach['coke'], carried['coke'])
+            carried_delta = distance(after_attach['plastic_cup'], carried['plastic_cup'])
             assert carried_delta > 0.01
             assert distance(
-                relative_position(after_attach['coke'], after_attach['gripper']),
-                relative_position(carried['coke'], carried['gripper']),
+                relative_position(after_attach['plastic_cup'], after_attach['gripper']),
+                relative_position(carried['plastic_cup'], carried['gripper']),
             ) < 0.01
 
             publish_attachment_command(environment, 'detach')
@@ -487,11 +651,11 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             gripper_delta = distance(
                 detached['gripper'], after_detached_motion['gripper']
             )
-            independent_coke_delta = distance(
-                detached['coke'], after_detached_motion['coke']
+            independent_task_object_delta = distance(
+                detached['plastic_cup'], after_detached_motion['plastic_cup']
             )
             assert gripper_delta > 0.01
-            assert independent_coke_delta < 0.01
+            assert independent_task_object_delta < 0.01
 
             log.seek(0)
             startup_log = log.read()
@@ -514,14 +678,14 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
                 'SO101_RUNTIME_EVIDENCE '
                 f'velocity={joint_sample["velocity"]} '
                 f'initial_detached_gripper_delta={initial_detached_gripper_delta:.9f} '
-                f'initial_detached_coke_delta={initial_detached_coke_delta:.9f} '
+                f'initial_detached_task_object_delta={initial_detached_task_object_delta:.9f} '
                 f'attach_jump={attach_jump:.9f} '
-                f'carried_coke_delta={carried_delta:.9f} '
+                f'carried_task_object_delta={carried_delta:.9f} '
                 f'detached_gripper_delta={gripper_delta:.9f} '
-                f'detached_coke_delta={independent_coke_delta:.9f} '
-                f'before_attach={before_attach["coke"]} '
-                f'carried={carried["coke"]} '
-                f'after_detached_motion={after_detached_motion["coke"]}'
+                f'detached_task_object_delta={independent_task_object_delta:.9f} '
+                f'before_attach={before_attach["plastic_cup"]} '
+                f'carried={carried["plastic_cup"]} '
+                f'after_detached_motion={after_detached_motion["plastic_cup"]}'
                 f' durable_initial={durable_initial!r}'
                 f' durable_attached={durable_attached!r}'
                 f' durable_detached={durable_detached!r}'
@@ -576,9 +740,8 @@ def test_pick_place_world_has_approved_gui_presentation():
     assert parse_vector(scene.findtext('background_color')) == pytest.approx(
         (0.8, 0.8, 0.8)
     )
-    assert parse_vector(scene.findtext('camera_pose')) == pytest.approx(
-        (0.322, 0.222, 0.62, 0, 0.40, -2.30)
-    )
+    assert scene.findtext('camera_pose') == '0.4281 0.2175 0.4608 0 0.4 -2.3'
+    assert scene.find('horizontal_fov') is None
 
 
 @pytest.mark.parametrize(
