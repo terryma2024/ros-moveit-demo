@@ -151,8 +151,8 @@ test("Target YAML import clamps every joint to live safe limits and invalidates 
     buffer: Buffer.from(`version: 1\ntarget:\n  step_frame: WORLD\n  joints_rad: {"1": 0, "2": 0, "3": 9, "4": 0, "5": 0, "6": 0}\n  tcp: {frame_id: world, tcp_frame: so101_tcp, x_m: 0.1, y_m: 0.2, z_m: 0.3, roll_rad: 0, pitch_rad: 0, yaw_rad: 0}\n`),
   });
   await page.getByRole("tab", { name: "Joints" }).click();
-  await expect(page.getByLabel("joint 3 target")).toHaveValue("88.00021045914971");
-  await expect(page.getByText("Joint 3 clamped to 88.00° (2° safety margin).")).toBeVisible();
+  await expect(page.getByLabel("joint 3 target")).toHaveValue("89.50021045914973");
+  await expect(page.getByText("Joint 3 clamped to 89.50° (0.5° safety margin).")).toBeVisible();
   await expect(page.getByRole("button", { name: "Execute Arm" })).toBeDisabled();
   await expect(page.getByText(/PLAN_STALE_TARGET/)).toBeVisible();
 });

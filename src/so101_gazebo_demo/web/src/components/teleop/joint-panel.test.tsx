@@ -19,28 +19,28 @@ describe("JointPanel", () => {
     expect(screen.queryByRole("button", { name: "Execute planned" })).toBeNull();
   });
 
-  it("shows the two-degree safe range and clamps direct entry at the upper boundary", () => {
+  it("shows the half-degree safe range and clamps direct entry at the upper boundary", () => {
     const onEdit = vi.fn();
     const onClampNotice = vi.fn();
     render(<JointPanel joints={{ "3": { name: "3", position_rad: 0, velocity_rad_s: 0, lower_limit_rad: -1.74533, upper_limit_rad: 1.5708 } }} targets={{ "3": 0 }} leaseHeld plan={{ executable: false }} onEdit={onEdit} onClampNotice={onClampNotice} onPlan={vi.fn()} onExecute={vi.fn()} onExecuteGripper={vi.fn()} onExecuteAll={vi.fn()} onCancel={vi.fn()} />);
 
     const input = screen.getByRole("spinbutton", { name: "joint 3 target" }) as HTMLInputElement;
-    expect(input.min).toBe("-98.00004285756798");
-    expect(input.max).toBe("88.00021045914971");
-    expect(screen.getByText("Safe −98.00° to 88.00°")).toBeTruthy();
+    expect(input.min).toBe("-99.50004285756798");
+    expect(input.max).toBe("89.50021045914973");
+    expect(screen.getByText("Safe −99.50° to 89.50°")).toBeTruthy();
     fireEvent.change(input, { target: { value: "100" } });
-    expect(onEdit).toHaveBeenCalledWith("3", 1.5358934149601133);
-    expect(onClampNotice).toHaveBeenCalledWith("Joint 3 clamped to 88.00° (2° safety margin).");
+    expect(onEdit).toHaveBeenCalledWith("3", 1.5620733537400284);
+    expect(onClampNotice).toHaveBeenCalledWith("Joint 3 clamped to 89.50° (0.5° safety margin).");
   });
 
   it("clamps one-degree trims and disables editing when authoritative limits are absent", () => {
     const onEdit = vi.fn();
     const onClampNotice = vi.fn();
-    render(<JointPanel joints={{ "1": { name: "1", position_rad: 0, velocity_rad_s: 0, lower_limit_rad: -1, upper_limit_rad: 1 } }} targets={{ "1": 0.96 }} leaseHeld plan={{ executable: false }} onEdit={onEdit} onClampNotice={onClampNotice} onPlan={vi.fn()} onExecute={vi.fn()} onExecuteGripper={vi.fn()} onExecuteAll={vi.fn()} onCancel={vi.fn()} />);
+    render(<JointPanel joints={{ "1": { name: "1", position_rad: 0, velocity_rad_s: 0, lower_limit_rad: -1, upper_limit_rad: 1 } }} targets={{ "1": 0.99 }} leaseHeld plan={{ executable: false }} onEdit={onEdit} onClampNotice={onClampNotice} onPlan={vi.fn()} onExecute={vi.fn()} onExecuteGripper={vi.fn()} onExecuteAll={vi.fn()} onCancel={vi.fn()} />);
     const row1 = screen.getByRole("row", { name: /1 0\.00/ });
     fireEvent.click(within(row1).getByRole("button", { name: "+1°" }));
-    expect(onEdit).toHaveBeenCalledWith("1", 0.9650934149601134);
-    expect(onClampNotice).toHaveBeenCalledWith("Joint 1 clamped to 55.30° (2° safety margin).");
+    expect(onEdit).toHaveBeenCalledWith("1", 0.9912733537400283);
+    expect(onClampNotice).toHaveBeenCalledWith("Joint 1 clamped to 56.80° (0.5° safety margin).");
 
     const missing = screen.getByRole("spinbutton", { name: "joint 2 target" }) as HTMLInputElement;
     expect(missing.disabled).toBe(true);
