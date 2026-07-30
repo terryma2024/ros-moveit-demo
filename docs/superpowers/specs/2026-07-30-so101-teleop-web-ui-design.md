@@ -11,9 +11,10 @@ SO-101 Gazebo 抓取调试目前依赖命令行、临时 YAML、远程桌面和�
 - Web UI 使用 React、TypeScript、Vite 和 shadcn/ui；
 - 实时显示六关节、TCP Pose6D、碰撞、物体和 controller 状态；
 - 支持关节/TCP 微调、Plan、Execute、Attach、Detach、Home、Reset；
+- 支持正式 pick-place 状态机的单步执行、物理抓取验证和可审计的仿真强制继续；
 - 支持只截取 Gazebo 窗口及保存本地 YAML 参数快照。
 
-第一版明确不支持真实机械臂，不提供绕过碰撞检查或强制执行能力。
+第一版明确不支持真实机械臂。强制继续仅用于 Gazebo 调试，并被限制在显式的 validation override；不能绕过控制权、数据新鲜度、ROS/Gazebo/MoveIt readiness、命令互斥、执行器错误或陈旧 checkpoint。
 
 ## 2. 已确认的产品决策
 
@@ -32,6 +33,9 @@ SO-101 Gazebo 抓取调试目前依赖命令行、临时 YAML、远程桌面和�
 | TCP RPY 步长 | 每步 1 degree |
 | 参数保存 | 浏览器下载/加载 Mac 本地 YAML |
 | arm/gripper | joints 1-5 与 q6 分开执行，Execute All 顺序执行 |
+| pick-place | 复用现有 C++ 状态机及 checkpoint，支持 Next Step、Run、Pause/Stop、Reset Workflow |
+| 抓取验证 | Close 后稳定，Micro Lift 1 mm，再验证杯子离桌、跟随率和滑移，通过后才 Attach |
+| 强制继续 | 仅仿真、仅覆盖当前状态的 validation failure、要求二次确认并保留审计证据 |
 
 ## 3. 总体架构
 
@@ -74,7 +78,7 @@ FastAPI 同时提供：
 2. FastAPI event loop：负责网络请求与 WebSocket，不直接调用 ROS；
 3. command queue：串行执行所有会改变仿真状态的命令。
 
-Plan、Execute、Attach、Detach、Home、Reset 和 Repair 不能并发。读取 telemetry 和截图不获取写锁，但截图必须在 Gazebo 窗口唯一且可见时执行。
+Plan、Execute、pick-place Step/Run、Attach、Detach、Home、Reset 和 Repair 不能并发。读取 telemetry 和截图不获取写锁，但截图必须在 Gazebo 窗口唯一且可见时执行。
 
 ## 4. 网络与控制权
 
@@ -198,7 +202,16 @@ Plan 保存在 server 内存中，客户端不能上传轨迹。Plan 响应包�
 - control lease 转移；
 - telemetry 过期。
 
-Execute 只接受 server 中最新、未过期、无禁止碰撞的 plan。第一版不提供 force execute。
+普通 Execute 只接受 server 中最新、未过期、无禁止碰撞的 plan。
+
+`Force Continue` 不等同于无条件执行任意轨迹。它只适用于 pick-place 当前状态已经完成动作、但后置 validation 返回失败的情形。用户必须看到失败 code、证据值和预期阈值，输入确认并二次确认后，server 才能为该状态提交一次性 override。override 与 `command_id`、workflow run ID、状态、snapshot revision、失败证据和时间戳一起写入事件日志；进入下一状态后立即失效。以下条件永远不可 override：
+
+- control lease 缺失或已经转移；
+- telemetry、checkpoint 或 simulation session 陈旧；
+- Gazebo、MoveIt、controller 或 ROS action/service 不可用；
+- 当前有其他 mutation 命令；
+- 动作本身失败、Cancel 或执行器报错；
+- 请求跳过状态或复用其他状态的 override。
 
 ## 9. 碰撞与接触显示
 
@@ -225,6 +238,32 @@ MoveIt collision 与 Gazebo contact 不合并为一个结论。Gazebo depth 标�
 
 默认 selected object 为 `plastic_cup`。
 
+### 10.0 物理抓取验证
+
+正式抓取主路径在 Attach 前增加以下状态：
+
+```text
+CLOSE_GRIPPER
+  -> WAIT_GRASP_STABLE
+  -> MICRO_LIFT
+  -> WAIT_MICRO_LIFT_STABLE
+  -> VERIFY_PHYSICAL_GRASP
+  -> ATTACH_GAZEBO
+  -> ATTACH_MOVEIT
+  -> LIFT
+```
+
+`MICRO_LIFT` 默认命令 TCP 沿 world Z 上升 1 mm。两个稳定状态采用连续采样窗口，而不是固定 sleep；至少监视关节最大速度、杯子位置/姿态变化和样本年龄。`VERIFY_PHYSICAL_GRASP` 至少报告：
+
+- 杯底相对桌面的净间隙；
+- TCP 与杯子的 Z 位移及 cup-follow ratio；
+- 杯子 XY 滑移；
+- 杯子姿态变化；
+- 夹爪与杯子的 Gazebo contact pair；
+- 每项阈值、实测值和 PASS/FAIL。
+
+只有普通验证 PASS，或用户对该状态提交一次性 Force Continue 后，才进入 Attach。Attach 的定位是把已经通过物理验证的抓取转成任务级约束，而不是代替抓取。
+
 ### 10.1 Attach Object
 
 1. 验证 object 未 attached、telemetry 新鲜和当前状态允许 attach；
@@ -250,6 +289,19 @@ MoveIt attach 失败且 Gazebo attach 已成功时，有限回滚 Gazebo attachm
 以 Gazebo object pose/physical attachment 为物理事实源，以 MoveIt world/attached membership 为规划事实源。Repair 根据显式规则恢复一致，不隐藏部分失败。
 
 主界面只提供高层 Attach/Detach。单独操作 Gazebo 或 MoveIt 的底层命令仅位于 Advanced Diagnostics，且要求二次确认。
+
+### 10.4 Pick-place 单步控制
+
+Web UI 直接驱动现有 C++ pick-place 状态机及其 checkpoint，不复制一套前端状态转换表。界面提供：
+
+- `Start New Workflow`：创建绑定 simulation session 的 run ID；
+- `Next Step`：只执行 checkpoint 指定的下一个合法状态；
+- `Run`：连续执行，每个 validation gate 都评估并报告，失败时停止；
+- `Pause/Stop`：请求取消当前 motion，并保留可验证 checkpoint；
+- `Reset Workflow`：仅重置 workflow/checkpoint，不重置 world；
+- `Force Continue`：仅在当前状态为 `VALIDATION_FAILED` 时出现。
+
+状态面板显示当前状态、上一个完成状态、下一状态、完整 trace、checkpoint/session 匹配、动作结果、validation 证据和 override 审计记录。浏览器不能任意指定要执行的状态，也不能倒序或跳步。
 
 ## 11. Home 与 Reset
 
@@ -331,14 +383,14 @@ Reset 是仿真专用的确定性重置事务：
 新建前端时使用 Vite template 和已确认 preset：
 
 ```bash
-npx shadcn@latest init --preset bKsFBxgG --template vite
+npx shadcn@latest init --name web --preset bKsFBxgG --template vite
 ```
 
 ### 14.2 页面布局
 
 - Header：连接、server 状态、control lease、session、RTF、staleness、Stop；
 - 左侧 Tabs：Joints、TCP、Objects；
-- 中间：Gazebo screenshot、Plan 摘要、Plan/Execute 操作；
+- 中间：Gazebo screenshot、Plan 摘要、Plan/Execute 操作、pick-place 状态机单步控制；
 - 右侧：MoveIt collisions、Gazebo contacts、controller、scene 和 attachment；
 - 底部：Home、Reset、Save/Load、Diagnostic Snapshot、结构化事件日志。
 
@@ -351,7 +403,7 @@ npx shadcn@latest init --preset bKsFBxgG --template vite
 - `Table`：collision/contact；
 - `Badge`：状态；
 - `Alert`：scene mismatch、stale data、expired plan；
-- `AlertDialog`：Execute、Attach/Detach、Reset 确认；
+- `AlertDialog`：Execute、Attach/Detach、Reset 确认；Force Continue 显示 validation 失败证据并要求输入确认；
 - `Sonner`：命令结果；
 - `Skeleton`：初始 telemetry 和截图加载；
 - `Collapsible` / `ScrollArea`：Advanced Diagnostics 和事件日志。
@@ -373,6 +425,13 @@ POST /plan/tcp
 POST /plans/{plan_id}/execute
 POST /gripper/execute
 POST /execution/cancel
+
+POST /workflow/start
+POST /workflow/step
+POST /workflow/run
+POST /workflow/stop
+POST /workflow/reset
+POST /workflow/force-continue
 
 POST /attachment/attach
 POST /attachment/detach
@@ -410,6 +469,9 @@ POST /gazebo/screenshot
 - reset 收敛与 `RESET_INCOMPLETE`；
 - screenshot 窗口唯一性；
 - collision source 不混淆。
+- workflow 合法状态转换、单步 checkpoint 和禁止跳步；
+- 稳定窗口、1 mm micro-lift 和 physical-grasp 指标；
+- validation override 的允许边界、一次性消费和审计记录；
 
 ### 16.3 headless 集成测试
 
@@ -421,6 +483,9 @@ POST /gazebo/screenshot
 - cancel；
 - attach/detach；
 - simulation reset。
+- pick-place Next Step/Run/Stop/Resume；
+- physical grasp PASS 后 Attach；
+- validation FAIL 时普通路径停止，确认后的 override 仅继续一次；
 
 ### 16.4 Web UI 测试
 
@@ -432,6 +497,8 @@ POST /gazebo/screenshot
 - confirmation dialogs；
 - collision/contact 分栏；
 - screenshot 展示和下载。
+- 状态 trace、Next Step、Run/Stop 和 workflow reset；
+- Force Continue 只在 validation failure 时可见，显示证据并二次确认。
 
 ### 16.5 ai-station 视觉验收
 
@@ -444,6 +511,8 @@ POST /gazebo/screenshot
 - screenshot 只含 Gazebo；
 - collision 显示具体双方名称；
 - Attach/Detach、Home、Reset 的数值状态和画面一致。
+- Close 后稳定、Micro Lift 1 mm、物理抓取指标和 Attach 顺序一致；
+- 单步与连续运行使用同一状态机 trace；强制继续被醒目标记且日志可追溯。
 
 ## 17. 完成标准
 
@@ -457,6 +526,9 @@ POST /gazebo/screenshot
 - latest-plan 与 scene/joint staleness 门控生效；
 - collision/contact 能显示对象/link 名称和数据源；
 - Attach/Detach、Repair、Home、Reset 通过对应分层验证；
+- pick-place 可单步执行，checkpoint/session 防止跳步和误续跑；
+- 物理抓取验证位于 Attach 之前，报告桌面间隙、跟随率和滑移；
+- validation override 只在仿真和明确边界内生效，并留下完整审计记录；
 - Gazebo screenshot 只截取目标窗口；
 - Target YAML 能在浏览器下载并重新加载；
 - 自动测试通过，并有本轮 ai-station 运行日志和新鲜视觉证据；
@@ -472,6 +544,6 @@ POST /gazebo/screenshot
 - 实时视频流；
 - 轨迹编辑器；
 - 自定义碰撞放行；
-- force execute；
+- 任意轨迹的 force execute，或绕过 readiness/lease/action failure；
 - 云端账户、权限或数据库；
 - server 端持久保存用户 Target YAML。
