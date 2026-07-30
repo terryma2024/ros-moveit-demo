@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gazebo Video Debug"
+  short_description: "Record and analyze Gazebo pick-place evidence"
+  default_prompt: "Use Gazebo video evidence to localize a pick-place failure."
