@@ -12,10 +12,10 @@ const limited: JointSample = {
 };
 
 describe("joint safe target limits", () => {
-  it("insets both hard limits by exactly two degrees", () => {
+  it("insets both hard limits by exactly half a degree", () => {
     expect(safeJointBounds(limited)).toEqual({
-      lowerRad: -1.7104234149601134,
-      upperRad: 1.5358934149601133,
+      lowerRad: -1.7366033537400285,
+      upperRad: 1.5620733537400284,
     });
   });
 
@@ -25,14 +25,14 @@ describe("joint safe target limits", () => {
 
   it("stops targets at either safe boundary and identifies the joint", () => {
     expect(clampJointTarget("3", -9, limited)).toEqual({
-      value: -1.7104234149601134,
+      value: -1.7366033537400285,
       clamped: true,
-      message: "Joint 3 clamped to -98.00° (2° safety margin).",
+      message: "Joint 3 clamped to -99.50° (0.5° safety margin).",
     });
     expect(clampJointTarget("3", 9, limited)).toEqual({
-      value: 1.5358934149601133,
+      value: 1.5620733537400284,
       clamped: true,
-      message: "Joint 3 clamped to 88.00° (2° safety margin).",
+      message: "Joint 3 clamped to 89.50° (0.5° safety margin).",
     });
   });
 

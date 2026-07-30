@@ -251,7 +251,7 @@ metadata 过长；执行命令前可打开该 Tab 核对通信域。
 - **Cancel**：请求取消当前 MoveIt 执行动作。
 
 修改任何 Target 后，旧 plan 会显示 `PLAN_STALE_TARGET` 并禁用执行。重新 Plan 后才能 Execute。
-每个关节的 Safe range 来自服务端权威 hard limit，两端统一内缩 2°。直接输入、±1° 和 YAML 导入都会截断到该范围并显示反馈；遥测没有有效 limit 时对应编辑器禁用。
+每个关节的 Safe range 来自服务端权威 hard limit，两端统一内缩 0.5°。直接输入、±1° 和 YAML 导入都会截断到该范围并显示反馈；遥测没有有效 limit 时对应编辑器禁用。
 
 ## 10. TCP Pose6D actual / target
 

@@ -3,7 +3,8 @@ import { degreesToRadians, radiansToDegrees } from "@/lib/units";
 
 export type SafeJointBounds = { lowerRad: number; upperRad: number };
 export type JointClampResult = { value: number; clamped: boolean; unavailable?: boolean; message?: string };
-export const JOINT_SAFETY_MARGIN_RAD = degreesToRadians(2);
+export const JOINT_SAFETY_MARGIN_DEG = 0.5;
+export const JOINT_SAFETY_MARGIN_RAD = degreesToRadians(JOINT_SAFETY_MARGIN_DEG);
 
 export function safeJointBounds(sample: JointSample | undefined): SafeJointBounds | undefined {
   const lower = sample?.lower_limit_rad;
@@ -21,6 +22,6 @@ export function clampJointTarget(joint: string, value: number, sample: JointSamp
   return {
     value: clampedValue,
     clamped: true,
-    message: `Joint ${joint} clamped to ${radiansToDegrees(clampedValue).toFixed(2)}° (2° safety margin).`,
+    message: `Joint ${joint} clamped to ${radiansToDegrees(clampedValue).toFixed(2)}° (${JOINT_SAFETY_MARGIN_DEG}° safety margin).`,
   };
 }
