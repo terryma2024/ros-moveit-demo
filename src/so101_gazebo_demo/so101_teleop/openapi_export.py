@@ -12,6 +12,9 @@ from .api import create_app
 class _SchemaOnlyService:
     """The route table does not call this service while exporting schema."""
 
+    async def camera_presets(self):
+        return {"presets": []}
+
 
 def export_openapi(output: str | Path) -> Path:
     destination = Path(output)

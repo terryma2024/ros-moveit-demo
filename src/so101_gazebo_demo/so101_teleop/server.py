@@ -41,6 +41,7 @@ from gz.msgs10.pose_v_pb2 import Pose_V
 from gz.msgs10.stringmsg_pb2 import StringMsg
 
 from .api import create_app, validate_bind_address
+from .camera import CameraController
 from .control import CommandCoordinator, CommandIdReused, PlanRejected, PlanStore
 from .models import (CommandResult, JointPlanRequest, JointSample, PlanSummary,
                      Pose6D, ServerMode, TcpPlanRequest, TelemetrySnapshot)
@@ -495,8 +496,9 @@ class RosTelemetryWorker:
 
 
 class TeleopService:
-    def __init__(self, worker: RosTelemetryWorker) -> None:
+    def __init__(self, worker: RosTelemetryWorker, camera: CameraController | None = None) -> None:
         self._worker=worker; self._commands=CommandCoordinator(); self._plans=PlanStore(); self._lease: tuple[str,float] | None=None
+        self._camera = camera
         self._parameters=Path(os.environ.get("SO101_TELEOP_PARAMETERS", "/tmp/so101-teleop-parameters.json"))
         self._workflow: dict[str, tuple[Path, str]] = {}
     async def health(self):
@@ -504,6 +506,7 @@ class TeleopService:
             "ros_worker": "rclpy", "moveit_plan_service": "/plan_kinematic_path", "moveit_execute_action": "/execute_trajectory"}
     async def current_snapshot(self): return self._worker.snapshot()
     async def capabilities(self): return {"simulation_only": True, "bind_policy":"loopback_or_tailscale", "workflow_transition_owner":"pick_place_state_machine"}
+    async def camera_presets(self): return {"presets": self._camera.names if self._camera else []}
     async def telemetry_wait(self): await asyncio.sleep(.2)
     def _result(self, body, ok, code, message, **kw): return CommandResult(command_id=body.get("command_id", ""), accepted=ok, succeeded=ok, code=code, message=message, snapshot_revision=self._worker.snapshot().revision, **kw)
     def _lease_ok(self, body) -> bool: return self._lease is not None and self._lease[0] == body.get("lease_id") and self._lease[1] > time.monotonic()
@@ -563,6 +566,12 @@ class TeleopService:
                 if name == "screenshot":
                     if gate:=self._mutation_gate(body): return gate
                     path=await asyncio.to_thread(self._worker.capture_gazebo); return self._result(body,True,"OK","Gazebo window PNG captured",data={"url":"/captures/"+path.name})
+                if name == "camera_preset":
+                    if gate:=self._mutation_gate(body): return gate
+                    if self._camera is None: return self._result(body,False,"GAZEBO_CAMERA_NOT_CONFIGURED","camera presets are unavailable")
+                    preset = str(body.get("preset", ""))
+                    await asyncio.to_thread(self._camera.apply, preset)
+                    return self._result(body,True,"OK",f"Gazebo camera moved to {preset}",data={"preset":preset})
                 if name == "parameters_save":
                     if gate:=self._mutation_gate(body): return gate
                     payload={"target_joints_rad":body.get("target_joints_rad",{}),"target_tcp":body.get("target_tcp"),"saved_session_id":self._worker.snapshot().simulation_session_id}
