@@ -138,6 +138,42 @@ def test_valid_lease_renewal_is_not_rejected_while_workflow_owner_is_running():
     asyncio.run(scenario())
 
 
+def test_workflow_step_resumes_the_existing_cpp_checkpoint_before_single_step():
+    """Next Step must advance the checkpoint instead of replaying the first step."""
+    async def scenario():
+        worker = Worker()
+        calls = []
+
+        def owner(executable, arguments, timeout_s=45.0):
+            calls.append((executable, list(arguments), timeout_s))
+            return "trace=IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT"
+
+        worker.package_cli = owner
+        service = TeleopService(worker)
+        lease_id = await lease(service)
+        started = await service.command("workflow_start", {
+            "command_id": "workflow-start",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+        run_id = started.data["workflow"]["run_id"]
+        stepped = await service.command("workflow_step", {
+            "command_id": "workflow-step",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+            "run_id": run_id,
+            "snapshot_revision": started.snapshot_revision,
+        })
+
+        assert started.succeeded is True
+        assert stepped.succeeded is True
+        assert "--resume" not in calls[0][1]
+        assert calls[0][1][-1] == "--step"
+        assert calls[1][1][-3:] == ["--resume", "true", "--step"]
+
+    asyncio.run(scenario())
+
+
 def test_detach_publishes_detach_and_waits_for_detached_convergence():
     """A suffix match made detach issue an attach event; exact operation identity is required."""
     async def scenario():
