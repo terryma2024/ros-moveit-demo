@@ -1,0 +1,4 @@
+# Offline collision-asset generation only; Gazebo runtime does not need these.
+numpy>=1.26,<2
+trimesh==4.12.2
+vhacdx==0.0.10

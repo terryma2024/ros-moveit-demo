@@ -1,0 +1,8 @@
+so101_teleop_server:
+  ros__parameters:
+    simulation_only: true
+    world_name: so101_pick_place
+    tcp_frame: so101_tcp
+    joint_state_topic: /joint_states
+    gazebo_pose_topic: /so101/gazebo_pose_info
+    gazebo_contact_topic: /task_object/contacts

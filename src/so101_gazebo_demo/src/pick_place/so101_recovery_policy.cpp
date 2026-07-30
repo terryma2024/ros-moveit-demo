@@ -40,8 +40,8 @@ double orientationDistance(const Pose3d & first, const Pose3d & second)
 
 bool nearPose(const Pose3d & actual, const Pose3d & expected, const SO101Profile & profile)
 {
-  return positionDistance(actual, expected) <= profile.coke_position_drift_tolerance &&
-         orientationDistance(actual, expected) <= profile.coke_orientation_drift_tolerance_rad;
+  return positionDistance(actual, expected) <= profile.task_object_position_drift_tolerance &&
+         orientationDistance(actual, expected) <= profile.task_object_orientation_drift_tolerance_rad;
 }
 
 bool tableCanonical(const WorldSnapshot & current, const SO101Profile & profile)
@@ -69,14 +69,14 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
     return error(FailureCategory::PRECONDITION, "RECOVERY_ROBOT_NOT_STATIONARY",
                  "Recovery classification requires a stationary arm");
   }
-  if (!current.gazebo_coke_attached || !current.moveit_coke_attached) {
+  if (!current.gazebo_task_object_attached || !current.moveit_task_object_attached) {
     return error(FailureCategory::WORLD_INCONSISTENCY, "RECOVERY_ATTACHMENT_STATE_UNKNOWN",
                  "Recovery requires both current attachment facts");
   }
-  if (!current.gazebo_coke_pose_world || !current.gazebo_coke_stationary ||
-      !*current.gazebo_coke_stationary) {
-    return error(FailureCategory::OBSERVATION, "RECOVERY_COKE_OBSERVATION_INCOMPLETE",
-                 "Recovery requires a stationary Gazebo Coke pose");
+  if (!current.gazebo_task_object_pose_world || !current.gazebo_task_object_stationary ||
+      !*current.gazebo_task_object_stationary) {
+    return error(FailureCategory::OBSERVATION, "RECOVERY_TASK_OBJECT_OBSERVATION_INCOMPLETE",
+                 "Recovery requires a stationary Gazebo TaskObject pose");
   }
   const auto q6 = current.joint_positions.find(profile_.gripper_joint);
   const auto q6_velocity = current.joint_velocities.find(profile_.gripper_joint);
@@ -90,15 +90,15 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
                  "Recovery requires joint 6 to be stationary");
   }
 
-  const bool gazebo_attached = *current.gazebo_coke_attached;
-  const bool moveit_attached = *current.moveit_coke_attached;
+  const bool gazebo_attached = *current.gazebo_task_object_attached;
+  const bool moveit_attached = *current.moveit_task_object_attached;
   const bool gripper_full_open =
     validateSO101GripperTarget(current, SO101GripperTarget::FULL_OPEN, profile_).ok;
 
   if ((gazebo_attached || moveit_attached) &&
-      !nearPose(*current.gazebo_coke_pose_world, profile_.coke_pose, profile_)) {
+      !nearPose(*current.gazebo_task_object_pose_world, profile_.task_object_pose, profile_)) {
     return error(FailureCategory::WORLD_INCONSISTENCY, "UNSAFE_RECOVERY_OBSERVATION",
-                 "Attached Coke is not on the known support pose; carrying recovery is not yet "
+                 "Attached TaskObject is not on the known support pose; carrying recovery is not yet "
                  "configured");
   }
   if (!gripper_full_open) {
@@ -111,12 +111,12 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
     return {State::RECOVER_DETACH_MOVEIT, std::nullopt};
   }
 
-  const auto moveit_coke = current.moveit_world_object_poses.find(profile_.coke_model);
-  const bool coke_synchronized =
-    moveit_coke != current.moveit_world_object_poses.end() &&
-    nearPose(moveit_coke->second, *current.gazebo_coke_pose_world, profile_);
-  if (!coke_synchronized || !tableCanonical(current, profile_) ||
-      current.moveit_coke_attached_link || !current.moveit_coke_touch_links.empty()) {
+  const auto moveit_task_object = current.moveit_world_object_poses.find(profile_.task_object_id);
+  const bool task_object_synchronized =
+    moveit_task_object != current.moveit_world_object_poses.end() &&
+    nearPose(moveit_task_object->second, *current.gazebo_task_object_pose_world, profile_);
+  if (!task_object_synchronized || !tableCanonical(current, profile_) ||
+      current.moveit_task_object_attached_link || !current.moveit_task_object_touch_links.empty()) {
     return {State::RECOVER_SYNC_WORLD_OBJECT, std::nullopt};
   }
   return {State::RECOVER_RETREAT, std::nullopt};

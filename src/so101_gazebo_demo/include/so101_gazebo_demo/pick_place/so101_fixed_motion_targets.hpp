@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 
+#include "so101_gazebo_demo/pick_place/policy_config.hpp"
 #include "so101_gazebo_demo/pick_place/so101_motion_planner.hpp"
 
 namespace so101_gazebo_demo::pick_place
@@ -14,13 +15,15 @@ struct SO101FixedMotionSpec
   std::vector<double> logical_start;
   JointMotionTarget target;
   MotionValidationConfig validation;
+  bool require_axial_path_validation{false};
   double expected_gripper_q6{0.0};
 };
 
-class SO101FixedMotionTargetPolicy final : public IJointMotionTargetPolicy
+class SO101ConfiguredMotionTargetPolicy final : public IJointMotionTargetPolicy
 {
 public:
-  explicit SO101FixedMotionTargetPolicy(SO101Profile profile = SO101Profile::canonical());
+  SO101ConfiguredMotionTargetPolicy(MotionPolicyConfig motion,
+                                    ValidationPolicyConfig validation);
 
   [[nodiscard]] JointMotionTargetResult
   target(State state, State next_state, const ObservationResult & observation) const override;
@@ -28,8 +31,11 @@ public:
   [[nodiscard]] const std::string & version() const noexcept;
 
 private:
-  SO101Profile profile_;
-  std::string version_{"so101-fixed-table-d20-v5"};
+  MotionPolicyConfig motion_;
+  ValidationPolicyConfig validation_;
+  std::string version_;
 };
+
+using SO101FixedMotionTargetPolicy = SO101ConfiguredMotionTargetPolicy;
 
 }  // namespace so101_gazebo_demo::pick_place

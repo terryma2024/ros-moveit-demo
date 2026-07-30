@@ -139,7 +139,7 @@ TEST(MoveItRobotHomeResetAdapter, ExposesIndependentJointsAndCommandsExactQ6)
   EXPECT_EQ(evidence.positions, observed->positions);
   EXPECT_EQ(ActionStatus::SUCCEEDED, adapter.commandGripper(profile.q6_home).status);
   ASSERT_EQ(1U, gripper->targets.size());
-  EXPECT_DOUBLE_EQ(0.0, gripper->targets.front());
+  EXPECT_DOUBLE_EQ(profile.q6_home, gripper->targets.front());
 }
 
 }  // namespace

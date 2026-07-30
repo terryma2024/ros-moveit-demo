@@ -16,12 +16,28 @@
             filename="gz-sim-detachable-joint-system"
             name="gz::sim::systems::DetachableJoint">
             <parent_link>gripper</parent_link>
-            <child_model>coke</child_model>
+            <child_model>plastic_cup</child_model>
             <child_link>body</child_link>
             <initially_detached>true</initially_detached>
-            <attach_topic>/so101/attach_coke</attach_topic>
-            <detach_topic>/so101/detach_coke</detach_topic>
-            <output_topic>/so101/coke_attached_event</output_topic>
+            <attach_topic>/so101/attach_object</attach_topic>
+            <detach_topic>/so101/detach_object</detach_topic>
+            <output_topic>/so101/object_attached_event</output_topic>
+        </plugin>
+
+        <!--
+          Contact is physical until attach validation succeeds. During rigid
+          carry the DetachableJoint is authoritative, so disable TaskObject collision
+          response to avoid locking fingertip penetration into a constraint loop.
+          Detach re-enables collision before the TaskObject settles on the table.
+        -->
+        <plugin
+            filename="libso101_attachment_collision_system.so"
+            name="so101_gazebo_demo::AttachmentCollisionSystem">
+            <child_model>plastic_cup</child_model>
+            <attach_topic>/so101/attach_object</attach_topic>
+            <detach_topic>/so101/detach_object</detach_topic>
+            <joint_state_topic>/so101/object_attached</joint_state_topic>
+            <collision_state_topic>/so101/object_collision_enabled</collision_state_topic>
         </plugin>
     </gazebo>
 

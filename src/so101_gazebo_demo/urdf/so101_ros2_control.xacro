@@ -53,7 +53,7 @@
 
         <joint name="6">
             <command_interface name="position">
-                <param name="min">-0.174533</param>
+                <param name="min">-0.059303612618397</param>
                 <param name="max">1.74533</param>
             </command_interface>
             <state_interface name="position" />

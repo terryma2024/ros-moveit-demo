@@ -15,9 +15,10 @@ namespace
 class FakeGripper final : public pick_place::ISO101GripperCommand
 {
 public:
-  pick_place::ActionResult command(double) override
+  pick_place::ActionResult command(double q6) override
   {
     ++calls;
+    last_q6 = q6;
     return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
   }
   pick_place::ActionResult cancelAndWait() override
@@ -25,6 +26,7 @@ public:
     return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
   }
   int calls{0};
+  double last_q6{0.0};
 };
 
 class FakeExecutor final : public pick_place::IStateExecutor
@@ -45,15 +47,15 @@ public:
 class FakeScene final : public pick_place::IMoveItSceneAdapter
 {
 public:
-  pick_place::ActionResult attachCoke(const pick_place::MoveItAttachmentSpec &) override
+  pick_place::ActionResult attachTaskObject(const pick_place::MoveItAttachmentSpec &) override
   {
     return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
   }
-  pick_place::ActionResult detachCoke() override
+  pick_place::ActionResult detachTaskObject() override
   {
     return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
   }
-  pick_place::ActionResult upsertCokeWorldPose(const pick_place::Pose3d &) override
+  pick_place::ActionResult upsertTaskObjectWorldPose(const pick_place::Pose3d &) override
   {
     return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
   }
@@ -146,7 +148,7 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
   for (const auto transition : {
          pick_place::TransitionKey{pick_place::State::PREPARE_OPEN_GRIPPER,
                                    pick_place::State::MOVE_ABOVE_OBJECT},
-         {pick_place::State::CLOSE_GRIPPER, pick_place::State::ATTACH_GAZEBO},
+         {pick_place::State::CLOSE_GRIPPER, pick_place::State::WAIT_GRASP_STABLE},
          {pick_place::State::OPEN_GRIPPER, pick_place::State::DETACH_GAZEBO},
          {pick_place::State::RECOVER_OPEN_GRIPPER,
           pick_place::State::RECOVER_DETACH_GAZEBO},
@@ -165,6 +167,26 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
     EXPECT_TRUE(runtime.contracts.hasContract(transition));
   }
   ASSERT_NE(nullptr, runtime.recovery_policy);
+}
+
+TEST(SO101Task3Runtime, GazeboAttachRetargetsPositionControllerToMeasuredCarryHold)
+{
+  auto gripper = std::make_shared<FakeGripper>();
+  auto attach = std::make_shared<FakeExecutor>();
+  pick_place::SO101Task3RuntimeDependencies deps{
+    gripper, std::make_shared<FakeScene>(), attach,
+    std::make_shared<FakeExecutor>(), std::make_shared<FakeExecutor>()};
+  const auto runtime = pick_place::makeSO101Task3Runtime(deps);
+  auto * executor = runtime.actions.findExecutor(pick_place::State::ATTACH_GAZEBO);
+  ASSERT_NE(nullptr, executor);
+  pick_place::WorldSnapshot before;
+  before.joint_positions[pick_place::SO101Profile::canonical().gripper_joint] = 0.791;
+  const pick_place::ExecutionContext context{pick_place::State::ATTACH_GAZEBO,
+                                             pick_place::State::ATTACH_MOVEIT, before, nullptr};
+  EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, executor->execute(context).status);
+  EXPECT_EQ(1, attach->calls);
+  EXPECT_EQ(1, gripper->calls);
+  EXPECT_DOUBLE_EQ(0.791, gripper->last_q6);
 }
 
 TEST(SO101Task3Runtime, WholeExecuteGraphFailsClosedBeforeObservationWithoutTask4Motion)

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -27,7 +28,7 @@ MoveItSceneGeometry canonicalGeometry()
   const auto & profile = SO101Profile::canonical();
   return {profile.world_frame, "table", profile.table_size,
           "base_pedestal", profile.pedestal_size,
-          profile.coke_model, profile.coke_height, profile.coke_radius};
+          "plastic_cup", 0.090, 0.040, 0.002, 0.002, 12};
 }
 
 MoveItAttachmentSpec canonicalAttachment()
@@ -39,8 +40,8 @@ MoveItAttachmentSpec canonicalAttachment()
 MoveItSceneState attachedState(bool in_world = false)
 {
   MoveItSceneState state;
-  state.coke_in_world = in_world;
-  state.coke_attached = true;
+  state.task_object_in_world = in_world;
+  state.task_object_attached = true;
   state.attached_link = "gripper";
   state.touch_links = {"gripper", "jaw"};
   return state;
@@ -49,29 +50,29 @@ MoveItSceneState attachedState(bool in_world = false)
 MoveItSceneState detachedState(const Pose3d & pose = {})
 {
   MoveItSceneState state;
-  state.coke_in_world = true;
-  state.coke_attached = false;
-  state.coke_world_pose = pose;
+  state.task_object_in_world = true;
+  state.task_object_attached = false;
+  state.task_object_world_pose = pose;
   return state;
 }
 
 class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(const MoveItAttachmentSpec & spec) override
+  ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) override
   {
     attached_spec = spec;
     ++attach_calls;
     return attach_result;
   }
 
-  ActionResult detachCoke() override
+  ActionResult detachTaskObject() override
   {
     ++detach_calls;
     return detach_result;
   }
 
-  ActionResult upsertCokeWorldPose(const Pose3d & pose) override
+  ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
     synced_pose = pose;
     ++upsert_calls;
@@ -150,25 +151,34 @@ TEST(SO101MoveItSceneGeometry, BuildsExactProfileDrivenCollisionObjects)
   EXPECT_DOUBLE_EQ(0.17, pedestal.pose.position.z);
   EXPECT_DOUBLE_EQ(1.0, pedestal.pose.orientation.w);
 
-  const auto coke = makeCokeCollisionObject(geometry, profile.coke_pose);
-  ASSERT_EQ(1U, coke.primitives.size());
-  EXPECT_EQ("world", coke.header.frame_id);
-  EXPECT_EQ("coke", coke.id);
-  EXPECT_EQ(shape_msgs::msg::SolidPrimitive::CYLINDER, coke.primitives.front().type);
-  ASSERT_EQ(2U, coke.primitives.front().dimensions.size());
-  EXPECT_DOUBLE_EQ(0.122, coke.primitives.front().dimensions[0]);
-  EXPECT_DOUBLE_EQ(0.033, coke.primitives.front().dimensions[1]);
-  EXPECT_DOUBLE_EQ(0.02, coke.pose.position.x);
-  EXPECT_DOUBLE_EQ(-0.28, coke.pose.position.y);
-  EXPECT_DOUBLE_EQ(0.181, coke.pose.position.z);
-  EXPECT_DOUBLE_EQ(1.0, coke.pose.orientation.w);
+  const Pose3d cup_pose{0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0};
+  const auto cup = makeTaskObjectCollisionObject(geometry, cup_pose);
+  ASSERT_EQ(13U, cup.primitives.size());
+  ASSERT_EQ(13U, cup.primitive_poses.size());
+  EXPECT_EQ("world", cup.header.frame_id);
+  EXPECT_EQ("plastic_cup", cup.id);
+  EXPECT_EQ(12U, std::count_if(cup.primitives.begin(), cup.primitives.end(),
+                              [](const auto & primitive) {
+                                return primitive.type == shape_msgs::msg::SolidPrimitive::BOX;
+                              }));
+  EXPECT_EQ(1U, std::count_if(cup.primitives.begin(), cup.primitives.end(),
+                             [](const auto & primitive) {
+                               return primitive.type ==
+                                      shape_msgs::msg::SolidPrimitive::CYLINDER;
+                             }));
+  EXPECT_DOUBLE_EQ(0.02, cup.pose.position.x);
+  EXPECT_DOUBLE_EQ(-0.28, cup.pose.position.y);
+  EXPECT_DOUBLE_EQ(0.165, cup.pose.position.z);
+  EXPECT_DOUBLE_EQ(1.0, cup.pose.orientation.w);
 }
 
 TEST(SO101MoveItSceneExecutor, AttachUsesExactOrderedMetadataAndExclusiveMembership)
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {attachedState(true), attachedState(false)};
-  MoveItSceneExecutor executor(adapter, {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false},
+  MoveItSceneExecutor executor(adapter,
+                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
+                                "plastic_cup"},
                                canonicalAttachment(), 0.05, 0.001);
 
   const auto result = executor.execute(contextFor(State::ATTACH_MOVEIT));
@@ -186,7 +196,9 @@ TEST(SO101MoveItSceneExecutor, RejectsWrongTouchLinkOrderDespiteApiSuccess)
   auto wrong = attachedState(false);
   wrong.touch_links = {"jaw", "gripper"};
   adapter->observations = {wrong};
-  MoveItSceneExecutor executor(adapter, {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false},
+  MoveItSceneExecutor executor(adapter,
+                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
+                                "plastic_cup"},
                                canonicalAttachment(), 0.005, 0.001);
 
   const auto result = executor.execute(contextFor(State::ATTACH_MOVEIT));
@@ -200,7 +212,9 @@ TEST(SO101MoveItSceneExecutor, DetachRequiresExclusiveReturnToWorld)
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {attachedState(false), detachedState()};
-  MoveItSceneExecutor executor(adapter, {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false},
+  MoveItSceneExecutor executor(adapter,
+                               {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false,
+                                "plastic_cup"},
                                canonicalAttachment(), 0.05, 0.001);
 
   const auto result = executor.execute(contextFor(State::DETACH_MOVEIT));
@@ -216,10 +230,11 @@ TEST(SO101MoveItSceneExecutor, SyncUsesAllSixPoseDegrees)
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {detachedState(pose)};
   MoveItSceneExecutor executor(adapter,
-                               {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false},
+                               {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false,
+                                "plastic_cup"},
                                canonicalAttachment(), 0.05, 0.001);
   auto context = contextFor(State::SYNC_WORLD_OBJECT);
-  context.before.gazebo_coke_pose_world = pose;
+  context.before.gazebo_task_object_pose_world = pose;
 
   const auto result = executor.execute(context);
 

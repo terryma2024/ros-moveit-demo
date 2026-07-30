@@ -34,9 +34,9 @@ public:
   double last_q6{0.0};
 };
 
-pick_place::Pose3d cokePose()
+pick_place::Pose3d task_objectPose()
 {
-  return pick_place::SO101Profile::canonical().coke_pose;
+  return pick_place::SO101Profile::canonical().task_object_pose;
 }
 
 pick_place::WorldSnapshot snapshot(double q6, double velocity = 0.0)
@@ -46,26 +46,26 @@ pick_place::WorldSnapshot snapshot(double q6, double velocity = 0.0)
   world.arm_stationary = true;
   world.joint_positions.emplace("6", q6);
   world.joint_velocities.emplace("6", velocity);
-  world.gazebo_coke_pose_world = cokePose();
-  world.gazebo_coke_stationary = true;
-  world.gazebo_coke_attached = false;
-  world.moveit_coke_attached = false;
+  world.gazebo_task_object_pose_world = task_objectPose();
+  world.gazebo_task_object_stationary = true;
+  world.gazebo_task_object_attached = false;
+  world.moveit_task_object_attached = false;
   const auto & profile = pick_place::SO101Profile::canonical();
   world.moveit_world_object_poses[profile.table_object] = profile.table_pose;
-  world.moveit_world_object_poses[profile.coke_model] = profile.coke_pose;
+  world.moveit_world_object_poses[profile.task_object_id] = profile.task_object_pose;
   return world;
 }
 
 void setAttached(pick_place::WorldSnapshot & world)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
-  world.gazebo_coke_attached = true;
-  world.moveit_coke_attached = true;
-  world.moveit_world_object_poses.erase(profile.coke_model);
-  world.moveit_coke_attached_link = profile.moveit_attach_link;
-  world.moveit_coke_touch_links = {profile.moveit_touch_links.begin(),
+  world.gazebo_task_object_attached = true;
+  world.moveit_task_object_attached = true;
+  world.moveit_world_object_poses.erase(profile.task_object_id);
+  world.moveit_task_object_attached_link = profile.moveit_attach_link;
+  world.moveit_task_object_touch_links = {profile.moveit_touch_links.begin(),
                                    profile.moveit_touch_links.end()};
-  world.moveit_coke_attached_relative_pose = profile.calibrated_grasp_relative_pose;
+  world.moveit_task_object_attached_relative_pose = profile.calibrated_grasp_relative_pose;
 }
 
 pick_place::ExecutionContext context(pick_place::State state,
@@ -89,7 +89,7 @@ TEST(SO101GripperStateExecutor, CommandsExactProfileTargetForAllFourStates)
     {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::SO101GripperTarget::PREOPEN,
      profile.q6_preopen},
     {pick_place::State::CLOSE_GRIPPER, pick_place::SO101GripperTarget::CONTACT,
-     profile.q6_contact},
+     profile.q6_close},
     {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN,
      profile.q6_full_open},
     {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN,
@@ -118,8 +118,8 @@ TEST(SO101GripperStateExecutor, RecoveryNoOpUsesCurrentQ6AndNeedsNoAttachment)
     {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, true},
     profile);
   auto current = snapshot(profile.q6_full_open);
-  current.gazebo_coke_attached = false;
-  current.moveit_coke_attached = false;
+  current.gazebo_task_object_attached = false;
+  current.moveit_task_object_attached = false;
 
   const auto result = executor.execute(
     context(pick_place::State::RECOVER_OPEN_GRIPPER, current));
@@ -134,7 +134,7 @@ TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayE
   EXPECT_DOUBLE_EQ(0.010, profile.contact_q6_stop_tolerance);
   EXPECT_DOUBLE_EQ(0.001, profile.contact_width_oversize_tolerance);
 
-  const auto physical_contact = snapshot(profile.q6_contact + 0.0067);
+  const auto physical_contact = snapshot(profile.q6_contact + 0.0060);
   EXPECT_TRUE(pick_place::validateSO101GripperTarget(
     physical_contact, pick_place::SO101GripperTarget::CONTACT, profile).ok);
 
@@ -145,6 +145,31 @@ TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayE
   const auto imprecise_preopen = snapshot(profile.q6_preopen - 0.0067);
   EXPECT_FALSE(pick_place::validateSO101GripperTarget(
     imprecise_preopen, pick_place::SO101GripperTarget::PREOPEN, profile).ok);
+}
+
+TEST(SO101GripperValidation, FullOpenAcceptsBulletFeatherstoneSettlingError)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  EXPECT_DOUBLE_EQ(0.010, profile.q6_full_open_tolerance);
+
+  const auto settled = snapshot(profile.q6_full_open + 0.005, 0.0);
+  EXPECT_TRUE(pick_place::validateSO101GripperTarget(
+    settled, pick_place::SO101GripperTarget::FULL_OPEN, profile).ok);
+}
+
+TEST(SO101GripperValidation, GazeboJawContactAcceptsPhysicalStopBeforeCommandedQ6)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  auto physical_stop = snapshot(profile.q6_contact + 0.25, 0.0);
+  physical_stop.gazebo_task_object_gripper_contact = true;
+  physical_stop.gazebo_task_object_gripper_max_depth = 0.0012;
+
+  const auto result = pick_place::validateSO101GripperTarget(
+    physical_stop, pick_place::SO101GripperTarget::CONTACT, profile);
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_DOUBLE_EQ(result.metrics.at("gazebo_task_object_gripper_contact"), 1.0);
+  EXPECT_DOUBLE_EQ(result.metrics.at("gazebo_task_object_gripper_max_depth"), 0.0012);
 }
 
 TEST(SO101GripperTransitionContract, ActionSuccessCannotReplaceFreshStoppedQ6Postcondition)
@@ -186,26 +211,26 @@ TEST(SO101GripperTransitionContract, FailureReportsExpectedAndActualEndpointEvid
   EXPECT_DOUBLE_EQ(0.125, metrics.at("actual_q6_velocity"));
 }
 
-TEST(SO101GripperTransitionContract, CloseRejectsCokeSixDegreeDriftUsingProfileTolerance)
+TEST(SO101GripperTransitionContract, CloseRejectsTaskObjectSixDegreeDriftUsingProfileTolerance)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   const auto contract = pick_place::makeSO101GripperContract(
     {pick_place::State::CLOSE_GRIPPER, pick_place::SO101GripperTarget::CONTACT, false}, profile);
   const auto before = snapshot(profile.q6_preopen);
   auto after = snapshot(profile.q6_contact);
-  after.gazebo_coke_pose_world->x += profile.coke_position_drift_tolerance * 2.0;
+  after.gazebo_task_object_pose_world->x += profile.task_object_position_drift_tolerance * 2.0;
   const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
 
   const auto position_drift = contract->validate(before, after, action);
   EXPECT_FALSE(position_drift.ok);
   ASSERT_FALSE(position_drift.failures.empty());
-  EXPECT_EQ("COKE_POSITION_DRIFT", position_drift.failures.front().code);
+  EXPECT_EQ("TASK_OBJECT_POSITION_DRIFT", position_drift.failures.front().code);
 
   after = snapshot(profile.q6_contact);
-  after.gazebo_coke_pose_world->qz =
-    std::sin(profile.coke_orientation_drift_tolerance_rad);
-  after.gazebo_coke_pose_world->qw =
-    std::cos(profile.coke_orientation_drift_tolerance_rad);
+  after.gazebo_task_object_pose_world->qz =
+    std::sin(profile.task_object_orientation_drift_tolerance_rad);
+  after.gazebo_task_object_pose_world->qw =
+    std::cos(profile.task_object_orientation_drift_tolerance_rad);
   const auto orientation_drift = contract->validate(before, after, action);
   EXPECT_FALSE(orientation_drift.ok);
 }
@@ -220,7 +245,7 @@ TEST(SO101GripperTransitionContract, EnforcesStateSpecificIndependentAttachmentF
   auto detached_before = snapshot(profile.q6_contact);
   auto detached_after = snapshot(profile.q6_preopen);
   EXPECT_TRUE(prepare->validate(detached_before, detached_after, action).ok);
-  detached_after.gazebo_coke_attached.reset();
+  detached_after.gazebo_task_object_attached.reset();
   EXPECT_FALSE(prepare->validate(detached_before, detached_after, action).ok);
 
   const auto open = pick_place::makeSO101GripperContract(
@@ -230,7 +255,7 @@ TEST(SO101GripperTransitionContract, EnforcesStateSpecificIndependentAttachmentF
   setAttached(attached_before);
   setAttached(attached_after);
   EXPECT_TRUE(open->validate(attached_before, attached_after, action).ok);
-  attached_after.moveit_coke_attached_link = "wrong";
+  attached_after.moveit_task_object_attached_link = "wrong";
   EXPECT_FALSE(open->validate(attached_before, attached_after, action).ok);
 
   const auto recovery = pick_place::makeSO101GripperContract(
@@ -250,8 +275,8 @@ TEST(SO101GripperTransitionContract, RecoveryOpenAcceptsOnlyInternallyExactMixed
 
   auto gazebo_only_before = snapshot(profile.q6_contact);
   auto gazebo_only_after = snapshot(profile.q6_full_open);
-  gazebo_only_before.gazebo_coke_attached = true;
-  gazebo_only_after.gazebo_coke_attached = true;
+  gazebo_only_before.gazebo_task_object_attached = true;
+  gazebo_only_after.gazebo_task_object_attached = true;
   EXPECT_TRUE(recovery->validatePrecondition(gazebo_only_before).ok);
   EXPECT_TRUE(recovery->validate(gazebo_only_before, gazebo_only_after, action).ok);
 
@@ -259,11 +284,11 @@ TEST(SO101GripperTransitionContract, RecoveryOpenAcceptsOnlyInternallyExactMixed
   auto moveit_only_after = snapshot(profile.q6_full_open);
   setAttached(moveit_only_before);
   setAttached(moveit_only_after);
-  moveit_only_before.gazebo_coke_attached = false;
-  moveit_only_after.gazebo_coke_attached = false;
+  moveit_only_before.gazebo_task_object_attached = false;
+  moveit_only_after.gazebo_task_object_attached = false;
   EXPECT_TRUE(recovery->validatePrecondition(moveit_only_before).ok);
   EXPECT_TRUE(recovery->validate(moveit_only_before, moveit_only_after, action).ok);
 
-  moveit_only_after.moveit_coke_attached_link = "wrong";
+  moveit_only_after.moveit_task_object_attached_link = "wrong";
   EXPECT_FALSE(recovery->validate(moveit_only_before, moveit_only_after, action).ok);
 }

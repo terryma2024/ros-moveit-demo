@@ -320,6 +320,26 @@ def describe_windows(windows):
     ) or '<none>'
 
 
+def wait_for_windows(backend, roles, timeout_sec, poll_sec, monotonic, sleep):
+    deadline = monotonic() + timeout_sec
+    while True:
+        observed = backend.windows()
+        selected = {
+            role: window
+            for window in observed
+            if (role := classify_window(window.title, window.wm_class))
+        }
+        missing = [role for role in roles if role not in selected]
+        if not missing:
+            return selected
+        if monotonic() >= deadline:
+            raise RuntimeError(
+                f"missing {', '.join(missing)}; observed: "
+                f'{describe_windows(observed)}'
+            )
+        sleep(poll_sec)
+
+
 def tile_windows(
     backend,
     timeout_sec,
@@ -328,24 +348,9 @@ def tile_windows(
     monotonic=time.monotonic,
     sleep=time.sleep,
 ):
-    deadline = monotonic() + timeout_sec
-    observed = []
-    selected = {}
-    while True:
-        observed = backend.windows()
-        selected = {
-            role: window
-            for window in observed
-            if (role := classify_window(window.title, window.wm_class))
-        }
-        missing = [role for role in ('rviz', 'gazebo') if role not in selected]
-        if not missing:
-            break
-        if monotonic() >= deadline:
-            raise RuntimeError(
-                f"missing {', '.join(missing)}; observed: {describe_windows(observed)}"
-            )
-        sleep(poll_sec)
+    selected = wait_for_windows(
+        backend, ('rviz', 'gazebo'), timeout_sec, poll_sec, monotonic, sleep
+    )
 
     left, right = split_workarea(backend.workarea())
     targets = {'rviz': left, 'gazebo': right}
@@ -365,12 +370,38 @@ def tile_windows(
     return targets
 
 
+def maximize_window(
+    backend,
+    role,
+    timeout_sec,
+    poll_sec,
+    geometry_tolerance,
+    monotonic=time.monotonic,
+    sleep=time.sleep,
+):
+    selected = wait_for_windows(
+        backend, (role,), timeout_sec, poll_sec, monotonic, sleep
+    )
+    target = backend.workarea()
+    window_id = selected[role].window_id
+    backend.move_resize(window_id, target)
+    sleep(0.5)
+    actual = backend.geometry(window_id)
+    if not rect_is_close(actual, target, geometry_tolerance):
+        raise RuntimeError(
+            f'{role} geometry mismatch: actual={actual!r} '
+            f'expected={target!r} tolerance={geometry_tolerance}'
+        )
+    return target
+
+
 def parse_args(arguments=None):
     parser = argparse.ArgumentParser(
         description='Tile RViz left and Gazebo Sim right on ai-station.'
     )
     parser.add_argument('--left', choices=('rviz',), default='rviz')
     parser.add_argument('--right', choices=('gazebo',), default='gazebo')
+    parser.add_argument('--maximize', choices=('gazebo', 'rviz'))
     parser.add_argument('--timeout-sec', type=float, default=30.0)
     parser.add_argument('--poll-sec', type=float, default=0.25)
     parser.add_argument('--geometry-tolerance', type=int, default=12)
@@ -381,16 +412,28 @@ def main(arguments=None):
     args = parse_args(arguments)
     try:
         backend = X11EwmhBackend()
-        result = tile_windows(
-            backend,
-            timeout_sec=args.timeout_sec,
-            poll_sec=args.poll_sec,
-            geometry_tolerance=args.geometry_tolerance,
-        )
+        if args.maximize:
+            target = maximize_window(
+                backend,
+                args.maximize,
+                timeout_sec=args.timeout_sec,
+                poll_sec=args.poll_sec,
+                geometry_tolerance=args.geometry_tolerance,
+            )
+        else:
+            result = tile_windows(
+                backend,
+                timeout_sec=args.timeout_sec,
+                poll_sec=args.poll_sec,
+                geometry_tolerance=args.geometry_tolerance,
+            )
     except (OSError, subprocess.SubprocessError, RuntimeError, ValueError) as error:
         print(f'LAYOUT_ERROR {error}', file=sys.stderr)
         return 2
-    print(f'LAYOUT_OK RVIZ={result["rviz"]} GAZEBO={result["gazebo"]}')
+    if args.maximize:
+        print(f'LAYOUT_OK {args.maximize.upper()}={target}')
+    else:
+        print(f'LAYOUT_OK RVIZ={result["rviz"]} GAZEBO={result["gazebo"]}')
     return 0
 
 

@@ -1,4 +1,6 @@
+import importlib.util
 from pathlib import Path
+import json
 import subprocess
 import xml.etree.ElementTree as ET
 
@@ -9,10 +11,34 @@ import yaml
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 CONFIG_DIR = PACKAGE_DIR / 'config'
 XACRO_PATH = PACKAGE_DIR / 'urdf' / 'so101.urdf.xacro'
+COLLISION_DIR = PACKAGE_DIR / 'meshes' / 'so101' / 'collision'
+PREOPEN_CALCULATOR_PATH = PACKAGE_DIR / 'scripts' / 'gripper_preopen_calc.py'
+
+
+def load_preopen_calculator_module():
+    spec = importlib.util.spec_from_file_location(
+        'gripper_preopen_calc_configuration_contract', PREOPEN_CALCULATOR_PATH
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_yaml(name):
     return yaml.safe_load((CONFIG_DIR / name).read_text())
+
+
+def test_descend_monotonic_tolerance_covers_measured_endpoint_settling_only():
+    """Accept the observed 22.7-um endpoint settle, well inside the 0.1-mm gate."""
+    validation = load_yaml('validation_policies/light_cup_wall_pick.yaml')
+    for state in ('DESCEND', 'RECOVER_DESCEND_TO_PICK'):
+        policy = validation['states'][state]
+        assert policy['monotonic_tolerance_m'] == pytest.approx(0.00003)
+        assert 0.0000227 < policy['monotonic_tolerance_m']
+        assert policy['monotonic_tolerance_m'] < policy[
+            'contact_wall_normal_endpoint_tolerance_m'
+        ]
 
 
 def generated_robot(*mappings):
@@ -29,6 +55,10 @@ def test_ros2_control_joint_and_interface_contract():
     controllers = load_yaml('so101_controllers.yaml')
     parameters = controllers['controller_manager']['ros__parameters']
 
+    assert controllers['gz_ros_control']['ros__parameters'][
+        'position_proportional_gain'
+    ] == 1.0
+
     assert parameters['arm_controller']['type'] == (
         'joint_trajectory_controller/JointTrajectoryController'
     )
@@ -43,6 +73,53 @@ def test_ros2_control_joint_and_interface_contract():
         controller = controllers[controller_name]['ros__parameters']
         assert controller['command_interfaces'] == ['position']
         assert controller['state_interfaces'] == ['position']
+
+
+def test_gripper_trajectory_success_requires_mesh_bounded_joint6_convergence():
+    """Contact-limited convergence must stay inside the mesh-derived safe gap band."""
+    controller = load_yaml('so101_controllers.yaml')['gripper_controller']['ros__parameters']
+    calculator = load_preopen_calculator_module()
+    calibration = calculator.calculate_fingertip_pad_gap_calibration(
+        CONFIG_DIR / 'task_objects' / 'light_plastic_cup.yaml',
+        PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo' / 'fingertip_pad_assets',
+        PACKAGE_DIR / 'urdf' / 'so101_base.xacro',
+    )
+    contact_limit = load_yaml('validation_policies/light_cup_wall_pick.yaml')[
+        'grasp_contact'
+    ]['max_penetration_m']
+    goal_tolerance = controller['constraints']['6']['goal']
+
+    assert controller['open_loop_control'] is False
+    assert controller['constraints'] == {
+        'goal_time': pytest.approx(1.0),
+        '6': {
+            'trajectory': pytest.approx(0.05),
+            'goal': pytest.approx(0.001),
+        },
+    }
+    gap_open = calibration.gap_at(calibration.grasp_q6 + goal_tolerance)
+    gap_closed = calibration.gap_at(calibration.grasp_q6 - goal_tolerance)
+    assert gap_open - calibration.grasp_gap_m < 0.00017
+    assert calibration.grasp_gap_m - gap_closed < 0.00017
+    assert max(0.0, 0.002 - gap_closed) < contact_limit
+
+
+def test_arm_path_tolerance_allows_bounded_contact_tracking_error_at_1khz():
+    """Path tracking may absorb bounded contact error; endpoint gates stay strict."""
+    controller = load_yaml('so101_controllers.yaml')['arm_controller']['ros__parameters']
+
+    assert controller['open_loop_control'] is False
+    assert load_yaml('so101_controllers.yaml')['controller_manager']['ros__parameters'][
+        'update_rate'
+    ] == 1000
+    assert controller['constraints'] == {
+        'goal_time': pytest.approx(1.0),
+        '1': {'trajectory': pytest.approx(0.002), 'goal': pytest.approx(0.00025)},
+        '2': {'trajectory': pytest.approx(0.0015), 'goal': pytest.approx(0.00025)},
+        '3': {'trajectory': pytest.approx(0.0015), 'goal': pytest.approx(0.00025)},
+        '4': {'trajectory': pytest.approx(0.0015), 'goal': pytest.approx(0.00025)},
+        '5': {'trajectory': pytest.approx(0.0015), 'goal': pytest.approx(0.00025)},
+    }
 
 
 def test_ros2_control_exposes_position_and_velocity_for_every_joint():
@@ -62,38 +139,100 @@ def test_ros2_control_exposes_position_and_velocity_for_every_joint():
     }
 
 
-def test_gazebo_contact_profile_uses_supported_gripper_pad_geometry():
-    """Catch Gazebo falling back to visual-only gripper contact geometry."""
+def test_gazebo_contact_profile_uses_two_manifest_bounded_fingertip_sets():
+    """Require low-count offline convex meshes for both load-bearing fingertips."""
     robot = generated_robot('gazebo_collision_primitives:=true')
 
-    for link_name, collision_name in (
-        ('gripper', 'fixed_finger_contact'),
-        ('jaw', 'moving_finger_contact'),
-    ):
-        link = robot.find(f"./link[@name='{link_name}']")
-        assert link is not None
-        assert link.find('./visual/geometry/mesh') is not None
-        assert link.findall('./collision/geometry/mesh') == []
-        collision = link.find(f"./collision[@name='{collision_name}']")
-        assert collision is not None
-        box = collision.find('./geometry/box')
-        assert box is not None
-        assert all(float(value) > 0.0 for value in box.attrib['size'].split())
+    gripper = robot.find("./link[@name='gripper']")
+    jaw = robot.find("./link[@name='jaw']")
+    assert gripper is not None
+    assert jaw is not None
+    fixed = [
+        piece for piece in gripper.findall('./collision')
+        if piece.attrib.get('name', '').startswith('fixed_finger_contact_convex_')
+    ]
+    moving = [
+        piece for piece in jaw.findall('./collision')
+        if piece.attrib.get('name', '').startswith('moving_jaw_contact_convex_')
+    ]
+    fixed_manifest = json.loads(
+        (COLLISION_DIR / 'fixed_finger_contact' / 'manifest.json').read_text()
+    )
+    moving_manifest = json.loads(
+        (COLLISION_DIR / 'moving_jaw_contact' / 'manifest.json').read_text()
+    )
+    assert [piece.attrib['name'] + '.stl' for piece in fixed] == [
+        record['filename'] for record in fixed_manifest['pieces']
+    ]
+    assert [piece.attrib['name'] + '.stl' for piece in moving] == [
+        record['filename'] for record in moving_manifest['pieces']
+    ]
+    assert 1 <= len(fixed) <= 8
+    assert 1 <= len(moving) <= 8
+    assert len(fixed) + len(moving) <= 16
+    assert robot.find("./link[@name='gripper']/collision[@name='fixed_finger_contact']") is None
+    assert all(piece.find('./geometry/box') is None for piece in fixed + moving)
 
-    fixed = robot.find("./link[@name='gripper']/collision[@name='fixed_finger_contact']")
-    moving = robot.find("./link[@name='jaw']/collision[@name='moving_finger_contact']")
-    assert [float(value) for value in fixed.find('origin').attrib['xyz'].split()] == pytest.approx(
-        [-0.0216, 0.0, -0.084], abs=1e-7
+    visual_mesh = jaw.find('./visual/geometry/mesh')
+    assert visual_mesh is not None
+    collision_meshes = [piece.find('./geometry/mesh') for piece in fixed + moving]
+    assert all(mesh is not None for mesh in collision_meshes)
+    assert all('/collision/' in mesh.attrib['filename'] for mesh in collision_meshes)
+    assert all(piece.find('origin').attrib == jaw.find('./visual/origin').attrib for piece in moving)
+    fixed_visual = next(
+        visual for visual in gripper.findall('./visual')
+        if 'wrist_roll_follower' in visual.find('./geometry/mesh').attrib['filename']
     )
-    assert [float(value) for value in moving.find('origin').attrib['xyz'].split()] == pytest.approx(
-        [-0.01599174, -0.09546963, 0.0], abs=1e-7
-    )
+    assert all(piece.find('origin').attrib == fixed_visual.find('origin').attrib for piece in fixed)
 
     moveit_robot = generated_robot()
     for link_name in ('gripper', 'jaw'):
         link = moveit_robot.find(f"./link[@name='{link_name}']")
         assert link is not None
         assert link.find('./collision/geometry/mesh') is not None
+
+
+def test_tpu95a_native_fingertip_pads_are_equivalent_in_moveit_and_gazebo():
+    """Require the measured native-only envelopes in both descriptions."""
+    object_path = CONFIG_DIR / 'task_objects' / 'light_plastic_cup.yaml'
+    object_policy = load_yaml('task_objects/light_plastic_cup.yaml')
+    pads = object_policy['fingertip_pads']
+    mappings = [f'object_config:={object_path}']
+
+    for gazebo_primitives in ('false', 'true'):
+        robot = generated_robot(
+            *mappings, f'gazebo_collision_primitives:={gazebo_primitives}'
+        )
+        expected = {
+            'gripper': ('fixed_fingertip_pad', 7),
+            'jaw': ('moving_fingertip_pad', 6),
+        }
+        for link_name, (name, collision_count) in expected.items():
+            link = robot.find(f"./link[@name='{link_name}']")
+            assert link is not None
+            visual = link.find(f"./visual[@name='{name}_visual']")
+            assert visual is not None
+            assert visual.find('./material').attrib['name'] == 'tpu_95a_adapter'
+            mesh = visual.find('./geometry/mesh')
+            assert mesh is not None and '/generated/' in mesh.attrib['filename']
+            collisions = [
+                collision for collision in link.findall('./collision')
+                if collision.attrib.get('name', '').startswith(f'{name}_collision_')
+            ]
+            assert len(collisions) == collision_count
+            assert all(collision.find('./geometry/mesh') is not None for collision in collisions)
+
+        assert not any(
+            'stem' in collision.attrib.get('name', '') or
+            'direct_tongue' in collision.attrib.get('name', '')
+            for collision in robot.findall('.//collision')
+        )
+
+    assert pads['enabled'] is True
+    assert pads['material'] == 'TPU_95A'
+    assert pads['contact_model'] == 'rigid_link_local_mesh'
+    assert pads['fixed_pad']['opening_axis_thickness_m'] == pytest.approx(0.005)
+    assert pads['moving_pad']['opening_axis_thickness_m'] == pytest.approx(0.005)
 
 
 def test_detachable_joint_uses_runtime_gripper_entity_and_raw_event_topic():
@@ -105,12 +244,27 @@ def test_detachable_joint_uses_runtime_gripper_entity_and_raw_event_topic():
     assert plugin is not None
     assert plugin.attrib['filename'] == 'gz-sim-detachable-joint-system'
     assert plugin.findtext('parent_link') == 'gripper'
-    assert plugin.findtext('child_model') == 'coke'
+    assert plugin.findtext('child_model') == 'plastic_cup'
     assert plugin.findtext('child_link') == 'body'
     assert plugin.findtext('initially_detached') == 'true'
-    assert plugin.findtext('attach_topic') == '/so101/attach_coke'
-    assert plugin.findtext('detach_topic') == '/so101/detach_coke'
-    assert plugin.findtext('output_topic') == '/so101/coke_attached_event'
+    assert plugin.findtext('attach_topic') == '/so101/attach_object'
+    assert plugin.findtext('detach_topic') == '/so101/detach_object'
+    assert plugin.findtext('output_topic') == '/so101/object_attached_event'
+
+
+def test_attached_task_object_collision_gate_uses_the_same_attach_lifecycle():
+    """Avoid locking fingertip penetration into the rigid carry constraint."""
+    robot = generated_robot('gazebo_collision_primitives:=true')
+    plugin = robot.find(
+        ".//plugin[@name='so101_gazebo_demo::AttachmentCollisionSystem']"
+    )
+    assert plugin is not None
+    assert plugin.attrib['filename'] == 'libso101_attachment_collision_system.so'
+    assert plugin.findtext('child_model') == 'plastic_cup'
+    assert plugin.findtext('attach_topic') == '/so101/attach_object'
+    assert plugin.findtext('detach_topic') == '/so101/detach_object'
+    assert plugin.findtext('joint_state_topic') == '/so101/object_attached'
+    assert plugin.findtext('collision_state_topic') == '/so101/object_collision_enabled'
 
 
 def test_moveit_controller_mapping_contract():
@@ -152,11 +306,30 @@ def test_srdf_group_and_named_state_contract():
     assert states[('arm', 'home')] == {
         '1': 0.0, '2': 0.0, '3': 0.0, '4': 0.0, '5': 0.0
     }
-    assert states[('gripper', 'home')] == {'6': 0.0}
-    assert states[('gripper', 'fullclose')] == {'6': pytest.approx(-0.17)}
+    assert states[('gripper', 'home')] == {'6': pytest.approx(-0.059303612618397)}
+    assert states[('gripper', 'fullclose')] == {'6': pytest.approx(-0.059303612618397)}
     assert states[('gripper', 'fullopen')] == {'6': pytest.approx(1.7)}
-    assert states[('gripper', 'preopen')] == {'6': pytest.approx(0.7072)}
-    assert states[('gripper', 'contact')] == {'6': pytest.approx(0.662818811)}
+    assert states[('gripper', 'preopen')] == {'6': pytest.approx(0.465038)}
+    calculator = load_preopen_calculator_module()
+    calibration = calculator.calculate_fingertip_pad_gap_calibration(
+        PACKAGE_DIR / 'config/task_objects/light_plastic_cup.yaml',
+        PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo' / 'fingertip_pad_assets',
+        PACKAGE_DIR / 'urdf' / 'so101_base.xacro',
+    )
+    assert states[('gripper', 'contact')] == {
+        '6': pytest.approx(calibration.grasp_q6, abs=2e-12)
+    }
+
+
+def test_joint6_fingertip_pad_lower_limit_is_identical_in_all_command_paths():
+    floor = pytest.approx(-0.059303612618397)
+    robot = generated_robot()
+    joint = robot.find("./joint[@name='6']")
+    assert joint is not None
+    assert float(joint.find('limit').attrib['lower']) == floor
+    control = robot.find("./ros2_control[@name='RobotSystem']/joint[@name='6']")
+    assert control is not None
+    assert float(control.find("./command_interface/param[@name='min']").text) == floor
 
 
 def test_srdf_has_no_exact_duplicate_disabled_collision_pairs():

@@ -20,16 +20,16 @@ pick_place::WorldSnapshot observed(bool gazebo_attached, bool moveit_attached, d
   snapshot.arm_stationary = true;
   snapshot.joint_positions.emplace(profile.gripper_joint, q6);
   snapshot.joint_velocities.emplace(profile.gripper_joint, 0.0);
-  snapshot.gazebo_coke_pose_world = profile.coke_pose;
-  snapshot.gazebo_coke_stationary = true;
-  snapshot.gazebo_coke_attached = gazebo_attached;
-  snapshot.moveit_coke_attached = moveit_attached;
+  snapshot.gazebo_task_object_pose_world = profile.task_object_pose;
+  snapshot.gazebo_task_object_stationary = true;
+  snapshot.gazebo_task_object_attached = gazebo_attached;
+  snapshot.moveit_task_object_attached = moveit_attached;
   snapshot.moveit_world_object_poses.emplace(profile.table_object, profile.table_pose);
   if (!moveit_attached) {
-    snapshot.moveit_world_object_poses.emplace(profile.coke_model, profile.coke_pose);
+    snapshot.moveit_world_object_poses.emplace(profile.task_object_id, profile.task_object_pose);
   } else {
-    snapshot.moveit_coke_attached_link = profile.moveit_attach_link;
-    snapshot.moveit_coke_touch_links = {profile.moveit_attach_link, "jaw"};
+    snapshot.moveit_task_object_attached_link = profile.moveit_attach_link;
+    snapshot.moveit_task_object_touch_links = {profile.moveit_attach_link, "jaw"};
   }
   return snapshot;
 }
@@ -47,7 +47,7 @@ TEST(SO101RecoveryPolicy, RoutesOnlyFromFreshStationaryCurrentFacts)
   world.arm_stationary = false;
   EXPECT_FALSE(policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
   world = observed(false, false, profile.q6_preopen);
-  world.gazebo_coke_attached.reset();
+  world.gazebo_task_object_attached.reset();
   EXPECT_FALSE(policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
   world = observed(false, false, profile.q6_preopen);
   world.joint_velocities[profile.gripper_joint] = profile.q6_velocity_tolerance * 2.0;
@@ -85,13 +85,13 @@ TEST(SO101RecoveryPolicy, DetachedFactsChooseOpenSyncOrRetreat)
                           observed(false, false, profile.q6_contact)).next_state);
 
   auto mismatch = observed(false, false, profile.q6_full_open);
-  mismatch.moveit_world_object_poses[profile.coke_model].x +=
-    profile.coke_position_drift_tolerance * 2.0;
+  mismatch.moveit_world_object_poses[profile.task_object_id].x +=
+    profile.task_object_position_drift_tolerance * 2.0;
   EXPECT_EQ(pick_place::State::RECOVER_SYNC_WORLD_OBJECT,
             policy.select(pick_place::State::DETACH_MOVEIT, failure, mismatch).next_state);
 
   auto missing = observed(false, false, profile.q6_full_open);
-  missing.moveit_world_object_poses.erase(profile.coke_model);
+  missing.moveit_world_object_poses.erase(profile.task_object_id);
   EXPECT_EQ(pick_place::State::RECOVER_SYNC_WORLD_OBJECT,
             policy.select(pick_place::State::DETACH_MOVEIT, failure, missing).next_state);
 
@@ -115,12 +115,12 @@ TEST(SO101RecoveryPolicy, SameCurrentWorldIgnoresFailedStateAndHistoricalFlags)
   EXPECT_EQ(pick_place::State::RECOVER_DETACH_GAZEBO, second.next_state);
 }
 
-TEST(SO101RecoveryPolicy, AttachedCokeAwayFromKnownSupportFailsClosedUntilMotionPolicyExists)
+TEST(SO101RecoveryPolicy, AttachedTaskObjectAwayFromKnownSupportFailsClosedUntilMotionPolicyExists)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   pick_place::SO101RecoveryPolicy policy(profile);
   auto unsupported = observed(true, true, profile.q6_contact);
-  unsupported.gazebo_coke_pose_world->z += 0.10;
+  unsupported.gazebo_task_object_pose_world->z += 0.10;
 
   const auto route =
     policy.select(pick_place::State::LIFT, originalFailure(), unsupported);

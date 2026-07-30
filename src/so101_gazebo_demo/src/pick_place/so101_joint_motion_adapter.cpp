@@ -71,8 +71,8 @@ double orientationDistance(const Pose3d & first, const Pose3d & second)
 bool posesMatch(const Pose3d & first, const Pose3d & second, const SO101Profile & profile)
 {
   return finitePose(first) && finitePose(second) &&
-         positionDistance(first, second) <= profile.coke_position_drift_tolerance &&
-         orientationDistance(first, second) <= profile.coke_orientation_drift_tolerance_rad;
+         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+         orientationDistance(first, second) <= profile.task_object_orientation_drift_tolerance_rad;
 }
 
 Pose3d compose(const Pose3d & parent, const Pose3d & child)
@@ -109,9 +109,9 @@ Pose3d compose(const Pose3d & parent, const Pose3d & child)
           w * cw - x * cx - y * cy - z * cz};
 }
 
-const Pose3d & expectedDetachedCokePose(State state, const SO101Profile & profile)
+const Pose3d & expectedDetachedTaskObjectPose(State state, const SO101Profile & profile)
 {
-  return state == State::RETREAT ? profile.place_coke_pose : profile.coke_pose;
+  return state == State::RETREAT ? profile.place_task_object_pose : profile.task_object_pose;
 }
 
 bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & observed,
@@ -121,33 +121,33 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
       !posesMatch(*facts.table_world_pose, profile.table_pose, profile) ||
       !facts.pedestal_in_world || !facts.pedestal_world_pose ||
       !posesMatch(*facts.pedestal_world_pose, profile.pedestal_pose, profile) ||
-      !observed.gazebo_coke_pose_world || !observed.gazebo_coke_attached ||
-      !observed.gazebo_coke_stationary || !*observed.gazebo_coke_stationary) {
+      !observed.gazebo_task_object_pose_world || !observed.gazebo_task_object_attached ||
+      !observed.gazebo_task_object_stationary || !*observed.gazebo_task_object_stationary) {
     return false;
   }
   if (carrying) {
-    if (!*observed.gazebo_coke_attached || facts.coke_in_world || !facts.coke_attached ||
+    if (!*observed.gazebo_task_object_attached || facts.task_object_in_world || !facts.task_object_attached ||
         !facts.attached_link || !facts.attached_relative_pose ||
         !facts.current_gripper_pose_world) {
       return false;
     }
-    const auto expected_coke =
+    const auto expected_task_object =
       compose(*facts.current_gripper_pose_world, *facts.attached_relative_pose);
     return posesMatch(*facts.attached_relative_pose, profile.calibrated_grasp_relative_pose,
                       profile) &&
-           posesMatch(*observed.gazebo_coke_pose_world, expected_coke, profile) &&
+           posesMatch(*observed.gazebo_task_object_pose_world, expected_task_object, profile) &&
            *facts.attached_link == profile.moveit_attach_link &&
            facts.touch_links == std::set<std::string>(profile.moveit_touch_links.begin(),
                                                        profile.moveit_touch_links.end());
   }
-  if (*observed.gazebo_coke_attached || !facts.coke_in_world || facts.coke_attached ||
-      facts.attached_link || !facts.touch_links.empty() || !facts.coke_world_pose) {
+  if (*observed.gazebo_task_object_attached || !facts.task_object_in_world || facts.task_object_attached ||
+      facts.attached_link || !facts.touch_links.empty() || !facts.task_object_world_pose) {
     return false;
   }
-  const auto & expected = expectedDetachedCokePose(state, profile);
-  return posesMatch(*facts.coke_world_pose, *observed.gazebo_coke_pose_world, profile) &&
-         posesMatch(*facts.coke_world_pose, expected, profile) &&
-         posesMatch(*observed.gazebo_coke_pose_world, expected, profile);
+  const auto & expected = expectedDetachedTaskObjectPose(state, profile);
+  return posesMatch(*facts.task_object_world_pose, *observed.gazebo_task_object_pose_world, profile) &&
+         posesMatch(*facts.task_object_world_pose, expected, profile) &&
+         posesMatch(*observed.gazebo_task_object_pose_world, expected, profile);
 }
 
 }  // namespace
@@ -188,8 +188,13 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     return fail(FailureCategory::PRECONDITION, "GRIPPER_NOT_STATIONARY_BEFORE_PLAN",
                 "Gripper joint 6 must be stationary before planning");
   }
+  const bool contact_context =
+    request.carrying && std::isfinite(request.gripper_position) &&
+    std::abs(request.gripper_position - profile_.q6_contact) <= 1e-12;
+  const double context_tolerance =
+    contact_context ? profile_.contact_q6_stop_tolerance : profile_.q6_tolerance;
   if (!std::isfinite(request.gripper_position) ||
-      std::abs(q6_position->second - request.gripper_position) > profile_.q6_tolerance) {
+      std::abs(q6_position->second - request.gripper_position) > context_tolerance) {
     return fail(FailureCategory::PRECONDITION, "GRIPPER_CONTEXT_MISMATCH_BEFORE_PLAN",
                 "Observed q6 does not match the motion state's expected gripper context");
   }

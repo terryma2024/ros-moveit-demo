@@ -16,11 +16,20 @@ def generate_launch_description():
         name="base_height", default_value="0.1899186"
     )
     package_share = Path(get_package_share_directory("so101_gazebo_demo"))
+    object_config_arg = DeclareLaunchArgument(
+        name="object_config",
+        default_value=str(
+            package_share / "config" / "task_objects" / "light_plastic_cup.yaml"
+        ),
+    )
     moveit_config = (
         MoveItConfigsBuilder("so101", package_name="so101_gazebo_demo")
         .robot_description(
             file_path=str(package_share / "urdf" / "so101.urdf.xacro"),
-            mappings={"base_height": LaunchConfiguration("base_height")},
+            mappings={
+                "base_height": LaunchConfiguration("base_height"),
+                "object_config": LaunchConfiguration("object_config"),
+            },
         )
         .robot_description_semantic(
             file_path=str(package_share / "config" / "so101.srdf")
@@ -40,4 +49,4 @@ def generate_launch_description():
             {"publish_robot_description_semantic": True},
         ],
     )
-    return LaunchDescription([is_sim_arg, base_height_arg, move_group])
+    return LaunchDescription([is_sim_arg, base_height_arg, object_config_arg, move_group])

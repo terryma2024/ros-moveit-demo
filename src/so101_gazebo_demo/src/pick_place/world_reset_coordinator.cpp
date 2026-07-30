@@ -1,5 +1,7 @@
 #include "so101_gazebo_demo/pick_place/world_reset_coordinator.hpp"
 
+#include "so101_gazebo_demo/pick_place/fingertip_pad_gap_calibration_data.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -74,8 +76,16 @@ bool gripperMatches(const CurrentJointStateEvidence & evidence, double target,
                     const WorldResetConfig & config)
 {
   return completeJointEvidence(evidence, config) &&
-         std::abs(*evidence.gripper_position - target) <= config.joint_position_tolerance &&
+         std::abs(*evidence.gripper_position - target) <= config.gripper_position_tolerance &&
          std::abs(*evidence.gripper_velocity) <= config.joint_velocity_tolerance;
+}
+
+bool gripperHomeMatches(const CurrentJointStateEvidence & evidence, const WorldResetConfig & config)
+{
+  namespace pad_calibration = fingertip_pad_calibration;
+  return gripperMatches(evidence, config.q6_home_position, config) &&
+         *evidence.gripper_position >= config.q6_safe_lower -
+           pad_calibration::kControllerEndpointEpsilonRad;
 }
 
 bool armMatches(const CurrentJointStateEvidence & evidence, const WorldResetConfig & config)
@@ -83,7 +93,7 @@ bool armMatches(const CurrentJointStateEvidence & evidence, const WorldResetConf
   if (!completeJointEvidence(evidence, config)) return false;
   for (std::size_t i = 0; i < config.arm_home_positions.size(); ++i) {
     if (std::abs(evidence.positions[i] - config.arm_home_positions[i]) >
-          config.joint_position_tolerance ||
+          config.arm_joint_position_tolerance ||
         std::abs(evidence.velocities[i]) > config.joint_velocity_tolerance) {
       return false;
     }
@@ -142,14 +152,23 @@ ActionResult WorldResetCoordinator::reset()
       config_.arm_joints.size() != config_.arm_home_positions.size() ||
       !std::all_of(config_.arm_home_positions.begin(), config_.arm_home_positions.end(),
                    [](double value) { return std::isfinite(value); }) ||
-      !std::isfinite(config_.q6_release_position) || !std::isfinite(config_.q6_home_position) ||
-      !std::isfinite(config_.joint_position_tolerance) ||
+      !std::isfinite(config_.q6_release_position) || !std::isfinite(config_.q6_safe_lower) ||
+      !std::isfinite(config_.q6_home_position) ||
+      !std::isfinite(config_.arm_joint_position_tolerance) ||
+      !std::isfinite(config_.gripper_position_tolerance) ||
       !std::isfinite(config_.joint_velocity_tolerance) ||
-      config_.joint_position_tolerance < 0.0 || config_.joint_velocity_tolerance < 0.0 ||
+      config_.arm_joint_position_tolerance < 0.0 ||
+      config_.gripper_position_tolerance < 0.0 || config_.joint_velocity_tolerance < 0.0 ||
       !validPose(config_.table_pose) || !validPose(config_.pedestal_pose) ||
-      !validPose(config_.coke_pose)) {
+      !validPose(config_.task_object_pose)) {
     return resetFailure(ActionStatus::FAILED, "WORLD_RESET_CONFIG_INVALID",
                         "Reset timing, tolerances, and canonical poses must be valid");
+  }
+  if (config_.q6_home_position < config_.q6_safe_lower) {
+    return resetFailure(ActionStatus::FAILED, "Q6_BELOW_SAFE_LOWER_LIMIT",
+                        "Reset q6 home target must not cross the fingertip-pad safety floor",
+                        {{"requested_q6", config_.q6_home_position},
+                         {"required_q6", config_.q6_safe_lower}});
   }
 
   auto gazebo_state = gazebo_->observe();
@@ -164,32 +183,32 @@ ActionResult WorldResetCoordinator::reset()
                         "Complete finite arm and gripper joint evidence is required before reset");
   }
 
-  if (gazebo_state->coke_attached) {
-    const auto command = gazebo_->detachCoke();
+  if (gazebo_state->task_object_attached) {
+    const auto command = gazebo_->detachTaskObject();
     if (command.status != ActionStatus::SUCCEEDED) {
       return command;
     }
     if (!pollUntil(config_.timeout_seconds, config_.poll_interval_seconds, [this]() {
           const auto state = gazebo_->observe();
-          return state && !state->coke_attached;
+          return state && !state->task_object_attached;
         })) {
       return resetFailure(ActionStatus::TIMED_OUT, "WORLD_RESET_GAZEBO_DETACH_TIMEOUT",
-                          "Gazebo Coke did not converge to detached");
+                          "Gazebo TaskObject did not converge to detached");
     }
   }
 
-  if (moveit_state->coke_attached) {
-    const auto command = moveit_->detachCoke();
+  if (moveit_state->task_object_attached) {
+    const auto command = moveit_->detachTaskObject();
     if (command.status != ActionStatus::SUCCEEDED) {
       return command;
     }
     if (!pollUntil(config_.timeout_seconds, config_.poll_interval_seconds, [this]() {
           const auto state = moveit_->observe();
-          return state && !state->coke_attached && state->coke_in_world &&
+          return state && !state->task_object_attached && state->task_object_in_world &&
                  state->attached_link.empty() && state->touch_links.empty();
         })) {
       return resetFailure(ActionStatus::TIMED_OUT, "WORLD_RESET_MOVEIT_DETACH_TIMEOUT",
-                          "MoveIt Coke did not converge to detached world membership");
+                          "MoveIt TaskObject did not converge to detached world membership");
     }
   }
 
@@ -241,7 +260,7 @@ ActionResult WorldResetCoordinator::reset()
                         "Gazebo facts became unavailable before canonical pose reset");
   }
   const auto pose_revision_before = gazebo_state->pose_revision;
-  command = gazebo_->setCokeWorldPose(config_.coke_pose);
+  command = gazebo_->setTaskObjectWorldPose(config_.task_object_pose);
   if (command.status != ActionStatus::SUCCEEDED) {
     return command;
   }
@@ -253,7 +272,7 @@ ActionResult WorldResetCoordinator::reset()
   if (command.status != ActionStatus::SUCCEEDED) {
     return command;
   }
-  command = moveit_->upsertCokeWorldPose(config_.coke_pose);
+  command = moveit_->upsertTaskObjectWorldPose(config_.task_object_pose);
   if (command.status != ActionStatus::SUCCEEDED) {
     return command;
   }
@@ -262,17 +281,17 @@ ActionResult WorldResetCoordinator::reset()
         config_.timeout_seconds, config_.poll_interval_seconds, [this, pose_revision_before]() {
           const auto gazebo = gazebo_->observe();
           const auto moveit = moveit_->observe();
-          return gazebo && moveit && !gazebo->coke_attached &&
+          return gazebo && moveit && !gazebo->task_object_attached &&
                  gazebo->pose_revision > pose_revision_before &&
-                 poseMatches(gazebo->coke_world_pose, config_.coke_pose, config_) &&
-                 !moveit->coke_attached && moveit->coke_in_world && moveit->attached_link.empty() &&
-                 moveit->touch_links.empty() && moveit->coke_world_pose &&
-                 poseMatches(*moveit->coke_world_pose, config_.coke_pose, config_) &&
+                 poseMatches(gazebo->task_object_world_pose, config_.task_object_pose, config_) &&
+                 !moveit->task_object_attached && moveit->task_object_in_world && moveit->attached_link.empty() &&
+                 moveit->touch_links.empty() && moveit->task_object_world_pose &&
+                 poseMatches(*moveit->task_object_world_pose, config_.task_object_pose, config_) &&
                  moveit->table_in_world && moveit->table_world_pose &&
                  poseMatches(*moveit->table_world_pose, config_.table_pose, config_) &&
                  moveit->pedestal_in_world && moveit->pedestal_world_pose &&
                  poseMatches(*moveit->pedestal_world_pose, config_.pedestal_pose, config_) &&
-                 poseMatches(gazebo->coke_world_pose, *moveit->coke_world_pose, config_);
+                 poseMatches(gazebo->task_object_world_pose, *moveit->task_object_world_pose, config_);
         })) {
     return resetFailure(ActionStatus::TIMED_OUT, "WORLD_RESET_CONVERGENCE_TIMEOUT",
                         "Gazebo and MoveIt did not converge to detached canonical 6D facts");
@@ -283,7 +302,7 @@ ActionResult WorldResetCoordinator::reset()
   if (!pollUntil(config_.timeout_seconds, config_.poll_interval_seconds, [this, &latest_joints]() {
         latest_joints = robot_->observeJoints();
         return latest_joints && armMatches(*latest_joints, config_) &&
-               gripperMatches(*latest_joints, config_.q6_home_position, config_);
+               gripperHomeMatches(*latest_joints, config_);
       })) {
     return resetFailure(ActionStatus::TIMED_OUT, "WORLD_RESET_GRIPPER_HOME_TIMEOUT",
                         "Gripper did not converge to the stationary SRDF home state",

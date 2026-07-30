@@ -8,6 +8,7 @@
 #include <thread>
 
 #include <gz/msgs/empty.pb.h>
+#include <gz/msgs/contacts.pb.h>
 #include <gz/msgs/pose_v.pb.h>
 #include <gz/msgs/stringmsg.pb.h>
 #include <gz/transport/Node.hh>
@@ -49,9 +50,9 @@ pick_place::ExecutionContext context(pick_place::State state, std::optional<bool
 {
   pick_place::WorldSnapshot snapshot;
   snapshot.fresh = true;
-  snapshot.gazebo_coke_attached = attached;
-  snapshot.gazebo_coke_pose_world = pick_place::Pose3d{};
-  snapshot.gazebo_coke_stationary = true;
+  snapshot.gazebo_task_object_attached = attached;
+  snapshot.gazebo_task_object_pose_world = pick_place::Pose3d{};
+  snapshot.gazebo_task_object_stationary = true;
   return {state, pick_place::State::DONE, snapshot, nullptr};
 }
 
@@ -153,18 +154,22 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
   BaseObserver base;
   const auto world = unique("world").substr(1);
   const auto state_topic = unique("durable");
-  pick_place::GazeboWorldObserver observer(base, world, "coke", state_topic, "session", 0.5, 3,
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.5, 3,
                                            0.005, 0.002, 0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);
+  auto contacts = peer.Advertise<gz::msgs::Contacts>(
+    "/world/" + world +
+    "/model/plastic_cup/link/body/sensor/task_object_contact_wall_near/contact");
   ASSERT_TRUE(connected(poses));
   ASSERT_TRUE(connected(state));
+  ASSERT_TRUE(connected(contacts));
   std::thread publish([&]() {
     for (int i = 0; i < 3; ++i) {
       gz::msgs::Pose_V message;
       auto * pose = message.add_pose();
-      pose->set_name("coke");
+      pose->set_name("plastic_cup");
       pose->mutable_position()->set_x(0.02);
       pose->mutable_position()->set_y(-0.28);
       pose->mutable_position()->set_z(0.181);
@@ -173,6 +178,59 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
       gz::msgs::StringMsg attached;
       attached.set_data("detached");
       state.Publish(attached);
+      gz::msgs::Contacts contact_message;
+      auto * fixed = contact_message.add_contact();
+      fixed->mutable_collision1()->set_name("plastic_cup::body::wall_near");
+      fixed->mutable_collision2()->set_name(
+        "so101::gripper::fixed_fingertip_pad_collision_000");
+      auto * fixed_position = fixed->add_position();
+      fixed_position->set_y(-0.24);
+      fixed_position->set_z(0.205);
+      fixed->add_normal()->set_y(1.0);
+      fixed->add_depth(0.0004);
+      // Repeated positive manifold points remain valid physical penetration
+      // evidence.  Deduplication must not erase the live 1.260 mm maximum.
+      for (int duplicate = 0; duplicate < 2; ++duplicate) {
+        auto * repeated = fixed->add_position();
+        repeated->set_y(-0.24);
+        repeated->set_z(0.205);
+        fixed->add_normal()->set_y(1.0);
+        fixed->add_depth(0.001260);
+      }
+      // Bullet may include separated manifold points beside a real contact.
+      // A negative depth is not a physical finger contact and must not poison
+      // the semantic sample set or its vertical band.
+      auto * separated_fixed_position = fixed->add_position();
+      separated_fixed_position->set_y(-0.24);
+      separated_fixed_position->set_z(0.300);
+      fixed->add_normal()->set_y(1.0);
+      fixed->add_depth(-0.001);
+      auto * moving = contact_message.add_contact();
+      moving->mutable_collision1()->set_name("plastic_cup::body::wall_near");
+      moving->mutable_collision2()->set_name(
+        "so101::jaw::moving_fingertip_pad_collision_000");
+      auto * moving_position = moving->add_position();
+      moving_position->set_y(-0.242);
+      moving_position->set_z(0.215);
+      auto * moving_position_2 = moving->add_position();
+      moving_position_2->set_y(-0.242);
+      moving_position_2->set_z(0.217);
+      moving->add_normal()->set_y(-1.0);
+      moving->add_normal()->set_y(-1.0);
+      moving->add_depth(0.0006);
+      moving->add_depth(0.0005);
+      auto * deep_moving_position = moving->add_position();
+      deep_moving_position->set_y(-0.242);
+      deep_moving_position->set_z(0.215);
+      moving->add_normal()->set_y(-1.0);
+      moving->add_depth(0.0009644);
+      auto * body = contact_message.add_contact();
+      body->mutable_collision1()->set_name("plastic_cup::body::collision");
+      body->mutable_collision2()->set_name(
+        "so101::gripper::gripper_fixed_joint_lump__fixed_finger_mount_collision");
+      body->add_position()->set_z(0.250);
+      body->add_depth(0.009);
+      contacts.Publish(contact_message);
       std::this_thread::sleep_for(10ms);
     }
   });
@@ -181,19 +239,50 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
   publish.join();
 
   ASSERT_TRUE(result.snapshot) << (result.failure ? result.failure->code : "no failure");
-  ASSERT_TRUE(result.snapshot->gazebo_coke_attached);
-  EXPECT_FALSE(*result.snapshot->gazebo_coke_attached);
-  ASSERT_TRUE(result.snapshot->gazebo_coke_stationary);
-  EXPECT_TRUE(*result.snapshot->gazebo_coke_stationary);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_attached);
+  EXPECT_FALSE(*result.snapshot->gazebo_task_object_attached);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_stationary);
+  EXPECT_TRUE(*result.snapshot->gazebo_task_object_stationary);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_fixed_finger_contact);
+  EXPECT_TRUE(*result.snapshot->gazebo_task_object_fixed_finger_contact);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_moving_jaw_contact);
+  EXPECT_TRUE(*result.snapshot->gazebo_task_object_moving_jaw_contact);
+  EXPECT_EQ(result.snapshot->gazebo_task_object_gripper_collision_names,
+            (std::set<std::string>{
+              "so101::gripper::fixed_fingertip_pad_collision_000",
+              "so101::jaw::moving_fingertip_pad_collision_000"}));
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_fixed_contact_min_height);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_fixed_contact_max_height);
+  EXPECT_DOUBLE_EQ(*result.snapshot->gazebo_task_object_fixed_contact_min_height, 0.205);
+  EXPECT_DOUBLE_EQ(*result.snapshot->gazebo_task_object_fixed_contact_max_height, 0.205);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_moving_contact_min_height);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_moving_contact_max_height);
+  EXPECT_DOUBLE_EQ(*result.snapshot->gazebo_task_object_moving_contact_min_height, 0.215);
+  EXPECT_DOUBLE_EQ(*result.snapshot->gazebo_task_object_moving_contact_max_height, 0.217);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_gripper_max_depth);
+  EXPECT_DOUBLE_EQ(*result.snapshot->gazebo_task_object_gripper_max_depth, 0.001260);
+  ASSERT_EQ(3U, result.snapshot->gazebo_task_object_fixed_finger_contacts.size());
+  ASSERT_EQ(3U, result.snapshot->gazebo_task_object_moving_jaw_contacts.size());
+  const auto & fixed_sample = result.snapshot->gazebo_task_object_fixed_finger_contacts.front();
+  EXPECT_EQ("wall_near", fixed_sample.task_object_collision);
+  EXPECT_NEAR(0.040, fixed_sample.point_task_object.y, 1e-9);
+  EXPECT_NEAR(0.024, fixed_sample.point_task_object.z, 1e-9);
+  EXPECT_DOUBLE_EQ(1.0, fixed_sample.normal_toward_finger_task_object.y);
+  EXPECT_DOUBLE_EQ(0.0004, fixed_sample.depth);
+  const auto & moving_sample = result.snapshot->gazebo_task_object_moving_jaw_contacts.front();
+  EXPECT_EQ("wall_near", moving_sample.task_object_collision);
+  EXPECT_NEAR(0.038, moving_sample.point_task_object.y, 1e-9);
+  EXPECT_DOUBLE_EQ(-1.0, moving_sample.normal_toward_finger_task_object.y);
+  EXPECT_DOUBLE_EQ(0.0006, moving_sample.depth);
 }
 
-TEST(SO101GazeboWorldObserver, RejectsNonfiniteCokePoseEvidence)
+TEST(SO101GazeboWorldObserver, RejectsNonfiniteTaskObjectPoseEvidence)
 {
   configurePartition();
   BaseObserver base;
   const auto world = unique("world_nonfinite").substr(1);
   const auto state_topic = unique("durable_nonfinite");
-  pick_place::GazeboWorldObserver observer(base, world, "coke", state_topic, "session", 0.2, 3,
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.2, 3,
                                            0.005, 0.002, 0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
@@ -204,7 +293,7 @@ TEST(SO101GazeboWorldObserver, RejectsNonfiniteCokePoseEvidence)
     for (int i = 0; i < 3; ++i) {
       gz::msgs::Pose_V message;
       auto * pose = message.add_pose();
-      pose->set_name("coke");
+      pose->set_name("plastic_cup");
       pose->mutable_position()->set_x(std::numeric_limits<double>::quiet_NaN());
       pose->mutable_orientation()->set_w(1.0);
       poses.Publish(message);
@@ -220,7 +309,7 @@ TEST(SO101GazeboWorldObserver, RejectsNonfiniteCokePoseEvidence)
 
   EXPECT_FALSE(result.snapshot);
   ASSERT_TRUE(result.failure);
-  EXPECT_EQ("GAZEBO_COKE_POSE_NONFINITE", result.failure->code);
+  EXPECT_EQ("GAZEBO_TASK_OBJECT_POSE_NONFINITE", result.failure->code);
 }
 
 TEST(SO101GazeboWorldObserver, ReobservesMoveItAfterGazeboWait)
@@ -230,7 +319,7 @@ TEST(SO101GazeboWorldObserver, ReobservesMoveItAfterGazeboWait)
   base.fail_on_second = true;
   const auto world = unique("world_moveit_refresh").substr(1);
   const auto state_topic = unique("durable_moveit_refresh");
-  pick_place::GazeboWorldObserver observer(base, world, "coke", state_topic, "session", 0.2, 2,
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.2, 2,
                                            0.005, 0.002, 0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
@@ -241,7 +330,7 @@ TEST(SO101GazeboWorldObserver, ReobservesMoveItAfterGazeboWait)
     for (int i = 0; i < 2; ++i) {
       gz::msgs::Pose_V message;
       auto * pose = message.add_pose();
-      pose->set_name("coke");
+      pose->set_name("plastic_cup");
       pose->mutable_position()->set_x(0.02);
       pose->mutable_position()->set_y(-0.28);
       pose->mutable_position()->set_z(0.181);

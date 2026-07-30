@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -55,12 +56,12 @@ pick_place::Checkpoint makeRecoveryCheckpoint()
   checkpoint.expected.joint_positions = {{"joint_a", -0.5}, {"joint_b", 0.75}};
   checkpoint.expected.moveit_world_object_poses = {{"object", makePose(0.1)},
                                                    {"table", makePose(0.2)}};
-  checkpoint.expected.moveit_coke_attached = false;
-  checkpoint.expected.gazebo_coke_pose_world = makePose(0.3);
-  checkpoint.expected.gazebo_coke_attached = true;
-  checkpoint.expected.gazebo_coke_stationary = true;
+  checkpoint.expected.moveit_task_object_attached = false;
+  checkpoint.expected.gazebo_task_object_pose_world = makePose(0.3);
+  checkpoint.expected.gazebo_task_object_attached = true;
+  checkpoint.expected.gazebo_task_object_stationary = true;
   checkpoint.expected.required_world_objects = {"object", "table"};
-  checkpoint.configuration_hash = "configuration-sha256";
+  checkpoint.policy_bundle_sha256 = "configuration-sha256";
   checkpoint.simulation_session_id = "simulation-session";
   checkpoint.resumable = true;
   return checkpoint;
@@ -75,10 +76,10 @@ pick_place::Checkpoint makeForwardCheckpointWithNullOptionals()
   checkpoint.failed_state.reset();
   checkpoint.original_failure.reset();
   checkpoint.next_state = pick_place::State::CLOSE_GRIPPER;
-  checkpoint.expected.moveit_coke_attached.reset();
-  checkpoint.expected.gazebo_coke_pose_world.reset();
-  checkpoint.expected.gazebo_coke_attached.reset();
-  checkpoint.expected.gazebo_coke_stationary.reset();
+  checkpoint.expected.moveit_task_object_attached.reset();
+  checkpoint.expected.gazebo_task_object_pose_world.reset();
+  checkpoint.expected.gazebo_task_object_attached.reset();
+  checkpoint.expected.gazebo_task_object_stationary.reset();
   checkpoint.resumable = true;
   return checkpoint;
 }
@@ -92,10 +93,10 @@ pick_place::WorldSnapshot snapshotFrom(const pick_place::Checkpoint & checkpoint
   snapshot.tcp_pose_world = checkpoint.expected.tcp_pose_world;
   snapshot.joint_positions = checkpoint.expected.joint_positions;
   snapshot.moveit_world_object_poses = checkpoint.expected.moveit_world_object_poses;
-  snapshot.moveit_coke_attached = checkpoint.expected.moveit_coke_attached;
-  snapshot.gazebo_coke_pose_world = checkpoint.expected.gazebo_coke_pose_world;
-  snapshot.gazebo_coke_attached = checkpoint.expected.gazebo_coke_attached;
-  snapshot.gazebo_coke_stationary = checkpoint.expected.gazebo_coke_stationary;
+  snapshot.moveit_task_object_attached = checkpoint.expected.moveit_task_object_attached;
+  snapshot.gazebo_task_object_pose_world = checkpoint.expected.gazebo_task_object_pose_world;
+  snapshot.gazebo_task_object_attached = checkpoint.expected.gazebo_task_object_attached;
+  snapshot.gazebo_task_object_stationary = checkpoint.expected.gazebo_task_object_stationary;
   snapshot.simulation_session_id = checkpoint.simulation_session_id;
   return snapshot;
 }
@@ -153,6 +154,9 @@ TEST(CheckpointV3, FullJsonRoundTripPreservesEveryCheckpointAndExpectedWorldFiel
   const auto checkpoint = makeRecoveryCheckpoint();
 
   ASSERT_FALSE(store.commit(checkpoint));
+  const auto persisted = readJson(path);
+  EXPECT_TRUE(persisted.contains("policy_bundle_sha256"));
+  EXPECT_FALSE(persisted.contains("configuration_hash"));
   const auto loaded = store.loadLatestCompatible();
 
   ASSERT_TRUE(loaded.checkpoint);
@@ -178,18 +182,18 @@ TEST(CheckpointV3, FullJsonRoundTripPreservesEveryCheckpointAndExpectedWorldFiel
   for (const auto & [name, pose] : checkpoint.expected.moveit_world_object_poses) {
     expectPoseEqual(pose, loaded.checkpoint->expected.moveit_world_object_poses.at(name));
   }
-  EXPECT_EQ(checkpoint.expected.moveit_coke_attached,
-            loaded.checkpoint->expected.moveit_coke_attached);
-  ASSERT_TRUE(loaded.checkpoint->expected.gazebo_coke_pose_world);
-  expectPoseEqual(*checkpoint.expected.gazebo_coke_pose_world,
-                  *loaded.checkpoint->expected.gazebo_coke_pose_world);
-  EXPECT_EQ(checkpoint.expected.gazebo_coke_attached,
-            loaded.checkpoint->expected.gazebo_coke_attached);
-  EXPECT_EQ(checkpoint.expected.gazebo_coke_stationary,
-            loaded.checkpoint->expected.gazebo_coke_stationary);
+  EXPECT_EQ(checkpoint.expected.moveit_task_object_attached,
+            loaded.checkpoint->expected.moveit_task_object_attached);
+  ASSERT_TRUE(loaded.checkpoint->expected.gazebo_task_object_pose_world);
+  expectPoseEqual(*checkpoint.expected.gazebo_task_object_pose_world,
+                  *loaded.checkpoint->expected.gazebo_task_object_pose_world);
+  EXPECT_EQ(checkpoint.expected.gazebo_task_object_attached,
+            loaded.checkpoint->expected.gazebo_task_object_attached);
+  EXPECT_EQ(checkpoint.expected.gazebo_task_object_stationary,
+            loaded.checkpoint->expected.gazebo_task_object_stationary);
   EXPECT_EQ(checkpoint.expected.required_world_objects,
             loaded.checkpoint->expected.required_world_objects);
-  EXPECT_EQ(checkpoint.configuration_hash, loaded.checkpoint->configuration_hash);
+  EXPECT_EQ(checkpoint.policy_bundle_sha256, loaded.checkpoint->policy_bundle_sha256);
   EXPECT_EQ(checkpoint.simulation_session_id, loaded.checkpoint->simulation_session_id);
   EXPECT_EQ(checkpoint.resumable, loaded.checkpoint->resumable);
   std::filesystem::remove(path);
@@ -205,19 +209,19 @@ TEST(CheckpointV3, OptionalWorldAndRecoveryEvidenceRoundTripsAsJsonNull)
   const auto json = readJson(path);
   EXPECT_TRUE(json.at("failed_state").is_null());
   EXPECT_TRUE(json.at("original_failure").is_null());
-  EXPECT_TRUE(json.at("expected").at("moveit_coke_attached").is_null());
-  EXPECT_TRUE(json.at("expected").at("gazebo_coke_pose_world").is_null());
-  EXPECT_TRUE(json.at("expected").at("gazebo_coke_attached").is_null());
-  EXPECT_TRUE(json.at("expected").at("gazebo_coke_stationary").is_null());
+  EXPECT_TRUE(json.at("expected").at("moveit_task_object_attached").is_null());
+  EXPECT_TRUE(json.at("expected").at("gazebo_task_object_pose_world").is_null());
+  EXPECT_TRUE(json.at("expected").at("gazebo_task_object_attached").is_null());
+  EXPECT_TRUE(json.at("expected").at("gazebo_task_object_stationary").is_null());
 
   const auto loaded = store.loadLatestCompatible();
   ASSERT_TRUE(loaded.checkpoint);
   EXPECT_FALSE(loaded.checkpoint->failed_state);
   EXPECT_FALSE(loaded.checkpoint->original_failure);
-  EXPECT_FALSE(loaded.checkpoint->expected.moveit_coke_attached);
-  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_pose_world);
-  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_attached);
-  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_coke_stationary);
+  EXPECT_FALSE(loaded.checkpoint->expected.moveit_task_object_attached);
+  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_task_object_pose_world);
+  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_task_object_attached);
+  EXPECT_FALSE(loaded.checkpoint->expected.gazebo_task_object_stationary);
   std::filesystem::remove(path);
 }
 
@@ -228,8 +232,8 @@ TEST(CheckpointV3, SchemaV3IntentionallyExcludesRuntimeAttachmentMetadata)
   ASSERT_FALSE(store.commit(makeRecoveryCheckpoint()));
 
   const auto expected = readJson(path).at("expected");
-  EXPECT_FALSE(expected.contains("moveit_coke_attached_link"));
-  EXPECT_FALSE(expected.contains("moveit_coke_touch_links"));
+  EXPECT_FALSE(expected.contains("moveit_task_object_attached_link"));
+  EXPECT_FALSE(expected.contains("moveit_task_object_touch_links"));
   std::filesystem::remove(path);
 }
 
@@ -424,13 +428,31 @@ TEST(CommonResumeValidator, AcceptsOnlyACompleteMatchingWorldBoundary)
   auto checkpoint = makeRecoveryCheckpoint();
   checkpoint.resumable = true;
   const auto snapshot = snapshotFrom(checkpoint);
-  const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
+  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
                                                     checkpoint.simulation_session_id);
 
   const auto result = validator.validate(checkpoint, snapshot);
 
   EXPECT_TRUE(result.ok);
   EXPECT_TRUE(result.failures.empty());
+}
+
+TEST(CommonResumeValidator, RejectsCheckpointFromDifferentPolicyBundle)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.policy_bundle_sha256 = "old-policy-bundle-sha256";
+  const auto snapshot = snapshotFrom(checkpoint);
+  const pick_place::CommonResumeValidator validator(
+    "new-policy-bundle-sha256", checkpoint.simulation_session_id);
+
+  const auto result = validator.validate(checkpoint, snapshot);
+
+  ASSERT_FALSE(result.ok);
+  const auto mismatch = std::find_if(
+    result.failures.begin(), result.failures.end(), [](const pick_place::Failure & failure) {
+      return failure.code == "CHECKPOINT_POLICY_MISMATCH";
+    });
+  EXPECT_NE(mismatch, result.failures.end());
 }
 
 TEST(CommonResumeValidator, ForwardResumeFailsClosedForEveryExpectedWorldBoundaryMismatch)
@@ -440,7 +462,7 @@ TEST(CommonResumeValidator, ForwardResumeFailsClosedForEveryExpectedWorldBoundar
   checkpoint.failed_state.reset();
   checkpoint.original_failure.reset();
   checkpoint.resumable = true;
-  const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
+  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
                                                     checkpoint.simulation_session_id);
   const auto matching = snapshotFrom(checkpoint);
 
@@ -464,16 +486,16 @@ TEST(CommonResumeValidator, ForwardResumeFailsClosedForEveryExpectedWorldBoundar
   missing_required_object.moveit_world_object_poses.erase("object");
   mismatches.push_back(missing_required_object);
   auto moveit_attachment = matching;
-  moveit_attachment.moveit_coke_attached = true;
+  moveit_attachment.moveit_task_object_attached = true;
   mismatches.push_back(moveit_attachment);
   auto gazebo_pose = matching;
-  gazebo_pose.gazebo_coke_pose_world->y += 0.1;
+  gazebo_pose.gazebo_task_object_pose_world->y += 0.1;
   mismatches.push_back(gazebo_pose);
   auto gazebo_attachment = matching;
-  gazebo_attachment.gazebo_coke_attached = false;
+  gazebo_attachment.gazebo_task_object_attached = false;
   mismatches.push_back(gazebo_attachment);
   auto gazebo_stationary = matching;
-  gazebo_stationary.gazebo_coke_stationary = false;
+  gazebo_stationary.gazebo_task_object_stationary = false;
   mismatches.push_back(gazebo_stationary);
 
   for (const auto & mismatch : mismatches) {
@@ -485,12 +507,12 @@ TEST(CommonResumeValidator, FailsClosedForIncompleteNonFiniteOrStaleBoundaryEvid
 {
   auto checkpoint = makeRecoveryCheckpoint();
   checkpoint.resumable = true;
-  const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
+  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
                                                     checkpoint.simulation_session_id);
   const auto matching = snapshotFrom(checkpoint);
 
   auto missing_optional = matching;
-  missing_optional.gazebo_coke_pose_world.reset();
+  missing_optional.gazebo_task_object_pose_world.reset();
   EXPECT_FALSE(validator.validate(checkpoint, missing_optional).ok);
 
   auto nonfinite = matching;
@@ -509,7 +531,7 @@ TEST(CommonResumeValidator, FailsClosedForIncompleteNonFiniteOrStaleBoundaryEvid
   wrong_session.simulation_session_id = "other-session";
   EXPECT_FALSE(validator.validate(checkpoint, wrong_session).ok);
 
-  checkpoint.configuration_hash = "other-config";
+  checkpoint.policy_bundle_sha256 = "other-config";
   EXPECT_FALSE(validator.validate(checkpoint, matching).ok);
 }
 
@@ -517,7 +539,7 @@ TEST(CommonResumeValidator, RejectsNonResumableAndIncompleteRecoveryContext)
 {
   auto checkpoint = makeRecoveryCheckpoint();
   const auto snapshot = snapshotFrom(checkpoint);
-  const pick_place::CommonResumeValidator validator(checkpoint.configuration_hash,
+  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
                                                     checkpoint.simulation_session_id);
 
   checkpoint.resumable = false;
