@@ -67,35 +67,36 @@ public:
     RCLCPP_INFO(
       logger_, "STATE_TRANSITION state=%s next_state=%s", pick_place::toString(state),
       pick_place::toString(transitions.resolve(state, pick_place::ActionStatus::SUCCEEDED)));
-    logPose("COKE_POSE_BEFORE", state, before.gazebo_coke_pose_world);
-    logPose("COKE_POSE_AFTER", state, after.gazebo_coke_pose_world);
+    logPose("COKE_POSE_BEFORE", state, before.gazebo_task_object_pose_world);
+    logPose("COKE_POSE_AFTER", state, after.gazebo_task_object_pose_world);
     logGripper("BEFORE", state, before);
     logGripper("AFTER", state, after);
     RCLCPP_INFO(logger_,
                 "ATTACHMENT_EVIDENCE state=%s GAZEBO_ATTACHED_BEFORE=%d GAZEBO_ATTACHED_AFTER=%d "
                 "MOVEIT_ATTACHED_BEFORE=%d MOVEIT_ATTACHED_AFTER=%d",
-                pick_place::toString(state), valueOrUnknown(before.gazebo_coke_attached),
-                valueOrUnknown(after.gazebo_coke_attached),
-                valueOrUnknown(before.moveit_coke_attached),
-                valueOrUnknown(after.moveit_coke_attached));
-    RCLCPP_INFO(logger_,
-                "MOVEIT_MEMBERSHIP state=%s COKE_IN_WORLD_BEFORE=%d COKE_IN_WORLD_AFTER=%d "
-                "ATTACHED_LINK=%s TOUCH_LINK_COUNT=%zu",
-                pick_place::toString(state),
-                before.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
-                after.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
-                after.moveit_coke_attached_link ? after.moveit_coke_attached_link->c_str() : "",
-                after.moveit_coke_touch_links.size());
-    if (before.gazebo_coke_pose_world && after.gazebo_coke_pose_world) {
-      RCLCPP_INFO(
-        logger_, "COKE_DRIFT state=%s position=%.6f orientation_rad=%.6f",
-        pick_place::toString(state),
-        pick_place::positionDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world),
-        pick_place::orientationDistance(*before.gazebo_coke_pose_world,
-                                        *after.gazebo_coke_pose_world));
+                pick_place::toString(state), valueOrUnknown(before.gazebo_task_object_attached),
+                valueOrUnknown(after.gazebo_task_object_attached),
+                valueOrUnknown(before.moveit_task_object_attached),
+                valueOrUnknown(after.moveit_task_object_attached));
+    RCLCPP_INFO(
+      logger_,
+      "MOVEIT_MEMBERSHIP state=%s COKE_IN_WORLD_BEFORE=%d COKE_IN_WORLD_AFTER=%d "
+      "ATTACHED_LINK=%s TOUCH_LINK_COUNT=%zu",
+      pick_place::toString(state), before.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
+      after.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
+      after.moveit_task_object_attached_link ? after.moveit_task_object_attached_link->c_str() : "",
+      after.moveit_task_object_touch_links.size());
+    if (before.gazebo_task_object_pose_world && after.gazebo_task_object_pose_world) {
+      RCLCPP_INFO(logger_, "COKE_DRIFT state=%s position=%.6f orientation_rad=%.6f",
+                  pick_place::toString(state),
+                  pick_place::positionDistance(*before.gazebo_task_object_pose_world,
+                                               *after.gazebo_task_object_pose_world),
+                  pick_place::orientationDistance(*before.gazebo_task_object_pose_world,
+                                                  *after.gazebo_task_object_pose_world));
       const auto before_relative =
-        relativePose(before.tcp_pose_world, *before.gazebo_coke_pose_world);
-      const auto after_relative = relativePose(after.tcp_pose_world, *after.gazebo_coke_pose_world);
+        relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
+      const auto after_relative =
+        relativePose(after.tcp_pose_world, *after.gazebo_task_object_pose_world);
       RCLCPP_INFO(
         logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
         pick_place::toString(state), pick_place::positionDistance(before_relative, after_relative),
@@ -106,12 +107,13 @@ public:
                   pick_place::toString(state));
     }
     const auto moveit_coke = after.moveit_world_object_poses.find("coke");
-    if (after.gazebo_coke_pose_world && moveit_coke != after.moveit_world_object_poses.end()) {
+    if (after.gazebo_task_object_pose_world &&
+        moveit_coke != after.moveit_world_object_poses.end()) {
       RCLCPP_INFO(
         logger_, "CROSS_WORLD_COKE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
         pick_place::toString(state),
-        pick_place::positionDistance(*after.gazebo_coke_pose_world, moveit_coke->second),
-        pick_place::orientationDistance(*after.gazebo_coke_pose_world, moveit_coke->second));
+        pick_place::positionDistance(*after.gazebo_task_object_pose_world, moveit_coke->second),
+        pick_place::orientationDistance(*after.gazebo_task_object_pose_world, moveit_coke->second));
     } else {
       RCLCPP_INFO(logger_, "CROSS_WORLD_COKE_POSE_ERROR state=%s unavailable",
                   pick_place::toString(state));

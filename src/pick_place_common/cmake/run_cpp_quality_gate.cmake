@@ -37,7 +37,7 @@ if(NOT clang_tidy_result EQUAL 0)
   message(FATAL_ERROR "clang-tidy failed with exit code ${clang_tidy_result}")
 endif()
 message(STATUS "C++ quality gate: running clang-format")
-execute_process(COMMAND "${CLANG_FORMAT_EXECUTABLE}" -i --style=file ${QUALITY_SOURCE_FILES}
+execute_process(COMMAND "${CLANG_FORMAT_EXECUTABLE}" --dry-run --Werror --style=file ${QUALITY_SOURCE_FILES}
   RESULT_VARIABLE clang_format_result)
 if(NOT clang_format_result EQUAL 0)
   message(FATAL_ERROR "clang-format failed with exit code ${clang_format_result}")

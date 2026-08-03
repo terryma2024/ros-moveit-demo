@@ -7,11 +7,11 @@ namespace pick_place_common
 void TransitionContractRegistry::registerContract(
   TransitionKey key, std::shared_ptr<const ITransitionContract> contract)
 {
-  if (!contract)
+  if (!contract && reject_null_)
     throw std::invalid_argument("null contract");
-  if (contracts_.count(key))
+  if (contracts_.count(key) && reject_duplicate_)
     throw std::logic_error("duplicate contract");
-  contracts_.emplace(key, std::move(contract));
+  contracts_[key] = std::move(contract);
 }
 
 bool TransitionContractRegistry::hasContract(TransitionKey key) const noexcept
@@ -61,7 +61,8 @@ std::optional<Failure> TransitionContractRegistry::validateExecuteCoverage(
   const WorkflowDefinition & workflow) const
 {
   for (const auto & [state, transitions] : workflow.transitions) {
-    if (state == workflow.initial_state || workflow.terminal_states.count(state)) {
+    if (state == workflow.initial_state || !workflow.forward_states.count(state) ||
+        workflow.terminal_states.count(state)) {
       continue;
     }
     if (!hasContract({state, transitions.succeeded})) {

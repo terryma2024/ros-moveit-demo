@@ -71,12 +71,15 @@ ValidationResult boundary(const WorldSnapshot & snapshot)
   ValidationResult result{true, {}, {}};
   result.metrics["snapshot_fresh"] = snapshot.fresh ? 1.0 : 0.0;
   result.metrics["arm_stationary"] = snapshot.arm_stationary ? 1.0 : 0.0;
-  result.metrics["gazebo_attached"] =
-    snapshot.gazebo_coke_attached ? (*snapshot.gazebo_coke_attached ? 1.0 : 0.0) : -1.0;
-  result.metrics["moveit_attached"] =
-    snapshot.moveit_coke_attached ? (*snapshot.moveit_coke_attached ? 1.0 : 0.0) : -1.0;
-  result.metrics["coke_stationary"] =
-    snapshot.gazebo_coke_stationary ? (*snapshot.gazebo_coke_stationary ? 1.0 : 0.0) : -1.0;
+  result.metrics["gazebo_attached"] = snapshot.gazebo_task_object_attached
+                                        ? (*snapshot.gazebo_task_object_attached ? 1.0 : 0.0)
+                                        : -1.0;
+  result.metrics["moveit_attached"] = snapshot.moveit_task_object_attached
+                                        ? (*snapshot.moveit_task_object_attached ? 1.0 : 0.0)
+                                        : -1.0;
+  result.metrics["coke_stationary"] = snapshot.gazebo_task_object_stationary
+                                        ? (*snapshot.gazebo_task_object_stationary ? 1.0 : 0.0)
+                                        : -1.0;
   if (!snapshot.fresh) {
     addFailure(result, FailureCategory::OBSERVATION, "STALE_WORLD_SNAPSHOT",
                "Recovery requires a fresh world observation");
@@ -85,15 +88,15 @@ ValidationResult boundary(const WorldSnapshot & snapshot)
     addFailure(result, FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT",
                "Recovery requires a stationary arm at every boundary");
   }
-  if (!snapshot.gazebo_coke_attached || !snapshot.moveit_coke_attached) {
+  if (!snapshot.gazebo_task_object_attached || !snapshot.moveit_task_object_attached) {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "ATTACHMENT_STATE_UNKNOWN",
                "Recovery requires current Gazebo and MoveIt attachment facts");
   }
-  if (!snapshot.gazebo_coke_pose_world) {
+  if (!snapshot.gazebo_task_object_pose_world) {
     addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
                "Recovery requires the current Gazebo Coke pose");
   }
-  if (!snapshot.gazebo_coke_stationary || !*snapshot.gazebo_coke_stationary) {
+  if (!snapshot.gazebo_task_object_stationary || !*snapshot.gazebo_task_object_stationary) {
     addFailure(result, FailureCategory::PRECONDITION, "COKE_NOT_STATIONARY",
                "Recovery requires a stationary Gazebo Coke");
   }
@@ -118,12 +121,12 @@ void requireAttachmentCombination(ValidationResult & result, const WorldSnapshot
 void requireBothAttached(ValidationResult & result, const WorldSnapshot & snapshot)
 {
   requireAttachmentCombination(result, snapshot, true, true);
-  const bool exact_link =
-    snapshot.moveit_coke_attached_link && *snapshot.moveit_coke_attached_link == "panda_hand";
+  const bool exact_link = snapshot.moveit_task_object_attached_link &&
+                          *snapshot.moveit_task_object_attached_link == "panda_hand";
   result.metrics["moveit_attached_link_exact"] = exact_link ? 1.0 : 0.0;
   result.metrics["moveit_touch_links_exact"] =
-    snapshot.moveit_coke_touch_links == kRequiredTouchLinks ? 1.0 : 0.0;
-  if (!exact_link || snapshot.moveit_coke_touch_links != kRequiredTouchLinks ||
+    snapshot.moveit_task_object_touch_links == kRequiredTouchLinks ? 1.0 : 0.0;
+  if (!exact_link || snapshot.moveit_task_object_touch_links != kRequiredTouchLinks ||
       snapshot.moveit_world_object_poses.count("coke") != 0) {
     addFailure(result, FailureCategory::MOVEIT_SCENE, "RECOVERY_ATTACHED_METADATA_INVALID",
                "Carrying recovery requires Coke attached to panda_hand with exact touch links");
@@ -202,7 +205,7 @@ void requireSupportedCoke(ValidationResult & result, const WorldSnapshot & snaps
                           const TargetPolicyPtr & target_policy, State state, State next_state,
                           const PickPlaceContractConfig & config)
 {
-  if (!snapshot.gazebo_coke_pose_world || !target_policy) {
+  if (!snapshot.gazebo_task_object_pose_world || !target_policy) {
     addFailure(result, FailureCategory::OBSERVATION, "RECOVERY_SUPPORTED_COKE_POSE_UNAVAILABLE",
                "Recovery support validation requires Coke observation and target policy");
     return;
@@ -218,9 +221,9 @@ void requireSupportedCoke(ValidationResult & result, const WorldSnapshot & snaps
     return;
   }
   const double position_error =
-    positionDistance(*snapshot.gazebo_coke_pose_world, *expected.target_pose);
+    positionDistance(*snapshot.gazebo_task_object_pose_world, *expected.target_pose);
   const double orientation_error =
-    orientationDistance(*snapshot.gazebo_coke_pose_world, *expected.target_pose);
+    orientationDistance(*snapshot.gazebo_task_object_pose_world, *expected.target_pose);
   result.metrics["supported_coke_position_error"] = position_error;
   result.metrics["supported_coke_orientation_error_rad"] = orientation_error;
   if (position_error > config.coke_position_tolerance ||
@@ -233,15 +236,15 @@ void requireSupportedCoke(ValidationResult & result, const WorldSnapshot & snaps
 void requireCokeDrift(ValidationResult & result, const WorldSnapshot & before,
                       const WorldSnapshot & after, const PickPlaceContractConfig & config)
 {
-  if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
+  if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world) {
     addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
                "Recovery boundary requires Gazebo Coke poses before and after the action");
     return;
   }
   const double position_error =
-    positionDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
-  const double orientation_error =
-    orientationDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
+    positionDistance(*before.gazebo_task_object_pose_world, *after.gazebo_task_object_pose_world);
+  const double orientation_error = orientationDistance(*before.gazebo_task_object_pose_world,
+                                                       *after.gazebo_task_object_pose_world);
   result.metrics["coke_position_drift"] = position_error;
   result.metrics["coke_orientation_drift_rad"] = orientation_error;
   if (position_error > config.coke_position_tolerance) {
@@ -300,13 +303,15 @@ Pose3d relativePose(const Pose3d & frame, const Pose3d & object)
 void requireRelativePose(ValidationResult & result, const WorldSnapshot & before,
                          const WorldSnapshot & after, const PickPlaceContractConfig & config)
 {
-  if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
+  if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world) {
     addFailure(result, FailureCategory::OBSERVATION, "CARRIED_RELATIVE_POSE_UNAVAILABLE",
                "Carrying recovery requires actual TCP and Gazebo Coke poses");
     return;
   }
-  const auto before_relative = relativePose(before.tcp_pose_world, *before.gazebo_coke_pose_world);
-  const auto after_relative = relativePose(after.tcp_pose_world, *after.gazebo_coke_pose_world);
+  const auto before_relative =
+    relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
+  const auto after_relative =
+    relativePose(after.tcp_pose_world, *after.gazebo_task_object_pose_world);
   const double position_error = positionDistance(before_relative, after_relative);
   const double orientation_error = orientationDistance(before_relative, after_relative);
   result.metrics["carried_relative_position_error"] = position_error;
@@ -324,9 +329,10 @@ void requireRelativePose(ValidationResult & result, const WorldSnapshot & before
 void requireAttachmentsUnchanged(ValidationResult & result, const WorldSnapshot & before,
                                  const WorldSnapshot & after)
 {
-  if (!before.gazebo_coke_attached || !before.moveit_coke_attached || !after.gazebo_coke_attached ||
-      !after.moveit_coke_attached || before.gazebo_coke_attached != after.gazebo_coke_attached ||
-      before.moveit_coke_attached != after.moveit_coke_attached) {
+  if (!before.gazebo_task_object_attached || !before.moveit_task_object_attached ||
+      !after.gazebo_task_object_attached || !after.moveit_task_object_attached ||
+      before.gazebo_task_object_attached != after.gazebo_task_object_attached ||
+      before.moveit_task_object_attached != after.moveit_task_object_attached) {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
                "RECOVERY_ATTACHMENT_CHANGED_UNEXPECTEDLY",
                "This recovery action must not change attachment facts");
@@ -336,15 +342,17 @@ void requireAttachmentsUnchanged(ValidationResult & result, const WorldSnapshot 
 void requireCrossWorldEquality(ValidationResult & result, const WorldSnapshot & snapshot,
                                const PickPlaceContractConfig & config)
 {
-  if (!snapshot.gazebo_coke_pose_world || snapshot.moveit_world_object_poses.count("coke") == 0) {
+  if (!snapshot.gazebo_task_object_pose_world ||
+      snapshot.moveit_world_object_poses.count("coke") == 0) {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "CROSS_WORLD_COKE_POSE_UNAVAILABLE",
                "Detached recovery requires Gazebo and MoveIt Coke poses");
     return;
   }
   const auto & moveit_pose = snapshot.moveit_world_object_poses.at("coke");
-  const double position_error = positionDistance(*snapshot.gazebo_coke_pose_world, moveit_pose);
+  const double position_error =
+    positionDistance(*snapshot.gazebo_task_object_pose_world, moveit_pose);
   const double orientation_error =
-    orientationDistance(*snapshot.gazebo_coke_pose_world, moveit_pose);
+    orientationDistance(*snapshot.gazebo_task_object_pose_world, moveit_pose);
   result.metrics["gazebo_moveit_coke_position_error"] = position_error;
   result.metrics["gazebo_moveit_coke_orientation_error_rad"] = orientation_error;
   if (position_error > config.coke_position_tolerance ||
@@ -410,12 +418,12 @@ std::shared_ptr<const Contract> gazeboDetachContract(const PickPlaceContractConf
       auto result = boundary(after);
       requireActionSucceeded(result, action_result);
       requireOpen(result, after, config);
-      if (after.gazebo_coke_attached && *after.gazebo_coke_attached) {
+      if (after.gazebo_task_object_attached && *after.gazebo_task_object_attached) {
         addFailure(result, FailureCategory::GAZEBO_ATTACHMENT, "RECOVERY_GAZEBO_STILL_ATTACHED",
                    "Recovery Gazebo detach did not converge");
       }
-      if (!before.moveit_coke_attached || !after.moveit_coke_attached ||
-          before.moveit_coke_attached != after.moveit_coke_attached) {
+      if (!before.moveit_task_object_attached || !after.moveit_task_object_attached ||
+          before.moveit_task_object_attached != after.moveit_task_object_attached) {
         addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
                    "RECOVERY_MOVEIT_ATTACHMENT_CHANGED",
                    "Gazebo detach must not change MoveIt attachment state");
@@ -431,7 +439,7 @@ std::shared_ptr<const Contract> moveitDetachContract(const PickPlaceContractConf
     [config](const WorldSnapshot & before) {
       auto result = boundary(before);
       requireOpen(result, before, config);
-      if (!before.gazebo_coke_attached || *before.gazebo_coke_attached) {
+      if (!before.gazebo_task_object_attached || *before.gazebo_task_object_attached) {
         addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "RECOVERY_GAZEBO_NOT_DETACHED",
                    "MoveIt recovery detach requires Gazebo already detached");
       }
@@ -444,7 +452,7 @@ std::shared_ptr<const Contract> moveitDetachContract(const PickPlaceContractConf
       requireOpen(result, after, config);
       requireAttachmentCombination(result, after, false, false);
       requireWorldObjects(result, after);
-      if (after.moveit_coke_attached_link || !after.moveit_coke_touch_links.empty()) {
+      if (after.moveit_task_object_attached_link || !after.moveit_task_object_touch_links.empty()) {
         addFailure(result, FailureCategory::MOVEIT_SCENE,
                    "RECOVERY_MOVEIT_ATTACHED_METADATA_REMAINS",
                    "Detached Coke must not retain MoveIt attached metadata");

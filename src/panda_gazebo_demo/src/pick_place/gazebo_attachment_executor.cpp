@@ -35,10 +35,12 @@ bool supportedState(State state) noexcept
 bool detachedPostconditionSatisfied(const WorldSnapshot & snapshot,
                                     const GripperLimits & gripper_limits)
 {
-  return snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_coke_attached &&
-         !*snapshot.gazebo_coke_attached && snapshot.moveit_coke_attached.has_value() &&
-         snapshot.gazebo_coke_pose_world.has_value() && snapshot.gazebo_coke_stationary &&
-         *snapshot.gazebo_coke_stationary && validateGripperOpen(snapshot, gripper_limits).ok;
+  return snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_task_object_attached &&
+         !*snapshot.gazebo_task_object_attached &&
+         snapshot.moveit_task_object_attached.has_value() &&
+         snapshot.gazebo_task_object_pose_world.has_value() &&
+         snapshot.gazebo_task_object_stationary && *snapshot.gazebo_task_object_stationary &&
+         validateGripperOpen(snapshot, gripper_limits).ok;
 }
 
 }  // namespace

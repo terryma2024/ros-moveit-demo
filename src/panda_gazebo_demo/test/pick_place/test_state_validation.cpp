@@ -24,8 +24,8 @@ pick_place::WorldSnapshot gripperSnapshot(double finger1_position, double finger
 pick_place::WorldSnapshot attachmentSnapshot(bool gazebo_attached, bool moveit_attached)
 {
   pick_place::WorldSnapshot snapshot;
-  snapshot.gazebo_coke_attached = gazebo_attached;
-  snapshot.moveit_coke_attached = moveit_attached;
+  snapshot.gazebo_task_object_attached = gazebo_attached;
+  snapshot.moveit_task_object_attached = moveit_attached;
   return snapshot;
 }
 

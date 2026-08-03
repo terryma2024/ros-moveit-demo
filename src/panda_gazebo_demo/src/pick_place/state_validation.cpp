@@ -156,7 +156,7 @@ ValidationResult validateGripperClosed(const WorldSnapshot & snapshot, double ta
 ValidationResult validateAttachmentState(const WorldSnapshot & snapshot, bool gazebo_attached,
                                          bool moveit_attached)
 {
-  if (!snapshot.gazebo_coke_attached || !snapshot.moveit_coke_attached) {
+  if (!snapshot.gazebo_task_object_attached || !snapshot.moveit_task_object_attached) {
     return {false,
             {{FailureCategory::WORLD_INCONSISTENCY,
               "ATTACHMENT_STATE_UNKNOWN",
@@ -165,11 +165,11 @@ ValidationResult validateAttachmentState(const WorldSnapshot & snapshot, bool ga
             {}};
   }
   const std::map<std::string, double> metrics{
-    {"gazebo_attached", *snapshot.gazebo_coke_attached ? 1.0 : 0.0},
-    {"moveit_attached", *snapshot.moveit_coke_attached ? 1.0 : 0.0},
+    {"gazebo_attached", *snapshot.gazebo_task_object_attached ? 1.0 : 0.0},
+    {"moveit_attached", *snapshot.moveit_task_object_attached ? 1.0 : 0.0},
   };
-  if (*snapshot.gazebo_coke_attached != gazebo_attached ||
-      *snapshot.moveit_coke_attached != moveit_attached) {
+  if (*snapshot.gazebo_task_object_attached != gazebo_attached ||
+      *snapshot.moveit_task_object_attached != moveit_attached) {
     return {false,
             {{FailureCategory::WORLD_INCONSISTENCY,
               "ATTACHMENT_STATE_MISMATCH",

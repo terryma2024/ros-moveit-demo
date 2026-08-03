@@ -151,10 +151,10 @@ TEST(MoveItSceneExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
   context.before.fresh = true;
   context.before.arm_stationary = true;
   context.before.gripper_open = true;
-  context.before.gazebo_coke_attached = false;
-  context.before.gazebo_coke_pose_world = Pose3d{};
-  context.before.gazebo_coke_stationary = true;
-  context.before.moveit_coke_attached = false;
+  context.before.gazebo_task_object_attached = false;
+  context.before.gazebo_task_object_pose_world = Pose3d{};
+  context.before.gazebo_task_object_stationary = true;
+  context.before.moveit_task_object_attached = false;
   context.before.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
   context.before.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   context.before.moveit_world_object_poses.emplace("table", Pose3d{});
@@ -179,10 +179,10 @@ TEST(MoveItSceneExecutor, RecoveryNoOpUsesInjectedGripperLimits)
   auto context = contextFor(State::RECOVER_DETACH_MOVEIT);
   context.before.fresh = true;
   context.before.arm_stationary = true;
-  context.before.gazebo_coke_attached = false;
-  context.before.gazebo_coke_pose_world = Pose3d{};
-  context.before.gazebo_coke_stationary = true;
-  context.before.moveit_coke_attached = false;
+  context.before.gazebo_task_object_attached = false;
+  context.before.gazebo_task_object_pose_world = Pose3d{};
+  context.before.gazebo_task_object_stationary = true;
+  context.before.moveit_task_object_attached = false;
   context.before.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
   context.before.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   context.before.moveit_world_object_poses.emplace("table", Pose3d{});
@@ -202,7 +202,7 @@ TEST(MoveItSceneExecutor, SyncUsesBeforeGazeboPoseAndPreservesGeometry)
   const int geometry_before = adapter->geometry_revision;
   auto executor = executorFor(adapter, State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC);
   auto context = contextFor(State::SYNC_WORLD_OBJECT);
-  context.before.gazebo_coke_pose_world = gazebo_pose;
+  context.before.gazebo_task_object_pose_world = gazebo_pose;
 
   const auto result = executor.execute(context);
 

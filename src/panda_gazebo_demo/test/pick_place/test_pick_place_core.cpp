@@ -79,9 +79,9 @@ pick_place::WorldSnapshot makeSnapshot()
                               {"panda_finger_joint2", 0.04}};
   snapshot.moveit_world_object_poses = {{"table", {}},
                                         {"coke", {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0}}};
-  snapshot.moveit_coke_attached = false;
-  snapshot.gazebo_coke_pose_world = {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
-  snapshot.gazebo_coke_attached = false;
+  snapshot.moveit_task_object_attached = false;
+  snapshot.gazebo_task_object_pose_world = {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
+  snapshot.gazebo_task_object_attached = false;
   snapshot.simulation_session_id = "test-session";
   return snapshot;
 }
@@ -386,11 +386,11 @@ pick_place::Checkpoint makeCheckpoint(const pick_place::WorldSnapshot & snapshot
   checkpoint.expected.gripper_open = snapshot.gripper_open;
   checkpoint.expected.joint_positions = snapshot.joint_positions;
   checkpoint.expected.moveit_world_object_poses = snapshot.moveit_world_object_poses;
-  checkpoint.expected.moveit_coke_attached = snapshot.moveit_coke_attached;
-  checkpoint.expected.gazebo_coke_pose_world = snapshot.gazebo_coke_pose_world;
-  checkpoint.expected.gazebo_coke_attached = snapshot.gazebo_coke_attached;
+  checkpoint.expected.moveit_task_object_attached = snapshot.moveit_task_object_attached;
+  checkpoint.expected.gazebo_task_object_pose_world = snapshot.gazebo_task_object_pose_world;
+  checkpoint.expected.gazebo_task_object_attached = snapshot.gazebo_task_object_attached;
   checkpoint.expected.required_world_objects = {"table", "coke"};
-  checkpoint.configuration_hash = "test-config";
+  checkpoint.configuration_fingerprint = "test-config";
   checkpoint.simulation_session_id = snapshot.simulation_session_id;
   return checkpoint;
 }
@@ -789,8 +789,8 @@ TEST(Runner, ExecutesPrepareOpenGripperWithoutPlanningAndCommitsAfterPostValidat
   EXPECT_EQ(2, observer.calls);
   ASSERT_TRUE(checkpoints.checkpoint.has_value());
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, checkpoints.checkpoint->next_state);
-  EXPECT_FALSE(*checkpoints.checkpoint->expected.gazebo_coke_attached);
-  EXPECT_FALSE(*checkpoints.checkpoint->expected.moveit_coke_attached);
+  EXPECT_FALSE(*checkpoints.checkpoint->expected.gazebo_task_object_attached);
+  EXPECT_FALSE(*checkpoints.checkpoint->expected.moveit_task_object_attached);
 }
 
 TEST(Runner, RecordsExistingPreAndPostExecutionSnapshotsOnce)
@@ -802,10 +802,10 @@ TEST(Runner, RecordsExistingPreAndPostExecutionSnapshotsOnce)
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   FakeObserver observer;
   observer.snapshot.gripper_open = false;
-  observer.snapshot.gazebo_coke_pose_world->x = 0.301;
+  observer.snapshot.gazebo_task_object_pose_world->x = 0.301;
   observer.after_snapshot = observer.snapshot;
   observer.after_snapshot->gripper_open = true;
-  observer.after_snapshot->gazebo_coke_pose_world->x = 0.302;
+  observer.after_snapshot->gazebo_task_object_pose_world->x = 0.302;
   observer.after_snapshot->moveit_world_object_poses.at("coke").x = 0.302;
   FakeCheckpointStore checkpoints;
   const auto common_resume_validator = makeCommonResumeValidator();
@@ -822,8 +822,8 @@ TEST(Runner, RecordsExistingPreAndPostExecutionSnapshotsOnce)
   EXPECT_EQ(pick_place::State::PREPARE_OPEN_GRIPPER, sink.last_state);
   ASSERT_TRUE(sink.before_snapshot.has_value());
   ASSERT_TRUE(sink.after_snapshot.has_value());
-  EXPECT_DOUBLE_EQ(0.301, sink.before_snapshot->gazebo_coke_pose_world->x);
-  EXPECT_DOUBLE_EQ(0.302, sink.after_snapshot->gazebo_coke_pose_world->x);
+  EXPECT_DOUBLE_EQ(0.301, sink.before_snapshot->gazebo_task_object_pose_world->x);
+  EXPECT_DOUBLE_EQ(0.302, sink.after_snapshot->gazebo_task_object_pose_world->x);
   EXPECT_EQ(2, observer.calls);
 }
 
@@ -989,14 +989,14 @@ TEST(Runner, ResumePlanOnlyWaitsForForwardCokeStationaryEvidence)
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
   FakeObserver observer;
-  observer.snapshot.gazebo_coke_stationary = false;
+  observer.snapshot.gazebo_task_object_stationary = false;
   observer.after_snapshot = observer.snapshot;
-  observer.after_snapshot->gazebo_coke_stationary = true;
+  observer.after_snapshot->gazebo_task_object_stationary = true;
   FakeCheckpointStore checkpoints;
   auto checkpoint_snapshot = observer.snapshot;
-  checkpoint_snapshot.gazebo_coke_stationary = true;
+  checkpoint_snapshot.gazebo_task_object_stationary = true;
   checkpoints.load_result.checkpoint = makeCheckpoint(checkpoint_snapshot);
-  checkpoints.load_result.checkpoint->expected.gazebo_coke_stationary = true;
+  checkpoints.load_result.checkpoint->expected.gazebo_task_object_stationary = true;
   const auto common_resume_validator = makeCommonResumeValidator();
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator, nullptr, &plan_validators);
@@ -1150,8 +1150,8 @@ TEST(TransitionContracts, RejectsGazeboAndMoveItCokePoseMismatch)
 {
   const auto before = makeSnapshot();
   auto after = before;
-  after.gazebo_coke_pose_world->y = -0.426;
-  after.gazebo_coke_pose_world->z = 0.987;
+  after.gazebo_task_object_pose_world->y = -0.426;
+  after.gazebo_task_object_pose_world->z = 0.987;
   const pick_place::MoveAboveObjectToDescendValidator contract(
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1, 0.01,
     0.1);
@@ -1186,7 +1186,7 @@ TEST(TransitionContracts, DescendRejectsCokeOrientationDriftAfterExecution)
   auto after = before;
   after.tcp_pose_world.z = 0.87;
   const pick_place::Pose3d rotated_coke{0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
-  after.gazebo_coke_pose_world = rotated_coke;
+  after.gazebo_task_object_pose_world = rotated_coke;
   after.moveit_world_object_poses.at("coke") = rotated_coke;
   const pick_place::DescendToCloseGripperValidator contract(
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), {"table", "coke"}, 0.02, 0.1, 0.01,
@@ -1222,7 +1222,7 @@ TEST(TransitionContracts, PrepareRequiresBothFingersSafelyOpenAndCokeStationary)
   auto before = makeSnapshot();
   before.gripper_open = false;
   auto after = before;
-  after.gazebo_coke_pose_world->x += 0.1;
+  after.gazebo_task_object_pose_world->x += 0.1;
   const pick_place::PrepareOpenGripperToMoveAboveObjectValidator contract({"table", "coke"}, 0.02,
                                                                           0.1, 0.01, 0.1);
 
@@ -1346,7 +1346,7 @@ TEST(TransitionContracts, ResumeUsesTheSameDescendToCloseGripperValidator)
   expected.tcp_pose_world.z = 0.87;
   auto current = expected;
   const pick_place::Pose3d rotated_coke{0.3, 0.0, 0.836, 0.0, 0.0, 0.1, 0.99498743710662};
-  current.gazebo_coke_pose_world = rotated_coke;
+  current.gazebo_task_object_pose_world = rotated_coke;
   current.moveit_world_object_poses.at("coke") = rotated_coke;
   pick_place::TransitionContractRegistry contracts;
   registerDescendToCloseGripperValidator(contracts);

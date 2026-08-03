@@ -1,11 +1,15 @@
 #include <gtest/gtest.h>
 
 #include <vector>
+#include <type_traits>
 
+#include "pick_place_common/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/transition_table.hpp"
 
 namespace pp = panda_gazebo_demo::pick_place;
+
+static_assert(std::is_same_v<pp::State, pick_place_common::State>);
 
 TEST(PandaWorkflowCharacterization, ForwardAndRecoveryEdgesRemainStable)
 {

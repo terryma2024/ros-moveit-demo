@@ -21,9 +21,11 @@ ActionResult unsupportedState(State actual, State configured)
 bool recoveryOpenPostconditionSatisfied(const WorldSnapshot & snapshot,
                                         const GripperLimits & limits)
 {
-  return snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_coke_pose_world.has_value() &&
-         snapshot.gazebo_coke_attached.has_value() && snapshot.moveit_coke_attached.has_value() &&
-         snapshot.gazebo_coke_stationary && *snapshot.gazebo_coke_stationary &&
+  return snapshot.fresh && snapshot.arm_stationary &&
+         snapshot.gazebo_task_object_pose_world.has_value() &&
+         snapshot.gazebo_task_object_attached.has_value() &&
+         snapshot.moveit_task_object_attached.has_value() &&
+         snapshot.gazebo_task_object_stationary && *snapshot.gazebo_task_object_stationary &&
          validateGripperOpen(snapshot, limits).ok;
 }
 

@@ -74,12 +74,15 @@ ValidationResult resultFor(const WorldSnapshot & snapshot)
   result.metrics["snapshot_fresh"] = snapshot.fresh ? 1.0 : 0.0;
   result.metrics["arm_stationary"] = snapshot.arm_stationary ? 1.0 : 0.0;
   result.metrics["gripper_open"] = snapshot.gripper_open ? 1.0 : 0.0;
-  result.metrics["gazebo_attached"] =
-    snapshot.gazebo_coke_attached ? (*snapshot.gazebo_coke_attached ? 1.0 : 0.0) : -1.0;
-  result.metrics["moveit_attached"] =
-    snapshot.moveit_coke_attached ? (*snapshot.moveit_coke_attached ? 1.0 : 0.0) : -1.0;
-  result.metrics["coke_stationary"] =
-    snapshot.gazebo_coke_stationary ? (*snapshot.gazebo_coke_stationary ? 1.0 : 0.0) : -1.0;
+  result.metrics["gazebo_attached"] = snapshot.gazebo_task_object_attached
+                                        ? (*snapshot.gazebo_task_object_attached ? 1.0 : 0.0)
+                                        : -1.0;
+  result.metrics["moveit_attached"] = snapshot.moveit_task_object_attached
+                                        ? (*snapshot.moveit_task_object_attached ? 1.0 : 0.0)
+                                        : -1.0;
+  result.metrics["coke_stationary"] = snapshot.gazebo_task_object_stationary
+                                        ? (*snapshot.gazebo_task_object_stationary ? 1.0 : 0.0)
+                                        : -1.0;
   return result;
 }
 
@@ -134,7 +137,7 @@ void requireReadyAndClosed(ValidationResult & result, const WorldSnapshot & snap
 
 void requireCokeStationary(ValidationResult & result, const WorldSnapshot & snapshot)
 {
-  if (!snapshot.gazebo_coke_stationary || !*snapshot.gazebo_coke_stationary) {
+  if (!snapshot.gazebo_task_object_stationary || !*snapshot.gazebo_task_object_stationary) {
     addFailure(result, FailureCategory::POSTCONDITION, "COKE_NOT_STATIONARY",
                "Gazebo Coke must be observed stationary at the transition boundary");
   }
@@ -193,15 +196,15 @@ void requireTcpTarget(ValidationResult & result, const WorldSnapshot & snapshot,
 void requireCokeDrift(ValidationResult & result, const WorldSnapshot & before,
                       const WorldSnapshot & after, const PickPlaceContractConfig & config)
 {
-  if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
+  if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world) {
     addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
                "Gazebo Coke poses are required on both sides of the transition");
     return;
   }
   const double position_drift =
-    positionDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
-  const double orientation_drift =
-    orientationDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world);
+    positionDistance(*before.gazebo_task_object_pose_world, *after.gazebo_task_object_pose_world);
+  const double orientation_drift = orientationDistance(*before.gazebo_task_object_pose_world,
+                                                       *after.gazebo_task_object_pose_world);
   result.metrics["coke_position_drift"] = position_drift;
   result.metrics["coke_orientation_drift_rad"] = orientation_drift;
   if (position_drift > config.coke_position_tolerance) {
@@ -266,13 +269,15 @@ void requireRelativePoseContinuity(ValidationResult & result, const WorldSnapsho
                                    const WorldSnapshot & after,
                                    const PickPlaceContractConfig & config)
 {
-  if (!before.gazebo_coke_pose_world || !after.gazebo_coke_pose_world) {
+  if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world) {
     addFailure(result, FailureCategory::OBSERVATION, "CARRIED_RELATIVE_POSE_UNAVAILABLE",
                "Actual TCP and Gazebo Coke poses are required for carried-relative validation");
     return;
   }
-  const auto before_relative = relativePose(before.tcp_pose_world, *before.gazebo_coke_pose_world);
-  const auto after_relative = relativePose(after.tcp_pose_world, *after.gazebo_coke_pose_world);
+  const auto before_relative =
+    relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
+  const auto after_relative =
+    relativePose(after.tcp_pose_world, *after.gazebo_task_object_pose_world);
   const double position_error = positionDistance(before_relative, after_relative);
   const double orientation_error = orientationDistance(before_relative, after_relative);
   result.metrics["carried_relative_position_error"] = position_error;
@@ -289,18 +294,18 @@ void requireRelativePoseContinuity(ValidationResult & result, const WorldSnapsho
 
 void requireExactAttachedMetadata(ValidationResult & result, const WorldSnapshot & snapshot)
 {
-  const bool exact_link =
-    snapshot.moveit_coke_attached_link && *snapshot.moveit_coke_attached_link == "panda_hand";
+  const bool exact_link = snapshot.moveit_task_object_attached_link &&
+                          *snapshot.moveit_task_object_attached_link == "panda_hand";
   result.metrics["moveit_attached_link_exact"] = exact_link ? 1.0 : 0.0;
   result.metrics["moveit_touch_link_count"] =
-    static_cast<double>(snapshot.moveit_coke_touch_links.size());
+    static_cast<double>(snapshot.moveit_task_object_touch_links.size());
   result.metrics["moveit_touch_links_exact"] =
-    snapshot.moveit_coke_touch_links == kRequiredTouchLinks ? 1.0 : 0.0;
+    snapshot.moveit_task_object_touch_links == kRequiredTouchLinks ? 1.0 : 0.0;
   if (!exact_link) {
     addFailure(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_ATTACHED_LINK_MISMATCH",
                "MoveIt Coke must be attached exactly to panda_hand");
   }
-  if (snapshot.moveit_coke_touch_links != kRequiredTouchLinks) {
+  if (snapshot.moveit_task_object_touch_links != kRequiredTouchLinks) {
     addFailure(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_TOUCH_LINKS_MISMATCH",
                "MoveIt Coke touch links must be panda_hand and both fingers exactly");
   }
@@ -313,15 +318,17 @@ void requireExactAttachedMetadata(ValidationResult & result, const WorldSnapshot
 void requireCrossWorldEquality(ValidationResult & result, const WorldSnapshot & snapshot,
                                const PickPlaceContractConfig & config)
 {
-  if (!snapshot.gazebo_coke_pose_world || snapshot.moveit_world_object_poses.count("coke") == 0) {
+  if (!snapshot.gazebo_task_object_pose_world ||
+      snapshot.moveit_world_object_poses.count("coke") == 0) {
     addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "CROSS_WORLD_COKE_POSE_UNAVAILABLE",
                "Gazebo and MoveIt Coke world poses are both required");
     return;
   }
   const auto & moveit_pose = snapshot.moveit_world_object_poses.at("coke");
-  const double position_error = positionDistance(*snapshot.gazebo_coke_pose_world, moveit_pose);
+  const double position_error =
+    positionDistance(*snapshot.gazebo_task_object_pose_world, moveit_pose);
   const double orientation_error =
-    orientationDistance(*snapshot.gazebo_coke_pose_world, moveit_pose);
+    orientationDistance(*snapshot.gazebo_task_object_pose_world, moveit_pose);
   result.metrics["gazebo_moveit_coke_position_error"] = position_error;
   result.metrics["gazebo_moveit_coke_orientation_error_rad"] = orientation_error;
   if (position_error > config.coke_position_tolerance) {
@@ -339,7 +346,7 @@ void requireSupportedCoke(ValidationResult & result, const WorldSnapshot & snaps
                           const TargetPolicyPtr & target_policy, State state, State next_state,
                           const PickPlaceContractConfig & config)
 {
-  if (!snapshot.gazebo_coke_pose_world) {
+  if (!snapshot.gazebo_task_object_pose_world) {
     addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
                "Gazebo Coke pose is required for place support validation");
     return;
@@ -360,9 +367,9 @@ void requireSupportedCoke(ValidationResult & result, const WorldSnapshot & snaps
     return;
   }
   const double position_error =
-    positionDistance(*snapshot.gazebo_coke_pose_world, *expected.target_pose);
+    positionDistance(*snapshot.gazebo_task_object_pose_world, *expected.target_pose);
   const double orientation_error =
-    orientationDistance(*snapshot.gazebo_coke_pose_world, *expected.target_pose);
+    orientationDistance(*snapshot.gazebo_task_object_pose_world, *expected.target_pose);
   result.metrics["supported_coke_position_error"] = position_error;
   result.metrics["supported_coke_orientation_error_rad"] = orientation_error;
   if (position_error > config.coke_position_tolerance ||

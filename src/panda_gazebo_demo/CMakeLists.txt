@@ -69,48 +69,47 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   # Register cppcheck explicitly below so its bundled GoogleTest model is loaded.
   # Without it cppcheck 2.13 reports TEST(...) declarations as syntax errors.
-  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cppcheck)
+  # clang-format is enforced by pick_place_common_add_cpp_quality_gate; avoid the
+  # incompatible ament_uncrustify formatter running over the same C++ sources.
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cppcheck ament_cmake_uncrustify)
   ament_lint_auto_find_test_dependencies()
 endif()
 
 add_library(
-  pick_place_core
+  panda_pick_place_runtime
   src/pick_place/cartesian_plan_validation.cpp
-  src/pick_place/domain_types.cpp
   src/pick_place/gripper_state_executor.cpp
   src/pick_place/moveit_scene_executor.cpp
   src/pick_place/motion_state_action.cpp
   src/pick_place/named_target_validation.cpp
-  src/pick_place/plan_validation.cpp
+  src/pick_place/panda_workflow.cpp
   src/pick_place/pick_place_contracts.cpp
   src/pick_place/pick_place_runtime.cpp
   src/pick_place/recovery_contracts.cpp
   src/pick_place/recovery_policy.cpp
   src/pick_place/ready_retreat_action.cpp
   src/pick_place/state_validation.cpp
-  src/pick_place/state_action.cpp
   src/pick_place/transition_contract.cpp
   src/pick_place/transition_table.cpp
-  src/pick_place/runner.cpp
   src/pick_place/runtime_parameters.cpp
-  src/pick_place/simulation_session_id.cpp
   src/pick_place/common_resume_validator.cpp
+  src/pick_place/panda_resume_validation_policy.cpp
   src/pick_place/moveit_world_object_pose.cpp
   src/pick_place/moveit_world_resetter.cpp
   src/pick_place/pick_place_target_policy.cpp
-  src/pick_place/world_observer.cpp
 )
-target_compile_features(pick_place_core PUBLIC cxx_std_17)
+target_compile_features(panda_pick_place_runtime PUBLIC cxx_std_17)
+target_link_libraries(panda_pick_place_runtime pick_place_common::core)
 target_include_directories(
-  pick_place_core
+  panda_pick_place_runtime
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-ament_target_dependencies(pick_place_core moveit_msgs)
+ament_target_dependencies(panda_pick_place_runtime moveit_msgs)
 
 add_library(
-  pick_place_ros_adapters
+  panda_pick_place_ros_adapters
   src/pick_place/file_checkpoint_store.cpp
   src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_world_observer.cpp
@@ -121,20 +120,20 @@ add_library(
   src/pick_place/move_above_object_planner.cpp
 )
 target_link_libraries(
-  pick_place_ros_adapters
-  pick_place_core
+  panda_pick_place_ros_adapters
+  panda_pick_place_runtime
   nlohmann_json::nlohmann_json
   gz-transport13::core
   gz-msgs10::core
 )
 target_include_directories(
-  pick_place_ros_adapters
+  panda_pick_place_ros_adapters
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(
-  pick_place_ros_adapters
+  panda_pick_place_ros_adapters
   rclcpp
   rclcpp_action
   control_msgs
@@ -165,7 +164,7 @@ ament_target_dependencies(
   pick_place_state_machine
   rclcpp
 )
-target_link_libraries(pick_place_state_machine pick_place_core pick_place_ros_adapters)
+target_link_libraries(pick_place_state_machine panda_pick_place_runtime panda_pick_place_ros_adapters)
 
 ament_target_dependencies(gazebo_attachment_state_relay rclcpp)
 target_link_libraries(
@@ -175,7 +174,7 @@ target_link_libraries(
 )
 
 ament_target_dependencies(reset_moveit_world rclcpp)
-target_link_libraries(reset_moveit_world pick_place_core pick_place_ros_adapters)
+target_link_libraries(reset_moveit_world panda_pick_place_runtime panda_pick_place_ros_adapters)
 
 pick_place_common_add_cpp_quality_gate(
   WORKSPACE_ROOT ${PANDA_GAZEBO_DEMO_WORKSPACE_ROOT}
@@ -183,8 +182,8 @@ pick_place_common_add_cpp_quality_gate(
   RUN_CLANG_TIDY_EXECUTABLE ${RUN_CLANG_TIDY_EXECUTABLE}
   CLANG_FORMAT_EXECUTABLE ${CLANG_FORMAT_EXECUTABLE}
   TARGETS
-    pick_place_core
-    pick_place_ros_adapters
+    panda_pick_place_runtime
+    panda_pick_place_ros_adapters
     pick_place_state_machine
     gazebo_attachment_state_relay
     reset_moveit_world
@@ -196,12 +195,12 @@ if(BUILD_TESTING)
     test/pick_place/test_workflow_characterization.cpp
   )
   if(TARGET test_workflow_characterization)
-    target_link_libraries(test_workflow_characterization pick_place_core)
+    target_link_libraries(test_workflow_characterization panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(test_pick_place_core test/pick_place/test_pick_place_core.cpp)
   if(TARGET test_pick_place_core)
-    target_link_libraries(test_pick_place_core pick_place_core pick_place_ros_adapters)
+    target_link_libraries(test_pick_place_core panda_pick_place_runtime panda_pick_place_ros_adapters)
   endif()
 
   ament_add_gtest(
@@ -209,32 +208,32 @@ if(BUILD_TESTING)
     test/pick_place/test_simulation_session_id.cpp
   )
   if(TARGET test_simulation_session_id)
-    target_link_libraries(test_simulation_session_id pick_place_core)
+    target_link_libraries(test_simulation_session_id panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(test_pick_place_targets test/pick_place/test_pick_place_targets.cpp)
   if(TARGET test_pick_place_targets)
-    target_link_libraries(test_pick_place_targets pick_place_core)
+    target_link_libraries(test_pick_place_targets panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(test_recovery_policy test/pick_place/test_recovery_policy.cpp)
   if(TARGET test_recovery_policy)
-    target_link_libraries(test_recovery_policy pick_place_core)
+    target_link_libraries(test_recovery_policy panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(test_checkpoint_v3 test/pick_place/test_checkpoint_v3.cpp)
   if(TARGET test_checkpoint_v3)
-    target_link_libraries(test_checkpoint_v3 pick_place_core pick_place_ros_adapters)
+    target_link_libraries(test_checkpoint_v3 panda_pick_place_runtime panda_pick_place_ros_adapters)
   endif()
 
   ament_add_gtest(test_state_validation test/pick_place/test_state_validation.cpp)
   if(TARGET test_state_validation)
-    target_link_libraries(test_state_validation pick_place_core)
+    target_link_libraries(test_state_validation panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(test_gripper_state_executor test/pick_place/test_gripper_state_executor.cpp)
   if(TARGET test_gripper_state_executor)
-    target_link_libraries(test_gripper_state_executor pick_place_core)
+    target_link_libraries(test_gripper_state_executor panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(
@@ -244,8 +243,8 @@ if(BUILD_TESTING)
   if(TARGET test_gripper_command_adapter)
     target_link_libraries(
       test_gripper_command_adapter
-      pick_place_core
-      pick_place_ros_adapters
+      panda_pick_place_runtime
+      panda_pick_place_ros_adapters
     )
     ament_target_dependencies(
       test_gripper_command_adapter
@@ -262,8 +261,8 @@ if(BUILD_TESTING)
   if(TARGET test_gazebo_attachment_executor)
     target_link_libraries(
       test_gazebo_attachment_executor
-      pick_place_core
-      pick_place_ros_adapters
+      panda_pick_place_runtime
+      panda_pick_place_ros_adapters
     )
   endif()
 
@@ -274,8 +273,8 @@ if(BUILD_TESTING)
   if(TARGET test_gazebo_world_observer)
     target_link_libraries(
       test_gazebo_world_observer
-      pick_place_core
-      pick_place_ros_adapters
+      panda_pick_place_runtime
+      panda_pick_place_ros_adapters
     )
   endif()
 
@@ -284,7 +283,7 @@ if(BUILD_TESTING)
     test/pick_place/test_moveit_scene_executor.cpp
   )
   if(TARGET test_moveit_scene_executor)
-    target_link_libraries(test_moveit_scene_executor pick_place_core)
+    target_link_libraries(test_moveit_scene_executor panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(
@@ -292,7 +291,7 @@ if(BUILD_TESTING)
     test/pick_place/test_moveit_world_resetter.cpp
   )
   if(TARGET test_moveit_world_resetter)
-    target_link_libraries(test_moveit_world_resetter pick_place_core)
+    target_link_libraries(test_moveit_world_resetter panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(
@@ -302,8 +301,8 @@ if(BUILD_TESTING)
   if(TARGET test_motion_plan_validation)
     target_link_libraries(
       test_motion_plan_validation
-      pick_place_core
-      pick_place_ros_adapters
+      panda_pick_place_runtime
+      panda_pick_place_ros_adapters
     )
   endif()
 
@@ -312,14 +311,14 @@ if(BUILD_TESTING)
     test/pick_place/test_motion_state_action.cpp
   )
   if(TARGET test_motion_state_action)
-    target_link_libraries(test_motion_state_action pick_place_core)
+    target_link_libraries(test_motion_state_action panda_pick_place_runtime)
   endif()
   ament_add_gtest(
     test_ready_retreat_action
     test/pick_place/test_ready_retreat_action.cpp
   )
   if(TARGET test_ready_retreat_action)
-    target_link_libraries(test_ready_retreat_action pick_place_core)
+    target_link_libraries(test_ready_retreat_action panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(
@@ -327,7 +326,7 @@ if(BUILD_TESTING)
     test/pick_place/test_forward_contracts.cpp
   )
   if(TARGET test_forward_contracts)
-    target_link_libraries(test_forward_contracts pick_place_core)
+    target_link_libraries(test_forward_contracts panda_pick_place_runtime)
   endif()
 
   ament_add_gtest(
@@ -337,8 +336,8 @@ if(BUILD_TESTING)
   if(TARGET test_recovery_workflow)
     target_link_libraries(
       test_recovery_workflow
-      pick_place_core
-      pick_place_ros_adapters
+      panda_pick_place_runtime
+      panda_pick_place_ros_adapters
     )
   endif()
 
@@ -347,7 +346,7 @@ if(BUILD_TESTING)
     test/pick_place/test_registration_coverage.cpp
   )
   if(TARGET test_registration_coverage)
-    target_link_libraries(test_registration_coverage pick_place_core)
+    target_link_libraries(test_registration_coverage panda_pick_place_runtime)
   endif()
 
   add_test(
@@ -436,8 +435,8 @@ endif()
 
 install(
   TARGETS
-    pick_place_core
-    pick_place_ros_adapters
+    panda_pick_place_runtime
+    panda_pick_place_ros_adapters
     pick_place_state_machine
     gazebo_attachment_state_relay
     reset_moveit_world
