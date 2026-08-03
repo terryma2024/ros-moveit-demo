@@ -18,9 +18,8 @@ namespace
 ActionResult resetFailure(ActionStatus status, std::string code, std::string message,
                           std::map<std::string, double> metrics = {})
 {
-  return {status,
-          Failure{FailureCategory::WORLD_INCONSISTENCY, std::move(code), std::move(message),
-                  std::move(metrics)}};
+  return {status, Failure{FailureCategory::WORLD_INCONSISTENCY, std::move(code), std::move(message),
+                          std::move(metrics)}};
 }
 
 bool validPose(const Pose3d & pose)
@@ -68,8 +67,7 @@ bool completeJointEvidence(const CurrentJointStateEvidence & evidence,
                      [](double value) { return std::isfinite(value); }) &&
          std::all_of(evidence.velocities.begin(), evidence.velocities.end(),
                      [](double value) { return std::isfinite(value); }) &&
-         std::isfinite(*evidence.gripper_position) &&
-         std::isfinite(*evidence.gripper_velocity);
+         std::isfinite(*evidence.gripper_position) && std::isfinite(*evidence.gripper_velocity);
 }
 
 bool gripperMatches(const CurrentJointStateEvidence & evidence, double target,
@@ -84,13 +82,14 @@ bool gripperHomeMatches(const CurrentJointStateEvidence & evidence, const WorldR
 {
   namespace pad_calibration = fingertip_pad_calibration;
   return gripperMatches(evidence, config.q6_home_position, config) &&
-         *evidence.gripper_position >= config.q6_safe_lower -
-           pad_calibration::kControllerEndpointEpsilonRad;
+         *evidence.gripper_position >=
+           config.q6_safe_lower - pad_calibration::kControllerEndpointEpsilonRad;
 }
 
 bool armMatches(const CurrentJointStateEvidence & evidence, const WorldResetConfig & config)
 {
-  if (!completeJointEvidence(evidence, config)) return false;
+  if (!completeJointEvidence(evidence, config))
+    return false;
   for (std::size_t i = 0; i < config.arm_home_positions.size(); ++i) {
     if (std::abs(evidence.positions[i] - config.arm_home_positions[i]) >
           config.arm_joint_position_tolerance ||
@@ -101,8 +100,8 @@ bool armMatches(const CurrentJointStateEvidence & evidence, const WorldResetConf
   return true;
 }
 
-std::map<std::string, double> gripperMetrics(
-  const std::optional<CurrentJointStateEvidence> & evidence, double target)
+std::map<std::string, double>
+gripperMetrics(const std::optional<CurrentJointStateEvidence> & evidence, double target)
 {
   std::map<std::string, double> metrics{{"expected_q6", target}};
   if (evidence && evidence->gripper_position) {
@@ -157,18 +156,17 @@ ActionResult WorldResetCoordinator::reset()
       !std::isfinite(config_.arm_joint_position_tolerance) ||
       !std::isfinite(config_.gripper_position_tolerance) ||
       !std::isfinite(config_.joint_velocity_tolerance) ||
-      config_.arm_joint_position_tolerance < 0.0 ||
-      config_.gripper_position_tolerance < 0.0 || config_.joint_velocity_tolerance < 0.0 ||
-      !validPose(config_.table_pose) || !validPose(config_.pedestal_pose) ||
-      !validPose(config_.task_object_pose)) {
+      config_.arm_joint_position_tolerance < 0.0 || config_.gripper_position_tolerance < 0.0 ||
+      config_.joint_velocity_tolerance < 0.0 || !validPose(config_.table_pose) ||
+      !validPose(config_.pedestal_pose) || !validPose(config_.task_object_pose)) {
     return resetFailure(ActionStatus::FAILED, "WORLD_RESET_CONFIG_INVALID",
                         "Reset timing, tolerances, and canonical poses must be valid");
   }
   if (config_.q6_home_position < config_.q6_safe_lower) {
-    return resetFailure(ActionStatus::FAILED, "Q6_BELOW_SAFE_LOWER_LIMIT",
-                        "Reset q6 home target must not cross the fingertip-pad safety floor",
-                        {{"requested_q6", config_.q6_home_position},
-                         {"required_q6", config_.q6_safe_lower}});
+    return resetFailure(
+      ActionStatus::FAILED, "Q6_BELOW_SAFE_LOWER_LIMIT",
+      "Reset q6 home target must not cross the fingertip-pad safety floor",
+      {{"requested_q6", config_.q6_home_position}, {"required_q6", config_.q6_safe_lower}});
   }
 
   auto gazebo_state = gazebo_->observe();
@@ -184,7 +182,7 @@ ActionResult WorldResetCoordinator::reset()
   }
 
   if (gazebo_state->task_object_attached) {
-    const auto command = gazebo_->detachTaskObject();
+    auto command = gazebo_->detachTaskObject();
     if (command.status != ActionStatus::SUCCEEDED) {
       return command;
     }
@@ -198,7 +196,7 @@ ActionResult WorldResetCoordinator::reset()
   }
 
   if (moveit_state->task_object_attached) {
-    const auto command = moveit_->detachTaskObject();
+    auto command = moveit_->detachTaskObject();
     if (command.status != ActionStatus::SUCCEEDED) {
       return command;
     }
@@ -213,7 +211,8 @@ ActionResult WorldResetCoordinator::reset()
   }
 
   auto command = robot_->commandGripper(config_.q6_release_position);
-  if (command.status != ActionStatus::SUCCEEDED) return command;
+  if (command.status != ActionStatus::SUCCEEDED)
+    return command;
   std::optional<CurrentJointStateEvidence> latest_joints;
   if (!pollUntil(config_.timeout_seconds, config_.poll_interval_seconds, [this, &latest_joints]() {
         latest_joints = robot_->observeJoints();
@@ -226,13 +225,15 @@ ActionResult WorldResetCoordinator::reset()
   }
 
   const auto arm_plan = robot_->planArmHome(config_.arm_home_positions);
-  if (arm_plan.action.status != ActionStatus::SUCCEEDED) return arm_plan.action;
+  if (arm_plan.action.status != ActionStatus::SUCCEEDED)
+    return arm_plan.action;
   if (!arm_plan.artifact || arm_plan.artifact->trajectory_points == 0) {
     return resetFailure(ActionStatus::FAILED, "WORLD_RESET_ARM_HOME_PLAN_INVALID",
                         "Arm home planning did not produce a non-empty executable trajectory");
   }
   command = robot_->executeArmHome(*arm_plan.artifact);
-  if (command.status != ActionStatus::SUCCEEDED) return command;
+  if (command.status != ActionStatus::SUCCEEDED)
+    return command;
   if (!pollUntil(config_.timeout_seconds, config_.poll_interval_seconds, [this, &latest_joints]() {
         latest_joints = robot_->observeJoints();
         return latest_joints && armMatches(*latest_joints, config_);
@@ -284,21 +285,24 @@ ActionResult WorldResetCoordinator::reset()
           return gazebo && moveit && !gazebo->task_object_attached &&
                  gazebo->pose_revision > pose_revision_before &&
                  poseMatches(gazebo->task_object_world_pose, config_.task_object_pose, config_) &&
-                 !moveit->task_object_attached && moveit->task_object_in_world && moveit->attached_link.empty() &&
-                 moveit->touch_links.empty() && moveit->task_object_world_pose &&
+                 !moveit->task_object_attached && moveit->task_object_in_world &&
+                 moveit->attached_link.empty() && moveit->touch_links.empty() &&
+                 moveit->task_object_world_pose &&
                  poseMatches(*moveit->task_object_world_pose, config_.task_object_pose, config_) &&
                  moveit->table_in_world && moveit->table_world_pose &&
                  poseMatches(*moveit->table_world_pose, config_.table_pose, config_) &&
                  moveit->pedestal_in_world && moveit->pedestal_world_pose &&
                  poseMatches(*moveit->pedestal_world_pose, config_.pedestal_pose, config_) &&
-                 poseMatches(gazebo->task_object_world_pose, *moveit->task_object_world_pose, config_);
+                 poseMatches(gazebo->task_object_world_pose, *moveit->task_object_world_pose,
+                             config_);
         })) {
     return resetFailure(ActionStatus::TIMED_OUT, "WORLD_RESET_CONVERGENCE_TIMEOUT",
                         "Gazebo and MoveIt did not converge to detached canonical 6D facts");
   }
 
   command = robot_->commandGripper(config_.q6_home_position);
-  if (command.status != ActionStatus::SUCCEEDED) return command;
+  if (command.status != ActionStatus::SUCCEEDED)
+    return command;
   if (!pollUntil(config_.timeout_seconds, config_.poll_interval_seconds, [this, &latest_joints]() {
         latest_joints = robot_->observeJoints();
         return latest_joints && armMatches(*latest_joints, config_) &&

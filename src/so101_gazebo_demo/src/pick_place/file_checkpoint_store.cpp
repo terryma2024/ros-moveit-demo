@@ -1,5 +1,7 @@
 #include "so101_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cmath>
 #include <cstring>
@@ -130,13 +132,8 @@ bool poseIsFinite(const Pose3d & pose) noexcept
 
 template <typename Value> bool mapHasValidNames(const std::map<std::string, Value> & values)
 {
-  for (const auto & [name, unused] : values) {
-    (void)unused;
-    if (name.empty()) {
-      return false;
-    }
-  }
-  return true;
+  return std::all_of(values.begin(), values.end(),
+                     [](const auto & item) { return !item.first.empty(); });
 }
 
 std::optional<Failure> validateCheckpoint(const Checkpoint & checkpoint)
@@ -265,17 +262,18 @@ Json checkpointToJson(const Checkpoint & checkpoint)
       {"joint_positions", checkpoint.expected.joint_positions},
       {"moveit_world_object_poses", poseMapToJson(checkpoint.expected.moveit_world_object_poses)},
       {"moveit_task_object_attached", checkpoint.expected.moveit_task_object_attached
-                                 ? Json(*checkpoint.expected.moveit_task_object_attached)
-                                 : Json(nullptr)},
-      {"gazebo_task_object_pose_world", checkpoint.expected.gazebo_task_object_pose_world
-                                   ? poseToJson(*checkpoint.expected.gazebo_task_object_pose_world)
-                                   : Json(nullptr)},
+                                        ? Json(*checkpoint.expected.moveit_task_object_attached)
+                                        : Json(nullptr)},
+      {"gazebo_task_object_pose_world",
+       checkpoint.expected.gazebo_task_object_pose_world
+         ? poseToJson(*checkpoint.expected.gazebo_task_object_pose_world)
+         : Json(nullptr)},
       {"gazebo_task_object_attached", checkpoint.expected.gazebo_task_object_attached
-                                 ? Json(*checkpoint.expected.gazebo_task_object_attached)
-                                 : Json(nullptr)},
+                                        ? Json(*checkpoint.expected.gazebo_task_object_attached)
+                                        : Json(nullptr)},
       {"gazebo_task_object_stationary", checkpoint.expected.gazebo_task_object_stationary
-                                   ? Json(*checkpoint.expected.gazebo_task_object_stationary)
-                                   : Json(nullptr)},
+                                          ? Json(*checkpoint.expected.gazebo_task_object_stationary)
+                                          : Json(nullptr)},
       {"required_world_objects", checkpoint.expected.required_world_objects}}},
     {"policy_bundle_sha256", checkpoint.policy_bundle_sha256},
     {"simulation_session_id", checkpoint.simulation_session_id},
@@ -288,12 +286,8 @@ bool hasExactKeys(const Json & json, std::initializer_list<std::string_view> exp
   if (!json.is_object() || json.size() != expected.size()) {
     return false;
   }
-  for (const auto key : expected) {
-    if (!json.contains(std::string(key))) {
-      return false;
-    }
-  }
-  return true;
+  return std::all_of(expected.begin(), expected.end(),
+                     [&](const auto key) { return json.contains(std::string(key)); });
 }
 
 bool isFiniteNumber(const Json & json)
@@ -306,12 +300,9 @@ bool isStrictPose(const Json & json)
   if (!hasExactKeys(json, {"x", "y", "z", "qx", "qy", "qz", "qw"})) {
     return false;
   }
-  for (const auto key : {"x", "y", "z", "qx", "qy", "qz", "qw"}) {
-    if (!isFiniteNumber(json.at(key))) {
-      return false;
-    }
-  }
-  return true;
+  constexpr std::array keys{"x", "y", "z", "qx", "qy", "qz", "qw"};
+  return std::all_of(keys.begin(), keys.end(),
+                     [&](const auto key) { return isFiniteNumber(json.at(key)); });
 }
 
 bool isFiniteNumberMap(const Json & json)
@@ -319,12 +310,9 @@ bool isFiniteNumberMap(const Json & json)
   if (!json.is_object()) {
     return false;
   }
-  for (const auto & [name, value] : json.items()) {
-    if (name.empty() || !isFiniteNumber(value)) {
-      return false;
-    }
-  }
-  return true;
+  return std::all_of(json.items().begin(), json.items().end(), [](const auto & item) {
+    return !item.key().empty() && isFiniteNumber(item.value());
+  });
 }
 
 bool isPoseMap(const Json & json)
@@ -332,12 +320,9 @@ bool isPoseMap(const Json & json)
   if (!json.is_object()) {
     return false;
   }
-  for (const auto & [name, pose] : json.items()) {
-    if (name.empty() || !isStrictPose(pose)) {
-      return false;
-    }
-  }
-  return true;
+  return std::all_of(json.items().begin(), json.items().end(), [](const auto & item) {
+    return !item.key().empty() && isStrictPose(item.value());
+  });
 }
 
 bool isOptionalBool(const Json & json)
@@ -408,10 +393,10 @@ std::optional<Failure> validateJsonShape(const Json & json)
                              "Checkpoint scalar or optional fields have the wrong type");
   }
   const auto & expected = json.at("expected");
-  if (!hasExactKeys(expected,
-                    {"tcp_pose_world", "gripper_open", "joint_positions",
-                     "moveit_world_object_poses", "moveit_task_object_attached", "gazebo_task_object_pose_world",
-                     "gazebo_task_object_attached", "gazebo_task_object_stationary", "required_world_objects"}) ||
+  if (!hasExactKeys(expected, {"tcp_pose_world", "gripper_open", "joint_positions",
+                               "moveit_world_object_poses", "moveit_task_object_attached",
+                               "gazebo_task_object_pose_world", "gazebo_task_object_attached",
+                               "gazebo_task_object_stationary", "required_world_objects"}) ||
       !isStrictPose(expected.at("tcp_pose_world")) || !expected.at("gripper_open").is_boolean() ||
       !isFiniteNumberMap(expected.at("joint_positions")) ||
       !isPoseMap(expected.at("moveit_world_object_poses")) ||
@@ -485,17 +470,20 @@ CheckpointLoadResult checkpointFromJson(const Json & json)
   checkpoint.expected.moveit_world_object_poses =
     poseMapFromJson(expected.at("moveit_world_object_poses"));
   if (!expected.at("moveit_task_object_attached").is_null()) {
-    checkpoint.expected.moveit_task_object_attached = expected.at("moveit_task_object_attached").get<bool>();
+    checkpoint.expected.moveit_task_object_attached =
+      expected.at("moveit_task_object_attached").get<bool>();
   }
   if (!expected.at("gazebo_task_object_pose_world").is_null()) {
     checkpoint.expected.gazebo_task_object_pose_world =
       poseFromJson(expected.at("gazebo_task_object_pose_world"));
   }
   if (!expected.at("gazebo_task_object_attached").is_null()) {
-    checkpoint.expected.gazebo_task_object_attached = expected.at("gazebo_task_object_attached").get<bool>();
+    checkpoint.expected.gazebo_task_object_attached =
+      expected.at("gazebo_task_object_attached").get<bool>();
   }
   if (!expected.at("gazebo_task_object_stationary").is_null()) {
-    checkpoint.expected.gazebo_task_object_stationary = expected.at("gazebo_task_object_stationary").get<bool>();
+    checkpoint.expected.gazebo_task_object_stationary =
+      expected.at("gazebo_task_object_stationary").get<bool>();
   }
   checkpoint.expected.required_world_objects =
     expected.at("required_world_objects").get<std::vector<std::string>>();

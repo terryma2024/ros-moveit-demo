@@ -31,10 +31,10 @@ public:
   {
     server_ = rclcpp_action::create_server<Follow>(
       node, "/test_gripper_controller/follow_joint_trajectory",
-      [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Follow::Goal>) {
+      [](const rclcpp_action::GoalUUID &, const std::shared_ptr<const Follow::Goal> &) {
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
       },
-      [this](const std::shared_ptr<ServerGoalHandle>) {
+      [this](const std::shared_ptr<ServerGoalHandle> &) {
         {
           std::lock_guard<std::mutex> lock(mutex_);
           cancel_seen_ = true;
@@ -42,7 +42,7 @@ public:
         condition_.notify_all();
         return rclcpp_action::CancelResponse::ACCEPT;
       },
-      [this](const std::shared_ptr<ServerGoalHandle> handle) {
+      [this](const std::shared_ptr<ServerGoalHandle> & handle) {
         {
           std::lock_guard<std::mutex> lock(mutex_);
           goal_ = handle;
@@ -122,7 +122,7 @@ protected:
     server_node_.reset();
   }
 
-  pick_place::SingleJointTrajectoryGoal goal() const
+  [[nodiscard]] static pick_place::SingleJointTrajectoryGoal goal()
   {
     return {{"6"}, {0.7}, 0.1};
   }
@@ -136,12 +136,13 @@ protected:
 
 TEST_F(RosTrajectoryActionClientTest, CancelWaitsForOriginalGoalTerminalResult)
 {
-  pick_place::RosTrajectoryActionClient client(
-    client_node_, "/test_gripper_controller/follow_joint_trajectory");
+  pick_place::RosTrajectoryActionClient client(client_node_,
+                                               "/test_gripper_controller/follow_joint_trajectory");
   const auto send = client.send(goal(), 0.15);
   ASSERT_EQ(pick_place::ActionStatus::TIMED_OUT, send.status);
 
-  auto cancelled = std::async(std::launch::async, [&client]() { return client.cancelAndWait(1.0); });
+  auto cancelled =
+    std::async(std::launch::async, [&client]() { return client.cancelAndWait(1.0); });
   ASSERT_TRUE(server_->waitForCancel(500ms));
   EXPECT_EQ(std::future_status::timeout, cancelled.wait_for(100ms));
 
@@ -152,8 +153,8 @@ TEST_F(RosTrajectoryActionClientTest, CancelWaitsForOriginalGoalTerminalResult)
 
 TEST_F(RosTrajectoryActionClientTest, CancelTimesOutWhenOriginalGoalNeverBecomesTerminal)
 {
-  pick_place::RosTrajectoryActionClient client(
-    client_node_, "/test_gripper_controller/follow_joint_trajectory");
+  pick_place::RosTrajectoryActionClient client(client_node_,
+                                               "/test_gripper_controller/follow_joint_trajectory");
   ASSERT_EQ(pick_place::ActionStatus::TIMED_OUT, client.send(goal(), 0.1).status);
 
   const auto cancelled = client.cancelAndWait(0.2);
@@ -168,11 +169,12 @@ TEST_F(RosTrajectoryActionClientTest, CancelTimesOutWhenOriginalGoalNeverBecomes
 
 TEST_F(RosTrajectoryActionClientTest, AbortedTerminalResultIsNotCancellationSuccess)
 {
-  pick_place::RosTrajectoryActionClient client(
-    client_node_, "/test_gripper_controller/follow_joint_trajectory");
+  pick_place::RosTrajectoryActionClient client(client_node_,
+                                               "/test_gripper_controller/follow_joint_trajectory");
   ASSERT_EQ(pick_place::ActionStatus::TIMED_OUT, client.send(goal(), 0.1).status);
 
-  auto cancelled = std::async(std::launch::async, [&client]() { return client.cancelAndWait(1.0); });
+  auto cancelled =
+    std::async(std::launch::async, [&client]() { return client.cancelAndWait(1.0); });
   ASSERT_TRUE(server_->waitForCancel(500ms));
   server_->finishAborted();
   const auto result = cancelled.get();

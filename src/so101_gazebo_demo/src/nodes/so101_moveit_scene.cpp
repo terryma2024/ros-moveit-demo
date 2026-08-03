@@ -104,10 +104,14 @@ int main(int argc, char * argv[])
 
   pick_place::ActionResult result;
   try {
-    const pick_place::MoveItSceneGeometry geometry{profile.world_frame, profile.table_object,
-                                                   profile.table_size, profile.pedestal_object,
-                                                   profile.pedestal_size, profile.task_object_id,
-                                                   profile.task_object_height, profile.task_object_outer_radius,
+    const pick_place::MoveItSceneGeometry geometry{profile.world_frame,
+                                                   profile.table_object,
+                                                   profile.table_size,
+                                                   profile.pedestal_object,
+                                                   profile.pedestal_size,
+                                                   profile.task_object_id,
+                                                   profile.task_object_height,
+                                                   profile.task_object_outer_radius,
                                                    profile.task_object_wall_thickness,
                                                    profile.task_object_bottom_thickness,
                                                    profile.task_object_side_count};
@@ -154,9 +158,10 @@ int main(int argc, char * argv[])
         bool converged = false;
         while (std::chrono::steady_clock::now() < deadline) {
           const auto state = adapter->observe();
-          if (state && !state->task_object_attached && state->task_object_in_world && state->task_object_world_pose &&
-              poseMatches(*state->task_object_world_pose, profile.task_object_pose) && state->table_in_world &&
-              state->table_world_pose &&
+          if (state && !state->task_object_attached && state->task_object_in_world &&
+              state->task_object_world_pose &&
+              poseMatches(*state->task_object_world_pose, profile.task_object_pose) &&
+              state->table_in_world && state->table_world_pose &&
               poseMatches(*state->table_world_pose, profile.table_pose) &&
               state->pedestal_in_world && state->pedestal_world_pose &&
               poseMatches(*state->pedestal_world_pose, profile.pedestal_pose)) {

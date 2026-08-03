@@ -42,32 +42,32 @@ constexpr std::array<State, 4> kPhysicalGraspStates{{
   State::VERIFY_PHYSICAL_GRASP,
 }};
 
-bool finite(double value) { return std::isfinite(value); }
+bool finite(double value)
+{
+  return std::isfinite(value);
+}
 
 bool finitePose(const Pose3d & pose)
 {
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy),
-                                 std::hypot(pose.qz, pose.qw));
-  return finite(pose.x) && finite(pose.y) && finite(pose.z) && finite(pose.qx) &&
-         finite(pose.qy) && finite(pose.qz) && finite(pose.qw) && finite(norm) &&
-         norm > 1e-12;
+  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
+  return finite(pose.x) && finite(pose.y) && finite(pose.z) && finite(pose.qx) && finite(pose.qy) &&
+         finite(pose.qz) && finite(pose.qw) && finite(norm) && norm > 1e-12;
 }
 
 double positionDistance(const Pose3d & first, const Pose3d & second)
 {
-  return std::hypot(std::hypot(first.x - second.x, first.y - second.y),
-                    first.z - second.z);
+  return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
 }
 
-double wallNormalPositionError(const Pose3d & actual, const Pose3d & expected,
-                               const Vec3 & outward)
+double wallNormalPositionError(const Pose3d & actual, const Pose3d & expected, const Vec3 & outward)
 {
   const double magnitude = std::hypot(outward.x, std::hypot(outward.y, outward.z));
   if (!finitePose(actual) || !finitePose(expected) || !finite(magnitude) || magnitude <= 1e-12) {
     return std::numeric_limits<double>::infinity();
   }
   const double projected = (actual.x - expected.x) * outward.x +
-    (actual.y - expected.y) * outward.y + (actual.z - expected.z) * outward.z;
+                           (actual.y - expected.y) * outward.y +
+                           (actual.z - expected.z) * outward.z;
   return std::abs(projected) / magnitude;
 }
 
@@ -109,12 +109,17 @@ Pose3d relativePose(const Pose3d & frame, const Pose3d & object)
     Eigen::Quaterniond(object.qw, object.qx, object.qy, object.qz).normalized();
   const Eigen::Isometry3d relative = world_frame.inverse() * world_object;
   const Eigen::Quaterniond orientation(relative.rotation());
-  return {relative.translation().x(), relative.translation().y(), relative.translation().z(),
-          orientation.x(), orientation.y(), orientation.z(), orientation.w()};
+  return {relative.translation().x(),
+          relative.translation().y(),
+          relative.translation().z(),
+          orientation.x(),
+          orientation.y(),
+          orientation.z(),
+          orientation.w()};
 }
 
-bool poseWithin(const Pose3d & actual, const Pose3d & expected,
-                double position_tolerance, double orientation_tolerance)
+bool poseWithin(const Pose3d & actual, const Pose3d & expected, double position_tolerance,
+                double orientation_tolerance)
 {
   return positionDistance(actual, expected) <= position_tolerance &&
          orientationDistance(actual, expected) <= orientation_tolerance;
@@ -129,12 +134,12 @@ bool cylindricalPoseWithin(const Pose3d & actual, const Pose3d & expected,
 
 bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
 {
-  if (!finitePose(pose)) return false;
+  if (!finitePose(pose))
+    return false;
   const auto & expected = profile.place_task_object_pose;
   const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
   const double height_error = std::abs(pose.z - expected.z);
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy),
-                                 std::hypot(pose.qz, pose.qw));
+  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
   const double local_z_world_z =
     1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
   const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
@@ -146,9 +151,9 @@ bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
 
 bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile)
 {
-  if (!finitePose(pose)) return false;
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy),
-                                 std::hypot(pose.qz, pose.qw));
+  if (!finitePose(pose))
+    return false;
+  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
   const double local_z_world_z =
     1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
   const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
@@ -177,18 +182,20 @@ void merge(ValidationResult & result, ValidationResult additional)
   result.ok = result.failures.empty();
 }
 
-bool carrying(State state) { return isCarryingMotionState(state); }
+bool carrying(State state)
+{
+  return isCarryingMotionState(state);
+}
 
-ValidationResult validateMotionQ6(const WorldSnapshot & snapshot,
-                                  double expected_q6,
+ValidationResult validateMotionQ6(const WorldSnapshot & snapshot, double expected_q6,
                                   const SO101Profile & profile)
 {
   if (std::abs(expected_q6 - profile.q6_full_open) <= profile.q6_tolerance) {
     return validateSO101GripperTarget(snapshot, SO101GripperTarget::FULL_OPEN, profile);
   }
-  const double expected_width =
-    std::abs(expected_q6 - profile.q6_contact) <= profile.q6_tolerance
-      ? profile.contact_width : profile.preopen_width;
+  const double expected_width = std::abs(expected_q6 - profile.q6_contact) <= profile.q6_tolerance
+                                  ? profile.contact_width
+                                  : profile.preopen_width;
   return validateQ6Target(snapshot, expected_q6, expected_width, profile);
 }
 
@@ -217,9 +224,8 @@ void requireCompleteSnapshot(ValidationResult & result, const WorldSnapshot & sn
   for (const auto & name : required) {
     const auto position = snapshot.joint_positions.find(name);
     const auto velocity = snapshot.joint_velocities.find(name);
-    if (position == snapshot.joint_positions.end() ||
-        velocity == snapshot.joint_velocities.end() || !finite(position->second) ||
-        !finite(velocity->second)) {
+    if (position == snapshot.joint_positions.end() || velocity == snapshot.joint_velocities.end() ||
+        !finite(position->second) || !finite(velocity->second)) {
       addFailure(result, FailureCategory::OBSERVATION, "JOINT_EVIDENCE_INCOMPLETE",
                  "Finite position and velocity evidence is required for joints 1 through 6");
       break;
@@ -231,7 +237,8 @@ void requireCompleteSnapshot(ValidationResult & result, const WorldSnapshot & sn
     addFailure(result, FailureCategory::MOVEIT_SCENE, "TABLE_WORLD_POSE_MISMATCH",
                "The canonical MoveIt table pose is required");
   }
-  if (!snapshot.gazebo_task_object_pose_world || !finitePose(*snapshot.gazebo_task_object_pose_world) ||
+  if (!snapshot.gazebo_task_object_pose_world ||
+      !finitePose(*snapshot.gazebo_task_object_pose_world) ||
       !snapshot.gazebo_task_object_attached || !snapshot.gazebo_task_object_stationary ||
       !snapshot.moveit_task_object_attached) {
     addFailure(result, FailureCategory::OBSERVATION, "ENVIRONMENT_EVIDENCE_INCOMPLETE",
@@ -252,7 +259,7 @@ void requireMotionEnvironment(ValidationResult & result, const WorldSnapshot & s
     return;
   }
   const std::set<std::string> expected_touch_links(profile.moveit_touch_links.begin(),
-                                                    profile.moveit_touch_links.end());
+                                                   profile.moveit_touch_links.end());
   if (carrying(state)) {
     if (!*snapshot.gazebo_task_object_attached || !*snapshot.moveit_task_object_attached ||
         snapshot.moveit_world_object_poses.count(profile.task_object_id) != 0 ||
@@ -283,24 +290,25 @@ void requireMotionEnvironment(ValidationResult & result, const WorldSnapshot & s
   }
   const auto moveit_task_object = snapshot.moveit_world_object_poses.find(profile.task_object_id);
   const auto & expected = expectedDetachedPose(state, profile);
-  const bool at_pick_pose = poseWithin(
-    *snapshot.gazebo_task_object_pose_world, expected,
-    profile.task_object_position_drift_tolerance,
-    profile.task_object_orientation_drift_tolerance_rad);
+  const bool at_pick_pose = poseWithin(*snapshot.gazebo_task_object_pose_world, expected,
+                                       profile.task_object_position_drift_tolerance,
+                                       profile.task_object_orientation_drift_tolerance_rad);
   const bool at_pick_support = supportedAtPick(*snapshot.gazebo_task_object_pose_world, profile);
   const bool at_place_support = supportedAtPlace(*snapshot.gazebo_task_object_pose_world, profile);
-  const bool expected_support = state == State::RETREAT
-    ? at_place_support
-    : (state == State::RECOVER_RETREAT ? at_pick_support || at_place_support : at_pick_pose);
+  const bool expected_support =
+    state == State::RETREAT
+      ? at_place_support
+      : (state == State::RECOVER_RETREAT ? at_pick_support || at_place_support : at_pick_pose);
   if (*snapshot.gazebo_task_object_attached || *snapshot.moveit_task_object_attached ||
-      snapshot.moveit_task_object_attached_link || !snapshot.moveit_task_object_touch_links.empty() ||
-      snapshot.moveit_task_object_attached_relative_pose || moveit_task_object == snapshot.moveit_world_object_poses.end() ||
+      snapshot.moveit_task_object_attached_link ||
+      !snapshot.moveit_task_object_touch_links.empty() ||
+      snapshot.moveit_task_object_attached_relative_pose ||
+      moveit_task_object == snapshot.moveit_world_object_poses.end() ||
       !poseWithin(moveit_task_object->second, *snapshot.gazebo_task_object_pose_world,
                   profile.task_object_position_drift_tolerance,
                   profile.task_object_orientation_drift_tolerance_rad) ||
       !expected_support) {
-    addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
-               "DETACHED_SUPPORT_EVIDENCE_INVALID",
+    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "DETACHED_SUPPORT_EVIDENCE_INVALID",
                "Detached motion requires matching supported Gazebo and MoveIt TaskObject poses");
   }
 }
@@ -310,19 +318,20 @@ class MotionAction final : public IStatePlanner, public IStateExecutor
 public:
   MotionAction(State state, State next_state,
                std::shared_ptr<const SO101ConfiguredMotionTargetPolicy> policy,
-               std::shared_ptr<IMoveItJointMotionAdapter> motion, SO101Profile profile)
-  : state_(state), next_state_(next_state), planner_(std::move(policy), motion, std::move(profile)),
-    motion_(std::move(motion))
+               std::shared_ptr<IMoveItJointMotionAdapter> motion, SO101Profile profile) :
+      state_(state), next_state_(next_state),
+      planner_(std::move(policy), motion, std::move(profile)), motion_(std::move(motion))
   {
   }
 
-  PlanResult plan(State state, State next_state,
-                  const ObservationResult & observation) override
+  PlanResult plan(State state, State next_state, const ObservationResult & observation) override
   {
     if (state != state_ || next_state != next_state_) {
       return {{ActionStatus::NOT_SUPPORTED,
-               Failure{FailureCategory::CONFIGURATION, "MOTION_STATE_MISMATCH",
-                       "Motion planner is registered for a different state transition", {}}},
+               Failure{FailureCategory::CONFIGURATION,
+                       "MOTION_STATE_MISMATCH",
+                       "Motion planner is registered for a different state transition",
+                       {}}},
               nullptr};
     }
     return planner_.plan(state, next_state, observation);
@@ -332,15 +341,18 @@ public:
   {
     if (context.state != state_ || context.next_state != next_state_) {
       return {ActionStatus::NOT_SUPPORTED,
-              Failure{FailureCategory::CONFIGURATION, "MOTION_STATE_MISMATCH",
-                      "Motion executor is registered for a different state transition", {}}};
+              Failure{FailureCategory::CONFIGURATION,
+                      "MOTION_STATE_MISMATCH",
+                      "Motion executor is registered for a different state transition",
+                      {}}};
     }
-    const auto artifact =
-      std::dynamic_pointer_cast<const MotionPlanArtifact>(context.plan);
+    const auto artifact = std::dynamic_pointer_cast<const MotionPlanArtifact>(context.plan);
     if (!motion_ || !artifact) {
       return {ActionStatus::FAILED,
-              Failure{FailureCategory::EXECUTION, "MOTION_ARTIFACT_INVALID",
-                      "Execution requires the exact validated SO-101 motion artifact", {}}};
+              Failure{FailureCategory::EXECUTION,
+                      "MOTION_ARTIFACT_INVALID",
+                      "Execution requires the exact validated SO-101 motion artifact",
+                      {}}};
     }
     return motion_->execute(*artifact);
   }
@@ -348,10 +360,10 @@ public:
   ActionResult cancel() override
   {
     return motion_ ? motion_->cancel()
-                   : ActionResult{ActionStatus::FAILED,
-                                  Failure{FailureCategory::CONFIGURATION,
-                                          "MOTION_DEPENDENCY_MISSING",
-                                          "SO-101 motion adapter is missing", {}}};
+                   : ActionResult{ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+                                                                "MOTION_DEPENDENCY_MISSING",
+                                                                "SO-101 motion adapter is missing",
+                                                                {}}};
   }
 
 private:
@@ -364,27 +376,29 @@ private:
 class RuntimeMotionPlanValidator final : public IPlanValidator
 {
 public:
-  RuntimeMotionPlanValidator(SO101FixedMotionSpec spec, SO101Profile profile)
-  : spec_(std::move(spec)), profile_(std::move(profile)),
-    delegate_(spec_.validation, spec_.require_axial_path_validation)
+  RuntimeMotionPlanValidator(SO101FixedMotionSpec spec, SO101Profile profile) :
+      spec_(std::move(spec)), profile_(std::move(profile)),
+      delegate_(spec_.validation, spec_.require_axial_path_validation)
   {
   }
 
-  ValidationResult validate(State state, const WorldSnapshot & before,
-                            const PlanArtifact & artifact) const override
+  [[nodiscard]] ValidationResult validate(State state, const WorldSnapshot & before,
+                                          const PlanArtifact & artifact) const override
   {
     if (state != spec_.state) {
       return {false,
-              {{FailureCategory::CONFIGURATION, "MOTION_VALIDATOR_STATE_MISMATCH",
-                "Motion validator is registered for another state", {}}},
+              {{FailureCategory::CONFIGURATION,
+                "MOTION_VALIDATOR_STATE_MISMATCH",
+                "Motion validator is registered for another state",
+                {}}},
               {}};
     }
     auto result = delegate_.validate(state, before, artifact);
     const auto * motion = dynamic_cast<const MotionPlanArtifact *>(&artifact);
-    if (!motion) return result;
+    if (!motion)
+      return result;
     if (motion->start_joint_positions.size() != profile_.arm_joints.size()) {
-      addFailure(result, FailureCategory::PLAN_VALIDATION,
-                 "PLAN_START_OBSERVATION_MISMATCH",
+      addFailure(result, FailureCategory::PLAN_VALIDATION, "PLAN_START_OBSERVATION_MISMATCH",
                  "Plan start must cover the observed SO-101 arm joints");
       return result;
     }
@@ -393,25 +407,24 @@ public:
       if (observed == before.joint_positions.end() || !finite(observed->second) ||
           std::abs(observed->second - motion->start_joint_positions[i]) >
             spec_.validation.joint_endpoint_tolerance) {
-        addFailure(result, FailureCategory::PLAN_VALIDATION,
-                   "PLAN_START_OBSERVATION_MISMATCH",
+        addFailure(result, FailureCategory::PLAN_VALIDATION, "PLAN_START_OBSERVATION_MISMATCH",
                    "Validated trajectory start does not match the observed arm state");
         break;
       }
     }
-    if (carrying(state) && before.gazebo_task_object_pose_world && finitePose(before.tcp_pose_world)) {
+    if (carrying(state) && before.gazebo_task_object_pose_world &&
+        finitePose(before.tcp_pose_world)) {
       const auto expected_relative =
         relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
-      for (std::size_t i = 0; i < motion->samples.size(); ++i) {
-        if (!motion->samples[i].attached_task_object_pose_world ||
+      for (const auto & sample : motion->samples) {
+        if (!sample.attached_task_object_pose_world ||
             !cylindricalPoseWithin(
-              relativePose(motion->samples[i].tcp_pose,
-                           *motion->samples[i].attached_task_object_pose_world),
+              relativePose(sample.tcp_pose, *sample.attached_task_object_pose_world),
               expected_relative, profile_.task_object_position_drift_tolerance,
               profile_.task_object_orientation_drift_tolerance_rad)) {
-          addFailure(result, FailureCategory::PLAN_VALIDATION,
-                     "ATTACHED_TASK_OBJECT_RELATIVE_PATH_MISMATCH",
-                     "Every carrying sample must preserve the observed TCP-TaskObject relative pose");
+          addFailure(
+            result, FailureCategory::PLAN_VALIDATION, "ATTACHED_TASK_OBJECT_RELATIVE_PATH_MISMATCH",
+            "Every carrying sample must preserve the observed TCP-TaskObject relative pose");
           break;
         }
       }
@@ -429,12 +442,12 @@ private:
 class MotionContract final : public TransitionContractRegistry::ITransitionContract
 {
 public:
-  MotionContract(SO101FixedMotionSpec spec, SO101Profile profile)
-  : spec_(std::move(spec)), profile_(std::move(profile))
+  MotionContract(SO101FixedMotionSpec spec, SO101Profile profile) :
+      spec_(std::move(spec)), profile_(std::move(profile))
   {
   }
 
-  ValidationResult validatePrecondition(const WorldSnapshot & before) const override
+  [[nodiscard]] ValidationResult validatePrecondition(const WorldSnapshot & before) const override
   {
     ValidationResult result{true, {}, {}};
     requireMotionEnvironment(result, before, spec_.state, profile_);
@@ -443,8 +456,8 @@ public:
     return result;
   }
 
-  ValidationResult validate(const WorldSnapshot & before, const WorldSnapshot & after,
-                            const ActionResult & action) const override
+  [[nodiscard]] ValidationResult validate(const WorldSnapshot & before, const WorldSnapshot & after,
+                                          const ActionResult & action) const override
   {
     ValidationResult result{true, {}, {}};
     if (action.status != ActionStatus::SUCCEEDED) {
@@ -457,15 +470,14 @@ public:
     for (std::size_t i = 0; i < profile_.arm_joints.size(); ++i) {
       const auto joint = after.joint_positions.find(profile_.arm_joints[i]);
       if (joint != after.joint_positions.end() && finite(joint->second)) {
-        max_joint_endpoint_error = std::max(
-          max_joint_endpoint_error,
-          std::abs(joint->second - spec_.target.joint_waypoints.back()[i]));
+        max_joint_endpoint_error =
+          std::max(max_joint_endpoint_error,
+                   std::abs(joint->second - spec_.target.joint_waypoints.back()[i]));
       }
       if (joint == after.joint_positions.end() || !finite(joint->second) ||
           std::abs(joint->second - spec_.target.joint_waypoints.back()[i]) >
             spec_.validation.joint_endpoint_tolerance) {
-        addFailure(result, FailureCategory::POSTCONDITION,
-                   "MOTION_JOINT_ENDPOINT_MISMATCH",
+        addFailure(result, FailureCategory::POSTCONDITION, "MOTION_JOINT_ENDPOINT_MISMATCH",
                    "Observed arm endpoint does not match the validated trajectory goal");
         break;
       }
@@ -473,11 +485,15 @@ public:
     result.metrics["max_joint_endpoint_error"] = max_joint_endpoint_error;
     const Pose3d endpoint{spec_.validation.endpoint_position.x,
                           spec_.validation.endpoint_position.y,
-                          spec_.validation.endpoint_position.z, 0.0, 0.0, 0.0, 1.0};
+                          spec_.validation.endpoint_position.z,
+                          0.0,
+                          0.0,
+                          0.0,
+                          1.0};
     const double endpoint_error = positionDistance(after.tcp_pose_world, endpoint);
-    const double axis_error = approachAxisError(after.tcp_pose_world,
-                                                spec_.validation.local_approach_axis,
-                                                spec_.validation.target_approach_axis);
+    const double axis_error =
+      approachAxisError(after.tcp_pose_world, spec_.validation.local_approach_axis,
+                        spec_.validation.target_approach_axis);
     result.metrics["tcp_endpoint_error"] = endpoint_error;
     result.metrics["tcp_axis_error"] = axis_error;
     if (!finite(endpoint_error) || endpoint_error > spec_.validation.position_tolerance) {
@@ -485,16 +501,16 @@ public:
                  "Observed TCP endpoint is outside the state-specific tolerance");
     }
     if (spec_.validation.contact_wall_normal_endpoint_tolerance) {
-      const double normal_error = wallNormalPositionError(
-        after.tcp_pose_world, endpoint, profile_.task_object_near_wall_outward);
+      const double normal_error = wallNormalPositionError(after.tcp_pose_world, endpoint,
+                                                          profile_.task_object_near_wall_outward);
       result.metrics["contact_wall_normal_endpoint_error"] = normal_error;
       result.metrics["contact_wall_normal_endpoint_tolerance"] =
         *spec_.validation.contact_wall_normal_endpoint_tolerance;
       if (!finite(normal_error) ||
           normal_error > *spec_.validation.contact_wall_normal_endpoint_tolerance) {
-        addFailure(result, FailureCategory::POSTCONDITION,
-                   "CONTACT_CRITICAL_WALL_NORMAL_ENDPOINT_MISMATCH",
-                   "Observed URDF-FK TCP endpoint is outside the contact-critical wall-normal tolerance");
+        addFailure(
+          result, FailureCategory::POSTCONDITION, "CONTACT_CRITICAL_WALL_NORMAL_ENDPOINT_MISMATCH",
+          "Observed URDF-FK TCP endpoint is outside the contact-critical wall-normal tolerance");
       }
     }
     if (!finite(axis_error) || axis_error > spec_.validation.axis_tolerance_rad) {
@@ -514,7 +530,8 @@ public:
       result.metrics[carrying(spec_.state) ? "task_object_follow_position_error"
                                            : "task_object_position_drift"] = task_object_position;
       result.metrics[carrying(spec_.state) ? "task_object_follow_orientation_error_rad"
-                                           : "task_object_orientation_drift_rad"] = task_object_orientation;
+                                           : "task_object_orientation_drift_rad"] =
+        task_object_orientation;
       if (carrying(spec_.state)) {
         result.metrics["task_object_follow_tilt_error_rad"] = task_object_tilt;
       }
@@ -552,20 +569,22 @@ struct PhysicalGraspEvidence
 class StablePhysicalGraspAction final : public IStateExecutor
 {
 public:
-  StablePhysicalGraspAction(State state, bool before_lift,
-                            std::shared_ptr<IWorldObserver> observer,
+  StablePhysicalGraspAction(State state, bool before_lift, std::shared_ptr<IWorldObserver> observer,
                             std::shared_ptr<PhysicalGraspEvidence> evidence,
-                            std::shared_ptr<ISO101GripperCommand> gripper,
-                            SO101Profile profile)
-  : state_(state), before_lift_(before_lift), observer_(std::move(observer)),
-    evidence_(std::move(evidence)), gripper_(std::move(gripper)), profile_(std::move(profile)) {}
+                            std::shared_ptr<ISO101GripperCommand> gripper, SO101Profile profile) :
+      state_(state), before_lift_(before_lift), observer_(std::move(observer)),
+      evidence_(std::move(evidence)), gripper_(std::move(gripper)), profile_(std::move(profile))
+  {
+  }
 
   ActionResult execute(const ExecutionContext & context) override
   {
     if (!observer_ || !evidence_) {
-      return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
-              "PHYSICAL_GRASP_EVIDENCE_DEPENDENCY_MISSING",
-              "Physical-grasp stability checks require the production world observer", {}}};
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::CONFIGURATION,
+                      "PHYSICAL_GRASP_EVIDENCE_DEPENDENCY_MISSING",
+                      "Physical-grasp stability checks require the production world observer",
+                      {}}};
     }
     std::optional<WorldSnapshot> last;
     const int required_consecutive = before_lift_ ? 6 : 3;
@@ -577,23 +596,30 @@ public:
     for (int sample = 0; sample < max_samples; ++sample) {
       const auto observed = observer_->observe();
       if (!observed.snapshot) {
-        return {ActionStatus::FAILED, observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
-                "PHYSICAL_GRASP_STABILITY_OBSERVATION_FAILED",
-                "Unable to collect physical-grasp stability evidence", {}})};
+        return {ActionStatus::FAILED, observed.failure.value_or(Failure{
+                                        FailureCategory::OBSERVATION,
+                                        "PHYSICAL_GRASP_STABILITY_OBSERVATION_FAILED",
+                                        "Unable to collect physical-grasp stability evidence",
+                                        {}})};
       }
       const auto & snapshot = *observed.snapshot;
       if (!snapshot.fresh || !snapshot.gazebo_task_object_stationary ||
           !snapshot.gazebo_task_object_pose_world) {
-        return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
-                "PHYSICAL_GRASP_NOT_STABLE", "Cup/contact/arm evidence was not stable for three samples", {}}};
+        return {ActionStatus::FAILED,
+                Failure{FailureCategory::POSTCONDITION,
+                        "PHYSICAL_GRASP_NOT_STABLE",
+                        "Cup/contact/arm evidence was not stable for three samples",
+                        {}}};
       }
       if (!snapshot.arm_stationary || !*snapshot.gazebo_task_object_stationary) {
         consecutive = 0;
         consecutive_unilateral = 0;
-        if (sample + 1 < max_samples) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        if (sample + 1 < max_samples)
+          std::this_thread::sleep_for(std::chrono::milliseconds(50));
         continue;
       }
-      const bool bilateral = snapshot.gazebo_task_object_gripper_contact.value_or(false) &&
+      const bool bilateral =
+        snapshot.gazebo_task_object_gripper_contact.value_or(false) &&
         snapshot.gazebo_task_object_fixed_finger_contact.value_or(false) &&
         snapshot.gazebo_task_object_moving_jaw_contact.value_or(false) &&
         snapshot.gazebo_task_object_gripper_max_depth &&
@@ -610,9 +636,10 @@ public:
             // second full stable window so an over-compressed grasp can never
             // be frozen into the Gazebo detachable joint.
             const auto relaxed = gripper_->command(profile_.q6_contact);
-            const bool contact_abort = relaxed.status == ActionStatus::FAILED &&
-              relaxed.failure && relaxed.failure->code == "GRIPPER_ACTION_ABORTED";
-            if (relaxed.status != ActionStatus::SUCCEEDED && !contact_abort) return relaxed;
+            const bool contact_abort = relaxed.status == ActionStatus::FAILED && relaxed.failure &&
+                                       relaxed.failure->code == "GRIPPER_ACTION_ABORTED";
+            if (relaxed.status != ActionStatus::SUCCEEDED && !contact_abort)
+              return relaxed;
             regrasp_relaxed = true;
             consecutive = 0;
             last.reset();
@@ -628,34 +655,44 @@ public:
         // before attachment and produces an unstable carrying transform.
         if (!regrasp_attempted && consecutive_unilateral >= 1) {
           if (!gripper_) {
-            return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
-                    "PHYSICAL_REGRASP_COMMAND_MISSING",
-                    "Bilateral contact retry requires the production gripper command", {}}};
+            return {ActionStatus::FAILED,
+                    Failure{FailureCategory::CONFIGURATION,
+                            "PHYSICAL_REGRASP_COMMAND_MISSING",
+                            "Bilateral contact retry requires the production gripper command",
+                            {}}};
           }
           const double retry_target = std::max(
             profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
           const auto retry = gripper_->command(retry_target);
           const bool contact_abort = retry.status == ActionStatus::FAILED && retry.failure &&
-            retry.failure->code == "GRIPPER_ACTION_ABORTED";
-          if (retry.status != ActionStatus::SUCCEEDED && !contact_abort) return retry;
+                                     retry.failure->code == "GRIPPER_ACTION_ABORTED";
+          if (retry.status != ActionStatus::SUCCEEDED && !contact_abort)
+            return retry;
           regrasp_attempted = true;
         }
       }
-      if (sample + 1 < max_samples) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      if (sample + 1 < max_samples)
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    if (!last || consecutive < required_consecutive ||
-        (regrasp_attempted && !regrasp_relaxed)) {
+    if (!last || consecutive < required_consecutive || (regrasp_attempted && !regrasp_relaxed)) {
       return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
-              "PHYSICAL_GRASP_BILATERAL_STABILITY_TIMEOUT",
-              "Bilateral fixed-finger and moving-jaw contact did not remain stable after one bounded regrasp", {}}};
+                                            "PHYSICAL_GRASP_BILATERAL_STABILITY_TIMEOUT",
+                                            "Bilateral fixed-finger and moving-jaw contact did not "
+                                            "remain stable after one bounded regrasp",
+                                            {}}};
     }
     std::lock_guard<std::mutex> lock(evidence_->mutex);
-    if (before_lift_) evidence_->before_lift = *last;
-    else evidence_->after_lift = *last;
+    if (before_lift_)
+      evidence_->before_lift = *last;
+    else
+      evidence_->after_lift = *last;
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
 
-  ActionResult cancel() override { return {ActionStatus::SUCCEEDED, std::nullopt}; }
+  ActionResult cancel() override
+  {
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
 
 private:
   State state_;
@@ -670,13 +707,16 @@ class DetachAndWaitForStationary final : public IStateExecutor
 {
 public:
   DetachAndWaitForStationary(std::shared_ptr<IStateExecutor> detach,
-                             std::shared_ptr<IWorldObserver> observer)
-  : detach_(std::move(detach)), observer_(std::move(observer)) {}
+                             std::shared_ptr<IWorldObserver> observer) :
+      detach_(std::move(detach)), observer_(std::move(observer))
+  {
+  }
 
   ActionResult execute(const ExecutionContext & context) override
   {
-    const auto detached = detach_->execute(context);
-    if (detached.status != ActionStatus::SUCCEEDED) return detached;
+    auto detached = detach_->execute(context);
+    if (detached.status != ActionStatus::SUCCEEDED)
+      return detached;
     constexpr int kRequiredConsecutive = 3;
     constexpr int kMaxSamples = 40;
     int consecutive = 0;
@@ -684,14 +724,16 @@ public:
       const auto observed = observer_->observe();
       if (!observed.snapshot) {
         return {ActionStatus::FAILED, observed.failure.value_or(Failure{
-          FailureCategory::OBSERVATION, "POST_DETACH_OBSERVATION_UNAVAILABLE",
-          "Gazebo detach settling requires a fresh world observation", {}})};
+                                        FailureCategory::OBSERVATION,
+                                        "POST_DETACH_OBSERVATION_UNAVAILABLE",
+                                        "Gazebo detach settling requires a fresh world observation",
+                                        {}})};
       }
       const auto & snapshot = *observed.snapshot;
-      const bool stationary_detached = snapshot.fresh && snapshot.arm_stationary &&
-        snapshot.gazebo_task_object_attached && !*snapshot.gazebo_task_object_attached &&
-        snapshot.gazebo_task_object_pose_world && snapshot.gazebo_task_object_stationary &&
-        *snapshot.gazebo_task_object_stationary;
+      const bool stationary_detached =
+        snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_task_object_attached &&
+        !*snapshot.gazebo_task_object_attached && snapshot.gazebo_task_object_pose_world &&
+        snapshot.gazebo_task_object_stationary && *snapshot.gazebo_task_object_stationary;
       consecutive = stationary_detached ? consecutive + 1 : 0;
       if (consecutive >= kRequiredConsecutive) {
         return {ActionStatus::SUCCEEDED, std::nullopt};
@@ -700,12 +742,17 @@ public:
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
       }
     }
-    return {ActionStatus::TIMED_OUT, Failure{
-      FailureCategory::POSTCONDITION, "GAZEBO_TASK_OBJECT_SETTLE_TIMEOUT",
-      "Detached TaskObject did not become stationary for three consecutive samples", {}}};
+    return {ActionStatus::TIMED_OUT,
+            Failure{FailureCategory::POSTCONDITION,
+                    "GAZEBO_TASK_OBJECT_SETTLE_TIMEOUT",
+                    "Detached TaskObject did not become stationary for three consecutive samples",
+                    {}}};
   }
 
-  ActionResult cancel() override { return detach_->cancel(); }
+  ActionResult cancel() override
+  {
+    return detach_->cancel();
+  }
 
 private:
   std::shared_ptr<IStateExecutor> detach_;
@@ -715,14 +762,18 @@ private:
 class WorldZMicroLiftAction final : public IStateExecutor
 {
 public:
-  explicit WorldZMicroLiftAction(std::shared_ptr<IWorldZMicroLift> micro_lift)
-  : micro_lift_(std::move(micro_lift)) {}
+  explicit WorldZMicroLiftAction(std::shared_ptr<IWorldZMicroLift> micro_lift) :
+      micro_lift_(std::move(micro_lift))
+  {
+  }
 
   ActionResult execute(const ExecutionContext & context) override
   {
     if (!micro_lift_) {
       return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
-              "MICRO_LIFT_DEPENDENCY_MISSING", "World-Z micro-lift requires the MoveIt boundary", {}}};
+                                            "MICRO_LIFT_DEPENDENCY_MISSING",
+                                            "World-Z micro-lift requires the MoveIt boundary",
+                                            {}}};
     }
     // A 1 mm probe was smaller than the simulator's table/contact settling
     // band: the TCP moved while a valid bilateral grip could remain seated.
@@ -733,9 +784,13 @@ public:
   ActionResult cancel() override
   {
     return micro_lift_ ? micro_lift_->cancelWorldZMicroLift()
-                       : ActionResult{ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
-                           "MICRO_LIFT_DEPENDENCY_MISSING", "World-Z micro-lift requires the MoveIt boundary", {}}};
+                       : ActionResult{ActionStatus::FAILED,
+                                      Failure{FailureCategory::CONFIGURATION,
+                                              "MICRO_LIFT_DEPENDENCY_MISSING",
+                                              "World-Z micro-lift requires the MoveIt boundary",
+                                              {}}};
   }
+
 private:
   std::shared_ptr<IWorldZMicroLift> micro_lift_;
 };
@@ -744,26 +799,37 @@ class VerifyPhysicalGraspAction final : public IStateExecutor
 {
 public:
   VerifyPhysicalGraspAction(std::shared_ptr<PhysicalGraspEvidence> evidence,
-                            PhysicalGraspValidator validator, PhysicalGraspGeometry geometry)
-  : evidence_(std::move(evidence)), validator_(std::move(validator)), geometry_(geometry) {}
+                            PhysicalGraspValidator validator, PhysicalGraspGeometry geometry) :
+      evidence_(std::move(evidence)), validator_(validator), geometry_(geometry)
+  {
+  }
 
   ActionResult execute(const ExecutionContext &) override
   {
     if (!evidence_) {
       return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
-              "PHYSICAL_GRASP_EVIDENCE_DEPENDENCY_MISSING", "Physical-grasp evidence store is missing", {}}};
+                                            "PHYSICAL_GRASP_EVIDENCE_DEPENDENCY_MISSING",
+                                            "Physical-grasp evidence store is missing",
+                                            {}}};
     }
     std::lock_guard<std::mutex> lock(evidence_->mutex);
     if (!evidence_->before_lift || !evidence_->after_lift) {
       return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
-              "PHYSICAL_GRASP_EVIDENCE_INCOMPLETE", "Both stable windows are required before attachment", {}}};
+                                            "PHYSICAL_GRASP_EVIDENCE_INCOMPLETE",
+                                            "Both stable windows are required before attachment",
+                                            {}}};
     }
     auto result = validator_.evaluate(*evidence_->before_lift, *evidence_->after_lift, geometry_);
     evidence_->result = result;
-    if (!result.passed) return {ActionStatus::FAILED, result.failure};
+    if (!result.passed)
+      return {ActionStatus::FAILED, result.failure};
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
-  ActionResult cancel() override { return {ActionStatus::SUCCEEDED, std::nullopt}; }
+  ActionResult cancel() override
+  {
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+
 private:
   std::shared_ptr<PhysicalGraspEvidence> evidence_;
   PhysicalGraspValidator validator_;
@@ -773,7 +839,7 @@ private:
 class PhysicalGraspContract final : public TransitionContractRegistry::ITransitionContract
 {
 public:
-  ValidationResult validatePrecondition(const WorldSnapshot & snapshot) const override
+  [[nodiscard]] ValidationResult validatePrecondition(const WorldSnapshot & snapshot) const override
   {
     ValidationResult result{true, {}, {}};
     if (!snapshot.fresh || !snapshot.arm_stationary || !snapshot.gazebo_task_object_pose_world) {
@@ -783,8 +849,8 @@ public:
     result.ok = result.failures.empty();
     return result;
   }
-  ValidationResult validate(const WorldSnapshot &, const WorldSnapshot & after,
-                            const ActionResult & action) const override
+  [[nodiscard]] ValidationResult validate(const WorldSnapshot &, const WorldSnapshot & after,
+                                          const ActionResult & action) const override
   {
     ValidationResult result{true, {}, {}};
     if (action.status != ActionStatus::SUCCEEDED) {
@@ -804,56 +870,72 @@ void registerPhysicalGrasp(SO101PickPlaceRuntimeRegistries & runtime,
                            const SO101PickPlaceRuntimeDependencies & dependencies,
                            const SO101PickPlaceRuntimeConfig & config)
 {
-  if (!dependencies.physical_observer || !dependencies.micro_lift) return;
+  if (!dependencies.physical_observer || !dependencies.micro_lift)
+    return;
   const auto evidence = std::make_shared<PhysicalGraspEvidence>();
-  const PhysicalGraspGeometry geometry{
-    config.profile.table_pose.z + config.profile.table_size[2] * 0.5,
-    -config.profile.task_object_height * 0.5};
+  const PhysicalGraspGeometry geometry{config.profile.table_pose.z +
+                                         config.profile.table_size[2] * 0.5,
+                                       -config.profile.task_object_height * 0.5};
   runtime.actions.registerExecutor(State::WAIT_GRASP_STABLE,
-    std::make_shared<StablePhysicalGraspAction>(State::WAIT_GRASP_STABLE, true,
-      dependencies.physical_observer, evidence, dependencies.gripper, config.profile));
-  runtime.actions.registerExecutor(State::MICRO_LIFT,
-    std::make_shared<WorldZMicroLiftAction>(dependencies.micro_lift));
-  runtime.actions.registerExecutor(State::WAIT_MICRO_LIFT_STABLE,
+                                   std::make_shared<StablePhysicalGraspAction>(
+                                     State::WAIT_GRASP_STABLE, true, dependencies.physical_observer,
+                                     evidence, dependencies.gripper, config.profile));
+  runtime.actions.registerExecutor(
+    State::MICRO_LIFT, std::make_shared<WorldZMicroLiftAction>(dependencies.micro_lift));
+  runtime.actions.registerExecutor(
+    State::WAIT_MICRO_LIFT_STABLE,
     std::make_shared<StablePhysicalGraspAction>(State::WAIT_MICRO_LIFT_STABLE, false,
-      dependencies.physical_observer, evidence, dependencies.gripper, config.profile));
-  runtime.actions.registerExecutor(State::VERIFY_PHYSICAL_GRASP,
+                                                dependencies.physical_observer, evidence,
+                                                dependencies.gripper, config.profile));
+  runtime.actions.registerExecutor(
+    State::VERIFY_PHYSICAL_GRASP,
     std::make_shared<VerifyPhysicalGraspAction>(evidence, PhysicalGraspValidator{}, geometry));
   for (const auto state : kPhysicalGraspStates) {
-    runtime.contracts.registerContract({state, TransitionTable::resolve(state, ActionStatus::SUCCEEDED)},
+    runtime.contracts.registerContract(
+      {state, TransitionTable::resolve(state, ActionStatus::SUCCEEDED)},
       std::make_shared<PhysicalGraspContract>());
   }
   runtime.contracts.registerContract({State::VALIDATION_FAILED, State::ATTACH_GAZEBO},
-    std::make_shared<PhysicalGraspContract>());
+                                     std::make_shared<PhysicalGraspContract>());
 }
 
-std::optional<Failure> missingDependencyFailure(
-  const SO101PickPlaceRuntimeDependencies & dependencies)
+std::optional<Failure>
+missingDependencyFailure(const SO101PickPlaceRuntimeDependencies & dependencies)
 {
   std::vector<std::string> missing;
-  if (!dependencies.gripper) missing.emplace_back("gripper");
-  if (!dependencies.moveit_scene) missing.emplace_back("moveit_scene");
-  if (!dependencies.gazebo_attach) missing.emplace_back("gazebo_attach");
-  if (!dependencies.gazebo_detach) missing.emplace_back("gazebo_detach");
-  if (!dependencies.recovery_gazebo_detach) missing.emplace_back("recovery_gazebo_detach");
-  if (!dependencies.motion_policy) missing.emplace_back("motion_policy");
-  if (!dependencies.motion) missing.emplace_back("motion");
-  if (!dependencies.micro_lift) missing.emplace_back("micro_lift");
-  if (!dependencies.physical_observer) missing.emplace_back("physical_observer");
-  if (missing.empty()) return std::nullopt;
+  if (!dependencies.gripper)
+    missing.emplace_back("gripper");
+  if (!dependencies.moveit_scene)
+    missing.emplace_back("moveit_scene");
+  if (!dependencies.gazebo_attach)
+    missing.emplace_back("gazebo_attach");
+  if (!dependencies.gazebo_detach)
+    missing.emplace_back("gazebo_detach");
+  if (!dependencies.recovery_gazebo_detach)
+    missing.emplace_back("recovery_gazebo_detach");
+  if (!dependencies.motion_policy)
+    missing.emplace_back("motion_policy");
+  if (!dependencies.motion)
+    missing.emplace_back("motion");
+  if (!dependencies.micro_lift)
+    missing.emplace_back("micro_lift");
+  if (!dependencies.physical_observer)
+    missing.emplace_back("physical_observer");
+  if (missing.empty())
+    return std::nullopt;
   std::ostringstream message;
   message << "Production SO-101 runtime dependencies are missing:";
-  for (const auto & name : missing) message << ' ' << name;
-  return Failure{FailureCategory::CONFIGURATION, "RUNTIME_DEPENDENCY_MISSING",
-                 message.str(), {}};
+  for (const auto & name : missing)
+    message << ' ' << name;
+  return Failure{FailureCategory::CONFIGURATION, "RUNTIME_DEPENDENCY_MISSING", message.str(), {}};
 }
 
 }  // namespace
 
-SO101MoveItWorldObserver::SO101MoveItWorldObserver(
-  std::shared_ptr<IJointPlanningBoundary> boundary, SO101Profile profile,
-  SO101WorldObservationConfig config)
-: boundary_(std::move(boundary)), profile_(std::move(profile)), config_(config)
+SO101MoveItWorldObserver::SO101MoveItWorldObserver(std::shared_ptr<IJointPlanningBoundary> boundary,
+                                                   SO101Profile profile,
+                                                   SO101WorldObservationConfig config) :
+    boundary_(std::move(boundary)), profile_(std::move(profile)), config_(config)
 {
 }
 
@@ -867,47 +949,45 @@ ObservationResult SO101MoveItWorldObserver::observe()
       config_.settle_samples == 0 || !finite(config_.settle_interval_seconds) ||
       config_.settle_interval_seconds < 0.0 || !finite(config_.joint_settle_tolerance) ||
       config_.joint_settle_tolerance < 0.0) {
-    return {std::nullopt, observationFailure("WORLD_OBSERVER_CONFIG_INVALID",
-                                             "World observer timing and settle limits are invalid")};
+    return {std::nullopt,
+            observationFailure("WORLD_OBSERVER_CONFIG_INVALID",
+                               "World observer timing and settle limits are invalid")};
   }
   std::optional<CurrentJointStateEvidence> previous;
   std::optional<CurrentJointStateEvidence> current;
   bool stationary = true;
-  const auto validate_current = [this](
-    const std::optional<CurrentJointStateEvidence> & evidence) -> std::optional<Failure> {
-      if (!evidence || evidence->joint_names != profile_.arm_joints ||
-          evidence->positions.size() != profile_.arm_joints.size() ||
-          evidence->velocities.size() != profile_.arm_joints.size() ||
-          !evidence->gripper_position || !evidence->gripper_velocity) {
-        return observationFailure("JOINT_EVIDENCE_INCOMPLETE",
-                                  "Joint 1 through 6 evidence is incomplete");
-      }
-      const auto now = std::chrono::steady_clock::now();
-      if (evidence->received_at == std::chrono::steady_clock::time_point{} ||
-          evidence->received_at > now ||
-          now - evidence->received_at >
-            std::chrono::duration<double>(config_.max_age_seconds)) {
-        return observationFailure("JOINT_EVIDENCE_STALE",
-                                  "Joint 1 through 6 evidence is stale");
-      }
-      for (std::size_t i = 0; i < evidence->positions.size(); ++i) {
-        if (!finite(evidence->positions[i]) || !finite(evidence->velocities[i])) {
-          return observationFailure("JOINT_EVIDENCE_NONFINITE",
-                                    "Joint position or velocity is non-finite");
-        }
-      }
-      if (!finite(*evidence->gripper_position) || !finite(*evidence->gripper_velocity)) {
+  const auto validate_current =
+    [this](const std::optional<CurrentJointStateEvidence> & evidence) -> std::optional<Failure> {
+    if (!evidence || evidence->joint_names != profile_.arm_joints ||
+        evidence->positions.size() != profile_.arm_joints.size() ||
+        evidence->velocities.size() != profile_.arm_joints.size() || !evidence->gripper_position ||
+        !evidence->gripper_velocity) {
+      return observationFailure("JOINT_EVIDENCE_INCOMPLETE",
+                                "Joint 1 through 6 evidence is incomplete");
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (evidence->received_at == std::chrono::steady_clock::time_point{} ||
+        evidence->received_at > now ||
+        now - evidence->received_at > std::chrono::duration<double>(config_.max_age_seconds)) {
+      return observationFailure("JOINT_EVIDENCE_STALE", "Joint 1 through 6 evidence is stale");
+    }
+    for (std::size_t i = 0; i < evidence->positions.size(); ++i) {
+      if (!finite(evidence->positions[i]) || !finite(evidence->velocities[i])) {
         return observationFailure("JOINT_EVIDENCE_NONFINITE",
-                                  "Joint 6 evidence is non-finite");
+                                  "Joint position or velocity is non-finite");
       }
-      return std::nullopt;
-    };
+    }
+    if (!finite(*evidence->gripper_position) || !finite(*evidence->gripper_velocity)) {
+      return observationFailure("JOINT_EVIDENCE_NONFINITE", "Joint 6 evidence is non-finite");
+    }
+    return std::nullopt;
+  };
   for (std::size_t sample = 0; sample < config_.settle_samples; ++sample) {
     current = boundary_->currentState();
-    if (auto failure = validate_current(current)) return {std::nullopt, std::move(failure)};
+    if (auto failure = validate_current(current))
+      return {std::nullopt, std::move(failure)};
     for (std::size_t i = 0; i < current->positions.size(); ++i) {
-      stationary = stationary &&
-                   std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
+      stationary = stationary && std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
       if (previous && std::abs(previous->positions[i] - current->positions[i]) >
                         config_.joint_settle_tolerance) {
         stationary = false;
@@ -919,8 +999,7 @@ ObservationResult SO101MoveItWorldObserver::observe()
     }
     previous = current;
     if (sample + 1 < config_.settle_samples && config_.settle_interval_seconds > 0.0) {
-      std::this_thread::sleep_for(
-        std::chrono::duration<double>(config_.settle_interval_seconds));
+      std::this_thread::sleep_for(std::chrono::duration<double>(config_.settle_interval_seconds));
     }
   }
 
@@ -928,25 +1007,27 @@ ObservationResult SO101MoveItWorldObserver::observe()
   if (!scene || !scene->table_in_world || !scene->table_world_pose ||
       !finitePose(*scene->table_world_pose) || !scene->pedestal_in_world ||
       !scene->pedestal_world_pose || !finitePose(*scene->pedestal_world_pose) ||
-      !scene->current_tcp_pose_world ||
-      !finitePose(*scene->current_tcp_pose_world) ||
+      !scene->current_tcp_pose_world || !finitePose(*scene->current_tcp_pose_world) ||
       !poseWithin(*scene->table_world_pose, profile_.table_pose, 1e-5, 1e-4) ||
       !poseWithin(*scene->pedestal_world_pose, profile_.pedestal_pose, 1e-5, 1e-4)) {
-    return {std::nullopt, observationFailure("MOVEIT_SCENE_EVIDENCE_INCOMPLETE",
-                                             "Canonical table, pedestal, and finite TCP evidence are required")};
+    return {std::nullopt,
+            observationFailure("MOVEIT_SCENE_EVIDENCE_INCOMPLETE",
+                               "Canonical table, pedestal, and finite TCP evidence are required")};
   }
   if (scene->task_object_in_world == scene->task_object_attached) {
-    return {std::nullopt, observationFailure("MOVEIT_TASK_OBJECT_MEMBERSHIP_INCONSISTENT",
-                                             "TaskObject must be exactly world or attached in MoveIt")};
+    return {std::nullopt,
+            observationFailure("MOVEIT_TASK_OBJECT_MEMBERSHIP_INCONSISTENT",
+                               "TaskObject must be exactly world or attached in MoveIt")};
   }
-  if ((scene->task_object_in_world && (!scene->task_object_world_pose || !finitePose(*scene->task_object_world_pose))) ||
-      (scene->task_object_attached && (!scene->attached_link || scene->touch_links.empty() ||
-                                !scene->attached_relative_pose ||
-                                !finitePose(*scene->attached_relative_pose) ||
-                                !scene->current_gripper_pose_world ||
-                                !finitePose(*scene->current_gripper_pose_world)))) {
-    return {std::nullopt, observationFailure("MOVEIT_TASK_OBJECT_POSE_EVIDENCE_INCOMPLETE",
-                                             "MoveIt TaskObject 6D pose and attachment metadata are incomplete")};
+  if ((scene->task_object_in_world &&
+       (!scene->task_object_world_pose || !finitePose(*scene->task_object_world_pose))) ||
+      (scene->task_object_attached &&
+       (!scene->attached_link || scene->touch_links.empty() || !scene->attached_relative_pose ||
+        !finitePose(*scene->attached_relative_pose) || !scene->current_gripper_pose_world ||
+        !finitePose(*scene->current_gripper_pose_world)))) {
+    return {std::nullopt,
+            observationFailure("MOVEIT_TASK_OBJECT_POSE_EVIDENCE_INCOMPLETE",
+                               "MoveIt TaskObject 6D pose and attachment metadata are incomplete")};
   }
   if (!scene->task_object_attached &&
       (scene->attached_link || !scene->touch_links.empty() || scene->attached_relative_pose)) {
@@ -956,16 +1037,15 @@ ObservationResult SO101MoveItWorldObserver::observe()
 
   previous = current;
   current = boundary_->currentState();
-  if (auto failure = validate_current(current)) return {std::nullopt, std::move(failure)};
+  if (auto failure = validate_current(current))
+    return {std::nullopt, std::move(failure)};
   for (std::size_t i = 0; i < current->positions.size(); ++i) {
-    if (std::abs(previous->positions[i] - current->positions[i]) >
-        config_.joint_settle_tolerance) {
+    if (std::abs(previous->positions[i] - current->positions[i]) > config_.joint_settle_tolerance) {
       return {std::nullopt,
               observationFailure("ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION",
                                  "Arm joints changed while MoveIt scene evidence was collected")};
     }
-    stationary = stationary &&
-                 std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
+    stationary = stationary && std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
   }
   if (std::abs(*previous->gripper_position - *current->gripper_position) >
       config_.joint_settle_tolerance) {
@@ -1008,21 +1088,25 @@ makeSO101MotionContract(const SO101FixedMotionSpec & spec, SO101Profile profile)
   return std::make_shared<MotionContract>(spec, std::move(profile));
 }
 
-SO101PickPlaceRuntimeRegistries makeSO101PickPlaceRuntimeRegistries(
-  const SO101PickPlaceRuntimeDependencies & dependencies, SO101PickPlaceRuntimeConfig config)
+SO101PickPlaceRuntimeRegistries
+makeSO101PickPlaceRuntimeRegistries(const SO101PickPlaceRuntimeDependencies & dependencies,
+                                    const SO101PickPlaceRuntimeConfig & config)
 {
-  SO101Task3RuntimeDependencies task3_dependencies = dependencies;
+  SO101Task3RuntimeDependencies task3_dependencies{
+    dependencies.gripper,       dependencies.moveit_scene,           dependencies.gazebo_attach,
+    dependencies.gazebo_detach, dependencies.recovery_gazebo_detach, dependencies.gripper_observer};
   task3_dependencies.gripper_observer = dependencies.physical_observer;
   if (task3_dependencies.gazebo_detach && dependencies.physical_observer) {
     task3_dependencies.gazebo_detach = std::make_shared<DetachAndWaitForStationary>(
       task3_dependencies.gazebo_detach, dependencies.physical_observer);
   }
   auto task3 = makeSO101Task3Runtime(task3_dependencies, config);
-  SO101PickPlaceRuntimeRegistries runtime{std::move(task3.actions), {},
-                                          std::move(task3.contracts),
-                                          std::move(task3.recovery_policy), false, std::nullopt};
+  SO101PickPlaceRuntimeRegistries runtime{
+    std::move(task3.actions),         {},    std::move(task3.contracts),
+    std::move(task3.recovery_policy), false, std::nullopt};
   runtime.configuration_failure = missingDependencyFailure(dependencies);
-  if (!dependencies.motion_policy || !dependencies.motion) return runtime;
+  if (!dependencies.motion_policy || !dependencies.motion)
+    return runtime;
 
   registerPhysicalGrasp(runtime, dependencies, config);
 
@@ -1030,8 +1114,10 @@ SO101PickPlaceRuntimeRegistries makeSO101PickPlaceRuntimeRegistries(
     const auto spec = dependencies.motion_policy->spec(state);
     if (!spec) {
       runtime.configuration_failure =
-        Failure{FailureCategory::CONFIGURATION, "MOTION_SPEC_MISSING",
-                std::string("Canonical motion specification missing for ") + toString(state), {}};
+        Failure{FailureCategory::CONFIGURATION,
+                "MOTION_SPEC_MISSING",
+                std::string("Canonical motion specification missing for ") + toString(state),
+                {}};
       return runtime;
     }
     const auto next = TransitionTable::resolve(state, ActionStatus::SUCCEEDED);
@@ -1044,14 +1130,18 @@ SO101PickPlaceRuntimeRegistries makeSO101PickPlaceRuntimeRegistries(
     runtime.contracts.registerContract({state, next},
                                        makeSO101MotionContract(*spec, config.profile));
   }
-  if (runtime.configuration_failure) return runtime;
+  if (runtime.configuration_failure)
+    return runtime;
   for (const auto & [state, transitions] : TransitionTable::entries()) {
-    if (state == State::IDLE || isTerminal(state) || !isAction(state)) continue;
+    if (state == State::IDLE || isTerminal(state) || !isAction(state))
+      continue;
     if (!runtime.actions.findExecutor(state) ||
         !runtime.contracts.hasContract({state, transitions.succeeded})) {
       runtime.configuration_failure =
-        Failure{FailureCategory::CONFIGURATION, "RUNTIME_REGISTRY_INCOMPLETE",
-                std::string("Runtime registry is incomplete at ") + toString(state), {}};
+        Failure{FailureCategory::CONFIGURATION,
+                "RUNTIME_REGISTRY_INCOMPLETE",
+                std::string("Runtime registry is incomplete at ") + toString(state),
+                {}};
       return runtime;
     }
     const bool needs_plan =
@@ -1059,8 +1149,10 @@ SO101PickPlaceRuntimeRegistries makeSO101PickPlaceRuntimeRegistries(
     if ((runtime.actions.findPlanner(state) != nullptr) != needs_plan ||
         runtime.plan_validators.hasValidator(state) != needs_plan) {
       runtime.configuration_failure =
-        Failure{FailureCategory::CONFIGURATION, "RUNTIME_REGISTRY_INCOMPLETE",
-                std::string("Runtime planning registry is incomplete at ") + toString(state), {}};
+        Failure{FailureCategory::CONFIGURATION,
+                "RUNTIME_REGISTRY_INCOMPLETE",
+                std::string("Runtime planning registry is incomplete at ") + toString(state),
+                {}};
       return runtime;
     }
   }

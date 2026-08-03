@@ -27,10 +27,9 @@ struct SO101WorldObservationConfig
 class SO101MoveItWorldObserver final : public IWorldObserver
 {
 public:
-  SO101MoveItWorldObserver(
-    std::shared_ptr<IJointPlanningBoundary> boundary,
-    SO101Profile profile = SO101Profile::canonical(),
-    SO101WorldObservationConfig config = {});
+  SO101MoveItWorldObserver(std::shared_ptr<IJointPlanningBoundary> boundary,
+                           SO101Profile profile = SO101Profile::canonical(),
+                           SO101WorldObservationConfig config = {});
 
   [[nodiscard]] ObservationResult observe() override;
 
@@ -63,12 +62,11 @@ struct SO101PickPlaceRuntimeRegistries
 };
 
 [[nodiscard]] std::shared_ptr<const TransitionContractRegistry::ITransitionContract>
-makeSO101MotionContract(
-  const SO101FixedMotionSpec & spec,
-  SO101Profile profile = SO101Profile::canonical());
+makeSO101MotionContract(const SO101FixedMotionSpec & spec,
+                        SO101Profile profile = SO101Profile::canonical());
 
-[[nodiscard]] SO101PickPlaceRuntimeRegistries makeSO101PickPlaceRuntimeRegistries(
-  const SO101PickPlaceRuntimeDependencies & dependencies,
-  SO101PickPlaceRuntimeConfig config = {});
+[[nodiscard]] SO101PickPlaceRuntimeRegistries
+makeSO101PickPlaceRuntimeRegistries(const SO101PickPlaceRuntimeDependencies & dependencies,
+                                    const SO101PickPlaceRuntimeConfig & config = {});
 
 }  // namespace so101_gazebo_demo::pick_place

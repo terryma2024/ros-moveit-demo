@@ -1,6 +1,36 @@
 cmake_minimum_required(VERSION 3.22)
 project(so101_gazebo_demo)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+get_filename_component(
+  SO101_GAZEBO_DEMO_WORKSPACE_ROOT
+  "${CMAKE_CURRENT_SOURCE_DIR}/../.."
+  REALPATH
+)
+find_program(
+  RUN_CLANG_TIDY_EXECUTABLE
+  NAMES run-clang-tidy run-clang-tidy-18 run-clang-tidy-17 run-clang-tidy-16
+  DOC "Path to run-clang-tidy for the required C++ quality gate"
+)
+if(NOT RUN_CLANG_TIDY_EXECUTABLE)
+  message(FATAL_ERROR
+          "RUN_CLANG_TIDY_EXECUTABLE is required for the C++ quality gate. "
+          "Install run-clang-tidy or set -DRUN_CLANG_TIDY_EXECUTABLE=/path/to/run-clang-tidy.")
+endif()
+find_program(
+  CLANG_FORMAT_EXECUTABLE
+  NAMES clang-format clang-format-18 clang-format-17 clang-format-16
+  DOC "Path to clang-format for the required C++ quality gate"
+)
+if(NOT CLANG_FORMAT_EXECUTABLE)
+  message(FATAL_ERROR
+          "CLANG_FORMAT_EXECUTABLE is required for the C++ quality gate. "
+          "Install clang-format or set -DCLANG_FORMAT_EXECUTABLE=/path/to/clang-format.")
+endif()
+
+include(cmake/cpp_quality_gate.cmake)
+
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -148,6 +178,27 @@ add_library(so101_attachment_collision_system SHARED
 target_compile_features(so101_attachment_collision_system PUBLIC cxx_std_17)
 target_link_libraries(so101_attachment_collision_system
   gz-msgs10::core gz-plugin2::gz-plugin2 gz-sim8::gz-sim8 gz-transport13::core)
+
+so101_gazebo_add_cpp_quality_gate(
+  WORKSPACE_ROOT ${SO101_GAZEBO_DEMO_WORKSPACE_ROOT}
+  SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}
+  RUN_CLANG_TIDY_EXECUTABLE ${RUN_CLANG_TIDY_EXECUTABLE}
+  CLANG_FORMAT_EXECUTABLE ${CLANG_FORMAT_EXECUTABLE}
+  # These tracked headers are byte-for-byte outputs of gripper_preopen_calc.py.
+  # Their regeneration tests, rather than clang-format, define canonical form.
+  EXCLUDE_FILES
+    include/so101_gazebo_demo/pick_place/fingertip_pad_gap_calibration_data.hpp
+    include/so101_gazebo_demo/pick_place/gripper_width_calibration_data.hpp
+  TARGETS
+    pick_place_core
+    pick_place_state_machine
+    gazebo_attachment_state_relay
+    reset_so101_world
+    so101_moveit_scene
+    calibrate_so101_motion
+    validate_so101_motion_matrix
+    so101_attachment_collision_system
+)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -340,6 +391,14 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_teleop_telemetry test/teleop/test_telemetry.py)
   ament_add_pytest_test(test_teleop_workflow_gateway test/teleop/test_workflow_gateway.py)
   ament_add_pytest_test(test_teleop_server_safety test/teleop/test_server_safety.py)
+  add_test(
+    NAME test_cpp_quality_gate
+    COMMAND
+      bash
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_cpp_quality_gate.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_cpp_quality_gate.cmake
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cpp_quality_gate.cmake
+  )
 endif()
 
 install(

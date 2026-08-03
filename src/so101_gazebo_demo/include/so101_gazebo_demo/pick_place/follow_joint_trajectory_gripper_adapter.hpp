@@ -58,11 +58,10 @@ public:
 class FollowJointTrajectoryGripperAdapter final : public ISO101GripperCommand
 {
 public:
-  FollowJointTrajectoryGripperAdapter(std::shared_ptr<ITrajectoryActionClient> client,
-                                      double trajectory_duration_seconds,
-                                      double action_timeout_seconds,
-                                      double contact_stop_q6 =
-                                        std::numeric_limits<double>::quiet_NaN());
+  FollowJointTrajectoryGripperAdapter(
+    std::shared_ptr<ITrajectoryActionClient> client, double trajectory_duration_seconds,
+    double action_timeout_seconds,
+    double contact_stop_q6 = std::numeric_limits<double>::quiet_NaN());
   [[nodiscard]] ActionResult command(double q6) override;
   [[nodiscard]] ActionResult cancelAndWait() override;
 

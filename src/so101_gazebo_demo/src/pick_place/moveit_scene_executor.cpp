@@ -22,7 +22,8 @@ ActionResult sceneFailure(ActionStatus status, std::string code, std::string mes
 
 bool validConfiguration(const MoveItSceneConfig & config) noexcept
 {
-  if (config.task_object_id.empty()) return false;
+  if (config.task_object_id.empty())
+    return false;
   switch (config.operation) {
     case MoveItSceneOperation::ATTACH:
       return config.state == State::ATTACH_MOVEIT;
@@ -63,7 +64,7 @@ bool poseMatches(const Pose3d & actual, const Pose3d & expected)
 MoveItSceneExecutor::MoveItSceneExecutor(std::shared_ptr<IMoveItSceneAdapter> adapter,
                                          MoveItSceneConfig config, MoveItAttachmentSpec attachment,
                                          double timeout_seconds, double poll_interval_seconds) :
-    adapter_(std::move(adapter)), config_(config), attachment_(std::move(attachment)),
+    adapter_(std::move(adapter)), config_(std::move(config)), attachment_(std::move(attachment)),
     timeout_seconds_(timeout_seconds), poll_interval_seconds_(poll_interval_seconds)
 {
 }
@@ -98,12 +99,15 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
       }
       pose = context.before.gazebo_task_object_pose_world;
       command = adapter_->upsertTaskObjectWorldPose(*pose);
-      if (command.status != ActionStatus::SUCCEEDED) return command;
+      if (command.status != ActionStatus::SUCCEEDED)
+        return command;
       command = adapter_->attachTaskObject(attachment_);
       break;
     case MoveItSceneOperation::DETACH:
-      if (config_.idempotent && context.before.fresh && context.before.moveit_task_object_attached &&
-          !*context.before.moveit_task_object_attached && !context.before.moveit_task_object_attached_link &&
+      if (config_.idempotent && context.before.fresh &&
+          context.before.moveit_task_object_attached &&
+          !*context.before.moveit_task_object_attached &&
+          !context.before.moveit_task_object_attached_link &&
           context.before.moveit_task_object_touch_links.empty() &&
           context.before.moveit_world_object_poses.count(config_.task_object_id) == 1) {
         return {ActionStatus::SUCCEEDED, std::nullopt};
@@ -155,7 +159,8 @@ ActionResult MoveItSceneExecutor::waitForConvergence(const std::optional<Pose3d>
           break;
         case MoveItSceneOperation::SYNC:
           converged = !state->task_object_attached && state->task_object_in_world && pose &&
-                      state->task_object_world_pose && poseMatches(*state->task_object_world_pose, *pose);
+                      state->task_object_world_pose &&
+                      poseMatches(*state->task_object_world_pose, *pose);
           break;
       }
       if (converged) {

@@ -19,8 +19,8 @@ public:
                      std::chrono::milliseconds poll_interval = std::chrono::milliseconds(50),
                      std::size_t required_consecutive_ready_observations = 20);
 
-  [[nodiscard]] std::optional<Failure>
-  waitForReady(const std::string & expected_session_id, std::chrono::milliseconds timeout);
+  [[nodiscard]] std::optional<Failure> waitForReady(const std::string & expected_session_id,
+                                                    std::chrono::milliseconds timeout);
 
 private:
   IWorldObserver & observer_;

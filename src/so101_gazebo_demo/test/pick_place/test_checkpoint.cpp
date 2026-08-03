@@ -442,16 +442,16 @@ TEST(CommonResumeValidator, RejectsCheckpointFromDifferentPolicyBundle)
   auto checkpoint = makeRecoveryCheckpoint();
   checkpoint.policy_bundle_sha256 = "old-policy-bundle-sha256";
   const auto snapshot = snapshotFrom(checkpoint);
-  const pick_place::CommonResumeValidator validator(
-    "new-policy-bundle-sha256", checkpoint.simulation_session_id);
+  const pick_place::CommonResumeValidator validator("new-policy-bundle-sha256",
+                                                    checkpoint.simulation_session_id);
 
   const auto result = validator.validate(checkpoint, snapshot);
 
   ASSERT_FALSE(result.ok);
-  const auto mismatch = std::find_if(
-    result.failures.begin(), result.failures.end(), [](const pick_place::Failure & failure) {
-      return failure.code == "CHECKPOINT_POLICY_MISMATCH";
-    });
+  const auto mismatch = std::find_if(result.failures.begin(), result.failures.end(),
+                                     [](const pick_place::Failure & failure) {
+                                       return failure.code == "CHECKPOINT_POLICY_MISMATCH";
+                                     });
   EXPECT_NE(mismatch, result.failures.end());
 }
 
@@ -510,11 +510,10 @@ TEST(CommonResumeValidator, AcceptsPhysicalGraspValidationCheckpointForExplicitO
   checkpoint.last_completed_state = pick_place::State::VERIFY_PHYSICAL_GRASP;
   checkpoint.failed_state = pick_place::State::VERIFY_PHYSICAL_GRASP;
   checkpoint.next_state = pick_place::State::VALIDATION_FAILED;
-  checkpoint.original_failure = pick_place::Failure{
-    pick_place::FailureCategory::POSTCONDITION,
-    "PHYSICAL_GRASP_TABLE_CLEARANCE",
-    "Cup did not clear the table",
-    {}};
+  checkpoint.original_failure = pick_place::Failure{pick_place::FailureCategory::POSTCONDITION,
+                                                    "PHYSICAL_GRASP_TABLE_CLEARANCE",
+                                                    "Cup did not clear the table",
+                                                    {}};
   checkpoint.resumable = true;
   const auto snapshot = snapshotFrom(checkpoint);
   const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,

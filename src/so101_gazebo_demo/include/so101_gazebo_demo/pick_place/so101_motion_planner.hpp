@@ -69,8 +69,7 @@ public:
   SO101MotionPlanner(std::shared_ptr<const IJointMotionTargetPolicy> policy,
                      std::shared_ptr<IMoveItJointMotionAdapter> adapter,
                      SO101Profile profile = SO101Profile::canonical());
-  PlanResult plan(State state, State next_state,
-                  const ObservationResult & observation) override;
+  PlanResult plan(State state, State next_state, const ObservationResult & observation) override;
 
 private:
   std::shared_ptr<const IJointMotionTargetPolicy> policy_;

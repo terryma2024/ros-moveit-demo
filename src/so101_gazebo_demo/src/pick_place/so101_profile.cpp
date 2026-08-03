@@ -15,10 +15,9 @@ const SO101Profile & SO101Profile::canonical() noexcept
   return profile;
 }
 
-SO101Profile SO101Profile::configured(
-  const TaskObjectConfig & object,
-  const MotionPolicyConfig & motion,
-  const ValidationPolicyConfig & validation)
+SO101Profile SO101Profile::configured(const TaskObjectConfig & object,
+                                      const MotionPolicyConfig & motion,
+                                      const ValidationPolicyConfig & validation)
 {
   auto profile = canonical();
   profile.task_object_id = object.object_id;
@@ -40,8 +39,7 @@ SO101Profile SO101Profile::configured(
   profile.release_stages_q6 = {0.209, 0.506, profile.q6_full_open};
   profile.q6_geometric_side_contact = object.fingertip_pads.geometry_reference_q6;
   profile.q6_tolerance = validation.runtime.q6_position_tolerance_rad;
-  profile.contact_q6_stop_tolerance =
-    validation.runtime.q6_contact_stop_tolerance_rad;
+  profile.contact_q6_stop_tolerance = validation.runtime.q6_contact_stop_tolerance_rad;
   profile.q6_velocity_tolerance = validation.runtime.q6_velocity_tolerance_rad_s;
   profile.max_gripper_contact_depth = validation.grasp_contact.max_penetration_m;
   profile.fingertip_pad_calibration_fingerprint = object.fingertip_pads.calibration_fingerprint;
@@ -52,13 +50,13 @@ SO101Profile SO101Profile::configured(
       std::abs(object.fingertip_pads.grasp_gap_m - pad_calibration::kGraspGapM) > 1e-12 ||
       profile.fingertip_pad_calibration_fingerprint != pad_calibration::kInputFingerprint) {
     throw std::invalid_argument(
-            "configured fingertip-pad q6 commands do not match the fingerprint-bound calibration");
+      "configured fingertip-pad q6 commands do not match the fingerprint-bound calibration");
   }
   profile.preopen_width = pad_calibration::kPreopenGapM;
   profile.contact_width = pad_calibration::kGraspGapM;
   if (!std::isfinite(profile.preopen_width) || !std::isfinite(profile.contact_width)) {
     throw std::invalid_argument(
-            "configured q6 values are outside the mesh-derived width calibration");
+      "configured q6 values are outside the mesh-derived width calibration");
   }
   return profile;
 }

@@ -64,8 +64,7 @@ class WorldResetCoordinator
 public:
   WorldResetCoordinator(std::shared_ptr<IGazeboResetAdapter> gazebo,
                         std::shared_ptr<IMoveItSceneAdapter> moveit,
-                        std::shared_ptr<IRobotHomeResetAdapter> robot,
-                        WorldResetConfig config);
+                        std::shared_ptr<IRobotHomeResetAdapter> robot, WorldResetConfig config);
 
   [[nodiscard]] ActionResult reset();
 

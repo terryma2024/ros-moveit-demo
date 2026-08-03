@@ -44,6 +44,7 @@ public:
   [[nodiscard]] PhysicalGraspResult evaluate(const WorldSnapshot & before,
                                              const WorldSnapshot & after,
                                              const PhysicalGraspGeometry & geometry) const;
+
 private:
   PhysicalGraspThresholds thresholds_;
 };

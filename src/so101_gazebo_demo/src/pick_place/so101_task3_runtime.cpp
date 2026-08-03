@@ -22,20 +22,19 @@ class AttachThenHoldGripper final : public IStateExecutor
 {
 public:
   AttachThenHoldGripper(std::shared_ptr<IStateExecutor> attach,
-                        std::shared_ptr<ISO101GripperCommand> gripper,
-                        std::string gripper_joint,
-                        double carry_hold_q6,
-                        double settle_seconds) :
-    attach_(std::move(attach)), gripper_(std::move(gripper)),
-    gripper_joint_(std::move(gripper_joint)), carry_hold_q6_(carry_hold_q6),
-    settle_seconds_(settle_seconds)
+                        std::shared_ptr<ISO101GripperCommand> gripper, std::string gripper_joint,
+                        double carry_hold_q6, double settle_seconds) :
+      attach_(std::move(attach)), gripper_(std::move(gripper)),
+      gripper_joint_(std::move(gripper_joint)), carry_hold_q6_(carry_hold_q6),
+      settle_seconds_(settle_seconds)
   {
   }
 
   ActionResult execute(const ExecutionContext & context) override
   {
-    const auto attached = attach_->execute(context);
-    if (attached.status != ActionStatus::SUCCEEDED) return attached;
+    auto attached = attach_->execute(context);
+    if (attached.status != ActionStatus::SUCCEEDED)
+      return attached;
     const auto measured_q6 = context.before.joint_positions.find(gripper_joint_);
     if (measured_q6 == context.before.joint_positions.end() ||
         !std::isfinite(measured_q6->second)) {
@@ -95,9 +94,8 @@ void registerGripper(SO101Task3Runtime & runtime,
   for (const auto & config : configs) {
     if (dependencies.gripper) {
       runtime.actions.registerExecutor(
-        config.state,
-        std::make_shared<SO101GripperStateExecutor>(
-          dependencies.gripper, config, profile, dependencies.gripper_observer));
+        config.state, std::make_shared<SO101GripperStateExecutor>(
+                        dependencies.gripper, config, profile, dependencies.gripper_observer));
     }
     const auto next = TransitionTable::resolve(config.state, ActionStatus::SUCCEEDED);
     runtime.contracts.registerContract({config.state, next},
@@ -105,18 +103,16 @@ void registerGripper(SO101Task3Runtime & runtime,
   }
 }
 
-void registerGazebo(SO101Task3Runtime & runtime,
-                    const SO101Task3RuntimeDependencies & dependencies,
+void registerGazebo(SO101Task3Runtime & runtime, const SO101Task3RuntimeDependencies & dependencies,
                     const SO101Profile & profile)
 {
   if (dependencies.gazebo_attach) {
     if (dependencies.gripper) {
       runtime.actions.registerExecutor(
         State::ATTACH_GAZEBO,
-        std::make_shared<AttachThenHoldGripper>(
-          dependencies.gazebo_attach, dependencies.gripper, profile.gripper_joint,
-          profile.q6_contact,
-          profile.post_attach_hold_settle_seconds));
+        std::make_shared<AttachThenHoldGripper>(dependencies.gazebo_attach, dependencies.gripper,
+                                                profile.gripper_joint, profile.q6_contact,
+                                                profile.post_attach_hold_settle_seconds));
     } else {
       runtime.actions.registerExecutor(State::ATTACH_GAZEBO, dependencies.gazebo_attach);
     }
@@ -151,9 +147,9 @@ void registerMoveItScene(SO101Task3Runtime & runtime,
   for (const auto & scene_config : configs) {
     runtime.actions.registerExecutor(
       scene_config.state,
-      std::make_shared<MoveItSceneExecutor>(
-        dependencies.moveit_scene, scene_config, attachment,
-        config.planning_scene_timeout_seconds, config.state_poll_interval_seconds));
+      std::make_shared<MoveItSceneExecutor>(dependencies.moveit_scene, scene_config, attachment,
+                                            config.planning_scene_timeout_seconds,
+                                            config.state_poll_interval_seconds));
   }
 }
 
@@ -166,8 +162,8 @@ SO101Task3Runtime makeSO101Task3Runtime(const SO101Task3RuntimeDependencies & de
   registerGripper(runtime, dependencies, config.profile);
   registerGazebo(runtime, dependencies, config.profile);
   registerMoveItScene(runtime, dependencies, config);
-  registerSO101AttachmentContracts(
-    runtime.contracts, config.profile, config.object, config.grasp_contact);
+  registerSO101AttachmentContracts(runtime.contracts, config.profile, config.object,
+                                   config.grasp_contact);
   runtime.recovery_policy = std::make_shared<SO101RecoveryPolicy>(std::move(config.profile));
   return runtime;
 }

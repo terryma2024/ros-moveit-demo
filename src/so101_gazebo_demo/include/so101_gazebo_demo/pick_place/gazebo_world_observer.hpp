@@ -20,9 +20,11 @@ public:
   GazeboWorldObserver(IWorldObserver & moveit_observer, const std::string & world_name,
                       std::string task_object_id, const std::string & attachment_topic,
                       std::string simulation_session_id, double max_observation_age_seconds,
-                      std::size_t task_object_settle_samples, double task_object_settle_interval_seconds,
+                      std::size_t task_object_settle_samples,
+                      double task_object_settle_interval_seconds,
                       double task_object_settle_position_tolerance,
-                      double task_object_settle_orientation_tolerance_rad, bool initially_detached = true);
+                      double task_object_settle_orientation_tolerance_rad,
+                      bool initially_detached = true);
   ~GazeboWorldObserver() override;
 
   [[nodiscard]] ObservationResult observe() override;

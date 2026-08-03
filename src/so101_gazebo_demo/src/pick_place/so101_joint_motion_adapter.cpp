@@ -13,13 +13,14 @@ namespace
 
 PlanResult fail(FailureCategory category, std::string code, std::string message)
 {
-  return {{ActionStatus::FAILED,
-           Failure{category, std::move(code), std::move(message), {}}}, nullptr};
+  return {{ActionStatus::FAILED, Failure{category, std::move(code), std::move(message), {}}},
+          nullptr};
 }
 
 bool samePositions(const std::vector<double> & a, const std::vector<double> & b)
 {
-  if (a.size() != b.size()) return false;
+  if (a.size() != b.size())
+    return false;
   for (std::size_t i = 0; i < a.size(); ++i) {
     if (!std::isfinite(a[i]) || !std::isfinite(b[i]) || std::abs(a[i] - b[i]) > 1e-9) {
       return false;
@@ -28,21 +29,21 @@ bool samePositions(const std::vector<double> & a, const std::vector<double> & b)
   return true;
 }
 
-bool positionsWithin(const std::vector<double> & a, const std::vector<double> & b,
-                     double tolerance)
+bool positionsWithin(const std::vector<double> & a, const std::vector<double> & b, double tolerance)
 {
-  if (a.size() != b.size()) return false;
+  if (a.size() != b.size())
+    return false;
   for (std::size_t i = 0; i < a.size(); ++i) {
-    if (!std::isfinite(a[i]) || !std::isfinite(b[i]) ||
-        std::abs(a[i] - b[i]) > tolerance) return false;
+    if (!std::isfinite(a[i]) || !std::isfinite(b[i]) || std::abs(a[i] - b[i]) > tolerance)
+      return false;
   }
   return true;
 }
 
 bool finitePose(const Pose3d & pose)
 {
-  const double norm = std::sqrt(pose.qx * pose.qx + pose.qy * pose.qy +
-                                pose.qz * pose.qz + pose.qw * pose.qw);
+  const double norm =
+    std::sqrt(pose.qx * pose.qx + pose.qy * pose.qy + pose.qz * pose.qz + pose.qw * pose.qw);
   return std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
          std::isfinite(pose.qx) && std::isfinite(pose.qy) && std::isfinite(pose.qz) &&
          std::isfinite(pose.qw) && std::isfinite(norm) && norm > 1e-12;
@@ -50,8 +51,7 @@ bool finitePose(const Pose3d & pose)
 
 double positionDistance(const Pose3d & first, const Pose3d & second)
 {
-  return std::hypot(std::hypot(first.x - second.x, first.y - second.y),
-                    first.z - second.z);
+  return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
 }
 
 double orientationDistance(const Pose3d & first, const Pose3d & second)
@@ -63,9 +63,9 @@ double orientationDistance(const Pose3d & first, const Pose3d & second)
                                       first.qz * first.qz + first.qw * first.qw);
   const double second_norm = std::sqrt(second.qx * second.qx + second.qy * second.qy +
                                        second.qz * second.qz + second.qw * second.qw);
-  const double dot = std::abs((first.qx * second.qx + first.qy * second.qy +
-                               first.qz * second.qz + first.qw * second.qw) /
-                              (first_norm * second_norm));
+  const double dot = std::abs(
+    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
+    (first_norm * second_norm));
   return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
 }
 
@@ -75,21 +75,19 @@ double axialTiltDistance(const Pose3d & first, const Pose3d & second)
     return std::numeric_limits<double>::infinity();
   }
   const auto axis = [](const Pose3d & pose) {
-    const double norm = std::sqrt(pose.qx * pose.qx + pose.qy * pose.qy +
-                                  pose.qz * pose.qz + pose.qw * pose.qw);
+    const double norm =
+      std::sqrt(pose.qx * pose.qx + pose.qy * pose.qy + pose.qz * pose.qz + pose.qw * pose.qw);
     const double x = pose.qx / norm;
     const double y = pose.qy / norm;
     const double z = pose.qz / norm;
     const double w = pose.qw / norm;
-    return std::array<double, 3>{
-      2.0 * (x * z + w * y),
-      2.0 * (y * z - w * x),
-      1.0 - 2.0 * (x * x + y * y)};
+    return std::array<double, 3>{2.0 * (x * z + w * y), 2.0 * (y * z - w * x),
+                                 1.0 - 2.0 * (x * x + y * y)};
   };
   const auto first_axis = axis(first);
   const auto second_axis = axis(second);
-  const double dot = first_axis[0] * second_axis[0] +
-    first_axis[1] * second_axis[1] + first_axis[2] * second_axis[2];
+  const double dot = first_axis[0] * second_axis[0] + first_axis[1] * second_axis[1] +
+                     first_axis[2] * second_axis[2];
   return std::acos(std::clamp(dot, -1.0, 1.0));
 }
 
@@ -120,12 +118,12 @@ bool posesMatchCylindricalCarry(const Pose3d & first, const Pose3d & second,
 
 bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
 {
-  if (!finitePose(pose)) return false;
+  if (!finitePose(pose))
+    return false;
   const auto & expected = profile.place_task_object_pose;
   const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
   const double height_error = std::abs(pose.z - expected.z);
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy),
-                                 std::hypot(pose.qz, pose.qw));
+  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
   const double local_z_world_z =
     1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
   const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
@@ -137,9 +135,9 @@ bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
 
 bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile)
 {
-  if (!finitePose(pose)) return false;
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy),
-                                 std::hypot(pose.qz, pose.qw));
+  if (!finitePose(pose))
+    return false;
+  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
   const double local_z_world_z =
     1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
   const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
@@ -166,16 +164,15 @@ Pose3d compose(const Pose3d & parent, const Pose3d & child)
   const double cy = child.qy / child_norm;
   const double cz = child.qz / child_norm;
   const double cw = child.qw / child_norm;
-  const double rx =
-    (1.0 - 2.0 * (y * y + z * z)) * child.x + 2.0 * (x * y - z * w) * child.y +
-    2.0 * (x * z + y * w) * child.z;
-  const double ry =
-    2.0 * (x * y + z * w) * child.x + (1.0 - 2.0 * (x * x + z * z)) * child.y +
-    2.0 * (y * z - x * w) * child.z;
-  const double rz =
-    2.0 * (x * z - y * w) * child.x + 2.0 * (y * z + x * w) * child.y +
-    (1.0 - 2.0 * (x * x + y * y)) * child.z;
-  return {parent.x + rx, parent.y + ry, parent.z + rz,
+  const double rx = (1.0 - 2.0 * (y * y + z * z)) * child.x + 2.0 * (x * y - z * w) * child.y +
+                    2.0 * (x * z + y * w) * child.z;
+  const double ry = 2.0 * (x * y + z * w) * child.x + (1.0 - 2.0 * (x * x + z * z)) * child.y +
+                    2.0 * (y * z - x * w) * child.z;
+  const double rz = 2.0 * (x * z - y * w) * child.x + 2.0 * (y * z + x * w) * child.y +
+                    (1.0 - 2.0 * (x * x + y * y)) * child.z;
+  return {parent.x + rx,
+          parent.y + ry,
+          parent.z + rz,
           w * cx + x * cw + y * cz - z * cy,
           w * cy - x * cz + y * cw + z * cx,
           w * cz + x * cy - y * cx + z * cw,
@@ -187,8 +184,8 @@ const Pose3d & expectedDetachedTaskObjectPose(State state, const SO101Profile & 
   return state == State::RETREAT ? profile.place_task_object_pose : profile.task_object_pose;
 }
 
-bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & observed,
-                State state, bool carrying, const SO101Profile & profile)
+bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & observed, State state,
+                bool carrying, const SO101Profile & profile)
 {
   if (!facts.table_in_world || !facts.table_world_pose ||
       !posesMatch(*facts.table_world_pose, profile.table_pose, profile) ||
@@ -199,40 +196,39 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
     return false;
   }
   if (carrying) {
-    if (!*observed.gazebo_task_object_attached || facts.task_object_in_world || !facts.task_object_attached ||
-        !facts.attached_link || !facts.attached_relative_pose ||
+    if (!*observed.gazebo_task_object_attached || facts.task_object_in_world ||
+        !facts.task_object_attached || !facts.attached_link || !facts.attached_relative_pose ||
         !facts.current_gripper_pose_world) {
       return false;
     }
     const auto expected_task_object =
       compose(*facts.current_gripper_pose_world, *facts.attached_relative_pose);
-    return posesMatchAttachmentCalibration(
-             *facts.attached_relative_pose, profile.calibrated_grasp_relative_pose, profile) &&
-           posesMatchCylindricalCarry(
-             *observed.gazebo_task_object_pose_world, expected_task_object, profile) &&
+    return posesMatchAttachmentCalibration(*facts.attached_relative_pose,
+                                           profile.calibrated_grasp_relative_pose, profile) &&
+           posesMatchCylindricalCarry(*observed.gazebo_task_object_pose_world, expected_task_object,
+                                      profile) &&
            *facts.attached_link == profile.moveit_attach_link &&
            facts.touch_links == std::set<std::string>(profile.moveit_touch_links.begin(),
-                                                       profile.moveit_touch_links.end());
+                                                      profile.moveit_touch_links.end());
   }
-  if (*observed.gazebo_task_object_attached || !facts.task_object_in_world || facts.task_object_attached ||
-      facts.attached_link || !facts.touch_links.empty() || !facts.task_object_world_pose) {
+  if (*observed.gazebo_task_object_attached || !facts.task_object_in_world ||
+      facts.task_object_attached || facts.attached_link || !facts.touch_links.empty() ||
+      !facts.task_object_world_pose) {
     return false;
   }
   const auto & expected = expectedDetachedTaskObjectPose(state, profile);
-  const bool on_pick_pose =
-    posesMatch(*facts.task_object_world_pose, expected, profile) &&
-    posesMatch(*observed.gazebo_task_object_pose_world, expected, profile);
-  const bool on_pick_support =
-    supportedAtPick(*facts.task_object_world_pose, profile) &&
-    supportedAtPick(*observed.gazebo_task_object_pose_world, profile);
-  const bool on_place_support =
-    supportedAtPlace(*facts.task_object_world_pose, profile) &&
-    supportedAtPlace(*observed.gazebo_task_object_pose_world, profile);
-  const bool on_expected_support = state == State::RETREAT
-    ? on_place_support
-    : (state == State::RECOVER_RETREAT ? on_pick_support || on_place_support : on_pick_pose);
-  return posesMatch(*facts.task_object_world_pose,
-                    *observed.gazebo_task_object_pose_world, profile) &&
+  const bool on_pick_pose = posesMatch(*facts.task_object_world_pose, expected, profile) &&
+                            posesMatch(*observed.gazebo_task_object_pose_world, expected, profile);
+  const bool on_pick_support = supportedAtPick(*facts.task_object_world_pose, profile) &&
+                               supportedAtPick(*observed.gazebo_task_object_pose_world, profile);
+  const bool on_place_support = supportedAtPlace(*facts.task_object_world_pose, profile) &&
+                                supportedAtPlace(*observed.gazebo_task_object_pose_world, profile);
+  const bool on_expected_support =
+    state == State::RETREAT
+      ? on_place_support
+      : (state == State::RECOVER_RETREAT ? on_pick_support || on_place_support : on_pick_pose);
+  return posesMatch(*facts.task_object_world_pose, *observed.gazebo_task_object_pose_world,
+                    profile) &&
          on_expected_support;
 }
 
@@ -240,8 +236,8 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
 
 ProfiledJointMotionAdapter::ProfiledJointMotionAdapter(
   std::shared_ptr<IJointPlanningBoundary> boundary,
-  std::shared_ptr<const IRobotStateEvidenceProvider> evaluator, SO101Profile profile)
-: boundary_(std::move(boundary)), evaluator_(std::move(evaluator)), profile_(std::move(profile))
+  std::shared_ptr<const IRobotStateEvidenceProvider> evaluator, SO101Profile profile) :
+    boundary_(std::move(boundary)), evaluator_(std::move(evaluator)), profile_(std::move(profile))
 {
 }
 
@@ -260,10 +256,8 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     return fail(FailureCategory::PRECONDITION, "ARM_NOT_STATIONARY_BEFORE_PLAN",
                 "Arm must be stationary before planning");
   }
-  const auto q6_position =
-    observation.snapshot->joint_positions.find(profile_.gripper_joint);
-  const auto q6_velocity =
-    observation.snapshot->joint_velocities.find(profile_.gripper_joint);
+  const auto q6_position = observation.snapshot->joint_positions.find(profile_.gripper_joint);
+  const auto q6_velocity = observation.snapshot->joint_velocities.find(profile_.gripper_joint);
   if (q6_position == observation.snapshot->joint_positions.end() ||
       q6_velocity == observation.snapshot->joint_velocities.end() ||
       !std::isfinite(q6_position->second) || !std::isfinite(q6_velocity->second)) {
@@ -274,10 +268,10 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     return fail(FailureCategory::PRECONDITION, "GRIPPER_NOT_STATIONARY_BEFORE_PLAN",
                 "Gripper joint 6 must be stationary before planning");
   }
-  const bool contact_context =
-    request.carrying && std::isfinite(request.gripper_position) &&
-    std::abs(request.gripper_position - profile_.q6_contact) <= 1e-12;
-  const bool full_open_context = std::isfinite(request.gripper_position) &&
+  const bool contact_context = request.carrying && std::isfinite(request.gripper_position) &&
+                               std::abs(request.gripper_position - profile_.q6_contact) <= 1e-12;
+  const bool full_open_context =
+    std::isfinite(request.gripper_position) &&
     std::abs(request.gripper_position - profile_.q6_full_open) <= 1e-12;
   const bool bounded_bilateral_contact_stop =
     contact_context &&
@@ -288,9 +282,9 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     *observation.snapshot->gazebo_task_object_gripper_max_depth >= 0.0 &&
     *observation.snapshot->gazebo_task_object_gripper_max_depth <=
       profile_.max_gripper_contact_depth;
-  const double context_tolerance = contact_context
-    ? profile_.contact_q6_stop_tolerance
-    : (full_open_context ? profile_.q6_full_open_tolerance : profile_.q6_tolerance);
+  const double context_tolerance =
+    contact_context ? profile_.contact_q6_stop_tolerance
+                    : (full_open_context ? profile_.q6_full_open_tolerance : profile_.q6_tolerance);
   if (!std::isfinite(request.gripper_position) ||
       (std::abs(q6_position->second - request.gripper_position) > context_tolerance &&
        !bounded_bilateral_contact_stop)) {
@@ -314,10 +308,11 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
                 "Current MoveIt Planning Scene facts are unavailable");
   }
   if (!validScene(*scene, *observation.snapshot, request.state, request.carrying, profile_)) {
-    return fail(FailureCategory::OBSERVATION,
-                request.carrying ? "CARRYING_ENVIRONMENT_OBSERVATION_INVALID"
-                                 : "DETACHED_ENVIRONMENT_OBSERVATION_INVALID",
-                "Independent Gazebo, MoveIt, support, or attachment 6D facts are missing or inconsistent");
+    return fail(
+      FailureCategory::OBSERVATION,
+      request.carrying ? "CARRYING_ENVIRONMENT_OBSERVATION_INVALID"
+                       : "DETACHED_ENVIRONMENT_OBSERVATION_INVALID",
+      "Independent Gazebo, MoveIt, support, or attachment 6D facts are missing or inconsistent");
   }
   const auto current = boundary_->currentState();
   if (!current || current->joint_names != profile_.arm_joints ||
@@ -341,10 +336,8 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
   for (const auto & waypoint : request.joint_waypoints) {
     auto result = boundary_->planSegment(profile_.arm_joints, segment_start, waypoint,
                                          request.allowed_touch_pairs,
-                                         request.temporal_contact_policy,
-                                         q6_position->second,
-                                         request.velocity_scaling,
-                                         request.acceleration_scaling);
+                                         request.temporal_contact_policy, q6_position->second,
+                                         request.velocity_scaling, request.acceleration_scaling);
     if (result.action.status != ActionStatus::SUCCEEDED || !result.segment) {
       return {result.action, nullptr};
     }
@@ -358,7 +351,8 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
       return fail(FailureCategory::PLAN_VALIDATION, "SEGMENT_START_JOINT_MISMATCH",
                   "MoveIt segment first point does not match the requested segment start");
     }
-    if (combined.planner_id.empty()) combined.planner_id = segment.planner_id;
+    if (combined.planner_id.empty())
+      combined.planner_id = segment.planner_id;
     if (segment.planner_id != combined.planner_id) {
       return fail(FailureCategory::PLANNING, "MIXED_SEGMENT_PLANNERS",
                   "All ladder segments must use the same configured planner");
@@ -366,9 +360,8 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     combined.moveit_error_code = segment.moveit_error_code;
     const double segment_time_origin = segment.points.front().time_from_start_seconds;
     const std::size_t first = combined.points.empty() ? 0 : 1;
-    if (!combined.points.empty() &&
-        !positionsWithin(combined.points.back().joint_positions, segment_start,
-                         profile_.q6_tolerance)) {
+    if (!combined.points.empty() && !positionsWithin(combined.points.back().joint_positions,
+                                                     segment_start, profile_.q6_tolerance)) {
       return fail(FailureCategory::PLAN_VALIDATION, "SEGMENT_BOUNDARY_DISCONTINUITY",
                   "Prior segment endpoint is outside continuity tolerance of the next start");
     }
@@ -400,20 +393,22 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
 
 ActionResult ProfiledJointMotionAdapter::execute(const MotionPlanArtifact & artifact)
 {
-  return boundary_ ? boundary_->execute(artifact)
-                   : ActionResult{ActionStatus::FAILED,
-                                  Failure{FailureCategory::CONFIGURATION,
-                                          "MOTION_ADAPTER_DEPENDENCY_MISSING",
-                                          "Joint planning boundary is missing", {}}};
+  return boundary_
+           ? boundary_->execute(artifact)
+           : ActionResult{ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+                                                        "MOTION_ADAPTER_DEPENDENCY_MISSING",
+                                                        "Joint planning boundary is missing",
+                                                        {}}};
 }
 
 ActionResult ProfiledJointMotionAdapter::cancel()
 {
-  return boundary_ ? boundary_->cancel()
-                   : ActionResult{ActionStatus::FAILED,
-                                  Failure{FailureCategory::CONFIGURATION,
-                                          "MOTION_ADAPTER_DEPENDENCY_MISSING",
-                                          "Joint planning boundary is missing", {}}};
+  return boundary_
+           ? boundary_->cancel()
+           : ActionResult{ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
+                                                        "MOTION_ADAPTER_DEPENDENCY_MISSING",
+                                                        "Joint planning boundary is missing",
+                                                        {}}};
 }
 
 }  // namespace so101_gazebo_demo::pick_place

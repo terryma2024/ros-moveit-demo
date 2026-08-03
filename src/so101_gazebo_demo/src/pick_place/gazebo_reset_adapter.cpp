@@ -41,7 +41,8 @@ public:
   Impl(const std::string & world_name, std::string task_object_id, const std::string & detach_topic,
        const std::string & attachment_topic, double observation_timeout_seconds,
        unsigned int service_timeout_ms) :
-      task_object_id(std::move(task_object_id)), set_pose_service("/world/" + world_name + "/set_pose"),
+      task_object_id(std::move(task_object_id)),
+      set_pose_service("/world/" + world_name + "/set_pose"),
       observation_timeout(std::chrono::duration<double>(observation_timeout_seconds)),
       service_timeout_ms(service_timeout_ms),
       detach_publisher(node.Advertise<gz::msgs::Empty>(detach_topic))
@@ -55,7 +56,8 @@ public:
   {
     std::lock_guard<std::mutex> lock(mutex);
     for (const auto & pose : message.pose()) {
-      if (pose.name() == task_object_id || pose.name().find("::" + task_object_id) != std::string::npos) {
+      if (pose.name() == task_object_id ||
+          pose.name().find("::" + task_object_id) != std::string::npos) {
         state.task_object_world_pose = toPose3d(pose);
         ++state.pose_revision;
         pose_received_at = std::chrono::steady_clock::now();
@@ -104,8 +106,8 @@ GazeboResetAdapter::GazeboResetAdapter(const std::string & world_name, std::stri
                                        const std::string & attachment_topic,
                                        double observation_timeout_seconds,
                                        unsigned int service_timeout_ms) :
-    impl_(std::make_unique<Impl>(world_name, std::move(task_object_id), detach_topic, attachment_topic,
-                                 observation_timeout_seconds, service_timeout_ms))
+    impl_(std::make_unique<Impl>(world_name, std::move(task_object_id), detach_topic,
+                                 attachment_topic, observation_timeout_seconds, service_timeout_ms))
 {
 }
 

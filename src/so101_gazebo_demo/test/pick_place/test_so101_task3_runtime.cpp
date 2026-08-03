@@ -80,9 +80,10 @@ public:
   pick_place::ObservationResult observe() override
   {
     ++calls;
-    return {std::nullopt,
-            pick_place::Failure{pick_place::FailureCategory::OBSERVATION, "UNEXPECTED_OBSERVE",
-                                "preflight should run first", {}}};
+    return {std::nullopt, pick_place::Failure{pick_place::FailureCategory::OBSERVATION,
+                                              "UNEXPECTED_OBSERVE",
+                                              "preflight should run first",
+                                              {}}};
   }
   int calls{0};
 };
@@ -151,19 +152,15 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
                                    pick_place::State::MOVE_ABOVE_OBJECT},
          {pick_place::State::CLOSE_GRIPPER, pick_place::State::WAIT_GRASP_STABLE},
          {pick_place::State::OPEN_GRIPPER, pick_place::State::DETACH_GAZEBO},
-         {pick_place::State::RECOVER_OPEN_GRIPPER,
-          pick_place::State::RECOVER_DETACH_GAZEBO},
+         {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::State::RECOVER_DETACH_GAZEBO},
          {pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT},
          {pick_place::State::ATTACH_MOVEIT, pick_place::State::LIFT},
          {pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT},
          {pick_place::State::DETACH_MOVEIT, pick_place::State::SYNC_WORLD_OBJECT},
          {pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT},
-         {pick_place::State::RECOVER_DETACH_GAZEBO,
-          pick_place::State::RECOVER_DETACH_MOVEIT},
-         {pick_place::State::RECOVER_DETACH_MOVEIT,
-          pick_place::State::RECOVER_SYNC_WORLD_OBJECT},
-         {pick_place::State::RECOVER_SYNC_WORLD_OBJECT,
-          pick_place::State::RECOVER_RETREAT},
+         {pick_place::State::RECOVER_DETACH_GAZEBO, pick_place::State::RECOVER_DETACH_MOVEIT},
+         {pick_place::State::RECOVER_DETACH_MOVEIT, pick_place::State::RECOVER_SYNC_WORLD_OBJECT},
+         {pick_place::State::RECOVER_SYNC_WORLD_OBJECT, pick_place::State::RECOVER_RETREAT},
        }) {
     EXPECT_TRUE(runtime.contracts.hasContract(transition));
   }
@@ -174,9 +171,9 @@ TEST(SO101Task3Runtime, GazeboAttachRetargetsPositionControllerToCalibratedCarry
 {
   auto gripper = std::make_shared<FakeGripper>();
   auto attach = std::make_shared<FakeExecutor>();
-  pick_place::SO101Task3RuntimeDependencies deps{
-    gripper, std::make_shared<FakeScene>(), attach,
-    std::make_shared<FakeExecutor>(), std::make_shared<FakeExecutor>()};
+  pick_place::SO101Task3RuntimeDependencies deps{gripper, std::make_shared<FakeScene>(), attach,
+                                                 std::make_shared<FakeExecutor>(),
+                                                 std::make_shared<FakeExecutor>()};
   const auto runtime = pick_place::makeSO101Task3Runtime(deps);
   auto * executor = runtime.actions.findExecutor(pick_place::State::ATTACH_GAZEBO);
   ASSERT_NE(nullptr, executor);
@@ -194,9 +191,9 @@ TEST(SO101Task3Runtime, GazeboAttachDoesNotPreserveTransientDeepRegrasp)
 {
   auto gripper = std::make_shared<FakeGripper>();
   auto attach = std::make_shared<FakeExecutor>();
-  pick_place::SO101Task3RuntimeDependencies deps{
-    gripper, std::make_shared<FakeScene>(), attach,
-    std::make_shared<FakeExecutor>(), std::make_shared<FakeExecutor>()};
+  pick_place::SO101Task3RuntimeDependencies deps{gripper, std::make_shared<FakeScene>(), attach,
+                                                 std::make_shared<FakeExecutor>(),
+                                                 std::make_shared<FakeExecutor>()};
   pick_place::SO101Task3RuntimeConfig config;
   config.profile.post_attach_hold_settle_seconds = 0.0;
   const auto runtime = pick_place::makeSO101Task3Runtime(deps, config);
@@ -206,8 +203,8 @@ TEST(SO101Task3Runtime, GazeboAttachDoesNotPreserveTransientDeepRegrasp)
   before.joint_positions[config.profile.gripper_joint] =
     config.profile.q6_contact - config.profile.q6_regrasp_squeeze_offset;
 
-  const auto result = executor->execute({
-    pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT, before, nullptr});
+  const auto result = executor->execute(
+    {pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT, before, nullptr});
 
   EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, result.status);
   EXPECT_DOUBLE_EQ(config.profile.q6_contact, gripper->last_q6);
@@ -216,14 +213,15 @@ TEST(SO101Task3Runtime, GazeboAttachDoesNotPreserveTransientDeepRegrasp)
 TEST(SO101Task3Runtime, GazeboAttachDefersOnlyCarryHoldContactAbortToTransitionEvidence)
 {
   auto gripper = std::make_shared<FakeGripper>();
-  gripper->result = {
-    pick_place::ActionStatus::FAILED,
-    pick_place::Failure{pick_place::FailureCategory::GRIPPER,
-                        "GRIPPER_ACTION_ABORTED", "contact stopped the hold", {}}};
+  gripper->result = {pick_place::ActionStatus::FAILED,
+                     pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                         "GRIPPER_ACTION_ABORTED",
+                                         "contact stopped the hold",
+                                         {}}};
   auto attach = std::make_shared<FakeExecutor>();
-  pick_place::SO101Task3RuntimeDependencies deps{
-    gripper, std::make_shared<FakeScene>(), attach,
-    std::make_shared<FakeExecutor>(), std::make_shared<FakeExecutor>()};
+  pick_place::SO101Task3RuntimeDependencies deps{gripper, std::make_shared<FakeScene>(), attach,
+                                                 std::make_shared<FakeExecutor>(),
+                                                 std::make_shared<FakeExecutor>()};
   pick_place::SO101Task3RuntimeConfig config;
   config.profile.post_attach_hold_settle_seconds = 0.0;
   const auto runtime = pick_place::makeSO101Task3Runtime(deps, config);
@@ -236,10 +234,11 @@ TEST(SO101Task3Runtime, GazeboAttachDefersOnlyCarryHoldContactAbortToTransitionE
 
   EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, executor->execute(context).status);
 
-  gripper->result = {
-    pick_place::ActionStatus::TIMED_OUT,
-    pick_place::Failure{pick_place::FailureCategory::GRIPPER,
-                        "GRIPPER_RESULT_TIMEOUT", "hold result timed out", {}}};
+  gripper->result = {pick_place::ActionStatus::TIMED_OUT,
+                     pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                         "GRIPPER_RESULT_TIMEOUT",
+                                         "hold result timed out",
+                                         {}}};
   EXPECT_EQ(pick_place::ActionStatus::TIMED_OUT, executor->execute(context).status);
 }
 
@@ -251,8 +250,7 @@ TEST(SO101Task3Runtime, WholeExecuteGraphFailsClosedBeforeObservationWithoutTask
   pick_place::CommonResumeValidator resume("config", "session");
   pick_place::PlanValidatorRegistry plan_validators;
   pick_place::StateMachineRunner runner(runtime.actions, runtime.contracts, &observer, &checkpoint,
-                                        &resume, &plan_validators,
-                                        runtime.recovery_policy.get());
+                                        &resume, &plan_validators, runtime.recovery_policy.get());
 
   const auto result = runner.run({pick_place::RunMode::EXECUTE});
 

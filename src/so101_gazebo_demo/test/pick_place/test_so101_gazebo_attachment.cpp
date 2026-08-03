@@ -63,10 +63,10 @@ public:
   {
     ++calls;
     if (fail_on_second && calls > 1) {
-      return {std::nullopt,
-              pick_place::Failure{pick_place::FailureCategory::OBSERVATION,
-                                  "MOVEIT_REFRESH_FAILED",
-                                  "MoveIt refresh failed after Gazebo wait", {}}};
+      return {std::nullopt, pick_place::Failure{pick_place::FailureCategory::OBSERVATION,
+                                                "MOVEIT_REFRESH_FAILED",
+                                                "MoveIt refresh failed after Gazebo wait",
+                                                {}}};
     }
     pick_place::WorldSnapshot snapshot;
     snapshot.fresh = true;
@@ -154,8 +154,8 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
   BaseObserver base;
   const auto world = unique("world").substr(1);
   const auto state_topic = unique("durable");
-  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.5, 3,
-                                           0.005, 0.002, 0.02);
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.5,
+                                           3, 0.005, 0.002, 0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);
@@ -181,8 +181,7 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
       gz::msgs::Contacts contact_message;
       auto * fixed = contact_message.add_contact();
       fixed->mutable_collision1()->set_name("plastic_cup::body::wall_near");
-      fixed->mutable_collision2()->set_name(
-        "so101::gripper::fixed_fingertip_pad_collision_000");
+      fixed->mutable_collision2()->set_name("so101::gripper::fixed_fingertip_pad_collision_000");
       auto * fixed_position = fixed->add_position();
       fixed_position->set_y(-0.24);
       fixed_position->set_z(0.205);
@@ -207,8 +206,7 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
       fixed->add_depth(-0.001);
       auto * moving = contact_message.add_contact();
       moving->mutable_collision1()->set_name("plastic_cup::body::wall_near");
-      moving->mutable_collision2()->set_name(
-        "so101::jaw::moving_fingertip_pad_collision_000");
+      moving->mutable_collision2()->set_name("so101::jaw::moving_fingertip_pad_collision_000");
       auto * moving_position = moving->add_position();
       moving_position->set_y(-0.242);
       moving_position->set_z(0.215);
@@ -248,9 +246,8 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
   ASSERT_TRUE(result.snapshot->gazebo_task_object_moving_jaw_contact);
   EXPECT_TRUE(*result.snapshot->gazebo_task_object_moving_jaw_contact);
   EXPECT_EQ(result.snapshot->gazebo_task_object_gripper_collision_names,
-            (std::set<std::string>{
-              "so101::gripper::fixed_fingertip_pad_collision_000",
-              "so101::jaw::moving_fingertip_pad_collision_000"}));
+            (std::set<std::string>{"so101::gripper::fixed_fingertip_pad_collision_000",
+                                   "so101::jaw::moving_fingertip_pad_collision_000"}));
   ASSERT_TRUE(result.snapshot->gazebo_task_object_fixed_contact_min_height);
   ASSERT_TRUE(result.snapshot->gazebo_task_object_fixed_contact_max_height);
   EXPECT_DOUBLE_EQ(*result.snapshot->gazebo_task_object_fixed_contact_min_height, 0.205);
@@ -282,8 +279,8 @@ TEST(SO101GazeboWorldObserver, RejectsNonfiniteTaskObjectPoseEvidence)
   BaseObserver base;
   const auto world = unique("world_nonfinite").substr(1);
   const auto state_topic = unique("durable_nonfinite");
-  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.2, 3,
-                                           0.005, 0.002, 0.02);
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.2,
+                                           3, 0.005, 0.002, 0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);
@@ -319,8 +316,8 @@ TEST(SO101GazeboWorldObserver, ReobservesMoveItAfterGazeboWait)
   base.fail_on_second = true;
   const auto world = unique("world_moveit_refresh").substr(1);
   const auto state_topic = unique("durable_moveit_refresh");
-  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.2, 2,
-                                           0.005, 0.002, 0.02);
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.2,
+                                           2, 0.005, 0.002, 0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);

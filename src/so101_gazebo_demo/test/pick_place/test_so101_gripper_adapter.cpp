@@ -68,8 +68,7 @@ TEST(SO101Profile, OwnsExactRobotSceneAndAttachmentContract)
   EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_close);
   EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_contact);
   EXPECT_DOUBLE_EQ(0.0060, profile.q6_regrasp_squeeze_offset);
-  EXPECT_GT(profile.q6_contact - profile.q6_regrasp_squeeze_offset,
-            profile.q6_safe_lower);
+  EXPECT_GT(profile.q6_contact - profile.q6_regrasp_squeeze_offset, profile.q6_safe_lower);
   EXPECT_EQ(profile.fingertip_pad_calibration_fingerprint,
             pick_place::fingertip_pad_calibration::kInputFingerprint);
   EXPECT_DOUBLE_EQ(0.020, profile.grasp_section_depth);
@@ -90,8 +89,7 @@ TEST(SO101GripperGeometry, KeepsLegacyMeshCalibrationInItsDeclaredOpenRange)
   const auto & profile = pick_place::SO101Profile::canonical();
   EXPECT_NEAR(0.041207026063, pick_place::gripperWidthAtSection(0.29, profile), 5e-8);
   EXPECT_TRUE(std::isnan(pick_place::gripperWidthAtSection(profile.q6_contact, profile)));
-  EXPECT_DOUBLE_EQ(pick_place::fingertip_pad_calibration::kGraspGapM,
-                   profile.contact_width);
+  EXPECT_DOUBLE_EQ(pick_place::fingertip_pad_calibration::kGraspGapM, profile.contact_width);
 }
 
 TEST(SO101GripperGeometry, MatchesRealMeshTruthAtNonEndpointAndRejectsExtrapolation)
@@ -103,25 +101,21 @@ TEST(SO101GripperGeometry, MatchesRealMeshTruthAtNonEndpointAndRejectsExtrapolat
   // The runtime linearly interpolates a dense generated table.  Bound interpolation
   // error to 0.1 micrometre at a point that is not itself a table sample.
   EXPECT_NEAR(mesh_truth_width, pick_place::gripperWidthAtSection(midpoint_q6, profile), 1e-7);
-  EXPECT_TRUE(std::isnan(
-    pick_place::gripperWidthAtSection(
-      0.29 - profile.q6_tolerance - 1e-6,
-                                      profile)));
+  EXPECT_TRUE(
+    std::isnan(pick_place::gripperWidthAtSection(0.29 - profile.q6_tolerance - 1e-6, profile)));
 }
 
 TEST(SO101GripperGeometry, ClampsOnlyAcceptedControllerErrorAtCalibrationEndpoints)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
-  EXPECT_NEAR(0.041207026063,
-              pick_place::gripperWidthAtSection(0.290000000 - 5e-10, profile), 2e-9);
-  EXPECT_NEAR(0.087012777213,
-              pick_place::gripperWidthAtSection(0.890000000 + 0.001, profile), 2e-9);
+  EXPECT_NEAR(0.041207026063, pick_place::gripperWidthAtSection(0.290000000 - 5e-10, profile),
+              2e-9);
+  EXPECT_NEAR(0.087012777213, pick_place::gripperWidthAtSection(0.890000000 + 0.001, profile),
+              2e-9);
   EXPECT_TRUE(std::isnan(
-    pick_place::gripperWidthAtSection(
-      0.290000000 - profile.q6_tolerance - 1e-6, profile)));
+    pick_place::gripperWidthAtSection(0.290000000 - profile.q6_tolerance - 1e-6, profile)));
   EXPECT_TRUE(std::isnan(
-    pick_place::gripperWidthAtSection(
-      0.890000000 + profile.q6_tolerance + 1e-6, profile)));
+    pick_place::gripperWidthAtSection(0.890000000 + profile.q6_tolerance + 1e-6, profile)));
 }
 
 TEST(SO101GripperValidation, RejectsWidthAndGeometryModelIndependentlyOfExactQ6)
@@ -129,21 +123,23 @@ TEST(SO101GripperValidation, RejectsWidthAndGeometryModelIndependentlyOfExactQ6)
   const auto & canonical = pick_place::SO101Profile::canonical();
   const auto current = q6Snapshot(canonical.q6_contact, 0.0);
   const auto wrong_width = pick_place::validateQ6Target(
-    current, canonical.q6_contact,
-    canonical.contact_width + canonical.width_tolerance * 2.0, canonical);
+    current, canonical.q6_contact, canonical.contact_width + canonical.width_tolerance * 2.0,
+    canonical);
   EXPECT_FALSE(wrong_width.ok);
-  EXPECT_TRUE(std::any_of(
-    wrong_width.failures.begin(), wrong_width.failures.end(),
-    [](const auto & failure) { return failure.code == "Q6_NATIVE_PAD_GAP_OUT_OF_TOLERANCE"; }));
+  EXPECT_TRUE(
+    std::any_of(wrong_width.failures.begin(), wrong_width.failures.end(), [](const auto & failure) {
+      return failure.code == "Q6_NATIVE_PAD_GAP_OUT_OF_TOLERANCE";
+    }));
 
   auto mismatched_model = canonical;
   mismatched_model.fingertip_pad_calibration_fingerprint = "wrong-pad-input";
   const auto mismatch = pick_place::validateQ6Target(
     current, mismatched_model.q6_contact, mismatched_model.contact_width, mismatched_model);
   EXPECT_FALSE(mismatch.ok);
-  EXPECT_TRUE(std::any_of(
-    mismatch.failures.begin(), mismatch.failures.end(),
-    [](const auto & failure) { return failure.code == "Q6_NATIVE_PAD_CALIBRATION_MISMATCH"; }));
+  EXPECT_TRUE(
+    std::any_of(mismatch.failures.begin(), mismatch.failures.end(), [](const auto & failure) {
+      return failure.code == "Q6_NATIVE_PAD_CALIBRATION_MISMATCH";
+    }));
 }
 
 TEST(SO101GripperValidation, EvaluatesObservedNativePadGapAndInterferenceFromGeneratedTable)
@@ -164,15 +160,17 @@ TEST(SO101GripperValidation, EvaluatesObservedNativePadGapAndInterferenceFromGen
   // ceiling enforced by the grasp-contact policy.
   EXPECT_NEAR(calibration::kCupWallInterferenceM, grasp_interference->second, 1e-12);
 
-  const auto slightly_open = pick_place::validateQ6Target(
-    q6Snapshot(profile.q6_contact + 0.0005, 0.0), profile.q6_contact, profile.contact_width, profile);
+  const auto slightly_open =
+    pick_place::validateQ6Target(q6Snapshot(profile.q6_contact + 0.0005, 0.0), profile.q6_contact,
+                                 profile.contact_width, profile);
   ASSERT_TRUE(slightly_open.ok);
   const auto open_gap = slightly_open.metrics.find("actual_pad_gap_m");
   ASSERT_NE(slightly_open.metrics.end(), open_gap);
   EXPECT_GT(open_gap->second, calibration::kGraspGapM);
 
-  const auto slightly_closed = pick_place::validateQ6Target(
-    q6Snapshot(profile.q6_contact - 0.0005, 0.0), profile.q6_contact, profile.contact_width, profile);
+  const auto slightly_closed =
+    pick_place::validateQ6Target(q6Snapshot(profile.q6_contact - 0.0005, 0.0), profile.q6_contact,
+                                 profile.contact_width, profile);
   EXPECT_FALSE(slightly_closed.ok);
   EXPECT_TRUE(std::any_of(
     slightly_closed.failures.begin(), slightly_closed.failures.end(),
@@ -180,51 +178,50 @@ TEST(SO101GripperValidation, EvaluatesObservedNativePadGapAndInterferenceFromGen
 
   auto bounded_contact = q6Snapshot(profile.q6_contact - 0.0005, 0.0);
   bounded_contact.gazebo_task_object_gripper_contact = true;
-  bounded_contact.gazebo_task_object_gripper_max_depth =
-    profile.max_gripper_contact_depth - 0.0001;
-  const auto dynamic_stop = pick_place::validateQ6Target(
-    bounded_contact, profile.q6_contact, profile.contact_width, profile);
-  EXPECT_TRUE(dynamic_stop.ok)
-    << (dynamic_stop.failures.empty() ? "" : dynamic_stop.failures.front().code);
+  bounded_contact.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth - 0.0001;
+  const auto dynamic_stop = pick_place::validateQ6Target(bounded_contact, profile.q6_contact,
+                                                         profile.contact_width, profile);
+  EXPECT_TRUE(dynamic_stop.ok) << (dynamic_stop.failures.empty()
+                                     ? ""
+                                     : dynamic_stop.failures.front().code);
 
-  bounded_contact.gazebo_task_object_gripper_max_depth =
-    profile.max_gripper_contact_depth + 0.0001;
-  const auto unbounded_stop = pick_place::validateQ6Target(
-    bounded_contact, profile.q6_contact, profile.contact_width, profile);
+  bounded_contact.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth + 0.0001;
+  const auto unbounded_stop = pick_place::validateQ6Target(bounded_contact, profile.q6_contact,
+                                                           profile.contact_width, profile);
   EXPECT_FALSE(unbounded_stop.ok);
 }
 
 TEST(SO101GripperValidation, RejectsObservedQ6BelowGeneratedNativePadSafeFloor)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
-  const auto result = pick_place::validateQ6Target(
-    q6Snapshot(profile.q6_safe_lower - 0.0002, 0.0), profile.q6_contact,
-    profile.contact_width, profile);
+  const auto result =
+    pick_place::validateQ6Target(q6Snapshot(profile.q6_safe_lower - 0.0002, 0.0),
+                                 profile.q6_contact, profile.contact_width, profile);
   EXPECT_FALSE(result.ok);
-  EXPECT_TRUE(std::any_of(
-    result.failures.begin(), result.failures.end(),
-    [](const auto & failure) { return failure.code == "Q6_NATIVE_PAD_SAFE_FLOOR_VIOLATED"; }));
+  EXPECT_TRUE(std::any_of(result.failures.begin(), result.failures.end(), [](const auto & failure) {
+    return failure.code == "Q6_NATIVE_PAD_SAFE_FLOOR_VIOLATED";
+  }));
 }
 
 TEST(SO101GripperValidation, AcceptsOnlyFreshFiniteStoppedQ6Evidence)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   auto snapshot = q6Snapshot(profile.q6_contact, 0.0);
-  EXPECT_TRUE(pick_place::validateQ6Target(
-    snapshot, profile.q6_contact, profile.contact_width, profile).ok);
+  EXPECT_TRUE(
+    pick_place::validateQ6Target(snapshot, profile.q6_contact, profile.contact_width, profile).ok);
 
   snapshot.fresh = false;
-  EXPECT_FALSE(pick_place::validateQ6Target(
-    snapshot, profile.q6_contact, profile.contact_width, profile).ok);
+  EXPECT_FALSE(
+    pick_place::validateQ6Target(snapshot, profile.q6_contact, profile.contact_width, profile).ok);
   snapshot = q6Snapshot(profile.q6_contact, 0.1);
-  EXPECT_FALSE(pick_place::validateQ6Target(
-    snapshot, profile.q6_contact, profile.contact_width, profile).ok);
+  EXPECT_FALSE(
+    pick_place::validateQ6Target(snapshot, profile.q6_contact, profile.contact_width, profile).ok);
   snapshot = {};
   snapshot.fresh = true;
   snapshot.joint_positions.emplace("panda_finger_joint1", 0.04);
   snapshot.joint_velocities.emplace("panda_finger_joint1", 0.0);
-  EXPECT_FALSE(pick_place::validateQ6Target(
-    snapshot, profile.q6_contact, profile.contact_width, profile).ok);
+  EXPECT_FALSE(
+    pick_place::validateQ6Target(snapshot, profile.q6_contact, profile.contact_width, profile).ok);
 }
 
 TEST(FollowJointTrajectoryGripperAdapter, SendsOnlyJointSixWithExactTargetAndDuration)
@@ -271,8 +268,7 @@ TEST(FollowJointTrajectoryGripperAdapter, DefersContactTargetAbortToPhysicalPost
 {
   auto client = std::make_shared<FakeTrajectoryClient>();
   const auto contact_q6 = pick_place::SO101Profile::canonical().q6_contact;
-  pick_place::FollowJointTrajectoryGripperAdapter adapter(
-    client, 0.75, 2.0, contact_q6);
+  pick_place::FollowJointTrajectoryGripperAdapter adapter(client, 0.75, 2.0, contact_q6);
   client->send_result = {pick_place::ActionStatus::FAILED,
                          pick_place::Failure{pick_place::FailureCategory::GRIPPER,
                                              "GRIPPER_ACTION_ABORTED",

@@ -22,8 +22,8 @@ bool isCarryingMotionState(State state) noexcept
 
 SO101MotionPlanner::SO101MotionPlanner(std::shared_ptr<const IJointMotionTargetPolicy> policy,
                                        std::shared_ptr<IMoveItJointMotionAdapter> adapter,
-                                       SO101Profile profile)
-: policy_(std::move(policy)), adapter_(std::move(adapter)), profile_(std::move(profile))
+                                       SO101Profile profile) :
+    policy_(std::move(policy)), adapter_(std::move(adapter)), profile_(std::move(profile))
 {
 }
 
@@ -32,8 +32,10 @@ PlanResult SO101MotionPlanner::plan(State state, State next_state,
 {
   if (!policy_ || !adapter_) {
     return {{ActionStatus::FAILED,
-             Failure{FailureCategory::CONFIGURATION, "MOTION_DEPENDENCY_MISSING",
-                     "SO-101 motion planner requires target policy and MoveIt adapter", {}}},
+             Failure{FailureCategory::CONFIGURATION,
+                     "MOTION_DEPENDENCY_MISSING",
+                     "SO-101 motion planner requires target policy and MoveIt adapter",
+                     {}}},
             nullptr};
   }
   auto selected = policy_->target(state, next_state, observation);
@@ -41,12 +43,18 @@ PlanResult SO101MotionPlanner::plan(State state, State next_state,
     return {{ActionStatus::FAILED,
              selected.failure.value_or(Failure{FailureCategory::CONFIGURATION,
                                                "MOTION_TARGET_UNAVAILABLE",
-                                               "SO-101 motion target is unavailable", {}})},
+                                               "SO-101 motion target is unavailable",
+                                               {}})},
             nullptr};
   }
   const auto & target = *selected.target;
-  JointMotionRequest request{state, next_state, target.joint_names, target.joint_waypoints,
-                             target.ladder, isCarryingMotionState(state), {},
+  JointMotionRequest request{state,
+                             next_state,
+                             target.joint_names,
+                             target.joint_waypoints,
+                             target.ladder,
+                             isCarryingMotionState(state),
+                             {},
                              target.gripper_position,
                              target.temporal_contact_policy,
                              target.velocity_scaling,

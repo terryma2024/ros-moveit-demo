@@ -37,7 +37,10 @@ public:
   {
     return {spp::ActionStatus::NOT_SUPPORTED, std::nullopt};
   }
-  spp::ActionResult cancel() override { return {spp::ActionStatus::SUCCEEDED, std::nullopt}; }
+  spp::ActionResult cancel() override
+  {
+    return {spp::ActionStatus::SUCCEEDED, std::nullopt};
+  }
   std::optional<spp::JointMotionRequest> seen;
   spp::PlanResult result;
 };
@@ -55,30 +58,30 @@ spp::ObservationResult observation()
 TEST(SO101MotionPlanner, SendsPolicyJointGoalToAdapterWithoutPoseTarget)
 {
   auto policy = std::make_shared<FakePolicy>();
-  policy->result.target = spp::JointMotionTarget{{"1", "2", "3", "4", "5"},
-                                                 {{0.1, 0.2, 0.3, 0.4, 0.5}}, false};
+  policy->result.target =
+    spp::JointMotionTarget{{"1", "2", "3", "4", "5"}, {{0.1, 0.2, 0.3, 0.4, 0.5}}, false};
   auto adapter = std::make_shared<FakeAdapter>();
   auto artifact = std::make_shared<spp::MotionPlanArtifact>();
   artifact->trajectory_points = 3;
   adapter->result = {{spp::ActionStatus::SUCCEEDED, std::nullopt}, artifact};
   spp::SO101MotionPlanner planner(policy, adapter);
 
-  const auto result = planner.plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
-                                   observation());
+  const auto result =
+    planner.plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, observation());
   EXPECT_EQ(result.artifact, artifact);
   ASSERT_TRUE(adapter->seen);
   EXPECT_EQ(adapter->seen->state, spp::State::MOVE_ABOVE_OBJECT);
   EXPECT_EQ(adapter->seen->next_state, spp::State::DESCEND);
   EXPECT_FALSE(adapter->seen->ladder);
-  EXPECT_EQ(adapter->seen->joint_waypoints[0],
-            (std::vector<double>{0.1, 0.2, 0.3, 0.4, 0.5}));
+  EXPECT_EQ(adapter->seen->joint_waypoints[0], (std::vector<double>{0.1, 0.2, 0.3, 0.4, 0.5}));
 }
 
 TEST(SO101MotionPlanner, PreservesLadderAndCarryingSemantics)
 {
   auto policy = std::make_shared<FakePolicy>();
   policy->result.target = spp::JointMotionTarget{{"1", "2", "3", "4", "5"},
-    {{0, 0, 0, 0, 0}, {0.1, 0.1, 0.1, 0.1, 0.1}}, true};
+                                                 {{0, 0, 0, 0, 0}, {0.1, 0.1, 0.1, 0.1, 0.1}},
+                                                 true};
   auto adapter = std::make_shared<FakeAdapter>();
   adapter->result = {{spp::ActionStatus::SUCCEEDED, std::nullopt},
                      std::make_shared<spp::MotionPlanArtifact>()};
@@ -95,8 +98,8 @@ TEST(SO101MotionPlanner, PreservesLadderAndCarryingSemantics)
 TEST(SO101MotionPlanner, KeepsPreopenDescendCollisionFreeInMoveIt)
 {
   auto policy = std::make_shared<FakePolicy>();
-  policy->result.target = spp::JointMotionTarget{{"1", "2", "3", "4", "5"},
-                                                 {{0, 0, 0, 0, 0}}, false};
+  policy->result.target =
+    spp::JointMotionTarget{{"1", "2", "3", "4", "5"}, {{0, 0, 0, 0, 0}}, false};
   auto adapter = std::make_shared<FakeAdapter>();
   adapter->result = {{spp::ActionStatus::SUCCEEDED, std::nullopt},
                      std::make_shared<spp::MotionPlanArtifact>()};
@@ -122,13 +125,13 @@ TEST(SO101MotionPlanner, KeepsPreopenDescendCollisionFreeInMoveIt)
 TEST(SO101MotionPlanner, FailsBeforeAdapterWhenPolicyHasNoTarget)
 {
   auto policy = std::make_shared<FakePolicy>();
-  policy->result.failure = spp::Failure{spp::FailureCategory::CONFIGURATION,
-    "MOTION_TARGET_UNAVAILABLE", "missing", {}};
+  policy->result.failure =
+    spp::Failure{spp::FailureCategory::CONFIGURATION, "MOTION_TARGET_UNAVAILABLE", "missing", {}};
   auto adapter = std::make_shared<FakeAdapter>();
   spp::SO101MotionPlanner planner(policy, adapter);
 
-  const auto result = planner.plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
-                                   observation());
+  const auto result =
+    planner.plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, observation());
   EXPECT_EQ(result.action.status, spp::ActionStatus::FAILED);
   EXPECT_FALSE(adapter->seen);
   ASSERT_TRUE(result.action.failure);

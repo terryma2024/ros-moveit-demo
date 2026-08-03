@@ -39,9 +39,9 @@ struct SO101Profile
   Vec3 task_object_near_wall_outward{0.0, 1.0, 0.0};
   Pose3d task_object_pose{0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0};
   Pose3d place_task_object_pose{-0.08, -0.25, 0.165, 0.0, 0.0, 0.0, 1.0};
-  Pose3d calibrated_grasp_relative_pose{
-    0.026397024348, 0.000172476372, -0.153948999996,
-    -0.000000367000, 0.000000354000, 0.719203129000, 0.694799870000};
+  Pose3d calibrated_grasp_relative_pose{0.026397024348,  0.000172476372, -0.153948999996,
+                                        -0.000000367000, 0.000000354000, 0.719203129000,
+                                        0.694799870000};
   std::vector<double> arm_home_positions{0.0, 0.0, 0.0, 0.0, 0.0};
   double q6_safe_lower{-0.059303612618397};
   double q6_home{-0.059303612618397};
@@ -105,10 +105,9 @@ struct SO101Profile
   std::string attachment_state_topic{"/so101/object_attached"};
 
   [[nodiscard]] static const SO101Profile & canonical() noexcept;
-  [[nodiscard]] static SO101Profile configured(
-    const TaskObjectConfig & object,
-    const MotionPolicyConfig & motion,
-    const ValidationPolicyConfig & validation);
+  [[nodiscard]] static SO101Profile configured(const TaskObjectConfig & object,
+                                               const MotionPolicyConfig & motion,
+                                               const ValidationPolicyConfig & validation);
 };
 
 }  // namespace so101_gazebo_demo::pick_place

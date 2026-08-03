@@ -65,17 +65,17 @@ public:
   [[nodiscard]] virtual std::optional<CurrentJointStateEvidence> currentState() = 0;
   [[nodiscard]] virtual std::optional<MotionPlanningSceneFacts> sceneFacts() = 0;
   [[nodiscard]] virtual JointSegmentPlanResult
-  planSegment(const std::vector<std::string> & joint_names,
-              const std::vector<double> & start, const std::vector<double> & goal,
-              const std::set<std::string> & allowed_touch_pairs,
+  planSegment(const std::vector<std::string> & joint_names, const std::vector<double> & start,
+              const std::vector<double> & goal, const std::set<std::string> & allowed_touch_pairs,
               const std::optional<TemporalContactPolicy> & temporal_contact_policy,
-              double gripper_position, double velocity_scaling,
-              double acceleration_scaling) = 0;
+              double gripper_position, double velocity_scaling, double acceleration_scaling) = 0;
   [[nodiscard]] virtual ActionResult execute(const MotionPlanArtifact &)
   {
     return {ActionStatus::NOT_SUPPORTED,
-            Failure{FailureCategory::EXECUTION, "MOTION_EXECUTION_NOT_IMPLEMENTED",
-                    "Joint planning boundary does not implement execution", {}}};
+            Failure{FailureCategory::EXECUTION,
+                    "MOTION_EXECUTION_NOT_IMPLEMENTED",
+                    "Joint planning boundary does not implement execution",
+                    {}}};
   }
   [[nodiscard]] virtual ActionResult cancel()
   {
@@ -90,8 +90,8 @@ class IWorldZMicroLift
 {
 public:
   virtual ~IWorldZMicroLift() = default;
-  [[nodiscard]] virtual ActionResult executeWorldZMicroLift(
-    const Pose3d & current_tcp_world, double world_z_delta_m) = 0;
+  [[nodiscard]] virtual ActionResult executeWorldZMicroLift(const Pose3d & current_tcp_world,
+                                                            double world_z_delta_m) = 0;
   [[nodiscard]] virtual ActionResult cancelWorldZMicroLift() = 0;
 };
 

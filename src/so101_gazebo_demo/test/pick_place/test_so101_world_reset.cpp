@@ -40,7 +40,8 @@ public:
   {
     ++detach_calls;
     commands.emplace_back("gazebo_detach");
-    if (events) events->emplace_back("gazebo_detach");
+    if (events)
+      events->emplace_back("gazebo_detach");
     if (detach_result.status == ActionStatus::SUCCEEDED && detach_converges) {
       state.task_object_attached = false;
       ++state.attachment_revision;
@@ -52,7 +53,8 @@ public:
   {
     ++set_pose_calls;
     commands.emplace_back("gazebo_pose");
-    if (events) events->emplace_back("gazebo_pose");
+    if (events)
+      events->emplace_back("gazebo_pose");
     if (set_pose_result.status == ActionStatus::SUCCEEDED && pose_converges) {
       state.task_object_world_pose = pose;
       ++state.pose_revision;
@@ -85,7 +87,8 @@ public:
   {
     ++detach_calls;
     commands.emplace_back("moveit_detach");
-    if (events) events->emplace_back("moveit_detach");
+    if (events)
+      events->emplace_back("moveit_detach");
     if (detach_result.status == ActionStatus::SUCCEEDED && detach_converges) {
       state.task_object_attached = false;
       state.task_object_in_world = true;
@@ -99,7 +102,8 @@ public:
   {
     ++task_object_upsert_calls;
     commands.emplace_back("moveit_task_object");
-    if (events) events->emplace_back("moveit_task_object");
+    if (events)
+      events->emplace_back("moveit_task_object");
     if (task_object_upsert_result.status == ActionStatus::SUCCEEDED && upsert_converges) {
       state.task_object_attached = false;
       state.task_object_in_world = true;
@@ -112,7 +116,8 @@ public:
   {
     ++table_upsert_calls;
     commands.emplace_back("moveit_table");
-    if (events) events->emplace_back("moveit_table");
+    if (events)
+      events->emplace_back("moveit_table");
     if (table_upsert_result.status == ActionStatus::SUCCEEDED && upsert_converges) {
       state.table_in_world = true;
       state.table_world_pose = pose;
@@ -124,7 +129,8 @@ public:
   {
     ++pedestal_upsert_calls;
     commands.emplace_back("moveit_pedestal");
-    if (events) events->emplace_back("moveit_pedestal");
+    if (events)
+      events->emplace_back("moveit_pedestal");
     if (pedestal_upsert_result.status == ActionStatus::SUCCEEDED && upsert_converges) {
       state.pedestal_in_world = true;
       state.pedestal_world_pose = pose;
@@ -161,14 +167,16 @@ public:
   std::optional<CurrentJointStateEvidence> observeJoints() override
   {
     ++observe_calls;
-    if (events) events->emplace_back("observe_joints");
+    if (events)
+      events->emplace_back("observe_joints");
     return observation_available ? joints : std::nullopt;
   }
   ActionResult commandGripper(double q6) override
   {
     ++gripper_calls;
     gripper_targets.push_back(q6);
-    if (events) events->emplace_back("gripper:" + std::to_string(q6));
+    if (events)
+      events->emplace_back("gripper:" + std::to_string(q6));
     if (gripper_result.status == ActionStatus::SUCCEEDED &&
         (q6 != -0.059303612618397 || home_gripper_converges)) {
       joints->gripper_position = q6 + home_gripper_offset;
@@ -180,13 +188,15 @@ public:
   {
     ++plan_calls;
     last_arm_goal = goal;
-    if (events) events->emplace_back("plan_arm_home");
+    if (events)
+      events->emplace_back("plan_arm_home");
     return {plan_result, plan_result.status == ActionStatus::SUCCEEDED ? plan : nullptr};
   }
   ActionResult executeArmHome(const PlanArtifact &) override
   {
     ++execute_calls;
-    if (events) events->emplace_back("execute_arm_home");
+    if (events)
+      events->emplace_back("execute_arm_home");
     if (execute_result.status == ActionStatus::SUCCEEDED && arm_converges) {
       joints->positions = last_arm_goal;
       if (!joints->positions.empty()) {
@@ -196,7 +206,10 @@ public:
     }
     return execute_result;
   }
-  ActionResult cancelArmAndWait() override { return succeeded(); }
+  ActionResult cancelArmAndWait() override
+  {
+    return succeeded();
+  }
 
   std::optional<CurrentJointStateEvidence> joints;
   std::shared_ptr<PlanArtifact> plan{[] {
@@ -238,8 +251,8 @@ std::shared_ptr<FakeRobotHomeResetAdapter> robotAdapter()
 WorldResetConfig canonicalConfig()
 {
   const auto & profile = SO101Profile::canonical();
-  return {profile.table_pose, profile.pedestal_pose, profile.task_object_pose,
-          0.02, 0.001, 1e-5, 1e-4};
+  return {
+    profile.table_pose, profile.pedestal_pose, profile.task_object_pose, 0.02, 0.001, 1e-5, 1e-4};
 }
 
 void seed(const std::shared_ptr<FakeGazeboResetAdapter> & gazebo,
@@ -415,12 +428,13 @@ TEST(SO101WorldResetCoordinator, UsesReleaseArmHomeWorldSyncThenFinalGripperHome
   EXPECT_EQ(ActionStatus::SUCCEEDED, result.status);
   std::vector<std::string> commands;
   for (const auto & event : *events) {
-    if (event != "observe_joints") commands.push_back(event);
+    if (event != "observe_joints")
+      commands.push_back(event);
   }
-  EXPECT_EQ((std::vector<std::string>{
-              "gripper:1.700000", "plan_arm_home", "execute_arm_home",
-              "gazebo_pose", "moveit_table", "moveit_pedestal", "moveit_task_object",
-              "gripper:-0.059304"}), commands);
+  EXPECT_EQ((std::vector<std::string>{"gripper:1.700000", "plan_arm_home", "execute_arm_home",
+                                      "gazebo_pose", "moveit_table", "moveit_pedestal",
+                                      "moveit_task_object", "gripper:-0.059304"}),
+            commands);
   EXPECT_EQ((std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0}), robot->last_arm_goal);
 }
 

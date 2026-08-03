@@ -13,22 +13,23 @@ namespace
 class RecordingStateEvaluator final : public spp::IRobotStateEvidenceProvider
 {
 public:
-  std::optional<spp::RobotStateEvidence>
-  evaluate(const std::vector<std::string> & joint_names,
-           const std::vector<double> & joint_positions,
-           const std::set<std::string> & allowed_touch_pairs,
-           const std::optional<spp::TemporalContactPolicy> &,
-           double gripper_position) const override
+  std::optional<spp::RobotStateEvidence> evaluate(const std::vector<std::string> & joint_names,
+                                                  const std::vector<double> & joint_positions,
+                                                  const std::set<std::string> & allowed_touch_pairs,
+                                                  const std::optional<spp::TemporalContactPolicy> &,
+                                                  double gripper_position) const override
   {
     seen_names.push_back(joint_names);
     seen_positions.push_back(joint_positions);
     seen_allowed_touch_pairs.push_back(allowed_touch_pairs);
     seen_gripper_positions.push_back(gripper_position);
-    if (fail_at && seen_positions.size() == *fail_at) return std::nullopt;
+    if (fail_at && seen_positions.size() == *fail_at)
+      return std::nullopt;
     const double sum = joint_positions[0] + joint_positions[1] + joint_positions[2] +
                        joint_positions[3] + joint_positions[4];
     return spp::RobotStateEvidence{{sum, -0.28, 0.30 - sum, 0, 0, 0, 1},
-                                   collision_at != seen_positions.size(), {},
+                                   collision_at != seen_positions.size(),
+                                   {},
                                    attached_pose};
   }
 
@@ -86,10 +87,8 @@ TEST(SO101MotionEvidenceBuilder, ReconstructsEveryTcpAndCollisionSample)
   EXPECT_EQ(result.artifact->allowed_touch_pairs, input().allowed_touch_pairs);
   EXPECT_NEAR(evaluator.seen_gripper_positions[0], 0.707194871, 1e-12);
   EXPECT_EQ(result.artifact->trajectory_points, 3U);
-  EXPECT_EQ(result.artifact->joint_names,
-            (std::vector<std::string>{"1", "2", "3", "4", "5"}));
-  EXPECT_EQ(result.artifact->start_joint_positions,
-            (std::vector<double>{0, 0, 0, 0, 0}));
+  EXPECT_EQ(result.artifact->joint_names, (std::vector<std::string>{"1", "2", "3", "4", "5"}));
+  EXPECT_EQ(result.artifact->start_joint_positions, (std::vector<double>{0, 0, 0, 0, 0}));
   EXPECT_EQ(result.artifact->goal_joint_positions,
             (std::vector<double>{0.02, 0.03, 0.04, 0.05, 0.06}));
   EXPECT_TRUE(result.artifact->collision_aware);
@@ -98,8 +97,7 @@ TEST(SO101MotionEvidenceBuilder, ReconstructsEveryTcpAndCollisionSample)
   EXPECT_EQ(result.artifact->moveit_error_code, 1);
   EXPECT_EQ(result.artifact->planner_id, "RRTConnectkConfigDefault");
   EXPECT_EQ(result.artifact->start_state_stamp_nanoseconds, 4242000000ULL);
-  EXPECT_EQ(result.artifact->current_joint_snapshot,
-            (std::vector<double>{0, 0, 0, 0, 0}));
+  EXPECT_EQ(result.artifact->current_joint_snapshot, (std::vector<double>{0, 0, 0, 0, 0}));
   EXPECT_NEAR(result.artifact->samples[2].tcp_pose.x, 0.20, 1e-12);
 }
 
@@ -110,9 +108,19 @@ TEST(SO101MotionEvidenceBuilder, PreservesCollidingSampleAsNegativeEvidence)
   const auto result = spp::buildMotionPlanEvidence(input(), evaluator);
   ASSERT_TRUE(result.artifact);
   EXPECT_FALSE(result.artifact->samples[1].collision_free);
-  EXPECT_FALSE(spp::validateJointGoalPlan(*result.artifact,
-    {{"1", "2", "3", "4", "5"}, {0.20, -0.28, 0.10}, {0, 0, -1}, {0, 0, -1},
-     {0, 0, -1}, 0.01, 0.1, 0.01, 0.2, 0.001, 0.1, 1e-5}).ok);
+  EXPECT_FALSE(spp::validateJointGoalPlan(*result.artifact, {{"1", "2", "3", "4", "5"},
+                                                             {0.20, -0.28, 0.10},
+                                                             {0, 0, -1},
+                                                             {0, 0, -1},
+                                                             {0, 0, -1},
+                                                             0.01,
+                                                             0.1,
+                                                             0.01,
+                                                             0.2,
+                                                             0.001,
+                                                             0.1,
+                                                             1e-5})
+                 .ok);
 }
 
 TEST(SO101MotionEvidenceBuilder, FailsClosedWhenFkOrPointShapeIsUnavailable)

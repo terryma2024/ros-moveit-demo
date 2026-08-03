@@ -80,12 +80,16 @@ public:
     return current_evidence;
   }
 
-  std::optional<spp::MotionPlanningSceneFacts> sceneFacts() override { return std::nullopt; }
+  std::optional<spp::MotionPlanningSceneFacts> sceneFacts() override
+  {
+    return std::nullopt;
+  }
 
-  spp::JointSegmentPlanResult planSegment(
-    const std::vector<std::string> &, const std::vector<double> &,
-    const std::vector<double> &, const std::set<std::string> &,
-    const std::optional<spp::TemporalContactPolicy> &, double, double, double) override
+  spp::JointSegmentPlanResult planSegment(const std::vector<std::string> &,
+                                          const std::vector<double> &, const std::vector<double> &,
+                                          const std::set<std::string> &,
+                                          const std::optional<spp::TemporalContactPolicy> &, double,
+                                          double, double) override
   {
     return {};
   }
@@ -103,7 +107,10 @@ public:
   {
     return ok();
   }
-  spp::ActionResult detachTaskObject() override { return ok(); }
+  spp::ActionResult detachTaskObject() override
+  {
+    return ok();
+  }
 
   spp::ActionResult upsertTableWorldPose(const spp::Pose3d &) override
   {
@@ -194,8 +201,8 @@ TEST(MoveItSceneInitializer, failsWhenJointsNeverArrive)
 TEST(MoveItSceneInitializer, waitsForDelayedCompleteJoints)
 {
   FakeBoundary boundary;
-  boundary.evidence_sequence = {
-    incompleteEvidence(), incompleteEvidence(), std::nullopt, completeEvidence()};
+  boundary.evidence_sequence = {incompleteEvidence(), incompleteEvidence(), std::nullopt,
+                                completeEvidence()};
   boundary.current_evidence = completeEvidence();
   FakeScene scene;
   scene.observe_result = convergedScene();
@@ -214,12 +221,12 @@ TEST(MoveItSceneInitializer, upsertsTableBeforePedestalBeforeTaskObject)
   scene.observe_result = convergedScene();
 
   std::vector<std::string> order;
-  auto trackOrder = [&](const std::string & name, spp::ActionResult result) {
+  auto trackOrder = [&](const std::string & name, const spp::ActionResult & result) {
     return spp::ActionResult{result.status, result.failure};
   };
 
   spp::MoveItSceneInitializer init(boundary, scene, kNoPoll);
-  init.initialize(spp::SO101Profile::canonical(), kShortTimeout);
+  EXPECT_FALSE(init.initialize(spp::SO101Profile::canonical(), kShortTimeout).has_value());
   EXPECT_GE(scene.upsert_table_calls, 1);
   EXPECT_GE(scene.upsert_pedestal_calls, 1);
   EXPECT_GE(scene.upsert_task_object_calls, 1);
@@ -369,8 +376,7 @@ TEST(MoveItSceneInitializer, ResumePreservesAlreadyAttachedTaskObject)
   scene.observe_result = s;
 
   spp::MoveItSceneInitializer init(boundary, scene, kNoPoll);
-  const auto result = init.initialize(
-    spp::SO101Profile::canonical(), kShortTimeout, true);
+  const auto result = init.initialize(spp::SO101Profile::canonical(), kShortTimeout, true);
 
   ASSERT_FALSE(result.has_value()) << result->code << ": " << result->message;
   EXPECT_EQ(scene.upsert_table_calls, 1);
@@ -388,8 +394,7 @@ TEST(MoveItSceneInitializer, ResumePreservesSettledWorldTaskObjectPose)
   scene.observe_result = s;
 
   spp::MoveItSceneInitializer init(boundary, scene, kNoPoll);
-  const auto result = init.initialize(
-    spp::SO101Profile::canonical(), kShortTimeout, true);
+  const auto result = init.initialize(spp::SO101Profile::canonical(), kShortTimeout, true);
 
   ASSERT_FALSE(result.has_value()) << result->code << ": " << result->message;
   EXPECT_EQ(scene.upsert_table_calls, 1);

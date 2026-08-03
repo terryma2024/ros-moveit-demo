@@ -62,18 +62,16 @@ geometry_msgs::msg::Pose identityPose()
 
 }  // namespace
 
-moveit_msgs::msg::CollisionObject makeTaskObjectCollisionObject(
-  const MoveItSceneGeometry & geometry, const Pose3d & pose)
+moveit_msgs::msg::CollisionObject
+makeTaskObjectCollisionObject(const MoveItSceneGeometry & geometry, const Pose3d & pose)
 {
   auto object = baseObject(geometry, geometry.task_object_id, pose);
   constexpr double pi = 3.14159265358979323846;
   const double angle_step = 2.0 * pi / geometry.task_object_side_count;
   const double radial_center =
     geometry.task_object_outer_radius - geometry.task_object_wall_thickness / 2.0;
-  const double chord =
-    2.0 * geometry.task_object_outer_radius * std::sin(angle_step / 2.0);
-  const double wall_height =
-    geometry.task_object_height - geometry.task_object_bottom_thickness;
+  const double chord = 2.0 * geometry.task_object_outer_radius * std::sin(angle_step / 2.0);
+  const double wall_height = geometry.task_object_height - geometry.task_object_bottom_thickness;
   for (int index = 0; index < geometry.task_object_side_count; ++index) {
     const double angle = index * angle_step;
     shape_msgs::msg::SolidPrimitive wall;
@@ -115,8 +113,8 @@ moveit_msgs::msg::CollisionObject makeTableCollisionObject(const MoveItSceneGeom
   return object;
 }
 
-moveit_msgs::msg::CollisionObject makePedestalCollisionObject(
-  const MoveItSceneGeometry & geometry, const Pose3d & pose)
+moveit_msgs::msg::CollisionObject makePedestalCollisionObject(const MoveItSceneGeometry & geometry,
+                                                              const Pose3d & pose)
 {
   auto object = baseObject(geometry, geometry.pedestal_id, pose);
   shape_msgs::msg::SolidPrimitive primitive;
@@ -156,8 +154,10 @@ ActionResult MoveItSceneAdapter::attachTaskObject(const MoveItAttachmentSpec & s
     return sceneFailure("MOVEIT_ATTACH_METADATA_INVALID",
                         "MoveIt attach link and touch links must not be empty");
   }
-  if (!impl_->move_group.attachObject(impl_->geometry.task_object_id, spec.link_name, spec.touch_links)) {
-    return sceneFailure("MOVEIT_ATTACH_REQUEST_FAILED", "MoveIt rejected the TaskObject attach request");
+  if (!impl_->move_group.attachObject(impl_->geometry.task_object_id, spec.link_name,
+                                      spec.touch_links)) {
+    return sceneFailure("MOVEIT_ATTACH_REQUEST_FAILED",
+                        "MoveIt rejected the TaskObject attach request");
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
@@ -165,7 +165,8 @@ ActionResult MoveItSceneAdapter::attachTaskObject(const MoveItAttachmentSpec & s
 ActionResult MoveItSceneAdapter::detachTaskObject()
 {
   if (!impl_->move_group.detachObject(impl_->geometry.task_object_id)) {
-    return sceneFailure("MOVEIT_DETACH_REQUEST_FAILED", "MoveIt rejected the TaskObject detach request");
+    return sceneFailure("MOVEIT_DETACH_REQUEST_FAILED",
+                        "MoveIt rejected the TaskObject detach request");
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
@@ -177,7 +178,8 @@ ActionResult MoveItSceneAdapter::upsertTaskObjectWorldPose(const Pose3d & pose)
     return sceneFailure("MOVEIT_UPSERT_OBJECT_ATTACHED",
                         "Cannot upsert TaskObject while it is attached in MoveIt");
   }
-  if (!impl_->planning_scene.applyCollisionObject(makeTaskObjectCollisionObject(impl_->geometry, pose))) {
+  if (!impl_->planning_scene.applyCollisionObject(
+        makeTaskObjectCollisionObject(impl_->geometry, pose))) {
     return sceneFailure("MOVEIT_TASK_OBJECT_UPSERT_APPLY_FAILED",
                         "Failed to apply the canonical TaskObject collision object");
   }
@@ -208,7 +210,8 @@ std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
 {
   const auto objects = impl_->planning_scene.getObjects(
     {impl_->geometry.task_object_id, impl_->geometry.table_id, impl_->geometry.pedestal_id});
-  const auto attached_objects = impl_->planning_scene.getAttachedObjects({impl_->geometry.task_object_id});
+  const auto attached_objects =
+    impl_->planning_scene.getAttachedObjects({impl_->geometry.task_object_id});
 
   MoveItSceneState state;
   const auto task_object = objects.find(impl_->geometry.task_object_id);

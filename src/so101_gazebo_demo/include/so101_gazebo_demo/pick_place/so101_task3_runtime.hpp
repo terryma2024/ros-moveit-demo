@@ -38,8 +38,8 @@ struct SO101Task3Runtime
   std::shared_ptr<const IRecoveryPolicy> recovery_policy;
 };
 
-[[nodiscard]] SO101Task3Runtime makeSO101Task3Runtime(
-  const SO101Task3RuntimeDependencies & dependencies,
-  SO101Task3RuntimeConfig config = {});
+[[nodiscard]] SO101Task3Runtime
+makeSO101Task3Runtime(const SO101Task3RuntimeDependencies & dependencies,
+                      SO101Task3RuntimeConfig config = {});
 
 }  // namespace so101_gazebo_demo::pick_place

@@ -120,7 +120,7 @@ public:
 
   ObservationResult observe() override
   {
-    scenario_.events.push_back("observe");
+    scenario_.events.emplace_back("observe");
     ++scenario_.observation_calls;
     if (scenario_.fail_observation_call &&
         scenario_.observation_calls >= *scenario_.fail_observation_call &&
@@ -166,7 +166,8 @@ class FakePlanValidator final : public pick_place::IPlanValidator
 public:
   FakePlanValidator(State state, Scenario & scenario) : state_(state), scenario_(scenario) {}
 
-  ValidationResult validate(State state, const WorldSnapshot &, const PlanArtifact &) const override
+  [[nodiscard]] ValidationResult validate(State state, const WorldSnapshot &,
+                                          const PlanArtifact &) const override
   {
     scenario_.events.push_back(event("plan-validate", state));
     ++scenario_.validation_calls;
@@ -279,17 +280,17 @@ class FakeContract final : public pick_place::TransitionContractRegistry::ITrans
 public:
   FakeContract(State state, Scenario & scenario) : state_(state), scenario_(scenario) {}
 
-  ValidationResult validatePrecondition(const WorldSnapshot &) const override
+  [[nodiscard]] ValidationResult validatePrecondition(const WorldSnapshot &) const override
   {
     scenario_.events.push_back(event("precondition", state_));
     ++scenario_.precondition_calls;
     if (scenario_.transient_precondition_state == state_ &&
         scenario_.transient_precondition_failures > 0) {
       --scenario_.transient_precondition_failures;
-      return {false,
-              {failure(FailureCategory::PRECONDITION,
-                       scenario_.transient_precondition_failure_code)},
-              {}};
+      return {
+        false,
+        {failure(FailureCategory::PRECONDITION, scenario_.transient_precondition_failure_code)},
+        {}};
     }
     if (scenario_.fail_precondition == state_) {
       return {false, {failure(FailureCategory::PRECONDITION, "PRECONDITION_INJECTED")}, {}};
@@ -303,18 +304,18 @@ public:
     return {true, {}, {}};
   }
 
-  ValidationResult validate(const WorldSnapshot &, const WorldSnapshot &,
-                            const ActionResult &) const override
+  [[nodiscard]] ValidationResult validate(const WorldSnapshot &, const WorldSnapshot &,
+                                          const ActionResult &) const override
   {
     scenario_.events.push_back(event("transition-validate", state_));
     ++scenario_.transition_calls;
     if (scenario_.transient_transition_state == state_ &&
         scenario_.transient_transition_failures > 0) {
       --scenario_.transient_transition_failures;
-      return {false,
-              {failure(FailureCategory::POSTCONDITION,
-                       scenario_.transient_transition_failure_code)},
-              {}};
+      return {
+        false,
+        {failure(FailureCategory::POSTCONDITION, scenario_.transient_transition_failure_code)},
+        {}};
     }
     if (scenario_.fail_transition == state_) {
       return {false, {failure(FailureCategory::POSTCONDITION, "POSTCONDITION_INJECTED")}, {}};
@@ -448,7 +449,7 @@ struct Harness
       registerState(state, kPlannedStates.count(state) != 0);
     }
     contracts.registerContract({State::VALIDATION_FAILED, State::ATTACH_GAZEBO},
-      std::make_shared<FakeContract>(State::VALIDATION_FAILED, scenario));
+                               std::make_shared<FakeContract>(State::VALIDATION_FAILED, scenario));
   }
 
   void registerAllExcept(std::optional<State> executor_gap, std::optional<State> planner_gap,
@@ -604,8 +605,7 @@ TEST(PureRunnerIntegration, MotionWaitsForAStablePostExecutionObservation)
   Harness harness;
   harness.registerAll();
   harness.scenario.fail_observation_call = 4;
-  harness.scenario.observation_failure_code =
-    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
+  harness.scenario.observation_failure_code = "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
   harness.scenario.observation_failure_count = 16;
   harness.scenario.observation_failure_delay = std::chrono::milliseconds(600);
 
@@ -626,8 +626,7 @@ TEST(PureRunnerIntegration, SuccessfulNonMotionActionWaitsForAConsistentObservat
   Harness harness;
   harness.registerAll();
   harness.scenario.fail_observation_call = 2;
-  harness.scenario.observation_failure_code =
-    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
+  harness.scenario.observation_failure_code = "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
   harness.scenario.observation_failure_count = 2;
 
   const auto result =
@@ -670,8 +669,7 @@ TEST(PureRunnerIntegration, GripperActionWaitsForEndpointPostconditionConvergenc
   harness.scenario.transient_transition_failure_code = "Q6_TARGET_OUT_OF_TOLERANCE";
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER,
-                          false, std::nullopt, 20});
+    harness.runner().run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, result.current_state);
@@ -690,8 +688,7 @@ TEST(PureRunnerIntegration, GripperActionWaitsForArmQuiescenceAfterContact)
   harness.scenario.transient_transition_failure_code = "ARM_NOT_QUIESCENT";
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::CLOSE_GRIPPER,
-                          false, std::nullopt, 20});
+    harness.runner().run({RunMode::EXECUTE, State::CLOSE_GRIPPER, false, std::nullopt, 20});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::CLOSE_GRIPPER, result.current_state);
@@ -709,8 +706,7 @@ TEST(PureRunnerIntegration, AttachmentWaitsForArmQuiescenceBeforeSideEffect)
   harness.scenario.transient_precondition_failures = 1;
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::ATTACH_GAZEBO,
-                          false, std::nullopt, 20});
+    harness.runner().run({RunMode::EXECUTE, State::ATTACH_GAZEBO, false, std::nullopt, 20});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::ATTACH_GAZEBO, result.current_state);
@@ -728,12 +724,10 @@ TEST(PureRunnerIntegration, AttachmentWaitsForTransientBilateralContactBeforeSid
   harness.registerAll();
   harness.scenario.transient_precondition_state = State::ATTACH_GAZEBO;
   harness.scenario.transient_precondition_failures = 2;
-  harness.scenario.transient_precondition_failure_code =
-    "BILATERAL_GRIPPER_CONTACT_REQUIRED";
+  harness.scenario.transient_precondition_failure_code = "BILATERAL_GRIPPER_CONTACT_REQUIRED";
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::ATTACH_GAZEBO,
-                          false, std::nullopt, 20});
+    harness.runner().run({RunMode::EXECUTE, State::ATTACH_GAZEBO, false, std::nullopt, 20});
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::ATTACH_GAZEBO, result.current_state);
@@ -756,18 +750,21 @@ TEST(PureRunnerIntegration, DescendPostconditionFailureNeverExecutesCloseOrAttac
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("POSTCONDITION_INJECTED", result.failure->code);
-  EXPECT_EQ((std::vector<State>{State::IDLE, State::PREPARE_OPEN_GRIPPER,
-                                State::MOVE_ABOVE_OBJECT, State::DESCEND,
-                                State::RECOVER_RETREAT, State::ERROR}),
+  EXPECT_EQ((std::vector<State>{State::IDLE, State::PREPARE_OPEN_GRIPPER, State::MOVE_ABOVE_OBJECT,
+                                State::DESCEND, State::RECOVER_RETREAT, State::ERROR}),
             result.state_trace);
-  EXPECT_NE(std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
-                      "execute:DESCEND"), harness.scenario.events.end());
+  EXPECT_NE(
+    std::find(harness.scenario.events.begin(), harness.scenario.events.end(), "execute:DESCEND"),
+    harness.scenario.events.end());
   EXPECT_EQ(std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
-                      "execute:CLOSE_GRIPPER"), harness.scenario.events.end());
+                      "execute:CLOSE_GRIPPER"),
+            harness.scenario.events.end());
   EXPECT_EQ(std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
-                      "execute:ATTACH_GAZEBO"), harness.scenario.events.end());
+                      "execute:ATTACH_GAZEBO"),
+            harness.scenario.events.end());
   EXPECT_EQ(std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
-                      "execute:ATTACH_MOVEIT"), harness.scenario.events.end());
+                      "execute:ATTACH_MOVEIT"),
+            harness.scenario.events.end());
 }
 
 TEST(PureRunnerIntegration, ResumeValidatesCommonAndTransitionBoundaryBeforeAnyAction)
@@ -911,8 +908,7 @@ TEST(PureRunnerIntegration, StopObservationRetriesTransientRobotStateChangesAndK
   // Calls 1-4 cover the initial and successful-action observations through
   // MOVE_ABOVE_OBJECT.  The first stop observation is call 5.
   harness.scenario.fail_observation_call = 5;
-  harness.scenario.observation_failure_code =
-    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
+  harness.scenario.observation_failure_code = "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
   harness.scenario.observation_failure_count = 2;
 
   const auto result =
@@ -933,13 +929,13 @@ TEST(PureRunnerIntegration, PostCancelQuiescenceFailureRetainsOriginalActionFail
   harness.scenario.execute_failure_metrics = {{"observed_q6", -0.059303}};
   harness.scenario.cancel_makes_arm_nonstationary = true;
 
-  const auto result = harness.runner().run(
-    {RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("ARM_NOT_QUIESCENT_AFTER_CANCEL", result.failure->code);
-  EXPECT_NE(std::string::npos,
-            result.failure->message.find("original failure EXECUTION_INJECTED: injected test failure"));
+  EXPECT_NE(std::string::npos, result.failure->message.find(
+                                 "original failure EXECUTION_INJECTED: injected test failure"));
   const auto original_q6 = result.failure->metrics.find("original_observed_q6");
   ASSERT_NE(result.failure->metrics.end(), original_q6);
   EXPECT_DOUBLE_EQ(-0.059303, original_q6->second);
@@ -950,25 +946,24 @@ TEST(PureRunnerIntegration, RecoveryClassificationFailureRetainsOriginalActionFa
   Harness harness;
   harness.registerAll();
   harness.scenario.fail_transition = State::MOVE_ABOVE_OBJECT;
-  harness.recovery.route_failure =
-    Failure{FailureCategory::WORLD_INCONSISTENCY, "UNSAFE_RECOVERY_OBSERVATION",
-            "recovery classification rejected the stopped world", {}};
+  harness.recovery.route_failure = Failure{FailureCategory::WORLD_INCONSISTENCY,
+                                           "UNSAFE_RECOVERY_OBSERVATION",
+                                           "recovery classification rejected the stopped world",
+                                           {}};
 
   const auto result =
     harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("UNSAFE_RECOVERY_OBSERVATION", result.failure->code);
-  EXPECT_NE(std::string::npos,
-            result.failure->message.find(
-              "original failure POSTCONDITION_INJECTED: injected test failure"));
+  EXPECT_NE(std::string::npos, result.failure->message.find(
+                                 "original failure POSTCONDITION_INJECTED: injected test failure"));
 }
 
 TEST(PureRunnerIntegration, DoesNotObserveOrRecoverBeforeCancelReachesTerminal)
 {
   Harness harness;
-  harness.registerAllExcept(State::PREPARE_OPEN_GRIPPER, std::nullopt, std::nullopt,
-                            std::nullopt);
+  harness.registerAllExcept(State::PREPARE_OPEN_GRIPPER, std::nullopt, std::nullopt, std::nullopt);
   auto blocking = std::make_shared<BlockingCancelExecutor>();
   harness.actions.registerExecutor(State::PREPARE_OPEN_GRIPPER, blocking);
 

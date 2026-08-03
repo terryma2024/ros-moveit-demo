@@ -15,18 +15,24 @@ namespace spp = so101_gazebo_demo::pick_place;
 namespace
 {
 
-const std::vector<std::string> kMotionStates{
-  "MOVE_ABOVE_OBJECT", "DESCEND", "LIFT", "MOVE_ABOVE_PLACE", "DESCEND_TO_PLACE",
-  "RETREAT", "RECOVER_LIFT_TO_SAFE_HEIGHT", "RECOVER_MOVE_ABOVE_PICK",
-  "RECOVER_DESCEND_TO_PICK", "RECOVER_RETREAT"};
+const std::vector<std::string> kMotionStates{"MOVE_ABOVE_OBJECT",
+                                             "DESCEND",
+                                             "LIFT",
+                                             "MOVE_ABOVE_PLACE",
+                                             "DESCEND_TO_PLACE",
+                                             "RETREAT",
+                                             "RECOVER_LIFT_TO_SAFE_HEIGHT",
+                                             "RECOVER_MOVE_ABOVE_PICK",
+                                             "RECOVER_DESCEND_TO_PICK",
+                                             "RECOVER_RETREAT"};
 
 std::string replaceOnce(std::string value, const std::string & from, const std::string & to);
 
 class PolicyFixture
 {
 public:
-  explicit PolicyFixture(const std::string & name)
-  : root(std::filesystem::temp_directory_path() / ("so101_policy_config_" + name))
+  explicit PolicyFixture(const std::string & name) :
+      root(std::filesystem::temp_directory_path() / ("so101_policy_config_" + name))
   {
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
@@ -35,11 +41,23 @@ public:
     write(validationPath(), validValidationYaml());
   }
 
-  ~PolicyFixture() {std::filesystem::remove_all(root);}
+  ~PolicyFixture()
+  {
+    std::filesystem::remove_all(root);
+  }
 
-  [[nodiscard]] std::filesystem::path objectPath() const {return root / "object.yaml";}
-  [[nodiscard]] std::filesystem::path motionPath() const {return root / "motion.yaml";}
-  [[nodiscard]] std::filesystem::path validationPath() const {return root / "validation.yaml";}
+  [[nodiscard]] std::filesystem::path objectPath() const
+  {
+    return root / "object.yaml";
+  }
+  [[nodiscard]] std::filesystem::path motionPath() const
+  {
+    return root / "motion.yaml";
+  }
+  [[nodiscard]] std::filesystem::path validationPath() const
+  {
+    return root / "validation.yaml";
+  }
 
   [[nodiscard]] spp::PolicyPaths paths() const
   {
@@ -116,7 +134,8 @@ gripper_actions:
 states:
 )";
     for (const auto & state : kMotionStates) {
-      if (state == omitted_state) continue;
+      if (state == omitted_state)
+        continue;
       yaml += "  " + state + ":\n";
       yaml += "    logical_start: [0.0, 0.0, 0.0, 0.0, 0.0]\n";
       yaml += "    waypoints:\n";
@@ -202,7 +221,8 @@ std::string replaceOnce(std::string value, const std::string & from, const std::
 {
   const auto position = value.find(from);
   EXPECT_NE(position, std::string::npos) << from;
-  if (position != std::string::npos) value.replace(position, from.size(), to);
+  if (position != std::string::npos)
+    value.replace(position, from.size(), to);
   return value;
 }
 
@@ -250,7 +270,8 @@ TEST(PolicyConfig, LoadsValidBundleWithCanonicalPathsAndContentDigests)
   EXPECT_EQ(result.bundle->object_path, std::filesystem::canonical(fixture.objectPath()));
   EXPECT_EQ(result.bundle->motion_path, std::filesystem::canonical(fixture.motionPath()));
   EXPECT_EQ(result.bundle->validation_path, std::filesystem::canonical(fixture.validationPath()));
-  for (const auto & digest : result.bundle->sha256) EXPECT_EQ(digest.size(), 64U);
+  for (const auto & digest : result.bundle->sha256)
+    EXPECT_EQ(digest.size(), 64U);
   EXPECT_EQ(result.bundle->bundle_sha256.size(), 64U);
 }
 
@@ -280,23 +301,25 @@ TEST(PolicyConfig, RejectsNativePadCalibrationFingerprintMismatchAtRuntimeProfil
 {
   PolicyFixture fixture("native_pad_fingerprint_mismatch");
   PolicyFixture::write(
-    fixture.objectPath(), replaceOnce(PolicyFixture::nativeFingertipPadObjectYaml(),
-                                      "calibration_fingerprint: b101b7db33a13c82797eb80c2356f1c6b509e04bdae7999efd4b6a8ce0d1094f",
-                                      "calibration_fingerprint: wrong-pad-model"));
+    fixture.objectPath(),
+    replaceOnce(
+      PolicyFixture::nativeFingertipPadObjectYaml(),
+      "calibration_fingerprint: b101b7db33a13c82797eb80c2356f1c6b509e04bdae7999efd4b6a8ce0d1094f",
+      "calibration_fingerprint: wrong-pad-model"));
   PolicyFixture::write(fixture.motionPath(), PolicyFixture::nativeFingertipPadMotionYaml());
   PolicyFixture::write(fixture.validationPath(), PolicyFixture::nativeFingertipPadValidationYaml());
   const auto loaded = spp::loadPolicyBundle(fixture.paths());
   ASSERT_TRUE(loaded.bundle) << (loaded.failure ? loaded.failure->code : "");
-  EXPECT_THROW((void)spp::SO101Profile::configured(
-    loaded.bundle->object, loaded.bundle->motion, loaded.bundle->validation), std::invalid_argument);
+  EXPECT_THROW((void)spp::SO101Profile::configured(loaded.bundle->object, loaded.bundle->motion,
+                                                   loaded.bundle->validation),
+               std::invalid_argument);
 }
 
 TEST(PolicyConfig, FingertipPadRejectsStemField)
 {
   PolicyFixture fixture("fingertip_pad_stem");
-  PolicyFixture::write(
-    fixture.objectPath(),
-    PolicyFixture::nativeFingertipPadObjectYaml() + R"(  fixed_stem:
+  PolicyFixture::write(fixture.objectPath(),
+                       PolicyFixture::nativeFingertipPadObjectYaml() + R"(  fixed_stem:
     size_xyz: [0.004, 0.012, 0.038]
     origin_xyz_rpy: [-0.013599999852, 0.0, -0.100000000000, 0.0, 0.0, 0.0]
 )");
@@ -309,10 +332,10 @@ TEST(PolicyConfig, FingertipPadRejectsGraspBelowSafeLower)
 {
   PolicyFixture fixture("fingertip_pad_lower_bound");
   PolicyFixture::write(fixture.objectPath(), PolicyFixture::nativeFingertipPadObjectYaml());
-  PolicyFixture::write(
-    fixture.motionPath(), replaceOnce(PolicyFixture::nativeFingertipPadMotionYaml(),
-                                      "grasp_close_q6: -0.047409691482075",
-                                      "grasp_close_q6: -0.0594"));
+  PolicyFixture::write(fixture.motionPath(),
+                       replaceOnce(PolicyFixture::nativeFingertipPadMotionYaml(),
+                                   "grasp_close_q6: -0.047409691482075",
+                                   "grasp_close_q6: -0.0594"));
   PolicyFixture::write(fixture.validationPath(), PolicyFixture::nativeFingertipPadValidationYaml());
   expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
 }
@@ -323,8 +346,8 @@ TEST(PolicyConfig, ConfiguresRuntimeGripperTargetsAndTolerancesFromYaml)
   const auto result = spp::loadPolicyBundle(fixture.paths());
   ASSERT_TRUE(result.bundle);
 
-  const auto profile = spp::SO101Profile::configured(
-    result.bundle->object, result.bundle->motion, result.bundle->validation);
+  const auto profile = spp::SO101Profile::configured(result.bundle->object, result.bundle->motion,
+                                                     result.bundle->validation);
 
   EXPECT_DOUBLE_EQ(0.465038, profile.q6_preopen);
   EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_close);
@@ -343,8 +366,8 @@ TEST(PolicyConfig, ConfiguresAttachmentRelativePoseFromObjectYaml)
   PolicyFixture fixture("attachment_pose");
   const auto result = spp::loadPolicyBundle(fixture.paths());
   ASSERT_TRUE(result.bundle) << (result.failure ? result.failure->code : "");
-  const auto profile = spp::SO101Profile::configured(
-    result.bundle->object, result.bundle->motion, result.bundle->validation);
+  const auto profile = spp::SO101Profile::configured(result.bundle->object, result.bundle->motion,
+                                                     result.bundle->validation);
 
   EXPECT_DOUBLE_EQ(0.047, profile.calibrated_grasp_relative_pose.x);
   EXPECT_DOUBLE_EQ(0.002, profile.calibrated_grasp_relative_pose.y);
@@ -372,11 +395,10 @@ TEST(PolicyConfig, RejectsUnsupportedAdapterMaterialOrContactModel)
   for (const auto & [name, from, to] :
        std::vector<std::tuple<std::string, std::string, std::string>>{
          {"material", "material: TPU_95A", "material: silicone"},
-         {"model", "contact_model: rigid_link_local_mesh",
-          "contact_model: fake_soft_body"}}) {
+         {"model", "contact_model: rigid_link_local_mesh", "contact_model: fake_soft_body"}}) {
     PolicyFixture fixture("adapter_" + name);
-    PolicyFixture::write(
-      fixture.objectPath(), replaceOnce(PolicyFixture::validObjectYaml(), from, to));
+    PolicyFixture::write(fixture.objectPath(),
+                         replaceOnce(PolicyFixture::validObjectYaml(), from, to));
     expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
   }
 }
@@ -388,8 +410,8 @@ TEST(PolicyConfig, RejectsNonpositiveAdapterGapOrFriction)
          {"gap", "safe_gap_m: 0.001", "safe_gap_m: 0.0"},
          {"friction", "friction_coefficient: 1.2", "friction_coefficient: 0.0"}}) {
     PolicyFixture fixture("adapter_" + name);
-    PolicyFixture::write(
-      fixture.objectPath(), replaceOnce(PolicyFixture::validObjectYaml(), from, to));
+    PolicyFixture::write(fixture.objectPath(),
+                         replaceOnce(PolicyFixture::validObjectYaml(), from, to));
     expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
   }
 }
@@ -397,9 +419,8 @@ TEST(PolicyConfig, RejectsNonpositiveAdapterGapOrFriction)
 TEST(PolicyConfig, RejectsUnsupportedSchemaVersion)
 {
   PolicyFixture fixture("schema");
-  PolicyFixture::write(
-    fixture.motionPath(), replaceOnce(PolicyFixture::validMotionYaml(), "schema_version: 1",
-                                      "schema_version: 2"));
+  PolicyFixture::write(fixture.motionPath(), replaceOnce(PolicyFixture::validMotionYaml(),
+                                                         "schema_version: 1", "schema_version: 2"));
   expectFailure(fixture.paths(), "POLICY_SCHEMA_UNSUPPORTED");
 }
 
@@ -408,9 +429,8 @@ TEST(PolicyConfig, RejectsNonFiniteNumbers)
   for (const auto & [name, value] :
        std::vector<std::pair<std::string, std::string>>{{"nan", ".nan"}, {"inf", ".inf"}}) {
     PolicyFixture fixture("non_finite_" + name);
-    PolicyFixture::write(
-      fixture.objectPath(), replaceOnce(PolicyFixture::validObjectYaml(), "mass_kg: 0.020",
-                                        "mass_kg: " + value));
+    PolicyFixture::write(fixture.objectPath(), replaceOnce(PolicyFixture::validObjectYaml(),
+                                                           "mass_kg: 0.020", "mass_kg: " + value));
     expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
   }
 }
@@ -418,21 +438,19 @@ TEST(PolicyConfig, RejectsNonFiniteNumbers)
 TEST(PolicyConfig, RejectsPoseWithWrongElementCount)
 {
   PolicyFixture fixture("pose_shape");
-  PolicyFixture::write(
-    fixture.objectPath(),
-    replaceOnce(PolicyFixture::validObjectYaml(),
-                "[0.020, -0.280, 0.165, 0.0, 0.0, 0.0, 1.0]",
-                "[0.020, -0.280, 0.165, 0.0, 0.0, 1.0]"));
+  PolicyFixture::write(fixture.objectPath(),
+                       replaceOnce(PolicyFixture::validObjectYaml(),
+                                   "[0.020, -0.280, 0.165, 0.0, 0.0, 0.0, 1.0]",
+                                   "[0.020, -0.280, 0.165, 0.0, 0.0, 1.0]"));
   expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
 }
 
 TEST(PolicyConfig, RejectsJointWaypointWithWrongElementCount)
 {
   PolicyFixture fixture("waypoint_shape");
-  PolicyFixture::write(
-    fixture.motionPath(), replaceOnce(PolicyFixture::validMotionYaml(),
-                                      "[0.1, 0.2, 0.3, 0.4, 0.5]",
-                                      "[0.1, 0.2, 0.3, 0.4]"));
+  PolicyFixture::write(fixture.motionPath(),
+                       replaceOnce(PolicyFixture::validMotionYaml(), "[0.1, 0.2, 0.3, 0.4, 0.5]",
+                                   "[0.1, 0.2, 0.3, 0.4]"));
   expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
 }
 
@@ -446,18 +464,17 @@ TEST(PolicyConfig, RejectsMissingRequiredMotionState)
 TEST(PolicyConfig, RejectsObjectIdMismatch)
 {
   PolicyFixture fixture("mismatched_object");
-  PolicyFixture::write(
-    fixture.motionPath(), replaceOnce(PolicyFixture::validMotionYaml(),
-                                      "object_id: plastic_cup", "object_id: other_object"));
+  PolicyFixture::write(fixture.motionPath(),
+                       replaceOnce(PolicyFixture::validMotionYaml(), "object_id: plastic_cup",
+                                   "object_id: other_object"));
   expectFailure(fixture.paths(), "POLICY_ID_MISMATCH");
 }
 
 TEST(PolicyConfig, RejectsValidationPolicyIdMismatch)
 {
   PolicyFixture fixture("mismatched_policy");
-  PolicyFixture::write(
-    fixture.validationPath(), replaceOnce(PolicyFixture::validValidationYaml(),
-                                          "policy_id: light_cup_wall_pick",
-                                          "policy_id: another_policy"));
+  PolicyFixture::write(fixture.validationPath(),
+                       replaceOnce(PolicyFixture::validValidationYaml(),
+                                   "policy_id: light_cup_wall_pick", "policy_id: another_policy"));
   expectFailure(fixture.paths(), "POLICY_ID_MISMATCH");
 }
