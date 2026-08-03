@@ -11,6 +11,7 @@ model:
 scene:
   spawn_pose_xyz_xyzw: [0.020, -0.280, 0.165, 0.0, 0.0, 0.0, 1.0]
   place_pose_xyz_xyzw: [-0.080, -0.250, 0.165, 0.0, 0.0, 0.0, 1.0]
+  reset_parking_pose_xyz_xyzw: [0.190, -0.440, 0.165, 0.0, 0.0, 0.0, 1.0]
 grasp_frame:
   near_wall_outward_world: [0.0, 1.0, 0.0]
   fixed_finger_side: outside

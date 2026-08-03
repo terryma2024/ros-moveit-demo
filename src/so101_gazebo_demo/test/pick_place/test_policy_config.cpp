@@ -86,6 +86,7 @@ model:
 scene:
   spawn_pose_xyz_xyzw: [0.020, -0.280, 0.165, 0.0, 0.0, 0.0, 1.0]
   place_pose_xyz_xyzw: [-0.080, -0.250, 0.165, 0.0, 0.0, 0.0, 1.0]
+  reset_parking_pose_xyz_xyzw: [0.190, -0.440, 0.165, 0.0, 0.0, 0.0, 1.0]
 grasp_frame:
   near_wall_outward_world: [0.0, 1.0, 0.0]
   fixed_finger_side: outside
@@ -374,6 +375,31 @@ TEST(PolicyConfig, ConfiguresAttachmentRelativePoseFromObjectYaml)
   EXPECT_DOUBLE_EQ(-0.154, profile.calibrated_grasp_relative_pose.z);
   EXPECT_DOUBLE_EQ(0.72, profile.calibrated_grasp_relative_pose.qz);
   EXPECT_DOUBLE_EQ(0.69, profile.calibrated_grasp_relative_pose.qw);
+}
+
+TEST(PolicyConfig, ConfiguresResetParkingPoseFromObjectYaml)
+{
+  PolicyFixture fixture("reset_parking_pose");
+  const auto result = spp::loadPolicyBundle(fixture.paths());
+  ASSERT_TRUE(result.bundle) << (result.failure ? result.failure->code : "");
+  const auto profile = spp::SO101Profile::configured(result.bundle->object, result.bundle->motion,
+                                                     result.bundle->validation);
+
+  EXPECT_DOUBLE_EQ(0.190, profile.reset_parking_task_object_pose.x);
+  EXPECT_DOUBLE_EQ(-0.440, profile.reset_parking_task_object_pose.y);
+  EXPECT_DOUBLE_EQ(0.165, profile.reset_parking_task_object_pose.z);
+  EXPECT_DOUBLE_EQ(1.0, profile.reset_parking_task_object_pose.qw);
+}
+
+TEST(PolicyConfig, RejectsMissingResetParkingPose)
+{
+  PolicyFixture fixture("missing_reset_parking_pose");
+  PolicyFixture::write(
+    fixture.objectPath(),
+    replaceOnce(PolicyFixture::validObjectYaml(),
+                "  reset_parking_pose_xyz_xyzw: [0.190, -0.440, 0.165, 0.0, 0.0, 0.0, 1.0]\n", ""));
+
+  expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
 }
 
 TEST(PolicyConfig, RejectsMissingFile)

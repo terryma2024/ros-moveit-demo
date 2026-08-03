@@ -52,10 +52,12 @@ public:
   ActionResult setTaskObjectWorldPose(const Pose3d & pose) override
   {
     ++set_pose_calls;
+    pose_commands.push_back(pose);
     commands.emplace_back("gazebo_pose");
     if (events)
       events->emplace_back("gazebo_pose");
-    if (set_pose_result.status == ActionStatus::SUCCEEDED && pose_converges) {
+    if (set_pose_result.status == ActionStatus::SUCCEEDED && pose_converges &&
+        set_pose_calls != fail_pose_call) {
       state.task_object_world_pose = pose;
       ++state.pose_revision;
     }
@@ -66,11 +68,13 @@ public:
   bool observation_available{true};
   bool detach_converges{true};
   bool pose_converges{true};
+  int fail_pose_call{0};
   ActionResult detach_result{succeeded()};
   ActionResult set_pose_result{succeeded()};
   int observe_calls{0};
   int detach_calls{0};
   int set_pose_calls{0};
+  std::vector<Pose3d> pose_commands;
   std::vector<std::string> commands;
   std::shared_ptr<std::vector<std::string>> events;
 };
@@ -101,6 +105,7 @@ public:
   ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
     ++task_object_upsert_calls;
+    task_object_pose_commands.push_back(pose);
     commands.emplace_back("moveit_task_object");
     if (events)
       events->emplace_back("moveit_task_object");
@@ -157,6 +162,7 @@ public:
   int task_object_upsert_calls{0};
   int table_upsert_calls{0};
   int pedestal_upsert_calls{0};
+  std::vector<Pose3d> task_object_pose_commands;
   std::vector<std::string> commands;
   std::shared_ptr<std::vector<std::string>> events;
 };
@@ -188,6 +194,10 @@ public:
   {
     ++plan_calls;
     last_arm_goal = goal;
+    if (gazebo)
+      gazebo_pose_at_plan = gazebo->state.task_object_world_pose;
+    if (moveit)
+      moveit_pose_at_plan = moveit->state.task_object_world_pose;
     if (events)
       events->emplace_back("plan_arm_home");
     return {plan_result, plan_result.status == ActionStatus::SUCCEEDED ? plan : nullptr};
@@ -208,6 +218,9 @@ public:
   }
   ActionResult cancelArmAndWait() override
   {
+    ++cancel_calls;
+    if (events)
+      events->emplace_back("cancel");
     return succeeded();
   }
 
@@ -229,8 +242,13 @@ public:
   int gripper_calls{0};
   int plan_calls{0};
   int execute_calls{0};
+  int cancel_calls{0};
   std::vector<double> gripper_targets;
   std::vector<double> last_arm_goal;
+  std::shared_ptr<FakeGazeboResetAdapter> gazebo;
+  std::shared_ptr<FakeMoveItSceneAdapter> moveit;
+  std::optional<Pose3d> gazebo_pose_at_plan;
+  std::optional<Pose3d> moveit_pose_at_plan;
   std::shared_ptr<std::vector<std::string>> events;
 };
 
@@ -251,8 +269,14 @@ std::shared_ptr<FakeRobotHomeResetAdapter> robotAdapter()
 WorldResetConfig canonicalConfig()
 {
   const auto & profile = SO101Profile::canonical();
-  return {
-    profile.table_pose, profile.pedestal_pose, profile.task_object_pose, 0.02, 0.001, 1e-5, 1e-4};
+  return {profile.table_pose,
+          profile.pedestal_pose,
+          profile.task_object_pose,
+          profile.reset_parking_task_object_pose,
+          0.02,
+          0.001,
+          1e-5,
+          1e-4};
 }
 
 void seed(const std::shared_ptr<FakeGazeboResetAdapter> & gazebo,
@@ -269,6 +293,17 @@ void seed(const std::shared_ptr<FakeGazeboResetAdapter> & gazebo,
     moveit->state.attached_link = "gripper";
     moveit->state.touch_links = {"gripper", "jaw"};
   }
+}
+
+void expectPose(const Pose3d & actual, const Pose3d & expected)
+{
+  EXPECT_DOUBLE_EQ(expected.x, actual.x);
+  EXPECT_DOUBLE_EQ(expected.y, actual.y);
+  EXPECT_DOUBLE_EQ(expected.z, actual.z);
+  EXPECT_DOUBLE_EQ(expected.qx, actual.qx);
+  EXPECT_DOUBLE_EQ(expected.qy, actual.qy);
+  EXPECT_DOUBLE_EQ(expected.qz, actual.qz);
+  EXPECT_DOUBLE_EQ(expected.qw, actual.qw);
 }
 
 TEST(SO101WorldResetCoordinator, FourInitialStatesUseOnlyNecessaryDetachCalls)
@@ -290,10 +325,10 @@ TEST(SO101WorldResetCoordinator, FourInitialStatesUseOnlyNecessaryDetachCalls)
     EXPECT_EQ(ActionStatus::SUCCEEDED, result.status);
     EXPECT_EQ(expected_gazebo_detach, gazebo->detach_calls);
     EXPECT_EQ(expected_moveit_detach, moveit->detach_calls);
-    EXPECT_EQ(1, gazebo->set_pose_calls);
+    EXPECT_EQ(2, gazebo->set_pose_calls);
     EXPECT_EQ(1, moveit->table_upsert_calls);
     EXPECT_EQ(1, moveit->pedestal_upsert_calls);
-    EXPECT_EQ(1, moveit->task_object_upsert_calls);
+    EXPECT_EQ(2, moveit->task_object_upsert_calls);
     EXPECT_FALSE(gazebo->state.task_object_attached);
     EXPECT_FALSE(moveit->state.task_object_attached);
     EXPECT_TRUE(moveit->state.task_object_in_world);
@@ -312,10 +347,10 @@ TEST(SO101WorldResetCoordinator, RepeatedResetDoesNotIssueHistoricalDetachCalls)
 
   EXPECT_EQ(1, gazebo->detach_calls);
   EXPECT_EQ(1, moveit->detach_calls);
-  EXPECT_EQ(2, gazebo->set_pose_calls);
+  EXPECT_EQ(4, gazebo->set_pose_calls);
   EXPECT_EQ(2, moveit->table_upsert_calls);
   EXPECT_EQ(2, moveit->pedestal_upsert_calls);
-  EXPECT_EQ(2, moveit->task_object_upsert_calls);
+  EXPECT_EQ(4, moveit->task_object_upsert_calls);
 }
 
 TEST(SO101WorldResetCoordinator, StopsAfterGazeboDetachCommandFailure)
@@ -354,12 +389,12 @@ TEST(SO101WorldResetCoordinator, ApiSuccessWithoutDetachConvergenceTimesOut)
   EXPECT_EQ(0, gazebo->set_pose_calls);
 }
 
-TEST(SO101WorldResetCoordinator, RejectsWrongFinalOrientationAfterSuccessfulCommands)
+TEST(SO101WorldResetCoordinator, RejectsCanonicalRestoreMismatchAfterSuccessfulCommands)
 {
   auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
   auto moveit = std::make_shared<FakeMoveItSceneAdapter>();
   seed(gazebo, moveit, false, false);
-  gazebo->pose_converges = false;
+  gazebo->fail_pose_call = 2;
   auto config = canonicalConfig();
   config.timeout_seconds = 0.004;
   WorldResetCoordinator resetter(gazebo, moveit, robotAdapter(), config);
@@ -368,7 +403,7 @@ TEST(SO101WorldResetCoordinator, RejectsWrongFinalOrientationAfterSuccessfulComm
 
   EXPECT_EQ(ActionStatus::TIMED_OUT, result.status);
   ASSERT_TRUE(result.failure);
-  EXPECT_EQ("WORLD_RESET_CONVERGENCE_TIMEOUT", result.failure->code);
+  EXPECT_EQ("WORLD_RESET_CANONICAL_RESTORE_TIMEOUT", result.failure->code);
 }
 
 TEST(SO101WorldResetCoordinator, MissingInitialObservationFailsBeforeCommands)
@@ -411,7 +446,7 @@ TEST(SO101WorldResetCoordinator, RequiresRobotHomeAdapterBeforeAnyCommand)
   EXPECT_EQ(0, moveit->detach_calls);
 }
 
-TEST(SO101WorldResetCoordinator, UsesReleaseArmHomeWorldSyncThenFinalGripperHomeOrder)
+TEST(SO101WorldResetCoordinator, ParksBothWorldLayersBeforeArmHomeThenRestoresCanonical)
 {
   auto events = std::make_shared<std::vector<std::string>>();
   auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
@@ -420,6 +455,8 @@ TEST(SO101WorldResetCoordinator, UsesReleaseArmHomeWorldSyncThenFinalGripperHome
   gazebo->events = events;
   moveit->events = events;
   robot->events = events;
+  robot->gazebo = gazebo;
+  robot->moveit = moveit;
   seed(gazebo, moveit, false, false);
   WorldResetCoordinator resetter(gazebo, moveit, robot, canonicalConfig());
 
@@ -431,11 +468,23 @@ TEST(SO101WorldResetCoordinator, UsesReleaseArmHomeWorldSyncThenFinalGripperHome
     if (event != "observe_joints")
       commands.push_back(event);
   }
-  EXPECT_EQ((std::vector<std::string>{"gripper:1.700000", "plan_arm_home", "execute_arm_home",
-                                      "gazebo_pose", "moveit_table", "moveit_pedestal",
-                                      "moveit_task_object", "gripper:-0.059304"}),
+  EXPECT_EQ((std::vector<std::string>{"cancel", "gazebo_pose", "moveit_table", "moveit_pedestal",
+                                      "moveit_task_object", "gripper:1.700000", "plan_arm_home",
+                                      "execute_arm_home", "gazebo_pose", "moveit_task_object",
+                                      "gripper:-0.059304"}),
             commands);
   EXPECT_EQ((std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0}), robot->last_arm_goal);
+  const Pose3d parking{0.190, -0.440, 0.165, 0.0, 0.0, 0.0, 1.0};
+  ASSERT_TRUE(robot->gazebo_pose_at_plan);
+  ASSERT_TRUE(robot->moveit_pose_at_plan);
+  expectPose(*robot->gazebo_pose_at_plan, parking);
+  expectPose(*robot->moveit_pose_at_plan, parking);
+  ASSERT_EQ(2U, gazebo->pose_commands.size());
+  ASSERT_EQ(2U, moveit->task_object_pose_commands.size());
+  expectPose(gazebo->pose_commands.front(), parking);
+  expectPose(moveit->task_object_pose_commands.front(), parking);
+  expectPose(gazebo->pose_commands.back(), SO101Profile::canonical().task_object_pose);
+  expectPose(moveit->task_object_pose_commands.back(), SO101Profile::canonical().task_object_pose);
 }
 
 TEST(SO101WorldResetCoordinator, MissingInitialJointEvidenceFailsBeforeCommands)
@@ -457,7 +506,7 @@ TEST(SO101WorldResetCoordinator, MissingInitialJointEvidenceFailsBeforeCommands)
   EXPECT_EQ(0, robot->gripper_calls);
 }
 
-TEST(SO101WorldResetCoordinator, FailedArmPlanNeverExecutesOrResetsWorld)
+TEST(SO101WorldResetCoordinator, FailedArmPlanLeavesObjectParkedAndNeverRestoresCanonical)
 {
   auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
   auto moveit = std::make_shared<FakeMoveItSceneAdapter>();
@@ -472,8 +521,33 @@ TEST(SO101WorldResetCoordinator, FailedArmPlanNeverExecutesOrResetsWorld)
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("ARM_HOME_PLAN_FAILED", result.failure->code);
   EXPECT_EQ(0, robot->execute_calls);
-  EXPECT_EQ(0, gazebo->set_pose_calls);
-  EXPECT_EQ(0, moveit->task_object_upsert_calls);
+  ASSERT_EQ(1, gazebo->set_pose_calls);
+  ASSERT_EQ(1, moveit->task_object_upsert_calls);
+  const Pose3d parking{0.190, -0.440, 0.165, 0.0, 0.0, 0.0, 1.0};
+  expectPose(gazebo->state.task_object_world_pose, parking);
+  ASSERT_TRUE(moveit->state.task_object_world_pose);
+  expectPose(*moveit->state.task_object_world_pose, parking);
+}
+
+TEST(SO101WorldResetCoordinator, ParkingConvergenceFailureStopsBeforeGripperAndHome)
+{
+  auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
+  auto moveit = std::make_shared<FakeMoveItSceneAdapter>();
+  auto robot = robotAdapter();
+  seed(gazebo, moveit, false, false);
+  gazebo->pose_converges = false;
+  auto config = canonicalConfig();
+  config.timeout_seconds = 0.004;
+  WorldResetCoordinator resetter(gazebo, moveit, robot, config);
+
+  const auto result = resetter.reset();
+
+  EXPECT_EQ(ActionStatus::TIMED_OUT, result.status);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("WORLD_RESET_PARKING_CONVERGENCE_TIMEOUT", result.failure->code);
+  EXPECT_EQ(0, robot->gripper_calls);
+  EXPECT_EQ(0, robot->plan_calls);
+  EXPECT_EQ(0, robot->execute_calls);
 }
 
 TEST(SO101WorldResetCoordinator, FinalGripperMismatchReportsExpectedAndActualQ6)

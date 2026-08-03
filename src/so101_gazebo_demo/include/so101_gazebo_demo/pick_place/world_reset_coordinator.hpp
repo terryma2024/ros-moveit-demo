@@ -44,6 +44,7 @@ struct WorldResetConfig
   Pose3d table_pose;
   Pose3d pedestal_pose;
   Pose3d task_object_pose;
+  Pose3d reset_parking_task_object_pose;
   double timeout_seconds{2.0};
   double poll_interval_seconds{0.05};
   double position_tolerance{0.002};

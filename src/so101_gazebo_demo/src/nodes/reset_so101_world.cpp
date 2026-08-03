@@ -1,9 +1,11 @@
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "so101_gazebo_demo/pick_place/gazebo_reset_adapter.hpp"
@@ -11,6 +13,7 @@
 #include "so101_gazebo_demo/pick_place/moveit_joint_planning_boundary.hpp"
 #include "so101_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
 #include "so101_gazebo_demo/pick_place/node_spinner.hpp"
+#include "so101_gazebo_demo/pick_place/policy_config.hpp"
 #include "so101_gazebo_demo/pick_place/robot_home_reset_adapter.hpp"
 #include "so101_gazebo_demo/pick_place/so101_profile.hpp"
 #include "so101_gazebo_demo/pick_place/world_reset_coordinator.hpp"
@@ -29,7 +32,29 @@ int main(int argc, char * argv[])
   node_options.parameter_overrides({rclcpp::Parameter("use_sim_time", true)});
   auto node = std::make_shared<rclcpp::Node>("reset_so101_world", node_options);
   pick_place::NodeSpinner spinner(node);
-  const auto & profile = pick_place::SO101Profile::canonical();
+  const std::filesystem::path share =
+    ament_index_cpp::get_package_share_directory("so101_gazebo_demo");
+  const pick_place::PolicyPaths policy_paths{
+    node->declare_parameter<std::string>(
+      "object_config", (share / "config/task_objects/light_plastic_cup.yaml").string()),
+    node->declare_parameter<std::string>(
+      "motion_policy", (share / "config/motion_policies/light_cup_wall_pick.yaml").string()),
+    node->declare_parameter<std::string>(
+      "validation_policy",
+      (share / "config/validation_policies/light_cup_wall_pick.yaml").string())};
+  const auto loaded = pick_place::loadPolicyBundle(policy_paths);
+  if (!loaded.bundle) {
+    const auto failure =
+      loaded.failure.value_or(pick_place::Failure{pick_place::FailureCategory::CONFIGURATION,
+                                                  "POLICY_INVALID_VALUE",
+                                                  "reset policy loading failed without evidence",
+                                                  {}});
+    RCLCPP_ERROR(node->get_logger(), "%s", pick_place::formatFailure(failure).c_str());
+    rclcpp::shutdown();
+    return EXIT_FAILURE;
+  }
+  const auto profile = pick_place::SO101Profile::configured(
+    loaded.bundle->object, loaded.bundle->motion, loaded.bundle->validation);
   const auto timeout_seconds = node->declare_parameter<double>("timeout_seconds", 10.0);
   const auto poll_interval_seconds = node->declare_parameter<double>("poll_interval_seconds", 0.05);
   const auto gazebo_observation_timeout_seconds =
@@ -80,6 +105,7 @@ int main(int argc, char * argv[])
     pick_place::WorldResetConfig config{profile.table_pose,
                                         profile.pedestal_pose,
                                         profile.task_object_pose,
+                                        profile.reset_parking_task_object_pose,
                                         timeout_seconds,
                                         poll_interval_seconds,
                                         0.002,

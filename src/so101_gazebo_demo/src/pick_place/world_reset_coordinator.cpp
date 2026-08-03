@@ -158,7 +158,8 @@ ActionResult WorldResetCoordinator::reset()
       !std::isfinite(config_.joint_velocity_tolerance) ||
       config_.arm_joint_position_tolerance < 0.0 || config_.gripper_position_tolerance < 0.0 ||
       config_.joint_velocity_tolerance < 0.0 || !validPose(config_.table_pose) ||
-      !validPose(config_.pedestal_pose) || !validPose(config_.task_object_pose)) {
+      !validPose(config_.pedestal_pose) || !validPose(config_.task_object_pose) ||
+      !validPose(config_.reset_parking_task_object_pose)) {
     return resetFailure(ActionStatus::FAILED, "WORLD_RESET_CONFIG_INVALID",
                         "Reset timing, tolerances, and canonical poses must be valid");
   }
@@ -180,6 +181,10 @@ ActionResult WorldResetCoordinator::reset()
     return resetFailure(ActionStatus::FAILED, "WORLD_RESET_INITIAL_JOINT_OBSERVATION_FAILED",
                         "Complete finite arm and gripper joint evidence is required before reset");
   }
+
+  auto command = robot_->cancelArmAndWait();
+  if (command.status != ActionStatus::SUCCEEDED)
+    return command;
 
   if (gazebo_state->task_object_attached) {
     auto command = gazebo_->detachTaskObject();
@@ -210,7 +215,51 @@ ActionResult WorldResetCoordinator::reset()
     }
   }
 
-  auto command = robot_->commandGripper(config_.q6_release_position);
+  gazebo_state = gazebo_->observe();
+  if (!gazebo_state) {
+    return resetFailure(ActionStatus::FAILED, "WORLD_RESET_GAZEBO_OBSERVATION_FAILED",
+                        "Gazebo facts became unavailable before parking");
+  }
+  const auto parking_pose_revision_before = gazebo_state->pose_revision;
+  command = gazebo_->setTaskObjectWorldPose(config_.reset_parking_task_object_pose);
+  if (command.status != ActionStatus::SUCCEEDED)
+    return command;
+  command = moveit_->upsertTableWorldPose(config_.table_pose);
+  if (command.status != ActionStatus::SUCCEEDED)
+    return command;
+  command = moveit_->upsertPedestalWorldPose(config_.pedestal_pose);
+  if (command.status != ActionStatus::SUCCEEDED)
+    return command;
+  command = moveit_->upsertTaskObjectWorldPose(config_.reset_parking_task_object_pose);
+  if (command.status != ActionStatus::SUCCEEDED)
+    return command;
+
+  if (!pollUntil(config_.timeout_seconds, config_.poll_interval_seconds,
+                 [this, parking_pose_revision_before]() {
+                   const auto gazebo = gazebo_->observe();
+                   const auto moveit = moveit_->observe();
+                   return gazebo && moveit && !gazebo->task_object_attached &&
+                          gazebo->pose_revision > parking_pose_revision_before &&
+                          poseMatches(gazebo->task_object_world_pose,
+                                      config_.reset_parking_task_object_pose, config_) &&
+                          !moveit->task_object_attached && moveit->task_object_in_world &&
+                          moveit->attached_link.empty() && moveit->touch_links.empty() &&
+                          moveit->task_object_world_pose &&
+                          poseMatches(*moveit->task_object_world_pose,
+                                      config_.reset_parking_task_object_pose, config_) &&
+                          moveit->table_in_world && moveit->table_world_pose &&
+                          poseMatches(*moveit->table_world_pose, config_.table_pose, config_) &&
+                          moveit->pedestal_in_world && moveit->pedestal_world_pose &&
+                          poseMatches(*moveit->pedestal_world_pose, config_.pedestal_pose,
+                                      config_) &&
+                          poseMatches(gazebo->task_object_world_pose,
+                                      *moveit->task_object_world_pose, config_);
+                 })) {
+    return resetFailure(ActionStatus::TIMED_OUT, "WORLD_RESET_PARKING_CONVERGENCE_TIMEOUT",
+                        "Gazebo and MoveIt did not converge to detached parking 6D facts");
+  }
+
+  command = robot_->commandGripper(config_.q6_release_position);
   if (command.status != ActionStatus::SUCCEEDED)
     return command;
   std::optional<CurrentJointStateEvidence> latest_joints;
@@ -265,14 +314,6 @@ ActionResult WorldResetCoordinator::reset()
   if (command.status != ActionStatus::SUCCEEDED) {
     return command;
   }
-  command = moveit_->upsertTableWorldPose(config_.table_pose);
-  if (command.status != ActionStatus::SUCCEEDED) {
-    return command;
-  }
-  command = moveit_->upsertPedestalWorldPose(config_.pedestal_pose);
-  if (command.status != ActionStatus::SUCCEEDED) {
-    return command;
-  }
   command = moveit_->upsertTaskObjectWorldPose(config_.task_object_pose);
   if (command.status != ActionStatus::SUCCEEDED) {
     return command;
@@ -296,7 +337,7 @@ ActionResult WorldResetCoordinator::reset()
                  poseMatches(gazebo->task_object_world_pose, *moveit->task_object_world_pose,
                              config_);
         })) {
-    return resetFailure(ActionStatus::TIMED_OUT, "WORLD_RESET_CONVERGENCE_TIMEOUT",
+    return resetFailure(ActionStatus::TIMED_OUT, "WORLD_RESET_CANONICAL_RESTORE_TIMEOUT",
                         "Gazebo and MoveIt did not converge to detached canonical 6D facts");
   }
 
