@@ -33,7 +33,8 @@ class SO101GripperStateExecutor final : public IStateExecutor
 public:
   SO101GripperStateExecutor(std::shared_ptr<ISO101GripperCommand> command,
                             SO101GripperStateConfig config,
-                            SO101Profile profile = SO101Profile::canonical());
+                            SO101Profile profile = SO101Profile::canonical(),
+                            std::shared_ptr<IWorldObserver> observer = {});
 
   [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
   [[nodiscard]] ActionResult cancel() override;
@@ -42,6 +43,7 @@ private:
   std::shared_ptr<ISO101GripperCommand> command_;
   SO101GripperStateConfig config_;
   SO101Profile profile_;
+  std::shared_ptr<IWorldObserver> observer_;
 };
 
 using SO101Contract = TransitionContractRegistry::ITransitionContract;

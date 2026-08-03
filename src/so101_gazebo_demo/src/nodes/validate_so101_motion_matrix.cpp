@@ -252,9 +252,11 @@ public:
     const std::vector<std::string> & names, const std::vector<double> & start,
     const std::vector<double> & goal, const std::set<std::string> & allowed,
     const std::optional<spp::TemporalContactPolicy> & temporal,
-    double gripper_position) override
+    double gripper_position, double velocity_scaling,
+    double acceleration_scaling) override
   {
-    return real_->planSegment(names, start, goal, allowed, temporal, gripper_position);
+    return real_->planSegment(names, start, goal, allowed, temporal, gripper_position,
+                              velocity_scaling, acceleration_scaling);
   }
   std::optional<spp::RobotStateEvidence> evaluate(
     const std::vector<std::string> & names, const std::vector<double> & positions,

@@ -182,7 +182,7 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       auto gripper_client =
         std::make_shared<spp::RosTrajectoryActionClient>(node, profile.gripper_action);
       auto gripper = std::make_shared<spp::FollowJointTrajectoryGripperAdapter>(
-        gripper_client, 1.0, 8.0);
+        gripper_client, 1.0, 8.0, profile.q6_contact);
       auto scene = std::make_shared<spp::MoveItSceneAdapter>(
         node, profile.planning_group,
         spp::MoveItSceneGeometry{profile.world_frame, profile.table_object,

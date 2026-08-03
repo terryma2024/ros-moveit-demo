@@ -41,6 +41,7 @@ from gz.msgs10.pose_v_pb2 import Pose_V
 from gz.msgs10.stringmsg_pb2 import StringMsg
 
 from .api import create_app, validate_bind_address
+from .camera import CameraController
 from .control import CommandCoordinator, CommandIdReused, PlanRejected, PlanStore
 from .models import (CommandResult, JointPlanRequest, JointSample, PlanSummary,
                      Pose6D, ServerMode, TcpPlanRequest, TelemetrySnapshot)
@@ -309,11 +310,17 @@ class RosTelemetryWorker:
             raise RuntimeError("READINESS_JOINTS_MISSING")
         return {name: sample.position_rad for name, sample in snapshot.joints.items()}
 
-    def plan_joints(self, target: dict[str, float]) -> StoredTrajectory:
+    def plan_joints(
+        self,
+        target: dict[str, float],
+        velocity_scaling_factor: float = 0.10,
+        acceleration_scaling_factor: float = 0.10,
+    ) -> StoredTrajectory:
         start = self._current_positions(); arm = {str(i): float(target[str(i)]) for i in range(1, 6)}
         request = GetMotionPlan.Request(); motion = request.motion_plan_request
         motion.group_name = "arm"; motion.allowed_planning_time = 3.0; motion.num_planning_attempts = 1
-        motion.max_velocity_scaling_factor = 0.10; motion.max_acceleration_scaling_factor = 0.10
+        motion.max_velocity_scaling_factor = velocity_scaling_factor
+        motion.max_acceleration_scaling_factor = acceleration_scaling_factor
         motion.start_state.joint_state.name = [str(i) for i in range(1, 6)]
         motion.start_state.joint_state.position = [start[str(i)] for i in range(1, 6)]
         goal = Constraints(); goal.joint_constraints = [JointConstraint(joint_name=name, position=value,
@@ -495,8 +502,9 @@ class RosTelemetryWorker:
 
 
 class TeleopService:
-    def __init__(self, worker: RosTelemetryWorker) -> None:
+    def __init__(self, worker: RosTelemetryWorker, camera: CameraController | None = None) -> None:
         self._worker=worker; self._commands=CommandCoordinator(); self._plans=PlanStore(); self._lease: tuple[str,float] | None=None
+        self._camera = camera
         self._parameters=Path(os.environ.get("SO101_TELEOP_PARAMETERS", "/tmp/so101-teleop-parameters.json"))
         self._workflow: dict[str, tuple[Path, str]] = {}
     async def health(self):
@@ -504,6 +512,7 @@ class TeleopService:
             "ros_worker": "rclpy", "moveit_plan_service": "/plan_kinematic_path", "moveit_execute_action": "/execute_trajectory"}
     async def current_snapshot(self): return self._worker.snapshot()
     async def capabilities(self): return {"simulation_only": True, "bind_policy":"loopback_or_tailscale", "workflow_transition_owner":"pick_place_state_machine"}
+    async def camera_presets(self): return {"presets": self._camera.names if self._camera else []}
     async def telemetry_wait(self): await asyncio.sleep(.2)
     def _result(self, body, ok, code, message, **kw): return CommandResult(command_id=body.get("command_id", ""), accepted=ok, succeeded=ok, code=code, message=message, snapshot_revision=self._worker.snapshot().revision, **kw)
     def _lease_ok(self, body) -> bool: return self._lease is not None and self._lease[0] == body.get("lease_id") and self._lease[1] > time.monotonic()
@@ -536,7 +545,17 @@ class TeleopService:
                     lease_id=str(uuid.uuid4()); self._lease=(lease_id,time.monotonic()+30); return self._result(body,True,"OK","lease acquired",layers={"lease_id":lease_id})
                 if name in ("plan_joints", "plan_tcp"):
                     if gate:=self._mutation_gate(body): return gate
-                    if name == "plan_joints": stored=await asyncio.to_thread(self._worker.plan_joints, body.get("target_joints_rad", {}))
+                    if name == "plan_joints":
+                        velocity_scaling = float(body.get("velocity_scaling_factor", 0.10))
+                        acceleration_scaling = float(body.get("acceleration_scaling_factor", 0.10))
+                        if not 0.01 <= velocity_scaling <= 0.10 or not 0.01 <= acceleration_scaling <= 0.10:
+                            raise ValueError("PLAN_SCALING_OUT_OF_RANGE")
+                        stored=await asyncio.to_thread(
+                            self._worker.plan_joints,
+                            body.get("target_joints_rad", {}),
+                            velocity_scaling,
+                            acceleration_scaling,
+                        )
                     else: stored=await asyncio.to_thread(self._worker.plan_tcp, Pose6D(**body["target"]))
                     self._plans.put(stored.summary); return self._result(body,True,"OK","MoveIt plan created",layers={"plan_id":stored.summary.plan_id,"trajectory_points":str(stored.summary.trajectory_points)})
                 if name == "execute":
@@ -563,6 +582,12 @@ class TeleopService:
                 if name == "screenshot":
                     if gate:=self._mutation_gate(body): return gate
                     path=await asyncio.to_thread(self._worker.capture_gazebo); return self._result(body,True,"OK","Gazebo window PNG captured",data={"url":"/captures/"+path.name})
+                if name == "camera_preset":
+                    if gate:=self._mutation_gate(body): return gate
+                    if self._camera is None: return self._result(body,False,"GAZEBO_CAMERA_NOT_CONFIGURED","camera presets are unavailable")
+                    preset = str(body.get("preset", ""))
+                    await asyncio.to_thread(self._camera.apply, preset)
+                    return self._result(body,True,"OK",f"Gazebo camera moved to {preset}",data={"preset":preset})
                 if name == "parameters_save":
                     if gate:=self._mutation_gate(body): return gate
                     payload={"target_joints_rad":body.get("target_joints_rad",{}),"target_tcp":body.get("target_tcp"),"saved_session_id":self._worker.snapshot().simulation_session_id}

@@ -48,7 +48,9 @@ PlanResult SO101MotionPlanner::plan(State state, State next_state,
   JointMotionRequest request{state, next_state, target.joint_names, target.joint_waypoints,
                              target.ladder, isCarryingMotionState(state), {},
                              target.gripper_position,
-                             target.temporal_contact_policy};
+                             target.temporal_contact_policy,
+                             target.velocity_scaling,
+                             target.acceleration_scaling};
   // DESCEND is executed at preopen q6.  Its fixed and moving native-pad
   // envelopes, together with the retained body collisions, must remain
   // collision checked until the non-arm CLOSE_GRIPPER transition.

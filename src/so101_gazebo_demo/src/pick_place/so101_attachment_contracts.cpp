@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <set>
 #include <utility>
 
@@ -113,13 +114,11 @@ void requireAttachments(ValidationResult & result, const WorldSnapshot & snapsho
   }
 }
 
-void requireQ6(ValidationResult & result, const WorldSnapshot & snapshot, bool open,
+void requireQ6(ValidationResult & result, const WorldSnapshot & snapshot,
+               SO101GripperTarget target,
                const SO101Profile & profile)
 {
-  merge(result, validateSO101GripperTarget(
-                  snapshot,
-                  open ? SO101GripperTarget::PREOPEN : SO101GripperTarget::CONTACT,
-                  profile));
+  merge(result, validateSO101GripperTarget(snapshot, target, profile));
 }
 
 void requireBilateralFingerContact(ValidationResult & result,
@@ -291,14 +290,39 @@ void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot &
   result.metrics["task_object_support_before_orientation_error_rad"] = before_orientation;
   result.metrics["task_object_support_after_position_error"] = after_position;
   result.metrics["task_object_support_after_orientation_error_rad"] = after_orientation;
-  if (!std::isfinite(before_position) || !std::isfinite(before_orientation) ||
-      !std::isfinite(after_position) || !std::isfinite(after_orientation) ||
-      before_position > profile.task_object_position_drift_tolerance ||
-      before_orientation > profile.task_object_orientation_drift_tolerance_rad ||
-      after_position > profile.task_object_position_drift_tolerance ||
-      after_orientation > profile.task_object_orientation_drift_tolerance_rad) {
+  const auto place_supported = [&](const Pose3d & pose, const char * phase) {
+    const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
+    const double height_error = std::abs(pose.z - expected.z);
+    const double norm = std::hypot(std::hypot(pose.qx, pose.qy),
+                                   std::hypot(pose.qz, pose.qw));
+    const double local_z_world_z = norm > 1e-12
+      ? 1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm)
+      : std::numeric_limits<double>::quiet_NaN();
+    const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
+    result.metrics[std::string("task_object_support_") + phase + "_xy_error"] = xy_error;
+    result.metrics[std::string("task_object_support_") + phase + "_height_error"] = height_error;
+    result.metrics[std::string("task_object_support_") + phase + "_tilt_error_rad"] = tilt;
+    const bool detaching = key.from == State::DETACH_GAZEBO ||
+      key.from == State::DETACH_MOVEIT;
+    const double xy_tolerance = detaching
+      ? profile.place_detach_xy_tolerance : profile.place_support_xy_tolerance;
+    return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
+           xy_error <= xy_tolerance &&
+           height_error <= profile.place_support_height_tolerance &&
+           tilt <= profile.place_support_tilt_tolerance_rad;
+  };
+  const bool supported = isRecovery(key)
+    ? std::isfinite(before_position) && std::isfinite(before_orientation) &&
+      std::isfinite(after_position) && std::isfinite(after_orientation) &&
+      before_position <= profile.task_object_position_drift_tolerance &&
+      before_orientation <= profile.task_object_orientation_drift_tolerance_rad &&
+      after_position <= profile.task_object_position_drift_tolerance &&
+      after_orientation <= profile.task_object_orientation_drift_tolerance_rad
+    : place_supported(*before.gazebo_task_object_pose_world, "before") &&
+      place_supported(*after.gazebo_task_object_pose_world, "after");
+  if (!supported) {
     add(result, FailureCategory::WORLD_INCONSISTENCY, "TASK_OBJECT_SUPPORT_POSE_MISMATCH",
-        "Detach and sync transitions require TaskObject at the state-specific support pose");
+        "Detach and sync transitions require TaskObject inside the state-specific support envelope");
   }
 }
 
@@ -359,10 +383,11 @@ public:
   {
     ValidationResult result{true, {}, {}};
     requireObserved(result, before, profile_);
-    const bool open = key_.from == State::DETACH_GAZEBO ||
-                      key_.from == State::DETACH_MOVEIT ||
-                      key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_);
-    requireQ6(result, before, open, profile_);
+    const auto gripper_target =
+      key_.from == State::DETACH_GAZEBO || key_.from == State::DETACH_MOVEIT ||
+      key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
+        ? SO101GripperTarget::FULL_OPEN : SO101GripperTarget::CONTACT;
+    requireQ6(result, before, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
       requireExpectedSupportPose(result, before, before, key_, profile_);
     }
@@ -394,12 +419,18 @@ public:
           "The attachment or scene action did not report success");
     }
     requireObserved(result, after, profile_);
-    const bool open = key_.from == State::DETACH_GAZEBO ||
-                      key_.from == State::DETACH_MOVEIT ||
-                      key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_);
-    requireQ6(result, after, open, profile_);
+    const auto gripper_target =
+      key_.from == State::DETACH_GAZEBO || key_.from == State::DETACH_MOVEIT ||
+      key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
+        ? SO101GripperTarget::FULL_OPEN : SO101GripperTarget::CONTACT;
+    requireQ6(result, after, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
-      requireNoTaskObjectJump(result, before, after, profile_);
+      // Removing the physical attachment intentionally lets the cup settle
+      // onto the table.  Bound both endpoints by the place support envelope;
+      // retain the no-jump invariant for recovery and post-release scene sync.
+      if (isRecovery(key_) || key_.from == State::SYNC_WORLD_OBJECT) {
+        requireNoTaskObjectJump(result, before, after, profile_);
+      }
       requireExpectedSupportPose(result, before, after, key_, profile_);
     }
     if (key_.from == State::ATTACH_GAZEBO) {

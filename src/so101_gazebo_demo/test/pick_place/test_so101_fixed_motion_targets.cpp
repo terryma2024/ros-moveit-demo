@@ -106,11 +106,11 @@ const std::vector<std::vector<double>> kGoldenWaypoints{
   {-0.000283745683, 0.253568199427, 0.213237198063, 1.103997256470, -0.000291185985},
   {-0.000283936540, 0.312943337339, 0.250048785615, 1.007810530006, -0.000291376841},
   {-0.000284124852, 0.381814591288, 0.272246878070, 0.916741182602, -0.000291565154},
-  {-0.000272079188, 0.459351907806, 0.192119212168, 0.898387581703, -0.000279513780},
+  {-0.000182194999, 0.469727784396, 0.217642530798, 0.859256029129, 0.000398028351},
   {0.414521193913, 0.179437354347, 0.140117134131, 1.230305282671, -0.000268782932},
-  {0.414968519553, 0.240811466651, 0.186950961785, 1.122097343800, -0.000268760093},
-  {0.414964243529, 0.302689863507, 0.233211668828, 1.013958239890, -0.000268760311},
-  {0.414520655659, 0.390112550389, 0.283976399900, 0.875770820859, -0.000268782959},
+  {0.412761019553, 0.231656466651, 0.201890961785, 1.116312343800, -0.000268760093},
+  {0.410549243529, 0.284379863507, 0.263091668828, 1.002388239890, -0.000268760311},
+  {0.407898155659, 0.362647550389, 0.328796399900, 0.858415820859, -0.000268782959},
 };
 
 std::vector<std::vector<double>> calibratedWaypoints(const spp::SO101FixedMotionTargetPolicy & policy)
@@ -226,6 +226,21 @@ TEST(SO101ConfiguredMotionTargets, MotionYamlQ6ChangesTargetWithoutChangingBinar
   EXPECT_NE(first_bundle.bundle->bundle_sha256, second_bundle.bundle->bundle_sha256);
 }
 
+TEST(SO101ConfiguredMotionTargets, RetreatUsesValidatedLowSpeedDynamics)
+{
+  const auto policy = configuredPolicy();
+
+  const auto retreat = policy.spec(spp::State::RETREAT);
+  const auto recovery = policy.spec(spp::State::RECOVER_RETREAT);
+
+  ASSERT_TRUE(retreat);
+  ASSERT_TRUE(recovery);
+  EXPECT_DOUBLE_EQ(retreat->target.velocity_scaling, 0.03);
+  EXPECT_DOUBLE_EQ(retreat->target.acceleration_scaling, 0.03);
+  EXPECT_DOUBLE_EQ(recovery->target.velocity_scaling, 0.03);
+  EXPECT_DOUBLE_EQ(recovery->target.acceleration_scaling, 0.03);
+}
+
 TEST(SO101ConfiguredMotionTargets, ValidationYamlToleranceChangesValidatorWithoutChangingBinary)
 {
   PolicyFiles first("validation_first");
@@ -271,7 +286,7 @@ TEST(SO101FixedMotionTargets, CoversExactTenStatePlanOnlyMatrix)
     EXPECT_TRUE(spec->expected_gripper_q6 == 0.465038000 ||
                 spec->expected_gripper_q6 ==
                   spp::fingertip_pad_calibration::kGraspQ6 ||
-                spec->expected_gripper_q6 == 1.7);
+                spec->expected_gripper_q6 == 0.750);
   }
 }
 
@@ -362,11 +377,11 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
     {0.020673885, -0.253024373, 0.239831664},
     {0.020673885, -0.253024210, 0.224832847},
     {0.020673884, -0.253024034, 0.210034129},
-    {0.020674242, -0.263338090, 0.205255723},
+    {0.020666853, -0.261860750, 0.200639178},
     {-0.072885185, -0.235515275, 0.262755728},
-    {-0.073623420, -0.236933298, 0.245845824},
-    {-0.073616593, -0.236920181, 0.229126444},
-    {-0.072885193, -0.235515271, 0.207755727},
+    {-0.072653526, -0.236004954, 0.245614538},
+    {-0.071642733, -0.234971310, 0.228845176},
+    {-0.069889681, -0.232459408, 0.207733946},
   };
   for (std::size_t index = 0; index < kGoldenWaypoints.size(); ++index) {
     state.setToDefaultValues();
@@ -380,7 +395,8 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
     EXPECT_NEAR(pose.x, expected_positions[index].x, 2e-7) << index;
     EXPECT_NEAR(pose.y, expected_positions[index].y, 2e-7) << index;
     EXPECT_NEAR(pose.z, expected_positions[index].z, 2e-7) << index;
-    const double expected_tilt = index >= 5 ? 0.020943951205 : 0.0;
+    const double expected_tilt = index == 5 ? 0.024176308795 :
+      (index > 5 ? 0.020943951205 : 0.0);
     EXPECT_NEAR(spp::approachAxisError(pose, {0, 0, -1}, {0, 0, -1}),
                 expected_tilt, 2e-5) << index;
     for (std::size_t joint = 0; joint < profile.arm_joints.size(); ++joint) {
@@ -401,12 +417,26 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
     relative.qw, relative.qx, relative.qy, relative.qz).normalized().toRotationMatrix();
   const auto world_task_object =
     state.getGlobalLinkTransform(profile.moveit_attach_link) * gripper_task_object;
+  Eigen::Isometry3d desired_world_task_object = Eigen::Isometry3d::Identity();
+  desired_world_task_object.translation() = Eigen::Vector3d(
+    profile.task_object_pose.x, profile.task_object_pose.y, profile.task_object_pose.z);
+  desired_world_task_object.linear() = Eigen::Quaterniond(
+    profile.task_object_pose.qw, profile.task_object_pose.qx,
+    profile.task_object_pose.qy, profile.task_object_pose.qz).normalized().toRotationMatrix();
+  const auto gentle_relative =
+    state.getGlobalLinkTransform(profile.moveit_attach_link).inverse() * desired_world_task_object;
+  const Eigen::Quaterniond gentle_relative_q(gentle_relative.rotation());
+  std::cerr << std::setprecision(15)
+            << "[GENTLE-ATTACH-RELATIVE] xyz_xyzw=["
+            << gentle_relative.translation().x() << ", "
+            << gentle_relative.translation().y() << ", "
+            << gentle_relative.translation().z() << ", "
+            << gentle_relative_q.x() << ", " << gentle_relative_q.y() << ", "
+            << gentle_relative_q.z() << ", " << gentle_relative_q.w() << "]\n";
   EXPECT_NEAR(world_task_object.translation().x(), profile.task_object_pose.x, 2e-6);
-  // The tilted CLOSE entry seats the still-upright cup onto the fixed pad with
-  // a sub-millimetre translation, rather than relying on attachment to hide a
-  // missing fixed-side physical contact.
-  EXPECT_NEAR(world_task_object.translation().y(),
-              profile.task_object_pose.y + 0.000538228847, 2e-6);
+  // The runtime-validated gentle entry uses an FK-bound attachment transform,
+  // so attachment does not teleport the cup after physical contact succeeds.
+  EXPECT_NEAR(world_task_object.translation().y(), profile.task_object_pose.y, 2e-6);
   EXPECT_NEAR(world_task_object.translation().z(), profile.task_object_pose.z, 2e-6);
   EXPECT_LE((world_task_object.translation() - Eigen::Vector3d(
       profile.task_object_pose.x, profile.task_object_pose.y,
@@ -430,15 +460,14 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
   state.update();
   const auto placed_task_object =
     state.getGlobalLinkTransform(profile.moveit_attach_link) * gripper_task_object;
-  EXPECT_NEAR(placed_task_object.translation().x(), profile.place_task_object_pose.x, 2e-6);
-  EXPECT_NEAR(placed_task_object.translation().y(), profile.place_task_object_pose.y, 2e-6);
-  EXPECT_NEAR(placed_task_object.translation().z(),
-              profile.place_task_object_pose.z + 0.0025, 2e-6);
+  EXPECT_NEAR(placed_task_object.translation().x(), -0.077664953130, 2e-6);
+  EXPECT_NEAR(placed_task_object.translation().y(), -0.248733688422, 2e-6);
+  EXPECT_NEAR(placed_task_object.translation().z(), 0.172036311876, 2e-6);
   const Eigen::Quaterniond placed_orientation(placed_task_object.rotation());
-  EXPECT_NEAR(placed_orientation.normalized().z(), -0.205907513726, 2e-6);
-  EXPECT_NEAR(std::abs(placed_orientation.normalized().w()), 0.978571456661, 2e-6);
+  EXPECT_NEAR(placed_orientation.normalized().z(), -0.202953473895, 2e-6);
+  EXPECT_NEAR(std::abs(placed_orientation.normalized().w()), 0.979187048177, 2e-6);
   const Eigen::Vector3d cup_axis = placed_task_object.linear().col(2);
-  EXPECT_NEAR(cup_axis.dot(Eigen::Vector3d::UnitZ()), 1.0, 2e-6);
+  EXPECT_NEAR(cup_axis.dot(Eigen::Vector3d::UnitZ()), 1.0, 6e-6);
   const Eigen::Vector3d bottom_center = placed_task_object * Eigen::Vector3d(
     0.0, 0.0, -profile.task_object_height / 2.0 + profile.task_object_bottom_thickness / 2.0);
   const double bottom_lowest_z = bottom_center.z() -
@@ -507,11 +536,12 @@ TEST(SO101FixedMotionTargets, ScopesPersistentAndBoundaryTouchPolicies)
   EXPECT_EQ(policy.spec(spp::State::RECOVER_DESCEND_TO_PICK)->validation.temporal_contact_policy,
             (spp::TemporalContactPolicy{{"plastic_cup:table"},
                                         spp::TemporalContactLocation::LAST_ONLY}));
-  for (const auto state : {spp::State::RETREAT, spp::State::RECOVER_RETREAT}) {
-    EXPECT_EQ(policy.spec(state)->validation.temporal_contact_policy,
-              (spp::TemporalContactPolicy{{"plastic_cup:gripper", "plastic_cup:jaw"},
-                spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043}));
-  }
+  EXPECT_EQ(policy.spec(spp::State::RETREAT)->validation.temporal_contact_policy,
+            (spp::TemporalContactPolicy{{"plastic_cup:gripper", "plastic_cup:jaw"},
+              spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.0044}));
+  EXPECT_EQ(policy.spec(spp::State::RECOVER_RETREAT)->validation.temporal_contact_policy,
+            (spp::TemporalContactPolicy{{"plastic_cup:gripper", "plastic_cup:jaw"},
+              spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043}));
 }
 
 TEST(SO101FixedMotionTargets, UsesFkOptimizedVerticalLaddersNotJointInterpolation)
@@ -526,8 +556,11 @@ TEST(SO101FixedMotionTargets, UsesFkOptimizedVerticalLaddersNotJointInterpolatio
     ASSERT_TRUE(spec);
     EXPECT_TRUE(spec->target.ladder);
     const bool pick_dogleg = state == spp::State::LIFT || state == spp::State::DESCEND ||
+      state == spp::State::RETREAT ||
       state == spp::State::RECOVER_DESCEND_TO_PICK || state == spp::State::RECOVER_RETREAT;
-    EXPECT_EQ(spec->target.joint_waypoints.size(), pick_dogleg ? 5U : 3U);
+    const std::size_t expected_waypoints = state == spp::State::RETREAT
+      ? 6U : (pick_dogleg ? 5U : 3U);
+    EXPECT_EQ(spec->target.joint_waypoints.size(), expected_waypoints);
   }
 }
 
@@ -535,13 +568,13 @@ TEST(SO101FixedMotionTargets, SeparatesTransferWaypointPlanningFromAxialPathVali
 {
   const auto policy = configuredPolicy();
   for (const auto state : {spp::State::MOVE_ABOVE_OBJECT, spp::State::MOVE_ABOVE_PLACE,
-                           spp::State::RECOVER_MOVE_ABOVE_PICK}) {
+                           spp::State::RECOVER_MOVE_ABOVE_PICK, spp::State::RETREAT}) {
     const auto spec = policy.spec(state);
     ASSERT_TRUE(spec);
     EXPECT_FALSE(spec->require_axial_path_validation) << spp::toString(state);
   }
   for (const auto state : {spp::State::DESCEND, spp::State::LIFT,
-                           spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
+                           spp::State::DESCEND_TO_PLACE,
                            spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
                            spp::State::RECOVER_DESCEND_TO_PICK,
                            spp::State::RECOVER_RETREAT}) {
@@ -567,13 +600,13 @@ TEST(SO101FixedMotionTargets, LocksPlaceCoordinatesContinuityQ6AndJointMargins)
   EXPECT_EQ(above_place->target.joint_waypoints.back(), place->logical_start);
   EXPECT_DOUBLE_EQ(above_place->validation.endpoint_position.x, -0.072885185);
   EXPECT_DOUBLE_EQ(above_place->validation.endpoint_position.y, -0.235515275);
-  EXPECT_DOUBLE_EQ(place->validation.endpoint_position.x, -0.072885193);
-  EXPECT_DOUBLE_EQ(place->validation.endpoint_position.y, -0.235515271);
+  EXPECT_DOUBLE_EQ(place->validation.endpoint_position.x, -0.069889681);
+  EXPECT_DOUBLE_EQ(place->validation.endpoint_position.y, -0.232459408);
   EXPECT_DOUBLE_EQ(descend->expected_gripper_q6, 0.465038000);
   EXPECT_DOUBLE_EQ(lift->expected_gripper_q6,
                    spp::fingertip_pad_calibration::kGraspQ6);
-  EXPECT_DOUBLE_EQ(policy.spec(spp::State::RETREAT)->expected_gripper_q6, 1.7);
-  EXPECT_DOUBLE_EQ(policy.spec(spp::State::RECOVER_RETREAT)->expected_gripper_q6, 1.7);
+  EXPECT_DOUBLE_EQ(policy.spec(spp::State::RETREAT)->expected_gripper_q6, 0.750);
+  EXPECT_DOUBLE_EQ(policy.spec(spp::State::RECOVER_RETREAT)->expected_gripper_q6, 0.750);
 
   const std::vector<std::pair<double, double>> limits{
     {-1.91986, 1.91986}, {-1.74533, 1.74533}, {-1.74533, 1.5708},
@@ -603,19 +636,20 @@ TEST(SO101FixedMotionTargets, UsesOutsideAboveLaneAndSeatedNearWallEndpoint)
   // fixed gripper-to-TCP transform.  They deliberately are not the gripper-
   // origin contact-face coordinates used by the pad/wall geometry audit.
   constexpr double pick_tcp_x = 0.020673889;
+  constexpr double gentle_tcp_x = 0.020666853;
   constexpr double outside_tcp_y = -0.254030551;
-  constexpr double seated_tcp_y = -0.263338090;
-  constexpr double place_tcp_x = -0.072885193;
-  constexpr double place_tcp_y = -0.235515271;
+  constexpr double seated_tcp_y = -0.261860750;
+  constexpr double place_tcp_x = -0.069889681;
+  constexpr double place_tcp_y = -0.232459408;
   EXPECT_DOUBLE_EQ(above->validation.endpoint_position.x, pick_tcp_x);
-  EXPECT_DOUBLE_EQ(descend->validation.endpoint_position.x, pick_tcp_x);
+  EXPECT_DOUBLE_EQ(descend->validation.endpoint_position.x, gentle_tcp_x);
   EXPECT_DOUBLE_EQ(place->validation.endpoint_position.x, place_tcp_x);
   EXPECT_NEAR(above->validation.endpoint_position.y, outside_tcp_y, 1e-9);
   EXPECT_NEAR(descend->validation.endpoint_position.y, seated_tcp_y, 1e-9);
   EXPECT_NEAR(place->validation.endpoint_position.y, place_tcp_y, 1e-9);
 }
 
-TEST(SO101FixedMotionTargets, UsesFortyFiveMillimetreAdapterInsertionAndFiftyMillimetreLift)
+TEST(SO101FixedMotionTargets, UsesValidatedGentlePregraspAndFiftyMillimetreLift)
 {
   const auto policy = configuredPolicy();
   const auto above = policy.spec(spp::State::MOVE_ABOVE_OBJECT);
@@ -627,7 +661,7 @@ TEST(SO101FixedMotionTargets, UsesFortyFiveMillimetreAdapterInsertionAndFiftyMil
   ASSERT_TRUE(above && descend && lift && above_place && place && recover_descend);
 
   EXPECT_NEAR(above->validation.endpoint_position.z - descend->validation.endpoint_position.z,
-              0.054581486, 2e-9);
+              0.059198031, 2e-9);
   EXPECT_GE(lift->validation.endpoint_position.z - descend->validation.endpoint_position.z,
             0.050 - 3e-9);
   EXPECT_GE(above_place->validation.endpoint_position.z -

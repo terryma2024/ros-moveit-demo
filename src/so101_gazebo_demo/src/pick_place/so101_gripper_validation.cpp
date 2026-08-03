@@ -139,7 +139,9 @@ ValidationResult validateQ6Target(const WorldSnapshot & snapshot, double target_
                                {}});
   } else if (native_pad_grasp &&
              (!std::isfinite(actual_wall_interference) ||
-              actual_wall_interference > pad_calibration::kCupWallInterferenceM + 1e-12)) {
+              actual_wall_interference >
+                (bounded_contact_stop ? profile.max_dynamic_wall_interference
+                                      : pad_calibration::kCupWallInterferenceM) + 1e-12)) {
     result.failures.push_back({FailureCategory::GRIPPER,
                                "Q6_NATIVE_PAD_INTERFERENCE_EXCEEDED",
                                "Observed native-pad gap exceeds the cup-wall interference ceiling",

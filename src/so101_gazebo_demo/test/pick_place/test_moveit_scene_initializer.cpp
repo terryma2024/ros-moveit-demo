@@ -85,7 +85,7 @@ public:
   spp::JointSegmentPlanResult planSegment(
     const std::vector<std::string> &, const std::vector<double> &,
     const std::vector<double> &, const std::set<std::string> &,
-    const std::optional<spp::TemporalContactPolicy> &, double) override
+    const std::optional<spp::TemporalContactPolicy> &, double, double, double) override
   {
     return {};
   }

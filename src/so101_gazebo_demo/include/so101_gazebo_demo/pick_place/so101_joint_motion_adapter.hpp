@@ -69,7 +69,8 @@ public:
               const std::vector<double> & start, const std::vector<double> & goal,
               const std::set<std::string> & allowed_touch_pairs,
               const std::optional<TemporalContactPolicy> & temporal_contact_policy,
-              double gripper_position) = 0;
+              double gripper_position, double velocity_scaling,
+              double acceleration_scaling) = 0;
   [[nodiscard]] virtual ActionResult execute(const MotionPlanArtifact &)
   {
     return {ActionStatus::NOT_SUPPORTED,

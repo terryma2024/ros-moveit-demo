@@ -109,7 +109,7 @@ bool environmentEvidenceUnavailable(const Failure & failure) noexcept
          failure.category == FailureCategory::TF;
 }
 
-bool endpointConvergenceFailure(const ValidationResult & validation) noexcept
+bool transientBoundaryConvergenceFailure(const ValidationResult & validation) noexcept
 {
   if (validation.failures.empty()) return false;
   return std::all_of(validation.failures.begin(), validation.failures.end(),
@@ -120,7 +120,10 @@ bool endpointConvergenceFailure(const ValidationResult & validation) noexcept
                               failure.code == "Q6_TARGET_OUT_OF_TOLERANCE" ||
                               failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE" ||
                               failure.code == "Q6_NOT_STATIONARY" ||
-                              failure.code == "ARM_NOT_QUIESCENT";
+                              failure.code == "ARM_NOT_QUIESCENT" ||
+                              failure.code == "BILATERAL_GRIPPER_CONTACT_REQUIRED" ||
+                              failure.code == "CONTACT_PENETRATION_EVIDENCE_REQUIRED" ||
+                              failure.code == "SEMANTIC_FINGER_CONTACT_REQUIRED";
                      });
 }
 
@@ -515,7 +518,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
     before = *observed.snapshot;
   }
   auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
-  if (!precondition.ok && endpointConvergenceFailure(precondition)) {
+  if (!precondition.ok && transientBoundaryConvergenceFailure(precondition)) {
     const auto deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
     do {
       std::this_thread::sleep_for(kStationaryPollInterval);
@@ -532,7 +535,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
       }
       before = *observed.snapshot;
       precondition = contracts_.validatePrecondition({state, next_state}, *before);
-      if (precondition.ok || !endpointConvergenceFailure(precondition)) break;
+      if (precondition.ok || !transientBoundaryConvergenceFailure(precondition)) break;
     } while (std::chrono::steady_clock::now() < deadline);
   }
   if (!precondition.ok) {
@@ -619,7 +622,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   }
   auto transition =
     contracts_.validate({state, next_state}, *before, *after.snapshot, action);
-  if (!transition.ok && endpointConvergenceFailure(transition)) {
+  if (!transition.ok && transientBoundaryConvergenceFailure(transition)) {
     const auto deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
     do {
       std::this_thread::sleep_for(kStationaryPollInterval);
@@ -640,7 +643,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
       if (!observed.snapshot->fresh || !observed.snapshot->arm_stationary) continue;
       after = {*observed.snapshot, std::nullopt};
       transition = contracts_.validate({state, next_state}, *before, *after.snapshot, action);
-      if (transition.ok || !endpointConvergenceFailure(transition)) break;
+      if (transition.ok || !transientBoundaryConvergenceFailure(transition)) break;
     } while (std::chrono::steady_clock::now() < deadline);
   }
   if (!transition.ok) {
@@ -802,8 +805,9 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
   }
   const auto route = recovery_policy_->select(state, original_failure, *stopped.snapshot);
   if (!route.next_state) {
-    return error(route.failure.value_or(
-      Failure{FailureCategory::INTERNAL, "RECOVERY_ROUTE_MISSING", "route missing", {}}));
+    auto route_failure = route.failure.value_or(
+      Failure{FailureCategory::INTERNAL, "RECOVERY_ROUTE_MISSING", "route missing", {}});
+    return error(withOriginalFailure(std::move(route_failure), original_failure));
   }
   if (isForwardAction(*route.next_state) || isTerminal(*route.next_state)) {
     return error({FailureCategory::CONFIGURATION,

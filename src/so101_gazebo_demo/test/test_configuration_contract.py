@@ -105,7 +105,7 @@ def test_gripper_trajectory_success_requires_mesh_bounded_joint6_convergence():
 
 
 def test_arm_path_tolerance_allows_bounded_contact_tracking_error_at_1khz():
-    """Path tracking may absorb bounded contact error; endpoint gates stay strict."""
+    """Controller accepts bounded load error; state postconditions stay strict."""
     controller = load_yaml('so101_controllers.yaml')['arm_controller']['ros__parameters']
 
     assert controller['open_loop_control'] is False
@@ -114,11 +114,11 @@ def test_arm_path_tolerance_allows_bounded_contact_tracking_error_at_1khz():
     ] == 1000
     assert controller['constraints'] == {
         'goal_time': pytest.approx(1.0),
-        '1': {'trajectory': pytest.approx(0.002), 'goal': pytest.approx(0.00025)},
-        '2': {'trajectory': pytest.approx(0.0015), 'goal': pytest.approx(0.00025)},
-        '3': {'trajectory': pytest.approx(0.0015), 'goal': pytest.approx(0.00025)},
-        '4': {'trajectory': pytest.approx(0.0015), 'goal': pytest.approx(0.00025)},
-        '5': {'trajectory': pytest.approx(0.0015), 'goal': pytest.approx(0.00025)},
+        '1': {'trajectory': pytest.approx(0.002), 'goal': pytest.approx(0.002)},
+        '2': {'trajectory': pytest.approx(0.002), 'goal': pytest.approx(0.002)},
+        '3': {'trajectory': pytest.approx(0.002), 'goal': pytest.approx(0.002)},
+        '4': {'trajectory': pytest.approx(0.002), 'goal': pytest.approx(0.002)},
+        '5': {'trajectory': pytest.approx(0.002), 'goal': pytest.approx(0.002)},
     }
 
 

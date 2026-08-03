@@ -37,6 +37,7 @@ SO101Profile SO101Profile::configured(
   profile.q6_close = motion.gripper_actions.grasp_close_q6;
   profile.q6_contact = motion.gripper_actions.grasp_close_q6;
   profile.q6_full_open = motion.gripper_actions.release_q6;
+  profile.release_stages_q6 = {0.209, 0.506, profile.q6_full_open};
   profile.q6_geometric_side_contact = object.fingertip_pads.geometry_reference_q6;
   profile.q6_tolerance = validation.runtime.q6_position_tolerance_rad;
   profile.contact_q6_stop_tolerance =

@@ -93,6 +93,8 @@ struct StateMotionConfig
   bool require_waypoint_ladder{false};
   bool require_axial_path_validation{false};
   double gripper_q6{0.0};
+  double velocity_scaling{0.1};
+  double acceleration_scaling{0.1};
 };
 
 struct MotionPolicyConfig

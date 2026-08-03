@@ -205,9 +205,9 @@ ActionResult RosTrajectoryActionClient::cancelAndWait(double timeout_seconds)
 
 FollowJointTrajectoryGripperAdapter::FollowJointTrajectoryGripperAdapter(
   std::shared_ptr<ITrajectoryActionClient> client, double trajectory_duration_seconds,
-  double action_timeout_seconds) :
+  double action_timeout_seconds, double contact_stop_q6) :
     client_(std::move(client)), trajectory_duration_seconds_(trajectory_duration_seconds),
-    action_timeout_seconds_(action_timeout_seconds)
+    action_timeout_seconds_(action_timeout_seconds), contact_stop_q6_(contact_stop_q6)
 {
 }
 
@@ -217,7 +217,17 @@ ActionResult FollowJointTrajectoryGripperAdapter::command(double q6)
     return failure(ActionStatus::FAILED, "GRIPPER_ACTION_CLIENT_MISSING",
                    "Joint 6 trajectory client is not configured");
   }
-  return client_->send({{"6"}, {q6}, trajectory_duration_seconds_}, action_timeout_seconds_);
+  auto result = client_->send({{"6"}, {q6}, trajectory_duration_seconds_}, action_timeout_seconds_);
+  // A position controller can report ABORTED when the commanded close is
+  // physically stopped by the cup.  Only the configured contact target may
+  // defer that terminal result; the state postcondition still has to prove
+  // fresh bilateral contact, bounded penetration, and stopped q6 evidence.
+  if (result.status == ActionStatus::FAILED && result.failure &&
+      result.failure->code == "GRIPPER_ACTION_ABORTED" &&
+      std::isfinite(contact_stop_q6_) && std::abs(q6 - contact_stop_q6_) <= 1e-12) {
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+  return result;
 }
 
 ActionResult FollowJointTrajectoryGripperAdapter::cancelAndWait()

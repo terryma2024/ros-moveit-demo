@@ -124,6 +124,8 @@ states:
       yaml += "    require_waypoint_ladder: false\n";
       yaml += "    require_axial_path_validation: false\n";
       yaml += "    gripper_q6: -0.047409691482075\n";
+      yaml += "    velocity_scaling: 0.10\n";
+      yaml += "    acceleration_scaling: 0.10\n";
     }
     return yaml;
   }
@@ -328,6 +330,8 @@ TEST(PolicyConfig, ConfiguresRuntimeGripperTargetsAndTolerancesFromYaml)
   EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_close);
   EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_contact);
   EXPECT_DOUBLE_EQ(1.70, profile.q6_full_open);
+  ASSERT_EQ(profile.release_stages_q6.size(), 3U);
+  EXPECT_DOUBLE_EQ(1.70, profile.release_stages_q6.back());
   EXPECT_DOUBLE_EQ(0.001, profile.q6_tolerance);
   EXPECT_DOUBLE_EQ(0.00125, profile.contact_q6_stop_tolerance);
   EXPECT_DOUBLE_EQ(0.01, profile.q6_velocity_tolerance);

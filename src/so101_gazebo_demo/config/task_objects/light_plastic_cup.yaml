@@ -18,7 +18,7 @@ grasp_frame:
   insertion_depth_below_rim_m: 0.025
   rim_clearance_m: 0.008
   bottom_clearance_m: 0.020
-  attachment_relative_pose_xyz_xyzw: [0.036677093233, -0.000674520721, -0.124533558176, 0.007402239728, 0.007407098723, 0.707067984659, 0.707068035486]
+  attachment_relative_pose_xyz_xyzw: [0.038672014712051, -0.000677205524856, -0.120016256756009, 0.008547938718506, 0.008546876808496, 0.706847306531293, 0.707262871137699]
 fingertip_pads:
   enabled: true
   material: TPU_95A

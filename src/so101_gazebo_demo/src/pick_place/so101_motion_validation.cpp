@@ -150,7 +150,8 @@ ValidationResult validateCommon(const MotionPlanArtifact & plan,
   const auto path_axis = normalized(config.path_direction);
   const auto temporal_origin = position(plan.samples.empty() ? Pose3d{} :
                                          plan.samples.front().tcp_pose);
-  bool temporal_prefix_cleared = false;
+  bool temporal_contact_seen = false;
+  bool temporal_clearance_proven = false;
   double previous_temporal_axial = 0.0;
   if (plan.joint_names != config.expected_joint_names) {
     return failure("ARM_JOINT_ORDER_MISMATCH", "Plan must contain SO-101 arm joints in profile order");
@@ -214,16 +215,16 @@ ValidationResult validateCommon(const MotionPlanArtifact & plan,
     if (config.temporal_contact_policy &&
         config.temporal_contact_policy->location ==
           TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE) {
+      const auto displacement = subtract(position(sample.tcp_pose), temporal_origin);
+      const double axial = dot(displacement, path_axis);
       if (!has_temporal_contact) {
-        temporal_prefix_cleared = true;
-      } else {
-        if (temporal_prefix_cleared) {
-          return failure("TEMPORAL_CONTACT_RECURRED_AFTER_CLEARANCE",
-                         "Boundary contact reappeared after the trajectory became clear",
-                         {{"sample_index", static_cast<double>(i)}});
+        if (temporal_contact_seen && finite(axial) &&
+            axial + config.monotonic_tolerance >=
+              config.temporal_contact_policy->max_axial_clearance_m) {
+          temporal_clearance_proven = true;
         }
-        const auto displacement = subtract(position(sample.tcp_pose), temporal_origin);
-        const double axial = dot(displacement, path_axis);
+      } else {
+        temporal_contact_seen = true;
         const auto lateral_vector = subtract(displacement, scale(path_axis, axial));
         const double lateral = norm(lateral_vector);
         if (!finite(axial) || axial < -config.monotonic_tolerance) {
@@ -258,6 +259,10 @@ ValidationResult validateCommon(const MotionPlanArtifact & plan,
                    plan.samples[i - 1].time_from_start_seconds) {
       return failure("TRAJECTORY_TIME_NOT_INCREASING", "Trajectory timestamps must strictly increase");
     }
+  }
+  if (temporal_contact_seen && !temporal_clearance_proven) {
+    return failure("TEMPORAL_CONTACT_CLEARANCE_NOT_PROVEN",
+                   "Trajectory ended without a contact-free sample at the clearance boundary");
   }
   if (plan.samples.front().time_from_start_seconds < 0.0 ||
       plan.samples.back().time_from_start_seconds < config.min_duration_seconds) {
@@ -421,8 +426,18 @@ ValidationResult SO101MotionPlanValidator::validate(State state, const WorldSnap
     const auto attached_task_object_evidence = validateAttachedTaskObjectPoseEvidence(*motion);
     if (!attached_task_object_evidence.ok) return attached_task_object_evidence;
   }
-  return require_ladder_ ? validateWaypointLadder(*motion, config_)
-                         : validateJointGoalPlan(*motion, config_);
+  auto result = require_ladder_ ? validateWaypointLadder(*motion, config_)
+                                : validateJointGoalPlan(*motion, config_);
+  if ((state == State::RETREAT || state == State::RECOVER_RETREAT) && !result.ok) {
+    for (auto & item : result.failures) {
+      if (item.code.rfind("TEMPORAL_CONTACT_", 0) == 0) {
+        item.message = "Retreat contact did not clear inside the configured axial envelope: " +
+          item.code + ": " + item.message;
+        item.code = "RETREAT_CONTACT_NOT_CLEARED";
+      }
+    }
+  }
+  return result;
 }
 
 }  // namespace so101_gazebo_demo::pick_place

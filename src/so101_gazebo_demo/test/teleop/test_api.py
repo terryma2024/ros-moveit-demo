@@ -8,6 +8,7 @@ from so101_teleop.models import CommandResult, ServerMode, TelemetrySnapshot
 class Service:
     def __init__(self):
         self.snapshot = TelemetrySnapshot(sequence=1, mode=ServerMode.READY, simulation_session_id="sim-a")
+        self.commands = []
 
     async def health(self): return {"ok": True}
     async def current_snapshot(self): return self.snapshot
@@ -16,8 +17,12 @@ class Service:
                              code="PLAN_STALE_SCENE", message="scene changed")
 
     async def command(self, name, body):
+        self.commands.append((name, body))
         return CommandResult(command_id=body["command_id"], accepted=True, succeeded=False,
                              code="MOVEIT_IK_FAILED_-31", message="No IK solution")
+
+    async def camera_presets(self):
+        return {"presets": ["overview", "top"]}
 
 
 def test_unsafe_bind_is_rejected():
@@ -70,3 +75,18 @@ def test_vite_assets_referenced_by_index_are_served_from_symlink_install(tmp_pat
     client = TestClient(create_app(Service(), dist))
     assert client.get("/assets/chunk.js").status_code == 200
     assert client.get("/assets/chunk.js").headers["content-type"].startswith("text/javascript")
+
+
+def test_camera_presets_are_listed_and_apply_uses_command_boundary():
+    service = Service()
+    client = TestClient(create_app(service))
+
+    assert client.get("/gazebo/camera/presets").json() == {"presets": ["overview", "top"]}
+    response = client.post(
+        "/gazebo/camera/presets/overview",
+        json={"command_id": "camera-1", "lease_id": "lease-a", "session_id": "sim-a"},
+    )
+
+    assert response.status_code == 409
+    assert service.commands[-1][0] == "camera_preset"
+    assert service.commands[-1][1]["preset"] == "overview"

@@ -525,14 +525,16 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(
             Failure{FailureCategory::CONFIGURATION, "MICRO_LIFT_REQUEST_INVALID",
                     "World-Z physical-grasp probe must be a finite positive lift no larger than 2 mm", {}}};
   }
-  geometry_msgs::msg::Pose target;
-  target.position.x = current_tcp_world.x;
-  target.position.y = current_tcp_world.y;
-  target.position.z = current_tcp_world.z + world_z_delta_m;
-  target.orientation.x = current_tcp_world.qx;
-  target.orientation.y = current_tcp_world.qy;
-  target.orientation.z = current_tcp_world.qz;
-  target.orientation.w = current_tcp_world.qw;
+  geometry_msgs::msg::PoseStamped target;
+  target.header.frame_id = impl_->profile.world_frame;
+  target.header.stamp = impl_->node->now();
+  target.pose.position.x = current_tcp_world.x;
+  target.pose.position.y = current_tcp_world.y;
+  target.pose.position.z = current_tcp_world.z + world_z_delta_m;
+  target.pose.orientation.x = current_tcp_world.qx;
+  target.pose.orientation.y = current_tcp_world.qy;
+  target.pose.orientation.z = current_tcp_world.qz;
+  target.pose.orientation.w = current_tcp_world.qw;
   auto & group = impl_->moveGroup();
   const auto current = group.getCurrentState(impl_->state_timeout_seconds);
   if (!current) {
@@ -540,18 +542,71 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(
             Failure{FailureCategory::OBSERVATION, "MICRO_LIFT_CURRENT_STATE_TIMEOUT",
                     "MoveIt current state was unavailable before world-Z micro lift", {}}};
   }
-  group.setStartState(*current);
-  group.clearPoseTargets();
-  group.setPoseTarget(target, impl_->profile.tcp_link);
-  moveit::planning_interface::MoveGroupInterface::Plan planned;
-  const auto code = group.plan(planned);
-  group.clearPoseTargets();
-  if (!static_cast<bool>(code)) {
+  if (!impl_->refreshScene()) {
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::MOVEIT_SCENE, "MICRO_LIFT_SCENE_UNAVAILABLE",
+                    "Planning Scene was unavailable for request-scoped micro-lift planning", {}}};
+  }
+  auto client = impl_->moveGroupAction();
+  if (!client->wait_for_action_server(
+        std::chrono::duration<double>(impl_->state_timeout_seconds))) {
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::OBSERVATION, "MICRO_LIFT_MOVE_GROUP_UNAVAILABLE",
+                    "MoveGroup action is unavailable for request-scoped micro-lift planning", {}}};
+  }
+  moveit_msgs::action::MoveGroup::Goal request;
+  request.request.group_name = impl_->profile.planning_group;
+  request.request.planner_id = impl_->planner_id;
+  request.request.num_planning_attempts = 1;
+  request.request.allowed_planning_time = 5.0;
+  request.request.max_velocity_scaling_factor = 0.03;
+  request.request.max_acceleration_scaling_factor = 0.03;
+  moveit::core::robotStateToRobotStateMsg(*current, request.request.start_state, true);
+  request.request.goal_constraints.push_back(
+    kinematic_constraints::constructGoalConstraints(
+      impl_->profile.tcp_link, target, 0.0002, 0.005));
+  request.planning_options.plan_only = true;
+  request.planning_options.planning_scene_diff.is_diff = true;
+  {
+    std::lock_guard<std::mutex> lock(impl_->scene_mutex);
+    collision_detection::AllowedCollisionMatrix acm(
+      impl_->scene->getAllowedCollisionMatrix());
+    for (const auto & link : impl_->profile.moveit_touch_links) {
+      acm.setEntry(impl_->profile.task_object_id, link, true);
+    }
+    acm.getMessage(request.planning_options.planning_scene_diff.allowed_collision_matrix);
+  }
+  const auto goal_future = client->async_send_goal(request);
+  if (goal_future.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVE_GROUP_GOAL_TIMEOUT",
+                    "MoveGroup did not accept the request-scoped micro-lift goal in time", {}}};
+  }
+  const auto goal_handle = goal_future.get();
+  if (!goal_handle) {
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVE_GROUP_GOAL_REJECTED",
+                    "MoveGroup rejected the request-scoped micro-lift goal", {}}};
+  }
+  const auto result_future = client->async_get_result(goal_handle);
+  if (result_future.wait_for(std::chrono::seconds(15)) != std::future_status::ready) {
+    RosMoveGroupGoalCancellation cancellation(client, goal_handle, result_future);
+    const auto cleanup = cancelRequestScopedGoalAndWait(
+      cancellation, impl_->state_timeout_seconds, impl_->state_timeout_seconds);
+    if (cleanup.status != ActionStatus::SUCCEEDED) return cleanup;
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVE_GROUP_RESULT_TIMEOUT",
+                    "Request-scoped micro-lift planning did not finish in time", {}}};
+  }
+  const auto wrapped = result_future.get();
+  if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result ||
+      wrapped.result->error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS ||
+      wrapped.result->planned_trajectory.joint_trajectory.points.empty()) {
     return {ActionStatus::FAILED,
             Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVEIT_PLAN_FAILED",
-                    "MoveIt could not produce a collision-aware world-Z micro-lift plan", {}}};
+                    "MoveIt could not produce a request-scoped touch-aware world-Z micro-lift plan", {}}};
   }
-  const auto executed = group.execute(planned.trajectory);
+  const auto executed = group.execute(wrapped.result->planned_trajectory);
   if (!static_cast<bool>(executed)) {
     return {ActionStatus::FAILED,
             Failure{FailureCategory::EXECUTION, "MICRO_LIFT_MOVEIT_EXECUTION_FAILED",
@@ -569,10 +624,13 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
   const std::vector<std::string> & joint_names, const std::vector<double> & start,
   const std::vector<double> & goal, const std::set<std::string> & allowed_touch_pairs,
   const std::optional<TemporalContactPolicy> & temporal_contact_policy,
-  double gripper_position)
+  double gripper_position, double velocity_scaling, double acceleration_scaling)
 {
   if (joint_names != impl_->profile.arm_joints || start.size() != joint_names.size() ||
-      goal.size() != joint_names.size() || !std::isfinite(gripper_position)) {
+      goal.size() != joint_names.size() || !std::isfinite(gripper_position) ||
+      !std::isfinite(velocity_scaling) || velocity_scaling <= 0.0 || velocity_scaling > 1.0 ||
+      !std::isfinite(acceleration_scaling) || acceleration_scaling <= 0.0 ||
+      acceleration_scaling > 1.0) {
     return planFail(FailureCategory::CONFIGURATION, "JOINT_SEGMENT_REQUEST_INVALID",
                     "MoveIt segment must contain the profile arm joint order");
   }
@@ -585,6 +643,8 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
                     "Temporal contact pair and boundary location violate SO-101 policy");
   }
   auto & group = impl_->moveGroup();
+  group.setMaxVelocityScalingFactor(velocity_scaling);
+  group.setMaxAccelerationScalingFactor(acceleration_scaling);
   const auto current = group.getCurrentState(impl_->state_timeout_seconds);
   if (!current) {
     return planFail(FailureCategory::OBSERVATION, "CURRENT_STATE_TIMEOUT",
@@ -625,8 +685,8 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
     request.request.planner_id = impl_->planner_id;
     request.request.num_planning_attempts = 1;
     request.request.allowed_planning_time = 5.0;
-    request.request.max_velocity_scaling_factor = impl_->velocity_scaling;
-    request.request.max_acceleration_scaling_factor = impl_->acceleration_scaling;
+    request.request.max_velocity_scaling_factor = velocity_scaling;
+    request.request.max_acceleration_scaling_factor = acceleration_scaling;
     moveit::core::robotStateToRobotStateMsg(start_state, request.request.start_state, true);
     moveit::core::RobotState goal_state(start_state);
     goal_state.setVariablePositions(joint_names, goal);

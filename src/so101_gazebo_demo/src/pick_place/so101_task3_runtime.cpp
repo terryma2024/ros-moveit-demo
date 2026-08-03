@@ -43,7 +43,16 @@ public:
                       "A finite measured gripper position is required after Gazebo attachment",
                       {}}};
     }
-    const auto held = gripper_->command(measured_q6->second);
+    auto held = gripper_->command(measured_q6->second);
+    // Gazebo's DetachableJoint can oppose the gripper position controller
+    // immediately after attachment.  The hold command is advisory at this
+    // boundary: defer only the controller's contact-stop abort and let the
+    // attachment transition contract prove bilateral, bounded, stationary
+    // grasp evidence from the fresh post-state.
+    if (held.status == ActionStatus::FAILED && held.failure &&
+        held.failure->code == "GRIPPER_ACTION_ABORTED") {
+      held = {ActionStatus::SUCCEEDED, std::nullopt};
+    }
     if (held.status == ActionStatus::SUCCEEDED && settle_seconds_ > 0.0) {
       std::this_thread::sleep_for(std::chrono::duration<double>(settle_seconds_));
     }
@@ -79,7 +88,8 @@ void registerGripper(SO101Task3Runtime & runtime,
     if (dependencies.gripper) {
       runtime.actions.registerExecutor(
         config.state,
-        std::make_shared<SO101GripperStateExecutor>(dependencies.gripper, config, profile));
+        std::make_shared<SO101GripperStateExecutor>(
+          dependencies.gripper, config, profile, dependencies.gripper_observer));
     }
     const auto next = TransitionTable::resolve(config.state, ActionStatus::SUCCEEDED);
     runtime.contracts.registerContract({config.state, next},

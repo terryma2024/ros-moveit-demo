@@ -47,6 +47,14 @@ def generate_launch_description():
             moveit_config.to_dict(),
             {"use_sim_time": LaunchConfiguration("is_sim")},
             {"publish_robot_description_semantic": True},
+            {
+                # Gazebo's low-speed carrying trajectories can finish a few
+                # scheduler ticks after MoveIt's default 1.2x + 0.5 s bound.
+                # Keep the controller goal alive without changing the planned
+                # path or its velocity scaling.
+                "trajectory_execution.allowed_execution_duration_scaling": 1.5,
+                "trajectory_execution.allowed_goal_duration_margin": 1.0,
+            },
         ],
     )
     return LaunchDescription([is_sim_arg, base_height_arg, object_config_arg, move_group])
