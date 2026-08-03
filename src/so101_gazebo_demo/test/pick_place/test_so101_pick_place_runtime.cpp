@@ -27,6 +27,7 @@ public:
   {
     ++calls;
     last_target = target;
+    targets.push_back(target);
     return {spp::ActionStatus::SUCCEEDED, std::nullopt};
   }
   spp::ActionResult cancelAndWait() override
@@ -35,6 +36,7 @@ public:
   }
   int calls{0};
   double last_target{0.0};
+  std::vector<double> targets;
 };
 
 class FakeExecutor final : public spp::IStateExecutor
@@ -443,6 +445,8 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
   bilateral.gazebo_task_object_moving_jaw_contact = true;
   observer->samples = {unilateral,
                        bilateral, bilateral, bilateral,
+                       bilateral, bilateral, bilateral,
+                       bilateral, bilateral, bilateral,
                        bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
@@ -455,12 +459,13 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  EXPECT_EQ(gripper->calls, 1);
+  ASSERT_EQ(gripper->calls, 2);
   EXPECT_DOUBLE_EQ(
-    gripper->last_target,
+    gripper->targets.front(),
     spp::SO101Profile::canonical().q6_contact -
       spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
-  EXPECT_EQ(observer->next_sample, 7U);
+  EXPECT_DOUBLE_EQ(gripper->targets.back(), spp::SO101Profile::canonical().q6_contact);
+  EXPECT_EQ(observer->next_sample, 13U);
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
@@ -478,6 +483,8 @@ TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
   auto bilateral = unilateral;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
   observer->samples = {unilateral, bilateral, bilateral, bilateral,
+                       bilateral, bilateral, bilateral,
+                       bilateral, bilateral, bilateral,
                        bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
@@ -489,8 +496,9 @@ TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  EXPECT_EQ(gripper->calls, 1);
-  EXPECT_EQ(observer->next_sample, 7U);
+  EXPECT_EQ(gripper->calls, 2);
+  EXPECT_DOUBLE_EQ(gripper->last_target, spp::SO101Profile::canonical().q6_contact);
+  EXPECT_EQ(observer->next_sample, 13U);
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)

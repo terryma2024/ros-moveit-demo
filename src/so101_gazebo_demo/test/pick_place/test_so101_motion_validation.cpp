@@ -432,6 +432,26 @@ TEST(SO101MotionTemporalContact, AllowsContiguousPrefixWithinAxialClearance)
   EXPECT_TRUE(spp::validateWaypointLadder(plan, config).ok);
 }
 
+TEST(SO101MotionTemporalContact, AllowsSupportContactDuringBoundedLiftPrefix)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  config.path_direction = {0.0, 0.0, 1.0};
+  plan.samples[0].tcp_pose.z = 0.250;
+  plan.samples[1].tcp_pose.z = 0.260;
+  plan.samples[2].tcp_pose.z = 0.300;
+  config.endpoint_position.z = 0.300;
+  const spp::TemporalContactPolicy policy{
+    {"plastic_cup:table"},
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.012};
+  config.temporal_contact_policy = policy;
+  plan.temporal_contact_policy = policy;
+  plan.samples[0].raw_contact_pairs = {"plastic_cup:table"};
+  plan.samples[1].raw_contact_pairs = {"plastic_cup:table"};
+  plan.raw_contact_pairs = {"plastic_cup:table"};
+  EXPECT_TRUE(spp::validateWaypointLadder(plan, config).ok);
+}
+
 TEST(SO101MotionTemporalContact, RejectsPrefixContactBeyondAxialClearance)
 {
   auto plan = validLadder();

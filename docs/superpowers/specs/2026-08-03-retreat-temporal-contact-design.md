@@ -38,7 +38,8 @@
 
 - 5 个臂关节通用 trajectory/goal tolerance 为 `0.002 rad`；接触关键状态仍由独立 `0.00025 rad` 末端门约束。
 - Gazebo detachable-joint 携带沉降门为 `5 mm / 0.070 rad`，仍严于绝对 attachment 倾斜上限 `0.087 rad`。
-- 唯一一次 regrasp 的额外收紧量为 `0.006 rad`；目标仍高于 `q6_safe_lower`，并继续要求连续 6 个双侧、深度受限的接触样本。
+- 唯一一次 regrasp 的额外收紧量为 `0.006 rad`，但它只用于把杯壁重新坐入双侧接触：首次连续 6 个双侧样本后必须回到标定的 `q6_contact`，再取得第二组连续 6 个双侧、深度受限样本，之后才允许附着。
+- `ATTACH_GAZEBO` 后的夹爪保持目标同样固定为 `q6_contact`，不把瞬时深 regrasp 固化进 detachable-joint；原生指垫干涉上限仍 fail-closed。
 
 ## 实机前边界
 
@@ -46,8 +47,8 @@
 
 ## 验收结果
 
-- 定向测试：fixed targets 19/19、profile/gripper 11/11、runtime 23/23、controller config 14/14。
+- 远端 symlink-install 构建通过；覆盖 runtime、task3、motion validation、fixed targets、policy、MoveIt scene 与 configuration contract 的 8 个定向 CTest 全部通过。
 - 冻结后的三次完整运行均到达 `DONE`，状态序列包含完整 release/detach/sync/retreat。
-- 三次最终 XY 误差为 `2.806 / 2.048 / 2.742 mm`；平均 `2.532 mm`，最大 `2.806 mm`。
-- 三次 Z 误差均小于 `0.00001 mm`，杯子倾斜均小于 `0.000002 rad`。
+- 三次最终位置误差为 `2.218 / 2.124 / 2.844 mm`；平均 `2.396 mm`，最大 `2.844 mm`。
+- 三次 Z 误差最大 `0.000098 mm`，杯子最终倾斜最大约 `0.000029 rad`。
 - 每次最终 `gazebo_attached=false`、`moveit_attached=false`、`moveit_collisions=[]`。

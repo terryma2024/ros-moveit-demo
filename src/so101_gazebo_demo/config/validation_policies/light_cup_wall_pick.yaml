@@ -65,8 +65,8 @@ states:
     allowed_touch_pairs: []
     temporal_contact:
       allowed_pairs: ["plastic_cup:table"]
-      location: FIRST_ONLY
-      max_axial_clearance_m: 0.0
+      location: PREFIX_UNTIL_AXIAL_CLEARANCE
+      max_axial_clearance_m: 0.012
   MOVE_ABOVE_PLACE:
     endpoint_position: [-0.072885185, -0.235515275, 0.262755728]
     local_approach_axis: [0.0, 0.0, -1.0]
