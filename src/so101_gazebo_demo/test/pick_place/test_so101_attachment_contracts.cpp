@@ -13,8 +13,8 @@ namespace pick_place = so101_gazebo_demo::pick_place;
 namespace
 {
 
-pick_place::TaskObjectContactSample contactSample(
-  std::string cup_collision, double normal_y, double local_z, double depth = 0.0004);
+pick_place::TaskObjectContactSample contactSample(std::string cup_collision, double normal_y,
+                                                  double local_z, double depth = 0.0004);
 
 pick_place::WorldSnapshot world(bool gazebo_attached, bool moveit_attached)
 {
@@ -34,10 +34,8 @@ pick_place::WorldSnapshot world(bool gazebo_attached, bool moveit_attached)
   snapshot.gazebo_task_object_fixed_contact_max_height = 0.187;
   snapshot.gazebo_task_object_moving_contact_min_height = 0.190;
   snapshot.gazebo_task_object_moving_contact_max_height = 0.192;
-  snapshot.gazebo_task_object_fixed_finger_contacts = {
-    contactSample("wall_near", 1.0, 0.020)};
-  snapshot.gazebo_task_object_moving_jaw_contacts = {
-    contactSample("wall_near", -1.0, 0.020)};
+  snapshot.gazebo_task_object_fixed_finger_contacts = {contactSample("wall_near", 1.0, 0.020)};
+  snapshot.gazebo_task_object_moving_jaw_contacts = {contactSample("wall_near", -1.0, 0.020)};
   snapshot.gazebo_task_object_attached = gazebo_attached;
   snapshot.moveit_task_object_attached = moveit_attached;
   snapshot.moveit_world_object_poses.emplace(profile.table_object, profile.table_pose);
@@ -61,7 +59,8 @@ std::string failureCodes(const pick_place::ValidationResult & result)
 {
   std::ostringstream output;
   for (const auto & failure : result.failures) {
-    if (output.tellp() > 0) output << ',';
+    if (output.tellp() > 0)
+      output << ',';
     output << failure.code;
   }
   return output.str();
@@ -81,8 +80,8 @@ void setTaskObjectPose(pick_place::WorldSnapshot & snapshot, const pick_place::P
   }
 }
 
-pick_place::TaskObjectContactSample contactSample(
-  std::string cup_collision, double normal_y, double local_z, double depth)
+pick_place::TaskObjectContactSample contactSample(std::string cup_collision, double normal_y,
+                                                  double local_z, double depth)
 {
   pick_place::TaskObjectContactSample sample;
   sample.task_object_collision = std::move(cup_collision);
@@ -98,10 +97,8 @@ pick_place::TaskObjectContactSample contactSample(
 pick_place::WorldSnapshot semanticWallGrasp()
 {
   auto snapshot = world(false, false);
-  snapshot.gazebo_task_object_fixed_finger_contacts = {
-    contactSample("wall_near", 1.0, 0.020)};
-  snapshot.gazebo_task_object_moving_jaw_contacts = {
-    contactSample("wall_near", -1.0, 0.020)};
+  snapshot.gazebo_task_object_fixed_finger_contacts = {contactSample("wall_near", 1.0, 0.020)};
+  snapshot.gazebo_task_object_moving_jaw_contacts = {contactSample("wall_near", -1.0, 0.020)};
   return snapshot;
 }
 
@@ -119,17 +116,16 @@ pick_place::TaskObjectConfig testObjectConfig(const pick_place::SO101Profile & p
 
 pick_place::GraspContactValidationConfig testContactPolicy()
 {
-  return {true, true, "wall_near", "outside", "inside", 0.0008,
-          0.008, 0.035, 0.020, {"rim", "bottom", "wall_opposite"}};
+  return {true,   true,  "wall_near", "outside", "inside",
+          0.0008, 0.008, 0.035,       0.020,     {"rim", "bottom", "wall_opposite"}};
 }
 
 std::shared_ptr<const pick_place::TransitionContractRegistry::ITransitionContract>
-attachmentContract(
-  pick_place::TransitionKey transition,
-  pick_place::SO101Profile profile = pick_place::SO101Profile::canonical())
+attachmentContract(pick_place::TransitionKey transition,
+                   const pick_place::SO101Profile & profile = pick_place::SO101Profile::canonical())
 {
-  return pick_place::makeSO101AttachmentContract(
-    transition, profile, testObjectConfig(profile), testContactPolicy());
+  return pick_place::makeSO101AttachmentContract(transition, profile, testObjectConfig(profile),
+                                                 testContactPolicy());
 }
 
 }  // namespace
@@ -138,8 +134,8 @@ TEST(SO101AttachmentContracts, RegistersEveryForwardAndRecoveryAttachmentBoundar
 {
   pick_place::TransitionContractRegistry registry;
   const auto & profile = pick_place::SO101Profile::canonical();
-  pick_place::registerSO101AttachmentContracts(
-    registry, profile, testObjectConfig(profile), testContactPolicy());
+  pick_place::registerSO101AttachmentContracts(registry, profile, testObjectConfig(profile),
+                                               testContactPolicy());
 
   for (const auto transition : {
          key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT),
@@ -147,12 +143,10 @@ TEST(SO101AttachmentContracts, RegistersEveryForwardAndRecoveryAttachmentBoundar
          key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT),
          key(pick_place::State::DETACH_MOVEIT, pick_place::State::SYNC_WORLD_OBJECT),
          key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT),
-         key(pick_place::State::RECOVER_DETACH_GAZEBO,
-             pick_place::State::RECOVER_DETACH_MOVEIT),
+         key(pick_place::State::RECOVER_DETACH_GAZEBO, pick_place::State::RECOVER_DETACH_MOVEIT),
          key(pick_place::State::RECOVER_DETACH_MOVEIT,
              pick_place::State::RECOVER_SYNC_WORLD_OBJECT),
-         key(pick_place::State::RECOVER_SYNC_WORLD_OBJECT,
-             pick_place::State::RECOVER_RETREAT),
+         key(pick_place::State::RECOVER_SYNC_WORLD_OBJECT, pick_place::State::RECOVER_RETREAT),
        }) {
     EXPECT_TRUE(registry.hasContract(transition));
   }
@@ -190,18 +184,16 @@ TEST(SO101AttachmentContracts, ArmQuiescenceFailureReportsEveryJointVelocity)
   const auto result = contract->validatePrecondition(before);
 
   ASSERT_FALSE(result.ok);
-  const auto failure = std::find_if(result.failures.begin(), result.failures.end(),
-                                    [](const auto & item) {
-                                      return item.code == "ARM_NOT_QUIESCENT";
-                                    });
+  const auto failure =
+    std::find_if(result.failures.begin(), result.failures.end(),
+                 [](const auto & item) { return item.code == "ARM_NOT_QUIESCENT"; });
   ASSERT_NE(failure, result.failures.end());
   EXPECT_DOUBLE_EQ(0.01, failure->metrics.at("stationary_velocity_limit"));
   for (std::size_t i = 0; i < profile.arm_joints.size(); ++i) {
     EXPECT_DOUBLE_EQ(0.001 * static_cast<double>(i + 1),
                      failure->metrics.at("actual_velocity_" + profile.arm_joints[i]));
   }
-  EXPECT_DOUBLE_EQ(0.012,
-                   failure->metrics.at("actual_velocity_" + profile.gripper_joint));
+  EXPECT_DOUBLE_EQ(0.012, failure->metrics.at("actual_velocity_" + profile.gripper_joint));
   EXPECT_DOUBLE_EQ(0.0, failure->metrics.at("q6_included_in_stationary_decision"));
 }
 
@@ -220,9 +212,9 @@ TEST(SO101AttachmentContracts, MovingGripperIsRejectedByQ6NotArmQuiescence)
   EXPECT_TRUE(std::any_of(result.failures.begin(), result.failures.end(), [](const auto & failure) {
     return failure.code == "Q6_NOT_STATIONARY";
   }));
-  EXPECT_FALSE(std::any_of(result.failures.begin(), result.failures.end(), [](const auto & failure) {
-    return failure.code == "ARM_NOT_QUIESCENT";
-  }));
+  EXPECT_FALSE(
+    std::any_of(result.failures.begin(), result.failures.end(),
+                [](const auto & failure) { return failure.code == "ARM_NOT_QUIESCENT"; }));
 }
 
 TEST(SO101AttachmentContracts, GazeboAttachRejectsMergedContactWithoutBothFingerSides)
@@ -254,8 +246,8 @@ TEST(SO101AttachmentContracts, GazeboAttachRejectsEitherSingleSidedContact)
 
     EXPECT_FALSE(result.ok);
     ASSERT_FALSE(result.failures.empty());
-    EXPECT_TRUE(std::any_of(
-      result.failures.begin(), result.failures.end(), [](const auto & failure) {
+    EXPECT_TRUE(
+      std::any_of(result.failures.begin(), result.failures.end(), [](const auto & failure) {
         return failure.code == "BILATERAL_GRIPPER_CONTACT_REQUIRED";
       }));
   }
@@ -273,27 +265,27 @@ TEST(SO101AttachmentContracts, StableWindowSolverReportedDepthKeepsConservativeL
   const auto result = contract->validatePrecondition(before);
 
   EXPECT_FALSE(result.ok);
-  const auto failure = std::find_if(result.failures.begin(), result.failures.end(),
-                                    [](const auto & item) {
-                                      return item.code == "GRIPPER_CONTACT_PENETRATION_EXCEEDED";
-                                    });
+  const auto failure =
+    std::find_if(result.failures.begin(), result.failures.end(), [](const auto & item) {
+      return item.code == "GRIPPER_CONTACT_PENETRATION_EXCEEDED";
+    });
   ASSERT_NE(failure, result.failures.end());
-  EXPECT_DOUBLE_EQ(
-    0.001260, result.metrics.at("gazebo_task_object_gripper_solver_reported_max_depth"));
+  EXPECT_DOUBLE_EQ(0.001260,
+                   result.metrics.at("gazebo_task_object_gripper_solver_reported_max_depth"));
   EXPECT_DOUBLE_EQ(0.0008, result.metrics.at("stable_solver_reported_depth_limit"));
 }
 
 TEST(SO101AttachmentContracts, AcceptsOpposingSurfacesOfTheSameNearWall)
 {
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
   EXPECT_TRUE(contract->validatePrecondition(semanticWallGrasp()).ok);
 }
 
 TEST(SO101AttachmentContracts, UsesYamlLocalVerticalBandInsteadOfLegacyWorldHeightBand)
 {
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
   auto snapshot = semanticWallGrasp();
   // These aggregate world heights reproduce the light-cup GUI contact.  The
   // semantic samples are 25 mm below the rim and therefore satisfy the YAML
@@ -310,20 +302,21 @@ TEST(SO101AttachmentContracts, UsesYamlLocalVerticalBandInsteadOfLegacyWorldHeig
 
 TEST(SO101AttachmentContracts, RejectsEitherMissingFingerAtTheNearWall)
 {
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
   for (const bool remove_fixed : {false, true}) {
     auto snapshot = semanticWallGrasp();
     (remove_fixed ? snapshot.gazebo_task_object_fixed_finger_contacts
-                  : snapshot.gazebo_task_object_moving_jaw_contacts).clear();
+                  : snapshot.gazebo_task_object_moving_jaw_contacts)
+      .clear();
     EXPECT_FALSE(contract->validatePrecondition(snapshot).ok);
   }
 }
 
 TEST(SO101AttachmentContracts, RejectsRimAndBottomContacts)
 {
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
   for (const std::string collision : {"rim", "bottom"}) {
     auto snapshot = semanticWallGrasp();
     snapshot.gazebo_task_object_moving_jaw_contacts.front().task_object_collision = collision;
@@ -333,8 +326,8 @@ TEST(SO101AttachmentContracts, RejectsRimAndBottomContacts)
 
 TEST(SO101AttachmentContracts, RejectsNearAndOppositeWallSplit)
 {
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
   auto snapshot = semanticWallGrasp();
   snapshot.gazebo_task_object_moving_jaw_contacts.front().task_object_collision = "wall_opposite";
   EXPECT_FALSE(contract->validatePrecondition(snapshot).ok);
@@ -342,8 +335,8 @@ TEST(SO101AttachmentContracts, RejectsNearAndOppositeWallSplit)
 
 TEST(SO101AttachmentContracts, RejectsWrongInsideOutsideNormals)
 {
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
   auto snapshot = semanticWallGrasp();
   snapshot.gazebo_task_object_moving_jaw_contacts.front().normal_toward_finger_task_object.y = 1.0;
   EXPECT_FALSE(contract->validatePrecondition(snapshot).ok);
@@ -351,8 +344,8 @@ TEST(SO101AttachmentContracts, RejectsWrongInsideOutsideNormals)
 
 TEST(SO101AttachmentContracts, RejectsSemanticContactDepthAbovePolicyLimit)
 {
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
   auto snapshot = semanticWallGrasp();
   snapshot.gazebo_task_object_moving_jaw_contacts.front().depth = 0.0009;
   EXPECT_FALSE(contract->validatePrecondition(snapshot).ok);
@@ -375,8 +368,8 @@ TEST(SO101AttachmentContracts, GazeboAttachRejectsCanTopEdgeContact)
 TEST(SO101AttachmentContracts, MoveItAttachNeedsIndependentExactMetadataAndBothWorldsAttached)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_MOVEIT, pick_place::State::LIFT), profile);
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_MOVEIT, pick_place::State::LIFT), profile);
   const auto before = world(true, false);
   auto after = world(true, true);
   const auto accepted = contract->validate(before, after, succeeded());
@@ -391,7 +384,8 @@ TEST(SO101AttachmentContracts, MoveItAttachNeedsIndependentExactMetadataAndBothW
   after.moveit_world_object_poses.emplace(profile.task_object_id, profile.task_object_pose);
   EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
   after = world(true, true);
-  after.moveit_task_object_attached_relative_pose->x += profile.task_object_position_drift_tolerance * 2.0;
+  after.moveit_task_object_attached_relative_pose->x +=
+    profile.task_object_position_drift_tolerance * 2.0;
   EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
 }
 
@@ -453,12 +447,10 @@ TEST(SO101AttachmentContracts, RecoveryDetachAndSyncAcceptAlreadyConvergedCurren
   auto detached = world(false, false);
   detached.joint_positions[profile.gripper_joint] = profile.q6_full_open;
   for (const auto transition : {
-         key(pick_place::State::RECOVER_DETACH_GAZEBO,
-             pick_place::State::RECOVER_DETACH_MOVEIT),
+         key(pick_place::State::RECOVER_DETACH_GAZEBO, pick_place::State::RECOVER_DETACH_MOVEIT),
          key(pick_place::State::RECOVER_DETACH_MOVEIT,
              pick_place::State::RECOVER_SYNC_WORLD_OBJECT),
-         key(pick_place::State::RECOVER_SYNC_WORLD_OBJECT,
-             pick_place::State::RECOVER_RETREAT),
+         key(pick_place::State::RECOVER_SYNC_WORLD_OBJECT, pick_place::State::RECOVER_RETREAT),
        }) {
     const auto contract = attachmentContract(transition, profile);
     EXPECT_TRUE(contract->validate(detached, detached, succeeded()).ok);
@@ -467,9 +459,9 @@ TEST(SO101AttachmentContracts, RecoveryDetachAndSyncAcceptAlreadyConvergedCurren
 
 TEST(SO101AttachmentContracts, ActionSuccessAloneNeverSatisfiesMissingObservations)
 {
-  const auto contract = attachmentContract(
-    key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT),
-    pick_place::SO101Profile::canonical());
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT),
+                       pick_place::SO101Profile::canonical());
   pick_place::WorldSnapshot empty;
   EXPECT_FALSE(contract->validate(empty, empty, succeeded()).ok);
 }
@@ -485,20 +477,17 @@ TEST(SO101AttachmentContracts, DetachAllowsBoundedSettlingWhileSyncAndRecoveryRe
     pick_place::Pose3d expected_support;
   };
   std::vector<Case> cases{
-    {key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT),
-     world(true, true), world(false, true), profile.place_task_object_pose},
+    {key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT), world(true, true),
+     world(false, true), profile.place_task_object_pose},
     {key(pick_place::State::DETACH_MOVEIT, pick_place::State::SYNC_WORLD_OBJECT),
      world(false, true), world(false, false), profile.place_task_object_pose},
-    {key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT),
-     world(false, false), world(false, false), profile.place_task_object_pose},
-    {key(pick_place::State::RECOVER_DETACH_GAZEBO,
-         pick_place::State::RECOVER_DETACH_MOVEIT),
+    {key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT), world(false, false),
+     world(false, false), profile.place_task_object_pose},
+    {key(pick_place::State::RECOVER_DETACH_GAZEBO, pick_place::State::RECOVER_DETACH_MOVEIT),
      world(false, false), world(false, false), profile.task_object_pose},
-    {key(pick_place::State::RECOVER_DETACH_MOVEIT,
-         pick_place::State::RECOVER_SYNC_WORLD_OBJECT),
+    {key(pick_place::State::RECOVER_DETACH_MOVEIT, pick_place::State::RECOVER_SYNC_WORLD_OBJECT),
      world(false, false), world(false, false), profile.task_object_pose},
-    {key(pick_place::State::RECOVER_SYNC_WORLD_OBJECT,
-         pick_place::State::RECOVER_RETREAT),
+    {key(pick_place::State::RECOVER_SYNC_WORLD_OBJECT, pick_place::State::RECOVER_RETREAT),
      world(false, false), world(false, false), profile.task_object_pose},
   };
   for (auto & test_case : cases) {
@@ -516,33 +505,33 @@ TEST(SO101AttachmentContracts, DetachAllowsBoundedSettlingWhileSyncAndRecoveryRe
         snapshot->moveit_world_object_poses[profile.task_object_id] = test_case.expected_support;
       }
     }
-    const auto contract = attachmentContract(
-      test_case.transition, profile);
+    const auto contract = attachmentContract(test_case.transition, profile);
     ASSERT_TRUE(contract->validate(test_case.before, test_case.after, succeeded()).ok)
       << pick_place::toString(test_case.transition.from);
 
-    const bool forward_detach =
-      test_case.transition.from == pick_place::State::DETACH_GAZEBO ||
-      test_case.transition.from == pick_place::State::DETACH_MOVEIT;
+    const bool forward_detach = test_case.transition.from == pick_place::State::DETACH_GAZEBO ||
+                                test_case.transition.from == pick_place::State::DETACH_MOVEIT;
     auto drifted = test_case.after;
-    drifted.gazebo_task_object_pose_world->x += forward_detach
-      ? profile.place_support_xy_tolerance * 0.8
-      : profile.task_object_position_drift_tolerance * 2.0;
+    drifted.gazebo_task_object_pose_world->x +=
+      forward_detach ? profile.place_support_xy_tolerance * 0.8
+                     : profile.task_object_position_drift_tolerance * 2.0;
     if (!drifted.moveit_task_object_attached.value_or(true)) {
-      drifted.moveit_world_object_poses[profile.task_object_id] = *drifted.gazebo_task_object_pose_world;
+      drifted.moveit_world_object_poses[profile.task_object_id] =
+        *drifted.gazebo_task_object_pose_world;
     }
     EXPECT_EQ(contract->validate(test_case.before, drifted, succeeded()).ok, forward_detach)
-      << pick_place::toString(test_case.transition.from)
-      << " applied the wrong settling invariant";
+      << pick_place::toString(test_case.transition.from) << " applied the wrong settling invariant";
 
     auto unsupported_before = test_case.before;
     auto unsupported_after = test_case.after;
-    unsupported_before.gazebo_task_object_pose_world->y += forward_detach ||
-      test_case.transition.from == pick_place::State::SYNC_WORLD_OBJECT
-      ? (forward_detach ? profile.place_detach_xy_tolerance
-                        : profile.place_support_xy_tolerance) + 0.001
-      : profile.task_object_position_drift_tolerance * 2.0;
-    unsupported_after.gazebo_task_object_pose_world = unsupported_before.gazebo_task_object_pose_world;
+    unsupported_before.gazebo_task_object_pose_world->y +=
+      forward_detach || test_case.transition.from == pick_place::State::SYNC_WORLD_OBJECT
+        ? (forward_detach ? profile.place_detach_xy_tolerance
+                          : profile.place_support_xy_tolerance) +
+            0.001
+        : profile.task_object_position_drift_tolerance * 2.0;
+    unsupported_after.gazebo_task_object_pose_world =
+      unsupported_before.gazebo_task_object_pose_world;
     if (!unsupported_after.moveit_task_object_attached.value_or(true)) {
       unsupported_after.moveit_world_object_poses[profile.task_object_id] =
         *unsupported_after.gazebo_task_object_pose_world;

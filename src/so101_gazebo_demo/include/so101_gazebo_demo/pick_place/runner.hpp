@@ -39,7 +39,7 @@ private:
   [[nodiscard]] RunResult runExecuteStep(State state, std::optional<WorldSnapshot> before,
                                          std::uint64_t checkpoint_sequence, CheckpointPhase phase,
                                          std::optional<State> failed_state,
-                                         std::optional<Failure> original_failure) const;
+                                         const std::optional<Failure> & original_failure) const;
   [[nodiscard]] RunResult runResume(const RunRequest & request) const;
   [[nodiscard]] std::optional<Failure> validateExecuteConfiguration() const;
   [[nodiscard]] RunResult handleActionFailure(State state, IStateExecutor & executor,

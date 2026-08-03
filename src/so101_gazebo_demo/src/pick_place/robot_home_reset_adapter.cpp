@@ -33,9 +33,11 @@ public:
 
 bool canonicalGoal(const std::vector<double> & actual, const std::vector<double> & expected)
 {
-  if (actual.size() != expected.size()) return false;
+  if (actual.size() != expected.size())
+    return false;
   for (std::size_t i = 0; i < actual.size(); ++i) {
-    if (!std::isfinite(actual[i]) || std::abs(actual[i] - expected[i]) > 1e-12) return false;
+    if (!std::isfinite(actual[i]) || std::abs(actual[i] - expected[i]) > 1e-12)
+      return false;
   }
   return true;
 }
@@ -45,9 +47,9 @@ bool canonicalGoal(const std::vector<double> & actual, const std::vector<double>
 class MoveGroupArmHomePlanningBoundary::Impl
 {
 public:
-  Impl(std::shared_ptr<rclcpp::Node> node, const std::string & group,
-       double tolerance, double velocity, double acceleration)
-  : move_group(std::move(node), group), endpoint_tolerance(tolerance)
+  Impl(const std::shared_ptr<rclcpp::Node> & node, const std::string & group, double tolerance,
+       double velocity, double acceleration) :
+      move_group(node, group), endpoint_tolerance(tolerance)
   {
     move_group.setMaxVelocityScalingFactor(velocity);
     move_group.setMaxAccelerationScalingFactor(acceleration);
@@ -58,17 +60,17 @@ public:
 };
 
 MoveGroupArmHomePlanningBoundary::MoveGroupArmHomePlanningBoundary(
-  std::shared_ptr<rclcpp::Node> node, std::string planning_group,
-  double endpoint_tolerance, double velocity_scaling, double acceleration_scaling)
-: impl_(std::make_unique<Impl>(std::move(node), planning_group, endpoint_tolerance,
-                               velocity_scaling, acceleration_scaling))
+  const std::shared_ptr<rclcpp::Node> & node, const std::string & planning_group,
+  double endpoint_tolerance, double velocity_scaling, double acceleration_scaling) :
+    impl_(std::make_unique<Impl>(node, planning_group, endpoint_tolerance, velocity_scaling,
+                                 acceleration_scaling))
 {
 }
 
 MoveGroupArmHomePlanningBoundary::~MoveGroupArmHomePlanningBoundary() = default;
 
-PlanResult MoveGroupArmHomePlanningBoundary::planHome(
-  const std::vector<std::string> & joint_names, const std::vector<double> & goal)
+PlanResult MoveGroupArmHomePlanningBoundary::planHome(const std::vector<std::string> & joint_names,
+                                                      const std::vector<double> & goal)
 {
   if (joint_names.empty() || joint_names.size() != goal.size() ||
       !std::isfinite(impl_->endpoint_tolerance) || impl_->endpoint_tolerance < 0.0) {
@@ -89,7 +91,8 @@ PlanResult MoveGroupArmHomePlanningBoundary::planHome(
   auto artifact = std::make_shared<MoveGroupHomePlanArtifact>();
   const auto code = impl_->move_group.plan(artifact->plan);
   if (!code) {
-    return planFailure("ARM_HOME_PLAN_FAILED", "MoveIt could not plan a collision-free arm home path");
+    return planFailure("ARM_HOME_PLAN_FAILED",
+                       "MoveIt could not plan a collision-free arm home path");
   }
   const auto & trajectory = artifact->plan.trajectory.joint_trajectory;
   if (trajectory.points.empty()) {
@@ -97,13 +100,13 @@ PlanResult MoveGroupArmHomePlanningBoundary::planHome(
   }
   const auto & endpoint = trajectory.points.back().positions;
   for (std::size_t i = 0; i < joint_names.size(); ++i) {
-    const auto name = std::find(trajectory.joint_names.begin(), trajectory.joint_names.end(),
-                                joint_names[i]);
+    const auto name =
+      std::find(trajectory.joint_names.begin(), trajectory.joint_names.end(), joint_names[i]);
     if (name == trajectory.joint_names.end()) {
-      return planFailure("ARM_HOME_PLAN_INCOMPLETE",
-                         "Arm home trajectory omits a required joint");
+      return planFailure("ARM_HOME_PLAN_INCOMPLETE", "Arm home trajectory omits a required joint");
     }
-    const auto index = static_cast<std::size_t>(std::distance(trajectory.joint_names.begin(), name));
+    const auto index =
+      static_cast<std::size_t>(std::distance(trajectory.joint_names.begin(), name));
     if (index >= endpoint.size() || !std::isfinite(endpoint[index]) ||
         std::abs(endpoint[index] - goal[i]) > impl_->endpoint_tolerance) {
       return planFailure("ARM_HOME_PLAN_ENDPOINT_INVALID",
@@ -136,11 +139,10 @@ ActionResult MoveGroupArmHomePlanningBoundary::cancelAndWait()
 }
 
 MoveItRobotHomeResetAdapter::MoveItRobotHomeResetAdapter(
-  std::shared_ptr<IArmHomePlanningBoundary> arm,
-  std::shared_ptr<IJointPlanningBoundary> joints,
-  std::shared_ptr<ISO101GripperCommand> gripper, SO101Profile profile)
-: arm_(std::move(arm)), joints_(std::move(joints)), gripper_(std::move(gripper)),
-  profile_(std::move(profile))
+  std::shared_ptr<IArmHomePlanningBoundary> arm, std::shared_ptr<IJointPlanningBoundary> joints,
+  std::shared_ptr<ISO101GripperCommand> gripper, SO101Profile profile) :
+    arm_(std::move(arm)), joints_(std::move(joints)), gripper_(std::move(gripper)),
+    profile_(std::move(profile))
 {
 }
 
@@ -184,8 +186,9 @@ ActionResult MoveItRobotHomeResetAdapter::cancelArmAndWait()
     return executionFailure("ROBOT_HOME_ADAPTER_MISSING",
                             "Robot home cancellation requires arm and gripper adapters");
   }
-  const auto arm = arm_->cancelAndWait();
-  if (arm.status != ActionStatus::SUCCEEDED) return arm;
+  auto arm = arm_->cancelAndWait();
+  if (arm.status != ActionStatus::SUCCEEDED)
+    return arm;
   return gripper_->cancelAndWait();
 }
 

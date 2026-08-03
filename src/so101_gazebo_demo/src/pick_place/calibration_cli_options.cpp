@@ -7,8 +7,7 @@ namespace so101_gazebo_demo::pick_place
 {
 
 CalibrationSearchParseResult
-parseCalibrationSearchOptions(const std::vector<std::string> & arguments,
-                              double default_gripper_q6)
+parseCalibrationSearchOptions(const std::vector<std::string> & arguments, double default_gripper_q6)
 {
   if (arguments.size() < 9 || arguments.size() > 11 || !std::isfinite(default_gripper_q6)) {
     return {std::nullopt, "search expects nine values plus optional seed_count and gripper_q6"};

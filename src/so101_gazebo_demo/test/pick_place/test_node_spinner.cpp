@@ -23,8 +23,8 @@ TEST(NodeSpinner, ProcessesCallbacksAndStopsBeforeDestructionReturns)
   std::atomic<int> callbacks{0};
   auto subscription = subscriber_node->create_subscription<std_msgs::msg::Empty>(
     "/so101/test_spinner", 10, [&](const std_msgs::msg::Empty &) { ++callbacks; });
-  auto publisher = publisher_node->create_publisher<std_msgs::msg::Empty>(
-    "/so101/test_spinner", 10);
+  auto publisher =
+    publisher_node->create_publisher<std_msgs::msg::Empty>("/so101/test_spinner", 10);
   {
     spp::NodeSpinner spinner(subscriber_node);
     for (int i = 0; i < 20 && callbacks.load() == 0; ++i) {
@@ -34,7 +34,8 @@ TEST(NodeSpinner, ProcessesCallbacksAndStopsBeforeDestructionReturns)
     EXPECT_GT(callbacks.load(), 0);
   }
   const int after_stop = callbacks.load();
-  for (int i = 0; i < 5; ++i) publisher->publish(std_msgs::msg::Empty{});
+  for (int i = 0; i < 5; ++i)
+    publisher->publish(std_msgs::msg::Empty{});
   std::this_thread::sleep_for(100ms);
   EXPECT_EQ(callbacks.load(), after_stop);
   static_cast<void>(subscription);

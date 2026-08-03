@@ -11,8 +11,8 @@ namespace spp = so101_gazebo_demo::pick_place;
 namespace
 {
 
-spp::Pose3d pose(double x, double y, double z, double qx = 0.0, double qy = 0.0,
-                 double qz = 0.0, double qw = 1.0)
+spp::Pose3d pose(double x, double y, double z, double qx = 0.0, double qy = 0.0, double qz = 0.0,
+                 double qw = 1.0)
 {
   return {x, y, z, qx, qy, qz, qw};
 }
@@ -93,7 +93,8 @@ TEST(SO101MotionLadder, AcceptsCompleteNearVerticalCollisionAwarePath)
 TEST(SO101MotionPlanValidator, CarryingStateRequiresFiniteAttachedTaskObjectPoseAtEverySample)
 {
   auto plan = validLadder();
-  for (auto & sample : plan.samples) sample.attached_task_object_pose_world = pose(0.1, 0.2, 0.3);
+  for (auto & sample : plan.samples)
+    sample.attached_task_object_pose_world = pose(0.1, 0.2, 0.3);
   const spp::SO101MotionPlanValidator validator(descendConfig(), true);
   const auto result = validator.validate(spp::State::LIFT, {}, plan);
   EXPECT_TRUE(result.ok);
@@ -102,7 +103,8 @@ TEST(SO101MotionPlanValidator, CarryingStateRequiresFiniteAttachedTaskObjectPose
 TEST(SO101MotionPlanValidator, CarryingStateRejectsMissingAttachedTaskObjectPose)
 {
   auto plan = validLadder();
-  for (auto & sample : plan.samples) sample.attached_task_object_pose_world = pose(0.1, 0.2, 0.3);
+  for (auto & sample : plan.samples)
+    sample.attached_task_object_pose_world = pose(0.1, 0.2, 0.3);
   plan.samples[1].attached_task_object_pose_world.reset();
   const spp::SO101MotionPlanValidator validator(descendConfig(), true);
   const auto result = validator.validate(spp::State::LIFT, {}, plan);
@@ -114,9 +116,9 @@ TEST(SO101MotionPlanValidator, CarryingStateRejectsMissingAttachedTaskObjectPose
 TEST(SO101MotionPlanValidator, CarryingStateRejectsNonfiniteAttachedTaskObjectPose)
 {
   auto plan = validLadder();
-  for (auto & sample : plan.samples) sample.attached_task_object_pose_world = pose(0.1, 0.2, 0.3);
-  plan.samples[2].attached_task_object_pose_world->qz =
-    std::numeric_limits<double>::quiet_NaN();
+  for (auto & sample : plan.samples)
+    sample.attached_task_object_pose_world = pose(0.1, 0.2, 0.3);
+  plan.samples[2].attached_task_object_pose_world->qz = std::numeric_limits<double>::quiet_NaN();
   const spp::SO101MotionPlanValidator validator(descendConfig(), true);
   const auto result = validator.validate(spp::State::MOVE_ABOVE_PLACE, {}, plan);
   ASSERT_FALSE(result.ok);
@@ -134,29 +136,69 @@ TEST(SO101MotionConfiguration, RejectsNonfiniteNegativeAndIllegalZeroValuesAtEnt
 {
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double inf = std::numeric_limits<double>::infinity();
-  for (const int mutation : {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-                             12, 13, 14, 15, 16, 17, 18}) {
+  for (const int mutation : {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}) {
     auto config = descendConfig();
     switch (mutation) {
-      case 0: config.endpoint_position.x = nan; break;
-      case 1: config.local_approach_axis = {0, 0, 0}; break;
-      case 2: config.target_approach_axis.y = inf; break;
-      case 3: config.path_direction = {0, 0, 0}; break;
-      case 4: config.position_tolerance = 0.0; break;
-      case 5: config.position_tolerance = -0.1; break;
-      case 6: config.position_tolerance = nan; break;
-      case 7: config.axis_tolerance_rad = 0.0; break;
-      case 8: config.axis_tolerance_rad = M_PI + 0.01; break;
-      case 9: config.max_lateral_deviation = -0.1; break;
-      case 10: config.max_lateral_deviation = 0.0; break;
-      case 11: config.max_joint_jump = inf; break;
-      case 12: config.max_joint_jump = 0.0; break;
-      case 13: config.joint_endpoint_tolerance = -0.001; break;
-      case 14: config.joint_endpoint_tolerance = 0.0; break;
-      case 15: config.min_duration_seconds = nan; break;
-      case 16: config.min_duration_seconds = 0.0; break;
-      case 17: config.monotonic_tolerance = -1e-5; break;
-      case 18: config.monotonic_tolerance = inf; break;
+      case 0:
+        config.endpoint_position.x = nan;
+        break;
+      case 1:
+        config.local_approach_axis = {0, 0, 0};
+        break;
+      case 2:
+        config.target_approach_axis.y = inf;
+        break;
+      case 3:
+        config.path_direction = {0, 0, 0};
+        break;
+      case 4:
+        config.position_tolerance = 0.0;
+        break;
+      case 5:
+        config.position_tolerance = -0.1;
+        break;
+      case 6:
+        config.position_tolerance = nan;
+        break;
+      case 7:
+        config.axis_tolerance_rad = 0.0;
+        break;
+      case 8:
+        config.axis_tolerance_rad = M_PI + 0.01;
+        break;
+      case 9:
+        config.max_lateral_deviation = -0.1;
+        break;
+      case 10:
+        config.max_lateral_deviation = 0.0;
+        break;
+      case 11:
+        config.max_joint_jump = inf;
+        break;
+      case 12:
+        config.max_joint_jump = 0.0;
+        break;
+      case 13:
+        config.joint_endpoint_tolerance = -0.001;
+        break;
+      case 14:
+        config.joint_endpoint_tolerance = 0.0;
+        break;
+      case 15:
+        config.min_duration_seconds = nan;
+        break;
+      case 16:
+        config.min_duration_seconds = 0.0;
+        break;
+      case 17:
+        config.monotonic_tolerance = -1e-5;
+        break;
+      case 18:
+        config.monotonic_tolerance = inf;
+        break;
+      default:
+        FAIL() << "Unhandled mutation";
+        break;
     }
     const auto result = spp::validateWaypointLadder(validLadder(), config);
     ASSERT_FALSE(result.ok) << mutation;
@@ -175,13 +217,13 @@ TEST(SO101MotionConfiguration, AllowsZeroOnlyForNonnegativeMonotonicTolerance)
 
 TEST(SO101MotionConfiguration, RejectsMalformedTemporalPolicyAtEntry)
 {
-  for (const double clearance : {0.0, -0.001,
-                                 std::numeric_limits<double>::quiet_NaN(),
+  for (const double clearance : {0.0, -0.001, std::numeric_limits<double>::quiet_NaN(),
                                  std::numeric_limits<double>::infinity()}) {
     auto config = descendConfig();
-    config.temporal_contact_policy = spp::TemporalContactPolicy{
-      {"plastic_cup:gripper"}, spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
-      clearance};
+    config.temporal_contact_policy =
+      spp::TemporalContactPolicy{{"plastic_cup:gripper"},
+                                 spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
+                                 clearance};
     auto plan = validLadder();
     plan.temporal_contact_policy = config.temporal_contact_policy;
     const auto result = spp::validateWaypointLadder(plan, config);
@@ -192,8 +234,10 @@ TEST(SO101MotionConfiguration, RejectsMalformedTemporalPolicyAtEntry)
   }
 
   auto config = descendConfig();
-  config.temporal_contact_policy = spp::TemporalContactPolicy{
-    {"plastic_cup:table"}, spp::TemporalContactLocation::FIRST_ONLY, 0.001};
+  config.temporal_contact_policy =
+    spp::TemporalContactPolicy{{"plastic_cup:table"},
+                               spp::TemporalContactLocation::FIRST_ONLY,
+                               0.001};
   auto plan = validLadder();
   plan.temporal_contact_policy = config.temporal_contact_policy;
   EXPECT_FALSE(spp::validateWaypointLadder(plan, config).ok);
@@ -232,8 +276,7 @@ TEST(SO101MotionLadder, BoundsMeasuredEndpointSettlingWithoutHidingRealRollback)
   EXPECT_TRUE(spp::validateWaypointLadder(measured, config).ok);
 
   auto real_rollback = measured;
-  real_rollback.samples[2].tcp_pose.z =
-    real_rollback.samples[1].tcp_pose.z + 0.000031;
+  real_rollback.samples[2].tcp_pose.z = real_rollback.samples[1].tcp_pose.z + 0.000031;
   const auto rejected = spp::validateWaypointLadder(real_rollback, config);
   ASSERT_FALSE(rejected.ok);
   ASSERT_FALSE(rejected.failures.empty());
@@ -256,10 +299,14 @@ TEST(SO101MotionLadder, RejectsMissingSafetyEvidence)
   auto config = descendConfig();
   for (const auto mutate : {0, 1, 2, 3}) {
     auto plan = validLadder();
-    if (mutate == 0) plan.collision_aware = false;
-    if (mutate == 1) plan.time_parameterized = false;
-    if (mutate == 2) plan.samples[1].collision_free = false;
-    if (mutate == 3) plan.samples[2].time_from_start_seconds = plan.samples[1].time_from_start_seconds;
+    if (mutate == 0)
+      plan.collision_aware = false;
+    if (mutate == 1)
+      plan.time_parameterized = false;
+    if (mutate == 2)
+      plan.samples[1].collision_free = false;
+    if (mutate == 3)
+      plan.samples[2].time_from_start_seconds = plan.samples[1].time_from_start_seconds;
     EXPECT_FALSE(spp::validateWaypointLadder(plan, config).ok) << mutate;
   }
 }
@@ -400,8 +447,9 @@ TEST(SO101MotionTemporalContact, AllowsExactGripperPairOnlyAtFirstSample)
 {
   auto plan = validLadder();
   auto config = descendConfig();
-  config.temporal_contact_policy = spp::TemporalContactPolicy{
-    {"plastic_cup:gripper", "plastic_cup:jaw"}, spp::TemporalContactLocation::FIRST_ONLY};
+  config.temporal_contact_policy =
+    spp::TemporalContactPolicy{{"plastic_cup:gripper", "plastic_cup:jaw"},
+                               spp::TemporalContactLocation::FIRST_ONLY};
   plan.temporal_contact_policy = config.temporal_contact_policy;
   plan.samples.front().raw_contact_pairs = {"plastic_cup:gripper"};
   plan.raw_contact_pairs = {"plastic_cup:gripper"};
@@ -423,7 +471,8 @@ TEST(SO101MotionTemporalContact, AllowsContiguousPrefixWithinAxialClearance)
   config.endpoint_position.z = 0.250;
   const spp::TemporalContactPolicy policy{
     {"plastic_cup:gripper", "plastic_cup:jaw"},
-    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
+    0.043};
   config.temporal_contact_policy = policy;
   plan.temporal_contact_policy = policy;
   plan.samples[0].raw_contact_pairs = {"plastic_cup:gripper"};
@@ -443,7 +492,8 @@ TEST(SO101MotionTemporalContact, AllowsSupportContactDuringBoundedLiftPrefix)
   config.endpoint_position.z = 0.300;
   const spp::TemporalContactPolicy policy{
     {"plastic_cup:table"},
-    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.012};
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
+    0.012};
   config.temporal_contact_policy = policy;
   plan.temporal_contact_policy = policy;
   plan.samples[0].raw_contact_pairs = {"plastic_cup:table"};
@@ -462,10 +512,12 @@ TEST(SO101MotionTemporalContact, RejectsPrefixContactBeyondAxialClearance)
   config.endpoint_position.z = 0.250;
   const spp::TemporalContactPolicy policy{
     {"plastic_cup:gripper", "plastic_cup:jaw"},
-    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
+    0.043};
   config.temporal_contact_policy = policy;
   plan.temporal_contact_policy = policy;
-  for (auto & sample : plan.samples) sample.raw_contact_pairs = {"plastic_cup:gripper"};
+  for (auto & sample : plan.samples)
+    sample.raw_contact_pairs = {"plastic_cup:gripper"};
   plan.raw_contact_pairs = {"plastic_cup:gripper"};
   const auto result = spp::validateWaypointLadder(plan, config);
   ASSERT_FALSE(result.ok);
@@ -482,10 +534,12 @@ TEST(SO101MotionTemporalContact, RetreatFailsClosedWithStableContactClearanceCod
   config.endpoint_position.z = 0.250;
   const spp::TemporalContactPolicy policy{
     {"plastic_cup:gripper", "plastic_cup:jaw"},
-    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
+    0.043};
   config.temporal_contact_policy = policy;
   plan.temporal_contact_policy = policy;
-  for (auto & sample : plan.samples) sample.raw_contact_pairs = {"plastic_cup:gripper"};
+  for (auto & sample : plan.samples)
+    sample.raw_contact_pairs = {"plastic_cup:gripper"};
   plan.raw_contact_pairs = {"plastic_cup:gripper"};
   spp::SO101MotionPlanValidator validator(config, true);
 
@@ -510,7 +564,8 @@ TEST(SO101MotionTemporalContact, AcceptsIntermittentContactInsidePrefixAndProves
   config.endpoint_position.z = 0.250;
   const spp::TemporalContactPolicy policy{
     {"plastic_cup:gripper", "plastic_cup:jaw"},
-    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
+    0.043};
   config.temporal_contact_policy = policy;
   plan.temporal_contact_policy = policy;
   plan.samples[0].raw_contact_pairs = {"plastic_cup:gripper"};
@@ -530,7 +585,8 @@ TEST(SO101MotionTemporalContact, RejectsPrefixContactWithNegativeAxialProgress)
   config.endpoint_position.z = 0.250;
   const spp::TemporalContactPolicy policy{
     {"plastic_cup:gripper", "plastic_cup:jaw"},
-    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE,
+    0.043};
   config.temporal_contact_policy = policy;
   plan.temporal_contact_policy = policy;
   plan.samples[0].raw_contact_pairs = {"plastic_cup:gripper"};

@@ -59,14 +59,12 @@ bool poseMapsMatch(const std::map<std::string, Pose3d> & expected,
   if (expected.size() != current.size()) {
     return false;
   }
-  for (const auto & [name, expected_pose] : expected) {
+  return std::all_of(expected.begin(), expected.end(), [&](const auto & item) {
+    const auto & [name, expected_pose] = item;
     const auto current_pose = current.find(name);
-    if (name.empty() || current_pose == current.end() ||
-        !posesMatch(expected_pose, current_pose->second, tolerance)) {
-      return false;
-    }
-  }
-  return true;
+    return !name.empty() && current_pose != current.end() &&
+           posesMatch(expected_pose, current_pose->second, tolerance);
+  });
 }
 
 bool finitePoseMap(const std::map<std::string, Pose3d> & poses)
@@ -163,10 +161,12 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
     addFailure(result, "CHECKPOINT_EXPECTATION_INCOMPLETE",
                "Checkpoint is missing complete finite cross-world boundary evidence");
   }
-  const bool current_complete =
-    !current.joint_positions.empty() && !current.moveit_world_object_poses.empty() &&
-    current.moveit_task_object_attached.has_value() && current.gazebo_task_object_pose_world.has_value() &&
-    current.gazebo_task_object_attached.has_value() && current.gazebo_task_object_stationary.has_value();
+  const bool current_complete = !current.joint_positions.empty() &&
+                                !current.moveit_world_object_poses.empty() &&
+                                current.moveit_task_object_attached.has_value() &&
+                                current.gazebo_task_object_pose_world.has_value() &&
+                                current.gazebo_task_object_attached.has_value() &&
+                                current.gazebo_task_object_stationary.has_value();
   if (!current_complete || !poseIsFinite(current.tcp_pose_world) ||
       !finitePositionMap(current.joint_positions) ||
       !finitePoseMap(current.moveit_world_object_poses) ||

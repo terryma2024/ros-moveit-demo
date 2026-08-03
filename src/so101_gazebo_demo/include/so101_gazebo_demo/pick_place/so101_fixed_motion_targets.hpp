@@ -22,8 +22,7 @@ struct SO101FixedMotionSpec
 class SO101ConfiguredMotionTargetPolicy final : public IJointMotionTargetPolicy
 {
 public:
-  SO101ConfiguredMotionTargetPolicy(MotionPolicyConfig motion,
-                                    ValidationPolicyConfig validation);
+  SO101ConfiguredMotionTargetPolicy(MotionPolicyConfig motion, ValidationPolicyConfig validation);
 
   [[nodiscard]] JointMotionTargetResult
   target(State state, State next_state, const ObservationResult & observation) const override;

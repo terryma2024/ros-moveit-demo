@@ -18,10 +18,9 @@
 namespace so101_gazebo_demo
 {
 
-class AttachmentCollisionSystem final :
-  public gz::sim::System,
-  public gz::sim::ISystemConfigure,
-  public gz::sim::ISystemPreUpdate
+class AttachmentCollisionSystem final : public gz::sim::System,
+                                        public gz::sim::ISystemConfigure,
+                                        public gz::sim::ISystemPreUpdate
 {
 public:
   void Configure(const gz::sim::Entity &, const std::shared_ptr<const sdf::Element> & sdf,
@@ -49,12 +48,12 @@ public:
       configured_ = false;
       return;
     }
-    const bool attach_ok = node_.Subscribe(attach_topic_, &AttachmentCollisionSystem::OnAttach,
-                                           this);
-    const bool detach_ok = node_.Subscribe(detach_topic_, &AttachmentCollisionSystem::OnDetach,
-                                           this);
-    const bool state_ok = node_.Subscribe(joint_state_topic_,
-                                          &AttachmentCollisionSystem::OnJointState, this);
+    const bool attach_ok =
+      node_.Subscribe(attach_topic_, &AttachmentCollisionSystem::OnAttach, this);
+    const bool detach_ok =
+      node_.Subscribe(detach_topic_, &AttachmentCollisionSystem::OnDetach, this);
+    const bool state_ok =
+      node_.Subscribe(joint_state_topic_, &AttachmentCollisionSystem::OnJointState, this);
     state_publisher_ = node_.Advertise<gz::msgs::StringMsg>(collision_state_topic_);
     configured_ = attach_ok && detach_ok && state_ok && state_publisher_.Valid();
     if (!configured_) {
@@ -62,15 +61,17 @@ public:
     }
   }
 
-  void PreUpdate(const gz::sim::UpdateInfo &,
-                 gz::sim::EntityComponentManager & ecm) override
+  void PreUpdate(const gz::sim::UpdateInfo &, gz::sim::EntityComponentManager & ecm) override
   {
-    if (!configured_) return;
+    if (!configured_)
+      return;
     const bool enabled = collision_enabled_.load(std::memory_order_acquire);
-    if (applied_ && *applied_ == enabled) return;
-    const auto entity = ecm.EntityByComponents(gz::sim::components::Model(),
-                                                gz::sim::components::Name(child_model_));
-    if (entity == gz::sim::kNullEntity) return;
+    if (applied_ && *applied_ == enabled)
+      return;
+    const auto entity =
+      ecm.EntityByComponents(gz::sim::components::Model(), gz::sim::components::Name(child_model_));
+    if (entity == gz::sim::kNullEntity)
+      return;
     if (enabled) {
       for (const auto collision : disabled_collisions_) {
         if (!ecm.Component<gz::sim::components::Collision>(collision)) {
@@ -133,12 +134,9 @@ private:
 
 }  // namespace so101_gazebo_demo
 
-GZ_ADD_PLUGIN(
-  so101_gazebo_demo::AttachmentCollisionSystem,
-  gz::sim::System,
-  so101_gazebo_demo::AttachmentCollisionSystem::ISystemConfigure,
-  so101_gazebo_demo::AttachmentCollisionSystem::ISystemPreUpdate)
+GZ_ADD_PLUGIN(so101_gazebo_demo::AttachmentCollisionSystem, gz::sim::System,
+              so101_gazebo_demo::AttachmentCollisionSystem::ISystemConfigure,
+              so101_gazebo_demo::AttachmentCollisionSystem::ISystemPreUpdate)
 
-GZ_ADD_PLUGIN_ALIAS(
-  so101_gazebo_demo::AttachmentCollisionSystem,
-  "so101_gazebo_demo::AttachmentCollisionSystem")
+GZ_ADD_PLUGIN_ALIAS(so101_gazebo_demo::AttachmentCollisionSystem,
+                    "so101_gazebo_demo::AttachmentCollisionSystem")

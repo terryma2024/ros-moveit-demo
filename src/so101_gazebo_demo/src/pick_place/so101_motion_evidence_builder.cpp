@@ -1,5 +1,6 @@
 #include "so101_gazebo_demo/pick_place/so101_motion_evidence_builder.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -10,16 +11,14 @@ namespace
 
 MotionEvidenceBuildResult fail(std::string code, std::string message)
 {
-  return {nullptr, Failure{FailureCategory::PLAN_VALIDATION, std::move(code),
-                           std::move(message), {}}};
+  return {nullptr,
+          Failure{FailureCategory::PLAN_VALIDATION, std::move(code), std::move(message), {}}};
 }
 
 bool finite(const std::vector<double> & values)
 {
-  for (double value : values) {
-    if (!std::isfinite(value)) return false;
-  }
-  return true;
+  return std::all_of(values.begin(), values.end(),
+                     [](double value) { return std::isfinite(value); });
 }
 
 }  // namespace
@@ -30,9 +29,11 @@ MotionEvidenceBuildResult buildMotionPlanEvidence(const TrajectoryEvidenceInput 
   if (!input.moveit_success) {
     return fail("MOVEIT_PLAN_DID_NOT_SUCCEED", "MoveIt did not report a successful plan");
   }
-  if (input.joint_names.empty() || input.current_joint_snapshot.size() != input.joint_names.size() ||
+  if (input.joint_names.empty() ||
+      input.current_joint_snapshot.size() != input.joint_names.size() ||
       !finite(input.current_joint_snapshot) || input.points.empty()) {
-    return fail("TRAJECTORY_EVIDENCE_INCOMPLETE", "Trajectory metadata or current state is incomplete");
+    return fail("TRAJECTORY_EVIDENCE_INCOMPLETE",
+                "Trajectory metadata or current state is incomplete");
   }
 
   auto artifact = std::make_shared<MotionPlanArtifact>();
@@ -60,18 +61,16 @@ MotionEvidenceBuildResult buildMotionPlanEvidence(const TrajectoryEvidenceInput 
         (previous_time >= 0.0 && point.time_from_start_seconds <= previous_time)) {
       artifact->time_parameterized = false;
     }
-    auto state = evaluator.evaluate(input.joint_names, point.joint_positions,
-                                    input.allowed_touch_pairs,
-                                    input.temporal_contact_policy,
-                                    input.gripper_position);
+    auto state =
+      evaluator.evaluate(input.joint_names, point.joint_positions, input.allowed_touch_pairs,
+                         input.temporal_contact_policy, input.gripper_position);
     if (!state) {
       return fail("MOTION_STATE_EVIDENCE_UNAVAILABLE",
                   "FK or independent collision evidence is unavailable for a trajectory point");
     }
     artifact->samples.push_back({state->tcp_pose, point.joint_positions,
                                  point.time_from_start_seconds, state->collision_free,
-                                 state->raw_contact_pairs,
-                                 state->attached_task_object_pose_world});
+                                 state->raw_contact_pairs, state->attached_task_object_pose_world});
     artifact->raw_contact_pairs.insert(state->raw_contact_pairs.begin(),
                                        state->raw_contact_pairs.end());
     previous_time = point.time_from_start_seconds;

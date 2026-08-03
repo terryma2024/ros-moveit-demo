@@ -8,8 +8,10 @@ namespace so101_gazebo_demo::pick_place
 void TransitionContractRegistry::registerContract(
   TransitionKey key, std::shared_ptr<const ITransitionContract> contract)
 {
-  if (!contract) throw std::invalid_argument("null contract");
-  if (contracts_.count(key)) throw std::logic_error("duplicate contract");
+  if (!contract)
+    throw std::invalid_argument("null contract");
+  if (contracts_.count(key))
+    throw std::logic_error("duplicate contract");
   contracts_.emplace(key, std::move(contract));
 }
 

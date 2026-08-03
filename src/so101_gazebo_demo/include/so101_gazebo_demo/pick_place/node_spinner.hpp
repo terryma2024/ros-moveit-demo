@@ -22,7 +22,8 @@ public:
   ~NodeSpinner()
   {
     executor_.cancel();
-    if (thread_.joinable()) thread_.join();
+    if (thread_.joinable())
+      thread_.join();
     executor_.remove_node(node_);
   }
 

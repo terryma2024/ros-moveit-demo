@@ -9,8 +9,7 @@ namespace spp = so101_gazebo_demo::pick_place;
 
 TEST(CalibrationCliOptions, ParsesNineRequiredSearchValuesWithDefaults)
 {
-  const std::vector<std::string> args{"0.02", "-0.28", "0.222", "0", "0", "-1",
-                                      "0", "0", "-1"};
+  const std::vector<std::string> args{"0.02", "-0.28", "0.222", "0", "0", "-1", "0", "0", "-1"};
   const auto result = spp::parseCalibrationSearchOptions(args, 0.707194871);
   ASSERT_TRUE(result.options);
   EXPECT_EQ(result.options->seed_count, 4096U);
@@ -19,8 +18,8 @@ TEST(CalibrationCliOptions, ParsesNineRequiredSearchValuesWithDefaults)
 
 TEST(CalibrationCliOptions, ParsesSeedThenGripperQ6WithoutOffByOne)
 {
-  const std::vector<std::string> args{"0.02", "-0.28", "0.222", "0", "0", "-1",
-                                      "0", "0", "-1", "512", "0.9"};
+  const std::vector<std::string> args{"0.02", "-0.28", "0.222", "0",   "0",  "-1",
+                                      "0",    "0",     "-1",    "512", "0.9"};
   const auto result = spp::parseCalibrationSearchOptions(args, 0.707194871);
   ASSERT_TRUE(result.options);
   EXPECT_EQ(result.options->seed_count, 512U);
@@ -31,7 +30,6 @@ TEST(CalibrationCliOptions, ParsesSeedThenGripperQ6WithoutOffByOne)
 TEST(CalibrationCliOptions, RejectsWrongArityOrZeroSeedCount)
 {
   EXPECT_FALSE(spp::parseCalibrationSearchOptions({"1", "2"}, 0.7).options);
-  const std::vector<std::string> zero_seed{"0", "0", "0", "0", "0", "-1",
-                                           "0", "0", "-1", "0"};
+  const std::vector<std::string> zero_seed{"0", "0", "0", "0", "0", "-1", "0", "0", "-1", "0"};
   EXPECT_FALSE(spp::parseCalibrationSearchOptions(zero_seed, 0.7).options);
 }

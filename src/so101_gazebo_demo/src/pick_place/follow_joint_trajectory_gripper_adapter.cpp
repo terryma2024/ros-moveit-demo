@@ -49,9 +49,10 @@ RosTrajectoryActionClient::RosTrajectoryActionClient(std::shared_ptr<rclcpp::Nod
 
 RosTrajectoryActionClient::~RosTrajectoryActionClient() = default;
 
-ActionResult RosTrajectoryActionClient::send(const SingleJointTrajectoryGoal & requested,
+ActionResult RosTrajectoryActionClient::send(const SingleJointTrajectoryGoal & goal,
                                              double timeout_seconds)
 {
+  const auto & requested = goal;
   if (requested.joint_names.size() != 1 || requested.positions.size() != 1 ||
       requested.joint_names.front() != "6" || !std::isfinite(requested.positions.front()) ||
       !std::isfinite(requested.duration_seconds) || requested.duration_seconds <= 0.0 ||
@@ -64,17 +65,17 @@ ActionResult RosTrajectoryActionClient::send(const SingleJointTrajectoryGoal & r
     return failure(ActionStatus::TIMED_OUT, "GRIPPER_ACTION_UNAVAILABLE",
                    "Gripper action server is unavailable: " + action_name_);
   }
-  Follow::Goal goal;
-  goal.trajectory.joint_names = requested.joint_names;
+  Follow::Goal action_goal;
+  action_goal.trajectory.joint_names = requested.joint_names;
   trajectory_msgs::msg::JointTrajectoryPoint point;
   point.positions = requested.positions;
   const auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
     std::chrono::duration<double>(requested.duration_seconds));
   point.time_from_start.sec = static_cast<std::int32_t>(duration.count() / 1000000000LL);
   point.time_from_start.nanosec = static_cast<std::uint32_t>(duration.count() % 1000000000LL);
-  goal.trajectory.points.push_back(point);
+  action_goal.trajectory.points.push_back(point);
 
-  auto future = impl_->client->async_send_goal(goal);
+  auto future = impl_->client->async_send_goal(action_goal);
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->pending = future;
@@ -140,8 +141,8 @@ ActionResult RosTrajectoryActionClient::cancelAndWait(double timeout_seconds)
     return failure(ActionStatus::FAILED, "GRIPPER_CANCEL_TIMEOUT_INVALID",
                    "Cancellation requires a finite positive timeout");
   }
-  const auto deadline = std::chrono::steady_clock::now() +
-                        std::chrono::duration<double>(timeout_seconds);
+  const auto deadline =
+    std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds);
   if (pending) {
     if (pending->wait_until(deadline) != std::future_status::ready) {
       return failure(ActionStatus::TIMED_OUT, "GRIPPER_PENDING_GOAL_UNRESOLVED",
@@ -174,7 +175,7 @@ ActionResult RosTrajectoryActionClient::cancelAndWait(double timeout_seconds)
       return failure(ActionStatus::TIMED_OUT, "GRIPPER_CANCEL_RESPONSE_TIMEOUT",
                      "Timed out waiting for joint 6 cancel response");
     }
-    const auto response = future.get();
+    const auto & response = future.get();
     if (!response || response->return_code != CancelResponse::ERROR_NONE ||
         response->goals_canceling.empty()) {
       return failure(ActionStatus::FAILED, "GRIPPER_CANCEL_REJECTED",
@@ -223,8 +224,8 @@ ActionResult FollowJointTrajectoryGripperAdapter::command(double q6)
   // defer that terminal result; the state postcondition still has to prove
   // fresh bilateral contact, bounded penetration, and stopped q6 evidence.
   if (result.status == ActionStatus::FAILED && result.failure &&
-      result.failure->code == "GRIPPER_ACTION_ABORTED" &&
-      std::isfinite(contact_stop_q6_) && std::abs(q6 - contact_stop_q6_) <= 1e-12) {
+      result.failure->code == "GRIPPER_ACTION_ABORTED" && std::isfinite(contact_stop_q6_) &&
+      std::abs(q6 - contact_stop_q6_) <= 1e-12) {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
   return result;

@@ -26,9 +26,17 @@ ActionResult succeeded()
 MoveItSceneGeometry canonicalGeometry()
 {
   const auto & profile = SO101Profile::canonical();
-  return {profile.world_frame, "table", profile.table_size,
-          "base_pedestal", profile.pedestal_size,
-          "plastic_cup", 0.090, 0.040, 0.002, 0.002, 12};
+  return {profile.world_frame,
+          "table",
+          profile.table_size,
+          "base_pedestal",
+          profile.pedestal_size,
+          "plastic_cup",
+          0.090,
+          0.040,
+          0.002,
+          0.002,
+          12};
 }
 
 MoveItAttachmentSpec canonicalAttachment()
@@ -61,7 +69,7 @@ class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
 public:
   ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) override
   {
-    calls.push_back("attach");
+    calls.emplace_back("attach");
     attached_spec = spec;
     ++attach_calls;
     return attach_result;
@@ -75,7 +83,7 @@ public:
 
   ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
-    calls.push_back("upsert");
+    calls.emplace_back("upsert");
     synced_pose = pose;
     ++upsert_calls;
     return sync_result;
@@ -160,15 +168,14 @@ TEST(SO101MoveItSceneGeometry, BuildsExactProfileDrivenCollisionObjects)
   ASSERT_EQ(13U, cup.primitive_poses.size());
   EXPECT_EQ("world", cup.header.frame_id);
   EXPECT_EQ("plastic_cup", cup.id);
-  EXPECT_EQ(12U, std::count_if(cup.primitives.begin(), cup.primitives.end(),
-                              [](const auto & primitive) {
-                                return primitive.type == shape_msgs::msg::SolidPrimitive::BOX;
-                              }));
-  EXPECT_EQ(1U, std::count_if(cup.primitives.begin(), cup.primitives.end(),
-                             [](const auto & primitive) {
-                               return primitive.type ==
-                                      shape_msgs::msg::SolidPrimitive::CYLINDER;
-                             }));
+  EXPECT_EQ(12U,
+            std::count_if(cup.primitives.begin(), cup.primitives.end(), [](const auto & primitive) {
+              return primitive.type == shape_msgs::msg::SolidPrimitive::BOX;
+            }));
+  EXPECT_EQ(1U,
+            std::count_if(cup.primitives.begin(), cup.primitives.end(), [](const auto & primitive) {
+              return primitive.type == shape_msgs::msg::SolidPrimitive::CYLINDER;
+            }));
   EXPECT_DOUBLE_EQ(0.02, cup.pose.position.x);
   EXPECT_DOUBLE_EQ(-0.28, cup.pose.position.y);
   EXPECT_DOUBLE_EQ(0.165, cup.pose.position.z);
@@ -179,10 +186,9 @@ TEST(SO101MoveItSceneExecutor, AttachUsesExactOrderedMetadataAndExclusiveMembers
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {attachedState(true), attachedState(false)};
-  MoveItSceneExecutor executor(adapter,
-                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
-                                "plastic_cup"},
-                               canonicalAttachment(), 0.05, 0.001);
+  MoveItSceneExecutor executor(
+    adapter, {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, "plastic_cup"},
+    canonicalAttachment(), 0.05, 0.001);
 
   const Pose3d settled_pose{0.0204, -0.2791, 0.1653, 0.01, -0.02, 0.03, 0.999};
   auto context = contextFor(State::ATTACH_MOVEIT);
@@ -204,10 +210,9 @@ TEST(SO101MoveItSceneExecutor, AttachUsesExactOrderedMetadataAndExclusiveMembers
 TEST(SO101MoveItSceneExecutor, AttachRejectsMissingSettledGazeboPose)
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
-  MoveItSceneExecutor executor(adapter,
-                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
-                                "plastic_cup"},
-                               canonicalAttachment(), 0.05, 0.001);
+  MoveItSceneExecutor executor(
+    adapter, {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, "plastic_cup"},
+    canonicalAttachment(), 0.05, 0.001);
 
   const auto result = executor.execute(contextFor(State::ATTACH_MOVEIT));
 
@@ -224,10 +229,9 @@ TEST(SO101MoveItSceneExecutor, RejectsWrongTouchLinkOrderDespiteApiSuccess)
   auto wrong = attachedState(false);
   wrong.touch_links = {"jaw", "gripper"};
   adapter->observations = {wrong};
-  MoveItSceneExecutor executor(adapter,
-                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
-                                "plastic_cup"},
-                               canonicalAttachment(), 0.005, 0.001);
+  MoveItSceneExecutor executor(
+    adapter, {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, "plastic_cup"},
+    canonicalAttachment(), 0.005, 0.001);
 
   auto context = contextFor(State::ATTACH_MOVEIT);
   context.before.gazebo_task_object_pose_world = SO101Profile::canonical().task_object_pose;
@@ -242,10 +246,9 @@ TEST(SO101MoveItSceneExecutor, DetachRequiresExclusiveReturnToWorld)
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {attachedState(false), detachedState()};
-  MoveItSceneExecutor executor(adapter,
-                               {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false,
-                                "plastic_cup"},
-                               canonicalAttachment(), 0.05, 0.001);
+  MoveItSceneExecutor executor(
+    adapter, {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false, "plastic_cup"},
+    canonicalAttachment(), 0.05, 0.001);
 
   const auto result = executor.execute(contextFor(State::DETACH_MOVEIT));
 
@@ -259,10 +262,9 @@ TEST(SO101MoveItSceneExecutor, SyncUsesAllSixPoseDegrees)
   const Pose3d pose{0.02, -0.28, 0.181, 0.1, -0.2, 0.3, 0.9};
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {detachedState(pose)};
-  MoveItSceneExecutor executor(adapter,
-                               {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false,
-                                "plastic_cup"},
-                               canonicalAttachment(), 0.05, 0.001);
+  MoveItSceneExecutor executor(
+    adapter, {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false, "plastic_cup"},
+    canonicalAttachment(), 0.05, 0.001);
   auto context = contextFor(State::SYNC_WORLD_OBJECT);
   context.before.gazebo_task_object_pose_world = pose;
 

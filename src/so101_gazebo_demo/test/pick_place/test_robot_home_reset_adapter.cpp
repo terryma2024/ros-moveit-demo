@@ -21,7 +21,10 @@ ActionResult succeeded()
 class MarkerPlan final : public PlanArtifact
 {
 public:
-  explicit MarkerPlan(int identifier) : id(identifier) { trajectory_points = 3; }
+  explicit MarkerPlan(int identifier) : id(identifier)
+  {
+    trajectory_points = 3;
+  }
   int id;
 };
 
@@ -44,7 +47,10 @@ public:
     return execute_result;
   }
 
-  ActionResult cancelAndWait() override { return succeeded(); }
+  ActionResult cancelAndWait() override
+  {
+    return succeeded();
+  }
 
   ActionResult plan_result{succeeded()};
   ActionResult execute_result{succeeded()};
@@ -59,12 +65,18 @@ public:
 class FakeJointBoundary final : public IJointPlanningBoundary
 {
 public:
-  std::optional<CurrentJointStateEvidence> currentState() override { return current; }
-  std::optional<MotionPlanningSceneFacts> sceneFacts() override { return std::nullopt; }
-  JointSegmentPlanResult planSegment(
-    const std::vector<std::string> &, const std::vector<double> &,
-    const std::vector<double> &, const std::set<std::string> &,
-    const std::optional<TemporalContactPolicy> &, double, double, double) override
+  std::optional<CurrentJointStateEvidence> currentState() override
+  {
+    return current;
+  }
+  std::optional<MotionPlanningSceneFacts> sceneFacts() override
+  {
+    return std::nullopt;
+  }
+  JointSegmentPlanResult planSegment(const std::vector<std::string> &, const std::vector<double> &,
+                                     const std::vector<double> &, const std::set<std::string> &,
+                                     const std::optional<TemporalContactPolicy> &, double, double,
+                                     double) override
   {
     return {{ActionStatus::NOT_SUPPORTED, std::nullopt}, std::nullopt};
   }
@@ -80,7 +92,10 @@ public:
     targets.push_back(q6);
     return command_result;
   }
-  ActionResult cancelAndWait() override { return succeeded(); }
+  ActionResult cancelAndWait() override
+  {
+    return succeeded();
+  }
 
   ActionResult command_result{succeeded()};
   std::vector<double> targets;
@@ -100,8 +115,7 @@ TEST(MoveItRobotHomeResetAdapter, PlansCanonicalHomeAndExecutesTheExactArtifact)
   EXPECT_EQ(profile.arm_joints, arm->last_joint_names);
   EXPECT_EQ((std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0}), arm->last_goal);
 
-  EXPECT_EQ(ActionStatus::SUCCEEDED,
-            adapter.executeArmHome(*planned.artifact).status);
+  EXPECT_EQ(ActionStatus::SUCCEEDED, adapter.executeArmHome(*planned.artifact).status);
   EXPECT_EQ(planned.artifact.get(), arm->executed);
   EXPECT_EQ(1, arm->plan_calls);
   EXPECT_EQ(1, arm->execute_calls);
@@ -111,9 +125,8 @@ TEST(MoveItRobotHomeResetAdapter, RejectsNonCanonicalHomeWithoutPlanning)
 {
   const auto & profile = SO101Profile::canonical();
   auto arm = std::make_shared<FakeArmHomePlanningBoundary>();
-  MoveItRobotHomeResetAdapter adapter(
-    arm, std::make_shared<FakeJointBoundary>(),
-    std::make_shared<FakeGripperCommand>(), profile);
+  MoveItRobotHomeResetAdapter adapter(arm, std::make_shared<FakeJointBoundary>(),
+                                      std::make_shared<FakeGripperCommand>(), profile);
 
   const auto result = adapter.planArmHome({0.0, 0.0, 0.0, 0.0, 0.1});
 

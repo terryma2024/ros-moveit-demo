@@ -62,8 +62,10 @@ public:
     ++calls;
     return delta_m == 0.002 ? spp::ActionResult{spp::ActionStatus::SUCCEEDED, std::nullopt}
                             : spp::ActionResult{spp::ActionStatus::FAILED,
-                              spp::Failure{spp::FailureCategory::CONFIGURATION,
-                                           "MICRO_LIFT_DELTA_INVALID", "unexpected probe", {}}};
+                                                spp::Failure{spp::FailureCategory::CONFIGURATION,
+                                                             "MICRO_LIFT_DELTA_INVALID",
+                                                             "unexpected probe",
+                                                             {}}};
   }
   spp::ActionResult cancelWorldZMicroLift() override
   {
@@ -77,7 +79,8 @@ class FakePhysicalObserver final : public spp::IWorldObserver
 public:
   spp::ObservationResult observe() override
   {
-    if (next_sample < samples.size()) return {samples[next_sample++], std::nullopt};
+    if (next_sample < samples.size())
+      return {samples[next_sample++], std::nullopt};
     return {snapshot, std::nullopt};
   }
   spp::WorldSnapshot snapshot;
@@ -126,9 +129,15 @@ public:
     return state;
   }
 
-  spp::MoveItSceneState state{true, false, {}, {}, spp::SO101Profile::canonical().task_object_pose,
-                              true, spp::SO101Profile::canonical().table_pose,
-                              true, spp::SO101Profile::canonical().pedestal_pose};
+  spp::MoveItSceneState state{true,
+                              false,
+                              {},
+                              {},
+                              spp::SO101Profile::canonical().task_object_pose,
+                              true,
+                              spp::SO101Profile::canonical().table_pose,
+                              true,
+                              spp::SO101Profile::canonical().pedestal_pose};
   int attach_calls{0};
 };
 
@@ -198,18 +207,20 @@ public:
     const auto & endpoint = spec_.validation.endpoint_position;
     const double initial_z = endpoint.z + 0.10;
     constexpr double kQuarterTurnHalfAngleSinCos = 0.7071067811865476;
-    artifact->samples.push_back({{endpoint.x, endpoint.y, initial_z,
-                                  kQuarterTurnHalfAngleSinCos, 0.0, 0.0,
-                                  kQuarterTurnHalfAngleSinCos},
-                                 spec_.logical_start, 0.0, true});
+    artifact->samples.push_back({{endpoint.x, endpoint.y, initial_z, kQuarterTurnHalfAngleSinCos,
+                                  0.0, 0.0, kQuarterTurnHalfAngleSinCos},
+                                 spec_.logical_start,
+                                 0.0,
+                                 true});
     for (std::size_t i = 0; i < request.joint_waypoints.size(); ++i) {
-      const double fraction = static_cast<double>(i + 1U) /
-                              static_cast<double>(request.joint_waypoints.size());
-      artifact->samples.push_back({{endpoint.x, endpoint.y,
-                                    initial_z + fraction * (endpoint.z - initial_z),
-                                    0.0, 0.0, 0.0, 1.0},
-                                   request.joint_waypoints[i],
-                                   static_cast<double>(i + 1U), true});
+      const double fraction =
+        static_cast<double>(i + 1U) / static_cast<double>(request.joint_waypoints.size());
+      artifact->samples.push_back(
+        {{endpoint.x, endpoint.y, initial_z + fraction * (endpoint.z - initial_z), 0.0, 0.0, 0.0,
+          1.0},
+         request.joint_waypoints[i],
+         static_cast<double>(i + 1U),
+         true});
     }
     return {{spp::ActionStatus::SUCCEEDED, std::nullopt}, artifact};
   }
@@ -218,7 +229,10 @@ public:
   {
     return {spp::ActionStatus::SUCCEEDED, std::nullopt};
   }
-  spp::ActionResult cancel() override { return {spp::ActionStatus::SUCCEEDED, std::nullopt}; }
+  spp::ActionResult cancel() override
+  {
+    return {spp::ActionStatus::SUCCEEDED, std::nullopt};
+  }
 
   spp::SO101FixedMotionSpec spec_;
   std::optional<spp::JointMotionRequest> last_request;
@@ -230,7 +244,8 @@ public:
   std::optional<spp::CurrentJointStateEvidence> currentState() override
   {
     ++current_calls;
-    if (current_after_scene && scene_calls > 0) return current_after_scene;
+    if (current_after_scene && scene_calls > 0)
+      return current_after_scene;
     return current;
   }
   std::optional<spp::MotionPlanningSceneFacts> sceneFacts() override
@@ -238,10 +253,11 @@ public:
     ++scene_calls;
     return scene;
   }
-  spp::JointSegmentPlanResult planSegment(
-    const std::vector<std::string> &, const std::vector<double> &,
-    const std::vector<double> &, const std::set<std::string> &,
-    const std::optional<spp::TemporalContactPolicy> &, double, double, double) override
+  spp::JointSegmentPlanResult planSegment(const std::vector<std::string> &,
+                                          const std::vector<double> &, const std::vector<double> &,
+                                          const std::set<std::string> &,
+                                          const std::optional<spp::TemporalContactPolicy> &, double,
+                                          double, double) override
   {
     return {{spp::ActionStatus::NOT_SUPPORTED, std::nullopt}, std::nullopt};
   }
@@ -258,8 +274,7 @@ class StubPlannerExecutor final : public spp::IStatePlanner, public spp::IStateE
 public:
   spp::PlanResult plan(spp::State, spp::State, const spp::ObservationResult &) override
   {
-    return {{spp::ActionStatus::SUCCEEDED, std::nullopt},
-            std::make_shared<spp::PlanArtifact>()};
+    return {{spp::ActionStatus::SUCCEEDED, std::nullopt}, std::make_shared<spp::PlanArtifact>()};
   }
   spp::ActionResult execute(const spp::ExecutionContext &) override
   {
@@ -274,29 +289,29 @@ public:
 std::shared_ptr<const spp::SO101ConfiguredMotionTargetPolicy> configuredPolicy()
 {
   const std::filesystem::path root(SO101_TEST_POLICY_CONFIG_ROOT);
-  const auto loaded = spp::loadPolicyBundle({
-    (root / "task_objects/light_plastic_cup.yaml").string(),
-    (root / "motion_policies/light_cup_wall_pick.yaml").string(),
-    (root / "validation_policies/light_cup_wall_pick.yaml").string()});
+  const auto loaded =
+    spp::loadPolicyBundle({(root / "task_objects/light_plastic_cup.yaml").string(),
+                           (root / "motion_policies/light_cup_wall_pick.yaml").string(),
+                           (root / "validation_policies/light_cup_wall_pick.yaml").string()});
   if (!loaded.bundle) {
     throw std::runtime_error(loaded.failure ? loaded.failure->message : "policy load failed");
   }
-  return std::make_shared<const spp::SO101ConfiguredMotionTargetPolicy>(
-    loaded.bundle->motion, loaded.bundle->validation);
+  return std::make_shared<const spp::SO101ConfiguredMotionTargetPolicy>(loaded.bundle->motion,
+                                                                        loaded.bundle->validation);
 }
 
 spp::SO101Profile configuredProfile()
 {
   const std::filesystem::path root(SO101_TEST_POLICY_CONFIG_ROOT);
-  const auto loaded = spp::loadPolicyBundle({
-    (root / "task_objects/light_plastic_cup.yaml").string(),
-    (root / "motion_policies/light_cup_wall_pick.yaml").string(),
-    (root / "validation_policies/light_cup_wall_pick.yaml").string()});
+  const auto loaded =
+    spp::loadPolicyBundle({(root / "task_objects/light_plastic_cup.yaml").string(),
+                           (root / "motion_policies/light_cup_wall_pick.yaml").string(),
+                           (root / "validation_policies/light_cup_wall_pick.yaml").string()});
   if (!loaded.bundle) {
     throw std::runtime_error(loaded.failure ? loaded.failure->message : "policy load failed");
   }
-  return spp::SO101Profile::configured(
-    loaded.bundle->object, loaded.bundle->motion, loaded.bundle->validation);
+  return spp::SO101Profile::configured(loaded.bundle->object, loaded.bundle->motion,
+                                       loaded.bundle->validation);
 }
 
 spp::SO101PickPlaceRuntimeDependencies completeDependencies()
@@ -357,10 +372,8 @@ std::shared_ptr<FakeBoundary> validBoundary()
   boundary->scene.table_world_pose = profile.table_pose;
   boundary->scene.pedestal_world_pose = profile.pedestal_pose;
   boundary->scene.task_object_world_pose = profile.task_object_pose;
-  boundary->scene.current_gripper_pose_world =
-    spp::Pose3d{0.0, -0.28, 0.25, 0.0, 0.0, 0.0, 1.0};
-  boundary->scene.current_tcp_pose_world =
-    spp::Pose3d{0.02, -0.28, 0.282, 0.0, 0.0, 0.0, 1.0};
+  boundary->scene.current_gripper_pose_world = spp::Pose3d{0.0, -0.28, 0.25, 0.0, 0.0, 0.0, 1.0};
+  boundary->scene.current_tcp_pose_world = spp::Pose3d{0.02, -0.28, 0.282, 0.0, 0.0, 0.0, 1.0};
   return boundary;
 }
 
@@ -374,7 +387,10 @@ spp::WorldSnapshot detachedMotionWorld(const spp::SO101FixedMotionSpec & spec,
   world.tcp_pose_world = {spec.validation.endpoint_position.x,
                           spec.validation.endpoint_position.y,
                           spec.validation.endpoint_position.z,
-                          0.0, 0.0, 0.0, 1.0};
+                          0.0,
+                          0.0,
+                          0.0,
+                          1.0};
   for (std::size_t i = 0; i < profile.arm_joints.size(); ++i) {
     world.joint_positions[profile.arm_joints[i]] = spec.target.joint_waypoints.back()[i];
     world.joint_velocities[profile.arm_joints[i]] = 0.0;
@@ -382,8 +398,8 @@ spp::WorldSnapshot detachedMotionWorld(const spp::SO101FixedMotionSpec & spec,
   world.joint_positions[profile.gripper_joint] = spec.expected_gripper_q6;
   world.joint_velocities[profile.gripper_joint] = 0.0;
   world.moveit_world_object_poses[profile.table_object] = profile.table_pose;
-  const auto task_object = spec.state == spp::State::RETREAT
-    ? profile.place_task_object_pose : profile.task_object_pose;
+  const auto task_object =
+    spec.state == spp::State::RETREAT ? profile.place_task_object_pose : profile.task_object_pose;
   world.moveit_world_object_poses[profile.task_object_id] = task_object;
   world.moveit_task_object_attached = false;
   world.gazebo_task_object_pose_world = task_object;
@@ -410,13 +426,19 @@ TEST(SO101PickPlaceRuntime, RegistersEveryConcreteActionValidatorAndContractExac
   ASSERT_TRUE(runtime.execution_safe);
   EXPECT_FALSE(runtime.configuration_failure);
 
-  const std::set<spp::State> planned{
-    spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, spp::State::LIFT,
-    spp::State::MOVE_ABOVE_PLACE, spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
-    spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT, spp::State::RECOVER_MOVE_ABOVE_PICK,
-    spp::State::RECOVER_DESCEND_TO_PICK, spp::State::RECOVER_RETREAT};
+  const std::set<spp::State> planned{spp::State::MOVE_ABOVE_OBJECT,
+                                     spp::State::DESCEND,
+                                     spp::State::LIFT,
+                                     spp::State::MOVE_ABOVE_PLACE,
+                                     spp::State::DESCEND_TO_PLACE,
+                                     spp::State::RETREAT,
+                                     spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
+                                     spp::State::RECOVER_MOVE_ABOVE_PICK,
+                                     spp::State::RECOVER_DESCEND_TO_PICK,
+                                     spp::State::RECOVER_RETREAT};
   for (const auto & [state, transitions] : spp::TransitionTable::entries()) {
-    if (state == spp::State::IDLE || spp::isTerminal(state) || !spp::isAction(state)) continue;
+    if (state == spp::State::IDLE || spp::isTerminal(state) || !spp::isAction(state))
+      continue;
     EXPECT_NE(runtime.actions.findExecutor(state), nullptr) << spp::toString(state);
     EXPECT_TRUE(runtime.contracts.hasContract({state, transitions.succeeded}))
       << spp::toString(state);
@@ -443,27 +465,22 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
   unilateral.gazebo_task_object_gripper_max_depth = 0.001;
   auto bilateral = unilateral;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
-  observer->samples = {unilateral,
-                       bilateral, bilateral, bilateral,
-                       bilateral, bilateral, bilateral,
-                       bilateral, bilateral, bilateral,
-                       bilateral, bilateral, bilateral};
+  observer->samples = {unilateral, bilateral, bilateral, bilateral, bilateral, bilateral, bilateral,
+                       bilateral,  bilateral, bilateral, bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
   ASSERT_TRUE(executor);
-  const spp::ExecutionContext context{
-    spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO,
-    observer->snapshot, nullptr};
+  const spp::ExecutionContext context{spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO,
+                                      observer->snapshot, nullptr};
 
   const auto result = executor->execute(context);
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
   ASSERT_EQ(gripper->calls, 2);
-  EXPECT_DOUBLE_EQ(
-    gripper->targets.front(),
-    spp::SO101Profile::canonical().q6_contact -
-      spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
+  EXPECT_DOUBLE_EQ(gripper->targets.front(),
+                   spp::SO101Profile::canonical().q6_contact -
+                     spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
   EXPECT_DOUBLE_EQ(gripper->targets.back(), spp::SO101Profile::canonical().q6_contact);
   EXPECT_EQ(observer->next_sample, 13U);
 }
@@ -482,17 +499,14 @@ TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
   unilateral.gazebo_task_object_gripper_max_depth = 0.001;
   auto bilateral = unilateral;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
-  observer->samples = {unilateral, bilateral, bilateral, bilateral,
-                       bilateral, bilateral, bilateral,
-                       bilateral, bilateral, bilateral,
-                       bilateral, bilateral, bilateral};
+  observer->samples = {unilateral, bilateral, bilateral, bilateral, bilateral, bilateral, bilateral,
+                       bilateral,  bilateral, bilateral, bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
   ASSERT_TRUE(executor);
 
-  const auto result = executor->execute({
-    spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO,
-    observer->snapshot, nullptr});
+  const auto result = executor->execute(
+    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
@@ -512,15 +526,13 @@ TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
   bilateral.gazebo_task_object_fixed_finger_contact = true;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
   bilateral.gazebo_task_object_gripper_max_depth = 0.001;
-  observer->samples = {moving, bilateral, bilateral, bilateral,
-                       bilateral, bilateral, bilateral};
+  observer->samples = {moving, bilateral, bilateral, bilateral, bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
   ASSERT_TRUE(executor);
 
-  const auto result = executor->execute({
-    spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO,
-    observer->snapshot, nullptr});
+  const auto result = executor->execute(
+    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
@@ -542,8 +554,8 @@ TEST(SO101PickPlaceRuntime, GazeboDetachWaitsForThreeConsecutiveStationarySample
   const auto executor = runtime.actions.findExecutor(spp::State::DETACH_GAZEBO);
   ASSERT_TRUE(executor);
 
-  const auto result = executor->execute({
-    spp::State::DETACH_GAZEBO, spp::State::DETACH_MOVEIT, observer->snapshot, nullptr});
+  const auto result = executor->execute(
+    {spp::State::DETACH_GAZEBO, spp::State::DETACH_MOVEIT, observer->snapshot, nullptr});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
@@ -560,13 +572,11 @@ TEST(SO101PickPlaceRuntime, MissingDependenciesRemainUnsafeWithoutPlaceholderAct
   ASSERT_TRUE(runtime.configuration_failure);
   EXPECT_EQ(runtime.configuration_failure->category, spp::FailureCategory::CONFIGURATION);
   EXPECT_EQ(runtime.configuration_failure->code, "RUNTIME_DEPENDENCY_MISSING");
-  for (const auto state : {spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
-                           spp::State::LIFT, spp::State::MOVE_ABOVE_PLACE,
-                           spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
-                           spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
-                           spp::State::RECOVER_MOVE_ABOVE_PICK,
-                           spp::State::RECOVER_DESCEND_TO_PICK,
-                           spp::State::RECOVER_RETREAT}) {
+  for (const auto state :
+       {spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, spp::State::LIFT,
+        spp::State::MOVE_ABOVE_PLACE, spp::State::DESCEND_TO_PLACE, spp::State::RETREAT,
+        spp::State::RECOVER_LIFT_TO_SAFE_HEIGHT, spp::State::RECOVER_MOVE_ABOVE_PICK,
+        spp::State::RECOVER_DESCEND_TO_PICK, spp::State::RECOVER_RETREAT}) {
     EXPECT_EQ(runtime.actions.findPlanner(state), nullptr) << spp::toString(state);
     EXPECT_EQ(runtime.actions.findExecutor(state), nullptr) << spp::toString(state);
     EXPECT_FALSE(runtime.plan_validators.hasValidator(state)) << spp::toString(state);
@@ -584,12 +594,12 @@ TEST(SO101PickPlaceRuntime, MotionExecutorUsesExactPlannedArtifactWithoutReplann
   ASSERT_NE(executor, nullptr);
 
   const auto observation = detachedObservation();
-  const auto planned = planner->plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
-                                     observation);
+  const auto planned =
+    planner->plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, observation);
   ASSERT_EQ(planned.action.status, spp::ActionStatus::SUCCEEDED);
   ASSERT_TRUE(planned.artifact);
-  const auto result = executor->execute({spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
-                                         *observation.snapshot, planned.artifact});
+  const auto result = executor->execute(
+    {spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, *observation.snapshot, planned.artifact});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED);
   EXPECT_EQ(motion->plan_calls, 1);
@@ -609,8 +619,8 @@ TEST(SO101PickPlaceRuntime, TransferSafetyWaypointsDoNotSelectAxialPathValidatio
   auto * planner = runtime.actions.findPlanner(spp::State::MOVE_ABOVE_OBJECT);
   ASSERT_NE(planner, nullptr);
 
-  const auto planned = planner->plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND,
-                                     detachedObservation());
+  const auto planned =
+    planner->plan(spp::State::MOVE_ABOVE_OBJECT, spp::State::DESCEND, detachedObservation());
   ASSERT_EQ(planned.action.status, spp::ActionStatus::SUCCEEDED);
   ASSERT_TRUE(planned.artifact);
   ASSERT_TRUE(motion->last_request);
@@ -630,15 +640,15 @@ TEST(SO101PickPlaceRuntime, AttachMoveItIsOnlyExecutedInItsOwnState)
   auto before = *detachedObservation().snapshot;
   before.gazebo_task_object_attached = true;
 
-  const auto attach = runtime.actions.findExecutor(spp::State::ATTACH_MOVEIT)->execute(
-    {spp::State::ATTACH_MOVEIT, spp::State::LIFT, before, nullptr});
+  const auto attach = runtime.actions.findExecutor(spp::State::ATTACH_MOVEIT)
+                        ->execute({spp::State::ATTACH_MOVEIT, spp::State::LIFT, before, nullptr});
   ASSERT_EQ(attach.status, spp::ActionStatus::SUCCEEDED);
   EXPECT_EQ(scene->attach_calls, 1);
 
   auto * lift_planner = runtime.actions.findPlanner(spp::State::LIFT);
   ASSERT_NE(lift_planner, nullptr);
-  static_cast<void>(lift_planner->plan(spp::State::LIFT, spp::State::MOVE_ABOVE_PLACE,
-                                       detachedObservation()));
+  static_cast<void>(
+    lift_planner->plan(spp::State::LIFT, spp::State::MOVE_ABOVE_PLACE, detachedObservation()));
   EXPECT_EQ(scene->attach_calls, 1);
 }
 
@@ -646,8 +656,8 @@ TEST(SO101MoveItWorldObserver, ProducesCompleteFreshJointTcpAndSceneEvidence)
 {
   const auto & profile = spp::SO101Profile::canonical();
   auto boundary = validBoundary();
-  spp::SO101MoveItWorldObserver observer(
-    boundary, profile, spp::SO101WorldObservationConfig{1.0, 1, 0.001, 0.001});
+  spp::SO101MoveItWorldObserver observer(boundary, profile,
+                                         spp::SO101WorldObservationConfig{1.0, 1, 0.001, 0.001});
 
   const auto result = observer.observe();
 
@@ -671,22 +681,24 @@ TEST(SO101MoveItWorldObserver, RejectsMissingStaleNonfiniteOrInconsistentEvidenc
 {
   for (const int mutation : {0, 1, 2, 3, 4, 5}) {
     auto boundary = validBoundary();
-    if (mutation == 0) boundary->current.velocities.pop_back();
+    if (mutation == 0)
+      boundary->current.velocities.pop_back();
     if (mutation == 1) {
       boundary->current.received_at = std::chrono::steady_clock::now() - std::chrono::seconds(2);
     }
     if (mutation == 2) {
       boundary->current.positions[0] = std::numeric_limits<double>::quiet_NaN();
     }
-    if (mutation == 3) boundary->scene.current_tcp_pose_world.reset();
-    if (mutation == 4) boundary->scene.table_world_pose.reset();
+    if (mutation == 3)
+      boundary->scene.current_tcp_pose_world.reset();
+    if (mutation == 4)
+      boundary->scene.table_world_pose.reset();
     if (mutation == 5) {
       boundary->scene.task_object_in_world = true;
       boundary->scene.task_object_attached = true;
     }
-    spp::SO101MoveItWorldObserver observer(
-      boundary, spp::SO101Profile::canonical(),
-      spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
+    spp::SO101MoveItWorldObserver observer(boundary, spp::SO101Profile::canonical(),
+                                           spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
 
     const auto result = observer.observe();
 
@@ -702,9 +714,8 @@ TEST(SO101MoveItWorldObserver, RejectsJointEvidenceThatGoesStaleWhileSceneIsColl
   boundary->current_after_scene = boundary->current;
   boundary->current_after_scene->received_at =
     std::chrono::steady_clock::now() - std::chrono::seconds(2);
-  spp::SO101MoveItWorldObserver observer(
-    boundary, spp::SO101Profile::canonical(),
-    spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
+  spp::SO101MoveItWorldObserver observer(boundary, spp::SO101Profile::canonical(),
+                                         spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
 
   const auto result = observer.observe();
 
@@ -725,9 +736,8 @@ TEST(SO101MoveItWorldObserver, RejectsJointOrGripperChangeWhileSceneIsCollected)
     } else {
       boundary->current_after_scene->positions[0] += 0.01;
     }
-    spp::SO101MoveItWorldObserver observer(
-      boundary, spp::SO101Profile::canonical(),
-      spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
+    spp::SO101MoveItWorldObserver observer(boundary, spp::SO101Profile::canonical(),
+                                           spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
 
     const auto result = observer.observe();
 
@@ -759,16 +769,15 @@ TEST(SO101MoveItWorldObserver, ArmStationaryExcludesTheSeparatelyValidatedGrippe
   *boundary->current.gripper_velocity = profile.q6_velocity_tolerance * 1.2;
   boundary->current_after_scene = boundary->current;
   boundary->current_after_scene->received_at = std::chrono::steady_clock::now();
-  spp::SO101MoveItWorldObserver observer(
-    boundary, profile, spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
+  spp::SO101MoveItWorldObserver observer(boundary, profile,
+                                         spp::SO101WorldObservationConfig{0.5, 1, 0.001, 0.001});
 
   const auto result = observer.observe();
 
   ASSERT_TRUE(result.snapshot) << (result.failure ? result.failure->code : "");
   EXPECT_TRUE(result.snapshot->arm_stationary);
-  EXPECT_DOUBLE_EQ(
-    profile.q6_velocity_tolerance * 1.2,
-    result.snapshot->joint_velocities.at(profile.gripper_joint));
+  EXPECT_DOUBLE_EQ(profile.q6_velocity_tolerance * 1.2,
+                   result.snapshot->joint_velocities.at(profile.gripper_joint));
 }
 
 TEST(SO101RuntimeRegistries, RejectNullAndDuplicateEntries)
@@ -783,17 +792,15 @@ TEST(SO101RuntimeRegistries, RejectNullAndDuplicateEntries)
   EXPECT_THROW(actions.registerExecutor(spp::State::DESCEND, action), std::logic_error);
 
   spp::PlanValidatorRegistry validators;
-  auto validator = std::make_shared<spp::SO101MotionPlanValidator>(
-    spp::MotionValidationConfig{}, false);
-  EXPECT_THROW(validators.registerValidator(spp::State::DESCEND, nullptr),
-               std::invalid_argument);
+  auto validator =
+    std::make_shared<spp::SO101MotionPlanValidator>(spp::MotionValidationConfig{}, false);
+  EXPECT_THROW(validators.registerValidator(spp::State::DESCEND, nullptr), std::invalid_argument);
   validators.registerValidator(spp::State::DESCEND, validator);
   EXPECT_THROW(validators.registerValidator(spp::State::DESCEND, validator), std::logic_error);
 
   spp::TransitionContractRegistry contracts;
   const spp::TransitionKey key{spp::State::DESCEND, spp::State::CLOSE_GRIPPER};
-  auto contract = spp::makeSO101MotionContract(
-    *configuredPolicy()->spec(spp::State::DESCEND));
+  auto contract = spp::makeSO101MotionContract(*configuredPolicy()->spec(spp::State::DESCEND));
   ASSERT_TRUE(contract);
   EXPECT_THROW(contracts.registerContract(key, nullptr), std::invalid_argument);
   contracts.registerContract(key, contract);
@@ -833,33 +840,35 @@ TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)
     world.moveit_task_object_attached_relative_pose = profile.calibrated_grasp_relative_pose;
     world.moveit_gripper_pose_world = spp::Pose3d{};
     const double half = rotation * 0.5;
-    const spp::Pose3d perturbation{
-      0.0, 0.0, 0.0,
-      axial_yaw ? 0.0 : std::sin(half), 0.0,
-      axial_yaw ? std::sin(half) : 0.0, std::cos(half)};
+    const spp::Pose3d perturbation{0.0,           0.0,
+                                   0.0,           axial_yaw ? 0.0 : std::sin(half),
+                                   0.0,           axial_yaw ? std::sin(half) : 0.0,
+                                   std::cos(half)};
     const auto & expected = profile.calibrated_grasp_relative_pose;
-    world.gazebo_task_object_pose_world = spp::Pose3d{
-      expected.x, expected.y, expected.z,
-      expected.qw * perturbation.qx + expected.qx * perturbation.qw +
-        expected.qy * perturbation.qz - expected.qz * perturbation.qy,
-      expected.qw * perturbation.qy - expected.qx * perturbation.qz +
-        expected.qy * perturbation.qw + expected.qz * perturbation.qx,
-      expected.qw * perturbation.qz + expected.qx * perturbation.qy -
-        expected.qy * perturbation.qx + expected.qz * perturbation.qw,
-      expected.qw * perturbation.qw - expected.qx * perturbation.qx -
-        expected.qy * perturbation.qy - expected.qz * perturbation.qz};
+    world.gazebo_task_object_pose_world =
+      spp::Pose3d{expected.x,
+                  expected.y,
+                  expected.z,
+                  expected.qw * perturbation.qx + expected.qx * perturbation.qw +
+                    expected.qy * perturbation.qz - expected.qz * perturbation.qy,
+                  expected.qw * perturbation.qy - expected.qx * perturbation.qz +
+                    expected.qy * perturbation.qw + expected.qz * perturbation.qx,
+                  expected.qw * perturbation.qz + expected.qx * perturbation.qy -
+                    expected.qy * perturbation.qx + expected.qz * perturbation.qw,
+                  expected.qw * perturbation.qw - expected.qx * perturbation.qx -
+                    expected.qy * perturbation.qy - expected.qz * perturbation.qz};
     return world;
   };
   const auto before = carrying_world(0.0, true);
-  const auto axial_spin = carrying_world(
-    profile.task_object_orientation_drift_tolerance_rad + 0.003, true);
-  const auto tilted = carrying_world(
-    profile.task_object_orientation_drift_tolerance_rad + 0.001, false);
+  const auto axial_spin =
+    carrying_world(profile.task_object_orientation_drift_tolerance_rad + 0.003, true);
+  const auto tilted =
+    carrying_world(profile.task_object_orientation_drift_tolerance_rad + 0.001, false);
 
-  const auto spin_result = contract->validate(
-    before, axial_spin, {spp::ActionStatus::SUCCEEDED, std::nullopt});
-  const auto tilt_result = contract->validate(
-    before, tilted, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto spin_result =
+    contract->validate(before, axial_spin, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto tilt_result =
+    contract->validate(before, tilted, {spp::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_TRUE(spin_result.ok)
     << (spin_result.failures.empty() ? "" : spin_result.failures.front().code)
@@ -867,10 +876,10 @@ TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)
     << " orientation=" << spin_result.metrics.at("task_object_follow_orientation_error_rad")
     << " tilt=" << spin_result.metrics.at("task_object_follow_tilt_error_rad");
   EXPECT_FALSE(tilt_result.ok);
-  EXPECT_NE(std::find_if(
-              tilt_result.failures.begin(), tilt_result.failures.end(), [](const auto & failure) {
-                return failure.code == "TASK_OBJECT_DID_NOT_FOLLOW_GRIPPER";
-              }),
+  EXPECT_NE(std::find_if(tilt_result.failures.begin(), tilt_result.failures.end(),
+                         [](const auto & failure) {
+                           return failure.code == "TASK_OBJECT_DID_NOT_FOLLOW_GRIPPER";
+                         }),
             tilt_result.failures.end());
 }
 
@@ -880,10 +889,8 @@ TEST(SO101MotionContract, ContactCriticalDescentsRejectSucceededActionsOutsideAr
   for (const auto state : {spp::State::DESCEND, spp::State::RECOVER_DESCEND_TO_PICK}) {
     const auto spec = configuredPolicy()->spec(state);
     ASSERT_TRUE(spec) << spp::toString(state);
-    ASSERT_TRUE(spec->validation.contact_wall_normal_endpoint_tolerance)
-      << spp::toString(state);
-    EXPECT_DOUBLE_EQ(spec->validation.joint_endpoint_tolerance, 0.00025)
-      << spp::toString(state);
+    ASSERT_TRUE(spec->validation.contact_wall_normal_endpoint_tolerance) << spp::toString(state);
+    EXPECT_DOUBLE_EQ(spec->validation.joint_endpoint_tolerance, 0.00025) << spp::toString(state);
     EXPECT_DOUBLE_EQ(*spec->validation.contact_wall_normal_endpoint_tolerance, 0.0001)
       << spp::toString(state);
     auto contract_spec = *spec;
@@ -914,14 +921,18 @@ TEST(SO101MotionContract, ContactCriticalDescentsRejectSucceededActionsOutsideAr
     // FollowJointTrajectory success must still block the next CLOSE/ATTACH
     // transition when the live FK is too far along the cup wall normal.
     after.tcp_pose_world.y += 0.0002;
-    const auto result = contract->validate(
-      before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+    const auto result =
+      contract->validate(before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
 
     EXPECT_FALSE(result.ok) << spp::toString(state);
-    EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(), [](const auto & failure) {
-                return failure.category == spp::FailureCategory::POSTCONDITION &&
-                       failure.code == "CONTACT_CRITICAL_WALL_NORMAL_ENDPOINT_MISMATCH";
-              }), result.failures.end()) << spp::toString(state);
+    EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(),
+                           [](const auto & failure) {
+                             return failure.category == spp::FailureCategory::POSTCONDITION &&
+                                    failure.code ==
+                                      "CONTACT_CRITICAL_WALL_NORMAL_ENDPOINT_MISMATCH";
+                           }),
+              result.failures.end())
+      << spp::toString(state);
   }
 }
 
@@ -954,14 +965,17 @@ TEST(SO101MotionContract, ContactCriticalDescentsRejectSucceededActionsOutsideJo
     auto after = before;
     after.joint_positions[profile.arm_joints.front()] += 0.000251;
 
-    const auto result = contract->validate(
-      before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+    const auto result =
+      contract->validate(before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
 
     EXPECT_FALSE(result.ok) << spp::toString(state);
-    EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(), [](const auto & failure) {
-                return failure.category == spp::FailureCategory::POSTCONDITION &&
-                       failure.code == "MOTION_JOINT_ENDPOINT_MISMATCH";
-              }), result.failures.end()) << spp::toString(state);
+    EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(),
+                           [](const auto & failure) {
+                             return failure.category == spp::FailureCategory::POSTCONDITION &&
+                                    failure.code == "MOTION_JOINT_ENDPOINT_MISMATCH";
+                           }),
+              result.failures.end())
+      << spp::toString(state);
   }
 }
 
@@ -995,10 +1009,11 @@ TEST(SO101MotionContract, ContactCriticalDescentsAcceptLiveEndpointInsideDerived
     }
     auto after = before;
 
-    for (const auto & joint : profile.arm_joints) after.joint_positions[joint] += 0.000125;
+    for (const auto & joint : profile.arm_joints)
+      after.joint_positions[joint] += 0.000125;
     after.tcp_pose_world.y += 0.00005;
-    const auto result = contract->validate(
-      before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+    const auto result =
+      contract->validate(before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
 
     EXPECT_TRUE(result.ok) << spp::toString(state)
                            << (result.failures.empty() ? "" : result.failures.front().code);
@@ -1016,14 +1031,16 @@ TEST(SO101MotionContract, RetreatProvesDetachedTaskObjectStayedFixedWhileArmLeft
   after.gazebo_task_object_pose_world->x += profile.task_object_position_drift_tolerance * 2.0;
   after.moveit_world_object_poses[profile.task_object_id] = *after.gazebo_task_object_pose_world;
 
-  const auto result = contract->validate(
-    before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract->validate(before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_FALSE(result.ok);
-  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(), [](const auto & failure) {
-              return failure.category == spp::FailureCategory::POSTCONDITION &&
-                     failure.code == "DETACHED_TASK_OBJECT_DRIFT";
-            }), result.failures.end());
+  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(),
+                         [](const auto & failure) {
+                           return failure.category == spp::FailureCategory::POSTCONDITION &&
+                                  failure.code == "DETACHED_TASK_OBJECT_DRIFT";
+                         }),
+            result.failures.end());
 }
 
 TEST(SO101MotionContract, RetreatAcceptsSupportedCylindricalYaw)
@@ -1043,8 +1060,8 @@ TEST(SO101MotionContract, RetreatAcceptsSupportedCylindricalYaw)
       *before.gazebo_task_object_pose_world;
     const auto after = before;
 
-    const auto result = contract->validate(
-      before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+    const auto result =
+      contract->validate(before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
 
     EXPECT_TRUE(result.ok) << spp::toString(state)
                            << (result.failures.empty() ? "" : result.failures.front().code);
@@ -1054,8 +1071,7 @@ TEST(SO101MotionContract, RetreatAcceptsSupportedCylindricalYaw)
 TEST(SO101MotionContract, RequiresTrueGazeboTaskObjectStationarityBeforeMotion)
 {
   const auto & profile = spp::SO101Profile::canonical();
-  const auto spec = configuredPolicy()->spec(
-    spp::State::MOVE_ABOVE_OBJECT);
+  const auto spec = configuredPolicy()->spec(spp::State::MOVE_ABOVE_OBJECT);
   ASSERT_TRUE(spec);
   const auto contract = spp::makeSO101MotionContract(*spec, profile);
   auto before = detachedMotionWorld(*spec, profile);
@@ -1064,29 +1080,32 @@ TEST(SO101MotionContract, RequiresTrueGazeboTaskObjectStationarityBeforeMotion)
   const auto result = contract->validatePrecondition(before);
 
   EXPECT_FALSE(result.ok);
-  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(), [](const auto & failure) {
-              return failure.category == spp::FailureCategory::OBSERVATION &&
-                     failure.code == "GAZEBO_TASK_OBJECT_NOT_STATIONARY";
-            }), result.failures.end());
+  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(),
+                         [](const auto & failure) {
+                           return failure.category == spp::FailureCategory::OBSERVATION &&
+                                  failure.code == "GAZEBO_TASK_OBJECT_NOT_STATIONARY";
+                         }),
+            result.failures.end());
 }
 
 TEST(SO101MotionContract, RequiresTrueGazeboTaskObjectStationarityAfterMotion)
 {
   const auto & profile = spp::SO101Profile::canonical();
-  const auto spec = configuredPolicy()->spec(
-    spp::State::MOVE_ABOVE_OBJECT);
+  const auto spec = configuredPolicy()->spec(spp::State::MOVE_ABOVE_OBJECT);
   ASSERT_TRUE(spec);
   const auto contract = spp::makeSO101MotionContract(*spec, profile);
   const auto before = detachedMotionWorld(*spec, profile);
   auto after = before;
   after.gazebo_task_object_stationary = false;
 
-  const auto result = contract->validate(
-    before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
+  const auto result =
+    contract->validate(before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
 
   EXPECT_FALSE(result.ok);
-  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(), [](const auto & failure) {
-              return failure.category == spp::FailureCategory::OBSERVATION &&
-                     failure.code == "GAZEBO_TASK_OBJECT_NOT_STATIONARY";
-            }), result.failures.end());
+  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(),
+                         [](const auto & failure) {
+                           return failure.category == spp::FailureCategory::OBSERVATION &&
+                                  failure.code == "GAZEBO_TASK_OBJECT_NOT_STATIONARY";
+                         }),
+            result.failures.end());
 }

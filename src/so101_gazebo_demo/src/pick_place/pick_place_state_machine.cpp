@@ -40,10 +40,9 @@ spp::PolicyPaths installedPolicyPaths()
 {
   const std::filesystem::path share =
     ament_index_cpp::get_package_share_directory("so101_gazebo_demo");
-  return {
-    (share / "config/task_objects/light_plastic_cup.yaml").string(),
-    (share / "config/motion_policies/light_cup_wall_pick.yaml").string(),
-    (share / "config/validation_policies/light_cup_wall_pick.yaml").string()};
+  return {(share / "config/task_objects/light_plastic_cup.yaml").string(),
+          (share / "config/motion_policies/light_cup_wall_pick.yaml").string(),
+          (share / "config/validation_policies/light_cup_wall_pick.yaml").string()};
 }
 
 bool booleanValue(const std::string & value, bool & result)
@@ -68,17 +67,20 @@ std::optional<CliOptions> parse(int argc, char ** argv)
     const std::string & argument = arguments[i];
     if (argument == "--mode" && i + 1 < arguments.size()) {
       const auto mode = spp::runModeFromString(arguments[++i]);
-      if (!mode) return std::nullopt;
+      if (!mode)
+        return std::nullopt;
       options.request.mode = *mode;
     } else if (argument == "--fail-at" && i + 1 < arguments.size()) {
       const auto state = spp::stateFromString(arguments[++i]);
-      if (!state) return std::nullopt;
+      if (!state)
+        return std::nullopt;
       options.request.fail_at = *state;
     } else if (argument == "--stop-after" && i + 1 < arguments.size()) {
-      const std::string value = arguments[++i];
+      const std::string & value = arguments[++i];
       if (!value.empty()) {
         const auto state = spp::stateFromString(value);
-        if (!state) return std::nullopt;
+        if (!state)
+          return std::nullopt;
         options.request.stop_after = *state;
       }
     } else if (argument == "--resume") {
@@ -96,7 +98,8 @@ std::optional<CliOptions> parse(int argc, char ** argv)
       options.request.force_continue = true;
     } else if (argument == "--checkpoint" && i + 1 < arguments.size()) {
       options.checkpoint_path = arguments[++i];
-      if (options.checkpoint_path.empty()) return std::nullopt;
+      if (options.checkpoint_path.empty())
+        return std::nullopt;
     } else if (argument == "--session-id" && i + 1 < arguments.size()) {
       options.simulation_session_id = arguments[++i];
     } else if (argument == "--object-config" && i + 1 < arguments.size()) {
@@ -119,13 +122,13 @@ void print(const spp::RunResult & result)
     std::cout << (i ? " -> " : "") << spp::toString(result.state_trace[i]);
   }
   std::cout << '\n';
-  if (result.failure) std::cout << spp::formatFailure(*result.failure) << '\n';
+  if (result.failure)
+    std::cout << spp::formatFailure(*result.failure) << '\n';
 }
 
 void printPreRunnerFailure(const spp::Failure & failure)
 {
-  std::cout << "status=ERROR\ntrace=BOOTSTRAP -> ERROR\n"
-            << spp::formatFailure(failure) << '\n';
+  std::cout << "status=ERROR\ntrace=BOOTSTRAP -> ERROR\n" << spp::formatFailure(failure) << '\n';
 }
 
 void printPolicyProvenance(const spp::LoadedPolicyBundle & bundle,
@@ -147,8 +150,8 @@ void printPolicyProvenance(const spp::LoadedPolicyBundle & bundle,
   }
 }
 
-int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bundle,
-                  int argc, char ** argv)
+int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bundle, int argc,
+                  char ** argv)
 {
   rclcpp::init(argc, argv);
   int exit_code = 1;
@@ -158,13 +161,14 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       node_options.parameter_overrides({rclcpp::Parameter("use_sim_time", true)});
       auto node = std::make_shared<rclcpp::Node>("so101_pick_place_state_machine", node_options);
       spp::NodeSpinner spinner(node);
-      const auto profile = spp::SO101Profile::configured(
-        bundle.object, bundle.motion, bundle.validation);
-      const auto milliseconds = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::system_clock::now().time_since_epoch()).count());
-      auto session = spp::resolveSimulationSessionId(
-        options.request.mode, options.request.resume, options.simulation_session_id, milliseconds);
+      const auto profile =
+        spp::SO101Profile::configured(bundle.object, bundle.motion, bundle.validation);
+      const auto milliseconds =
+        static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::system_clock::now().time_since_epoch())
+                                     .count());
+      auto session = spp::resolveSimulationSessionId(options.request.mode, options.request.resume,
+                                                     options.simulation_session_id, milliseconds);
       if (!session.value) {
         if (options.request.mode == spp::RunMode::PLAN_ONLY && !options.request.resume) {
           session.value = "plan-only-" + std::to_string(milliseconds);
@@ -177,27 +181,25 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
 
       auto boundary = std::make_shared<spp::MoveItJointPlanningBoundary>(node, profile);
       auto motion = std::make_shared<spp::ProfiledJointMotionAdapter>(boundary, boundary, profile);
-      auto policy = std::make_shared<spp::SO101ConfiguredMotionTargetPolicy>(
-        bundle.motion, bundle.validation);
+      auto policy =
+        std::make_shared<spp::SO101ConfiguredMotionTargetPolicy>(bundle.motion, bundle.validation);
       auto gripper_client =
         std::make_shared<spp::RosTrajectoryActionClient>(node, profile.gripper_action);
       auto gripper = std::make_shared<spp::FollowJointTrajectoryGripperAdapter>(
         gripper_client, 1.0, 8.0, profile.q6_contact);
       auto scene = std::make_shared<spp::MoveItSceneAdapter>(
         node, profile.planning_group,
-        spp::MoveItSceneGeometry{profile.world_frame, profile.table_object,
-                                profile.table_size, profile.pedestal_object,
-                                profile.pedestal_size, profile.task_object_id,
-                                profile.task_object_height, profile.task_object_outer_radius,
-                                profile.task_object_wall_thickness,
-                                profile.task_object_bottom_thickness,
-                                profile.task_object_side_count});
+        spp::MoveItSceneGeometry{
+          profile.world_frame, profile.table_object, profile.table_size, profile.pedestal_object,
+          profile.pedestal_size, profile.task_object_id, profile.task_object_height,
+          profile.task_object_outer_radius, profile.task_object_wall_thickness,
+          profile.task_object_bottom_thickness, profile.task_object_side_count});
 
       if (options.request.mode == spp::RunMode::EXECUTE ||
           options.request.mode == spp::RunMode::PLAN_ONLY) {
         spp::MoveItSceneInitializer scene_init(*boundary, *scene);
-        if (const auto init_failure = scene_init.initialize(
-              profile, std::chrono::seconds(45), options.request.resume)) {
+        if (const auto init_failure =
+              scene_init.initialize(profile, std::chrono::seconds(45), options.request.resume)) {
           printPreRunnerFailure(*init_failure);
           rclcpp::shutdown();
           return 1;
@@ -211,8 +213,8 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
         spp::State::DETACH_GAZEBO, false, profile.attach_topic, profile.detach_topic,
         profile.attachment_event_topic, 3.0, 0.05, false);
       auto recovery_gazebo_detach = std::make_shared<spp::GazeboAttachmentExecutor>(
-        spp::State::RECOVER_DETACH_GAZEBO, false, profile.attach_topic,
-        profile.detach_topic, profile.attachment_event_topic, 3.0, 0.05, true);
+        spp::State::RECOVER_DETACH_GAZEBO, false, profile.attach_topic, profile.detach_topic,
+        profile.attachment_event_topic, 3.0, 0.05, true);
 
       auto moveit_observer = std::make_shared<spp::SO101MoveItWorldObserver>(boundary, profile);
       auto observer = std::make_shared<spp::GazeboWorldObserver>(
@@ -223,8 +225,8 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       spp::FileCheckpointStore checkpoint(options.checkpoint_path);
       spp::CommonResumeValidator resume(bundle.bundle_sha256, *session.value);
       spp::WorldReadinessGate readiness_gate(*observer);
-      if (const auto readiness_failure = readiness_gate.waitForReady(
-            *session.value, std::chrono::seconds(45))) {
+      if (const auto readiness_failure =
+            readiness_gate.waitForReady(*session.value, std::chrono::seconds(45))) {
         printPreRunnerFailure(*readiness_failure);
         rclcpp::shutdown();
         return 1;
@@ -247,14 +249,16 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies, runtime_config);
       if (!runtime.execution_safe) {
         const auto failure = runtime.configuration_failure.value_or(
-          spp::Failure{spp::FailureCategory::CONFIGURATION, "RUNTIME_UNSAFE",
-                       "Production runtime registry is incomplete", {}});
+          spp::Failure{spp::FailureCategory::CONFIGURATION,
+                       "RUNTIME_UNSAFE",
+                       "Production runtime registry is incomplete",
+                       {}});
         print({spp::RunStatus::ERROR, spp::State::ERROR, std::nullopt, failure, 0, {}});
         exit_code = 1;
       } else {
-        spp::StateMachineRunner runner(
-          runtime.actions, runtime.contracts, observer.get(), &checkpoint, &resume,
-          &runtime.plan_validators, runtime.recovery_policy.get());
+        spp::StateMachineRunner runner(runtime.actions, runtime.contracts, observer.get(),
+                                       &checkpoint, &resume, &runtime.plan_validators,
+                                       runtime.recovery_policy.get());
         const auto result = runner.run(options.request);
         print(result);
         exit_code = result.status == spp::RunStatus::ERROR ? 1 : 0;
@@ -290,9 +294,12 @@ int main(int argc, char ** argv)
   }
   const auto loaded = spp::loadPolicyBundle(options->policy_paths);
   if (!loaded.bundle) {
-    std::cerr << spp::formatFailure(loaded.failure.value_or(
-      spp::Failure{spp::FailureCategory::CONFIGURATION, "POLICY_INVALID_VALUE",
-                   "policy loading failed without evidence", {}})) << '\n';
+    std::cerr << spp::formatFailure(
+                   loaded.failure.value_or(spp::Failure{spp::FailureCategory::CONFIGURATION,
+                                                        "POLICY_INVALID_VALUE",
+                                                        "policy loading failed without evidence",
+                                                        {}}))
+              << '\n';
     return 2;
   }
   printPolicyProvenance(*loaded.bundle, options->request.stop_after);

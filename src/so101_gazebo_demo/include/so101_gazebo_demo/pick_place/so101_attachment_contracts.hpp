@@ -9,13 +9,12 @@ namespace so101_gazebo_demo::pick_place
 {
 
 [[nodiscard]] std::shared_ptr<const TransitionContractRegistry::ITransitionContract>
-makeSO101AttachmentContract(TransitionKey key,
-                            SO101Profile profile,
-                            TaskObjectConfig object,
-                            GraspContactValidationConfig grasp_contact);
+makeSO101AttachmentContract(TransitionKey key, const SO101Profile & profile,
+                            const TaskObjectConfig & object,
+                            const GraspContactValidationConfig & grasp_contact);
 
-void registerSO101AttachmentContracts(
-  TransitionContractRegistry & registry, SO101Profile profile,
-  TaskObjectConfig object, GraspContactValidationConfig grasp_contact);
+void registerSO101AttachmentContracts(TransitionContractRegistry & registry,
+                                      const SO101Profile & profile, const TaskObjectConfig & object,
+                                      const GraspContactValidationConfig & grasp_contact);
 
 }  // namespace so101_gazebo_demo::pick_place

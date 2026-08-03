@@ -16,8 +16,8 @@ TEST(DryRun, NormalWorkflowEndsDone)
 TEST(DryRun, AttachMoveItFailureRunsCompleteRecoveryAndEndsError)
 {
   pick_place::StateMachineRunner runner;
-  const auto result = runner.run({pick_place::RunMode::DRY_RUN, std::nullopt, false,
-                                  pick_place::State::ATTACH_MOVEIT});
+  const auto result = runner.run(
+    {pick_place::RunMode::DRY_RUN, std::nullopt, false, pick_place::State::ATTACH_MOVEIT});
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   EXPECT_EQ(pick_place::State::ERROR, result.current_state);
   ASSERT_TRUE(result.failure);
@@ -28,8 +28,7 @@ TEST(DryRun, AttachMoveItFailureRunsCompleteRecoveryAndEndsError)
 TEST(DryRun, StopAfterPersistsTheNextBoundary)
 {
   pick_place::StateMachineRunner runner;
-  const auto result = runner.run({pick_place::RunMode::DRY_RUN,
-                                  pick_place::State::DESCEND});
+  const auto result = runner.run({pick_place::RunMode::DRY_RUN, pick_place::State::DESCEND});
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::CLOSE_GRIPPER, result.current_state);
   ASSERT_TRUE(result.next_state);

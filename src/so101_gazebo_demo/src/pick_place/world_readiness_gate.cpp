@@ -22,19 +22,24 @@ bool isTransientObservation(const std::string & code)
 bool finitePose(const Pose3d & pose)
 {
   return std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
-         std::isfinite(pose.qx) && std::isfinite(pose.qy) &&
-         std::isfinite(pose.qz) && std::isfinite(pose.qw);
+         std::isfinite(pose.qx) && std::isfinite(pose.qy) && std::isfinite(pose.qz) &&
+         std::isfinite(pose.qw);
 }
 
 bool snapshotReady(const WorldSnapshot & snapshot, const std::string & expected_session_id)
 {
-  if (!snapshot.fresh) return false;
-  if (!snapshot.arm_stationary) return false;
-  if (!snapshot.gazebo_task_object_pose_world || !finitePose(*snapshot.gazebo_task_object_pose_world)) {
+  if (!snapshot.fresh)
+    return false;
+  if (!snapshot.arm_stationary)
+    return false;
+  if (!snapshot.gazebo_task_object_pose_world ||
+      !finitePose(*snapshot.gazebo_task_object_pose_world)) {
     return false;
   }
-  if (!snapshot.gazebo_task_object_attached) return false;
-  if (snapshot.simulation_session_id != expected_session_id) return false;
+  if (!snapshot.gazebo_task_object_attached)
+    return false;
+  if (snapshot.simulation_session_id != expected_session_id)
+    return false;
   return true;
 }
 
@@ -42,15 +47,14 @@ bool snapshotReady(const WorldSnapshot & snapshot, const std::string & expected_
 
 WorldReadinessGate::WorldReadinessGate(IWorldObserver & observer,
                                        std::chrono::milliseconds poll_interval,
-                                       std::size_t required_consecutive_ready_observations)
-: observer_(observer), poll_interval_(poll_interval),
-  required_consecutive_ready_observations_(required_consecutive_ready_observations)
+                                       std::size_t required_consecutive_ready_observations) :
+    observer_(observer), poll_interval_(poll_interval),
+    required_consecutive_ready_observations_(required_consecutive_ready_observations)
 {
 }
 
-std::optional<Failure>
-WorldReadinessGate::waitForReady(const std::string & expected_session_id,
-                                 std::chrono::milliseconds timeout)
+std::optional<Failure> WorldReadinessGate::waitForReady(const std::string & expected_session_id,
+                                                        std::chrono::milliseconds timeout)
 {
   const auto deadline = std::chrono::steady_clock::now() + timeout;
   std::size_t consecutive_ready_observations = 0;
@@ -71,8 +75,10 @@ WorldReadinessGate::waitForReady(const std::string & expected_session_id,
     std::this_thread::sleep_for(poll_interval_);
   }
 
-  return Failure{FailureCategory::OBSERVATION, "WORLD_READINESS_TIMEOUT",
-                 "World observation did not become ready within timeout", {}};
+  return Failure{FailureCategory::OBSERVATION,
+                 "WORLD_READINESS_TIMEOUT",
+                 "World observation did not become ready within timeout",
+                 {}};
 }
 
 }  // namespace so101_gazebo_demo::pick_place

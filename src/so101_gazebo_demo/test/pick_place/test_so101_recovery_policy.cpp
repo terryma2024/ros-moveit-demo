@@ -42,16 +42,20 @@ TEST(SO101RecoveryPolicy, RoutesOnlyFromFreshStationaryCurrentFacts)
   pick_place::SO101RecoveryPolicy policy(profile);
   auto world = observed(false, false, profile.q6_preopen);
   world.fresh = false;
-  EXPECT_FALSE(policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
+  EXPECT_FALSE(
+    policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
   world = observed(false, false, profile.q6_preopen);
   world.arm_stationary = false;
-  EXPECT_FALSE(policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
+  EXPECT_FALSE(
+    policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
   world = observed(false, false, profile.q6_preopen);
   world.gazebo_task_object_attached.reset();
-  EXPECT_FALSE(policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
+  EXPECT_FALSE(
+    policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
   world = observed(false, false, profile.q6_preopen);
   world.joint_velocities[profile.gripper_joint] = profile.q6_velocity_tolerance * 2.0;
-  EXPECT_FALSE(policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
+  EXPECT_FALSE(
+    policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), world).next_state);
 }
 
 TEST(SO101RecoveryPolicy, CurrentQ6AndAttachmentFactsChooseMinimalSafeReleaseRoute)
@@ -60,18 +64,26 @@ TEST(SO101RecoveryPolicy, CurrentQ6AndAttachmentFactsChooseMinimalSafeReleaseRou
   pick_place::SO101RecoveryPolicy policy(profile);
   const auto failure = originalFailure();
 
-  EXPECT_EQ(pick_place::State::RECOVER_OPEN_GRIPPER,
-            policy.select(pick_place::State::ATTACH_MOVEIT, failure,
-                          observed(true, true, profile.q6_contact)).next_state);
+  EXPECT_EQ(
+    pick_place::State::RECOVER_OPEN_GRIPPER,
+    policy
+      .select(pick_place::State::ATTACH_MOVEIT, failure, observed(true, true, profile.q6_contact))
+      .next_state);
+  EXPECT_EQ(
+    pick_place::State::RECOVER_DETACH_GAZEBO,
+    policy
+      .select(pick_place::State::ATTACH_MOVEIT, failure, observed(true, true, profile.q6_full_open))
+      .next_state);
   EXPECT_EQ(pick_place::State::RECOVER_DETACH_GAZEBO,
-            policy.select(pick_place::State::ATTACH_MOVEIT, failure,
-                          observed(true, true, profile.q6_full_open)).next_state);
-  EXPECT_EQ(pick_place::State::RECOVER_DETACH_GAZEBO,
-            policy.select(pick_place::State::ATTACH_MOVEIT, failure,
-                          observed(true, false, profile.q6_full_open)).next_state);
+            policy
+              .select(pick_place::State::ATTACH_MOVEIT, failure,
+                      observed(true, false, profile.q6_full_open))
+              .next_state);
   EXPECT_EQ(pick_place::State::RECOVER_DETACH_MOVEIT,
-            policy.select(pick_place::State::ATTACH_MOVEIT, failure,
-                          observed(false, true, profile.q6_full_open)).next_state);
+            policy
+              .select(pick_place::State::ATTACH_MOVEIT, failure,
+                      observed(false, true, profile.q6_full_open))
+              .next_state);
 }
 
 TEST(SO101RecoveryPolicy, DetachedFactsChooseOpenSyncOrRetreat)
@@ -80,9 +92,11 @@ TEST(SO101RecoveryPolicy, DetachedFactsChooseOpenSyncOrRetreat)
   pick_place::SO101RecoveryPolicy policy(profile);
   const auto failure = originalFailure();
 
-  EXPECT_EQ(pick_place::State::RECOVER_OPEN_GRIPPER,
-            policy.select(pick_place::State::DETACH_MOVEIT, failure,
-                          observed(false, false, profile.q6_contact)).next_state);
+  EXPECT_EQ(
+    pick_place::State::RECOVER_OPEN_GRIPPER,
+    policy
+      .select(pick_place::State::DETACH_MOVEIT, failure, observed(false, false, profile.q6_contact))
+      .next_state);
 
   auto mismatch = observed(false, false, profile.q6_full_open);
   mismatch.moveit_world_object_poses[profile.task_object_id].x +=
@@ -96,8 +110,10 @@ TEST(SO101RecoveryPolicy, DetachedFactsChooseOpenSyncOrRetreat)
             policy.select(pick_place::State::DETACH_MOVEIT, failure, missing).next_state);
 
   EXPECT_EQ(pick_place::State::RECOVER_RETREAT,
-            policy.select(pick_place::State::DETACH_MOVEIT, failure,
-                          observed(false, false, profile.q6_full_open)).next_state);
+            policy
+              .select(pick_place::State::DETACH_MOVEIT, failure,
+                      observed(false, false, profile.q6_full_open))
+              .next_state);
 }
 
 TEST(SO101RecoveryPolicy, SameCurrentWorldIgnoresFailedStateAndHistoricalFlags)
@@ -122,8 +138,7 @@ TEST(SO101RecoveryPolicy, AttachedTaskObjectAwayFromKnownSupportFailsClosedUntil
   auto unsupported = observed(true, true, profile.q6_contact);
   unsupported.gazebo_task_object_pose_world->z += 0.10;
 
-  const auto route =
-    policy.select(pick_place::State::LIFT, originalFailure(), unsupported);
+  const auto route = policy.select(pick_place::State::LIFT, originalFailure(), unsupported);
 
   EXPECT_FALSE(route.next_state);
   ASSERT_TRUE(route.failure);

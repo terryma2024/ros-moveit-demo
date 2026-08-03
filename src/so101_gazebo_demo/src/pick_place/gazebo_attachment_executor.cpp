@@ -32,7 +32,8 @@ bool supportedState(State state) noexcept
 
 bool detachedPostconditionSatisfied(const WorldSnapshot & snapshot)
 {
-  return snapshot.fresh && snapshot.gazebo_task_object_attached && !*snapshot.gazebo_task_object_attached;
+  return snapshot.fresh && snapshot.gazebo_task_object_attached &&
+         !*snapshot.gazebo_task_object_attached;
 }
 
 }  // namespace

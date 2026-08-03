@@ -53,9 +53,8 @@ Pose3d poseFrom(const Eigen::Isometry3d & transform)
 
 Pose3d poseFrom(const geometry_msgs::msg::Pose & pose)
 {
-  return {pose.position.x, pose.position.y, pose.position.z,
-          pose.orientation.x, pose.orientation.y, pose.orientation.z,
-          pose.orientation.w};
+  return {pose.position.x,    pose.position.y,    pose.position.z,   pose.orientation.x,
+          pose.orientation.y, pose.orientation.z, pose.orientation.w};
 }
 
 double distance(const Pose3d & pose, const Vec3 & target)
@@ -95,20 +94,22 @@ double halton(std::size_t index, unsigned base)
 
 JointSegmentPlanResult planFail(FailureCategory category, std::string code, std::string message)
 {
-  return {{ActionStatus::FAILED,
-           Failure{category, std::move(code), std::move(message), {}}}, std::nullopt};
+  return {{ActionStatus::FAILED, Failure{category, std::move(code), std::move(message), {}}},
+          std::nullopt};
 }
 
 std::string policyPair(const SO101Profile & profile, std::string first, std::string second)
 {
-  if (second == profile.task_object_id) std::swap(first, second);
-  if (first == profile.task_object_id) return first + ":" + second;
-  if (second < first) std::swap(first, second);
+  if (second == profile.task_object_id)
+    std::swap(first, second);
+  if (first == profile.task_object_id)
+    return first + ":" + second;
+  if (second < first)
+    std::swap(first, second);
   return first + ":" + second;
 }
 
-bool validTouchWhitelist(const std::set<std::string> & requested,
-                         const SO101Profile & profile)
+bool validTouchWhitelist(const std::set<std::string> & requested, const SO101Profile & profile)
 {
   return requested.empty() || requested == exactTaskObjectTouchWhitelist(profile);
 }
@@ -116,56 +117,55 @@ bool validTouchWhitelist(const std::set<std::string> & requested,
 bool validTemporalContact(const std::optional<TemporalContactPolicy> & requested,
                           const SO101Profile & profile)
 {
-  if (!requested) return true;
-  const auto support = std::set<std::string>{policyPair(
-    profile, profile.task_object_id, profile.table_object)};
+  if (!requested)
+    return true;
+  const auto support =
+    std::set<std::string>{policyPair(profile, profile.task_object_id, profile.table_object)};
   const auto gripper = exactTaskObjectTouchWhitelist(profile);
   if (requested->location == TemporalContactLocation::FIRST_ONLY) {
     return requested->max_axial_clearance_m == 0.0 &&
            (requested->allowed_pairs == support || requested->allowed_pairs == gripper);
   }
   if (requested->location == TemporalContactLocation::LAST_ONLY) {
-    return requested->max_axial_clearance_m == 0.0 &&
-           requested->allowed_pairs == support;
+    return requested->max_axial_clearance_m == 0.0 && requested->allowed_pairs == support;
   }
   return requested->location == TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE &&
          (requested->allowed_pairs == support || requested->allowed_pairs == gripper) &&
-         std::isfinite(requested->max_axial_clearance_m) &&
-         requested->max_axial_clearance_m > 0.0;
+         std::isfinite(requested->max_axial_clearance_m) && requested->max_axial_clearance_m > 0.0;
 }
 
 }  // namespace
 
-std::optional<Pose3d>
-updatedLinkPose(const moveit::core::RobotState & source, const std::string & link_name)
+std::optional<Pose3d> updatedLinkPose(const moveit::core::RobotState & source,
+                                      const std::string & link_name)
 {
-  if (!source.getRobotModel()->hasLinkModel(link_name)) return std::nullopt;
+  if (!source.getRobotModel()->hasLinkModel(link_name))
+    return std::nullopt;
   moveit::core::RobotState current(source);
   current.update();
   return poseFrom(current.getGlobalLinkTransform(link_name));
 }
 
-std::optional<Pose3d>
-updatedAttachedBodyPose(const moveit::core::RobotState & source,
-                        const std::string & attached_body_name)
+std::optional<Pose3d> updatedAttachedBodyPose(const moveit::core::RobotState & source,
+                                              const std::string & attached_body_name)
 {
   moveit::core::RobotState current(source);
   current.update();
-  if (!current.hasAttachedBody(attached_body_name)) return std::nullopt;
+  if (!current.hasAttachedBody(attached_body_name))
+    return std::nullopt;
   const auto * attached = current.getAttachedBody(attached_body_name);
-  if (!attached) return std::nullopt;
+  if (!attached)
+    return std::nullopt;
   return poseFrom(attached->getGlobalPose());
 }
 
 std::optional<moveit_msgs::msg::RobotTrajectory>
-executableTrajectoryFromValidatedArtifact(
-  const MotionPlanArtifact & artifact,
-  const std::vector<std::string> & expected_joint_names)
+executableTrajectoryFromValidatedArtifact(const MotionPlanArtifact & artifact,
+                                          const std::vector<std::string> & expected_joint_names)
 {
-  if (!artifact.moveit_success || !artifact.collision_aware ||
-      !artifact.time_parameterized || expected_joint_names.empty() ||
-      artifact.joint_names != expected_joint_names || artifact.trajectory_points < 2 ||
-      artifact.samples.size() != artifact.trajectory_points ||
+  if (!artifact.moveit_success || !artifact.collision_aware || !artifact.time_parameterized ||
+      expected_joint_names.empty() || artifact.joint_names != expected_joint_names ||
+      artifact.trajectory_points < 2 || artifact.samples.size() != artifact.trajectory_points ||
       artifact.start_joint_positions.size() != expected_joint_names.size() ||
       artifact.goal_joint_positions.size() != expected_joint_names.size()) {
     return std::nullopt;
@@ -175,50 +175,47 @@ executableTrajectoryFromValidatedArtifact(
   double previous_time = -1.0;
   for (const auto & sample : artifact.samples) {
     if (sample.joint_positions.size() != expected_joint_names.size() ||
-        !std::isfinite(sample.time_from_start_seconds) ||
-        sample.time_from_start_seconds < 0.0 ||
+        !std::isfinite(sample.time_from_start_seconds) || sample.time_from_start_seconds < 0.0 ||
         (previous_time >= 0.0 && sample.time_from_start_seconds <= previous_time)) {
       return std::nullopt;
     }
     trajectory_msgs::msg::JointTrajectoryPoint point;
     for (const double position : sample.joint_positions) {
-      if (!std::isfinite(position)) return std::nullopt;
+      if (!std::isfinite(position))
+        return std::nullopt;
       point.positions.push_back(position);
     }
     const auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::duration<double>(sample.time_from_start_seconds));
-    point.time_from_start.sec =
-      static_cast<std::int32_t>(nanoseconds.count() / 1000000000LL);
-    point.time_from_start.nanosec =
-      static_cast<std::uint32_t>(nanoseconds.count() % 1000000000LL);
+    point.time_from_start.sec = static_cast<std::int32_t>(nanoseconds.count() / 1000000000LL);
+    point.time_from_start.nanosec = static_cast<std::uint32_t>(nanoseconds.count() % 1000000000LL);
     trajectory.joint_trajectory.points.push_back(std::move(point));
     previous_time = sample.time_from_start_seconds;
   }
-  const auto same = [](const std::vector<double> & first,
-                       const std::vector<double> & second) {
-    if (first.size() != second.size()) return false;
+  const auto same = [](const std::vector<double> & first, const std::vector<double> & second) {
+    if (first.size() != second.size())
+      return false;
     for (std::size_t i = 0; i < first.size(); ++i) {
       if (!std::isfinite(first[i]) || !std::isfinite(second[i]) ||
-          std::abs(first[i] - second[i]) > 1e-9) return false;
+          std::abs(first[i] - second[i]) > 1e-9)
+        return false;
     }
     return true;
   };
-  if (!same(trajectory.joint_trajectory.points.front().positions,
-            artifact.start_joint_positions) ||
-      !same(trajectory.joint_trajectory.points.back().positions,
-            artifact.goal_joint_positions)) {
+  if (!same(trajectory.joint_trajectory.points.front().positions, artifact.start_joint_positions) ||
+      !same(trajectory.joint_trajectory.points.back().positions, artifact.goal_joint_positions)) {
     return std::nullopt;
   }
   return trajectory;
 }
 
 std::optional<CurrentJointStateEvidence>
-currentJointStateEvidenceFromMessage(
-  const sensor_msgs::msg::JointState & message, const SO101Profile & profile,
-  std::chrono::steady_clock::time_point received_at)
+currentJointStateEvidenceFromMessage(const sensor_msgs::msg::JointState & message,
+                                     const SO101Profile & profile,
+                                     std::chrono::steady_clock::time_point received_at)
 {
-  if (received_at == std::chrono::steady_clock::time_point{} ||
-      message.name.empty() || message.position.size() != message.name.size() ||
+  if (received_at == std::chrono::steady_clock::time_point{} || message.name.empty() ||
+      message.position.size() != message.name.size() ||
       message.velocity.size() != message.name.size() || message.header.stamp.sec < 0) {
     return std::nullopt;
   }
@@ -248,22 +245,27 @@ currentJointStateEvidenceFromMessage(
     return true;
   };
   for (const auto & name : profile.arm_joints) {
-    if (!append(name, false)) return std::nullopt;
+    if (!append(name, false))
+      return std::nullopt;
   }
-  if (!append(profile.gripper_joint, true)) return std::nullopt;
+  if (!append(profile.gripper_joint, true))
+    return std::nullopt;
   return result;
 }
 
-ActionResult cancelRequestScopedGoalAndWait(
-  IRequestScopedGoalCancellation & goal, double cancel_ack_timeout_seconds,
-  double terminal_timeout_seconds)
+ActionResult cancelRequestScopedGoalAndWait(IRequestScopedGoalCancellation & goal,
+                                            double cancel_ack_timeout_seconds,
+                                            double terminal_timeout_seconds)
 {
-  const auto cancel = goal.requestCancel(cancel_ack_timeout_seconds);
-  if (cancel.status != ActionStatus::SUCCEEDED) return cancel;
+  auto cancel = goal.requestCancel(cancel_ack_timeout_seconds);
+  if (cancel.status != ActionStatus::SUCCEEDED)
+    return cancel;
   if (!goal.waitForTerminal(terminal_timeout_seconds)) {
     return {ActionStatus::TIMED_OUT,
-            Failure{FailureCategory::PLANNING, "MOVE_GROUP_CANCEL_TERMINAL_TIMEOUT",
-                    "MoveGroup goal did not reach a terminal state after cancellation", {}}};
+            Failure{FailureCategory::PLANNING,
+                    "MOVE_GROUP_CANCEL_TERMINAL_TIMEOUT",
+                    "MoveGroup goal did not reach a terminal state after cancellation",
+                    {}}};
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
@@ -279,9 +281,9 @@ public:
   RosMoveGroupGoalCancellation(
     rclcpp_action::Client<moveit_msgs::action::MoveGroup>::SharedPtr client,
     MoveGroupGoalHandle::SharedPtr goal_handle,
-    std::shared_future<MoveGroupGoalHandle::WrappedResult> result_future)
-  : client_(std::move(client)), goal_handle_(std::move(goal_handle)),
-    result_future_(std::move(result_future))
+    std::shared_future<MoveGroupGoalHandle::WrappedResult> result_future) :
+      client_(std::move(client)), goal_handle_(std::move(goal_handle)),
+      result_future_(std::move(result_future))
   {
   }
 
@@ -290,17 +292,19 @@ public:
     const auto future = client_->async_cancel_goal(goal_handle_);
     if (future.wait_for(std::chrono::duration<double>(timeout_seconds)) !=
         std::future_status::ready) {
-      return {ActionStatus::TIMED_OUT,
-              Failure{FailureCategory::PLANNING, "MOVE_GROUP_CANCEL_ACK_TIMEOUT",
-                      "MoveGroup did not acknowledge cancellation in time", {}}};
+      return {ActionStatus::TIMED_OUT, Failure{FailureCategory::PLANNING,
+                                               "MOVE_GROUP_CANCEL_ACK_TIMEOUT",
+                                               "MoveGroup did not acknowledge cancellation in time",
+                                               {}}};
     }
-    const auto response = future.get();
-    if (!response ||
-        response->return_code != action_msgs::srv::CancelGoal::Response::ERROR_NONE ||
+    const auto & response = future.get();
+    if (!response || response->return_code != action_msgs::srv::CancelGoal::Response::ERROR_NONE ||
         response->goals_canceling.empty()) {
       return {ActionStatus::FAILED,
-              Failure{FailureCategory::PLANNING, "MOVE_GROUP_CANCEL_REJECTED",
-                      "MoveGroup rejected cancellation of the timed-out planning goal", {}}};
+              Failure{FailureCategory::PLANNING,
+                      "MOVE_GROUP_CANCEL_REJECTED",
+                      "MoveGroup rejected cancellation of the timed-out planning goal",
+                      {}}};
     }
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
@@ -335,16 +339,16 @@ class MoveItJointPlanningBoundary::Impl
 {
 public:
   Impl(std::shared_ptr<rclcpp::Node> node, SO101Profile profile, std::string planner_id,
-       double velocity_scaling, double acceleration_scaling, double state_timeout_seconds)
-  : node(std::move(node)), profile(std::move(profile)), planner_id(std::move(planner_id)),
-    velocity_scaling(velocity_scaling), acceleration_scaling(acceleration_scaling),
-    state_timeout_seconds(state_timeout_seconds)
+       double velocity_scaling, double acceleration_scaling, double state_timeout_seconds) :
+      node(std::move(node)), profile(std::move(profile)), planner_id(std::move(planner_id)),
+      velocity_scaling(velocity_scaling), acceleration_scaling(acceleration_scaling),
+      state_timeout_seconds(state_timeout_seconds)
   {
     joint_state_subscription = this->node->create_subscription<sensor_msgs::msg::JointState>(
       "/joint_states", rclcpp::SensorDataQoS(),
-      [this](sensor_msgs::msg::JointState::ConstSharedPtr message) {
-        auto evidence = currentJointStateEvidenceFromMessage(
-          *message, this->profile, std::chrono::steady_clock::now());
+      [this](const sensor_msgs::msg::JointState::ConstSharedPtr & message) {
+        auto evidence = currentJointStateEvidenceFromMessage(*message, this->profile,
+                                                             std::chrono::steady_clock::now());
         {
           std::lock_guard<std::mutex> lock(joint_state_mutex);
           latest_joint_state = std::move(evidence);
@@ -370,8 +374,8 @@ public:
   rclcpp_action::Client<moveit_msgs::action::MoveGroup>::SharedPtr moveGroupAction()
   {
     if (!move_group_action) {
-      move_group_action = rclcpp_action::create_client<moveit_msgs::action::MoveGroup>(
-        node, "move_action");
+      move_group_action =
+        rclcpp_action::create_client<moveit_msgs::action::MoveGroup>(node, "move_action");
     }
     return move_group_action;
   }
@@ -388,21 +392,25 @@ public:
   bool refreshScene()
   {
     auto & group = moveGroup();
-    if (!group.startStateMonitor(state_timeout_seconds)) return false;
+    if (!group.startStateMonitor(state_timeout_seconds))
+      return false;
     auto current = group.getCurrentState(state_timeout_seconds);
-    if (!current) return false;
+    if (!current)
+      return false;
     auto next = std::make_shared<planning_scene::PlanningScene>(current->getRobotModel());
     next->setCurrentState(*current);
     auto & scene_interface = planningSceneInterface();
     const auto objects = scene_interface.getObjects();
     for (const auto & [id, object] : objects) {
       static_cast<void>(id);
-      if (!next->processCollisionObjectMsg(object)) return false;
+      if (!next->processCollisionObjectMsg(object))
+        return false;
     }
     const auto attached = scene_interface.getAttachedObjects();
     for (const auto & [id, object] : attached) {
       static_cast<void>(id);
-      if (!next->processAttachedCollisionObjectMsg(object)) return false;
+      if (!next->processAttachedCollisionObjectMsg(object))
+        return false;
     }
     std::lock_guard<std::mutex> lock(scene_mutex);
     scene = std::move(next);
@@ -417,8 +425,7 @@ public:
   double state_timeout_seconds;
   std::unique_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
   rclcpp_action::Client<moveit_msgs::action::MoveGroup>::SharedPtr move_group_action;
-  std::unique_ptr<moveit::planning_interface::PlanningSceneInterface>
-    planning_scene_interface;
+  std::unique_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface;
   mutable std::mutex scene_mutex;
   std::shared_ptr<planning_scene::PlanningScene> scene;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscription;
@@ -429,9 +436,9 @@ public:
 
 MoveItJointPlanningBoundary::MoveItJointPlanningBoundary(
   std::shared_ptr<rclcpp::Node> node, SO101Profile profile, std::string planner_id,
-  double velocity_scaling, double acceleration_scaling, double state_timeout_seconds)
-: impl_(std::make_unique<Impl>(std::move(node), std::move(profile), std::move(planner_id),
-                              velocity_scaling, acceleration_scaling, state_timeout_seconds))
+  double velocity_scaling, double acceleration_scaling, double state_timeout_seconds) :
+    impl_(std::make_unique<Impl>(std::move(node), std::move(profile), std::move(planner_id),
+                                 velocity_scaling, acceleration_scaling, state_timeout_seconds))
 {
 }
 
@@ -450,7 +457,8 @@ std::optional<CurrentJointStateEvidence> MoveItJointPlanningBoundary::currentSta
 
 std::optional<MotionPlanningSceneFacts> MoveItJointPlanningBoundary::sceneFacts()
 {
-  if (!impl_->refreshScene()) return std::nullopt;
+  if (!impl_->refreshScene())
+    return std::nullopt;
   MotionPlanningSceneFacts facts;
   auto & scene_interface = impl_->planningSceneInterface();
   const auto objects = scene_interface.getObjects(
@@ -478,8 +486,8 @@ std::optional<MotionPlanningSceneFacts> MoveItJointPlanningBoundary::sceneFacts(
   {
     std::lock_guard<std::mutex> lock(impl_->scene_mutex);
     if (impl_->scene && impl_->scene->knowsFrameTransform(impl_->profile.moveit_attach_link)) {
-      facts.current_gripper_pose_world = updatedLinkPose(
-        impl_->scene->getCurrentState(), impl_->profile.moveit_attach_link);
+      facts.current_gripper_pose_world =
+        updatedLinkPose(impl_->scene->getCurrentState(), impl_->profile.moveit_attach_link);
     }
     if (impl_->scene && impl_->scene->knowsFrameTransform(impl_->profile.tcp_link)) {
       facts.current_tcp_pose_world =
@@ -495,14 +503,17 @@ ActionResult MoveItJointPlanningBoundary::execute(const MotionPlanArtifact & art
     executableTrajectoryFromValidatedArtifact(artifact, impl_->profile.arm_joints);
   if (!trajectory) {
     return {ActionStatus::FAILED,
-            Failure{FailureCategory::EXECUTION, "MOTION_ARTIFACT_INVALID",
-                    "MoveIt execution requires a complete validated SO-101 artifact", {}}};
+            Failure{FailureCategory::EXECUTION,
+                    "MOTION_ARTIFACT_INVALID",
+                    "MoveIt execution requires a complete validated SO-101 artifact",
+                    {}}};
   }
   const auto result = impl_->moveGroup().execute(*trajectory);
   if (!static_cast<bool>(result)) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::EXECUTION, "MOVEIT_EXECUTION_FAILED",
-                    "MoveIt failed to execute the exact validated artifact", {}}};
+    return {ActionStatus::FAILED, Failure{FailureCategory::EXECUTION,
+                                          "MOVEIT_EXECUTION_FAILED",
+                                          "MoveIt failed to execute the exact validated artifact",
+                                          {}}};
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
@@ -513,17 +524,20 @@ ActionResult MoveItJointPlanningBoundary::cancel()
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
-ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(
-  const Pose3d & current_tcp_world, double world_z_delta_m)
+ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & current_tcp_world,
+                                                                 double world_z_delta_m)
 {
   if (!std::isfinite(current_tcp_world.x) || !std::isfinite(current_tcp_world.y) ||
       !std::isfinite(current_tcp_world.z) || !std::isfinite(current_tcp_world.qx) ||
       !std::isfinite(current_tcp_world.qy) || !std::isfinite(current_tcp_world.qz) ||
       !std::isfinite(current_tcp_world.qw) || !std::isfinite(world_z_delta_m) ||
       world_z_delta_m <= 0.0 || world_z_delta_m > 0.002) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::CONFIGURATION, "MICRO_LIFT_REQUEST_INVALID",
-                    "World-Z physical-grasp probe must be a finite positive lift no larger than 2 mm", {}}};
+    return {
+      ActionStatus::FAILED,
+      Failure{FailureCategory::CONFIGURATION,
+              "MICRO_LIFT_REQUEST_INVALID",
+              "World-Z physical-grasp probe must be a finite positive lift no larger than 2 mm",
+              {}}};
   }
   geometry_msgs::msg::PoseStamped target;
   target.header.frame_id = impl_->profile.world_frame;
@@ -539,20 +553,26 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(
   const auto current = group.getCurrentState(impl_->state_timeout_seconds);
   if (!current) {
     return {ActionStatus::FAILED,
-            Failure{FailureCategory::OBSERVATION, "MICRO_LIFT_CURRENT_STATE_TIMEOUT",
-                    "MoveIt current state was unavailable before world-Z micro lift", {}}};
+            Failure{FailureCategory::OBSERVATION,
+                    "MICRO_LIFT_CURRENT_STATE_TIMEOUT",
+                    "MoveIt current state was unavailable before world-Z micro lift",
+                    {}}};
   }
   if (!impl_->refreshScene()) {
     return {ActionStatus::FAILED,
-            Failure{FailureCategory::MOVEIT_SCENE, "MICRO_LIFT_SCENE_UNAVAILABLE",
-                    "Planning Scene was unavailable for request-scoped micro-lift planning", {}}};
+            Failure{FailureCategory::MOVEIT_SCENE,
+                    "MICRO_LIFT_SCENE_UNAVAILABLE",
+                    "Planning Scene was unavailable for request-scoped micro-lift planning",
+                    {}}};
   }
   auto client = impl_->moveGroupAction();
   if (!client->wait_for_action_server(
         std::chrono::duration<double>(impl_->state_timeout_seconds))) {
     return {ActionStatus::FAILED,
-            Failure{FailureCategory::OBSERVATION, "MICRO_LIFT_MOVE_GROUP_UNAVAILABLE",
-                    "MoveGroup action is unavailable for request-scoped micro-lift planning", {}}};
+            Failure{FailureCategory::OBSERVATION,
+                    "MICRO_LIFT_MOVE_GROUP_UNAVAILABLE",
+                    "MoveGroup action is unavailable for request-scoped micro-lift planning",
+                    {}}};
   }
   moveit_msgs::action::MoveGroup::Goal request;
   request.request.group_name = impl_->profile.planning_group;
@@ -562,15 +582,13 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(
   request.request.max_velocity_scaling_factor = 0.03;
   request.request.max_acceleration_scaling_factor = 0.03;
   moveit::core::robotStateToRobotStateMsg(*current, request.request.start_state, true);
-  request.request.goal_constraints.push_back(
-    kinematic_constraints::constructGoalConstraints(
-      impl_->profile.tcp_link, target, 0.0002, 0.005));
+  request.request.goal_constraints.push_back(kinematic_constraints::constructGoalConstraints(
+    impl_->profile.tcp_link, target, 0.0002, 0.005));
   request.planning_options.plan_only = true;
   request.planning_options.planning_scene_diff.is_diff = true;
   {
     std::lock_guard<std::mutex> lock(impl_->scene_mutex);
-    collision_detection::AllowedCollisionMatrix acm(
-      impl_->scene->getAllowedCollisionMatrix());
+    collision_detection::AllowedCollisionMatrix acm(impl_->scene->getAllowedCollisionMatrix());
     for (const auto & link : impl_->profile.moveit_touch_links) {
       acm.setEntry(impl_->profile.task_object_id, link, true);
     }
@@ -579,38 +597,48 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(
   const auto goal_future = client->async_send_goal(request);
   if (goal_future.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
     return {ActionStatus::FAILED,
-            Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVE_GROUP_GOAL_TIMEOUT",
-                    "MoveGroup did not accept the request-scoped micro-lift goal in time", {}}};
+            Failure{FailureCategory::PLANNING,
+                    "MICRO_LIFT_MOVE_GROUP_GOAL_TIMEOUT",
+                    "MoveGroup did not accept the request-scoped micro-lift goal in time",
+                    {}}};
   }
-  const auto goal_handle = goal_future.get();
+  const auto & goal_handle = goal_future.get();
   if (!goal_handle) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVE_GROUP_GOAL_REJECTED",
-                    "MoveGroup rejected the request-scoped micro-lift goal", {}}};
+    return {ActionStatus::FAILED, Failure{FailureCategory::PLANNING,
+                                          "MICRO_LIFT_MOVE_GROUP_GOAL_REJECTED",
+                                          "MoveGroup rejected the request-scoped micro-lift goal",
+                                          {}}};
   }
   const auto result_future = client->async_get_result(goal_handle);
   if (result_future.wait_for(std::chrono::seconds(15)) != std::future_status::ready) {
     RosMoveGroupGoalCancellation cancellation(client, goal_handle, result_future);
-    const auto cleanup = cancelRequestScopedGoalAndWait(
-      cancellation, impl_->state_timeout_seconds, impl_->state_timeout_seconds);
-    if (cleanup.status != ActionStatus::SUCCEEDED) return cleanup;
+    auto cleanup = cancelRequestScopedGoalAndWait(cancellation, impl_->state_timeout_seconds,
+                                                  impl_->state_timeout_seconds);
+    if (cleanup.status != ActionStatus::SUCCEEDED)
+      return cleanup;
     return {ActionStatus::FAILED,
-            Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVE_GROUP_RESULT_TIMEOUT",
-                    "Request-scoped micro-lift planning did not finish in time", {}}};
+            Failure{FailureCategory::PLANNING,
+                    "MICRO_LIFT_MOVE_GROUP_RESULT_TIMEOUT",
+                    "Request-scoped micro-lift planning did not finish in time",
+                    {}}};
   }
-  const auto wrapped = result_future.get();
+  const auto & wrapped = result_future.get();
   if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result ||
       wrapped.result->error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS ||
       wrapped.result->planned_trajectory.joint_trajectory.points.empty()) {
     return {ActionStatus::FAILED,
-            Failure{FailureCategory::PLANNING, "MICRO_LIFT_MOVEIT_PLAN_FAILED",
-                    "MoveIt could not produce a request-scoped touch-aware world-Z micro-lift plan", {}}};
+            Failure{FailureCategory::PLANNING,
+                    "MICRO_LIFT_MOVEIT_PLAN_FAILED",
+                    "MoveIt could not produce a request-scoped touch-aware world-Z micro-lift plan",
+                    {}}};
   }
   const auto executed = group.execute(wrapped.result->planned_trajectory);
   if (!static_cast<bool>(executed)) {
     return {ActionStatus::FAILED,
-            Failure{FailureCategory::EXECUTION, "MICRO_LIFT_MOVEIT_EXECUTION_FAILED",
-                    "MoveIt failed to execute the validated world-Z micro-lift plan", {}}};
+            Failure{FailureCategory::EXECUTION,
+                    "MICRO_LIFT_MOVEIT_EXECUTION_FAILED",
+                    "MoveIt failed to execute the validated world-Z micro-lift plan",
+                    {}}};
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
@@ -623,8 +651,8 @@ ActionResult MoveItJointPlanningBoundary::cancelWorldZMicroLift()
 JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
   const std::vector<std::string> & joint_names, const std::vector<double> & start,
   const std::vector<double> & goal, const std::set<std::string> & allowed_touch_pairs,
-  const std::optional<TemporalContactPolicy> & temporal_contact_policy,
-  double gripper_position, double velocity_scaling, double acceleration_scaling)
+  const std::optional<TemporalContactPolicy> & temporal_contact_policy, double gripper_position,
+  double velocity_scaling, double acceleration_scaling)
 {
   if (joint_names != impl_->profile.arm_joints || start.size() != joint_names.size() ||
       goal.size() != joint_names.size() || !std::isfinite(gripper_position) ||
@@ -635,8 +663,9 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
                     "MoveIt segment must contain the profile arm joint order");
   }
   if (!validTouchWhitelist(allowed_touch_pairs, impl_->profile)) {
-    return planFail(FailureCategory::CONFIGURATION, "TOUCH_WHITELIST_POLICY_VIOLATION",
-                    "World touch whitelist must be empty or the exact SO-101 TaskObject touch policy");
+    return planFail(
+      FailureCategory::CONFIGURATION, "TOUCH_WHITELIST_POLICY_VIOLATION",
+      "World touch whitelist must be empty or the exact SO-101 TaskObject touch policy");
   }
   if (!validTemporalContact(temporal_contact_policy, impl_->profile)) {
     return planFail(FailureCategory::CONFIGURATION, "TEMPORAL_CONTACT_POLICY_VIOLATION",
@@ -657,7 +686,8 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
   group.setStartState(start_state);
   group.clearPoseTargets();
   std::map<std::string, double> target;
-  for (std::size_t i = 0; i < joint_names.size(); ++i) target.emplace(joint_names[i], goal[i]);
+  for (std::size_t i = 0; i < joint_names.size(); ++i)
+    target.emplace(joint_names[i], goal[i]);
   if (!group.setJointValueTarget(target)) {
     return planFail(FailureCategory::PRECONDITION, "JOINT_TARGET_REJECTED",
                     "MoveIt rejected an out-of-bounds or invalid SO-101 joint target");
@@ -707,17 +737,15 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
         return planFail(FailureCategory::MOVEIT_SCENE, "PLANNING_SCENE_OBSERVATION_UNAVAILABLE",
                         "Planning Scene is unavailable for request-scoped touch planning");
       }
-      collision_detection::AllowedCollisionMatrix acm(
-        impl_->scene->getAllowedCollisionMatrix());
+      collision_detection::AllowedCollisionMatrix acm(impl_->scene->getAllowedCollisionMatrix());
       for (const auto & link : impl_->profile.moveit_touch_links) {
         if (!allowed_touch_pairs.empty()) {
           acm.setEntry(impl_->profile.task_object_id, link, true);
         }
       }
       if (temporal_contact_policy) {
-        if (temporal_contact_policy->allowed_pairs.find(
-              policyPair(impl_->profile, impl_->profile.task_object_id,
-                         impl_->profile.table_object)) !=
+        if (temporal_contact_policy->allowed_pairs.find(policyPair(
+              impl_->profile, impl_->profile.task_object_id, impl_->profile.table_object)) !=
             temporal_contact_policy->allowed_pairs.end()) {
           acm.setEntry(impl_->profile.task_object_id, impl_->profile.table_object, true);
         }
@@ -736,7 +764,7 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
       return planFail(FailureCategory::PLANNING, "MOVE_GROUP_GOAL_TIMEOUT",
                       "MoveGroup did not accept the request-scoped planning goal in time");
     }
-    const auto goal_handle = goal_future.get();
+    const auto & goal_handle = goal_future.get();
     if (!goal_handle) {
       return planFail(FailureCategory::PLANNING, "MOVE_GROUP_GOAL_REJECTED",
                       "MoveGroup rejected the request-scoped planning goal");
@@ -752,7 +780,7 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
       return planFail(FailureCategory::PLANNING, "MOVE_GROUP_RESULT_TIMEOUT",
                       "MoveGroup request-scoped planning did not finish in time");
     }
-    const auto wrapped = result_future.get();
+    const auto & wrapped = result_future.get();
     if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result ||
         wrapped.result->error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
       return planFail(FailureCategory::PLANNING, "MOVEIT_JOINT_PLAN_FAILED",
@@ -768,7 +796,8 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
   }
   std::vector<std::size_t> indices;
   for (const auto & required : joint_names) {
-    const auto it = std::find(trajectory.joint_names.begin(), trajectory.joint_names.end(), required);
+    const auto it =
+      std::find(trajectory.joint_names.begin(), trajectory.joint_names.end(), required);
     if (it == trajectory.joint_names.end()) {
       return planFail(FailureCategory::PLAN_VALIDATION, "TRAJECTORY_JOINT_ORDER_INCOMPLETE",
                       "MoveIt trajectory omits a required SO-101 arm joint");
@@ -796,8 +825,7 @@ JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
 }
 
 std::optional<RobotStateEvidence> MoveItJointPlanningBoundary::evaluate(
-  const std::vector<std::string> & joint_names,
-  const std::vector<double> & joint_positions,
+  const std::vector<std::string> & joint_names, const std::vector<double> & joint_positions,
   const std::set<std::string> & allowed_touch_pairs,
   const std::optional<TemporalContactPolicy> & temporal_contact_policy,
   double gripper_position) const
@@ -806,15 +834,19 @@ std::optional<RobotStateEvidence> MoveItJointPlanningBoundary::evaluate(
       !std::isfinite(gripper_position)) {
     return std::nullopt;
   }
-  if (!validTouchWhitelist(allowed_touch_pairs, impl_->profile)) return std::nullopt;
-  if (!validTemporalContact(temporal_contact_policy, impl_->profile)) return std::nullopt;
+  if (!validTouchWhitelist(allowed_touch_pairs, impl_->profile))
+    return std::nullopt;
+  if (!validTemporalContact(temporal_contact_policy, impl_->profile))
+    return std::nullopt;
   std::lock_guard<std::mutex> lock(impl_->scene_mutex);
-  if (!impl_->scene) return std::nullopt;
+  if (!impl_->scene)
+    return std::nullopt;
   moveit::core::RobotState state(impl_->scene->getCurrentState());
   state.setVariablePositions(joint_names, joint_positions);
   state.setVariablePosition(impl_->profile.gripper_joint, gripper_position);
   state.update();
-  if (!state.satisfiesBounds()) return std::nullopt;
+  if (!state.satisfiesBounds())
+    return std::nullopt;
   RobotStateEvidence evidence;
   evidence.tcp_pose = poseFrom(state.getGlobalLinkTransform(impl_->profile.tcp_link));
   evidence.attached_task_object_pose_world =
@@ -824,8 +856,7 @@ std::optional<RobotStateEvidence> MoveItJointPlanningBoundary::evaluate(
   request.contacts = true;
   request.max_contacts = 256;
   request.max_contacts_per_pair = 1;
-  collision_detection::AllowedCollisionMatrix raw_acm(
-    impl_->scene->getAllowedCollisionMatrix());
+  collision_detection::AllowedCollisionMatrix raw_acm(impl_->scene->getAllowedCollisionMatrix());
   if (!allowed_touch_pairs.empty()) {
     for (const auto & link : impl_->profile.moveit_touch_links) {
       raw_acm.setEntry(impl_->profile.task_object_id, link, false);
@@ -851,8 +882,7 @@ std::optional<RobotStateEvidence> MoveItJointPlanningBoundary::evaluate(
   }
   if (temporal_contact_policy) {
     if (temporal_contact_policy->allowed_pairs.find(
-          policyPair(impl_->profile, impl_->profile.task_object_id,
-                     impl_->profile.table_object)) !=
+          policyPair(impl_->profile, impl_->profile.task_object_id, impl_->profile.table_object)) !=
         temporal_contact_policy->allowed_pairs.end()) {
       allowed_acm.setEntry(impl_->profile.task_object_id, impl_->profile.table_object, true);
     }
@@ -870,11 +900,13 @@ std::optional<RobotStateEvidence> MoveItJointPlanningBoundary::evaluate(
   return evidence;
 }
 
-std::vector<CalibrationCandidate> MoveItJointPlanningBoundary::search(
-  const Vec3 & target_position, const Vec3 & local_axis, const Vec3 & target_axis,
-  std::size_t seed_count, std::size_t result_count, double gripper_q6)
+std::vector<CalibrationCandidate>
+MoveItJointPlanningBoundary::search(const Vec3 & target_position, const Vec3 & local_axis,
+                                    const Vec3 & target_axis, std::size_t seed_count,
+                                    std::size_t result_count, double gripper_q6)
 {
-  if (!impl_->refreshScene() || seed_count == 0 || result_count == 0) return {};
+  if (!impl_->refreshScene() || seed_count == 0 || result_count == 0)
+    return {};
   std::shared_ptr<planning_scene::PlanningScene> scene;
   {
     std::lock_guard<std::mutex> lock(impl_->scene_mutex);
@@ -924,15 +956,15 @@ std::vector<CalibrationCandidate> MoveItJointPlanningBoundary::search(
   for (std::size_t i = 1; i <= seed_count; ++i) {
     std::vector<double> joints;
     for (std::size_t j = 0; j < bounds.size(); ++j) {
-      joints.push_back(bounds[j].first + halton(i, primes[j]) *
-                        (bounds[j].second - bounds[j].first));
+      joints.push_back(bounds[j].first +
+                       halton(i, primes[j]) * (bounds[j].second - bounds[j].first));
     }
     auto candidate = evaluate_candidate(joints, false);
     seeds.push_back(std::move(candidate));
-    std::sort(seeds.begin(), seeds.end(), [&](const auto & a, const auto & b) {
-      return score(a) < score(b);
-    });
-    if (seeds.size() > 64) seeds.pop_back();
+    std::sort(seeds.begin(), seeds.end(),
+              [&](const auto & a, const auto & b) { return score(a) < score(b); });
+    if (seeds.size() > 64)
+      seeds.pop_back();
   }
 
   std::vector<CalibrationCandidate> results;
@@ -940,8 +972,7 @@ std::vector<CalibrationCandidate> MoveItJointPlanningBoundary::search(
   const Eigen::Vector3d normalized_target_axis = target_axis_vector.normalized();
   auto residual = [&](const CalibrationCandidate & candidate) {
     Eigen::Matrix<double, 6, 1> value;
-    value << candidate.tcp_pose.x - target_position.x,
-      candidate.tcp_pose.y - target_position.y,
+    value << candidate.tcp_pose.x - target_position.x, candidate.tcp_pose.y - target_position.y,
       candidate.tcp_pose.z - target_position.z,
       0.12 * (rotatedAxis(candidate.tcp_pose, local_axis).x() - normalized_target_axis.x()),
       0.12 * (rotatedAxis(candidate.tcp_pose, local_axis).y() - normalized_target_axis.y()),
@@ -957,12 +988,12 @@ std::vector<CalibrationCandidate> MoveItJointPlanningBoundary::search(
       constexpr double epsilon = 1e-5;
       for (std::size_t joint = 0; joint < candidate.joints.size(); ++joint) {
         auto perturbed = candidate.joints;
-        perturbed[joint] = std::clamp(perturbed[joint] + epsilon,
-                                      bounds[joint].first, bounds[joint].second);
+        perturbed[joint] =
+          std::clamp(perturbed[joint] + epsilon, bounds[joint].first, bounds[joint].second);
         const double actual_step = perturbed[joint] - candidate.joints[joint];
         if (std::abs(actual_step) <= 1e-12) {
-          perturbed[joint] = std::clamp(candidate.joints[joint] - epsilon,
-                                        bounds[joint].first, bounds[joint].second);
+          perturbed[joint] = std::clamp(candidate.joints[joint] - epsilon, bounds[joint].first,
+                                        bounds[joint].second);
         }
         const double signed_step = perturbed[joint] - candidate.joints[joint];
         jacobian.col(static_cast<Eigen::Index>(joint)) =
@@ -970,10 +1001,13 @@ std::vector<CalibrationCandidate> MoveItJointPlanningBoundary::search(
       }
       const Eigen::Matrix<double, 5, 5> normal =
         jacobian.transpose() * jacobian + damping * Eigen::Matrix<double, 5, 5>::Identity();
-      Eigen::Matrix<double, 5, 1> delta = normal.ldlt().solve(-jacobian.transpose() * base_residual);
-      if (!delta.allFinite()) break;
+      Eigen::Matrix<double, 5, 1> delta =
+        normal.ldlt().solve(-jacobian.transpose() * base_residual);
+      if (!delta.allFinite())
+        break;
       const double max_delta = delta.cwiseAbs().maxCoeff();
-      if (max_delta > 0.25) delta *= 0.25 / max_delta;
+      if (max_delta > 0.25)
+        delta *= 0.25 / max_delta;
       auto proposal = candidate.joints;
       for (std::size_t joint = 0; joint < proposal.size(); ++joint) {
         proposal[joint] = std::clamp(proposal[joint] + delta[static_cast<Eigen::Index>(joint)],
@@ -986,31 +1020,37 @@ std::vector<CalibrationCandidate> MoveItJointPlanningBoundary::search(
       } else {
         damping = std::min(1e6, damping * 10.0);
       }
-      if (residual(candidate).norm() < 1e-7 || delta.norm() < 1e-8) break;
+      if (residual(candidate).norm() < 1e-7 || delta.norm() < 1e-8)
+        break;
     }
     candidate = evaluate_candidate(candidate.joints, true);
     results.push_back(std::move(candidate));
   }
-  std::sort(results.begin(), results.end(), [&](const auto & a, const auto & b) {
-    return score(a) < score(b);
-  });
-  results.erase(std::unique(results.begin(), results.end(), [](const auto & a, const auto & b) {
-    double max_delta = 0.0;
-    for (std::size_t i = 0; i < a.joints.size(); ++i) {
-      max_delta = std::max(max_delta, std::abs(a.joints[i] - b.joints[i]));
-    }
-    return max_delta < 1e-4;
-  }), results.end());
+  std::sort(results.begin(), results.end(),
+            [&](const auto & a, const auto & b) { return score(a) < score(b); });
+  results.erase(std::unique(results.begin(), results.end(),
+                            [](const auto & a, const auto & b) {
+                              double max_delta = 0.0;
+                              for (std::size_t i = 0; i < a.joints.size(); ++i) {
+                                max_delta =
+                                  std::max(max_delta, std::abs(a.joints[i] - b.joints[i]));
+                              }
+                              return max_delta < 1e-4;
+                            }),
+                results.end());
   std::vector<CalibrationCandidate> selected;
   for (const auto & result : results) {
-    if (selected.size() == result_count) break;
+    if (selected.size() == result_count)
+      break;
     selected.push_back(result);
   }
   std::size_t collision_free_count = 0;
   for (const auto & result : results) {
-    if (!result.collision_free) continue;
+    if (!result.collision_free)
+      continue;
     selected.push_back(result);
-    if (++collision_free_count == result_count) break;
+    if (++collision_free_count == result_count)
+      break;
   }
   return selected;
 }

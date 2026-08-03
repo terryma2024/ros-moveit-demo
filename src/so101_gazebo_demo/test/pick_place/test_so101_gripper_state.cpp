@@ -79,14 +79,15 @@ void setAttached(pick_place::WorldSnapshot & world)
   world.moveit_world_object_poses.erase(profile.task_object_id);
   world.moveit_task_object_attached_link = profile.moveit_attach_link;
   world.moveit_task_object_touch_links = {profile.moveit_touch_links.begin(),
-                                   profile.moveit_touch_links.end()};
+                                          profile.moveit_touch_links.end()};
   world.moveit_task_object_attached_relative_pose = profile.calibrated_grasp_relative_pose;
 }
 
 pick_place::ExecutionContext context(pick_place::State state,
                                      const pick_place::WorldSnapshot & before)
 {
-  const auto next = pick_place::TransitionTable::resolve(state, pick_place::ActionStatus::SUCCEEDED);
+  const auto next =
+    pick_place::TransitionTable::resolve(state, pick_place::ActionStatus::SUCCEEDED);
   return {state, next, before, nullptr};
 }
 
@@ -103,8 +104,7 @@ TEST(SO101GripperStateExecutor, CommandsExactProfileTargetForAllFourStates)
   } cases[] = {
     {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::SO101GripperTarget::PREOPEN,
      profile.q6_preopen},
-    {pick_place::State::CLOSE_GRIPPER, pick_place::SO101GripperTarget::CONTACT,
-     profile.q6_close},
+    {pick_place::State::CLOSE_GRIPPER, pick_place::SO101GripperTarget::CONTACT, profile.q6_close},
     {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN,
      profile.q6_full_open},
     {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN,
@@ -114,8 +114,9 @@ TEST(SO101GripperStateExecutor, CommandsExactProfileTargetForAllFourStates)
   for (const auto & test_case : cases) {
     auto command = std::make_shared<FakeGripperCommand>();
     pick_place::SO101GripperStateExecutor executor(
-      command, {test_case.state, test_case.target, test_case.state ==
-                                                   pick_place::State::RECOVER_OPEN_GRIPPER},
+      command,
+      {test_case.state, test_case.target,
+       test_case.state == pick_place::State::RECOVER_OPEN_GRIPPER},
       profile);
     const auto result = executor.execute(context(test_case.state, snapshot(profile.q6_contact)));
     EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, result.status);
@@ -136,8 +137,7 @@ TEST(SO101GripperStateExecutor, RecoveryNoOpUsesCurrentQ6AndNeedsNoAttachment)
   current.gazebo_task_object_attached = false;
   current.moveit_task_object_attached = false;
 
-  const auto result = executor.execute(
-    context(pick_place::State::RECOVER_OPEN_GRIPPER, current));
+  const auto result = executor.execute(context(pick_place::State::RECOVER_OPEN_GRIPPER, current));
 
   EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, result.status);
   EXPECT_EQ(0, command->command_calls);
@@ -149,11 +149,11 @@ TEST(SO101GripperStateExecutor, NormalOpenUsesConfiguredStagedRelease)
   profile.release_stages_q6 = {0.209, 0.506, profile.q6_full_open};
   auto command = std::make_shared<FakeGripperCommand>();
   pick_place::SO101GripperStateExecutor executor(
-    command, {pick_place::State::OPEN_GRIPPER,
-              pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
+    command, {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false},
+    profile);
 
-  const auto result = executor.execute(
-    context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
+  const auto result =
+    executor.execute(context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
 
   EXPECT_EQ(result.status, pick_place::ActionStatus::SUCCEEDED);
   EXPECT_EQ(command->commanded_q6, profile.release_stages_q6);
@@ -164,19 +164,20 @@ TEST(SO101GripperStateExecutor, StagedOpenAcceptsAbortOnlyAfterObservedPhysicalC
   auto profile = pick_place::SO101Profile::canonical();
   profile.release_stages_q6 = {profile.q6_full_open};
   auto command = std::make_shared<FakeGripperCommand>();
-  command->command_result = {
-    pick_place::ActionStatus::FAILED,
-    pick_place::Failure{pick_place::FailureCategory::GRIPPER, "GRIPPER_ACTION_ABORTED",
-                        "controller aborted after reaching target", {}}};
+  command->command_result = {pick_place::ActionStatus::FAILED,
+                             pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                                 "GRIPPER_ACTION_ABORTED",
+                                                 "controller aborted after reaching target",
+                                                 {}}};
   auto observer = std::make_shared<FakeWorldObserver>();
   observer->world = snapshot(profile.q6_full_open - 0.006, 0.0);
   setAttached(observer->world);
   pick_place::SO101GripperStateExecutor executor(
-    command, {pick_place::State::OPEN_GRIPPER,
-              pick_place::SO101GripperTarget::FULL_OPEN, false}, profile, observer);
+    command, {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false},
+    profile, observer);
 
-  const auto result = executor.execute(
-    context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
+  const auto result =
+    executor.execute(context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
 
   EXPECT_EQ(result.status, pick_place::ActionStatus::SUCCEEDED);
   EXPECT_EQ(observer->calls, 3);
@@ -190,15 +191,18 @@ TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayE
 
   const auto physical_contact = snapshot(profile.q6_contact + 0.0060);
   EXPECT_TRUE(pick_place::validateSO101GripperTarget(
-    physical_contact, pick_place::SO101GripperTarget::CONTACT, profile).ok);
+                physical_contact, pick_place::SO101GripperTarget::CONTACT, profile)
+                .ok);
 
   const auto still_too_wide = snapshot(profile.q6_contact + 0.012);
   EXPECT_FALSE(pick_place::validateSO101GripperTarget(
-    still_too_wide, pick_place::SO101GripperTarget::CONTACT, profile).ok);
+                 still_too_wide, pick_place::SO101GripperTarget::CONTACT, profile)
+                 .ok);
 
   const auto imprecise_preopen = snapshot(profile.q6_preopen - 0.0067);
   EXPECT_FALSE(pick_place::validateSO101GripperTarget(
-    imprecise_preopen, pick_place::SO101GripperTarget::PREOPEN, profile).ok);
+                 imprecise_preopen, pick_place::SO101GripperTarget::PREOPEN, profile)
+                 .ok);
 }
 
 TEST(SO101GripperValidation, FullOpenAcceptsBulletFeatherstoneSettlingError)
@@ -208,7 +212,8 @@ TEST(SO101GripperValidation, FullOpenAcceptsBulletFeatherstoneSettlingError)
 
   const auto settled = snapshot(profile.q6_full_open + 0.005, 0.0);
   EXPECT_TRUE(pick_place::validateSO101GripperTarget(
-    settled, pick_place::SO101GripperTarget::FULL_OPEN, profile).ok);
+                settled, pick_place::SO101GripperTarget::FULL_OPEN, profile)
+                .ok);
 }
 
 TEST(SO101GripperValidation, GazeboJawContactAcceptsPhysicalStopBeforeCommandedQ6)
@@ -248,8 +253,8 @@ TEST(SO101GripperTransitionContract, FailureReportsExpectedAndActualEndpointEvid
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   const auto contract = pick_place::makeSO101GripperContract(
-    {pick_place::State::PREPARE_OPEN_GRIPPER,
-     pick_place::SO101GripperTarget::PREOPEN, false}, profile);
+    {pick_place::State::PREPARE_OPEN_GRIPPER, pick_place::SO101GripperTarget::PREOPEN, false},
+    profile);
   const auto before = snapshot(profile.q6_full_open);
   const auto after = snapshot(profile.q6_full_open, 0.125);
   const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
@@ -336,8 +341,8 @@ TEST(SO101GripperTransitionContract, EnforcesStateSpecificIndependentAttachmentF
   const auto recovery = pick_place::makeSO101GripperContract(
     {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, true},
     profile);
-  EXPECT_TRUE(recovery->validate(snapshot(profile.q6_contact),
-                                 snapshot(profile.q6_full_open), action).ok);
+  EXPECT_TRUE(
+    recovery->validate(snapshot(profile.q6_contact), snapshot(profile.q6_full_open), action).ok);
 }
 
 TEST(SO101GripperTransitionContract, NormalReleaseAllowsBoundedSupportSettling)

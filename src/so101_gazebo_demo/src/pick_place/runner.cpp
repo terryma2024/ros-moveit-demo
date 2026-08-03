@@ -111,20 +111,20 @@ bool environmentEvidenceUnavailable(const Failure & failure) noexcept
 
 bool transientBoundaryConvergenceFailure(const ValidationResult & validation) noexcept
 {
-  if (validation.failures.empty()) return false;
-  return std::all_of(validation.failures.begin(), validation.failures.end(),
-                     [](const Failure & failure) {
-                       return failure.code == "MOTION_JOINT_ENDPOINT_MISMATCH" ||
-                              failure.code == "TCP_ENDPOINT_OUTSIDE_TOLERANCE" ||
-                              failure.code == "TCP_AXIS_OUTSIDE_TOLERANCE" ||
-                              failure.code == "Q6_TARGET_OUT_OF_TOLERANCE" ||
-                              failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE" ||
-                              failure.code == "Q6_NOT_STATIONARY" ||
-                              failure.code == "ARM_NOT_QUIESCENT" ||
-                              failure.code == "BILATERAL_GRIPPER_CONTACT_REQUIRED" ||
-                              failure.code == "CONTACT_PENETRATION_EVIDENCE_REQUIRED" ||
-                              failure.code == "SEMANTIC_FINGER_CONTACT_REQUIRED";
-                     });
+  if (validation.failures.empty())
+    return false;
+  return std::all_of(
+    validation.failures.begin(), validation.failures.end(), [](const Failure & failure) {
+      return failure.code == "MOTION_JOINT_ENDPOINT_MISMATCH" ||
+             failure.code == "TCP_ENDPOINT_OUTSIDE_TOLERANCE" ||
+             failure.code == "TCP_AXIS_OUTSIDE_TOLERANCE" ||
+             failure.code == "Q6_TARGET_OUT_OF_TOLERANCE" ||
+             failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE" || failure.code == "Q6_NOT_STATIONARY" ||
+             failure.code == "ARM_NOT_QUIESCENT" ||
+             failure.code == "BILATERAL_GRIPPER_CONTACT_REQUIRED" ||
+             failure.code == "CONTACT_PENETRATION_EVIDENCE_REQUIRED" ||
+             failure.code == "SEMANTIC_FINGER_CONTACT_REQUIRED";
+    });
 }
 
 }  // namespace
@@ -388,8 +388,12 @@ RunResult StateMachineRunner::runExecuteWorkflow(
   trace.push_back(state);
   while (!isTerminal(state) && transition_count < request.max_state_transitions) {
     if (state == State::VALIDATION_FAILED) {
-      return {RunStatus::CHECKPOINT_COMPLETE, state, state, workflow_failure,
-              transition_count, std::move(trace)};
+      return {RunStatus::CHECKPOINT_COMPLETE,
+              state,
+              state,
+              workflow_failure,
+              transition_count,
+              std::move(trace)};
     }
     const auto step = runExecuteStep(state, initial_snapshot, checkpoint_sequence, phase,
                                      failed_state, workflow_failure);
@@ -464,7 +468,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                                              std::uint64_t checkpoint_sequence,
                                              CheckpointPhase phase,
                                              std::optional<State> failed_state,
-                                             std::optional<Failure> original_failure) const
+                                             const std::optional<Failure> & original_failure) const
 {
   const auto next_state = TransitionTable::resolve(state, ActionStatus::SUCCEEDED);
   if (!observer_ || !checkpoint_store_) {
@@ -528,20 +532,20 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
             observed.failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION") {
           continue;
         }
-        return error(observed.failure.value_or(
-          Failure{FailureCategory::OBSERVATION,
-                  "PRE_EXECUTION_OBSERVATION_FAILED",
-                  "could not observe precondition convergence", {}}));
+        return error(observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                                       "PRE_EXECUTION_OBSERVATION_FAILED",
+                                                       "could not observe precondition convergence",
+                                                       {}}));
       }
       before = *observed.snapshot;
       precondition = contracts_.validatePrecondition({state, next_state}, *before);
-      if (precondition.ok || !transientBoundaryConvergenceFailure(precondition)) break;
+      if (precondition.ok || !transientBoundaryConvergenceFailure(precondition))
+        break;
     } while (std::chrono::steady_clock::now() < deadline);
   }
   if (!precondition.ok) {
-    const auto environment_failure =
-      std::find_if(precondition.failures.begin(), precondition.failures.end(),
-                   environmentEvidenceUnavailable);
+    const auto environment_failure = std::find_if(
+      precondition.failures.begin(), precondition.failures.end(), environmentEvidenceUnavailable);
     if (environment_failure != precondition.failures.end()) {
       return error(*environment_failure);
     }
@@ -602,8 +606,8 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
       if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
         return error(*checkpoint_failure);
       }
-      return {RunStatus::CHECKPOINT_COMPLETE, state, State::VALIDATION_FAILED,
-              *action.failure, 1, {}};
+      return {
+        RunStatus::CHECKPOINT_COMPLETE, state, State::VALIDATION_FAILED, *action.failure, 1, {}};
     }
     return handleActionFailure(
       state, *executor,
@@ -620,8 +624,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                                                               {}}),
                                checkpoint_sequence);
   }
-  auto transition =
-    contracts_.validate({state, next_state}, *before, *after.snapshot, action);
+  auto transition = contracts_.validate({state, next_state}, *before, *after.snapshot, action);
   if (!transition.ok && transientBoundaryConvergenceFailure(transition)) {
     const auto deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
     do {
@@ -640,10 +643,12 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                                             {}}),
           checkpoint_sequence);
       }
-      if (!observed.snapshot->fresh || !observed.snapshot->arm_stationary) continue;
+      if (!observed.snapshot->fresh || !observed.snapshot->arm_stationary)
+        continue;
       after = {*observed.snapshot, std::nullopt};
       transition = contracts_.validate({state, next_state}, *before, *after.snapshot, action);
-      if (transition.ok || !transientBoundaryConvergenceFailure(transition)) break;
+      if (transition.ok || !transientBoundaryConvergenceFailure(transition))
+        break;
     } while (std::chrono::steady_clock::now() < deadline);
   }
   if (!transition.ok) {
@@ -702,7 +707,8 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
     checkpoint.phase == CheckpointPhase::FORWARD &&
     (isTerminal(checkpoint.last_completed_state) ||
      TransitionTable::resolve(checkpoint.last_completed_state, ActionStatus::SUCCEEDED) !=
-       checkpoint.next_state) && !validation_failed_checkpoint;
+       checkpoint.next_state) &&
+    !validation_failed_checkpoint;
   const bool invalid_recovery_context = checkpoint.phase == CheckpointPhase::RECOVERY &&
                                         (!checkpoint.failed_state || !checkpoint.original_failure);
   const bool invalid_recovery_source =
@@ -727,8 +733,11 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
   }
   if (validation_failed_checkpoint) {
     if (!request.force_continue) {
-      return {RunStatus::CHECKPOINT_COMPLETE, State::VALIDATION_FAILED,
-              State::VALIDATION_FAILED, checkpoint.original_failure, 0,
+      return {RunStatus::CHECKPOINT_COMPLETE,
+              State::VALIDATION_FAILED,
+              State::VALIDATION_FAILED,
+              checkpoint.original_failure,
+              0,
               {State::VALIDATION_FAILED}};
     }
     return runExecuteWorkflow(State::ATTACH_GAZEBO, request, *observation.snapshot,
@@ -786,9 +795,10 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
 {
   const auto stopped = stopAndObserveAfterFailure(executor);
   if (!stopped.snapshot) {
-    auto stop_failure = stopped.failure.value_or(
-      Failure{FailureCategory::OBSERVATION, "POST_FAILURE_OBSERVATION_FAILED",
-              "unable to establish a stopped world", {}});
+    auto stop_failure = stopped.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                                         "POST_FAILURE_OBSERVATION_FAILED",
+                                                         "unable to establish a stopped world",
+                                                         {}});
     return error(withOriginalFailure(std::move(stop_failure), original_failure));
   }
   original_failure.metrics["cancel_succeeded"] = 1.0;
@@ -852,21 +862,21 @@ StateMachineRunner::observeAfterSuccessfulAction(State state) const
     if (!observed.snapshot &&
         (!observed.failure ||
          observed.failure->code != "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION")) {
-      return {std::nullopt,
-              observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
-                                                "POST_EXECUTION_OBSERVATION_FAILED",
-                                                "could not observe after execution",
-                                                {}})};
+      return {std::nullopt, observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                                              "POST_EXECUTION_OBSERVATION_FAILED",
+                                                              "could not observe after execution",
+                                                              {}})};
     }
     std::this_thread::sleep_for(kStationaryPollInterval);
   } while (observation_attempts < 4 || std::chrono::steady_clock::now() < deadline);
 
   if (!motion_state) {
-    return {std::nullopt,
-            Failure{FailureCategory::POSTCONDITION,
-                    "POST_ACTION_OBSERVATION_DID_NOT_CONVERGE",
-                    "action succeeded but no fresh consistent post-action observation was available",
-                    {{"execution_succeeded", 1.0}}}};
+    return {
+      std::nullopt,
+      Failure{FailureCategory::POSTCONDITION,
+              "POST_ACTION_OBSERVATION_DID_NOT_CONVERGE",
+              "action succeeded but no fresh consistent post-action observation was available",
+              {{"execution_succeeded", 1.0}}}};
   }
   return {std::nullopt,
           Failure{FailureCategory::POSTCONDITION,

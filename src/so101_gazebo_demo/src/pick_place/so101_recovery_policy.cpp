@@ -32,16 +32,17 @@ double orientationDistance(const Pose3d & first, const Pose3d & second)
       second_norm <= 1e-12) {
     return INFINITY;
   }
-  const double dot = std::abs((first.qx * second.qx + first.qy * second.qy +
-                               first.qz * second.qz + first.qw * second.qw) /
-                              (first_norm * second_norm));
+  const double dot = std::abs(
+    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
+    (first_norm * second_norm));
   return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
 }
 
 bool nearPose(const Pose3d & actual, const Pose3d & expected, const SO101Profile & profile)
 {
   return positionDistance(actual, expected) <= profile.task_object_position_drift_tolerance &&
-         orientationDistance(actual, expected) <= profile.task_object_orientation_drift_tolerance_rad;
+         orientationDistance(actual, expected) <=
+           profile.task_object_orientation_drift_tolerance_rad;
 }
 
 bool tableCanonical(const WorldSnapshot & current, const SO101Profile & profile)
@@ -97,9 +98,10 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
 
   if ((gazebo_attached || moveit_attached) &&
       !nearPose(*current.gazebo_task_object_pose_world, profile_.task_object_pose, profile_)) {
-    return error(FailureCategory::WORLD_INCONSISTENCY, "UNSAFE_RECOVERY_OBSERVATION",
-                 "Attached TaskObject is not on the known support pose; carrying recovery is not yet "
-                 "configured");
+    return error(
+      FailureCategory::WORLD_INCONSISTENCY, "UNSAFE_RECOVERY_OBSERVATION",
+      "Attached TaskObject is not on the known support pose; carrying recovery is not yet "
+      "configured");
   }
   if (!gripper_full_open) {
     return {State::RECOVER_OPEN_GRIPPER, std::nullopt};

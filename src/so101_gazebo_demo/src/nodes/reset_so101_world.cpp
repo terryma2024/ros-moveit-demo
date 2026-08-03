@@ -37,8 +37,7 @@ int main(int argc, char * argv[])
   const auto service_timeout_ms = node->declare_parameter<int>("service_timeout_ms", 1000);
   const auto joint_state_timeout_seconds =
     node->declare_parameter<double>("joint_state_timeout_seconds", 3.0);
-  const auto arm_velocity_scaling =
-    node->declare_parameter<double>("arm_velocity_scaling", 0.15);
+  const auto arm_velocity_scaling = node->declare_parameter<double>("arm_velocity_scaling", 0.15);
   const auto arm_acceleration_scaling =
     node->declare_parameter<double>("arm_acceleration_scaling", 0.15);
   const auto gripper_trajectory_seconds =
@@ -49,10 +48,14 @@ int main(int argc, char * argv[])
     node->declare_parameter<double>("arm_home_position_tolerance", 0.002);
 
   try {
-    const pick_place::MoveItSceneGeometry geometry{profile.world_frame, profile.table_object,
-                                                   profile.table_size, profile.pedestal_object,
-                                                   profile.pedestal_size, profile.task_object_id,
-                                                   profile.task_object_height, profile.task_object_outer_radius,
+    const pick_place::MoveItSceneGeometry geometry{profile.world_frame,
+                                                   profile.table_object,
+                                                   profile.table_size,
+                                                   profile.pedestal_object,
+                                                   profile.pedestal_size,
+                                                   profile.task_object_id,
+                                                   profile.task_object_height,
+                                                   profile.task_object_outer_radius,
                                                    profile.task_object_wall_thickness,
                                                    profile.task_object_bottom_thickness,
                                                    profile.task_object_side_count};
@@ -63,20 +66,24 @@ int main(int argc, char * argv[])
       profile.attachment_state_topic, gazebo_observation_timeout_seconds,
       service_timeout_ms > 0 ? static_cast<unsigned int>(service_timeout_ms) : 0U);
     auto joints = std::make_shared<pick_place::MoveItJointPlanningBoundary>(
-      node, profile, "RRTConnectkConfigDefault", arm_velocity_scaling,
-      arm_acceleration_scaling, joint_state_timeout_seconds);
+      node, profile, "RRTConnectkConfigDefault", arm_velocity_scaling, arm_acceleration_scaling,
+      joint_state_timeout_seconds);
     auto arm = std::make_shared<pick_place::MoveGroupArmHomePlanningBoundary>(
-      node, profile.planning_group, arm_home_position_tolerance,
-      arm_velocity_scaling, arm_acceleration_scaling);
-    auto gripper_client = std::make_shared<pick_place::RosTrajectoryActionClient>(
-      node, profile.gripper_action);
+      node, profile.planning_group, arm_home_position_tolerance, arm_velocity_scaling,
+      arm_acceleration_scaling);
+    auto gripper_client =
+      std::make_shared<pick_place::RosTrajectoryActionClient>(node, profile.gripper_action);
     auto gripper = std::make_shared<pick_place::FollowJointTrajectoryGripperAdapter>(
       gripper_client, gripper_trajectory_seconds, gripper_action_timeout_seconds);
-    auto robot = std::make_shared<pick_place::MoveItRobotHomeResetAdapter>(
-      arm, joints, gripper, profile);
-    pick_place::WorldResetConfig config{
-      profile.table_pose, profile.pedestal_pose, profile.task_object_pose,
-      timeout_seconds, poll_interval_seconds, 0.002, 0.02};
+    auto robot =
+      std::make_shared<pick_place::MoveItRobotHomeResetAdapter>(arm, joints, gripper, profile);
+    pick_place::WorldResetConfig config{profile.table_pose,
+                                        profile.pedestal_pose,
+                                        profile.task_object_pose,
+                                        timeout_seconds,
+                                        poll_interval_seconds,
+                                        0.002,
+                                        0.02};
     config.arm_joints = profile.arm_joints;
     config.arm_home_positions = profile.arm_home_positions;
     config.gripper_joint = profile.gripper_joint;
@@ -89,10 +96,10 @@ int main(int argc, char * argv[])
     pick_place::WorldResetCoordinator resetter(gazebo, moveit, robot, config);
     const auto result = resetter.reset();
     if (result.status != pick_place::ActionStatus::SUCCEEDED) {
-      const auto message = result.failure
-        ? pick_place::formatFailure(*result.failure)
-        : std::string("failure=WORLD_RESET_FAILED\n"
-                      "failure_message=SO-101 world reset failed without evidence");
+      const auto message =
+        result.failure ? pick_place::formatFailure(*result.failure)
+                       : std::string("failure=WORLD_RESET_FAILED\n"
+                                     "failure_message=SO-101 world reset failed without evidence");
       RCLCPP_ERROR(node->get_logger(), "%s", message.c_str());
       rclcpp::shutdown();
       return EXIT_FAILURE;
