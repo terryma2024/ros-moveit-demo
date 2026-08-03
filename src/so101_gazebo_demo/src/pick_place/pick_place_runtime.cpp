@@ -571,6 +571,7 @@ public:
     const int required_consecutive = before_lift_ ? 6 : 3;
     const int max_samples = before_lift_ ? 30 : 3;
     int consecutive = 0;
+    int consecutive_unilateral = 0;
     bool regrasp_attempted = false;
     for (int sample = 0; sample < max_samples; ++sample) {
       const auto observed = observer_->observe();
@@ -592,11 +593,17 @@ public:
         *snapshot.gazebo_task_object_gripper_max_depth <= profile_.max_gripper_contact_depth;
       if (!before_lift_ || bilateral) {
         ++consecutive;
+        consecutive_unilateral = 0;
         last = snapshot;
         if (consecutive >= required_consecutive) break;
       } else {
         consecutive = 0;
-        if (!regrasp_attempted) {
+        ++consecutive_unilateral;
+        // Contact topics can expose one side one sample before the other while
+        // the cup settles after CLOSE.  Do not turn that transient observation
+        // into a physical squeeze; require three consecutive unilateral samples
+        // before spending the single bounded regrasp attempt.
+        if (!regrasp_attempted && consecutive_unilateral >= 3) {
           if (!gripper_) {
             return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
                     "PHYSICAL_REGRASP_COMMAND_MISSING",
