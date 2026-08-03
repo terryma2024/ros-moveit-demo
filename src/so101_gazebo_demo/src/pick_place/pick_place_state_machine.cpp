@@ -197,7 +197,7 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
           options.request.mode == spp::RunMode::PLAN_ONLY) {
         spp::MoveItSceneInitializer scene_init(*boundary, *scene);
         if (const auto init_failure = scene_init.initialize(
-              profile, std::chrono::seconds(45))) {
+              profile, std::chrono::seconds(45), options.request.resume)) {
           printPreRunnerFailure(*init_failure);
           rclcpp::shutdown();
           return 1;

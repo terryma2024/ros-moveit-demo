@@ -19,7 +19,8 @@ public:
                          std::chrono::milliseconds poll_interval = std::chrono::milliseconds(50));
 
   [[nodiscard]] std::optional<Failure>
-  initialize(const SO101Profile & profile, std::chrono::milliseconds timeout);
+  initialize(const SO101Profile & profile, std::chrono::milliseconds timeout,
+             bool preserve_task_object = false);
 
 private:
   IJointPlanningBoundary & boundary_;

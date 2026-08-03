@@ -61,6 +61,7 @@ class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
 public:
   ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) override
   {
+    calls.push_back("attach");
     attached_spec = spec;
     ++attach_calls;
     return attach_result;
@@ -74,6 +75,7 @@ public:
 
   ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
+    calls.push_back("upsert");
     synced_pose = pose;
     ++upsert_calls;
     return sync_result;
@@ -111,6 +113,7 @@ public:
   int observe_calls{0};
   std::optional<MoveItAttachmentSpec> attached_spec;
   std::optional<Pose3d> synced_pose;
+  std::vector<std::string> calls;
 };
 
 ExecutionContext contextFor(State state)
@@ -181,13 +184,38 @@ TEST(SO101MoveItSceneExecutor, AttachUsesExactOrderedMetadataAndExclusiveMembers
                                 "plastic_cup"},
                                canonicalAttachment(), 0.05, 0.001);
 
-  const auto result = executor.execute(contextFor(State::ATTACH_MOVEIT));
+  const Pose3d settled_pose{0.0204, -0.2791, 0.1653, 0.01, -0.02, 0.03, 0.999};
+  auto context = contextFor(State::ATTACH_MOVEIT);
+  context.before.gazebo_task_object_pose_world = settled_pose;
+  const auto result = executor.execute(context);
 
   EXPECT_EQ(ActionStatus::SUCCEEDED, result.status);
   ASSERT_TRUE(adapter->attached_spec);
   EXPECT_EQ("gripper", adapter->attached_spec->link_name);
   EXPECT_EQ((std::vector<std::string>{"gripper", "jaw"}), adapter->attached_spec->touch_links);
+  ASSERT_TRUE(adapter->synced_pose);
+  EXPECT_DOUBLE_EQ(settled_pose.x, adapter->synced_pose->x);
+  EXPECT_DOUBLE_EQ(settled_pose.y, adapter->synced_pose->y);
+  EXPECT_DOUBLE_EQ(settled_pose.z, adapter->synced_pose->z);
+  EXPECT_EQ((std::vector<std::string>{"upsert", "attach"}), adapter->calls);
   EXPECT_EQ(2, adapter->observe_calls);
+}
+
+TEST(SO101MoveItSceneExecutor, AttachRejectsMissingSettledGazeboPose)
+{
+  auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
+  MoveItSceneExecutor executor(adapter,
+                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
+                                "plastic_cup"},
+                               canonicalAttachment(), 0.05, 0.001);
+
+  const auto result = executor.execute(contextFor(State::ATTACH_MOVEIT));
+
+  EXPECT_EQ(ActionStatus::FAILED, result.status);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("GAZEBO_TASK_OBJECT_POSE_MISSING", result.failure->code);
+  EXPECT_EQ(0, adapter->upsert_calls);
+  EXPECT_EQ(0, adapter->attach_calls);
 }
 
 TEST(SO101MoveItSceneExecutor, RejectsWrongTouchLinkOrderDespiteApiSuccess)
@@ -201,7 +229,9 @@ TEST(SO101MoveItSceneExecutor, RejectsWrongTouchLinkOrderDespiteApiSuccess)
                                 "plastic_cup"},
                                canonicalAttachment(), 0.005, 0.001);
 
-  const auto result = executor.execute(contextFor(State::ATTACH_MOVEIT));
+  auto context = contextFor(State::ATTACH_MOVEIT);
+  context.before.gazebo_task_object_pose_world = SO101Profile::canonical().task_object_pose;
+  const auto result = executor.execute(context);
 
   EXPECT_EQ(ActionStatus::TIMED_OUT, result.status);
   ASSERT_TRUE(result.failure);

@@ -601,9 +601,9 @@ public:
         ++consecutive_unilateral;
         // Contact topics can expose one side one sample before the other while
         // the cup settles after CLOSE.  Do not turn that transient observation
-        // into a physical squeeze; require three consecutive unilateral samples
+        // into a physical squeeze; require two consecutive unilateral samples
         // before spending the single bounded regrasp attempt.
-        if (!regrasp_attempted && consecutive_unilateral >= 3) {
+        if (!regrasp_attempted && consecutive_unilateral >= 2) {
           if (!gripper_) {
             return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
                     "PHYSICAL_REGRASP_COMMAND_MISSING",
