@@ -29,9 +29,8 @@ if(NOT CLANG_FORMAT_EXECUTABLE)
           "Install clang-format or set -DCLANG_FORMAT_EXECUTABLE=/path/to/clang-format.")
 endif()
 
-include(cmake/cpp_quality_gate.cmake)
-
 find_package(ament_cmake REQUIRED)
+find_package(pick_place_common REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -179,7 +178,7 @@ target_compile_features(so101_attachment_collision_system PUBLIC cxx_std_17)
 target_link_libraries(so101_attachment_collision_system
   gz-msgs10::core gz-plugin2::gz-plugin2 gz-sim8::gz-sim8 gz-transport13::core)
 
-so101_gazebo_add_cpp_quality_gate(
+pick_place_common_add_cpp_quality_gate(
   WORKSPACE_ROOT ${SO101_GAZEBO_DEMO_WORKSPACE_ROOT}
   SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}
   RUN_CLANG_TIDY_EXECUTABLE ${RUN_CLANG_TIDY_EXECUTABLE}
@@ -398,8 +397,8 @@ if(BUILD_TESTING)
     COMMAND
       bash
       ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_cpp_quality_gate.sh
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_cpp_quality_gate.cmake
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cpp_quality_gate.cmake
+      ${pick_place_common_DIR}/run_cpp_quality_gate.cmake
+      ${pick_place_common_DIR}/cpp_quality_gate.cmake
   )
 endif()
 
