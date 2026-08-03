@@ -4,8 +4,11 @@ project(pick_place_common)
 find_package(ament_cmake REQUIRED)
 
 add_library(pick_place_common_core
+  src/common_resume_validator.cpp
   src/domain_types.cpp
   src/plan_validation.cpp
+  src/runner.cpp
+  src/simulation_session_id.cpp
   src/state_action.cpp
   src/transition_contract.cpp
   src/workflow_definition.cpp
@@ -36,6 +39,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_package_contract test/test_package_contract.py)
   ament_add_gtest(test_workflow_definition test/test_workflow_definition.cpp)
   target_link_libraries(test_workflow_definition pick_place_common_core)
+  ament_add_gtest(test_common_runner test/test_common_runner.cpp)
+  target_link_libraries(test_common_runner pick_place_common_core)
 endif()
 
 ament_package(CONFIG_EXTRAS "cmake/pick_place_common-extras.cmake")
