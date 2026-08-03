@@ -329,6 +329,7 @@ if(BUILD_TESTING)
   # allowing bounded wrapper/scheduler headroom.
   set_tests_properties(test_fingertip_pad_geometry PROPERTIES TIMEOUT 90)
   ament_add_pytest_test(test_teleop_api test/teleop/test_api.py)
+  ament_add_pytest_test(test_teleop_camera test/teleop/test_camera.py)
   ament_add_pytest_test(test_teleop_control test/teleop/test_control.py)
   ament_add_pytest_test(test_teleop_geometry test/teleop/test_geometry.py)
   ament_add_pytest_test(test_teleop_models test/teleop/test_models.py)
