@@ -599,11 +599,10 @@ public:
       } else {
         consecutive = 0;
         ++consecutive_unilateral;
-        // Contact topics can expose one side one sample before the other while
-        // the cup settles after CLOSE.  Do not turn that transient observation
-        // into a physical squeeze; require two consecutive unilateral samples
-        // before spending the single bounded regrasp attempt.
-        if (!regrasp_attempted && consecutive_unilateral >= 2) {
+        // Spend the single bounded regrasp as soon as unilateral contact is
+        // observed.  Delaying this squeeze lets the lightly seated cup tilt
+        // before attachment and produces an unstable carrying transform.
+        if (!regrasp_attempted && consecutive_unilateral >= 1) {
           if (!gripper_) {
             return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
                     "PHYSICAL_REGRASP_COMMAND_MISSING",
