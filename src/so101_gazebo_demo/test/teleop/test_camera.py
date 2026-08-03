@@ -13,7 +13,8 @@ def test_load_camera_presets_rejects_unknown_fields(tmp_path: Path):
         load_camera_presets(config)
 
 
-def test_controller_calls_existing_gui_service_with_same_process_environment():
+def test_controller_calls_existing_gui_service_with_same_process_environment(monkeypatch):
+    monkeypatch.setenv("GZ_PARTITION", "camera-test-partition")
     calls = []
 
     def run(command, **kwargs):
@@ -31,7 +32,7 @@ def test_controller_calls_existing_gui_service_with_same_process_environment():
     assert command[:4] == ["gz", "service", "-s", "/gui/move_to/pose"]
     assert "gz.msgs.GUICamera" in command
     assert "position" in command[-1]
-    assert kwargs["env"] is not None
+    assert kwargs["env"]["GZ_PARTITION"] == "camera-test-partition"
 
 
 def test_controller_reports_missing_gui_service_without_false_success():
