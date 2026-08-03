@@ -355,6 +355,48 @@ TEST(MoveItSceneInitializer, rejectsSceneWhenTaskObjectAttached)
   EXPECT_EQ(result->code, "MOVEIT_SCENE_EVIDENCE_INCOMPLETE");
 }
 
+TEST(MoveItSceneInitializer, ResumePreservesAlreadyAttachedTaskObject)
+{
+  FakeBoundary boundary;
+  boundary.current_evidence = completeEvidence();
+  FakeScene scene;
+  auto s = convergedScene();
+  s.task_object_in_world = false;
+  s.task_object_world_pose.reset();
+  s.task_object_attached = true;
+  s.attached_link = "gripper";
+  s.touch_links = {"gripper", "jaw"};
+  scene.observe_result = s;
+
+  spp::MoveItSceneInitializer init(boundary, scene, kNoPoll);
+  const auto result = init.initialize(
+    spp::SO101Profile::canonical(), kShortTimeout, true);
+
+  ASSERT_FALSE(result.has_value()) << result->code << ": " << result->message;
+  EXPECT_EQ(scene.upsert_table_calls, 1);
+  EXPECT_EQ(scene.upsert_pedestal_calls, 1);
+  EXPECT_EQ(scene.upsert_task_object_calls, 0);
+}
+
+TEST(MoveItSceneInitializer, ResumePreservesSettledWorldTaskObjectPose)
+{
+  FakeBoundary boundary;
+  boundary.current_evidence = completeEvidence();
+  FakeScene scene;
+  auto s = convergedScene();
+  s.task_object_world_pose = spp::Pose3d{0.021, -0.278, 0.165, 0.0, 0.0, 0.1, 0.995};
+  scene.observe_result = s;
+
+  spp::MoveItSceneInitializer init(boundary, scene, kNoPoll);
+  const auto result = init.initialize(
+    spp::SO101Profile::canonical(), kShortTimeout, true);
+
+  ASSERT_FALSE(result.has_value()) << result->code << ": " << result->message;
+  EXPECT_EQ(scene.upsert_table_calls, 1);
+  EXPECT_EQ(scene.upsert_pedestal_calls, 1);
+  EXPECT_EQ(scene.upsert_task_object_calls, 0);
+}
+
 TEST(MoveItSceneInitializer, rejectsSceneWhenTablePoseMismatch)
 {
   FakeBoundary boundary;

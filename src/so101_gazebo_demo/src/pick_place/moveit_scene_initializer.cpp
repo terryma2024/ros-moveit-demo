@@ -60,17 +60,23 @@ bool poseMatches(const Pose3d & actual, const Pose3d & expected,
 }
 
 bool sceneConverged(const std::optional<MoveItSceneState> & state,
-                    const SO101Profile & profile)
+                    const SO101Profile & profile, bool preserve_task_object)
 {
   if (!state) return false;
   if (!state->table_in_world || !state->table_world_pose) return false;
   if (!state->pedestal_in_world || !state->pedestal_world_pose) return false;
-  if (!state->task_object_in_world || !state->task_object_world_pose) return false;
-  if (state->task_object_attached) return false;
   if (!poseMatches(*state->table_world_pose, profile.table_pose, 1e-3, 1e-2)) return false;
   if (!poseMatches(*state->pedestal_world_pose, profile.pedestal_pose, 1e-3, 1e-2)) return false;
-  if (!poseMatches(*state->task_object_world_pose, profile.task_object_pose, 1e-3, 1e-2)) return false;
-  return true;
+  if (state->task_object_in_world == state->task_object_attached) return false;
+  if (preserve_task_object) {
+    if (state->task_object_attached) {
+      return !state->attached_link.empty() && !state->touch_links.empty();
+    }
+    return state->task_object_in_world && state->task_object_world_pose.has_value();
+  }
+  return state->task_object_in_world && state->task_object_world_pose &&
+         !state->task_object_attached &&
+         poseMatches(*state->task_object_world_pose, profile.task_object_pose, 1e-3, 1e-2);
 }
 
 }  // namespace
@@ -84,7 +90,8 @@ MoveItSceneInitializer::MoveItSceneInitializer(
 
 std::optional<Failure>
 MoveItSceneInitializer::initialize(const SO101Profile & profile,
-                                   std::chrono::milliseconds timeout)
+                                   std::chrono::milliseconds timeout,
+                                   bool preserve_task_object)
 {
   const auto & expected_names = profile.arm_joints;
   const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -110,18 +117,20 @@ MoveItSceneInitializer::initialize(const SO101Profile & profile,
       "MOVEIT_PEDESTAL_UPSERT_APPLY_FAILED",
       "Failed to upsert canonical pedestal collision object", {}});
   }
-  if (const auto r = scene_.upsertTaskObjectWorldPose(profile.task_object_pose);
-      r.status != ActionStatus::SUCCEEDED) {
-    return r.failure.value_or(Failure{FailureCategory::MOVEIT_SCENE,
-      "MOVEIT_TASK_OBJECT_UPSERT_APPLY_FAILED",
-      "Failed to upsert configured task object collision object", {}});
+  if (!preserve_task_object) {
+    if (const auto r = scene_.upsertTaskObjectWorldPose(profile.task_object_pose);
+        r.status != ActionStatus::SUCCEEDED) {
+      return r.failure.value_or(Failure{FailureCategory::MOVEIT_SCENE,
+        "MOVEIT_TASK_OBJECT_UPSERT_APPLY_FAILED",
+        "Failed to upsert configured task object collision object", {}});
+    }
   }
 
   while (std::chrono::steady_clock::now() < deadline) {
-    if (sceneConverged(scene_.observe(), profile)) return std::nullopt;
+    if (sceneConverged(scene_.observe(), profile, preserve_task_object)) return std::nullopt;
     std::this_thread::sleep_for(poll_interval_);
   }
-  if (sceneConverged(scene_.observe(), profile)) return std::nullopt;
+  if (sceneConverged(scene_.observe(), profile, preserve_task_object)) return std::nullopt;
 
   return Failure{FailureCategory::MOVEIT_SCENE, "MOVEIT_SCENE_EVIDENCE_INCOMPLETE",
                  "Canonical table, pedestal, and task object did not converge in planning scene",

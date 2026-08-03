@@ -92,6 +92,13 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
   std::optional<Pose3d> pose;
   switch (config_.operation) {
     case MoveItSceneOperation::ATTACH:
+      if (!context.before.gazebo_task_object_pose_world) {
+        return sceneFailure(ActionStatus::FAILED, "GAZEBO_TASK_OBJECT_POSE_MISSING",
+                            "Cannot attach MoveIt without the settled Gazebo TaskObject pose");
+      }
+      pose = context.before.gazebo_task_object_pose_world;
+      command = adapter_->upsertTaskObjectWorldPose(*pose);
+      if (command.status != ActionStatus::SUCCEEDED) return command;
       command = adapter_->attachTaskObject(attachment_);
       break;
     case MoveItSceneOperation::DETACH:
