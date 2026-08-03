@@ -441,7 +441,7 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
   unilateral.gazebo_task_object_gripper_max_depth = 0.001;
   auto bilateral = unilateral;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
-  observer->samples = {unilateral, unilateral,
+  observer->samples = {unilateral,
                        bilateral, bilateral, bilateral,
                        bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
@@ -460,10 +460,10 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
     gripper->last_target,
     spp::SO101Profile::canonical().q6_contact -
       spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
-  EXPECT_EQ(observer->next_sample, 8U);
+  EXPECT_EQ(observer->next_sample, 7U);
 }
 
-TEST(SO101PickPlaceRuntime, StableGraspDebouncesOneTransientUnilateralSample)
+TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
 {
   auto dependencies = completeDependencies();
   auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
@@ -489,7 +489,7 @@ TEST(SO101PickPlaceRuntime, StableGraspDebouncesOneTransientUnilateralSample)
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  EXPECT_EQ(gripper->calls, 0);
+  EXPECT_EQ(gripper->calls, 1);
   EXPECT_EQ(observer->next_sample, 7U);
 }
 
