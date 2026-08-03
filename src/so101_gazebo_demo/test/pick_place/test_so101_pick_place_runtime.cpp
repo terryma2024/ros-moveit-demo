@@ -493,6 +493,32 @@ TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
   EXPECT_EQ(observer->next_sample, 7U);
 }
 
+TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  ASSERT_TRUE(observer);
+  auto moving = observer->snapshot;
+  moving.gazebo_task_object_stationary = false;
+  auto bilateral = observer->snapshot;
+  bilateral.gazebo_task_object_fixed_finger_contact = true;
+  bilateral.gazebo_task_object_moving_jaw_contact = true;
+  bilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  observer->samples = {moving, bilateral, bilateral, bilateral,
+                       bilateral, bilateral, bilateral};
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
+  ASSERT_TRUE(executor);
+
+  const auto result = executor->execute({
+    spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO,
+    observer->snapshot, nullptr});
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  EXPECT_EQ(observer->next_sample, 7U);
+}
+
 TEST(SO101PickPlaceRuntime, GazeboDetachWaitsForThreeConsecutiveStationarySamples)
 {
   auto dependencies = completeDependencies();

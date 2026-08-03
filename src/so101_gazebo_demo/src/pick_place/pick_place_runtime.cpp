@@ -581,10 +581,16 @@ public:
                 "Unable to collect physical-grasp stability evidence", {}})};
       }
       const auto & snapshot = *observed.snapshot;
-      if (!snapshot.fresh || !snapshot.arm_stationary || !snapshot.gazebo_task_object_stationary ||
-          !*snapshot.gazebo_task_object_stationary || !snapshot.gazebo_task_object_pose_world) {
+      if (!snapshot.fresh || !snapshot.gazebo_task_object_stationary ||
+          !snapshot.gazebo_task_object_pose_world) {
         return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
                 "PHYSICAL_GRASP_NOT_STABLE", "Cup/contact/arm evidence was not stable for three samples", {}}};
+      }
+      if (!snapshot.arm_stationary || !*snapshot.gazebo_task_object_stationary) {
+        consecutive = 0;
+        consecutive_unilateral = 0;
+        if (sample + 1 < max_samples) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        continue;
       }
       const bool bilateral = snapshot.gazebo_task_object_gripper_contact.value_or(false) &&
         snapshot.gazebo_task_object_fixed_finger_contact.value_or(false) &&
