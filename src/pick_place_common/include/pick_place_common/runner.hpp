@@ -27,9 +27,18 @@ public:
 class NoRetryRunnerBehaviorPolicy final : public IRunnerBehaviorPolicy
 {
 public:
-  bool retryPrecondition(State, const Failure &, std::size_t) const override { return false; }
-  bool retryPostcondition(State, const Failure &, std::size_t) const override { return false; }
-  bool includeIdleInTrace() const noexcept override { return true; }
+  bool retryPrecondition(State, const Failure &, std::size_t) const override
+  {
+    return false;
+  }
+  bool retryPostcondition(State, const Failure &, std::size_t) const override
+  {
+    return false;
+  }
+  bool includeIdleInTrace() const noexcept override
+  {
+    return false;
+  }
 };
 
 class StateMachineRunner
@@ -38,27 +47,25 @@ public:
   StateMachineRunner(const WorkflowDefinition &, const StateActionRegistry &,
                      const TransitionContractRegistry &, IWorldObserver * = nullptr,
                      ICheckpointStore * = nullptr, const CommonResumeValidator * = nullptr,
-                     IExecutionObservationSink * = nullptr,
-                     const PlanValidatorRegistry * = nullptr,
-                     const IRecoveryPolicy * = nullptr,
-                     const IRunnerBehaviorPolicy * = nullptr);
+                     IExecutionObservationSink * = nullptr, const PlanValidatorRegistry * = nullptr,
+                     const IRecoveryPolicy * = nullptr, const IRunnerBehaviorPolicy * = nullptr);
   [[nodiscard]] RunResult run(const RunRequest &) const;
 
 private:
   [[nodiscard]] RunResult runDryRun(const RunRequest &) const;
   [[nodiscard]] RunResult runPlanOnly(const RunRequest &) const;
-  [[nodiscard]] RunResult runPlanOnly(
-    State, const RunRequest &, std::optional<ObservationResult> = std::nullopt) const;
+  [[nodiscard]] RunResult runPlanOnly(State, const RunRequest &,
+                                      std::optional<ObservationResult> = std::nullopt) const;
   [[nodiscard]] RunResult runExecuteWorkflow(
     State, const RunRequest &, std::optional<WorldSnapshot> = std::nullopt,
     std::uint64_t checkpoint_sequence = 1, std::uint64_t initial_transition_count = 0,
     CheckpointPhase = CheckpointPhase::FORWARD, std::optional<State> failed_state = std::nullopt,
-    std::optional<Failure> original_failure = std::nullopt) const;
-  [[nodiscard]] RunResult runExecuteStep(
-    State, std::optional<WorldSnapshot> = std::nullopt,
-    std::uint64_t checkpoint_sequence = 1, CheckpointPhase = CheckpointPhase::FORWARD,
-    std::optional<State> failed_state = std::nullopt,
-    std::optional<Failure> original_failure = std::nullopt) const;
+    std::optional<Failure> original_failure = std::nullopt, bool include_idle = false) const;
+  [[nodiscard]] RunResult
+  runExecuteStep(State, std::optional<WorldSnapshot> = std::nullopt,
+                 std::uint64_t checkpoint_sequence = 1, CheckpointPhase = CheckpointPhase::FORWARD,
+                 std::optional<State> failed_state = std::nullopt,
+                 std::optional<Failure> original_failure = std::nullopt) const;
   [[nodiscard]] RunResult runResume(const RunRequest &) const;
   [[nodiscard]] RunResult handleActionFailure(State, IStateExecutor &, Failure,
                                               std::uint64_t checkpoint_sequence) const;

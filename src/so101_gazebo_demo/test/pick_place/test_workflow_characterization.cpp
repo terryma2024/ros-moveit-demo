@@ -1,11 +1,23 @@
 #include <gtest/gtest.h>
 
+#include <set>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "so101_gazebo_demo/pick_place/runner.hpp"
 
 namespace pp = so101_gazebo_demo::pick_place;
+
+TEST(SO101WorkflowCharacterization, UsesCommonDomainTypeAndDeclaresExtendedWorkflow)
+{
+  static_assert(std::is_same_v<pp::State, pick_place_common::State>);
+  const auto & workflow = pp::so101WorkflowDefinition();
+  EXPECT_EQ((std::set<pick_place_common::State>{pick_place_common::State::VALIDATION_FAILED}),
+            workflow.force_continue_states);
+  EXPECT_TRUE(workflow.action_states.count(pick_place_common::State::MICRO_LIFT));
+  EXPECT_TRUE(workflow.action_states.count(pick_place_common::State::VERIFY_PHYSICAL_GRASP));
+}
 
 TEST(SO101WorkflowCharacterization, DefaultDryRunTraceAndExtendedStatesRemainStable)
 {

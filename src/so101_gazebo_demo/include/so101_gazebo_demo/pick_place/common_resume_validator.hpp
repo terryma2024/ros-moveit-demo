@@ -1,20 +1,21 @@
 #pragma once
-#include <string>
+
+#include <pick_place_common/common_resume_validator.hpp>
+
 #include "so101_gazebo_demo/pick_place/checkpoint.hpp"
-#include "so101_gazebo_demo/pick_place/plan_validation.hpp"
+
 namespace so101_gazebo_demo::pick_place
 {
-class CommonResumeValidator
+
+class CommonResumeValidator final : public pick_place_common::CommonResumeValidator
 {
 public:
-  CommonResumeValidator(std::string, std::string, double = 0.01);
-  ValidationResult validate(const Checkpoint &, const WorldSnapshot &) const;
-  const std::string & policyBundleSha256() const noexcept;
-  const std::string & simulationSessionId() const noexcept;
-
-private:
-  std::string policy_bundle_sha256_;
-  std::string simulation_session_id_;
-  double tolerance_;
+  CommonResumeValidator(std::string policy_bundle_sha256, std::string simulation_session_id,
+                        double tolerance = 0.01);
+  [[nodiscard]] const std::string & policyBundleSha256() const noexcept
+  {
+    return configurationFingerprint();
+  }
 };
+
 }  // namespace so101_gazebo_demo::pick_place

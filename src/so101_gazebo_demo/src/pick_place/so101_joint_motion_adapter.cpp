@@ -49,12 +49,12 @@ bool finitePose(const Pose3d & pose)
          std::isfinite(pose.qw) && std::isfinite(norm) && norm > 1e-12;
 }
 
-double positionDistance(const Pose3d & first, const Pose3d & second)
+double localPositionDistance(const Pose3d & first, const Pose3d & second)
 {
   return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
 }
 
-double orientationDistance(const Pose3d & first, const Pose3d & second)
+double localOrientationDistance(const Pose3d & first, const Pose3d & second)
 {
   if (!finitePose(first) || !finitePose(second)) {
     return std::numeric_limits<double>::infinity();
@@ -94,15 +94,16 @@ double axialTiltDistance(const Pose3d & first, const Pose3d & second)
 bool posesMatch(const Pose3d & first, const Pose3d & second, const SO101Profile & profile)
 {
   return finitePose(first) && finitePose(second) &&
-         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
-         orientationDistance(first, second) <= profile.task_object_orientation_drift_tolerance_rad;
+         localPositionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+         localOrientationDistance(first, second) <=
+           profile.task_object_orientation_drift_tolerance_rad;
 }
 
 bool posesMatchAttachmentCalibration(const Pose3d & first, const Pose3d & second,
                                      const SO101Profile & profile)
 {
   return finitePose(first) && finitePose(second) &&
-         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+         localPositionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
          axialTiltDistance(first, second) <=
            profile.task_object_attachment_orientation_tolerance_rad;
 }
@@ -111,7 +112,7 @@ bool posesMatchCylindricalCarry(const Pose3d & first, const Pose3d & second,
                                 const SO101Profile & profile)
 {
   return finitePose(first) && finitePose(second) &&
-         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+         localPositionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
          axialTiltDistance(first, second) <=
            profile.task_object_attachment_orientation_tolerance_rad;
 }
@@ -141,7 +142,7 @@ bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile)
   const double local_z_world_z =
     1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
   const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
-  return positionDistance(pose, profile.task_object_pose) <=
+  return localPositionDistance(pose, profile.task_object_pose) <=
            profile.task_object_position_drift_tolerance &&
          std::isfinite(tilt) && tilt <= profile.place_support_tilt_tolerance_rad;
 }

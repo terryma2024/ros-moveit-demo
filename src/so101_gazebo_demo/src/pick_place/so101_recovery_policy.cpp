@@ -17,12 +17,12 @@ RecoveryRoute error(FailureCategory category, std::string code, std::string mess
   return {std::nullopt, Failure{category, std::move(code), std::move(message), {}}};
 }
 
-double positionDistance(const Pose3d & first, const Pose3d & second)
+double localPositionDistance(const Pose3d & first, const Pose3d & second)
 {
   return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
 }
 
-double orientationDistance(const Pose3d & first, const Pose3d & second)
+double localOrientationDistance(const Pose3d & first, const Pose3d & second)
 {
   const double first_norm =
     std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
@@ -40,8 +40,8 @@ double orientationDistance(const Pose3d & first, const Pose3d & second)
 
 bool nearPose(const Pose3d & actual, const Pose3d & expected, const SO101Profile & profile)
 {
-  return positionDistance(actual, expected) <= profile.task_object_position_drift_tolerance &&
-         orientationDistance(actual, expected) <=
+  return localPositionDistance(actual, expected) <= profile.task_object_position_drift_tolerance &&
+         localOrientationDistance(actual, expected) <=
            profile.task_object_orientation_drift_tolerance_rad;
 }
 
@@ -49,8 +49,8 @@ bool tableCanonical(const WorldSnapshot & current, const SO101Profile & profile)
 {
   const auto table = current.moveit_world_object_poses.find(profile.table_object);
   return table != current.moveit_world_object_poses.end() &&
-         positionDistance(table->second, profile.table_pose) <= 1e-5 &&
-         orientationDistance(table->second, profile.table_pose) <= 1e-4;
+         localPositionDistance(table->second, profile.table_pose) <= 1e-5 &&
+         localOrientationDistance(table->second, profile.table_pose) <= 1e-4;
 }
 
 }  // namespace

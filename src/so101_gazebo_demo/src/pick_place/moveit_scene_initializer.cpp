@@ -37,7 +37,7 @@ bool evidenceComplete(const std::optional<CurrentJointStateEvidence> & evidence,
   return true;
 }
 
-double positionDistance(const Pose3d & a, const Pose3d & b)
+double localPositionDistance(const Pose3d & a, const Pose3d & b)
 {
   const auto dx = a.x - b.x;
   const auto dy = a.y - b.y;
@@ -60,7 +60,7 @@ bool poseMatches(const Pose3d & actual, const Pose3d & expected, double position
       !std::isfinite(actual.qw)) {
     return false;
   }
-  return positionDistance(actual, expected) <= position_tolerance &&
+  return localPositionDistance(actual, expected) <= position_tolerance &&
          quaternionAngularDistance(actual, expected) <= angular_tolerance;
 }
 

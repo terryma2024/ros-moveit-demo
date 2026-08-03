@@ -36,12 +36,12 @@ bool validConfiguration(const MoveItSceneConfig & config) noexcept
   return false;
 }
 
-double positionDistance(const Pose3d & a, const Pose3d & b)
+double localPositionDistance(const Pose3d & a, const Pose3d & b)
 {
   return std::hypot(std::hypot(a.x - b.x, a.y - b.y), a.z - b.z);
 }
 
-double orientationDistance(const Pose3d & a, const Pose3d & b)
+double localOrientationDistance(const Pose3d & a, const Pose3d & b)
 {
   const auto a_norm = std::hypot(std::hypot(a.qx, a.qy), std::hypot(a.qz, a.qw));
   const auto b_norm = std::hypot(std::hypot(b.qx, b.qy), std::hypot(b.qz, b.qw));
@@ -55,8 +55,8 @@ double orientationDistance(const Pose3d & a, const Pose3d & b)
 
 bool poseMatches(const Pose3d & actual, const Pose3d & expected)
 {
-  return positionDistance(actual, expected) <= 1e-5 &&
-         orientationDistance(actual, expected) <= 1e-4;
+  return localPositionDistance(actual, expected) <= 1e-5 &&
+         localOrientationDistance(actual, expected) <= 1e-4;
 }
 
 }  // namespace

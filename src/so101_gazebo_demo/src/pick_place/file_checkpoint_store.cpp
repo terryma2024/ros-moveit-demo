@@ -275,7 +275,7 @@ Json checkpointToJson(const Checkpoint & checkpoint)
                                           ? Json(*checkpoint.expected.gazebo_task_object_stationary)
                                           : Json(nullptr)},
       {"required_world_objects", checkpoint.expected.required_world_objects}}},
-    {"policy_bundle_sha256", checkpoint.policy_bundle_sha256},
+    {"policy_bundle_sha256", checkpoint.configuration_fingerprint},
     {"simulation_session_id", checkpoint.simulation_session_id},
     {"resumable", checkpoint.resumable},
   };
@@ -487,7 +487,7 @@ CheckpointLoadResult checkpointFromJson(const Json & json)
   }
   checkpoint.expected.required_world_objects =
     expected.at("required_world_objects").get<std::vector<std::string>>();
-  checkpoint.policy_bundle_sha256 = json.at("policy_bundle_sha256").get<std::string>();
+  checkpoint.configuration_fingerprint = json.at("policy_bundle_sha256").get<std::string>();
   checkpoint.simulation_session_id = json.at("simulation_session_id").get<std::string>();
   checkpoint.resumable = json.at("resumable").get<bool>();
   if (const auto validation_failure = validateCheckpoint(checkpoint)) {

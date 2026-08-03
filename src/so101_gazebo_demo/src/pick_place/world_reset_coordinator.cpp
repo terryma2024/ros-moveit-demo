@@ -31,12 +31,12 @@ bool validPose(const Pose3d & pose)
          std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw)) > 1e-12;
 }
 
-double positionDistance(const Pose3d & a, const Pose3d & b)
+double localPositionDistance(const Pose3d & a, const Pose3d & b)
 {
   return std::hypot(std::hypot(a.x - b.x, a.y - b.y), a.z - b.z);
 }
 
-double orientationDistance(const Pose3d & a, const Pose3d & b)
+double localOrientationDistance(const Pose3d & a, const Pose3d & b)
 {
   const auto a_norm = std::hypot(std::hypot(a.qx, a.qy), std::hypot(a.qz, a.qw));
   const auto b_norm = std::hypot(std::hypot(b.qx, b.qy), std::hypot(b.qz, b.qw));
@@ -50,8 +50,8 @@ double orientationDistance(const Pose3d & a, const Pose3d & b)
 
 bool poseMatches(const Pose3d & actual, const Pose3d & expected, const WorldResetConfig & config)
 {
-  return positionDistance(actual, expected) <= config.position_tolerance &&
-         orientationDistance(actual, expected) <= config.orientation_tolerance_rad;
+  return localPositionDistance(actual, expected) <= config.position_tolerance &&
+         localOrientationDistance(actual, expected) <= config.orientation_tolerance_rad;
 }
 
 bool completeJointEvidence(const CurrentJointStateEvidence & evidence,
