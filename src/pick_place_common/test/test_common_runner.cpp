@@ -1,0 +1,96 @@
+#include <gtest/gtest.h>
+#include <memory>
+#include <string>
+#include <vector>
+#include "pick_place_common/runner.hpp"
+namespace pp = pick_place_common;
+namespace
+{
+struct Scenario { std::vector<std::string> events; pp::WorldSnapshot world; };
+class Observer final : public pp::IWorldObserver
+{
+public: explicit Observer(Scenario & s) : s_(s) { s_.world.fresh = true; s_.world.arm_stationary = true; }
+  pp::ObservationResult observe() override { s_.events.push_back("observe"); return {s_.world, {}}; }
+private: Scenario & s_;
+};
+class Contract final : public pp::TransitionContractRegistry::ITransitionContract
+{
+public: explicit Contract(Scenario & s) : s_(s) {}
+  pp::ValidationResult validatePrecondition(const pp::WorldSnapshot &) const override
+  { s_.events.push_back("precondition:MOVE_ABOVE_OBJECT"); return {true, {}, {}}; }
+  pp::ValidationResult validate(const pp::WorldSnapshot &, const pp::WorldSnapshot &,
+    const pp::ActionResult &) const override
+  { s_.events.push_back("transition-validate:MOVE_ABOVE_OBJECT"); return {true, {}, {}}; }
+private: Scenario & s_;
+};
+class Planner final : public pp::IStatePlanner
+{
+public: explicit Planner(Scenario & s) : s_(s) {}
+  pp::PlanResult plan(pp::State, pp::State, const pp::ObservationResult &) override
+  { s_.events.push_back("plan:MOVE_ABOVE_OBJECT"); auto a=std::make_shared<pp::PlanArtifact>(); a->trajectory_points=1; return {{pp::ActionStatus::SUCCEEDED,{}},a}; }
+private: Scenario & s_;
+};
+class Validator final : public pp::IPlanValidator
+{
+public: explicit Validator(Scenario & s) : s_(s) {}
+  pp::ValidationResult validate(pp::State, const pp::WorldSnapshot &, const pp::PlanArtifact &) const override
+  { s_.events.push_back("plan-validate:MOVE_ABOVE_OBJECT"); return {true, {}, {}}; }
+private: Scenario & s_;
+};
+class Executor final : public pp::IStateExecutor
+{
+public: explicit Executor(Scenario & s) : s_(s) {}
+  pp::ActionResult execute(const pp::ExecutionContext &) override
+  { s_.events.push_back("execute:MOVE_ABOVE_OBJECT"); return {pp::ActionStatus::SUCCEEDED,{}}; }
+  pp::ActionResult cancel() override { s_.events.push_back("cancel"); return {pp::ActionStatus::SUCCEEDED,{}}; }
+private: Scenario & s_;
+};
+class Store final : public pp::ICheckpointStore
+{
+public: explicit Store(Scenario & s) : s_(s) {}
+  std::optional<pp::Failure> commit(const pp::Checkpoint &) override
+  { s_.events.push_back("checkpoint:MOVE_ABOVE_OBJECT"); return {}; }
+  pp::CheckpointLoadResult loadLatestCompatible() override { return {}; }
+private: Scenario & s_;
+};
+pp::WorkflowDefinition workflow()
+{
+  pp::WorkflowDefinition w; w.transitions[pp::State::IDLE]={pp::State::MOVE_ABOVE_OBJECT,pp::State::ERROR};
+  w.transitions[pp::State::MOVE_ABOVE_OBJECT]={pp::State::DONE,pp::State::ERROR};
+  w.action_states={pp::State::MOVE_ABOVE_OBJECT}; w.forward_states={pp::State::IDLE,pp::State::MOVE_ABOVE_OBJECT,pp::State::DONE};
+  w.terminal_states={pp::State::DONE,pp::State::ERROR}; return w;
+}
+}
+TEST(CommonRunner, ExecutePreservesBoundaryOrder)
+{
+  Scenario s; Observer observer(s); Store store(s); pp::StateActionRegistry actions;
+  actions.registerPlanner(pp::State::MOVE_ABOVE_OBJECT,std::make_shared<Planner>(s));
+  actions.registerExecutor(pp::State::MOVE_ABOVE_OBJECT,std::make_shared<Executor>(s));
+  pp::TransitionContractRegistry contracts; contracts.registerContract({pp::State::MOVE_ABOVE_OBJECT,pp::State::DONE},std::make_shared<Contract>(s));
+  pp::PlanValidatorRegistry validators; validators.registerValidator(pp::State::MOVE_ABOVE_OBJECT,std::make_shared<Validator>(s));
+  const auto w=workflow(); pp::StateMachineRunner runner(w,actions,contracts,&observer,&store,nullptr,nullptr,&validators);
+  const auto result=runner.run({pp::RunMode::EXECUTE});
+  EXPECT_EQ(pp::RunStatus::DONE,result.status);
+  EXPECT_EQ((std::vector<std::string>{"observe","precondition:MOVE_ABOVE_OBJECT","plan:MOVE_ABOVE_OBJECT","plan-validate:MOVE_ABOVE_OBJECT","execute:MOVE_ABOVE_OBJECT","observe","transition-validate:MOVE_ABOVE_OBJECT","checkpoint:MOVE_ABOVE_OBJECT"}),s.events);
+}
+TEST(CommonRunner, PlanOnlyDoesNotExecute)
+{
+  Scenario s; Observer observer(s); pp::StateActionRegistry actions;
+  actions.registerPlanner(pp::State::MOVE_ABOVE_OBJECT,std::make_shared<Planner>(s));
+  actions.registerExecutor(pp::State::MOVE_ABOVE_OBJECT,std::make_shared<Executor>(s));
+  pp::TransitionContractRegistry contracts; contracts.registerContract({pp::State::MOVE_ABOVE_OBJECT,pp::State::DONE},std::make_shared<Contract>(s));
+  pp::PlanValidatorRegistry validators; validators.registerValidator(pp::State::MOVE_ABOVE_OBJECT,std::make_shared<Validator>(s));
+  const auto w=workflow(); pp::StateMachineRunner runner(w,actions,contracts,&observer,nullptr,nullptr,nullptr,&validators);
+  const auto result=runner.run({pp::RunMode::PLAN_ONLY});
+  EXPECT_EQ(pp::RunStatus::PLAN_ONLY_COMPLETE,result.status);
+  EXPECT_EQ(s.events.end(),std::find(s.events.begin(),s.events.end(),"execute:MOVE_ABOVE_OBJECT"));
+}
+TEST(CommonRunner, DryRunAndBudgetAreDefinitionDriven)
+{
+  pp::StateActionRegistry actions; pp::TransitionContractRegistry contracts; const auto w=workflow();
+  pp::StateMachineRunner runner(w,actions,contracts);
+  const auto ok=runner.run({pp::RunMode::DRY_RUN});
+  EXPECT_EQ((std::vector<pp::State>{pp::State::IDLE,pp::State::MOVE_ABOVE_OBJECT,pp::State::DONE}),ok.state_trace);
+  auto request=pp::RunRequest{}; request.max_state_transitions=1;
+  EXPECT_EQ("STATE_TRANSITION_BUDGET_EXHAUSTED",runner.run(request).failure->code);
+}
