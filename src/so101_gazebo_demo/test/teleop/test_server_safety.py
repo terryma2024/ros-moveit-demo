@@ -223,6 +223,109 @@ def test_workflow_step_resumes_the_existing_cpp_checkpoint_before_single_step():
     asyncio.run(scenario())
 
 
+def test_workflow_run_creates_a_fresh_run_without_step_or_resume_flags():
+    """Run owns a new checkpoint and executes the workflow from the beginning."""
+    async def scenario():
+        worker = Worker()
+        calls = []
+
+        def owner(executable, arguments, timeout_s=45.0):
+            calls.append((executable, list(arguments), timeout_s))
+            return "trace=IDLE -> PREPARE_OPEN_GRIPPER -> DONE"
+
+        worker.package_cli = owner
+        service = TeleopService(worker)
+        lease_id = await lease(service)
+        result = await service.command("workflow_run", {
+            "command_id": "workflow-run",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+
+        assert result.succeeded is True
+        assert result.data["workflow"]["run_id"] in service._workflow
+        assert calls[0][0] == "pick_place_state_machine"
+        assert "--step" not in calls[0][1]
+        assert "--resume" not in calls[0][1]
+
+    asyncio.run(scenario())
+
+
+def test_workflow_run_cannot_replace_an_existing_workflow():
+    """Run must not silently overwrite a workflow checkpoint after Start."""
+    async def scenario():
+        worker = Worker()
+        calls = []
+
+        def owner(executable, arguments, timeout_s=45.0):
+            calls.append((executable, list(arguments), timeout_s))
+            return "trace=IDLE -> PREPARE_OPEN_GRIPPER"
+
+        worker.package_cli = owner
+        service = TeleopService(worker)
+        lease_id = await lease(service)
+        started = await service.command("workflow_start", {
+            "command_id": "workflow-start",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+        original = dict(service._workflow)
+        rejected = await service.command("workflow_run", {
+            "command_id": "workflow-run",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+
+        assert started.succeeded is True
+        assert rejected.succeeded is False
+        assert rejected.code == "WORKFLOW_ALREADY_STARTED"
+        assert service._workflow == original
+        assert len(calls) == 1
+
+    asyncio.run(scenario())
+
+
+def test_workflow_resume_requires_an_existing_run_and_uses_resume_only():
+    """Resume continues an existing checkpoint and never creates one implicitly."""
+    async def scenario():
+        worker = Worker()
+        calls = []
+
+        def owner(executable, arguments, timeout_s=45.0):
+            calls.append((executable, list(arguments), timeout_s))
+            return "trace=IDLE -> PREPARE_OPEN_GRIPPER"
+
+        worker.package_cli = owner
+        service = TeleopService(worker)
+        lease_id = await lease(service)
+        missing = await service.command("workflow_resume", {
+            "command_id": "workflow-resume-missing",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+        assert missing.succeeded is False
+        assert missing.code == "WORKFLOW_RUN_MISMATCH"
+        assert service._workflow == {}
+        assert calls == []
+
+        started = await service.command("workflow_start", {
+            "command_id": "workflow-start",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+        resumed = await service.command("workflow_resume", {
+            "command_id": "workflow-resume",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+            "run_id": started.data["workflow"]["run_id"],
+        })
+        assert resumed.succeeded is True
+        assert calls[1][1][-2:] == ["--resume", "true"]
+        assert "--step" not in calls[1][1]
+
+    asyncio.run(scenario())
+
+
 def test_detach_publishes_detach_and_waits_for_detached_convergence():
     """A suffix match made detach issue an attach event; exact operation identity is required."""
     async def scenario():
