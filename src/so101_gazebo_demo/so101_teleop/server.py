@@ -619,13 +619,17 @@ class TeleopService:
                 if name.startswith("workflow_"):
                     if gate:=self._mutation_gate(body): return gate
                     operation=name.removeprefix("workflow_")
-                    if operation == "start":
-                        run_id=str(uuid.uuid4()); checkpoint=Path("/tmp") / f"so101-teleop-workflow-{run_id}.json"; self._workflow[run_id]=(checkpoint,self._worker.snapshot().simulation_session_id)
+                    session_id=self._worker.snapshot().simulation_session_id
+                    if operation in ("start", "run"):
+                        if any(workflow_session == session_id
+                               for _, workflow_session in self._workflow.values()):
+                            return self._result(body,False,"WORKFLOW_ALREADY_STARTED","reset the existing workflow before starting a new one")
+                        run_id=str(uuid.uuid4()); checkpoint=Path("/tmp") / f"so101-teleop-workflow-{run_id}.json"; self._workflow[run_id]=(checkpoint,session_id)
                     else:
                         run_id=body.get("run_id", ""); entry=self._workflow.get(run_id)
                         if entry is None: return self._result(body,False,"WORKFLOW_RUN_MISMATCH","unknown workflow run")
                         checkpoint, session=entry
-                        if session != self._worker.snapshot().simulation_session_id: return self._result(body,False,"SESSION_MISMATCH","workflow session invalidated")
+                        if session != session_id: return self._result(body,False,"SESSION_MISMATCH","workflow session invalidated")
                     if operation == "reset":
                         if body.get("confirmation") != "CONFIRM WORKFLOW_RESET": return self._result(body,False,"CONFIRMATION_REQUIRED","second server-side confirmation required")
                         self._workflow.pop(run_id, None); return self._result(body,True,"OK","workflow checkpoint invalidated")
