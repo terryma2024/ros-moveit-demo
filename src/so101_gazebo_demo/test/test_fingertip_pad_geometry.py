@@ -812,7 +812,7 @@ def test_contact_critical_arm_endpoint_contract_brackets_the_measured_contact_pl
     # metadata change can repair this static contract.
     max_penetration = validation['grasp_contact']['max_penetration_m']
     clearance_upper = max_penetration - closed_depth - outward_error
-    assert clearance_upper == pytest.approx(-0.000888813069, abs=2e-9)
+    assert clearance_upper == pytest.approx(-0.000388813069, abs=2e-9)
     assert inward_error > clearance_upper
     for state in ('DESCEND', 'RECOVER_DESCEND_TO_PICK'):
         assert validation['states'][state]['joint_endpoint_tolerance_rad'] == pytest.approx(

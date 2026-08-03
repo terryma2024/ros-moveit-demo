@@ -511,9 +511,6 @@ std::vector<State> normalTrace()
           State::DESCEND,
           State::CLOSE_GRIPPER,
           State::WAIT_GRASP_STABLE,
-          State::MICRO_LIFT,
-          State::WAIT_MICRO_LIFT_STABLE,
-          State::VERIFY_PHYSICAL_GRASP,
           State::ATTACH_GAZEBO,
           State::ATTACH_MOVEIT,
           State::LIFT,
@@ -725,6 +722,29 @@ TEST(PureRunnerIntegration, AttachmentWaitsForArmQuiescenceBeforeSideEffect)
   EXPECT_EQ(0, harness.scenario.cancel_calls);
 }
 
+TEST(PureRunnerIntegration, AttachmentWaitsForTransientBilateralContactBeforeSideEffect)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.transient_precondition_state = State::ATTACH_GAZEBO;
+  harness.scenario.transient_precondition_failures = 2;
+  harness.scenario.transient_precondition_failure_code =
+    "BILATERAL_GRIPPER_CONTACT_REQUIRED";
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, State::ATTACH_GAZEBO,
+                          false, std::nullopt, 20});
+
+  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(State::ATTACH_GAZEBO, result.current_state);
+  EXPECT_EQ(State::ATTACH_MOVEIT, result.next_state);
+  EXPECT_GE(harness.scenario.observation_calls, 4);
+  EXPECT_GE(harness.scenario.precondition_calls, 3);
+  EXPECT_EQ(1, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
+                          "execute:ATTACH_GAZEBO"));
+  EXPECT_EQ(0, harness.scenario.cancel_calls);
+}
+
 TEST(PureRunnerIntegration, DescendPostconditionFailureNeverExecutesCloseOrAttach)
 {
   Harness harness;
@@ -925,6 +945,25 @@ TEST(PureRunnerIntegration, PostCancelQuiescenceFailureRetainsOriginalActionFail
   EXPECT_DOUBLE_EQ(-0.059303, original_q6->second);
 }
 
+TEST(PureRunnerIntegration, RecoveryClassificationFailureRetainsOriginalActionFailureContext)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_transition = State::MOVE_ABOVE_OBJECT;
+  harness.recovery.route_failure =
+    Failure{FailureCategory::WORLD_INCONSISTENCY, "UNSAFE_RECOVERY_OBSERVATION",
+            "recovery classification rejected the stopped world", {}};
+
+  const auto result =
+    harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("UNSAFE_RECOVERY_OBSERVATION", result.failure->code);
+  EXPECT_NE(std::string::npos,
+            result.failure->message.find(
+              "original failure POSTCONDITION_INJECTED: injected test failure"));
+}
+
 TEST(PureRunnerIntegration, DoesNotObserveOrRecoverBeforeCancelReachesTerminal)
 {
   Harness harness;
@@ -967,9 +1006,6 @@ TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTra
                                     State::DESCEND,
                                     State::CLOSE_GRIPPER,
                                     State::WAIT_GRASP_STABLE,
-                                    State::MICRO_LIFT,
-                                    State::WAIT_MICRO_LIFT_STABLE,
-                                    State::VERIFY_PHYSICAL_GRASP,
                                     State::ATTACH_GAZEBO,
                                     State::ATTACH_MOVEIT,
                                     State::LIFT,

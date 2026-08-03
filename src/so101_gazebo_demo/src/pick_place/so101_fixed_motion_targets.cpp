@@ -23,7 +23,9 @@ std::optional<SO101FixedMotionSpec> SO101ConfiguredMotionTargetPolicy::spec(Stat
     motion->second.waypoints,
     motion->second.require_waypoint_ladder,
     motion->second.gripper_q6,
-    validation->second.motion.temporal_contact_policy};
+    validation->second.motion.temporal_contact_policy,
+    motion->second.velocity_scaling,
+    motion->second.acceleration_scaling};
   auto motion_validation = validation->second.motion;
   motion_validation.expected_joint_names = motion_.arm_joints;
   return SO101FixedMotionSpec{state, motion->second.logical_start, std::move(target),

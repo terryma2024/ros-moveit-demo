@@ -64,7 +64,7 @@ public:
   JointSegmentPlanResult planSegment(
     const std::vector<std::string> &, const std::vector<double> &,
     const std::vector<double> &, const std::set<std::string> &,
-    const std::optional<TemporalContactPolicy> &, double) override
+    const std::optional<TemporalContactPolicy> &, double, double, double) override
   {
     return {{ActionStatus::NOT_SUPPORTED, std::nullopt}, std::nullopt};
   }

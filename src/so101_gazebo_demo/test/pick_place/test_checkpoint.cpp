@@ -503,6 +503,29 @@ TEST(CommonResumeValidator, ForwardResumeFailsClosedForEveryExpectedWorldBoundar
   }
 }
 
+TEST(CommonResumeValidator, AcceptsPhysicalGraspValidationCheckpointForExplicitOverride)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.phase = pick_place::CheckpointPhase::FORWARD;
+  checkpoint.last_completed_state = pick_place::State::VERIFY_PHYSICAL_GRASP;
+  checkpoint.failed_state = pick_place::State::VERIFY_PHYSICAL_GRASP;
+  checkpoint.next_state = pick_place::State::VALIDATION_FAILED;
+  checkpoint.original_failure = pick_place::Failure{
+    pick_place::FailureCategory::POSTCONDITION,
+    "PHYSICAL_GRASP_TABLE_CLEARANCE",
+    "Cup did not clear the table",
+    {}};
+  checkpoint.resumable = true;
+  const auto snapshot = snapshotFrom(checkpoint);
+  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
+                                                    checkpoint.simulation_session_id);
+
+  const auto result = validator.validate(checkpoint, snapshot);
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_TRUE(result.failures.empty());
+}
+
 TEST(CommonResumeValidator, FailsClosedForIncompleteNonFiniteOrStaleBoundaryEvidence)
 {
   auto checkpoint = makeRecoveryCheckpoint();

@@ -109,6 +109,13 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
   }
   const bool has_failed_state = checkpoint.failed_state.has_value();
   const bool has_original_failure = checkpoint.original_failure.has_value();
+  const bool is_physical_validation_checkpoint =
+    checkpoint.phase == CheckpointPhase::FORWARD &&
+    checkpoint.last_completed_state == State::VERIFY_PHYSICAL_GRASP &&
+    checkpoint.failed_state == State::VERIFY_PHYSICAL_GRASP &&
+    checkpoint.next_state == State::VALIDATION_FAILED && checkpoint.original_failure &&
+    checkpoint.original_failure->category == FailureCategory::POSTCONDITION &&
+    checkpoint.original_failure->code.rfind("PHYSICAL_GRASP_", 0) == 0;
   if (checkpoint.source_mode == RunMode::DRY_RUN ||
       (checkpoint.phase == CheckpointPhase::RECOVERY &&
        checkpoint.source_mode != RunMode::EXECUTE)) {
@@ -117,7 +124,8 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
   }
   if (has_failed_state != has_original_failure ||
       (checkpoint.phase == CheckpointPhase::RECOVERY && !has_failed_state) ||
-      (checkpoint.phase == CheckpointPhase::FORWARD && has_failed_state)) {
+      (checkpoint.phase == CheckpointPhase::FORWARD && has_failed_state &&
+       !is_physical_validation_checkpoint)) {
     addFailure(result, "RECOVERY_CHECKPOINT_CONTEXT_INCOMPLETE",
                "Checkpoint recovery context must match its phase");
   }

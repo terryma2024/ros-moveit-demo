@@ -452,14 +452,42 @@ TEST(SO101MotionTemporalContact, RejectsPrefixContactBeyondAxialClearance)
   EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_BEYOND_AXIAL_CLEARANCE");
 }
 
-TEST(SO101MotionTemporalContact, RejectsPrefixContactAfterItDisappears)
+TEST(SO101MotionTemporalContact, RetreatFailsClosedWithStableContactClearanceCode)
 {
   auto plan = validLadder();
   auto config = descendConfig();
   plan.samples[0].tcp_pose.z = 0.300;
   plan.samples[1].tcp_pose.z = 0.280;
-  plan.samples[2].tcp_pose.z = 0.260;
-  config.endpoint_position.z = 0.260;
+  plan.samples[2].tcp_pose.z = 0.250;
+  config.endpoint_position.z = 0.250;
+  const spp::TemporalContactPolicy policy{
+    {"plastic_cup:gripper", "plastic_cup:jaw"},
+    spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
+  config.temporal_contact_policy = policy;
+  plan.temporal_contact_policy = policy;
+  for (auto & sample : plan.samples) sample.raw_contact_pairs = {"plastic_cup:gripper"};
+  plan.raw_contact_pairs = {"plastic_cup:gripper"};
+  spp::SO101MotionPlanValidator validator(config, true);
+
+  const auto result = validator.validate(spp::State::RETREAT, {}, plan);
+
+  ASSERT_FALSE(result.ok);
+  ASSERT_FALSE(result.failures.empty());
+  EXPECT_EQ(result.failures.front().code, "RETREAT_CONTACT_NOT_CLEARED");
+}
+
+TEST(SO101MotionTemporalContact, AcceptsIntermittentContactInsidePrefixAndProvesFinalClearance)
+{
+  auto plan = validLadder();
+  auto config = descendConfig();
+  plan.samples[0].tcp_pose.z = 0.300;
+  plan.samples[1].tcp_pose.z = 0.285;
+  plan.samples[2].tcp_pose.z = 0.270;
+  plan.samples.insert(plan.samples.end(), plan.samples.back());
+  plan.samples[3].tcp_pose.z = 0.250;
+  plan.samples[3].time_from_start_seconds = 3.0;
+  plan.trajectory_points = plan.samples.size();
+  config.endpoint_position.z = 0.250;
   const spp::TemporalContactPolicy policy{
     {"plastic_cup:gripper", "plastic_cup:jaw"},
     spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.043};
@@ -469,8 +497,7 @@ TEST(SO101MotionTemporalContact, RejectsPrefixContactAfterItDisappears)
   plan.samples[2].raw_contact_pairs = {"plastic_cup:gripper"};
   plan.raw_contact_pairs = {"plastic_cup:gripper"};
   const auto result = spp::validateWaypointLadder(plan, config);
-  ASSERT_FALSE(result.ok);
-  EXPECT_EQ(result.failures.front().code, "TEMPORAL_CONTACT_RECURRED_AFTER_CLEARANCE");
+  EXPECT_TRUE(result.ok) << (result.failures.empty() ? "" : result.failures.front().code);
 }
 
 TEST(SO101MotionTemporalContact, RejectsPrefixContactWithNegativeAxialProgress)

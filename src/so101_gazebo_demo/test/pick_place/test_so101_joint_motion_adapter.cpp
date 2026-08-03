@@ -1,3 +1,4 @@
+#include <cmath>
 #include <limits>
 #include <memory>
 
@@ -42,6 +43,12 @@ spp::Pose3d compose(const spp::Pose3d & parent, const spp::Pose3d & child)
   return {translated.x(), translated.y(), translated.z(), q.x(), q.y(), q.z(), q.w()};
 }
 
+spp::Pose3d withLocalYaw(const spp::Pose3d & pose, double yaw)
+{
+  return compose(pose, spp::Pose3d{0.0, 0.0, 0.0, 0.0, 0.0,
+                                   std::sin(yaw * 0.5), std::cos(yaw * 0.5)});
+}
+
 class FakeBoundary final : public spp::IJointPlanningBoundary,
                            public spp::IRobotStateEvidenceProvider
 {
@@ -61,13 +68,16 @@ public:
                                           const std::vector<double> & goal,
                                           const std::set<std::string> & allowed_touch_pairs,
                                           const std::optional<spp::TemporalContactPolicy> &,
-                                          double gripper_position) override
+                                          double gripper_position, double velocity_scaling,
+                                          double acceleration_scaling) override
   {
     ++plan_calls;
     starts.push_back(start);
     goals.push_back(goal);
     allowed_pairs.push_back(allowed_touch_pairs);
     gripper_positions.push_back(gripper_position);
+    velocity_scalings.push_back(velocity_scaling);
+    acceleration_scalings.push_back(acceleration_scaling);
     spp::JointSegmentPlan segment;
     segment.joint_names = names;
     segment.moveit_success = true;
@@ -103,6 +113,8 @@ public:
   std::vector<std::vector<double>> goals;
   std::vector<std::set<std::string>> allowed_pairs;
   std::vector<double> gripper_positions;
+  std::vector<double> velocity_scalings;
+  std::vector<double> acceleration_scalings;
 };
 
 spp::ObservationResult observation(double q6 = 0.707194871, double velocity = 0.0)
@@ -183,6 +195,74 @@ TEST(SO101JointMotionAdapter, PassesObservedQ6RatherThanAnExpectedFallbackIntoPl
   EXPECT_DOUBLE_EQ(boundary->gripper_positions.front(), 0.662818811);
 }
 
+TEST(SO101JointMotionAdapter, PassesRetreatDynamicsIntoEveryWaypointSegment)
+{
+  auto boundary = std::make_shared<FakeBoundary>();
+  auto request = goalRequest();
+  request.state = spp::State::RETREAT;
+  request.next_state = spp::State::DONE;
+  request.ladder = true;
+  request.joint_waypoints = {{0.05, 0.05, 0.05, 0.05, 0.05},
+                             {0.10, 0.10, 0.10, 0.10, 0.10}};
+  request.velocity_scaling = 0.03;
+  request.acceleration_scaling = 0.03;
+  auto observed = observation();
+  observed.snapshot->gazebo_task_object_pose_world =
+    spp::SO101Profile::canonical().place_task_object_pose;
+  boundary->scene.task_object_world_pose =
+    spp::SO101Profile::canonical().place_task_object_pose;
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+
+  const auto result = adapter.plan(request, observed);
+
+  ASSERT_EQ(result.action.status, spp::ActionStatus::SUCCEEDED);
+  EXPECT_EQ(boundary->velocity_scalings, (std::vector<double>{0.03, 0.03}));
+  EXPECT_EQ(boundary->acceleration_scalings, (std::vector<double>{0.03, 0.03}));
+}
+
+TEST(SO101JointMotionAdapter, RetreatAcceptsMatchingSupportedCylinderYaw)
+{
+  for (const auto state : {spp::State::RETREAT, spp::State::RECOVER_RETREAT}) {
+    auto boundary = std::make_shared<FakeBoundary>();
+    auto request = goalRequest();
+    request.state = state;
+    request.next_state = spp::State::DONE;
+    const auto placed = withLocalYaw(
+      spp::SO101Profile::canonical().place_task_object_pose, 0.5);
+    auto observed = observation();
+    observed.snapshot->gazebo_task_object_pose_world = placed;
+    boundary->scene.task_object_world_pose = placed;
+    spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+
+    const auto result = adapter.plan(request, observed);
+
+    EXPECT_EQ(result.action.status, spp::ActionStatus::SUCCEEDED)
+      << spp::toString(state)
+      << (result.action.failure ? result.action.failure->code : "");
+  }
+}
+
+TEST(SO101JointMotionAdapter, CarryingAcceptsCylindricalAxialSelfSpin)
+{
+  auto profile = spp::SO101Profile::canonical();
+  auto boundary = std::make_shared<FakeBoundary>();
+  boundary->scene = carryingScene();
+  boundary->scene.attached_relative_pose = withLocalYaw(graspRelativePose(), 0.20);
+  auto observed = carryingObservation();
+  observed.snapshot->gazebo_task_object_pose_world = compose(
+    *boundary->scene.current_gripper_pose_world, *boundary->scene.attached_relative_pose);
+  auto request = goalRequest();
+  request.state = spp::State::DESCEND_TO_PLACE;
+  request.carrying = true;
+  request.gripper_position = 0.662818811;
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary, profile);
+
+  const auto result = adapter.plan(request, observed);
+
+  EXPECT_EQ(result.action.status, spp::ActionStatus::SUCCEEDED)
+    << (result.action.failure ? result.action.failure->code : "");
+}
+
 TEST(SO101JointMotionAdapter, ContactContextUsesProvenStopToleranceWithoutWeakeningOtherContexts)
 {
   auto profile = spp::SO101Profile::canonical();
@@ -212,6 +292,62 @@ TEST(SO101JointMotionAdapter, ContactContextUsesProvenStopToleranceWithoutWeaken
   EXPECT_EQ(ordinary_result.action.status, spp::ActionStatus::FAILED);
   ASSERT_TRUE(ordinary_result.action.failure);
   EXPECT_EQ(ordinary_result.action.failure->code, "GRIPPER_CONTEXT_MISMATCH_BEFORE_PLAN");
+}
+
+TEST(SO101JointMotionAdapter, RetreatUsesValidatedFullOpenTolerance)
+{
+  const auto & profile = spp::SO101Profile::canonical();
+  auto boundary = std::make_shared<FakeBoundary>();
+  boundary->scene.task_object_world_pose = profile.place_task_object_pose;
+  auto observed = observation(profile.q6_full_open + 0.011, 0.0);
+  observed.snapshot->gazebo_task_object_pose_world = profile.place_task_object_pose;
+  auto request = goalRequest();
+  request.state = spp::State::RETREAT;
+  request.next_state = spp::State::DONE;
+  request.gripper_position = profile.q6_full_open;
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary, profile);
+
+  const auto result = adapter.plan(request, observed);
+
+  EXPECT_EQ(result.action.status, spp::ActionStatus::SUCCEEDED)
+    << (result.action.failure ? result.action.failure->code : "");
+}
+
+TEST(SO101JointMotionAdapter, CarryingLoadDriftRequiresBoundedBilateralContact)
+{
+  auto profile = spp::SO101Profile::canonical();
+  auto request = goalRequest();
+  request.state = spp::State::MOVE_ABOVE_PLACE;
+  request.carrying = true;
+  request.gripper_position = profile.q6_contact;
+
+  auto boundary = std::make_shared<FakeBoundary>();
+  boundary->scene = carryingScene();
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary, profile);
+  auto observed = carryingObservation();
+  observed.snapshot->joint_positions[profile.gripper_joint] = profile.q6_contact + 0.015;
+  observed.snapshot->gazebo_task_object_gripper_contact = true;
+  observed.snapshot->gazebo_task_object_fixed_finger_contact = true;
+  observed.snapshot->gazebo_task_object_moving_jaw_contact = true;
+  observed.snapshot->gazebo_task_object_gripper_max_depth =
+    profile.max_gripper_contact_depth - 0.0001;
+
+  const auto bounded = adapter.plan(request, observed);
+  EXPECT_EQ(bounded.action.status, spp::ActionStatus::SUCCEEDED);
+
+  observed.snapshot->gazebo_task_object_moving_jaw_contact = false;
+  const auto unilateral = adapter.plan(request, observed);
+  ASSERT_EQ(unilateral.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(unilateral.action.failure);
+  EXPECT_EQ(unilateral.action.failure->code, "GRIPPER_CONTEXT_MISMATCH_BEFORE_PLAN");
+
+  observed.snapshot->gazebo_task_object_moving_jaw_contact = true;
+  observed.snapshot->gazebo_task_object_gripper_max_depth =
+    profile.max_gripper_contact_depth + 0.0001;
+  const auto too_deep = adapter.plan(request, observed);
+  ASSERT_EQ(too_deep.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(too_deep.action.failure);
+  EXPECT_EQ(too_deep.action.failure->code, "GRIPPER_CONTEXT_MISMATCH_BEFORE_PLAN");
 }
 
 TEST(SO101JointMotionAdapter, PlansGoalFromObservedCurrentStateAndBuildsEvidence)
@@ -317,14 +453,14 @@ TEST(SO101JointMotionAdapter, RejectsMovedDetachedTaskObjectAndMoveItGazeboWorld
   }
 }
 
-TEST(SO101JointMotionAdapter, RejectsBadAttachedRelativeOrientationBeforePlanning)
+TEST(SO101JointMotionAdapter, RejectsBadAttachedRelativeTiltBeforePlanning)
 {
   auto boundary = std::make_shared<FakeBoundary>();
   boundary->scene = carryingScene();
-  boundary->scene.attached_relative_pose->qx = 0.0;
+  boundary->scene.attached_relative_pose->qx = std::sin(0.10);
   boundary->scene.attached_relative_pose->qy = 0.0;
   boundary->scene.attached_relative_pose->qz = 0.0;
-  boundary->scene.attached_relative_pose->qw = 1.0;
+  boundary->scene.attached_relative_pose->qw = std::cos(0.10);
   auto request = goalRequest();
   request.state = spp::State::LIFT;
   request.carrying = true;

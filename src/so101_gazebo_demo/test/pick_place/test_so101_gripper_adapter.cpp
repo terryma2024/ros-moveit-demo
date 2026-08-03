@@ -67,6 +67,9 @@ TEST(SO101Profile, OwnsExactRobotSceneAndAttachmentContract)
   EXPECT_DOUBLE_EQ(0.662818811, profile.q6_geometric_side_contact);
   EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_close);
   EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_contact);
+  EXPECT_DOUBLE_EQ(0.0060, profile.q6_regrasp_squeeze_offset);
+  EXPECT_GT(profile.q6_contact - profile.q6_regrasp_squeeze_offset,
+            profile.q6_safe_lower);
   EXPECT_EQ(profile.fingertip_pad_calibration_fingerprint,
             pick_place::fingertip_pad_calibration::kInputFingerprint);
   EXPECT_DOUBLE_EQ(0.020, profile.grasp_section_depth);
@@ -75,6 +78,10 @@ TEST(SO101Profile, OwnsExactRobotSceneAndAttachmentContract)
   EXPECT_DOUBLE_EQ(0.04, profile.table_size[2]);
   EXPECT_DOUBLE_EQ(0.040, profile.task_object_outer_radius);
   EXPECT_DOUBLE_EQ(0.090, profile.task_object_height);
+  EXPECT_DOUBLE_EQ(0.005, profile.task_object_position_drift_tolerance);
+  EXPECT_DOUBLE_EQ(0.070, profile.task_object_orientation_drift_tolerance_rad);
+  EXPECT_LT(profile.task_object_orientation_drift_tolerance_rad,
+            profile.task_object_attachment_orientation_tolerance_rad);
   EXPECT_EQ("/so101/object_attached", profile.attachment_state_topic);
 }
 
@@ -170,6 +177,21 @@ TEST(SO101GripperValidation, EvaluatesObservedNativePadGapAndInterferenceFromGen
   EXPECT_TRUE(std::any_of(
     slightly_closed.failures.begin(), slightly_closed.failures.end(),
     [](const auto & failure) { return failure.code == "Q6_NATIVE_PAD_INTERFERENCE_EXCEEDED"; }));
+
+  auto bounded_contact = q6Snapshot(profile.q6_contact - 0.0005, 0.0);
+  bounded_contact.gazebo_task_object_gripper_contact = true;
+  bounded_contact.gazebo_task_object_gripper_max_depth =
+    profile.max_gripper_contact_depth - 0.0001;
+  const auto dynamic_stop = pick_place::validateQ6Target(
+    bounded_contact, profile.q6_contact, profile.contact_width, profile);
+  EXPECT_TRUE(dynamic_stop.ok)
+    << (dynamic_stop.failures.empty() ? "" : dynamic_stop.failures.front().code);
+
+  bounded_contact.gazebo_task_object_gripper_max_depth =
+    profile.max_gripper_contact_depth + 0.0001;
+  const auto unbounded_stop = pick_place::validateQ6Target(
+    bounded_contact, profile.q6_contact, profile.contact_width, profile);
+  EXPECT_FALSE(unbounded_stop.ok);
 }
 
 TEST(SO101GripperValidation, RejectsObservedQ6BelowGeneratedNativePadSafeFloor)
@@ -243,4 +265,24 @@ TEST(FollowJointTrajectoryGripperAdapter, PropagatesAbortTimeoutAndCancel)
                                                {}}};
   EXPECT_EQ(pick_place::ActionStatus::CANCELLED, adapter.cancelAndWait().status);
   EXPECT_EQ(1, client->cancel_calls);
+}
+
+TEST(FollowJointTrajectoryGripperAdapter, DefersContactTargetAbortToPhysicalPostcondition)
+{
+  auto client = std::make_shared<FakeTrajectoryClient>();
+  const auto contact_q6 = pick_place::SO101Profile::canonical().q6_contact;
+  pick_place::FollowJointTrajectoryGripperAdapter adapter(
+    client, 0.75, 2.0, contact_q6);
+  client->send_result = {pick_place::ActionStatus::FAILED,
+                         pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                             "GRIPPER_ACTION_ABORTED",
+                                             "controller stopped on the cup",
+                                             {}}};
+
+  const auto contact = adapter.command(contact_q6);
+  const auto ordinary = adapter.command(0.5);
+
+  EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, contact.status);
+  EXPECT_FALSE(contact.failure);
+  EXPECT_EQ(pick_place::ActionStatus::FAILED, ordinary.status);
 }

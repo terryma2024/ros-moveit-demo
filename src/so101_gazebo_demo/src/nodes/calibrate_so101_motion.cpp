@@ -142,7 +142,8 @@ int main(int argc, char ** argv)
       const auto result = boundary->planSegment(current->joint_names, current->positions,
                                                 numbers(argc, argv, 2), allowed,
                                                 {},
-                                                spp::SO101Profile::canonical().q6_preopen);
+                                                spp::SO101Profile::canonical().q6_preopen,
+                                                0.1, 0.1);
       if (!result.segment) {
         std::cerr << "PLAN_FAILED code="
                   << (result.action.failure ? result.action.failure->code : "UNKNOWN") << '\n';

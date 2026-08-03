@@ -1,6 +1,7 @@
 #include "so101_gazebo_demo/pick_place/so101_joint_motion_adapter.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -68,11 +69,83 @@ double orientationDistance(const Pose3d & first, const Pose3d & second)
   return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
 }
 
+double axialTiltDistance(const Pose3d & first, const Pose3d & second)
+{
+  if (!finitePose(first) || !finitePose(second)) {
+    return std::numeric_limits<double>::infinity();
+  }
+  const auto axis = [](const Pose3d & pose) {
+    const double norm = std::sqrt(pose.qx * pose.qx + pose.qy * pose.qy +
+                                  pose.qz * pose.qz + pose.qw * pose.qw);
+    const double x = pose.qx / norm;
+    const double y = pose.qy / norm;
+    const double z = pose.qz / norm;
+    const double w = pose.qw / norm;
+    return std::array<double, 3>{
+      2.0 * (x * z + w * y),
+      2.0 * (y * z - w * x),
+      1.0 - 2.0 * (x * x + y * y)};
+  };
+  const auto first_axis = axis(first);
+  const auto second_axis = axis(second);
+  const double dot = first_axis[0] * second_axis[0] +
+    first_axis[1] * second_axis[1] + first_axis[2] * second_axis[2];
+  return std::acos(std::clamp(dot, -1.0, 1.0));
+}
+
 bool posesMatch(const Pose3d & first, const Pose3d & second, const SO101Profile & profile)
 {
   return finitePose(first) && finitePose(second) &&
          positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
          orientationDistance(first, second) <= profile.task_object_orientation_drift_tolerance_rad;
+}
+
+bool posesMatchAttachmentCalibration(const Pose3d & first, const Pose3d & second,
+                                     const SO101Profile & profile)
+{
+  return finitePose(first) && finitePose(second) &&
+         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+         axialTiltDistance(first, second) <=
+           profile.task_object_attachment_orientation_tolerance_rad;
+}
+
+bool posesMatchCylindricalCarry(const Pose3d & first, const Pose3d & second,
+                                const SO101Profile & profile)
+{
+  return finitePose(first) && finitePose(second) &&
+         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+         axialTiltDistance(first, second) <=
+           profile.task_object_attachment_orientation_tolerance_rad;
+}
+
+bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
+{
+  if (!finitePose(pose)) return false;
+  const auto & expected = profile.place_task_object_pose;
+  const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
+  const double height_error = std::abs(pose.z - expected.z);
+  const double norm = std::hypot(std::hypot(pose.qx, pose.qy),
+                                 std::hypot(pose.qz, pose.qw));
+  const double local_z_world_z =
+    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
+  const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
+  return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
+         xy_error <= profile.place_support_xy_tolerance &&
+         height_error <= profile.place_support_height_tolerance &&
+         tilt <= profile.place_support_tilt_tolerance_rad;
+}
+
+bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile)
+{
+  if (!finitePose(pose)) return false;
+  const double norm = std::hypot(std::hypot(pose.qx, pose.qy),
+                                 std::hypot(pose.qz, pose.qw));
+  const double local_z_world_z =
+    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
+  const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
+  return positionDistance(pose, profile.task_object_pose) <=
+           profile.task_object_position_drift_tolerance &&
+         std::isfinite(tilt) && tilt <= profile.place_support_tilt_tolerance_rad;
 }
 
 Pose3d compose(const Pose3d & parent, const Pose3d & child)
@@ -133,9 +206,10 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
     }
     const auto expected_task_object =
       compose(*facts.current_gripper_pose_world, *facts.attached_relative_pose);
-    return posesMatch(*facts.attached_relative_pose, profile.calibrated_grasp_relative_pose,
-                      profile) &&
-           posesMatch(*observed.gazebo_task_object_pose_world, expected_task_object, profile) &&
+    return posesMatchAttachmentCalibration(
+             *facts.attached_relative_pose, profile.calibrated_grasp_relative_pose, profile) &&
+           posesMatchCylindricalCarry(
+             *observed.gazebo_task_object_pose_world, expected_task_object, profile) &&
            *facts.attached_link == profile.moveit_attach_link &&
            facts.touch_links == std::set<std::string>(profile.moveit_touch_links.begin(),
                                                        profile.moveit_touch_links.end());
@@ -145,9 +219,21 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
     return false;
   }
   const auto & expected = expectedDetachedTaskObjectPose(state, profile);
-  return posesMatch(*facts.task_object_world_pose, *observed.gazebo_task_object_pose_world, profile) &&
-         posesMatch(*facts.task_object_world_pose, expected, profile) &&
-         posesMatch(*observed.gazebo_task_object_pose_world, expected, profile);
+  const bool on_pick_pose =
+    posesMatch(*facts.task_object_world_pose, expected, profile) &&
+    posesMatch(*observed.gazebo_task_object_pose_world, expected, profile);
+  const bool on_pick_support =
+    supportedAtPick(*facts.task_object_world_pose, profile) &&
+    supportedAtPick(*observed.gazebo_task_object_pose_world, profile);
+  const bool on_place_support =
+    supportedAtPlace(*facts.task_object_world_pose, profile) &&
+    supportedAtPlace(*observed.gazebo_task_object_pose_world, profile);
+  const bool on_expected_support = state == State::RETREAT
+    ? on_place_support
+    : (state == State::RECOVER_RETREAT ? on_pick_support || on_place_support : on_pick_pose);
+  return posesMatch(*facts.task_object_world_pose,
+                    *observed.gazebo_task_object_pose_world, profile) &&
+         on_expected_support;
 }
 
 }  // namespace
@@ -191,12 +277,25 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
   const bool contact_context =
     request.carrying && std::isfinite(request.gripper_position) &&
     std::abs(request.gripper_position - profile_.q6_contact) <= 1e-12;
-  const double context_tolerance =
-    contact_context ? profile_.contact_q6_stop_tolerance : profile_.q6_tolerance;
+  const bool full_open_context = std::isfinite(request.gripper_position) &&
+    std::abs(request.gripper_position - profile_.q6_full_open) <= 1e-12;
+  const bool bounded_bilateral_contact_stop =
+    contact_context &&
+    observation.snapshot->gazebo_task_object_fixed_finger_contact.value_or(false) &&
+    observation.snapshot->gazebo_task_object_moving_jaw_contact.value_or(false) &&
+    observation.snapshot->gazebo_task_object_gripper_max_depth &&
+    std::isfinite(*observation.snapshot->gazebo_task_object_gripper_max_depth) &&
+    *observation.snapshot->gazebo_task_object_gripper_max_depth >= 0.0 &&
+    *observation.snapshot->gazebo_task_object_gripper_max_depth <=
+      profile_.max_gripper_contact_depth;
+  const double context_tolerance = contact_context
+    ? profile_.contact_q6_stop_tolerance
+    : (full_open_context ? profile_.q6_full_open_tolerance : profile_.q6_tolerance);
   if (!std::isfinite(request.gripper_position) ||
-      std::abs(q6_position->second - request.gripper_position) > context_tolerance) {
+      (std::abs(q6_position->second - request.gripper_position) > context_tolerance &&
+       !bounded_bilateral_contact_stop)) {
     return fail(FailureCategory::PRECONDITION, "GRIPPER_CONTEXT_MISMATCH_BEFORE_PLAN",
-                "Observed q6 does not match the motion state's expected gripper context");
+                "Observed q6 is outside the expected context without bounded bilateral contact");
   }
   if (request.joint_names != profile_.arm_joints || request.joint_waypoints.empty() ||
       (!request.ladder && request.joint_waypoints.size() != 1)) {
@@ -243,7 +342,9 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     auto result = boundary_->planSegment(profile_.arm_joints, segment_start, waypoint,
                                          request.allowed_touch_pairs,
                                          request.temporal_contact_policy,
-                                         q6_position->second);
+                                         q6_position->second,
+                                         request.velocity_scaling,
+                                         request.acceleration_scaling);
     if (result.action.status != ActionStatus::SUCCEEDED || !result.segment) {
       return {result.action, nullptr};
     }

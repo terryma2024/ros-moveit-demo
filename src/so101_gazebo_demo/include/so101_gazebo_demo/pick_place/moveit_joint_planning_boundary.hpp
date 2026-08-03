@@ -91,7 +91,8 @@ public:
                                      const std::vector<double> & goal,
                                      const std::set<std::string> & allowed_touch_pairs,
                                      const std::optional<TemporalContactPolicy> & temporal_contact_policy,
-                                     double gripper_position) override;
+                                     double gripper_position, double velocity_scaling,
+                                     double acceleration_scaling) override;
   ActionResult execute(const MotionPlanArtifact & artifact) override;
   ActionResult cancel() override;
   ActionResult executeWorldZMicroLift(const Pose3d & current_tcp_world,

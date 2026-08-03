@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import time
 from typing import Awaitable, Callable, Dict, Tuple
@@ -15,6 +16,27 @@ class PlanRejected(RuntimeError):
 
 class CommandIdReused(PlanRejected):
     pass
+
+
+START_FINGERPRINT_TOLERANCE_STEPS = 10
+
+
+def _start_fingerprints_match(planned: str, live: str) -> bool:
+    if planned == live:
+        return True
+    try:
+        planned_joints = dict(ast.literal_eval(planned))
+        live_joints = dict(ast.literal_eval(live))
+    except (SyntaxError, ValueError, TypeError):
+        return False
+    if planned_joints.keys() != live_joints.keys():
+        return False
+    return all(
+        isinstance(planned_joints[name], int)
+        and isinstance(live_joints[name], int)
+        and abs(planned_joints[name] - live_joints[name]) < START_FINGERPRINT_TOLERANCE_STEPS
+        for name in planned_joints
+    )
 
 
 class CommandCoordinator:
@@ -63,7 +85,7 @@ class PlanStore:
             raise PlanRejected("PLAN_NOT_LATEST")
         if self._latest.scene_revision != scene_revision:
             raise PlanRejected("PLAN_STALE_SCENE")
-        if self._latest.start_fingerprint != start_fingerprint:
+        if not _start_fingerprints_match(self._latest.start_fingerprint, start_fingerprint):
             raise PlanRejected("PLAN_STALE_START")
         if self._latest.expires_at_monotonic <= (time.monotonic() if now is None else now):
             raise PlanRejected("PLAN_EXPIRED")

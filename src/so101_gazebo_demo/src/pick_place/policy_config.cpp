@@ -413,7 +413,8 @@ MotionPolicyConfig parseMotion(const YAML::Node & root)
     const auto state = parseRequiredState(name);
     const auto node = entry.second;
     rejectUnknownFields(node, {"logical_start", "waypoints", "require_waypoint_ladder",
-                               "require_axial_path_validation", "gripper_q6"}, name);
+                               "require_axial_path_validation", "gripper_q6",
+                               "velocity_scaling", "acceleration_scaling"}, name);
     StateMotionConfig config;
     config.state = state;
     config.logical_start =
@@ -431,6 +432,13 @@ MotionPolicyConfig parseMotion(const YAML::Node & root)
     config.require_axial_path_validation =
       requireField(node, "require_axial_path_validation", name).as<bool>();
     config.gripper_q6 = parseFinite(requireField(node, "gripper_q6", name), name + ".gripper_q6");
+    config.velocity_scaling = parsePositive(
+      requireField(node, "velocity_scaling", name), name + ".velocity_scaling");
+    config.acceleration_scaling = parsePositive(
+      requireField(node, "acceleration_scaling", name), name + ".acceleration_scaling");
+    if (config.velocity_scaling > 1.0 || config.acceleration_scaling > 1.0) {
+      throw PolicyError("POLICY_INVALID_VALUE", name + " motion scaling must not exceed 1");
+    }
     result.states.emplace(state, std::move(config));
   }
   requireAllMotionStates(result.states);

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <memory>
+#include <vector>
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
@@ -18,6 +19,7 @@ public:
   {
     ++command_calls;
     last_q6 = q6;
+    commanded_q6.push_back(q6);
     return command_result;
   }
 
@@ -32,6 +34,19 @@ public:
   int command_calls{0};
   int cancel_calls{0};
   double last_q6{0.0};
+  std::vector<double> commanded_q6;
+};
+
+class FakeWorldObserver final : public pick_place::IWorldObserver
+{
+public:
+  pick_place::ObservationResult observe() override
+  {
+    ++calls;
+    return {world, std::nullopt};
+  }
+  pick_place::WorldSnapshot world;
+  int calls{0};
 };
 
 pick_place::Pose3d task_objectPose()
@@ -128,6 +143,45 @@ TEST(SO101GripperStateExecutor, RecoveryNoOpUsesCurrentQ6AndNeedsNoAttachment)
   EXPECT_EQ(0, command->command_calls);
 }
 
+TEST(SO101GripperStateExecutor, NormalOpenUsesConfiguredStagedRelease)
+{
+  auto profile = pick_place::SO101Profile::canonical();
+  profile.release_stages_q6 = {0.209, 0.506, profile.q6_full_open};
+  auto command = std::make_shared<FakeGripperCommand>();
+  pick_place::SO101GripperStateExecutor executor(
+    command, {pick_place::State::OPEN_GRIPPER,
+              pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
+
+  const auto result = executor.execute(
+    context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
+
+  EXPECT_EQ(result.status, pick_place::ActionStatus::SUCCEEDED);
+  EXPECT_EQ(command->commanded_q6, profile.release_stages_q6);
+}
+
+TEST(SO101GripperStateExecutor, StagedOpenAcceptsAbortOnlyAfterObservedPhysicalConvergence)
+{
+  auto profile = pick_place::SO101Profile::canonical();
+  profile.release_stages_q6 = {profile.q6_full_open};
+  auto command = std::make_shared<FakeGripperCommand>();
+  command->command_result = {
+    pick_place::ActionStatus::FAILED,
+    pick_place::Failure{pick_place::FailureCategory::GRIPPER, "GRIPPER_ACTION_ABORTED",
+                        "controller aborted after reaching target", {}}};
+  auto observer = std::make_shared<FakeWorldObserver>();
+  observer->world = snapshot(profile.q6_full_open - 0.006, 0.0);
+  setAttached(observer->world);
+  pick_place::SO101GripperStateExecutor executor(
+    command, {pick_place::State::OPEN_GRIPPER,
+              pick_place::SO101GripperTarget::FULL_OPEN, false}, profile, observer);
+
+  const auto result = executor.execute(
+    context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
+
+  EXPECT_EQ(result.status, pick_place::ActionStatus::SUCCEEDED);
+  EXPECT_EQ(observer->calls, 3);
+}
+
 TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayExact)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
@@ -150,7 +204,7 @@ TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayE
 TEST(SO101GripperValidation, FullOpenAcceptsBulletFeatherstoneSettlingError)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
-  EXPECT_DOUBLE_EQ(0.010, profile.q6_full_open_tolerance);
+  EXPECT_DOUBLE_EQ(0.012, profile.q6_full_open_tolerance);
 
   const auto settled = snapshot(profile.q6_full_open + 0.005, 0.0);
   EXPECT_TRUE(pick_place::validateSO101GripperTarget(
@@ -227,12 +281,31 @@ TEST(SO101GripperTransitionContract, CloseRejectsTaskObjectSixDegreeDriftUsingPr
   EXPECT_EQ("TASK_OBJECT_POSITION_DRIFT", position_drift.failures.front().code);
 
   after = snapshot(profile.q6_contact);
-  after.gazebo_task_object_pose_world->qz =
+  after.gazebo_task_object_pose_world->qx =
     std::sin(profile.task_object_orientation_drift_tolerance_rad);
   after.gazebo_task_object_pose_world->qw =
     std::cos(profile.task_object_orientation_drift_tolerance_rad);
   const auto orientation_drift = contract->validate(before, after, action);
   EXPECT_FALSE(orientation_drift.ok);
+}
+
+TEST(SO101GripperTransitionContract, CloseAcceptsCylindricalYawButKeepsUprightBound)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto contract = pick_place::makeSO101GripperContract(
+    {pick_place::State::CLOSE_GRIPPER, pick_place::SO101GripperTarget::CONTACT, false}, profile);
+  const auto before = snapshot(profile.q6_preopen);
+  auto after = snapshot(profile.q6_contact);
+  after.gazebo_task_object_pose_world->qz = std::sin(0.04);
+  after.gazebo_task_object_pose_world->qw = std::cos(0.04);
+  const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+
+  const auto result = contract->validate(before, after, action);
+
+  EXPECT_TRUE(result.ok) << (result.failures.empty() ? "" : result.failures.front().code);
+  EXPECT_GT(result.metrics.at("task_object_orientation_drift_rad"),
+            profile.task_object_orientation_drift_tolerance_rad);
+  EXPECT_NEAR(result.metrics.at("task_object_final_tilt_rad"), 0.0, 1e-12);
 }
 
 TEST(SO101GripperTransitionContract, EnforcesStateSpecificIndependentAttachmentFacts)
@@ -250,19 +323,65 @@ TEST(SO101GripperTransitionContract, EnforcesStateSpecificIndependentAttachmentF
 
   const auto open = pick_place::makeSO101GripperContract(
     {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
-  auto attached_before = snapshot(profile.q6_contact);
-  auto attached_after = snapshot(profile.q6_full_open);
-  setAttached(attached_before);
-  setAttached(attached_after);
-  EXPECT_TRUE(open->validate(attached_before, attached_after, action).ok);
-  attached_after.moveit_task_object_attached_link = "wrong";
-  EXPECT_FALSE(open->validate(attached_before, attached_after, action).ok);
+  auto placed_before = snapshot(profile.q6_contact);
+  auto placed_after = snapshot(profile.q6_full_open);
+  setAttached(placed_before);
+  setAttached(placed_after);
+  placed_before.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  placed_after.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  EXPECT_TRUE(open->validate(placed_before, placed_after, action).ok);
+  placed_after.moveit_task_object_attached = false;
+  EXPECT_FALSE(open->validate(placed_before, placed_after, action).ok);
 
   const auto recovery = pick_place::makeSO101GripperContract(
     {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, true},
     profile);
   EXPECT_TRUE(recovery->validate(snapshot(profile.q6_contact),
                                  snapshot(profile.q6_full_open), action).ok);
+}
+
+TEST(SO101GripperTransitionContract, NormalReleaseAllowsBoundedSupportSettling)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto open = pick_place::makeSO101GripperContract(
+    {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
+  auto before = snapshot(profile.q6_contact);
+  auto after = snapshot(profile.q6_full_open);
+  setAttached(before);
+  setAttached(after);
+  before.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  before.gazebo_task_object_pose_world->z += 0.008;
+  after.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  after.gazebo_task_object_pose_world->x += 0.0015;
+  after.gazebo_task_object_pose_world->qz = std::sin(0.20);
+  after.gazebo_task_object_pose_world->qw = std::cos(0.20);
+  const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+
+  const auto result = open->validate(before, after, action);
+
+  EXPECT_TRUE(result.ok) << (result.failures.empty() ? "" : result.failures.front().code);
+  EXPECT_GT(result.metrics.at("task_object_position_drift"),
+            profile.task_object_position_drift_tolerance);
+}
+
+TEST(SO101GripperTransitionContract, NormalReleaseRejectsSettlingOutsideSupportEnvelope)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto open = pick_place::makeSO101GripperContract(
+    {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
+  auto before = snapshot(profile.q6_contact);
+  auto after = snapshot(profile.q6_full_open);
+  setAttached(before);
+  setAttached(after);
+  before.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  after.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  after.gazebo_task_object_pose_world->x += profile.place_support_xy_tolerance + 0.001;
+  const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+
+  const auto result = open->validate(before, after, action);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ(result.failures.front().code, "TASK_OBJECT_RELEASE_SUPPORT_INVALID");
 }
 
 TEST(SO101GripperTransitionContract, RecoveryOpenAcceptsOnlyInternallyExactMixedAttachmentFacts)

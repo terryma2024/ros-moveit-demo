@@ -57,6 +57,10 @@ def generate_launch_description():
             moveit_config.to_dict(),
             {"use_sim_time": is_sim},
             {"publish_robot_description_semantic": True},
+            {
+                "trajectory_execution.allowed_execution_duration_scaling": 1.5,
+                "trajectory_execution.allowed_goal_duration_margin": 1.0,
+            },
         ],
         arguments=["--ros-args", "--log-level", "info"],
     )

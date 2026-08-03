@@ -18,6 +18,8 @@ struct JointMotionTarget
   bool ladder{false};
   double gripper_position{0.0};
   std::optional<TemporalContactPolicy> temporal_contact_policy;
+  double velocity_scaling{0.1};
+  double acceleration_scaling{0.1};
 };
 
 struct JointMotionTargetResult
@@ -45,6 +47,8 @@ struct JointMotionRequest
   std::set<std::string> allowed_touch_pairs;
   double gripper_position{0.0};
   std::optional<TemporalContactPolicy> temporal_contact_policy;
+  double velocity_scaling{0.1};
+  double acceleration_scaling{0.1};
 };
 
 class IMoveItJointMotionAdapter

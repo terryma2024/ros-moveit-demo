@@ -33,8 +33,57 @@ class Worker:
         self._plans.clear(); self._snapshot.simulation_session_id = "sim-reset"; return "sim-reset"
 
 
+class PlanningWorker(Worker):
+    def __init__(self):
+        super().__init__()
+        self.planning_calls = []
+
+    def plan_joints(self, target, velocity_scaling_factor=0.10,
+                    acceleration_scaling_factor=0.10):
+        self.planning_calls.append({
+            "target": target,
+            "velocity_scaling_factor": velocity_scaling_factor,
+            "acceleration_scaling_factor": acceleration_scaling_factor,
+        })
+        summary = PlanSummary(
+            plan_id="scaled-plan",
+            start_fingerprint=self.fingerprint,
+            target_fingerprint="target",
+            scene_revision=0,
+            expires_at_monotonic=time.monotonic() + 30,
+        )
+        stored = StoredTrajectory(summary, object(), "sim-a", 7)
+        self._plans[summary.plan_id] = stored
+        return stored
+
+
 async def lease(service):
     return (await service.command("lease", {"command_id": "lease"})).layers["lease_id"]
+
+
+def test_joint_plan_forwards_bounded_velocity_and_acceleration_scaling():
+    """Loaded pick/place moves can run slower without weakening path tolerance."""
+    async def scenario():
+        worker = PlanningWorker()
+        service = TeleopService(worker)
+        token = await lease(service)
+
+        result = await service.command("plan_joints", {
+            "command_id": "slow-plan",
+            "lease_id": token,
+            "target_joints_rad": {str(index): 0.1 for index in range(1, 6)},
+            "velocity_scaling_factor": 0.03,
+            "acceleration_scaling_factor": 0.03,
+        })
+
+        assert result.succeeded
+        assert worker.planning_calls == [{
+            "target": {str(index): 0.1 for index in range(1, 6)},
+            "velocity_scaling_factor": 0.03,
+            "acceleration_scaling_factor": 0.03,
+        }]
+
+    asyncio.run(scenario())
 
 
 def test_valid_web_root_override_is_authoritative(monkeypatch, tmp_path):
@@ -409,6 +458,14 @@ def test_start_fingerprint_allows_five_urad_feedback_micro_jitter():
     plan = PlanSummary(plan_id="jitter", start_fingerprint=baseline, target_fingerprint="t", scene_revision=0, expires_at_monotonic=time.monotonic() + 30)
     store = PlanStore(); store.put(plan)
     assert store.require_executable(jittered, 0, "jitter").plan_id == "jitter"
+
+
+def test_start_fingerprint_allows_sub_milliradian_feedback_jitter_across_quantized_bins():
+    baseline = _joint_fingerprint({str(index): 0.0 for index in range(1, 6)})
+    jittered = _joint_fingerprint({"1": 0.0006, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.0})
+    plan = PlanSummary(plan_id="sub-milliradian-jitter", start_fingerprint=baseline, target_fingerprint="t", scene_revision=0, expires_at_monotonic=time.monotonic() + 30)
+    store = PlanStore(); store.put(plan)
+    assert store.require_executable(jittered, 0, "sub-milliradian-jitter").plan_id == "sub-milliradian-jitter"
 
 
 def test_start_fingerprint_rejects_one_milliradian_joint_drift():

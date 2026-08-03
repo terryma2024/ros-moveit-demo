@@ -37,6 +37,10 @@ def create_app(service, static_dir: str | Path | None = None, capture_dir: str |
     async def capabilities():
         return await service.capabilities()
 
+    @app.get("/gazebo/camera/presets")
+    async def camera_presets():
+        return await service.camera_presets()
+
     async def command(name: str, body: dict):
         result = await service.command(name, body)
         if getattr(result, "succeeded", False):
@@ -77,6 +81,9 @@ def create_app(service, static_dir: str | Path | None = None, capture_dir: str |
     async def reset_simulation(body: dict): return await command("simulation_reset", body)
     @app.post("/gazebo/screenshot")
     async def screenshot(body: dict): return await command("screenshot", body)
+    @app.post("/gazebo/camera/presets/{preset}")
+    async def camera_preset(preset: str, body: dict):
+        return await command("camera_preset", {**body, "preset": preset})
     @app.post("/parameters/{operation}")
     async def parameters(operation: str, body: dict): return await command(f"parameters_{operation}", body)
     @app.post("/workflow/{operation}")

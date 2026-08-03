@@ -19,7 +19,7 @@ public:
   {
     ++calls;
     last_q6 = q6;
-    return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+    return result;
   }
   pick_place::ActionResult cancelAndWait() override
   {
@@ -27,6 +27,7 @@ public:
   }
   int calls{0};
   double last_q6{0.0};
+  pick_place::ActionResult result{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
 };
 
 class FakeExecutor final : public pick_place::IStateExecutor
@@ -187,6 +188,36 @@ TEST(SO101Task3Runtime, GazeboAttachRetargetsPositionControllerToMeasuredCarryHo
   EXPECT_EQ(1, attach->calls);
   EXPECT_EQ(1, gripper->calls);
   EXPECT_DOUBLE_EQ(0.791, gripper->last_q6);
+}
+
+TEST(SO101Task3Runtime, GazeboAttachDefersOnlyCarryHoldContactAbortToTransitionEvidence)
+{
+  auto gripper = std::make_shared<FakeGripper>();
+  gripper->result = {
+    pick_place::ActionStatus::FAILED,
+    pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                        "GRIPPER_ACTION_ABORTED", "contact stopped the hold", {}}};
+  auto attach = std::make_shared<FakeExecutor>();
+  pick_place::SO101Task3RuntimeDependencies deps{
+    gripper, std::make_shared<FakeScene>(), attach,
+    std::make_shared<FakeExecutor>(), std::make_shared<FakeExecutor>()};
+  pick_place::SO101Task3RuntimeConfig config;
+  config.profile.post_attach_hold_settle_seconds = 0.0;
+  const auto runtime = pick_place::makeSO101Task3Runtime(deps, config);
+  auto * executor = runtime.actions.findExecutor(pick_place::State::ATTACH_GAZEBO);
+  ASSERT_NE(nullptr, executor);
+  pick_place::WorldSnapshot before;
+  before.joint_positions[config.profile.gripper_joint] = config.profile.q6_contact;
+  const pick_place::ExecutionContext context{pick_place::State::ATTACH_GAZEBO,
+                                             pick_place::State::ATTACH_MOVEIT, before, nullptr};
+
+  EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, executor->execute(context).status);
+
+  gripper->result = {
+    pick_place::ActionStatus::TIMED_OUT,
+    pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                        "GRIPPER_RESULT_TIMEOUT", "hold result timed out", {}}};
+  EXPECT_EQ(pick_place::ActionStatus::TIMED_OUT, executor->execute(context).status);
 }
 
 TEST(SO101Task3Runtime, WholeExecuteGraphFailsClosedBeforeObservationWithoutTask4Motion)

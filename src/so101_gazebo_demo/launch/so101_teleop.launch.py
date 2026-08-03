@@ -81,6 +81,7 @@ def launch_setup(context):
             "SO101_TCP_FRAME": LaunchConfiguration("tcp_frame"),
             "SO101_SIMULATION_SESSION_ID": LaunchConfiguration("simulation_session_id"),
             "SO101_TELEOP_WEB_ROOT": str(web_root),
+            "GZ_PARTITION": LaunchConfiguration("gz_partition"),
         },
     )]
 
@@ -93,6 +94,7 @@ def generate_launch_description():
         DeclareLaunchArgument("world_name", default_value="so101_pick_place"),
         DeclareLaunchArgument("tcp_frame", default_value="so101_tcp"),
         DeclareLaunchArgument("simulation_session_id", default_value="teleop-launch-session"),
+        DeclareLaunchArgument("gz_partition", default_value=os.environ.get("GZ_PARTITION", "")),
         DeclareLaunchArgument("build_web_if_needed", default_value="true"),
         DeclareLaunchArgument("web_source_dir", default_value=""),
         OpaqueFunction(function=launch_setup),

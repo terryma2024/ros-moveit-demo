@@ -402,23 +402,23 @@ TEST(SO101AttachmentContracts, ForwardDetachOrderUsesCurrentDualWorldFacts)
     key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT), profile);
   auto before = world(true, true);
   auto after_gazebo = world(false, true);
-  before.joint_positions[profile.gripper_joint] = profile.q6_preopen;
-  after_gazebo.joint_positions[profile.gripper_joint] = profile.q6_preopen;
+  before.joint_positions[profile.gripper_joint] = profile.q6_full_open;
+  after_gazebo.joint_positions[profile.gripper_joint] = profile.q6_full_open;
   setTaskObjectPose(before, profile.place_task_object_pose);
   setTaskObjectPose(after_gazebo, profile.place_task_object_pose);
   EXPECT_TRUE(gazebo_contract->validate(before, after_gazebo, succeeded()).ok);
   after_gazebo.gazebo_task_object_attached = true;
   EXPECT_FALSE(gazebo_contract->validate(before, after_gazebo, succeeded()).ok);
   after_gazebo = world(false, false);
-  after_gazebo.joint_positions[profile.gripper_joint] = profile.q6_preopen;
+  after_gazebo.joint_positions[profile.gripper_joint] = profile.q6_full_open;
   EXPECT_FALSE(gazebo_contract->validate(before, after_gazebo, succeeded()).ok);
 
   const auto moveit_contract = attachmentContract(
     key(pick_place::State::DETACH_MOVEIT, pick_place::State::SYNC_WORLD_OBJECT), profile);
   before = world(false, true);
   auto after_moveit = world(false, false);
-  before.joint_positions[profile.gripper_joint] = profile.q6_preopen;
-  after_moveit.joint_positions[profile.gripper_joint] = profile.q6_preopen;
+  before.joint_positions[profile.gripper_joint] = profile.q6_full_open;
+  after_moveit.joint_positions[profile.gripper_joint] = profile.q6_full_open;
   setTaskObjectPose(before, profile.place_task_object_pose);
   setTaskObjectPose(after_moveit, profile.place_task_object_pose);
   EXPECT_TRUE(moveit_contract->validate(before, after_moveit, succeeded()).ok);
@@ -433,8 +433,8 @@ TEST(SO101AttachmentContracts, SyncComparesIndependentGazeboAndMoveItSixDegreePo
     key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT), profile);
   auto before = world(false, false);
   auto after = world(false, false);
-  before.joint_positions[profile.gripper_joint] = profile.q6_preopen;
-  after.joint_positions[profile.gripper_joint] = profile.q6_preopen;
+  before.joint_positions[profile.gripper_joint] = profile.q6_full_open;
+  after.joint_positions[profile.gripper_joint] = profile.q6_full_open;
   const auto observed = profile.place_task_object_pose;
   setTaskObjectPose(before, observed);
   setTaskObjectPose(after, observed);
@@ -451,7 +451,7 @@ TEST(SO101AttachmentContracts, RecoveryDetachAndSyncAcceptAlreadyConvergedCurren
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   auto detached = world(false, false);
-  detached.joint_positions[profile.gripper_joint] = profile.q6_preopen;
+  detached.joint_positions[profile.gripper_joint] = profile.q6_full_open;
   for (const auto transition : {
          key(pick_place::State::RECOVER_DETACH_GAZEBO,
              pick_place::State::RECOVER_DETACH_MOVEIT),
@@ -474,7 +474,7 @@ TEST(SO101AttachmentContracts, ActionSuccessAloneNeverSatisfiesMissingObservatio
   EXPECT_FALSE(contract->validate(empty, empty, succeeded()).ok);
 }
 
-TEST(SO101AttachmentContracts, EveryDetachAndSyncRequiresNoDriftAtExpectedSupport)
+TEST(SO101AttachmentContracts, DetachAllowsBoundedSettlingWhileSyncAndRecoveryRequireNoDrift)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   struct Case
@@ -502,8 +502,15 @@ TEST(SO101AttachmentContracts, EveryDetachAndSyncRequiresNoDriftAtExpectedSuppor
      world(false, false), world(false, false), profile.task_object_pose},
   };
   for (auto & test_case : cases) {
+    const bool released = test_case.transition.from == pick_place::State::DETACH_GAZEBO ||
+                          test_case.transition.from == pick_place::State::DETACH_MOVEIT ||
+                          test_case.transition.from == pick_place::State::SYNC_WORLD_OBJECT ||
+                          test_case.transition.from == pick_place::State::RECOVER_DETACH_GAZEBO ||
+                          test_case.transition.from == pick_place::State::RECOVER_DETACH_MOVEIT ||
+                          test_case.transition.from == pick_place::State::RECOVER_SYNC_WORLD_OBJECT;
     for (auto * snapshot : {&test_case.before, &test_case.after}) {
-      snapshot->joint_positions[profile.gripper_joint] = profile.q6_preopen;
+      snapshot->joint_positions[profile.gripper_joint] =
+        released ? profile.q6_full_open : profile.q6_contact;
       snapshot->gazebo_task_object_pose_world = test_case.expected_support;
       if (!snapshot->moveit_task_object_attached.value_or(true)) {
         snapshot->moveit_world_object_poses[profile.task_object_id] = test_case.expected_support;
@@ -514,18 +521,27 @@ TEST(SO101AttachmentContracts, EveryDetachAndSyncRequiresNoDriftAtExpectedSuppor
     ASSERT_TRUE(contract->validate(test_case.before, test_case.after, succeeded()).ok)
       << pick_place::toString(test_case.transition.from);
 
+    const bool forward_detach =
+      test_case.transition.from == pick_place::State::DETACH_GAZEBO ||
+      test_case.transition.from == pick_place::State::DETACH_MOVEIT;
     auto drifted = test_case.after;
-    drifted.gazebo_task_object_pose_world->x += profile.task_object_position_drift_tolerance * 2.0;
+    drifted.gazebo_task_object_pose_world->x += forward_detach
+      ? profile.place_support_xy_tolerance * 0.8
+      : profile.task_object_position_drift_tolerance * 2.0;
     if (!drifted.moveit_task_object_attached.value_or(true)) {
       drifted.moveit_world_object_poses[profile.task_object_id] = *drifted.gazebo_task_object_pose_world;
     }
-    EXPECT_FALSE(contract->validate(test_case.before, drifted, succeeded()).ok)
-      << pick_place::toString(test_case.transition.from) << " accepted TaskObject drift";
+    EXPECT_EQ(contract->validate(test_case.before, drifted, succeeded()).ok, forward_detach)
+      << pick_place::toString(test_case.transition.from)
+      << " applied the wrong settling invariant";
 
     auto unsupported_before = test_case.before;
     auto unsupported_after = test_case.after;
-    unsupported_before.gazebo_task_object_pose_world->y +=
-      profile.task_object_position_drift_tolerance * 2.0;
+    unsupported_before.gazebo_task_object_pose_world->y += forward_detach ||
+      test_case.transition.from == pick_place::State::SYNC_WORLD_OBJECT
+      ? (forward_detach ? profile.place_detach_xy_tolerance
+                        : profile.place_support_xy_tolerance) + 0.001
+      : profile.task_object_position_drift_tolerance * 2.0;
     unsupported_after.gazebo_task_object_pose_world = unsupported_before.gazebo_task_object_pose_world;
     if (!unsupported_after.moveit_task_object_attached.value_or(true)) {
       unsupported_after.moveit_world_object_poses[profile.task_object_id] =
@@ -546,4 +562,30 @@ TEST(SO101AttachmentContracts, EveryDetachAndSyncRequiresNoDriftAtExpectedSuppor
     EXPECT_FALSE(contract->validate(test_case.before, nonfinite, succeeded()).ok)
       << pick_place::toString(test_case.transition.from) << " accepted nonfinite TaskObject pose";
   }
+}
+
+TEST(SO101AttachmentContracts, ForwardDetachAcceptsCylindricalYawInsideSupportEnvelope)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto contract = attachmentContract(
+    key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT), profile);
+  auto before = world(true, true);
+  auto after = world(false, true);
+  auto supported = profile.place_task_object_pose;
+  supported.x += 0.002;
+  supported.y -= 0.001;
+  supported.z += 0.008;
+  supported.qz = std::sin(0.2);
+  supported.qw = std::cos(0.2);
+  for (auto * snapshot : {&before, &after}) {
+    snapshot->joint_positions[profile.gripper_joint] = profile.q6_full_open;
+    snapshot->gazebo_task_object_pose_world = supported;
+  }
+
+  EXPECT_TRUE(contract->validatePrecondition(before).ok);
+  EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
+
+  before.gazebo_task_object_pose_world->x =
+    profile.place_task_object_pose.x + profile.place_detach_xy_tolerance + 0.001;
+  EXPECT_FALSE(contract->validatePrecondition(before).ok);
 }

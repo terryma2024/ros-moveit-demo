@@ -32,6 +32,31 @@ TEST(TransitionTable, AttachMoveItFailureSelectsCompleteSafeRecoveryChain)
   }
 }
 
+TEST(TransitionTable, StableContactAttachesBeforeAnyCarryingLift)
+{
+  EXPECT_EQ(
+    pick_place::State::ATTACH_GAZEBO,
+    pick_place::TransitionTable::resolve(
+      pick_place::State::WAIT_GRASP_STABLE,
+      pick_place::ActionStatus::SUCCEEDED));
+}
+
+TEST(TransitionTable, PlacementOpensUnderAttachmentBeforeDetachingAndRetreating)
+{
+  EXPECT_EQ(pick_place::State::OPEN_GRIPPER,
+            pick_place::TransitionTable::resolve(
+              pick_place::State::DESCEND_TO_PLACE, pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::DETACH_GAZEBO,
+            pick_place::TransitionTable::resolve(
+              pick_place::State::OPEN_GRIPPER, pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::DETACH_MOVEIT,
+            pick_place::TransitionTable::resolve(
+              pick_place::State::DETACH_GAZEBO, pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::SYNC_WORLD_OBJECT,
+            pick_place::TransitionTable::resolve(
+              pick_place::State::DETACH_MOVEIT, pick_place::ActionStatus::SUCCEEDED));
+}
+
 TEST(FailureFormatting, PrintsMessageAndSortedMetricsForRuntimeDiagnosis)
 {
   const pick_place::Failure failure{

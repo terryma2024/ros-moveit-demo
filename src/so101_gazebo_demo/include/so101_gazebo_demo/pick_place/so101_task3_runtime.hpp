@@ -19,6 +19,7 @@ struct SO101Task3RuntimeDependencies
   std::shared_ptr<IStateExecutor> gazebo_attach;
   std::shared_ptr<IStateExecutor> gazebo_detach;
   std::shared_ptr<IStateExecutor> recovery_gazebo_detach;
+  std::shared_ptr<IWorldObserver> gripper_observer;
 };
 
 struct SO101Task3RuntimeConfig

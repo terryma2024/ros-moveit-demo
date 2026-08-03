@@ -1,7 +1,9 @@
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <thread>
 #include <utility>
 
 namespace so101_gazebo_demo::pick_place
@@ -63,6 +65,33 @@ double orientationDistance(const Pose3d & first, const Pose3d & second)
   return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
 }
 
+bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
+{
+  const double norm =
+    std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
+  if (!std::isfinite(norm) || norm <= 1e-12) return false;
+  const double xy_error = std::hypot(pose.x - profile.place_task_object_pose.x,
+                                     pose.y - profile.place_task_object_pose.y);
+  const double height_error = std::abs(pose.z - profile.place_task_object_pose.z);
+  const double local_z_world_z =
+    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
+  const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
+  return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
+         xy_error <= profile.place_support_xy_tolerance &&
+         height_error <= profile.place_support_height_tolerance &&
+         tilt <= profile.place_support_tilt_tolerance_rad;
+}
+
+double uprightTilt(const Pose3d & pose)
+{
+  const double norm =
+    std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
+  if (!std::isfinite(norm) || norm <= 1e-12) return INFINITY;
+  const double local_z_world_z =
+    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
+  return std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
+}
+
 void requireAttachmentEvidence(ValidationResult & result, const WorldSnapshot & world,
                                const SO101GripperStateConfig & config,
                                const SO101Profile & profile)
@@ -97,7 +126,7 @@ void requireAttachmentEvidence(ValidationResult & result, const WorldSnapshot & 
              profile.task_object_position_drift_tolerance &&
            orientationDistance(*world.moveit_task_object_attached_relative_pose,
                                profile.calibrated_grasp_relative_pose) <=
-             profile.task_object_orientation_drift_tolerance_rad;
+             profile.task_object_attachment_orientation_tolerance_rad;
   };
   bool valid = false;
   if (config.state == State::PREPARE_OPEN_GRIPPER || config.state == State::CLOSE_GRIPPER) {
@@ -180,15 +209,34 @@ public:
           orientationDistance(*before.gazebo_task_object_pose_world, *after.gazebo_task_object_pose_world);
         result.metrics["task_object_position_drift"] = position_drift;
         result.metrics["task_object_orientation_drift_rad"] = orientation_drift;
-        if (position_drift > profile_.task_object_position_drift_tolerance) {
+        const bool upright_yaw_invariant = config_.state == State::CLOSE_GRIPPER ||
+          config_.state == State::RECOVER_OPEN_GRIPPER;
+        const double final_tilt = uprightTilt(*after.gazebo_task_object_pose_world);
+        result.metrics["task_object_final_tilt_rad"] = final_tilt;
+        const bool release_settled_on_support = config_.state == State::OPEN_GRIPPER &&
+          supportedAtPlace(*after.gazebo_task_object_pose_world, profile_);
+        if (config_.state == State::OPEN_GRIPPER && !release_settled_on_support) {
+          result.failures.push_back(
+            {FailureCategory::POSTCONDITION, "TASK_OBJECT_RELEASE_SUPPORT_INVALID",
+             "Released TaskObject must settle inside the configured place support envelope", {}});
+        }
+        if (config_.state != State::OPEN_GRIPPER &&
+            position_drift > profile_.task_object_position_drift_tolerance) {
           result.failures.push_back({FailureCategory::POSTCONDITION, "TASK_OBJECT_POSITION_DRIFT",
                                      "Gripper motion moved TaskObject beyond the configured position tolerance",
                                      {}});
         }
-        if (orientation_drift > profile_.task_object_orientation_drift_tolerance_rad) {
+        if (config_.state != State::OPEN_GRIPPER && !upright_yaw_invariant &&
+            orientation_drift > profile_.task_object_orientation_drift_tolerance_rad) {
           result.failures.push_back(
             {FailureCategory::POSTCONDITION, "TASK_OBJECT_ORIENTATION_DRIFT",
              "Gripper motion rotated TaskObject beyond the configured orientation tolerance", {}});
+        }
+        if (upright_yaw_invariant &&
+            final_tilt > profile_.place_support_tilt_tolerance_rad) {
+          result.failures.push_back(
+            {FailureCategory::POSTCONDITION, "TASK_OBJECT_TILT_OUTSIDE_TOLERANCE",
+             "Gripper motion tilted the cylindrical TaskObject beyond the upright tolerance", {}});
         }
       }
       if (!after.gazebo_task_object_stationary || !*after.gazebo_task_object_stationary) {
@@ -212,8 +260,9 @@ private:
 
 SO101GripperStateExecutor::SO101GripperStateExecutor(
   std::shared_ptr<ISO101GripperCommand> command, SO101GripperStateConfig config,
-  SO101Profile profile) :
-    command_(std::move(command)), config_(config), profile_(std::move(profile))
+  SO101Profile profile, std::shared_ptr<IWorldObserver> observer) :
+    command_(std::move(command)), config_(config), profile_(std::move(profile)),
+    observer_(std::move(observer))
 {
 }
 
@@ -230,6 +279,37 @@ ActionResult SO101GripperStateExecutor::execute(const ExecutionContext & context
   const auto [target_q6, target_width] = targetFor(config_.target, profile_);
   if (config_.no_op_if_at_target &&
       validateSO101GripperTarget(context.before, config_.target, profile_).ok) {
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+  if (config_.state == State::OPEN_GRIPPER && !profile_.release_stages_q6.empty()) {
+    for (const double stage : profile_.release_stages_q6) {
+      const auto result = command_->command(stage);
+      if (result.status == ActionStatus::SUCCEEDED) continue;
+      const bool action_aborted = result.status == ActionStatus::FAILED && result.failure &&
+        result.failure->code == "GRIPPER_ACTION_ABORTED";
+      if (!action_aborted || !observer_) return result;
+      int consecutive = 0;
+      for (int sample = 0; sample < 20; ++sample) {
+        const auto observed = observer_->observe();
+        if (!observed.snapshot) return result;
+        const auto position = observed.snapshot->joint_positions.find(profile_.gripper_joint);
+        const auto velocity = observed.snapshot->joint_velocities.find(profile_.gripper_joint);
+        const bool physically_reached = observed.snapshot->fresh &&
+          observed.snapshot->gazebo_task_object_attached &&
+          *observed.snapshot->gazebo_task_object_attached &&
+          observed.snapshot->moveit_task_object_attached &&
+          *observed.snapshot->moveit_task_object_attached &&
+          position != observed.snapshot->joint_positions.end() &&
+          velocity != observed.snapshot->joint_velocities.end() &&
+          std::isfinite(position->second) && std::isfinite(velocity->second) &&
+          std::abs(position->second - stage) <= profile_.q6_full_open_tolerance &&
+          std::abs(velocity->second) <= profile_.q6_velocity_tolerance;
+        consecutive = physically_reached ? consecutive + 1 : 0;
+        if (consecutive >= 3) break;
+        if (sample + 1 < 20) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
+      if (consecutive < 3) return result;
+    }
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
   return command_->command(
