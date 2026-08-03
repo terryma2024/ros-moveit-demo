@@ -16,6 +16,7 @@
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_attachment_executor.hpp"
+#include "panda_gazebo_demo/pick_place/panda_attachment_convergence_policy.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
 #include "panda_gazebo_demo/pick_place/gripper_command_adapter.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
@@ -440,6 +441,8 @@ int main(int argc, char * argv[])
     dependencies.motion = motion_adapter;
     dependencies.observer = motion_adapter;
     if (*mode == pick_place::RunMode::EXECUTE) {
+      const auto attachment_convergence_policy =
+        std::make_shared<pick_place::PandaAttachmentConvergencePolicy>(gripper_limits);
       dependencies.gripper = std::make_shared<pick_place::GripperCommandAdapter>(
         node, parameters.gripper_action_name, parameters.gripper_action_timeout_seconds);
       dependencies.moveit_scene =
@@ -448,17 +451,17 @@ int main(int argc, char * argv[])
         pick_place::State::ATTACH_GAZEBO, true, parameters.gazebo_attach_topic,
         parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
         parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
-        gripper_limits);
+        attachment_convergence_policy);
       dependencies.gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
         pick_place::State::DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
         parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
         parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
-        gripper_limits);
+        attachment_convergence_policy);
       dependencies.recovery_gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
         pick_place::State::RECOVER_DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
         parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
         parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, true,
-        gripper_limits);
+        attachment_convergence_policy);
     }
     pick_place::PickPlaceRuntimeConfig runtime_config;
     const auto ready_joints =

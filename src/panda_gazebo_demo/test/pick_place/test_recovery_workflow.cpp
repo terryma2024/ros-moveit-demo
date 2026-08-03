@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "panda_gazebo_demo/pick_place/gazebo_attachment_executor.hpp"
+#include "panda_gazebo_demo/pick_place/panda_attachment_convergence_policy.hpp"
 #include "panda_gazebo_demo/pick_place/gripper_state_executor.hpp"
 #include "panda_gazebo_demo/pick_place/motion_plan_evidence.hpp"
 #include "panda_gazebo_demo/pick_place/motion_state_action.hpp"
@@ -695,8 +696,9 @@ TEST(RecoveryWorkflow, AlreadyDetachedCleanupNoOpsAndSynchronizes)
   const auto gripper_adapter = std::make_shared<FakeGripperAdapter>();
   GripperStateExecutor open_executor(gripper_adapter,
                                      {State::RECOVER_OPEN_GRIPPER, 0.04, 20.0, true});
-  GazeboAttachmentExecutor gazebo_detach(State::RECOVER_DETACH_GAZEBO, false, "/unused/attach",
-                                         "/unused/detach", "/unused/output", 0.01, 0.001, true);
+  GazeboAttachmentExecutor gazebo_detach(
+    State::RECOVER_DETACH_GAZEBO, false, "/unused/attach", "/unused/detach", "/unused/output", 0.01,
+    0.001, true, std::make_shared<PandaAttachmentConvergencePolicy>(GripperLimits{}));
   const auto scene_adapter = std::make_shared<FakeSceneAdapter>();
   MoveItSceneExecutor moveit_detach(
     scene_adapter, {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true});

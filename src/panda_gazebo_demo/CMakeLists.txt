@@ -111,7 +111,6 @@ ament_target_dependencies(panda_pick_place_runtime moveit_msgs)
 add_library(
   panda_pick_place_ros_adapters
   src/pick_place/file_checkpoint_store.cpp
-  src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_world_observer.cpp
   src/pick_place/gripper_command_adapter.cpp
   src/pick_place/moveit_scene_adapter.cpp
@@ -122,6 +121,7 @@ add_library(
 target_link_libraries(
   panda_pick_place_ros_adapters
   panda_pick_place_runtime
+  pick_place_common::ros_adapters
   nlohmann_json::nlohmann_json
   gz-transport13::core
   gz-msgs10::core

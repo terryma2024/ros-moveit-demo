@@ -10,6 +10,7 @@
 #include <gz/transport/Node.hh>
 
 #include "panda_gazebo_demo/pick_place/gazebo_attachment_executor.hpp"
+#include "panda_gazebo_demo/pick_place/panda_attachment_convergence_policy.hpp"
 
 namespace pick_place = panda_gazebo_demo::pick_place;
 using namespace std::chrono_literals;
@@ -111,9 +112,10 @@ TEST(GazeboAttachmentExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
   std::atomic<int> detach_messages{0};
   ASSERT_TRUE(peer.Subscribe<gz::msgs::Empty>(
     topics.detach, [&detach_messages](const gz::msgs::Empty &) { ++detach_messages; }));
-  pick_place::GazeboAttachmentExecutor executor(pick_place::State::RECOVER_DETACH_GAZEBO, false,
-                                                topics.attach, topics.detach, topics.output, 0.5,
-                                                0.005, true);
+  pick_place::GazeboAttachmentExecutor executor(
+    pick_place::State::RECOVER_DETACH_GAZEBO, false, topics.attach, topics.detach, topics.output,
+    0.5, 0.005, true,
+    std::make_shared<pick_place::PandaAttachmentConvergencePolicy>(pick_place::GripperLimits{}));
   waitForDiscovery();
 
   const auto result = executor.execute(contextFor(pick_place::State::RECOVER_DETACH_GAZEBO, false));
@@ -137,9 +139,10 @@ TEST(GazeboAttachmentExecutor, RecoveryNoOpUsesInjectedGripperLimits)
                                               }));
   pick_place::GripperLimits strict_gripper;
   strict_gripper.open_min = 0.041;
-  pick_place::GazeboAttachmentExecutor executor(pick_place::State::RECOVER_DETACH_GAZEBO, false,
-                                                topics.attach, topics.detach, topics.output, 0.5,
-                                                0.005, true, strict_gripper);
+  pick_place::GazeboAttachmentExecutor executor(
+    pick_place::State::RECOVER_DETACH_GAZEBO, false, topics.attach, topics.detach, topics.output,
+    0.5, 0.005, true,
+    std::make_shared<pick_place::PandaAttachmentConvergencePolicy>(strict_gripper));
   waitForDiscovery();
 
   const auto result = executor.execute(contextFor(pick_place::State::RECOVER_DETACH_GAZEBO, false));

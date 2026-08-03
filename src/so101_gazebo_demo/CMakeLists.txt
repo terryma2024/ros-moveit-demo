@@ -126,7 +126,6 @@ add_library(so101_pick_place_runtime
   src/pick_place/moveit_joint_planning_boundary.cpp
   src/pick_place/calibration_cli_options.cpp
   src/pick_place/follow_joint_trajectory_gripper_adapter.cpp
-  src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_reset_adapter.cpp
   src/pick_place/gazebo_world_observer.cpp
   src/pick_place/world_readiness_gate.cpp
@@ -140,7 +139,7 @@ target_compile_features(so101_pick_place_runtime PUBLIC cxx_std_17)
 target_include_directories(so101_pick_place_runtime PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-target_link_libraries(so101_pick_place_runtime PUBLIC pick_place_common::core
+target_link_libraries(so101_pick_place_runtime PUBLIC pick_place_common::core pick_place_common::ros_adapters
   nlohmann_json::nlohmann_json OpenSSL::Crypto yaml-cpp gz-msgs10::core gz-transport13::core)
 ament_target_dependencies(so101_pick_place_runtime PUBLIC control_msgs geometry_msgs moveit_msgs
   moveit_core moveit_ros_planning_interface rclcpp rclcpp_action sensor_msgs shape_msgs
