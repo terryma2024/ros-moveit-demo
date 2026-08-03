@@ -441,7 +441,8 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
   unilateral.gazebo_task_object_gripper_max_depth = 0.001;
   auto bilateral = unilateral;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
-  observer->samples = {unilateral, bilateral, bilateral, bilateral,
+  observer->samples = {unilateral, unilateral, unilateral,
+                       bilateral, bilateral, bilateral,
                        bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
@@ -459,6 +460,36 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
     gripper->last_target,
     spp::SO101Profile::canonical().q6_contact -
       spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
+  EXPECT_EQ(observer->next_sample, 9U);
+}
+
+TEST(SO101PickPlaceRuntime, StableGraspDebouncesOneTransientUnilateralSample)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  auto unilateral = observer->snapshot;
+  unilateral.gazebo_task_object_gripper_contact = true;
+  unilateral.gazebo_task_object_fixed_finger_contact = true;
+  unilateral.gazebo_task_object_moving_jaw_contact = false;
+  unilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  auto bilateral = unilateral;
+  bilateral.gazebo_task_object_moving_jaw_contact = true;
+  observer->samples = {unilateral, bilateral, bilateral, bilateral,
+                       bilateral, bilateral, bilateral};
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
+  ASSERT_TRUE(executor);
+
+  const auto result = executor->execute({
+    spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO,
+    observer->snapshot, nullptr});
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  EXPECT_EQ(gripper->calls, 0);
   EXPECT_EQ(observer->next_sample, 7U);
 }
 
