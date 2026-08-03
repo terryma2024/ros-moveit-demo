@@ -192,6 +192,14 @@ panda_gazebo_add_cpp_quality_gate(
 )
 
 if(BUILD_TESTING)
+  ament_add_gtest(
+    test_workflow_characterization
+    test/pick_place/test_workflow_characterization.cpp
+  )
+  if(TARGET test_workflow_characterization)
+    target_link_libraries(test_workflow_characterization pick_place_core)
+  endif()
+
   ament_add_gtest(test_pick_place_core test/pick_place/test_pick_place_core.cpp)
   if(TARGET test_pick_place_core)
     target_link_libraries(test_pick_place_core pick_place_core pick_place_ros_adapters)
