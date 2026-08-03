@@ -29,14 +29,13 @@ if(NOT CLANG_FORMAT_EXECUTABLE)
           "Install clang-format or set -DCLANG_FORMAT_EXECUTABLE=/path/to/clang-format.")
 endif()
 
-include(cmake/cpp_quality_gate.cmake)
-
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(pick_place_common REQUIRED)
 find_package(xacro REQUIRED)
 find_package(robot_state_publisher REQUIRED)
 find_package(ros_gz_sim REQUIRED)
@@ -178,7 +177,7 @@ target_link_libraries(
 ament_target_dependencies(reset_moveit_world rclcpp)
 target_link_libraries(reset_moveit_world pick_place_core pick_place_ros_adapters)
 
-panda_gazebo_add_cpp_quality_gate(
+pick_place_common_add_cpp_quality_gate(
   WORKSPACE_ROOT ${PANDA_GAZEBO_DEMO_WORKSPACE_ROOT}
   SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}
   RUN_CLANG_TIDY_EXECUTABLE ${RUN_CLANG_TIDY_EXECUTABLE}
@@ -375,8 +374,8 @@ if(BUILD_TESTING)
     COMMAND
       bash
       ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_cpp_quality_gate.sh
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_cpp_quality_gate.cmake
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cpp_quality_gate.cmake
+      ${pick_place_common_DIR}/run_cpp_quality_gate.cmake
+      ${pick_place_common_DIR}/cpp_quality_gate.cmake
   )
 
   add_test(

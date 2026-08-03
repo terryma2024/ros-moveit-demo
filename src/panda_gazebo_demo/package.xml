@@ -10,6 +10,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>xacro</depend>
+  <depend>pick_place_common</depend>
   <depend>robot_state_publisher</depend>
   <depend>ros_gz_sim</depend>
   <depend>gz_ros2_control</depend>

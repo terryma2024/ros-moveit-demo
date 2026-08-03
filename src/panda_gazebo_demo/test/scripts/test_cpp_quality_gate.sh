@@ -102,7 +102,7 @@ include("${quality_gate_module}")
 add_library(example STATIC src/example.cpp src/other.cpp)
 set(FIXTURE_RUN_CLANG_TIDY "${fake_bin}/run-clang-tidy" CACHE FILEPATH "")
 set(FIXTURE_CLANG_FORMAT "${fake_bin}/clang-format" CACHE FILEPATH "")
-panda_gazebo_add_cpp_quality_gate(
+pick_place_common_add_cpp_quality_gate(
   WORKSPACE_ROOT "\${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCE_ROOT "\${CMAKE_CURRENT_SOURCE_DIR}"
   RUN_CLANG_TIDY_EXECUTABLE "\${FIXTURE_RUN_CLANG_TIDY}"
