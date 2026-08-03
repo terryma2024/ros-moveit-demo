@@ -49,11 +49,12 @@ bool poseMatches(const Pose3d & actual, const Pose3d & expected) noexcept
 
 bool detachedBoundaryComplete(const WorldSnapshot & snapshot, const GripperLimits & gripper_limits)
 {
-  return snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_coke_attached &&
-         !*snapshot.gazebo_coke_attached && snapshot.moveit_coke_attached &&
-         !*snapshot.moveit_coke_attached && !snapshot.moveit_coke_attached_link &&
-         snapshot.moveit_coke_touch_links.empty() && snapshot.gazebo_coke_pose_world &&
-         snapshot.gazebo_coke_stationary && *snapshot.gazebo_coke_stationary &&
+  return snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_task_object_attached &&
+         !*snapshot.gazebo_task_object_attached && snapshot.moveit_task_object_attached &&
+         !*snapshot.moveit_task_object_attached && !snapshot.moveit_task_object_attached_link &&
+         snapshot.moveit_task_object_touch_links.empty() &&
+         snapshot.gazebo_task_object_pose_world && snapshot.gazebo_task_object_stationary &&
+         *snapshot.gazebo_task_object_stationary &&
          snapshot.moveit_world_object_poses.count("table") == 1 &&
          snapshot.moveit_world_object_poses.count(kCokeObjectId) == 1 &&
          validateGripperOpen(snapshot, gripper_limits).ok;
@@ -64,7 +65,7 @@ bool synchronizedBoundaryComplete(const WorldSnapshot & snapshot,
 {
   return detachedBoundaryComplete(snapshot, gripper_limits) &&
          poseMatches(snapshot.moveit_world_object_poses.at(kCokeObjectId),
-                     *snapshot.gazebo_coke_pose_world);
+                     *snapshot.gazebo_task_object_pose_world);
 }
 
 }  // namespace
@@ -112,14 +113,14 @@ ActionResult MoveItSceneExecutor::execute(const ExecutionContext & context)
       command_result = adapter_->detachCoke();
       break;
     case MoveItSceneOperation::SYNC:
-      if (!context.before.gazebo_coke_pose_world) {
+      if (!context.before.gazebo_task_object_pose_world) {
         return sceneFailure(ActionStatus::FAILED, "GAZEBO_COKE_POSE_MISSING",
                             "Cannot synchronize MoveIt without an observed Gazebo Coke pose");
       }
       if (config_.idempotent && synchronizedBoundaryComplete(context.before, gripper_limits_)) {
         return {ActionStatus::SUCCEEDED, std::nullopt};
       }
-      synchronized_pose = context.before.gazebo_coke_pose_world;
+      synchronized_pose = context.before.gazebo_task_object_pose_world;
       command_result = adapter_->syncCokeWorldPose(*synchronized_pose);
       break;
   }

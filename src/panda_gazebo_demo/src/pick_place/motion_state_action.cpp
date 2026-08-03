@@ -45,7 +45,8 @@ PlanResult noOpPlan(const MotionStateConfig & config, const WorldSnapshot & snap
   evidence->tcp_path = {snapshot.tcp_pose_world};
   evidence->trajectory_points = 1;
   evidence->collision_aware = true;
-  const bool attached = snapshot.moveit_coke_attached && *snapshot.moveit_coke_attached;
+  const bool attached =
+    snapshot.moveit_task_object_attached && *snapshot.moveit_task_object_attached;
   evidence->attached_object_in_model = config.carrying && attached;
   evidence->carried_relative_pose_available = config.carrying && attached;
   evidence->carried_clearance_verified = config.carrying && attached;

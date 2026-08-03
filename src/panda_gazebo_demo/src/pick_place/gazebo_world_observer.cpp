@@ -113,9 +113,9 @@ public:
       return {std::nullopt, observationFailure("GAZEBO_COKE_POSE_UNAVAILABLE",
                                                "Gazebo Coke pose is missing or stale")};
     }
-    snapshot.gazebo_coke_pose_world = coke_pose_;
-    snapshot.gazebo_coke_attached = coke_attached_;
-    snapshot.gazebo_coke_stationary = coke_pose_stability_.stationary();
+    snapshot.gazebo_task_object_pose_world = coke_pose_;
+    snapshot.gazebo_task_object_attached = coke_attached_;
+    snapshot.gazebo_task_object_stationary = coke_pose_stability_.stationary();
     snapshot.simulation_session_id = simulation_session_id_;
     return {snapshot, std::nullopt};
   }

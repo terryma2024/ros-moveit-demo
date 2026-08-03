@@ -5,23 +5,13 @@
 
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 #include "panda_gazebo_demo/pick_place/state_validation.hpp"
+#include <pick_place_common/recovery_policy.hpp>
 
 namespace panda_gazebo_demo::pick_place
 {
 
-struct RecoveryRoute
-{
-  std::optional<State> next_state;
-  std::optional<Failure> failure;
-};
-
-class IRecoveryPolicy
-{
-public:
-  virtual ~IRecoveryPolicy() = default;
-  [[nodiscard]] virtual RecoveryRoute select(State failed_state, const Failure & original_failure,
-                                             const WorldSnapshot & stopped_world) const = 0;
-};
+using pick_place_common::IRecoveryPolicy;
+using pick_place_common::RecoveryRoute;
 
 class FixedRecoveryPolicy final : public IRecoveryPolicy
 {

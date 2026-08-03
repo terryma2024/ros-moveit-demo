@@ -121,5 +121,6 @@ struct RunResult
 [[nodiscard]] std::optional<RunMode> runModeFromString(std::string_view);
 [[nodiscard]] std::string formatFailure(const Failure &);
 [[nodiscard]] bool isTerminal(State) noexcept;
+[[nodiscard]] bool isForwardAction(State) noexcept;
 [[nodiscard]] bool isAction(State) noexcept;
 }  // namespace pick_place_common

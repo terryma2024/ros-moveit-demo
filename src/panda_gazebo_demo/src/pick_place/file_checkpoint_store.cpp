@@ -121,7 +121,7 @@ std::optional<Failure> FileCheckpointStore::commit(const Checkpoint & checkpoint
     {"original_failure",
      checkpoint.original_failure ? failureToJson(*checkpoint.original_failure) : Json(nullptr)},
     {"next_state", toString(checkpoint.next_state)},
-    {"configuration_hash", checkpoint.configuration_hash},
+    {"configuration_hash", checkpoint.configuration_fingerprint},
     {"simulation_session_id", checkpoint.simulation_session_id},
     {"resumable", checkpoint.resumable},
     {"expected",
@@ -129,17 +129,17 @@ std::optional<Failure> FileCheckpointStore::commit(const Checkpoint & checkpoint
       {"gripper_open", checkpoint.expected.gripper_open},
       {"joint_positions", checkpoint.expected.joint_positions},
       {"moveit_world_object_poses", poseMapToJson(checkpoint.expected.moveit_world_object_poses)},
-      {"moveit_coke_attached", checkpoint.expected.moveit_coke_attached
-                                 ? Json(*checkpoint.expected.moveit_coke_attached)
+      {"moveit_coke_attached", checkpoint.expected.moveit_task_object_attached
+                                 ? Json(*checkpoint.expected.moveit_task_object_attached)
                                  : Json(nullptr)},
-      {"gazebo_coke_pose_world", checkpoint.expected.gazebo_coke_pose_world
-                                   ? poseToJson(*checkpoint.expected.gazebo_coke_pose_world)
+      {"gazebo_coke_pose_world", checkpoint.expected.gazebo_task_object_pose_world
+                                   ? poseToJson(*checkpoint.expected.gazebo_task_object_pose_world)
                                    : Json(nullptr)},
-      {"gazebo_coke_attached", checkpoint.expected.gazebo_coke_attached
-                                 ? Json(*checkpoint.expected.gazebo_coke_attached)
+      {"gazebo_coke_attached", checkpoint.expected.gazebo_task_object_attached
+                                 ? Json(*checkpoint.expected.gazebo_task_object_attached)
                                  : Json(nullptr)},
-      {"gazebo_coke_stationary", checkpoint.expected.gazebo_coke_stationary
-                                   ? Json(*checkpoint.expected.gazebo_coke_stationary)
+      {"gazebo_coke_stationary", checkpoint.expected.gazebo_task_object_stationary
+                                   ? Json(*checkpoint.expected.gazebo_task_object_stationary)
                                    : Json(nullptr)},
       {"required_world_objects", checkpoint.expected.required_world_objects}}}};
   const auto temporary_path = path_.string() + ".tmp";
@@ -208,7 +208,7 @@ CheckpointLoadResult FileCheckpointStore::loadLatestCompatible()
     }
     checkpoint.next_state = *next_state;
     checkpoint.resumable = json.at("resumable").get<bool>();
-    checkpoint.configuration_hash = json.at("configuration_hash").get<std::string>();
+    checkpoint.configuration_fingerprint = json.at("configuration_hash").get<std::string>();
     checkpoint.simulation_session_id = json.at("simulation_session_id").get<std::string>();
     checkpoint.expected.tcp_pose_world = poseFromJson(expected.at("tcp_pose_world"));
     checkpoint.expected.gripper_open = expected.at("gripper_open").get<bool>();
@@ -217,17 +217,19 @@ CheckpointLoadResult FileCheckpointStore::loadLatestCompatible()
     checkpoint.expected.moveit_world_object_poses =
       poseMapFromJson(expected.at("moveit_world_object_poses"));
     if (!expected.at("moveit_coke_attached").is_null()) {
-      checkpoint.expected.moveit_coke_attached = expected.at("moveit_coke_attached").get<bool>();
+      checkpoint.expected.moveit_task_object_attached =
+        expected.at("moveit_coke_attached").get<bool>();
     }
     if (!expected.at("gazebo_coke_pose_world").is_null()) {
-      checkpoint.expected.gazebo_coke_pose_world =
+      checkpoint.expected.gazebo_task_object_pose_world =
         poseFromJson(expected.at("gazebo_coke_pose_world"));
     }
     if (!expected.at("gazebo_coke_attached").is_null()) {
-      checkpoint.expected.gazebo_coke_attached = expected.at("gazebo_coke_attached").get<bool>();
+      checkpoint.expected.gazebo_task_object_attached =
+        expected.at("gazebo_coke_attached").get<bool>();
     }
     if (!expected.at("gazebo_coke_stationary").is_null()) {
-      checkpoint.expected.gazebo_coke_stationary =
+      checkpoint.expected.gazebo_task_object_stationary =
         expected.at("gazebo_coke_stationary").get<bool>();
     }
     checkpoint.expected.required_world_objects =

@@ -47,10 +47,10 @@ WorldSnapshot detachedSnapshot(const Pose3d & tcp = kPick, const Pose3d & coke =
   snapshot.joint_velocities = {{"panda_joint1", 0.0},
                                {"panda_finger_joint1", 0.0},
                                {"panda_finger_joint2", 0.0}};
-  snapshot.gazebo_coke_pose_world = coke;
-  snapshot.gazebo_coke_attached = false;
-  snapshot.gazebo_coke_stationary = true;
-  snapshot.moveit_coke_attached = false;
+  snapshot.gazebo_task_object_pose_world = coke;
+  snapshot.gazebo_task_object_attached = false;
+  snapshot.gazebo_task_object_stationary = true;
+  snapshot.moveit_task_object_attached = false;
   auto moveit_coke = coke;
   if (!synchronized) {
     moveit_coke.x += 0.02;
@@ -66,11 +66,11 @@ WorldSnapshot carryingSnapshot(const Pose3d & tcp, const Pose3d & coke)
   snapshot.gripper_open = false;
   snapshot.joint_positions["panda_finger_joint1"] = 0.032;
   snapshot.joint_positions["panda_finger_joint2"] = 0.032;
-  snapshot.gazebo_coke_attached = true;
-  snapshot.moveit_coke_attached = true;
+  snapshot.gazebo_task_object_attached = true;
+  snapshot.moveit_task_object_attached = true;
   snapshot.moveit_world_object_poses.erase("coke");
-  snapshot.moveit_coke_attached_link = "panda_hand";
-  snapshot.moveit_coke_touch_links = kTouchLinks;
+  snapshot.moveit_task_object_attached_link = "panda_hand";
+  snapshot.moveit_task_object_touch_links = kTouchLinks;
   return snapshot;
 }
 
@@ -88,32 +88,32 @@ void applySuccessfulRecoveryState(State state, WorldSnapshot & snapshot)
   switch (state) {
     case State::RECOVER_LIFT_TO_SAFE_HEIGHT:
       snapshot.tcp_pose_world = kAbovePlace;
-      snapshot.gazebo_coke_pose_world = kCokeAbovePlace;
+      snapshot.gazebo_task_object_pose_world = kCokeAbovePlace;
       break;
     case State::RECOVER_MOVE_ABOVE_PICK:
       snapshot.tcp_pose_world = kAbovePick;
-      snapshot.gazebo_coke_pose_world = kCokeAbovePick;
+      snapshot.gazebo_task_object_pose_world = kCokeAbovePick;
       break;
     case State::RECOVER_DESCEND_TO_PICK:
       snapshot.tcp_pose_world = kPick;
-      snapshot.gazebo_coke_pose_world = kCokePick;
+      snapshot.gazebo_task_object_pose_world = kCokePick;
       break;
     case State::RECOVER_OPEN_GRIPPER:
       openGripper(snapshot);
       break;
     case State::RECOVER_DETACH_GAZEBO:
-      snapshot.gazebo_coke_attached = false;
+      snapshot.gazebo_task_object_attached = false;
       break;
     case State::RECOVER_DETACH_MOVEIT:
-      snapshot.moveit_coke_attached = false;
-      snapshot.moveit_coke_attached_link.reset();
-      snapshot.moveit_coke_touch_links.clear();
+      snapshot.moveit_task_object_attached = false;
+      snapshot.moveit_task_object_attached_link.reset();
+      snapshot.moveit_task_object_touch_links.clear();
       snapshot.moveit_world_object_poses["coke"] =
         Pose3d{kCokePick.x + 0.02, kCokePick.y,  kCokePick.z, kCokePick.qx,
                kCokePick.qy,       kCokePick.qz, kCokePick.qw};
       break;
     case State::RECOVER_SYNC_WORLD_OBJECT:
-      snapshot.moveit_world_object_poses["coke"] = *snapshot.gazebo_coke_pose_world;
+      snapshot.moveit_world_object_poses["coke"] = *snapshot.gazebo_task_object_pose_world;
       break;
     case State::RECOVER_RETREAT:
       snapshot.tcp_pose_world.z = kAbovePick.z;
@@ -136,7 +136,7 @@ public:
     snapshot.fresh = true;
     snapshot.arm_stationary = true;
     if (stationary_after_call > 0) {
-      snapshot.gazebo_coke_stationary = calls >= stationary_after_call;
+      snapshot.gazebo_task_object_stationary = calls >= stationary_after_call;
     }
     return {snapshot, std::nullopt};
   }
@@ -152,10 +152,10 @@ void setExpected(Checkpoint & checkpoint, const WorldSnapshot & snapshot)
   checkpoint.expected.gripper_open = snapshot.gripper_open;
   checkpoint.expected.joint_positions = snapshot.joint_positions;
   checkpoint.expected.moveit_world_object_poses = snapshot.moveit_world_object_poses;
-  checkpoint.expected.moveit_coke_attached = snapshot.moveit_coke_attached;
-  checkpoint.expected.gazebo_coke_pose_world = snapshot.gazebo_coke_pose_world;
-  checkpoint.expected.gazebo_coke_attached = snapshot.gazebo_coke_attached;
-  checkpoint.expected.gazebo_coke_stationary = snapshot.gazebo_coke_stationary;
+  checkpoint.expected.moveit_task_object_attached = snapshot.moveit_task_object_attached;
+  checkpoint.expected.gazebo_task_object_pose_world = snapshot.gazebo_task_object_pose_world;
+  checkpoint.expected.gazebo_task_object_attached = snapshot.gazebo_task_object_attached;
+  checkpoint.expected.gazebo_task_object_stationary = snapshot.gazebo_task_object_stationary;
   checkpoint.expected.required_world_objects = {"table", "coke"};
 }
 
@@ -172,7 +172,7 @@ Checkpoint recoveryCheckpoint(const WorldSnapshot & snapshot)
                                         "forward motion failed",
                                         {{"forward_metric", 0.25}}};
   checkpoint.next_state = State::RECOVER_LIFT_TO_SAFE_HEIGHT;
-  checkpoint.configuration_hash = "recovery-test-config";
+  checkpoint.configuration_fingerprint = "recovery-test-config";
   checkpoint.simulation_session_id = "recovery-test-session";
   setExpected(checkpoint, snapshot);
   return checkpoint;
@@ -214,7 +214,7 @@ Checkpoint forwardCarryingCheckpoint(const WorldSnapshot & snapshot)
   checkpoint.phase = CheckpointPhase::FORWARD;
   checkpoint.last_completed_state = State::LIFT;
   checkpoint.next_state = State::MOVE_ABOVE_PLACE;
-  checkpoint.configuration_hash = "recovery-test-config";
+  checkpoint.configuration_fingerprint = "recovery-test-config";
   checkpoint.simulation_session_id = "recovery-test-session";
   setExpected(checkpoint, snapshot);
   return checkpoint;
@@ -678,7 +678,7 @@ TEST(RecoveryWorkflow, GazeboOnlyAttachNeverPlansCarryingMotion)
   snapshot.gripper_open = false;
   snapshot.joint_positions["panda_finger_joint1"] = 0.032;
   snapshot.joint_positions["panda_finger_joint2"] = 0.032;
-  snapshot.gazebo_coke_attached = true;
+  snapshot.gazebo_task_object_attached = true;
   WorkflowHarness harness(snapshot);
 
   const auto result = harness.run();
@@ -731,7 +731,7 @@ TEST(RecoveryWorkflow, AlreadyDetachedCleanupNoOpsAndSynchronizes)
   EXPECT_DOUBLE_EQ(scene_adapter->synchronized_pose->x, kCokePick.x);
 
   auto incomplete = detachedSnapshot(kPick, kCokePick);
-  incomplete.gazebo_coke_stationary = false;
+  incomplete.gazebo_task_object_stationary = false;
   EXPECT_EQ(
     open_executor
       .execute({State::RECOVER_OPEN_GRIPPER, State::RECOVER_DETACH_GAZEBO, incomplete, nullptr})
@@ -740,7 +740,7 @@ TEST(RecoveryWorkflow, AlreadyDetachedCleanupNoOpsAndSynchronizes)
   EXPECT_EQ(gripper_adapter->command_calls, 1);
 
   auto stale_moveit_metadata = detachedSnapshot(kPick, kCokePick);
-  stale_moveit_metadata.moveit_coke_attached_link = "panda_hand";
+  stale_moveit_metadata.moveit_task_object_attached_link = "panda_hand";
   EXPECT_EQ(moveit_detach
               .execute({State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT,
                         stale_moveit_metadata, nullptr})

@@ -18,6 +18,8 @@ struct TransitionKey
 class TransitionContractRegistry
 {
 public:
+  explicit TransitionContractRegistry(bool reject_null = true, bool reject_duplicate = true) :
+    reject_null_(reject_null), reject_duplicate_(reject_duplicate) {}
   class ITransitionContract
   {
   public:
@@ -36,6 +38,8 @@ public:
   std::optional<Failure> validateExecuteCoverage(const WorkflowDefinition &) const;
 
 private:
+  bool reject_null_;
+  bool reject_duplicate_;
   std::map<TransitionKey, std::shared_ptr<const ITransitionContract>> contracts_;
 };
 class AlwaysPassValidator final : public TransitionContractRegistry::ITransitionContract

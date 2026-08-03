@@ -116,6 +116,11 @@ bool isTerminal(State s) noexcept
 {
   return s == State::DONE || s == State::ERROR;
 }
+bool isForwardAction(State s) noexcept
+{
+  return s >= State::PREPARE_OPEN_GRIPPER && s <= State::RETREAT &&
+         s != State::VALIDATION_FAILED;
+}
 bool isAction(State s) noexcept
 {
   return s >= State::PREPARE_OPEN_GRIPPER && s <= State::RECOVER_RETREAT &&
