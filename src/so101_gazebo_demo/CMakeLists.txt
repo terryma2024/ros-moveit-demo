@@ -202,6 +202,8 @@ so101_gazebo_add_cpp_quality_gate(
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_workflow_characterization test/pick_place/test_workflow_characterization.cpp)
+  target_link_libraries(test_workflow_characterization pick_place_core)
   ament_add_gtest(test_pick_place_dry_run test/pick_place/test_dry_run.cpp)
   target_link_libraries(test_pick_place_dry_run pick_place_core)
   ament_add_gtest(test_pick_place_checkpoint test/pick_place/test_checkpoint.cpp)
