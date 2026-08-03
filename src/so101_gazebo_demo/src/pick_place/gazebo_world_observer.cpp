@@ -40,12 +40,12 @@ bool finitePose(const Pose3d & pose)
          std::isfinite(pose.qw);
 }
 
-double positionDistance(const Pose3d & a, const Pose3d & b)
+double localPositionDistance(const Pose3d & a, const Pose3d & b)
 {
   return std::hypot(std::hypot(a.x - b.x, a.y - b.y), a.z - b.z);
 }
 
-double orientationDistance(const Pose3d & a, const Pose3d & b)
+double localOrientationDistance(const Pose3d & a, const Pose3d & b)
 {
   const auto dot = std::abs(a.qx * b.qx + a.qy * b.qy + a.qz * b.qz + a.qw * b.qw);
   return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
@@ -98,8 +98,9 @@ public:
     }
     for (std::size_t i = 1; i < samples_.size(); ++i) {
       if (samples_[i].observed_at <= samples_[i - 1].observed_at ||
-          positionDistance(samples_[i - 1].pose, samples_[i].pose) > position_tolerance_ ||
-          orientationDistance(samples_[i - 1].pose, samples_[i].pose) > orientation_tolerance_) {
+          localPositionDistance(samples_[i - 1].pose, samples_[i].pose) > position_tolerance_ ||
+          localOrientationDistance(samples_[i - 1].pose, samples_[i].pose) >
+            orientation_tolerance_) {
         return false;
       }
     }

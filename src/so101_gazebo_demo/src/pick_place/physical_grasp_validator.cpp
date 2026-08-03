@@ -8,7 +8,7 @@ namespace so101_gazebo_demo::pick_place
 {
 namespace
 {
-double orientationDistance(const Pose3d & first, const Pose3d & second)
+double localOrientationDistance(const Pose3d & first, const Pose3d & second)
 {
   const double first_norm =
     std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
@@ -63,7 +63,7 @@ PhysicalGraspResult PhysicalGraspValidator::evaluate(const WorldSnapshot & befor
   result.cup_follow_ratio =
     std::abs(result.tcp_z_delta_m) <= 1e-12 ? 0.0 : result.cup_z_delta_m / result.tcp_z_delta_m;
   result.xy_slip_m = std::hypot(cup_after.x - cup_before.x, cup_after.y - cup_before.y);
-  result.orientation_change_rad = orientationDistance(cup_before, cup_after);
+  result.orientation_change_rad = localOrientationDistance(cup_before, cup_after);
   result.gripper_contact = after.gazebo_task_object_gripper_contact.value_or(false);
   if (thresholds_.require_gripper_contact && !result.gripper_contact) {
     result.failure =

@@ -498,7 +498,7 @@ Checkpoint forwardCheckpoint(State last, State next, const WorldSnapshot & world
   checkpoint.phase = CheckpointPhase::FORWARD;
   checkpoint.last_completed_state = last;
   checkpoint.next_state = next;
-  checkpoint.policy_bundle_sha256 = "config-a";
+  checkpoint.configuration_fingerprint = "config-a";
   checkpoint.simulation_session_id = "session-a";
   setExpected(checkpoint, world);
   return checkpoint;
@@ -800,7 +800,7 @@ TEST(PureRunnerIntegration, ResumeMismatchStaleSessionConfigAndSkippedBoundaryFa
     } else if (which == "session") {
       harness.scenario.world.simulation_session_id = "other-session";
     } else if (which == "config") {
-      harness.store.latest->policy_bundle_sha256 = "other-config";
+      harness.store.latest->configuration_fingerprint = "other-config";
     } else {
       harness.store.latest->next_state = State::DESCEND;
     }

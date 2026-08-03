@@ -64,7 +64,7 @@ mapfile -t commands <"${command_log}"
   "${commands[0]}" == *"-config-file ${workspace_root}/.clang-tidy"* &&
   "${commands[0]}" == *"${source_file}"* ]] ||
   fail 'tidy did not receive the strict compilation database arguments'
-[[ "${commands[1]}" == "format argc=3 args=<-i><--style=file><${source_file}>" ]] ||
+[[ "${commands[1]}" == "format argc=4 args=<--dry-run><--Werror><--style=file><${source_file}>" ]] ||
   fail 'format did not receive repository style arguments'
 
 : >"${command_log}"
@@ -125,7 +125,7 @@ COMMAND_LOG="${command_log}" cmake --build "${fixture_build_dir}" --target examp
   >/dev/null
 mapfile -t commands <"${command_log}"
 [[ "${#commands[@]}" -eq 2 && "${commands[0]}" == tidy* &&
-  "${commands[1]}" == *'format argc=4'* &&
+  "${commands[1]}" == *'format argc=5'* &&
   "${commands[1]}" == *"<${fixture_root}/src/example.cpp>"* &&
   "${commands[1]}" == *"<${fixture_root}/src/other.cpp>"* ]] ||
   fail 'target compilation did not run tidy then format first'

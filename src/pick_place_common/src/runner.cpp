@@ -1,5 +1,6 @@
 #include "pick_place_common/runner.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <utility>
@@ -75,16 +76,10 @@ StateMachineRunner::StateMachineRunner(
   ICheckpointStore * checkpoint_store, const CommonResumeValidator * resume_validator,
   IExecutionObservationSink * observation_sink, const PlanValidatorRegistry * plan_validators,
   const IRecoveryPolicy * recovery_policy, const IRunnerBehaviorPolicy * behavior_policy) :
-    workflow_(workflow),
-    actions_(actions),
-    contracts_(contracts),
-    observer_(observer),
-    checkpoint_store_(checkpoint_store),
-    resume_validator_(resume_validator),
-    observation_sink_(observation_sink),
-    plan_validators_(plan_validators),
-    recovery_policy_(recovery_policy),
-    behavior_policy_(behavior_policy)
+    workflow_(workflow), actions_(actions), contracts_(contracts), observer_(observer),
+    checkpoint_store_(checkpoint_store), resume_validator_(resume_validator),
+    observation_sink_(observation_sink), plan_validators_(plan_validators),
+    recovery_policy_(recovery_policy), behavior_policy_(behavior_policy)
 {
 }
 
@@ -121,6 +116,55 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
                                "fail_at is supported only in dry_run mode",
                                {}});
   }
+  if (behavior_policy_ && request.force_continue &&
+      (!request.resume || request.mode != RunMode::EXECUTE)) {
+    return error(State::IDLE, {FailureCategory::CONFIGURATION,
+                               "FORCE_CONTINUE_REQUEST_INVALID",
+                               "force_continue requires an execute resume",
+                               {}});
+  }
+  if (behavior_policy_ && request.mode == RunMode::EXECUTE) {
+    if (!observer_ || !checkpoint_store_ || !resume_validator_) {
+      return error(State::IDLE,
+                   {FailureCategory::CONFIGURATION,
+                    "EXECUTE_INFRASTRUCTURE_MISSING",
+                    "execute requires observer, checkpoint store, and resume validator",
+                    {}});
+    }
+    if (!recovery_policy_) {
+      return error(State::IDLE, {FailureCategory::CONFIGURATION,
+                                 "RECOVERY_POLICY_MISSING",
+                                 "execute requires a recovery policy",
+                                 {}});
+    }
+    for (const auto state : workflow_.action_states) {
+      const auto transition = workflow_.transitions.find(state);
+      if (transition == workflow_.transitions.end()) {
+        continue;
+      }
+      if (!actions_.findExecutor(state)) {
+        return error(state, {FailureCategory::CONFIGURATION,
+                             "EXECUTE_ACTION_NOT_REGISTERED",
+                             std::string("State requires an executor: ") + toString(state),
+                             {}});
+      }
+      if (!contracts_.hasContract({state, transition->second.succeeded})) {
+        return error(state, {FailureCategory::CONFIGURATION,
+                             "MISSING_TRANSITION_CONTRACT",
+                             std::string("Missing execute contract for ") + toString(state),
+                             {}});
+      }
+      const bool has_planner = actions_.findPlanner(state) != nullptr;
+      const bool has_validator = plan_validators_ && plan_validators_->hasValidator(state);
+      if (has_planner != has_validator) {
+        return error(state,
+                     {FailureCategory::CONFIGURATION,
+                      has_planner ? "PLAN_VALIDATOR_NOT_REGISTERED" : "PLANNER_NOT_REGISTERED",
+                      "planner and plan validator registrations must be paired",
+                      {}});
+      }
+    }
+  }
   if (request.resume) {
     return runResume(request);
   }
@@ -130,8 +174,10 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
     case RunMode::PLAN_ONLY:
       return runPlanOnly(request);
     case RunMode::EXECUTE:
-      return runExecuteWorkflow(resolve(workflow_.initial_state, ActionStatus::SUCCEEDED),
-                                request, std::nullopt, 1, 1);
+      return runExecuteWorkflow(resolve(workflow_.initial_state, ActionStatus::SUCCEEDED), request,
+                                std::nullopt, 1, 1, CheckpointPhase::FORWARD, std::nullopt,
+                                std::nullopt,
+                                behavior_policy_ && behavior_policy_->includeIdleInTrace());
   }
   return error(State::IDLE, {FailureCategory::INTERNAL, "UNKNOWN_MODE", "Unknown run mode", {}});
 }
@@ -167,12 +213,17 @@ RunResult StateMachineRunner::runDryRun(const RunRequest & request) const
                  transition_count);
   }
   return {state_machine.currentState() == State::DONE ? RunStatus::DONE : RunStatus::ERROR,
-          state_machine.currentState(), std::nullopt, injected_failure, transition_count, trace};
+          state_machine.currentState(),
+          std::nullopt,
+          injected_failure,
+          transition_count,
+          trace};
 }
 
 RunResult StateMachineRunner::runPlanOnly(const RunRequest & request) const
 {
-  auto state = resolve(workflow_.initial_state, ActionStatus::SUCCEEDED);
+  auto state =
+    request.stop_after.value_or(resolve(workflow_.initial_state, ActionStatus::SUCCEEDED));
   while (!terminal(state) && actions_.findPlanner(state) == nullptr) {
     state = resolve(state, ActionStatus::SUCCEEDED);
   }
@@ -182,12 +233,6 @@ RunResult StateMachineRunner::runPlanOnly(const RunRequest & request) const
 RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & request,
                                           std::optional<ObservationResult> observation) const
 {
-  if (request.stop_after.has_value()) {
-    return error(state, {FailureCategory::CONFIGURATION,
-                         "STOP_AFTER_PLAN_ONLY_UNSUPPORTED",
-                         "plan_only does not execute actions or create checkpoints",
-                         {}});
-  }
   auto * planner = actions_.findPlanner(state);
   if (planner == nullptr) {
     return error(state, {FailureCategory::PLANNING,
@@ -218,6 +263,15 @@ RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & reques
                                                    {}}));
   }
   const auto next_state = resolve(state, ActionStatus::SUCCEEDED);
+  // SO-101's behavior policy opts plan-only into the same strict preflight used by execute.
+  // Panda's established plan-only contract intentionally plans from the observation directly.
+  if (behavior_policy_ != nullptr) {
+    const auto precondition =
+      contracts_.validatePrecondition({state, next_state}, *observation->snapshot);
+    if (!precondition.ok) {
+      return error(state, precondition.failures.front());
+    }
+  }
   const auto plan = planner->plan(state, next_state, *observation);
   if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact) {
     return error(state,
@@ -231,18 +285,70 @@ RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & reques
   if (!plan_validation.ok) {
     return error(state, plan_validation.failures.front());
   }
+  if (request.stop_after) {
+    if (checkpoint_store_ == nullptr || resume_validator_ == nullptr) {
+      return error(state, {FailureCategory::CONFIGURATION,
+                           "PLAN_ONLY_CHECKPOINT_INFRASTRUCTURE_MISSING",
+                           "plan_only stop boundary requires checkpoint infrastructure",
+                           {}});
+    }
+    std::optional<State> predecessor;
+    for (const auto & [candidate, transitions] : workflow_.transitions) {
+      if (transitions.succeeded == state) {
+        if (predecessor) {
+          return error(state, {FailureCategory::CONFIGURATION,
+                               "PLAN_ONLY_PREDECESSOR_AMBIGUOUS",
+                               "plan_only state has multiple successful predecessors",
+                               {}});
+        }
+        predecessor = candidate;
+      }
+    }
+    if (!predecessor) {
+      return error(state, {FailureCategory::CONFIGURATION,
+                           "PLAN_ONLY_PREDECESSOR_MISSING",
+                           "plan_only state has no successful predecessor",
+                           {}});
+    }
+    Checkpoint checkpoint;
+    checkpoint.run_id = "pick_place_state_machine";
+    checkpoint.source_mode = RunMode::PLAN_ONLY;
+    checkpoint.last_completed_state = *predecessor;
+    checkpoint.next_state = state;
+    checkpoint.configuration_fingerprint = resume_validator_->configurationFingerprint();
+    checkpoint.simulation_session_id = resume_validator_->simulationSessionId();
+    setExpectedWorldState(checkpoint, *observation->snapshot);
+    if (const auto failure = checkpoint_store_->commit(checkpoint)) {
+      return error(state, *failure);
+    }
+    return {RunStatus::CHECKPOINT_COMPLETE, state, state, std::nullopt, 0, {state}};
+  }
   return {RunStatus::PLAN_ONLY_COMPLETE, state, next_state, std::nullopt, 0};
 }
 
 RunResult StateMachineRunner::runExecuteWorkflow(
   State initial_state, const RunRequest & request, std::optional<WorldSnapshot> initial_snapshot,
   std::uint64_t checkpoint_sequence, std::uint64_t initial_transition_count, CheckpointPhase phase,
-  std::optional<State> failed_state, std::optional<Failure> original_failure) const
+  std::optional<State> failed_state, std::optional<Failure> original_failure,
+  bool include_idle) const
 {
   State state = initial_state;
   std::uint64_t transition_count = initial_transition_count;
   std::optional<Failure> workflow_failure = std::move(original_failure);
+  std::vector<State> trace;
+  if (include_idle) {
+    trace.push_back(workflow_.initial_state);
+  }
+  trace.push_back(state);
   while (!terminal(state) && transition_count < request.max_state_transitions) {
+    if (state == State::VALIDATION_FAILED) {
+      return {RunStatus::CHECKPOINT_COMPLETE,
+              state,
+              state,
+              workflow_failure,
+              transition_count,
+              std::move(trace)};
+    }
     const auto step = runExecuteStep(state, initial_snapshot, checkpoint_sequence, phase,
                                      failed_state, workflow_failure);
     initial_snapshot.reset();
@@ -253,19 +359,27 @@ RunResult StateMachineRunner::runExecuteWorkflow(
         failed.failure = withOriginalFailure(*step.failure, *workflow_failure);
       }
       failed.transition_count = transition_count;
+      trace.push_back(State::ERROR);
+      failed.state_trace = std::move(trace);
       return failed;
     }
     if (!step.next_state) {
-      return error(state,
-                   {FailureCategory::INTERNAL,
-                    "WORKFLOW_NEXT_STATE_MISSING",
-                    "Successful execute step did not provide its next state",
-                    {}},
-                   transition_count);
+      auto failed = error(state,
+                          {FailureCategory::INTERNAL,
+                           "WORKFLOW_NEXT_STATE_MISSING",
+                           "Successful execute step did not provide its next state",
+                           {}},
+                          transition_count);
+      trace.push_back(State::ERROR);
+      failed.state_trace = std::move(trace);
+      return failed;
     }
-    if (step.status == RunStatus::CHECKPOINT_COMPLETE && request.stop_after == state) {
+    trace.push_back(*step.next_state);
+    if (step.status == RunStatus::CHECKPOINT_COMPLETE &&
+        (request.stop_after == state || request.single_step)) {
       auto stopped = step;
       stopped.transition_count = transition_count;
+      stopped.state_trace = std::move(trace);
       return stopped;
     }
     if (phase == CheckpointPhase::FORWARD && step.status == RunStatus::RUNNING && step.failure &&
@@ -284,22 +398,28 @@ RunResult StateMachineRunner::runExecuteWorkflow(
     }
   }
   if (!terminal(state)) {
-    return error(state,
-                 {FailureCategory::INTERNAL,
-                  "MAX_TRANSITIONS_EXCEEDED",
-                  "State machine exceeded max_state_transitions",
-                  {}},
-                 transition_count);
+    auto failed = error(state,
+                        {FailureCategory::INTERNAL,
+                         "MAX_TRANSITIONS_EXCEEDED",
+                         "State machine exceeded max_state_transitions",
+                         {}},
+                        transition_count);
+    trace.push_back(State::ERROR);
+    failed.state_trace = std::move(trace);
+    return failed;
   }
   if (state == State::DONE) {
-    return {RunStatus::DONE, state, std::nullopt, std::nullopt, transition_count};
+    return {RunStatus::DONE, state, std::nullopt, std::nullopt, transition_count, std::move(trace)};
   }
-  return {RunStatus::ERROR, State::ERROR, std::nullopt,
+  return {RunStatus::ERROR,
+          State::ERROR,
+          std::nullopt,
           workflow_failure.value_or(Failure{FailureCategory::INTERNAL,
                                             "WORKFLOW_REACHED_ERROR",
                                             "Workflow reached ERROR without a recorded failure",
                                             {}}),
-          transition_count};
+          transition_count,
+          std::move(trace)};
 }
 
 RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSnapshot> before,
@@ -343,7 +463,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                                              "PRE_EXECUTION_OBSERVATION_FAILED",
                                              "Could not observe the world before execution",
                                              {}});
-      if (phase == CheckpointPhase::FORWARD) {
+      if (phase == CheckpointPhase::FORWARD && !behavior_policy_) {
         return handleActionFailure(state, *executor, std::move(failure), checkpoint_sequence);
       }
       return error(state, std::move(failure));
@@ -351,8 +471,39 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
     before = *observation.snapshot;
   }
   const ObservationResult planning_observation{*before, std::nullopt};
-  const auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
+  auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
+  std::size_t precondition_attempt = 0;
+  while (!precondition.ok && !precondition.failures.empty() && behavior_policy_ &&
+         behavior_policy_->retryPrecondition(state, precondition.failures.front(),
+                                             precondition_attempt++)) {
+    const auto observed = observer_->observe();
+    if (!observed.snapshot) {
+      if (observed.failure &&
+          observed.failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION") {
+        continue;
+      }
+      return error(state,
+                   observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                                     "PRE_EXECUTION_OBSERVATION_FAILED",
+                                                     "Could not observe precondition convergence",
+                                                     {}}));
+    }
+    before = *observed.snapshot;
+    precondition = contracts_.validatePrecondition({state, next_state}, *before);
+  }
   if (!precondition.ok) {
+    if (behavior_policy_) {
+      const auto environment_failure = std::find_if(
+        precondition.failures.begin(), precondition.failures.end(), [](const Failure & failure) {
+          return failure.category == FailureCategory::OBSERVATION ||
+                 failure.category == FailureCategory::WORLD_INCONSISTENCY ||
+                 failure.category == FailureCategory::MOVEIT_SCENE ||
+                 failure.category == FailureCategory::TF;
+        });
+      if (environment_failure != precondition.failures.end()) {
+        return error(state, *environment_failure);
+      }
+    }
     if (phase == CheckpointPhase::FORWARD) {
       return handleActionFailure(state, *executor, precondition.failures.front(),
                                  checkpoint_sequence);
@@ -396,7 +547,13 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
         Failure{FailureCategory::EXECUTION, "EXECUTION_FAILED", "Trajectory execution failed", {}}),
       checkpoint_sequence);
   }
-  const auto after = observer_->observe();
+  auto after = observer_->observe();
+  std::size_t post_observation_attempt = 1;
+  while (!after.snapshot && behavior_policy_ && after.failure &&
+         after.failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION" &&
+         post_observation_attempt++ < 480) {
+    after = observer_->observe();
+  }
   if (!after.snapshot) {
     const auto observation_failure =
       after.failure.value_or(Failure{FailureCategory::OBSERVATION,
@@ -408,8 +565,28 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   if (observation_sink_ != nullptr) {
     observation_sink_->record(state, *before, *after.snapshot);
   }
-  const auto validation =
-    contracts_.validate({state, next_state}, *before, *after.snapshot, action);
+  auto validation = contracts_.validate({state, next_state}, *before, *after.snapshot, action);
+  std::size_t postcondition_attempt = 0;
+  while (!validation.ok && !validation.failures.empty() && behavior_policy_ &&
+         behavior_policy_->retryPostcondition(state, validation.failures.front(),
+                                              postcondition_attempt++)) {
+    const auto observed = observer_->observe();
+    if (!observed.snapshot) {
+      if (observed.failure &&
+          observed.failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION") {
+        continue;
+      }
+      return handleActionFailure(
+        state, *executor,
+        observed.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                          "POST_EXECUTION_OBSERVATION_FAILED",
+                                          "Could not observe endpoint convergence",
+                                          {}}),
+        checkpoint_sequence);
+    }
+    after = observed;
+    validation = contracts_.validate({state, next_state}, *before, *after.snapshot, action);
+  }
   if (!validation.ok) {
     return handleActionFailure(state, *executor, validation.failures.front(), checkpoint_sequence);
   }
@@ -422,8 +599,8 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   checkpoint.original_failure = original_failure;
   checkpoint.next_state = next_state;
   setExpectedWorldState(checkpoint, *after.snapshot);
-  checkpoint.simulation_session_id =
-    resume_validator_ ? resume_validator_->simulationSessionId() : after.snapshot->simulation_session_id;
+  checkpoint.simulation_session_id = resume_validator_ ? resume_validator_->simulationSessionId()
+                                                       : after.snapshot->simulation_session_id;
   checkpoint.configuration_fingerprint =
     resume_validator_ ? resume_validator_->configurationFingerprint() : std::string{};
   if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
@@ -461,8 +638,7 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
   const bool invalid_forward_transition =
     checkpoint.phase == CheckpointPhase::FORWARD &&
     (terminal(checkpoint.last_completed_state) ||
-     resolve(checkpoint.last_completed_state, ActionStatus::SUCCEEDED) !=
-       checkpoint.next_state);
+     resolve(checkpoint.last_completed_state, ActionStatus::SUCCEEDED) != checkpoint.next_state);
   const bool invalid_recovery_context = checkpoint.phase == CheckpointPhase::RECOVERY &&
                                         (!checkpoint.failed_state || !checkpoint.original_failure);
   if (checkpoint.schema_version != 3 || checkpoint.source_mode != RunMode::EXECUTE ||
@@ -488,11 +664,13 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
                                          {}});
   }
   auto snapshot = *observation.snapshot;
-  const bool requires_stationary_coke = checkpoint.phase == CheckpointPhase::RECOVERY ||
-                                        checkpoint.expected.gazebo_task_object_stationary.value_or(false);
+  const bool requires_stationary_coke =
+    checkpoint.phase == CheckpointPhase::RECOVERY ||
+    checkpoint.expected.gazebo_task_object_stationary.value_or(false);
   if (requires_stationary_coke) {
     const auto stationary_deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
-    while ((!snapshot.gazebo_task_object_stationary || !*snapshot.gazebo_task_object_stationary) &&
+    while (!behavior_policy_ &&
+           (!snapshot.gazebo_task_object_stationary || !*snapshot.gazebo_task_object_stationary) &&
            std::chrono::steady_clock::now() < stationary_deadline) {
       std::this_thread::sleep_for(kStationaryPollInterval);
       const auto settled_observation = observer_->observe();
@@ -576,16 +754,19 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
 {
   const auto stopped = stopAndObserveAfterFailure(executor);
   if (!stopped.snapshot) {
-    return error(state, stopped.failure.value_or(
-                          Failure{FailureCategory::OBSERVATION,
-                                  "POST_FAILURE_OBSERVATION_FAILED",
-                                  "Unable to establish a stopped world after action failure",
-                                  {}}));
+    auto stop_failure =
+      stopped.failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                       "POST_FAILURE_OBSERVATION_FAILED",
+                                       "Unable to establish a stopped world after action failure",
+                                       {}});
+    if (behavior_policy_) {
+      stop_failure = withOriginalFailure(std::move(stop_failure), original_failure);
+    }
+    return error(state, std::move(stop_failure));
   }
   original_failure.metrics["cancel_succeeded"] = 1.0;
   original_failure.metrics["arm_stationary_after_cancel"] = 1.0;
-  if (!forwardAction(state) ||
-      resolve(state, ActionStatus::FAILED) == State::ERROR) {
+  if (!forwardAction(state) || resolve(state, ActionStatus::FAILED) == State::ERROR) {
     return error(state, std::move(original_failure));
   }
   if (recovery_policy_ == nullptr) {
@@ -653,6 +834,10 @@ StateMachineRunner::stopAndObserveAfterFailure(IStateExecutor & executor) const
   do {
     latest_observation = observer_->observe();
     if (!latest_observation->snapshot) {
+      if (behavior_policy_ && latest_observation->failure &&
+          latest_observation->failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION") {
+        continue;
+      }
       return {std::nullopt, latest_observation->failure.value_or(
                               Failure{FailureCategory::OBSERVATION,
                                       "POST_FAILURE_OBSERVATION_FAILED",

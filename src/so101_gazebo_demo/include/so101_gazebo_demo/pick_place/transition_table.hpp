@@ -1,21 +1,15 @@
 #pragma once
 #include <map>
 #include "so101_gazebo_demo/pick_place/domain_types.hpp"
+#include <pick_place_common/workflow_definition.hpp>
 namespace so101_gazebo_demo::pick_place
 {
-struct StateTransitions
-{
-  State succeeded;
-  State failed;
-};
+using pick_place_common::StateTransitions;
 class TransitionTable
 {
 public:
   [[nodiscard]] static State resolve(State from, ActionStatus outcome) noexcept;
   [[nodiscard]] static const std::map<State, StateTransitions> & entries() noexcept;
-
-private:
-  static const std::map<State, StateTransitions> kTransitions;
 };
 class StateMachine
 {

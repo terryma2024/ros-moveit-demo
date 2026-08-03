@@ -28,12 +28,12 @@ bool isRecovery(TransitionKey key)
          key.from == State::RECOVER_SYNC_WORLD_OBJECT;
 }
 
-double positionDistance(const Pose3d & first, const Pose3d & second)
+double localPositionDistance(const Pose3d & first, const Pose3d & second)
 {
   return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
 }
 
-double orientationDistance(const Pose3d & first, const Pose3d & second)
+double localOrientationDistance(const Pose3d & first, const Pose3d & second)
 {
   const double first_norm =
     std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
@@ -254,10 +254,10 @@ void requireNoTaskObjectJump(ValidationResult & result, const WorldSnapshot & be
         "Gazebo TaskObject poses are required before and after attachment");
     return;
   }
-  const double position =
-    positionDistance(*before.gazebo_task_object_pose_world, *after.gazebo_task_object_pose_world);
-  const double orientation = orientationDistance(*before.gazebo_task_object_pose_world,
-                                                 *after.gazebo_task_object_pose_world);
+  const double position = localPositionDistance(*before.gazebo_task_object_pose_world,
+                                                *after.gazebo_task_object_pose_world);
+  const double orientation = localOrientationDistance(*before.gazebo_task_object_pose_world,
+                                                      *after.gazebo_task_object_pose_world);
   result.metrics["task_object_position_drift"] = position;
   result.metrics["task_object_orientation_drift_rad"] = orientation;
   if (!std::isfinite(position) || position > profile.task_object_position_drift_tolerance) {
@@ -285,12 +285,14 @@ void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot &
     return;
   const auto & expected =
     isRecovery(key) ? profile.task_object_pose : profile.place_task_object_pose;
-  const double before_position = positionDistance(*before.gazebo_task_object_pose_world, expected);
+  const double before_position =
+    localPositionDistance(*before.gazebo_task_object_pose_world, expected);
   const double before_orientation =
-    orientationDistance(*before.gazebo_task_object_pose_world, expected);
-  const double after_position = positionDistance(*after.gazebo_task_object_pose_world, expected);
+    localOrientationDistance(*before.gazebo_task_object_pose_world, expected);
+  const double after_position =
+    localPositionDistance(*after.gazebo_task_object_pose_world, expected);
   const double after_orientation =
-    orientationDistance(*after.gazebo_task_object_pose_world, expected);
+    localOrientationDistance(*after.gazebo_task_object_pose_world, expected);
   result.metrics["task_object_support_before_position_error"] = before_position;
   result.metrics["task_object_support_before_orientation_error_rad"] = before_orientation;
   result.metrics["task_object_support_after_position_error"] = after_position;
@@ -344,11 +346,11 @@ void requireExactMoveItAttachment(ValidationResult & result, const WorldSnapshot
         "MoveIt TaskObject touch links do not match the SO-101 profile");
   }
   if (!snapshot.moveit_task_object_attached_relative_pose ||
-      positionDistance(*snapshot.moveit_task_object_attached_relative_pose,
-                       profile.calibrated_grasp_relative_pose) >
+      localPositionDistance(*snapshot.moveit_task_object_attached_relative_pose,
+                            profile.calibrated_grasp_relative_pose) >
         profile.task_object_position_drift_tolerance ||
-      orientationDistance(*snapshot.moveit_task_object_attached_relative_pose,
-                          profile.calibrated_grasp_relative_pose) >
+      localOrientationDistance(*snapshot.moveit_task_object_attached_relative_pose,
+                               profile.calibrated_grasp_relative_pose) >
         profile.task_object_orientation_drift_tolerance_rad) {
     add(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_ATTACHED_RELATIVE_POSE_MISMATCH",
         "MoveIt TaskObject attachment must preserve the calibrated full 6D relative pose");
@@ -464,9 +466,9 @@ public:
             "Independent Gazebo and MoveIt TaskObject poses are required after sync");
       } else {
         const double position =
-          positionDistance(*after.gazebo_task_object_pose_world, moveit_task_object->second);
-        const double orientation =
-          orientationDistance(*after.gazebo_task_object_pose_world, moveit_task_object->second);
+          localPositionDistance(*after.gazebo_task_object_pose_world, moveit_task_object->second);
+        const double orientation = localOrientationDistance(*after.gazebo_task_object_pose_world,
+                                                            moveit_task_object->second);
         result.metrics["world_task_object_position_error"] = position;
         result.metrics["world_task_object_orientation_error_rad"] = orientation;
         if (position > profile_.task_object_position_drift_tolerance ||
@@ -477,8 +479,8 @@ public:
       }
       const auto table = after.moveit_world_object_poses.find(profile_.table_object);
       if (table == after.moveit_world_object_poses.end() ||
-          positionDistance(table->second, profile_.table_pose) > 1e-5 ||
-          orientationDistance(table->second, profile_.table_pose) > 1e-4) {
+          localPositionDistance(table->second, profile_.table_pose) > 1e-5 ||
+          localOrientationDistance(table->second, profile_.table_pose) > 1e-4) {
         add(result, FailureCategory::MOVEIT_SCENE, "TABLE_WORLD_POSE_MISMATCH",
             "MoveIt table must remain at the canonical profile pose");
       }

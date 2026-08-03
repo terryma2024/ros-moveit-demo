@@ -54,7 +54,7 @@ bool finitePose(const Pose3d & pose)
          finite(pose.qz) && finite(pose.qw) && finite(norm) && norm > 1e-12;
 }
 
-double positionDistance(const Pose3d & first, const Pose3d & second)
+double localPositionDistance(const Pose3d & first, const Pose3d & second)
 {
   return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
 }
@@ -71,7 +71,7 @@ double wallNormalPositionError(const Pose3d & actual, const Pose3d & expected, c
   return std::abs(projected) / magnitude;
 }
 
-double orientationDistance(const Pose3d & first, const Pose3d & second)
+double localOrientationDistance(const Pose3d & first, const Pose3d & second)
 {
   if (!finitePose(first) || !finitePose(second)) {
     return std::numeric_limits<double>::infinity();
@@ -121,14 +121,14 @@ Pose3d relativePose(const Pose3d & frame, const Pose3d & object)
 bool poseWithin(const Pose3d & actual, const Pose3d & expected, double position_tolerance,
                 double orientation_tolerance)
 {
-  return positionDistance(actual, expected) <= position_tolerance &&
-         orientationDistance(actual, expected) <= orientation_tolerance;
+  return localPositionDistance(actual, expected) <= position_tolerance &&
+         localOrientationDistance(actual, expected) <= orientation_tolerance;
 }
 
 bool cylindricalPoseWithin(const Pose3d & actual, const Pose3d & expected,
                            double position_tolerance, double tilt_tolerance)
 {
-  return positionDistance(actual, expected) <= position_tolerance &&
+  return localPositionDistance(actual, expected) <= position_tolerance &&
          axialTiltDistance(actual, expected) <= tilt_tolerance;
 }
 
@@ -157,7 +157,7 @@ bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile)
   const double local_z_world_z =
     1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
   const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
-  return positionDistance(pose, profile.task_object_pose) <=
+  return localPositionDistance(pose, profile.task_object_pose) <=
            profile.task_object_position_drift_tolerance &&
          finite(tilt) && tilt <= profile.place_support_tilt_tolerance_rad;
 }
@@ -489,7 +489,7 @@ public:
                           0.0,
                           0.0,
                           1.0};
-    const double endpoint_error = positionDistance(after.tcp_pose_world, endpoint);
+    const double endpoint_error = localPositionDistance(after.tcp_pose_world, endpoint);
     const double axis_error =
       approachAxisError(after.tcp_pose_world, spec_.validation.local_approach_axis,
                         spec_.validation.target_approach_axis);
@@ -523,8 +523,9 @@ public:
         before_evidence = relativePose(before.tcp_pose_world, before_evidence);
         after_evidence = relativePose(after.tcp_pose_world, after_evidence);
       }
-      const double task_object_position = positionDistance(before_evidence, after_evidence);
-      const double task_object_orientation = orientationDistance(before_evidence, after_evidence);
+      const double task_object_position = localPositionDistance(before_evidence, after_evidence);
+      const double task_object_orientation =
+        localOrientationDistance(before_evidence, after_evidence);
       const double task_object_tilt = axialTiltDistance(before_evidence, after_evidence);
       result.metrics[carrying(spec_.state) ? "task_object_follow_position_error"
                                            : "task_object_position_drift"] = task_object_position;
