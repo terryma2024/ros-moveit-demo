@@ -24,9 +24,11 @@ public:
   AttachThenHoldGripper(std::shared_ptr<IStateExecutor> attach,
                         std::shared_ptr<ISO101GripperCommand> gripper,
                         std::string gripper_joint,
+                        double carry_hold_q6,
                         double settle_seconds) :
     attach_(std::move(attach)), gripper_(std::move(gripper)),
-    gripper_joint_(std::move(gripper_joint)), settle_seconds_(settle_seconds)
+    gripper_joint_(std::move(gripper_joint)), carry_hold_q6_(carry_hold_q6),
+    settle_seconds_(settle_seconds)
   {
   }
 
@@ -43,7 +45,12 @@ public:
                       "A finite measured gripper position is required after Gazebo attachment",
                       {}}};
     }
-    auto held = gripper_->command(measured_q6->second);
+    // The bounded regrasp may finish slightly deeper than the calibrated cup
+    // wall target.  Once the Gazebo joint owns the cup, retarget the controller
+    // to the calibrated carry value instead of preserving that transient
+    // squeeze; otherwise an unusually deep regrasp can violate the native-pad
+    // interference ceiling at the attachment boundary.
+    auto held = gripper_->command(carry_hold_q6_);
     // Gazebo's DetachableJoint can oppose the gripper position controller
     // immediately after attachment.  The hold command is advisory at this
     // boundary: defer only the controller's contact-stop abort and let the
@@ -71,6 +78,7 @@ private:
   std::shared_ptr<IStateExecutor> attach_;
   std::shared_ptr<ISO101GripperCommand> gripper_;
   std::string gripper_joint_;
+  double carry_hold_q6_;
   double settle_seconds_;
 };
 
@@ -107,6 +115,7 @@ void registerGazebo(SO101Task3Runtime & runtime,
         State::ATTACH_GAZEBO,
         std::make_shared<AttachThenHoldGripper>(
           dependencies.gazebo_attach, dependencies.gripper, profile.gripper_joint,
+          profile.q6_contact,
           profile.post_attach_hold_settle_seconds));
     } else {
       runtime.actions.registerExecutor(State::ATTACH_GAZEBO, dependencies.gazebo_attach);

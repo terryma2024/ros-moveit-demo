@@ -11,26 +11,27 @@
 7. 根据运行日志把臂控制器通用 path tolerance 修复为 `2 mrad`，但不放宽接触关键状态的独立末端门。
 8. 根据 Gazebo 物理沉降证据，把携带相对姿态门固化为 `5 mm / 0.070 rad`。
 9. 把唯一一次 regrasp 收紧量改为 `0.006 rad`，继续要求连续 6 个双侧接触样本和最大接触深度门。
+10. 把 regrasp 明确为临时 seating 动作：首次稳定后回到 `q6_contact`，再次通过连续 6 个双侧样本才允许附着；附着后的 carry hold 也固定为 `q6_contact`。
 
 ## 冻结复跑证据
 
 共同策略哈希：
 
 - motion policy: `48dba1959278572e17af2256532a3201868fd4fa7a16c8e0b6a0f31e0723b33e`
-- validation policy: `f8ec294ec4591f4728880585b3c9275d04708e8fc19b8df79ee2e30b243d49df`
-- policy bundle: `45c53a6cb0fe55987e00adb36d0035bedb390c7b9d85e36515bc22877c3f89e0`
+- validation policy: `d4fdef83fca56d9f232c098c0f0ecfe5a3e2044bb6404c6ccba684559c2bc167`
+- policy bundle: `d3a2ea99b6862c248c3e0cf4867b39687b6a3c3c75bba0e2bd905a382f263594`
 
 | Trial | simulation session | checkpoint | 结果 | XY 误差 | Z 误差 | 最终 attachment |
 |---|---|---|---|---:|---:|---|
-| 1 | `reset-6f45e224-0e44-4924-869f-0ae7a71d5e41` | `/tmp/retreat-final-candidate-trial1.json` | `DONE` | 2.806 mm | 0.0000066 mm | false / false |
-| 2 | `reset-d8b3e1bd-5991-4496-ad12-28763d45bd68` | `/tmp/retreat-final-candidate-trial2.json` | `DONE` | 2.048 mm | 0.0000083 mm | false / false |
-| 3 | `reset-3dde1e33-5bf0-45cf-966d-3700d61e55ed` | `/tmp/retreat-final-candidate-trial3.json` | `DONE` | 2.742 mm | 0.0000066 mm | false / false |
+| 1 | `reset-bc01bee2-f80c-4e01-a561-ff20382b4327` | `/tmp/so101-local-takeover-20260803/relaxfix-consecutive/trial1/checkpoint.json` | `DONE` | 2.218 mm | 0.000008 mm | false / false |
+| 2 | `reset-90cde82e-5921-46c1-bf5c-84fb992b1a44` | `/tmp/so101-local-takeover-20260803/relaxfix-consecutive/trial2/checkpoint.json` | `DONE` | 2.124 mm | 0.000008 mm | false / false |
+| 3 | `reset-8b1ee265-a4fc-4147-88c0-5fb0078a3c8a` | `/tmp/so101-local-takeover-20260803/relaxfix-consecutive/trial3/checkpoint.json` | `DONE` | 2.844 mm | 0.000098 mm | false / false |
 
-统计：连续成功率 `3/3 = 100%`；XY 平均误差 `2.532 mm`，最大 `2.806 mm`，总体标准差 `0.343 mm`。
+统计：连续成功率 `3/3 = 100%`；位置平均误差 `2.396 mm`，最大 `2.844 mm`，总体标准差 `0.320 mm`。三轮最终 `moveit_collisions=[]`。
 
-最终 Gazebo 证据：`/captures/gazebo-1785746221250.png`。画面显示杯子稳定落台，夹爪已按偏置路径撤至杯口外上方。
+最终 Gazebo 证据：`/captures/gazebo-1785757436134.png`。画面显示杯子稳定落台，夹爪已按偏置路径撤至杯口外上方；整屏证据保存在 `/tmp/so101-local-takeover-20260803/relaxfix-consecutive/desktop-final/desktop.png`。
 
-完整包测试共运行 63 个 CTest 项。状态机 dry-run 的两条旧 transition-count 断言已更新并单独复跑通过；`test_fingertip_pad_geometry.py` 仍有 8/15 个静态 mesh 几何断言使用旧 DESCEND endpoint、旧 0.538 mm seating shift 和旧 attachment 假设。它们与本次 3/3 实时双侧接触证据不一致，未通过放宽断言伪造全绿；应另行重建静态几何模型与实时 contact manifold 的对应关系。
+本轮 fresh CTest 显式排除已知过期的 `test_fingertip_pad_geometry` 后为 `62/62` 通过。该静态 mesh 套件仍记录着旧 DESCEND endpoint、旧 0.538 mm seating shift 和旧 attachment 假设；本轮没有通过放宽断言伪造全绿，应另行重建静态几何模型与实时 contact manifold 的对应关系。
 
 ## 后续门
 

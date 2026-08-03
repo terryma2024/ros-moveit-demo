@@ -129,7 +129,7 @@ bool validTemporalContact(const std::optional<TemporalContactPolicy> & requested
            requested->allowed_pairs == support;
   }
   return requested->location == TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE &&
-         requested->allowed_pairs == gripper &&
+         (requested->allowed_pairs == support || requested->allowed_pairs == gripper) &&
          std::isfinite(requested->max_axial_clearance_m) &&
          requested->max_axial_clearance_m > 0.0;
 }

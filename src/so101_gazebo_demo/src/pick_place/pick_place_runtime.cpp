@@ -573,6 +573,7 @@ public:
     int consecutive = 0;
     int consecutive_unilateral = 0;
     bool regrasp_attempted = false;
+    bool regrasp_relaxed = false;
     for (int sample = 0; sample < max_samples; ++sample) {
       const auto observed = observer_->observe();
       if (!observed.snapshot) {
@@ -601,7 +602,24 @@ public:
         ++consecutive;
         consecutive_unilateral = 0;
         last = snapshot;
-        if (consecutive >= required_consecutive) break;
+        if (consecutive >= required_consecutive) {
+          if (before_lift_ && regrasp_attempted && !regrasp_relaxed) {
+            // The retry deliberately moves the cup into bilateral contact, but
+            // its deep squeeze is only a transient seating action.  Return to
+            // the calibrated wall target before attachment, then require a
+            // second full stable window so an over-compressed grasp can never
+            // be frozen into the Gazebo detachable joint.
+            const auto relaxed = gripper_->command(profile_.q6_contact);
+            const bool contact_abort = relaxed.status == ActionStatus::FAILED &&
+              relaxed.failure && relaxed.failure->code == "GRIPPER_ACTION_ABORTED";
+            if (relaxed.status != ActionStatus::SUCCEEDED && !contact_abort) return relaxed;
+            regrasp_relaxed = true;
+            consecutive = 0;
+            last.reset();
+          } else {
+            break;
+          }
+        }
       } else {
         consecutive = 0;
         ++consecutive_unilateral;
@@ -625,7 +643,8 @@ public:
       }
       if (sample + 1 < max_samples) std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    if (!last || consecutive < required_consecutive) {
+    if (!last || consecutive < required_consecutive ||
+        (regrasp_attempted && !regrasp_relaxed)) {
       return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
               "PHYSICAL_GRASP_BILATERAL_STABILITY_TIMEOUT",
               "Bilateral fixed-finger and moving-jaw contact did not remain stable after one bounded regrasp", {}}};

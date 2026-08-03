@@ -520,7 +520,7 @@ TEST(SO101FixedMotionTargets, ScopesPersistentAndBoundaryTouchPolicies)
   EXPECT_TRUE(policy.spec(spp::State::RECOVER_RETREAT)->validation.allowed_touch_pairs.empty());
   EXPECT_TRUE(policy.spec(spp::State::LIFT)->validation.allowed_touch_pairs.empty());
   const auto lift_policy = spp::TemporalContactPolicy{
-    {"plastic_cup:table"}, spp::TemporalContactLocation::FIRST_ONLY};
+    {"plastic_cup:table"}, spp::TemporalContactLocation::PREFIX_UNTIL_AXIAL_CLEARANCE, 0.012};
   EXPECT_EQ(policy.spec(spp::State::LIFT)->validation.temporal_contact_policy,
             lift_policy);
   EXPECT_EQ(policy.spec(spp::State::LIFT)->target.temporal_contact_policy,
