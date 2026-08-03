@@ -159,7 +159,7 @@ ament_target_dependencies(gazebo_attachment_state_relay rclcpp std_msgs)
 
 add_executable(reset_so101_world src/nodes/reset_so101_world.cpp)
 target_link_libraries(reset_so101_world pick_place_core)
-ament_target_dependencies(reset_so101_world rclcpp)
+ament_target_dependencies(reset_so101_world ament_index_cpp rclcpp)
 
 add_executable(so101_moveit_scene src/nodes/so101_moveit_scene.cpp)
 target_link_libraries(so101_moveit_scene pick_place_core)

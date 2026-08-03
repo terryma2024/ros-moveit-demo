@@ -34,6 +34,7 @@ struct TaskObjectSceneConfig
 {
   Pose3d spawn_pose;
   Pose3d place_pose;
+  Pose3d reset_parking_pose;
 };
 
 struct TaskObjectGraspFrameConfig

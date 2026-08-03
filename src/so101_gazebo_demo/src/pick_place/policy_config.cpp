@@ -304,11 +304,14 @@ TaskObjectConfig parseObject(const YAML::Node & root)
   }
 
   const auto scene = requireField(root, "scene", "object config");
-  rejectUnknownFields(scene, {"spawn_pose_xyz_xyzw", "place_pose_xyz_xyzw"}, "scene");
+  rejectUnknownFields(
+    scene, {"spawn_pose_xyz_xyzw", "place_pose_xyz_xyzw", "reset_parking_pose_xyz_xyzw"}, "scene");
   result.scene.spawn_pose =
     parsePose(requireField(scene, "spawn_pose_xyz_xyzw", "scene"), "spawn_pose_xyz_xyzw");
   result.scene.place_pose =
     parsePose(requireField(scene, "place_pose_xyz_xyzw", "scene"), "place_pose_xyz_xyzw");
+  result.scene.reset_parking_pose = parsePose(
+    requireField(scene, "reset_parking_pose_xyz_xyzw", "scene"), "reset_parking_pose_xyz_xyzw");
 
   const auto grasp = requireField(root, "grasp_frame", "object config");
   rejectUnknownFields(grasp,

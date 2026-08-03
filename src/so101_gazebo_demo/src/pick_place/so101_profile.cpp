@@ -29,6 +29,7 @@ SO101Profile SO101Profile::configured(const TaskObjectConfig & object,
   profile.task_object_near_wall_outward = object.grasp_frame.near_wall_outward_world;
   profile.task_object_pose = object.scene.spawn_pose;
   profile.place_task_object_pose = object.scene.place_pose;
+  profile.reset_parking_task_object_pose = object.scene.reset_parking_pose;
   profile.calibrated_grasp_relative_pose = object.grasp_frame.attachment_relative_pose;
   profile.q6_safe_lower = object.fingertip_pads.safe_lower_q6;
   profile.q6_home = profile.q6_safe_lower;

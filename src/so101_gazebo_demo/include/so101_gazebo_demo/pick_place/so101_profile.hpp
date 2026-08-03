@@ -39,6 +39,7 @@ struct SO101Profile
   Vec3 task_object_near_wall_outward{0.0, 1.0, 0.0};
   Pose3d task_object_pose{0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0};
   Pose3d place_task_object_pose{-0.08, -0.25, 0.165, 0.0, 0.0, 0.0, 1.0};
+  Pose3d reset_parking_task_object_pose{0.19, -0.44, 0.165, 0.0, 0.0, 0.0, 1.0};
   Pose3d calibrated_grasp_relative_pose{0.026397024348,  0.000172476372, -0.153948999996,
                                         -0.000000367000, 0.000000354000, 0.719203129000,
                                         0.694799870000};
