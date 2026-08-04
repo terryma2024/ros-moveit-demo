@@ -167,7 +167,7 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
   ASSERT_NE(nullptr, runtime.recovery_policy);
 }
 
-TEST(SO101Task3Runtime, GazeboAttachRetargetsPositionControllerToCalibratedCarryHold)
+TEST(SO101Task3Runtime, GazeboAttachHoldsAtObservedShallowContactInsteadOfResqueezing)
 {
   auto gripper = std::make_shared<FakeGripper>();
   auto attach = std::make_shared<FakeExecutor>();
@@ -177,14 +177,16 @@ TEST(SO101Task3Runtime, GazeboAttachRetargetsPositionControllerToCalibratedCarry
   const auto runtime = pick_place::makeSO101Task3Runtime(deps);
   auto * executor = runtime.actions.findExecutor(pick_place::State::ATTACH_GAZEBO);
   ASSERT_NE(nullptr, executor);
+  const auto & profile = pick_place::SO101Profile::canonical();
   pick_place::WorldSnapshot before;
-  before.joint_positions[pick_place::SO101Profile::canonical().gripper_joint] = 0.791;
+  before.joint_positions[profile.gripper_joint] =
+    profile.q6_contact + 0.5 * profile.contact_q6_stop_tolerance;
   const pick_place::ExecutionContext context{pick_place::State::ATTACH_GAZEBO,
                                              pick_place::State::ATTACH_MOVEIT, before, nullptr};
   EXPECT_EQ(pick_place::ActionStatus::SUCCEEDED, executor->execute(context).status);
   EXPECT_EQ(1, attach->calls);
   EXPECT_EQ(1, gripper->calls);
-  EXPECT_DOUBLE_EQ(pick_place::SO101Profile::canonical().q6_contact, gripper->last_q6);
+  EXPECT_DOUBLE_EQ(before.joint_positions.at(profile.gripper_joint), gripper->last_q6);
 }
 
 TEST(SO101Task3Runtime, GazeboAttachDoesNotPreserveTransientDeepRegrasp)

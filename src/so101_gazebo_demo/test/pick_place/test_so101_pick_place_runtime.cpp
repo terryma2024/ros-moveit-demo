@@ -780,6 +780,39 @@ TEST(SO101MoveItWorldObserver, ArmStationaryExcludesTheSeparatelyValidatedGrippe
                    result.snapshot->joint_velocities.at(profile.gripper_joint));
 }
 
+TEST(SO101MoveItWorldObserver, PositionWindowRejectsVelocitySpikesWithoutMaskingRealMotion)
+{
+  const auto & profile = spp::SO101Profile::canonical();
+  auto stable = validBoundary();
+  for (auto & velocity : stable->current.velocities)
+    velocity = profile.q6_velocity_tolerance * 15.0;
+  stable->current_after_scene = stable->current;
+  stable->current_after_scene->received_at = std::chrono::steady_clock::now();
+  spp::SO101MoveItWorldObserver stable_observer(
+    stable, profile, spp::SO101WorldObservationConfig{0.5, 2, 0.001, 0.003});
+
+  const auto stable_result = stable_observer.observe();
+
+  ASSERT_TRUE(stable_result.snapshot) << (stable_result.failure ? stable_result.failure->code : "");
+  EXPECT_TRUE(stable_result.snapshot->arm_stationary);
+  EXPECT_GT(std::abs(stable_result.snapshot->joint_velocities.at(profile.arm_joints.back())),
+            profile.q6_velocity_tolerance);
+
+  auto moving = validBoundary();
+  for (auto & velocity : moving->current.velocities)
+    velocity = profile.q6_velocity_tolerance * 15.0;
+  moving->current_after_scene = moving->current;
+  moving->current_after_scene->received_at = std::chrono::steady_clock::now();
+  moving->current_after_scene->positions.back() += 0.001;
+  spp::SO101MoveItWorldObserver moving_observer(
+    moving, profile, spp::SO101WorldObservationConfig{0.5, 2, 0.001, 0.003});
+
+  const auto moving_result = moving_observer.observe();
+
+  ASSERT_TRUE(moving_result.snapshot) << (moving_result.failure ? moving_result.failure->code : "");
+  EXPECT_FALSE(moving_result.snapshot->arm_stationary);
+}
+
 TEST(SO101RuntimeRegistries, RejectNullAndDuplicateEntries)
 {
   auto action = std::make_shared<StubPlannerExecutor>();
@@ -820,6 +853,25 @@ TEST(SO101MotionContract, FullOpenMotionUsesJointOnlySemantics)
   const auto result = contract->validatePrecondition(detachedMotionWorld(*spec, profile));
 
   EXPECT_TRUE(result.ok) << (result.failures.empty() ? "" : result.failures.front().code);
+}
+
+TEST(SO101PickPlaceRuntime, CarryPlanUsesAbsoluteAttachmentTiltTolerance)
+{
+  const auto profile = configuredProfile();
+  const spp::Pose3d observed{0.02, 0.0, -0.04, 0.0, 0.0, 0.0, 1.0};
+  const auto tilted = [&](double angle) {
+    const double half = angle * 0.5;
+    return spp::Pose3d{observed.x, observed.y, observed.z,    std::sin(half),
+                       0.0,        0.0,        std::cos(half)};
+  };
+  const double between_drift_and_attachment =
+    0.5 * (profile.task_object_orientation_drift_tolerance_rad +
+           profile.task_object_attachment_orientation_tolerance_rad);
+
+  EXPECT_TRUE(spp::withinSO101AttachmentModelTolerance(
+    observed, tilted(between_drift_and_attachment), profile));
+  EXPECT_FALSE(spp::withinSO101AttachmentModelTolerance(
+    observed, tilted(profile.task_object_attachment_orientation_tolerance_rad + 0.001), profile));
 }
 
 TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)

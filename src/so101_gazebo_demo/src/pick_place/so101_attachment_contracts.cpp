@@ -197,6 +197,7 @@ void requireSameWallSurfaceContact(ValidationResult & result, const WorldSnapsho
           std::string(finger) + " has no fresh cup contact samples");
       return;
     }
+    bool has_surface_witness = false;
     for (const auto & sample : samples) {
       const double normal_norm = norm(sample.normal_toward_finger_world);
       const double alignment = normal_norm > 1e-12
@@ -225,10 +226,9 @@ void requireSameWallSurfaceContact(ValidationResult & result, const WorldSnapsho
         add(result, FailureCategory::COLLISION, "GRASP_CONTACT_SAMPLE_INVALID",
             std::string(finger) + " contact point, normal or depth violates policy");
       }
-      if ((outside && (alignment <= 0.5 || local_alignment <= 0.5)) ||
-          (!outside && (alignment >= -0.5 || local_alignment >= -0.5))) {
-        add(result, FailureCategory::COLLISION, "GRASP_CONTACT_SURFACE_MISMATCH",
-            std::string(finger) + " contact normal is on the wrong wall surface");
+      if ((outside && alignment > 0.5 && local_alignment > 0.5) ||
+          (!outside && alignment < -0.5 && local_alignment < -0.5)) {
+        has_surface_witness = true;
       }
       if (!std::isfinite(below_rim) || !std::isfinite(bottom_clearance) ||
           below_rim < policy.min_below_rim_m || below_rim > policy.max_below_rim_m ||
@@ -236,6 +236,10 @@ void requireSameWallSurfaceContact(ValidationResult & result, const WorldSnapsho
         add(result, FailureCategory::COLLISION, "GRASP_CONTACT_VERTICAL_BAND_MISMATCH",
             std::string(finger) + " contact is too close to the rim or cup bottom");
       }
+    }
+    if (!has_surface_witness) {
+      add(result, FailureCategory::COLLISION, "GRASP_CONTACT_SURFACE_MISMATCH",
+          std::string(finger) + " has no contact normal on the configured wall surface");
     }
   };
   validate_finger(snapshot.gazebo_task_object_fixed_finger_contacts, true, "fixed finger");
