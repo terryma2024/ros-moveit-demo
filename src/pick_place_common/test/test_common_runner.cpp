@@ -147,6 +147,27 @@ public:
 private:
   Scenario & s_;
 };
+class ResumePolicy final : public pp::IResumeValidationPolicy
+{
+public:
+  pp::ValidationResult validateBoundary(const pp::Checkpoint &, const pp::WorldSnapshot &,
+                                        double) const override
+  {
+    return {true, {}, {}};
+  }
+  std::string fingerprintMismatchCode() const override
+  {
+    return "FINGERPRINT_MISMATCH";
+  }
+};
+class RecoveryPolicy final : public pp::IRecoveryPolicy
+{
+public:
+  pp::RecoveryRoute select(pp::State, const pp::Failure &, const pp::WorldSnapshot &) const override
+  {
+    return {std::nullopt, pp::Failure{pp::FailureCategory::INTERNAL, "NO_ROUTE", "No route", {}}};
+  }
+};
 pp::WorkflowDefinition workflow()
 {
   pp::WorkflowDefinition w;
@@ -155,6 +176,7 @@ pp::WorkflowDefinition workflow()
   w.action_states = {pp::State::MOVE_ABOVE_OBJECT};
   w.forward_states = {pp::State::IDLE, pp::State::MOVE_ABOVE_OBJECT, pp::State::DONE};
   w.terminal_states = {pp::State::DONE, pp::State::ERROR};
+  w.plan_only_states = {pp::State::MOVE_ABOVE_OBJECT};
   return w;
 }
 }  // namespace
@@ -186,6 +208,7 @@ TEST(CommonRunner, PlanOnlyDoesNotExecute)
 {
   Scenario s;
   Observer observer(s);
+  Store store(s);
   pp::StateActionRegistry actions;
   actions.registerPlanner(pp::State::MOVE_ABOVE_OBJECT, std::make_shared<Planner>(s));
   actions.registerExecutor(pp::State::MOVE_ABOVE_OBJECT, std::make_shared<Executor>(s));
@@ -194,10 +217,16 @@ TEST(CommonRunner, PlanOnlyDoesNotExecute)
                              std::make_shared<Contract>(s));
   pp::PlanValidatorRegistry validators;
   validators.registerValidator(pp::State::MOVE_ABOVE_OBJECT, std::make_shared<Validator>(s));
+  const pp::CommonResumeValidator resume_validator("fingerprint", "session",
+                                                   std::make_shared<ResumePolicy>());
+  const RecoveryPolicy recovery_policy;
   const auto w = workflow();
-  pp::StateMachineRunner runner(w, actions, contracts, &observer, nullptr, nullptr, nullptr,
-                                &validators);
-  const auto result = runner.run({pp::RunMode::PLAN_ONLY});
+  pp::StateMachineRunner runner(w, actions, contracts, &observer, &store, &resume_validator,
+                                nullptr, &validators, &recovery_policy);
+  pp::RunRequest request;
+  request.mode = pp::RunMode::PLAN_ONLY;
+  request.plan_only_state = pp::State::MOVE_ABOVE_OBJECT;
+  const auto result = runner.run(request);
   EXPECT_EQ(pp::RunStatus::PLAN_ONLY_COMPLETE, result.status);
   EXPECT_EQ(s.events.end(),
             std::find(s.events.begin(), s.events.end(), "execute:MOVE_ABOVE_OBJECT"));
