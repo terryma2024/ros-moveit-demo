@@ -14,8 +14,7 @@ TEST(WorkflowDefinition, RejectsMissingTransitionAndUnknownTarget)
   ASSERT_TRUE(failure);
   EXPECT_EQ("WORKFLOW_TRANSITION_MISSING", failure->code);
 
-  missing.transitions[pp::State::IDLE] =
-    {pp::State::PREPARE_OPEN_GRIPPER, pp::State::ERROR};
+  missing.transitions[pp::State::IDLE] = {pp::State::PREPARE_OPEN_GRIPPER, pp::State::ERROR};
   failure = pp::validateWorkflowDefinition(missing);
   ASSERT_TRUE(failure);
   EXPECT_EQ("WORKFLOW_TRANSITION_TARGET_UNKNOWN", failure->code);
@@ -43,10 +42,8 @@ TEST(WorkflowDefinition, ValidDefinitionDrivesStateMachine)
 {
   pp::WorkflowDefinition workflow;
   workflow.initial_state = pp::State::IDLE;
-  workflow.transitions[pp::State::IDLE] =
-    {pp::State::PREPARE_OPEN_GRIPPER, pp::State::ERROR};
-  workflow.transitions[pp::State::PREPARE_OPEN_GRIPPER] =
-    {pp::State::DONE, pp::State::ERROR};
+  workflow.transitions[pp::State::IDLE] = {pp::State::PREPARE_OPEN_GRIPPER, pp::State::ERROR};
+  workflow.transitions[pp::State::PREPARE_OPEN_GRIPPER] = {pp::State::DONE, pp::State::ERROR};
   workflow.action_states = {pp::State::PREPARE_OPEN_GRIPPER};
   workflow.forward_states = {pp::State::IDLE, pp::State::PREPARE_OPEN_GRIPPER, pp::State::DONE};
   workflow.terminal_states = {pp::State::DONE, pp::State::ERROR};
@@ -54,4 +51,22 @@ TEST(WorkflowDefinition, ValidDefinitionDrivesStateMachine)
   pp::StateMachine machine(workflow, pp::State::IDLE);
   EXPECT_EQ(pp::State::PREPARE_OPEN_GRIPPER, machine.advance(pp::ActionStatus::SUCCEEDED));
   EXPECT_EQ(pp::State::DONE, machine.advance(pp::ActionStatus::SUCCEEDED));
+}
+
+TEST(WorkflowDefinition, ResolvesBothEdgesTerminalSelfLoopsAndUnknownStates)
+{
+  pp::WorkflowDefinition workflow;
+  workflow.transitions[pp::State::IDLE] = {pp::State::DONE, pp::State::ERROR};
+  workflow.terminal_states = {pp::State::DONE, pp::State::ERROR};
+
+  EXPECT_EQ(pp::State::DONE,
+            pp::resolveTransition(workflow, pp::State::IDLE, pp::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pp::State::ERROR,
+            pp::resolveTransition(workflow, pp::State::IDLE, pp::ActionStatus::FAILED));
+  EXPECT_EQ(pp::State::DONE,
+            pp::resolveTransition(workflow, pp::State::DONE, pp::ActionStatus::FAILED));
+  EXPECT_EQ(pp::State::ERROR,
+            pp::resolveTransition(workflow, pp::State::ERROR, pp::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pp::State::ERROR, pp::resolveTransition(workflow, pp::State::MOVE_ABOVE_OBJECT,
+                                                    pp::ActionStatus::SUCCEEDED));
 }

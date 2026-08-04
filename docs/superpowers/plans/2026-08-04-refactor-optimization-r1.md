@@ -188,16 +188,16 @@ class PoseStabilityTracker {
 - Modify: `src/so101_gazebo_demo/src/pick_place/transition_table.cpp`
 - Modify: SO-101 transition-table tests/callers
 
-- [ ] 为公共 API 写 RED tests：
+- [x] 为公共 API 写 RED tests：
 
 ```cpp
 [[nodiscard]] State resolveTransition(const WorkflowDefinition &, State,
                                       ActionStatus) noexcept;
 ```
 
-- [ ] 覆盖 Panda 与 SO-101 每个 workflow state 的 `SUCCEEDED`/`FAILED` 结果、terminal 自环、未知 state 的当前兼容行为。
-- [ ] 两包 `TransitionTable::resolve()` 若仍是公开兼容入口，只能委托 `resolveTransition(<robotWorkflowDefinition>(), ...)`；`entries()` 只能返回 workflow definition 的 transitions view。
-- [ ] 删除两包重复 `StateMachine` 实现；现有消费者改用 `pick_place_common::StateMachine`。若公开 alias 必须保留，使用 `using StateMachine = pick_place_common::StateMachine` 或薄构造 wrapper，不保留 advance logic。
+- [x] 覆盖 Panda 与 SO-101 每个 workflow state 的 `SUCCEEDED`/`FAILED` 结果、terminal 自环、未知 state 的当前兼容行为。
+- [x] 两包 `TransitionTable::resolve()` 若仍是公开兼容入口，只能委托 `resolveTransition(<robotWorkflowDefinition>(), ...)`；`entries()` 只能返回 workflow definition 的 transitions view。
+- [x] 删除两包重复 `StateMachine` 实现；现有消费者改用 `pick_place_common::StateMachine`。若公开 alias 必须保留，使用 `using StateMachine = pick_place_common::StateMachine` 或薄构造 wrapper，不保留 advance logic。
 
 **Acceptance:** 全边 truth-table tests 逐项相等；`rg` 只找到 common 的 `StateMachine::advance` 实现；SO-101 特有状态未丢失。
 

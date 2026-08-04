@@ -6,6 +6,7 @@
 #include "pick_place_common/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/transition_table.hpp"
+#include "panda_gazebo_demo/pick_place/panda_workflow.hpp"
 
 namespace pp = panda_gazebo_demo::pick_place;
 
@@ -50,4 +51,17 @@ TEST(PandaWorkflowCharacterization, RequestDefaultsRemainStable)
   EXPECT_FALSE(request.resume);
   EXPECT_FALSE(request.fail_at);
   EXPECT_EQ(100U, request.max_state_transitions);
+}
+
+TEST(PandaWorkflowCharacterization, CompatibilityTableMatchesEveryWorkflowEdge)
+{
+  const auto & workflow = pp::pandaWorkflowDefinition();
+  for (const auto & [state, edges] : workflow.transitions) {
+    EXPECT_EQ(edges.succeeded, pp::TransitionTable::resolve(state, pp::ActionStatus::SUCCEEDED));
+    EXPECT_EQ(edges.failed, pp::TransitionTable::resolve(state, pp::ActionStatus::FAILED));
+  }
+  for (const auto state : workflow.terminal_states) {
+    EXPECT_EQ(state, pp::TransitionTable::resolve(state, pp::ActionStatus::SUCCEEDED));
+    EXPECT_EQ(state, pp::TransitionTable::resolve(state, pp::ActionStatus::FAILED));
+  }
 }
