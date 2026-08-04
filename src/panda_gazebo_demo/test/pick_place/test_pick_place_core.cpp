@@ -80,6 +80,16 @@ public:
   pick_place::ActionResult execute_result{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
 };
 
+class TestRecoveryPolicy final : public pick_place::IRecoveryPolicy
+{
+public:
+  [[nodiscard]] pick_place::RecoveryRoute select(pick_place::State, const pick_place::Failure &,
+                                                 const pick_place::WorldSnapshot &) const override
+  {
+    return {pick_place::State::RECOVER_RETREAT, std::nullopt};
+  }
+};
+
 pick_place::WorldSnapshot makeSnapshot()
 {
   pick_place::WorldSnapshot snapshot;
@@ -517,18 +527,28 @@ TEST(Runner, DryRunFailureTakesPriorityOverStopAfter)
   EXPECT_EQ("DRY_RUN_FAILURE_INJECTED", result.failure->code);
 }
 
-TEST(Runner, PlanOnlyUsesExactlyOnePlannerAndDoesNotAdvanceBusinessState)
+TEST(Runner, PlanOnlyExecutesPrepareThenPlansTargetWithoutExecutingTarget)
 {
   pick_place::StateActionRegistry actions;
   auto planner = std::make_shared<FakePlanner>();
+  auto prepare_executor = std::make_shared<FakeExecutor>();
+  auto target_executor = std::make_shared<FakeExecutor>();
+  actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER, prepare_executor);
+  actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, target_executor);
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   pick_place::PlanValidatorRegistry plan_validators;
   plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
                                     std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
+  registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
+  registerMoveAboveObjectToDescendValidator(contracts);
   FakeObserver observer;
-  const pick_place::StateMachineRunner runner(actions, contracts, &observer, nullptr, nullptr,
-                                              nullptr, &plan_validators);
+  FakeCheckpointStore checkpoints;
+  const auto common_resume_validator = makeCommonResumeValidator();
+  const TestRecoveryPolicy recovery_policy;
+  const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
+                                              &common_resume_validator, nullptr, &plan_validators,
+                                              &recovery_policy);
 
   const auto result = runner.run(
     makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, false, std::nullopt, 100));
@@ -536,11 +556,16 @@ TEST(Runner, PlanOnlyUsesExactlyOnePlannerAndDoesNotAdvanceBusinessState)
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
   EXPECT_EQ(pick_place::State::DESCEND, *result.next_state);
   EXPECT_EQ(1, planner->calls);
+  EXPECT_EQ(1, prepare_executor->calls);
+  EXPECT_EQ(0, target_executor->calls);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, planner->last_state);
   EXPECT_EQ(pick_place::State::DESCEND, planner->last_next_state);
   ASSERT_TRUE(planner->last_observation.snapshot.has_value());
   EXPECT_EQ("test-session", planner->last_observation.snapshot->simulation_session_id);
-  EXPECT_EQ(1, observer.calls);
+  EXPECT_EQ(3, observer.calls);
+  ASSERT_TRUE(checkpoints.checkpoint);
+  EXPECT_EQ(pick_place::RunMode::EXECUTE, checkpoints.checkpoint->source_mode);
+  EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, checkpoints.checkpoint->next_state);
 }
 
 TEST(Runner, RejectsPlannedExecuteStateWithoutPlanValidator)
@@ -823,18 +848,24 @@ TEST(Runner, ResumePlanOnlyValidatesCheckpointAndPlansMoveAboveWithoutCommitting
 {
   pick_place::StateActionRegistry actions;
   auto planner = std::make_shared<FakePlanner>();
+  actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER,
+                           std::make_shared<FakeExecutor>());
+  actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, std::make_shared<FakeExecutor>());
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   pick_place::PlanValidatorRegistry plan_validators;
   plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
                                     std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
+  registerMoveAboveObjectToDescendValidator(contracts);
   FakeObserver observer;
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeCheckpoint(observer.snapshot);
   const auto common_resume_validator = makeCommonResumeValidator();
+  const TestRecoveryPolicy recovery_policy;
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
-                                              &common_resume_validator, nullptr, &plan_validators);
+                                              &common_resume_validator, nullptr, &plan_validators,
+                                              &recovery_policy);
 
   const auto result = runner.run(
     makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100));
@@ -850,12 +881,16 @@ TEST(Runner, ResumePlanOnlyWaitsForForwardCokeStationaryEvidence)
 {
   pick_place::StateActionRegistry actions;
   auto planner = std::make_shared<FakePlanner>();
+  actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER,
+                           std::make_shared<FakeExecutor>());
+  actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, std::make_shared<FakeExecutor>());
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
   pick_place::PlanValidatorRegistry plan_validators;
   plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
                                     std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
+  registerMoveAboveObjectToDescendValidator(contracts);
   FakeObserver observer;
   observer.snapshot.gazebo_task_object_stationary = false;
   observer.after_snapshot = observer.snapshot;
@@ -866,8 +901,10 @@ TEST(Runner, ResumePlanOnlyWaitsForForwardCokeStationaryEvidence)
   checkpoints.load_result.checkpoint = makeCheckpoint(checkpoint_snapshot);
   checkpoints.load_result.checkpoint->expected.gazebo_task_object_stationary = true;
   const auto common_resume_validator = makeCommonResumeValidator();
+  const TestRecoveryPolicy recovery_policy;
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
-                                              &common_resume_validator, nullptr, &plan_validators);
+                                              &common_resume_validator, nullptr, &plan_validators,
+                                              &recovery_policy);
 
   const auto result = runner.run(
     makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100));
@@ -978,16 +1015,25 @@ TEST(Runner, ResumeRejectsWorldMismatchBeforePlanning)
 {
   pick_place::StateActionRegistry actions;
   auto planner = std::make_shared<FakePlanner>();
+  actions.registerExecutor(pick_place::State::PREPARE_OPEN_GRIPPER,
+                           std::make_shared<FakeExecutor>());
+  actions.registerExecutor(pick_place::State::MOVE_ABOVE_OBJECT, std::make_shared<FakeExecutor>());
   actions.registerPlanner(pick_place::State::MOVE_ABOVE_OBJECT, planner);
+  pick_place::PlanValidatorRegistry plan_validators;
+  plan_validators.registerValidator(pick_place::State::MOVE_ABOVE_OBJECT,
+                                    std::make_shared<pick_place::NonEmptyPlanValidator>());
   pick_place::TransitionContractRegistry contracts;
   registerPrepareOpenGripperToMoveAboveObjectValidator(contracts);
+  registerMoveAboveObjectToDescendValidator(contracts);
   FakeObserver observer;
   observer.snapshot.tcp_pose_world.x = 0.5;
   FakeCheckpointStore checkpoints;
   checkpoints.load_result.checkpoint = makeCheckpoint(makeSnapshot());
   const auto common_resume_validator = makeCommonResumeValidator();
+  const TestRecoveryPolicy recovery_policy;
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
-                                              &common_resume_validator);
+                                              &common_resume_validator, nullptr, &plan_validators,
+                                              &recovery_policy);
 
   const auto result = runner.run(
     makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100));

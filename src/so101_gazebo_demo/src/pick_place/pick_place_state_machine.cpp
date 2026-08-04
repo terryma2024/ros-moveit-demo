@@ -9,6 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
+#include "pick_place_common/run_request_validation.hpp"
 #include "so101_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "so101_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "so101_gazebo_demo/pick_place/follow_joint_trajectory_gripper_adapter.hpp"
@@ -82,6 +83,14 @@ std::optional<CliOptions> parse(int argc, char ** argv)
         if (!state)
           return std::nullopt;
         options.request.stop_after = *state;
+      }
+    } else if (argument == "--plan-only-state" && i + 1 < arguments.size()) {
+      const std::string & value = arguments[++i];
+      if (!value.empty()) {
+        const auto state = spp::stateFromString(value);
+        if (!state)
+          return std::nullopt;
+        options.request.plan_only_state = *state;
       }
     } else if (argument == "--resume") {
       options.request.resume = true;
@@ -170,13 +179,9 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       auto session = spp::resolveSimulationSessionId(options.request.mode, options.request.resume,
                                                      options.simulation_session_id, milliseconds);
       if (!session.value) {
-        if (options.request.mode == spp::RunMode::PLAN_ONLY && !options.request.resume) {
-          session.value = "plan-only-" + std::to_string(milliseconds);
-        } else {
-          std::cerr << session.error << '\n';
-          rclcpp::shutdown();
-          return 2;
-        }
+        std::cerr << session.error << '\n';
+        rclcpp::shutdown();
+        return 2;
       }
 
       auto boundary = std::make_shared<spp::MoveItJointPlanningBoundary>(node, profile);
@@ -285,11 +290,17 @@ int main(int argc, char ** argv)
   }
   if (!options) {
     std::cerr << "usage: pick_place_state_machine [--mode dry_run|plan_only|execute] "
-                 "[--fail-at STATE] [--stop-after STATE] [--resume [true|false]] [--step] "
+                 "[--fail-at STATE] [--stop-after STATE] [--plan-only-state STATE] "
+                 "[--resume [true|false]] [--step] "
                  "[--force-continue] "
                  "[--checkpoint PATH] [--session-id ID] "
                  "[--object-config PATH] [--motion-policy PATH] "
                  "[--validation-policy PATH]\n";
+    return 2;
+  }
+  if (const auto failure =
+        pick_place_common::validateRunRequest(spp::so101WorkflowDefinition(), options->request)) {
+    printPreRunnerFailure(*failure);
     return 2;
   }
   const auto loaded = spp::loadPolicyBundle(options->policy_paths);
@@ -302,7 +313,9 @@ int main(int argc, char ** argv)
               << '\n';
     return 2;
   }
-  printPolicyProvenance(*loaded.bundle, options->request.stop_after);
+  printPolicyProvenance(*loaded.bundle,
+                        options->request.plan_only_state.value_or(
+                          options->request.stop_after.value_or(spp::State::MOVE_ABOVE_OBJECT)));
   if (options->request.mode == spp::RunMode::DRY_RUN) {
     spp::StateMachineRunner runner;
     const auto result = runner.run(options->request);
