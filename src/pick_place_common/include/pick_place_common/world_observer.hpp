@@ -6,18 +6,9 @@
 #include <string>
 #include <vector>
 #include "pick_place_common/domain_types.hpp"
+#include "pick_place_common/pose_geometry.hpp"
 namespace pick_place_common
 {
-struct Pose3d
-{
-  double x{0};
-  double y{0};
-  double z{0};
-  double qx{0};
-  double qy{0};
-  double qz{0};
-  double qw{1};
-};
 struct ContactVector3
 {
   double x{0.0};
@@ -76,6 +67,4 @@ public:
   virtual ~IWorldObserver() = default;
   virtual ObservationResult observe() = 0;
 };
-[[nodiscard]] double positionDistance(const Pose3d &, const Pose3d &) noexcept;
-[[nodiscard]] double orientationDistance(const Pose3d &, const Pose3d &) noexcept;
 }  // namespace pick_place_common

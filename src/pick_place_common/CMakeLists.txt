@@ -9,12 +9,13 @@ add_library(pick_place_common_core
   src/common_resume_validator.cpp
   src/domain_types.cpp
   src/plan_validation.cpp
+  src/pose_geometry.cpp
+  src/pose_stability_tracker.cpp
   src/runner.cpp
   src/simulation_session_id.cpp
   src/state_action.cpp
   src/transition_contract.cpp
   src/workflow_definition.cpp
-  src/world_observer.cpp
 )
 target_compile_features(pick_place_common_core PUBLIC cxx_std_17)
 target_include_directories(pick_place_common_core PUBLIC
@@ -57,6 +58,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_workflow_definition pick_place_common_core)
   ament_add_gtest(test_common_runner test/test_common_runner.cpp)
   target_link_libraries(test_common_runner pick_place_common_core)
+  ament_add_gtest(test_pose_geometry test/test_pose_geometry.cpp)
+  target_link_libraries(test_pose_geometry pick_place_common_core)
+  ament_add_gtest(test_pose_stability_tracker test/test_pose_stability_tracker.cpp)
+  target_link_libraries(test_pose_stability_tracker pick_place_common_core)
   ament_add_gtest(test_gazebo_attachment_executor test/test_gazebo_attachment_executor.cpp)
   target_link_libraries(test_gazebo_attachment_executor pick_place_common_ros_adapters)
   ament_add_gtest(test_moveit_scene_executor test/test_moveit_scene_executor.cpp)
