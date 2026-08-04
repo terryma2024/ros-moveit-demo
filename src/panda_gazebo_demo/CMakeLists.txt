@@ -206,6 +206,9 @@ pick_place_common_add_cpp_quality_gate(
 )
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_source_manifest test/test_source_manifest.py)
+
   ament_add_gtest(
     test_workflow_characterization
     test/pick_place/test_workflow_characterization.cpp
