@@ -77,7 +77,7 @@ endif()
 
 add_library(
   panda_pick_place_runtime
-  src/pick_place/cartesian_plan_validation.cpp
+  src/pick_place/motion_plan_evidence.cpp
   src/pick_place/gripper_state_executor.cpp
   src/pick_place/motion_state_action.cpp
   src/pick_place/named_target_validation.cpp
@@ -116,8 +116,6 @@ add_library(
   src/pick_place/gripper_command_adapter.cpp
   src/pick_place/moveit_scene_adapter.cpp
   src/pick_place/moveit_motion_adapter.cpp
-  src/pick_place/descend_planner_executor.cpp
-  src/pick_place/move_above_object_planner.cpp
 )
 target_link_libraries(
   panda_pick_place_ros_adapters
