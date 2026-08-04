@@ -214,8 +214,8 @@ class PoseStabilityTracker {
 - Modify: `src/panda_gazebo_demo/src/pick_place/transition_contract.cpp`
 - Modify: Panda registry/runtime/tests
 
-- [ ] 先写一个通过真实 `pick_place_common::StateMachineRunner` 的 RED test：Panda contract precondition/postcondition/resume 失败时，当前 `withBoundaryFailureMetrics()` 指标缺失，证明同名非虚方法隐藏是 effective-dead seam。
-- [ ] 在 common 增加显式 decorator：
+- [x] 先写一个通过真实 `pick_place_common::StateMachineRunner` 的 RED test：Panda contract precondition/postcondition/resume 失败时，当前 `withBoundaryFailureMetrics()` 指标缺失，证明同名非虚方法隐藏是 effective-dead seam。
+- [x] 在 common 增加显式 decorator：
 
 ```cpp
 class ITransitionValidationDecorator {
@@ -231,10 +231,10 @@ class ITransitionValidationDecorator {
 };
 ```
 
-- [ ] `pick_place_common::TransitionContractRegistry` 持有可空 `shared_ptr<const ITransitionValidationDecorator>`，并在自己的三个 validation 方法内调用；没有 decorator 时结果逐字节语义等价。
-- [ ] 把 Panda `withBoundaryFailureMetrics()` 变成 `PandaBoundaryMetricsDecorator`，Panda registry 只负责构造 common registry 与 `validateExecuteCoverage(pandaWorkflowDefinition())`，删除同名 `validate*` 隐藏方法。
-- [ ] SO-101 使用 null/default decorator，现有错误码和 metrics 不变。
-- [ ] tests 覆盖 decorator 调用恰好一次、成功不凭空失败、失败 metrics 同时出现在 result 和每个 Failure、pre/post/resume 三条路径。
+- [x] `pick_place_common::TransitionContractRegistry` 持有可空 `shared_ptr<const ITransitionValidationDecorator>`，并在自己的三个 validation 方法内调用；没有 decorator 时结果逐字节语义等价。
+- [x] 把 Panda `withBoundaryFailureMetrics()` 变成 `PandaBoundaryMetricsDecorator`，Panda registry 只负责构造 common registry 与 `validateExecuteCoverage(pandaWorkflowDefinition())`，删除同名 `validate*` 隐藏方法。
+- [x] SO-101 使用 null/default decorator，现有错误码和 metrics 不变。
+- [x] tests 覆盖 decorator 调用恰好一次、成功不凭空失败、失败 metrics 同时出现在 result 和每个 Failure、pre/post/resume 三条路径。
 
 **Acceptance:** runner-level RED 转 GREEN；Panda direct-wrapper-only tests 被 runner composition tests 替代；common/SO-101 无 decorator regression 全绿。
 

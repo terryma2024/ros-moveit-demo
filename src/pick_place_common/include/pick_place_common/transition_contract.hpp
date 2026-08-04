@@ -2,6 +2,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <utility>
 #include "pick_place_common/plan_validation.hpp"
 #include "pick_place_common/workflow_definition.hpp"
 namespace pick_place_common
@@ -15,11 +16,28 @@ struct TransitionKey
     return a.from != b.from ? a.from < b.from : a.to < b.to;
   }
 };
+class ITransitionValidationDecorator
+{
+public:
+  virtual ~ITransitionValidationDecorator() = default;
+  virtual ValidationResult decoratePrecondition(TransitionKey, const WorldSnapshot &,
+                                                ValidationResult) const = 0;
+  virtual ValidationResult decoratePostcondition(TransitionKey, const WorldSnapshot &,
+                                                 const WorldSnapshot &, const ActionResult &,
+                                                 ValidationResult) const = 0;
+  virtual ValidationResult decorateResume(TransitionKey, const WorldSnapshot &,
+                                          const WorldSnapshot &, ValidationResult) const = 0;
+};
 class TransitionContractRegistry
 {
 public:
-  explicit TransitionContractRegistry(bool reject_null = true, bool reject_duplicate = true) :
-    reject_null_(reject_null), reject_duplicate_(reject_duplicate) {}
+  explicit TransitionContractRegistry(
+    bool reject_null = true, bool reject_duplicate = true,
+    std::shared_ptr<const ITransitionValidationDecorator> decorator = nullptr) :
+      reject_null_(reject_null), reject_duplicate_(reject_duplicate),
+      decorator_(std::move(decorator))
+  {
+  }
   class ITransitionContract
   {
   public:
@@ -40,6 +58,7 @@ public:
 private:
   bool reject_null_;
   bool reject_duplicate_;
+  std::shared_ptr<const ITransitionValidationDecorator> decorator_;
   std::map<TransitionKey, std::shared_ptr<const ITransitionContract>> contracts_;
 };
 class AlwaysPassValidator final : public TransitionContractRegistry::ITransitionContract

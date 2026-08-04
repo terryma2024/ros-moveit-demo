@@ -93,29 +93,34 @@ void validateCrossWorldConsistency(ValidationResult & result, const WorldSnapsho
 
 }  // namespace
 
-ValidationResult
-TransitionContractRegistry::validatePrecondition(TransitionKey key,
-                                                 const WorldSnapshot & before) const
+ValidationResult PandaBoundaryMetricsDecorator::decoratePrecondition(TransitionKey,
+                                                                     const WorldSnapshot & before,
+                                                                     ValidationResult result) const
 {
-  return withBoundaryFailureMetrics(
-    pick_place_common::TransitionContractRegistry::validatePrecondition(key, before), before);
+  return withBoundaryFailureMetrics(std::move(result), before);
 }
 
-ValidationResult TransitionContractRegistry::validate(TransitionKey key,
-                                                      const WorldSnapshot & before,
-                                                      const WorldSnapshot & after,
-                                                      const ActionResult & action_result) const
+ValidationResult PandaBoundaryMetricsDecorator::decoratePostcondition(TransitionKey,
+                                                                      const WorldSnapshot & before,
+                                                                      const WorldSnapshot & after,
+                                                                      const ActionResult &,
+                                                                      ValidationResult result) const
 {
-  return withBoundaryFailureMetrics(
-    pick_place_common::TransitionContractRegistry::validate(key, before, after, action_result),
-    before, &after);
+  return withBoundaryFailureMetrics(std::move(result), before, &after);
 }
 
-ValidationResult TransitionContractRegistry::validateResume(TransitionKey key,
-                                                            const WorldSnapshot & expected,
-                                                            const WorldSnapshot & current) const
+ValidationResult PandaBoundaryMetricsDecorator::decorateResume(TransitionKey,
+                                                               const WorldSnapshot & expected,
+                                                               const WorldSnapshot & current,
+                                                               ValidationResult result) const
 {
-  return validate(key, expected, current, {ActionStatus::SUCCEEDED, std::nullopt});
+  return withBoundaryFailureMetrics(std::move(result), expected, &current);
+}
+
+TransitionContractRegistry::TransitionContractRegistry() :
+    pick_place_common::TransitionContractRegistry(
+      false, false, std::make_shared<const PandaBoundaryMetricsDecorator>())
+{
 }
 
 namespace

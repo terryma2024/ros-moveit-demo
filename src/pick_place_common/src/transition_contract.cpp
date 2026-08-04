@@ -24,14 +24,15 @@ ValidationResult TransitionContractRegistry::validatePrecondition(TransitionKey 
                                                                   const WorldSnapshot & world) const
 {
   const auto found = contracts_.find(key);
-  return found == contracts_.end() || !found->second
-           ? ValidationResult{false,
-                              {{FailureCategory::CONFIGURATION,
-                                "MISSING_TRANSITION_CONTRACT",
-                                "contract missing",
-                                {}}},
-                              {}}
-           : found->second->validatePrecondition(world);
+  auto result = found == contracts_.end() || !found->second
+                  ? ValidationResult{false,
+                                     {{FailureCategory::CONFIGURATION,
+                                       "MISSING_TRANSITION_CONTRACT",
+                                       "contract missing",
+                                       {}}},
+                                     {}}
+                  : found->second->validatePrecondition(world);
+  return decorator_ ? decorator_->decoratePrecondition(key, world, std::move(result)) : result;
 }
 
 ValidationResult TransitionContractRegistry::validate(TransitionKey key,
@@ -40,25 +41,39 @@ ValidationResult TransitionContractRegistry::validate(TransitionKey key,
                                                       const ActionResult & result) const
 {
   const auto found = contracts_.find(key);
-  return found == contracts_.end() || !found->second
-           ? ValidationResult{false,
-                              {{FailureCategory::CONFIGURATION,
-                                "MISSING_TRANSITION_CONTRACT",
-                                "contract missing",
-                                {}}},
-                              {}}
-           : found->second->validate(before, after, result);
+  auto validation = found == contracts_.end() || !found->second
+                      ? ValidationResult{false,
+                                         {{FailureCategory::CONFIGURATION,
+                                           "MISSING_TRANSITION_CONTRACT",
+                                           "contract missing",
+                                           {}}},
+                                         {}}
+                      : found->second->validate(before, after, result);
+  return decorator_
+           ? decorator_->decoratePostcondition(key, before, after, result, std::move(validation))
+           : validation;
 }
 
 ValidationResult TransitionContractRegistry::validateResume(TransitionKey key,
                                                             const WorldSnapshot & expected,
                                                             const WorldSnapshot & current) const
 {
-  return validate(key, expected, current, {ActionStatus::SUCCEEDED, {}});
+  const auto found = contracts_.find(key);
+  const ActionResult action{ActionStatus::SUCCEEDED, {}};
+  auto result = found == contracts_.end() || !found->second
+                  ? ValidationResult{false,
+                                     {{FailureCategory::CONFIGURATION,
+                                       "MISSING_TRANSITION_CONTRACT",
+                                       "contract missing",
+                                       {}}},
+                                     {}}
+                  : found->second->validate(expected, current, action);
+  return decorator_ ? decorator_->decorateResume(key, expected, current, std::move(result))
+                    : result;
 }
 
-std::optional<Failure> TransitionContractRegistry::validateExecuteCoverage(
-  const WorkflowDefinition & workflow) const
+std::optional<Failure>
+TransitionContractRegistry::validateExecuteCoverage(const WorkflowDefinition & workflow) const
 {
   for (const auto & [state, transitions] : workflow.transitions) {
     if (state == workflow.initial_state || !workflow.forward_states.count(state) ||
