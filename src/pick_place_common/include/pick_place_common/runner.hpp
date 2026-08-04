@@ -53,9 +53,9 @@ public:
 
 private:
   [[nodiscard]] RunResult runDryRun(const RunRequest &) const;
-  [[nodiscard]] RunResult runPlanOnly(const RunRequest &) const;
-  [[nodiscard]] RunResult runPlanOnly(State, const RunRequest &,
-                                      std::optional<ObservationResult> = std::nullopt) const;
+  [[nodiscard]] RunResult runPlanOnlyTarget(State, const RunRequest &,
+                                            std::optional<ObservationResult> = std::nullopt,
+                                            std::uint64_t checkpoint_sequence = 1) const;
   [[nodiscard]] RunResult runExecuteWorkflow(
     State, const RunRequest &, std::optional<WorldSnapshot> = std::nullopt,
     std::uint64_t checkpoint_sequence = 1, std::uint64_t initial_transition_count = 0,

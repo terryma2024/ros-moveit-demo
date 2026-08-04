@@ -5,6 +5,8 @@
 #include <thread>
 #include <utility>
 
+#include "pick_place_common/run_request_validation.hpp"
+
 namespace pick_place_common
 {
 
@@ -104,26 +106,11 @@ bool StateMachineRunner::forwardAction(State state) const
 
 RunResult StateMachineRunner::run(const RunRequest & request) const
 {
-  if (request.max_state_transitions == 0) {
-    return error(State::IDLE, {FailureCategory::CONFIGURATION,
-                               "INVALID_MAX_TRANSITIONS",
-                               "max_state_transitions must be greater than zero",
-                               {}});
+  if (const auto failure = validateRunRequest(workflow_, request)) {
+    return error(State::IDLE, *failure);
   }
-  if (request.fail_at.has_value() && request.mode != RunMode::DRY_RUN) {
-    return error(State::IDLE, {FailureCategory::CONFIGURATION,
-                               "FAIL_AT_MODE_MISMATCH",
-                               "fail_at is supported only in dry_run mode",
-                               {}});
-  }
-  if (behavior_policy_ && request.force_continue &&
-      (!request.resume || request.mode != RunMode::EXECUTE)) {
-    return error(State::IDLE, {FailureCategory::CONFIGURATION,
-                               "FORCE_CONTINUE_REQUEST_INVALID",
-                               "force_continue requires an execute resume",
-                               {}});
-  }
-  if (behavior_policy_ && request.mode == RunMode::EXECUTE) {
+  const bool plan_only = request.mode == RunMode::PLAN_ONLY;
+  if (plan_only || (behavior_policy_ && request.mode == RunMode::EXECUTE)) {
     if (!observer_ || !checkpoint_store_ || !resume_validator_) {
       return error(State::IDLE,
                    {FailureCategory::CONFIGURATION,
@@ -134,10 +121,23 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
     if (!recovery_policy_) {
       return error(State::IDLE, {FailureCategory::CONFIGURATION,
                                  "RECOVERY_POLICY_MISSING",
-                                 "execute requires a recovery policy",
+                                 "executable modes require a recovery policy",
                                  {}});
     }
-    for (const auto state : workflow_.action_states) {
+    std::vector<State> required_states;
+    if (plan_only) {
+      State state = resolve(workflow_.initial_state, ActionStatus::SUCCEEDED);
+      while (!terminal(state)) {
+        required_states.push_back(state);
+        if (state == *request.plan_only_state) {
+          break;
+        }
+        state = resolve(state, ActionStatus::SUCCEEDED);
+      }
+    } else {
+      required_states.assign(workflow_.action_states.begin(), workflow_.action_states.end());
+    }
+    for (const auto state : required_states) {
       const auto transition = workflow_.transitions.find(state);
       if (transition == workflow_.transitions.end()) {
         continue;
@@ -163,6 +163,12 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
                       "planner and plan validator registrations must be paired",
                       {}});
       }
+      if (plan_only && state == *request.plan_only_state && !has_planner) {
+        return error(state, {FailureCategory::CONFIGURATION,
+                             "PLANNER_NOT_REGISTERED",
+                             std::string("No planner is registered for ") + toString(state),
+                             {}});
+      }
     }
   }
   if (request.resume) {
@@ -172,7 +178,9 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
     case RunMode::DRY_RUN:
       return runDryRun(request);
     case RunMode::PLAN_ONLY:
-      return runPlanOnly(request);
+      return runExecuteWorkflow(resolve(workflow_.initial_state, ActionStatus::SUCCEEDED), request,
+                                std::nullopt, 1, 1, CheckpointPhase::FORWARD, std::nullopt,
+                                std::nullopt, true);
     case RunMode::EXECUTE:
       return runExecuteWorkflow(resolve(workflow_.initial_state, ActionStatus::SUCCEEDED), request,
                                 std::nullopt, 1, 1, CheckpointPhase::FORWARD, std::nullopt,
@@ -220,19 +228,18 @@ RunResult StateMachineRunner::runDryRun(const RunRequest & request) const
           trace};
 }
 
-RunResult StateMachineRunner::runPlanOnly(const RunRequest & request) const
+RunResult StateMachineRunner::runPlanOnlyTarget(State state, const RunRequest & request,
+                                                std::optional<ObservationResult> observation,
+                                                std::uint64_t checkpoint_sequence) const
 {
-  auto state =
-    request.stop_after.value_or(resolve(workflow_.initial_state, ActionStatus::SUCCEEDED));
-  while (!terminal(state) && actions_.findPlanner(state) == nullptr) {
-    state = resolve(state, ActionStatus::SUCCEEDED);
+  static_cast<void>(request);
+  auto * executor = actions_.findExecutor(state);
+  if (executor == nullptr) {
+    return error(state, {FailureCategory::CONFIGURATION,
+                         "EXECUTE_ACTION_NOT_REGISTERED",
+                         std::string("State requires an executor: ") + toString(state),
+                         {}});
   }
-  return runPlanOnly(state, request);
-}
-
-RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & request,
-                                          std::optional<ObservationResult> observation) const
-{
   auto * planner = actions_.findPlanner(state);
   if (planner == nullptr) {
     return error(state, {FailureCategory::PLANNING,
@@ -256,72 +263,36 @@ RunResult StateMachineRunner::runPlanOnly(State state, const RunRequest & reques
     observation = observer_->observe();
   }
   if (!observation->snapshot) {
-    return error(
-      state, observation->failure.value_or(Failure{FailureCategory::OBSERVATION,
-                                                   "TARGET_OBSERVATION_FAILED",
-                                                   "Could not observe the world before planning",
-                                                   {}}));
+    return handleActionFailure(
+      state, *executor,
+      observation->failure.value_or(Failure{FailureCategory::OBSERVATION,
+                                            "TARGET_OBSERVATION_FAILED",
+                                            "Could not observe the world before planning",
+                                            {}}),
+      checkpoint_sequence);
   }
   const auto next_state = resolve(state, ActionStatus::SUCCEEDED);
-  // SO-101's behavior policy opts plan-only into the same strict preflight used by execute.
-  // Panda's established plan-only contract intentionally plans from the observation directly.
-  if (behavior_policy_ != nullptr) {
-    const auto precondition =
-      contracts_.validatePrecondition({state, next_state}, *observation->snapshot);
-    if (!precondition.ok) {
-      return error(state, precondition.failures.front());
-    }
+  const auto precondition =
+    contracts_.validatePrecondition({state, next_state}, *observation->snapshot);
+  if (!precondition.ok) {
+    return handleActionFailure(state, *executor, precondition.failures.front(),
+                               checkpoint_sequence);
   }
   const auto plan = planner->plan(state, next_state, *observation);
   if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact) {
-    return error(state,
-                 plan.action.failure.value_or(Failure{FailureCategory::PLAN_VALIDATION,
-                                                      "EMPTY_PLAN_ARTIFACT",
-                                                      "Planner returned no usable trajectory",
-                                                      {}}));
+    return handleActionFailure(
+      state, *executor,
+      plan.action.failure.value_or(Failure{FailureCategory::PLAN_VALIDATION,
+                                           "EMPTY_PLAN_ARTIFACT",
+                                           "Planner returned no usable trajectory",
+                                           {}}),
+      checkpoint_sequence);
   }
   const auto plan_validation =
     plan_validators_->validate(state, *observation->snapshot, *plan.artifact);
   if (!plan_validation.ok) {
-    return error(state, plan_validation.failures.front());
-  }
-  if (request.stop_after) {
-    if (checkpoint_store_ == nullptr || resume_validator_ == nullptr) {
-      return error(state, {FailureCategory::CONFIGURATION,
-                           "PLAN_ONLY_CHECKPOINT_INFRASTRUCTURE_MISSING",
-                           "plan_only stop boundary requires checkpoint infrastructure",
-                           {}});
-    }
-    std::optional<State> predecessor;
-    for (const auto & [candidate, transitions] : workflow_.transitions) {
-      if (transitions.succeeded == state) {
-        if (predecessor) {
-          return error(state, {FailureCategory::CONFIGURATION,
-                               "PLAN_ONLY_PREDECESSOR_AMBIGUOUS",
-                               "plan_only state has multiple successful predecessors",
-                               {}});
-        }
-        predecessor = candidate;
-      }
-    }
-    if (!predecessor) {
-      return error(state, {FailureCategory::CONFIGURATION,
-                           "PLAN_ONLY_PREDECESSOR_MISSING",
-                           "plan_only state has no successful predecessor",
-                           {}});
-    }
-    Checkpoint checkpoint;
-    checkpoint.run_id = "pick_place_state_machine";
-    checkpoint.source_mode = RunMode::PLAN_ONLY;
-    checkpoint.last_completed_state = *predecessor;
-    checkpoint.next_state = state;
-    checkpoint.configuration_fingerprint = resume_validator_->configurationFingerprint();
-    checkpoint.simulation_session_id = resume_validator_->simulationSessionId();
-    setExpectedWorldState(checkpoint, *observation->snapshot);
-    if (const auto failure = checkpoint_store_->commit(checkpoint)) {
-      return error(state, *failure);
-    }
-    return {RunStatus::CHECKPOINT_COMPLETE, state, state, std::nullopt, 0, {state}};
+    return handleActionFailure(state, *executor, plan_validation.failures.front(),
+                               checkpoint_sequence);
   }
   return {RunStatus::PLAN_ONLY_COMPLETE, state, next_state, std::nullopt, 0};
 }
@@ -348,6 +319,38 @@ RunResult StateMachineRunner::runExecuteWorkflow(
               workflow_failure,
               transition_count,
               std::move(trace)};
+    }
+    if (phase == CheckpointPhase::FORWARD && request.mode == RunMode::PLAN_ONLY &&
+        state == *request.plan_only_state) {
+      std::optional<ObservationResult> target_observation;
+      if (initial_snapshot) {
+        target_observation = ObservationResult{*initial_snapshot, std::nullopt};
+      }
+      initial_snapshot.reset();
+      auto target =
+        runPlanOnlyTarget(state, request, std::move(target_observation), checkpoint_sequence);
+      if (target.status == RunStatus::PLAN_ONLY_COMPLETE) {
+        target.transition_count = transition_count;
+        target.state_trace = std::move(trace);
+        return target;
+      }
+      ++transition_count;
+      if (target.status == RunStatus::ERROR || !target.next_state) {
+        if (target.failure && workflow_failure) {
+          target.failure = withOriginalFailure(*target.failure, *workflow_failure);
+        }
+        target.transition_count = transition_count;
+        trace.push_back(State::ERROR);
+        target.state_trace = std::move(trace);
+        return target;
+      }
+      trace.push_back(*target.next_state);
+      phase = CheckpointPhase::RECOVERY;
+      failed_state = state;
+      workflow_failure = target.failure;
+      ++checkpoint_sequence;
+      state = *target.next_state;
+      continue;
     }
     const auto step = runExecuteStep(state, initial_snapshot, checkpoint_sequence, phase,
                                      failed_state, workflow_failure);
@@ -723,7 +726,8 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
                     {}});
     }
     if (request.mode == RunMode::PLAN_ONLY) {
-      return runPlanOnly(*route.next_state, request, ObservationResult{snapshot, std::nullopt});
+      return runPlanOnlyTarget(*route.next_state, request,
+                               ObservationResult{snapshot, std::nullopt}, checkpoint.sequence + 1);
     }
     return runExecuteWorkflow(*route.next_state, request, snapshot, checkpoint.sequence + 1, 0,
                               CheckpointPhase::RECOVERY, checkpoint.failed_state,
@@ -743,7 +747,8 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
     return error(checkpoint.next_state, transition_validation.failures.front());
   }
   if (request.mode == RunMode::PLAN_ONLY) {
-    return runPlanOnly(checkpoint.next_state, request, ObservationResult{snapshot, std::nullopt});
+    return runPlanOnlyTarget(checkpoint.next_state, request,
+                             ObservationResult{snapshot, std::nullopt}, checkpoint.sequence + 1);
   }
   return runExecuteWorkflow(checkpoint.next_state, request, snapshot, checkpoint.sequence + 1);
 }
