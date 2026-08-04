@@ -27,12 +27,6 @@ struct GripperEvidence
   std::optional<double> finger2_velocity;
 };
 
-struct AttachmentExpectation
-{
-  bool gazebo_attached{false};
-  bool moveit_attached{false};
-};
-
 [[nodiscard]] GripperEvidence gripperEvidence(const WorldSnapshot & snapshot);
 [[nodiscard]] ValidationResult validateGripperOpen(const WorldSnapshot & snapshot,
                                                    const GripperLimits & limits);

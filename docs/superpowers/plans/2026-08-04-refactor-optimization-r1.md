@@ -94,13 +94,13 @@ colcon test-result --verbose
 - Modify: `src/panda_gazebo_demo/CMakeLists.txt`
 - Modify/Delete: Panda tests that only assert these orphan types/APIs
 
-- [ ] 用 `rg -n` 和 CMake/install/docs 记录证明：生产 runtime 使用 `MotionStateAction`；`MoveAboveObjectPlanner` 没有构造者；`DescendPlannerExecutor` 只有类型继承测试；旧 `validateCartesianPlan()` 只有测试消费者；`cleanup_panda_demo.sh` 未安装、未 launch、未文档引用。
-- [ ] 删除 6 个 shadow sources，运行 manifest tests 到 GREEN。
-- [ ] 删除两个 old planner 类及其 type-only test/CMake source entry；不得删除当前 `MotionStateAction` 或现代 motion plan tests。
-- [ ] 将旧 Cartesian API 中仍有价值的边界用例迁到 `MotionPlanEvidence`/`validateMotionPlan()`，先让现代 API test RED，再删旧 API 和 CMake entry。
-- [ ] 删除未使用的 `AttachmentExpectation`。
-- [ ] 删除孤立且以宽泛进程清理为目的的 `cleanup_panda_demo.sh`；最终说明它为何不再是受支持 operator surface。
-- [ ] 运行两个 package manifest tests、Panda motion validation tests、Panda package build/test、`git diff --check`。
+- [x] 用 `rg -n` 和 CMake/install/docs 记录证明：生产 runtime 使用 `MotionStateAction`；`MoveAboveObjectPlanner` 没有构造者；`DescendPlannerExecutor` 只有类型继承测试；旧 `validateCartesianPlan()` 只有测试消费者；`cleanup_panda_demo.sh` 未安装、未 launch、未文档引用。
+- [x] 删除 6 个 shadow sources，运行 manifest tests 到 GREEN。
+- [x] 删除两个 old planner 类及其 type-only test/CMake source entry；不得删除当前 `MotionStateAction` 或现代 motion plan tests。
+- [x] 将旧 Cartesian API 中仍有价值的边界用例迁到 `MotionPlanEvidence`/`validateMotionPlan()`，用 characterization/mutation coverage 证明现代 API 后再删旧 API 和 CMake entry。当前源码已在现代 validator 中实现这些行为，因此测试在删除前即通过；未伪造生产 RED。
+- [x] 删除未使用的 `AttachmentExpectation`。
+- [x] 删除孤立且以宽泛进程清理为目的的 `cleanup_panda_demo.sh`；最终说明它为何不再是受支持 operator surface。
+- [x] 运行两个 package manifest tests、Panda motion validation tests、Panda package build/test、`git diff --check`。
 
 **Acceptance:** `rg` 对所有删除符号/文件名无生产残留；Panda runtime 构造路径不变；现代 motion validation 覆盖旧 API 的 finite/fraction/trajectory/limits 边界；两个 manifest allowlist 为空。
 

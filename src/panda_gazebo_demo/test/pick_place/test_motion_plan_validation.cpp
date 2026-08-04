@@ -91,6 +91,81 @@ TEST(CartesianLiftPlan, RejectsLateralMotion)
   EXPECT_TRUE(hasFailure(result, "CARTESIAN_LATERAL_DEVIATION_EXCEEDED"));
 }
 
+TEST(CartesianMotionPlan, AcceptsCompleteFiniteTrajectory)
+{
+  const auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+
+  EXPECT_TRUE(result.ok);
+  EXPECT_DOUBLE_EQ(1.0, result.metrics.at("cartesian_fraction"));
+  EXPECT_DOUBLE_EQ(0.05, result.metrics.at("max_joint_jump"));
+}
+
+TEST(CartesianMotionPlan, RejectsPartialPath)
+{
+  auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+  evidence.cartesian_fraction = 0.98;
+
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "CARTESIAN_FRACTION_BELOW_THRESHOLD"));
+}
+
+TEST(MotionPlan, RejectsEmptyTrajectory)
+{
+  auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+  evidence.trajectory_points = 0;
+  evidence.tcp_path.clear();
+
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "EMPTY_MOTION_TRAJECTORY"));
+}
+
+TEST(MotionPlan, RejectsJointJumpAboveLimit)
+{
+  auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+  evidence.max_joint_jump = 0.21;
+
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "MOTION_JOINT_JUMP_EXCEEDED"));
+}
+
+TEST(MotionPlan, RejectsNonFiniteTcpPath)
+{
+  auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+  evidence.tcp_path.front().x = std::numeric_limits<double>::quiet_NaN();
+
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "MOTION_TCP_PATH_NON_FINITE"));
+}
+
+TEST(MotionPlan, RejectsOrientationDriftAndWrongEndpoint)
+{
+  auto evidence = validEvidence(MotionKind::CARTESIAN_UP, kStart, kLiftTarget, true);
+  evidence.tcp_path.front() = {0.3, 0.0, 0.92, 0.7071067811865476, 0.0, 0.0, 0.7071067811865476};
+  evidence.end_tcp_pose.z -= 0.03;
+
+  const auto result =
+    validateMotionPlan(evidence, kLiftTarget, MotionKind::CARTESIAN_UP, true, MotionPlanLimits{});
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(hasFailure(result, "MOTION_ORIENTATION_DEVIATION_EXCEEDED"));
+  EXPECT_TRUE(hasFailure(result, "MOTION_ENDPOINT_POSITION_OUTSIDE_TOLERANCE"));
+}
+
 TEST(CartesianPlacePlan, RejectsUpwardSegment)
 {
   const Pose3d start{0.3, 0.2, 0.987, 1.0, 0.0, 0.0, 0.0};

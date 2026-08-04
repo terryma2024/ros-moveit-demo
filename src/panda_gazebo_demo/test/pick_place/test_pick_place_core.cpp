@@ -4,13 +4,10 @@
 #include <cmath>
 #include <limits>
 #include <memory>
-#include <type_traits>
 
 #include <moveit_msgs/msg/collision_object.hpp>
 
-#include "panda_gazebo_demo/pick_place/cartesian_plan_validation.hpp"
 #include "panda_gazebo_demo/pick_place/checkpoint.hpp"
-#include "panda_gazebo_demo/pick_place/descend_planner_executor.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_world_object_pose.hpp"
 #include "panda_gazebo_demo/pick_place/plan_validation.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
@@ -86,156 +83,9 @@ pick_place::WorldSnapshot makeSnapshot()
   return snapshot;
 }
 
-pick_place::CartesianPlanEvidence validDescendPlanEvidence()
-{
-  pick_place::CartesianPlanEvidence evidence;
-  evidence.fraction = 1.0;
-  evidence.trajectory_points = 3;
-  evidence.max_joint_delta = 0.05;
-  evidence.time_parameterized = true;
-  evidence.start_tcp_pose = {0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
-  evidence.tcp_path = {
-    {0.3, 0.0, 0.97, 1.0, 0.0, 0.0, 0.0},
-    {0.3, 0.0, 0.95, 1.0, 0.0, 0.0, 0.0},
-    {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0},
-  };
-  return evidence;
-}
-
-pick_place::CartesianPlanLimits descendPlanLimits()
-{
-  return {0.99, 0.2, 0.02, 0.1, 0.02, 0.1};
-}
-
 std::string firstFailureCode(const pick_place::ValidationResult & result)
 {
   return result.failures.empty() ? "" : result.failures.front().code;
-}
-
-TEST(CartesianPlanValidation, AcceptsCompleteVerticalDescent)
-{
-  const auto result = pick_place::validateCartesianPlan(
-    validDescendPlanEvidence(), {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_TRUE(result.ok);
-  EXPECT_DOUBLE_EQ(1.0, result.metrics.at("cartesian_fraction"));
-  EXPECT_DOUBLE_EQ(0.05, result.metrics.at("max_joint_delta"));
-  EXPECT_DOUBLE_EQ(0.0, result.metrics.at("max_lateral_deviation"));
-}
-
-TEST(DescendPlannerExecutor, ImplementsIndependentPlannerAndExecutorInterfaces)
-{
-  EXPECT_TRUE((std::is_base_of_v<pick_place::IStatePlanner, pick_place::DescendPlannerExecutor>));
-  EXPECT_TRUE((std::is_base_of_v<pick_place::IStateExecutor, pick_place::DescendPlannerExecutor>));
-}
-
-TEST(CartesianPlanValidation, RejectsPartialCartesianPath)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.fraction = 0.98;
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("CARTESIAN_FRACTION_BELOW_THRESHOLD", firstFailureCode(result));
-}
-
-TEST(CartesianPlanValidation, RejectsEmptyCartesianTrajectory)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.trajectory_points = 0;
-  evidence.tcp_path.clear();
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("EMPTY_CARTESIAN_TRAJECTORY", firstFailureCode(result));
-}
-
-TEST(CartesianPlanValidation, RejectsTrajectoryWithoutIncreasingTime)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.time_parameterized = false;
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("CARTESIAN_TRAJECTORY_NOT_TIME_PARAMETERIZED", firstFailureCode(result));
-}
-
-TEST(CartesianPlanValidation, RejectsAdjacentJointJump)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.max_joint_delta = 0.21;
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("CARTESIAN_JOINT_JUMP_EXCEEDED", firstFailureCode(result));
-}
-
-TEST(CartesianPlanValidation, RejectsLateralSweep)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.tcp_path[1].x = 0.321;
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("CARTESIAN_LATERAL_DEVIATION_EXCEEDED", firstFailureCode(result));
-}
-
-TEST(CartesianPlanValidation, RejectsUpwardMotion)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.tcp_path[1].z = 0.975;
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("CARTESIAN_PATH_NOT_MONOTONIC_DESCENT", firstFailureCode(result));
-}
-
-TEST(CartesianPlanValidation, RejectsOrientationDrift)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.tcp_path[1] = {0.3, 0.0, 0.95, 0.7071067811865476, 0.0, 0.0, 0.7071067811865476};
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("CARTESIAN_ORIENTATION_DEVIATION_EXCEEDED", firstFailureCode(result));
-}
-
-TEST(CartesianPlanValidation, RejectsWrongSixDofEndpoint)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.tcp_path.back().z = 0.909;
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("CARTESIAN_ENDPOINT_POSITION_OUTSIDE_TOLERANCE", firstFailureCode(result));
-}
-
-TEST(CartesianPlanValidation, RejectsNonFiniteTcpPathPose)
-{
-  auto evidence = validDescendPlanEvidence();
-  evidence.tcp_path[1].x = std::numeric_limits<double>::quiet_NaN();
-
-  const auto result = pick_place::validateCartesianPlan(
-    evidence, {0.3, 0.0, 0.93, 1.0, 0.0, 0.0, 0.0}, descendPlanLimits());
-
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ("CARTESIAN_TCP_PATH_NON_FINITE", firstFailureCode(result));
 }
 
 TEST(PickPlaceTargetPolicy, ReturnsFixedMoveAboveObjectTarget)
