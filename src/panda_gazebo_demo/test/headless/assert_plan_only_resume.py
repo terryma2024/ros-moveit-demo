@@ -38,8 +38,10 @@ expected_state = sys.argv[2]
 expected_phase = sys.argv[3]
 before_path = Path(sys.argv[4])
 after_path = Path(sys.argv[5])
-if expected_phase not in ('FORWARD', 'RECOVERY'):
+if expected_phase != 'FORWARD':
     fail(f'unsupported checkpoint phase {expected_phase}')
+if expected_state.startswith('RECOVER_'):
+    fail('recovery states are not valid plan-only targets')
 
 text = log_path.read_text(encoding='utf-8')
 before_bytes = before_path.read_bytes()
@@ -49,6 +51,8 @@ if before_bytes != after_bytes:
 checkpoint = json.loads(before_bytes)
 if checkpoint.get('schema_version') != 3:
     fail('checkpoint schema_version is not 3')
+if checkpoint.get('source_mode') != 'execute':
+    fail('plan-only target-entry checkpoint source_mode is not execute')
 if checkpoint.get('phase') != expected_phase:
     fail(
         f'checkpoint phase is {checkpoint.get("phase")}, '
@@ -64,8 +68,6 @@ if expected_phase == 'FORWARD' and next_state != expected_state:
     fail(
         f'forward checkpoint selects {next_state}, expected {expected_state}'
     )
-if expected_phase == 'RECOVERY' and not checkpoint.get('original_failure'):
-    fail('recovery checkpoint does not retain original_failure')
 
 load_pattern = (
     rf'CHECKPOINT_PHASE={expected_phase}\s+'
@@ -84,14 +86,16 @@ if 'Run failed:' in text:
     fail('plan-only log contains Run failed')
 if re.search(r'=\s*[-+]?(?:nan|inf(?:inity)?)\b', text, re.IGNORECASE):
     fail('plan-only log contains a non-finite numeric value')
-if re.search(r'EXECUTED_END_TCP_POSE|STATE_TRANSITION', text):
-    fail('plan-only log contains execute-time evidence')
+if re.search(
+    rf'(?:EXECUTED_END_TCP_POSE|STATE_TRANSITION|execute:|transition-validate:)[^\n]*'
+    rf'\b{re.escape(expected_state)}\b',
+    text,
+):
+    fail('plan-only log contains target execute/postcondition evidence')
 checkpoint_lines = re.findall(r'^.*CHECKPOINT_PHASE=.*$', text, re.MULTILINE)
 if any('resume_load=1' not in line for line in checkpoint_lines):
     fail('plan-only log contains a checkpoint commit')
-if expected_phase == 'FORWARD' and (
-    'RECOVER_' in text or 'CHECKPOINT_PHASE=RECOVERY' in text
-):
+if 'RECOVER_' in text or 'CHECKPOINT_PHASE=RECOVERY' in text:
     fail('forward plan-only resume entered recovery')
 
 named_target = re.search(
