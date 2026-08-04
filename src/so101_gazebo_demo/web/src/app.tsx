@@ -139,7 +139,8 @@ export function App() {
 
   const workflowCommand = async (operation: string, body: Record<string, unknown> = {}) => {
     const confirmation = operation === "reset" ? { confirmation: "CONFIRM WORKFLOW_RESET" } : {};
-    await call(`/workflow/${operation}`, { ...body, ...confirmation, run_id: workflow?.run_id });
+    const result = await call(`/workflow/${operation}`, { ...body, ...confirmation, run_id: workflow?.run_id });
+    if (operation === "reset" && result.succeeded) setWorkflow(undefined);
   };
 
   const targetPose = state.target.tcp ?? { frame_id: "world", tcp_frame: "so101_tcp", x_m: 0, y_m: 0, z_m: 0, roll_rad: 0, pitch_rad: 0, yaw_rad: 0 };

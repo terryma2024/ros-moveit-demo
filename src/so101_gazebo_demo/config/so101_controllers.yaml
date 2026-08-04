@@ -46,15 +46,15 @@ arm_controller:
 
     constraints:
       goal_time: 1.0
-      # A Gazebo-attached cup produces a repeatable 1.0-1.7 mrad transient arm
-      # tracking offset.  Let the generic controller action finish inside the reset
-      # contract's 2 mrad bound; the state-specific postcondition still
-      # enforces the tighter 0.25 mrad DESCEND endpoint where required.
-      "1": {trajectory: 0.0020, goal: 0.002}
-      "2": {trajectory: 0.0020, goal: 0.002}
-      "3": {trajectory: 0.0020, goal: 0.002}
-      "4": {trajectory: 0.0020, goal: 0.002}
-      "5": {trajectory: 0.0020, goal: 0.002}
+      # Gazebo carrying trials observed transient arm tracking errors up to
+      # 6.922 mrad.  The path tolerance covers that load disturbance without
+      # weakening the 2 mrad controller goal or the tighter state-specific
+      # endpoint postconditions (0.25 mrad at contact-critical boundaries).
+      "1": {trajectory: 0.0080, goal: 0.002}
+      "2": {trajectory: 0.0080, goal: 0.002}
+      "3": {trajectory: 0.0080, goal: 0.002}
+      "4": {trajectory: 0.0080, goal: 0.002}
+      "5": {trajectory: 0.0080, goal: 0.002}
 
 gripper_controller:
   ros__parameters:

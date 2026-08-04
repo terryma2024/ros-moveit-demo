@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <thread>
@@ -127,6 +128,25 @@ bool pollUntil(double timeout_seconds, double poll_interval_seconds, Predicate p
   return false;
 }
 
+bool setPoseSucceededOrDurablyConvergedAfterTimeout(
+  const ActionResult & command, const std::shared_ptr<IGazeboResetAdapter> & gazebo,
+  const Pose3d & expected_pose, std::uint64_t pose_revision_before, const WorldResetConfig & config)
+{
+  if (command.status == ActionStatus::SUCCEEDED) {
+    return true;
+  }
+  if (command.status != ActionStatus::TIMED_OUT || !command.failure ||
+      command.failure->code != "GAZEBO_SET_POSE_TIMEOUT") {
+    return false;
+  }
+  return pollUntil(config.timeout_seconds, config.poll_interval_seconds,
+                   [&gazebo, &expected_pose, pose_revision_before, &config]() {
+                     const auto state = gazebo->observe();
+                     return state && state->pose_revision > pose_revision_before &&
+                            poseMatches(state->task_object_world_pose, expected_pose, config);
+                   });
+}
+
 }  // namespace
 
 WorldResetCoordinator::WorldResetCoordinator(std::shared_ptr<IGazeboResetAdapter> gazebo,
@@ -222,7 +242,9 @@ ActionResult WorldResetCoordinator::reset()
   }
   const auto parking_pose_revision_before = gazebo_state->pose_revision;
   command = gazebo_->setTaskObjectWorldPose(config_.reset_parking_task_object_pose);
-  if (command.status != ActionStatus::SUCCEEDED)
+  if (!setPoseSucceededOrDurablyConvergedAfterTimeout(command, gazebo_,
+                                                      config_.reset_parking_task_object_pose,
+                                                      parking_pose_revision_before, config_))
     return command;
   command = moveit_->upsertTableWorldPose(config_.table_pose);
   if (command.status != ActionStatus::SUCCEEDED)
@@ -311,7 +333,8 @@ ActionResult WorldResetCoordinator::reset()
   }
   const auto pose_revision_before = gazebo_state->pose_revision;
   command = gazebo_->setTaskObjectWorldPose(config_.task_object_pose);
-  if (command.status != ActionStatus::SUCCEEDED) {
+  if (!setPoseSucceededOrDurablyConvergedAfterTimeout(command, gazebo_, config_.task_object_pose,
+                                                      pose_revision_before, config_)) {
     return command;
   }
   command = moveit_->upsertTaskObjectWorldPose(config_.task_object_pose);

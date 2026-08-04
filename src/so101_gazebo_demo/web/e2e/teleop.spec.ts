@@ -98,6 +98,7 @@ test("operator controls preserve targets and send audited command payloads", asy
       await new Promise((resolve) => setTimeout(resolve, 300));
       return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, snapshot_revision: 123, data: { workflow: { run_id: "run-e2e", current_state: "WAIT_GRASP_STABLE", next_state: "MICRO_LIFT" } } }) });
     }
+    if (path === "/workflow/run") return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, snapshot_revision: 125, data: { workflow: { run_id: "run-full", current_state: "DONE", next_state: null } } }) });
     if (path === "/workflow/step") return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true, snapshot_revision: 124, data: { workflow: { run_id: "run-e2e", current_state: "MICRO_LIFT", next_state: "ATTACH_GAZEBO" } } }) });
     return route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "OK", succeeded: true }) });
   });
@@ -122,12 +123,26 @@ test("operator controls preserve targets and send audited command payloads", asy
   await page.getByRole("button", { name: "Capture Gazebo window" }).click(); await expect(page.getByRole("link", { name: "Download latest Gazebo PNG" })).toHaveAttribute("href", "/captures/e2e.png");
   await expect(page.evaluate(async () => (await fetch("/captures/e2e.png")).headers.get("content-type"))).resolves.toContain("image/png");
   await page.getByRole("tab", { name: "Workflow" }).click();
+  await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Run" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Resume" })).toBeDisabled();
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("button", { name: "Starting…" })).toBeDisabled();
   await expect(page.getByText(/WAIT_GRASP_STABLE/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Run" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Resume" })).toBeEnabled();
   await page.getByRole("button", { name: "Next Step" }).click();
   await expect.poll(() => payloads.findLast((entry) => entry.path === "/workflow/step")?.body.snapshot_revision).toBe(123);
   await page.getByRole("button", { name: "Reset workflow" }).click(); await page.getByRole("button", { name: "Confirm Reset workflow" }).click(); await expect.poll(() => payloads.at(-1)?.body.confirmation).toBe("CONFIRM WORKFLOW_RESET");
+  await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Run" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Resume" })).toBeDisabled();
+  await page.getByRole("button", { name: "Run" }).click();
+  await expect.poll(() => payloads.at(-1)?.path).toBe("/workflow/run");
+  expect(payloads.at(-1)?.body.run_id).toBeUndefined();
+  await expect(page.getByRole("button", { name: "Resume" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Reset workflow" })).toBeEnabled();
   expect(consoleErrors).toEqual([]);
 });
 

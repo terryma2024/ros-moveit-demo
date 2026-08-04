@@ -342,6 +342,21 @@ TEST(SO101AttachmentContracts, RejectsWrongInsideOutsideNormals)
   EXPECT_FALSE(contract->validatePrecondition(snapshot).ok);
 }
 
+TEST(SO101AttachmentContracts, AcceptsEdgeNormalWhenFingerHasValidSurfaceWitness)
+{
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  auto snapshot = semanticWallGrasp();
+  auto edge_sample = contactSample("wall_near", 1.0, 0.020);
+  edge_sample.normal_toward_finger_world = {1.0, 0.0, 0.0};
+  edge_sample.normal_toward_finger_task_object = {1.0, 0.0, 0.0};
+  snapshot.gazebo_task_object_fixed_finger_contacts.push_back(edge_sample);
+
+  const auto result = contract->validatePrecondition(snapshot);
+
+  EXPECT_TRUE(result.ok) << failureCodes(result);
+}
+
 TEST(SO101AttachmentContracts, RejectsSemanticContactDepthAbovePolicyLimit)
 {
   const auto contract =
