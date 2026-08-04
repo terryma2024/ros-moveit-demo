@@ -12,6 +12,7 @@
 
 #include "panda_gazebo_demo/pick_place/gazebo_attachment_executor.hpp"
 #include "panda_gazebo_demo/pick_place/panda_attachment_convergence_policy.hpp"
+#include "panda_gazebo_demo/pick_place/panda_moveit_scene_policy.hpp"
 #include "panda_gazebo_demo/pick_place/gripper_state_executor.hpp"
 #include "panda_gazebo_demo/pick_place/motion_plan_evidence.hpp"
 #include "panda_gazebo_demo/pick_place/motion_state_action.hpp"
@@ -523,27 +524,19 @@ public:
 class FakeSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(const std::string &, const std::vector<std::string> &) override
+  ActionResult attachTaskObject(const MoveItAttachmentSpec &) override
   {
     return {ActionStatus::NOT_SUPPORTED, std::nullopt};
   }
-  ActionResult detachCoke() override
+  ActionResult detachTaskObject() override
   {
     ++detach_calls;
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
-  ActionResult syncCokeWorldPose(const Pose3d & pose) override
+  ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
     ++sync_calls;
     synchronized_pose = pose;
-    return {ActionStatus::SUCCEEDED, std::nullopt};
-  }
-  ActionResult upsertCokeWorldPose(const Pose3d & pose) override
-  {
-    return syncCokeWorldPose(pose);
-  }
-  ActionResult upsertTableWorldPose(const Pose3d &) override
-  {
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
   std::optional<MoveItSceneState> observe() override
@@ -701,10 +694,25 @@ TEST(RecoveryWorkflow, AlreadyDetachedCleanupNoOpsAndSynchronizes)
     0.001, true, std::make_shared<PandaAttachmentConvergencePolicy>(GripperLimits{}));
   const auto scene_adapter = std::make_shared<FakeSceneAdapter>();
   MoveItSceneExecutor moveit_detach(
-    scene_adapter, {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true});
+    scene_adapter,
+    {State::RECOVER_DETACH_MOVEIT,
+     MoveItSceneOperation::DETACH,
+     true,
+     "coke",
+     {"panda_hand", {"panda_hand", "panda_leftfinger", "panda_rightfinger"}},
+     2.0,
+     0.05},
+    std::make_shared<PandaMoveItScenePolicy>(GripperLimits{}, true));
   MoveItSceneExecutor synchronize(
-    scene_adapter, {State::RECOVER_SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, true}, 0.05,
-    0.001);
+    scene_adapter,
+    {State::RECOVER_SYNC_WORLD_OBJECT,
+     MoveItSceneOperation::SYNC,
+     true,
+     "coke",
+     {"panda_hand", {"panda_hand", "panda_leftfinger", "panda_rightfinger"}},
+     0.05,
+     0.001},
+    std::make_shared<PandaMoveItScenePolicy>(GripperLimits{}, true));
 
   EXPECT_EQ(
     open_executor

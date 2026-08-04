@@ -54,27 +54,17 @@ public:
 class FakeSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(const std::string &, const std::vector<std::string> &) override
+  ActionResult attachTaskObject(const MoveItAttachmentSpec &) override
   {
     return {ActionStatus::NOT_SUPPORTED, std::nullopt};
   }
 
-  ActionResult detachCoke() override
+  ActionResult detachTaskObject() override
   {
     return {ActionStatus::NOT_SUPPORTED, std::nullopt};
   }
 
-  ActionResult syncCokeWorldPose(const Pose3d &) override
-  {
-    return {ActionStatus::NOT_SUPPORTED, std::nullopt};
-  }
-
-  ActionResult upsertCokeWorldPose(const Pose3d &) override
-  {
-    return {ActionStatus::NOT_SUPPORTED, std::nullopt};
-  }
-
-  ActionResult upsertTableWorldPose(const Pose3d &) override
+  ActionResult upsertTaskObjectWorldPose(const Pose3d &) override
   {
     return {ActionStatus::NOT_SUPPORTED, std::nullopt};
   }

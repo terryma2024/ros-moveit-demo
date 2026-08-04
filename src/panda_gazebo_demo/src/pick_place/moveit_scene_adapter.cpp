@@ -64,16 +64,15 @@ MoveItSceneAdapter::MoveItSceneAdapter(const std::shared_ptr<rclcpp::Node> & nod
 
 MoveItSceneAdapter::~MoveItSceneAdapter() = default;
 
-ActionResult MoveItSceneAdapter::attachCoke(const std::string & link_name,
-                                            const std::vector<std::string> & touch_links)
+ActionResult MoveItSceneAdapter::attachTaskObject(const MoveItAttachmentSpec & spec)
 {
-  if (!impl_->move_group.attachObject(impl_->object_id, link_name, touch_links)) {
+  if (!impl_->move_group.attachObject(impl_->object_id, spec.link_name, spec.touch_links)) {
     return sceneFailure("MOVEIT_ATTACH_REQUEST_FAILED", "MoveIt rejected the Coke attach request");
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
-ActionResult MoveItSceneAdapter::detachCoke()
+ActionResult MoveItSceneAdapter::detachTaskObject()
 {
   if (!impl_->move_group.detachObject(impl_->object_id)) {
     return sceneFailure("MOVEIT_DETACH_REQUEST_FAILED", "MoveIt rejected the Coke detach request");
@@ -81,32 +80,7 @@ ActionResult MoveItSceneAdapter::detachCoke()
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
-ActionResult MoveItSceneAdapter::syncCokeWorldPose(const Pose3d & pose)
-{
-  if (impl_->planning_scene.getAttachedObjects({impl_->object_id}).count(impl_->object_id) != 0) {
-    return sceneFailure("MOVEIT_SYNC_OBJECT_ATTACHED",
-                        "Cannot synchronize Coke while it is attached in MoveIt");
-  }
-
-  auto objects = impl_->planning_scene.getObjects({impl_->object_id});
-  const auto existing = objects.find(impl_->object_id);
-  if (existing == objects.end()) {
-    return sceneFailure("MOVEIT_SYNC_OBJECT_MISSING",
-                        "Cannot synchronize a Coke object that is absent from the MoveIt world");
-  }
-
-  auto synchronized = existing->second;
-  synchronized.header.frame_id = "world";
-  synchronized.pose = toMessage(pose);
-  synchronized.operation = moveit_msgs::msg::CollisionObject::ADD;
-  if (!impl_->planning_scene.applyCollisionObject(synchronized)) {
-    return sceneFailure("MOVEIT_SYNC_APPLY_FAILED",
-                        "Failed to apply the synchronized Coke world pose");
-  }
-  return {ActionStatus::SUCCEEDED, std::nullopt};
-}
-
-ActionResult MoveItSceneAdapter::upsertCokeWorldPose(const Pose3d & pose)
+ActionResult MoveItSceneAdapter::upsertTaskObjectWorldPose(const Pose3d & pose)
 {
   if (impl_->planning_scene.getAttachedObjects({impl_->object_id}).count(impl_->object_id) != 0) {
     return sceneFailure("MOVEIT_UPSERT_OBJECT_ATTACHED",
@@ -174,9 +148,9 @@ std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
 
   MoveItSceneState state;
   const auto world = objects.find(impl_->object_id);
-  state.coke_in_world = world != objects.end();
-  if (state.coke_in_world) {
-    state.coke_world_pose = worldPoseFromCollisionObject(world->second);
+  state.task_object_in_world = world != objects.end();
+  if (state.task_object_in_world) {
+    state.task_object_world_pose = worldPoseFromCollisionObject(world->second);
   }
   const auto table = objects.find(impl_->table_id);
   state.table_in_world = table != objects.end();
@@ -185,8 +159,8 @@ std::optional<MoveItSceneState> MoveItSceneAdapter::observe()
   }
 
   const auto attached = attached_objects.find(impl_->object_id);
-  state.coke_attached = attached != attached_objects.end();
-  if (state.coke_attached) {
+  state.task_object_attached = attached != attached_objects.end();
+  if (state.task_object_attached) {
     state.attached_link = attached->second.link_name;
     state.touch_links = {attached->second.touch_links.begin(), attached->second.touch_links.end()};
   }

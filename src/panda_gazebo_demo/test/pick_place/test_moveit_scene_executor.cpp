@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "panda_gazebo_demo/pick_place/moveit_scene_executor.hpp"
+#include "panda_gazebo_demo/pick_place/panda_moveit_scene_policy.hpp"
 
 namespace panda_gazebo_demo::pick_place
 {
@@ -33,37 +34,25 @@ MoveItSceneState detachedState(const Pose3d & pose = {})
 class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(const std::string & link_name,
-                          const std::vector<std::string> & touch_links) override
+  ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) override
   {
     ++attach_calls;
-    attached_link = link_name;
-    attached_touch_links = touch_links;
+    attached_link = spec.link_name;
+    attached_touch_links = spec.touch_links;
     return attach_result;
   }
 
-  ActionResult detachCoke() override
+  ActionResult detachTaskObject() override
   {
     ++detach_calls;
     return detach_result;
   }
 
-  ActionResult syncCokeWorldPose(const Pose3d & pose) override
+  ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
     ++sync_calls;
     synced_pose = pose;
     return sync_result;
-  }
-
-  ActionResult upsertCokeWorldPose(const Pose3d & pose) override
-  {
-    synced_pose = pose;
-    return sync_result;
-  }
-
-  ActionResult upsertTableWorldPose(const Pose3d &) override
-  {
-    return succeeded();
   }
 
   std::optional<MoveItSceneState> observe() override
@@ -101,7 +90,11 @@ MoveItSceneExecutor executorFor(const std::shared_ptr<FakeMoveItSceneAdapter> & 
                                 State state, MoveItSceneOperation operation,
                                 bool idempotent = false)
 {
-  return MoveItSceneExecutor(adapter, {state, operation, idempotent}, 0.05, 0.001);
+  const MoveItAttachmentSpec attachment{"panda_hand",
+                                        {"panda_hand", "panda_leftfinger", "panda_rightfinger"}};
+  return MoveItSceneExecutor(adapter,
+                             {state, operation, idempotent, "coke", attachment, 0.05, 0.001},
+                             std::make_shared<PandaMoveItScenePolicy>(GripperLimits{}, idempotent));
 }
 
 TEST(MoveItSceneExecutor, AttachUsesPandaHandAndExactTouchLinks)
@@ -173,9 +166,12 @@ TEST(MoveItSceneExecutor, RecoveryNoOpUsesInjectedGripperLimits)
   adapter->observations = {detachedState()};
   GripperLimits strict_gripper;
   strict_gripper.open_min = 0.041;
+  const MoveItAttachmentSpec attachment{"panda_hand",
+                                        {"panda_hand", "panda_leftfinger", "panda_rightfinger"}};
   MoveItSceneExecutor executor(adapter,
-                               {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true},
-                               0.05, 0.001, strict_gripper);
+                               {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true,
+                                "coke", attachment, 0.05, 0.001},
+                               std::make_shared<PandaMoveItScenePolicy>(strict_gripper, true));
   auto context = contextFor(State::RECOVER_DETACH_MOVEIT);
   context.before.fresh = true;
   context.before.arm_stationary = true;

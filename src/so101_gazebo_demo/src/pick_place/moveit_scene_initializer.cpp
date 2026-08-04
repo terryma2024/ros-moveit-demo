@@ -93,7 +93,7 @@ bool sceneConverged(const std::optional<MoveItSceneState> & state, const SO101Pr
 }  // namespace
 
 MoveItSceneInitializer::MoveItSceneInitializer(IJointPlanningBoundary & boundary,
-                                               IMoveItSceneAdapter & scene,
+                                               ISO101MoveItSceneAdapter & scene,
                                                std::chrono::milliseconds poll_interval) :
     boundary_(boundary), scene_(scene), poll_interval_(poll_interval)
 {

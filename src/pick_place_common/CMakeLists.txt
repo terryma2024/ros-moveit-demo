@@ -25,6 +25,7 @@ add_library(pick_place_common::core ALIAS pick_place_common_core)
 
 add_library(pick_place_common_ros_adapters
   src/gazebo_attachment_executor.cpp
+  src/moveit_scene_executor.cpp
 )
 target_compile_features(pick_place_common_ros_adapters PUBLIC cxx_std_17)
 target_include_directories(pick_place_common_ros_adapters PUBLIC
@@ -57,6 +58,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_common_runner pick_place_common_core)
   ament_add_gtest(test_gazebo_attachment_executor test/test_gazebo_attachment_executor.cpp)
   target_link_libraries(test_gazebo_attachment_executor pick_place_common_ros_adapters)
+  ament_add_gtest(test_moveit_scene_executor test/test_moveit_scene_executor.cpp)
+  target_link_libraries(test_moveit_scene_executor pick_place_common_ros_adapters)
 endif()
 
 ament_package(CONFIG_EXTRAS "cmake/pick_place_common-extras.cmake")

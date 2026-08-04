@@ -1,51 +1,13 @@
 #pragma once
-
-#include <condition_variable>
-#include <memory>
-#include <mutex>
-
-#include "panda_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
-#include "panda_gazebo_demo/pick_place/state_action.hpp"
-#include "panda_gazebo_demo/pick_place/state_validation.hpp"
-
+#include <pick_place_common/moveit_scene_executor.hpp>
 namespace panda_gazebo_demo::pick_place
 {
-
-enum class MoveItSceneOperation
-{
-  ATTACH,
-  DETACH,
-  SYNC,
-};
-
-struct MoveItSceneConfig
-{
-  State state;
-  MoveItSceneOperation operation;
-  bool idempotent{false};
-};
-
-class MoveItSceneExecutor final : public IStateExecutor
-{
-public:
-  MoveItSceneExecutor(std::shared_ptr<IMoveItSceneAdapter> adapter, MoveItSceneConfig config,
-                      double timeout_seconds = 2.0, double poll_interval_seconds = 0.05,
-                      GripperLimits gripper_limits = {});
-
-  [[nodiscard]] ActionResult execute(const ExecutionContext & context) override;
-  [[nodiscard]] ActionResult cancel() override;
-
-private:
-  [[nodiscard]] ActionResult waitForConvergence(const std::optional<Pose3d> & synchronized_pose);
-
-  std::shared_ptr<IMoveItSceneAdapter> adapter_;
-  MoveItSceneConfig config_;
-  double timeout_seconds_;
-  double poll_interval_seconds_;
-  GripperLimits gripper_limits_;
-  std::mutex mutex_;
-  std::condition_variable condition_;
-  bool cancel_requested_{false};
-};
-
+using pick_place_common::ros_adapters::IMoveItSceneAdapter;
+using pick_place_common::ros_adapters::IMoveItScenePolicy;
+using pick_place_common::ros_adapters::MoveItAttachmentSpec;
+using pick_place_common::ros_adapters::MoveItSceneConfig;
+using pick_place_common::ros_adapters::MoveItSceneExecutor;
+using pick_place_common::ros_adapters::MoveItSceneOperation;
+using pick_place_common::ros_adapters::MoveItSceneState;
+using pick_place_common::ros_adapters::ScenePreparation;
 }  // namespace panda_gazebo_demo::pick_place

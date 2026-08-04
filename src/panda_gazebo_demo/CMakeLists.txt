@@ -79,7 +79,6 @@ add_library(
   panda_pick_place_runtime
   src/pick_place/cartesian_plan_validation.cpp
   src/pick_place/gripper_state_executor.cpp
-  src/pick_place/moveit_scene_executor.cpp
   src/pick_place/motion_state_action.cpp
   src/pick_place/named_target_validation.cpp
   src/pick_place/panda_workflow.cpp
@@ -94,12 +93,14 @@ add_library(
   src/pick_place/runtime_parameters.cpp
   src/pick_place/common_resume_validator.cpp
   src/pick_place/panda_resume_validation_policy.cpp
+  src/pick_place/panda_moveit_scene_policy.cpp
   src/pick_place/moveit_world_object_pose.cpp
   src/pick_place/moveit_world_resetter.cpp
   src/pick_place/pick_place_target_policy.cpp
 )
 target_compile_features(panda_pick_place_runtime PUBLIC cxx_std_17)
-target_link_libraries(panda_pick_place_runtime pick_place_common::core)
+target_link_libraries(panda_pick_place_runtime pick_place_common::core
+  pick_place_common::ros_adapters)
 target_include_directories(
   panda_pick_place_runtime
   PUBLIC
