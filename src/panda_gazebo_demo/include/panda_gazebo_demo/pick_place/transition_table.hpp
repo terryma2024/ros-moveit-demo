@@ -17,17 +17,10 @@ public:
   [[nodiscard]] static const std::map<State, StateTransitions> & entries() noexcept;
 };
 
-class StateMachine
+class StateMachine : public pick_place_common::StateMachine
 {
 public:
-  explicit StateMachine(State initial_state = State::IDLE) : current_state_(initial_state) {}
-
-  [[nodiscard]] State currentState() const noexcept;
-  [[nodiscard]] bool isTerminal() const noexcept;
-  [[nodiscard]] State advance(ActionStatus outcome) noexcept;
-
-private:
-  State current_state_;
+  explicit StateMachine(State initial_state = State::IDLE);
 };
 
 }  // namespace panda_gazebo_demo::pick_place

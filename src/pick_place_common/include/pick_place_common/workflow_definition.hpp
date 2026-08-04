@@ -27,6 +27,9 @@ struct WorkflowDefinition
 [[nodiscard]] std::optional<Failure>
 validateWorkflowDefinition(const WorkflowDefinition & workflow);
 
+[[nodiscard]] State resolveTransition(const WorkflowDefinition & workflow, State from,
+                                      ActionStatus outcome) noexcept;
+
 class StateMachine
 {
 public:

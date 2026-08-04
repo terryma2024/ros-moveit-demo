@@ -13,8 +13,7 @@ Failure configurationFailure(const char * code, const char * message)
 std::optional<Failure> validateWorkflowDefinition(const WorkflowDefinition & workflow)
 {
   if (!workflow.terminal_states.count(State::DONE) ||
-      !workflow.terminal_states.count(State::ERROR) ||
-      (workflow.initial_state != State::IDLE)) {
+      !workflow.terminal_states.count(State::ERROR) || (workflow.initial_state != State::IDLE)) {
     return configurationFailure("WORKFLOW_BOUNDARY_MISSING",
                                 "workflow must contain IDLE, DONE, and ERROR boundaries");
   }
@@ -62,11 +61,28 @@ std::optional<Failure> validateWorkflowDefinition(const WorkflowDefinition & wor
   return std::nullopt;
 }
 
-StateMachine::StateMachine(const WorkflowDefinition & workflow, State initial)
-: workflow_(&workflow), current_state_(initial)
+State resolveTransition(const WorkflowDefinition & workflow, State from,
+                        ActionStatus outcome) noexcept
+{
+  if (workflow.terminal_states.count(from)) {
+    return from;
+  }
+  const auto transition = workflow.transitions.find(from);
+  if (transition == workflow.transitions.end()) {
+    return State::ERROR;
+  }
+  return outcome == ActionStatus::SUCCEEDED ? transition->second.succeeded
+                                            : transition->second.failed;
+}
+
+StateMachine::StateMachine(const WorkflowDefinition & workflow, State initial) :
+    workflow_(&workflow), current_state_(initial)
 {
 }
-State StateMachine::currentState() const noexcept { return current_state_; }
+State StateMachine::currentState() const noexcept
+{
+  return current_state_;
+}
 bool StateMachine::isTerminal() const noexcept
 {
   return workflow_->terminal_states.count(current_state_) != 0;
@@ -76,13 +92,7 @@ State StateMachine::advance(ActionStatus outcome) noexcept
   if (isTerminal()) {
     return current_state_;
   }
-  const auto transition = workflow_->transitions.find(current_state_);
-  if (transition == workflow_->transitions.end()) {
-    current_state_ = State::ERROR;
-  } else {
-    current_state_ = outcome == ActionStatus::SUCCEEDED ? transition->second.succeeded
-                                                        : transition->second.failed;
-  }
+  current_state_ = resolveTransition(*workflow_, current_state_, outcome);
   return current_state_;
 }
 }  // namespace pick_place_common
