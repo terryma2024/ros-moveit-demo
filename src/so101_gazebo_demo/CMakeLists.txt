@@ -111,7 +111,6 @@ add_library(so101_pick_place_runtime
   src/pick_place/policy_config.cpp
   src/pick_place/physical_grasp_validator.cpp
   src/pick_place/transition_table.cpp
-  src/pick_place/runner.cpp
   src/pick_place/so101_profile.cpp
   src/pick_place/so101_gripper_validation.cpp
   src/pick_place/so101_gripper_state.cpp

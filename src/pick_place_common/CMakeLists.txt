@@ -41,6 +41,7 @@ install(TARGETS pick_place_common_core pick_place_common_ros_adapters EXPORT pic
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin
   INCLUDES DESTINATION include)
 ament_export_targets(pick_place_common_targets HAS_LIBRARY_TARGET NAMESPACE pick_place_common::)
+ament_export_dependencies(gz-msgs10 gz-transport13)
 
 install(FILES
   cmake/cpp_quality_gate.cmake

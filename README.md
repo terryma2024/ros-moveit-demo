@@ -25,6 +25,9 @@
 
 ## 项目结构
 
+Panda 与 SO-101 的 pick-place 公共架构见
+[`docs/pick-place-architecture.md`](docs/pick-place-architecture.md)。
+
 ```text
 src/fixed_pose_goal/
 ├── CMakeLists.txt

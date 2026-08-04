@@ -1,9 +1,19 @@
 # Panda fixed-space pick-place verification
 
+The workflow engine is provided by `pick_place_common`. This package owns the
+Panda workflow definition and policies, checkpoint JSON codec and file store,
+motion and gripper behavior, concrete Gazebo/MoveIt adapters, collision
+geometry, reset/recovery policy, launch files, and robot configuration. It
+links `pick_place_common::core` and `pick_place_common::ros_adapters`; the
+compatibility headers under this package's include path forward shared types.
+
+See [`../../docs/pick-place-architecture.md`](../../docs/pick-place-architecture.md)
+for the ownership boundary and extension rules.
+
 Build and source the workspace before running the headless checks:
 
 ```bash
-colcon build --packages-select panda_gazebo_demo --symlink-install
+colcon build --packages-up-to panda_gazebo_demo --symlink-install
 source install/setup.bash
 ```
 

@@ -30,4 +30,27 @@ private:
   pick_place_common::StateMachineRunner impl_;
 };
 
+inline StateMachineRunner::StateMachineRunner() :
+    StateMachineRunner(StateActionRegistry{}, TransitionContractRegistry{})
+{
+}
+
+inline StateMachineRunner::StateMachineRunner(const StateActionRegistry & actions,
+                                              const TransitionContractRegistry & contracts,
+                                              IWorldObserver * observer,
+                                              ICheckpointStore * checkpoint_store,
+                                              const CommonResumeValidator * resume_validator,
+                                              const PlanValidatorRegistry * plan_validators,
+                                              const IRecoveryPolicy * recovery_policy) :
+    behavior_policy_(),
+    impl_(so101WorkflowDefinition(), actions, contracts, observer, checkpoint_store,
+          resume_validator, nullptr, plan_validators, recovery_policy, &behavior_policy_)
+{
+}
+
+inline RunResult StateMachineRunner::run(const RunRequest & request) const
+{
+  return impl_.run(request);
+}
+
 }  // namespace so101_gazebo_demo::pick_place

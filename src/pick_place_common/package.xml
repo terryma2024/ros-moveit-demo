@@ -3,7 +3,7 @@
 <package format="3">
   <name>pick_place_common</name>
   <version>0.1.0</version>
-  <description>Shared robot-independent pick-place workflow components.</description>
+  <description>Shared robot-independent pick-place workflow core and ROS adapter executors.</description>
   <maintainer email="zjumty@aliyun.com">lenovo</maintainer>
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
