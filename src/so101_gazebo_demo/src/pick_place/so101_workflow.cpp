@@ -68,6 +68,8 @@ const pick_place_common::WorkflowDefinition & so101WorkflowDefinition()
                         S::DONE};
     w.terminal_states = {S::DONE, S::ERROR};
     w.force_continue_states = {S::VALIDATION_FAILED};
+    w.plan_only_states = {S::MOVE_ABOVE_OBJECT, S::DESCEND,          S::LIFT,
+                          S::MOVE_ABOVE_PLACE,  S::DESCEND_TO_PLACE, S::RETREAT};
     if (const auto failure = pick_place_common::validateWorkflowDefinition(w)) {
       throw std::logic_error(failure->code);
     }

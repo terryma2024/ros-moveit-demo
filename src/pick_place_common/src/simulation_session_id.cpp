@@ -8,11 +8,13 @@ SimulationSessionIdResolution resolveSimulationSessionId(RunMode mode, bool resu
   if (resume && configured_id.empty())
     return {std::nullopt,
             "simulation_session_id is required for resume to reject stale checkpoints"};
-  if (resume || mode == RunMode::EXECUTE)
+  if (resume || mode == RunMode::EXECUTE || mode == RunMode::PLAN_ONLY) {
+    const char * prefix = mode == RunMode::PLAN_ONLY ? "plan-only-" : "execute-";
     return {configured_id.empty()
-              ? std::optional<std::string>{"execute-" + std::to_string(unix_timestamp_milliseconds)}
+              ? std::optional<std::string>{prefix + std::to_string(unix_timestamp_milliseconds)}
               : std::optional<std::string>{std::move(configured_id)},
             ""};
+  }
   return {};
 }
 }  // namespace pick_place_common

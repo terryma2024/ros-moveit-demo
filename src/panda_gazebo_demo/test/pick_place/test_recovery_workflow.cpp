@@ -418,7 +418,11 @@ public:
   {
     const StateMachineRunner runner(actions, contracts, &observer, &checkpoints, &common_resume,
                                     nullptr, &plan_validators, &recovery_policy);
-    return runner.run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+    RunRequest request;
+    request.mode = RunMode::EXECUTE;
+    request.resume = true;
+    request.max_state_transitions = 100;
+    return runner.run(request);
   }
 
   std::shared_ptr<const PickPlaceTargetPolicy> target_policy;
