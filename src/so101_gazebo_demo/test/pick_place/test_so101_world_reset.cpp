@@ -27,6 +27,12 @@ ActionResult failed(std::string code)
           Failure{FailureCategory::WORLD_INCONSISTENCY, std::move(code), "failure", {}}};
 }
 
+ActionResult timedOut(std::string code)
+{
+  return {ActionStatus::TIMED_OUT,
+          Failure{FailureCategory::WORLD_INCONSISTENCY, std::move(code), "timeout", {}}};
+}
+
 class FakeGazeboResetAdapter final : public IGazeboResetAdapter
 {
 public:
@@ -56,8 +62,8 @@ public:
     commands.emplace_back("gazebo_pose");
     if (events)
       events->emplace_back("gazebo_pose");
-    if (set_pose_result.status == ActionStatus::SUCCEEDED && pose_converges &&
-        set_pose_calls != fail_pose_call) {
+    if ((set_pose_result.status == ActionStatus::SUCCEEDED || apply_pose_despite_timeout) &&
+        pose_converges && set_pose_calls != fail_pose_call) {
       state.task_object_world_pose = pose;
       ++state.pose_revision;
     }
@@ -68,6 +74,7 @@ public:
   bool observation_available{true};
   bool detach_converges{true};
   bool pose_converges{true};
+  bool apply_pose_despite_timeout{false};
   int fail_pose_call{0};
   ActionResult detach_result{succeeded()};
   ActionResult set_pose_result{succeeded()};
@@ -351,6 +358,41 @@ TEST(SO101WorldResetCoordinator, RepeatedResetDoesNotIssueHistoricalDetachCalls)
   EXPECT_EQ(2, moveit->table_upsert_calls);
   EXPECT_EQ(2, moveit->pedestal_upsert_calls);
   EXPECT_EQ(4, moveit->task_object_upsert_calls);
+}
+
+TEST(SO101WorldResetCoordinator, AcceptsAmbiguousSetPoseTimeoutOnlyAfterDurablePoseConverges)
+{
+  auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
+  auto moveit = std::make_shared<FakeMoveItSceneAdapter>();
+  seed(gazebo, moveit, false, false);
+  gazebo->set_pose_result = timedOut("GAZEBO_SET_POSE_TIMEOUT");
+  gazebo->apply_pose_despite_timeout = true;
+  WorldResetCoordinator resetter(gazebo, moveit, robotAdapter(), canonicalConfig());
+
+  const auto result = resetter.reset();
+
+  EXPECT_EQ(ActionStatus::SUCCEEDED, result.status);
+  EXPECT_EQ(2, gazebo->set_pose_calls);
+  EXPECT_EQ(2, moveit->task_object_upsert_calls);
+}
+
+TEST(SO101WorldResetCoordinator, RejectsAmbiguousSetPoseTimeoutWithoutDurablePoseConvergence)
+{
+  auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
+  auto moveit = std::make_shared<FakeMoveItSceneAdapter>();
+  seed(gazebo, moveit, false, false);
+  gazebo->set_pose_result = timedOut("GAZEBO_SET_POSE_TIMEOUT");
+  auto config = canonicalConfig();
+  config.timeout_seconds = 0.004;
+  WorldResetCoordinator resetter(gazebo, moveit, robotAdapter(), config);
+
+  const auto result = resetter.reset();
+
+  EXPECT_EQ(ActionStatus::TIMED_OUT, result.status);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("GAZEBO_SET_POSE_TIMEOUT", result.failure->code);
+  EXPECT_EQ(1, gazebo->set_pose_calls);
+  EXPECT_EQ(0, moveit->task_object_upsert_calls);
 }
 
 TEST(SO101WorldResetCoordinator, StopsAfterGazeboDetachCommandFailure)

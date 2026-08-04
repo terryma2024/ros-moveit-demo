@@ -19,6 +19,7 @@ struct SO101WorldObservationConfig
   std::size_t settle_samples{3};
   double settle_interval_seconds{0.05};
   double joint_settle_tolerance{0.003};
+  double joint_stationary_position_tolerance{0.0005};
 };
 
 /// Produces the robot and MoveIt half of a complete world observation. The
@@ -64,6 +65,14 @@ struct SO101PickPlaceRuntimeRegistries
 [[nodiscard]] std::shared_ptr<const TransitionContractRegistry::ITransitionContract>
 makeSO101MotionContract(const SO101FixedMotionSpec & spec,
                         SO101Profile profile = SO101Profile::canonical());
+
+/// Compare the independently observed Gazebo carry pose with the MoveIt
+/// attached-object model. This is an absolute attachment-alignment check, not
+/// a per-motion drift check.
+[[nodiscard]] bool
+withinSO101AttachmentModelTolerance(const Pose3d & observed_relative_pose,
+                                    const Pose3d & planned_relative_pose,
+                                    const SO101Profile & profile = SO101Profile::canonical());
 
 [[nodiscard]] SO101PickPlaceRuntimeRegistries
 makeSO101PickPlaceRuntimeRegistries(const SO101PickPlaceRuntimeDependencies & dependencies,

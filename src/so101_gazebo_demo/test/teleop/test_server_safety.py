@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -59,6 +60,35 @@ class PlanningWorker(Worker):
 
 async def lease(service):
     return (await service.command("lease", {"command_id": "lease"})).layers["lease_id"]
+
+
+def test_package_cli_preserves_cpp_owner_failure_diagnostics(monkeypatch, tmp_path):
+    prefix = tmp_path / "prefix"
+    executable = prefix / "lib" / "so101_gazebo_demo" / "pick_place_state_machine"
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    diagnostic_dir = tmp_path / "diagnostics"
+    monkeypatch.setenv("SO101_TELEOP_OWNER_DIAGNOSTIC_DIR", str(diagnostic_dir))
+    monkeypatch.setattr(
+        "ament_index_python.packages.get_package_prefix", lambda package: str(prefix))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=1,
+            stdout="status=ERROR\nfailure=ARM_NOT_QUIESCENT_AFTER_EXECUTION\n",
+            stderr="owner stderr evidence\n",
+        ),
+    )
+    worker = object.__new__(RosTelemetryWorker)
+
+    with pytest.raises(RuntimeError, match="^CPP_OWNER_FAILED_pick_place_state_machine$"):
+        worker.package_cli("pick_place_state_machine", ["--mode", "execute"], 1.0)
+
+    diagnostic = (diagnostic_dir / "last-pick_place_state_machine.log").read_text()
+    assert "failure=ARM_NOT_QUIESCENT_AFTER_EXECUTION" in diagnostic
+    assert "owner stderr evidence" in diagnostic
+    assert "arguments=['--mode', 'execute']" in diagnostic
 
 
 def test_joint_plan_forwards_bounded_velocity_and_acceleration_scaling():
@@ -219,6 +249,109 @@ def test_workflow_step_resumes_the_existing_cpp_checkpoint_before_single_step():
         assert "--resume" not in calls[0][1]
         assert calls[0][1][-1] == "--step"
         assert calls[1][1][-3:] == ["--resume", "true", "--step"]
+
+    asyncio.run(scenario())
+
+
+def test_workflow_run_creates_a_fresh_run_without_step_or_resume_flags():
+    """Run owns a new checkpoint and executes the workflow from the beginning."""
+    async def scenario():
+        worker = Worker()
+        calls = []
+
+        def owner(executable, arguments, timeout_s=45.0):
+            calls.append((executable, list(arguments), timeout_s))
+            return "trace=IDLE -> PREPARE_OPEN_GRIPPER -> DONE"
+
+        worker.package_cli = owner
+        service = TeleopService(worker)
+        lease_id = await lease(service)
+        result = await service.command("workflow_run", {
+            "command_id": "workflow-run",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+
+        assert result.succeeded is True
+        assert result.data["workflow"]["run_id"] in service._workflow
+        assert calls[0][0] == "pick_place_state_machine"
+        assert "--step" not in calls[0][1]
+        assert "--resume" not in calls[0][1]
+
+    asyncio.run(scenario())
+
+
+def test_workflow_run_cannot_replace_an_existing_workflow():
+    """Run must not silently overwrite a workflow checkpoint after Start."""
+    async def scenario():
+        worker = Worker()
+        calls = []
+
+        def owner(executable, arguments, timeout_s=45.0):
+            calls.append((executable, list(arguments), timeout_s))
+            return "trace=IDLE -> PREPARE_OPEN_GRIPPER"
+
+        worker.package_cli = owner
+        service = TeleopService(worker)
+        lease_id = await lease(service)
+        started = await service.command("workflow_start", {
+            "command_id": "workflow-start",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+        original = dict(service._workflow)
+        rejected = await service.command("workflow_run", {
+            "command_id": "workflow-run",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+
+        assert started.succeeded is True
+        assert rejected.succeeded is False
+        assert rejected.code == "WORKFLOW_ALREADY_STARTED"
+        assert service._workflow == original
+        assert len(calls) == 1
+
+    asyncio.run(scenario())
+
+
+def test_workflow_resume_requires_an_existing_run_and_uses_resume_only():
+    """Resume continues an existing checkpoint and never creates one implicitly."""
+    async def scenario():
+        worker = Worker()
+        calls = []
+
+        def owner(executable, arguments, timeout_s=45.0):
+            calls.append((executable, list(arguments), timeout_s))
+            return "trace=IDLE -> PREPARE_OPEN_GRIPPER"
+
+        worker.package_cli = owner
+        service = TeleopService(worker)
+        lease_id = await lease(service)
+        missing = await service.command("workflow_resume", {
+            "command_id": "workflow-resume-missing",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+        assert missing.succeeded is False
+        assert missing.code == "WORKFLOW_RUN_MISMATCH"
+        assert service._workflow == {}
+        assert calls == []
+
+        started = await service.command("workflow_start", {
+            "command_id": "workflow-start",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+        })
+        resumed = await service.command("workflow_resume", {
+            "command_id": "workflow-resume",
+            "lease_id": lease_id,
+            "session_id": "sim-a",
+            "run_id": started.data["workflow"]["run_id"],
+        })
+        assert resumed.succeeded is True
+        assert calls[1][1][-2:] == ["--resume", "true"]
+        assert "--step" not in calls[1][1]
 
     asyncio.run(scenario())
 

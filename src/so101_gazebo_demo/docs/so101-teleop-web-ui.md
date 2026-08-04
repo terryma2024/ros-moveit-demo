@@ -404,12 +404,14 @@ Reset 完成后等待状态恢复为 `READY`，再依次执行 Acquire lease、C
 
 状态机拥有状态转移权，浏览器不能任意选择跳转到某个状态。
 
-- **Start**：创建新的 workflow run/checkpoint，并执行第一个单步请求。
+- **Start**：仅在 workflow 尚未开始时可用；创建新的 run/checkpoint，并执行第一个单步请求。
 - **Next Step**：从当前 checkpoint 执行下一状态，适合逐状态调试。
-- **Run**：从当前 checkpoint 连续执行。
+- **Run**：仅在 workflow 尚未开始时可用；创建新的 run/checkpoint，从头连续执行到结束或首个失败边界。
 - **Stop**：停止请求后续状态；它不是急停，也不等同于取消正在执行的 MoveIt action。
-- **Resume**：从当前 checkpoint 继续。
+- **Resume**：仅在已有 workflow checkpoint 时可用；从当前 checkpoint 连续执行到结束或首个失败边界。
 - **Reset workflow**：使当前 workflow checkpoint 失效，不重置整个 Gazebo world。
+
+Start 或 Run 后，二者保持禁用直到 Reset workflow；到达 DONE 后只保留 Reset workflow 可用。
 
 逐步调试推荐流程：
 
@@ -460,7 +462,7 @@ Event log 最多保留浏览器本次会话最近 100 条命令，包含时间�
 | `MOVEIT_IK_FAILED_*` | TCP 目标不可达或姿态不合理；缩小步长或调整姿态。 |
 | `PLAN_COLLISION` | 候选路径存在碰撞；检查碰撞对象和目标。 |
 | `GAZEBO_ATTACHMENT_UNVERIFIED` | Gazebo attachment 没有在时限内收敛；不要继续 Lift。 |
-| `WORKFLOW_RUN_MISMATCH` / `CHECKPOINT_STALE` | workflow 已重置或 session 改变；重新 Start。 |
+| `WORKFLOW_RUN_MISMATCH` / `CHECKPOINT_STALE` | 无效 Resume 需要当前有效 run；新 Start/Run 需要先 Reset workflow。 |
 | `SERVER_BUSY` | 另一条变更命令仍在执行；等待其结束。 |
 | `CONFIRMATION_REQUIRED` | 服务端未收到正确的二次确认；从界面确认弹窗执行。 |
 

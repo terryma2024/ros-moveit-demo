@@ -1,5 +1,6 @@
 #include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -44,12 +45,12 @@ public:
                       "A finite measured gripper position is required after Gazebo attachment",
                       {}}};
     }
-    // The bounded regrasp may finish slightly deeper than the calibrated cup
-    // wall target.  Once the Gazebo joint owns the cup, retarget the controller
-    // to the calibrated carry value instead of preserving that transient
-    // squeeze; otherwise an unusually deep regrasp can violate the native-pad
-    // interference ceiling at the attachment boundary.
-    auto held = gripper_->command(carry_hold_q6_);
+    // Never ask the position controller to squeeze farther into a contact that
+    // already stopped shallower than the calibrated target.  Conversely, a
+    // transiently deeper regrasp is released back to the calibrated carry value
+    // so it cannot preserve excessive wall interference.
+    const double hold_q6 = std::max(measured_q6->second, carry_hold_q6_);
+    auto held = gripper_->command(hold_q6);
     // Gazebo's DetachableJoint can oppose the gripper position controller
     // immediately after attachment.  The hold command is advisory at this
     // boundary: defer only the controller's contact-stop abort and let the
