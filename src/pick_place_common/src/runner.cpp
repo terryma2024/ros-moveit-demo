@@ -652,6 +652,30 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
                   "Checkpoint does not describe a valid successful workflow transition",
                   {}});
   }
+  if (request.mode == RunMode::PLAN_ONLY) {
+    if (checkpoint.phase == CheckpointPhase::RECOVERY) {
+      return error(checkpoint.next_state,
+                   {FailureCategory::RESUME_VALIDATION,
+                    "PLAN_ONLY_RECOVERY_RESUME_UNSUPPORTED",
+                    "plan_only resume accepts only forward execute checkpoints",
+                    {}});
+    }
+    const auto relation =
+      compareForwardPathPosition(workflow_, checkpoint.next_state, *request.plan_only_state);
+    if (relation == ForwardPathRelation::DOWNSTREAM) {
+      return error(checkpoint.next_state, {FailureCategory::RESUME_VALIDATION,
+                                           "PLAN_ONLY_TARGET_ALREADY_PASSED",
+                                           "checkpoint next_state is downstream of plan_only_state",
+                                           {}});
+    }
+    if (relation == ForwardPathRelation::UNREACHABLE) {
+      return error(checkpoint.next_state,
+                   {FailureCategory::RESUME_VALIDATION,
+                    "PLAN_ONLY_STATE_UNREACHABLE",
+                    "checkpoint cannot reach plan_only_state on the forward success path",
+                    {}});
+    }
+  }
   const auto observation = observer_->observe();
   if (!observation.snapshot) {
     return error(checkpoint.next_state,
@@ -725,10 +749,6 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
                     "Recovery policy selected a forward or terminal state during resume",
                     {}});
     }
-    if (request.mode == RunMode::PLAN_ONLY) {
-      return runPlanOnlyTarget(*route.next_state, request,
-                               ObservationResult{snapshot, std::nullopt}, checkpoint.sequence + 1);
-    }
     return runExecuteWorkflow(*route.next_state, request, snapshot, checkpoint.sequence + 1, 0,
                               CheckpointPhase::RECOVERY, checkpoint.failed_state,
                               checkpoint.original_failure);
@@ -745,10 +765,6 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
     snapshot);
   if (!transition_validation.ok) {
     return error(checkpoint.next_state, transition_validation.failures.front());
-  }
-  if (request.mode == RunMode::PLAN_ONLY) {
-    return runPlanOnlyTarget(checkpoint.next_state, request,
-                             ObservationResult{snapshot, std::nullopt}, checkpoint.sequence + 1);
   }
   return runExecuteWorkflow(checkpoint.next_state, request, snapshot, checkpoint.sequence + 1);
 }

@@ -19,6 +19,8 @@ struct Scenario
   int observer_calls{};
   int planner_calls{};
   int executor_calls{};
+  std::string target_failure_stage;
+  bool recovery_execute_failure{};
 };
 
 class Observer final : public pp::IWorldObserver
@@ -45,6 +47,15 @@ public:
   pp::ValidationResult validatePrecondition(const pp::WorldSnapshot &) const override
   {
     scenario_.events.emplace_back(std::string("precondition ") + pp::toString(state_));
+    if (state_ == pp::State::MOVE_ABOVE_OBJECT &&
+        scenario_.target_failure_stage == "precondition") {
+      return {false,
+              {pp::Failure{pp::FailureCategory::PRECONDITION,
+                           "TARGET_PRECONDITION_FAILED",
+                           "Target precondition failed",
+                           {}}},
+              {}};
+    }
     return {true, {}, {}};
   }
 
@@ -69,6 +80,13 @@ public:
   {
     ++scenario_.planner_calls;
     scenario_.events.emplace_back(std::string("plan ") + pp::toString(state_));
+    if (state_ == pp::State::MOVE_ABOVE_OBJECT && scenario_.target_failure_stage == "planning") {
+      return {{pp::ActionStatus::FAILED, pp::Failure{pp::FailureCategory::PLANNING,
+                                                     "TARGET_PLAN_FAILED",
+                                                     "Target planning failed",
+                                                     {}}},
+              nullptr};
+    }
     auto artifact = std::make_shared<pp::PlanArtifact>();
     artifact->trajectory_points = 1;
     return {{pp::ActionStatus::SUCCEEDED, std::nullopt}, artifact};
@@ -88,6 +106,15 @@ public:
                                 const pp::PlanArtifact &) const override
   {
     scenario_.events.emplace_back(std::string("validate-plan ") + pp::toString(state_));
+    if (state_ == pp::State::MOVE_ABOVE_OBJECT &&
+        scenario_.target_failure_stage == "plan_validation") {
+      return {false,
+              {pp::Failure{pp::FailureCategory::PLAN_VALIDATION,
+                           "TARGET_PLAN_VALIDATION_FAILED",
+                           "Target plan validation failed",
+                           {}}},
+              {}};
+    }
     return {true, {}, {}};
   }
 
@@ -105,6 +132,12 @@ public:
   {
     ++scenario_.executor_calls;
     scenario_.events.emplace_back(std::string("execute ") + pp::toString(state_));
+    if (state_ == pp::State::RECOVER_RETREAT && scenario_.recovery_execute_failure) {
+      return {pp::ActionStatus::FAILED, pp::Failure{pp::FailureCategory::EXECUTION,
+                                                    "RECOVERY_EXECUTION_FAILED",
+                                                    "Recovery execution failed",
+                                                    {}}};
+    }
     return {pp::ActionStatus::SUCCEEDED, std::nullopt};
   }
 
@@ -134,10 +167,13 @@ public:
 
   pp::CheckpointLoadResult loadLatestCompatible() override
   {
-    return {};
+    ++load_calls;
+    return {loaded, std::nullopt};
   }
 
   std::vector<pp::Checkpoint> checkpoints;
+  std::optional<pp::Checkpoint> loaded;
+  int load_calls{};
 
 private:
   Scenario & scenario_;
@@ -163,8 +199,7 @@ class RecoveryPolicy final : public pp::IRecoveryPolicy
 public:
   pp::RecoveryRoute select(pp::State, const pp::Failure &, const pp::WorldSnapshot &) const override
   {
-    return {std::nullopt,
-            pp::Failure{pp::FailureCategory::INTERNAL, "NO_TEST_ROUTE", "No test route", {}}};
+    return {pp::State::RECOVER_RETREAT, std::nullopt};
   }
 };
 
@@ -174,10 +209,12 @@ pp::WorkflowDefinition workflow()
   result.transitions[pp::State::IDLE] = {pp::State::PREPARE_OPEN_GRIPPER, pp::State::ERROR};
   result.transitions[pp::State::PREPARE_OPEN_GRIPPER] = {pp::State::MOVE_ABOVE_OBJECT,
                                                          pp::State::ERROR};
-  result.transitions[pp::State::MOVE_ABOVE_OBJECT] = {pp::State::DESCEND, pp::State::ERROR};
-  result.transitions[pp::State::DESCEND] = {pp::State::DONE, pp::State::ERROR};
+  result.transitions[pp::State::MOVE_ABOVE_OBJECT] = {pp::State::DESCEND,
+                                                      pp::State::RECOVER_RETREAT};
+  result.transitions[pp::State::DESCEND] = {pp::State::DONE, pp::State::RECOVER_RETREAT};
+  result.transitions[pp::State::RECOVER_RETREAT] = {pp::State::ERROR, pp::State::ERROR};
   result.action_states = {pp::State::PREPARE_OPEN_GRIPPER, pp::State::MOVE_ABOVE_OBJECT,
-                          pp::State::DESCEND};
+                          pp::State::DESCEND, pp::State::RECOVER_RETREAT};
   result.forward_states = {pp::State::IDLE, pp::State::PREPARE_OPEN_GRIPPER,
                            pp::State::MOVE_ABOVE_OBJECT, pp::State::DESCEND, pp::State::DONE};
   result.terminal_states = {pp::State::DONE, pp::State::ERROR};
@@ -219,6 +256,10 @@ public:
     }
     registerTarget(pp::State::MOVE_ABOVE_OBJECT, pp::State::DESCEND, options);
     registerTarget(pp::State::DESCEND, pp::State::DONE, options);
+    actions.registerExecutor(pp::State::RECOVER_RETREAT,
+                             std::make_shared<Executor>(scenario, pp::State::RECOVER_RETREAT));
+    contracts.registerContract({pp::State::RECOVER_RETREAT, pp::State::ERROR},
+                               std::make_shared<Contract>(scenario, pp::State::RECOVER_RETREAT));
     resume_validator = std::make_unique<pp::CommonResumeValidator>(
       "fingerprint", "session", std::make_shared<ResumePolicy>());
     runner = std::make_unique<pp::StateMachineRunner>(
@@ -242,6 +283,7 @@ public:
     scenario.planner_calls = 0;
     scenario.executor_calls = 0;
     store.checkpoints.clear();
+    store.load_calls = 0;
   }
 
   Scenario scenario;
@@ -279,6 +321,49 @@ void expectZeroCalls(const Harness & harness)
   EXPECT_EQ(0, harness.scenario.planner_calls);
   EXPECT_EQ(0, harness.scenario.executor_calls);
   EXPECT_TRUE(harness.store.checkpoints.empty());
+}
+
+pp::Checkpoint forwardCheckpoint(pp::State completed, pp::State next)
+{
+  pp::Checkpoint checkpoint;
+  checkpoint.sequence = 7;
+  checkpoint.source_mode = pp::RunMode::EXECUTE;
+  checkpoint.phase = pp::CheckpointPhase::FORWARD;
+  checkpoint.last_completed_state = completed;
+  checkpoint.next_state = next;
+  checkpoint.configuration_fingerprint = "fingerprint";
+  checkpoint.simulation_session_id = "session";
+  return checkpoint;
+}
+
+pp::RunRequest resumeRequest(pp::State target)
+{
+  pp::RunRequest request;
+  request.mode = pp::RunMode::PLAN_ONLY;
+  request.plan_only_state = target;
+  request.resume = true;
+  return request;
+}
+
+void expectTargetFailureRecovers(const std::string & stage, const std::string & expected_code)
+{
+  Harness harness;
+  harness.scenario.target_failure_stage = stage;
+  const auto result = harness.run(pp::State::MOVE_ABOVE_OBJECT);
+
+  ASSERT_EQ(pp::RunStatus::ERROR, result.status);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(expected_code, result.failure->code);
+  EXPECT_EQ(0, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
+                          "execute MOVE_ABOVE_OBJECT"));
+  EXPECT_EQ(1, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
+                          "cancel MOVE_ABOVE_OBJECT"));
+  EXPECT_EQ(1, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
+                          "execute RECOVER_RETREAT"));
+  ASSERT_GE(harness.store.checkpoints.size(), 2U);
+  EXPECT_EQ(pp::CheckpointPhase::RECOVERY, harness.store.checkpoints[1].phase);
+  ASSERT_TRUE(harness.store.checkpoints[1].original_failure);
+  EXPECT_EQ(expected_code, harness.store.checkpoints[1].original_failure->code);
 }
 }  // namespace
 
@@ -416,4 +501,127 @@ TEST(RunToPlanOnly, MissingInfrastructureFailsBeforeAnyCalls)
     EXPECT_EQ(code, result.failure->code);
     expectZeroCalls(harness);
   }
+}
+
+TEST(RunToPlanOnlyResume, SameTargetCheckpointValidatesThenPlansWithoutExecuting)
+{
+  Harness harness;
+  harness.store.loaded =
+    forwardCheckpoint(pp::State::PREPARE_OPEN_GRIPPER, pp::State::MOVE_ABOVE_OBJECT);
+
+  const auto result = harness.runner->run(resumeRequest(pp::State::MOVE_ABOVE_OBJECT));
+
+  EXPECT_EQ(pp::RunStatus::PLAN_ONLY_COMPLETE, result.status);
+  EXPECT_EQ(1, harness.store.load_calls);
+  EXPECT_EQ(1, harness.scenario.planner_calls);
+  EXPECT_EQ(0, harness.scenario.executor_calls);
+  EXPECT_TRUE(harness.store.checkpoints.empty());
+}
+
+TEST(RunToPlanOnlyResume, UpstreamCheckpointExecutesRemainderThenPlansTarget)
+{
+  Harness harness;
+  harness.store.loaded =
+    forwardCheckpoint(pp::State::PREPARE_OPEN_GRIPPER, pp::State::MOVE_ABOVE_OBJECT);
+
+  const auto result = harness.runner->run(resumeRequest(pp::State::DESCEND));
+
+  EXPECT_EQ(pp::RunStatus::PLAN_ONLY_COMPLETE, result.status);
+  EXPECT_EQ(1, harness.scenario.executor_calls);
+  EXPECT_EQ(2, harness.scenario.planner_calls);
+  ASSERT_EQ(1U, harness.store.checkpoints.size());
+  EXPECT_EQ(pp::State::MOVE_ABOVE_OBJECT, harness.store.checkpoints.back().last_completed_state);
+  EXPECT_EQ(pp::State::DESCEND, harness.store.checkpoints.back().next_state);
+  EXPECT_EQ(0, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
+                          "execute DESCEND"));
+}
+
+TEST(RunToPlanOnlyResume, PassedTargetFailsBeforeObservation)
+{
+  Harness harness;
+  harness.store.loaded = forwardCheckpoint(pp::State::MOVE_ABOVE_OBJECT, pp::State::DESCEND);
+
+  const auto result = harness.runner->run(resumeRequest(pp::State::MOVE_ABOVE_OBJECT));
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("PLAN_ONLY_TARGET_ALREADY_PASSED", result.failure->code);
+  EXPECT_EQ(1, harness.store.load_calls);
+  expectZeroCalls(harness);
+}
+
+TEST(RunToPlanOnlyResume, RecoveryCheckpointFailsBeforeObservation)
+{
+  Harness harness;
+  auto checkpoint = forwardCheckpoint(pp::State::MOVE_ABOVE_OBJECT, pp::State::RECOVER_RETREAT);
+  checkpoint.phase = pp::CheckpointPhase::RECOVERY;
+  checkpoint.failed_state = pp::State::MOVE_ABOVE_OBJECT;
+  checkpoint.original_failure =
+    pp::Failure{pp::FailureCategory::PLANNING, "ORIGINAL_FAILURE", "Original failure", {}};
+  harness.store.loaded = checkpoint;
+
+  const auto result = harness.runner->run(resumeRequest(pp::State::DESCEND));
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("PLAN_ONLY_RECOVERY_RESUME_UNSUPPORTED", result.failure->code);
+  EXPECT_EQ(1, harness.store.load_calls);
+  expectZeroCalls(harness);
+}
+
+TEST(RunToPlanOnlyResume, WorldSessionAndFingerprintMismatchRemainFailClosed)
+{
+  Harness harness;
+  auto checkpoint =
+    forwardCheckpoint(pp::State::PREPARE_OPEN_GRIPPER, pp::State::MOVE_ABOVE_OBJECT);
+  checkpoint.configuration_fingerprint = "wrong";
+  harness.store.loaded = checkpoint;
+  auto result = harness.runner->run(resumeRequest(pp::State::MOVE_ABOVE_OBJECT));
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("FINGERPRINT_MISMATCH", result.failure->code);
+
+  harness.clearCalls();
+  checkpoint.configuration_fingerprint = "fingerprint";
+  checkpoint.simulation_session_id = "wrong";
+  harness.store.loaded = checkpoint;
+  result = harness.runner->run(resumeRequest(pp::State::MOVE_ABOVE_OBJECT));
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("RESUME_SIMULATION_SESSION_MISMATCH", result.failure->code);
+
+  harness.clearCalls();
+  checkpoint.simulation_session_id = "session";
+  harness.store.loaded = checkpoint;
+  harness.scenario.world.simulation_session_id = "wrong";
+  result = harness.runner->run(resumeRequest(pp::State::MOVE_ABOVE_OBJECT));
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("RESUME_SIMULATION_SESSION_MISMATCH", result.failure->code);
+}
+
+TEST(RunToPlanOnlyFailure, TargetPreconditionFailureRecoversWithoutExecutingTarget)
+{
+  expectTargetFailureRecovers("precondition", "TARGET_PRECONDITION_FAILED");
+}
+
+TEST(RunToPlanOnlyFailure, TargetPlanningFailureRecoversWithoutExecutingTarget)
+{
+  expectTargetFailureRecovers("planning", "TARGET_PLAN_FAILED");
+}
+
+TEST(RunToPlanOnlyFailure, TargetPlanValidationFailureRecoversWithoutExecutingTarget)
+{
+  expectTargetFailureRecovers("plan_validation", "TARGET_PLAN_VALIDATION_FAILED");
+}
+
+TEST(RunToPlanOnlyFailure, RecoveryFailureRetainsOriginalFailure)
+{
+  Harness harness;
+  harness.scenario.target_failure_stage = "planning";
+  harness.scenario.recovery_execute_failure = true;
+
+  const auto result = harness.run(pp::State::MOVE_ABOVE_OBJECT);
+
+  ASSERT_EQ(pp::RunStatus::ERROR, result.status);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("RECOVERY_EXECUTION_FAILED", result.failure->code);
+  EXPECT_NE(std::string::npos, result.failure->message.find("TARGET_PLAN_FAILED"));
+  EXPECT_EQ(0, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
+                          "execute MOVE_ABOVE_OBJECT"));
 }
