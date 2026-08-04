@@ -25,6 +25,17 @@ assert runtime_defaults is not None
 assert runtime_defaults.get('motion_start_joint_tolerance') == '0.010'
 PY
 
+python3 - "${script_dir}/run_plan_only_resume_matrix.sh" <<'PY'
+import pathlib
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+body = text.split('reset_fixture() {', 1)[1].split('\n}', 1)[0]
+assert body.index('reset_world.sh') < body.index('last_attachment_is_detached'), (
+    'independent target reset must converge an attached predecessor before asserting detached state'
+)
+PY
+
 expect_failure() {
   if "$@" >/dev/null 2>&1; then
     printf 'Expected command to fail: %q' "$1" >&2
