@@ -17,31 +17,10 @@ RecoveryRoute error(FailureCategory category, std::string code, std::string mess
   return {std::nullopt, Failure{category, std::move(code), std::move(message), {}}};
 }
 
-double localPositionDistance(const Pose3d & first, const Pose3d & second)
-{
-  return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
-}
-
-double localOrientationDistance(const Pose3d & first, const Pose3d & second)
-{
-  const double first_norm =
-    std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
-  const double second_norm =
-    std::hypot(std::hypot(second.qx, second.qy), std::hypot(second.qz, second.qw));
-  if (!std::isfinite(first_norm) || !std::isfinite(second_norm) || first_norm <= 1e-12 ||
-      second_norm <= 1e-12) {
-    return INFINITY;
-  }
-  const double dot = std::abs(
-    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
-    (first_norm * second_norm));
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
-}
-
 bool nearPose(const Pose3d & actual, const Pose3d & expected, const SO101Profile & profile)
 {
-  return localPositionDistance(actual, expected) <= profile.task_object_position_drift_tolerance &&
-         localOrientationDistance(actual, expected) <=
+  return positionDistance(actual, expected) <= profile.task_object_position_drift_tolerance &&
+         orientationDistance(actual, expected) <=
            profile.task_object_orientation_drift_tolerance_rad;
 }
 
@@ -49,8 +28,8 @@ bool tableCanonical(const WorldSnapshot & current, const SO101Profile & profile)
 {
   const auto table = current.moveit_world_object_poses.find(profile.table_object);
   return table != current.moveit_world_object_poses.end() &&
-         localPositionDistance(table->second, profile.table_pose) <= 1e-5 &&
-         localOrientationDistance(table->second, profile.table_pose) <= 1e-4;
+         positionDistance(table->second, profile.table_pose) <= 1e-5 &&
+         orientationDistance(table->second, profile.table_pose) <= 1e-4;
 }
 
 }  // namespace

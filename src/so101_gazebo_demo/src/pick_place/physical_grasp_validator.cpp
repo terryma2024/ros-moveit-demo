@@ -8,20 +8,6 @@ namespace so101_gazebo_demo::pick_place
 {
 namespace
 {
-double localOrientationDistance(const Pose3d & first, const Pose3d & second)
-{
-  const double first_norm =
-    std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
-  const double second_norm =
-    std::hypot(std::hypot(second.qx, second.qy), std::hypot(second.qz, second.qw));
-  if (first_norm <= 1e-12 || second_norm <= 1e-12)
-    return std::numeric_limits<double>::infinity();
-  const double dot =
-    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
-    (first_norm * second_norm);
-  return 2.0 * std::acos(std::clamp(std::abs(dot), 0.0, 1.0));
-}
-
 Failure failure(std::string code, std::string message, const PhysicalGraspResult & result)
 {
   return {FailureCategory::POSTCONDITION,
@@ -63,7 +49,7 @@ PhysicalGraspResult PhysicalGraspValidator::evaluate(const WorldSnapshot & befor
   result.cup_follow_ratio =
     std::abs(result.tcp_z_delta_m) <= 1e-12 ? 0.0 : result.cup_z_delta_m / result.tcp_z_delta_m;
   result.xy_slip_m = std::hypot(cup_after.x - cup_before.x, cup_after.y - cup_before.y);
-  result.orientation_change_rad = localOrientationDistance(cup_before, cup_after);
+  result.orientation_change_rad = orientationDistance(cup_before, cup_after);
   result.gripper_contact = after.gazebo_task_object_gripper_contact.value_or(false);
   if (thresholds_.require_gripper_contact && !result.gripper_contact) {
     result.failure =

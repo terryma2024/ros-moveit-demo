@@ -14,6 +14,7 @@
 #include "so101_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "so101_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "so101_gazebo_demo/pick_place/simulation_session_id.hpp"
+#include "so101_gazebo_demo/pick_place/so101_resume_validation_policy.hpp"
 
 namespace pick_place = so101_gazebo_demo::pick_place;
 
@@ -436,6 +437,27 @@ TEST(CommonResumeValidator, AcceptsOnlyACompleteMatchingWorldBoundary)
 
   EXPECT_TRUE(result.ok);
   EXPECT_TRUE(result.failures.empty());
+}
+
+TEST(CommonResumeValidator, PreservesSO101QuaternionChordDistanceMetric)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.phase = pick_place::CheckpointPhase::FORWARD;
+  checkpoint.failed_state.reset();
+  checkpoint.original_failure.reset();
+  checkpoint.resumable = true;
+  auto snapshot = snapshotFrom(checkpoint);
+  constexpr double rotation = 0.1;
+  snapshot.tcp_pose_world.qz = std::sin(rotation / 2.0);
+  snapshot.tcp_pose_world.qw = std::cos(rotation / 2.0);
+  const pick_place::SO101ResumeValidationPolicy policy;
+
+  const auto result = policy.validateBoundary(checkpoint, snapshot, 1.0);
+
+  ASSERT_TRUE(result.ok);
+  EXPECT_NEAR(result.metrics.at("resume_tcp_orientation_error"), 2.0 * std::sin(rotation / 4.0),
+              1e-12);
+  EXPECT_NE(result.metrics.at("resume_tcp_orientation_error"), rotation);
 }
 
 TEST(CommonResumeValidator, RejectsCheckpointFromDifferentPolicyBundle)

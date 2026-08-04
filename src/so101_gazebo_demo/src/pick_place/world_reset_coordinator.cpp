@@ -25,33 +25,13 @@ ActionResult resetFailure(ActionStatus status, std::string code, std::string mes
 
 bool validPose(const Pose3d & pose)
 {
-  const double values[]{pose.x, pose.y, pose.z, pose.qx, pose.qy, pose.qz, pose.qw};
-  return std::all_of(std::begin(values), std::end(values),
-                     [](double value) { return std::isfinite(value); }) &&
-         std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw)) > 1e-12;
-}
-
-double localPositionDistance(const Pose3d & a, const Pose3d & b)
-{
-  return std::hypot(std::hypot(a.x - b.x, a.y - b.y), a.z - b.z);
-}
-
-double localOrientationDistance(const Pose3d & a, const Pose3d & b)
-{
-  const auto a_norm = std::hypot(std::hypot(a.qx, a.qy), std::hypot(a.qz, a.qw));
-  const auto b_norm = std::hypot(std::hypot(b.qx, b.qy), std::hypot(b.qz, b.qw));
-  if (a_norm <= 1e-12 || b_norm <= 1e-12) {
-    return INFINITY;
-  }
-  const auto dot =
-    std::abs((a.qx * b.qx + a.qy * b.qy + a.qz * b.qz + a.qw * b.qw) / (a_norm * b_norm));
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
+  return isFinitePose(pose);
 }
 
 bool poseMatches(const Pose3d & actual, const Pose3d & expected, const WorldResetConfig & config)
 {
-  return localPositionDistance(actual, expected) <= config.position_tolerance &&
-         localOrientationDistance(actual, expected) <= config.orientation_tolerance_rad;
+  return positionDistance(actual, expected) <= config.position_tolerance &&
+         orientationDistance(actual, expected) <= config.orientation_tolerance_rad;
 }
 
 bool completeJointEvidence(const CurrentJointStateEvidence & evidence,

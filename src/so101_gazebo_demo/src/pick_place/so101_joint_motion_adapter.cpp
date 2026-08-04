@@ -1,5 +1,7 @@
 #include "so101_gazebo_demo/pick_place/so101_joint_motion_adapter.hpp"
 
+#include "so101_gazebo_demo/pick_place/support_pose.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -40,38 +42,10 @@ bool positionsWithin(const std::vector<double> & a, const std::vector<double> & 
   return true;
 }
 
-bool finitePose(const Pose3d & pose)
-{
-  const double norm =
-    std::sqrt(pose.qx * pose.qx + pose.qy * pose.qy + pose.qz * pose.qz + pose.qw * pose.qw);
-  return std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
-         std::isfinite(pose.qx) && std::isfinite(pose.qy) && std::isfinite(pose.qz) &&
-         std::isfinite(pose.qw) && std::isfinite(norm) && norm > 1e-12;
-}
-
-double localPositionDistance(const Pose3d & first, const Pose3d & second)
-{
-  return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
-}
-
-double localOrientationDistance(const Pose3d & first, const Pose3d & second)
-{
-  if (!finitePose(first) || !finitePose(second)) {
-    return std::numeric_limits<double>::infinity();
-  }
-  const double first_norm = std::sqrt(first.qx * first.qx + first.qy * first.qy +
-                                      first.qz * first.qz + first.qw * first.qw);
-  const double second_norm = std::sqrt(second.qx * second.qx + second.qy * second.qy +
-                                       second.qz * second.qz + second.qw * second.qw);
-  const double dot = std::abs(
-    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
-    (first_norm * second_norm));
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
-}
-
+// SO-101 owns axial tilt: cylindrical cups permit yaw while constraining the local Z axis.
 double axialTiltDistance(const Pose3d & first, const Pose3d & second)
 {
-  if (!finitePose(first) || !finitePose(second)) {
+  if (!isFinitePose(first) || !isFinitePose(second)) {
     return std::numeric_limits<double>::infinity();
   }
   const auto axis = [](const Pose3d & pose) {
@@ -93,17 +67,16 @@ double axialTiltDistance(const Pose3d & first, const Pose3d & second)
 
 bool posesMatch(const Pose3d & first, const Pose3d & second, const SO101Profile & profile)
 {
-  return finitePose(first) && finitePose(second) &&
-         localPositionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
-         localOrientationDistance(first, second) <=
-           profile.task_object_orientation_drift_tolerance_rad;
+  return isFinitePose(first) && isFinitePose(second) &&
+         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+         orientationDistance(first, second) <= profile.task_object_orientation_drift_tolerance_rad;
 }
 
 bool posesMatchAttachmentCalibration(const Pose3d & first, const Pose3d & second,
                                      const SO101Profile & profile)
 {
-  return finitePose(first) && finitePose(second) &&
-         localPositionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+  return isFinitePose(first) && isFinitePose(second) &&
+         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
          axialTiltDistance(first, second) <=
            profile.task_object_attachment_orientation_tolerance_rad;
 }
@@ -111,73 +84,10 @@ bool posesMatchAttachmentCalibration(const Pose3d & first, const Pose3d & second
 bool posesMatchCylindricalCarry(const Pose3d & first, const Pose3d & second,
                                 const SO101Profile & profile)
 {
-  return finitePose(first) && finitePose(second) &&
-         localPositionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
+  return isFinitePose(first) && isFinitePose(second) &&
+         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
          axialTiltDistance(first, second) <=
            profile.task_object_attachment_orientation_tolerance_rad;
-}
-
-bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
-{
-  if (!finitePose(pose))
-    return false;
-  const auto & expected = profile.place_task_object_pose;
-  const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
-  const double height_error = std::abs(pose.z - expected.z);
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
-  const double local_z_world_z =
-    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
-  const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
-  return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
-         xy_error <= profile.place_support_xy_tolerance &&
-         height_error <= profile.place_support_height_tolerance &&
-         tilt <= profile.place_support_tilt_tolerance_rad;
-}
-
-bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile)
-{
-  if (!finitePose(pose))
-    return false;
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
-  const double local_z_world_z =
-    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
-  const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
-  return localPositionDistance(pose, profile.task_object_pose) <=
-           profile.task_object_position_drift_tolerance &&
-         std::isfinite(tilt) && tilt <= profile.place_support_tilt_tolerance_rad;
-}
-
-Pose3d compose(const Pose3d & parent, const Pose3d & child)
-{
-  if (!finitePose(parent) || !finitePose(child)) {
-    const double nan = std::numeric_limits<double>::quiet_NaN();
-    return {nan, nan, nan, nan, nan, nan, nan};
-  }
-  const double parent_norm = std::sqrt(parent.qx * parent.qx + parent.qy * parent.qy +
-                                       parent.qz * parent.qz + parent.qw * parent.qw);
-  const double child_norm = std::sqrt(child.qx * child.qx + child.qy * child.qy +
-                                      child.qz * child.qz + child.qw * child.qw);
-  const double x = parent.qx / parent_norm;
-  const double y = parent.qy / parent_norm;
-  const double z = parent.qz / parent_norm;
-  const double w = parent.qw / parent_norm;
-  const double cx = child.qx / child_norm;
-  const double cy = child.qy / child_norm;
-  const double cz = child.qz / child_norm;
-  const double cw = child.qw / child_norm;
-  const double rx = (1.0 - 2.0 * (y * y + z * z)) * child.x + 2.0 * (x * y - z * w) * child.y +
-                    2.0 * (x * z + y * w) * child.z;
-  const double ry = 2.0 * (x * y + z * w) * child.x + (1.0 - 2.0 * (x * x + z * z)) * child.y +
-                    2.0 * (y * z - x * w) * child.z;
-  const double rz = 2.0 * (x * z - y * w) * child.x + 2.0 * (y * z + x * w) * child.y +
-                    (1.0 - 2.0 * (x * x + y * y)) * child.z;
-  return {parent.x + rx,
-          parent.y + ry,
-          parent.z + rz,
-          w * cx + x * cw + y * cz - z * cy,
-          w * cy - x * cz + y * cw + z * cx,
-          w * cz + x * cy - y * cx + z * cw,
-          w * cw - x * cx - y * cy - z * cz};
 }
 
 const Pose3d & expectedDetachedTaskObjectPose(State state, const SO101Profile & profile)
@@ -203,11 +113,12 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
       return false;
     }
     const auto expected_task_object =
-      compose(*facts.current_gripper_pose_world, *facts.attached_relative_pose);
+      composePose(*facts.current_gripper_pose_world, *facts.attached_relative_pose);
     return posesMatchAttachmentCalibration(*facts.attached_relative_pose,
                                            profile.calibrated_grasp_relative_pose, profile) &&
-           posesMatchCylindricalCarry(*observed.gazebo_task_object_pose_world, expected_task_object,
-                                      profile) &&
+           expected_task_object &&
+           posesMatchCylindricalCarry(*observed.gazebo_task_object_pose_world,
+                                      *expected_task_object, profile) &&
            *facts.attached_link == profile.moveit_attach_link &&
            facts.touch_links == std::set<std::string>(profile.moveit_touch_links.begin(),
                                                       profile.moveit_touch_links.end());

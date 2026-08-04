@@ -2,9 +2,9 @@
 
 #include <chrono>
 #include <cstddef>
-#include <deque>
 #include <optional>
 
+#include "pick_place_common/pose_stability_tracker.hpp"
 #include "panda_gazebo_demo/pick_place/transition_contract.hpp"
 
 namespace panda_gazebo_demo::pick_place
@@ -38,26 +38,6 @@ struct GripperEvidence
 [[nodiscard]] ValidationResult validateAttachmentState(const WorldSnapshot & snapshot,
                                                        bool gazebo_attached, bool moveit_attached);
 
-class CokePoseStabilityTracker
-{
-public:
-  CokePoseStabilityTracker(std::size_t required_samples = 5, double position_tolerance = 0.002,
-                           double orientation_tolerance_rad = 0.020);
-
-  void addSample(const Pose3d & pose, std::chrono::steady_clock::time_point observed_at);
-  [[nodiscard]] std::optional<bool> stationary() const noexcept;
-
-private:
-  struct Sample
-  {
-    Pose3d pose;
-    std::chrono::steady_clock::time_point observed_at;
-  };
-
-  std::size_t required_samples_;
-  double position_tolerance_;
-  double orientation_tolerance_rad_;
-  std::deque<Sample> samples_;
-};
+using CokePoseStabilityTracker = pick_place_common::PoseStabilityTracker;
 
 }  // namespace panda_gazebo_demo::pick_place
