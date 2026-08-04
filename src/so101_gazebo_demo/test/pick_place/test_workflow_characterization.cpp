@@ -61,8 +61,10 @@ TEST(SO101WorkflowCharacterization, RequestDefaultsRemainStable)
 TEST(SO101WorkflowCharacterization, AttachMoveItFailureContractRemainsStable)
 {
   const pp::StateMachineRunner runner;
-  const auto result =
-    runner.run({pp::RunMode::DRY_RUN, std::nullopt, false, pp::State::ATTACH_MOVEIT});
+  pp::RunRequest request;
+  request.mode = pp::RunMode::DRY_RUN;
+  request.fail_at = pp::State::ATTACH_MOVEIT;
+  const auto result = runner.run(request);
   EXPECT_EQ(pp::RunStatus::ERROR, result.status);
   EXPECT_EQ(pp::State::ERROR, result.current_state);
   ASSERT_TRUE(result.failure);
@@ -83,4 +85,19 @@ TEST(SO101WorkflowCharacterization, AttachMoveItFailureContractRemainsStable)
                                         pp::State::RECOVER_RETREAT,
                                         pp::State::ERROR};
   EXPECT_EQ(expected, result.state_trace);
+}
+
+TEST(SO101WorkflowCharacterization, DeclaresExactPlanOnlyStates)
+{
+  const auto & workflow = pp::so101WorkflowDefinition();
+  const std::set<pp::State> expected{
+    pp::State::MOVE_ABOVE_OBJECT, pp::State::DESCEND,          pp::State::LIFT,
+    pp::State::MOVE_ABOVE_PLACE,  pp::State::DESCEND_TO_PLACE, pp::State::RETREAT};
+
+  EXPECT_EQ(expected, workflow.plan_only_states);
+  for (const auto state : workflow.plan_only_states) {
+    EXPECT_TRUE(workflow.action_states.count(state));
+    EXPECT_TRUE(workflow.forward_states.count(state));
+    EXPECT_FALSE(workflow.terminal_states.count(state));
+  }
 }

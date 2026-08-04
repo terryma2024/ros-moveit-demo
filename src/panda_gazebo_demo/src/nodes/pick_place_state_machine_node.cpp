@@ -519,8 +519,13 @@ int main(int argc, char * argv[])
                                               checkpoint_store.get(), common_resume_validator.get(),
                                               &execution_observation_logger,
                                               &runtime.plan_validators, &recovery_policy);
-  const auto result =
-    runner.run({*mode, stop_after, resume, fail_at, parameters.max_state_transitions});
+  pick_place::RunRequest request;
+  request.mode = *mode;
+  request.stop_after = stop_after;
+  request.resume = resume;
+  request.fail_at = fail_at;
+  request.max_state_transitions = parameters.max_state_transitions;
+  const auto result = runner.run(request);
   if (result.failure) {
     RCLCPP_ERROR(logger, "Run failed: status=%s state=%s category=%d code=%s message=%s",
                  pick_place::toString(result.status), pick_place::toString(result.current_state),

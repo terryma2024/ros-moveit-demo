@@ -16,6 +16,15 @@ namespace pick_place = panda_gazebo_demo::pick_place;
 namespace
 {
 
+pick_place::RunRequest makeResumeExecuteRequest()
+{
+  pick_place::RunRequest request;
+  request.mode = pick_place::RunMode::EXECUTE;
+  request.resume = true;
+  request.max_state_transitions = 100;
+  return request;
+}
+
 std::filesystem::path checkpointPath(const std::string & name)
 {
   return std::filesystem::temp_directory_path() / ("panda_gazebo_demo_" + name + ".json");
@@ -233,8 +242,7 @@ TEST(Runner, RecoveryResumeReclassifiesCurrentFacts)
                                               &common_resume_validator, nullptr, nullptr,
                                               &recovery_policy);
 
-  const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(makeResumeExecuteRequest());
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("EXECUTE_ACTION_NOT_REGISTERED", result.failure->code);
@@ -265,8 +273,7 @@ TEST(Runner, ForwardActionFailureCommitsRecoveryCheckpointBeforeRecoverySideEffe
                                               &common_resume_validator, nullptr, nullptr,
                                               &recovery_policy);
 
-  const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(makeResumeExecuteRequest());
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(1, executor->calls);
@@ -298,8 +305,7 @@ TEST(Runner, RecoveryActionFailureTerminatesWithoutSelectingAnotherRoute)
                                               &common_resume_validator, nullptr, nullptr,
                                               &recovery_policy);
 
-  const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(makeResumeExecuteRequest());
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("ACTION_FAILED", result.failure->code);

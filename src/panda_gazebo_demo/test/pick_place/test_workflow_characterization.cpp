@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <set>
 #include <vector>
 #include <type_traits>
 
@@ -63,5 +64,20 @@ TEST(PandaWorkflowCharacterization, CompatibilityTableMatchesEveryWorkflowEdge)
   for (const auto state : workflow.terminal_states) {
     EXPECT_EQ(state, pp::TransitionTable::resolve(state, pp::ActionStatus::SUCCEEDED));
     EXPECT_EQ(state, pp::TransitionTable::resolve(state, pp::ActionStatus::FAILED));
+  }
+}
+
+TEST(PandaWorkflowCharacterization, DeclaresExactPlanOnlyStates)
+{
+  const auto & workflow = pp::pandaWorkflowDefinition();
+  const std::set<pp::State> expected{
+    pp::State::MOVE_ABOVE_OBJECT, pp::State::DESCEND,          pp::State::LIFT,
+    pp::State::MOVE_ABOVE_PLACE,  pp::State::DESCEND_TO_PLACE, pp::State::RETREAT};
+
+  EXPECT_EQ(expected, workflow.plan_only_states);
+  for (const auto state : workflow.plan_only_states) {
+    EXPECT_TRUE(workflow.action_states.count(state));
+    EXPECT_TRUE(workflow.forward_states.count(state));
+    EXPECT_FALSE(workflow.terminal_states.count(state));
   }
 }

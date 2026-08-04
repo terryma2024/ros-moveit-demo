@@ -50,6 +50,8 @@ const pick_place_common::WorkflowDefinition & pandaWorkflowDefinition()
                         S::RETREAT,
                         S::DONE};
     w.terminal_states = {S::DONE, S::ERROR};
+    w.plan_only_states = {S::MOVE_ABOVE_OBJECT, S::DESCEND,          S::LIFT,
+                          S::MOVE_ABOVE_PLACE,  S::DESCEND_TO_PLACE, S::RETREAT};
     if (auto failure = pick_place_common::validateWorkflowDefinition(w))
       throw std::logic_error(failure->code);
     return w;

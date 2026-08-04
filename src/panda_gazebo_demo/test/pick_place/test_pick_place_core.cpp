@@ -18,6 +18,23 @@ namespace pick_place = panda_gazebo_demo::pick_place;
 namespace
 {
 
+pick_place::RunRequest makeRunRequest(pick_place::RunMode mode,
+                                      std::optional<pick_place::State> stop_after, bool resume,
+                                      std::optional<pick_place::State> fail_at,
+                                      std::uint64_t max_state_transitions)
+{
+  pick_place::RunRequest request;
+  request.mode = mode;
+  request.stop_after = stop_after;
+  if (mode == pick_place::RunMode::PLAN_ONLY) {
+    request.plan_only_state = pick_place::State::MOVE_ABOVE_OBJECT;
+  }
+  request.resume = resume;
+  request.fail_at = fail_at;
+  request.max_state_transitions = max_state_transitions;
+  return request;
+}
+
 class FakePlanner final : public pick_place::IStatePlanner
 {
 public:
@@ -465,8 +482,8 @@ TEST(Runner, DryRunCompletesAndNeverNeedsAnActionRegistry)
   pick_place::TransitionContractRegistry contracts;
   const pick_place::StateMachineRunner runner(actions, contracts);
 
-  const auto result =
-    runner.run({pick_place::RunMode::DRY_RUN, std::nullopt, false, std::nullopt, 100});
+  const auto result = runner.run(
+    makeRunRequest(pick_place::RunMode::DRY_RUN, std::nullopt, false, std::nullopt, 100));
   EXPECT_EQ(pick_place::RunStatus::DONE, result.status);
   EXPECT_EQ(pick_place::State::DONE, result.current_state);
   EXPECT_FALSE(result.failure.has_value());
@@ -478,8 +495,8 @@ TEST(Runner, DryRunFailureFollowsTheRecoveryPathAndReportsTheInjection)
   pick_place::TransitionContractRegistry contracts;
   const pick_place::StateMachineRunner runner(actions, contracts);
 
-  const auto result = runner.run(
-    {pick_place::RunMode::DRY_RUN, std::nullopt, false, pick_place::State::DESCEND, 100});
+  const auto result = runner.run(makeRunRequest(pick_place::RunMode::DRY_RUN, std::nullopt, false,
+                                                pick_place::State::DESCEND, 100));
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   EXPECT_EQ(pick_place::State::ERROR, result.current_state);
   ASSERT_TRUE(result.failure.has_value());
@@ -492,8 +509,9 @@ TEST(Runner, DryRunFailureTakesPriorityOverStopAfter)
   pick_place::TransitionContractRegistry contracts;
   const pick_place::StateMachineRunner runner(actions, contracts);
 
-  const auto result = runner.run({pick_place::RunMode::DRY_RUN, pick_place::State::DESCEND, false,
-                                  pick_place::State::DESCEND, 100});
+  const auto result =
+    runner.run(makeRunRequest(pick_place::RunMode::DRY_RUN, pick_place::State::DESCEND, false,
+                              pick_place::State::DESCEND, 100));
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("DRY_RUN_FAILURE_INJECTED", result.failure->code);
@@ -512,8 +530,8 @@ TEST(Runner, PlanOnlyUsesExactlyOnePlannerAndDoesNotAdvanceBusinessState)
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, nullptr, nullptr,
                                               nullptr, &plan_validators);
 
-  const auto result =
-    runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, false, std::nullopt, 100});
+  const auto result = runner.run(
+    makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, false, std::nullopt, 100));
   EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
   EXPECT_EQ(pick_place::State::DESCEND, *result.next_state);
@@ -542,8 +560,8 @@ TEST(Runner, RejectsPlannedExecuteStateWithoutPlanValidator)
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator);
 
-  const auto result = runner.run(
-    {pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
+  const auto result = runner.run(makeRunRequest(
+    pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100));
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("PLAN_VALIDATOR_NOT_REGISTERED", result.failure->code);
@@ -570,8 +588,8 @@ TEST(Runner, PassesVerifiedBeforeSnapshotToExecutor)
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run(
-    {pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
+  const auto result = runner.run(makeRunRequest(
+    pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100));
 
   ASSERT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_NEAR(observer.snapshot.tcp_pose_world.x, executor->last_context.before.tcp_pose_world.x,
@@ -606,8 +624,8 @@ TEST(Runner, ExecuteWorkflowRequiresExecutionInfrastructure)
   pick_place::TransitionContractRegistry contracts;
   const pick_place::StateMachineRunner runner(actions, contracts);
 
-  const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+  const auto result = runner.run(
+    makeRunRequest(pick_place::RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("EXECUTE_INFRASTRUCTURE_MISSING", result.failure->code);
 }
@@ -629,8 +647,8 @@ TEST(Runner, ExecutesPrepareOpenGripperWithoutPlanningAndCommitsAfterPostValidat
                                               &common_resume_validator);
 
   const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
-                std::nullopt, 100});
+    runner.run(makeRunRequest(pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER,
+                              false, std::nullopt, 100));
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::PREPARE_OPEN_GRIPPER, result.current_state);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, *result.next_state);
@@ -664,8 +682,8 @@ TEST(Runner, RecordsExistingPreAndPostExecutionSnapshotsOnce)
                                               &common_resume_validator, &sink);
 
   const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
-                std::nullopt, 100});
+    runner.run(makeRunRequest(pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER,
+                              false, std::nullopt, 100));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(1, sink.calls);
@@ -700,8 +718,8 @@ TEST(Runner, ExecuteWorkflowAdvancesThroughRegisteredStatesUntilStopAfter)
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run(
-    {pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, false, std::nullopt, 100});
+  const auto result = runner.run(makeRunRequest(
+    pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, false, std::nullopt, 100));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
@@ -736,8 +754,8 @@ TEST(Runner, DoesNotCommitWhenPostValidationFails)
                                               &common_resume_validator);
 
   const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
-                std::nullopt, 100});
+    runner.run(makeRunRequest(pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER,
+                              false, std::nullopt, 100));
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("TCP_MOVED_DURING_GRIPPER_OPEN", result.failure->code);
   EXPECT_EQ(1, executor->calls);
@@ -761,8 +779,8 @@ TEST(Runner, PrepareOpenGripperFailureTransitionsToError)
                                               &common_resume_validator);
 
   const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
-                std::nullopt, 100});
+    runner.run(makeRunRequest(pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER,
+                              false, std::nullopt, 100));
 
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   EXPECT_EQ(pick_place::State::ERROR, result.current_state);
@@ -790,8 +808,8 @@ TEST(Runner, ExecutionFailureCancelsAndObservesStationaryRobotBeforeReturningErr
                                               &common_resume_validator);
 
   const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER, false,
-                std::nullopt, 100});
+    runner.run(makeRunRequest(pick_place::RunMode::EXECUTE, pick_place::State::PREPARE_OPEN_GRIPPER,
+                              false, std::nullopt, 100));
 
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("GRIPPER_OPEN_FAILED", result.failure->code);
@@ -818,8 +836,8 @@ TEST(Runner, ResumePlanOnlyValidatesCheckpointAndPlansMoveAboveWithoutCommitting
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result =
-    runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(
+    makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100));
   EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
   EXPECT_EQ(pick_place::State::DESCEND, *result.next_state);
@@ -851,8 +869,8 @@ TEST(Runner, ResumePlanOnlyWaitsForForwardCokeStationaryEvidence)
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result =
-    runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(
+    makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100));
 
   EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
   EXPECT_GE(observer.calls, 2);
@@ -879,8 +897,8 @@ TEST(Runner, ResumeExecuteRunsMoveAboveObjectFromPrepareCheckpoint)
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result = runner.run(
-    {pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100});
+  const auto result = runner.run(makeRunRequest(
+    pick_place::RunMode::EXECUTE, pick_place::State::MOVE_ABOVE_OBJECT, true, std::nullopt, 100));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_OBJECT, result.current_state);
@@ -911,8 +929,8 @@ TEST(Runner, ResumeExecuteStopsSuccessfullyAfterDescendCheckpoint)
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator, nullptr, &plan_validators);
 
-  const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, pick_place::State::DESCEND, true, std::nullopt, 100});
+  const auto result = runner.run(makeRunRequest(
+    pick_place::RunMode::EXECUTE, pick_place::State::DESCEND, true, std::nullopt, 100));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(pick_place::State::DESCEND, result.current_state);
@@ -947,7 +965,7 @@ TEST(Runner, ResumeExecuteReachesExpectedUnregisteredCloseGripperBoundary)
                                               &common_resume_validator, nullptr, &plan_validators);
 
   const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+    runner.run(makeRunRequest(pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100));
 
   EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
   ASSERT_TRUE(result.failure.has_value());
@@ -971,8 +989,8 @@ TEST(Runner, ResumeRejectsWorldMismatchBeforePlanning)
   const pick_place::StateMachineRunner runner(actions, contracts, &observer, &checkpoints,
                                               &common_resume_validator);
 
-  const auto result =
-    runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(
+    makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, true, std::nullopt, 100));
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("TCP_MOVED_DURING_GRIPPER_OPEN", result.failure->code);
   EXPECT_EQ(0, planner->calls);
@@ -1232,8 +1250,8 @@ TEST(Runner, RejectsFailureInjectionOutsideDryRun)
   pick_place::TransitionContractRegistry contracts;
   const pick_place::StateMachineRunner runner(actions, contracts);
 
-  const auto result = runner.run({pick_place::RunMode::PLAN_ONLY, std::nullopt, false,
-                                  pick_place::State::MOVE_ABOVE_OBJECT, 100});
+  const auto result = runner.run(makeRunRequest(pick_place::RunMode::PLAN_ONLY, std::nullopt, false,
+                                                pick_place::State::MOVE_ABOVE_OBJECT, 100));
   ASSERT_TRUE(result.failure.has_value());
   EXPECT_EQ("FAIL_AT_MODE_MISMATCH", result.failure->code);
 }
