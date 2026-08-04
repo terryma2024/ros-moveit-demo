@@ -7,6 +7,7 @@ find_package(gz-transport13 REQUIRED)
 
 add_library(pick_place_common_core
   src/common_resume_validator.cpp
+  src/checkpoint_validation.cpp
   src/domain_types.cpp
   src/functional_transition_contract.cpp
   src/plan_validation.cpp
@@ -60,6 +61,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_workflow_definition pick_place_common_core)
   ament_add_gtest(test_common_runner test/test_common_runner.cpp)
   target_link_libraries(test_common_runner pick_place_common_core)
+  ament_add_gtest(test_checkpoint_validation test/test_checkpoint_validation.cpp)
+  target_link_libraries(test_checkpoint_validation pick_place_common_core)
   ament_add_gtest(test_pose_geometry test/test_pose_geometry.cpp)
   target_link_libraries(test_pose_geometry pick_place_common_core)
   ament_add_gtest(test_pose_stability_tracker test/test_pose_stability_tracker.cpp)

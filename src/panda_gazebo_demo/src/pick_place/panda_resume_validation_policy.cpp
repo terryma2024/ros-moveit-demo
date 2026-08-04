@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "pick_place_common/checkpoint_validation.hpp"
+
 namespace panda_gazebo_demo::pick_place
 {
 
@@ -35,24 +37,11 @@ PandaResumeValidationPolicy::validateBoundary(const pick_place_common::Checkpoin
     add_failure("CHECKPOINT_EXPECTATION_INCOMPLETE",
                 "Checkpoint is missing required cross-world transition evidence");
   }
-  bool joint_evidence_valid =
-    checkpoint.expected.joint_positions.size() == current.joint_positions.size();
-  bool within_tolerance = true;
-  double maximum_error = 0.0;
-  for (const auto & [name, expected] : checkpoint.expected.joint_positions) {
-    const auto actual = current.joint_positions.find(name);
-    if (actual == current.joint_positions.end() || !std::isfinite(expected) ||
-        !std::isfinite(actual->second)) {
-      joint_evidence_valid = false;
-      continue;
-    }
-    const auto error = std::abs(expected - actual->second);
-    maximum_error = std::max(maximum_error, error);
-    within_tolerance = within_tolerance && error <= tolerance;
-  }
-  result.metrics["resume_joint_position_error_max"] = maximum_error;
-  if (!joint_evidence_valid ||
-      (checkpoint.phase == pick_place_common::CheckpointPhase::FORWARD && !within_tolerance)) {
+  const auto joints = pick_place_common::compareNamedJointPositions(
+    checkpoint.expected.joint_positions, current.joint_positions, tolerance);
+  result.metrics["resume_joint_position_error_max"] = joints.maximum_error;
+  if (!joints.complete || (checkpoint.phase == pick_place_common::CheckpointPhase::FORWARD &&
+                           !joints.within_tolerance)) {
     add_failure("RESUME_JOINT_POSITION_MISMATCH",
                 checkpoint.phase == pick_place_common::CheckpointPhase::FORWARD
                   ? "Current named joint positions differ from the checkpoint expectation"

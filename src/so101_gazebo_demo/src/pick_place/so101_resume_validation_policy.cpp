@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "so101_gazebo_demo/pick_place/common_resume_validator.hpp"
+#include "pick_place_common/checkpoint_validation.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -48,13 +49,6 @@ bool posesMatch(const Pose3d & expected, const Pose3d & current, double toleranc
          orientationError(expected, current) <= tolerance;
 }
 
-bool finitePositionMap(const std::map<std::string, double> & positions)
-{
-  return std::all_of(positions.begin(), positions.end(), [](const auto & item) {
-    return !item.first.empty() && std::isfinite(item.second);
-  });
-}
-
 bool poseMapsMatch(const std::map<std::string, Pose3d> & expected,
                    const std::map<std::string, Pose3d> & current, double tolerance)
 {
@@ -66,13 +60,6 @@ bool poseMapsMatch(const std::map<std::string, Pose3d> & expected,
     const auto current_pose = current.find(name);
     return !name.empty() && current_pose != current.end() &&
            posesMatch(expected_pose, current_pose->second, tolerance);
-  });
-}
-
-bool finitePoseMap(const std::map<std::string, Pose3d> & poses)
-{
-  return std::all_of(poses.begin(), poses.end(), [](const auto & item) {
-    return !item.first.empty() && poseIsFinite(item.second);
   });
 }
 
@@ -133,8 +120,8 @@ SO101ResumeValidationPolicy::validateBoundary(const pick_place_common::Checkpoin
                                  checkpoint.expected.gazebo_task_object_stationary.has_value() &&
                                  !checkpoint.expected.required_world_objects.empty();
   if (!expected_complete || !poseIsFinite(checkpoint.expected.tcp_pose_world) ||
-      !finitePositionMap(checkpoint.expected.joint_positions) ||
-      !finitePoseMap(checkpoint.expected.moveit_world_object_poses)) {
+      !pick_place_common::hasFiniteJointPositions(checkpoint.expected.joint_positions) ||
+      !pick_place_common::hasFinitePoseMap(checkpoint.expected.moveit_world_object_poses)) {
     addFailure(result, "CHECKPOINT_EXPECTATION_INCOMPLETE",
                "Checkpoint is missing complete finite cross-world boundary evidence");
   }
@@ -145,8 +132,8 @@ SO101ResumeValidationPolicy::validateBoundary(const pick_place_common::Checkpoin
                                 current.gazebo_task_object_attached.has_value() &&
                                 current.gazebo_task_object_stationary.has_value();
   if (!current_complete || !poseIsFinite(current.tcp_pose_world) ||
-      !finitePositionMap(current.joint_positions) ||
-      !finitePoseMap(current.moveit_world_object_poses) ||
+      !pick_place_common::hasFiniteJointPositions(current.joint_positions) ||
+      !pick_place_common::hasFinitePoseMap(current.moveit_world_object_poses) ||
       !poseIsFinite(*current.gazebo_task_object_pose_world)) {
     addFailure(result, "RESUME_SNAPSHOT_INCOMPLETE",
                "Current observation is missing complete finite cross-world boundary evidence");
@@ -168,21 +155,10 @@ SO101ResumeValidationPolicy::validateBoundary(const pick_place_common::Checkpoin
                "Current gripper state differs from the checkpoint expectation");
   }
 
-  bool joints_match = checkpoint.expected.joint_positions.size() == current.joint_positions.size();
-  double maximum_joint_error = 0.0;
-  for (const auto & [name, expected_position] : checkpoint.expected.joint_positions) {
-    const auto current_position = current.joint_positions.find(name);
-    if (current_position == current.joint_positions.end() || !std::isfinite(expected_position) ||
-        !std::isfinite(current_position->second)) {
-      joints_match = false;
-      continue;
-    }
-    const auto error = std::abs(expected_position - current_position->second);
-    maximum_joint_error = std::max(maximum_joint_error, error);
-    joints_match = joints_match && error <= tolerance;
-  }
-  result.metrics["resume_joint_position_error_max"] = maximum_joint_error;
-  if (forward_boundary && !joints_match) {
+  const auto joints = pick_place_common::compareNamedJointPositions(
+    checkpoint.expected.joint_positions, current.joint_positions, tolerance);
+  result.metrics["resume_joint_position_error_max"] = joints.maximum_error;
+  if (forward_boundary && (!joints.complete || !joints.within_tolerance)) {
     addFailure(result, "RESUME_JOINT_POSITION_MISMATCH",
                "Current named joint positions differ from the checkpoint expectation");
   }
