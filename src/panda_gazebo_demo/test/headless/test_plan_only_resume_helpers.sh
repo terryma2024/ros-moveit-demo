@@ -34,6 +34,16 @@ expect_failure() {
   fi
 }
 
+cat >"${temporary_directory}/target_entry_only.log" <<'EOF'
+STATE_TRANSITION state=PREPARE_OPEN_GRIPPER next_state=MOVE_ABOVE_OBJECT
+PLANNED_END_TCP_POSE state=MOVE_ABOVE_OBJECT next_state=DESCEND
+EOF
+if grep -Eq "(EXECUTED_END_TCP_POSE|STATE_TRANSITION)[^[:cntrl:]]*[[:space:]]state=MOVE_ABOVE_OBJECT([[:space:]]|$)" \
+  "${temporary_directory}/target_entry_only.log"; then
+  printf 'Target-entry transition must not be mistaken for target execution\n' >&2
+  exit 1
+fi
+
 cat >"${temporary_directory}/gazebo.txt" <<'EOF'
 Pose [ XYZ (m) ] [ RPY (rad) ]: [ 0.300000 0.000000 0.836000 ] [ 0 0 0 ]
 EOF

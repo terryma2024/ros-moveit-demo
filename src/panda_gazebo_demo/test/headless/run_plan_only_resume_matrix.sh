@@ -219,7 +219,7 @@ plan_only_pair() {
   grep -q \
     "Run completed: status=PLAN_ONLY_COMPLETE current_state=${state}" \
     "${directory}/fresh.log"
-  if grep -Eq "(EXECUTED_END_TCP_POSE|STATE_TRANSITION).*state=${state}\\b" \
+  if grep -Eq "(EXECUTED_END_TCP_POSE|STATE_TRANSITION)[^[:cntrl:]]*[[:space:]]state=${state}([[:space:]]|$)" \
     "${directory}/fresh.log"; then
     printf 'Fresh plan-only executed target %s\n' "${state}" >&2
     return 1
