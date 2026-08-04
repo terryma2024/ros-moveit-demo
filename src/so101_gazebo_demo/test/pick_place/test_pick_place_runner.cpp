@@ -574,23 +574,25 @@ TEST(PureRunnerIntegration, ExecuteUsesTheCompleteBoundaryInOrder)
             harness.scenario.executed_world->moveit_task_object_touch_links);
 }
 
-TEST(PureRunnerIntegration, PlanOnlyStopBoundaryPlansValidatesAndCheckpointsWithoutActing)
+TEST(PureRunnerIntegration, PlanOnlyExecutesPrepareThenPlansTargetWithoutExecutingTarget)
 {
   Harness harness;
-  harness.registerState(State::MOVE_ABOVE_OBJECT, true);
+  harness.registerAll();
 
   const auto result = harness.runner().run(
     makeRunRequest(RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
 
-  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
-  EXPECT_EQ(0, harness.scenario.executor_calls);
-  EXPECT_EQ(0, harness.scenario.transition_calls);
-  EXPECT_EQ(
-    (std::vector<std::string>{"observe", "precondition:MOVE_ABOVE_OBJECT", "plan:MOVE_ABOVE_OBJECT",
-                              "plan-validate:MOVE_ABOVE_OBJECT", "checkpoint:MOVE_ABOVE_OBJECT"}),
-    harness.scenario.events);
+  EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
+  EXPECT_EQ(1, harness.scenario.executor_calls);
+  EXPECT_EQ(1, harness.scenario.transition_calls);
+  EXPECT_EQ((std::vector<std::string>{
+              "observe", "precondition:PREPARE_OPEN_GRIPPER", "execute:PREPARE_OPEN_GRIPPER",
+              "observe", "transition-validate:PREPARE_OPEN_GRIPPER", "checkpoint:MOVE_ABOVE_OBJECT",
+              "observe", "precondition:MOVE_ABOVE_OBJECT", "plan:MOVE_ABOVE_OBJECT",
+              "plan-validate:MOVE_ABOVE_OBJECT"}),
+            harness.scenario.events);
   ASSERT_TRUE(harness.store.latest);
-  EXPECT_EQ(RunMode::PLAN_ONLY, harness.store.latest->source_mode);
+  EXPECT_EQ(RunMode::EXECUTE, harness.store.latest->source_mode);
   EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, harness.store.latest->last_completed_state);
   EXPECT_EQ(State::MOVE_ABOVE_OBJECT, harness.store.latest->next_state);
 }
@@ -836,15 +838,7 @@ TEST(PureRunnerIntegration, MissingPlannerExecutorValidatorContractAndObserverFa
 {
   {
     Harness harness;
-    harness.validators.registerValidator(
-      State::MOVE_ABOVE_OBJECT,
-      std::make_shared<FakePlanValidator>(State::MOVE_ABOVE_OBJECT, harness.scenario));
-    harness.actions.registerExecutor(
-      State::MOVE_ABOVE_OBJECT,
-      std::make_shared<FakeExecutor>(State::MOVE_ABOVE_OBJECT, harness.scenario));
-    harness.contracts.registerContract(
-      {State::MOVE_ABOVE_OBJECT, State::DESCEND},
-      std::make_shared<FakeContract>(State::MOVE_ABOVE_OBJECT, harness.scenario));
+    harness.registerAllExcept(std::nullopt, State::MOVE_ABOVE_OBJECT, std::nullopt, std::nullopt);
     const auto result = harness.runner().run(
       makeRunRequest(RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
     ASSERT_TRUE(result.failure);
@@ -861,9 +855,7 @@ TEST(PureRunnerIntegration, MissingPlannerExecutorValidatorContractAndObserverFa
   }
   {
     Harness harness;
-    harness.actions.registerPlanner(
-      State::MOVE_ABOVE_OBJECT,
-      std::make_shared<FakePlanner>(State::MOVE_ABOVE_OBJECT, harness.scenario));
+    harness.registerAllExcept(std::nullopt, std::nullopt, State::MOVE_ABOVE_OBJECT, std::nullopt);
     const auto result = harness.runner().run(
       makeRunRequest(RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
     ASSERT_TRUE(result.failure);

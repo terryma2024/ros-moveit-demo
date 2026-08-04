@@ -57,6 +57,11 @@ def generate_launch_description():
             DeclareLaunchArgument('mode', default_value='execute'),
             DeclareLaunchArgument('resume', default_value='false'),
             DeclareLaunchArgument('stop_after', default_value=''),
+            DeclareLaunchArgument(
+                'plan_only_state',
+                default_value='',
+                description='See docs/pick-place-launch-parameters.md',
+            ),
             DeclareLaunchArgument('simulation_session_id', default_value=''),
             DeclareLaunchArgument(
                 'checkpoint_path',
@@ -277,6 +282,7 @@ def generate_launch_description():
                     LaunchConfiguration('resume'), value_type=bool
                 ),
                 'stop_after': LaunchConfiguration('stop_after'),
+                'plan_only_state': LaunchConfiguration('plan_only_state'),
                 'simulation_session_id': LaunchConfiguration(
                     'simulation_session_id'
                 ),

@@ -17,6 +17,7 @@
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_attachment_executor.hpp"
 #include "panda_gazebo_demo/pick_place/panda_attachment_convergence_policy.hpp"
+#include "pick_place_common/run_request_validation.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
 #include "panda_gazebo_demo/pick_place/gripper_command_adapter.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
@@ -220,6 +221,7 @@ enum class StateParameterScope
 {
   FORWARD_ACTION,
   ANY_ACTION,
+  PLAN_ONLY,
 };
 
 std::optional<pick_place::State> optionalStateParameter(const std::shared_ptr<rclcpp::Node> & node,
@@ -233,11 +235,17 @@ std::optional<pick_place::State> optionalStateParameter(const std::shared_ptr<rc
   }
   const auto state = pick_place::stateFromString(value);
   const bool valid_action = state && pick_place::isAction(*state);
-  const bool valid_scope = valid_action && (scope == StateParameterScope::ANY_ACTION ||
-                                            pick_place::isForwardAction(*state));
+  const bool valid_scope =
+    valid_action &&
+    (scope == StateParameterScope::ANY_ACTION ||
+     (scope == StateParameterScope::FORWARD_ACTION && pick_place::isForwardAction(*state)) ||
+     (scope == StateParameterScope::PLAN_ONLY &&
+      pick_place::pandaWorkflowDefinition().plan_only_states.count(*state)));
   if (!valid_scope) {
     const char * expected = scope == StateParameterScope::ANY_ACTION ? "a non-terminal action State"
-                                                                     : "a forward action State";
+                            : scope == StateParameterScope::FORWARD_ACTION
+                              ? "a forward action State"
+                              : "an approved plan-only State";
     RCLCPP_ERROR(logger, "%s must name %s; got '%s'", name.c_str(), expected, value.c_str());
     return std::nullopt;
   }
@@ -277,14 +285,26 @@ int main(int argc, char * argv[])
   const auto stop_after =
     optionalStateParameter(node, "stop_after", StateParameterScope::ANY_ACTION, logger);
   const auto stop_after_value = node->get_parameter("stop_after").get_value<std::string>();
-  if ((!fail_at_value.empty() && !fail_at) || (!stop_after_value.empty() && !stop_after)) {
+  const auto plan_only_state =
+    optionalStateParameter(node, "plan_only_state", StateParameterScope::PLAN_ONLY, logger);
+  const auto plan_only_state_value =
+    node->get_parameter("plan_only_state").get_value<std::string>();
+  if ((!fail_at_value.empty() && !fail_at) || (!stop_after_value.empty() && !stop_after) ||
+      (!plan_only_state_value.empty() && !plan_only_state)) {
     rclcpp::shutdown();
     return EXIT_FAILURE;
   }
 
   const auto resume = parameterOrDeclare(node, "resume", false);
-  if (resume && *mode == pick_place::RunMode::DRY_RUN) {
-    RCLCPP_ERROR(logger, "resume is supported only in plan_only and execute modes");
+  pick_place::RunRequest request;
+  request.mode = *mode;
+  request.stop_after = stop_after;
+  request.plan_only_state = plan_only_state;
+  request.resume = resume;
+  request.fail_at = fail_at;
+  if (const auto failure =
+        pick_place_common::validateRunRequest(pick_place::pandaWorkflowDefinition(), request)) {
+    RCLCPP_ERROR(logger, "%s: %s", failure->code.c_str(), failure->message.c_str());
     rclcpp::shutdown();
     return EXIT_FAILURE;
   }
@@ -426,29 +446,27 @@ int main(int argc, char * argv[])
     pick_place::PickPlaceRuntimeDependencies dependencies;
     dependencies.motion = motion_adapter;
     dependencies.observer = motion_adapter;
-    if (*mode == pick_place::RunMode::EXECUTE) {
-      const auto attachment_convergence_policy =
-        std::make_shared<pick_place::PandaAttachmentConvergencePolicy>(gripper_limits);
-      dependencies.gripper = std::make_shared<pick_place::GripperCommandAdapter>(
-        node, parameters.gripper_action_name, parameters.gripper_action_timeout_seconds);
-      dependencies.moveit_scene =
-        std::make_shared<pick_place::MoveItSceneAdapter>(node, parameters.planning_group);
-      dependencies.gazebo_attach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
-        pick_place::State::ATTACH_GAZEBO, true, parameters.gazebo_attach_topic,
-        parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
-        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
-        attachment_convergence_policy);
-      dependencies.gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
-        pick_place::State::DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
-        parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
-        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
-        attachment_convergence_policy);
-      dependencies.recovery_gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
-        pick_place::State::RECOVER_DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
-        parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
-        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, true,
-        attachment_convergence_policy);
-    }
+    const auto attachment_convergence_policy =
+      std::make_shared<pick_place::PandaAttachmentConvergencePolicy>(gripper_limits);
+    dependencies.gripper = std::make_shared<pick_place::GripperCommandAdapter>(
+      node, parameters.gripper_action_name, parameters.gripper_action_timeout_seconds);
+    dependencies.moveit_scene =
+      std::make_shared<pick_place::MoveItSceneAdapter>(node, parameters.planning_group);
+    dependencies.gazebo_attach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
+      pick_place::State::ATTACH_GAZEBO, true, parameters.gazebo_attach_topic,
+      parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
+      parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
+      attachment_convergence_policy);
+    dependencies.gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
+      pick_place::State::DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
+      parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
+      parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
+      attachment_convergence_policy);
+    dependencies.recovery_gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
+      pick_place::State::RECOVER_DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
+      parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
+      parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, true,
+      attachment_convergence_policy);
     pick_place::PickPlaceRuntimeConfig runtime_config;
     const auto ready_joints =
       motion_adapter->namedTargetJointPositions(parameters.ready_named_target);
@@ -496,7 +514,7 @@ int main(int argc, char * argv[])
   std::unique_ptr<LoggingCheckpointStore> checkpoint_store;
   std::unique_ptr<pick_place::GazeboWorldObserver> world_observer;
   std::unique_ptr<pick_place::CommonResumeValidator> common_resume_validator;
-  if (*mode == pick_place::RunMode::EXECUTE || resume) {
+  if (*mode == pick_place::RunMode::EXECUTE || *mode == pick_place::RunMode::PLAN_ONLY || resume) {
     checkpoint_store = std::make_unique<LoggingCheckpointStore>(checkpoint_path, logger);
     world_observer = std::make_unique<pick_place::GazeboWorldObserver>(
       *motion_adapter, parameters.gazebo_world_name, parameters.gazebo_coke_model,
@@ -519,11 +537,6 @@ int main(int argc, char * argv[])
                                               checkpoint_store.get(), common_resume_validator.get(),
                                               &execution_observation_logger,
                                               &runtime.plan_validators, &recovery_policy);
-  pick_place::RunRequest request;
-  request.mode = *mode;
-  request.stop_after = stop_after;
-  request.resume = resume;
-  request.fail_at = fail_at;
   request.max_state_transitions = parameters.max_state_transitions;
   const auto result = runner.run(request);
   if (result.failure) {
