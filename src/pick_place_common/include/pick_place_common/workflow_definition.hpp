@@ -22,6 +22,7 @@ struct WorkflowDefinition
   std::set<State> forward_states;
   std::set<State> terminal_states;
   std::set<State> force_continue_states;
+  std::set<State> plan_only_states;
 };
 
 [[nodiscard]] std::optional<Failure>

@@ -1,5 +1,9 @@
 #include "pick_place_common/workflow_definition.hpp"
 
+#include <set>
+
+#include "pick_place_common/run_request_validation.hpp"
+
 namespace pick_place_common
 {
 namespace
@@ -56,6 +60,45 @@ std::optional<Failure> validateWorkflowDefinition(const WorkflowDefinition & wor
     if (!workflow.terminal_states.count(state) && !workflow.transitions.count(state)) {
       return configurationFailure("WORKFLOW_TRANSITION_MISSING",
                                   "non-terminal state has no transition");
+    }
+  }
+  {
+    std::set<State> visited;
+    State state = workflow.initial_state;
+    while (!workflow.terminal_states.count(state)) {
+      if (!visited.insert(state).second) {
+        return configurationFailure("WORKFLOW_FORWARD_SUCCESS_CYCLE",
+                                    "forward success path contains a cycle");
+      }
+      const auto transition = workflow.transitions.find(state);
+      if (transition == workflow.transitions.end()) {
+        break;
+      }
+      state = transition->second.succeeded;
+    }
+  }
+  for (const auto state : workflow.plan_only_states) {
+    if (workflow.terminal_states.count(state)) {
+      return configurationFailure("WORKFLOW_PLAN_ONLY_STATE_TERMINAL",
+                                  "plan-only state cannot be terminal");
+    }
+    if (!workflow.action_states.count(state) || !workflow.forward_states.count(state)) {
+      return configurationFailure("WORKFLOW_PLAN_ONLY_STATE_NOT_FORWARD_ACTION",
+                                  "plan-only state must be a forward action state");
+    }
+    if (compareForwardPathPosition(workflow, workflow.initial_state, state) ==
+        ForwardPathRelation::UNREACHABLE) {
+      return configurationFailure("WORKFLOW_PLAN_ONLY_STATE_UNREACHABLE",
+                                  "plan-only state is not on the forward success path");
+    }
+    std::size_t predecessor_count = 0;
+    for (const auto & [source, edges] : workflow.transitions) {
+      (void)source;
+      predecessor_count += edges.succeeded == state ? 1U : 0U;
+    }
+    if (predecessor_count != 1) {
+      return configurationFailure("WORKFLOW_PLAN_ONLY_PREDECESSOR_AMBIGUOUS",
+                                  "plan-only state must have exactly one successful predecessor");
     }
   }
   return std::nullopt;

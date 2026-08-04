@@ -13,6 +13,7 @@ add_library(pick_place_common_core
   src/plan_validation.cpp
   src/pose_geometry.cpp
   src/pose_stability_tracker.cpp
+  src/run_request_validation.cpp
   src/runner.cpp
   src/simulation_session_id.cpp
   src/state_action.cpp
@@ -59,6 +60,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_package_contract test/test_package_contract.py)
   ament_add_gtest(test_workflow_definition test/test_workflow_definition.cpp)
   target_link_libraries(test_workflow_definition pick_place_common_core)
+  ament_add_gtest(test_run_request_validation test/test_run_request_validation.cpp)
+  target_link_libraries(test_run_request_validation pick_place_common_core)
   ament_add_gtest(test_common_runner test/test_common_runner.cpp)
   target_link_libraries(test_common_runner pick_place_common_core)
   ament_add_gtest(test_checkpoint_validation test/test_checkpoint_validation.cpp)
