@@ -139,6 +139,15 @@ add_library(pick_place_core
   src/pick_place/world_reset_coordinator.cpp
   src/pick_place/robot_home_reset_adapter.cpp
 )
+
+add_library(so101_workspace_sampling
+  src/workspace/workspace_types.cpp
+)
+target_compile_features(so101_workspace_sampling PUBLIC cxx_std_17)
+target_include_directories(so101_workspace_sampling PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(so101_workspace_sampling PUBLIC pick_place_core)
 target_compile_features(pick_place_core PUBLIC cxx_std_17)
 target_include_directories(pick_place_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -190,6 +199,7 @@ so101_gazebo_add_cpp_quality_gate(
     include/so101_gazebo_demo/pick_place/fingertip_pad_gap_calibration_data.hpp
     include/so101_gazebo_demo/pick_place/gripper_width_calibration_data.hpp
   TARGETS
+    so101_workspace_sampling
     pick_place_core
     pick_place_state_machine
     gazebo_attachment_state_relay
@@ -202,6 +212,8 @@ so101_gazebo_add_cpp_quality_gate(
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_workspace_types test/workspace/test_workspace_types.cpp)
+  target_link_libraries(test_workspace_types so101_workspace_sampling)
   ament_add_gtest(test_pick_place_dry_run test/pick_place/test_dry_run.cpp)
   target_link_libraries(test_pick_place_dry_run pick_place_core)
   ament_add_gtest(test_pick_place_checkpoint test/pick_place/test_checkpoint.cpp)
