@@ -4,6 +4,23 @@
 
 namespace pp = pick_place_common;
 
+namespace
+{
+pp::WorkflowDefinition validPlanOnlyWorkflow()
+{
+  pp::WorkflowDefinition workflow;
+  workflow.transitions[pp::State::IDLE] = {pp::State::PREPARE_OPEN_GRIPPER, pp::State::ERROR};
+  workflow.transitions[pp::State::PREPARE_OPEN_GRIPPER] = {pp::State::MOVE_ABOVE_OBJECT,
+                                                           pp::State::ERROR};
+  workflow.transitions[pp::State::MOVE_ABOVE_OBJECT] = {pp::State::DONE, pp::State::ERROR};
+  workflow.action_states = {pp::State::PREPARE_OPEN_GRIPPER, pp::State::MOVE_ABOVE_OBJECT};
+  workflow.forward_states = {pp::State::IDLE, pp::State::PREPARE_OPEN_GRIPPER,
+                             pp::State::MOVE_ABOVE_OBJECT, pp::State::DONE};
+  workflow.terminal_states = {pp::State::DONE, pp::State::ERROR};
+  return workflow;
+}
+}  // namespace
+
 TEST(WorkflowDefinition, RejectsMissingTransitionAndUnknownTarget)
 {
   pp::WorkflowDefinition missing;
@@ -69,4 +86,50 @@ TEST(WorkflowDefinition, ResolvesBothEdgesTerminalSelfLoopsAndUnknownStates)
             pp::resolveTransition(workflow, pp::State::ERROR, pp::ActionStatus::SUCCEEDED));
   EXPECT_EQ(pp::State::ERROR, pp::resolveTransition(workflow, pp::State::MOVE_ABOVE_OBJECT,
                                                     pp::ActionStatus::SUCCEEDED));
+}
+
+TEST(WorkflowDefinition, AcceptsReachableActionPlanOnlyState)
+{
+  auto workflow = validPlanOnlyWorkflow();
+  workflow.plan_only_states = {pp::State::MOVE_ABOVE_OBJECT};
+  EXPECT_FALSE(pp::validateWorkflowDefinition(workflow));
+}
+
+TEST(WorkflowDefinition, RejectsInvalidPlanOnlyDeclarations)
+{
+  auto terminal = validPlanOnlyWorkflow();
+  terminal.plan_only_states = {pp::State::DONE};
+  ASSERT_TRUE(pp::validateWorkflowDefinition(terminal));
+  EXPECT_EQ("WORKFLOW_PLAN_ONLY_STATE_TERMINAL", pp::validateWorkflowDefinition(terminal)->code);
+
+  auto non_action = validPlanOnlyWorkflow();
+  non_action.forward_states.insert(pp::State::RECOVER_RETREAT);
+  non_action.transitions[pp::State::RECOVER_RETREAT] = {pp::State::DONE, pp::State::ERROR};
+  non_action.plan_only_states = {pp::State::RECOVER_RETREAT};
+  ASSERT_TRUE(pp::validateWorkflowDefinition(non_action));
+  EXPECT_EQ("WORKFLOW_PLAN_ONLY_STATE_NOT_FORWARD_ACTION",
+            pp::validateWorkflowDefinition(non_action)->code);
+
+  auto unreachable = validPlanOnlyWorkflow();
+  unreachable.action_states.insert(pp::State::DESCEND);
+  unreachable.forward_states.insert(pp::State::DESCEND);
+  unreachable.transitions[pp::State::DESCEND] = {pp::State::DONE, pp::State::ERROR};
+  unreachable.plan_only_states = {pp::State::DESCEND};
+  ASSERT_TRUE(pp::validateWorkflowDefinition(unreachable));
+  EXPECT_EQ("WORKFLOW_PLAN_ONLY_STATE_UNREACHABLE",
+            pp::validateWorkflowDefinition(unreachable)->code);
+
+  auto ambiguous = validPlanOnlyWorkflow();
+  ambiguous.action_states.insert(pp::State::RECOVER_RETREAT);
+  ambiguous.transitions[pp::State::RECOVER_RETREAT] = {pp::State::MOVE_ABOVE_OBJECT,
+                                                       pp::State::ERROR};
+  ambiguous.plan_only_states = {pp::State::MOVE_ABOVE_OBJECT};
+  ASSERT_TRUE(pp::validateWorkflowDefinition(ambiguous));
+  EXPECT_EQ("WORKFLOW_PLAN_ONLY_PREDECESSOR_AMBIGUOUS",
+            pp::validateWorkflowDefinition(ambiguous)->code);
+
+  auto cycle = validPlanOnlyWorkflow();
+  cycle.transitions[pp::State::MOVE_ABOVE_OBJECT].succeeded = pp::State::PREPARE_OPEN_GRIPPER;
+  ASSERT_TRUE(pp::validateWorkflowDefinition(cycle));
+  EXPECT_EQ("WORKFLOW_FORWARD_SUCCESS_CYCLE", pp::validateWorkflowDefinition(cycle)->code);
 }
