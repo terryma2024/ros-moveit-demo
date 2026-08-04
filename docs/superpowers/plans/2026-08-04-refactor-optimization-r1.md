@@ -275,7 +275,7 @@ class ITransitionValidationDecorator {
 - Modify: Panda/SO-101 file checkpoint stores only where a pure predicate is exactly shared
 - Modify: `src/pick_place_common/CMakeLists.txt`
 
-- [ ] 写 RED tests 并实现：
+- [x] 写 RED tests 并实现：
 
 ```cpp
 struct NamedJointComparison {
@@ -295,10 +295,10 @@ struct NamedJointComparison {
   const std::map<std::string, Pose3d> &) noexcept;
 ```
 
-- [ ] Tests 覆盖 empty、missing、extra、不同顺序、NaN/Inf、负/NaN tolerance、恰好等于与刚超过 tolerance；`maximum_error` 的 invalid-input 约定必须明确且可断言。
-- [ ] Panda/SO-101 policies 使用公共 comparison，但 phase 判断、failure category/code/message 和各自 completeness 规则继续留在 policy。
-- [ ] file store 仅迁移完全相同的 finite map/pose predicate；不要统一 JSON parser/writer，不改变原子写、备份、磁盘 key 或 schema rejection 文案。
-- [ ] 用既有 schema-v3 fixtures 做 read -> write -> read 兼容测试；负向 resume exact code tests 必须通过。
+- [x] Tests 覆盖 empty、missing、extra、不同顺序、NaN/Inf、负/NaN tolerance、恰好等于与刚超过 tolerance；`maximum_error` 的 invalid-input 约定必须明确且可断言。
+- [x] Panda/SO-101 policies 使用公共 comparison，但 phase 判断、failure category/code/message 和各自 completeness 规则继续留在 policy。
+- [x] file store 仅迁移完全相同的 finite map/pose predicate；不要统一 JSON parser/writer，不改变原子写、备份、磁盘 key 或 schema rejection 文案。
+- [x] 用既有 schema-v3 fixtures 做 read -> write -> read 兼容测试；负向 resume exact code tests 必须通过。
 
 **Acceptance:** 两个 resume policy 不再各自手写 named-joint 循环；Panda/SO-101 schema-v3 JSON key snapshot 与 R1 前一致；stale session 和 fingerprint mismatch 仍返回各自 exact code 且 trace 为空。
 
