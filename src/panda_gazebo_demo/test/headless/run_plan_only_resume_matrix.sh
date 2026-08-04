@@ -116,9 +116,9 @@ last_attachment_is_detached() {
 reset_fixture() {
   local directory="$1"
   mkdir -p "${directory}"
-  last_attachment_is_detached
   EXPECTED_COKE_DETACHED=true "${package_root}/scripts/reset_world.sh" \
     >"${directory}/reset.log" 2>&1
+  wait_until 10 'detached state after independent reset' last_attachment_is_detached
   timeout 5 ros2 service call /get_planning_scene \
     moveit_msgs/srv/GetPlanningScene '{components: {components: 28}}' \
     >"${directory}/reset_moveit.txt" 2>&1
