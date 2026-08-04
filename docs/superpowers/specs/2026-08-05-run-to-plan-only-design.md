@@ -1,7 +1,7 @@
 # Run-to-Plan-Only 与 Pick/Place 启动参数手册设计
 
 日期：2026-08-05
-状态：已完成口头设计审批，等待书面 spec 确认
+状态：书面 spec 已批准，进入实施计划阶段
 适用范围：`pick_place_common`、`panda_gazebo_demo`、`so101_gazebo_demo`
 
 ## 1. 背景
