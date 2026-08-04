@@ -34,3 +34,15 @@ def test_plan_only_state_is_public_and_forwarded():
     assert defaults['plan_only_state'] == ''
     assert "'plan_only_state': LaunchConfiguration('plan_only_state')" in source
     assert 'docs/pick-place-launch-parameters.md' in declared['plan_only_state'].description
+
+
+def test_plan_only_request_uses_common_validation_before_runtime_bootstrap():
+    source = (
+        PANDA_LAUNCH.parent.parent
+        / 'src'
+        / 'nodes'
+        / 'pick_place_state_machine_node.cpp'
+    ).read_text()
+
+    assert 'scope == StateParameterScope::PLAN_ONLY' in source
+    assert source.index('validateRunRequest') < source.index('resolveSimulationSessionId')

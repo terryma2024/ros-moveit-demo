@@ -239,8 +239,7 @@ std::optional<pick_place::State> optionalStateParameter(const std::shared_ptr<rc
     valid_action &&
     (scope == StateParameterScope::ANY_ACTION ||
      (scope == StateParameterScope::FORWARD_ACTION && pick_place::isForwardAction(*state)) ||
-     (scope == StateParameterScope::PLAN_ONLY &&
-      pick_place::pandaWorkflowDefinition().plan_only_states.count(*state)));
+     scope == StateParameterScope::PLAN_ONLY);
   if (!valid_scope) {
     const char * expected = scope == StateParameterScope::ANY_ACTION ? "a non-terminal action State"
                             : scope == StateParameterScope::FORWARD_ACTION
