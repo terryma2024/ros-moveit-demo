@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -59,6 +60,35 @@ class PlanningWorker(Worker):
 
 async def lease(service):
     return (await service.command("lease", {"command_id": "lease"})).layers["lease_id"]
+
+
+def test_package_cli_preserves_cpp_owner_failure_diagnostics(monkeypatch, tmp_path):
+    prefix = tmp_path / "prefix"
+    executable = prefix / "lib" / "so101_gazebo_demo" / "pick_place_state_machine"
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    diagnostic_dir = tmp_path / "diagnostics"
+    monkeypatch.setenv("SO101_TELEOP_OWNER_DIAGNOSTIC_DIR", str(diagnostic_dir))
+    monkeypatch.setattr(
+        "ament_index_python.packages.get_package_prefix", lambda package: str(prefix))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=1,
+            stdout="status=ERROR\nfailure=ARM_NOT_QUIESCENT_AFTER_EXECUTION\n",
+            stderr="owner stderr evidence\n",
+        ),
+    )
+    worker = object.__new__(RosTelemetryWorker)
+
+    with pytest.raises(RuntimeError, match="^CPP_OWNER_FAILED_pick_place_state_machine$"):
+        worker.package_cli("pick_place_state_machine", ["--mode", "execute"], 1.0)
+
+    diagnostic = (diagnostic_dir / "last-pick_place_state_machine.log").read_text()
+    assert "failure=ARM_NOT_QUIESCENT_AFTER_EXECUTION" in diagnostic
+    assert "owner stderr evidence" in diagnostic
+    assert "arguments=['--mode', 'execute']" in diagnostic
 
 
 def test_joint_plan_forwards_bounded_velocity_and_acceleration_scaling():

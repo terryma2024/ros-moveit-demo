@@ -418,10 +418,9 @@ public:
         relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
       for (const auto & sample : motion->samples) {
         if (!sample.attached_task_object_pose_world ||
-            !cylindricalPoseWithin(
+            !withinSO101AttachmentModelTolerance(
               relativePose(sample.tcp_pose, *sample.attached_task_object_pose_world),
-              expected_relative, profile_.task_object_position_drift_tolerance,
-              profile_.task_object_orientation_drift_tolerance_rad)) {
+              expected_relative, profile_)) {
           addFailure(
             result, FailureCategory::PLAN_VALIDATION, "ATTACHED_TASK_OBJECT_RELATIVE_PATH_MISMATCH",
             "Every carrying sample must preserve the observed TCP-TaskObject relative pose");
@@ -948,7 +947,9 @@ ObservationResult SO101MoveItWorldObserver::observe()
   if (!finite(config_.max_age_seconds) || config_.max_age_seconds <= 0.0 ||
       config_.settle_samples == 0 || !finite(config_.settle_interval_seconds) ||
       config_.settle_interval_seconds < 0.0 || !finite(config_.joint_settle_tolerance) ||
-      config_.joint_settle_tolerance < 0.0) {
+      config_.joint_settle_tolerance < 0.0 ||
+      !finite(config_.joint_stationary_position_tolerance) ||
+      config_.joint_stationary_position_tolerance < 0.0) {
     return {std::nullopt,
             observationFailure("WORLD_OBSERVER_CONFIG_INVALID",
                                "World observer timing and settle limits are invalid")};
@@ -956,6 +957,7 @@ ObservationResult SO101MoveItWorldObserver::observe()
   std::optional<CurrentJointStateEvidence> previous;
   std::optional<CurrentJointStateEvidence> current;
   bool stationary = true;
+  const bool use_position_window = config_.settle_samples > 1;
   const auto validate_current =
     [this](const std::optional<CurrentJointStateEvidence> & evidence) -> std::optional<Failure> {
     if (!evidence || evidence->joint_names != profile_.arm_joints ||
@@ -987,11 +989,12 @@ ObservationResult SO101MoveItWorldObserver::observe()
     if (auto failure = validate_current(current))
       return {std::nullopt, std::move(failure)};
     for (std::size_t i = 0; i < current->positions.size(); ++i) {
-      stationary = stationary && std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
-      if (previous && std::abs(previous->positions[i] - current->positions[i]) >
-                        config_.joint_settle_tolerance) {
-        stationary = false;
-      }
+      if (previous)
+        stationary = stationary && std::abs(previous->positions[i] - current->positions[i]) <=
+                                     config_.joint_stationary_position_tolerance;
+      else if (!use_position_window)
+        stationary =
+          stationary && std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
     }
     if (previous && std::abs(*previous->gripper_position - *current->gripper_position) >
                       config_.joint_settle_tolerance) {
@@ -1040,12 +1043,16 @@ ObservationResult SO101MoveItWorldObserver::observe()
   if (auto failure = validate_current(current))
     return {std::nullopt, std::move(failure)};
   for (std::size_t i = 0; i < current->positions.size(); ++i) {
-    if (std::abs(previous->positions[i] - current->positions[i]) > config_.joint_settle_tolerance) {
+    const double position_delta = std::abs(previous->positions[i] - current->positions[i]);
+    if (position_delta > config_.joint_settle_tolerance) {
       return {std::nullopt,
               observationFailure("ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION",
                                  "Arm joints changed while MoveIt scene evidence was collected")};
     }
-    stationary = stationary && std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
+    if (use_position_window)
+      stationary = stationary && position_delta <= config_.joint_stationary_position_tolerance;
+    else
+      stationary = stationary && std::abs(current->velocities[i]) <= profile_.q6_velocity_tolerance;
   }
   if (std::abs(*previous->gripper_position - *current->gripper_position) >
       config_.joint_settle_tolerance) {
@@ -1086,6 +1093,15 @@ makeSO101MotionContract(const SO101FixedMotionSpec & spec, SO101Profile profile)
     return {};
   }
   return std::make_shared<MotionContract>(spec, std::move(profile));
+}
+
+bool withinSO101AttachmentModelTolerance(const Pose3d & observed_relative_pose,
+                                         const Pose3d & planned_relative_pose,
+                                         const SO101Profile & profile)
+{
+  return cylindricalPoseWithin(observed_relative_pose, planned_relative_pose,
+                               profile.task_object_position_drift_tolerance,
+                               profile.task_object_attachment_orientation_tolerance_rad);
 }
 
 SO101PickPlaceRuntimeRegistries
