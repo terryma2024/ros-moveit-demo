@@ -1,5 +1,7 @@
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
 
+#include "so101_gazebo_demo/pick_place/support_pose.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -43,44 +45,6 @@ void append(ValidationResult & result, ValidationResult additional)
   result.ok = result.failures.empty();
 }
 
-double localPositionDistance(const Pose3d & first, const Pose3d & second)
-{
-  return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
-}
-
-double localOrientationDistance(const Pose3d & first, const Pose3d & second)
-{
-  const double first_norm =
-    std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
-  const double second_norm =
-    std::hypot(std::hypot(second.qx, second.qy), std::hypot(second.qz, second.qw));
-  if (!std::isfinite(first_norm) || !std::isfinite(second_norm) || first_norm <= 1e-12 ||
-      second_norm <= 1e-12) {
-    return INFINITY;
-  }
-  const double dot = std::abs(
-    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
-    (first_norm * second_norm));
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
-}
-
-bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
-{
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
-  if (!std::isfinite(norm) || norm <= 1e-12)
-    return false;
-  const double xy_error = std::hypot(pose.x - profile.place_task_object_pose.x,
-                                     pose.y - profile.place_task_object_pose.y);
-  const double height_error = std::abs(pose.z - profile.place_task_object_pose.z);
-  const double local_z_world_z =
-    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
-  const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
-  return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
-         xy_error <= profile.place_support_xy_tolerance &&
-         height_error <= profile.place_support_height_tolerance &&
-         tilt <= profile.place_support_tilt_tolerance_rad;
-}
-
 double uprightTilt(const Pose3d & pose)
 {
   const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
@@ -121,11 +85,11 @@ void requireAttachmentEvidence(ValidationResult & result, const WorldSnapshot & 
            *world.moveit_task_object_attached_link == profile.moveit_attach_link &&
            world.moveit_task_object_touch_links == touch_links &&
            world.moveit_task_object_attached_relative_pose &&
-           localPositionDistance(*world.moveit_task_object_attached_relative_pose,
-                                 profile.calibrated_grasp_relative_pose) <=
+           positionDistance(*world.moveit_task_object_attached_relative_pose,
+                            profile.calibrated_grasp_relative_pose) <=
              profile.task_object_position_drift_tolerance &&
-           localOrientationDistance(*world.moveit_task_object_attached_relative_pose,
-                                    profile.calibrated_grasp_relative_pose) <=
+           orientationDistance(*world.moveit_task_object_attached_relative_pose,
+                               profile.calibrated_grasp_relative_pose) <=
              profile.task_object_attachment_orientation_tolerance_rad;
   };
   bool valid = false;
@@ -206,10 +170,10 @@ public:
                                    "TaskObject poses are required before and after close",
                                    {}});
       } else {
-        const double position_drift = localPositionDistance(*before.gazebo_task_object_pose_world,
-                                                            *after.gazebo_task_object_pose_world);
-        const double orientation_drift = localOrientationDistance(
-          *before.gazebo_task_object_pose_world, *after.gazebo_task_object_pose_world);
+        const double position_drift = positionDistance(*before.gazebo_task_object_pose_world,
+                                                       *after.gazebo_task_object_pose_world);
+        const double orientation_drift = orientationDistance(*before.gazebo_task_object_pose_world,
+                                                             *after.gazebo_task_object_pose_world);
         result.metrics["task_object_position_drift"] = position_drift;
         result.metrics["task_object_orientation_drift_rad"] = orientation_drift;
         const bool upright_yaw_invariant =

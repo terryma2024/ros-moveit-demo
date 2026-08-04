@@ -95,13 +95,19 @@ public:
                   pick_place::orientationDistance(*before.gazebo_task_object_pose_world,
                                                   *after.gazebo_task_object_pose_world));
       const auto before_relative =
-        relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
+        pick_place::relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
       const auto after_relative =
-        relativePose(after.tcp_pose_world, *after.gazebo_task_object_pose_world);
-      RCLCPP_INFO(
-        logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
-        pick_place::toString(state), pick_place::positionDistance(before_relative, after_relative),
-        pick_place::orientationDistance(before_relative, after_relative));
+        pick_place::relativePose(after.tcp_pose_world, *after.gazebo_task_object_pose_world);
+      if (before_relative && after_relative) {
+        RCLCPP_INFO(logger_,
+                    "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
+                    pick_place::toString(state),
+                    pick_place::positionDistance(*before_relative, *after_relative),
+                    pick_place::orientationDistance(*before_relative, *after_relative));
+      } else {
+        RCLCPP_INFO(logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s unavailable",
+                    pick_place::toString(state));
+      }
     } else {
       RCLCPP_INFO(logger_, "COKE_DRIFT state=%s unavailable", pick_place::toString(state));
       RCLCPP_INFO(logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s unavailable",
@@ -125,26 +131,6 @@ private:
   static int valueOrUnknown(const std::optional<bool> & value)
   {
     return value ? (*value ? 1 : 0) : -1;
-  }
-
-  static pick_place::Pose3d relativePose(const pick_place::Pose3d & frame,
-                                         const pick_place::Pose3d & object)
-  {
-    const Eigen::Isometry3d world_frame =
-      Eigen::Translation3d(frame.x, frame.y, frame.z) *
-      Eigen::Quaterniond(frame.qw, frame.qx, frame.qy, frame.qz).normalized();
-    const Eigen::Isometry3d world_object =
-      Eigen::Translation3d(object.x, object.y, object.z) *
-      Eigen::Quaterniond(object.qw, object.qx, object.qy, object.qz).normalized();
-    const Eigen::Isometry3d relative = world_frame.inverse() * world_object;
-    const Eigen::Quaterniond orientation(relative.rotation());
-    return {relative.translation().x(),
-            relative.translation().y(),
-            relative.translation().z(),
-            orientation.x(),
-            orientation.y(),
-            orientation.z(),
-            orientation.w()};
   }
 
   void logPose(const char * label, pick_place::State state,

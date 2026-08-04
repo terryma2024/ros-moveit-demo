@@ -257,49 +257,6 @@ void requireCokeDrift(ValidationResult & result, const WorldSnapshot & before,
   }
 }
 
-struct Quaternion
-{
-  double x;
-  double y;
-  double z;
-  double w;
-};
-
-Quaternion normalized(Quaternion value)
-{
-  const double norm =
-    std::sqrt(value.x * value.x + value.y * value.y + value.z * value.z + value.w * value.w);
-  if (!std::isfinite(norm) || norm <= 1.0e-12) {
-    return {0.0, 0.0, 0.0, 1.0};
-  }
-  return {value.x / norm, value.y / norm, value.z / norm, value.w / norm};
-}
-
-Quaternion multiply(const Quaternion & lhs, const Quaternion & rhs)
-{
-  return {lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
-          lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x,
-          lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w,
-          lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z};
-}
-
-Pose3d relativePose(const Pose3d & frame, const Pose3d & object)
-{
-  const auto orientation = normalized({frame.qx, frame.qy, frame.qz, frame.qw});
-  const Quaternion inverse{-orientation.x, -orientation.y, -orientation.z, orientation.w};
-  const Quaternion displacement{object.x - frame.x, object.y - frame.y, object.z - frame.z, 0.0};
-  const auto rotated = multiply(multiply(inverse, displacement), orientation);
-  const auto object_orientation = normalized({object.qx, object.qy, object.qz, object.qw});
-  const auto relative_orientation = normalized(multiply(inverse, object_orientation));
-  return {rotated.x,
-          rotated.y,
-          rotated.z,
-          relative_orientation.x,
-          relative_orientation.y,
-          relative_orientation.z,
-          relative_orientation.w};
-}
-
 void requireRelativePose(ValidationResult & result, const WorldSnapshot & before,
                          const WorldSnapshot & after, const PickPlaceContractConfig & config)
 {
@@ -312,8 +269,13 @@ void requireRelativePose(ValidationResult & result, const WorldSnapshot & before
     relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
   const auto after_relative =
     relativePose(after.tcp_pose_world, *after.gazebo_task_object_pose_world);
-  const double position_error = positionDistance(before_relative, after_relative);
-  const double orientation_error = orientationDistance(before_relative, after_relative);
+  if (!before_relative || !after_relative) {
+    addFailure(result, FailureCategory::OBSERVATION, "CARRIED_RELATIVE_POSE_UNAVAILABLE",
+               "Carrying recovery poses must contain usable quaternions");
+    return;
+  }
+  const double position_error = positionDistance(*before_relative, *after_relative);
+  const double orientation_error = orientationDistance(*before_relative, *after_relative);
   result.metrics["carried_relative_position_error"] = position_error;
   result.metrics["carried_relative_orientation_error_rad"] = orientation_error;
   if (position_error > config.carried_relative_position_tolerance) {

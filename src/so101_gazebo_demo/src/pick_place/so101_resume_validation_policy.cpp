@@ -33,6 +33,7 @@ double positionError(const Pose3d & expected, const Pose3d & current) noexcept
 
 double orientationError(const Pose3d & expected, const Pose3d & current) noexcept
 {
+  // Resume schema v3 owns this sign-invariant quaternion chord metric, not angular distance.
   const auto direct = std::hypot(std::hypot(expected.qx - current.qx, expected.qy - current.qy),
                                  std::hypot(expected.qz - current.qz, expected.qw - current.qw));
   const auto negated = std::hypot(std::hypot(expected.qx + current.qx, expected.qy + current.qy),

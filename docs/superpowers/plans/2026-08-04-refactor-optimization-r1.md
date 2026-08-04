@@ -162,13 +162,13 @@ class PoseStabilityTracker {
 - Modify: SO-101 files containing behavior-equivalent `finitePose`/distance helpers
 - Create/Modify: SO-101 local support-pose utility and its tests
 
-- [ ] 在迁移前，为 Panda `CokePoseStabilityTracker` 和 SO-101 `TaskObjectPoseStabilityTracker` 现有行为补 characterization tests，证明两者与公共 tracker 在有效、抖动和逆序时间戳输入上相同。
-- [ ] Panda 用公共 `PoseStabilityTracker`、`relativePose()`；删除三个本地 relative-pose 实现。
-- [ ] SO-101 将行为等价的 `finitePose`/position/orientation/relative/compose 实现迁到公共 API，至少覆盖当前 active callers：attachment contracts、gripper state、recovery policy、joint motion adapter、runtime、Gazebo observer、world reset、scene initializer、physical grasp validator 和 scene node。
-- [ ] 对每个未迁移的 SO-101 本地 helper 写一行 code comment 说明语义差异和 owner；`SO101ResumeValidationPolicy::orientationError` 必须保留并有 chord-distance regression test。
-- [ ] 将 `supportedAtPick`/`supportedAtPlace` 收敛为一个 SO-101-owned utility，供 `so101_joint_motion_adapter.cpp`、`pick_place_runtime.cpp` 和 `so101_gripper_state.cpp` 共用；不得放进 common。
-- [ ] 只有在类型、frame 与异常语义完全相同时，才把重复 ROS/Gazebo message conversion 放进 `pick_place_common::ros_adapters`；否则保留 robot-local 并在本计划结果中说明差异。禁止给 common core 加消息依赖。
-- [ ] 运行 common geometry/stability、Panda state/contract、SO-101 motion/runtime/attachment/recovery/observer tests。
+- [x] 在迁移前，为 Panda `CokePoseStabilityTracker` 和 SO-101 `TaskObjectPoseStabilityTracker` 现有行为补 characterization tests，证明两者与公共 tracker 在有效、抖动和逆序时间戳输入上相同。
+- [x] Panda 用公共 `PoseStabilityTracker`、`relativePose()`；删除三个本地 relative-pose 实现。
+- [x] SO-101 将行为等价的 `finitePose`/position/orientation/relative/compose 实现迁到公共 API，至少覆盖当前 active callers：attachment contracts、gripper state、recovery policy、joint motion adapter、runtime、Gazebo observer、world reset、scene initializer、physical grasp validator 和 scene node。
+- [x] 对每个未迁移的 SO-101 本地 helper 写一行 code comment 说明语义差异和 owner；`SO101ResumeValidationPolicy::orientationError` 必须保留并有 chord-distance regression test。
+- [x] 将 `supportedAtPick`/`supportedAtPlace` 收敛为一个 SO-101-owned utility，供 `so101_joint_motion_adapter.cpp`、`pick_place_runtime.cpp` 和 `so101_gripper_state.cpp` 共用；不得放进 common。
+- [x] 只有在类型、frame 与异常语义完全相同时，才把重复 ROS/Gazebo message conversion 放进 `pick_place_common::ros_adapters`；否则保留 robot-local 并在本计划结果中说明差异。禁止给 common core 加消息依赖。（ROS/Gazebo conversions 保留 robot-local：消息类型与 frame/error 语义不同。）
+- [x] 运行 common geometry/stability、Panda state/contract、SO-101 motion/runtime/attachment/recovery/observer tests。
 
 **Acceptance:** `rg` 不再发现行为等价的本地 `finitePose`, `relativePose`, `TaskObjectPoseStabilityTracker`, `CokePoseStabilityTracker` 实现；保留的特殊距离/tilt/support 逻辑均有机器人语义测试；两个 workflow 行为结果不变。
 

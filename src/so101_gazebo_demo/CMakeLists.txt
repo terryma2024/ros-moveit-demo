@@ -114,6 +114,7 @@ add_library(so101_pick_place_runtime
   src/pick_place/so101_profile.cpp
   src/pick_place/so101_gripper_validation.cpp
   src/pick_place/so101_gripper_state.cpp
+  src/pick_place/support_pose.cpp
   src/pick_place/so101_attachment_contracts.cpp
   src/pick_place/so101_recovery_policy.cpp
   src/pick_place/so101_task3_runtime.cpp
@@ -216,6 +217,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_ros_trajectory_action_client so101_pick_place_runtime)
   ament_add_gtest(test_so101_gripper_state test/pick_place/test_so101_gripper_state.cpp)
   target_link_libraries(test_so101_gripper_state so101_pick_place_runtime)
+  ament_add_gtest(test_support_pose test/pick_place/test_support_pose.cpp)
+  target_link_libraries(test_support_pose so101_pick_place_runtime)
   ament_add_gtest(test_so101_gazebo_attachment test/pick_place/test_so101_gazebo_attachment.cpp)
   target_link_libraries(test_so101_gazebo_attachment so101_pick_place_runtime gz-msgs10::core gz-transport13::core)
   ament_add_gtest(test_attachment_state_reducer

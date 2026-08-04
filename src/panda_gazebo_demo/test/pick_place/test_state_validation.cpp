@@ -126,3 +126,14 @@ TEST(GazeboObserver, ReportsMovingAfterPoseDeltaExceedsTolerance)
   ASSERT_TRUE(tracker.stationary());
   EXPECT_FALSE(*tracker.stationary());
 }
+
+TEST(GazeboObserver, StabilityTrackerRejectsOutOfOrderSamplesLikeCommonTracker)
+{
+  pick_place::CokePoseStabilityTracker tracker(2, 0.002, 0.020);
+  const auto start = std::chrono::steady_clock::now();
+  tracker.addSample({0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0}, start + std::chrono::milliseconds(50));
+  tracker.addSample({0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0}, start);
+
+  ASSERT_TRUE(tracker.stationary());
+  EXPECT_FALSE(*tracker.stationary());
+}

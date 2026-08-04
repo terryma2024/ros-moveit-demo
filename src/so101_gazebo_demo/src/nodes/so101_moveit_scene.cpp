@@ -21,27 +21,10 @@ namespace pick_place = so101_gazebo_demo::pick_place;
 
 namespace
 {
-double localPositionDistance(const pick_place::Pose3d & a, const pick_place::Pose3d & b)
-{
-  return std::hypot(std::hypot(a.x - b.x, a.y - b.y), a.z - b.z);
-}
-
-double localOrientationDistance(const pick_place::Pose3d & a, const pick_place::Pose3d & b)
-{
-  const auto a_norm = std::hypot(std::hypot(a.qx, a.qy), std::hypot(a.qz, a.qw));
-  const auto b_norm = std::hypot(std::hypot(b.qx, b.qy), std::hypot(b.qz, b.qw));
-  if (a_norm <= 1e-12 || b_norm <= 1e-12) {
-    return INFINITY;
-  }
-  const auto dot =
-    std::abs((a.qx * b.qx + a.qy * b.qy + a.qz * b.qz + a.qw * b.qw) / (a_norm * b_norm));
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
-}
-
 bool poseMatches(const pick_place::Pose3d & actual, const pick_place::Pose3d & expected)
 {
-  return localPositionDistance(actual, expected) <= 0.002 &&
-         localOrientationDistance(actual, expected) <= 0.02;
+  return pick_place::positionDistance(actual, expected) <= 0.002 &&
+         pick_place::orientationDistance(actual, expected) <= 0.02;
 }
 
 std::string poseText(const std::optional<pick_place::Pose3d> & pose)
