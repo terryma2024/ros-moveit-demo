@@ -113,6 +113,28 @@ assert not snapshot['moveit_coke_in_world']
 assert snapshot['tcp_pose'] == [0.3, 0.0, 0.9, 1.0, 0.0, 0.0, 0.0]
 PY
 
+cat >"${temporary_directory}/tcp_rpy.txt" <<'EOF'
+EXECUTED_END_TCP_POSE state=MOVE_ABOVE_OBJECT x=0.300000000 y=0.000000000 z=0.987000000 roll=3.141592654 pitch=0.000000000 yaw=0.000000000
+EXECUTED_END_TCP_POSE state=ATTACH_MOVEIT x=0.300000000 y=0.000000000 z=0.870000000 roll=3.141592654 pitch=0.000000000 yaw=0.000000000
+EOF
+python3 "${script_dir}/capture_resume_snapshot.py" \
+  "${temporary_directory}/gazebo.txt" \
+  "${temporary_directory}/attachment_attached.txt" \
+  "${temporary_directory}/joints.txt" \
+  "${temporary_directory}/scene_attached.txt" \
+  "${temporary_directory}/attached_rpy.json" \
+  "${temporary_directory}/tcp_rpy.txt"
+python3 - "${temporary_directory}/attached_rpy.json" <<'PY'
+import json
+import math
+import pathlib
+import sys
+
+snapshot = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+assert snapshot['tcp_pose'][:3] == [0.3, 0.0, 0.87]
+assert math.isclose(abs(snapshot['tcp_pose'][3]), 1.0, abs_tol=1e-9)
+PY
+
 cat >"${temporary_directory}/checkpoint.json" <<'EOF'
 {
   "schema_version": 3,
@@ -147,6 +169,33 @@ cp "${temporary_directory}/plan.log" "${temporary_directory}/plan_second.log"
 python3 "${script_dir}/assert_plan_only_tcp_unchanged.py" \
   "${temporary_directory}/plan.log" \
   "${temporary_directory}/plan_second.log" DESCEND
+
+cat >"${temporary_directory}/named_plan.log" <<'EOF'
+CHECKPOINT_PHASE=FORWARD CHECKPOINT_SEQUENCE=7 NEXT_STATE=RETREAT resume_load=1
+NAMED_JOINT_TARGET state=RETREAT target=ready
+START_TCP_POSE state=RETREAT next_state=DONE x=0.3 y=0.2 z=0.87 roll=3.141593 pitch=0 yaw=0
+PLANNED_END_TCP_POSE state=RETREAT next_state=DONE x=0.307 y=0 z=1.262 roll=3.141593 pitch=0 yaw=0
+TRAJECTORY_POINTS state=RETREAT value=69
+Run completed: status=PLAN_ONLY_COMPLETE current_state=RETREAT next_state=DONE transitions=0
+EOF
+cp "${temporary_directory}/checkpoint.json" \
+  "${temporary_directory}/named_checkpoint.json"
+python3 - "${temporary_directory}/named_checkpoint.json" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+checkpoint = json.loads(path.read_text(encoding='utf-8'))
+checkpoint['next_state'] = 'RETREAT'
+path.write_text(json.dumps(checkpoint), encoding='utf-8')
+PY
+cp "${temporary_directory}/named_checkpoint.json" \
+  "${temporary_directory}/named_checkpoint.after.json"
+python3 "${script_dir}/assert_plan_only_resume.py" \
+  "${temporary_directory}/named_plan.log" RETREAT FORWARD \
+  "${temporary_directory}/named_checkpoint.json" \
+  "${temporary_directory}/named_checkpoint.after.json"
 
 sed 's/MAX_JOINT_JUMP state=DESCEND value=0.02/MAX_JOINT_JUMP state=DESCEND value=0.21/' \
   "${temporary_directory}/plan.log" >"${temporary_directory}/invalid_jump.log"
