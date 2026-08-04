@@ -160,34 +160,6 @@ run_machine() {
     -p checkpoint_path:="${checkpoint}" >"${log_file}" 2>&1
 }
 
-run_plan_only_with_transient_retry() {
-  local log_file="$1"
-  local checkpoint="$2"
-  local session="$3"
-  local target="$4"
-  local resume="$5"
-  local attempt status attempt_log
-  for attempt in {1..10}; do
-    attempt_log="${log_file}.attempt_${attempt}"
-    set +e
-    run_machine "${attempt_log}" "${checkpoint}" "${session}" \
-      -p mode:=plan_only -p plan_only_state:="${target}" \
-      -p resume:="${resume}"
-    status=$?
-    set -e
-    if [[ "${status}" -eq 0 ]]; then
-      mv "${attempt_log}" "${log_file}"
-      return 0
-    fi
-    if ! grep -Eq 'code=MOVEIT_[A-Z_]*PLAN_FAILED' "${attempt_log}"; then
-      mv "${attempt_log}" "${log_file}"
-      return "${status}"
-    fi
-  done
-  mv "${attempt_log}" "${log_file}"
-  return "${status}"
-}
-
 execute_stop() {
   local log_file="$1"
   local checkpoint="$2"
@@ -214,8 +186,8 @@ plan_only_pair() {
   reset_fixture "${directory}"
   capture_snapshot "${directory}" initial
 
-  run_plan_only_with_transient_retry \
-    "${directory}/fresh.log" "${checkpoint}" "${session}" "${state}" false
+  run_machine "${directory}/fresh.log" "${checkpoint}" "${session}" \
+    -p mode:=plan_only -p plan_only_state:="${state}" -p resume:=false
   grep -q \
     "Run completed: status=PLAN_ONLY_COMPLETE current_state=${state}" \
     "${directory}/fresh.log"
@@ -249,8 +221,8 @@ PY
   sha256sum "${directory}/checkpoint.before.json" \
     >"${directory}/checkpoint.before.sha256"
 
-  run_plan_only_with_transient_retry \
-    "${directory}/resume.log" "${checkpoint}" "${session}" "${state}" true
+  run_machine "${directory}/resume.log" "${checkpoint}" "${session}" \
+    -p mode:=plan_only -p plan_only_state:="${state}" -p resume:=true
   python3 "${script_dir}/assert_plan_only_resume.py" \
     "${directory}/resume.log" "${state}" FORWARD \
     "${directory}/checkpoint.before.json" "${checkpoint}"

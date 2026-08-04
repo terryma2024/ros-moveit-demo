@@ -34,6 +34,9 @@ body = text.split('reset_fixture() {', 1)[1].split('\n}', 1)[0]
 assert body.index('reset_world.sh') < body.index('last_attachment_is_detached'), (
     'independent target reset must converge an attached predecessor before asserting detached state'
 )
+assert 'run_plan_only_with_transient_retry' not in text, (
+    'fresh target retries must restart the independent fixture instead of reusing a mutated world'
+)
 PY
 
 expect_failure() {
