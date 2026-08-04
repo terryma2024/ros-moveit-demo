@@ -120,7 +120,7 @@ colcon test-result --verbose
 - Modify: `src/pick_place_common/src/world_observer.cpp`
 - Modify: `src/pick_place_common/CMakeLists.txt`
 
-- [ ] 写 RED tests 并定义以下公共 API：
+- [x] 写 RED tests 并定义以下公共 API：
 
 ```cpp
 [[nodiscard]] bool isFinitePose(const Pose3d &) noexcept;
@@ -141,9 +141,9 @@ class PoseStabilityTracker {
 };
 ```
 
-- [ ] Tests 必须覆盖：任一 position/quaternion 分量 NaN/Inf；零/近零 quaternion；非单位 quaternion 归一化；`q` 与 `-q` 的同姿态；relative/compose round-trip；无效 quaternion 返回 `nullopt`；样本不足；时间戳相等/逆序；位置/角度恰好等于和刚超过 tolerance。
-- [ ] 把现有 `positionDistance`/`orientationDistance` 实现迁到新 component，并让 `world_observer.hpp` 通过 include 保持已有 source compatibility，不复制第二份实现。
-- [ ] 公共实现只能用标准库数学，不引入 ROS/MoveIt/Gazebo/Eigen 依赖。
+- [x] Tests 必须覆盖：任一 position/quaternion 分量 NaN/Inf；零/近零 quaternion；非单位 quaternion 归一化；`q` 与 `-q` 的同姿态；relative/compose round-trip；无效 quaternion 返回 `nullopt`；样本不足；时间戳相等/逆序；位置/角度恰好等于和刚超过 tolerance。
+- [x] 把现有 `positionDistance`/`orientationDistance` 实现迁到新 component，并让 `world_observer.hpp` 通过 include 保持已有 source compatibility，不复制第二份实现。
+- [x] 公共实现只能用标准库数学，不引入 ROS/MoveIt/Gazebo/Eigen 依赖。
 
 **Acceptance:** `pick_place_common` 定向 tests 全绿；`nm`/source inspection 只存在一份公共几何实现；invalid quaternion 行为显式且不产生 NaN 泄漏。
 
