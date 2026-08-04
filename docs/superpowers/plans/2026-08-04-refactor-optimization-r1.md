@@ -311,7 +311,7 @@ struct NamedJointComparison {
 - Modify: `docs/superpowers/plans/2026-08-04-refactor-optimization-r1.md`（勾选已完成项并追加最终证据索引，不改验收标准）
 - Create: no runtime/build artifacts in Git
 
-- [ ] 从 clean cache build 并验证 overlay：
+- [x] 从 clean cache build 并验证 overlay：
 
 ```zsh
 cd /data/work/ws_moveit/.worktrees/refactor-optimization-r1
@@ -325,8 +325,8 @@ PYTHONNOUSERSITE=1 colcon test --packages-select pick_place_common panda_gazebo_
 colcon test-result --verbose
 ```
 
-- [ ] 运行只读 formatting/lint gates、两个 source-manifest tests、`git diff --check`；检查没有 `.obsidian`, build/install/log/capture 产物被 tracked。
-- [ ] Panda runtime：
+- [x] 运行只读 formatting/lint gates、两个 source-manifest tests、`git diff --check`；检查没有 `.obsidian`, build/install/log/capture 产物被 tracked。
+- [x] Panda runtime：
 
 ```zsh
 src/panda_gazebo_demo/test/headless/run_pick_place_e2e.sh --runs 1 --label refactor-optimization-r1
@@ -345,12 +345,54 @@ ros2 launch so101_gazebo_demo so101_pick_place.launch.py run_mode:=execute start
 
 - [ ] GUI 必须由 `tmux codex` 的明确 window 持有，并先 `source ~/gui-env.zsh`；运行 tile 工具得到 `LAYOUT_OK`，获取本轮前后新截图并实际查看。若 existing live stack 有冲突，停止并报告，不抢占 `codex-cua` 或其他 session。
 - [ ] 对 execute 保存同轮：完整命令/exit code、state trace、attachment topic、Planning Scene observe、controllers、joint/TF 前后、object 6D pose/contact、截图路径与 SHA-256。
-- [ ] 只关闭本轮明确创建的精确 PID/tmux windows，随后重查既有进程仍在；保存 before/after process ownership。
+- [x] 只关闭本轮明确创建的精确 PID/tmux windows，随后重查既有进程仍在；保存 before/after process ownership。
 - [ ] 最终 `git status --short` 必须为空；列出 commits、相对 base diffstat、测试结果、runtime/visual evidence、保留的特殊 robot-local helper 和明确延期项。
 
 **Acceptance:** Acceptance Matrix 每一行都有可打开的 evidence path；任何一项缺失都标记 `NOT ACCEPTED`，不得用“编译通过”替代 runtime/visual 证据。
 
 **Commit:** `docs: record refactor optimization R1 acceptance evidence`
+
+### R1 Final Evidence Index (2026-08-04)
+
+Status: **NOT ACCEPTED**. Source, package, Panda runtime, and SO-101 dry-run gates pass. The
+required fresh-simulation SO-101 `plan_only` gate fails before any state transition, so execute
+and visual acceptance were not attempted.
+
+- Evidence root: `/tmp/so101-debug-refactor-optimization-r1-20260804-141550`
+- Exact base: `fe446e0005c6432ab57aa73b2c4ea41f5863040e`; branch:
+  `codex/refactor-optimization-r1`; worktree:
+  `/data/work/ws_moveit/.worktrees/refactor-optimization-r1`.
+- Clean-cache build: three packages finished. Package prefixes in `package-prefixes.txt` all
+  resolve beneath this worktree's `install/`.
+- Full package tests: `colcon-test.log` and `colcon-test-result.txt` report 1118 tests, zero
+  errors, zero failures, 92 skipped.
+- Static gates: `static-gates.txt` records both source-manifest tests, CMake/XML lint,
+  `git diff --check`, and `TRACKED_ARTIFACT_CHECK_OK` passing.
+- Panda runtime: `panda-e2e.log`, `panda-recovery.log`, and `panda-plan-resume.log`; all three
+  exit files record zero. The E2E log records independent Gazebo, joint-state, and Planning Scene
+  evidence; recovery covers `gazebo_only`, `both_attached`, and `moveit_only`; the resume matrix
+  covers forward and recovery boundaries without changing checkpoint or independent observations.
+- SO-101 launch/dry-run: `so101-show-args.log` and `so101-dry.log` both pass; dry-run preserves
+  `policy_bundle_sha256=2c6eedecd20459efd526586766aa00b0204dd2c9b22e18331ef6ff3e28fa838a`
+  and the full expected `IDLE -> ... -> DONE` trace.
+- SO-101 plan-only blocker (`OBSERVED`): `so101-plan.log` records activated joint-state,
+  gripper, and arm controllers, followed by `status=ERROR`, empty trace, and exact failure code
+  `Q6_TARGET_OUT_OF_TOLERANCE`. Source configuration sets fresh-simulation joint 6 to `0`, while
+  the loaded policy target printed in the same log is `0.465038`.
+- Root-cause classification (`INFERRED`): the prescribed fresh-simulation plan-only command lacks
+  a preopen initialization step required by the existing gripper validation contract. Production
+  behavior was not changed to bypass that contract.
+- Runtime ownership: `process-before-so101.txt` and `process-after-so101-failure.txt`. Only the
+  exact R1 process group PGID 385642 was signalled; no R1 Gazebo/MoveIt/controller processes
+  remain. `codex-cua` was not used or modified.
+- Visual/Gazebo execute/MoveIt execute/controller-joint-TF/contact/screenshot rows: **NOT
+  ACCEPTED**, because the preceding plan-only gate failed. No GUI execute was started and no
+  screenshot is claimed.
+- Integrity: `commits.txt`, `diffstat.txt`, and `SHA256SUMS` index the evidence set. Runtime,
+  build, install, log, and capture artifacts remain untracked.
+- Smallest decision needed: either approve an explicit fresh-simulation gripper-preopen
+  initialization step before `plan_only`, or redefine this gate as requiring an already-preopened
+  stack. The latter would no longer be the plan's prescribed fresh independent simulation.
 
 ## Explicitly Deferred Beyond R1
 
