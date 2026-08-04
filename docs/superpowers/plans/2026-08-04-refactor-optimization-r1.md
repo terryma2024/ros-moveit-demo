@@ -254,10 +254,10 @@ class ITransitionValidationDecorator {
 - Modify: `src/panda_gazebo_demo/src/pick_place/recovery_contracts.cpp`
 - Modify: `src/pick_place_common/CMakeLists.txt`
 
-- [ ] 为 `FunctionalTransitionContract`、`appendFailure`、`mergeValidationResult`、`finalizeValidationResult` 写 RED tests。
-- [ ] 明确并锁定现有语义：additional metrics 使用 `std::map::insert`，已有 key 优先；failure 保持追加顺序；finalize 以 failures 是否为空设置 `ok`；每个 failure 合并 result metrics 且 failure 自有同名 metric 优先。
-- [ ] 用公共实现替换 Panda forward/recovery contracts 中两份相同的 `FunctionalContract`, `addFailure`, `merge`, `finish`。
-- [ ] 机器人专属 failure category/code/message、required touch links 和 target/support policy 继续留在 Panda。
+- [x] 为 `FunctionalTransitionContract`、`appendFailure`、`mergeValidationResult`、`finalizeValidationResult` 写 RED tests。
+- [x] 明确并锁定现有语义：additional metrics 使用 `std::map::insert`，已有 key 优先；failure 保持追加顺序；finalize 以 failures 是否为空设置 `ok`；每个 failure 合并 result metrics 且 failure 自有同名 metric 优先。
+- [x] 用公共实现替换 Panda forward/recovery contracts 中两份相同的 `FunctionalContract`, `addFailure`, `merge`, `finish`。
+- [x] 机器人专属 failure category/code/message、required touch links 和 target/support policy 继续留在 Panda。
 
 **Acceptance:** Panda contract tests 的 failure code、顺序和 metrics key/value 完全不变；两个 Panda `.cpp` 不再声明上述四套本地 helper。
 
