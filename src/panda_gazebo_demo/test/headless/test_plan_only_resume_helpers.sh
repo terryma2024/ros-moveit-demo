@@ -37,6 +37,10 @@ assert body.index('reset_world.sh') < body.index('last_attachment_is_detached'),
 assert 'run_plan_only_with_transient_retry' not in text, (
     'fresh target retries must restart the independent fixture instead of reusing a mutated world'
 )
+assert 'run_independent_target() {' in text
+retry_body = text.split('run_independent_target() {', 1)[1].split('\n}', 1)[0]
+assert 'plan_only_pair' in retry_body and 'attempt_' in retry_body
+assert retry_body.index('attempt_') < retry_body.index('plan_only_pair')
 PY
 
 expect_failure() {

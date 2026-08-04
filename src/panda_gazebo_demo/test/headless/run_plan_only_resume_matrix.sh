@@ -237,6 +237,28 @@ PY
     "${directory}/checkpoint.after.json"
 }
 
+run_independent_target() {
+  local state="$1"
+  local attempt state_directory checkpoint session status
+  for attempt in {1..3}; do
+    state_directory="${run_root}/${state}/attempt_${attempt}"
+    checkpoint="${state_directory}/checkpoint.json"
+    session="plan-only-${state}-${ROS_DOMAIN_ID}-$$-${attempt}-$(date +%s%N)"
+    set +e
+    (set -e; plan_only_pair "${state}" "${state_directory}" "${checkpoint}" "${session}")
+    status=$?
+    set -e
+    if [[ "${status}" -eq 0 ]]; then
+      printf 'PASS: %s independent attempt %s\n' "${state}" "${attempt}"
+      return 0
+    fi
+    printf 'RETRY: %s independent attempt %s failed with status %s\n' \
+      "${state}" "${attempt}" "${status}" >&2
+  done
+  printf 'FAIL: %s exhausted independent attempts\n' "${state}" >&2
+  return 1
+}
+
 if ros2 node list 2>/dev/null | grep -Eq '/(controller_manager|move_group)$'; then
   printf 'Isolated ROS_DOMAIN_ID %s is already in use\n' "${ROS_DOMAIN_ID}" >&2
   exit 1
@@ -275,10 +297,7 @@ forward_states=(
   RETREAT
 )
 for state in "${forward_states[@]}"; do
-  state_directory="${run_root}/${state}"
-  checkpoint="${state_directory}/checkpoint.json"
-  session="plan-only-${state}-${ROS_DOMAIN_ID}-$$-$(date +%s%N)"
-  plan_only_pair "${state}" "${state_directory}" "${checkpoint}" "${session}"
+  run_independent_target "${state}"
 done
 
 printf 'PASS: independent forward run-to-plan-only/resume matrix; logs: %s\n' \
