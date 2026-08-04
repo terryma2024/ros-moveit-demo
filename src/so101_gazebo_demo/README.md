@@ -8,7 +8,9 @@ keeps SO-101 motion, gripper, workflow and behavior policies, checkpoint JSON
 codec and file store, concrete Gazebo/MoveIt adapters, geometry/contact/reset
 logic, Teleop, launch, world, URDF, SRDF, and configuration. See
 [`../../docs/pick-place-architecture.md`](../../docs/pick-place-architecture.md)
-for the dependency and ownership boundary.
+for the dependency and ownership boundary, and
+[`../../docs/pick-place-launch-parameters.md`](../../docs/pick-place-launch-parameters.md)
+for the authoritative launch, run-to-plan-only, resume, and safety contract.
 
 ## System prerequisites
 

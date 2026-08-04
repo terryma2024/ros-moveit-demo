@@ -8,7 +8,9 @@ links `pick_place_common::core` and `pick_place_common::ros_adapters`; the
 compatibility headers under this package's include path forward shared types.
 
 See [`../../docs/pick-place-architecture.md`](../../docs/pick-place-architecture.md)
-for the ownership boundary and extension rules.
+for the ownership boundary and extension rules. See
+[`../../docs/pick-place-launch-parameters.md`](../../docs/pick-place-launch-parameters.md)
+for the authoritative launch, run-to-plan-only, resume, and safety contract.
 
 Build and source the workspace before running the headless checks:
 
