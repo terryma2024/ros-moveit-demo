@@ -14,6 +14,7 @@
 
 #include "so101_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
 #include "so101_gazebo_demo/pick_place/moveit_scene_executor.hpp"
+#include "so101_gazebo_demo/pick_place/so101_moveit_scene_policy.hpp"
 #include "so101_gazebo_demo/pick_place/so101_profile.hpp"
 
 namespace pick_place = so101_gazebo_demo::pick_place;
@@ -133,8 +134,10 @@ int main(int argc, char * argv[])
       const auto scene_operation = operation == "attach" ? pick_place::MoveItSceneOperation::ATTACH
                                                          : pick_place::MoveItSceneOperation::DETACH;
       pick_place::MoveItSceneExecutor executor(
-        adapter, {state, scene_operation, false, profile.task_object_id}, attachment,
-        timeout_seconds, poll_interval_seconds);
+        adapter,
+        {state, scene_operation, false, profile.task_object_id, attachment, timeout_seconds,
+         poll_interval_seconds},
+        std::make_shared<pick_place::SO101MoveItScenePolicy>(profile.task_object_id, false));
       const pick_place::ExecutionContext context{state, pick_place::State::ERROR,
                                                  pick_place::WorldSnapshot{}, nullptr};
       result = executor.execute(context);

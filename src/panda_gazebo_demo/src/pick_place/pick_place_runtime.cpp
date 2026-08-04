@@ -1,4 +1,5 @@
 #include "panda_gazebo_demo/pick_place/pick_place_runtime.hpp"
+#include "panda_gazebo_demo/pick_place/panda_moveit_scene_policy.hpp"
 
 #include <array>
 #include <memory>
@@ -106,19 +107,29 @@ void registerMoveItSceneActions(PickPlaceRuntimeRegistries & runtime,
                                 const PickPlaceRuntimeDependencies & dependencies,
                                 const PickPlaceRuntimeConfig & config)
 {
+  const MoveItAttachmentSpec attachment{"panda_hand",
+                                        {"panda_hand", "panda_leftfinger", "panda_rightfinger"}};
   const std::array scene_configs{
-    MoveItSceneConfig{State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false},
-    MoveItSceneConfig{State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false},
-    MoveItSceneConfig{State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false},
-    MoveItSceneConfig{State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true},
-    MoveItSceneConfig{State::RECOVER_SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, true},
+    MoveItSceneConfig{State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, "coke", attachment,
+                      config.planning_scene_timeout_seconds, config.state_poll_interval_seconds},
+    MoveItSceneConfig{State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false, "coke", attachment,
+                      config.planning_scene_timeout_seconds, config.state_poll_interval_seconds},
+    MoveItSceneConfig{State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false, "coke",
+                      attachment, config.planning_scene_timeout_seconds,
+                      config.state_poll_interval_seconds},
+    MoveItSceneConfig{State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true, "coke",
+                      attachment, config.planning_scene_timeout_seconds,
+                      config.state_poll_interval_seconds},
+    MoveItSceneConfig{State::RECOVER_SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, true, "coke",
+                      attachment, config.planning_scene_timeout_seconds,
+                      config.state_poll_interval_seconds},
   };
   for (const auto & scene_config : scene_configs) {
     runtime.actions.registerExecutor(
       scene_config.state,
-      std::make_shared<MoveItSceneExecutor>(dependencies.moveit_scene, scene_config,
-                                            config.planning_scene_timeout_seconds,
-                                            config.state_poll_interval_seconds, config.gripper));
+      std::make_shared<MoveItSceneExecutor>(
+        dependencies.moveit_scene, scene_config,
+        std::make_shared<PandaMoveItScenePolicy>(config.gripper, scene_config.idempotent)));
   }
 }
 

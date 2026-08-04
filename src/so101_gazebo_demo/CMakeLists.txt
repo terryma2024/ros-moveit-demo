@@ -106,6 +106,7 @@ add_library(so101_pick_place_runtime
   src/pick_place/common_resume_validator.cpp
   src/pick_place/so101_resume_validation_policy.cpp
   src/pick_place/so101_runner_behavior_policy.cpp
+  src/pick_place/so101_moveit_scene_policy.cpp
   src/pick_place/so101_workflow.cpp
   src/pick_place/policy_config.cpp
   src/pick_place/physical_grasp_validator.cpp
@@ -131,7 +132,6 @@ add_library(so101_pick_place_runtime
   src/pick_place/world_readiness_gate.cpp
   src/pick_place/moveit_scene_adapter.cpp
   src/pick_place/moveit_scene_initializer.cpp
-  src/pick_place/moveit_scene_executor.cpp
   src/pick_place/world_reset_coordinator.cpp
   src/pick_place/robot_home_reset_adapter.cpp
 )

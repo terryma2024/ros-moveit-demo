@@ -150,7 +150,7 @@ bool setPoseSucceededOrDurablyConvergedAfterTimeout(
 }  // namespace
 
 WorldResetCoordinator::WorldResetCoordinator(std::shared_ptr<IGazeboResetAdapter> gazebo,
-                                             std::shared_ptr<IMoveItSceneAdapter> moveit,
+                                             std::shared_ptr<ISO101MoveItSceneAdapter> moveit,
                                              std::shared_ptr<IRobotHomeResetAdapter> robot,
                                              WorldResetConfig config) :
     gazebo_(std::move(gazebo)), moveit_(std::move(moveit)), robot_(std::move(robot)),

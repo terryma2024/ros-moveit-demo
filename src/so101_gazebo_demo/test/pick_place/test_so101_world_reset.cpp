@@ -86,7 +86,7 @@ public:
   std::shared_ptr<std::vector<std::string>> events;
 };
 
-class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
+class FakeMoveItSceneAdapter final : public ISO101MoveItSceneAdapter
 {
 public:
   ActionResult attachTaskObject(const MoveItAttachmentSpec &) override
