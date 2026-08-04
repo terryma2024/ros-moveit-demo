@@ -188,6 +188,24 @@ TEST(RegistrationCoverage, FactoryBuildsTheCompleteRuntimeGraph)
   EXPECT_FALSE(runtime.contracts.validateExecuteCoverage().has_value());
 }
 
+TEST(RegistrationCoverage, PlanOnlyDependenciesDoNotRequireGazeboExecutors)
+{
+  PickPlaceRuntimeDependencies dependencies;
+  dependencies.motion = std::make_shared<FakeMotionAdapter>();
+  dependencies.observer = std::make_shared<FakeObserver>();
+  PickPlaceRuntimeConfig config;
+  config.target_policy = std::make_shared<FixedPickPlaceTargetPolicy>();
+  config.required_world_objects = {"table", "coke"};
+  config.ready_joint_positions = {{"panda_joint1", 0.0}};
+
+  PickPlaceRuntimeRegistries runtime;
+  EXPECT_NO_THROW(runtime = makePickPlaceRuntimeRegistries(dependencies, config));
+  EXPECT_NE(runtime.actions.findPlanner(State::MOVE_ABOVE_OBJECT), nullptr);
+  EXPECT_EQ(runtime.actions.findExecutor(State::ATTACH_GAZEBO), nullptr);
+  EXPECT_EQ(runtime.actions.findExecutor(State::DETACH_GAZEBO), nullptr);
+  EXPECT_EQ(runtime.actions.findExecutor(State::RECOVER_DETACH_GAZEBO), nullptr);
+}
+
 TEST(RegistrationCoverage, NullTransitionContractIsNotRegisteredCoverage)
 {
   TransitionContractRegistry contracts;

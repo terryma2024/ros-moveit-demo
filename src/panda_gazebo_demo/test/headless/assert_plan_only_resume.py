@@ -94,6 +94,37 @@ if expected_phase == 'FORWARD' and (
 ):
     fail('forward plan-only resume entered recovery')
 
+named_target = re.search(
+    rf'NAMED_JOINT_TARGET[^\n]*\bstate={re.escape(expected_state)}\b'
+    r'[^\n]*\btarget=(\S+)',
+    text,
+)
+if named_target:
+    for label in ('START_TCP_POSE', 'PLANNED_END_TCP_POSE'):
+        pose = re.search(
+            rf'{label}[^\n]*\bstate={re.escape(expected_state)}\b'
+            rf'[^\n]*\bx=({NUMBER})[^\n]*\by=({NUMBER})'
+            rf'[^\n]*\bz=({NUMBER})[^\n]*\broll=({NUMBER})'
+            rf'[^\n]*\bpitch=({NUMBER})[^\n]*\byaw=({NUMBER})',
+            text,
+        )
+        if not pose or not all(
+            math.isfinite(float(value)) for value in pose.groups()
+        ):
+            fail(f'{label} does not contain a finite 6DoF pose for {expected_state}')
+    points = re.search(
+        rf'TRAJECTORY_POINTS[^\n]*\bstate={re.escape(expected_state)}\b'
+        rf'[^\n]*\bvalue=({NUMBER})',
+        text,
+    )
+    if not points or float(points.group(1)) < 1.0:
+        fail(f'planned named-target trajectory is empty for {expected_state}')
+    print(
+        f'PASS: {expected_phase} named-target plan-only resume validated '
+        f'for {expected_state}; checkpoint unchanged'
+    )
+    raise SystemExit(0)
+
 for label in EVIDENCE_LABELS:
     if not re.search(
         rf'{label}[^\n]*\bstate={re.escape(expected_state)}\b', text

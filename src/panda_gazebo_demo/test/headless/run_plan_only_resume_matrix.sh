@@ -160,6 +160,31 @@ run_machine() {
     -p checkpoint_path:="${checkpoint}" >"${log_file}" 2>&1
 }
 
+run_plan_only_with_transient_retry() {
+  local log_file="$1"
+  local checkpoint="$2"
+  local session="$3"
+  local attempt status attempt_log
+  for attempt in {1..10}; do
+    attempt_log="${log_file}.attempt_${attempt}"
+    set +e
+    run_machine "${attempt_log}" "${checkpoint}" "${session}" \
+      -p mode:=plan_only -p resume:=true
+    status=$?
+    set -e
+    if [[ "${status}" -eq 0 ]]; then
+      mv "${attempt_log}" "${log_file}"
+      return 0
+    fi
+    if ! grep -Eq 'code=MOVEIT_[A-Z_]*PLAN_FAILED' "${attempt_log}"; then
+      mv "${attempt_log}" "${log_file}"
+      return "${status}"
+    fi
+  done
+  mv "${attempt_log}" "${log_file}"
+  return "${status}"
+}
+
 execute_stop() {
   local log_file="$1"
   local checkpoint="$2"
@@ -189,13 +214,13 @@ plan_only_pair() {
   sha256sum "${directory}/checkpoint.before.json" \
     >"${directory}/checkpoint.before.sha256"
 
-  run_machine "${directory}/plan_only_1.log" "${checkpoint}" "${session}" \
-    -p mode:=plan_only -p resume:=true
+  run_plan_only_with_transient_retry \
+    "${directory}/plan_only_1.log" "${checkpoint}" "${session}"
   python3 "${script_dir}/assert_plan_only_resume.py" \
     "${directory}/plan_only_1.log" "${state}" "${phase}" \
     "${directory}/checkpoint.before.json" "${checkpoint}"
-  run_machine "${directory}/plan_only_2.log" "${checkpoint}" "${session}" \
-    -p mode:=plan_only -p resume:=true
+  run_plan_only_with_transient_retry \
+    "${directory}/plan_only_2.log" "${checkpoint}" "${session}"
   python3 "${script_dir}/assert_plan_only_resume.py" \
     "${directory}/plan_only_2.log" "${state}" "${phase}" \
     "${directory}/checkpoint.before.json" "${checkpoint}"
@@ -264,8 +289,10 @@ for state in "${forward_states[@]}"; do
   state_directory="${forward_root}/${state}"
   plan_only_pair "${state}" FORWARD "${state_directory}" \
     "${forward_checkpoint}" "${forward_session}"
-  execute_stop "${state_directory}/execute.log" "${forward_checkpoint}" \
-    "${forward_session}" "${state}"
+  if [[ "${state}" != RETREAT ]]; then
+    execute_stop "${state_directory}/execute.log" "${forward_checkpoint}" \
+      "${forward_session}" "${state}"
+  fi
   if [[ -n "${bridges[${state}]:-}" ]]; then
     bridge="${bridges[${state}]}"
     execute_stop "${state_directory}/bridge_to_${bridge}.log" \

@@ -97,10 +97,16 @@ void registerGripperActions(PickPlaceRuntimeRegistries & runtime,
 void registerGazeboActions(PickPlaceRuntimeRegistries & runtime,
                            const PickPlaceRuntimeDependencies & dependencies)
 {
-  runtime.actions.registerExecutor(State::ATTACH_GAZEBO, dependencies.gazebo_attach);
-  runtime.actions.registerExecutor(State::DETACH_GAZEBO, dependencies.gazebo_detach);
-  runtime.actions.registerExecutor(State::RECOVER_DETACH_GAZEBO,
-                                   dependencies.recovery_gazebo_detach);
+  if (dependencies.gazebo_attach) {
+    runtime.actions.registerExecutor(State::ATTACH_GAZEBO, dependencies.gazebo_attach);
+  }
+  if (dependencies.gazebo_detach) {
+    runtime.actions.registerExecutor(State::DETACH_GAZEBO, dependencies.gazebo_detach);
+  }
+  if (dependencies.recovery_gazebo_detach) {
+    runtime.actions.registerExecutor(State::RECOVER_DETACH_GAZEBO,
+                                     dependencies.recovery_gazebo_detach);
+  }
 }
 
 void registerMoveItSceneActions(PickPlaceRuntimeRegistries & runtime,

@@ -151,6 +151,11 @@ add_executable(
 )
 
 add_executable(
+  attach_and_lift_demo
+  src/attach_and_lift_demo.cpp
+)
+
+add_executable(
   gazebo_attachment_state_relay
   src/nodes/gazebo_attachment_state_relay.cpp
 )
@@ -166,6 +171,15 @@ ament_target_dependencies(
   rclcpp
 )
 target_link_libraries(pick_place_state_machine panda_pick_place_runtime panda_pick_place_ros_adapters)
+
+ament_target_dependencies(
+  attach_and_lift_demo
+  rclcpp
+  geometry_msgs
+  moveit_msgs
+  moveit_ros_planning_interface
+)
+target_link_libraries(attach_and_lift_demo panda_pick_place_runtime)
 
 ament_target_dependencies(gazebo_attachment_state_relay rclcpp)
 target_link_libraries(
@@ -186,6 +200,7 @@ pick_place_common_add_cpp_quality_gate(
     panda_pick_place_runtime
     panda_pick_place_ros_adapters
     pick_place_state_machine
+    attach_and_lift_demo
     gazebo_attachment_state_relay
     reset_moveit_world
 )
@@ -439,6 +454,7 @@ install(
     panda_pick_place_runtime
     panda_pick_place_ros_adapters
     pick_place_state_machine
+    attach_and_lift_demo
     gazebo_attachment_state_relay
     reset_moveit_world
   DESTINATION lib/${PROJECT_NAME}
