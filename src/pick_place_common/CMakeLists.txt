@@ -8,6 +8,7 @@ find_package(gz-transport13 REQUIRED)
 add_library(pick_place_common_core
   src/common_resume_validator.cpp
   src/domain_types.cpp
+  src/functional_transition_contract.cpp
   src/plan_validation.cpp
   src/pose_geometry.cpp
   src/pose_stability_tracker.cpp
@@ -15,6 +16,7 @@ add_library(pick_place_common_core
   src/simulation_session_id.cpp
   src/state_action.cpp
   src/transition_contract.cpp
+  src/validation_result_utils.cpp
   src/workflow_definition.cpp
 )
 target_compile_features(pick_place_common_core PUBLIC cxx_std_17)
@@ -62,6 +64,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_pose_geometry pick_place_common_core)
   ament_add_gtest(test_pose_stability_tracker test/test_pose_stability_tracker.cpp)
   target_link_libraries(test_pose_stability_tracker pick_place_common_core)
+  ament_add_gtest(test_functional_transition_contract test/test_functional_transition_contract.cpp)
+  target_link_libraries(test_functional_transition_contract pick_place_common_core)
+  ament_add_gtest(test_validation_result_utils test/test_validation_result_utils.cpp)
+  target_link_libraries(test_validation_result_utils pick_place_common_core)
   ament_add_gtest(test_gazebo_attachment_executor test/test_gazebo_attachment_executor.cpp)
   target_link_libraries(test_gazebo_attachment_executor pick_place_common_ros_adapters)
   ament_add_gtest(test_moveit_scene_executor test/test_moveit_scene_executor.cpp)

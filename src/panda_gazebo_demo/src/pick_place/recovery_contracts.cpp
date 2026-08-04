@@ -1,11 +1,13 @@
 #include "panda_gazebo_demo/pick_place/recovery_contracts.hpp"
 
 #include <cmath>
-#include <functional>
 #include <memory>
 #include <set>
 #include <string>
 #include <utility>
+
+#include "pick_place_common/functional_transition_contract.hpp"
+#include "pick_place_common/validation_result_utils.hpp"
 
 namespace panda_gazebo_demo::pick_place
 {
@@ -15,56 +17,7 @@ namespace
 const std::set<std::string> kRequiredTouchLinks{"panda_hand", "panda_leftfinger",
                                                 "panda_rightfinger"};
 
-using ValidationFunction = std::function<ValidationResult(const WorldSnapshot &)>;
-using PostValidationFunction = std::function<ValidationResult(
-  const WorldSnapshot &, const WorldSnapshot &, const ActionResult &)>;
-
-class FunctionalContract final : public Contract
-{
-public:
-  FunctionalContract(ValidationFunction precondition, PostValidationFunction postcondition) :
-      precondition_(std::move(precondition)), postcondition_(std::move(postcondition))
-  {
-  }
-
-  [[nodiscard]] ValidationResult validatePrecondition(const WorldSnapshot & before) const override
-  {
-    return precondition_(before);
-  }
-
-  [[nodiscard]] ValidationResult validate(const WorldSnapshot & before, const WorldSnapshot & after,
-                                          const ActionResult & action_result) const override
-  {
-    return postcondition_(before, after, action_result);
-  }
-
-private:
-  ValidationFunction precondition_;
-  PostValidationFunction postcondition_;
-};
-
-void addFailure(ValidationResult & result, FailureCategory category, std::string code,
-                std::string message)
-{
-  result.failures.push_back({category, std::move(code), std::move(message), {}});
-}
-
-void merge(ValidationResult & result, ValidationResult additional)
-{
-  result.metrics.insert(additional.metrics.begin(), additional.metrics.end());
-  result.failures.insert(result.failures.end(),
-                         std::make_move_iterator(additional.failures.begin()),
-                         std::make_move_iterator(additional.failures.end()));
-}
-
-ValidationResult finish(ValidationResult result)
-{
-  result.ok = result.failures.empty();
-  for (auto & failure : result.failures) {
-    failure.metrics.insert(result.metrics.begin(), result.metrics.end());
-  }
-  return result;
-}
+using pick_place_common::FunctionalTransitionContract;
 
 ValidationResult boundary(const WorldSnapshot & snapshot)
 {
@@ -81,24 +34,26 @@ ValidationResult boundary(const WorldSnapshot & snapshot)
                                         ? (*snapshot.gazebo_task_object_stationary ? 1.0 : 0.0)
                                         : -1.0;
   if (!snapshot.fresh) {
-    addFailure(result, FailureCategory::OBSERVATION, "STALE_WORLD_SNAPSHOT",
-               "Recovery requires a fresh world observation");
+    pick_place_common::appendFailure(result, FailureCategory::OBSERVATION, "STALE_WORLD_SNAPSHOT",
+                                     "Recovery requires a fresh world observation");
   }
   if (!snapshot.arm_stationary) {
-    addFailure(result, FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT",
-               "Recovery requires a stationary arm at every boundary");
+    pick_place_common::appendFailure(result, FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT",
+                                     "Recovery requires a stationary arm at every boundary");
   }
   if (!snapshot.gazebo_task_object_attached || !snapshot.moveit_task_object_attached) {
-    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "ATTACHMENT_STATE_UNKNOWN",
-               "Recovery requires current Gazebo and MoveIt attachment facts");
+    pick_place_common::appendFailure(
+      result, FailureCategory::WORLD_INCONSISTENCY, "ATTACHMENT_STATE_UNKNOWN",
+      "Recovery requires current Gazebo and MoveIt attachment facts");
   }
   if (!snapshot.gazebo_task_object_pose_world) {
-    addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
-               "Recovery requires the current Gazebo Coke pose");
+    pick_place_common::appendFailure(result, FailureCategory::OBSERVATION,
+                                     "GAZEBO_COKE_POSE_UNAVAILABLE",
+                                     "Recovery requires the current Gazebo Coke pose");
   }
   if (!snapshot.gazebo_task_object_stationary || !*snapshot.gazebo_task_object_stationary) {
-    addFailure(result, FailureCategory::PRECONDITION, "COKE_NOT_STATIONARY",
-               "Recovery requires a stationary Gazebo Coke");
+    pick_place_common::appendFailure(result, FailureCategory::PRECONDITION, "COKE_NOT_STATIONARY",
+                                     "Recovery requires a stationary Gazebo Coke");
   }
   return result;
 }
@@ -107,15 +62,16 @@ void requireActionSucceeded(ValidationResult & result, const ActionResult & acti
 {
   result.metrics["action_succeeded"] = action_result.status == ActionStatus::SUCCEEDED ? 1.0 : 0.0;
   if (action_result.status != ActionStatus::SUCCEEDED) {
-    addFailure(result, FailureCategory::EXECUTION, "ACTION_DID_NOT_SUCCEED",
-               "Recovery action did not report success");
+    pick_place_common::appendFailure(result, FailureCategory::EXECUTION, "ACTION_DID_NOT_SUCCEED",
+                                     "Recovery action did not report success");
   }
 }
 
 void requireAttachmentCombination(ValidationResult & result, const WorldSnapshot & snapshot,
                                   bool gazebo_attached, bool moveit_attached)
 {
-  merge(result, validateAttachmentState(snapshot, gazebo_attached, moveit_attached));
+  pick_place_common::mergeValidationResult(
+    result, validateAttachmentState(snapshot, gazebo_attached, moveit_attached));
 }
 
 void requireBothAttached(ValidationResult & result, const WorldSnapshot & snapshot)
@@ -128,30 +84,33 @@ void requireBothAttached(ValidationResult & result, const WorldSnapshot & snapsh
     snapshot.moveit_task_object_touch_links == kRequiredTouchLinks ? 1.0 : 0.0;
   if (!exact_link || snapshot.moveit_task_object_touch_links != kRequiredTouchLinks ||
       snapshot.moveit_world_object_poses.count("coke") != 0) {
-    addFailure(result, FailureCategory::MOVEIT_SCENE, "RECOVERY_ATTACHED_METADATA_INVALID",
-               "Carrying recovery requires Coke attached to panda_hand with exact touch links");
+    pick_place_common::appendFailure(
+      result, FailureCategory::MOVEIT_SCENE, "RECOVERY_ATTACHED_METADATA_INVALID",
+      "Carrying recovery requires Coke attached to panda_hand with exact touch links");
   }
 }
 
 void requireGrasp(ValidationResult & result, const WorldSnapshot & snapshot,
                   const PickPlaceContractConfig & config)
 {
-  merge(result, validateGripperGrasp(snapshot, config.gripper));
+  pick_place_common::mergeValidationResult(result, validateGripperGrasp(snapshot, config.gripper));
 }
 
 void requireOpen(ValidationResult & result, const WorldSnapshot & snapshot,
                  const PickPlaceContractConfig & config)
 {
-  merge(result, validateGripperOpen(snapshot, config.gripper));
+  pick_place_common::mergeValidationResult(result, validateGripperOpen(snapshot, config.gripper));
 }
 
 void requireReadyAndClosed(ValidationResult & result, const WorldSnapshot & snapshot,
                            const PickPlaceContractConfig & config)
 {
-  merge(result, validateNamedJointTarget(snapshot, config.ready_joint_positions,
-                                         config.ready_joint_tolerance));
-  merge(result, validateGripperClosed(snapshot, config.gripper_close_position,
-                                      config.gripper_close_tolerance, config.gripper));
+  pick_place_common::mergeValidationResult(
+    result,
+    validateNamedJointTarget(snapshot, config.ready_joint_positions, config.ready_joint_tolerance));
+  pick_place_common::mergeValidationResult(
+    result, validateGripperClosed(snapshot, config.gripper_close_position,
+                                  config.gripper_close_tolerance, config.gripper));
 }
 
 void requireWorldObjects(ValidationResult & result, const WorldSnapshot & snapshot)
@@ -162,8 +121,9 @@ void requireWorldObjects(ValidationResult & result, const WorldSnapshot & snapsh
     snapshot.moveit_world_object_poses.count("coke") == 1 ? 1.0 : 0.0;
   if (snapshot.moveit_world_object_poses.count("table") == 0 ||
       snapshot.moveit_world_object_poses.count("coke") == 0) {
-    addFailure(result, FailureCategory::MOVEIT_SCENE, "RECOVERY_WORLD_OBJECTS_INCOMPLETE",
-               "Detached recovery requires table and Coke in the MoveIt world");
+    pick_place_common::appendFailure(
+      result, FailureCategory::MOVEIT_SCENE, "RECOVERY_WORLD_OBJECTS_INCOMPLETE",
+      "Detached recovery requires table and Coke in the MoveIt world");
   }
 }
 
@@ -172,8 +132,9 @@ void requireTarget(ValidationResult & result, const WorldSnapshot & snapshot,
                    const PickPlaceContractConfig & config)
 {
   if (!target_policy) {
-    addFailure(result, FailureCategory::CONFIGURATION, "TARGET_POLICY_MISSING",
-               "Recovery motion contract requires a target policy");
+    pick_place_common::appendFailure(result, FailureCategory::CONFIGURATION,
+                                     "TARGET_POLICY_MISSING",
+                                     "Recovery motion contract requires a target policy");
     return;
   }
   const auto target =
@@ -192,12 +153,14 @@ void requireTarget(ValidationResult & result, const WorldSnapshot & snapshot,
   result.metrics["tcp_position_error"] = position_error;
   result.metrics["tcp_orientation_error_rad"] = orientation_error;
   if (position_error > config.tcp_position_tolerance) {
-    addFailure(result, FailureCategory::POSTCONDITION, "TCP_POSITION_OUTSIDE_TOLERANCE",
-               "Recovery TCP position is outside the configured target tolerance");
+    pick_place_common::appendFailure(
+      result, FailureCategory::POSTCONDITION, "TCP_POSITION_OUTSIDE_TOLERANCE",
+      "Recovery TCP position is outside the configured target tolerance");
   }
   if (orientation_error > config.tcp_orientation_tolerance_rad) {
-    addFailure(result, FailureCategory::POSTCONDITION, "TCP_ORIENTATION_OUTSIDE_TOLERANCE",
-               "Recovery TCP orientation is outside the configured target tolerance");
+    pick_place_common::appendFailure(
+      result, FailureCategory::POSTCONDITION, "TCP_ORIENTATION_OUTSIDE_TOLERANCE",
+      "Recovery TCP orientation is outside the configured target tolerance");
   }
 }
 
@@ -206,8 +169,9 @@ void requireSupportedCoke(ValidationResult & result, const WorldSnapshot & snaps
                           const PickPlaceContractConfig & config)
 {
   if (!snapshot.gazebo_task_object_pose_world || !target_policy) {
-    addFailure(result, FailureCategory::OBSERVATION, "RECOVERY_SUPPORTED_COKE_POSE_UNAVAILABLE",
-               "Recovery support validation requires Coke observation and target policy");
+    pick_place_common::appendFailure(
+      result, FailureCategory::OBSERVATION, "RECOVERY_SUPPORTED_COKE_POSE_UNAVAILABLE",
+      "Recovery support validation requires Coke observation and target policy");
     return;
   }
   const auto expected =
@@ -228,8 +192,9 @@ void requireSupportedCoke(ValidationResult & result, const WorldSnapshot & snaps
   result.metrics["supported_coke_orientation_error_rad"] = orientation_error;
   if (position_error > config.coke_position_tolerance ||
       orientation_error > config.coke_orientation_tolerance_rad) {
-    addFailure(result, FailureCategory::POSTCONDITION, "RECOVERY_COKE_NOT_AT_SUPPORTED_POSE",
-               "Recovery Coke is outside the derived support pose or upright orientation");
+    pick_place_common::appendFailure(
+      result, FailureCategory::POSTCONDITION, "RECOVERY_COKE_NOT_AT_SUPPORTED_POSE",
+      "Recovery Coke is outside the derived support pose or upright orientation");
   }
 }
 
@@ -237,8 +202,9 @@ void requireCokeDrift(ValidationResult & result, const WorldSnapshot & before,
                       const WorldSnapshot & after, const PickPlaceContractConfig & config)
 {
   if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world) {
-    addFailure(result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
-               "Recovery boundary requires Gazebo Coke poses before and after the action");
+    pick_place_common::appendFailure(
+      result, FailureCategory::OBSERVATION, "GAZEBO_COKE_POSE_UNAVAILABLE",
+      "Recovery boundary requires Gazebo Coke poses before and after the action");
     return;
   }
   const double position_error =
@@ -248,12 +214,13 @@ void requireCokeDrift(ValidationResult & result, const WorldSnapshot & before,
   result.metrics["coke_position_drift"] = position_error;
   result.metrics["coke_orientation_drift_rad"] = orientation_error;
   if (position_error > config.coke_position_tolerance) {
-    addFailure(result, FailureCategory::POSTCONDITION, "COKE_POSITION_DRIFT",
-               "Coke position changed beyond the recovery tolerance");
+    pick_place_common::appendFailure(result, FailureCategory::POSTCONDITION, "COKE_POSITION_DRIFT",
+                                     "Coke position changed beyond the recovery tolerance");
   }
   if (orientation_error > config.coke_orientation_tolerance_rad) {
-    addFailure(result, FailureCategory::POSTCONDITION, "COKE_ORIENTATION_DRIFT",
-               "Coke orientation changed beyond the recovery tolerance");
+    pick_place_common::appendFailure(result, FailureCategory::POSTCONDITION,
+                                     "COKE_ORIENTATION_DRIFT",
+                                     "Coke orientation changed beyond the recovery tolerance");
   }
 }
 
@@ -261,8 +228,9 @@ void requireRelativePose(ValidationResult & result, const WorldSnapshot & before
                          const WorldSnapshot & after, const PickPlaceContractConfig & config)
 {
   if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world) {
-    addFailure(result, FailureCategory::OBSERVATION, "CARRIED_RELATIVE_POSE_UNAVAILABLE",
-               "Carrying recovery requires actual TCP and Gazebo Coke poses");
+    pick_place_common::appendFailure(result, FailureCategory::OBSERVATION,
+                                     "CARRIED_RELATIVE_POSE_UNAVAILABLE",
+                                     "Carrying recovery requires actual TCP and Gazebo Coke poses");
     return;
   }
   const auto before_relative =
@@ -270,8 +238,9 @@ void requireRelativePose(ValidationResult & result, const WorldSnapshot & before
   const auto after_relative =
     relativePose(after.tcp_pose_world, *after.gazebo_task_object_pose_world);
   if (!before_relative || !after_relative) {
-    addFailure(result, FailureCategory::OBSERVATION, "CARRIED_RELATIVE_POSE_UNAVAILABLE",
-               "Carrying recovery poses must contain usable quaternions");
+    pick_place_common::appendFailure(result, FailureCategory::OBSERVATION,
+                                     "CARRIED_RELATIVE_POSE_UNAVAILABLE",
+                                     "Carrying recovery poses must contain usable quaternions");
     return;
   }
   const double position_error = positionDistance(*before_relative, *after_relative);
@@ -279,12 +248,14 @@ void requireRelativePose(ValidationResult & result, const WorldSnapshot & before
   result.metrics["carried_relative_position_error"] = position_error;
   result.metrics["carried_relative_orientation_error_rad"] = orientation_error;
   if (position_error > config.carried_relative_position_tolerance) {
-    addFailure(result, FailureCategory::POSTCONDITION, "CARRIED_RELATIVE_POSITION_DRIFT",
-               "TCP-to-Coke relative position changed during recovery motion");
+    pick_place_common::appendFailure(
+      result, FailureCategory::POSTCONDITION, "CARRIED_RELATIVE_POSITION_DRIFT",
+      "TCP-to-Coke relative position changed during recovery motion");
   }
   if (orientation_error > config.carried_relative_orientation_tolerance_rad) {
-    addFailure(result, FailureCategory::POSTCONDITION, "CARRIED_RELATIVE_ORIENTATION_DRIFT",
-               "TCP-to-Coke relative orientation changed during recovery motion");
+    pick_place_common::appendFailure(
+      result, FailureCategory::POSTCONDITION, "CARRIED_RELATIVE_ORIENTATION_DRIFT",
+      "TCP-to-Coke relative orientation changed during recovery motion");
   }
 }
 
@@ -295,9 +266,9 @@ void requireAttachmentsUnchanged(ValidationResult & result, const WorldSnapshot 
       !after.gazebo_task_object_attached || !after.moveit_task_object_attached ||
       before.gazebo_task_object_attached != after.gazebo_task_object_attached ||
       before.moveit_task_object_attached != after.moveit_task_object_attached) {
-    addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
-               "RECOVERY_ATTACHMENT_CHANGED_UNEXPECTEDLY",
-               "This recovery action must not change attachment facts");
+    pick_place_common::appendFailure(result, FailureCategory::WORLD_INCONSISTENCY,
+                                     "RECOVERY_ATTACHMENT_CHANGED_UNEXPECTEDLY",
+                                     "This recovery action must not change attachment facts");
   }
 }
 
@@ -306,8 +277,9 @@ void requireCrossWorldEquality(ValidationResult & result, const WorldSnapshot & 
 {
   if (!snapshot.gazebo_task_object_pose_world ||
       snapshot.moveit_world_object_poses.count("coke") == 0) {
-    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "CROSS_WORLD_COKE_POSE_UNAVAILABLE",
-               "Detached recovery requires Gazebo and MoveIt Coke poses");
+    pick_place_common::appendFailure(result, FailureCategory::WORLD_INCONSISTENCY,
+                                     "CROSS_WORLD_COKE_POSE_UNAVAILABLE",
+                                     "Detached recovery requires Gazebo and MoveIt Coke poses");
     return;
   }
   const auto & moveit_pose = snapshot.moveit_world_object_poses.at("coke");
@@ -319,8 +291,9 @@ void requireCrossWorldEquality(ValidationResult & result, const WorldSnapshot & 
   result.metrics["gazebo_moveit_coke_orientation_error_rad"] = orientation_error;
   if (position_error > config.coke_position_tolerance ||
       orientation_error > config.coke_orientation_tolerance_rad) {
-    addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "CROSS_WORLD_COKE_POSE_MISMATCH",
-               "Gazebo and MoveIt Coke poses differ beyond recovery tolerance");
+    pick_place_common::appendFailure(
+      result, FailureCategory::WORLD_INCONSISTENCY, "CROSS_WORLD_COKE_POSE_MISMATCH",
+      "Gazebo and MoveIt Coke poses differ beyond recovery tolerance");
   }
 }
 
@@ -328,12 +301,12 @@ std::shared_ptr<const Contract> carriedMotionContract(const TargetPolicyPtr & ta
                                                       const PickPlaceContractConfig & config,
                                                       State state, State next_state)
 {
-  return std::make_shared<FunctionalContract>(
+  return std::make_shared<FunctionalTransitionContract>(
     [config](const WorldSnapshot & before) {
       auto result = boundary(before);
       requireBothAttached(result, before);
       requireGrasp(result, before, config);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     },
     [target_policy, config, state, next_state](const WorldSnapshot & before,
                                                const WorldSnapshot & after,
@@ -348,14 +321,16 @@ std::shared_ptr<const Contract> carriedMotionContract(const TargetPolicyPtr & ta
         requireSupportedCoke(result, after, target_policy, State::DESCEND, State::CLOSE_GRIPPER,
                              config);
       }
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     });
 }
 
 std::shared_ptr<const Contract> openContract(const PickPlaceContractConfig & config)
 {
-  return std::make_shared<FunctionalContract>(
-    [](const WorldSnapshot & before) { return finish(boundary(before)); },
+  return std::make_shared<FunctionalTransitionContract>(
+    [](const WorldSnapshot & before) {
+      return pick_place_common::finalizeValidationResult(boundary(before));
+    },
     [config](const WorldSnapshot & before, const WorldSnapshot & after,
              const ActionResult & action_result) {
       auto result = boundary(after);
@@ -363,17 +338,17 @@ std::shared_ptr<const Contract> openContract(const PickPlaceContractConfig & con
       requireOpen(result, after, config);
       requireAttachmentsUnchanged(result, before, after);
       requireCokeDrift(result, before, after, config);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     });
 }
 
 std::shared_ptr<const Contract> gazeboDetachContract(const PickPlaceContractConfig & config)
 {
-  return std::make_shared<FunctionalContract>(
+  return std::make_shared<FunctionalTransitionContract>(
     [config](const WorldSnapshot & before) {
       auto result = boundary(before);
       requireOpen(result, before, config);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     },
     [config](const WorldSnapshot & before, const WorldSnapshot & after,
              const ActionResult & action_result) {
@@ -381,31 +356,33 @@ std::shared_ptr<const Contract> gazeboDetachContract(const PickPlaceContractConf
       requireActionSucceeded(result, action_result);
       requireOpen(result, after, config);
       if (after.gazebo_task_object_attached && *after.gazebo_task_object_attached) {
-        addFailure(result, FailureCategory::GAZEBO_ATTACHMENT, "RECOVERY_GAZEBO_STILL_ATTACHED",
-                   "Recovery Gazebo detach did not converge");
+        pick_place_common::appendFailure(result, FailureCategory::GAZEBO_ATTACHMENT,
+                                         "RECOVERY_GAZEBO_STILL_ATTACHED",
+                                         "Recovery Gazebo detach did not converge");
       }
       if (!before.moveit_task_object_attached || !after.moveit_task_object_attached ||
           before.moveit_task_object_attached != after.moveit_task_object_attached) {
-        addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
-                   "RECOVERY_MOVEIT_ATTACHMENT_CHANGED",
-                   "Gazebo detach must not change MoveIt attachment state");
+        pick_place_common::appendFailure(result, FailureCategory::WORLD_INCONSISTENCY,
+                                         "RECOVERY_MOVEIT_ATTACHMENT_CHANGED",
+                                         "Gazebo detach must not change MoveIt attachment state");
       }
       requireCokeDrift(result, before, after, config);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     });
 }
 
 std::shared_ptr<const Contract> moveitDetachContract(const PickPlaceContractConfig & config)
 {
-  return std::make_shared<FunctionalContract>(
+  return std::make_shared<FunctionalTransitionContract>(
     [config](const WorldSnapshot & before) {
       auto result = boundary(before);
       requireOpen(result, before, config);
       if (!before.gazebo_task_object_attached || *before.gazebo_task_object_attached) {
-        addFailure(result, FailureCategory::WORLD_INCONSISTENCY, "RECOVERY_GAZEBO_NOT_DETACHED",
-                   "MoveIt recovery detach requires Gazebo already detached");
+        pick_place_common::appendFailure(result, FailureCategory::WORLD_INCONSISTENCY,
+                                         "RECOVERY_GAZEBO_NOT_DETACHED",
+                                         "MoveIt recovery detach requires Gazebo already detached");
       }
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     },
     [config](const WorldSnapshot & before, const WorldSnapshot & after,
              const ActionResult & action_result) {
@@ -415,24 +392,24 @@ std::shared_ptr<const Contract> moveitDetachContract(const PickPlaceContractConf
       requireAttachmentCombination(result, after, false, false);
       requireWorldObjects(result, after);
       if (after.moveit_task_object_attached_link || !after.moveit_task_object_touch_links.empty()) {
-        addFailure(result, FailureCategory::MOVEIT_SCENE,
-                   "RECOVERY_MOVEIT_ATTACHED_METADATA_REMAINS",
-                   "Detached Coke must not retain MoveIt attached metadata");
+        pick_place_common::appendFailure(result, FailureCategory::MOVEIT_SCENE,
+                                         "RECOVERY_MOVEIT_ATTACHED_METADATA_REMAINS",
+                                         "Detached Coke must not retain MoveIt attached metadata");
       }
       requireCokeDrift(result, before, after, config);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     });
 }
 
 std::shared_ptr<const Contract> syncContract(const PickPlaceContractConfig & config)
 {
-  return std::make_shared<FunctionalContract>(
+  return std::make_shared<FunctionalTransitionContract>(
     [config](const WorldSnapshot & before) {
       auto result = boundary(before);
       requireOpen(result, before, config);
       requireAttachmentCombination(result, before, false, false);
       requireWorldObjects(result, before);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     },
     [config](const WorldSnapshot & before, const WorldSnapshot & after,
              const ActionResult & action_result) {
@@ -443,21 +420,21 @@ std::shared_ptr<const Contract> syncContract(const PickPlaceContractConfig & con
       requireWorldObjects(result, after);
       requireCrossWorldEquality(result, after, config);
       requireCokeDrift(result, before, after, config);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     });
 }
 
 std::shared_ptr<const Contract> retreatContract(const TargetPolicyPtr & target_policy,
                                                 const PickPlaceContractConfig & config)
 {
-  return std::make_shared<FunctionalContract>(
+  return std::make_shared<FunctionalTransitionContract>(
     [config](const WorldSnapshot & before) {
       auto result = boundary(before);
       requireOpen(result, before, config);
       requireAttachmentCombination(result, before, false, false);
       requireWorldObjects(result, before);
       requireCrossWorldEquality(result, before, config);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     },
     [target_policy, config](const WorldSnapshot & before, const WorldSnapshot & after,
                             const ActionResult & action_result) {
@@ -468,7 +445,7 @@ std::shared_ptr<const Contract> retreatContract(const TargetPolicyPtr & target_p
       requireWorldObjects(result, after);
       requireCrossWorldEquality(result, after, config);
       requireCokeDrift(result, before, after, config);
-      return finish(std::move(result));
+      return pick_place_common::finalizeValidationResult(std::move(result));
     });
 }
 
