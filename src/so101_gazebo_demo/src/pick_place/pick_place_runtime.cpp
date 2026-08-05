@@ -494,19 +494,11 @@ private:
   SO101Profile profile_;
 };
 
-struct PhysicalGraspEvidence
-{
-  std::mutex mutex;
-  std::optional<WorldSnapshot> before_lift;
-  std::optional<WorldSnapshot> after_lift;
-  std::optional<PhysicalGraspResult> result;
-};
-
 class StablePhysicalGraspAction final : public IStateExecutor
 {
 public:
   StablePhysicalGraspAction(State state, bool before_lift, std::shared_ptr<IWorldObserver> observer,
-                            std::shared_ptr<PhysicalGraspEvidence> evidence,
+                            std::shared_ptr<IPhysicalGraspEvidenceStore> evidence,
                             std::shared_ptr<ISO101GripperCommand> gripper, SO101Profile profile) :
       state_(state), before_lift_(before_lift), observer_(std::move(observer)),
       evidence_(std::move(evidence)), gripper_(std::move(gripper)), profile_(std::move(profile))
@@ -617,11 +609,9 @@ public:
                                             "remain stable after one bounded regrasp",
                                             {}}};
     }
-    std::lock_guard<std::mutex> lock(evidence_->mutex);
-    if (before_lift_)
-      evidence_->before_lift = *last;
-    else
-      evidence_->after_lift = *last;
+    const auto failure = before_lift_ ? evidence_->saveBefore(*last) : evidence_->saveAfter(*last);
+    if (failure)
+      return {ActionStatus::FAILED, *failure};
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
 
@@ -634,7 +624,7 @@ private:
   State state_;
   bool before_lift_;
   std::shared_ptr<IWorldObserver> observer_;
-  std::shared_ptr<PhysicalGraspEvidence> evidence_;
+  std::shared_ptr<IPhysicalGraspEvidenceStore> evidence_;
   std::shared_ptr<ISO101GripperCommand> gripper_;
   SO101Profile profile_;
 };
@@ -734,7 +724,7 @@ private:
 class VerifyPhysicalGraspAction final : public IStateExecutor
 {
 public:
-  VerifyPhysicalGraspAction(std::shared_ptr<PhysicalGraspEvidence> evidence,
+  VerifyPhysicalGraspAction(std::shared_ptr<IPhysicalGraspEvidenceStore> evidence,
                             PhysicalGraspValidator validator, PhysicalGraspGeometry geometry) :
       evidence_(std::move(evidence)), validator_(validator), geometry_(geometry)
   {
@@ -748,15 +738,25 @@ public:
                                             "Physical-grasp evidence store is missing",
                                             {}}};
     }
-    std::lock_guard<std::mutex> lock(evidence_->mutex);
-    if (!evidence_->before_lift || !evidence_->after_lift) {
+    auto loaded = evidence_->load();
+    if (std::holds_alternative<Failure>(loaded))
+      return {ActionStatus::FAILED, std::get<Failure>(std::move(loaded))};
+    const auto record = std::get<PhysicalGraspEvidenceRecord>(std::move(loaded));
+    if (!record.before_lift || !record.after_lift) {
       return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
                                             "PHYSICAL_GRASP_EVIDENCE_INCOMPLETE",
                                             "Both stable windows are required before attachment",
                                             {}}};
     }
-    auto result = validator_.evaluate(*evidence_->before_lift, *evidence_->after_lift, geometry_);
-    evidence_->result = result;
+    WorldSnapshot before;
+    before.tcp_pose_world = record.before_lift->tcp_pose_world;
+    before.gazebo_task_object_pose_world = record.before_lift->task_object_pose_world;
+    before.gazebo_task_object_gripper_contact = record.before_lift->gripper_contact;
+    WorldSnapshot after;
+    after.tcp_pose_world = record.after_lift->tcp_pose_world;
+    after.gazebo_task_object_pose_world = record.after_lift->task_object_pose_world;
+    after.gazebo_task_object_gripper_contact = record.after_lift->gripper_contact;
+    auto result = validator_.evaluate(before, after, geometry_);
     if (!result.passed)
       return {ActionStatus::FAILED, result.failure};
     return {ActionStatus::SUCCEEDED, std::nullopt};
@@ -767,7 +767,7 @@ public:
   }
 
 private:
-  std::shared_ptr<PhysicalGraspEvidence> evidence_;
+  std::shared_ptr<IPhysicalGraspEvidenceStore> evidence_;
   PhysicalGraspValidator validator_;
   PhysicalGraspGeometry geometry_;
 };
@@ -806,26 +806,28 @@ void registerPhysicalGrasp(SO101PickPlaceRuntimeRegistries & runtime,
                            const SO101PickPlaceRuntimeDependencies & dependencies,
                            const SO101PickPlaceRuntimeConfig & config)
 {
-  if (!dependencies.physical_observer || !dependencies.micro_lift)
+  if (!dependencies.physical_observer || !dependencies.micro_lift ||
+      !dependencies.physical_grasp_evidence)
     return;
-  const auto evidence = std::make_shared<PhysicalGraspEvidence>();
   const PhysicalGraspGeometry geometry{config.profile.table_pose.z +
                                          config.profile.table_size[2] * 0.5,
                                        -config.profile.task_object_height * 0.5};
   runtime.actions.registerExecutor(State::WAIT_GRASP_STABLE,
                                    std::make_shared<StablePhysicalGraspAction>(
                                      State::WAIT_GRASP_STABLE, true, dependencies.physical_observer,
-                                     evidence, dependencies.gripper, config.profile));
+                                     dependencies.physical_grasp_evidence, dependencies.gripper,
+                                     config.profile));
   runtime.actions.registerExecutor(
     State::MICRO_LIFT, std::make_shared<WorldZMicroLiftAction>(dependencies.micro_lift));
   runtime.actions.registerExecutor(
     State::WAIT_MICRO_LIFT_STABLE,
-    std::make_shared<StablePhysicalGraspAction>(State::WAIT_MICRO_LIFT_STABLE, false,
-                                                dependencies.physical_observer, evidence,
-                                                dependencies.gripper, config.profile));
+    std::make_shared<StablePhysicalGraspAction>(
+      State::WAIT_MICRO_LIFT_STABLE, false, dependencies.physical_observer,
+      dependencies.physical_grasp_evidence, dependencies.gripper, config.profile));
   runtime.actions.registerExecutor(
     State::VERIFY_PHYSICAL_GRASP,
-    std::make_shared<VerifyPhysicalGraspAction>(evidence, PhysicalGraspValidator{}, geometry));
+    std::make_shared<VerifyPhysicalGraspAction>(dependencies.physical_grasp_evidence,
+                                                PhysicalGraspValidator{}, geometry));
   for (const auto state : kPhysicalGraspStates) {
     runtime.contracts.registerContract(
       {state, TransitionTable::resolve(state, ActionStatus::SUCCEEDED)},
@@ -857,6 +859,8 @@ missingDependencyFailure(const SO101PickPlaceRuntimeDependencies & dependencies)
     missing.emplace_back("micro_lift");
   if (!dependencies.physical_observer)
     missing.emplace_back("physical_observer");
+  if (!dependencies.physical_grasp_evidence)
+    missing.emplace_back("physical_grasp_evidence");
   if (missing.empty())
     return std::nullopt;
   std::ostringstream message;

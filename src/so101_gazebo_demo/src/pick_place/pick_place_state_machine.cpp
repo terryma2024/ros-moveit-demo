@@ -20,6 +20,7 @@
 #include "so101_gazebo_demo/pick_place/moveit_scene_initializer.hpp"
 #include "so101_gazebo_demo/pick_place/node_spinner.hpp"
 #include "so101_gazebo_demo/pick_place/pick_place_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_evidence_store.hpp"
 #include "so101_gazebo_demo/pick_place/runner.hpp"
 #include "so101_gazebo_demo/pick_place/simulation_session_id.hpp"
 #include "so101_gazebo_demo/pick_place/world_readiness_gate.hpp"
@@ -238,6 +239,16 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       }
 
       spp::SO101PickPlaceRuntimeDependencies dependencies;
+      auto physical_evidence = std::make_shared<spp::FilePhysicalGraspEvidenceStore>(
+        options.checkpoint_path.string() + ".physical-grasp.json", *session.value,
+        bundle.bundle_sha256);
+      if (!options.request.resume) {
+        if (const auto failure = physical_evidence->resetForFreshRun()) {
+          printPreRunnerFailure(*failure);
+          rclcpp::shutdown();
+          return 1;
+        }
+      }
       dependencies.gripper = gripper;
       dependencies.moveit_scene = scene;
       dependencies.gazebo_attach = gazebo_attach;
@@ -247,6 +258,7 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       dependencies.motion = motion;
       dependencies.micro_lift = boundary;
       dependencies.physical_observer = observer;
+      dependencies.physical_grasp_evidence = physical_evidence;
       spp::SO101PickPlaceRuntimeConfig runtime_config;
       runtime_config.profile = profile;
       runtime_config.object = bundle.object;
