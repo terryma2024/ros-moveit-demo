@@ -329,6 +329,20 @@ if(BUILD_TESTING)
   ament_add_gtest(test_planning_failure_diagnostics
     test/pick_place/test_planning_failure_diagnostics.cpp)
   target_link_libraries(test_planning_failure_diagnostics so101_pick_place_runtime)
+  add_library(so101_planning_failure_replay_core
+    test/pick_place/planning_failure_replay.cpp)
+  target_include_directories(so101_planning_failure_replay_core PRIVATE test/pick_place)
+  target_link_libraries(so101_planning_failure_replay_core so101_pick_place_runtime)
+  ament_target_dependencies(so101_planning_failure_replay_core rclcpp rclcpp_action moveit_msgs)
+  add_executable(so101_planning_failure_replay
+    test/pick_place/planning_failure_replay_main.cpp)
+  target_include_directories(so101_planning_failure_replay PRIVATE test/pick_place)
+  target_link_libraries(so101_planning_failure_replay so101_planning_failure_replay_core)
+  ament_target_dependencies(so101_planning_failure_replay rclcpp)
+  ament_add_gtest(test_planning_failure_replay
+    test/pick_place/test_planning_failure_replay.cpp)
+  target_include_directories(test_planning_failure_replay PRIVATE test/pick_place)
+  target_link_libraries(test_planning_failure_replay so101_planning_failure_replay_core)
   ament_add_gtest(test_so101_joint_motion_adapter
     test/pick_place/test_so101_joint_motion_adapter.cpp)
   target_link_libraries(test_so101_joint_motion_adapter so101_pick_place_runtime)
