@@ -177,15 +177,19 @@ def test_pick_place_runtime_launch_is_safe_by_default_and_wires_all_cli_gates():
     assert arguments['start_simulation'] == 'false'
     assert arguments['headless'] == 'false'
     assert arguments['plan_only_state'] == ''
+    assert arguments['planning_diagnostics_dir'] == ''
     assert {'stop_after', 'resume', 'checkpoint_path', 'simulation_session_id'} <= set(arguments)
 
-    runtime = next(
+    runtime_factory = next(
         entity
         for entity in description.entities
-        if isinstance(entity, Node)
-        and entity.node_package == 'so101_gazebo_demo'
-        and entity.node_executable == 'pick_place_state_machine'
+        if isinstance(entity, OpaqueFunction)
     )
+    context = LaunchContext()
+    context.launch_configurations.update(arguments)
+    runtime = runtime_factory.execute(context)[0]
+    assert runtime.node_package == 'so101_gazebo_demo'
+    assert runtime.node_executable == 'pick_place_state_machine'
     source = PICK_PLACE_LAUNCH.read_text()
     assert '--mode' in source
     assert '--plan-only-state' in source
@@ -204,6 +208,24 @@ def test_pick_place_cli_exposes_plan_only_state_and_uses_it_for_provenance():
     ).read_text()
     assert '--plan-only-state STATE' in source
     assert 'options->request.plan_only_state.value_or(' in source
+
+
+def test_pick_place_planning_diagnostics_are_default_off_and_tokenized():
+    module = load_launch_module(PICK_PLACE_LAUNCH)
+    values = {name: '' for name in module._RUNTIME_ARGUMENTS}
+    assert '--planning-diagnostics-dir' not in module._runtime_arguments(values)
+    values['planning_diagnostics_dir'] = '/tmp/so101-r3-planning-diagnostics/artifacts'
+    arguments = module._runtime_arguments(values)
+    index = arguments.index('--planning-diagnostics-dir')
+    assert arguments[index:index + 2] == [
+        '--planning-diagnostics-dir',
+        '/tmp/so101-r3-planning-diagnostics/artifacts',
+    ]
+    source = (
+        PACKAGE_DIR / 'src' / 'pick_place' / 'pick_place_state_machine.cpp'
+    ).read_text()
+    assert '--planning-diagnostics-dir PATH' in source
+    assert 'MoveItJointPlanningBoundaryOptions boundary_options;' in source
 
 
 def test_pick_place_runtime_launch_wires_three_independent_installed_policy_files():

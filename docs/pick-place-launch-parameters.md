@@ -41,11 +41,21 @@ are excluded from plan-only.
 | `resume` | `false` | Load a compatible checkpoint; requires the same explicit session ID |
 | `checkpoint_path` | `/tmp/panda_pick_place_checkpoint.json` or `/tmp/so101_pick_place_checkpoint.json` | Schema-v3 checkpoint file |
 | `simulation_session_id` | empty | Generated for fresh executable modes; mandatory and unchanged for resume |
+| SO `planning_diagnostics_dir` | empty | Opt-in micro-lift planning-failure artifacts; for example `/tmp/so101-r3-planning-diagnostics/artifacts` |
 | `max_state_transitions` | Panda `100` | Positive transition safety bound (SO-101 CLI uses its runtime default) |
 | SO CLI `--step` | off | Execute-resume single-step control |
 | SO CLI `--force-continue` | off | Only valid for execute resume |
 
 ## SO-101 physical validation and validation-pause resume
+
+SO-101 planning diagnostics are disabled by default. When enabled, the absolute
+directory is created with mode `0700` and artifacts with mode `0600`. Artifacts
+are written only for request-scoped micro-lift planning failures; successful
+planning emits none. Writer failures preserve the original planning failure.
+These artifacts do not alter checkpoint or resume semantics, are retained until
+the operator removes them, and can be inspected with the test-only, non-installed
+plan-only replay harness. A matching replay may still produce a different
+stochastic planner outcome and never executes a trajectory.
 
 Before Gazebo attachment, SO-101 always executes the physical chain
 `WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP`.

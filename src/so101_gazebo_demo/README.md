@@ -139,3 +139,11 @@ samples to the simulation session and policy fingerprint and is reset for a
 fresh run, so continuous and `--step` subprocess runs validate identically.
 For control syntax and validation-pause/force-resume semantics, see
 `docs/pick-place-launch-parameters.md`.
+
+Request-scoped micro-lift planning diagnostics are opt-in via
+`planning_diagnostics_dir:=/tmp/so101-r3-planning-diagnostics/artifacts`; the
+empty default disables them. The directory and artifacts use owner-only `0700`
+and `0600` permissions. Failures preserve the original workflow/checkpoint
+result even if writing fails, successful plans create no artifact, and operators
+own retention. Artifacts have no checkpoint or resume meaning. The test-only,
+non-installed replay harness is plan-only and its planner result is stochastic.
