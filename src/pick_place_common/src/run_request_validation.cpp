@@ -64,6 +64,15 @@ std::optional<Failure> validateRunRequest(const WorkflowDefinition & workflow,
     return configurationFailure("FORCE_CONTINUE_REQUEST_INVALID",
                                 "force_continue requires an execute resume");
   }
+  if (request.stop_after && !workflow.action_states.count(*request.stop_after)) {
+    return configurationFailure("STOP_AFTER_STATE_NOT_ACTION",
+                                "stop_after must name an action state in this workflow");
+  }
+  if (request.fail_at && (!workflow.forward_states.count(*request.fail_at) ||
+                          !workflow.action_states.count(*request.fail_at))) {
+    return configurationFailure("FAIL_AT_STATE_NOT_FORWARD_ACTION",
+                                "fail_at must name a forward action state in this workflow");
+  }
   if (request.mode != RunMode::PLAN_ONLY) {
     if (request.plan_only_state) {
       return configurationFailure("PLAN_ONLY_ARGUMENT_CONFLICT",

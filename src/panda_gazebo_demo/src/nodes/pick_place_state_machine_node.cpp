@@ -217,16 +217,8 @@ T parameterOrDeclare(const std::shared_ptr<rclcpp::Node> & node, const std::stri
   return node->get_parameter(name).get_value<T>();
 }
 
-enum class StateParameterScope
-{
-  FORWARD_ACTION,
-  ANY_ACTION,
-  PLAN_ONLY,
-};
-
 std::optional<pick_place::State> optionalStateParameter(const std::shared_ptr<rclcpp::Node> & node,
                                                         const std::string & name,
-                                                        StateParameterScope scope,
                                                         const rclcpp::Logger & logger)
 {
   const auto value = parameterOrDeclare(node, name, std::string(""));
@@ -234,18 +226,8 @@ std::optional<pick_place::State> optionalStateParameter(const std::shared_ptr<rc
     return std::nullopt;
   }
   const auto state = pick_place::stateFromString(value);
-  const bool valid_action = state && pick_place::isAction(*state);
-  const bool valid_scope =
-    valid_action &&
-    (scope == StateParameterScope::ANY_ACTION ||
-     (scope == StateParameterScope::FORWARD_ACTION && pick_place::isForwardAction(*state)) ||
-     scope == StateParameterScope::PLAN_ONLY);
-  if (!valid_scope) {
-    const char * expected = scope == StateParameterScope::ANY_ACTION ? "a non-terminal action State"
-                            : scope == StateParameterScope::FORWARD_ACTION
-                              ? "a forward action State"
-                              : "an approved plan-only State";
-    RCLCPP_ERROR(logger, "%s must name %s; got '%s'", name.c_str(), expected, value.c_str());
+  if (!state) {
+    RCLCPP_ERROR(logger, "%s must name a known State; got '%s'", name.c_str(), value.c_str());
     return std::nullopt;
   }
   return state;
@@ -279,13 +261,13 @@ int main(int argc, char * argv[])
   }
 
   const auto fail_at =
-    optionalStateParameter(node, "fail_at", StateParameterScope::FORWARD_ACTION, logger);
+    optionalStateParameter(node, "fail_at", logger);
   const auto fail_at_value = node->get_parameter("fail_at").get_value<std::string>();
   const auto stop_after =
-    optionalStateParameter(node, "stop_after", StateParameterScope::ANY_ACTION, logger);
+    optionalStateParameter(node, "stop_after", logger);
   const auto stop_after_value = node->get_parameter("stop_after").get_value<std::string>();
   const auto plan_only_state =
-    optionalStateParameter(node, "plan_only_state", StateParameterScope::PLAN_ONLY, logger);
+    optionalStateParameter(node, "plan_only_state", logger);
   const auto plan_only_state_value =
     node->get_parameter("plan_only_state").get_value<std::string>();
   if ((!fail_at_value.empty() && !fail_at) || (!stop_after_value.empty() && !stop_after) ||

@@ -81,6 +81,22 @@ TEST(RunRequestValidation, RejectsInvalidRequestsWithStableCodes)
   pp::RunRequest invalid_force_continue;
   invalid_force_continue.force_continue = true;
   expectFailureCode(workflow, invalid_force_continue, "FORCE_CONTINUE_REQUEST_INVALID");
+
+  pp::RunRequest terminal_stop;
+  terminal_stop.stop_after = pp::State::DONE;
+  expectFailureCode(workflow, terminal_stop, "STOP_AFTER_STATE_NOT_ACTION");
+
+  pp::RunRequest idle_stop;
+  idle_stop.stop_after = pp::State::IDLE;
+  expectFailureCode(workflow, idle_stop, "STOP_AFTER_STATE_NOT_ACTION");
+
+  pp::RunRequest recovery_fail;
+  recovery_fail.fail_at = pp::State::RECOVER_RETREAT;
+  expectFailureCode(workflow, recovery_fail, "FAIL_AT_STATE_NOT_FORWARD_ACTION");
+
+  pp::RunRequest terminal_fail;
+  terminal_fail.fail_at = pp::State::ERROR;
+  expectFailureCode(workflow, terminal_fail, "FAIL_AT_STATE_NOT_FORWARD_ACTION");
 }
 
 TEST(RunRequestValidation, ComparesForwardPathPositions)
