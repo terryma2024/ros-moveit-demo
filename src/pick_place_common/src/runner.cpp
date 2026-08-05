@@ -760,7 +760,13 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
                     "Recovery policy selected a forward or terminal state during resume",
                     {}});
     }
-    return runExecuteWorkflow(*route.next_state, request, snapshot, checkpoint.sequence + 1, 0,
+    const auto selected = *route.next_state;
+    if (recovery_policy_->canSkipRecoveryAction(*checkpoint.failed_state,
+                                                *checkpoint.original_failure, selected, snapshot)) {
+      return {RunStatus::ERROR, State::ERROR, std::nullopt, *checkpoint.original_failure, 0,
+              {selected, State::ERROR}};
+    }
+    return runExecuteWorkflow(selected, request, snapshot, checkpoint.sequence + 1, 0,
                               CheckpointPhase::RECOVERY, checkpoint.failed_state,
                               checkpoint.original_failure);
   }
