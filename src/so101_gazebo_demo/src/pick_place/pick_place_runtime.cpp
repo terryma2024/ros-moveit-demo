@@ -749,10 +749,12 @@ public:
                                             {}}};
     }
     WorldSnapshot before;
+    before.fresh = true;
     before.tcp_pose_world = record.before_lift->tcp_pose_world;
     before.gazebo_task_object_pose_world = record.before_lift->task_object_pose_world;
     before.gazebo_task_object_gripper_contact = record.before_lift->gripper_contact;
     WorldSnapshot after;
+    after.fresh = true;
     after.tcp_pose_world = record.after_lift->tcp_pose_world;
     after.gazebo_task_object_pose_world = record.after_lift->task_object_pose_world;
     after.gazebo_task_object_gripper_contact = record.after_lift->gripper_contact;

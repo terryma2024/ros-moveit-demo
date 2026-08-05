@@ -289,6 +289,8 @@ public:
 class MemoryPhysicalEvidenceStore final : public spp::IPhysicalGraspEvidenceStore
 {
 public:
+  std::optional<spp::PhysicalGraspEvidenceRecord> record;
+
   std::optional<spp::Failure> resetForFreshRun() override
   {
     return std::nullopt;
@@ -303,6 +305,8 @@ public:
   }
   [[nodiscard]] std::variant<spp::PhysicalGraspEvidenceRecord, spp::Failure> load() const override
   {
+    if (record)
+      return *record;
     return spp::Failure{spp::FailureCategory::OBSERVATION, "TEST_EVIDENCE_UNUSED", "unused", {}};
   }
 };
@@ -471,6 +475,39 @@ TEST(SO101PickPlaceRuntime, RegistersEveryConcreteActionValidatorAndContractExac
   }
   EXPECT_EQ(runtime.actions.findPlanner(spp::State::ATTACH_MOVEIT), nullptr);
   EXPECT_FALSE(runtime.plan_validators.hasValidator(spp::State::ATTACH_MOVEIT));
+}
+
+TEST(SO101PickPlaceRuntime, MarksPersistedPhysicalSamplesFreshBeforeValidation)
+{
+  auto dependencies = completeDependencies();
+  auto evidence =
+    std::dynamic_pointer_cast<MemoryPhysicalEvidenceStore>(dependencies.physical_grasp_evidence);
+  ASSERT_TRUE(evidence);
+  const auto & profile = spp::SO101Profile::canonical();
+  spp::PhysicalGraspEvidenceRecord record;
+  record.simulation_session_id = "freshness-regression";
+  record.configuration_fingerprint = "fingerprint";
+  record.before_lift = spp::PhysicalGraspSample{spp::State::WAIT_GRASP_STABLE,
+                                                100,
+                                                {0.02, -0.28, 0.200, 0.0, 0.0, 0.0, 1.0},
+                                                profile.task_object_pose,
+                                                true};
+  auto after_tcp = record.before_lift->tcp_pose_world;
+  auto after_cup = record.before_lift->task_object_pose_world;
+  after_tcp.z += 0.002;
+  after_cup.z += 0.002;
+  record.after_lift =
+    spp::PhysicalGraspSample{spp::State::WAIT_MICRO_LIFT_STABLE, 200, after_tcp, after_cup, true};
+  evidence->record = record;
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::VERIFY_PHYSICAL_GRASP);
+  ASSERT_TRUE(executor);
+
+  const auto result =
+    executor->execute({spp::State::VERIFY_PHYSICAL_GRASP, spp::State::ATTACH_GAZEBO, {}, nullptr});
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSamples)
