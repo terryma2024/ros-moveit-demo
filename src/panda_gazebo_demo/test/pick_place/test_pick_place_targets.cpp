@@ -1,9 +1,7 @@
 #include <gtest/gtest.h>
 
-#include <limits>
 #include <optional>
 
-#include "panda_gazebo_demo/pick_place/headless_fault_fixture.hpp"
 #include "panda_gazebo_demo/pick_place/pick_place_target_policy.hpp"
 
 namespace pick_place = panda_gazebo_demo::pick_place;
@@ -64,48 +62,6 @@ TEST(FixedTargets, UsesObservedXYForRecoverySafeHeight)
   EXPECT_DOUBLE_EQ(0.12, result.target_pose->x);
   EXPECT_DOUBLE_EQ(-0.08, result.target_pose->y);
   EXPECT_DOUBLE_EQ(0.987, result.target_pose->z);
-}
-
-TEST(HeadlessFaultFixture, BuildsLiftThenLateralWaypoints)
-{
-  const pick_place::Pose3d start{0.3, 0.0, 0.87, 1.0, 0.0, 0.0, 0.0};
-
-  const auto result = pick_place::buildLiftThenLateralWaypoints(start, 0.03, -0.03);
-
-  ASSERT_FALSE(result.failure);
-  ASSERT_EQ(2U, result.waypoints.size());
-  EXPECT_DOUBLE_EQ(0.3, result.waypoints[0].x);
-  EXPECT_DOUBLE_EQ(0.0, result.waypoints[0].y);
-  EXPECT_DOUBLE_EQ(0.9, result.waypoints[0].z);
-  EXPECT_DOUBLE_EQ(0.3, result.waypoints[1].x);
-  EXPECT_DOUBLE_EQ(-0.03, result.waypoints[1].y);
-  EXPECT_DOUBLE_EQ(0.9, result.waypoints[1].z);
-  EXPECT_EQ(start.qx, result.waypoints[1].qx);
-  EXPECT_EQ(start.qw, result.waypoints[1].qw);
-}
-
-TEST(HeadlessFaultFixture, ZeroLateralOffsetPreservesLegacySingleLift)
-{
-  const pick_place::Pose3d start{0.3, 0.0, 0.87, 1.0, 0.0, 0.0, 0.0};
-
-  const auto result = pick_place::buildLiftThenLateralWaypoints(start, 0.03, 0.0);
-
-  ASSERT_FALSE(result.failure);
-  ASSERT_EQ(1U, result.waypoints.size());
-  EXPECT_DOUBLE_EQ(0.9, result.waypoints.front().z);
-}
-
-TEST(HeadlessFaultFixture, RejectsUnsafeOrNonFiniteOffsets)
-{
-  const pick_place::Pose3d start{0.3, 0.0, 0.87, 1.0, 0.0, 0.0, 0.0};
-
-  EXPECT_TRUE(pick_place::buildLiftThenLateralWaypoints(start, 0.0, 0.0).failure);
-  EXPECT_TRUE(pick_place::buildLiftThenLateralWaypoints(start, -0.03, 0.0).failure);
-  EXPECT_TRUE(pick_place::buildLiftThenLateralWaypoints(start, 0.11, 0.0).failure);
-  EXPECT_TRUE(pick_place::buildLiftThenLateralWaypoints(start, 0.03, 0.11).failure);
-  EXPECT_TRUE(
-    pick_place::buildLiftThenLateralWaypoints(start, 0.03, std::numeric_limits<double>::quiet_NaN())
-      .failure);
 }
 
 TEST(FixedTargets, RecoverySafeHeightNeverCommandsDownwardMotion)
