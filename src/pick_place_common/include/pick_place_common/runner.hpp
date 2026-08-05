@@ -22,9 +22,15 @@ public:
   virtual bool retryPrecondition(State, const Failure &, std::size_t attempt) const = 0;
   virtual bool retryPostcondition(State, const Failure &, std::size_t attempt) const = 0;
   virtual bool includeIdleInTrace() const noexcept = 0;
+  virtual bool runExecutePreflight() const noexcept = 0;
+  virtual bool recoverForwardObservationFailure() const noexcept = 0;
+  virtual bool preserveEnvironmentFailureWithoutRecovery() const noexcept = 0;
+  virtual bool retryTransientObservation(State, const Failure &, std::size_t) const = 0;
+  virtual bool waitForStationaryObjectOnResume() const noexcept = 0;
+  virtual bool preserveOriginalFailureOnRecoveryError() const noexcept = 0;
 };
 
-class NoRetryRunnerBehaviorPolicy final : public IRunnerBehaviorPolicy
+class DefaultRunnerBehaviorPolicy final : public IRunnerBehaviorPolicy
 {
 public:
   bool retryPrecondition(State, const Failure &, std::size_t) const override
@@ -39,6 +45,12 @@ public:
   {
     return false;
   }
+  bool runExecutePreflight() const noexcept override { return false; }
+  bool recoverForwardObservationFailure() const noexcept override { return true; }
+  bool preserveEnvironmentFailureWithoutRecovery() const noexcept override { return false; }
+  bool retryTransientObservation(State, const Failure &, std::size_t) const override { return false; }
+  bool waitForStationaryObjectOnResume() const noexcept override { return true; }
+  bool preserveOriginalFailureOnRecoveryError() const noexcept override { return false; }
 };
 
 class StateMachineRunner
@@ -89,7 +101,7 @@ private:
   IExecutionObservationSink * observation_sink_;
   const PlanValidatorRegistry * plan_validators_;
   const IRecoveryPolicy * recovery_policy_;
-  const IRunnerBehaviorPolicy * behavior_policy_;
+  const IRunnerBehaviorPolicy & behavior_policy_;
 };
 
 }  // namespace pick_place_common

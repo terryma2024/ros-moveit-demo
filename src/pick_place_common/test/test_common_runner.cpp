@@ -180,6 +180,23 @@ pp::WorkflowDefinition workflow()
   return w;
 }
 }  // namespace
+
+TEST(CommonRunnerBehaviorPolicy, DefaultPolicyCharacterizesPandaNullBaseline)
+{
+  pick_place_common::DefaultRunnerBehaviorPolicy policy;
+  const pick_place_common::Failure observation_failure{
+    pick_place_common::FailureCategory::OBSERVATION,
+    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION", "transient", {}};
+
+  EXPECT_FALSE(policy.runExecutePreflight());
+  EXPECT_TRUE(policy.recoverForwardObservationFailure());
+  EXPECT_FALSE(policy.preserveEnvironmentFailureWithoutRecovery());
+  EXPECT_FALSE(policy.retryTransientObservation(pick_place_common::State::MOVE_ABOVE_OBJECT,
+                                                observation_failure, 0));
+  EXPECT_TRUE(policy.waitForStationaryObjectOnResume());
+  EXPECT_FALSE(policy.preserveOriginalFailureOnRecoveryError());
+  EXPECT_FALSE(policy.includeIdleInTrace());
+}
 TEST(CommonRunner, ExecutePreservesBoundaryOrder)
 {
   Scenario s;
