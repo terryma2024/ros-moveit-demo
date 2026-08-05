@@ -5,6 +5,7 @@
 #include <mutex>
 
 #include <gtest/gtest.h>
+#include <moveit_msgs/msg/move_it_error_codes.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
@@ -96,6 +97,71 @@ TEST(RequestScopedGoalCancellation, PropagatesCancelAcknowledgementFailure)
   EXPECT_EQ(result.status, spp::ActionStatus::TIMED_OUT);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(result.failure->code, "MOVE_GROUP_CANCEL_ACK_TIMEOUT");
+}
+
+TEST(MicroLiftPlanningOutcome, PreservesTheSevenPublicFailureMappings)
+{
+  struct Case
+  {
+    spp::PlanningFailureStage stage;
+    spp::ActionStatus status;
+    const char * code;
+  };
+  const std::vector<Case> cases{
+    {spp::PlanningFailureStage::GOAL_ACCEPT_TIMEOUT, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVE_GROUP_GOAL_TIMEOUT"},
+    {spp::PlanningFailureStage::GOAL_REJECTED, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVE_GROUP_GOAL_REJECTED"},
+    {spp::PlanningFailureStage::RESULT_TIMEOUT, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVE_GROUP_RESULT_TIMEOUT"},
+    {spp::PlanningFailureStage::TRANSPORT_FAILURE, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVEIT_PLAN_FAILED"},
+    {spp::PlanningFailureStage::MISSING_RESULT, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVEIT_PLAN_FAILED"},
+    {spp::PlanningFailureStage::MOVEIT_ERROR, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVEIT_PLAN_FAILED"},
+    {spp::PlanningFailureStage::EMPTY_TRAJECTORY, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVEIT_PLAN_FAILED"},
+  };
+  for (const auto & item : cases) {
+    spp::MicroLiftPlanningOutcome outcome;
+    outcome.action = {spp::ActionStatus::SUCCEEDED, std::nullopt};
+    outcome.failure_stage = item.stage;
+    const auto result = spp::classifyMicroLiftPlanningOutcome(outcome);
+    EXPECT_EQ(result.status, item.status);
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ(result.failure->category, spp::FailureCategory::PLANNING);
+    EXPECT_EQ(result.failure->code, item.code);
+  }
+}
+
+TEST(MicroLiftPlanningOutcome, CancellationFailureWinsOverResultTimeoutMapping)
+{
+  spp::MicroLiftPlanningOutcome outcome;
+  outcome.action = {spp::ActionStatus::TIMED_OUT, spp::Failure{spp::FailureCategory::PLANNING,
+                                                               "MOVE_GROUP_CANCEL_TERMINAL_TIMEOUT",
+                                                               "terminal timeout",
+                                                               {}}};
+  outcome.failure_stage = spp::PlanningFailureStage::RESULT_TIMEOUT;
+
+  const auto result = spp::classifyMicroLiftPlanningOutcome(outcome);
+
+  EXPECT_EQ(result.status, outcome.action.status);
+  EXPECT_EQ(result.failure->code, outcome.action.failure->code);
+}
+
+TEST(MicroLiftPlanningOutcome, SuccessRequiresMoveItSuccessAndNonemptyTrajectory)
+{
+  spp::MicroLiftPlanningOutcome outcome;
+  outcome.action = {spp::ActionStatus::SUCCEEDED, std::nullopt};
+  outcome.result = std::make_shared<moveit_msgs::action::MoveGroup::Result>();
+  outcome.result->error_code.val = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
+  outcome.result->planned_trajectory.joint_trajectory.points.resize(1);
+
+  const auto result = spp::classifyMicroLiftPlanningOutcome(outcome);
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED);
+  EXPECT_FALSE(result.failure);
 }
 
 TEST(ValidatedMotionArtifact, ReconstructsTheExactValidatedTrajectoryWithoutPlanning)
