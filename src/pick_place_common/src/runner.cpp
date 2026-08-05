@@ -291,8 +291,9 @@ RunResult StateMachineRunner::runPlanOnlyTarget(State state, const RunRequest & 
   const auto plan_validation =
     plan_validators_->validate(state, *observation->snapshot, *plan.artifact);
   if (!plan_validation.ok) {
-    return handleActionFailure(state, *executor, plan_validation.failures.front(),
-                               checkpoint_sequence);
+    auto failure = plan_validation.failures.front();
+    failure.metrics["plan_only_target_not_executed"] = 1.0;
+    return handleActionFailure(state, *executor, std::move(failure), checkpoint_sequence);
   }
   return {RunStatus::PLAN_ONLY_COMPLETE, state, next_state, std::nullopt, 0};
 }
@@ -319,6 +320,16 @@ RunResult StateMachineRunner::runExecuteWorkflow(
               workflow_failure,
               transition_count,
               std::move(trace)};
+    }
+    if (phase == CheckpointPhase::RECOVERY && request.mode == RunMode::PLAN_ONLY &&
+        state == State::RECOVER_RETREAT && workflow_failure && observer_ != nullptr) {
+      const auto observed = observer_->observe();
+      if (observed.snapshot && recovery_policy_->canSkipRecoveryAction(
+                                 *failed_state, *workflow_failure, state, *observed.snapshot)) {
+        trace.push_back(State::ERROR);
+        return {RunStatus::ERROR,  State::ERROR,     std::nullopt,
+                *workflow_failure, transition_count, std::move(trace)};
+      }
     }
     if (phase == CheckpointPhase::FORWARD && request.mode == RunMode::PLAN_ONLY &&
         state == *request.plan_only_state) {

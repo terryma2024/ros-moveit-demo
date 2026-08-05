@@ -12,12 +12,24 @@ pick_place::Failure originalFailure()
   return {pick_place::FailureCategory::EXECUTION, "ORIGINAL", "injected", {}};
 }
 
+pick_place::Failure unexecutedPlanValidationFailure()
+{
+  return {pick_place::FailureCategory::PLAN_VALIDATION,
+          "TARGET_PLAN_VALIDATION_FAILED",
+          "injected",
+          {{"plan_only_target_not_executed", 1.0}}};
+}
+
 pick_place::WorldSnapshot observed(bool gazebo_attached, bool moveit_attached, double q6)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   pick_place::WorldSnapshot snapshot;
   snapshot.fresh = true;
   snapshot.arm_stationary = true;
+  for (std::size_t index = 0; index < profile.arm_joints.size(); ++index) {
+    snapshot.joint_positions.emplace(profile.arm_joints[index], profile.arm_home_positions[index]);
+    snapshot.joint_velocities.emplace(profile.arm_joints[index], 0.0);
+  }
   snapshot.joint_positions.emplace(profile.gripper_joint, q6);
   snapshot.joint_velocities.emplace(profile.gripper_joint, 0.0);
   snapshot.gazebo_task_object_pose_world = profile.task_object_pose;
@@ -144,4 +156,49 @@ TEST(SO101RecoveryPolicy, AttachedTaskObjectAwayFromKnownSupportFailsClosedUntil
   ASSERT_TRUE(route.failure);
   EXPECT_EQ(pick_place::FailureCategory::WORLD_INCONSISTENCY, route.failure->category);
   EXPECT_EQ("UNSAFE_RECOVERY_OBSERVATION", route.failure->code);
+}
+
+TEST(SO101RecoveryPolicy, SkipsRetreatOnlyForAnUnexecutedPlanValidationTargetAtSafeHome)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  pick_place::SO101RecoveryPolicy policy(profile);
+  const auto failure = unexecutedPlanValidationFailure();
+  const auto safe = observed(false, false, profile.q6_full_open);
+
+  EXPECT_TRUE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT, failure,
+                                           pick_place::State::RECOVER_RETREAT, safe));
+
+  auto not_plan_validation = failure;
+  not_plan_validation.category = pick_place::FailureCategory::PLANNING;
+  EXPECT_FALSE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT,
+                                            not_plan_validation, pick_place::State::RECOVER_RETREAT,
+                                            safe));
+  auto target_executed = failure;
+  target_executed.metrics["plan_only_target_not_executed"] = 0.0;
+  EXPECT_FALSE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT, target_executed,
+                                            pick_place::State::RECOVER_RETREAT, safe));
+  EXPECT_FALSE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT, failure,
+                                            pick_place::State::RECOVER_SYNC_WORLD_OBJECT, safe));
+
+  auto moving = safe;
+  moving.arm_stationary = false;
+  EXPECT_FALSE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT, failure,
+                                            pick_place::State::RECOVER_RETREAT, moving));
+  auto away_from_home = safe;
+  away_from_home.joint_positions[profile.arm_joints.front()] = 0.02;
+  EXPECT_FALSE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT, failure,
+                                            pick_place::State::RECOVER_RETREAT, away_from_home));
+  auto gazebo_attached = safe;
+  gazebo_attached.gazebo_task_object_attached = true;
+  EXPECT_FALSE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT, failure,
+                                            pick_place::State::RECOVER_RETREAT, gazebo_attached));
+  auto moveit_attached = safe;
+  moveit_attached.moveit_task_object_attached = true;
+  EXPECT_FALSE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT, failure,
+                                            pick_place::State::RECOVER_RETREAT, moveit_attached));
+  auto unsynchronized = safe;
+  unsynchronized.moveit_world_object_poses[profile.task_object_id].x +=
+    profile.task_object_position_drift_tolerance * 2.0;
+  EXPECT_FALSE(policy.canSkipRecoveryAction(pick_place::State::MOVE_ABOVE_OBJECT, failure,
+                                            pick_place::State::RECOVER_RETREAT, unsynchronized));
 }
