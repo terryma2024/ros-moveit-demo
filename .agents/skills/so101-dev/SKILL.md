@@ -11,6 +11,8 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 
 默认范围是 ai-station 上的 SO-101 仿真。若目标包含真实机械臂动作，在得到用户明确授权并建立急停、限速、限位和净空门控前，停在 plan-only。
 
+先判定 coding agent 实际运行在哪台主机。若任务已发送到 ai-station 的 tmux/Codex，交接指令必须明确写出“你当前直接运行在 ai-station 上”，后续命令在本机执行，不得再次 `ssh ai-station`。具体判定与交接模板见 [`references/ai-station-access.md`](references/ai-station-access.md)。
+
 ## 开始前必须做
 
 1. 读取仓库根 `AGENTS.md` 和 `moveit-demo/AGENTS.md`。
@@ -19,7 +21,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
    - 查找源码、launch、安装产物或运行边界：[`references/so101-system-map.md`](references/so101-system-map.md)
    - 定位根因和区分证据层：[`references/debug-evidence.md`](references/debug-evidence.md)
    - 修改代码、运行测试或声明完成：[`references/test-and-acceptance.md`](references/test-and-acceptance.md)
-3. 在本地和 ai-station 分别记录 `pwd`、commit、branch、submodule 和 `git status --short`。已有改动均视为用户工作，不能覆盖、清理或夹带。
+3. 从当前 orchestrator 和 ai-station 分别记录 `pwd`、commit、branch、submodule 和 `git status --short`；已经位于 ai-station 的 coding agent 直接在本机取证，不再 SSH 自身。已有改动均视为用户工作，不能覆盖、清理或夹带。
 4. 检查现有进程、ROS graph 和 `codex-cua` tmux 状态。不得在不知情时启动第二套 `/move_group`、RViz 或 Gazebo。
 5. 给本轮建立一个 `/tmp/so101-debug-<时间或短ID>/` 证据目录；不要把日志、截图或构建产物写进源码目录。
 
