@@ -80,6 +80,19 @@ def test_attachment_bridge_message_dependency_is_declared_directly():
     assert 'std_msgs' in dependencies
 
 
+def test_workspace_sampler_is_installed_with_direct_moveit_dependencies():
+    cmake = (PACKAGE_DIR / 'CMakeLists.txt').read_text()
+    package = ET.parse(PACKAGE_DIR / 'package.xml').getroot()
+    dependencies = {
+        element.text for tag in ('buildtool_depend', 'depend', 'exec_depend')
+        for element in package.findall(tag)
+    }
+    assert 'add_executable(sample_so101_workspace' in cmake
+    assert 'sample_so101_workspace' in cmake.split('install(', 1)[1]
+    assert {'moveit_core', 'moveit_ros_planning'} <= dependencies
+    assert (PACKAGE_DIR / 'launch' / 'so101_workspace_sample.launch.py').is_file()
+
+
 def test_teleop_server_runtime_dependencies_are_declared_directly():
     """Removing a direct Teleop dependency must fail before an installed server starts."""
     package = ET.parse(PACKAGE_DIR / 'package.xml').getroot()
