@@ -41,6 +41,7 @@ struct PickPlaceParameters
   double attachment_timeout_seconds{2.0};
   double planning_scene_timeout_seconds{2.0};
   double state_poll_interval_seconds{0.05};
+  double gazebo_initial_observation_timeout_seconds{30.0};
   double gazebo_observation_max_age_seconds{0.5};
   std::size_t coke_settle_samples{5};
   double coke_settle_interval_seconds{0.05};

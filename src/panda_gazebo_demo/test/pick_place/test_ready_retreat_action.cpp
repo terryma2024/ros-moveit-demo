@@ -38,7 +38,7 @@ WorldSnapshot readySnapshot(bool stationary = true)
 
 ReadyRetreatConfig config(State state, State next_state)
 {
-  return {state, next_state, "ready", kReadyJoints, 0.010, 0.0, 0.0};
+  return {state, next_state, "ready", kReadyJoints, 0.010, 0.0, 0.0, 0.987};
 }
 
 class RecordingMotionAdapter final : public IMoveItMotionAdapter
@@ -49,10 +49,11 @@ public:
     return {{ActionStatus::NOT_SUPPORTED, std::nullopt}, nullptr};
   }
 
-  PlanResult planNamedTarget(const NamedTargetPlanningRequest & request,
-                             const ObservationResult &) override
+  PlanResult planSafeNamedTarget(const SafeNamedTargetPlanningRequest & request,
+                                 const ObservationResult &) override
   {
-    events->emplace_back("motion.plan");
+    events->emplace_back("motion.plan_safe_named_target");
+    safe_requests.push_back(request);
     const auto evidence =
       std::make_shared<MotionPlanEvidence>(readyEvidence(request.state, request.next_state));
     return {{ActionStatus::SUCCEEDED, std::nullopt}, evidence};
@@ -71,6 +72,7 @@ public:
   }
 
   std::shared_ptr<std::vector<std::string>> events{std::make_shared<std::vector<std::string>>()};
+  std::vector<SafeNamedTargetPlanningRequest> safe_requests;
   ActionResult execution_result{ActionStatus::SUCCEEDED, std::nullopt};
 };
 
@@ -129,8 +131,14 @@ TEST(ReadyRetreatAction, ExecutesReadyArmThenObservesThenClosesGripper)
   const auto result = action.execute({State::RETREAT, State::DONE, readySnapshot(), plan.artifact});
 
   EXPECT_EQ(result.status, ActionStatus::SUCCEEDED);
-  EXPECT_EQ(*events, (std::vector<std::string>{"motion.plan", "motion.execute", "observer.observe",
-                                               "gripper.command"}));
+  EXPECT_EQ(*events, (std::vector<std::string>{"motion.plan_safe_named_target", "motion.execute",
+                                               "observer.observe", "gripper.command"}));
+  ASSERT_EQ(motion->safe_requests.size(), 1U);
+  EXPECT_DOUBLE_EQ(motion->safe_requests.front().clearance_pose.x,
+                   readySnapshot().tcp_pose_world.x);
+  EXPECT_DOUBLE_EQ(motion->safe_requests.front().clearance_pose.y,
+                   readySnapshot().tcp_pose_world.y);
+  EXPECT_DOUBLE_EQ(motion->safe_requests.front().clearance_pose.z, 0.987);
   ASSERT_EQ(gripper->targets.size(), 1U);
   EXPECT_DOUBLE_EQ(gripper->targets.front().first, 0.0);
 }
