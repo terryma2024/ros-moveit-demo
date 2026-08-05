@@ -201,6 +201,14 @@ public:
   {
     return {pp::State::RECOVER_RETREAT, std::nullopt};
   }
+
+  bool canSkipRecoveryAction(pp::State, const pp::Failure &, pp::State,
+                             const pp::WorldSnapshot &) const override
+  {
+    return skip_recovery_action;
+  }
+
+  bool skip_recovery_action{false};
 };
 
 pp::WorkflowDefinition workflow()
@@ -243,6 +251,7 @@ public:
   {
     scenario.world.fresh = true;
     scenario.world.arm_stationary = true;
+    scenario.world.gazebo_task_object_stationary = true;
     scenario.world.simulation_session_id = "session";
     if (options.prepare_executor) {
       actions.registerExecutor(
@@ -565,6 +574,34 @@ TEST(RunToPlanOnlyResume, RecoveryCheckpointFailsBeforeObservation)
   EXPECT_EQ("PLAN_ONLY_RECOVERY_RESUME_UNSUPPORTED", result.failure->code);
   EXPECT_EQ(1, harness.store.load_calls);
   expectZeroCalls(harness);
+}
+
+TEST(RunToPlanOnly, RecoveryResumeSkipsSelectedActionAndPreservesOriginalFailure)
+{
+  Harness harness;
+  harness.recovery.skip_recovery_action = true;
+  auto checkpoint = forwardCheckpoint(pp::State::MOVE_ABOVE_OBJECT, pp::State::RECOVER_RETREAT);
+  checkpoint.phase = pp::CheckpointPhase::RECOVERY;
+  checkpoint.failed_state = pp::State::MOVE_ABOVE_OBJECT;
+  checkpoint.original_failure = pp::Failure{pp::FailureCategory::PLAN_VALIDATION,
+                                             "ORIGINAL_FAILURE", "Original failure",
+                                             {{"plan_only_target_not_executed", 1.0}}};
+  harness.store.loaded = checkpoint;
+
+  pp::RunRequest request;
+  request.mode = pp::RunMode::EXECUTE;
+  request.resume = true;
+  const auto result = harness.runner->run(request);
+
+  ASSERT_EQ(pp::RunStatus::ERROR, result.status);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(checkpoint.original_failure->category, result.failure->category);
+  EXPECT_EQ(checkpoint.original_failure->code, result.failure->code);
+  EXPECT_EQ(checkpoint.original_failure->message, result.failure->message);
+  EXPECT_EQ(checkpoint.original_failure->metrics, result.failure->metrics);
+  EXPECT_EQ(0, harness.scenario.executor_calls);
+  EXPECT_EQ((std::vector<pp::State>{pp::State::RECOVER_RETREAT, pp::State::ERROR}),
+            result.state_trace);
 }
 
 TEST(RunToPlanOnlyResume, WorldSessionAndFingerprintMismatchRemainFailClosed)
