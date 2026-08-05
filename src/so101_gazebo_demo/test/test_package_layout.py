@@ -91,6 +91,8 @@ def test_workspace_sampler_is_installed_with_direct_moveit_dependencies():
     assert 'sample_so101_workspace' in cmake.split('install(', 1)[1]
     assert {'moveit_core', 'moveit_ros_planning'} <= dependencies
     assert (PACKAGE_DIR / 'launch' / 'so101_workspace_sample.launch.py').is_file()
+    assert (PACKAGE_DIR / 'docs' / 'so101-workspace-sampler.md').is_file()
+    assert 'so101-workspace-sampler.md' in (PACKAGE_DIR / 'README.md').read_text()
 
 
 def test_teleop_server_runtime_dependencies_are_declared_directly():

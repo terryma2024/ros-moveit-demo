@@ -311,6 +311,14 @@ if(BUILD_TESTING)
   target_compile_definitions(test_workspace_sampler PRIVATE
     SO101_TEST_URDF="${SO101_TEST_URDF}"
     SO101_TEST_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/config/so101.srdf")
+  ament_add_gtest(test_workspace_sampler_integration
+    test/workspace/test_workspace_sampler_integration.cpp)
+  target_link_libraries(test_workspace_sampler_integration so101_workspace_sampling)
+  add_dependencies(test_workspace_sampler_integration so101_fixed_target_test_urdf)
+  target_compile_definitions(test_workspace_sampler_integration PRIVATE
+    SO101_TEST_URDF="${SO101_TEST_URDF}"
+    SO101_TEST_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/config/so101.srdf")
+  set_tests_properties(test_workspace_sampler_integration PROPERTIES TIMEOUT 300)
   ament_add_gtest(test_request_scoped_goal_cancellation
     test/pick_place/test_request_scoped_goal_cancellation.cpp)
   target_link_libraries(test_request_scoped_goal_cancellation pick_place_core)
