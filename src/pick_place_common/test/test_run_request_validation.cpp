@@ -1,8 +1,12 @@
 #include <gtest/gtest.h>
 
+#include <type_traits>
+
 #include "pick_place_common/run_request_validation.hpp"
 
 namespace pp = pick_place_common;
+
+static_assert(std::is_aggregate_v<pick_place_common::RunRequest>);
 
 namespace
 {

@@ -354,6 +354,26 @@ pp::RunRequest resumeRequest(pp::State target)
   return request;
 }
 
+pp::WorkflowDefinition forceContinueWorkflow()
+{
+  pp::WorkflowDefinition workflow;
+  workflow.transitions[pp::State::IDLE] = {pp::State::VERIFY_PHYSICAL_GRASP, pp::State::ERROR};
+  workflow.transitions[pp::State::VERIFY_PHYSICAL_GRASP] = {pp::State::ATTACH_GAZEBO,
+                                                            pp::State::VALIDATION_FAILED};
+  workflow.transitions[pp::State::VALIDATION_FAILED] = {pp::State::ATTACH_GAZEBO,
+                                                        pp::State::VALIDATION_FAILED};
+  workflow.transitions[pp::State::ATTACH_GAZEBO] = {pp::State::DONE, pp::State::RECOVER_RETREAT};
+  workflow.transitions[pp::State::RECOVER_RETREAT] = {pp::State::ERROR, pp::State::ERROR};
+  workflow.action_states = {pp::State::VERIFY_PHYSICAL_GRASP, pp::State::ATTACH_GAZEBO,
+                            pp::State::RECOVER_RETREAT};
+  workflow.forward_states = {pp::State::IDLE, pp::State::VERIFY_PHYSICAL_GRASP,
+                             pp::State::VALIDATION_FAILED, pp::State::ATTACH_GAZEBO,
+                             pp::State::DONE};
+  workflow.terminal_states = {pp::State::DONE, pp::State::ERROR};
+  workflow.force_continue_states = {pp::State::VALIDATION_FAILED};
+  return workflow;
+}
+
 void expectTargetFailureRecovers(const std::string & stage, const std::string & expected_code)
 {
   Harness harness;
@@ -630,6 +650,106 @@ TEST(RunToPlanOnlyResume, WorldSessionAndFingerprintMismatchRemainFailClosed)
   result = harness.runner->run(resumeRequest(pp::State::MOVE_ABOVE_OBJECT));
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("RESUME_SIMULATION_SESSION_MISMATCH", result.failure->code);
+}
+
+TEST(ForceContinue, PassiveExecuteResumePreservesValidationPause)
+{
+  Harness harness;
+  harness.definition = forceContinueWorkflow();
+  harness.actions.registerExecutor(
+    pp::State::ATTACH_GAZEBO,
+    std::make_shared<Executor>(harness.scenario, pp::State::ATTACH_GAZEBO));
+  harness.contracts.registerContract(
+    {pp::State::ATTACH_GAZEBO, pp::State::DONE},
+    std::make_shared<Contract>(harness.scenario, pp::State::ATTACH_GAZEBO));
+  auto checkpoint =
+    forwardCheckpoint(pp::State::VERIFY_PHYSICAL_GRASP, pp::State::VALIDATION_FAILED);
+  checkpoint.failed_state = pp::State::VERIFY_PHYSICAL_GRASP;
+  checkpoint.original_failure = pp::Failure{pp::FailureCategory::POSTCONDITION,
+                                            "PHYSICAL_GRASP_FOLLOW_RATIO",
+                                            "Physical grasp validation failed",
+                                            {}};
+  harness.store.loaded = checkpoint;
+
+  pp::RunRequest request;
+  request.mode = pp::RunMode::EXECUTE;
+  request.resume = true;
+  const auto result = harness.runner->run(request);
+
+  EXPECT_EQ(pp::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(pp::State::VALIDATION_FAILED, result.current_state);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("PHYSICAL_GRASP_FOLLOW_RATIO", result.failure->code);
+  EXPECT_EQ(0, harness.scenario.executor_calls);
+  EXPECT_TRUE(harness.store.checkpoints.empty());
+}
+
+TEST(ForceContinue, ValidSingleStepOverrideExecutesOnlyGazeboAttach)
+{
+  Harness harness;
+  harness.definition = forceContinueWorkflow();
+  harness.actions.registerExecutor(
+    pp::State::ATTACH_GAZEBO,
+    std::make_shared<Executor>(harness.scenario, pp::State::ATTACH_GAZEBO));
+  harness.contracts.registerContract(
+    {pp::State::VALIDATION_FAILED, pp::State::ATTACH_GAZEBO},
+    std::make_shared<Contract>(harness.scenario, pp::State::VALIDATION_FAILED));
+  harness.contracts.registerContract(
+    {pp::State::ATTACH_GAZEBO, pp::State::DONE},
+    std::make_shared<Contract>(harness.scenario, pp::State::ATTACH_GAZEBO));
+  auto checkpoint =
+    forwardCheckpoint(pp::State::VERIFY_PHYSICAL_GRASP, pp::State::VALIDATION_FAILED);
+  checkpoint.failed_state = pp::State::VERIFY_PHYSICAL_GRASP;
+  checkpoint.original_failure = pp::Failure{pp::FailureCategory::POSTCONDITION,
+                                            "PHYSICAL_GRASP_FOLLOW_RATIO",
+                                            "Physical grasp validation failed",
+                                            {}};
+  harness.store.loaded = checkpoint;
+
+  pp::RunRequest request;
+  request.mode = pp::RunMode::EXECUTE;
+  request.resume = true;
+  request.force_continue = true;
+  request.single_step = true;
+  const auto result = harness.runner->run(request);
+
+  EXPECT_EQ(pp::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  EXPECT_EQ(pp::State::ATTACH_GAZEBO, result.current_state);
+  EXPECT_EQ(pp::State::DONE, result.next_state);
+  EXPECT_EQ((std::vector<pp::State>{pp::State::VALIDATION_FAILED,
+                                    pp::State::ATTACH_GAZEBO,
+                                    pp::State::DONE}),
+            result.state_trace);
+  EXPECT_EQ(2U, result.transition_count);
+  EXPECT_EQ(1, harness.scenario.executor_calls);
+}
+
+TEST(ForceContinue, RejectsNormalForwardCheckpointWithoutSideEffects)
+{
+  Harness harness;
+  harness.definition = forceContinueWorkflow();
+  harness.actions.registerExecutor(
+    pp::State::ATTACH_GAZEBO,
+    std::make_shared<Executor>(harness.scenario, pp::State::ATTACH_GAZEBO));
+  harness.contracts.registerContract(
+    {pp::State::VERIFY_PHYSICAL_GRASP, pp::State::ATTACH_GAZEBO},
+    std::make_shared<Contract>(harness.scenario, pp::State::VERIFY_PHYSICAL_GRASP));
+  harness.contracts.registerContract(
+    {pp::State::ATTACH_GAZEBO, pp::State::DONE},
+    std::make_shared<Contract>(harness.scenario, pp::State::ATTACH_GAZEBO));
+  harness.store.loaded =
+    forwardCheckpoint(pp::State::VERIFY_PHYSICAL_GRASP, pp::State::ATTACH_GAZEBO);
+
+  pp::RunRequest request;
+  request.mode = pp::RunMode::EXECUTE;
+  request.resume = true;
+  request.force_continue = true;
+  const auto result = harness.runner->run(request);
+
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("FORCE_CONTINUE_STATE_MISMATCH", result.failure->code);
+  EXPECT_EQ(0, harness.scenario.executor_calls);
+  EXPECT_TRUE(harness.store.checkpoints.empty());
 }
 
 TEST(RunToPlanOnlyFailure, TargetPreconditionFailureRecoversWithoutExecutingTarget)
