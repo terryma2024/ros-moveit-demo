@@ -14,33 +14,17 @@
 
 #include "so101_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
 #include "so101_gazebo_demo/pick_place/moveit_scene_executor.hpp"
+#include "so101_gazebo_demo/pick_place/so101_moveit_scene_policy.hpp"
 #include "so101_gazebo_demo/pick_place/so101_profile.hpp"
 
 namespace pick_place = so101_gazebo_demo::pick_place;
 
 namespace
 {
-double positionDistance(const pick_place::Pose3d & a, const pick_place::Pose3d & b)
-{
-  return std::hypot(std::hypot(a.x - b.x, a.y - b.y), a.z - b.z);
-}
-
-double orientationDistance(const pick_place::Pose3d & a, const pick_place::Pose3d & b)
-{
-  const auto a_norm = std::hypot(std::hypot(a.qx, a.qy), std::hypot(a.qz, a.qw));
-  const auto b_norm = std::hypot(std::hypot(b.qx, b.qy), std::hypot(b.qz, b.qw));
-  if (a_norm <= 1e-12 || b_norm <= 1e-12) {
-    return INFINITY;
-  }
-  const auto dot =
-    std::abs((a.qx * b.qx + a.qy * b.qy + a.qz * b.qz + a.qw * b.qw) / (a_norm * b_norm));
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
-}
-
 bool poseMatches(const pick_place::Pose3d & actual, const pick_place::Pose3d & expected)
 {
-  return positionDistance(actual, expected) <= 0.002 &&
-         orientationDistance(actual, expected) <= 0.02;
+  return pick_place::positionDistance(actual, expected) <= 0.002 &&
+         pick_place::orientationDistance(actual, expected) <= 0.02;
 }
 
 std::string poseText(const std::optional<pick_place::Pose3d> & pose)
@@ -133,8 +117,10 @@ int main(int argc, char * argv[])
       const auto scene_operation = operation == "attach" ? pick_place::MoveItSceneOperation::ATTACH
                                                          : pick_place::MoveItSceneOperation::DETACH;
       pick_place::MoveItSceneExecutor executor(
-        adapter, {state, scene_operation, false, profile.task_object_id}, attachment,
-        timeout_seconds, poll_interval_seconds);
+        adapter,
+        {state, scene_operation, false, profile.task_object_id, attachment, timeout_seconds,
+         poll_interval_seconds},
+        std::make_shared<pick_place::SO101MoveItScenePolicy>(profile.task_object_id, false));
       const pick_place::ExecutionContext context{state, pick_place::State::ERROR,
                                                  pick_place::WorldSnapshot{}, nullptr};
       result = executor.execute(context);

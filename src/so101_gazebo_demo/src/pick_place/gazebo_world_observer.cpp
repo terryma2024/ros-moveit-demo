@@ -4,7 +4,6 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
-#include <deque>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -14,6 +13,8 @@
 #include <gz/msgs/contacts.pb.h>
 #include <gz/msgs/stringmsg.pb.h>
 #include <gz/transport/Node.hh>
+
+#include "pick_place_common/pose_stability_tracker.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -31,24 +32,6 @@ Pose3d toPose3d(const gz::msgs::Pose & pose)
 Failure observationFailure(std::string code, std::string message)
 {
   return {FailureCategory::OBSERVATION, std::move(code), std::move(message), {}};
-}
-
-bool finitePose(const Pose3d & pose)
-{
-  return std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
-         std::isfinite(pose.qx) && std::isfinite(pose.qy) && std::isfinite(pose.qz) &&
-         std::isfinite(pose.qw);
-}
-
-double positionDistance(const Pose3d & a, const Pose3d & b)
-{
-  return std::hypot(std::hypot(a.x - b.x, a.y - b.y), a.z - b.z);
-}
-
-double orientationDistance(const Pose3d & a, const Pose3d & b)
-{
-  const auto dot = std::abs(a.qx * b.qx + a.qy * b.qy + a.qz * b.qz + a.qw * b.qw);
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
 }
 
 ContactVector3 rotateByInverseQuaternion(const ContactVector3 & vector, const Pose3d & pose)
@@ -72,51 +55,6 @@ std::string unscopedCollisionName(const std::string & scoped)
   const auto separator = scoped.rfind("::");
   return separator == std::string::npos ? scoped : scoped.substr(separator + 2);
 }
-
-class TaskObjectPoseStabilityTracker
-{
-public:
-  TaskObjectPoseStabilityTracker(std::size_t required_samples, double position_tolerance,
-                                 double orientation_tolerance) :
-      required_samples_(required_samples), position_tolerance_(position_tolerance),
-      orientation_tolerance_(orientation_tolerance)
-  {
-  }
-
-  void addSample(const Pose3d & pose, std::chrono::steady_clock::time_point observed_at)
-  {
-    samples_.push_back({pose, observed_at});
-    while (samples_.size() > required_samples_) {
-      samples_.pop_front();
-    }
-  }
-
-  [[nodiscard]] std::optional<bool> stationary() const
-  {
-    if (required_samples_ < 2 || samples_.size() < required_samples_) {
-      return std::nullopt;
-    }
-    for (std::size_t i = 1; i < samples_.size(); ++i) {
-      if (samples_[i].observed_at <= samples_[i - 1].observed_at ||
-          positionDistance(samples_[i - 1].pose, samples_[i].pose) > position_tolerance_ ||
-          orientationDistance(samples_[i - 1].pose, samples_[i].pose) > orientation_tolerance_) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-private:
-  struct Sample
-  {
-    Pose3d pose;
-    std::chrono::steady_clock::time_point observed_at;
-  };
-  std::size_t required_samples_;
-  double position_tolerance_;
-  double orientation_tolerance_;
-  std::deque<Sample> samples_;
-};
 
 }  // namespace
 
@@ -296,7 +234,7 @@ public:
       return {std::nullopt, observationFailure("GAZEBO_TASK_OBJECT_POSE_UNAVAILABLE",
                                                "Gazebo TaskObject pose is missing or stale")};
     }
-    if (!finitePose(*task_object_pose_)) {
+    if (!isFinitePose(*task_object_pose_)) {
       return {std::nullopt,
               observationFailure("GAZEBO_TASK_OBJECT_POSE_NONFINITE",
                                  "Gazebo TaskObject pose contains nonfinite evidence")};
@@ -419,7 +357,7 @@ private:
   std::optional<double> task_object_moving_contact_max_height_;
   std::chrono::steady_clock::time_point contact_received_at_{};
   std::chrono::steady_clock::time_point attachment_received_at_{};
-  TaskObjectPoseStabilityTracker task_object_pose_stability_;
+  pick_place_common::PoseStabilityTracker task_object_pose_stability_;
   std::chrono::duration<double> task_object_settle_interval_;
   std::chrono::steady_clock::time_point last_stability_sample_at_{};
   std::chrono::steady_clock::time_point task_object_pose_received_at_{};

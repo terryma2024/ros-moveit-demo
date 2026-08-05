@@ -25,10 +25,10 @@ pick_place::WorldSnapshot snapshot(bool gazebo_attached, bool moveit_attached,
   world.fresh = true;
   world.arm_stationary = true;
   world.tcp_pose_world = tcp;
-  world.gazebo_coke_pose_world = coke;
-  world.gazebo_coke_stationary = true;
-  world.gazebo_coke_attached = gazebo_attached;
-  world.moveit_coke_attached = moveit_attached;
+  world.gazebo_task_object_pose_world = coke;
+  world.gazebo_task_object_stationary = true;
+  world.gazebo_task_object_attached = gazebo_attached;
+  world.moveit_task_object_attached = moveit_attached;
   world.joint_positions = {{"panda_finger_joint1", 0.032}, {"panda_finger_joint2", 0.032}};
   world.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   if (!moveit_attached) {
@@ -92,7 +92,7 @@ TEST(FixedRecoveryPolicy, SelectsExactFactMatrix)
   expectRouteError(policy, moving, "RECOVERY_ROBOT_NOT_STATIONARY");
 
   auto missing_attachment = snapshot(false, false);
-  missing_attachment.gazebo_coke_attached.reset();
+  missing_attachment.gazebo_task_object_attached.reset();
   expectRouteError(policy, missing_attachment, "RECOVERY_ATTACHMENT_STATE_UNKNOWN");
 }
 
@@ -121,11 +121,11 @@ TEST(FixedRecoveryPolicy, BothAttachedWithoutPositiveSupportUsesCarryingRecovery
   expectRoute(policy, wrong_orientation, pick_place::State::RECOVER_LIFT_TO_SAFE_HEIGHT);
 
   auto missing_coke = snapshot(true, true);
-  missing_coke.gazebo_coke_pose_world.reset();
+  missing_coke.gazebo_task_object_pose_world.reset();
   expectRouteError(policy, missing_coke, "RECOVERY_COKE_POSE_UNKNOWN");
 
   auto tilted_coke = snapshot(true, true);
-  tilted_coke.gazebo_coke_pose_world = {0.3, 0.0, 0.836, 0.258819, 0.0, 0.0, 0.965926};
+  tilted_coke.gazebo_task_object_pose_world = {0.3, 0.0, 0.836, 0.258819, 0.0, 0.0, 0.965926};
   expectRouteError(policy, tilted_coke, "RECOVERY_CARRIED_POSE_INCONSISTENT");
 }
 
@@ -197,7 +197,7 @@ TEST(FixedRecoveryPolicy, DetachedResumeOpensThenSynchronizesBeforeRetreat)
   world.moveit_world_object_poses["coke"].x += 0.05;
   expectRoute(policy, world, pick_place::State::RECOVER_SYNC_WORLD_OBJECT);
 
-  world.moveit_world_object_poses["coke"] = *world.gazebo_coke_pose_world;
+  world.moveit_world_object_poses["coke"] = *world.gazebo_task_object_pose_world;
   expectRoute(policy, world, pick_place::State::RECOVER_RETREAT);
 }
 
@@ -206,7 +206,7 @@ TEST(FixedRecoveryPolicy, MissingProgressFactsFailClosed)
   const pick_place::FixedRecoveryPolicy policy(
     std::make_shared<pick_place::FixedPickPlaceTargetPolicy>(), 0.02);
   auto missing_coke = snapshot(true, true);
-  missing_coke.gazebo_coke_pose_world.reset();
+  missing_coke.gazebo_task_object_pose_world.reset();
   expectRouteError(policy, missing_coke, "RECOVERY_COKE_POSE_UNKNOWN");
 
   auto missing_gripper = snapshot(false, false);

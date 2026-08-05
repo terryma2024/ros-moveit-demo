@@ -45,7 +45,7 @@ public:
   int calls{0};
 };
 
-class FakeScene final : public pick_place::IMoveItSceneAdapter
+class FakeScene final : public pick_place::ISO101MoveItSceneAdapter
 {
 public:
   pick_place::ActionResult attachTaskObject(const pick_place::MoveItAttachmentSpec &) override

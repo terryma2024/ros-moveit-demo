@@ -13,6 +13,9 @@ public:
 
   [[nodiscard]] RecoveryRoute select(State failed_state, const Failure & original_failure,
                                      const WorldSnapshot & current) const override;
+  [[nodiscard]] bool canSkipRecoveryAction(State failed_state, const Failure & original_failure,
+                                           State next_recovery_action,
+                                           const WorldSnapshot & current) const override;
 
 private:
   SO101Profile profile_;

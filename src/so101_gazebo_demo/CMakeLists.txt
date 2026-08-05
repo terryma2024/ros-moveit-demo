@@ -29,9 +29,8 @@ if(NOT CLANG_FORMAT_EXECUTABLE)
           "Install clang-format or set -DCLANG_FORMAT_EXECUTABLE=/path/to/clang-format.")
 endif()
 
-include(cmake/cpp_quality_gate.cmake)
-
 find_package(ament_cmake REQUIRED)
+find_package(pick_place_common REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -102,22 +101,21 @@ add_custom_command(
   VERBATIM)
 add_custom_target(so101_fingertip_pad_assets ALL DEPENDS ${SO101_FINGERTIP_PAD_MANIFEST})
 
-add_library(pick_place_core
+add_library(so101_pick_place_runtime
   src/pick_place/attachment_state_reducer.cpp
-  src/pick_place/domain_types.cpp
   src/pick_place/file_checkpoint_store.cpp
   src/pick_place/common_resume_validator.cpp
-  src/pick_place/plan_validation.cpp
+  src/pick_place/so101_resume_validation_policy.cpp
+  src/pick_place/so101_runner_behavior_policy.cpp
+  src/pick_place/so101_moveit_scene_policy.cpp
+  src/pick_place/so101_workflow.cpp
   src/pick_place/policy_config.cpp
   src/pick_place/physical_grasp_validator.cpp
-  src/pick_place/state_action.cpp
-  src/pick_place/transition_contract.cpp
   src/pick_place/transition_table.cpp
-  src/pick_place/runner.cpp
-  src/pick_place/simulation_session_id.cpp
   src/pick_place/so101_profile.cpp
   src/pick_place/so101_gripper_validation.cpp
   src/pick_place/so101_gripper_state.cpp
+  src/pick_place/support_pose.cpp
   src/pick_place/so101_attachment_contracts.cpp
   src/pick_place/so101_recovery_policy.cpp
   src/pick_place/so101_task3_runtime.cpp
@@ -130,16 +128,23 @@ add_library(pick_place_core
   src/pick_place/moveit_joint_planning_boundary.cpp
   src/pick_place/calibration_cli_options.cpp
   src/pick_place/follow_joint_trajectory_gripper_adapter.cpp
-  src/pick_place/gazebo_attachment_executor.cpp
   src/pick_place/gazebo_reset_adapter.cpp
   src/pick_place/gazebo_world_observer.cpp
   src/pick_place/world_readiness_gate.cpp
   src/pick_place/moveit_scene_adapter.cpp
   src/pick_place/moveit_scene_initializer.cpp
-  src/pick_place/moveit_scene_executor.cpp
   src/pick_place/world_reset_coordinator.cpp
   src/pick_place/robot_home_reset_adapter.cpp
 )
+target_compile_features(so101_pick_place_runtime PUBLIC cxx_std_17)
+target_include_directories(so101_pick_place_runtime PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(so101_pick_place_runtime PUBLIC pick_place_common::core pick_place_common::ros_adapters
+  nlohmann_json::nlohmann_json OpenSSL::Crypto yaml-cpp gz-msgs10::core gz-transport13::core)
+ament_target_dependencies(so101_pick_place_runtime PUBLIC control_msgs geometry_msgs moveit_msgs
+  moveit_core moveit_ros_planning_interface rclcpp rclcpp_action sensor_msgs shape_msgs
+  trajectory_msgs)
 
 add_library(so101_workspace_sampling
   src/workspace/joint_sample_generator.cpp
@@ -154,43 +159,34 @@ target_compile_features(so101_workspace_sampling PUBLIC cxx_std_17)
 target_include_directories(so101_workspace_sampling PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-target_link_libraries(so101_workspace_sampling PUBLIC pick_place_core)
-target_compile_features(pick_place_core PUBLIC cxx_std_17)
-target_include_directories(pick_place_core PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-target_link_libraries(pick_place_core PUBLIC nlohmann_json::nlohmann_json OpenSSL::Crypto
-  yaml-cpp gz-msgs10::core gz-transport13::core)
-ament_target_dependencies(pick_place_core PUBLIC control_msgs geometry_msgs moveit_msgs
-  moveit_core moveit_ros_planning_interface rclcpp rclcpp_action sensor_msgs shape_msgs
-  trajectory_msgs)
+target_link_libraries(so101_workspace_sampling PUBLIC so101_pick_place_runtime)
 
 add_executable(pick_place_state_machine src/pick_place/pick_place_state_machine.cpp)
-target_link_libraries(pick_place_state_machine pick_place_core)
+target_link_libraries(pick_place_state_machine so101_pick_place_runtime)
 ament_target_dependencies(pick_place_state_machine ament_index_cpp)
 
 add_executable(gazebo_attachment_state_relay src/nodes/gazebo_attachment_state_relay.cpp)
-target_link_libraries(gazebo_attachment_state_relay pick_place_core gz-msgs10::core gz-transport13::core)
+target_link_libraries(gazebo_attachment_state_relay so101_pick_place_runtime gz-msgs10::core gz-transport13::core)
 ament_target_dependencies(gazebo_attachment_state_relay rclcpp std_msgs)
 
 add_executable(reset_so101_world src/nodes/reset_so101_world.cpp)
-target_link_libraries(reset_so101_world pick_place_core)
+target_link_libraries(reset_so101_world so101_pick_place_runtime)
 ament_target_dependencies(reset_so101_world ament_index_cpp rclcpp)
 
 add_executable(so101_moveit_scene src/nodes/so101_moveit_scene.cpp)
-target_link_libraries(so101_moveit_scene pick_place_core)
+target_link_libraries(so101_moveit_scene so101_pick_place_runtime)
 ament_target_dependencies(so101_moveit_scene rclcpp)
 
 add_executable(calibrate_so101_motion src/nodes/calibrate_so101_motion.cpp)
-target_link_libraries(calibrate_so101_motion pick_place_core)
+target_link_libraries(calibrate_so101_motion so101_pick_place_runtime)
 ament_target_dependencies(calibrate_so101_motion rclcpp)
 
 add_executable(validate_so101_motion_matrix src/nodes/validate_so101_motion_matrix.cpp)
-target_link_libraries(validate_so101_motion_matrix pick_place_core)
+target_link_libraries(validate_so101_motion_matrix so101_pick_place_runtime)
 ament_target_dependencies(validate_so101_motion_matrix ament_index_cpp rclcpp)
 
 add_executable(sample_so101_workspace src/nodes/sample_so101_workspace.cpp)
-target_link_libraries(sample_so101_workspace so101_workspace_sampling pick_place_core)
+target_link_libraries(sample_so101_workspace so101_workspace_sampling so101_pick_place_runtime)
 ament_target_dependencies(sample_so101_workspace ament_index_cpp moveit_core moveit_ros_planning rclcpp)
 
 add_library(so101_attachment_collision_system SHARED
@@ -199,7 +195,7 @@ target_compile_features(so101_attachment_collision_system PUBLIC cxx_std_17)
 target_link_libraries(so101_attachment_collision_system
   gz-msgs10::core gz-plugin2::gz-plugin2 gz-sim8::gz-sim8 gz-transport13::core)
 
-so101_gazebo_add_cpp_quality_gate(
+pick_place_common_add_cpp_quality_gate(
   WORKSPACE_ROOT ${SO101_GAZEBO_DEMO_WORKSPACE_ROOT}
   SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}
   RUN_CLANG_TIDY_EXECUTABLE ${RUN_CLANG_TIDY_EXECUTABLE}
@@ -211,7 +207,7 @@ so101_gazebo_add_cpp_quality_gate(
     include/so101_gazebo_demo/pick_place/gripper_width_calibration_data.hpp
   TARGETS
     so101_workspace_sampling
-    pick_place_core
+    so101_pick_place_runtime
     pick_place_state_machine
     gazebo_attachment_state_relay
     reset_so101_world
@@ -230,52 +226,56 @@ if(BUILD_TESTING)
   target_link_libraries(test_joint_sample_generator so101_workspace_sampling)
   ament_add_gtest(test_pose_coverage_index test/workspace/test_pose_coverage_index.cpp)
   target_link_libraries(test_pose_coverage_index so101_workspace_sampling)
+  ament_add_gtest(test_workflow_characterization test/pick_place/test_workflow_characterization.cpp)
+  target_link_libraries(test_workflow_characterization so101_pick_place_runtime)
   ament_add_gtest(test_pick_place_dry_run test/pick_place/test_dry_run.cpp)
-  target_link_libraries(test_pick_place_dry_run pick_place_core)
+  target_link_libraries(test_pick_place_dry_run so101_pick_place_runtime)
   ament_add_gtest(test_pick_place_checkpoint test/pick_place/test_checkpoint.cpp)
-  target_link_libraries(test_pick_place_checkpoint pick_place_core)
+  target_link_libraries(test_pick_place_checkpoint so101_pick_place_runtime)
   ament_add_gtest(test_pick_place_transition_table test/pick_place/test_transition_table.cpp)
-  target_link_libraries(test_pick_place_transition_table pick_place_core)
+  target_link_libraries(test_pick_place_transition_table so101_pick_place_runtime)
   ament_add_gtest(test_pick_place_runner test/pick_place/test_pick_place_runner.cpp)
-  target_link_libraries(test_pick_place_runner pick_place_core)
+  target_link_libraries(test_pick_place_runner so101_pick_place_runtime)
   ament_add_gtest(test_physical_grasp_validator test/pick_place/test_physical_grasp_validator.cpp)
-  target_link_libraries(test_physical_grasp_validator pick_place_core)
+  target_link_libraries(test_physical_grasp_validator so101_pick_place_runtime)
   ament_add_gtest(test_so101_gripper_adapter test/pick_place/test_so101_gripper_adapter.cpp)
-  target_link_libraries(test_so101_gripper_adapter pick_place_core)
+  target_link_libraries(test_so101_gripper_adapter so101_pick_place_runtime)
   ament_add_gtest(test_ros_trajectory_action_client
     test/pick_place/test_ros_trajectory_action_client.cpp)
-  target_link_libraries(test_ros_trajectory_action_client pick_place_core)
+  target_link_libraries(test_ros_trajectory_action_client so101_pick_place_runtime)
   ament_add_gtest(test_so101_gripper_state test/pick_place/test_so101_gripper_state.cpp)
-  target_link_libraries(test_so101_gripper_state pick_place_core)
+  target_link_libraries(test_so101_gripper_state so101_pick_place_runtime)
+  ament_add_gtest(test_support_pose test/pick_place/test_support_pose.cpp)
+  target_link_libraries(test_support_pose so101_pick_place_runtime)
   ament_add_gtest(test_so101_gazebo_attachment test/pick_place/test_so101_gazebo_attachment.cpp)
-  target_link_libraries(test_so101_gazebo_attachment pick_place_core gz-msgs10::core gz-transport13::core)
+  target_link_libraries(test_so101_gazebo_attachment so101_pick_place_runtime gz-msgs10::core gz-transport13::core)
   ament_add_gtest(test_attachment_state_reducer
     test/pick_place/test_attachment_state_reducer.cpp)
-  target_link_libraries(test_attachment_state_reducer pick_place_core)
+  target_link_libraries(test_attachment_state_reducer so101_pick_place_runtime)
   ament_add_gtest(test_so101_attachment_contracts
     test/pick_place/test_so101_attachment_contracts.cpp)
-  target_link_libraries(test_so101_attachment_contracts pick_place_core)
+  target_link_libraries(test_so101_attachment_contracts so101_pick_place_runtime)
   ament_add_gtest(test_so101_recovery_policy test/pick_place/test_so101_recovery_policy.cpp)
-  target_link_libraries(test_so101_recovery_policy pick_place_core)
+  target_link_libraries(test_so101_recovery_policy so101_pick_place_runtime)
   ament_add_gtest(test_so101_pick_place_runtime test/pick_place/test_so101_pick_place_runtime.cpp)
-  target_link_libraries(test_so101_pick_place_runtime pick_place_core)
+  target_link_libraries(test_so101_pick_place_runtime so101_pick_place_runtime)
   target_compile_definitions(test_so101_pick_place_runtime PRIVATE
     SO101_TEST_POLICY_CONFIG_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/config")
   ament_add_gtest(test_so101_task3_runtime test/pick_place/test_so101_task3_runtime.cpp)
-  target_link_libraries(test_so101_task3_runtime pick_place_core)
+  target_link_libraries(test_so101_task3_runtime so101_pick_place_runtime)
   ament_add_gtest(test_so101_motion_validation
     test/pick_place/test_so101_motion_validation.cpp)
-  target_link_libraries(test_so101_motion_validation pick_place_core)
+  target_link_libraries(test_so101_motion_validation so101_pick_place_runtime)
   ament_add_gtest(test_so101_motion_evidence_builder
     test/pick_place/test_so101_motion_evidence_builder.cpp)
-  target_link_libraries(test_so101_motion_evidence_builder pick_place_core)
+  target_link_libraries(test_so101_motion_evidence_builder so101_pick_place_runtime)
   ament_add_gtest(test_so101_motion_planner test/pick_place/test_so101_motion_planner.cpp)
-  target_link_libraries(test_so101_motion_planner pick_place_core)
+  target_link_libraries(test_so101_motion_planner so101_pick_place_runtime)
   ament_add_gtest(test_so101_fixed_motion_targets
     test/pick_place/test_so101_fixed_motion_targets.cpp)
-  target_link_libraries(test_so101_fixed_motion_targets pick_place_core)
+  target_link_libraries(test_so101_fixed_motion_targets so101_pick_place_runtime)
   ament_add_gtest(test_policy_config test/pick_place/test_policy_config.cpp)
-  target_link_libraries(test_policy_config pick_place_core)
+  target_link_libraries(test_policy_config so101_pick_place_runtime)
   find_program(XACRO_EXECUTABLE xacro REQUIRED)
   set(SO101_TEST_URDF ${CMAKE_CURRENT_BINARY_DIR}/so101_fixed_target_test.urdf)
   add_custom_command(
@@ -321,32 +321,32 @@ if(BUILD_TESTING)
   set_tests_properties(test_workspace_sampler_integration PROPERTIES TIMEOUT 300)
   ament_add_gtest(test_request_scoped_goal_cancellation
     test/pick_place/test_request_scoped_goal_cancellation.cpp)
-  target_link_libraries(test_request_scoped_goal_cancellation pick_place_core)
+  target_link_libraries(test_request_scoped_goal_cancellation so101_pick_place_runtime)
   ament_add_gtest(test_so101_joint_motion_adapter
     test/pick_place/test_so101_joint_motion_adapter.cpp)
-  target_link_libraries(test_so101_joint_motion_adapter pick_place_core)
+  target_link_libraries(test_so101_joint_motion_adapter so101_pick_place_runtime)
   ament_add_gtest(test_so101_node_spinner test/pick_place/test_node_spinner.cpp)
-  target_link_libraries(test_so101_node_spinner pick_place_core)
+  target_link_libraries(test_so101_node_spinner so101_pick_place_runtime)
   ament_target_dependencies(test_so101_node_spinner rclcpp std_msgs)
   ament_add_gtest(test_so101_calibration_cli_options
     test/pick_place/test_calibration_cli_options.cpp)
-  target_link_libraries(test_so101_calibration_cli_options pick_place_core)
+  target_link_libraries(test_so101_calibration_cli_options so101_pick_place_runtime)
   ament_add_gtest(test_so101_moveit_scene test/pick_place/test_so101_moveit_scene.cpp)
-  target_link_libraries(test_so101_moveit_scene pick_place_core)
+  target_link_libraries(test_so101_moveit_scene so101_pick_place_runtime)
   ament_target_dependencies(test_so101_moveit_scene moveit_msgs shape_msgs)
   ament_add_gtest(test_moveit_scene_initializer test/pick_place/test_moveit_scene_initializer.cpp)
-  target_link_libraries(test_moveit_scene_initializer pick_place_core)
+  target_link_libraries(test_moveit_scene_initializer so101_pick_place_runtime)
   ament_target_dependencies(test_moveit_scene_initializer moveit_msgs shape_msgs)
   ament_add_gtest(test_world_readiness_gate test/pick_place/test_world_readiness_gate.cpp)
-  target_link_libraries(test_world_readiness_gate pick_place_core)
+  target_link_libraries(test_world_readiness_gate so101_pick_place_runtime)
   ament_add_gtest(test_so101_world_reset test/pick_place/test_so101_world_reset.cpp)
-  target_link_libraries(test_so101_world_reset pick_place_core)
+  target_link_libraries(test_so101_world_reset so101_pick_place_runtime)
   ament_add_gtest(test_robot_home_reset_adapter
     test/pick_place/test_robot_home_reset_adapter.cpp)
-  target_link_libraries(test_robot_home_reset_adapter pick_place_core)
+  target_link_libraries(test_robot_home_reset_adapter so101_pick_place_runtime)
   ament_add_gtest(test_so101_gazebo_reset_adapter
     test/pick_place/test_so101_gazebo_reset_adapter.cpp)
-  target_link_libraries(test_so101_gazebo_reset_adapter pick_place_core
+  target_link_libraries(test_so101_gazebo_reset_adapter so101_pick_place_runtime
     gz-msgs10::core gz-transport13::core)
   add_test(NAME test_so101_reset_cli
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_so101_reset_cli.sh
@@ -357,6 +357,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_package_layout test/test_package_layout.py)
   ament_add_pytest_test(test_workspace_launch_contract test/test_workspace_launch_contract.py)
+  ament_add_pytest_test(test_source_manifest test/test_source_manifest.py)
   ament_add_pytest_test(
     test_gripper_preopen_calc
     test/test_gripper_preopen_calc.py
@@ -452,13 +453,13 @@ if(BUILD_TESTING)
     COMMAND
       bash
       ${CMAKE_CURRENT_SOURCE_DIR}/test/scripts/test_cpp_quality_gate.sh
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_cpp_quality_gate.cmake
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cpp_quality_gate.cmake
+      ${pick_place_common_DIR}/run_cpp_quality_gate.cmake
+      ${pick_place_common_DIR}/cpp_quality_gate.cmake
   )
 endif()
 
 install(
-  TARGETS pick_place_core pick_place_state_machine gazebo_attachment_state_relay
+  TARGETS so101_pick_place_runtime pick_place_state_machine gazebo_attachment_state_relay
     so101_attachment_collision_system
     reset_so101_world so101_moveit_scene
     calibrate_so101_motion validate_so101_motion_matrix

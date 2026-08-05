@@ -10,12 +10,12 @@ namespace so101_gazebo_demo::pick_place
 {
 
 class IJointPlanningBoundary;
-class IMoveItSceneAdapter;
+class ISO101MoveItSceneAdapter;
 
 class MoveItSceneInitializer
 {
 public:
-  MoveItSceneInitializer(IJointPlanningBoundary & boundary, IMoveItSceneAdapter & scene,
+  MoveItSceneInitializer(IJointPlanningBoundary & boundary, ISO101MoveItSceneAdapter & scene,
                          std::chrono::milliseconds poll_interval = std::chrono::milliseconds(50));
 
   [[nodiscard]] std::optional<Failure> initialize(const SO101Profile & profile,
@@ -24,7 +24,7 @@ public:
 
 private:
   IJointPlanningBoundary & boundary_;
-  IMoveItSceneAdapter & scene_;
+  ISO101MoveItSceneAdapter & scene_;
   std::chrono::milliseconds poll_interval_;
 };
 

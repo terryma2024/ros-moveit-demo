@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
+#include "so101_gazebo_demo/pick_place/so101_workflow.hpp"
 
 namespace pick_place = so101_gazebo_demo::pick_place;
 
@@ -12,6 +13,22 @@ TEST(TransitionTable, ContainsEveryActionAndOnlyTerminalStatesAreAbsent)
     EXPECT_TRUE(pick_place::isAction(state) || state == pick_place::State::IDLE ||
                 state == pick_place::State::VALIDATION_FAILED);
     EXPECT_NE(pick_place::State::IDLE, transitions.succeeded);
+  }
+}
+
+TEST(TransitionTable, CompatibilityTableMatchesEveryExtendedWorkflowEdge)
+{
+  const auto & workflow = pick_place::so101WorkflowDefinition();
+  for (const auto & [state, edges] : workflow.transitions) {
+    EXPECT_EQ(edges.succeeded,
+              pick_place::TransitionTable::resolve(state, pick_place::ActionStatus::SUCCEEDED));
+    EXPECT_EQ(edges.failed,
+              pick_place::TransitionTable::resolve(state, pick_place::ActionStatus::FAILED));
+  }
+  for (const auto state : workflow.terminal_states) {
+    EXPECT_EQ(state,
+              pick_place::TransitionTable::resolve(state, pick_place::ActionStatus::SUCCEEDED));
+    EXPECT_EQ(state, pick_place::TransitionTable::resolve(state, pick_place::ActionStatus::FAILED));
   }
 }
 

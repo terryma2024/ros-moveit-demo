@@ -10,6 +10,7 @@
 
 #include "so101_gazebo_demo/pick_place/domain_types.hpp"
 #include "so101_gazebo_demo/pick_place/world_observer.hpp"
+#include <pick_place_common/moveit_scene_executor.hpp>
 
 namespace rclcpp
 {
@@ -34,24 +35,8 @@ struct MoveItSceneGeometry
   int task_object_side_count;
 };
 
-struct MoveItAttachmentSpec
-{
-  std::string link_name;
-  std::vector<std::string> touch_links;
-};
-
-struct MoveItSceneState
-{
-  bool task_object_in_world{false};
-  bool task_object_attached{false};
-  std::string attached_link;
-  std::vector<std::string> touch_links;
-  std::optional<Pose3d> task_object_world_pose;
-  bool table_in_world{false};
-  std::optional<Pose3d> table_world_pose;
-  bool pedestal_in_world{false};
-  std::optional<Pose3d> pedestal_world_pose;
-};
+using pick_place_common::ros_adapters::MoveItAttachmentSpec;
+using pick_place_common::ros_adapters::MoveItSceneState;
 
 [[nodiscard]] moveit_msgs::msg::CollisionObject
 makeTaskObjectCollisionObject(const MoveItSceneGeometry & geometry, const Pose3d & pose);
@@ -62,19 +47,16 @@ makeTableCollisionObject(const MoveItSceneGeometry & geometry, const Pose3d & po
 [[nodiscard]] moveit_msgs::msg::CollisionObject
 makePedestalCollisionObject(const MoveItSceneGeometry & geometry, const Pose3d & pose);
 
-class IMoveItSceneAdapter
+using pick_place_common::ros_adapters::IMoveItSceneAdapter;
+
+class ISO101MoveItSceneAdapter : public IMoveItSceneAdapter
 {
 public:
-  virtual ~IMoveItSceneAdapter() = default;
-  [[nodiscard]] virtual ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) = 0;
-  [[nodiscard]] virtual ActionResult detachTaskObject() = 0;
-  [[nodiscard]] virtual ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual ActionResult upsertTableWorldPose(const Pose3d & pose) = 0;
   [[nodiscard]] virtual ActionResult upsertPedestalWorldPose(const Pose3d & pose) = 0;
-  [[nodiscard]] virtual std::optional<MoveItSceneState> observe() = 0;
 };
 
-class MoveItSceneAdapter final : public IMoveItSceneAdapter
+class MoveItSceneAdapter final : public ISO101MoveItSceneAdapter
 {
 public:
   MoveItSceneAdapter(const std::shared_ptr<rclcpp::Node> & node, const std::string & planning_group,

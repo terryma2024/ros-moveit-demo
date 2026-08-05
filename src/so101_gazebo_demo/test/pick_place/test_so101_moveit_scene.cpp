@@ -11,6 +11,7 @@
 
 #include "so101_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
 #include "so101_gazebo_demo/pick_place/moveit_scene_executor.hpp"
+#include "so101_gazebo_demo/pick_place/so101_moveit_scene_policy.hpp"
 #include "so101_gazebo_demo/pick_place/so101_profile.hpp"
 
 namespace so101_gazebo_demo::pick_place
@@ -64,7 +65,7 @@ MoveItSceneState detachedState(const Pose3d & pose = {})
   return state;
 }
 
-class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
+class FakeMoveItSceneAdapter final : public ISO101MoveItSceneAdapter
 {
 public:
   ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) override
@@ -186,9 +187,10 @@ TEST(SO101MoveItSceneExecutor, AttachUsesExactOrderedMetadataAndExclusiveMembers
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {attachedState(true), attachedState(false)};
-  MoveItSceneExecutor executor(
-    adapter, {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, "plastic_cup"},
-    canonicalAttachment(), 0.05, 0.001);
+  MoveItSceneExecutor executor(adapter,
+                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
+                                "plastic_cup", canonicalAttachment(), 0.05, 0.001},
+                               std::make_shared<SO101MoveItScenePolicy>("plastic_cup", false));
 
   const Pose3d settled_pose{0.0204, -0.2791, 0.1653, 0.01, -0.02, 0.03, 0.999};
   auto context = contextFor(State::ATTACH_MOVEIT);
@@ -210,9 +212,10 @@ TEST(SO101MoveItSceneExecutor, AttachUsesExactOrderedMetadataAndExclusiveMembers
 TEST(SO101MoveItSceneExecutor, AttachRejectsMissingSettledGazeboPose)
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
-  MoveItSceneExecutor executor(
-    adapter, {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, "plastic_cup"},
-    canonicalAttachment(), 0.05, 0.001);
+  MoveItSceneExecutor executor(adapter,
+                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
+                                "plastic_cup", canonicalAttachment(), 0.05, 0.001},
+                               std::make_shared<SO101MoveItScenePolicy>("plastic_cup", false));
 
   const auto result = executor.execute(contextFor(State::ATTACH_MOVEIT));
 
@@ -229,9 +232,10 @@ TEST(SO101MoveItSceneExecutor, RejectsWrongTouchLinkOrderDespiteApiSuccess)
   auto wrong = attachedState(false);
   wrong.touch_links = {"jaw", "gripper"};
   adapter->observations = {wrong};
-  MoveItSceneExecutor executor(
-    adapter, {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, "plastic_cup"},
-    canonicalAttachment(), 0.005, 0.001);
+  MoveItSceneExecutor executor(adapter,
+                               {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false,
+                                "plastic_cup", canonicalAttachment(), 0.005, 0.001},
+                               std::make_shared<SO101MoveItScenePolicy>("plastic_cup", false));
 
   auto context = contextFor(State::ATTACH_MOVEIT);
   context.before.gazebo_task_object_pose_world = SO101Profile::canonical().task_object_pose;
@@ -246,9 +250,10 @@ TEST(SO101MoveItSceneExecutor, DetachRequiresExclusiveReturnToWorld)
 {
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {attachedState(false), detachedState()};
-  MoveItSceneExecutor executor(
-    adapter, {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false, "plastic_cup"},
-    canonicalAttachment(), 0.05, 0.001);
+  MoveItSceneExecutor executor(adapter,
+                               {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false,
+                                "plastic_cup", canonicalAttachment(), 0.05, 0.001},
+                               std::make_shared<SO101MoveItScenePolicy>("plastic_cup", false));
 
   const auto result = executor.execute(contextFor(State::DETACH_MOVEIT));
 
@@ -262,9 +267,10 @@ TEST(SO101MoveItSceneExecutor, SyncUsesAllSixPoseDegrees)
   const Pose3d pose{0.02, -0.28, 0.181, 0.1, -0.2, 0.3, 0.9};
   auto adapter = std::make_shared<FakeMoveItSceneAdapter>();
   adapter->observations = {detachedState(pose)};
-  MoveItSceneExecutor executor(
-    adapter, {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false, "plastic_cup"},
-    canonicalAttachment(), 0.05, 0.001);
+  MoveItSceneExecutor executor(adapter,
+                               {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false,
+                                "plastic_cup", canonicalAttachment(), 0.05, 0.001},
+                               std::make_shared<SO101MoveItScenePolicy>("plastic_cup", false));
   auto context = contextFor(State::SYNC_WORLD_OBJECT);
   context.before.gazebo_task_object_pose_world = pose;
 

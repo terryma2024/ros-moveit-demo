@@ -14,6 +14,7 @@
 #include "so101_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "so101_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "so101_gazebo_demo/pick_place/simulation_session_id.hpp"
+#include "so101_gazebo_demo/pick_place/so101_resume_validation_policy.hpp"
 
 namespace pick_place = so101_gazebo_demo::pick_place;
 
@@ -61,7 +62,7 @@ pick_place::Checkpoint makeRecoveryCheckpoint()
   checkpoint.expected.gazebo_task_object_attached = true;
   checkpoint.expected.gazebo_task_object_stationary = true;
   checkpoint.expected.required_world_objects = {"object", "table"};
-  checkpoint.policy_bundle_sha256 = "configuration-sha256";
+  checkpoint.configuration_fingerprint = "configuration-sha256";
   checkpoint.simulation_session_id = "simulation-session";
   checkpoint.resumable = true;
   return checkpoint;
@@ -156,6 +157,7 @@ TEST(CheckpointV3, FullJsonRoundTripPreservesEveryCheckpointAndExpectedWorldFiel
   ASSERT_FALSE(store.commit(checkpoint));
   const auto persisted = readJson(path);
   EXPECT_TRUE(persisted.contains("policy_bundle_sha256"));
+  EXPECT_FALSE(persisted.contains("configuration_fingerprint"));
   EXPECT_FALSE(persisted.contains("configuration_hash"));
   const auto loaded = store.loadLatestCompatible();
 
@@ -193,7 +195,7 @@ TEST(CheckpointV3, FullJsonRoundTripPreservesEveryCheckpointAndExpectedWorldFiel
             loaded.checkpoint->expected.gazebo_task_object_stationary);
   EXPECT_EQ(checkpoint.expected.required_world_objects,
             loaded.checkpoint->expected.required_world_objects);
-  EXPECT_EQ(checkpoint.policy_bundle_sha256, loaded.checkpoint->policy_bundle_sha256);
+  EXPECT_EQ(checkpoint.configuration_fingerprint, loaded.checkpoint->configuration_fingerprint);
   EXPECT_EQ(checkpoint.simulation_session_id, loaded.checkpoint->simulation_session_id);
   EXPECT_EQ(checkpoint.resumable, loaded.checkpoint->resumable);
   std::filesystem::remove(path);
@@ -428,7 +430,7 @@ TEST(CommonResumeValidator, AcceptsOnlyACompleteMatchingWorldBoundary)
   auto checkpoint = makeRecoveryCheckpoint();
   checkpoint.resumable = true;
   const auto snapshot = snapshotFrom(checkpoint);
-  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_fingerprint,
                                                     checkpoint.simulation_session_id);
 
   const auto result = validator.validate(checkpoint, snapshot);
@@ -437,10 +439,31 @@ TEST(CommonResumeValidator, AcceptsOnlyACompleteMatchingWorldBoundary)
   EXPECT_TRUE(result.failures.empty());
 }
 
+TEST(CommonResumeValidator, PreservesSO101QuaternionChordDistanceMetric)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.phase = pick_place::CheckpointPhase::FORWARD;
+  checkpoint.failed_state.reset();
+  checkpoint.original_failure.reset();
+  checkpoint.resumable = true;
+  auto snapshot = snapshotFrom(checkpoint);
+  constexpr double rotation = 0.1;
+  snapshot.tcp_pose_world.qz = std::sin(rotation / 2.0);
+  snapshot.tcp_pose_world.qw = std::cos(rotation / 2.0);
+  const pick_place::SO101ResumeValidationPolicy policy;
+
+  const auto result = policy.validateBoundary(checkpoint, snapshot, 1.0);
+
+  ASSERT_TRUE(result.ok);
+  EXPECT_NEAR(result.metrics.at("resume_tcp_orientation_error"), 2.0 * std::sin(rotation / 4.0),
+              1e-12);
+  EXPECT_NE(result.metrics.at("resume_tcp_orientation_error"), rotation);
+}
+
 TEST(CommonResumeValidator, RejectsCheckpointFromDifferentPolicyBundle)
 {
   auto checkpoint = makeRecoveryCheckpoint();
-  checkpoint.policy_bundle_sha256 = "old-policy-bundle-sha256";
+  checkpoint.configuration_fingerprint = "old-policy-bundle-sha256";
   const auto snapshot = snapshotFrom(checkpoint);
   const pick_place::CommonResumeValidator validator("new-policy-bundle-sha256",
                                                     checkpoint.simulation_session_id);
@@ -462,7 +485,7 @@ TEST(CommonResumeValidator, ForwardResumeFailsClosedForEveryExpectedWorldBoundar
   checkpoint.failed_state.reset();
   checkpoint.original_failure.reset();
   checkpoint.resumable = true;
-  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_fingerprint,
                                                     checkpoint.simulation_session_id);
   const auto matching = snapshotFrom(checkpoint);
 
@@ -516,7 +539,7 @@ TEST(CommonResumeValidator, AcceptsPhysicalGraspValidationCheckpointForExplicitO
                                                     {}};
   checkpoint.resumable = true;
   const auto snapshot = snapshotFrom(checkpoint);
-  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_fingerprint,
                                                     checkpoint.simulation_session_id);
 
   const auto result = validator.validate(checkpoint, snapshot);
@@ -529,7 +552,7 @@ TEST(CommonResumeValidator, FailsClosedForIncompleteNonFiniteOrStaleBoundaryEvid
 {
   auto checkpoint = makeRecoveryCheckpoint();
   checkpoint.resumable = true;
-  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_fingerprint,
                                                     checkpoint.simulation_session_id);
   const auto matching = snapshotFrom(checkpoint);
 
@@ -553,7 +576,7 @@ TEST(CommonResumeValidator, FailsClosedForIncompleteNonFiniteOrStaleBoundaryEvid
   wrong_session.simulation_session_id = "other-session";
   EXPECT_FALSE(validator.validate(checkpoint, wrong_session).ok);
 
-  checkpoint.policy_bundle_sha256 = "other-config";
+  checkpoint.configuration_fingerprint = "other-config";
   EXPECT_FALSE(validator.validate(checkpoint, matching).ok);
 }
 
@@ -561,7 +584,7 @@ TEST(CommonResumeValidator, RejectsNonResumableAndIncompleteRecoveryContext)
 {
   auto checkpoint = makeRecoveryCheckpoint();
   const auto snapshot = snapshotFrom(checkpoint);
-  const pick_place::CommonResumeValidator validator(checkpoint.policy_bundle_sha256,
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_fingerprint,
                                                     checkpoint.simulation_session_id);
 
   checkpoint.resumable = false;

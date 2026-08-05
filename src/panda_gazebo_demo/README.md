@@ -1,9 +1,21 @@
 # Panda fixed-space pick-place verification
 
+The workflow engine is provided by `pick_place_common`. This package owns the
+Panda workflow definition and policies, checkpoint JSON codec and file store,
+motion and gripper behavior, concrete Gazebo/MoveIt adapters, collision
+geometry, reset/recovery policy, launch files, and robot configuration. It
+links `pick_place_common::core` and `pick_place_common::ros_adapters`; the
+compatibility headers under this package's include path forward shared types.
+
+See [`../../docs/pick-place-architecture.md`](../../docs/pick-place-architecture.md)
+for the ownership boundary and extension rules. See
+[`../../docs/pick-place-launch-parameters.md`](../../docs/pick-place-launch-parameters.md)
+for the authoritative launch, run-to-plan-only, resume, and safety contract.
+
 Build and source the workspace before running the headless checks:
 
 ```bash
-colcon build --packages-select panda_gazebo_demo --symlink-install
+colcon build --packages-up-to panda_gazebo_demo --symlink-install
 source install/setup.bash
 ```
 
@@ -20,8 +32,8 @@ Run all three attachment-fact recovery scenarios:
 src/panda_gazebo_demo/test/headless/run_recovery_scenarios.sh
 ```
 
-Run the cross-process plan-only/resume matrix for every forward motion and
-each carrying-recovery motion:
+Run the cross-process run-to-plan-only/resume matrix for the exact six approved
+forward motion targets:
 
 ```bash
 src/panda_gazebo_demo/test/headless/run_plan_only_resume_matrix.sh
@@ -45,17 +57,13 @@ finishes in the expected `ERROR` terminal while preserving the injected
 original failure, after safely opening/detaching/synchronizing/retreating. A
 carried Coke must first return to the pick surface.
 
-The plan-only/resume matrix wraps two independent plan-only processes with
-joint, Gazebo Coke 6DoF, durable attachment, and MoveIt Planning Scene
-snapshots. It also compares both processes' observed `START_TCP_POSE`, requires
-complete finite plan evidence, rejects execute evidence, and proves the schema
-v3 checkpoint remains byte-identical. Recovery motion coverage uses an explicit
-headless fault fixture: `attach_and_lift_demo` first lifts the attached Coke by
-30 mm, then shifts it by -30 mm in world y at the lifted height. This creates a
-real low carrying state away from the support surface, allowing fact-driven
-resume to exercise lift, move-above-pick, and descend in separate processes.
-The fixture's `lateral_offset_y` defaults to zero, is finite/range checked, and
-does not change the demo's legacy single-lift behavior unless explicitly set.
+Each matrix target starts from an independent reset, session, and checkpoint.
+The fresh run executes real predecessors and stops at the target planning
+boundary; the same-target resume replans without executing the target or
+mutating the schema-v3 execute/FORWARD checkpoint. Independent joint, Gazebo
+Coke 6DoF, durable attachment, and MoveIt Planning Scene snapshots prove the
+resumed plan causes no physical movement. Recovery states are intentionally not
+plan-only targets; execute recovery tests cover them separately.
 
 `stop_after` accepts any non-terminal forward or recovery action. It rejects
 `IDLE`, `DONE`, and `ERROR`; `fail_at` remains restricted to forward actions in

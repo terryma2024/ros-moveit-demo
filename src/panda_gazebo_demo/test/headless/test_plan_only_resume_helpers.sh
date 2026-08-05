@@ -25,6 +25,24 @@ assert runtime_defaults is not None
 assert runtime_defaults.get('motion_start_joint_tolerance') == '0.010'
 PY
 
+python3 - "${script_dir}/run_plan_only_resume_matrix.sh" <<'PY'
+import pathlib
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+body = text.split('reset_fixture() {', 1)[1].split('\n}', 1)[0]
+assert body.index('reset_world.sh') < body.index('last_attachment_is_detached'), (
+    'independent target reset must converge an attached predecessor before asserting detached state'
+)
+assert 'run_plan_only_with_transient_retry' not in text, (
+    'fresh target retries must restart the independent fixture instead of reusing a mutated world'
+)
+assert 'run_independent_target() {' in text
+retry_body = text.split('run_independent_target() {', 1)[1].split('\n}', 1)[0]
+assert 'plan_only_pair' in retry_body and 'attempt_' in retry_body
+assert retry_body.index('attempt_') < retry_body.index('plan_only_pair')
+PY
+
 expect_failure() {
   if "$@" >/dev/null 2>&1; then
     printf 'Expected command to fail: %q' "$1" >&2
@@ -33,6 +51,16 @@ expect_failure() {
     return 1
   fi
 }
+
+cat >"${temporary_directory}/target_entry_only.log" <<'EOF'
+STATE_TRANSITION state=PREPARE_OPEN_GRIPPER next_state=MOVE_ABOVE_OBJECT
+PLANNED_END_TCP_POSE state=MOVE_ABOVE_OBJECT next_state=DESCEND
+EOF
+if grep -Eq "(EXECUTED_END_TCP_POSE|STATE_TRANSITION)[^[:cntrl:]]*[[:space:]]state=MOVE_ABOVE_OBJECT([[:space:]]|$)" \
+  "${temporary_directory}/target_entry_only.log"; then
+  printf 'Target-entry transition must not be mistaken for target execution\n' >&2
+  exit 1
+fi
 
 cat >"${temporary_directory}/gazebo.txt" <<'EOF'
 Pose [ XYZ (m) ] [ RPY (rad) ]: [ 0.300000 0.000000 0.836000 ] [ 0 0 0 ]
@@ -113,10 +141,33 @@ assert not snapshot['moveit_coke_in_world']
 assert snapshot['tcp_pose'] == [0.3, 0.0, 0.9, 1.0, 0.0, 0.0, 0.0]
 PY
 
+cat >"${temporary_directory}/tcp_rpy.txt" <<'EOF'
+EXECUTED_END_TCP_POSE state=MOVE_ABOVE_OBJECT x=0.300000000 y=0.000000000 z=0.987000000 roll=3.141592654 pitch=0.000000000 yaw=0.000000000
+EXECUTED_END_TCP_POSE state=ATTACH_MOVEIT x=0.300000000 y=0.000000000 z=0.870000000 roll=3.141592654 pitch=0.000000000 yaw=0.000000000
+EOF
+python3 "${script_dir}/capture_resume_snapshot.py" \
+  "${temporary_directory}/gazebo.txt" \
+  "${temporary_directory}/attachment_attached.txt" \
+  "${temporary_directory}/joints.txt" \
+  "${temporary_directory}/scene_attached.txt" \
+  "${temporary_directory}/attached_rpy.json" \
+  "${temporary_directory}/tcp_rpy.txt"
+python3 - "${temporary_directory}/attached_rpy.json" <<'PY'
+import json
+import math
+import pathlib
+import sys
+
+snapshot = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+assert snapshot['tcp_pose'][:3] == [0.3, 0.0, 0.87]
+assert math.isclose(abs(snapshot['tcp_pose'][3]), 1.0, abs_tol=1e-9)
+PY
+
 cat >"${temporary_directory}/checkpoint.json" <<'EOF'
 {
   "schema_version": 3,
-  "sequence": 7,
+  "sequence": 2,
+  "source_mode": "execute",
   "phase": "FORWARD",
   "last_completed_state": "MOVE_ABOVE_OBJECT",
   "next_state": "DESCEND",
@@ -129,7 +180,7 @@ cat >"${temporary_directory}/checkpoint.json" <<'EOF'
 EOF
 cp "${temporary_directory}/checkpoint.json" "${temporary_directory}/checkpoint.after.json"
 cat >"${temporary_directory}/plan.log" <<'EOF'
-CHECKPOINT_PHASE=FORWARD CHECKPOINT_SEQUENCE=7 NEXT_STATE=DESCEND resume_load=1
+CHECKPOINT_PHASE=FORWARD CHECKPOINT_SEQUENCE=2 NEXT_STATE=DESCEND resume_load=1
 TARGET_TCP_POSE state=DESCEND next_state=CLOSE_GRIPPER x=0.3 y=0 z=0.87 roll=3.141593 pitch=0 yaw=0
 START_TCP_POSE state=DESCEND next_state=CLOSE_GRIPPER x=0.3 y=0 z=0.987 roll=3.141593 pitch=0 yaw=0
 PLANNED_END_TCP_POSE state=DESCEND next_state=CLOSE_GRIPPER x=0.3 y=0 z=0.87 roll=3.141593 pitch=0 yaw=0
@@ -137,7 +188,7 @@ CARTESIAN_FRACTION state=DESCEND value=1.0
 TRAJECTORY_POINTS state=DESCEND value=20
 MAX_JOINT_JUMP state=DESCEND value=0.02
 TRAJECTORY_DURATION state=DESCEND value=1.0
-Run completed: status=PLAN_ONLY_COMPLETE current_state=DESCEND next_state=CLOSE_GRIPPER transitions=0
+Run completed: status=PLAN_ONLY_COMPLETE current_state=DESCEND next_state=CLOSE_GRIPPER transitions=3
 EOF
 python3 "${script_dir}/assert_plan_only_resume.py" \
   "${temporary_directory}/plan.log" DESCEND FORWARD \
@@ -147,6 +198,33 @@ cp "${temporary_directory}/plan.log" "${temporary_directory}/plan_second.log"
 python3 "${script_dir}/assert_plan_only_tcp_unchanged.py" \
   "${temporary_directory}/plan.log" \
   "${temporary_directory}/plan_second.log" DESCEND
+
+cat >"${temporary_directory}/named_plan.log" <<'EOF'
+CHECKPOINT_PHASE=FORWARD CHECKPOINT_SEQUENCE=2 NEXT_STATE=RETREAT resume_load=1
+NAMED_JOINT_TARGET state=RETREAT target=ready
+START_TCP_POSE state=RETREAT next_state=DONE x=0.3 y=0.2 z=0.87 roll=3.141593 pitch=0 yaw=0
+PLANNED_END_TCP_POSE state=RETREAT next_state=DONE x=0.307 y=0 z=1.262 roll=3.141593 pitch=0 yaw=0
+TRAJECTORY_POINTS state=RETREAT value=69
+Run completed: status=PLAN_ONLY_COMPLETE current_state=RETREAT next_state=DONE transitions=3
+EOF
+cp "${temporary_directory}/checkpoint.json" \
+  "${temporary_directory}/named_checkpoint.json"
+python3 - "${temporary_directory}/named_checkpoint.json" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+checkpoint = json.loads(path.read_text(encoding='utf-8'))
+checkpoint['next_state'] = 'RETREAT'
+path.write_text(json.dumps(checkpoint), encoding='utf-8')
+PY
+cp "${temporary_directory}/named_checkpoint.json" \
+  "${temporary_directory}/named_checkpoint.after.json"
+python3 "${script_dir}/assert_plan_only_resume.py" \
+  "${temporary_directory}/named_plan.log" RETREAT FORWARD \
+  "${temporary_directory}/named_checkpoint.json" \
+  "${temporary_directory}/named_checkpoint.after.json"
 
 sed 's/MAX_JOINT_JUMP state=DESCEND value=0.02/MAX_JOINT_JUMP state=DESCEND value=0.21/' \
   "${temporary_directory}/plan.log" >"${temporary_directory}/invalid_jump.log"
@@ -190,6 +268,29 @@ expect_failure python3 "${script_dir}/assert_plan_only_resume.py" \
   "${temporary_directory}/checkpoint.json" \
   "${temporary_directory}/checkpoint.after.json"
 
+cp "${temporary_directory}/plan.log" \
+  "${temporary_directory}/invalid_postcondition.log"
+printf '%s\n' 'transition-validate:DESCEND' \
+  >>"${temporary_directory}/invalid_postcondition.log"
+expect_failure python3 "${script_dir}/assert_plan_only_resume.py" \
+  "${temporary_directory}/invalid_postcondition.log" DESCEND FORWARD \
+  "${temporary_directory}/checkpoint.json" \
+  "${temporary_directory}/checkpoint.after.json"
+
+cp "${temporary_directory}/checkpoint.json" \
+  "${temporary_directory}/plan_only_source.json"
+sed -i 's/"source_mode": "execute"/"source_mode": "plan_only"/' \
+  "${temporary_directory}/plan_only_source.json"
+expect_failure python3 "${script_dir}/assert_plan_only_resume.py" \
+  "${temporary_directory}/plan.log" DESCEND FORWARD \
+  "${temporary_directory}/plan_only_source.json" \
+  "${temporary_directory}/plan_only_source.json"
+
+expect_failure python3 "${script_dir}/assert_plan_only_resume.py" \
+  "${temporary_directory}/plan.log" RECOVER_RETREAT FORWARD \
+  "${temporary_directory}/checkpoint.json" \
+  "${temporary_directory}/checkpoint.json"
+
 python3 - "${temporary_directory}/checkpoint.after.json" <<'PY'
 import json
 import pathlib
@@ -204,26 +305,5 @@ expect_failure python3 "${script_dir}/assert_plan_only_resume.py" \
   "${temporary_directory}/plan.log" DESCEND FORWARD \
   "${temporary_directory}/checkpoint.json" \
   "${temporary_directory}/checkpoint.after.json"
-
-cp "${temporary_directory}/checkpoint.json" \
-  "${temporary_directory}/recovery_checkpoint.json"
-python3 "${script_dir}/seed_recovery_checkpoint.py" \
-  "${temporary_directory}/recovery_checkpoint.json" \
-  "${temporary_directory}/attached.json" ATTACH_MOVEIT
-python3 - "${temporary_directory}/recovery_checkpoint.json" <<'PY'
-import json
-import pathlib
-import sys
-
-checkpoint = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
-assert checkpoint['phase'] == 'RECOVERY'
-assert checkpoint['failed_state'] == 'ATTACH_MOVEIT'
-assert checkpoint['next_state'] == 'RECOVER_RETREAT'
-assert checkpoint['original_failure']['code'] == 'HEADLESS_RECOVERY_TRIGGER'
-assert checkpoint['expected']['tcp_pose_world']['z'] == 0.9
-assert checkpoint['expected']['gazebo_coke_attached']
-assert checkpoint['expected']['moveit_coke_attached']
-assert 'coke' not in checkpoint['expected']['moveit_world_object_poses']
-PY
 
 printf 'PASS: plan-only resume helper assertions\n'

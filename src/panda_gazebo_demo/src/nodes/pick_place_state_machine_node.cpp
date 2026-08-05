@@ -16,6 +16,8 @@
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
 #include "panda_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_attachment_executor.hpp"
+#include "panda_gazebo_demo/pick_place/panda_attachment_convergence_policy.hpp"
+#include "pick_place_common/run_request_validation.hpp"
 #include "panda_gazebo_demo/pick_place/gazebo_world_observer.hpp"
 #include "panda_gazebo_demo/pick_place/gripper_command_adapter.hpp"
 #include "panda_gazebo_demo/pick_place/moveit_motion_adapter.hpp"
@@ -67,51 +69,59 @@ public:
     RCLCPP_INFO(
       logger_, "STATE_TRANSITION state=%s next_state=%s", pick_place::toString(state),
       pick_place::toString(transitions.resolve(state, pick_place::ActionStatus::SUCCEEDED)));
-    logPose("COKE_POSE_BEFORE", state, before.gazebo_coke_pose_world);
-    logPose("COKE_POSE_AFTER", state, after.gazebo_coke_pose_world);
+    logPose("COKE_POSE_BEFORE", state, before.gazebo_task_object_pose_world);
+    logPose("COKE_POSE_AFTER", state, after.gazebo_task_object_pose_world);
     logGripper("BEFORE", state, before);
     logGripper("AFTER", state, after);
     RCLCPP_INFO(logger_,
                 "ATTACHMENT_EVIDENCE state=%s GAZEBO_ATTACHED_BEFORE=%d GAZEBO_ATTACHED_AFTER=%d "
                 "MOVEIT_ATTACHED_BEFORE=%d MOVEIT_ATTACHED_AFTER=%d",
-                pick_place::toString(state), valueOrUnknown(before.gazebo_coke_attached),
-                valueOrUnknown(after.gazebo_coke_attached),
-                valueOrUnknown(before.moveit_coke_attached),
-                valueOrUnknown(after.moveit_coke_attached));
-    RCLCPP_INFO(logger_,
-                "MOVEIT_MEMBERSHIP state=%s COKE_IN_WORLD_BEFORE=%d COKE_IN_WORLD_AFTER=%d "
-                "ATTACHED_LINK=%s TOUCH_LINK_COUNT=%zu",
-                pick_place::toString(state),
-                before.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
-                after.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
-                after.moveit_coke_attached_link ? after.moveit_coke_attached_link->c_str() : "",
-                after.moveit_coke_touch_links.size());
-    if (before.gazebo_coke_pose_world && after.gazebo_coke_pose_world) {
-      RCLCPP_INFO(
-        logger_, "COKE_DRIFT state=%s position=%.6f orientation_rad=%.6f",
-        pick_place::toString(state),
-        pick_place::positionDistance(*before.gazebo_coke_pose_world, *after.gazebo_coke_pose_world),
-        pick_place::orientationDistance(*before.gazebo_coke_pose_world,
-                                        *after.gazebo_coke_pose_world));
+                pick_place::toString(state), valueOrUnknown(before.gazebo_task_object_attached),
+                valueOrUnknown(after.gazebo_task_object_attached),
+                valueOrUnknown(before.moveit_task_object_attached),
+                valueOrUnknown(after.moveit_task_object_attached));
+    RCLCPP_INFO(
+      logger_,
+      "MOVEIT_MEMBERSHIP state=%s COKE_IN_WORLD_BEFORE=%d COKE_IN_WORLD_AFTER=%d "
+      "ATTACHED_LINK=%s TOUCH_LINK_COUNT=%zu",
+      pick_place::toString(state), before.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
+      after.moveit_world_object_poses.count("coke") == 1 ? 1 : 0,
+      after.moveit_task_object_attached_link ? after.moveit_task_object_attached_link->c_str() : "",
+      after.moveit_task_object_touch_links.size());
+    if (before.gazebo_task_object_pose_world && after.gazebo_task_object_pose_world) {
+      RCLCPP_INFO(logger_, "COKE_DRIFT state=%s position=%.6f orientation_rad=%.6f",
+                  pick_place::toString(state),
+                  pick_place::positionDistance(*before.gazebo_task_object_pose_world,
+                                               *after.gazebo_task_object_pose_world),
+                  pick_place::orientationDistance(*before.gazebo_task_object_pose_world,
+                                                  *after.gazebo_task_object_pose_world));
       const auto before_relative =
-        relativePose(before.tcp_pose_world, *before.gazebo_coke_pose_world);
-      const auto after_relative = relativePose(after.tcp_pose_world, *after.gazebo_coke_pose_world);
-      RCLCPP_INFO(
-        logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
-        pick_place::toString(state), pick_place::positionDistance(before_relative, after_relative),
-        pick_place::orientationDistance(before_relative, after_relative));
+        pick_place::relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
+      const auto after_relative =
+        pick_place::relativePose(after.tcp_pose_world, *after.gazebo_task_object_pose_world);
+      if (before_relative && after_relative) {
+        RCLCPP_INFO(logger_,
+                    "TCP_COKE_RELATIVE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
+                    pick_place::toString(state),
+                    pick_place::positionDistance(*before_relative, *after_relative),
+                    pick_place::orientationDistance(*before_relative, *after_relative));
+      } else {
+        RCLCPP_INFO(logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s unavailable",
+                    pick_place::toString(state));
+      }
     } else {
       RCLCPP_INFO(logger_, "COKE_DRIFT state=%s unavailable", pick_place::toString(state));
       RCLCPP_INFO(logger_, "TCP_COKE_RELATIVE_POSE_ERROR state=%s unavailable",
                   pick_place::toString(state));
     }
     const auto moveit_coke = after.moveit_world_object_poses.find("coke");
-    if (after.gazebo_coke_pose_world && moveit_coke != after.moveit_world_object_poses.end()) {
+    if (after.gazebo_task_object_pose_world &&
+        moveit_coke != after.moveit_world_object_poses.end()) {
       RCLCPP_INFO(
         logger_, "CROSS_WORLD_COKE_POSE_ERROR state=%s position=%.6f orientation_rad=%.6f",
         pick_place::toString(state),
-        pick_place::positionDistance(*after.gazebo_coke_pose_world, moveit_coke->second),
-        pick_place::orientationDistance(*after.gazebo_coke_pose_world, moveit_coke->second));
+        pick_place::positionDistance(*after.gazebo_task_object_pose_world, moveit_coke->second),
+        pick_place::orientationDistance(*after.gazebo_task_object_pose_world, moveit_coke->second));
     } else {
       RCLCPP_INFO(logger_, "CROSS_WORLD_COKE_POSE_ERROR state=%s unavailable",
                   pick_place::toString(state));
@@ -122,26 +132,6 @@ private:
   static int valueOrUnknown(const std::optional<bool> & value)
   {
     return value ? (*value ? 1 : 0) : -1;
-  }
-
-  static pick_place::Pose3d relativePose(const pick_place::Pose3d & frame,
-                                         const pick_place::Pose3d & object)
-  {
-    const Eigen::Isometry3d world_frame =
-      Eigen::Translation3d(frame.x, frame.y, frame.z) *
-      Eigen::Quaterniond(frame.qw, frame.qx, frame.qy, frame.qz).normalized();
-    const Eigen::Isometry3d world_object =
-      Eigen::Translation3d(object.x, object.y, object.z) *
-      Eigen::Quaterniond(object.qw, object.qx, object.qy, object.qz).normalized();
-    const Eigen::Isometry3d relative = world_frame.inverse() * world_object;
-    const Eigen::Quaterniond orientation(relative.rotation());
-    return {relative.translation().x(),
-            relative.translation().y(),
-            relative.translation().z(),
-            orientation.x(),
-            orientation.y(),
-            orientation.z(),
-            orientation.w()};
   }
 
   void logPose(const char * label, pick_place::State state,
@@ -227,15 +217,8 @@ T parameterOrDeclare(const std::shared_ptr<rclcpp::Node> & node, const std::stri
   return node->get_parameter(name).get_value<T>();
 }
 
-enum class StateParameterScope
-{
-  FORWARD_ACTION,
-  ANY_ACTION,
-};
-
 std::optional<pick_place::State> optionalStateParameter(const std::shared_ptr<rclcpp::Node> & node,
                                                         const std::string & name,
-                                                        StateParameterScope scope,
                                                         const rclcpp::Logger & logger)
 {
   const auto value = parameterOrDeclare(node, name, std::string(""));
@@ -243,13 +226,8 @@ std::optional<pick_place::State> optionalStateParameter(const std::shared_ptr<rc
     return std::nullopt;
   }
   const auto state = pick_place::stateFromString(value);
-  const bool valid_action = state && pick_place::isAction(*state);
-  const bool valid_scope = valid_action && (scope == StateParameterScope::ANY_ACTION ||
-                                            pick_place::isForwardAction(*state));
-  if (!valid_scope) {
-    const char * expected = scope == StateParameterScope::ANY_ACTION ? "a non-terminal action State"
-                                                                     : "a forward action State";
-    RCLCPP_ERROR(logger, "%s must name %s; got '%s'", name.c_str(), expected, value.c_str());
+  if (!state) {
+    RCLCPP_ERROR(logger, "%s must name a known State; got '%s'", name.c_str(), value.c_str());
     return std::nullopt;
   }
   return state;
@@ -282,20 +260,29 @@ int main(int argc, char * argv[])
     return EXIT_FAILURE;
   }
 
-  const auto fail_at =
-    optionalStateParameter(node, "fail_at", StateParameterScope::FORWARD_ACTION, logger);
+  const auto fail_at = optionalStateParameter(node, "fail_at", logger);
   const auto fail_at_value = node->get_parameter("fail_at").get_value<std::string>();
-  const auto stop_after =
-    optionalStateParameter(node, "stop_after", StateParameterScope::ANY_ACTION, logger);
+  const auto stop_after = optionalStateParameter(node, "stop_after", logger);
   const auto stop_after_value = node->get_parameter("stop_after").get_value<std::string>();
-  if ((!fail_at_value.empty() && !fail_at) || (!stop_after_value.empty() && !stop_after)) {
+  const auto plan_only_state = optionalStateParameter(node, "plan_only_state", logger);
+  const auto plan_only_state_value =
+    node->get_parameter("plan_only_state").get_value<std::string>();
+  if ((!fail_at_value.empty() && !fail_at) || (!stop_after_value.empty() && !stop_after) ||
+      (!plan_only_state_value.empty() && !plan_only_state)) {
     rclcpp::shutdown();
     return EXIT_FAILURE;
   }
 
   const auto resume = parameterOrDeclare(node, "resume", false);
-  if (resume && *mode == pick_place::RunMode::DRY_RUN) {
-    RCLCPP_ERROR(logger, "resume is supported only in plan_only and execute modes");
+  pick_place::RunRequest request;
+  request.mode = *mode;
+  request.stop_after = stop_after;
+  request.plan_only_state = plan_only_state;
+  request.resume = resume;
+  request.fail_at = fail_at;
+  if (const auto failure =
+        pick_place_common::validateRunRequest(pick_place::pandaWorkflowDefinition(), request)) {
+    RCLCPP_ERROR(logger, "%s: %s", failure->code.c_str(), failure->message.c_str());
     rclcpp::shutdown();
     return EXIT_FAILURE;
   }
@@ -437,27 +424,27 @@ int main(int argc, char * argv[])
     pick_place::PickPlaceRuntimeDependencies dependencies;
     dependencies.motion = motion_adapter;
     dependencies.observer = motion_adapter;
-    if (*mode == pick_place::RunMode::EXECUTE) {
-      dependencies.gripper = std::make_shared<pick_place::GripperCommandAdapter>(
-        node, parameters.gripper_action_name, parameters.gripper_action_timeout_seconds);
-      dependencies.moveit_scene =
-        std::make_shared<pick_place::MoveItSceneAdapter>(node, parameters.planning_group);
-      dependencies.gazebo_attach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
-        pick_place::State::ATTACH_GAZEBO, true, parameters.gazebo_attach_topic,
-        parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
-        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
-        gripper_limits);
-      dependencies.gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
-        pick_place::State::DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
-        parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
-        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
-        gripper_limits);
-      dependencies.recovery_gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
-        pick_place::State::RECOVER_DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
-        parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
-        parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, true,
-        gripper_limits);
-    }
+    const auto attachment_convergence_policy =
+      std::make_shared<pick_place::PandaAttachmentConvergencePolicy>(gripper_limits);
+    dependencies.gripper = std::make_shared<pick_place::GripperCommandAdapter>(
+      node, parameters.gripper_action_name, parameters.gripper_action_timeout_seconds);
+    dependencies.moveit_scene =
+      std::make_shared<pick_place::MoveItSceneAdapter>(node, parameters.planning_group);
+    dependencies.gazebo_attach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
+      pick_place::State::ATTACH_GAZEBO, true, parameters.gazebo_attach_topic,
+      parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
+      parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
+      attachment_convergence_policy);
+    dependencies.gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
+      pick_place::State::DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
+      parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
+      parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, false,
+      attachment_convergence_policy);
+    dependencies.recovery_gazebo_detach = std::make_shared<pick_place::GazeboAttachmentExecutor>(
+      pick_place::State::RECOVER_DETACH_GAZEBO, false, parameters.gazebo_attach_topic,
+      parameters.gazebo_detach_topic, parameters.gazebo_attachment_topic,
+      parameters.attachment_timeout_seconds, parameters.state_poll_interval_seconds, true,
+      attachment_convergence_policy);
     pick_place::PickPlaceRuntimeConfig runtime_config;
     const auto ready_joints =
       motion_adapter->namedTargetJointPositions(parameters.ready_named_target);
@@ -468,12 +455,21 @@ int main(int argc, char * argv[])
     }
     runtime_config.target_policy = target_policy;
     runtime_config.required_world_objects = parameters.required_world_objects;
-    runtime_config.motion_plan_limits = {
-      parameters.cartesian_min_fraction,      parameters.joint_jump_threshold,
-      parameters.tcp_position_tolerance,      parameters.tcp_orientation_tolerance_rad,
-      parameters.tcp_position_tolerance,      parameters.tcp_orientation_tolerance_rad,
-      parameters.coke_position_tolerance,     parameters.coke_orientation_tolerance_rad,
-      parameters.motion_start_joint_tolerance};
+    runtime_config.motion_plan_limits.min_cartesian_fraction = parameters.cartesian_min_fraction;
+    runtime_config.motion_plan_limits.max_joint_jump = parameters.joint_jump_threshold;
+    runtime_config.motion_plan_limits.max_lateral_deviation = parameters.tcp_position_tolerance;
+    runtime_config.motion_plan_limits.max_orientation_error_rad =
+      parameters.tcp_orientation_tolerance_rad;
+    runtime_config.motion_plan_limits.endpoint_position_tolerance =
+      parameters.tcp_position_tolerance;
+    runtime_config.motion_plan_limits.endpoint_orientation_tolerance_rad =
+      parameters.tcp_orientation_tolerance_rad;
+    runtime_config.motion_plan_limits.carried_relative_position_tolerance =
+      parameters.coke_position_tolerance;
+    runtime_config.motion_plan_limits.carried_relative_orientation_tolerance_rad =
+      parameters.coke_orientation_tolerance_rad;
+    runtime_config.motion_plan_limits.start_joint_tolerance =
+      parameters.motion_start_joint_tolerance;
     runtime_config.gripper = gripper_limits;
     runtime_config.contract.tcp_position_tolerance = parameters.tcp_position_tolerance;
     runtime_config.contract.tcp_orientation_tolerance_rad =
@@ -505,7 +501,7 @@ int main(int argc, char * argv[])
   std::unique_ptr<LoggingCheckpointStore> checkpoint_store;
   std::unique_ptr<pick_place::GazeboWorldObserver> world_observer;
   std::unique_ptr<pick_place::CommonResumeValidator> common_resume_validator;
-  if (*mode == pick_place::RunMode::EXECUTE || resume) {
+  if (*mode == pick_place::RunMode::EXECUTE || *mode == pick_place::RunMode::PLAN_ONLY || resume) {
     checkpoint_store = std::make_unique<LoggingCheckpointStore>(checkpoint_path, logger);
     world_observer = std::make_unique<pick_place::GazeboWorldObserver>(
       *motion_adapter, parameters.gazebo_world_name, parameters.gazebo_coke_model,
@@ -528,8 +524,8 @@ int main(int argc, char * argv[])
                                               checkpoint_store.get(), common_resume_validator.get(),
                                               &execution_observation_logger,
                                               &runtime.plan_validators, &recovery_policy);
-  const auto result =
-    runner.run({*mode, stop_after, resume, fail_at, parameters.max_state_transitions});
+  request.max_state_transitions = parameters.max_state_transitions;
+  const auto result = runner.run(request);
   if (result.failure) {
     RCLCPP_ERROR(logger, "Run failed: status=%s state=%s category=%d code=%s message=%s",
                  pick_place::toString(result.status), pick_place::toString(result.current_state),

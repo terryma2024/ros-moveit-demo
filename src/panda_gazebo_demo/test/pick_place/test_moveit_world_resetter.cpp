@@ -38,27 +38,22 @@ MoveItSceneState detachedState(std::optional<Pose3d> pose = std::nullopt)
   return {pose.has_value(), false, "", {}, pose, true, kTablePose};
 }
 
-class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
+class FakeMoveItSceneAdapter final : public IPandaMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(const std::string &, const std::vector<std::string> &) override
+  ActionResult attachTaskObject(const MoveItAttachmentSpec &) override
   {
     return succeeded();
   }
 
-  ActionResult detachCoke() override
+  ActionResult detachTaskObject() override
   {
     ++detach_calls;
     commands.emplace_back("detach");
     return detach_result;
   }
 
-  ActionResult syncCokeWorldPose(const Pose3d &) override
-  {
-    return succeeded();
-  }
-
-  ActionResult upsertCokeWorldPose(const Pose3d & pose) override
+  ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
     ++upsert_calls;
     commands.emplace_back("upsert");

@@ -5,12 +5,10 @@
 #include <optional>
 #include <string>
 
-#include "so101_gazebo_demo/pick_place/domain_types.hpp"
+#include "so101_gazebo_demo/pick_place/world_observer.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
-
-class IWorldObserver;
 
 class WorldReadinessGate
 {

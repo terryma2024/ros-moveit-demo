@@ -1,22 +1,8 @@
 #pragma once
-
 #include "panda_gazebo_demo/pick_place/domain_types.hpp"
-
-#include <cstdint>
-#include <optional>
-#include <string>
-
+#include <pick_place_common/simulation_session_id.hpp>
 namespace panda_gazebo_demo::pick_place
 {
-
-struct SimulationSessionIdResolution
-{
-  std::optional<std::string> value;
-  std::string error;
-};
-
-SimulationSessionIdResolution resolveSimulationSessionId(RunMode mode, bool resume,
-                                                         std::string configured_id,
-                                                         std::uint64_t unix_timestamp_milliseconds);
-
+using pick_place_common::resolveSimulationSessionId;
+using pick_place_common::SimulationSessionIdResolution;
 }  // namespace panda_gazebo_demo::pick_place

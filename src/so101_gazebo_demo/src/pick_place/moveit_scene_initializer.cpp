@@ -37,31 +37,11 @@ bool evidenceComplete(const std::optional<CurrentJointStateEvidence> & evidence,
   return true;
 }
 
-double positionDistance(const Pose3d & a, const Pose3d & b)
-{
-  const auto dx = a.x - b.x;
-  const auto dy = a.y - b.y;
-  const auto dz = a.z - b.z;
-  return std::sqrt(dx * dx + dy * dy + dz * dz);
-}
-
-double quaternionAngularDistance(const Pose3d & a, const Pose3d & b)
-{
-  const auto dot =
-    std::clamp(std::abs(a.qx * b.qx + a.qy * b.qy + a.qz * b.qz + a.qw * b.qw), 0.0, 1.0);
-  return 2.0 * std::acos(dot);
-}
-
 bool poseMatches(const Pose3d & actual, const Pose3d & expected, double position_tolerance,
                  double angular_tolerance)
 {
-  if (!std::isfinite(actual.x) || !std::isfinite(actual.y) || !std::isfinite(actual.z) ||
-      !std::isfinite(actual.qx) || !std::isfinite(actual.qy) || !std::isfinite(actual.qz) ||
-      !std::isfinite(actual.qw)) {
-    return false;
-  }
   return positionDistance(actual, expected) <= position_tolerance &&
-         quaternionAngularDistance(actual, expected) <= angular_tolerance;
+         orientationDistance(actual, expected) <= angular_tolerance;
 }
 
 bool sceneConverged(const std::optional<MoveItSceneState> & state, const SO101Profile & profile,
@@ -93,7 +73,7 @@ bool sceneConverged(const std::optional<MoveItSceneState> & state, const SO101Pr
 }  // namespace
 
 MoveItSceneInitializer::MoveItSceneInitializer(IJointPlanningBoundary & boundary,
-                                               IMoveItSceneAdapter & scene,
+                                               ISO101MoveItSceneAdapter & scene,
                                                std::chrono::milliseconds poll_interval) :
     boundary_(boundary), scene_(scene), poll_interval_(poll_interval)
 {

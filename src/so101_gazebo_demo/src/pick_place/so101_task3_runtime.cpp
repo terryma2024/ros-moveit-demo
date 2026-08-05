@@ -1,4 +1,5 @@
 #include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/so101_moveit_scene_policy.hpp"
 
 #include <algorithm>
 #include <array>
@@ -134,23 +135,49 @@ void registerMoveItScene(SO101Task3Runtime & runtime,
   if (!dependencies.moveit_scene) {
     return;
   }
-  const MoveItAttachmentSpec attachment{config.profile.moveit_attach_link,
-                                        config.profile.moveit_touch_links};
   const std::array<MoveItSceneConfig, 5> configs{{
-    {State::ATTACH_MOVEIT, MoveItSceneOperation::ATTACH, false, config.profile.task_object_id},
-    {State::DETACH_MOVEIT, MoveItSceneOperation::DETACH, false, config.profile.task_object_id},
-    {State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, false, config.profile.task_object_id},
-    {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true,
-     config.profile.task_object_id},
-    {State::RECOVER_SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC, true,
-     config.profile.task_object_id},
+    {State::ATTACH_MOVEIT,
+     MoveItSceneOperation::ATTACH,
+     false,
+     config.profile.task_object_id,
+     {config.profile.moveit_attach_link, config.profile.moveit_touch_links},
+     config.planning_scene_timeout_seconds,
+     config.state_poll_interval_seconds},
+    {State::DETACH_MOVEIT,
+     MoveItSceneOperation::DETACH,
+     false,
+     config.profile.task_object_id,
+     {config.profile.moveit_attach_link, config.profile.moveit_touch_links},
+     config.planning_scene_timeout_seconds,
+     config.state_poll_interval_seconds},
+    {State::SYNC_WORLD_OBJECT,
+     MoveItSceneOperation::SYNC,
+     false,
+     config.profile.task_object_id,
+     {config.profile.moveit_attach_link, config.profile.moveit_touch_links},
+     config.planning_scene_timeout_seconds,
+     config.state_poll_interval_seconds},
+    {State::RECOVER_DETACH_MOVEIT,
+     MoveItSceneOperation::DETACH,
+     true,
+     config.profile.task_object_id,
+     {config.profile.moveit_attach_link, config.profile.moveit_touch_links},
+     config.planning_scene_timeout_seconds,
+     config.state_poll_interval_seconds},
+    {State::RECOVER_SYNC_WORLD_OBJECT,
+     MoveItSceneOperation::SYNC,
+     true,
+     config.profile.task_object_id,
+     {config.profile.moveit_attach_link, config.profile.moveit_touch_links},
+     config.planning_scene_timeout_seconds,
+     config.state_poll_interval_seconds},
   }};
   for (const auto & scene_config : configs) {
     runtime.actions.registerExecutor(
-      scene_config.state,
-      std::make_shared<MoveItSceneExecutor>(dependencies.moveit_scene, scene_config, attachment,
-                                            config.planning_scene_timeout_seconds,
-                                            config.state_poll_interval_seconds));
+      scene_config.state, std::make_shared<MoveItSceneExecutor>(
+                            dependencies.moveit_scene, scene_config,
+                            std::make_shared<SO101MoveItScenePolicy>(config.profile.task_object_id,
+                                                                     scene_config.idempotent)));
   }
 }
 

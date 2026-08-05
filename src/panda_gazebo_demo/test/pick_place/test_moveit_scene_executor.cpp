@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "panda_gazebo_demo/pick_place/moveit_scene_executor.hpp"
+#include "panda_gazebo_demo/pick_place/panda_moveit_scene_policy.hpp"
 
 namespace panda_gazebo_demo::pick_place
 {
@@ -33,37 +34,25 @@ MoveItSceneState detachedState(const Pose3d & pose = {})
 class FakeMoveItSceneAdapter final : public IMoveItSceneAdapter
 {
 public:
-  ActionResult attachCoke(const std::string & link_name,
-                          const std::vector<std::string> & touch_links) override
+  ActionResult attachTaskObject(const MoveItAttachmentSpec & spec) override
   {
     ++attach_calls;
-    attached_link = link_name;
-    attached_touch_links = touch_links;
+    attached_link = spec.link_name;
+    attached_touch_links = spec.touch_links;
     return attach_result;
   }
 
-  ActionResult detachCoke() override
+  ActionResult detachTaskObject() override
   {
     ++detach_calls;
     return detach_result;
   }
 
-  ActionResult syncCokeWorldPose(const Pose3d & pose) override
+  ActionResult upsertTaskObjectWorldPose(const Pose3d & pose) override
   {
     ++sync_calls;
     synced_pose = pose;
     return sync_result;
-  }
-
-  ActionResult upsertCokeWorldPose(const Pose3d & pose) override
-  {
-    synced_pose = pose;
-    return sync_result;
-  }
-
-  ActionResult upsertTableWorldPose(const Pose3d &) override
-  {
-    return succeeded();
   }
 
   std::optional<MoveItSceneState> observe() override
@@ -101,7 +90,11 @@ MoveItSceneExecutor executorFor(const std::shared_ptr<FakeMoveItSceneAdapter> & 
                                 State state, MoveItSceneOperation operation,
                                 bool idempotent = false)
 {
-  return MoveItSceneExecutor(adapter, {state, operation, idempotent}, 0.05, 0.001);
+  const MoveItAttachmentSpec attachment{"panda_hand",
+                                        {"panda_hand", "panda_leftfinger", "panda_rightfinger"}};
+  return MoveItSceneExecutor(adapter,
+                             {state, operation, idempotent, "coke", attachment, 0.05, 0.001},
+                             std::make_shared<PandaMoveItScenePolicy>(GripperLimits{}, idempotent));
 }
 
 TEST(MoveItSceneExecutor, AttachUsesPandaHandAndExactTouchLinks)
@@ -151,10 +144,10 @@ TEST(MoveItSceneExecutor, RecoveryDetachNoOpsWhenAlreadyDetached)
   context.before.fresh = true;
   context.before.arm_stationary = true;
   context.before.gripper_open = true;
-  context.before.gazebo_coke_attached = false;
-  context.before.gazebo_coke_pose_world = Pose3d{};
-  context.before.gazebo_coke_stationary = true;
-  context.before.moveit_coke_attached = false;
+  context.before.gazebo_task_object_attached = false;
+  context.before.gazebo_task_object_pose_world = Pose3d{};
+  context.before.gazebo_task_object_stationary = true;
+  context.before.moveit_task_object_attached = false;
   context.before.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
   context.before.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   context.before.moveit_world_object_poses.emplace("table", Pose3d{});
@@ -173,16 +166,19 @@ TEST(MoveItSceneExecutor, RecoveryNoOpUsesInjectedGripperLimits)
   adapter->observations = {detachedState()};
   GripperLimits strict_gripper;
   strict_gripper.open_min = 0.041;
+  const MoveItAttachmentSpec attachment{"panda_hand",
+                                        {"panda_hand", "panda_leftfinger", "panda_rightfinger"}};
   MoveItSceneExecutor executor(adapter,
-                               {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true},
-                               0.05, 0.001, strict_gripper);
+                               {State::RECOVER_DETACH_MOVEIT, MoveItSceneOperation::DETACH, true,
+                                "coke", attachment, 0.05, 0.001},
+                               std::make_shared<PandaMoveItScenePolicy>(strict_gripper, true));
   auto context = contextFor(State::RECOVER_DETACH_MOVEIT);
   context.before.fresh = true;
   context.before.arm_stationary = true;
-  context.before.gazebo_coke_attached = false;
-  context.before.gazebo_coke_pose_world = Pose3d{};
-  context.before.gazebo_coke_stationary = true;
-  context.before.moveit_coke_attached = false;
+  context.before.gazebo_task_object_attached = false;
+  context.before.gazebo_task_object_pose_world = Pose3d{};
+  context.before.gazebo_task_object_stationary = true;
+  context.before.moveit_task_object_attached = false;
   context.before.joint_positions = {{"panda_finger_joint1", 0.04}, {"panda_finger_joint2", 0.04}};
   context.before.joint_velocities = {{"panda_finger_joint1", 0.0}, {"panda_finger_joint2", 0.0}};
   context.before.moveit_world_object_poses.emplace("table", Pose3d{});
@@ -202,7 +198,7 @@ TEST(MoveItSceneExecutor, SyncUsesBeforeGazeboPoseAndPreservesGeometry)
   const int geometry_before = adapter->geometry_revision;
   auto executor = executorFor(adapter, State::SYNC_WORLD_OBJECT, MoveItSceneOperation::SYNC);
   auto context = contextFor(State::SYNC_WORLD_OBJECT);
-  context.before.gazebo_coke_pose_world = gazebo_pose;
+  context.before.gazebo_task_object_pose_world = gazebo_pose;
 
   const auto result = executor.execute(context);
 

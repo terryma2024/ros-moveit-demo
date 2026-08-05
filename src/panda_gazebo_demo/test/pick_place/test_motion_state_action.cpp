@@ -151,7 +151,7 @@ TEST(MotionStateAction, RecoveryMotionAlreadyAtTargetUsesValidatedNoOp)
   auto current = observation();
   current.snapshot->tcp_pose_world = {0.31, 0.12, 0.98, 1.0, 0.0, 0.0, 0.0};
   current.snapshot->arm_stationary = true;
-  current.snapshot->moveit_coke_attached = true;
+  current.snapshot->moveit_task_object_attached = true;
 
   const auto plan = action.plan(config.state, config.next_state, current);
 

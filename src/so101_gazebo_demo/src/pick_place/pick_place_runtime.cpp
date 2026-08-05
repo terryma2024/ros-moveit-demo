@@ -15,6 +15,7 @@
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
+#include "so101_gazebo_demo/pick_place/support_pose.hpp"
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
 
 namespace so101_gazebo_demo::pick_place
@@ -47,22 +48,11 @@ bool finite(double value)
   return std::isfinite(value);
 }
 
-bool finitePose(const Pose3d & pose)
-{
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
-  return finite(pose.x) && finite(pose.y) && finite(pose.z) && finite(pose.qx) && finite(pose.qy) &&
-         finite(pose.qz) && finite(pose.qw) && finite(norm) && norm > 1e-12;
-}
-
-double positionDistance(const Pose3d & first, const Pose3d & second)
-{
-  return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
-}
-
 double wallNormalPositionError(const Pose3d & actual, const Pose3d & expected, const Vec3 & outward)
 {
   const double magnitude = std::hypot(outward.x, std::hypot(outward.y, outward.z));
-  if (!finitePose(actual) || !finitePose(expected) || !finite(magnitude) || magnitude <= 1e-12) {
+  if (!isFinitePose(actual) || !isFinitePose(expected) || !finite(magnitude) ||
+      magnitude <= 1e-12) {
     return std::numeric_limits<double>::infinity();
   }
   const double projected = (actual.x - expected.x) * outward.x +
@@ -71,19 +61,10 @@ double wallNormalPositionError(const Pose3d & actual, const Pose3d & expected, c
   return std::abs(projected) / magnitude;
 }
 
-double orientationDistance(const Pose3d & first, const Pose3d & second)
-{
-  if (!finitePose(first) || !finitePose(second)) {
-    return std::numeric_limits<double>::infinity();
-  }
-  const Eigen::Quaterniond a(first.qw, first.qx, first.qy, first.qz);
-  const Eigen::Quaterniond b(second.qw, second.qx, second.qy, second.qz);
-  return 2.0 * std::acos(std::clamp(std::abs(a.normalized().dot(b.normalized())), 0.0, 1.0));
-}
-
+// SO-101 owns axial tilt: cylindrical cups permit yaw while constraining the local Z axis.
 double axialTiltDistance(const Pose3d & first, const Pose3d & second)
 {
-  if (!finitePose(first) || !finitePose(second)) {
+  if (!isFinitePose(first) || !isFinitePose(second)) {
     return std::numeric_limits<double>::infinity();
   }
   const Eigen::Vector3d first_axis =
@@ -95,27 +76,10 @@ double axialTiltDistance(const Pose3d & first, const Pose3d & second)
   return std::acos(std::clamp(first_axis.dot(second_axis), -1.0, 1.0));
 }
 
-Pose3d relativePose(const Pose3d & frame, const Pose3d & object)
+Pose3d invalidPose()
 {
-  if (!finitePose(frame) || !finitePose(object)) {
-    const double nan = std::numeric_limits<double>::quiet_NaN();
-    return {nan, nan, nan, nan, nan, nan, nan};
-  }
-  const Eigen::Isometry3d world_frame =
-    Eigen::Translation3d(frame.x, frame.y, frame.z) *
-    Eigen::Quaterniond(frame.qw, frame.qx, frame.qy, frame.qz).normalized();
-  const Eigen::Isometry3d world_object =
-    Eigen::Translation3d(object.x, object.y, object.z) *
-    Eigen::Quaterniond(object.qw, object.qx, object.qy, object.qz).normalized();
-  const Eigen::Isometry3d relative = world_frame.inverse() * world_object;
-  const Eigen::Quaterniond orientation(relative.rotation());
-  return {relative.translation().x(),
-          relative.translation().y(),
-          relative.translation().z(),
-          orientation.x(),
-          orientation.y(),
-          orientation.z(),
-          orientation.w()};
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  return {nan, nan, nan, nan, nan, nan, nan};
 }
 
 bool poseWithin(const Pose3d & actual, const Pose3d & expected, double position_tolerance,
@@ -130,36 +94,6 @@ bool cylindricalPoseWithin(const Pose3d & actual, const Pose3d & expected,
 {
   return positionDistance(actual, expected) <= position_tolerance &&
          axialTiltDistance(actual, expected) <= tilt_tolerance;
-}
-
-bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile)
-{
-  if (!finitePose(pose))
-    return false;
-  const auto & expected = profile.place_task_object_pose;
-  const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
-  const double height_error = std::abs(pose.z - expected.z);
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
-  const double local_z_world_z =
-    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
-  const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
-  return finite(xy_error) && finite(height_error) && finite(tilt) &&
-         xy_error <= profile.place_support_xy_tolerance &&
-         height_error <= profile.place_support_height_tolerance &&
-         tilt <= profile.place_support_tilt_tolerance_rad;
-}
-
-bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile)
-{
-  if (!finitePose(pose))
-    return false;
-  const double norm = std::hypot(std::hypot(pose.qx, pose.qy), std::hypot(pose.qz, pose.qw));
-  const double local_z_world_z =
-    1.0 - 2.0 * (pose.qx * pose.qx + pose.qy * pose.qy) / (norm * norm);
-  const double tilt = std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
-  return positionDistance(pose, profile.task_object_pose) <=
-           profile.task_object_position_drift_tolerance &&
-         finite(tilt) && tilt <= profile.place_support_tilt_tolerance_rad;
 }
 
 Failure observationFailure(std::string code, std::string message)
@@ -215,7 +149,7 @@ void requireCompleteSnapshot(ValidationResult & result, const WorldSnapshot & sn
     addFailure(result, FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT",
                "All SO-101 joints must be stationary at the motion boundary");
   }
-  if (!finitePose(snapshot.tcp_pose_world)) {
+  if (!isFinitePose(snapshot.tcp_pose_world)) {
     addFailure(result, FailureCategory::OBSERVATION, "TCP_POSE_EVIDENCE_INVALID",
                "A finite full TCP pose is required");
   }
@@ -238,7 +172,7 @@ void requireCompleteSnapshot(ValidationResult & result, const WorldSnapshot & sn
                "The canonical MoveIt table pose is required");
   }
   if (!snapshot.gazebo_task_object_pose_world ||
-      !finitePose(*snapshot.gazebo_task_object_pose_world) ||
+      !isFinitePose(*snapshot.gazebo_task_object_pose_world) ||
       !snapshot.gazebo_task_object_attached || !snapshot.gazebo_task_object_stationary ||
       !snapshot.moveit_task_object_attached) {
     addFailure(result, FailureCategory::OBSERVATION, "ENVIRONMENT_EVIDENCE_INCOMPLETE",
@@ -277,11 +211,11 @@ void requireMotionEnvironment(ValidationResult & result, const WorldSnapshot & s
                  "Carrying requires exact independent Gazebo and MoveIt attachment facts");
     }
     if (snapshot.moveit_gripper_pose_world &&
-        !cylindricalPoseWithin(relativePose(*snapshot.moveit_gripper_pose_world,
-                                            *snapshot.gazebo_task_object_pose_world),
-                               profile.calibrated_grasp_relative_pose,
-                               profile.task_object_position_drift_tolerance,
-                               profile.task_object_attachment_orientation_tolerance_rad)) {
+        !cylindricalPoseWithin(
+          relativePose(*snapshot.moveit_gripper_pose_world, *snapshot.gazebo_task_object_pose_world)
+            .value_or(invalidPose()),
+          profile.calibrated_grasp_relative_pose, profile.task_object_position_drift_tolerance,
+          profile.task_object_attachment_orientation_tolerance_rad)) {
       addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
                  "GAZEBO_TASK_OBJECT_GRIPPER_RELATIVE_POSE_INVALID",
                  "Gazebo TaskObject must match the independently observed gripper-relative pose");
@@ -413,13 +347,15 @@ public:
       }
     }
     if (carrying(state) && before.gazebo_task_object_pose_world &&
-        finitePose(before.tcp_pose_world)) {
+        isFinitePose(before.tcp_pose_world)) {
       const auto expected_relative =
-        relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world);
+        relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world)
+          .value_or(invalidPose());
       for (const auto & sample : motion->samples) {
         if (!sample.attached_task_object_pose_world ||
             !withinSO101AttachmentModelTolerance(
-              relativePose(sample.tcp_pose, *sample.attached_task_object_pose_world),
+              relativePose(sample.tcp_pose, *sample.attached_task_object_pose_world)
+                .value_or(invalidPose()),
               expected_relative, profile_)) {
           addFailure(
             result, FailureCategory::PLAN_VALIDATION, "ATTACHED_TASK_OBJECT_RELATIVE_PATH_MISMATCH",
@@ -520,8 +456,9 @@ public:
       Pose3d before_evidence = *before.gazebo_task_object_pose_world;
       Pose3d after_evidence = *after.gazebo_task_object_pose_world;
       if (carrying(spec_.state)) {
-        before_evidence = relativePose(before.tcp_pose_world, before_evidence);
-        after_evidence = relativePose(after.tcp_pose_world, after_evidence);
+        before_evidence =
+          relativePose(before.tcp_pose_world, before_evidence).value_or(invalidPose());
+        after_evidence = relativePose(after.tcp_pose_world, after_evidence).value_or(invalidPose());
       }
       const double task_object_position = positionDistance(before_evidence, after_evidence);
       const double task_object_orientation = orientationDistance(before_evidence, after_evidence);
@@ -1008,9 +945,9 @@ ObservationResult SO101MoveItWorldObserver::observe()
 
   const auto scene = boundary_->sceneFacts();
   if (!scene || !scene->table_in_world || !scene->table_world_pose ||
-      !finitePose(*scene->table_world_pose) || !scene->pedestal_in_world ||
-      !scene->pedestal_world_pose || !finitePose(*scene->pedestal_world_pose) ||
-      !scene->current_tcp_pose_world || !finitePose(*scene->current_tcp_pose_world) ||
+      !isFinitePose(*scene->table_world_pose) || !scene->pedestal_in_world ||
+      !scene->pedestal_world_pose || !isFinitePose(*scene->pedestal_world_pose) ||
+      !scene->current_tcp_pose_world || !isFinitePose(*scene->current_tcp_pose_world) ||
       !poseWithin(*scene->table_world_pose, profile_.table_pose, 1e-5, 1e-4) ||
       !poseWithin(*scene->pedestal_world_pose, profile_.pedestal_pose, 1e-5, 1e-4)) {
     return {std::nullopt,
@@ -1023,11 +960,11 @@ ObservationResult SO101MoveItWorldObserver::observe()
                                "TaskObject must be exactly world or attached in MoveIt")};
   }
   if ((scene->task_object_in_world &&
-       (!scene->task_object_world_pose || !finitePose(*scene->task_object_world_pose))) ||
+       (!scene->task_object_world_pose || !isFinitePose(*scene->task_object_world_pose))) ||
       (scene->task_object_attached &&
        (!scene->attached_link || scene->touch_links.empty() || !scene->attached_relative_pose ||
-        !finitePose(*scene->attached_relative_pose) || !scene->current_gripper_pose_world ||
-        !finitePose(*scene->current_gripper_pose_world)))) {
+        !isFinitePose(*scene->attached_relative_pose) || !scene->current_gripper_pose_world ||
+        !isFinitePose(*scene->current_gripper_pose_world)))) {
     return {std::nullopt,
             observationFailure("MOVEIT_TASK_OBJECT_POSE_EVIDENCE_INCOMPLETE",
                                "MoveIt TaskObject 6D pose and attachment metadata are incomplete")};

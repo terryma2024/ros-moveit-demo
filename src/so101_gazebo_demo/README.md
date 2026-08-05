@@ -6,6 +6,15 @@ The offline TCP 6D workspace sampler is documented in
 `so101_gazebo_demo` is the self-contained SO-101 description, Gazebo, controller,
 MoveIt, and geometry-tool package used by `/data/work/ws_moveit`.
 
+Its pick-place workflow engine comes from `pick_place_common`. This package
+keeps SO-101 motion, gripper, workflow and behavior policies, checkpoint JSON
+codec and file store, concrete Gazebo/MoveIt adapters, geometry/contact/reset
+logic, Teleop, launch, world, URDF, SRDF, and configuration. See
+[`../../docs/pick-place-architecture.md`](../../docs/pick-place-architecture.md)
+for the dependency and ownership boundary, and
+[`../../docs/pick-place-launch-parameters.md`](../../docs/pick-place-launch-parameters.md)
+for the authoritative launch, run-to-plan-only, resume, and safety contract.
+
 ## System prerequisites
 
 Install the ROS 2 Jazzy dependencies through rosdep. The optional GUI tiling
@@ -29,7 +38,7 @@ Start a fresh shell that has not sourced the original SO-101 workspace:
 cd /data/work/ws_moveit
 source /opt/ros/jazzy/setup.zsh
 rosdep check --from-paths src/so101_gazebo_demo --ignore-src
-colcon build --packages-select so101_gazebo_demo --cmake-clean-cache
+colcon build --packages-up-to so101_gazebo_demo --cmake-clean-cache
 source install/setup.zsh
 PYTHONNOUSERSITE=1 colcon test --packages-select so101_gazebo_demo --event-handlers console_direct+
 colcon test-result --verbose
@@ -80,15 +89,11 @@ source commit `65c371e`.
 
 ## Scope
 
-The package is deliberately self-contained: it will install its own robot
-description, simulation, controller, MoveIt, test, and helper assets without a
-runtime dependency on the original workspace. Phase 1 intentionally excludes
-Panda pick-place code; that migration happens separately after the SO-101
-environment is proven from this workspace.
-
-Phase 2 will copy and adapt the Panda pick-place state-machine structure for
-SO-101. Shared abstractions are intentionally deferred until both robot-specific
-implementations have passed their own runtime gates.
+The package installs its own robot description, simulation, controller,
+MoveIt, Teleop, test, and helper assets without depending on the original
+SO-101 workspace. Robot-independent workflow, runner, resume validation, and
+Gazebo/MoveIt convergence algorithms are shared through `pick_place_common`;
+SO-101 behavior remains local behind explicit workflow and policy interfaces.
 
 ## Simulation-only Teleop Web UI
 

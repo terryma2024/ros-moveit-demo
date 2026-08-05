@@ -19,7 +19,8 @@ bool isTransientObservation(const std::string & code)
          code == "GAZEBO_ATTACHMENT_STATE_UNAVAILABLE";
 }
 
-bool finitePose(const Pose3d & pose)
+// Readiness only requires transport fields to be finite; quaternion usability is checked later.
+bool finitePoseComponents(const Pose3d & pose)
 {
   return std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
          std::isfinite(pose.qx) && std::isfinite(pose.qy) && std::isfinite(pose.qz) &&
@@ -33,7 +34,7 @@ bool snapshotReady(const WorldSnapshot & snapshot, const std::string & expected_
   if (!snapshot.arm_stationary)
     return false;
   if (!snapshot.gazebo_task_object_pose_world ||
-      !finitePose(*snapshot.gazebo_task_object_pose_world)) {
+      !finitePoseComponents(*snapshot.gazebo_task_object_pose_world)) {
     return false;
   }
   if (!snapshot.gazebo_task_object_attached)

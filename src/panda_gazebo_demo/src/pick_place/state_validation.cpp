@@ -156,7 +156,7 @@ ValidationResult validateGripperClosed(const WorldSnapshot & snapshot, double ta
 ValidationResult validateAttachmentState(const WorldSnapshot & snapshot, bool gazebo_attached,
                                          bool moveit_attached)
 {
-  if (!snapshot.gazebo_coke_attached || !snapshot.moveit_coke_attached) {
+  if (!snapshot.gazebo_task_object_attached || !snapshot.moveit_task_object_attached) {
     return {false,
             {{FailureCategory::WORLD_INCONSISTENCY,
               "ATTACHMENT_STATE_UNKNOWN",
@@ -165,11 +165,11 @@ ValidationResult validateAttachmentState(const WorldSnapshot & snapshot, bool ga
             {}};
   }
   const std::map<std::string, double> metrics{
-    {"gazebo_attached", *snapshot.gazebo_coke_attached ? 1.0 : 0.0},
-    {"moveit_attached", *snapshot.moveit_coke_attached ? 1.0 : 0.0},
+    {"gazebo_attached", *snapshot.gazebo_task_object_attached ? 1.0 : 0.0},
+    {"moveit_attached", *snapshot.moveit_task_object_attached ? 1.0 : 0.0},
   };
-  if (*snapshot.gazebo_coke_attached != gazebo_attached ||
-      *snapshot.moveit_coke_attached != moveit_attached) {
+  if (*snapshot.gazebo_task_object_attached != gazebo_attached ||
+      *snapshot.moveit_task_object_attached != moveit_attached) {
     return {false,
             {{FailureCategory::WORLD_INCONSISTENCY,
               "ATTACHMENT_STATE_MISMATCH",
@@ -178,39 +178,6 @@ ValidationResult validateAttachmentState(const WorldSnapshot & snapshot, bool ga
             metrics};
   }
   return {true, {}, metrics};
-}
-
-CokePoseStabilityTracker::CokePoseStabilityTracker(std::size_t required_samples,
-                                                   double position_tolerance,
-                                                   double orientation_tolerance_rad) :
-    required_samples_(required_samples), position_tolerance_(position_tolerance),
-    orientation_tolerance_rad_(orientation_tolerance_rad)
-{
-}
-
-void CokePoseStabilityTracker::addSample(const Pose3d & pose,
-                                         std::chrono::steady_clock::time_point observed_at)
-{
-  samples_.push_back({pose, observed_at});
-  while (samples_.size() > required_samples_) {
-    samples_.pop_front();
-  }
-}
-
-std::optional<bool> CokePoseStabilityTracker::stationary() const noexcept
-{
-  if (required_samples_ < 2 || samples_.size() < required_samples_) {
-    return std::nullopt;
-  }
-  for (std::size_t index = 1; index < samples_.size(); ++index) {
-    if (samples_[index].observed_at <= samples_[index - 1].observed_at ||
-        positionDistance(samples_[index - 1].pose, samples_[index].pose) > position_tolerance_ ||
-        orientationDistance(samples_[index - 1].pose, samples_[index].pose) >
-          orientation_tolerance_rad_) {
-      return false;
-    }
-  }
-  return true;
 }
 
 }  // namespace panda_gazebo_demo::pick_place

@@ -96,9 +96,9 @@ TEST(GazeboWorldObserver, WaitsForFirstPoseAndAttachmentMessages)
   delayed_publish.join();
 
   ASSERT_TRUE(result.snapshot);
-  ASSERT_TRUE(result.snapshot->gazebo_coke_pose_world);
-  ASSERT_TRUE(result.snapshot->gazebo_coke_attached);
-  EXPECT_FALSE(*result.snapshot->gazebo_coke_attached);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_pose_world);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_attached);
+  EXPECT_FALSE(*result.snapshot->gazebo_task_object_attached);
 }
 
 TEST(GazeboWorldObserver, MissingInitialPoseStillFailsClosedAtDeadline)

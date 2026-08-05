@@ -59,7 +59,8 @@ Vec3 position(const Pose3d & pose)
   return {pose.x, pose.y, pose.z};
 }
 
-bool finitePose(const Pose3d & pose)
+// Motion samples validate finite serialized components; quaternion norms are checked per operation.
+bool finitePoseComponents(const Pose3d & pose)
 {
   return finite(pose.x) && finite(pose.y) && finite(pose.z) && finite(pose.qx) && finite(pose.qy) &&
          finite(pose.qz) && finite(pose.qw);
@@ -91,7 +92,7 @@ ValidationResult validateAttachedTaskObjectPoseEvidence(const MotionPlanArtifact
                      "A carrying motion sample lacks attached TaskObject world-pose evidence",
                      {{"sample_index", static_cast<double>(i)}});
     }
-    if (!finitePose(*attached_task_object_pose)) {
+    if (!finitePoseComponents(*attached_task_object_pose)) {
       return failure(
         "ATTACHED_TASK_OBJECT_POSE_EVIDENCE_NONFINITE",
         "A carrying motion sample has non-finite attached TaskObject world-pose evidence",
@@ -197,7 +198,7 @@ ValidationResult validateCommon(const MotionPlanArtifact & plan,
 
   for (std::size_t i = 0; i < plan.samples.size(); ++i) {
     const auto & sample = plan.samples[i];
-    if (!finitePose(sample.tcp_pose) || sample.joint_positions.size() != joint_count ||
+    if (!finitePoseComponents(sample.tcp_pose) || sample.joint_positions.size() != joint_count ||
         !finite(sample.time_from_start_seconds)) {
       return failure("MOTION_SAMPLE_INVALID", "FK sample is missing or non-finite");
     }
@@ -364,7 +365,7 @@ double approachAxisError(const Pose3d & pose, const Vec3 & local_axis,
   const Vec3 target = normalized(target_axis);
   const double q_norm =
     std::sqrt(pose.qx * pose.qx + pose.qy * pose.qy + pose.qz * pose.qz + pose.qw * pose.qw);
-  if (!finitePose(pose) || !finite(local) || !finite(target) || !finite(q_norm) ||
+  if (!finitePoseComponents(pose) || !finite(local) || !finite(target) || !finite(q_norm) ||
       q_norm <= kTiny) {
     return std::numeric_limits<double>::infinity();
   }

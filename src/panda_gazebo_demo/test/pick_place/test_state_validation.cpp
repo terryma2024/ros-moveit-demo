@@ -24,8 +24,8 @@ pick_place::WorldSnapshot gripperSnapshot(double finger1_position, double finger
 pick_place::WorldSnapshot attachmentSnapshot(bool gazebo_attached, bool moveit_attached)
 {
   pick_place::WorldSnapshot snapshot;
-  snapshot.gazebo_coke_attached = gazebo_attached;
-  snapshot.moveit_coke_attached = moveit_attached;
+  snapshot.gazebo_task_object_attached = gazebo_attached;
+  snapshot.moveit_task_object_attached = moveit_attached;
   return snapshot;
 }
 
@@ -122,6 +122,17 @@ TEST(GazeboObserver, ReportsMovingAfterPoseDeltaExceedsTolerance)
     tracker.addSample({x_positions[index], 0.0, 0.836, 0.0, 0.0, 0.0, 1.0},
                       start + std::chrono::milliseconds(static_cast<int>(index) * 50));
   }
+
+  ASSERT_TRUE(tracker.stationary());
+  EXPECT_FALSE(*tracker.stationary());
+}
+
+TEST(GazeboObserver, StabilityTrackerRejectsOutOfOrderSamplesLikeCommonTracker)
+{
+  pick_place::CokePoseStabilityTracker tracker(2, 0.002, 0.020);
+  const auto start = std::chrono::steady_clock::now();
+  tracker.addSample({0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0}, start + std::chrono::milliseconds(50));
+  tracker.addSample({0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0}, start);
 
   ASSERT_TRUE(tracker.stationary());
   EXPECT_FALSE(*tracker.stationary());

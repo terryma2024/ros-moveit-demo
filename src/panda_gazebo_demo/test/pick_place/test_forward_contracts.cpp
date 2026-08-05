@@ -37,10 +37,10 @@ WorldSnapshot detachedSnapshot(const Pose3d & tcp = kPick, const Pose3d & coke =
   snapshot.arm_stationary = true;
   snapshot.gripper_open = gripper_open;
   snapshot.tcp_pose_world = tcp;
-  snapshot.gazebo_coke_pose_world = coke;
-  snapshot.gazebo_coke_attached = false;
-  snapshot.moveit_coke_attached = false;
-  snapshot.gazebo_coke_stationary = true;
+  snapshot.gazebo_task_object_pose_world = coke;
+  snapshot.gazebo_task_object_attached = false;
+  snapshot.moveit_task_object_attached = false;
+  snapshot.gazebo_task_object_stationary = true;
   snapshot.moveit_world_object_poses = {{"table", Pose3d{}}, {"coke", coke}};
   const double finger_position = gripper_open ? 0.04 : 0.032;
   snapshot.joint_positions = {{"panda_finger_joint1", finger_position},
@@ -52,29 +52,29 @@ WorldSnapshot detachedSnapshot(const Pose3d & tcp = kPick, const Pose3d & coke =
 WorldSnapshot carryingSnapshot(const Pose3d & tcp, const Pose3d & coke, bool gripper_open = false)
 {
   auto snapshot = detachedSnapshot(tcp, coke, gripper_open);
-  snapshot.gazebo_coke_attached = true;
-  snapshot.moveit_coke_attached = true;
+  snapshot.gazebo_task_object_attached = true;
+  snapshot.moveit_task_object_attached = true;
   snapshot.moveit_world_object_poses.erase("coke");
-  snapshot.moveit_coke_attached_link = "panda_hand";
-  snapshot.moveit_coke_touch_links = {"panda_hand", "panda_leftfinger", "panda_rightfinger"};
+  snapshot.moveit_task_object_attached_link = "panda_hand";
+  snapshot.moveit_task_object_touch_links = {"panda_hand", "panda_leftfinger", "panda_rightfinger"};
   return snapshot;
 }
 
 WorldSnapshot gazeboOnlyAttachedSnapshot()
 {
   auto snapshot = detachedSnapshot(kPick, kCokePick, false);
-  snapshot.gazebo_coke_attached = true;
+  snapshot.gazebo_task_object_attached = true;
   return snapshot;
 }
 
 WorldSnapshot moveItOnlyAttachedSnapshot(bool gripper_open = true)
 {
   auto snapshot = detachedSnapshot(kPlace, kCokePlace, gripper_open);
-  snapshot.gazebo_coke_attached = false;
-  snapshot.moveit_coke_attached = true;
+  snapshot.gazebo_task_object_attached = false;
+  snapshot.moveit_task_object_attached = true;
   snapshot.moveit_world_object_poses.erase("coke");
-  snapshot.moveit_coke_attached_link = "panda_hand";
-  snapshot.moveit_coke_touch_links = {"panda_hand", "panda_leftfinger", "panda_rightfinger"};
+  snapshot.moveit_task_object_attached_link = "panda_hand";
+  snapshot.moveit_task_object_touch_links = {"panda_hand", "panda_leftfinger", "panda_rightfinger"};
   return snapshot;
 }
 
@@ -129,8 +129,8 @@ TEST(ForwardContracts, CloseRequiresPickPoseAndDetachedStableCoke)
   const auto contract = makeCloseToGazeboAttachContract(targetPolicy(), {});
   auto before = detachedSnapshot();
   before.tcp_pose_world.x += 0.05;
-  before.gazebo_coke_stationary = false;
-  before.gazebo_coke_attached = true;
+  before.gazebo_task_object_stationary = false;
+  before.gazebo_task_object_attached = true;
 
   expectMetricBearingFailure(contract->validatePrecondition(before));
 }
@@ -164,7 +164,7 @@ TEST(ForwardContracts, GazeboAttachRequiresOnlyGazeboToChange)
 
   EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
 
-  after.moveit_coke_attached = true;
+  after.moveit_task_object_attached = true;
   expectMetricBearingFailure(contract->validate(before, after, succeeded()));
 }
 
@@ -173,8 +173,8 @@ TEST(ForwardContracts, MoveItAttachRequiresExactAttachedMetadata)
   const auto contract = makeMoveItAttachToLiftContract({});
   const auto before = gazeboOnlyAttachedSnapshot();
   auto after = carryingSnapshot(kPick, kCokePick);
-  after.moveit_coke_attached_link = "panda_tcp";
-  after.moveit_coke_touch_links.erase("panda_rightfinger");
+  after.moveit_task_object_attached_link = "panda_tcp";
+  after.moveit_task_object_touch_links.erase("panda_rightfinger");
 
   expectMetricBearingFailure(contract->validate(before, after, succeeded()));
 }
@@ -187,7 +187,7 @@ TEST(ForwardContracts, LiftPreservesBothAttachmentsAndRelativePose)
 
   EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
 
-  after.gazebo_coke_pose_world->x += 0.02;
+  after.gazebo_task_object_pose_world->x += 0.02;
   expectMetricBearingFailure(contract->validate(before, after, succeeded()));
 }
 
@@ -208,7 +208,7 @@ TEST(ForwardContracts, DescendToPlaceRequiresSupportedPlacePose)
 
   EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
 
-  after.gazebo_coke_pose_world->z += 0.03;
+  after.gazebo_task_object_pose_world->z += 0.03;
   expectMetricBearingFailure(contract->validate(before, after, succeeded()));
 }
 
@@ -220,7 +220,7 @@ TEST(ForwardContracts, OpenAtPlaceKeepsBothAttachmentsAndCokeStable)
 
   EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
 
-  after.gazebo_coke_attached = false;
+  after.gazebo_task_object_attached = false;
   expectMetricBearingFailure(contract->validate(before, after, succeeded()));
 }
 
@@ -232,7 +232,7 @@ TEST(ForwardContracts, GazeboDetachRequiresOpenFingersAndCokeSettling)
 
   EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
 
-  after.gazebo_coke_stationary = false;
+  after.gazebo_task_object_stationary = false;
   expectMetricBearingFailure(contract->validate(before, after, succeeded()));
 }
 
