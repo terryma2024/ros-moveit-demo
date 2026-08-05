@@ -111,6 +111,7 @@ add_library(so101_pick_place_runtime
   src/pick_place/so101_workflow.cpp
   src/pick_place/policy_config.cpp
   src/pick_place/physical_grasp_validator.cpp
+  src/pick_place/physical_grasp_evidence_store.cpp
   src/pick_place/transition_table.cpp
   src/pick_place/so101_profile.cpp
   src/pick_place/so101_gripper_validation.cpp
@@ -238,6 +239,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_pick_place_runner so101_pick_place_runtime)
   ament_add_gtest(test_physical_grasp_validator test/pick_place/test_physical_grasp_validator.cpp)
   target_link_libraries(test_physical_grasp_validator so101_pick_place_runtime)
+  ament_add_gtest(test_physical_grasp_evidence_store test/pick_place/test_physical_grasp_evidence_store.cpp)
+  target_link_libraries(test_physical_grasp_evidence_store so101_pick_place_runtime)
   ament_add_gtest(test_so101_gripper_adapter test/pick_place/test_so101_gripper_adapter.cpp)
   target_link_libraries(test_so101_gripper_adapter so101_pick_place_runtime)
   ament_add_gtest(test_ros_trajectory_action_client

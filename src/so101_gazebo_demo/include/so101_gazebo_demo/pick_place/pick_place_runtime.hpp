@@ -9,6 +9,7 @@
 #include "so101_gazebo_demo/pick_place/so101_joint_motion_adapter.hpp"
 #include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_validator.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_evidence_store.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -46,6 +47,7 @@ struct SO101PickPlaceRuntimeDependencies : SO101Task3RuntimeDependencies
   std::shared_ptr<IMoveItJointMotionAdapter> motion;
   std::shared_ptr<IWorldZMicroLift> micro_lift;
   std::shared_ptr<IWorldObserver> physical_observer;
+  std::shared_ptr<IPhysicalGraspEvidenceStore> physical_grasp_evidence;
 };
 
 struct SO101PickPlaceRuntimeConfig : SO101Task3RuntimeConfig

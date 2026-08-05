@@ -286,6 +286,27 @@ public:
   }
 };
 
+class MemoryPhysicalEvidenceStore final : public spp::IPhysicalGraspEvidenceStore
+{
+public:
+  std::optional<spp::Failure> resetForFreshRun() override
+  {
+    return std::nullopt;
+  }
+  std::optional<spp::Failure> saveBefore(const spp::WorldSnapshot &) override
+  {
+    return std::nullopt;
+  }
+  std::optional<spp::Failure> saveAfter(const spp::WorldSnapshot &) override
+  {
+    return std::nullopt;
+  }
+  [[nodiscard]] std::variant<spp::PhysicalGraspEvidenceRecord, spp::Failure> load() const override
+  {
+    return spp::Failure{spp::FailureCategory::OBSERVATION, "TEST_EVIDENCE_UNUSED", "unused", {}};
+  }
+};
+
 std::shared_ptr<const spp::SO101ConfiguredMotionTargetPolicy> configuredPolicy()
 {
   const std::filesystem::path root(SO101_TEST_POLICY_CONFIG_ROOT);
@@ -334,6 +355,7 @@ spp::SO101PickPlaceRuntimeDependencies completeDependencies()
   observer->snapshot.gazebo_task_object_stationary = true;
   observer->snapshot.gazebo_task_object_gripper_contact = true;
   dependencies.physical_observer = std::move(observer);
+  dependencies.physical_grasp_evidence = std::make_shared<MemoryPhysicalEvidenceStore>();
   return dependencies;
 }
 
