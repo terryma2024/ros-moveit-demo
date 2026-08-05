@@ -100,7 +100,7 @@ public:
   int current_state_calls{0};
 };
 
-class FakeScene final : public spp::IMoveItSceneAdapter
+class FakeScene final : public spp::ISO101MoveItSceneAdapter
 {
 public:
   spp::ActionResult attachTaskObject(const spp::MoveItAttachmentSpec &) override

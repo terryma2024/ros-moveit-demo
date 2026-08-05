@@ -28,27 +28,6 @@ bool isRecovery(TransitionKey key)
          key.from == State::RECOVER_SYNC_WORLD_OBJECT;
 }
 
-double positionDistance(const Pose3d & first, const Pose3d & second)
-{
-  return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
-}
-
-double orientationDistance(const Pose3d & first, const Pose3d & second)
-{
-  const double first_norm =
-    std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
-  const double second_norm =
-    std::hypot(std::hypot(second.qx, second.qy), std::hypot(second.qz, second.qw));
-  if (!std::isfinite(first_norm) || !std::isfinite(second_norm) || first_norm <= 1e-12 ||
-      second_norm <= 1e-12) {
-    return INFINITY;
-  }
-  const double dot = std::abs(
-    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
-    (first_norm * second_norm));
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
-}
-
 void add(ValidationResult & result, FailureCategory category, std::string code, std::string message)
 {
   result.failures.push_back({category, std::move(code), std::move(message), {}});

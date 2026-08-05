@@ -17,6 +17,7 @@ def generate_launch_description():
     start_simulation = LaunchConfiguration("start_simulation")
     headless = LaunchConfiguration("headless")
     stop_after = LaunchConfiguration("stop_after")
+    plan_only_state = LaunchConfiguration("plan_only_state")
     resume = LaunchConfiguration("resume")
     checkpoint_path = LaunchConfiguration("checkpoint_path")
     simulation_session_id = LaunchConfiguration("simulation_session_id")
@@ -29,6 +30,11 @@ def generate_launch_description():
         DeclareLaunchArgument("start_simulation", default_value="false"),
         DeclareLaunchArgument("headless", default_value="false"),
         DeclareLaunchArgument("stop_after", default_value=""),
+        DeclareLaunchArgument(
+            "plan_only_state",
+            default_value="",
+            description="See docs/pick-place-launch-parameters.md",
+        ),
         DeclareLaunchArgument("resume", default_value="false"),
         DeclareLaunchArgument(
             "checkpoint_path", default_value="/tmp/so101_pick_place_checkpoint.json"
@@ -76,6 +82,7 @@ def generate_launch_description():
         output="screen",
         arguments=[
             "--mode", run_mode,
+            "--plan-only-state", plan_only_state,
             "--stop-after", stop_after,
             "--resume", resume,
             "--checkpoint", checkpoint_path,

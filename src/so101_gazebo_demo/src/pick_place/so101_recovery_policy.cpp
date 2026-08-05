@@ -17,27 +17,6 @@ RecoveryRoute error(FailureCategory category, std::string code, std::string mess
   return {std::nullopt, Failure{category, std::move(code), std::move(message), {}}};
 }
 
-double positionDistance(const Pose3d & first, const Pose3d & second)
-{
-  return std::hypot(std::hypot(first.x - second.x, first.y - second.y), first.z - second.z);
-}
-
-double orientationDistance(const Pose3d & first, const Pose3d & second)
-{
-  const double first_norm =
-    std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
-  const double second_norm =
-    std::hypot(std::hypot(second.qx, second.qy), std::hypot(second.qz, second.qw));
-  if (!std::isfinite(first_norm) || !std::isfinite(second_norm) || first_norm <= 1e-12 ||
-      second_norm <= 1e-12) {
-    return INFINITY;
-  }
-  const double dot = std::abs(
-    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
-    (first_norm * second_norm));
-  return 2.0 * std::acos(std::clamp(dot, 0.0, 1.0));
-}
-
 bool nearPose(const Pose3d & actual, const Pose3d & expected, const SO101Profile & profile)
 {
   return positionDistance(actual, expected) <= profile.task_object_position_drift_tolerance &&
@@ -53,9 +32,51 @@ bool tableCanonical(const WorldSnapshot & current, const SO101Profile & profile)
          orientationDistance(table->second, profile.table_pose) <= 1e-4;
 }
 
+bool armAtSafeHome(const WorldSnapshot & current, const SO101Profile & profile)
+{
+  constexpr double kArmHomeTolerance = 0.002;
+  for (std::size_t index = 0; index < profile.arm_joints.size(); ++index) {
+    const auto position = current.joint_positions.find(profile.arm_joints[index]);
+    const auto velocity = current.joint_velocities.find(profile.arm_joints[index]);
+    if (position == current.joint_positions.end() || velocity == current.joint_velocities.end() ||
+        !std::isfinite(position->second) || !std::isfinite(velocity->second) ||
+        std::abs(position->second - profile.arm_home_positions[index]) > kArmHomeTolerance ||
+        std::abs(velocity->second) > profile.q6_velocity_tolerance) {
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 SO101RecoveryPolicy::SO101RecoveryPolicy(SO101Profile profile) : profile_(std::move(profile)) {}
+
+bool SO101RecoveryPolicy::canSkipRecoveryAction(State, const Failure & original_failure,
+                                                State next_recovery_action,
+                                                const WorldSnapshot & current) const
+{
+  const auto unexecuted = original_failure.metrics.find("plan_only_target_not_executed");
+  if (next_recovery_action != State::RECOVER_RETREAT ||
+      original_failure.category != FailureCategory::PLAN_VALIDATION ||
+      unexecuted == original_failure.metrics.end() || unexecuted->second != 1.0 || !current.fresh ||
+      !current.arm_stationary || !armAtSafeHome(current, profile_)) {
+    return false;
+  }
+  if (!current.gazebo_task_object_attached || !current.moveit_task_object_attached ||
+      *current.gazebo_task_object_attached || *current.moveit_task_object_attached ||
+      !current.gazebo_task_object_pose_world || !current.gazebo_task_object_stationary ||
+      !*current.gazebo_task_object_stationary ||
+      !validateSO101GripperTarget(current, SO101GripperTarget::FULL_OPEN, profile_).ok) {
+    return false;
+  }
+  const auto task_object = current.moveit_world_object_poses.find(profile_.task_object_id);
+  return task_object != current.moveit_world_object_poses.end() &&
+         nearPose(*current.gazebo_task_object_pose_world, profile_.task_object_pose, profile_) &&
+         nearPose(task_object->second, *current.gazebo_task_object_pose_world, profile_) &&
+         tableCanonical(current, profile_) && !current.moveit_task_object_attached_link &&
+         current.moveit_task_object_touch_links.empty();
+}
 
 RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & original_failure,
                                           const WorldSnapshot & current) const

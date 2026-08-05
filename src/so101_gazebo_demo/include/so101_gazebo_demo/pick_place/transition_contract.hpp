@@ -1,47 +1,25 @@
 #pragma once
-#include <map>
-#include <memory>
-#include <optional>
+
+#include <pick_place_common/transition_contract.hpp>
+
 #include "so101_gazebo_demo/pick_place/plan_validation.hpp"
+#include "so101_gazebo_demo/pick_place/so101_workflow.hpp"
+
 namespace so101_gazebo_demo::pick_place
 {
-struct TransitionKey
+
+using pick_place_common::AlwaysPassValidator;
+using pick_place_common::TransitionKey;
+
+class TransitionContractRegistry : public pick_place_common::TransitionContractRegistry
 {
-  State from;
-  State to;
-  friend bool operator<(const TransitionKey & a, const TransitionKey & b) noexcept
+public:
+  using pick_place_common::TransitionContractRegistry::TransitionContractRegistry;
+  [[nodiscard]] std::optional<Failure> validateExecuteCoverage() const
   {
-    return a.from != b.from ? a.from < b.from : a.to < b.to;
+    return pick_place_common::TransitionContractRegistry::validateExecuteCoverage(
+      so101WorkflowDefinition());
   }
 };
-class TransitionContractRegistry
-{
-public:
-  class ITransitionContract
-  {
-  public:
-    virtual ~ITransitionContract() = default;
-    virtual ValidationResult validatePrecondition(const WorldSnapshot &) const = 0;
-    virtual ValidationResult validate(const WorldSnapshot &, const WorldSnapshot &,
-                                      const ActionResult &) const = 0;
-  };
-  void registerContract(TransitionKey, std::shared_ptr<const ITransitionContract>);
-  bool hasContract(TransitionKey) const noexcept;
-  ValidationResult validatePrecondition(TransitionKey, const WorldSnapshot &) const;
-  ValidationResult validate(TransitionKey, const WorldSnapshot &, const WorldSnapshot &,
-                            const ActionResult &) const;
-  ValidationResult validateResume(TransitionKey, const WorldSnapshot &,
-                                  const WorldSnapshot &) const;
-  std::optional<Failure> validateExecuteCoverage() const;
 
-private:
-  std::map<TransitionKey, std::shared_ptr<const ITransitionContract>> contracts_;
-};
-class AlwaysPassValidator final : public TransitionContractRegistry::ITransitionContract
-{
-public:
-  ValidationResult validatePrecondition(const WorldSnapshot &) const override;
-  ValidationResult validate(const WorldSnapshot &, const WorldSnapshot &,
-                            const ActionResult &) const override;
-};
 }  // namespace so101_gazebo_demo::pick_place

@@ -34,15 +34,25 @@ TEST(SimulationSessionId, RejectsResumeWithoutExplicitId)
             "simulation_session_id is required for resume to reject stale checkpoints");
 }
 
-TEST(SimulationSessionId, DoesNotGenerateForNonResumeNonExecuteModes)
+TEST(SimulationSessionId, GeneratesForInitialPlanOnly)
 {
-  for (const auto mode : {RunMode::DRY_RUN, RunMode::PLAN_ONLY}) {
-    const auto result =
-      resolveSimulationSessionId(mode, false, "ignored-session", 1784779200123ULL);
+  const auto generated =
+    resolveSimulationSessionId(RunMode::PLAN_ONLY, false, "", 1784779200123ULL);
+  const auto explicit_id =
+    resolveSimulationSessionId(RunMode::PLAN_ONLY, false, "operator-session", 1);
 
-    EXPECT_TRUE(result.error.empty());
-    EXPECT_FALSE(result.value);
-  }
+  ASSERT_TRUE(generated.value);
+  ASSERT_TRUE(explicit_id.value);
+  EXPECT_EQ("plan-only-1784779200123", *generated.value);
+  EXPECT_EQ("operator-session", *explicit_id.value);
+}
+
+TEST(SimulationSessionId, DoesNotGenerateForDryRun)
+{
+  const auto result = resolveSimulationSessionId(RunMode::DRY_RUN, false, "ignored", 1);
+
+  EXPECT_TRUE(result.error.empty());
+  EXPECT_FALSE(result.value);
 }
 
 }  // namespace panda_gazebo_demo::pick_place

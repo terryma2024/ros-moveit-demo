@@ -57,16 +57,18 @@ RecoveryRoute FixedRecoveryPolicy::select(State failed_state, const Failure & or
     return recoveryError(FailureCategory::PRECONDITION, "RECOVERY_ROBOT_NOT_STATIONARY",
                          "Recovery classification requires a stationary robot");
   }
-  if (!stopped_world.gazebo_coke_attached || !stopped_world.moveit_coke_attached) {
+  if (!stopped_world.gazebo_task_object_attached || !stopped_world.moveit_task_object_attached) {
     return recoveryError(
       FailureCategory::WORLD_INCONSISTENCY, "RECOVERY_ATTACHMENT_STATE_UNKNOWN",
       "Recovery classification requires both Gazebo and MoveIt attachment facts");
   }
-  if (!stopped_world.gazebo_coke_stationary || !*stopped_world.gazebo_coke_stationary) {
+  if (!stopped_world.gazebo_task_object_stationary ||
+      !*stopped_world.gazebo_task_object_stationary) {
     return recoveryError(FailureCategory::PRECONDITION, "RECOVERY_COKE_NOT_STATIONARY",
                          "Recovery classification requires stationary Gazebo Coke evidence");
   }
-  if (!stopped_world.gazebo_coke_pose_world || !finitePose(*stopped_world.gazebo_coke_pose_world) ||
+  if (!stopped_world.gazebo_task_object_pose_world ||
+      !finitePose(*stopped_world.gazebo_task_object_pose_world) ||
       !finitePose(stopped_world.tcp_pose_world)) {
     return recoveryError(FailureCategory::OBSERVATION, "RECOVERY_COKE_POSE_UNKNOWN",
                          "Recovery classification requires finite TCP and Gazebo Coke poses");
@@ -82,8 +84,8 @@ RecoveryRoute FixedRecoveryPolicy::select(State failed_state, const Failure & or
     return recoveryError(FailureCategory::CONFIGURATION, "RECOVERY_TARGET_POLICY_MISSING",
                          "Recovery classification requires a target policy");
   }
-  const bool gazebo_attached = *stopped_world.gazebo_coke_attached;
-  const bool moveit_attached = *stopped_world.moveit_coke_attached;
+  const bool gazebo_attached = *stopped_world.gazebo_task_object_attached;
+  const bool moveit_attached = *stopped_world.moveit_task_object_attached;
   const bool gripper_open = validateGripperOpen(stopped_world, gripper_limits_).ok;
   const ObservationResult observation{stopped_world, std::nullopt};
   const auto pick_target =
@@ -114,8 +116,8 @@ RecoveryRoute FixedRecoveryPolicy::select(State failed_state, const Failure & or
   for (const auto & [tcp_target, coke_target] : support_targets) {
     if (nearPose(stopped_world.tcp_pose_world, tcp_target, tcp_position_tolerance_,
                  tcp_orientation_tolerance_rad_) &&
-        nearPose(*stopped_world.gazebo_coke_pose_world, coke_target, coke_position_tolerance_,
-                 coke_orientation_tolerance_rad_)) {
+        nearPose(*stopped_world.gazebo_task_object_pose_world, coke_target,
+                 coke_position_tolerance_, coke_orientation_tolerance_rad_)) {
       positively_supported = true;
       break;
     }
@@ -132,7 +134,7 @@ RecoveryRoute FixedRecoveryPolicy::select(State failed_state, const Failure & or
       const bool above_pick = nearPose(stopped_world.tcp_pose_world, *above_pick_target.target_pose,
                                        tcp_position_tolerance_, tcp_orientation_tolerance_rad_);
       const bool coke_above_pick =
-        nearPose(*stopped_world.gazebo_coke_pose_world, *above_pick_coke_target.target_pose,
+        nearPose(*stopped_world.gazebo_task_object_pose_world, *above_pick_coke_target.target_pose,
                  coke_position_tolerance_, coke_orientation_tolerance_rad_);
       if (above_pick) {
         if (!coke_above_pick) {
@@ -143,7 +145,7 @@ RecoveryRoute FixedRecoveryPolicy::select(State failed_state, const Failure & or
         return {State::RECOVER_DESCEND_TO_PICK, std::nullopt};
       }
       const auto coke_at_current_tcp = supportedCokePoseFromTcp(stopped_world.tcp_pose_world);
-      if (!nearPose(*stopped_world.gazebo_coke_pose_world, coke_at_current_tcp,
+      if (!nearPose(*stopped_world.gazebo_task_object_pose_world, coke_at_current_tcp,
                     coke_position_tolerance_, coke_orientation_tolerance_rad_)) {
         return recoveryError(FailureCategory::WORLD_INCONSISTENCY,
                              "RECOVERY_CARRIED_POSE_INCONSISTENT",
@@ -169,7 +171,7 @@ RecoveryRoute FixedRecoveryPolicy::select(State failed_state, const Failure & or
     return recoveryError(FailureCategory::MOVEIT_SCENE, "RECOVERY_MOVEIT_COKE_POSE_UNKNOWN",
                          "Detached recovery requires a finite MoveIt Coke world pose");
   }
-  if (!nearPose(*stopped_world.gazebo_coke_pose_world, moveit_coke->second,
+  if (!nearPose(*stopped_world.gazebo_task_object_pose_world, moveit_coke->second,
                 coke_position_tolerance_, coke_orientation_tolerance_rad_)) {
     return {State::RECOVER_SYNC_WORLD_OBJECT, std::nullopt};
   }

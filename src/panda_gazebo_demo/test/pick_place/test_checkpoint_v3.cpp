@@ -16,6 +16,15 @@ namespace pick_place = panda_gazebo_demo::pick_place;
 namespace
 {
 
+pick_place::RunRequest makeResumeExecuteRequest()
+{
+  pick_place::RunRequest request;
+  request.mode = pick_place::RunMode::EXECUTE;
+  request.resume = true;
+  request.max_state_transitions = 100;
+  return request;
+}
+
 std::filesystem::path checkpointPath(const std::string & name)
 {
   return std::filesystem::temp_directory_path() / ("panda_gazebo_demo_" + name + ".json");
@@ -30,10 +39,10 @@ pick_place::WorldSnapshot makeSnapshot()
   snapshot.tcp_pose_world = {0.3, 0.0, 0.987, 1.0, 0.0, 0.0, 0.0};
   snapshot.joint_positions = {{"panda_joint1", 0.0}};
   snapshot.moveit_world_object_poses = {{"table", {}}, {"coke", {}}};
-  snapshot.moveit_coke_attached = false;
-  snapshot.gazebo_coke_pose_world = {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
-  snapshot.gazebo_coke_attached = false;
-  snapshot.gazebo_coke_stationary = true;
+  snapshot.moveit_task_object_attached = false;
+  snapshot.gazebo_task_object_pose_world = {0.3, 0.0, 0.836, 0.0, 0.0, 0.0, 1.0};
+  snapshot.gazebo_task_object_attached = false;
+  snapshot.gazebo_task_object_stationary = true;
   snapshot.simulation_session_id = "test-session";
   return snapshot;
 }
@@ -56,12 +65,12 @@ pick_place::Checkpoint makeRecoveryCheckpoint()
   checkpoint.expected.gripper_open = snapshot.gripper_open;
   checkpoint.expected.joint_positions = snapshot.joint_positions;
   checkpoint.expected.moveit_world_object_poses = snapshot.moveit_world_object_poses;
-  checkpoint.expected.moveit_coke_attached = snapshot.moveit_coke_attached;
-  checkpoint.expected.gazebo_coke_pose_world = snapshot.gazebo_coke_pose_world;
-  checkpoint.expected.gazebo_coke_attached = snapshot.gazebo_coke_attached;
-  checkpoint.expected.gazebo_coke_stationary = snapshot.gazebo_coke_stationary;
+  checkpoint.expected.moveit_task_object_attached = snapshot.moveit_task_object_attached;
+  checkpoint.expected.gazebo_task_object_pose_world = snapshot.gazebo_task_object_pose_world;
+  checkpoint.expected.gazebo_task_object_attached = snapshot.gazebo_task_object_attached;
+  checkpoint.expected.gazebo_task_object_stationary = snapshot.gazebo_task_object_stationary;
   checkpoint.expected.required_world_objects = {"table", "coke"};
-  checkpoint.configuration_hash = "test-config";
+  checkpoint.configuration_fingerprint = "test-config";
   checkpoint.simulation_session_id = "test-session";
   return checkpoint;
 }
@@ -120,7 +129,7 @@ public:
     ++calls;
     observed_failed_state = failed_state;
     observed_failure_code = original_failure.code;
-    observed_gazebo_attached = stopped_world.gazebo_coke_attached;
+    observed_gazebo_attached = stopped_world.gazebo_task_object_attached;
     return {pick_place::State::RECOVER_OPEN_GRIPPER, std::nullopt};
   }
 
@@ -166,6 +175,10 @@ TEST(CheckpointV3, RecoveryJsonRoundTripsPhaseFailureAndNextState)
   const auto checkpoint = makeRecoveryCheckpoint();
 
   EXPECT_FALSE(store.commit(checkpoint));
+  std::ifstream input(path);
+  const auto serialized = nlohmann::json::parse(input);
+  EXPECT_TRUE(serialized.contains("configuration_hash"));
+  EXPECT_FALSE(serialized.contains("configuration_fingerprint"));
   const auto loaded = store.loadLatestCompatible();
 
   ASSERT_TRUE(loaded.checkpoint);
@@ -229,8 +242,7 @@ TEST(Runner, RecoveryResumeReclassifiesCurrentFacts)
                                               &common_resume_validator, nullptr, nullptr,
                                               &recovery_policy);
 
-  const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(makeResumeExecuteRequest());
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("EXECUTE_ACTION_NOT_REGISTERED", result.failure->code);
@@ -261,8 +273,7 @@ TEST(Runner, ForwardActionFailureCommitsRecoveryCheckpointBeforeRecoverySideEffe
                                               &common_resume_validator, nullptr, nullptr,
                                               &recovery_policy);
 
-  const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(makeResumeExecuteRequest());
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(1, executor->calls);
@@ -294,8 +305,7 @@ TEST(Runner, RecoveryActionFailureTerminatesWithoutSelectingAnotherRoute)
                                               &common_resume_validator, nullptr, nullptr,
                                               &recovery_policy);
 
-  const auto result =
-    runner.run({pick_place::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+  const auto result = runner.run(makeResumeExecuteRequest());
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("ACTION_FAILED", result.failure->code);

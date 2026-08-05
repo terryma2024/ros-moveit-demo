@@ -8,20 +8,6 @@ namespace so101_gazebo_demo::pick_place
 {
 namespace
 {
-double orientationDistance(const Pose3d & first, const Pose3d & second)
-{
-  const double first_norm =
-    std::hypot(std::hypot(first.qx, first.qy), std::hypot(first.qz, first.qw));
-  const double second_norm =
-    std::hypot(std::hypot(second.qx, second.qy), std::hypot(second.qz, second.qw));
-  if (first_norm <= 1e-12 || second_norm <= 1e-12)
-    return std::numeric_limits<double>::infinity();
-  const double dot =
-    (first.qx * second.qx + first.qy * second.qy + first.qz * second.qz + first.qw * second.qw) /
-    (first_norm * second_norm);
-  return 2.0 * std::acos(std::clamp(std::abs(dot), 0.0, 1.0));
-}
-
 Failure failure(std::string code, std::string message, const PhysicalGraspResult & result)
 {
   return {FailureCategory::POSTCONDITION,

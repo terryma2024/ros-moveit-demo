@@ -136,9 +136,22 @@ if len(sys.argv) == 7:
             rf'qy=({NUMBER})\s+qz=({NUMBER})\s+qw=({NUMBER})',
             tcp_text,
         )
+    tcp_rpy_match = None
     if not tcp_match:
+        tcp_rpy_matches = re.findall(
+            rf'EXECUTED_END_TCP_POSE[^\n]*\bx=({NUMBER})\s+'
+            rf'y=({NUMBER})\s+z=({NUMBER})\s+roll=({NUMBER})\s+'
+            rf'pitch=({NUMBER})\s+yaw=({NUMBER})',
+            tcp_text,
+        )
+        tcp_rpy_match = tcp_rpy_matches[-1] if tcp_rpy_matches else None
+    if not tcp_match and not tcp_rpy_match:
         fail('TCP world pose evidence is missing')
-    tcp_pose = [float(value) for value in tcp_match.groups()]
+    if tcp_match:
+        tcp_pose = [float(value) for value in tcp_match.groups()]
+    else:
+        tcp_rpy = [float(value) for value in tcp_rpy_match]
+        tcp_pose = tcp_rpy[:3] + quaternion_from_rpy(*tcp_rpy[3:])
     if not all(math.isfinite(value) for value in tcp_pose):
         fail('TCP world transform contains a non-finite value')
     snapshot['tcp_pose'] = tcp_pose

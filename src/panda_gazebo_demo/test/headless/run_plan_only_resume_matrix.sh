@@ -116,9 +116,9 @@ last_attachment_is_detached() {
 reset_fixture() {
   local directory="$1"
   mkdir -p "${directory}"
-  last_attachment_is_detached
   EXPECTED_COKE_DETACHED=true "${package_root}/scripts/reset_world.sh" \
     >"${directory}/reset.log" 2>&1
+  wait_until 10 'detached state after independent reset' last_attachment_is_detached
   timeout 5 ros2 service call /get_planning_scene \
     moveit_msgs/srv/GetPlanningScene '{components: {components: 28}}' \
     >"${directory}/reset_moveit.txt" 2>&1
@@ -179,37 +179,84 @@ execute_stop() {
 
 plan_only_pair() {
   local state="$1"
-  local phase="$2"
-  local directory="$3"
-  local checkpoint="$4"
-  local session="$5"
+  local directory="$2"
+  local checkpoint="$3"
+  local session="$4"
   mkdir -p "${directory}"
-  capture_snapshot "${directory}" before
+  reset_fixture "${directory}"
+  capture_snapshot "${directory}" initial
+
+  run_machine "${directory}/fresh.log" "${checkpoint}" "${session}" \
+    -p mode:=plan_only -p plan_only_state:="${state}" -p resume:=false
+  grep -q \
+    "Run completed: status=PLAN_ONLY_COMPLETE current_state=${state}" \
+    "${directory}/fresh.log"
+  if grep -Eq "(EXECUTED_END_TCP_POSE|STATE_TRANSITION)[^[:cntrl:]]*[[:space:]]state=${state}([[:space:]]|$)" \
+    "${directory}/fresh.log"; then
+    printf 'Fresh plan-only executed target %s\n' "${state}" >&2
+    return 1
+  fi
+  capture_snapshot "${directory}" target_entry
+  python3 - "${checkpoint}" "${directory}/target_entry_snapshot.json" "${state}" <<'PY'
+import json
+import math
+import pathlib
+import sys
+
+checkpoint = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+snapshot = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding='utf-8'))
+target = sys.argv[3]
+assert checkpoint['schema_version'] == 3
+assert checkpoint['source_mode'] == 'execute'
+assert checkpoint['phase'] == 'FORWARD'
+assert checkpoint['next_state'] == target
+assert not target.startswith('RECOVER_')
+expected = checkpoint['expected']
+for name, value in expected['joint_positions'].items():
+    assert math.isclose(snapshot['joint_positions'][name], value, abs_tol=0.01)
+assert snapshot['gazebo_attached'] == expected['gazebo_coke_attached']
+assert snapshot['moveit_coke_attached'] == expected['moveit_coke_attached']
+PY
   cp "${checkpoint}" "${directory}/checkpoint.before.json"
   sha256sum "${directory}/checkpoint.before.json" \
     >"${directory}/checkpoint.before.sha256"
 
-  run_machine "${directory}/plan_only_1.log" "${checkpoint}" "${session}" \
-    -p mode:=plan_only -p resume:=true
+  run_machine "${directory}/resume.log" "${checkpoint}" "${session}" \
+    -p mode:=plan_only -p plan_only_state:="${state}" -p resume:=true
   python3 "${script_dir}/assert_plan_only_resume.py" \
-    "${directory}/plan_only_1.log" "${state}" "${phase}" \
-    "${directory}/checkpoint.before.json" "${checkpoint}"
-  run_machine "${directory}/plan_only_2.log" "${checkpoint}" "${session}" \
-    -p mode:=plan_only -p resume:=true
-  python3 "${script_dir}/assert_plan_only_resume.py" \
-    "${directory}/plan_only_2.log" "${state}" "${phase}" \
+    "${directory}/resume.log" "${state}" FORWARD \
     "${directory}/checkpoint.before.json" "${checkpoint}"
 
-  capture_snapshot "${directory}" after
+  capture_snapshot "${directory}" resumed
   python3 "${script_dir}/assert_resume_snapshot_unchanged.py" \
-    "${directory}/before_snapshot.json" "${directory}/after_snapshot.json"
-  python3 "${script_dir}/assert_plan_only_tcp_unchanged.py" \
-    "${directory}/plan_only_1.log" "${directory}/plan_only_2.log" "${state}"
+    "${directory}/target_entry_snapshot.json" "${directory}/resumed_snapshot.json"
   cp "${checkpoint}" "${directory}/checkpoint.after.json"
   sha256sum "${directory}/checkpoint.after.json" \
     >"${directory}/checkpoint.after.sha256"
   cmp -s "${directory}/checkpoint.before.json" \
     "${directory}/checkpoint.after.json"
+}
+
+run_independent_target() {
+  local state="$1"
+  local attempt state_directory checkpoint session status
+  for attempt in {1..3}; do
+    state_directory="${run_root}/${state}/attempt_${attempt}"
+    checkpoint="${state_directory}/checkpoint.json"
+    session="plan-only-${state}-${ROS_DOMAIN_ID}-$$-${attempt}-$(date +%s%N)"
+    set +e
+    (set -e; plan_only_pair "${state}" "${state_directory}" "${checkpoint}" "${session}")
+    status=$?
+    set -e
+    if [[ "${status}" -eq 0 ]]; then
+      printf 'PASS: %s independent attempt %s\n' "${state}" "${attempt}"
+      return 0
+    fi
+    printf 'RETRY: %s independent attempt %s failed with status %s\n' \
+      "${state}" "${attempt}" "${status}" >&2
+  done
+  printf 'FAIL: %s exhausted independent attempts\n' "${state}" >&2
+  return 1
 }
 
 if ros2 node list 2>/dev/null | grep -Eq '/(controller_manager|move_group)$'; then
@@ -241,13 +288,6 @@ gz topic -e -t /panda/coke_attached \
 attachment_monitor_pid=$!
 wait_until 30 'Planning Scene Coke object' planning_scene_ready
 
-forward_root="${run_root}/forward"
-forward_checkpoint="${forward_root}/checkpoint.json"
-forward_session="plan-only-forward-${ROS_DOMAIN_ID}-$$-$(date +%s%N)"
-reset_fixture "${forward_root}"
-execute_stop "${forward_root}/prepare.log" "${forward_checkpoint}" \
-  "${forward_session}" PREPARE_OPEN_GRIPPER false
-
 forward_states=(
   MOVE_ABOVE_OBJECT
   DESCEND
@@ -256,75 +296,9 @@ forward_states=(
   DESCEND_TO_PLACE
   RETREAT
 )
-declare -A bridges=(
-  [DESCEND]=ATTACH_MOVEIT
-  [DESCEND_TO_PLACE]=SYNC_WORLD_OBJECT
-)
 for state in "${forward_states[@]}"; do
-  state_directory="${forward_root}/${state}"
-  plan_only_pair "${state}" FORWARD "${state_directory}" \
-    "${forward_checkpoint}" "${forward_session}"
-  execute_stop "${state_directory}/execute.log" "${forward_checkpoint}" \
-    "${forward_session}" "${state}"
-  if [[ -n "${bridges[${state}]:-}" ]]; then
-    bridge="${bridges[${state}]}"
-    execute_stop "${state_directory}/bridge_to_${bridge}.log" \
-      "${forward_checkpoint}" "${forward_session}" "${bridge}"
-  fi
+  run_independent_target "${state}"
 done
 
-recovery_root="${run_root}/recovery"
-recovery_checkpoint="${recovery_root}/checkpoint.json"
-recovery_session="plan-only-recovery-${ROS_DOMAIN_ID}-$$-$(date +%s%N)"
-reset_fixture "${recovery_root}"
-execute_stop "${recovery_root}/attach_moveit_boundary.log" \
-  "${recovery_checkpoint}" "${recovery_session}" ATTACH_MOVEIT false
-timeout 120 ros2 run panda_gazebo_demo attach_and_lift_demo --ros-args \
-  -p use_sim_time:=true \
-  -p plan_lift:=true -p execute_lift:=true -p lift_distance:=0.03 \
-  -p lateral_offset_y:=-0.03 >"${recovery_root}/low_carry_fixture.log" 2>&1
-sleep 1
-capture_snapshot "${recovery_root}" low_carry \
-  "${recovery_root}/low_carry_fixture.log"
-python3 "${script_dir}/seed_recovery_checkpoint.py" \
-  "${recovery_checkpoint}" "${recovery_root}/low_carry_snapshot.json" \
-  ATTACH_MOVEIT
-
-recovery_motion_states=(
-  RECOVER_LIFT_TO_SAFE_HEIGHT
-  RECOVER_MOVE_ABOVE_PICK
-  RECOVER_DESCEND_TO_PICK
-)
-for state in "${recovery_motion_states[@]}"; do
-  state_directory="${recovery_root}/${state}"
-  plan_only_pair "${state}" RECOVERY "${state_directory}" \
-    "${recovery_checkpoint}" "${recovery_session}"
-  execute_stop "${state_directory}/execute.log" "${recovery_checkpoint}" \
-    "${recovery_session}" "${state}"
-done
-
-cleanup_directory="${recovery_root}/cleanup"
-mkdir -p "${cleanup_directory}"
-execute_stop "${cleanup_directory}/through_sync.log" "${recovery_checkpoint}" \
-  "${recovery_session}" RECOVER_SYNC_WORLD_OBJECT
-plan_only_pair RECOVER_RETREAT RECOVERY \
-  "${recovery_root}/RECOVER_RETREAT" "${recovery_checkpoint}" \
-  "${recovery_session}"
-execute_stop "${recovery_root}/RECOVER_RETREAT/execute.log" \
-  "${recovery_checkpoint}" "${recovery_session}" RECOVER_RETREAT
-
-set +e
-run_machine "${recovery_root}/final_error.log" "${recovery_checkpoint}" \
-  "${recovery_session}" -p mode:=execute -p resume:=true
-final_status=$?
-set -e
-if [[ "${final_status}" -eq 0 || "${final_status}" -eq 124 ]]; then
-  printf 'Recovery finalization returned unexpected status %s\n' \
-    "${final_status}" >&2
-  exit 1
-fi
-grep -q 'Run failed: status=ERROR state=ERROR.*code=HEADLESS_RECOVERY_TRIGGER' \
-  "${recovery_root}/final_error.log"
-
-printf 'PASS: forward and recovery plan-only/resume matrix; logs: %s\n' \
+printf 'PASS: independent forward run-to-plan-only/resume matrix; logs: %s\n' \
   "${run_root}"

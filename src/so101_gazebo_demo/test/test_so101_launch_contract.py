@@ -166,6 +166,7 @@ def test_pick_place_runtime_launch_is_safe_by_default_and_wires_all_cli_gates():
     assert arguments['run_mode'] == 'dry_run'
     assert arguments['start_simulation'] == 'false'
     assert arguments['headless'] == 'false'
+    assert arguments['plan_only_state'] == ''
     assert {'stop_after', 'resume', 'checkpoint_path', 'simulation_session_id'} <= set(arguments)
 
     runtime = next(
@@ -177,9 +178,22 @@ def test_pick_place_runtime_launch_is_safe_by_default_and_wires_all_cli_gates():
     )
     source = PICK_PLACE_LAUNCH.read_text()
     assert '--mode' in source
+    assert '--plan-only-state' in source
     assert '--checkpoint' in source
     assert '--session-id' in source
     assert '"headless": headless, "object_config": object_config' in source
+    assert (
+        'docs/pick-place-launch-parameters.md'
+        in declared_argument(PICK_PLACE_LAUNCH, 'plan_only_state').description
+    )
+
+
+def test_pick_place_cli_exposes_plan_only_state_and_uses_it_for_provenance():
+    source = (
+        PACKAGE_DIR / 'src' / 'pick_place' / 'pick_place_state_machine.cpp'
+    ).read_text()
+    assert '--plan-only-state STATE' in source
+    assert 'options->request.plan_only_state.value_or(' in source
 
 
 def test_pick_place_runtime_launch_wires_three_independent_installed_policy_files():

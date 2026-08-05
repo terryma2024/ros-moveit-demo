@@ -31,8 +31,25 @@ using pick_place::ObservationResult;
 using pick_place::PlanArtifact;
 using pick_place::PlanResult;
 using pick_place::RunMode;
+using pick_place::RunRequest;
 using pick_place::State;
 using pick_place::TransitionKey;
+
+RunRequest makeRunRequest(RunMode mode, std::optional<State> requested_state, bool resume,
+                          std::optional<State> fail_at, std::uint64_t max_state_transitions)
+{
+  RunRequest request;
+  request.mode = mode;
+  if (mode == RunMode::PLAN_ONLY) {
+    request.plan_only_state = requested_state;
+  } else {
+    request.stop_after = requested_state;
+  }
+  request.resume = resume;
+  request.fail_at = fail_at;
+  request.max_state_transitions = max_state_transitions;
+  return request;
+}
 using pick_place::ValidationResult;
 using pick_place::WorldSnapshot;
 
@@ -498,7 +515,7 @@ Checkpoint forwardCheckpoint(State last, State next, const WorldSnapshot & world
   checkpoint.phase = CheckpointPhase::FORWARD;
   checkpoint.last_completed_state = last;
   checkpoint.next_state = next;
-  checkpoint.policy_bundle_sha256 = "config-a";
+  checkpoint.configuration_fingerprint = "config-a";
   checkpoint.simulation_session_id = "session-a";
   setExpected(checkpoint, world);
   return checkpoint;
@@ -530,8 +547,8 @@ TEST(PureRunnerIntegration, ExecuteUsesTheCompleteBoundaryInOrder)
   Harness harness;
   harness.registerAll();
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   const std::vector<std::string> expected{"observe",
@@ -557,23 +574,25 @@ TEST(PureRunnerIntegration, ExecuteUsesTheCompleteBoundaryInOrder)
             harness.scenario.executed_world->moveit_task_object_touch_links);
 }
 
-TEST(PureRunnerIntegration, PlanOnlyStopBoundaryPlansValidatesAndCheckpointsWithoutActing)
+TEST(PureRunnerIntegration, PlanOnlyExecutesPrepareThenPlansTargetWithoutExecutingTarget)
 {
   Harness harness;
-  harness.registerState(State::MOVE_ABOVE_OBJECT, true);
+  harness.registerAll();
 
-  const auto result =
-    harness.runner().run({RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
 
-  EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
-  EXPECT_EQ(0, harness.scenario.executor_calls);
-  EXPECT_EQ(0, harness.scenario.transition_calls);
-  EXPECT_EQ(
-    (std::vector<std::string>{"observe", "precondition:MOVE_ABOVE_OBJECT", "plan:MOVE_ABOVE_OBJECT",
-                              "plan-validate:MOVE_ABOVE_OBJECT", "checkpoint:MOVE_ABOVE_OBJECT"}),
-    harness.scenario.events);
+  EXPECT_EQ(pick_place::RunStatus::PLAN_ONLY_COMPLETE, result.status);
+  EXPECT_EQ(1, harness.scenario.executor_calls);
+  EXPECT_EQ(1, harness.scenario.transition_calls);
+  EXPECT_EQ((std::vector<std::string>{
+              "observe", "precondition:PREPARE_OPEN_GRIPPER", "execute:PREPARE_OPEN_GRIPPER",
+              "observe", "transition-validate:PREPARE_OPEN_GRIPPER", "checkpoint:MOVE_ABOVE_OBJECT",
+              "observe", "precondition:MOVE_ABOVE_OBJECT", "plan:MOVE_ABOVE_OBJECT",
+              "plan-validate:MOVE_ABOVE_OBJECT"}),
+            harness.scenario.events);
   ASSERT_TRUE(harness.store.latest);
-  EXPECT_EQ(RunMode::PLAN_ONLY, harness.store.latest->source_mode);
+  EXPECT_EQ(RunMode::EXECUTE, harness.store.latest->source_mode);
   EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, harness.store.latest->last_completed_state);
   EXPECT_EQ(State::MOVE_ABOVE_OBJECT, harness.store.latest->next_state);
 }
@@ -582,17 +601,18 @@ TEST(PureRunnerIntegration, ExecuteStopCheckpointResumesWithFreshRunnerAndObserv
 {
   Harness first;
   first.registerAll();
-  ASSERT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE,
-            first.runner()
-              .run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20})
-              .status);
+  ASSERT_EQ(
+    pick_place::RunStatus::CHECKPOINT_COMPLETE,
+    first.runner()
+      .run(makeRunRequest(RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20))
+      .status);
 
   Harness resumed;
   resumed.store.latest = first.store.latest;
   resumed.registerAll();
 
-  const auto result =
-    resumed.runner().run({RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, true, std::nullopt, 20});
+  const auto result = resumed.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, true, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ((std::vector<State>{State::MOVE_ABOVE_OBJECT, State::DESCEND}), result.state_trace);
@@ -609,8 +629,8 @@ TEST(PureRunnerIntegration, MotionWaitsForAStablePostExecutionObservation)
   harness.scenario.observation_failure_count = 16;
   harness.scenario.observation_failure_delay = std::chrono::milliseconds(600);
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::MOVE_ABOVE_OBJECT, result.current_state);
@@ -629,8 +649,8 @@ TEST(PureRunnerIntegration, SuccessfulNonMotionActionWaitsForAConsistentObservat
   harness.scenario.observation_failure_code = "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
   harness.scenario.observation_failure_count = 2;
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, result.current_state);
@@ -649,8 +669,8 @@ TEST(PureRunnerIntegration, MotionWaitsForEndpointPostconditionConvergence)
   harness.scenario.transient_transition_state = State::MOVE_ABOVE_OBJECT;
   harness.scenario.transient_transition_failures = 1;
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::MOVE_ABOVE_OBJECT, result.current_state);
@@ -668,8 +688,8 @@ TEST(PureRunnerIntegration, GripperActionWaitsForEndpointPostconditionConvergenc
   harness.scenario.transient_transition_failures = 1;
   harness.scenario.transient_transition_failure_code = "Q6_TARGET_OUT_OF_TOLERANCE";
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::PREPARE_OPEN_GRIPPER, result.current_state);
@@ -687,8 +707,8 @@ TEST(PureRunnerIntegration, GripperActionWaitsForArmQuiescenceAfterContact)
   harness.scenario.transient_transition_failures = 1;
   harness.scenario.transient_transition_failure_code = "ARM_NOT_QUIESCENT";
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::CLOSE_GRIPPER, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::CLOSE_GRIPPER, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::CLOSE_GRIPPER, result.current_state);
@@ -705,8 +725,8 @@ TEST(PureRunnerIntegration, AttachmentWaitsForArmQuiescenceBeforeSideEffect)
   harness.scenario.transient_precondition_state = State::ATTACH_GAZEBO;
   harness.scenario.transient_precondition_failures = 1;
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::ATTACH_GAZEBO, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::ATTACH_GAZEBO, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::ATTACH_GAZEBO, result.current_state);
@@ -726,8 +746,8 @@ TEST(PureRunnerIntegration, AttachmentWaitsForTransientBilateralContactBeforeSid
   harness.scenario.transient_precondition_failures = 2;
   harness.scenario.transient_precondition_failure_code = "BILATERAL_GRIPPER_CONTACT_REQUIRED";
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::ATTACH_GAZEBO, false, std::nullopt, 20});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::ATTACH_GAZEBO, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
   EXPECT_EQ(State::ATTACH_GAZEBO, result.current_state);
@@ -746,7 +766,7 @@ TEST(PureRunnerIntegration, DescendPostconditionFailureNeverExecutesCloseOrAttac
   harness.scenario.fail_transition = State::DESCEND;
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::DESCEND, false, std::nullopt, 20});
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, State::DESCEND, false, std::nullopt, 20));
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("POSTCONDITION_INJECTED", result.failure->code);
@@ -776,7 +796,7 @@ TEST(PureRunnerIntegration, ResumeValidatesCommonAndTransitionBoundaryBeforeAnyA
   harness.scenario.fail_transition = State::PREPARE_OPEN_GRIPPER;
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 20});
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, true, std::nullopt, 20));
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("POSTCONDITION_INJECTED", result.failure->code);
@@ -800,13 +820,13 @@ TEST(PureRunnerIntegration, ResumeMismatchStaleSessionConfigAndSkippedBoundaryFa
     } else if (which == "session") {
       harness.scenario.world.simulation_session_id = "other-session";
     } else if (which == "config") {
-      harness.store.latest->policy_bundle_sha256 = "other-config";
+      harness.store.latest->configuration_fingerprint = "other-config";
     } else {
       harness.store.latest->next_state = State::DESCEND;
     }
 
     const auto result =
-      harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 20});
+      harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, true, std::nullopt, 20));
 
     EXPECT_EQ(pick_place::RunStatus::ERROR, result.status) << which;
     EXPECT_EQ(0, harness.scenario.executor_calls) << which;
@@ -818,17 +838,9 @@ TEST(PureRunnerIntegration, MissingPlannerExecutorValidatorContractAndObserverFa
 {
   {
     Harness harness;
-    harness.validators.registerValidator(
-      State::MOVE_ABOVE_OBJECT,
-      std::make_shared<FakePlanValidator>(State::MOVE_ABOVE_OBJECT, harness.scenario));
-    harness.actions.registerExecutor(
-      State::MOVE_ABOVE_OBJECT,
-      std::make_shared<FakeExecutor>(State::MOVE_ABOVE_OBJECT, harness.scenario));
-    harness.contracts.registerContract(
-      {State::MOVE_ABOVE_OBJECT, State::DESCEND},
-      std::make_shared<FakeContract>(State::MOVE_ABOVE_OBJECT, harness.scenario));
-    const auto result =
-      harness.runner().run({RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+    harness.registerAllExcept(std::nullopt, State::MOVE_ABOVE_OBJECT, std::nullopt, std::nullopt);
+    const auto result = harness.runner().run(
+      makeRunRequest(RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
     ASSERT_TRUE(result.failure);
     EXPECT_EQ("PLANNER_NOT_REGISTERED", result.failure->code);
   }
@@ -837,17 +849,15 @@ TEST(PureRunnerIntegration, MissingPlannerExecutorValidatorContractAndObserverFa
     harness.registerState(State::PREPARE_OPEN_GRIPPER);
     harness.actions = {};
     const auto result = harness.runner().run(
-      {RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20});
+      makeRunRequest(RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20));
     ASSERT_TRUE(result.failure);
     EXPECT_EQ("EXECUTE_ACTION_NOT_REGISTERED", result.failure->code);
   }
   {
     Harness harness;
-    harness.actions.registerPlanner(
-      State::MOVE_ABOVE_OBJECT,
-      std::make_shared<FakePlanner>(State::MOVE_ABOVE_OBJECT, harness.scenario));
-    const auto result =
-      harness.runner().run({RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20});
+    harness.registerAllExcept(std::nullopt, std::nullopt, State::MOVE_ABOVE_OBJECT, std::nullopt);
+    const auto result = harness.runner().run(
+      makeRunRequest(RunMode::PLAN_ONLY, State::MOVE_ABOVE_OBJECT, false, std::nullopt, 20));
     ASSERT_TRUE(result.failure);
     EXPECT_EQ("PLAN_VALIDATOR_NOT_REGISTERED", result.failure->code);
   }
@@ -857,7 +867,7 @@ TEST(PureRunnerIntegration, MissingPlannerExecutorValidatorContractAndObserverFa
       State::PREPARE_OPEN_GRIPPER,
       std::make_shared<FakeExecutor>(State::PREPARE_OPEN_GRIPPER, harness.scenario));
     const auto result = harness.runner().run(
-      {RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20});
+      makeRunRequest(RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 20));
     ASSERT_TRUE(result.failure);
     EXPECT_EQ("MISSING_TRANSITION_CONTRACT", result.failure->code);
   }
@@ -889,8 +899,8 @@ TEST(PureRunnerIntegration, PlanningAndExecutionFailuresKeepTheirClassificationA
       harness.scenario.fail_transition = State::MOVE_ABOVE_OBJECT;
     }
 
-    const auto result =
-      harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+    const auto result = harness.runner().run(
+      makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
 
     ASSERT_TRUE(result.failure) << which;
     EXPECT_EQ(category, result.failure->category) << which;
@@ -912,7 +922,7 @@ TEST(PureRunnerIntegration, StopObservationRetriesTransientRobotStateChangesAndK
   harness.scenario.observation_failure_count = 2;
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(FailureCategory::POSTCONDITION, result.failure->category);
@@ -929,8 +939,8 @@ TEST(PureRunnerIntegration, PostCancelQuiescenceFailureRetainsOriginalActionFail
   harness.scenario.execute_failure_metrics = {{"observed_q6", -0.059303}};
   harness.scenario.cancel_makes_arm_nonstationary = true;
 
-  const auto result =
-    harness.runner().run({RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+  const auto result = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100));
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("ARM_NOT_QUIESCENT_AFTER_CANCEL", result.failure->code);
@@ -952,7 +962,7 @@ TEST(PureRunnerIntegration, RecoveryClassificationFailureRetainsOriginalActionFa
                                            {}};
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("UNSAFE_RECOVERY_OBSERVATION", result.failure->code);
@@ -968,7 +978,8 @@ TEST(PureRunnerIntegration, DoesNotObserveOrRecoverBeforeCancelReachesTerminal)
   harness.actions.registerExecutor(State::PREPARE_OPEN_GRIPPER, blocking);
 
   auto run = std::async(std::launch::async, [&harness]() {
-    return harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+    return harness.runner().run(
+      makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
   });
   ASSERT_TRUE(blocking->waitForCancel(std::chrono::milliseconds(500)));
   EXPECT_EQ(std::future_status::timeout, run.wait_for(std::chrono::milliseconds(100)));
@@ -986,7 +997,7 @@ TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTra
   Harness normal;
   normal.registerAll();
   const auto successful =
-    normal.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+    normal.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
   EXPECT_EQ(pick_place::RunStatus::DONE, successful.status);
   EXPECT_EQ(normalTrace(), successful.state_trace);
 
@@ -994,7 +1005,7 @@ TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTra
   failed.registerAll();
   failed.scenario.fail_execute = State::LIFT;
   const auto recovered =
-    failed.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+    failed.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
   const std::vector<State> expected{State::IDLE,
                                     State::PREPARE_OPEN_GRIPPER,
                                     State::MOVE_ABOVE_OBJECT,
@@ -1032,7 +1043,7 @@ TEST(PureRunnerIntegration, RecoveryResumeReclassifiesFromCurrentFactsInsteadOfC
   harness.scenario.world.moveit_task_object_attached = false;
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100));
 
   EXPECT_EQ((std::vector<State>{State::RECOVER_RETREAT, State::ERROR}), result.state_trace);
   EXPECT_EQ(1, harness.recovery.calls);
@@ -1056,7 +1067,7 @@ TEST(PureRunnerIntegration, RecoveryResumeRequiresStationaryObjectBeforePolicyOr
     }
 
     const auto result =
-      harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+      harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100));
 
     EXPECT_EQ(pick_place::RunStatus::ERROR, result.status);
     EXPECT_EQ(0, harness.recovery.calls);
@@ -1079,7 +1090,7 @@ TEST(PureRunnerIntegration, RecoveryResumeRejectsPlanOnlySourceBeforeObservation
   harness.store.latest = checkpoint;
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100});
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100));
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("CHECKPOINT_INCOMPATIBLE", result.failure->code);
@@ -1112,8 +1123,8 @@ TEST(PureRunnerIntegration, ExecutePreflightRejectsEveryLateRegistrationGapWitho
     Harness harness;
     harness.registerAllExcept(gap.executor, gap.planner, gap.validator, gap.contract);
 
-    const auto result =
-      harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+    const auto result = harness.runner().run(
+      makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
 
     ASSERT_TRUE(result.failure);
     EXPECT_EQ(gap.code, result.failure->code);
@@ -1128,7 +1139,10 @@ TEST(PureRunnerIntegration, ExecutePreflightRejectsEveryLateRegistrationGapWitho
   const pick_place::StateMachineRunner runner(
     missing_recovery.actions, missing_recovery.contracts, &missing_recovery.observer,
     &missing_recovery.store, &missing_recovery.resume, &missing_recovery.validators, nullptr);
-  const auto result = runner.run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+  RunRequest request;
+  request.mode = RunMode::EXECUTE;
+  request.max_state_transitions = 100;
+  const auto result = runner.run(request);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("RECOVERY_POLICY_MISSING", result.failure->code);
   EXPECT_TRUE(missing_recovery.scenario.events.empty());
@@ -1151,7 +1165,7 @@ TEST(PureRunnerIntegration, ExecutePreflightRejectsLateNonPlanningPlannerValidat
     }
 
     const auto result = harness.runner().run(
-      {RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100});
+      makeRunRequest(RunMode::EXECUTE, State::PREPARE_OPEN_GRIPPER, false, std::nullopt, 100));
 
     ASSERT_TRUE(result.failure);
     EXPECT_EQ(planner_only ? "PLAN_VALIDATOR_NOT_REGISTERED" : "PLANNER_NOT_REGISTERED",
@@ -1172,7 +1186,7 @@ TEST(PureRunnerIntegration, CancelFailureStopsWithoutRecoveryActions)
                                     failure(FailureCategory::EXECUTION, "CANCEL_INJECTED")};
 
   const auto result =
-    harness.runner().run({RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100});
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
 
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("CANCEL_INJECTED", result.failure->code);
@@ -1197,13 +1211,13 @@ TEST(PureRunnerIntegration, RegistriesRegisterQueryAndReportCoverage)
 TEST(PureRunnerIntegration, FailAtOutsideDryRunAndInvalidTransitionLimitFailClosed)
 {
   Harness harness;
-  const auto fail_at =
-    harness.runner().run({RunMode::EXECUTE, std::nullopt, false, State::MOVE_ABOVE_OBJECT, 20});
+  const auto fail_at = harness.runner().run(
+    makeRunRequest(RunMode::EXECUTE, std::nullopt, false, State::MOVE_ABOVE_OBJECT, 20));
   ASSERT_TRUE(fail_at.failure);
   EXPECT_EQ("FAIL_AT_MODE_MISMATCH", fail_at.failure->code);
 
   const auto no_transitions =
-    harness.runner().run({RunMode::DRY_RUN, std::nullopt, false, std::nullopt, 0});
+    harness.runner().run(makeRunRequest(RunMode::DRY_RUN, std::nullopt, false, std::nullopt, 0));
   ASSERT_TRUE(no_transitions.failure);
   EXPECT_EQ("INVALID_MAX_TRANSITIONS", no_transitions.failure->code);
   EXPECT_EQ(0, harness.scenario.executor_calls);
