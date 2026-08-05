@@ -3,6 +3,7 @@
 ## 导航
 
 - [事实与可变项](#事实与可变项)
+- [先判定当前执行主机](#先判定当前执行主机)
 - [shell 与 overlay](#shell-与-overlay)
 - [GUI 进程](#gui-进程)
 - [RViz 与 Gazebo 左右 50% 分屏](#rviz-与-gazebo-左右-50-分屏)
@@ -13,6 +14,31 @@
 ## 事实与可变项
 
 仓库约定的 SSH 别名是 `ai-station`，ROS 工作区通常是 `/data/work/ws_moveit`，ROS 发行版通常是 Jazzy。它们是需要现场复核的环境约定，不是永久常量。
+
+## 先判定当前执行主机
+
+在运行任何 `ssh ai-station` 前，先确认 coding agent 当前是否已经直接运行在 ai-station。不要用“能否解析 `ai-station` 别名”反推主机身份：远端 agent 的受限环境可能没有该 SSH 别名或 DNS 解析，但它仍然已经位于目标主机。
+
+从 Mac/orchestrator 投递给 ai-station 上 tmux/Codex 的任务，交接开头必须明确写出：
+
+```text
+你当前直接运行在 ai-station 上。不要 ssh 到 ai-station；仓库、tmux、进程、CloudCompare、CUA 和截图命令都在当前主机直接执行。
+```
+
+远端 coding agent 先在本机只读确认：
+
+```bash
+hostname
+pwd
+test -d /data/work/ws_moveit && printf 'AI_STATION_WORKSPACE_PRESENT\n'
+tmux list-sessions 2>/dev/null || true
+```
+
+执行边界：
+
+- coding agent 已在 ai-station：直接运行本机命令，禁止再次 `ssh ai-station`；SSH 别名解析失败不是远端不可达证据。
+- orchestrator 在 Mac：使用 `ssh ai-station '...'` 进入目标主机，并在交接给远端 agent 时声明上述执行位置。
+- 无法确认：先报告 `hostname`、`pwd` 和工作区探测结果，不猜测 endpoint，也不把自我 SSH 失败声明为任务阻塞。
 
 先做只读探测：
 
