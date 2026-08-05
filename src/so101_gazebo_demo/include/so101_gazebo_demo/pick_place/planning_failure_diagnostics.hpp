@@ -1,8 +1,10 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -86,5 +88,38 @@ loadPlanningFailureArtifact(const std::filesystem::path & artifact_path);
 
 [[nodiscard]] std::variant<moveit_msgs::action::MoveGroup::Goal, Failure>
 reconstructMoveGroupGoal(const PlanningDiagnosticsJson & artifact_document);
+
+class IPlanningFailureDiagnosticsSink
+{
+public:
+  virtual ~IPlanningFailureDiagnosticsSink() = default;
+  virtual std::optional<Failure> record(const PlanningFailureArtifact & artifact) = 0;
+};
+
+class NullPlanningFailureDiagnosticsSink final : public IPlanningFailureDiagnosticsSink
+{
+public:
+  std::optional<Failure> record(const PlanningFailureArtifact & artifact) override;
+};
+
+class FilePlanningFailureDiagnosticsSink final : public IPlanningFailureDiagnosticsSink
+{
+public:
+  explicit FilePlanningFailureDiagnosticsSink(std::filesystem::path directory);
+  std::optional<Failure> record(const PlanningFailureArtifact & artifact) override;
+
+private:
+  std::filesystem::path directory_;
+  std::atomic<std::uint64_t> collision_sequence_{0};
+};
+
+struct PlanningFailureDiagnosticsSelection
+{
+  std::shared_ptr<IPlanningFailureDiagnosticsSink> sink;
+  std::optional<Failure> failure;
+};
+
+PlanningFailureDiagnosticsSelection
+selectPlanningFailureDiagnostics(const std::filesystem::path & directory);
 
 }  // namespace so101_gazebo_demo::pick_place

@@ -2,15 +2,22 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cstring>
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
+#include <system_error>
 #include <type_traits>
 
 #include <openssl/evp.h>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -25,6 +32,22 @@ Failure invalidArtifact(std::string message)
           "PLANNING_DIAGNOSTIC_ARTIFACT_INVALID",
           std::move(message),
           {}};
+}
+
+Failure writeFailure(const std::filesystem::path & directory, std::string message)
+{
+  return {FailureCategory::INTERNAL,
+          "PLANNING_DIAGNOSTIC_WRITE_FAILED",
+          std::move(message),
+          {{"directory_path_length", static_cast<double>(directory.string().size())}}};
+}
+
+Failure invalidDirectory(const std::filesystem::path & directory, std::string message)
+{
+  return {FailureCategory::CONFIGURATION,
+          "PLANNING_DIAGNOSTICS_DIR_INVALID",
+          std::move(message),
+          {{"directory_path_length", static_cast<double>(directory.string().size())}}};
 }
 
 std::string base64Encode(const std::uint8_t * bytes, std::size_t size)
@@ -274,6 +297,111 @@ PlanningFailureStage stageFromName(const std::string & name)
   return stages.at(name);
 }
 
+std::string stageName(PlanningFailureStage stage)
+{
+  switch (stage) {
+    case PlanningFailureStage::GOAL_ACCEPT_TIMEOUT:
+      return "GOAL_ACCEPT_TIMEOUT";
+    case PlanningFailureStage::GOAL_REJECTED:
+      return "GOAL_REJECTED";
+    case PlanningFailureStage::RESULT_TIMEOUT:
+      return "RESULT_TIMEOUT";
+    case PlanningFailureStage::TRANSPORT_FAILURE:
+      return "TRANSPORT_FAILURE";
+    case PlanningFailureStage::MISSING_RESULT:
+      return "MISSING_RESULT";
+    case PlanningFailureStage::MOVEIT_ERROR:
+      return "MOVEIT_ERROR";
+    case PlanningFailureStage::EMPTY_TRAJECTORY:
+      return "EMPTY_TRAJECTORY";
+  }
+  throw std::runtime_error("unsupported planning failure stage");
+}
+
+template <typename ValueT> PlanningDiagnosticsJson optionalJson(const std::optional<ValueT> & value)
+{
+  if (!value)
+    return nullptr;
+  return *value;
+}
+
+PlanningDiagnosticsJson artifactDocument(const PlanningFailureArtifact & artifact)
+{
+  const auto request = canonicalMoveGroupGoalJson(artifact.request);
+  const auto scene = canonicalPlanningSceneJson(artifact.observed_scene);
+  const auto failure = artifact.result.original.failure;
+  PlanningDiagnosticsJson cancel_terminal = nullptr;
+  if (artifact.result.cancel_terminal)
+    cancel_terminal = static_cast<int>(*artifact.result.cancel_terminal);
+  return {
+    {"schema_version", 1},
+    {"artifact_kind", "SO101_PLANNING_FAILURE"},
+    {"operation", "MICRO_LIFT_WORLD_Z"},
+    {"captured_at_unix_ns", artifact.captured_at_unix_ns},
+    {"process_sequence", artifact.process_sequence},
+    {"simulation_session_id", artifact.simulation_session_id},
+    {"configuration_fingerprint", artifact.configuration_fingerprint},
+    {"request_sha256", planningDiagnosticsSha256(request.dump())},
+    {"scene_sha256", planningDiagnosticsSha256(scene.dump())},
+    {"replay_scene_fingerprint", replaySceneFingerprint(artifact.observed_scene)},
+    {"source_tcp_world", poseJson(artifact.source_tcp_world)},
+    {"world_z_delta_m", artifact.world_z_delta_m},
+    {"request", request},
+    {"scene", scene},
+    {"contacts",
+     {{"raw_collision", artifact.contacts.raw_collision},
+      {"request_collision", artifact.contacts.request_collision},
+      {"raw_contacts", artifact.contacts.raw_contacts},
+      {"request_contacts", artifact.contacts.request_contacts}}},
+    {"profile_identity",
+     {{"world_frame", artifact.profile_identity.world_frame},
+      {"planning_group", artifact.profile_identity.planning_group},
+      {"tcp_link", artifact.profile_identity.tcp_link},
+      {"task_object_id", artifact.profile_identity.task_object_id},
+      {"table_object", artifact.profile_identity.table_object},
+      {"pedestal_object", artifact.profile_identity.pedestal_object},
+      {"moveit_attach_link", artifact.profile_identity.moveit_attach_link},
+      {"moveit_touch_links", artifact.profile_identity.moveit_touch_links}}},
+    {"result",
+     {{"failure_stage", stageName(artifact.result.stage)},
+      {"original_status", static_cast<int>(artifact.result.original.status)},
+      {"original_failure_category", failure
+                                      ? PlanningDiagnosticsJson(static_cast<int>(failure->category))
+                                      : PlanningDiagnosticsJson(nullptr)},
+      {"original_failure_code",
+       failure ? PlanningDiagnosticsJson(failure->code) : PlanningDiagnosticsJson(nullptr)},
+      {"original_failure_message",
+       failure ? PlanningDiagnosticsJson(failure->message) : PlanningDiagnosticsJson(nullptr)},
+      {"transport_result_code", optionalJson(artifact.result.transport_result_code)},
+      {"moveit_error_code", optionalJson(artifact.result.moveit_error_code)},
+      {"planning_time", optionalJson(artifact.result.planning_time)},
+      {"trajectory_joint_names", artifact.result.trajectory_joint_names},
+      {"trajectory_points", artifact.result.trajectory_points},
+      {"trajectory_duration_seconds", optionalJson(artifact.result.trajectory_duration_seconds)},
+      {"cancel_acknowledged", optionalJson(artifact.result.cancel_acknowledged)},
+      {"cancel_terminal", cancel_terminal}}}};
+}
+
+bool writeAll(int descriptor, std::string_view bytes)
+{
+  std::size_t written = 0;
+  while (written < bytes.size()) {
+    const ssize_t result = ::write(descriptor, bytes.data() + written, bytes.size() - written);
+    if (result < 0 && errno == EINTR)
+      continue;
+    if (result <= 0)
+      return false;
+    written += static_cast<std::size_t>(result);
+  }
+  return true;
+}
+
+int renameWithoutReplacement(const std::filesystem::path & from, const std::filesystem::path & to)
+{
+  return static_cast<int>(
+    ::syscall(SYS_renameat2, AT_FDCWD, from.c_str(), AT_FDCWD, to.c_str(), RENAME_NOREPLACE));
+}
+
 }  // namespace
 
 PlanningDiagnosticsJson
@@ -506,6 +634,110 @@ loadPlanningFailureArtifact(const std::filesystem::path & artifact_path)
     return invalidArtifact(std::string("could not parse planning diagnostic artifact: ") +
                            error.what());
   }
+}
+
+std::optional<Failure>
+NullPlanningFailureDiagnosticsSink::record(const PlanningFailureArtifact & artifact)
+{
+  static_cast<void>(artifact);
+  return std::nullopt;
+}
+
+FilePlanningFailureDiagnosticsSink::FilePlanningFailureDiagnosticsSink(
+  std::filesystem::path directory) : directory_(std::move(directory))
+{
+}
+
+std::optional<Failure>
+FilePlanningFailureDiagnosticsSink::record(const PlanningFailureArtifact & artifact)
+{
+  std::filesystem::path temporary_path;
+  int descriptor = -1;
+  try {
+    const auto document = artifactDocument(artifact);
+    const std::string bytes = document.dump(2) + "\n";
+    const std::string request_prefix =
+      document.at("request_sha256").get<std::string>().substr(0, 12);
+    for (std::uint64_t attempt = 0; attempt < 10000; ++attempt) {
+      static_cast<void>(attempt);
+      const std::uint64_t sequence =
+        artifact.process_sequence + collision_sequence_.fetch_add(1, std::memory_order_relaxed);
+      const std::string filename = std::to_string(artifact.captured_at_unix_ns) + "-" +
+                                   std::to_string(sequence) + "-micro-lift-" + request_prefix +
+                                   ".json";
+      const auto final_path = directory_ / filename;
+      temporary_path = directory_ / ("." + filename + ".tmp-" + std::to_string(::getpid()));
+      descriptor = ::open(temporary_path.c_str(), O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0600);
+      if (descriptor < 0) {
+        if (errno == EEXIST)
+          continue;
+        return writeFailure(directory_, "could not create exclusive diagnostic temporary file");
+      }
+      if (!writeAll(descriptor, bytes) || ::fsync(descriptor) != 0 || ::close(descriptor) != 0) {
+        descriptor = -1;
+        ::unlink(temporary_path.c_str());
+        return writeFailure(directory_, "could not durably write diagnostic temporary file");
+      }
+      descriptor = -1;
+      if (renameWithoutReplacement(temporary_path, final_path) != 0) {
+        const int rename_error = errno;
+        ::unlink(temporary_path.c_str());
+        if (rename_error == EEXIST)
+          continue;
+        return writeFailure(directory_, "could not atomically publish diagnostic artifact");
+      }
+      const int directory_descriptor =
+        ::open(directory_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+      if (directory_descriptor < 0)
+        return writeFailure(directory_, "could not open diagnostic directory for sync");
+      const bool directory_synced = ::fsync(directory_descriptor) == 0;
+      const bool directory_closed = ::close(directory_descriptor) == 0;
+      if (!directory_synced || !directory_closed) {
+        return writeFailure(directory_, "could not sync diagnostic directory");
+      }
+      return std::nullopt;
+    }
+    return writeFailure(directory_, "could not allocate a unique diagnostic artifact name");
+  } catch (const std::exception & error) {
+    if (descriptor >= 0)
+      ::close(descriptor);
+    if (!temporary_path.empty())
+      ::unlink(temporary_path.c_str());
+    return writeFailure(directory_,
+                        std::string("could not serialize diagnostic artifact: ") + error.what());
+  }
+}
+
+PlanningFailureDiagnosticsSelection
+selectPlanningFailureDiagnostics(const std::filesystem::path & directory)
+{
+  if (directory.empty())
+    return {std::make_shared<NullPlanningFailureDiagnosticsSink>(), std::nullopt};
+  if (!directory.is_absolute())
+    return {nullptr,
+            invalidDirectory(directory, "planning diagnostics directory must be absolute")};
+  struct stat status
+  {
+  };
+  if (::stat(directory.c_str(), &status) != 0) {
+    if (errno != ENOENT || ::mkdir(directory.c_str(), 0700) != 0) {
+      return {nullptr,
+              invalidDirectory(directory, "planning diagnostics directory could not be created")};
+    }
+    if (::stat(directory.c_str(), &status) != 0) {
+      return {nullptr,
+              invalidDirectory(directory, "planning diagnostics directory could not be inspected")};
+    }
+  }
+  if (!S_ISDIR(status.st_mode) || ::access(directory.c_str(), W_OK | X_OK) != 0 ||
+      (status.st_mode & 0222) == 0) {
+    return {nullptr, invalidDirectory(directory, "planning diagnostics path is not writable")};
+  }
+  if (::chmod(directory.c_str(), 0700) != 0) {
+    return {nullptr,
+            invalidDirectory(directory, "planning diagnostics permissions could not be secured")};
+  }
+  return {std::make_shared<FilePlanningFailureDiagnosticsSink>(directory), std::nullopt};
 }
 
 }  // namespace so101_gazebo_demo::pick_place
