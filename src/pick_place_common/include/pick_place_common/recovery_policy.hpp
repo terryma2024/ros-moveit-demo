@@ -12,5 +12,9 @@ class IRecoveryPolicy
 public:
   virtual ~IRecoveryPolicy() = default;
   virtual RecoveryRoute select(State, const Failure &, const WorldSnapshot &) const = 0;
+  virtual bool canSkipRecoveryAction(State, const Failure &, State, const WorldSnapshot &) const
+  {
+    return false;
+  }
 };
 }  // namespace pick_place_common
