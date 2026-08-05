@@ -99,12 +99,12 @@ struct RunRequest
 {
   RunMode mode{RunMode::DRY_RUN};
   std::optional<State> stop_after;
-  std::optional<State> plan_only_state;
   bool resume{false};
   std::optional<State> fail_at;
   std::uint64_t max_state_transitions{100};
   bool single_step{false};
   bool force_continue{false};
+  std::optional<State> plan_only_state;
 };
 struct RunResult
 {
