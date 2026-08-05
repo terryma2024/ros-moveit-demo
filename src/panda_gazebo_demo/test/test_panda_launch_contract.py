@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+import re
 
 from launch.actions import DeclareLaunchArgument
 
@@ -44,5 +45,34 @@ def test_plan_only_request_uses_common_validation_before_runtime_bootstrap():
         / 'pick_place_state_machine_node.cpp'
     ).read_text()
 
-    assert 'scope == StateParameterScope::PLAN_ONLY' in source
+    assert (
+        'pick_place_common::validateRunRequest(pick_place::pandaWorkflowDefinition(), request)'
+        in source
+    )
     assert source.index('validateRunRequest') < source.index('resolveSimulationSessionId')
+
+
+def test_motion_plan_limit_parameters_are_mapped_by_name():
+    source = (
+        PANDA_LAUNCH.parent.parent
+        / 'src'
+        / 'nodes'
+        / 'pick_place_state_machine_node.cpp'
+    ).read_text()
+
+    expected_assignments = {
+        'min_cartesian_fraction': 'cartesian_min_fraction',
+        'max_joint_jump': 'joint_jump_threshold',
+        'max_lateral_deviation': 'tcp_position_tolerance',
+        'max_orientation_error_rad': 'tcp_orientation_tolerance_rad',
+        'endpoint_position_tolerance': 'tcp_position_tolerance',
+        'endpoint_orientation_tolerance_rad': 'tcp_orientation_tolerance_rad',
+        'carried_relative_position_tolerance': 'coke_position_tolerance',
+        'carried_relative_orientation_tolerance_rad': 'coke_orientation_tolerance_rad',
+        'start_joint_tolerance': 'motion_start_joint_tolerance',
+    }
+
+    for limit, parameter in expected_assignments.items():
+        assert re.search(
+            rf'motion_plan_limits\.{limit} =\s+parameters\.{parameter}', source
+        )
