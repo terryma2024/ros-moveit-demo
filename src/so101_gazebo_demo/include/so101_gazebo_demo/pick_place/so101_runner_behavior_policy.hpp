@@ -18,8 +18,8 @@ public:
   [[nodiscard]] bool recoverForwardObservationFailure() const noexcept override;
   [[nodiscard]] bool preserveEnvironmentFailureWithoutRecovery() const noexcept override;
   [[nodiscard]] bool retryTransientObservation(pick_place_common::State,
-                                                const pick_place_common::Failure &,
-                                                std::size_t attempt) const override;
+                                               const pick_place_common::Failure &,
+                                               std::size_t attempt) const override;
   [[nodiscard]] bool waitForStationaryObjectOnResume() const noexcept override;
   [[nodiscard]] bool preserveOriginalFailureOnRecoveryError() const noexcept override;
 };
