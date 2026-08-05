@@ -1,5 +1,8 @@
 # SO-101 Gazebo Demo
 
+The offline TCP 6D workspace sampler is documented in
+[docs/so101-workspace-sampler.md](docs/so101-workspace-sampler.md).
+
 `so101_gazebo_demo` is the self-contained SO-101 description, Gazebo, controller,
 MoveIt, and geometry-tool package used by `/data/work/ws_moveit`.
 
