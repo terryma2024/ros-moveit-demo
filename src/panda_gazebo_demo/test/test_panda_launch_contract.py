@@ -83,3 +83,39 @@ def test_motion_plan_limit_parameters_are_mapped_by_name():
         assert re.search(
             rf'motion_plan_limits\.{limit} =\s+parameters\.{parameter}', source
         )
+
+
+def test_embedded_state_machine_has_a_distinct_initial_observation_wait_budget():
+    description = load_launch_description(PANDA_LAUNCH)
+    declared = {
+        entity.name: entity
+        for entity in description.entities
+        if isinstance(entity, DeclareLaunchArgument)
+    }
+    defaults = {name: launch_default_text(argument) for name, argument in declared.items()}
+    source = PANDA_LAUNCH.read_text()
+
+    assert defaults['gazebo_initial_observation_timeout_seconds'] == '30.0'
+    assert re.search(
+        r"'gazebo_initial_observation_timeout_seconds':\s*ParameterValue\(\s*"
+        r"LaunchConfiguration\('gazebo_initial_observation_timeout_seconds'\)",
+        source,
+    )
+
+
+def test_embedded_state_machine_is_sequenced_after_controller_and_scene_readiness():
+    source = PANDA_LAUNCH.read_text()
+
+    required_dependencies = {
+        'spawn_panda': 'joint_state_broadcaster',
+        'joint_state_broadcaster': 'panda_arm_controller',
+        'panda_arm_controller': 'panda_hand_controller',
+        'panda_hand_controller': 'moveit_world_setup_node',
+        'moveit_world_setup_node': 'pick_place_state_machine',
+    }
+    for predecessor, successor in required_dependencies.items():
+        assert re.search(
+            rf'OnProcessExit\(\s*target_action={predecessor},\s*'
+            rf'on_exit=\[{successor}\]',
+            source,
+        )

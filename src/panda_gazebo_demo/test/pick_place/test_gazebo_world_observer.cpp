@@ -79,7 +79,7 @@ TEST(GazeboWorldObserver, WaitsForFirstPoseAndAttachmentMessages)
   BaseObserver base;
   const auto world = uniqueName("observer_world_");
   const auto attachment_topic = "/test/" + world + "/attachment";
-  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.5, 2, 0.01,
+  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.5, 0.05, 2, 0.01,
                                0.002, 0.02, true);
   gz::transport::Node transport;
   auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
@@ -88,7 +88,7 @@ TEST(GazeboWorldObserver, WaitsForFirstPoseAndAttachmentMessages)
   ASSERT_TRUE(waitForConnections(attachment_publisher));
 
   std::thread delayed_publish([&]() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     publishPose(pose_publisher, "coke");
     publishAttachment(attachment_publisher, "detached");
   });
@@ -107,8 +107,8 @@ TEST(GazeboWorldObserver, MissingInitialPoseStillFailsClosedAtDeadline)
   BaseObserver base;
   const auto world = uniqueName("missing_pose_world_");
   const auto attachment_topic = "/test/" + world + "/attachment";
-  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.05, 2, 0.01,
-                               0.002, 0.02, true);
+  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.05, 0.05, 2,
+                               0.01, 0.002, 0.02, true);
   gz::transport::Node transport;
   auto attachment_publisher = transport.Advertise<gz::msgs::StringMsg>(attachment_topic);
   ASSERT_TRUE(waitForConnections(attachment_publisher));
@@ -126,8 +126,8 @@ TEST(GazeboWorldObserver, MissingInitialAttachmentStillFailsClosedAtDeadline)
   BaseObserver base;
   const auto world = uniqueName("missing_attachment_world_");
   const auto attachment_topic = "/test/" + world + "/attachment";
-  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.05, 2, 0.01,
-                               0.002, 0.02, true);
+  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.05, 0.05, 2,
+                               0.01, 0.002, 0.02, true);
   gz::transport::Node transport;
   auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   ASSERT_TRUE(waitForConnections(pose_publisher));
@@ -145,7 +145,7 @@ TEST(GazeboWorldObserver, AttachmentStateAgesOutWhenRelayStopsPublishing)
   BaseObserver base;
   const auto world = uniqueName("stale_attachment_world_");
   const auto attachment_topic = "/test/" + world + "/attachment";
-  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.5, 2, 0.01,
+  GazeboWorldObserver observer(base, world, "coke", attachment_topic, "session", 0.5, 0.05, 2, 0.01,
                                0.002, 0.02, true);
   gz::transport::Node transport;
   auto pose_publisher = transport.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");

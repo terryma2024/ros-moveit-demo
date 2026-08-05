@@ -90,6 +90,9 @@ std::optional<Failure> validatePickPlaceParameters(const PickPlaceParameters & p
       !positiveFinite(parameters.state_poll_interval_seconds) ||
       parameters.state_poll_interval_seconds > parameters.attachment_timeout_seconds ||
       parameters.state_poll_interval_seconds > parameters.planning_scene_timeout_seconds ||
+      !positiveFinite(parameters.gazebo_initial_observation_timeout_seconds) ||
+      parameters.gazebo_initial_observation_timeout_seconds <
+        parameters.gazebo_observation_max_age_seconds ||
       !positiveFinite(parameters.gazebo_observation_max_age_seconds)) {
     return invalid("Attachment, Planning Scene, polling, and observation timing is invalid");
   }
@@ -140,6 +143,7 @@ std::string pickPlaceConfigurationHash(const PickPlaceParameters & parameters,
         << parameters.attachment_timeout_seconds << '\n'
         << parameters.planning_scene_timeout_seconds << '\n'
         << parameters.state_poll_interval_seconds << '\n'
+        << parameters.gazebo_initial_observation_timeout_seconds << '\n'
         << parameters.gazebo_observation_max_age_seconds << '\n'
         << parameters.coke_settle_samples << '\n'
         << parameters.coke_settle_interval_seconds << '\n'

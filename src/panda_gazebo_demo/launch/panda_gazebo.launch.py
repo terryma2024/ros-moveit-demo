@@ -1,6 +1,11 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+)
 from launch.conditions import IfCondition, UnlessCondition
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -37,6 +42,7 @@ def generate_launch_description():
         'attachment_timeout_seconds': '2.0',
         'planning_scene_timeout_seconds': '2.0',
         'state_poll_interval_seconds': '0.05',
+        'gazebo_initial_observation_timeout_seconds': '30.0',
         'gazebo_observation_max_age_seconds': '0.5',
         'coke_settle_interval_seconds': '0.05',
         'coke_settle_position_tolerance': '0.002',
@@ -295,8 +301,43 @@ def generate_launch_description():
                     LaunchConfiguration('coke_settle_samples'),
                     value_type=int,
                 ),
+                'gazebo_initial_observation_timeout_seconds': ParameterValue(
+                    LaunchConfiguration('gazebo_initial_observation_timeout_seconds'),
+                    value_type=float,
+                ),
             },
         ],
+    )
+
+    spawn_to_joint_state = RegisterEventHandler(
+        OnProcessExit(
+            target_action=spawn_panda,
+            on_exit=[joint_state_broadcaster],
+        )
+    )
+    joint_state_to_arm = RegisterEventHandler(
+        OnProcessExit(
+            target_action=joint_state_broadcaster,
+            on_exit=[panda_arm_controller],
+        )
+    )
+    arm_to_hand = RegisterEventHandler(
+        OnProcessExit(
+            target_action=panda_arm_controller,
+            on_exit=[panda_hand_controller],
+        )
+    )
+    hand_to_moveit_world = RegisterEventHandler(
+        OnProcessExit(
+            target_action=panda_hand_controller,
+            on_exit=[moveit_world_setup_node],
+        )
+    )
+    moveit_world_to_state_machine = RegisterEventHandler(
+        OnProcessExit(
+            target_action=moveit_world_setup_node,
+            on_exit=[pick_place_state_machine],
+        )
     )
 
     return LaunchDescription(
@@ -313,12 +354,12 @@ def generate_launch_description():
             attachment_state_relay,
             robot_state_publisher,
             spawn_panda,
-            joint_state_broadcaster,
-            panda_arm_controller,
-            panda_hand_controller,
+            spawn_to_joint_state,
+            joint_state_to_arm,
+            arm_to_hand,
+            hand_to_moveit_world,
+            moveit_world_to_state_machine,
             move_group_node,
-            moveit_world_setup_node,
-            pick_place_state_machine,
             rviz_node,
         ]
     )
