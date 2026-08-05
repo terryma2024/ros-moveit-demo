@@ -43,6 +43,7 @@ find_package(gz-transport13 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
+find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -188,6 +189,10 @@ add_executable(validate_so101_motion_matrix src/nodes/validate_so101_motion_matr
 target_link_libraries(validate_so101_motion_matrix pick_place_core)
 ament_target_dependencies(validate_so101_motion_matrix ament_index_cpp rclcpp)
 
+add_executable(sample_so101_workspace src/nodes/sample_so101_workspace.cpp)
+target_link_libraries(sample_so101_workspace so101_workspace_sampling pick_place_core)
+ament_target_dependencies(sample_so101_workspace ament_index_cpp moveit_core moveit_ros_planning rclcpp)
+
 add_library(so101_attachment_collision_system SHARED
   src/gazebo/attachment_collision_system.cpp)
 target_compile_features(so101_attachment_collision_system PUBLIC cxx_std_17)
@@ -213,6 +218,7 @@ so101_gazebo_add_cpp_quality_gate(
     so101_moveit_scene
     calibrate_so101_motion
     validate_so101_motion_matrix
+    sample_so101_workspace
     so101_attachment_collision_system
 )
 
@@ -342,6 +348,7 @@ if(BUILD_TESTING)
       $<TARGET_FILE:calibrate_so101_motion>)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_package_layout test/test_package_layout.py)
+  ament_add_pytest_test(test_workspace_launch_contract test/test_workspace_launch_contract.py)
   ament_add_pytest_test(
     test_gripper_preopen_calc
     test/test_gripper_preopen_calc.py
@@ -447,6 +454,7 @@ install(
     so101_attachment_collision_system
     reset_so101_world so101_moveit_scene
     calibrate_so101_motion validate_so101_motion_matrix
+    sample_so101_workspace so101_workspace_sampling
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
