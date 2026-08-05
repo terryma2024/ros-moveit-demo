@@ -207,18 +207,6 @@ class RosTelemetryWorker:
                 self._moveit_attached = None
             time.sleep(1.0)
 
-    def _legacy_bridge_pose_unused(self, message: TFMessage) -> None:
-        for transform in message.transforms:
-            if transform.child_frame_id.rsplit("/", 1)[-1] != "plastic_cup":
-                continue
-            translation, rotation = transform.transform.translation, transform.transform.rotation
-            roll, pitch, yaw = _quaternion_to_rpy(rotation.x, rotation.y, rotation.z, rotation.w)
-            self._object_pose = Pose6D(frame_id=transform.header.frame_id or "world", tcp_frame="plastic_cup",
-                x_m=translation.x, y_m=translation.y, z_m=translation.z,
-                roll_rad=roll, pitch_rad=pitch, yaw_rad=yaw)
-            self._object_stamp = time.time()
-            return
-
     def _on_contacts(self, message: Contacts) -> None:
         from .models import CollisionPair
         self._gazebo_contacts = [CollisionPair(source="gazebo_contacts", object_a=item.collision1.name,
