@@ -36,7 +36,8 @@ are excluded from plan-only.
 |---|---|---|
 | Panda `mode` / SO-101 `run_mode` | `execute` / `dry_run` | Selects the mode above |
 | `plan_only_state` | empty | Required only for `plan_only`; one exact whitelist value |
-| `stop_after` | empty | Execute/dry-run checkpoint boundary; never a plan-only target |
+| `stop_after` | empty | Execute/dry-run checkpoint boundary; must name any nonterminal action in the workflow and is never a plan-only target |
+| `fail_at` | empty | Dry-run failure injection; must name a forward action in the workflow |
 | `resume` | `false` | Load a compatible checkpoint; requires the same explicit session ID |
 | `checkpoint_path` | `/tmp/panda_pick_place_checkpoint.json` or `/tmp/so101_pick_place_checkpoint.json` | Schema-v3 checkpoint file |
 | `simulation_session_id` | empty | Generated for fresh executable modes; mandatory and unchanged for resume |
@@ -54,6 +55,13 @@ are excluded from plan-only.
 | Target supplied outside plan-only, or combined with `stop_after`/single-step | `PLAN_ONLY_ARGUMENT_CONFLICT` |
 | Resume checkpoint is already downstream of the target | `PLAN_ONLY_TARGET_ALREADY_PASSED` |
 | Resume checkpoint is in recovery phase | `PLAN_ONLY_RECOVERY_RESUME_UNSUPPORTED` |
+
+## Invalid control states
+
+| Condition | Stable code |
+|---|---|
+| `stop_after` is idle, terminal, or otherwise not an action state | `STOP_AFTER_STATE_NOT_ACTION` |
+| `fail_at` is terminal, recovery, or otherwise not a forward action state | `FAIL_AT_STATE_NOT_FORWARD_ACTION` |
 
 ## Panda launch arguments
 
