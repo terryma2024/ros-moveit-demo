@@ -8,6 +8,13 @@ from launch.actions import DeclareLaunchArgument
 
 
 PANDA_LAUNCH = Path(__file__).resolve().parents[1] / 'launch' / 'panda_gazebo.launch.py'
+LAUNCH_MANUAL = PANDA_LAUNCH.parents[3] / 'docs' / 'pick-place-launch-parameters.md'
+
+
+def test_launch_manual_preserves_panda_force_continue_exclusion():
+    manual = LAUNCH_MANUAL.read_text()
+    assert 'Panda declares no force-continue state' in manual
+    assert 'attach_and_lift_demo' in manual
 
 
 def load_launch_description(path):

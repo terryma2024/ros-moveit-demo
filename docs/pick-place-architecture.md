@@ -27,6 +27,21 @@ Panda preserves `configuration_hash`; SO-101 preserves
 `policy_bundle_sha256`. Their JSON codecs, file stores, and persistence paths
 remain local because those are robot application boundaries.
 
+SO-101 additionally owns a physical-grasp evidence sidecar at the checkpoint
+path plus `.physical-grasp.json`. This is deliberately not part of the common
+checkpoint schema: it atomically persists the two physical validation samples,
+and binds them to the simulation session and policy fingerprint across separate
+CLI processes. Its pre-attachment chain is `WAIT_GRASP_STABLE -> MICRO_LIFT ->
+WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP`; validator failure takes
+`VERIFY_PHYSICAL_GRASP -> VALIDATION_FAILED`.
+
+The common runner supports workflow-declared validation parking. Passive normal
+execute resume at a validation pause has no side effects and preserves both the
+original failure and checkpoint bytes. Only a declared execute-resume,
+single-use force edge may continue; mismatches fail with
+`FORCE_CONTINUE_STATE_MISMATCH` before observation or action. Panda keeps its
+characterized behavior by declaring no force-continue state.
+
 New robot consumers should link the exported targets and provide a
 `WorkflowDefinition` plus explicit policies. `IRunnerBehaviorPolicy` names the
 runner's execute preflight, observation-recovery, environment-failure,

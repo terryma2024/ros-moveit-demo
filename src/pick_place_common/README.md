@@ -16,6 +16,14 @@ collision geometry, contact thresholds, reset/recovery choices, launch/world
 assets, URDF/SRDF, or robot configuration. Checkpoint data and validation are
 shared, while each robot package retains its JSON codec and file persistence.
 
+Validation parking is declared by each workflow rather than hard-coded by state
+name. A declared postcondition pause preserves its original failure for passive
+resume; an execute-only, single-use force continuation may cross only the
+workflow's declared succeeded edge. Panda intentionally declares no such state.
+When constructing `RunRequest`, use named extension fields (`single_step`,
+`force_continue`, and `plan_only_state`) to keep positional aggregate callers
+compatible.
+
 Build and test both consumers from the workspace root:
 
 ```bash
