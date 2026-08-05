@@ -44,4 +44,36 @@ bool SO101RunnerBehaviorPolicy::includeIdleInTrace() const noexcept
   return true;
 }
 
+bool SO101RunnerBehaviorPolicy::runExecutePreflight() const noexcept
+{
+  return true;
+}
+
+bool SO101RunnerBehaviorPolicy::recoverForwardObservationFailure() const noexcept
+{
+  return false;
+}
+
+bool SO101RunnerBehaviorPolicy::preserveEnvironmentFailureWithoutRecovery() const noexcept
+{
+  return true;
+}
+
+bool SO101RunnerBehaviorPolicy::retryTransientObservation(
+  pick_place_common::State, const pick_place_common::Failure & failure, std::size_t attempt) const
+{
+  return attempt < kMaximumConvergenceAttempts &&
+         failure.code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION";
+}
+
+bool SO101RunnerBehaviorPolicy::waitForStationaryObjectOnResume() const noexcept
+{
+  return false;
+}
+
+bool SO101RunnerBehaviorPolicy::preserveOriginalFailureOnRecoveryError() const noexcept
+{
+  return true;
+}
+
 }  // namespace so101_gazebo_demo::pick_place

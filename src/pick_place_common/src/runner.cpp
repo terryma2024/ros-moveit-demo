@@ -16,6 +16,12 @@ namespace
 constexpr auto kStationaryTimeout = std::chrono::seconds(2);
 constexpr auto kStationaryPollInterval = std::chrono::milliseconds(25);
 
+const IRunnerBehaviorPolicy & defaultRunnerBehaviorPolicy()
+{
+  static const DefaultRunnerBehaviorPolicy policy;
+  return policy;
+}
+
 WorldSnapshot snapshotFromExpected(const ExpectedWorldState & expected,
                                    const std::string & simulation_session_id)
 {
@@ -81,7 +87,8 @@ StateMachineRunner::StateMachineRunner(
     workflow_(workflow), actions_(actions), contracts_(contracts), observer_(observer),
     checkpoint_store_(checkpoint_store), resume_validator_(resume_validator),
     observation_sink_(observation_sink), plan_validators_(plan_validators),
-    recovery_policy_(recovery_policy), behavior_policy_(behavior_policy)
+    recovery_policy_(recovery_policy),
+    behavior_policy_(behavior_policy ? *behavior_policy : defaultRunnerBehaviorPolicy())
 {
 }
 
@@ -110,7 +117,7 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
     return error(State::IDLE, *failure);
   }
   const bool plan_only = request.mode == RunMode::PLAN_ONLY;
-  if (plan_only || (behavior_policy_ && request.mode == RunMode::EXECUTE)) {
+  if (plan_only || (behavior_policy_.runExecutePreflight() && request.mode == RunMode::EXECUTE)) {
     if (!observer_ || !checkpoint_store_ || !resume_validator_) {
       return error(State::IDLE,
                    {FailureCategory::CONFIGURATION,
@@ -185,7 +192,7 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
       return runExecuteWorkflow(resolve(workflow_.initial_state, ActionStatus::SUCCEEDED), request,
                                 std::nullopt, 1, 1, CheckpointPhase::FORWARD, std::nullopt,
                                 std::nullopt,
-                                behavior_policy_ && behavior_policy_->includeIdleInTrace());
+                                behavior_policy_.includeIdleInTrace());
   }
   return error(State::IDLE, {FailureCategory::INTERNAL, "UNKNOWN_MODE", "Unknown run mode", {}});
 }
@@ -477,7 +484,8 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                                              "PRE_EXECUTION_OBSERVATION_FAILED",
                                              "Could not observe the world before execution",
                                              {}});
-      if (phase == CheckpointPhase::FORWARD && !behavior_policy_) {
+      if (phase == CheckpointPhase::FORWARD &&
+          behavior_policy_.recoverForwardObservationFailure()) {
         return handleActionFailure(state, *executor, std::move(failure), checkpoint_sequence);
       }
       return error(state, std::move(failure));
@@ -487,9 +495,9 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   const ObservationResult planning_observation{*before, std::nullopt};
   auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
   std::size_t precondition_attempt = 0;
-  while (!precondition.ok && !precondition.failures.empty() && behavior_policy_ &&
-         behavior_policy_->retryPrecondition(state, precondition.failures.front(),
-                                             precondition_attempt++)) {
+  while (!precondition.ok && !precondition.failures.empty() &&
+         behavior_policy_.retryPrecondition(state, precondition.failures.front(),
+                                            precondition_attempt++)) {
     const auto observed = observer_->observe();
     if (!observed.snapshot) {
       if (observed.failure &&
@@ -506,7 +514,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
     precondition = contracts_.validatePrecondition({state, next_state}, *before);
   }
   if (!precondition.ok) {
-    if (behavior_policy_) {
+    if (behavior_policy_.preserveEnvironmentFailureWithoutRecovery()) {
       const auto environment_failure = std::find_if(
         precondition.failures.begin(), precondition.failures.end(), [](const Failure & failure) {
           return failure.category == FailureCategory::OBSERVATION ||
@@ -563,9 +571,9 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   }
   auto after = observer_->observe();
   std::size_t post_observation_attempt = 1;
-  while (!after.snapshot && behavior_policy_ && after.failure &&
-         after.failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION" &&
-         post_observation_attempt++ < 480) {
+  while (!after.snapshot && after.failure &&
+         behavior_policy_.retryTransientObservation(state, *after.failure,
+                                                    post_observation_attempt++)) {
     after = observer_->observe();
   }
   if (!after.snapshot) {
@@ -581,9 +589,9 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   }
   auto validation = contracts_.validate({state, next_state}, *before, *after.snapshot, action);
   std::size_t postcondition_attempt = 0;
-  while (!validation.ok && !validation.failures.empty() && behavior_policy_ &&
-         behavior_policy_->retryPostcondition(state, validation.failures.front(),
-                                              postcondition_attempt++)) {
+  while (!validation.ok && !validation.failures.empty() &&
+         behavior_policy_.retryPostcondition(state, validation.failures.front(),
+                                             postcondition_attempt++)) {
     const auto observed = observer_->observe();
     if (!observed.snapshot) {
       if (observed.failure &&
@@ -707,7 +715,7 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
     checkpoint.expected.gazebo_task_object_stationary.value_or(false);
   if (requires_stationary_coke) {
     const auto stationary_deadline = std::chrono::steady_clock::now() + kStationaryTimeout;
-    while (!behavior_policy_ &&
+    while (behavior_policy_.waitForStationaryObjectOnResume() &&
            (!snapshot.gazebo_task_object_stationary || !*snapshot.gazebo_task_object_stationary) &&
            std::chrono::steady_clock::now() < stationary_deadline) {
       std::this_thread::sleep_for(kStationaryPollInterval);
@@ -797,7 +805,7 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
                                        "POST_FAILURE_OBSERVATION_FAILED",
                                        "Unable to establish a stopped world after action failure",
                                        {}});
-    if (behavior_policy_) {
+    if (behavior_policy_.preserveOriginalFailureOnRecoveryError()) {
       stop_failure = withOriginalFailure(std::move(stop_failure), original_failure);
     }
     return error(state, std::move(stop_failure));
@@ -872,8 +880,8 @@ StateMachineRunner::stopAndObserveAfterFailure(IStateExecutor & executor) const
   do {
     latest_observation = observer_->observe();
     if (!latest_observation->snapshot) {
-      if (behavior_policy_ && latest_observation->failure &&
-          latest_observation->failure->code == "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION") {
+      if (latest_observation->failure && behavior_policy_.retryTransientObservation(
+            State::ERROR, *latest_observation->failure, 0)) {
         continue;
       }
       return {std::nullopt, latest_observation->failure.value_or(

@@ -28,8 +28,12 @@ Panda preserves `configuration_hash`; SO-101 preserves
 remain local because those are robot application boundaries.
 
 New robot consumers should link the exported targets and provide a
-`WorkflowDefinition` plus explicit policies. A new consumer must not copy the
-runner, domain/state-action implementation, or Gazebo/MoveIt executor sources.
+`WorkflowDefinition` plus explicit policies. `IRunnerBehaviorPolicy` names the
+runner's execute preflight, observation-recovery, environment-failure,
+transient-observation retry, resume-settling, original-failure preservation,
+pre/postcondition retry, and trace decisions; `DefaultRunnerBehaviorPolicy`
+is the characterized Panda baseline. A new consumer must not copy the runner,
+domain/state-action implementation, or Gazebo/MoveIt executor sources.
 
 The full automated gate is:
 
