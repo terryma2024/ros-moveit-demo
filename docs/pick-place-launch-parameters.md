@@ -45,6 +45,31 @@ are excluded from plan-only.
 | SO CLI `--step` | off | Execute-resume single-step control |
 | SO CLI `--force-continue` | off | Only valid for execute resume |
 
+## SO-101 physical validation and validation-pause resume
+
+Before Gazebo attachment, SO-101 always executes the physical chain
+`WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP`.
+Only a validator postcondition may take `VERIFY_PHYSICAL_GRASP -> VALIDATION_FAILED`.
+The evidence is stored robot-locally at `checkpoint_path + ".physical-grasp.json"`,
+bound to the simulation session and policy-bundle fingerprint. A fresh run removes
+prior sidecar evidence; continuous execution and subprocess-per-step execution use
+the same persisted samples and therefore the same validation result.
+
+A physical validation failure produces a FORWARD checkpoint at
+`VALIDATION_FAILED` retaining the original failure. A normal execute resume is
+side-effect-free at that checkpoint: it reports the same validation pause and
+leaves checkpoint bytes unchanged. `--force-continue` is execute-resume only,
+may consume that declared pause once, and proceeds only through its declared
+succeeded edge. Any other checkpoint is rejected with
+`FORCE_CONTINUE_STATE_MISMATCH` before observation or action side effects.
+
+Deep plan-only paths do not bypass physical validation: they must pass it
+naturally before an attachment predecessor can run. Set `RunRequest` extension
+fields by name (`single_step`, `force_continue`, and `plan_only_state`) so older
+positional aggregate initializers retain their historical meaning. The common
+runner is declaration-driven; Panda declares no force-continue state.
+The retired Panda `attach_and_lift_demo` is no longer an installed entry point.
+
 ## Invalid plan-only requests
 
 | Condition | Stable code |
@@ -127,6 +152,7 @@ assume plan-only restored the initial world.
 |---|---|
 | Request rejected | Mode/target whitelist and conflicting `stop_after`, step, or `fail_at` |
 | SO-101 q6/grasp failure | Observed q6, contact threshold, installed object/motion/validation policy provenance |
+| Physical evidence failure | Sidecar schema/session/fingerprint and both persisted stable samples |
 | Checkpoint/session failure | Schema version 3, phase, fingerprint/hash, identical explicit session ID |
 | MoveIt plan failure | `/move_group`, current joint state, start tolerance, target policy and collision scene |
 | Attachment failure | Durable Gazebo attachment topic and exclusive MoveIt world/attached membership |

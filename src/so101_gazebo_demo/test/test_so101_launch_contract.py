@@ -27,6 +27,16 @@ MOVE_GROUP_HEADLESS_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_move_group_headless
 PICK_PLACE_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_pick_place.launch.py'
 PICK_PLACE_WORLD_TEST = PACKAGE_DIR / 'test' / 'test_so101_pick_place_world.py'
 TELEOP_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_teleop.launch.py'
+LAUNCH_MANUAL = PACKAGE_DIR.parents[1] / 'docs' / 'pick-place-launch-parameters.md'
+
+
+def test_launch_manual_documents_r3_physical_validation_and_resume_contract():
+    manual = LAUNCH_MANUAL.read_text()
+    assert 'WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE' in manual
+    assert 'VERIFY_PHYSICAL_GRASP -> VALIDATION_FAILED' in manual
+    assert 'FORCE_CONTINUE_STATE_MISMATCH' in manual
+    assert 'normal execute resume' in manual
+    assert 'checkpoint bytes unchanged' in manual
 
 
 @pytest.mark.parametrize('launch_path', [MOVEIT_LAUNCH, MOVE_GROUP_HEADLESS_LAUNCH])

@@ -131,3 +131,11 @@ command id, and a non-stale plan.  The web UI treats axes 1–5 as the arm and
 axis 6 as gripper opening; it never makes axis 6 a Cartesian planning target.
 `Force Continue` is limited to a fresh, auditable physical-grasp
 post-validation failure and is never evidence of a successful grasp.
+
+The pick/place physical gate is `WAIT_GRASP_STABLE -> MICRO_LIFT ->
+WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP` before attachment. Its durable
+robot-local sidecar is `checkpoint_path + ".physical-grasp.json"`; it binds
+samples to the simulation session and policy fingerprint and is reset for a
+fresh run, so continuous and `--step` subprocess runs validate identically.
+For control syntax and validation-pause/force-resume semantics, see
+`docs/pick-place-launch-parameters.md`.
