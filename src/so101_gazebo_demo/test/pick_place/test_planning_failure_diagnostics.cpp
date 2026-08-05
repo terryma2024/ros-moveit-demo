@@ -1,5 +1,8 @@
 #include <filesystem>
 #include <fstream>
+#include <regex>
+
+#include <sys/stat.h>
 
 #include <gtest/gtest.h>
 #include <moveit_msgs/msg/collision_object.hpp>
@@ -146,6 +149,33 @@ std::filesystem::path writeDocument(const std::filesystem::path & directory,
   stream << bytes;
   return path;
 }
+
+spp::PlanningFailureArtifact representativeArtifact()
+{
+  return {1000,
+          1,
+          "test-session",
+          std::string(64, 'a'),
+          {0.02, -0.28, 0.20, 0.0, 0.0, 0.0, 1.0},
+          0.002,
+          representativeGoal(),
+          representativeScene(),
+          {true, false, {{"jaw|plastic_cup", 1}}, {}},
+          spp::SO101Profile::canonical(),
+          {spp::PlanningFailureStage::MOVEIT_ERROR,
+           {spp::ActionStatus::FAILED, spp::Failure{spp::FailureCategory::PLANNING,
+                                                    "MICRO_LIFT_MOVEIT_PLAN_FAILED",
+                                                    "planning failed",
+                                                    {}}},
+           4,
+           -1,
+           0.5,
+           {},
+           0,
+           std::nullopt,
+           std::nullopt,
+           std::nullopt}};
+}
 }  // namespace
 
 TEST(PlanningFailureDiagnostics, ExactCdrRoundTripPreservesAbsentStartVelocities)
@@ -241,5 +271,86 @@ TEST(PlanningFailureDiagnostics, RejectsTruncatedUnsupportedOrHashMutatedArtifac
   EXPECT_TRUE(std::holds_alternative<spp::Failure>(truncated_result));
   EXPECT_TRUE(std::holds_alternative<spp::Failure>(unsupported_result));
   EXPECT_TRUE(std::holds_alternative<spp::Failure>(hash_result));
+  std::filesystem::remove_all(directory);
+}
+
+TEST(PlanningFailureDiagnostics, EmptySelectionUsesNullSinkWithoutFilesystemEffects)
+{
+  const auto selection = spp::selectPlanningFailureDiagnostics({});
+  ASSERT_FALSE(selection.failure);
+  ASSERT_TRUE(selection.sink);
+  EXPECT_FALSE(selection.sink->record(representativeArtifact()));
+}
+
+TEST(PlanningFailureDiagnostics, RejectsRelativeFileAndUnwritableDirectories)
+{
+  const auto root = std::filesystem::temp_directory_path() / "so101-planning-sink-invalid";
+  std::filesystem::remove_all(root);
+  std::filesystem::create_directories(root);
+  const auto file = root / "file";
+  std::ofstream(file) << "not a directory";
+  const auto unwritable = root / "unwritable";
+  std::filesystem::create_directory(unwritable);
+  ASSERT_EQ(::chmod(unwritable.c_str(), 0500), 0);
+
+  for (const auto & path : {std::filesystem::path("relative"), file, unwritable}) {
+    const auto selection = spp::selectPlanningFailureDiagnostics(path);
+    ASSERT_TRUE(selection.failure) << path;
+    EXPECT_EQ(selection.failure->code, "PLANNING_DIAGNOSTICS_DIR_INVALID");
+  }
+  ASSERT_EQ(::chmod(unwritable.c_str(), 0700), 0);
+  std::filesystem::remove_all(root);
+}
+
+TEST(PlanningFailureDiagnostics, FileSinkCreatesOwnerOnlyUniqueImmutableArtifacts)
+{
+  const auto directory = std::filesystem::temp_directory_path() / "so101-planning-sink-artifacts";
+  std::filesystem::remove_all(directory);
+  const auto selection = spp::selectPlanningFailureDiagnostics(directory);
+  ASSERT_FALSE(selection.failure);
+  ASSERT_TRUE(selection.sink);
+  auto artifact = representativeArtifact();
+  EXPECT_FALSE(selection.sink->record(artifact));
+  EXPECT_FALSE(selection.sink->record(artifact));
+
+  struct stat directory_stat
+  {
+  };
+  ASSERT_EQ(::stat(directory.c_str(), &directory_stat), 0);
+  EXPECT_EQ(directory_stat.st_mode & 0777, 0700);
+  std::vector<std::filesystem::path> files;
+  for (const auto & entry : std::filesystem::directory_iterator(directory)) {
+    files.push_back(entry.path());
+    struct stat file_stat
+    {
+    };
+    ASSERT_EQ(::stat(entry.path().c_str(), &file_stat), 0);
+    EXPECT_EQ(file_stat.st_mode & 0777, 0600);
+    EXPECT_TRUE(std::regex_match(entry.path().filename().string(),
+                                 std::regex("[0-9]+-[0-9]+-micro-lift-[0-9a-f]{12}\\.json")));
+    EXPECT_TRUE(std::holds_alternative<spp::PlanningFailureArtifact>(
+      spp::loadPlanningFailureArtifact(entry.path())));
+  }
+  ASSERT_EQ(files.size(), 2U);
+  EXPECT_NE(files[0], files[1]);
+  std::filesystem::remove_all(directory);
+}
+
+TEST(PlanningFailureDiagnostics, WriteFailurePreservesInputAndReturnsDiagnosticFailure)
+{
+  const auto directory = std::filesystem::temp_directory_path() / "so101-planning-sink-failure";
+  std::filesystem::remove_all(directory);
+  const auto selection = spp::selectPlanningFailureDiagnostics(directory);
+  ASSERT_FALSE(selection.failure);
+  auto artifact = representativeArtifact();
+  const auto request_before = spp::canonicalMoveGroupGoalJson(artifact.request);
+  ASSERT_EQ(::chmod(directory.c_str(), 0500), 0);
+
+  const auto failure = selection.sink->record(artifact);
+
+  ASSERT_TRUE(failure);
+  EXPECT_EQ(failure->code, "PLANNING_DIAGNOSTIC_WRITE_FAILED");
+  EXPECT_EQ(spp::canonicalMoveGroupGoalJson(artifact.request), request_before);
+  ASSERT_EQ(::chmod(directory.c_str(), 0700), 0);
   std::filesystem::remove_all(directory);
 }
