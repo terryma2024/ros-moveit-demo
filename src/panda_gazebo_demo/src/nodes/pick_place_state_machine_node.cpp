@@ -260,14 +260,11 @@ int main(int argc, char * argv[])
     return EXIT_FAILURE;
   }
 
-  const auto fail_at =
-    optionalStateParameter(node, "fail_at", logger);
+  const auto fail_at = optionalStateParameter(node, "fail_at", logger);
   const auto fail_at_value = node->get_parameter("fail_at").get_value<std::string>();
-  const auto stop_after =
-    optionalStateParameter(node, "stop_after", logger);
+  const auto stop_after = optionalStateParameter(node, "stop_after", logger);
   const auto stop_after_value = node->get_parameter("stop_after").get_value<std::string>();
-  const auto plan_only_state =
-    optionalStateParameter(node, "plan_only_state", logger);
+  const auto plan_only_state = optionalStateParameter(node, "plan_only_state", logger);
   const auto plan_only_state_value =
     node->get_parameter("plan_only_state").get_value<std::string>();
   if ((!fail_at_value.empty() && !fail_at) || (!stop_after_value.empty() && !stop_after) ||
@@ -458,12 +455,21 @@ int main(int argc, char * argv[])
     }
     runtime_config.target_policy = target_policy;
     runtime_config.required_world_objects = parameters.required_world_objects;
-    runtime_config.motion_plan_limits = {
-      parameters.cartesian_min_fraction,      parameters.joint_jump_threshold,
-      parameters.tcp_position_tolerance,      parameters.tcp_orientation_tolerance_rad,
-      parameters.tcp_position_tolerance,      parameters.tcp_orientation_tolerance_rad,
-      parameters.coke_position_tolerance,     parameters.coke_orientation_tolerance_rad,
-      parameters.motion_start_joint_tolerance};
+    runtime_config.motion_plan_limits.min_cartesian_fraction = parameters.cartesian_min_fraction;
+    runtime_config.motion_plan_limits.max_joint_jump = parameters.joint_jump_threshold;
+    runtime_config.motion_plan_limits.max_lateral_deviation = parameters.tcp_position_tolerance;
+    runtime_config.motion_plan_limits.max_orientation_error_rad =
+      parameters.tcp_orientation_tolerance_rad;
+    runtime_config.motion_plan_limits.endpoint_position_tolerance =
+      parameters.tcp_position_tolerance;
+    runtime_config.motion_plan_limits.endpoint_orientation_tolerance_rad =
+      parameters.tcp_orientation_tolerance_rad;
+    runtime_config.motion_plan_limits.carried_relative_position_tolerance =
+      parameters.coke_position_tolerance;
+    runtime_config.motion_plan_limits.carried_relative_orientation_tolerance_rad =
+      parameters.coke_orientation_tolerance_rad;
+    runtime_config.motion_plan_limits.start_joint_tolerance =
+      parameters.motion_start_joint_tolerance;
     runtime_config.gripper = gripper_limits;
     runtime_config.contract.tcp_position_tolerance = parameters.tcp_position_tolerance;
     runtime_config.contract.tcp_orientation_tolerance_rad =
