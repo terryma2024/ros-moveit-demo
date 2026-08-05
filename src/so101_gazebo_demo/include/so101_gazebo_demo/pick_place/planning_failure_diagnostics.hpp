@@ -21,7 +21,12 @@
 namespace so101_gazebo_demo::pick_place
 {
 
-enum class RequestScopedGoalTerminal;
+enum class RequestScopedGoalTerminal
+{
+  SUCCEEDED,
+  ABORTED,
+  CANCELED
+};
 
 enum class PlanningFailureStage
 {
