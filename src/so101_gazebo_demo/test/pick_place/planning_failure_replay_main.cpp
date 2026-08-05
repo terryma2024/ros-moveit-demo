@@ -5,6 +5,9 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include "so101_gazebo_demo/pick_place/node_spinner.hpp"
+
+namespace spp = so101_gazebo_demo::pick_place;
 namespace replay = so101_gazebo_demo::pick_place::test;
 
 int main(int argc, char ** argv)
@@ -32,12 +35,17 @@ int main(int argc, char ** argv)
     else
       return 2;
   }
-  std::shared_ptr<rclcpp::Node> node;
+  replay::PlanningFailureReplayResult result;
   if (options.mode != replay::PlanningFailureReplayMode::OFFLINE) {
     rclcpp::init(argc, argv);
-    node = std::make_shared<rclcpp::Node>("so101_planning_failure_replay");
+    rclcpp::NodeOptions node_options;
+    node_options.parameter_overrides({rclcpp::Parameter("use_sim_time", true)});
+    auto node = std::make_shared<rclcpp::Node>("so101_planning_failure_replay", node_options);
+    spp::NodeSpinner spinner(node);
+    result = replay::runPlanningFailureReplay(options, node);
+  } else {
+    result = replay::runPlanningFailureReplay(options);
   }
-  const auto result = replay::runPlanningFailureReplay(options, node);
   if (rclcpp::ok())
     rclcpp::shutdown();
   if (result.failure) {

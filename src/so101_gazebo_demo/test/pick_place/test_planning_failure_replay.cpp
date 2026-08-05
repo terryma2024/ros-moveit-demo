@@ -108,3 +108,23 @@ TEST(PlanningFailureReplay, SourceOwnsNoExecutionOrControllerClient)
   EXPECT_EQ(bytes.find("gripper_action"), std::string::npos);
   EXPECT_EQ(bytes.find("applyPlanningScene"), std::string::npos);
 }
+
+TEST(PlanningFailureReplay, StandaloneNodeUsesSimulationTime)
+{
+  const std::filesystem::path source = __FILE__;
+  std::ifstream stream(source.parent_path() / "planning_failure_replay_main.cpp");
+  const std::string bytes((std::istreambuf_iterator<char>(stream)), {});
+  EXPECT_NE(bytes.find("rclcpp::Parameter(\"use_sim_time\", true)"), std::string::npos);
+}
+
+TEST(PlanningFailureReplay, StandaloneNodeSpinsWhileCapturingLiveState)
+{
+  const std::filesystem::path source = __FILE__;
+  std::ifstream stream(source.parent_path() / "planning_failure_replay_main.cpp");
+  const std::string bytes((std::istreambuf_iterator<char>(stream)), {});
+  const auto spinner = bytes.find("spp::NodeSpinner spinner(node);");
+  const auto replay_call = bytes.find("replay::runPlanningFailureReplay(options, node)");
+  ASSERT_NE(spinner, std::string::npos);
+  ASSERT_NE(replay_call, std::string::npos);
+  EXPECT_LT(spinner, replay_call);
+}

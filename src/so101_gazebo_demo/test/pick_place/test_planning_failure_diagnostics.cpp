@@ -209,6 +209,19 @@ TEST(PlanningFailureDiagnostics, CdrRoundTripCoversEveryRequestAndPlanningOption
     document.at("request"));
 }
 
+TEST(PlanningFailureDiagnostics, ReconstructionComparesSemanticMirrorNotCdrPadding)
+{
+  const std::filesystem::path source = __FILE__;
+  std::ifstream stream(source.parent_path().parent_path().parent_path() / "src" / "pick_place" /
+                       "planning_failure_diagnostics.cpp");
+  const std::string bytes((std::istreambuf_iterator<char>(stream)), {});
+  EXPECT_NE(bytes.find("canonical.at(\"human_readable\") != request.at(\"human_readable\")"),
+            std::string::npos);
+  EXPECT_NE(bytes.find("canonical_scene.at(\"human_readable\") != "
+                       "scene_json.at(\"human_readable\")"),
+            std::string::npos);
+}
+
 TEST(PlanningFailureDiagnostics, ReplaySceneFingerprintIgnoresFeedbackAndTimestamps)
 {
   const auto scene = representativeScene();
