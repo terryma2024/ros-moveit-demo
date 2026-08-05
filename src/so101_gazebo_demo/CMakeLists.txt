@@ -143,6 +143,7 @@ add_library(pick_place_core
 add_library(so101_workspace_sampling
   src/workspace/joint_sample_generator.cpp
   src/workspace/pose_coverage_index.cpp
+  src/workspace/workspace_state_evaluator.cpp
   src/workspace/workspace_types.cpp
 )
 target_compile_features(so101_workspace_sampling PUBLIC cxx_std_17)
@@ -282,6 +283,13 @@ if(BUILD_TESTING)
     SO101_TEST_URDF="${SO101_TEST_URDF}"
     SO101_TEST_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/config/so101.srdf"
     SO101_TEST_POLICY_CONFIG_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/config")
+  ament_add_gtest(test_workspace_state_evaluator
+    test/workspace/test_workspace_state_evaluator.cpp)
+  target_link_libraries(test_workspace_state_evaluator so101_workspace_sampling)
+  add_dependencies(test_workspace_state_evaluator so101_fixed_target_test_urdf)
+  target_compile_definitions(test_workspace_state_evaluator PRIVATE
+    SO101_TEST_URDF="${SO101_TEST_URDF}"
+    SO101_TEST_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/config/so101.srdf")
   ament_add_gtest(test_request_scoped_goal_cancellation
     test/pick_place/test_request_scoped_goal_cancellation.cpp)
   target_link_libraries(test_request_scoped_goal_cancellation pick_place_core)
