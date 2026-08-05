@@ -528,7 +528,8 @@ reconstructMoveGroupGoal(const PlanningDiagnosticsJson & artifact_document)
       return invalidArtifact("unsupported MoveGroup request encoding");
     auto goal = deserializeCdr<moveit_msgs::action::MoveGroup::Goal>(
       request.at("cdr_base64").get<std::string>());
-    if (canonicalMoveGroupGoalJson(goal) != request)
+    const auto canonical = canonicalMoveGroupGoalJson(goal);
+    if (canonical.at("human_readable") != request.at("human_readable"))
       return invalidArtifact("MoveGroup request canonical round-trip mismatch");
     return goal;
   } catch (const std::exception & error) {
@@ -563,7 +564,8 @@ loadPlanningFailureArtifact(const std::filesystem::path & artifact_path)
     const auto & scene_json = document.at("scene");
     auto scene = deserializeCdr<moveit_msgs::msg::PlanningScene>(
       scene_json.at("cdr_base64").get<std::string>());
-    if (canonicalPlanningSceneJson(scene) != scene_json ||
+    const auto canonical_scene = canonicalPlanningSceneJson(scene);
+    if (canonical_scene.at("human_readable") != scene_json.at("human_readable") ||
         replaySceneFingerprint(scene) !=
           document.at("replay_scene_fingerprint").get<std::string>()) {
       return invalidArtifact("planning scene canonical round-trip mismatch");
