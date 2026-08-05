@@ -142,6 +142,7 @@ add_library(pick_place_core
 
 add_library(so101_workspace_sampling
   src/workspace/joint_sample_generator.cpp
+  src/workspace/pose_coverage_index.cpp
   src/workspace/workspace_types.cpp
 )
 target_compile_features(so101_workspace_sampling PUBLIC cxx_std_17)
@@ -217,6 +218,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_workspace_types so101_workspace_sampling)
   ament_add_gtest(test_joint_sample_generator test/workspace/test_joint_sample_generator.cpp)
   target_link_libraries(test_joint_sample_generator so101_workspace_sampling)
+  ament_add_gtest(test_pose_coverage_index test/workspace/test_pose_coverage_index.cpp)
+  target_link_libraries(test_pose_coverage_index so101_workspace_sampling)
   ament_add_gtest(test_pick_place_dry_run test/pick_place/test_dry_run.cpp)
   target_link_libraries(test_pick_place_dry_run pick_place_core)
   ament_add_gtest(test_pick_place_checkpoint test/pick_place/test_checkpoint.cpp)
