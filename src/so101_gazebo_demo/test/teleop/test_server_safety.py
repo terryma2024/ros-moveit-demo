@@ -393,7 +393,7 @@ def test_joint_samples_publish_authoritative_so101_urdf_position_limits():
         "3": (-1.74533, 1.5708),
         "4": (-1.65806, 1.65806),
         "5": (-2.79253, 2.79253),
-        "6": (-0.059303612618397, 1.74533),
+        "6": (-0.059600220867817, 1.74533),
     }
     assert {
         name: (sample.lower_limit_rad, sample.upper_limit_rad)

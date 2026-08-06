@@ -44,28 +44,29 @@ struct SO101Profile
                                         -0.000000367000, 0.000000354000, 0.719203129000,
                                         0.694799870000};
   std::vector<double> arm_home_positions{0.0, 0.0, 0.0, 0.0, 0.0};
-  double q6_safe_lower{-0.059303612618397};
-  double q6_home{-0.059303612618397};
+  double q6_safe_lower{-0.059600220867817};
+  double q6_home{-0.059600220867817};
   double q6_preopen{0.465038};
   double q6_geometric_side_contact{0.662818811};
   // Command the calibrated Bullet contact stop instead of locking penetration
   // into the DetachableJoint constraint.
   double q6_close{fingertip_pad_calibration::kGraspQ6};
   double q6_contact{fingertip_pad_calibration::kGraspQ6};
-  // One bounded retry compensates the observed ~2.1 mm cup seating shift.
-  // The resulting q6 remains 5.9 mrad above the declared safe lower limit,
-  // and physical acceptance still requires six bilateral depth-bounded samples.
+  // One bounded retry adds about 0.49 mm of mesh-calibrated wall interference.
+  // Keep more than 5 mrad of travel above the generated safe lower limit; the
+  // Bullet compound-link friction fix supplies lift capacity without crushing
+  // the 2 mm cup wall toward the 1 mm safe-floor gap.
   double q6_regrasp_squeeze_offset{0.0060};
   double q6_full_open{1.7};
   std::vector<double> release_stages_q6;
-  double preopen_width{0.039453338646308};
+  double preopen_width{fingertip_pad_calibration::kPreopenGapM};
   double contact_width{fingertip_pad_calibration::kGraspGapM};
   std::string fingertip_pad_calibration_fingerprint{
-    "b101b7db33a13c82797eb80c2356f1c6b509e04bdae7999efd4b6a8ce0d1094f"};
+    "f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8"};
   double grasp_section_depth{0.020};
   std::string gripper_geometry_model_version{"so101-gripper-d20-mesh-v1"};
   std::string gripper_geometry_model_fingerprint{
-    "8d541b21f53327500776c611227323c30e8dceb69844535235c46704836cc127"};
+    "20494b75a582e30723af0addaf1aaa234f55e539a83f33a24a91f71ef6a27a53"};
   // Preopen and native-pad grasp use the configured position tolerance.  The
   // release endpoint gets a separate settling allowance below.
   double q6_tolerance{0.001};

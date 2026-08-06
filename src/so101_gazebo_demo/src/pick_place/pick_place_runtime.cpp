@@ -520,7 +520,6 @@ public:
     int consecutive = 0;
     int consecutive_unilateral = 0;
     bool regrasp_attempted = false;
-    bool regrasp_relaxed = false;
     for (int sample = 0; sample < max_samples; ++sample) {
       const auto observed = observer_->observe();
       if (!observed.snapshot) {
@@ -557,18 +556,19 @@ public:
         consecutive_unilateral = 0;
         last = snapshot;
         if (consecutive >= required_consecutive) {
-          if (before_lift_ && regrasp_attempted && !regrasp_relaxed) {
-            // The retry deliberately moves the cup into bilateral contact, but
-            // its deep squeeze is only a transient seating action.  Return to
-            // the calibrated wall target before attachment, then require a
-            // second full stable window so an over-compressed grasp can never
-            // be frozen into the Gazebo detachable joint.
-            const auto relaxed = gripper_->command(profile_.q6_contact);
-            const bool contact_abort = relaxed.status == ActionStatus::FAILED && relaxed.failure &&
-                                       relaxed.failure->code == "GRIPPER_ACTION_ABORTED";
-            if (relaxed.status != ActionStatus::SUCCEEDED && !contact_abort)
-              return relaxed;
-            regrasp_relaxed = true;
+          if (before_lift_ && !regrasp_attempted) {
+            // A bilateral contact indication proves geometry, not load-bearing
+            // normal force. Apply one bounded preload and keep it through the
+            // physical micro-lift. ATTACH_GAZEBO releases it to q6_contact only
+            // after the detachable joint has become authoritative.
+            const double retry_target = std::max(
+              profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
+            const auto retry = gripper_->command(retry_target);
+            const bool contact_abort = retry.status == ActionStatus::FAILED && retry.failure &&
+                                       retry.failure->code == "GRIPPER_ACTION_ABORTED";
+            if (retry.status != ActionStatus::SUCCEEDED && !contact_abort)
+              return retry;
+            regrasp_attempted = true;
             consecutive = 0;
             last.reset();
           } else {
@@ -602,7 +602,7 @@ public:
       if (sample + 1 < max_samples)
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    if (!last || consecutive < required_consecutive || (regrasp_attempted && !regrasp_relaxed)) {
+    if (!last || consecutive < required_consecutive) {
       return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
                                             "PHYSICAL_GRASP_BILATERAL_STABILITY_TIMEOUT",
                                             "Bilateral fixed-finger and moving-jaw contact did not "

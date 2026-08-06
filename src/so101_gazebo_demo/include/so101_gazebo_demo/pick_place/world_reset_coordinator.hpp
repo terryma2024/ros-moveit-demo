@@ -53,8 +53,8 @@ struct WorldResetConfig
   std::vector<double> arm_home_positions{0.0, 0.0, 0.0, 0.0, 0.0};
   std::string gripper_joint{"6"};
   double q6_release_position{1.7};
-  double q6_safe_lower{-0.059303612618397};
-  double q6_home_position{-0.059303612618397};
+  double q6_safe_lower{-0.059600220867817};
+  double q6_home_position{-0.059600220867817};
   double arm_joint_position_tolerance{0.002};
   double gripper_position_tolerance{0.001};
   double joint_velocity_tolerance{0.01};

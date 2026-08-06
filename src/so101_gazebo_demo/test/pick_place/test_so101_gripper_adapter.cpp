@@ -65,10 +65,11 @@ TEST(SO101Profile, OwnsExactRobotSceneAndAttachmentContract)
   EXPECT_EQ((std::vector<std::string>{"gripper", "jaw"}), profile.moveit_touch_links);
   EXPECT_DOUBLE_EQ(0.465038, profile.q6_preopen);
   EXPECT_DOUBLE_EQ(0.662818811, profile.q6_geometric_side_contact);
-  EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_close);
-  EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_contact);
+  EXPECT_DOUBLE_EQ(-0.047608632840292, profile.q6_close);
+  EXPECT_DOUBLE_EQ(-0.047608632840292, profile.q6_contact);
   EXPECT_DOUBLE_EQ(0.0060, profile.q6_regrasp_squeeze_offset);
   EXPECT_GT(profile.q6_contact - profile.q6_regrasp_squeeze_offset, profile.q6_safe_lower);
+  EXPECT_GT(profile.q6_contact - profile.q6_regrasp_squeeze_offset - profile.q6_safe_lower, 0.005);
   EXPECT_EQ(profile.fingertip_pad_calibration_fingerprint,
             pick_place::fingertip_pad_calibration::kInputFingerprint);
   EXPECT_DOUBLE_EQ(0.020, profile.grasp_section_depth);

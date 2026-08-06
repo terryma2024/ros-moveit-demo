@@ -119,11 +119,11 @@ const std::vector<std::vector<double>> kGoldenWaypoints{
   {-0.000283745683, 0.253568199427, 0.213237198063, 1.103997256470, -0.000291185985},
   {-0.000283936540, 0.312943337339, 0.250048785615, 1.007810530006, -0.000291376841},
   {-0.000284124852, 0.381814591288, 0.272246878070, 0.916741182602, -0.000291565154},
-  {-0.000182194999, 0.469727784396, 0.217642530798, 0.859256029129, 0.000398028351},
+  {-0.000266500000, 0.471075800000, 0.216081000000, 0.856893000000, 0.000519000000},
   {0.414521193913, 0.179437354347, 0.140117134131, 1.230305282671, -0.000268782932},
   {0.412761019553, 0.231656466651, 0.201890961785, 1.116312343800, -0.000268760093},
   {0.410549243529, 0.284379863507, 0.263091668828, 1.002388239890, -0.000268760311},
-  {0.407898155659, 0.362647550389, 0.328796399900, 0.858415820859, -0.000268782959},
+  {0.407916176553, 0.360728562196, 0.333930438812, 0.849391852381, 0.000527139337},
 };
 
 std::vector<std::vector<double>>
@@ -392,9 +392,9 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
     const std::vector<spp::Vec3> expected_positions{
       {0.020673898, -0.254062366, 0.259792378},  {0.020673884, -0.258022783, 0.241331096},
       {0.020673885, -0.253024373, 0.239831664},  {0.020673885, -0.253024210, 0.224832847},
-      {0.020673884, -0.253024034, 0.210034129},  {0.020666853, -0.261860750, 0.200639178},
+      {0.020673884, -0.253024034, 0.210034129},  {0.020689712, -0.262368530, 0.200624360},
       {-0.072885185, -0.235515275, 0.262755728}, {-0.072653526, -0.236004954, 0.245614538},
-      {-0.071642733, -0.234971310, 0.228845176}, {-0.069889681, -0.232459408, 0.207733946},
+      {-0.071642733, -0.234971310, 0.228845176}, {-0.070033365, -0.232824468, 0.207660672},
     };
     for (std::size_t index = 0; index < kGoldenWaypoints.size(); ++index) {
       state.setToDefaultValues();
@@ -413,7 +413,8 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
       EXPECT_NEAR(pose.x, expected_positions[index].x, 2e-7) << index;
       EXPECT_NEAR(pose.y, expected_positions[index].y, 2e-7) << index;
       EXPECT_NEAR(pose.z, expected_positions[index].z, 2e-7) << index;
-      const double expected_tilt = index == 5 ? 0.024176308795 : (index > 5 ? 0.020943951205 : 0.0);
+      const double expected_tilt =
+        (index == 5 || index == 9) ? 0.026752852892 : (index > 5 ? 0.020943951205 : 0.0);
       EXPECT_NEAR(spp::approachAxisError(pose, {0, 0, -1}, {0, 0, -1}), expected_tilt, 2e-5)
         << index;
       for (std::size_t joint = 0; joint < profile.arm_joints.size(); ++joint) {
@@ -489,8 +490,8 @@ TEST(SO101FixedMotionTargets, RobotModelFkLocksXyzToolAxisAndJointMarginForEvery
     EXPECT_NEAR(placed_task_object.translation().y(), -0.248733688422, 2e-6);
     EXPECT_NEAR(placed_task_object.translation().z(), 0.172036311876, 2e-6);
     const Eigen::Quaterniond placed_orientation(placed_task_object.rotation());
-    EXPECT_NEAR(placed_orientation.normalized().z(), -0.202953473895, 2e-6);
-    EXPECT_NEAR(std::abs(placed_orientation.normalized().w()), 0.979187048177, 2e-6);
+    EXPECT_NEAR(placed_orientation.normalized().z(), -0.202673456967, 2e-6);
+    EXPECT_NEAR(std::abs(placed_orientation.normalized().w()), 0.979246378518, 2e-6);
     const Eigen::Vector3d cup_axis = placed_task_object.linear().col(2);
     EXPECT_NEAR(cup_axis.dot(Eigen::Vector3d::UnitZ()), 1.0, 6e-6);
     const Eigen::Vector3d bottom_center =
@@ -665,16 +666,16 @@ TEST(SO101FixedMotionTargets, UsesOutsideAboveLaneAndSeatedNearWallEndpoint)
   // fixed gripper-to-TCP transform.  They deliberately are not the gripper-
   // origin contact-face coordinates used by the pad/wall geometry audit.
   constexpr double pick_tcp_x = 0.020673889;
-  constexpr double gentle_tcp_x = 0.020666853;
+  constexpr double precontact_tcp_x = 0.020689711743;
   constexpr double outside_tcp_y = -0.254030551;
-  constexpr double seated_tcp_y = -0.261860750;
+  constexpr double precontact_tcp_y = -0.262368529811;
   constexpr double place_tcp_x = -0.069889681;
   constexpr double place_tcp_y = -0.232459408;
   EXPECT_DOUBLE_EQ(above->validation.endpoint_position.x, pick_tcp_x);
-  EXPECT_DOUBLE_EQ(descend->validation.endpoint_position.x, gentle_tcp_x);
+  EXPECT_DOUBLE_EQ(descend->validation.endpoint_position.x, precontact_tcp_x);
   EXPECT_DOUBLE_EQ(place->validation.endpoint_position.x, place_tcp_x);
   EXPECT_NEAR(above->validation.endpoint_position.y, outside_tcp_y, 1e-9);
-  EXPECT_NEAR(descend->validation.endpoint_position.y, seated_tcp_y, 1e-9);
+  EXPECT_NEAR(descend->validation.endpoint_position.y, precontact_tcp_y, 1e-9);
   EXPECT_NEAR(place->validation.endpoint_position.y, place_tcp_y, 1e-9);
 }
 
@@ -690,7 +691,7 @@ TEST(SO101FixedMotionTargets, UsesValidatedGentlePregraspAndFiftyMillimetreLift)
   ASSERT_TRUE(above && descend && lift && above_place && place && recover_descend);
 
   EXPECT_NEAR(above->validation.endpoint_position.z - descend->validation.endpoint_position.z,
-              0.059198031, 2e-9);
+              0.059212849276, 2e-9);
   EXPECT_GE(lift->validation.endpoint_position.z - descend->validation.endpoint_position.z,
             0.050 - 3e-9);
   EXPECT_GE(above_place->validation.endpoint_position.z - place->validation.endpoint_position.z,

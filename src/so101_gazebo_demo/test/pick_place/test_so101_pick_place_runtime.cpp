@@ -510,7 +510,7 @@ TEST(SO101PickPlaceRuntime, MarksPersistedPhysicalSamplesFreshBeforeValidation)
     << (result.failure ? result.failure->code : "");
 }
 
-TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSamples)
+TEST(SO101PickPlaceRuntime, StableGraspKeepsTheBoundedSqueezeThroughMicroLift)
 {
   auto dependencies = completeDependencies();
   auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
@@ -536,12 +536,11 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  ASSERT_EQ(gripper->calls, 2);
+  ASSERT_EQ(gripper->calls, 1);
   EXPECT_DOUBLE_EQ(gripper->targets.front(),
                    spp::SO101Profile::canonical().q6_contact -
                      spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
-  EXPECT_DOUBLE_EQ(gripper->targets.back(), spp::SO101Profile::canonical().q6_contact);
-  EXPECT_EQ(observer->next_sample, 13U);
+  EXPECT_EQ(observer->next_sample, 7U);
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
@@ -569,9 +568,39 @@ TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  EXPECT_EQ(gripper->calls, 2);
-  EXPECT_DOUBLE_EQ(gripper->last_target, spp::SO101Profile::canonical().q6_contact);
-  EXPECT_EQ(observer->next_sample, 13U);
+  EXPECT_EQ(gripper->calls, 1);
+  EXPECT_DOUBLE_EQ(gripper->last_target,
+                   spp::SO101Profile::canonical().q6_contact -
+                     spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
+  EXPECT_EQ(observer->next_sample, 7U);
+}
+
+TEST(SO101PickPlaceRuntime, StableBilateralGraspAddsOneBoundedSqueezeBeforeMicroLift)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  auto bilateral = observer->snapshot;
+  bilateral.gazebo_task_object_fixed_finger_contact = true;
+  bilateral.gazebo_task_object_moving_jaw_contact = true;
+  bilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  observer->samples.assign(12, bilateral);
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
+  ASSERT_TRUE(executor);
+
+  const auto result = executor->execute(
+    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  ASSERT_EQ(gripper->calls, 1);
+  EXPECT_DOUBLE_EQ(gripper->last_target,
+                   spp::SO101Profile::canonical().q6_contact -
+                     spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
+  EXPECT_EQ(observer->next_sample, 12U);
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
@@ -585,7 +614,8 @@ TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
   bilateral.gazebo_task_object_fixed_finger_contact = true;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
   bilateral.gazebo_task_object_gripper_max_depth = 0.001;
-  observer->samples = {moving, bilateral, bilateral, bilateral, bilateral, bilateral, bilateral};
+  observer->samples = {moving,    bilateral, bilateral, bilateral, bilateral, bilateral, bilateral,
+                       bilateral, bilateral, bilateral, bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
   ASSERT_TRUE(executor);
@@ -595,7 +625,7 @@ TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  EXPECT_EQ(observer->next_sample, 7U);
+  EXPECT_EQ(observer->next_sample, 13U);
 }
 
 TEST(SO101PickPlaceRuntime, GazeboDetachWaitsForThreeConsecutiveStationarySamples)

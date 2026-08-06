@@ -675,8 +675,9 @@ MoveItJointPlanningBoundary::captureWorldZMicroLiftPlanningRequest(const Pose3d 
   capture.request.request.max_acceleration_scaling_factor = 0.03;
   moveit::core::robotStateToRobotStateMsg(*current, capture.request.request.start_state, true);
   capture.request.request.goal_constraints.push_back(
-    kinematic_constraints::constructGoalConstraints(impl_->profile.tcp_link, target, 0.0002,
-                                                    0.005));
+    kinematic_constraints::constructGoalConstraints(impl_->profile.tcp_link, target,
+                                                    kMicroLiftPositionToleranceM,
+                                                    kMicroLiftOrientationToleranceRad));
   capture.request.planning_options.plan_only = true;
   capture.request.planning_options.planning_scene_diff.is_diff = true;
   {

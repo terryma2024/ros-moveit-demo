@@ -37,6 +37,9 @@ def generate_launch_description():
         .trajectory_execution(
             file_path=str(package_share / "config" / "moveit_controllers.yaml")
         )
+        .planning_pipelines(
+            default_planning_pipeline="ompl", pipelines=["ompl"], load_all=False
+        )
         .to_moveit_configs()
     )
     move_group = Node(

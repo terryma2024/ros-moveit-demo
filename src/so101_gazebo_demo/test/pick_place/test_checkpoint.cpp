@@ -526,6 +526,35 @@ TEST(CommonResumeValidator, ForwardResumeFailsClosedForEveryExpectedWorldBoundar
   }
 }
 
+TEST(CommonResumeValidator, SettlingWaitResumeAllowsOnlyGazeboPoseEvolution)
+{
+  auto checkpoint = makeRecoveryCheckpoint();
+  checkpoint.phase = pick_place::CheckpointPhase::FORWARD;
+  checkpoint.last_completed_state = pick_place::State::CLOSE_GRIPPER;
+  checkpoint.next_state = pick_place::State::WAIT_GRASP_STABLE;
+  checkpoint.failed_state.reset();
+  checkpoint.original_failure.reset();
+  checkpoint.resumable = true;
+  auto settled_later = snapshotFrom(checkpoint);
+  settled_later.gazebo_task_object_pose_world->x += 0.01;
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_fingerprint,
+                                                    checkpoint.simulation_session_id);
+
+  EXPECT_TRUE(validator.validate(checkpoint, settled_later).ok);
+
+  checkpoint.last_completed_state = pick_place::State::WAIT_GRASP_STABLE;
+  checkpoint.next_state = pick_place::State::MICRO_LIFT;
+  EXPECT_TRUE(validator.validate(checkpoint, settled_later).ok);
+
+  checkpoint.last_completed_state = pick_place::State::DESCEND;
+  checkpoint.next_state = pick_place::State::CLOSE_GRIPPER;
+  EXPECT_FALSE(validator.validate(checkpoint, settled_later).ok);
+
+  checkpoint.next_state = pick_place::State::WAIT_GRASP_STABLE;
+  settled_later.gazebo_task_object_attached = false;
+  EXPECT_FALSE(validator.validate(checkpoint, settled_later).ok);
+}
+
 TEST(CommonResumeValidator, AcceptsPhysicalGraspValidationCheckpointForExplicitOverride)
 {
   auto checkpoint = makeRecoveryCheckpoint();

@@ -81,6 +81,11 @@ SO101ResumeValidationPolicy::validateBoundary(const pick_place_common::Checkpoin
 {
   pick_place_common::ValidationResult result{true, {}, {}};
   const bool forward_boundary = checkpoint.phase == CheckpointPhase::FORWARD;
+  const bool settling_wait_boundary =
+    forward_boundary && (checkpoint.last_completed_state == State::WAIT_GRASP_STABLE ||
+                         checkpoint.last_completed_state == State::WAIT_MICRO_LIFT_STABLE ||
+                         checkpoint.next_state == State::WAIT_GRASP_STABLE ||
+                         checkpoint.next_state == State::WAIT_MICRO_LIFT_STABLE);
   if (!checkpoint.resumable) {
     addFailure(result, "CHECKPOINT_INCOMPATIBLE", "Resume requires a resumable checkpoint");
   }
@@ -185,8 +190,9 @@ SO101ResumeValidationPolicy::validateBoundary(const pick_place_common::Checkpoin
     addFailure(result, "RESUME_MOVEIT_ATTACHMENT_MISMATCH",
                "Current MoveIt attachment state differs from the checkpoint expectation");
   }
-  if (forward_boundary && !optionalPosesMatch(checkpoint.expected.gazebo_task_object_pose_world,
-                                              current.gazebo_task_object_pose_world, tolerance)) {
+  if (forward_boundary && !settling_wait_boundary &&
+      !optionalPosesMatch(checkpoint.expected.gazebo_task_object_pose_world,
+                          current.gazebo_task_object_pose_world, tolerance)) {
     addFailure(result, "RESUME_GAZEBO_POSE_MISMATCH",
                "Current Gazebo object pose differs from the checkpoint expectation");
   }

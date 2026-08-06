@@ -36,7 +36,7 @@ states:
     allowed_touch_pairs: []
     temporal_contact: null
   DESCEND:
-    endpoint_position: [0.020666853, -0.261860750, 0.200639178]
+    endpoint_position: [0.020689711743, -0.262368529811, 0.200624359724]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, -1.0]
@@ -144,7 +144,7 @@ states:
     allowed_touch_pairs: []
     temporal_contact: null
   RECOVER_DESCEND_TO_PICK:
-    endpoint_position: [0.020666853, -0.261860750, 0.200639178]
+    endpoint_position: [0.020689711743, -0.262368529811, 0.200624359724]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, -1.0]

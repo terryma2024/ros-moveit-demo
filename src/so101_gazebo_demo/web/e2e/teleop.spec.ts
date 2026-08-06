@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const hardLimits: Record<string, [number, number]> = { "1": [-1.91986, 1.91986], "2": [-1.74533, 1.74533], "3": [-1.74533, 1.5708], "4": [-1.65806, 1.65806], "5": [-2.79253, 2.79253], "6": [-0.059303612618397, 1.74533] };
+const hardLimits: Record<string, [number, number]> = { "1": [-1.91986, 1.91986], "2": [-1.74533, 1.74533], "3": [-1.74533, 1.5708], "4": [-1.65806, 1.65806], "5": [-2.79253, 2.79253], "6": [-0.059600220867817, 1.74533] };
 const environment = {
   ROS_DOMAIN_ID: "55", ROS_DISTRO: "jazzy", ROS_VERSION: "2", ROS_PYTHON_VERSION: "3",
   ROS_AUTOMATIC_DISCOVERY_RANGE: "SUBNET", AMENT_PREFIX_PATH: "/data/work/ws_moveit/install:/opt/ros/jazzy",
