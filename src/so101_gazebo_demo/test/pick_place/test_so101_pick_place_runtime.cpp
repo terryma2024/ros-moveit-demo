@@ -522,6 +522,47 @@ TEST(SO101PickPlaceRuntime, MarksPersistedPhysicalSamplesFreshBeforeValidation)
     << (result.failure ? result.failure->code : "");
 }
 
+TEST(SO101PickPlaceRuntime, VerifyPhysicalGraspDelegatesFailureToBoundedRetryCoordinator)
+{
+  auto dependencies = completeDependencies();
+  auto evidence =
+    std::dynamic_pointer_cast<MemoryPhysicalEvidenceStore>(dependencies.physical_grasp_evidence);
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(evidence);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  const auto & profile = spp::SO101Profile::canonical();
+  spp::PhysicalGraspEvidenceRecord record;
+  record.simulation_session_id = "runtime-retry";
+  record.retry.progress = {1, 0, profile.q6_contact};
+  record.before_lift = spp::PhysicalGraspSample{spp::State::WAIT_GRASP_STABLE,
+                                                100,
+                                                {0.02, -0.28, 0.200, 0.0, 0.0, 0.0, 1.0},
+                                                profile.task_object_pose,
+                                                true};
+  record.after_lift = *record.before_lift;
+  record.after_lift->capture_state = spp::State::WAIT_MICRO_LIFT_STABLE;
+  record.after_lift->tcp_pose_world.z += 0.002;
+  evidence->record = record;
+  observer->snapshot.simulation_session_id = record.simulation_session_id;
+  observer->snapshot.gazebo_task_object_attached = false;
+  observer->snapshot.moveit_task_object_attached = false;
+  observer->snapshot.moveit_world_object_poses[profile.task_object_id] = profile.task_object_pose;
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::VERIFY_PHYSICAL_GRASP);
+  ASSERT_TRUE(executor);
+
+  const auto result =
+    executor->execute({spp::State::VERIFY_PHYSICAL_GRASP, spp::State::ATTACH_GAZEBO, {}, nullptr});
+
+  ASSERT_EQ(result.status, spp::ActionStatus::NOT_SUPPORTED);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "WORLD_Z_MICRO_DESCEND_NOT_SUPPORTED");
+  ASSERT_EQ(gripper->targets.size(), 1U);
+  EXPECT_DOUBLE_EQ(gripper->targets.front(), profile.q6_preopen);
+}
+
 TEST(SO101PickPlaceRuntime, StableGraspKeepsTheBoundedSqueezeThroughMicroLift)
 {
   auto dependencies = completeDependencies();

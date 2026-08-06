@@ -16,6 +16,7 @@
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_stabilizer.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_retry.hpp"
 #include "so101_gazebo_demo/pick_place/support_pose.hpp"
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
 
@@ -614,64 +615,33 @@ private:
 class VerifyPhysicalGraspAction final : public IStateExecutor
 {
 public:
-  VerifyPhysicalGraspAction(std::shared_ptr<IPhysicalGraspEvidenceStore> evidence,
-                            PhysicalGraspValidator validator, PhysicalGraspGeometry geometry) :
-      evidence_(std::move(evidence)), validator_(validator), geometry_(geometry)
+  explicit VerifyPhysicalGraspAction(std::shared_ptr<PhysicalGraspRetryCoordinator> coordinator) :
+      coordinator_(std::move(coordinator))
   {
   }
 
   ActionResult execute(const ExecutionContext &) override
   {
-    if (!evidence_) {
+    if (!coordinator_) {
       return {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
-                                            "PHYSICAL_GRASP_EVIDENCE_DEPENDENCY_MISSING",
-                                            "Physical-grasp evidence store is missing",
+                                            "PHYSICAL_GRASP_RETRY_DEPENDENCY_MISSING",
+                                            "Physical-grasp retry coordinator is missing",
                                             {}}};
     }
-    auto loaded = evidence_->load();
-    if (std::holds_alternative<Failure>(loaded))
-      return {ActionStatus::FAILED, std::get<Failure>(std::move(loaded))};
-    const auto record = std::get<PhysicalGraspEvidenceRecord>(std::move(loaded));
-    if (record.retry.phase != PhysicalGraspRetryPhase::IDLE &&
-        record.retry.phase != PhysicalGraspRetryPhase::COMPLETE) {
-      return {ActionStatus::FAILED,
-              Failure{FailureCategory::POSTCONDITION,
-                      "PHYSICAL_GRASP_RETRY_INTERRUPTED",
-                      "Physical-grasp retry stopped during an uncertain side-effect phase",
-                      {{"attempt_index", static_cast<double>(record.retry.progress.attempt_index)},
-                       {"phase", static_cast<double>(record.retry.phase)},
-                       {"close_target_q6", record.retry.progress.current_reclose_target_q6}}}};
-    }
-    if (!record.before_lift || !record.after_lift) {
-      return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
-                                            "PHYSICAL_GRASP_EVIDENCE_INCOMPLETE",
-                                            "Both stable windows are required before attachment",
-                                            {}}};
-    }
-    WorldSnapshot before;
-    before.fresh = true;
-    before.tcp_pose_world = record.before_lift->tcp_pose_world;
-    before.gazebo_task_object_pose_world = record.before_lift->task_object_pose_world;
-    before.gazebo_task_object_gripper_contact = record.before_lift->gripper_contact;
-    WorldSnapshot after;
-    after.fresh = true;
-    after.tcp_pose_world = record.after_lift->tcp_pose_world;
-    after.gazebo_task_object_pose_world = record.after_lift->task_object_pose_world;
-    after.gazebo_task_object_gripper_contact = record.after_lift->gripper_contact;
-    auto result = validator_.evaluate(before, after, geometry_);
-    if (!result.passed)
-      return {ActionStatus::FAILED, result.failure};
-    return {ActionStatus::SUCCEEDED, std::nullopt};
+    return coordinator_->verifyOrRetry();
   }
   ActionResult cancel() override
   {
-    return {ActionStatus::SUCCEEDED, std::nullopt};
+    return coordinator_ ? coordinator_->cancel()
+                        : ActionResult{ActionStatus::FAILED,
+                                       Failure{FailureCategory::CONFIGURATION,
+                                               "PHYSICAL_GRASP_RETRY_DEPENDENCY_MISSING",
+                                               "Physical-grasp retry coordinator is missing",
+                                               {}}};
   }
 
 private:
-  std::shared_ptr<IPhysicalGraspEvidenceStore> evidence_;
-  PhysicalGraspValidator validator_;
-  PhysicalGraspGeometry geometry_;
+  std::shared_ptr<PhysicalGraspRetryCoordinator> coordinator_;
 };
 
 class PhysicalGraspContract final : public TransitionContractRegistry::ITransitionContract
@@ -717,6 +687,10 @@ void registerPhysicalGrasp(SO101PickPlaceRuntimeRegistries & runtime,
   auto stabilizer = std::make_shared<SO101PhysicalGraspStabilizer>(
     dependencies.physical_observer, dependencies.physical_grasp_evidence, dependencies.gripper,
     config.profile);
+  auto coordinator = std::make_shared<PhysicalGraspRetryCoordinator>(
+    dependencies.gripper, dependencies.micro_lift, dependencies.physical_observer,
+    dependencies.physical_grasp_evidence, stabilizer, PhysicalGraspValidator{}, geometry,
+    config.profile, config.physical_grasp_retry);
   runtime.actions.registerExecutor(
     State::WAIT_GRASP_STABLE, std::make_shared<PhysicalGraspStabilizerAction>(true, stabilizer));
   runtime.actions.registerExecutor(
@@ -724,10 +698,8 @@ void registerPhysicalGrasp(SO101PickPlaceRuntimeRegistries & runtime,
   runtime.actions.registerExecutor(
     State::WAIT_MICRO_LIFT_STABLE,
     std::make_shared<PhysicalGraspStabilizerAction>(false, stabilizer));
-  runtime.actions.registerExecutor(
-    State::VERIFY_PHYSICAL_GRASP,
-    std::make_shared<VerifyPhysicalGraspAction>(dependencies.physical_grasp_evidence,
-                                                PhysicalGraspValidator{}, geometry));
+  runtime.actions.registerExecutor(State::VERIFY_PHYSICAL_GRASP,
+                                   std::make_shared<VerifyPhysicalGraspAction>(coordinator));
   for (const auto state : kPhysicalGraspStates) {
     runtime.contracts.registerContract(
       {state, TransitionTable::resolve(state, ActionStatus::SUCCEEDED)},
@@ -957,7 +929,8 @@ makeSO101PickPlaceRuntimeRegistries(const SO101PickPlaceRuntimeDependencies & de
     task3_dependencies.gazebo_detach = std::make_shared<DetachAndWaitForStationary>(
       task3_dependencies.gazebo_detach, dependencies.physical_observer);
   }
-  auto task3 = makeSO101Task3Runtime(task3_dependencies, config);
+  const auto & task3_config = static_cast<const SO101Task3RuntimeConfig &>(config);
+  auto task3 = makeSO101Task3Runtime(task3_dependencies, task3_config);
   SO101PickPlaceRuntimeRegistries runtime{
     std::move(task3.actions),         {},    std::move(task3.contracts),
     std::move(task3.recovery_policy), false, std::nullopt};
