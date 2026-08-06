@@ -510,7 +510,6 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
     }
     before = *observation.snapshot;
   }
-  const ObservationResult planning_observation{*before, std::nullopt};
   auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
   std::size_t precondition_attempt = 0;
   while (!precondition.ok && !precondition.failures.empty() &&
@@ -558,6 +557,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                            std::string("No plan validator is registered for ") + toString(state),
                            {}});
     }
+    const ObservationResult planning_observation{*before, std::nullopt};
     const auto plan = planner->plan(state, next_state, planning_observation);
     if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact) {
       auto failure = plan.action.failure.value_or(Failure{FailureCategory::PLAN_VALIDATION,
