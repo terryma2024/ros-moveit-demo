@@ -19,6 +19,27 @@
         <origin xyz="0 0 0.1034" rpy="0 0 0" />
     </joint>
 
+
+    <!-- V5-T004: eye-to-hand 深度相机，固定在 panda_link0 前上方俯视桌面 -->
+    <link name="camera_link">
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <box size="0.04 0.08 0.04" />
+            </geometry>
+            <material>
+                <color rgba="0.1 0.1 0.8 1.0" />
+            </material>
+        </visual>
+    </link>
+
+    <joint name="camera_joint" type="fixed">
+        <parent link="panda_link0" />
+        <child link="camera_link" />
+        <!-- 相机在底座前方 0.6m、高度 1.0m，绕 Y 轴转 135° 让光轴朝前下方俯视 -->
+        <origin xyz="0.6 0 1.0" rpy="0 2.356 0" />
+    </joint>
+
     <!-- Fix Panda base to the Gazebo world at the table-top height. -->
     <link name="world" />
 
@@ -61,4 +82,25 @@
             <output_topic>/panda/coke_attached_event</output_topic>
         </plugin>
     </gazebo>
+
+    <!-- V5-T004: Gazebo RGBD 相机 sensor，发布 RGB + Depth + CameraInfo -->
+    <gazebo reference="camera_link">
+        <sensor name="rgbd_camera" type="rgbd_camera">
+            <topic>camera</topic>
+            <update_rate>10</update_rate>
+            <camera>
+                <horizontal_fov>1.047</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>rgb_int8</format>
+                </image>
+                <clip>
+                    <near>0.1</near>
+                    <far>10.0</far>
+                </clip>
+            </camera>
+        </sensor>
+    </gazebo>
+
 </robot>

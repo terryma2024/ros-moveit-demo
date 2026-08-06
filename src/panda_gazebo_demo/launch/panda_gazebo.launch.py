@@ -172,6 +172,24 @@ def generate_launch_description():
         output='screen',
     )
 
+    # V5-T004: 桥接 Gazebo RGBD 相机 topic 到 ROS 2
+    # [ 表示 Gazebo → ROS 2 方向
+    camera_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/camera@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/camera/depth@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+        ],
+        remappings=[
+            ('/camera', '/camera/color/image_raw'),
+            ('/camera/depth', '/camera/depth/image_raw'),
+            ('/camera/camera_info', '/camera/color/camera_info'),
+        ],
+        output='screen',
+    )
+
     moveit_config = (
         MoveItConfigsBuilder('moveit_resources_panda')
         .robot_description(
@@ -304,6 +322,7 @@ def generate_launch_description():
             gazebo_headless,
             gazebo_with_gui,
             clock_bridge,
+            camera_bridge,
             attachment_state_relay,
             robot_state_publisher,
             spawn_panda,
