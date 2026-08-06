@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 
 #include "so101_gazebo_demo/pick_place/physical_grasp_validator.hpp"
@@ -8,6 +9,11 @@
 
 namespace so101_gazebo_demo::pick_place
 {
+class ISO101GripperCommand;
+class IWorldZMicroLift;
+class IPhysicalGraspEvidenceStore;
+class SO101PhysicalGraspStabilizer;
+
 struct PhysicalGraspRetryConfig
 {
   std::size_t max_attempts{5};
@@ -33,4 +39,30 @@ struct PhysicalGraspRetryDecision
 decidePhysicalGraspRetry(const PhysicalGraspRetryConfig & config, const SO101Profile & profile,
                          const PhysicalGraspRetryProgress & current,
                          const PhysicalGraspResult & physical_result, const WorldSnapshot & after);
+
+class PhysicalGraspRetryCoordinator
+{
+public:
+  PhysicalGraspRetryCoordinator(std::shared_ptr<ISO101GripperCommand> gripper,
+                                std::shared_ptr<IWorldZMicroLift> micro_lift,
+                                std::shared_ptr<IWorldObserver> observer,
+                                std::shared_ptr<IPhysicalGraspEvidenceStore> evidence,
+                                std::shared_ptr<SO101PhysicalGraspStabilizer> stabilizer,
+                                PhysicalGraspValidator validator, PhysicalGraspGeometry geometry,
+                                SO101Profile profile = SO101Profile::canonical(),
+                                PhysicalGraspRetryConfig config = {});
+  ~PhysicalGraspRetryCoordinator();
+
+  PhysicalGraspRetryCoordinator(const PhysicalGraspRetryCoordinator &) = delete;
+  PhysicalGraspRetryCoordinator & operator=(const PhysicalGraspRetryCoordinator &) = delete;
+  PhysicalGraspRetryCoordinator(PhysicalGraspRetryCoordinator &&) noexcept;
+  PhysicalGraspRetryCoordinator & operator=(PhysicalGraspRetryCoordinator &&) noexcept;
+
+  [[nodiscard]] ActionResult verifyOrRetry();
+  [[nodiscard]] ActionResult cancel();
+
+private:
+  class Impl;
+  std::unique_ptr<Impl> impl_;
+};
 }  // namespace so101_gazebo_demo::pick_place

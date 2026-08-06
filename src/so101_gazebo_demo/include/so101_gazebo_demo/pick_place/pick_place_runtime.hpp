@@ -10,6 +10,7 @@
 #include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_validator.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_evidence_store.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_retry.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -52,6 +53,7 @@ struct SO101PickPlaceRuntimeDependencies : SO101Task3RuntimeDependencies
 
 struct SO101PickPlaceRuntimeConfig : SO101Task3RuntimeConfig
 {
+  PhysicalGraspRetryConfig physical_grasp_retry;
 };
 
 struct SO101PickPlaceRuntimeRegistries
