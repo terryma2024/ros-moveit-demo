@@ -29,11 +29,21 @@ ActionResult SO101PhysicalGraspStabilizer::captureAfterLift()
 ActionResult
 SO101PhysicalGraspStabilizer::cancel()  // NOLINT(readability-convert-member-functions-to-static)
 {
+  cancelled_.store(true);
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
 ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
 {
+  const auto cancelled = [this]() -> std::optional<ActionResult> {
+    if (!cancelled_.exchange(false))
+      return std::nullopt;
+    return ActionResult{ActionStatus::FAILED,
+                        Failure{FailureCategory::EXECUTION,
+                                "PHYSICAL_GRASP_STABILIZATION_CANCELLED",
+                                "Physical-grasp stability capture was cancelled",
+                                {}}};
+  };
   if (!observer_ || !evidence_) {
     return {ActionStatus::FAILED,
             Failure{FailureCategory::CONFIGURATION,
@@ -48,6 +58,8 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
   int consecutive_unilateral = 0;
   bool regrasp_attempted = false;
   for (int sample = 0; sample < max_samples; ++sample) {
+    if (auto stopped = cancelled())
+      return *stopped;
     const auto observed = observer_->observe();
     if (!observed.snapshot) {
       return {ActionStatus::FAILED, observed.failure.value_or(
@@ -84,6 +96,15 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
       last = snapshot;
       if (consecutive >= required_consecutive) {
         if (before_lift && !regrasp_attempted) {
+          if (auto stopped = cancelled())
+            return *stopped;
+          if (!gripper_) {
+            return {ActionStatus::FAILED,
+                    Failure{FailureCategory::CONFIGURATION,
+                            "PHYSICAL_REGRASP_COMMAND_MISSING",
+                            "Bilateral contact retry requires the production gripper command",
+                            {}}};
+          }
           const double retry_target = std::max(
             profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
           const auto retry = gripper_->command(retry_target);
@@ -111,6 +132,8 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
         }
         const double retry_target = std::max(
           profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
+        if (auto stopped = cancelled())
+          return *stopped;
         const auto retry = gripper_->command(retry_target);
         const bool contact_abort = retry.status == ActionStatus::FAILED && retry.failure &&
                                    retry.failure->code == "GRIPPER_ACTION_ABORTED";
@@ -129,6 +152,8 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
                                           "remain stable after one bounded regrasp",
                                           {}}};
   }
+  if (auto stopped = cancelled())
+    return *stopped;
   const auto failure = before_lift ? evidence_->saveBefore(*last) : evidence_->saveAfter(*last);
   if (failure)
     return {ActionStatus::FAILED, *failure};
