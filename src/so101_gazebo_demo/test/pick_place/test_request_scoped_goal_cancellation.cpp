@@ -279,3 +279,20 @@ TEST(MoveItJointPlanningBoundary, WaitsForTheFirstCompleteJointState)
   EXPECT_EQ((std::vector<double>{0.1, 0.2, 0.3, 0.4, 0.5}), evidence->positions);
   EXPECT_DOUBLE_EQ(0.795386732, *evidence->gripper_position);
 }
+
+TEST(MoveItJointPlanningBoundary, RejectsInvalidMicroDescendTargetsBeforeMoveItDispatch)
+{
+  if (!rclcpp::ok())
+    rclcpp::init(0, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("micro_descend_target_validation");
+  spp::MoveItJointPlanningBoundary boundary(node, spp::SO101Profile::canonical(),
+                                            "RRTConnectkConfigDefault", 0.1, 0.1, 0.01);
+  const spp::Pose3d current{0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0};
+  for (const auto target : {std::numeric_limits<double>::quiet_NaN(), 0.3, 0.301, 0.29779}) {
+    const auto captured = boundary.captureWorldZMicroDescendPlanningRequest(current, target);
+    ASSERT_TRUE(std::holds_alternative<spp::ActionResult>(captured));
+    const auto & result = std::get<spp::ActionResult>(captured);
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ(result.failure->code, "MICRO_DESCEND_TARGET_INVALID");
+  }
+}

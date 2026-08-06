@@ -138,6 +138,12 @@ public:
   [[nodiscard]] std::variant<MicroLiftPlanningCapture, ActionResult>
   captureWorldZMicroLiftPlanningRequest(const Pose3d & current_tcp_world, double world_z_delta_m);
   ActionResult cancelWorldZMicroLift() override;
+  ActionResult executeWorldZMicroDescend(const Pose3d & current_tcp_world,
+                                         double target_world_z_m) override;
+  [[nodiscard]] std::variant<MicroLiftPlanningCapture, ActionResult>
+  captureWorldZMicroDescendPlanningRequest(const Pose3d & current_tcp_world,
+                                           double target_world_z_m);
+  ActionResult cancelWorldZMicroDescend() override;
   std::optional<RobotStateEvidence>
   evaluate(const std::vector<std::string> & joint_names,
            const std::vector<double> & joint_positions,
@@ -151,6 +157,10 @@ public:
                                            double gripper_q6 = 1.100000000);
 
 private:
+  [[nodiscard]] std::variant<MicroLiftPlanningCapture, ActionResult>
+  captureWorldZPlanningRequest(const Pose3d & current_tcp_world, double target_world_z_m);
+  ActionResult executeWorldZPlanningRequest(const Pose3d & current_tcp_world,
+                                            double world_z_displacement_m, bool descend);
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

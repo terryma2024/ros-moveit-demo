@@ -74,6 +74,17 @@ public:
   int calls{0};
 };
 
+TEST(WorldZMicroDescendInterface, ExistingAdaptersFailClosedAsNotSupported)
+{
+  FakeMicroLift adapter;
+  const spp::Pose3d current{0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0};
+  const auto execute = adapter.executeWorldZMicroDescend(current, 0.298);
+  EXPECT_EQ(execute.status, spp::ActionStatus::NOT_SUPPORTED);
+  ASSERT_TRUE(execute.failure);
+  EXPECT_EQ(execute.failure->code, "WORLD_Z_MICRO_DESCEND_NOT_SUPPORTED");
+  EXPECT_EQ(adapter.cancelWorldZMicroDescend().status, spp::ActionStatus::NOT_SUPPORTED);
+}
+
 class FakePhysicalObserver final : public spp::IWorldObserver
 {
 public:
