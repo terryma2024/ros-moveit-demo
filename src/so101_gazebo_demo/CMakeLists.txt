@@ -111,6 +111,7 @@ add_library(so101_pick_place_runtime
   src/pick_place/so101_workflow.cpp
   src/pick_place/policy_config.cpp
   src/pick_place/physical_grasp_validator.cpp
+  src/pick_place/physical_grasp_retry.cpp
   src/pick_place/physical_grasp_evidence_store.cpp
   src/pick_place/planning_failure_diagnostics.cpp
   src/pick_place/transition_table.cpp
@@ -240,6 +241,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_pick_place_runner so101_pick_place_runtime)
   ament_add_gtest(test_physical_grasp_validator test/pick_place/test_physical_grasp_validator.cpp)
   target_link_libraries(test_physical_grasp_validator so101_pick_place_runtime)
+  ament_add_gtest(test_physical_grasp_retry test/pick_place/test_physical_grasp_retry.cpp)
+  target_link_libraries(test_physical_grasp_retry so101_pick_place_runtime)
   ament_add_gtest(test_physical_grasp_evidence_store test/pick_place/test_physical_grasp_evidence_store.cpp)
   target_link_libraries(test_physical_grasp_evidence_store so101_pick_place_runtime)
   ament_add_gtest(test_so101_gripper_adapter test/pick_place/test_so101_gripper_adapter.cpp)
