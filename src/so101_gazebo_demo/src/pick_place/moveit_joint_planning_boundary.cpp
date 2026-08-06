@@ -639,12 +639,40 @@ MoveItJointPlanningBoundary::captureWorldZMicroLiftPlanningRequest(const Pose3d 
               "World-Z physical-grasp probe must be a finite positive lift no larger than 2 mm",
               {}}};
   }
+  return captureWorldZPlanningRequest(current_tcp_world, current_tcp_world.z + world_z_delta_m);
+}
+
+std::variant<MicroLiftPlanningCapture, ActionResult>
+MoveItJointPlanningBoundary::captureWorldZMicroDescendPlanningRequest(
+  const Pose3d & current_tcp_world, double target_world_z_m)
+{
+  const auto displacement = current_tcp_world.z - target_world_z_m;
+  if (!std::isfinite(current_tcp_world.x) || !std::isfinite(current_tcp_world.y) ||
+      !std::isfinite(current_tcp_world.z) || !std::isfinite(current_tcp_world.qx) ||
+      !std::isfinite(current_tcp_world.qy) || !std::isfinite(current_tcp_world.qz) ||
+      !std::isfinite(current_tcp_world.qw) || !std::isfinite(target_world_z_m) ||
+      target_world_z_m >= current_tcp_world.z ||
+      displacement > 0.002 + kMicroLiftPositionToleranceM) {
+    return ActionResult{
+      ActionStatus::FAILED,
+      Failure{FailureCategory::CONFIGURATION,
+              "MICRO_DESCEND_TARGET_INVALID",
+              "World-Z micro-descend target must be finite, lower, and no more than 2 mm away",
+              {}}};
+  }
+  return captureWorldZPlanningRequest(current_tcp_world, target_world_z_m);
+}
+
+std::variant<MicroLiftPlanningCapture, ActionResult>
+MoveItJointPlanningBoundary::captureWorldZPlanningRequest(const Pose3d & current_tcp_world,
+                                                          double target_world_z_m)
+{
   geometry_msgs::msg::PoseStamped target;
   target.header.frame_id = impl_->profile.world_frame;
   target.header.stamp = impl_->node->now();
   target.pose.position.x = current_tcp_world.x;
   target.pose.position.y = current_tcp_world.y;
-  target.pose.position.z = current_tcp_world.z + world_z_delta_m;
+  target.pose.position.z = target_world_z_m;
   target.pose.orientation.x = current_tcp_world.qx;
   target.pose.orientation.y = current_tcp_world.qy;
   target.pose.orientation.z = current_tcp_world.qz;
@@ -714,17 +742,45 @@ MoveItJointPlanningBoundary::captureWorldZMicroLiftPlanningRequest(const Pose3d 
 ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & current_tcp_world,
                                                                  double world_z_delta_m)
 {
-  auto captured = captureWorldZMicroLiftPlanningRequest(current_tcp_world, world_z_delta_m);
-  if (std::holds_alternative<ActionResult>(captured))
-    return std::get<ActionResult>(std::move(captured));
+  return executeWorldZPlanningRequest(current_tcp_world, world_z_delta_m, false);
+}
+
+ActionResult
+MoveItJointPlanningBoundary::executeWorldZMicroDescend(const Pose3d & current_tcp_world,
+                                                       double target_world_z_m)
+{
+  return executeWorldZPlanningRequest(current_tcp_world, target_world_z_m - current_tcp_world.z,
+                                      true);
+}
+
+ActionResult MoveItJointPlanningBoundary::executeWorldZPlanningRequest(
+  const Pose3d & current_tcp_world, double world_z_displacement_m, bool descend)
+{
+  auto captured =
+    descend ? captureWorldZMicroDescendPlanningRequest(current_tcp_world,
+                                                       current_tcp_world.z + world_z_displacement_m)
+            : captureWorldZMicroLiftPlanningRequest(current_tcp_world, world_z_displacement_m);
+  if (std::holds_alternative<ActionResult>(captured)) {
+    auto failure = std::get<ActionResult>(std::move(captured));
+    if (!descend || (failure.failure && failure.failure->code == "MICRO_DESCEND_TARGET_INVALID"))
+      return failure;
+    return {
+      failure.status,
+      Failure{failure.failure ? failure.failure->category : FailureCategory::PLANNING,
+              "MICRO_DESCEND_PLANNING_FAILED",
+              failure.failure ? failure.failure->message : "World-Z micro-descend planning failed",
+              {}}};
+  }
   const auto capture = std::get<MicroLiftPlanningCapture>(std::move(captured));
   auto client = impl_->moveGroupAction();
   if (!client->wait_for_action_server(
         std::chrono::duration<double>(impl_->state_timeout_seconds))) {
     return {ActionStatus::FAILED,
             Failure{FailureCategory::OBSERVATION,
-                    "MICRO_LIFT_MOVE_GROUP_UNAVAILABLE",
-                    "MoveGroup action is unavailable for request-scoped micro-lift planning",
+                    descend ? "MICRO_DESCEND_PLANNING_FAILED" : "MICRO_LIFT_MOVE_GROUP_UNAVAILABLE",
+                    descend
+                      ? "MoveGroup action is unavailable for request-scoped micro-descend planning"
+                      : "MoveGroup action is unavailable for request-scoped micro-lift planning",
                     {}}};
   }
   const auto record_failure = [&](const MicroLiftPlanningOutcome & outcome,
@@ -754,7 +810,7 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & 
       impl_->diagnostics->simulation_session_id,
       impl_->diagnostics->configuration_fingerprint,
       current_tcp_world,
-      world_z_delta_m,
+      world_z_displacement_m,
       capture.request,
       capture.observed_scene,
       capture.contacts,
@@ -779,9 +835,14 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & 
     }
   };
   const auto finish_failure = [&](const MicroLiftPlanningOutcome & outcome) {
-    const auto original = classifyMicroLiftPlanningOutcome(outcome);
+    auto original = classifyMicroLiftPlanningOutcome(outcome);
     record_failure(outcome, original);
-    return original;
+    if (!descend || original.status == ActionStatus::SUCCEEDED)
+      return original;
+    return ActionResult{original.status, Failure{original.failure->category,
+                                                 "MICRO_DESCEND_PLANNING_FAILED",
+                                                 original.failure->message,
+                                                 {}}};
   };
   const auto goal_future = client->async_send_goal(capture.request);
   if (goal_future.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
@@ -830,11 +891,33 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & 
   }
   const auto executed = impl_->moveGroup().execute(wrapped.result->planned_trajectory);
   if (!static_cast<bool>(executed)) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::EXECUTION,
-                    "MICRO_LIFT_MOVEIT_EXECUTION_FAILED",
-                    "MoveIt failed to execute the validated world-Z micro-lift plan",
-                    {}}};
+    return {
+      ActionStatus::FAILED,
+      Failure{FailureCategory::EXECUTION,
+              descend ? "MICRO_DESCEND_EXECUTION_FAILED" : "MICRO_LIFT_MOVEIT_EXECUTION_FAILED",
+              descend ? "MoveIt failed to execute the validated world-Z micro-descend plan"
+                      : "MoveIt failed to execute the validated world-Z micro-lift plan",
+              {}}};
+  }
+  if (descend) {
+    const auto reached = poseFrom(impl_->moveGroup().getCurrentPose(impl_->profile.tcp_link).pose);
+    const Vec3 expected_position{current_tcp_world.x, current_tcp_world.y,
+                                 current_tcp_world.z + world_z_displacement_m};
+    const Eigen::Quaterniond expected_orientation(current_tcp_world.qw, current_tcp_world.qx,
+                                                  current_tcp_world.qy, current_tcp_world.qz);
+    const Eigen::Quaterniond reached_orientation(reached.qw, reached.qx, reached.qy, reached.qz);
+    const auto orientation_error =
+      2.0 * std::acos(std::clamp(
+              std::abs(expected_orientation.normalized().dot(reached_orientation.normalized())),
+              0.0, 1.0));
+    if (distance(reached, expected_position) > kMicroLiftPositionToleranceM ||
+        orientation_error > kMicroLiftOrientationToleranceRad) {
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::POSTCONDITION,
+                      "MICRO_DESCEND_ENDPOINT_OUTSIDE_TOLERANCE",
+                      "World-Z micro-descend endpoint is outside position or orientation tolerance",
+                      {}}};
+    }
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
@@ -842,6 +925,19 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & 
 ActionResult MoveItJointPlanningBoundary::cancelWorldZMicroLift()
 {
   return cancel();
+}
+
+ActionResult MoveItJointPlanningBoundary::cancelWorldZMicroDescend()
+{
+  auto result = cancel();
+  if (result.status != ActionStatus::SUCCEEDED) {
+    return {result.status, Failure{FailureCategory::EXECUTION,
+                                   "MICRO_DESCEND_CANCEL_FAILED",
+                                   result.failure ? result.failure->message
+                                                  : "World-Z micro-descend cancellation failed",
+                                   {}}};
+  }
+  return result;
 }
 
 JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(
