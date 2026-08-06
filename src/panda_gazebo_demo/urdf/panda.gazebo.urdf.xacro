@@ -84,8 +84,9 @@
     </gazebo>
 
     <!-- V5-T004: Gazebo RGBD 相机 sensor，发布 RGB + Depth + CameraInfo -->
-    <gazebo reference="camera_link">
+    <gazebo reference="panda_link0">
         <sensor name="rgbd_camera" type="rgbd_camera">
+            <pose>0.6 0 1.0 -2.356 0 -1.571</pose>
             <topic>camera</topic>
             <update_rate>10</update_rate>
             <camera>
