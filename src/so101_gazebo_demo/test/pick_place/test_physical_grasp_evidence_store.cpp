@@ -43,6 +43,22 @@ TEST(PhysicalGraspEvidenceStore, AtomicallyRoundTripsFiniteOrderedSamples)
   EXPECT_LE(record.before_lift->captured_at_unix_ns, record.after_lift->captured_at_unix_ns);
 }
 
+TEST(PhysicalGraspEvidenceStore, StartingRetryAttemptInvalidatesPriorAfterLiftSample)
+{
+  FilePhysicalGraspEvidenceStore store(sidecarPath(), "session", "fingerprint");
+  ASSERT_FALSE(store.resetForFreshRun());
+  ASSERT_FALSE(store.saveBefore(snapshot()));
+  ASSERT_FALSE(store.saveAfter(snapshot()));
+
+  ASSERT_FALSE(store.saveBefore(snapshot()));
+
+  const auto loaded = store.load();
+  ASSERT_TRUE(std::holds_alternative<PhysicalGraspEvidenceRecord>(loaded));
+  const auto & record = std::get<PhysicalGraspEvidenceRecord>(loaded);
+  EXPECT_TRUE(record.before_lift.has_value());
+  EXPECT_FALSE(record.after_lift.has_value());
+}
+
 TEST(PhysicalGraspEvidenceStore, RejectsSessionFingerprintAndMissingEvidence)
 {
   FilePhysicalGraspEvidenceStore writer(sidecarPath(), "session-a", "fingerprint-a");
