@@ -84,23 +84,4 @@
     </gazebo>
 
     <!-- V5-T004: Gazebo RGBD 相机 sensor，发布 RGB + Depth + CameraInfo -->
-    <gazebo reference="panda_link0">
-        <sensor name="rgbd_camera" type="rgbd_camera">
-            <pose>0.6 0 1.0 -2.356 0 -1.571</pose>
-            <topic>camera</topic>
-            <update_rate>10</update_rate>
-            <camera>
-                <horizontal_fov>1.047</horizontal_fov>
-                <image>
-                    <width>640</width>
-                    <height>480</height>
-                </image>
-                <clip>
-                    <near>0.1</near>
-                    <far>10.0</far>
-                </clip>
-            </camera>
-        </sensor>
-    </gazebo>
-
 </robot>

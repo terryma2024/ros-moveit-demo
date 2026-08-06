@@ -263,6 +263,30 @@
       <direction>-0.5 0.1 -0.9</direction>
     </light>
 
+
+    <!-- V5-T004: eye-to-hand 深度相机（独立 model，避免 URDF fixed joint lumping） -->
+    <model name="rgbd_camera">
+      <static>true</static>
+      <pose>0.6 0 1.775 -2.356 0 -1.571</pose>
+      <link name="link">
+        <sensor name="rgbd_camera" type="rgbd_camera">
+          <topic>camera</topic>
+          <update_rate>10</update_rate>
+          <camera>
+            <horizontal_fov>1.047</horizontal_fov>
+            <image>
+              <width>640</width>
+              <height>480</height>
+            </image>
+            <clip>
+              <near>0.1</near>
+              <far>10.0</far>
+            </clip>
+          </camera>
+        </sensor>
+      </link>
+    </model>
+
     <model name="table">
       <static>true</static>
       <pose>0 0 0.75 0 0 0</pose>
