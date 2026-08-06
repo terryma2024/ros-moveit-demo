@@ -112,6 +112,7 @@ add_library(so101_pick_place_runtime
   src/pick_place/policy_config.cpp
   src/pick_place/physical_grasp_validator.cpp
   src/pick_place/physical_grasp_retry.cpp
+  src/pick_place/physical_grasp_stabilizer.cpp
   src/pick_place/physical_grasp_evidence_store.cpp
   src/pick_place/planning_failure_diagnostics.cpp
   src/pick_place/transition_table.cpp

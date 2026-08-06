@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "so101_gazebo_demo/pick_place/pick_place_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_stabilizer.hpp"
 #include "so101_gazebo_demo/pick_place/so101_fixed_motion_targets.hpp"
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
 
@@ -552,6 +553,34 @@ TEST(SO101PickPlaceRuntime, StableGraspKeepsTheBoundedSqueezeThroughMicroLift)
                    spp::SO101Profile::canonical().q6_contact -
                      spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
   EXPECT_EQ(observer->next_sample, 7U);
+}
+
+TEST(SO101PhysicalGraspStabilizer, PreservesTheFixedPreloadAndStableWindow)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto evidence = std::make_shared<MemoryPhysicalEvidenceStore>();
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  auto bilateral = observer->snapshot;
+  bilateral.gazebo_task_object_fixed_finger_contact = true;
+  bilateral.gazebo_task_object_moving_jaw_contact = true;
+  bilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  observer->snapshot = bilateral;
+  observer->samples.assign(12, bilateral);
+  spp::SO101PhysicalGraspStabilizer stabilizer(observer, evidence, gripper);
+
+  const auto result = stabilizer.captureBeforeLift();
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  ASSERT_EQ(gripper->targets.size(), 1U);
+  const auto & profile = spp::SO101Profile::canonical();
+  EXPECT_DOUBLE_EQ(
+    gripper->targets.front(),
+    std::max(profile.q6_safe_lower, profile.q6_contact - profile.q6_regrasp_squeeze_offset));
+  EXPECT_EQ(observer->next_sample, 12U);
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
