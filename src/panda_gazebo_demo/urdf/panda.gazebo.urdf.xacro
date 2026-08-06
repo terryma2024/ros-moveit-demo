@@ -37,7 +37,7 @@
         <parent link="panda_link0" />
         <child link="camera_link" />
         <!-- 相机在底座前方 0.6m、高度 1.0m，绕 Y 轴转 135° 让光轴朝前下方俯视 -->
-        <origin xyz="0.6 0 1.0" rpy="0 2.356 0" />
+        <origin xyz="0.6 0 1.0" rpy="-2.356 0 -1.571" />
     </joint>
 
     <!-- Fix Panda base to the Gazebo world at the table-top height. -->
