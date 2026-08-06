@@ -195,7 +195,6 @@ std::optional<Failure> FilePhysicalGraspEvidenceStore::saveBefore(const WorldSna
     if (std::holds_alternative<Failure>(loaded))
       return std::get<Failure>(loaded);
     record.retry = std::get<PhysicalGraspEvidenceRecord>(loaded).retry;
-    record.after_lift = std::get<PhysicalGraspEvidenceRecord>(loaded).after_lift;
   }
   return writeAtomically(path_, recordJson(record));
 }
