@@ -349,8 +349,8 @@ TaskObjectConfig parseObject(const YAML::Node & root)
   rejectUnknownFields(pads,
                       {"enabled", "material", "shore_hardness_a", "contact_model",
                        "geometry_reference_q6", "safe_lower_q6", "safe_gap_m", "grasp_gap_m",
-                       "calibration_fingerprint", "friction_coefficient", "fixed_pad",
-                       "moving_pad"},
+                       "calibration_fingerprint", "friction_coefficient", "contact_material",
+                       "fixed_pad", "moving_pad"},
                       "fingertip_pads");
   auto & pad = result.fingertip_pads;
   pad.enabled = requireField(pads, "enabled", "fingertip_pads").as<bool>();
@@ -375,6 +375,31 @@ TaskObjectConfig parseObject(const YAML::Node & root)
   pad.friction_coefficient =
     parsePositive(requireField(pads, "friction_coefficient", "fingertip_pads"),
                   "fingertip_pads.friction_coefficient");
+  const auto contact_material = requireField(pads, "contact_material", "fingertip_pads");
+  rejectUnknownFields(contact_material,
+                      {"axial_friction_coefficient", "transverse_friction_coefficient",
+                       "contact_stiffness_n_m", "contact_damping_n_s_m",
+                       "max_correcting_velocity_m_s", "min_depth_m"},
+                      "fingertip_pads.contact_material");
+  auto & contact = pad.contact_material;
+  contact.axial_friction_coefficient =
+    parsePositive(requireField(contact_material, "axial_friction_coefficient", "contact_material"),
+                  "contact_material.axial_friction_coefficient");
+  contact.transverse_friction_coefficient = parsePositive(
+    requireField(contact_material, "transverse_friction_coefficient", "contact_material"),
+    "contact_material.transverse_friction_coefficient");
+  contact.contact_stiffness_n_m =
+    parsePositive(requireField(contact_material, "contact_stiffness_n_m", "contact_material"),
+                  "contact_material.contact_stiffness_n_m");
+  contact.contact_damping_n_s_m =
+    parsePositive(requireField(contact_material, "contact_damping_n_s_m", "contact_material"),
+                  "contact_material.contact_damping_n_s_m");
+  contact.max_correcting_velocity_m_s =
+    parsePositive(requireField(contact_material, "max_correcting_velocity_m_s", "contact_material"),
+                  "contact_material.max_correcting_velocity_m_s");
+  contact.min_depth_m =
+    parsePositive(requireField(contact_material, "min_depth_m", "contact_material"),
+                  "contact_material.min_depth_m");
   pad.fixed_pad = parseFingertipPadGeometry(requireField(pads, "fixed_pad", "fingertip_pads"),
                                             "fingertip_pads.fixed_pad", "z", 1.0, 8U);
   pad.moving_pad = parseFingertipPadGeometry(requireField(pads, "moving_pad", "fingertip_pads"),

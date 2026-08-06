@@ -28,6 +28,9 @@ class RobotState;
 namespace so101_gazebo_demo::pick_place
 {
 
+inline constexpr double kMicroLiftPositionToleranceM = 0.0002;
+inline constexpr double kMicroLiftOrientationToleranceRad = 0.005;
+
 [[nodiscard]] std::set<std::string> exactTaskObjectTouchWhitelist(const SO101Profile & profile);
 
 [[nodiscard]] std::optional<Pose3d> updatedLinkPose(const moveit::core::RobotState & source,

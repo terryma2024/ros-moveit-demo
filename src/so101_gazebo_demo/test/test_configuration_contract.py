@@ -255,6 +255,42 @@ def test_tpu95a_native_fingertip_pads_are_equivalent_in_moveit_and_gazebo():
     assert pads['moving_pad']['opening_axis_thickness_m'] == pytest.approx(0.005)
 
 
+def test_cup_walls_share_the_bounded_contact_material_without_owning_friction_direction():
+    """Cup walls contribute material limits but leave fdir1 to the fingertip."""
+    pads = load_yaml('task_objects/light_plastic_cup.yaml')['fingertip_pads']
+    material = pads['contact_material']
+    assert material == {
+        'axial_friction_coefficient': 3.0,
+        'transverse_friction_coefficient': 1.2,
+        'contact_stiffness_n_m': 1000000.0,
+        'contact_damping_n_s_m': 100.0,
+        'max_correcting_velocity_m_s': 0.01,
+        'min_depth_m': 0.0001,
+    }
+
+    world = ET.parse(PACKAGE_DIR / 'worlds' / 'so101_pick_place.sdf').getroot()
+    cup = world.find(".//model[@name='plastic_cup']/link[@name='body']")
+    assert cup is not None
+    walls = [collision for collision in cup.findall('collision')
+             if collision.attrib['name'].startswith('wall')]
+    assert len(walls) == 12
+    for wall in walls:
+        bullet = wall.find('./surface/friction/bullet')
+        ode = wall.find('./surface/friction/ode')
+        contact = wall.find('./surface/contact/ode')
+        assert bullet is not None and ode is not None and contact is not None
+        assert bullet.find('fdir1') is None
+        assert ode.find('fdir1') is None
+        assert float(bullet.findtext('friction')) == pytest.approx(1.2)
+        assert float(bullet.findtext('friction2')) == pytest.approx(1.2)
+        assert float(ode.findtext('mu')) == pytest.approx(1.2)
+        assert float(ode.findtext('mu2')) == pytest.approx(1.2)
+        assert float(contact.findtext('kp')) == pytest.approx(1000000.0)
+        assert float(contact.findtext('kd')) == pytest.approx(100.0)
+        assert float(contact.findtext('max_vel')) == pytest.approx(0.01)
+        assert float(contact.findtext('min_depth')) == pytest.approx(0.0001)
+
+
 def test_detachable_joint_uses_runtime_gripper_entity_and_raw_event_topic():
     """Catch a planning-only link name or durable-state topic in Gazebo config."""
     robot = generated_robot('gazebo_collision_primitives:=true')
@@ -326,8 +362,8 @@ def test_srdf_group_and_named_state_contract():
     assert states[('arm', 'home')] == {
         '1': 0.0, '2': 0.0, '3': 0.0, '4': 0.0, '5': 0.0
     }
-    assert states[('gripper', 'home')] == {'6': pytest.approx(-0.059303612618397)}
-    assert states[('gripper', 'fullclose')] == {'6': pytest.approx(-0.059303612618397)}
+    assert states[('gripper', 'home')] == {'6': pytest.approx(-0.059600220867817)}
+    assert states[('gripper', 'fullclose')] == {'6': pytest.approx(-0.059600220867817)}
     assert states[('gripper', 'fullopen')] == {'6': pytest.approx(1.7)}
     assert states[('gripper', 'preopen')] == {'6': pytest.approx(0.465038)}
     calculator = load_preopen_calculator_module()
@@ -342,7 +378,7 @@ def test_srdf_group_and_named_state_contract():
 
 
 def test_joint6_fingertip_pad_lower_limit_is_identical_in_all_command_paths():
-    floor = pytest.approx(-0.059303612618397)
+    floor = pytest.approx(-0.059600220867817)
     robot = generated_robot()
     joint = robot.find("./joint[@name='6']")
     assert joint is not None

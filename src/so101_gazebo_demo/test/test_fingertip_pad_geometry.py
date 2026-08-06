@@ -37,7 +37,7 @@ MOVING_POINTS = (
     (-0.0815, 0.0036, -0.01230),
     (-0.0780, 0.0045, -0.01230),
     (-0.0730, 0.0054, -0.01230),
-    (-0.0722, 0.0057, -0.01230),
+    (-0.0722, 0.0057, -0.0123232903),
     (-0.0718, 0.0058, -0.01030),
     (-0.0670, 0.0060, -0.01030),
     (-0.0625, 0.0060, -0.01030),
@@ -610,7 +610,7 @@ def test_exact_native_pad_to_cup_wall_diagnostic_at_descend_and_close_samples():
         calculator, calibration, gripper_transform,
         _cup_wall_boxes(calculator, policy), calibration.grasp_q6,
     )
-    assert 0.0018 <= np.linalg.norm(seating_shift) <= 0.0022
+    assert 0.0012 <= np.linalg.norm(seating_shift) <= 0.0015
     assert np.linalg.norm(seating_shift - nominal_attachment_shift) < 0.003
     assert preclose['fixed_signed_clearance_m'] == pytest.approx(
         np.linalg.norm(seating_shift), abs=2e-9
@@ -746,7 +746,7 @@ def test_pick_ladder_diagnoses_preopen_and_fixed_pad_contact_as_infeasible():
     # A q6 endpoint accepted by the unchanged contract is 0.080376 mm above
     # the ceiling.  Hence the exact-boundary pose is not a valid static policy.
     assert closer_depths['moving_penetration_m'] == pytest.approx(
-        0.000880375996, abs=2e-9
+        0.000879970423, abs=2e-9
     )
     assert closer_depths['total_penetration_m'] > 0.0008
     preopen_jaw = candidate_transform @ _joint_transform(
@@ -809,7 +809,7 @@ def test_contact_critical_arm_endpoint_contract_brackets_the_measured_contact_pl
         calculator, calibration, transform, walls,
         wide_q6 - validation['runtime']['q6_position_tolerance_rad'],
     )['moving_penetration_m']
-    assert closed_depth == pytest.approx(0.000480484102, abs=2e-9)
+    assert closed_depth == pytest.approx(0.000480079037, abs=2e-9)
 
     # The former 5 mrad arm contract admits more than a millimetre of normal
     # motion and therefore cannot protect a 0.8 mm contact ceiling.
@@ -832,7 +832,7 @@ def test_contact_critical_arm_endpoint_contract_brackets_the_measured_contact_pl
     # metadata change can repair this static contract.
     max_penetration = validation['grasp_contact']['max_penetration_m']
     clearance_upper = max_penetration - closed_depth - outward_error
-    assert clearance_upper == pytest.approx(-0.000388813069, abs=2e-9)
+    assert clearance_upper == pytest.approx(-0.000388408004, abs=2e-9)
     assert inward_error > clearance_upper
     for state in ('DESCEND', 'RECOVER_DESCEND_TO_PICK'):
         assert validation['states'][state]['joint_endpoint_tolerance_rad'] == pytest.approx(
@@ -878,7 +878,7 @@ def test_contact_critical_arm_endpoint_contract_brackets_the_measured_contact_pl
     assert policy['fingertip_pads']['grasp_gap_m'] == pytest.approx(platform_gap_m, abs=2e-12)
     assert platform_open['fixed_signed_clearance_m'] == pytest.approx(0.0, abs=2e-9)
     assert 0.0 <= platform_open['moving_signed_clearance_m'] <= 0.00005
-    assert platform_target['moving_penetration_m'] == pytest.approx(0.000043005070, abs=2e-9)
+    assert platform_target['moving_penetration_m'] == pytest.approx(0.000040000786, abs=2e-9)
     assert 0.0 < platform_closed['moving_penetration_m'] <= max_penetration
 
 
@@ -940,10 +940,10 @@ def test_measured_contact_target_stays_inside_the_mesh_bounded_q6_band():
         endpoint_budget, min_depth, max_depth,
     )
     assert platform['endpoint_budget_m'] == pytest.approx(0.000159973242, abs=2e-12)
-    assert platform['equal_slack_c_m'] == pytest.approx(0.000269447683, abs=2e-12)
-    assert platform['equal_slack_m'] == pytest.approx(0.000109474421, abs=5e-11)
+    assert platform['equal_slack_c_m'] == pytest.approx(0.000269852305, abs=2e-12)
+    assert platform['equal_slack_m'] == pytest.approx(0.000109879063, abs=5e-11)
     assert platform['c_lower_m'] == pytest.approx(platform['endpoint_budget_m'], abs=2e-12)
-    assert wider['c_lower_m'] == pytest.approx(0.000238256, abs=2e-9)
+    assert wider['c_lower_m'] == pytest.approx(0.000240151949, abs=2e-9)
     assert wider['c_lower_m'] > wider['endpoint_budget_m']
     assert wider['equal_slack_m'] == pytest.approx(platform['equal_slack_m'], abs=2e-7)
 
@@ -1005,7 +1005,7 @@ def test_full_active_mesh_contact_and_preopen_swept_audit():
     walls, seating_shift, _ = _seat_walls_on_fixed_pad(
         calculator, calibration, nominal_gripper, approach_walls, contact_q6
     )
-    assert 0.0018 <= np.linalg.norm(seating_shift) <= 0.0022
+    assert 0.0012 <= np.linalg.norm(seating_shift) <= 0.0015
     rim_z = max(transform[2, 3] + half[2] for _, transform, half in walls)
     table_top_z = 0.12
     cup_bottom_top_z = policy['scene']['spawn_pose_xyz_xyzw'][2] - 0.044 + 0.001
@@ -1203,7 +1203,7 @@ def test_fixed_pad_pick_lane_has_live_margin_and_no_cup_contact_through_descend(
     seated_walls, seating_shift, _ = _seat_walls_on_fixed_pad(
         calculator, calibration, gripper, walls, calibration.grasp_q6
     )
-    assert 0.0018 <= np.linalg.norm(seating_shift) <= 0.0022
+    assert 0.0012 <= np.linalg.norm(seating_shift) <= 0.0015
     q6_tolerance = validation['runtime']['q6_position_tolerance_rad']
     for q6 in (
         calibration.grasp_q6 + q6_tolerance,
@@ -1327,6 +1327,48 @@ def test_close_entry_geometry_caps_first_contact_and_retains_bilateral_seating()
     assert 0.0 < seated['moving_penetration_m'] <= max_depth
 
 
+def test_descend_precontact_reduces_fixed_pad_clearance_without_static_penetration():
+    """DESCEND must move the fixed finger toward the wall before q6 closes."""
+    calculator = _load_calculator()
+    policy = _policy()
+    motion = yaml.safe_load(MOTION_PATH.read_text())
+    robot = _robot(
+        f'object_config:={CONFIG_PATH}',
+        'gazebo_collision_primitives:=true',
+    )
+    calibration = calculator.calculate_fingertip_pad_gap_calibration(
+        CONFIG_PATH, BUILD_ASSET_ROOT, PACKAGE_DIR / 'urdf' / 'so101_base.xacro'
+    )
+    _, joints = _descend_gripper_transform(calculator, robot)
+    spawn_walls = _cup_wall_boxes(calculator, policy)
+
+    previous_endpoint = np.asarray([
+        -0.000182194999,
+        0.469727784396,
+        0.217642530798,
+        0.859256029129,
+        0.000398028351,
+    ])
+    selected_endpoint = np.asarray(motion['states']['DESCEND']['waypoints'][-1])
+    previous = _signed_native_pad_wall_depths(
+        calculator, calibration, _fk(calculator, joints, previous_endpoint), spawn_walls,
+        calibration.preopen_q6,
+    )
+    selected = _signed_native_pad_wall_depths(
+        calculator, calibration, _fk(calculator, joints, selected_endpoint), spawn_walls,
+        calibration.preopen_q6,
+    )
+
+    # The live no-load trial kept the cup at its canonical spawn pose while
+    # reducing the visible fixed-side gap by about 0.56 mm.  Keep a bounded
+    # positive analytical margin because Bullet's convex margin reports
+    # contact before the rendered mesh reaches the wall.
+    assert selected['fixed_signed_clearance_m'] <= 0.0015
+    assert selected['fixed_signed_clearance_m'] >= 0.0012
+    assert previous['fixed_signed_clearance_m'] - selected['fixed_signed_clearance_m'] >= 0.0005
+    assert selected['fixed_penetration_m'] == pytest.approx(0.0, abs=2e-9)
+
+
 def test_close_geometry_brackets_the_near_wall_with_bilateral_pad_contact():
     """CLOSE must establish a fixed support and an inside moving-pad contact."""
     calculator = _load_calculator()
@@ -1353,10 +1395,10 @@ def test_close_geometry_brackets_the_near_wall_with_bilateral_pad_contact():
     )
     outward = np.asarray(policy['grasp_frame']['near_wall_outward_world'], dtype=float)
     seating_distance = float(seating_shift @ outward)
-    # The selected live lane leaves roughly 1.95 mm for the bounded regrasp to
-    # seat the free cup onto the fixed pad.  This agrees with the independently
-    # observed ~2.1-mm seating event and stays inside the 3-mm drift budget.
-    assert 0.0018 <= seating_distance <= 0.0022
+    # The fixed-finger precontact lane leaves roughly 1.39 mm for the bounded
+    # regrasp to seat the free cup onto the fixed pad.  This is smaller than the
+    # previous 1.95-mm lane and remains inside the 3-mm drift budget.
+    assert 0.0012 <= seating_distance <= 0.0015
     assert seating_shift == pytest.approx(outward * seating_distance, abs=5e-9)
     assert np.linalg.norm(seating_shift) < 0.003
     assert preclose_depths['fixed_signed_clearance_m'] == pytest.approx(
@@ -1372,10 +1414,10 @@ def test_close_geometry_brackets_the_near_wall_with_bilateral_pad_contact():
         policy['model']['wall_thickness_m'] - calibration.gap_at(calibration.grasp_q6)
     )
     assert wall_interference > 0.0
-    # The 40-um calibrated face gap stays within 6 um after projection onto the
-    # selected lane's slightly tilted cup-wall normal.
-    assert depths['moving_penetration_m'] <= 0.00005
-    assert abs(depths['moving_penetration_m'] - wall_interference) < 0.000006
+    # The 40-um calibrated face gap stays within 15 um after projection onto
+    # the selected lane's slightly tilted cup-wall normal and extended axial edge.
+    assert depths['moving_penetration_m'] <= 0.00006
+    assert abs(depths['moving_penetration_m'] - wall_interference) < 0.000015
 
 
 def test_selected_close_contact_band_stays_below_the_rim_leverage_zone():
@@ -1399,7 +1441,7 @@ def test_selected_close_contact_band_stays_below_the_rim_leverage_zone():
         calculator, calibration, gripper, _cup_wall_boxes(calculator, policy),
         calibration.grasp_q6,
     )
-    assert 0.0018 <= np.linalg.norm(seating_shift) <= 0.0022
+    assert 0.0012 <= np.linalg.norm(seating_shift) <= 0.0015
     probed_walls = []
     for name, transform, half_extents in walls:
         seated_transform = transform.copy()
@@ -1416,3 +1458,35 @@ def test_selected_close_contact_band_stays_below_the_rim_leverage_zone():
     assert any(name.startswith('fixed_fingertip_pad_collision_') for name, *_ in hits)
     assert any(name.startswith('moving_fingertip_pad_collision_') for name, *_ in hits)
     assert max(z_max for _, _, _, z_max in hits) <= rim_z - 0.013 + 2e-6
+
+
+def test_moving_pad_load_face_is_horizontal_at_runtime_preload():
+    """The segment carrying the cup must not inject vertical slip force."""
+    calculator = _load_calculator()
+    robot = _robot(
+        f'object_config:={CONFIG_PATH}',
+        'gazebo_collision_primitives:=true',
+    )
+    gripper, joints = _descend_gripper_transform(calculator, robot)
+    calibration = calculator.calculate_fingertip_pad_gap_calibration(
+        CONFIG_PATH, BUILD_ASSET_ROOT, PACKAGE_DIR / 'urdf' / 'so101_base.xacro'
+    )
+    # The runtime's canonical regrasp squeeze is locked independently by the
+    # SO101Profile tests.  Validate the geometry at that actual load-bearing q6.
+    runtime_preload_q6 = calibration.grasp_q6 - 0.0060
+    jaw = gripper @ _joint_transform(calculator, joints['6'], runtime_preload_q6)
+    moving = dict(_active_collision_meshes(calculator, robot, 'jaw'))
+    mesh = moving['moving_fingertip_pad_collision_002']
+    triangles = mesh.triangles
+    cross = np.cross(triangles[:, 1] - triangles[:, 0],
+                     triangles[:, 2] - triangles[:, 0])
+    double_areas = np.linalg.norm(cross, axis=1)
+    normals = cross / double_areas[:, np.newaxis]
+    world_normals = normals @ jaw[:3, :3].T
+    # The native short load face is not the segment's largest face; select the
+    # outward contact pair by its link-local -X normal instead of triangle area.
+    load_faces = world_normals[mesh.face_normals[:, 0] <= -0.99]
+
+    assert load_faces.shape == (2, 3)
+    assert np.min(np.abs(load_faces[:, 1])) >= 0.99
+    assert np.max(np.abs(load_faces[:, 2])) <= 0.01

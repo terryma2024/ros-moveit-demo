@@ -13,18 +13,114 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import yaml
 from ament_index_python.packages import get_package_share_directory
 
 
 SCHEMA_VERSION = 1
 MAX_TOTAL_PIECES = 24
 _COLLISION_SUFFIX = re.compile(r'_collision(?:_\d+)?$')
-_PREPARATION_SCHEMA_VERSION = 3
+_PREPARATION_SCHEMA_VERSION = 6
 _NATIVE_PAD_COLLISION = re.compile(
     r'(?:^|__)(fixed|moving)_fingertip_pad_collision_(\d{3})'
     r'_collision(?:_\d+)?$'
 )
 _NATIVE_PAD_COUNTS = {'fixed': 7, 'moving': 6}
+
+
+def has_native_fingertip_pads(sdf_text):
+    """Return whether converted SDF contains a native pad collision."""
+    root = ET.fromstring(sdf_text)
+    return any(
+        _NATIVE_PAD_COLLISION.search(collision.attrib.get('name', ''))
+        for collision in root.iter('collision')
+    )
+
+
+def apply_fingertip_contact_material(sdf_text, material):
+    """Inject TPU contact data at the pads and Bullet compound-link owners."""
+    root = ET.fromstring(sdf_text)
+    pads = []
+    owner_collisions = []
+    for link in root.iter('link'):
+        link_pads = []
+        for collision in link.findall('collision'):
+            match = _NATIVE_PAD_COLLISION.search(collision.attrib.get('name', ''))
+            if match is not None:
+                link_pads.append((collision, match.group(1)))
+        sides = {side for _, side in link_pads}
+        # bullet-featherstone creates one collider per link and reads surface
+        # friction only while adding the first collision.  Native pad pieces
+        # are later compound children, so their tags alone never reach the
+        # solver.  A real SO-101 fingertip link owns exactly one pad side.
+        if len(sides) == 1 and link_pads:
+            collisions = link.findall('collision')
+            if not collisions:
+                raise ValueError('native fingertip link has no owner collision')
+            owner_collisions.append((collisions[0], next(iter(sides))))
+        pads.extend(link_pads)
+
+    expected_total = sum(_NATIVE_PAD_COUNTS.values())
+    if len(pads) != expected_total:
+        raise ValueError(
+            f'found {len(pads)} native fingertip pad collisions, '
+            f'expected {expected_total}'
+        )
+
+    values = {
+        'mu': material['axial_friction_coefficient'],
+        'mu2': material['transverse_friction_coefficient'],
+        'kp': material['contact_stiffness_n_m'],
+        'kd': material['contact_damping_n_s_m'],
+        'max_vel': material['max_correcting_velocity_m_s'],
+        'min_depth': material['min_depth_m'],
+    }
+
+    def add_friction(collision, side, *, replace_surface):
+        existing = collision.find('surface')
+        if replace_surface and existing is not None:
+            collision.remove(existing)
+            existing = None
+        surface = existing if existing is not None else ET.SubElement(collision, 'surface')
+        old_friction = surface.find('friction')
+        if old_friction is not None:
+            surface.remove(old_friction)
+        friction = ET.SubElement(surface, 'friction')
+        direction = '0 0 1' if side == 'fixed' else '0 1 0'
+        ode = ET.SubElement(friction, 'ode')
+        for tag in ('mu', 'mu2'):
+            ET.SubElement(ode, tag).text = str(values[tag])
+        ET.SubElement(ode, 'fdir1').text = direction
+        bullet = ET.SubElement(friction, 'bullet')
+        ET.SubElement(bullet, 'friction').text = str(values['mu'])
+        ET.SubElement(bullet, 'friction2').text = str(values['mu2'])
+        # bullet-featherstone 7.x ignores SDF fdir1 and applies anisotropy in
+        # the compound link's local axes.  Do not serialize a false contract.
+        return surface
+
+    def add_contact(surface):
+        old_contact = surface.find('contact')
+        if old_contact is not None:
+            surface.remove(old_contact)
+        contact = ET.SubElement(surface, 'contact')
+        ode = ET.SubElement(contact, 'ode')
+        for tag in ('kp', 'kd', 'max_vel', 'min_depth'):
+            ET.SubElement(ode, tag).text = str(values[tag])
+        # The runtime explicitly selects Bullet Featherstone.  Mirroring the
+        # configured stiffness and damping into Bullet prevents the intended
+        # TPU material from silently degrading to engine defaults.
+        bullet = ET.SubElement(contact, 'bullet')
+        for tag in ('kp', 'kd'):
+            ET.SubElement(bullet, tag).text = str(values[tag])
+
+    for collision, side in owner_collisions:
+        surface = add_friction(collision, side, replace_surface=False)
+        add_contact(surface)
+
+    for collision, side in pads:
+        surface = add_friction(collision, side, replace_surface=True)
+        add_contact(surface)
+    return ET.tostring(root, encoding='unicode')
 
 
 def load_manifest(path, *, collision_root=None):
@@ -327,6 +423,17 @@ def prepare_simulation_model(
             if temporary_urdf is not None:
                 temporary_urdf.unlink(missing_ok=True)
         prepared = enable_fingertip_convex_hulls(sdf_result.stdout, manifests)
+        if has_native_fingertip_pads(prepared):
+            if object_config is None:
+                raise ValueError(
+                    'object_config is required for fingertip contact material'
+                )
+            with open(object_config, 'r', encoding='utf-8') as stream:
+                object_data = yaml.safe_load(stream)
+            contact_material = object_data['fingertip_pads']['contact_material']
+            prepared = apply_fingertip_contact_material(
+                prepared, contact_material
+            )
         _write_cache(cache_key, prepared, dependencies)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)

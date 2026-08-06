@@ -14,6 +14,9 @@
 
 namespace spp = so101_gazebo_demo::pick_place;
 
+static_assert(spp::kMicroLiftPositionToleranceM == 0.0002);
+static_assert(spp::kMicroLiftOrientationToleranceRad == 0.005);
+
 namespace
 {
 

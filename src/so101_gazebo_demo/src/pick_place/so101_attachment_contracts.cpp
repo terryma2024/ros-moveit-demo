@@ -98,6 +98,32 @@ void requireQ6(ValidationResult & result, const WorldSnapshot & snapshot, SO101G
   merge(result, validateSO101GripperTarget(snapshot, target, profile));
 }
 
+void requireAttachPreloadQ6(ValidationResult & result, const WorldSnapshot & snapshot,
+                            const SO101Profile & profile)
+{
+  const auto position = snapshot.joint_positions.find(profile.gripper_joint);
+  const auto velocity = snapshot.joint_velocities.find(profile.gripper_joint);
+  const double lower = profile.q6_contact - profile.q6_regrasp_squeeze_offset;
+  const double upper = profile.q6_contact + profile.contact_q6_stop_tolerance;
+  if (position == snapshot.joint_positions.end() || velocity == snapshot.joint_velocities.end() ||
+      !std::isfinite(position->second) || !std::isfinite(velocity->second)) {
+    add(result, FailureCategory::OBSERVATION, "ATTACH_PRELOAD_Q6_EVIDENCE_REQUIRED",
+        "Gazebo attach requires finite gripper position and velocity evidence");
+    return;
+  }
+  result.metrics["attach_preload_q6"] = position->second;
+  result.metrics["attach_preload_q6_lower"] = lower;
+  result.metrics["attach_preload_q6_upper"] = upper;
+  if (position->second < lower - 1e-12 || position->second > upper + 1e-12) {
+    add(result, FailureCategory::GRIPPER, "ATTACH_PRELOAD_Q6_OUT_OF_BOUNDS",
+        "Gazebo attach precondition exceeds the configured bounded preload interval");
+  }
+  if (std::abs(velocity->second) > profile.q6_velocity_tolerance) {
+    add(result, FailureCategory::GRIPPER, "Q6_NOT_STATIONARY",
+        "Joint 6 velocity exceeds the stop threshold");
+  }
+}
+
 void requireBilateralFingerContact(ValidationResult & result, const WorldSnapshot & snapshot,
                                    const SO101Profile & profile)
 {
@@ -371,7 +397,10 @@ public:
                                     key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
                                   ? SO101GripperTarget::FULL_OPEN
                                   : SO101GripperTarget::CONTACT;
-    requireQ6(result, before, gripper_target, profile_);
+    if (key_.from == State::ATTACH_GAZEBO)
+      requireAttachPreloadQ6(result, before, profile_);
+    else
+      requireQ6(result, before, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
       requireExpectedSupportPose(result, before, before, key_, profile_);
     }

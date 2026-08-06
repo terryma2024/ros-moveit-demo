@@ -46,6 +46,9 @@ def generate_launch_description():
         )
         .robot_description_semantic(file_path=str(srdf_path))
         .trajectory_execution(file_path=str(controllers_path))
+        .planning_pipelines(
+            default_planning_pipeline="ompl", pipelines=["ompl"], load_all=False
+        )
         .to_moveit_configs()
     )
 

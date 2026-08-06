@@ -16,6 +16,7 @@ from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
+from launch_ros.utilities import evaluate_parameters
 
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
@@ -46,6 +47,33 @@ def test_move_group_allows_low_speed_simulation_execution_jitter(launch_path):
     assert '"trajectory_execution.allowed_goal_duration_margin": 1.0' in source
 
 
+@pytest.mark.parametrize('launch_path', [MOVEIT_LAUNCH, MOVE_GROUP_HEADLESS_LAUNCH])
+def test_move_group_loads_the_named_so101_rrtconnect_configuration(launch_path):
+    """Catch silently falling back from the requested planner to OMPL defaults."""
+    parameters = evaluated_move_group_parameters(launch_path)
+
+    assert parameters['planning_pipelines'] == ('ompl',)
+    assert parameters['default_planning_pipeline'] == 'ompl'
+    assert parameters['ompl.arm.planner_configs'] == ('RRTConnectkConfigDefault',)
+    assert (
+        parameters['ompl.planner_configs.RRTConnectkConfigDefault.type']
+        == 'geometric::RRTConnect'
+    )
+    assert parameters['ompl.planner_configs.RRTConnectkConfigDefault.range'] == 0.0
+    assert parameters['robot_description_kinematics.arm.kinematics_solver_timeout'] == 0.05
+    assert parameters['robot_description_kinematics.arm.position_only_ik'] is True
+
+
+def test_gazebo_fingertips_load_the_object_friction_contract():
+    preparation = (
+        PACKAGE_DIR / 'scripts' / 'prepare_simulation_model.py'
+    ).read_text()
+
+    assert 'apply_fingertip_contact_material' in preparation
+    assert "object_data['fingertip_pads']['contact_material']" in preparation
+    assert 'prepared = apply_fingertip_contact_material(' in preparation
+
+
 def load_launch_module(path):
     """Load a launch module directly from source."""
     module_name = f'{path.parent.parent.name}_{path.stem}'.replace('.', '_')
@@ -59,6 +87,31 @@ def load_launch_module(path):
 def load_launch_description(path):
     """Load a launch description directly from source."""
     return load_launch_module(path).generate_launch_description()
+
+
+def evaluated_move_group_parameters(path):
+    """Evaluate the real move_group parameter payload from one launch file."""
+    description = load_launch_description(path)
+    move_group = next(
+        entity
+        for entity in description.entities
+        if isinstance(entity, Node)
+        and entity.node_package == 'moveit_ros_move_group'
+        and entity.node_executable == 'move_group'
+    )
+    context = LaunchContext()
+    context.launch_configurations.update({
+        'is_sim': 'True',
+        'base_height': '0.1899186',
+        'object_config': str(
+            PACKAGE_DIR / 'config' / 'task_objects' / 'light_plastic_cup.yaml'
+        ),
+    })
+    merged = {}
+    for parameter_set in evaluate_parameters(context, move_group._Node__parameters):
+        if isinstance(parameter_set, dict):
+            merged.update(parameter_set)
+    return merged
 
 
 def declared_arguments(path):
