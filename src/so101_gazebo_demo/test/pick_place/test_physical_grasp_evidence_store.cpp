@@ -27,6 +27,8 @@ TEST(PhysicalGraspEvidenceStore, AtomicallyRoundTripsFiniteOrderedSamples)
 {
   FilePhysicalGraspEvidenceStore store(sidecarPath(), "session", "fingerprint");
   ASSERT_FALSE(store.resetForFreshRun());
+  const PhysicalGraspRetryEvidence retry{{2, 1, -0.048}, -0.053, PhysicalGraspRetryPhase::IDLE};
+  ASSERT_FALSE(store.saveRetryEvidence(retry));
   ASSERT_FALSE(store.saveBefore(snapshot()));
   ASSERT_FALSE(store.saveAfter(snapshot()));
   const auto loaded = store.load();
@@ -34,6 +36,10 @@ TEST(PhysicalGraspEvidenceStore, AtomicallyRoundTripsFiniteOrderedSamples)
   const auto & record = std::get<PhysicalGraspEvidenceRecord>(loaded);
   ASSERT_TRUE(record.before_lift);
   ASSERT_TRUE(record.after_lift);
+  EXPECT_EQ(record.retry.progress.attempt_index, 2U);
+  EXPECT_EQ(record.retry.progress.contact_missing_count, 1U);
+  EXPECT_DOUBLE_EQ(record.retry.progress.current_reclose_target_q6, -0.048);
+  EXPECT_DOUBLE_EQ(record.retry.micro_lift_preload_target_q6, -0.053);
   EXPECT_LE(record.before_lift->captured_at_unix_ns, record.after_lift->captured_at_unix_ns);
 }
 

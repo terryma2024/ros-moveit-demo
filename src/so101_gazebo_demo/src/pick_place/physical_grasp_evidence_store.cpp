@@ -64,6 +64,65 @@ PhysicalGraspSample parseSample(const Json & value)
           value.at("gripper_contact").get<bool>()};
 }
 
+std::string_view phaseName(PhysicalGraspRetryPhase phase)
+{
+  switch (phase) {
+    case PhysicalGraspRetryPhase::IDLE:
+      return "IDLE";
+    case PhysicalGraspRetryPhase::OPEN_PENDING:
+      return "OPEN_PENDING";
+    case PhysicalGraspRetryPhase::DESCEND_PENDING:
+      return "DESCEND_PENDING";
+    case PhysicalGraspRetryPhase::CLOSE_PENDING:
+      return "CLOSE_PENDING";
+    case PhysicalGraspRetryPhase::LIFT_PENDING:
+      return "LIFT_PENDING";
+    case PhysicalGraspRetryPhase::VERIFY_PENDING:
+      return "VERIFY_PENDING";
+    case PhysicalGraspRetryPhase::COMPLETE:
+      return "COMPLETE";
+  }
+  return "UNKNOWN";
+}
+
+PhysicalGraspRetryPhase parsePhase(const std::string & value)
+{
+  if (value == "IDLE")
+    return PhysicalGraspRetryPhase::IDLE;
+  if (value == "OPEN_PENDING")
+    return PhysicalGraspRetryPhase::OPEN_PENDING;
+  if (value == "DESCEND_PENDING")
+    return PhysicalGraspRetryPhase::DESCEND_PENDING;
+  if (value == "CLOSE_PENDING")
+    return PhysicalGraspRetryPhase::CLOSE_PENDING;
+  if (value == "LIFT_PENDING")
+    return PhysicalGraspRetryPhase::LIFT_PENDING;
+  if (value == "VERIFY_PENDING")
+    return PhysicalGraspRetryPhase::VERIFY_PENDING;
+  if (value == "COMPLETE")
+    return PhysicalGraspRetryPhase::COMPLETE;
+  throw std::runtime_error("unknown retry phase");
+}
+
+Json retryJson(const PhysicalGraspRetryEvidence & retry)
+{
+  return {{"attempt_index", retry.progress.attempt_index},
+          {"contact_missing_count", retry.progress.contact_missing_count},
+          {"current_reclose_target_q6", retry.progress.current_reclose_target_q6},
+          {"micro_lift_preload_target_q6", retry.micro_lift_preload_target_q6},
+          {"phase", phaseName(retry.phase)}};
+}
+
+Json recordJson(const PhysicalGraspEvidenceRecord & record)
+{
+  return {{"schema_version", 2},
+          {"simulation_session_id", record.simulation_session_id},
+          {"configuration_fingerprint", record.configuration_fingerprint},
+          {"retry", retryJson(record.retry)},
+          {"before_lift", record.before_lift ? sampleJson(*record.before_lift) : Json(nullptr)},
+          {"after_lift", record.after_lift ? sampleJson(*record.after_lift) : Json(nullptr)}};
+}
+
 std::optional<Failure> writeAtomically(const std::filesystem::path & path, const Json & document)
 {
   const auto temporary = path.string() + ".tmp";
@@ -127,14 +186,18 @@ std::optional<Failure> FilePhysicalGraspEvidenceStore::saveBefore(const WorldSna
                              snapshot.gazebo_task_object_gripper_contact.value_or(false)};
   if (!validSample(sample, State::WAIT_GRASP_STABLE))
     return failure("PHYSICAL_GRASP_EVIDENCE_SAMPLE_INVALID", "Before-lift evidence is invalid");
-  PhysicalGraspEvidenceRecord record{simulation_session_id_, configuration_fingerprint_, sample,
-                                     std::nullopt};
-  const Json document{{"schema_version", 1},
-                      {"simulation_session_id", record.simulation_session_id},
-                      {"configuration_fingerprint", record.configuration_fingerprint},
-                      {"before_lift", sampleJson(*record.before_lift)},
-                      {"after_lift", nullptr}};
-  return writeAtomically(path_, document);
+  PhysicalGraspEvidenceRecord record;
+  record.simulation_session_id = simulation_session_id_;
+  record.configuration_fingerprint = configuration_fingerprint_;
+  record.before_lift = sample;
+  if (std::filesystem::exists(path_)) {
+    auto loaded = load();
+    if (std::holds_alternative<Failure>(loaded))
+      return std::get<Failure>(loaded);
+    record.retry = std::get<PhysicalGraspEvidenceRecord>(loaded).retry;
+    record.after_lift = std::get<PhysicalGraspEvidenceRecord>(loaded).after_lift;
+  }
+  return writeAtomically(path_, recordJson(record));
 }
 
 std::optional<Failure> FilePhysicalGraspEvidenceStore::saveAfter(const WorldSnapshot & snapshot)
@@ -154,12 +217,24 @@ std::optional<Failure> FilePhysicalGraspEvidenceStore::saveAfter(const WorldSnap
   if (!record.before_lift || !validSample(sample, State::WAIT_MICRO_LIFT_STABLE) ||
       sample.captured_at_unix_ns < record.before_lift->captured_at_unix_ns)
     return failure("PHYSICAL_GRASP_EVIDENCE_SAMPLE_INVALID", "After-lift evidence is invalid");
-  const Json document{{"schema_version", 1},
-                      {"simulation_session_id", record.simulation_session_id},
-                      {"configuration_fingerprint", record.configuration_fingerprint},
-                      {"before_lift", sampleJson(*record.before_lift)},
-                      {"after_lift", sampleJson(sample)}};
-  return writeAtomically(path_, document);
+  record.after_lift = sample;
+  return writeAtomically(path_, recordJson(record));
+}
+
+std::optional<Failure>
+FilePhysicalGraspEvidenceStore::saveRetryEvidence(const PhysicalGraspRetryEvidence & retry)
+{
+  PhysicalGraspEvidenceRecord record;
+  record.simulation_session_id = simulation_session_id_;
+  record.configuration_fingerprint = configuration_fingerprint_;
+  if (std::filesystem::exists(path_)) {
+    auto loaded = load();
+    if (std::holds_alternative<Failure>(loaded))
+      return std::get<Failure>(loaded);
+    record = std::get<PhysicalGraspEvidenceRecord>(std::move(loaded));
+  }
+  record.retry = retry;
+  return writeAtomically(path_, recordJson(record));
 }
 
 std::variant<PhysicalGraspEvidenceRecord, Failure> FilePhysicalGraspEvidenceStore::load() const
@@ -174,25 +249,41 @@ std::variant<PhysicalGraspEvidenceRecord, Failure> FilePhysicalGraspEvidenceStor
                      "Physical-grasp evidence sidecar is missing");
     Json document;
     input >> document;
-    if (document.at("schema_version").get<int>() != 1)
+    if (document.at("schema_version").get<int>() != 2)
       return failure("PHYSICAL_GRASP_EVIDENCE_SCHEMA_UNSUPPORTED",
                      "Evidence sidecar schema is unsupported");
-    PhysicalGraspEvidenceRecord record{
-      document.at("simulation_session_id").get<std::string>(),
-      document.at("configuration_fingerprint").get<std::string>(),
-      document.at("before_lift").is_null() ? std::nullopt
-                                           : std::optional{parseSample(document.at("before_lift"))},
-      document.at("after_lift").is_null() ? std::nullopt
-                                          : std::optional{parseSample(document.at("after_lift"))}};
+    PhysicalGraspEvidenceRecord record;
+    record.simulation_session_id = document.at("simulation_session_id").get<std::string>();
+    record.configuration_fingerprint = document.at("configuration_fingerprint").get<std::string>();
+    const auto & retry = document.at("retry");
+    record.retry.progress.attempt_index = retry.at("attempt_index").get<std::size_t>();
+    record.retry.progress.contact_missing_count =
+      retry.at("contact_missing_count").get<std::size_t>();
+    record.retry.progress.current_reclose_target_q6 =
+      retry.at("current_reclose_target_q6").get<double>();
+    record.retry.micro_lift_preload_target_q6 =
+      retry.at("micro_lift_preload_target_q6").get<double>();
+    record.retry.phase = parsePhase(retry.at("phase").get<std::string>());
+    record.before_lift = document.at("before_lift").is_null()
+                           ? std::nullopt
+                           : std::optional{parseSample(document.at("before_lift"))};
+    record.after_lift = document.at("after_lift").is_null()
+                          ? std::nullopt
+                          : std::optional{parseSample(document.at("after_lift"))};
     if (record.simulation_session_id != simulation_session_id_)
       return failure("PHYSICAL_GRASP_EVIDENCE_SESSION_MISMATCH",
                      "Evidence session does not match current simulation");
     if (record.configuration_fingerprint != configuration_fingerprint_)
       return failure("PHYSICAL_GRASP_EVIDENCE_FINGERPRINT_MISMATCH",
                      "Evidence fingerprint does not match current policy");
-    if (!record.before_lift || !validSample(*record.before_lift, State::WAIT_GRASP_STABLE) ||
+    if (record.retry.progress.attempt_index == 0 || record.retry.progress.attempt_index > 5 ||
+        record.retry.progress.contact_missing_count >= record.retry.progress.attempt_index ||
+        !std::isfinite(record.retry.progress.current_reclose_target_q6) ||
+        !std::isfinite(record.retry.micro_lift_preload_target_q6))
+      return failure("PHYSICAL_GRASP_EVIDENCE_RETRY_INVALID", "Retry evidence is invalid");
+    if ((record.before_lift && !validSample(*record.before_lift, State::WAIT_GRASP_STABLE)) ||
         (record.after_lift &&
-         (!validSample(*record.after_lift, State::WAIT_MICRO_LIFT_STABLE) ||
+         (!record.before_lift || !validSample(*record.after_lift, State::WAIT_MICRO_LIFT_STABLE) ||
           record.after_lift->captured_at_unix_ns < record.before_lift->captured_at_unix_ns)))
       return failure("PHYSICAL_GRASP_EVIDENCE_SAMPLE_INVALID",
                      "Evidence sidecar samples are invalid");
