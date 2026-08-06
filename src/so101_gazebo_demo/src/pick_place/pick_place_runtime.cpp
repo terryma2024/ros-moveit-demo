@@ -15,6 +15,7 @@
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_stabilizer.hpp"
 #include "so101_gazebo_demo/pick_place/support_pose.hpp"
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
 
@@ -494,139 +495,28 @@ private:
   SO101Profile profile_;
 };
 
-class StablePhysicalGraspAction final : public IStateExecutor
+class PhysicalGraspStabilizerAction final : public IStateExecutor
 {
 public:
-  StablePhysicalGraspAction(State state, bool before_lift, std::shared_ptr<IWorldObserver> observer,
-                            std::shared_ptr<IPhysicalGraspEvidenceStore> evidence,
-                            std::shared_ptr<ISO101GripperCommand> gripper, SO101Profile profile) :
-      state_(state), before_lift_(before_lift), observer_(std::move(observer)),
-      evidence_(std::move(evidence)), gripper_(std::move(gripper)), profile_(std::move(profile))
+  PhysicalGraspStabilizerAction(bool before_lift,
+                                std::shared_ptr<SO101PhysicalGraspStabilizer> stabilizer) :
+      before_lift_(before_lift), stabilizer_(std::move(stabilizer))
   {
   }
 
-  ActionResult execute(const ExecutionContext & context) override
+  ActionResult execute(const ExecutionContext &) override
   {
-    if (!observer_ || !evidence_) {
-      return {ActionStatus::FAILED,
-              Failure{FailureCategory::CONFIGURATION,
-                      "PHYSICAL_GRASP_EVIDENCE_DEPENDENCY_MISSING",
-                      "Physical-grasp stability checks require the production world observer",
-                      {}}};
-    }
-    std::optional<WorldSnapshot> last;
-    const int required_consecutive = before_lift_ ? 6 : 3;
-    const int max_samples = before_lift_ ? 30 : 3;
-    int consecutive = 0;
-    int consecutive_unilateral = 0;
-    bool regrasp_attempted = false;
-    for (int sample = 0; sample < max_samples; ++sample) {
-      const auto observed = observer_->observe();
-      if (!observed.snapshot) {
-        return {ActionStatus::FAILED, observed.failure.value_or(Failure{
-                                        FailureCategory::OBSERVATION,
-                                        "PHYSICAL_GRASP_STABILITY_OBSERVATION_FAILED",
-                                        "Unable to collect physical-grasp stability evidence",
-                                        {}})};
-      }
-      const auto & snapshot = *observed.snapshot;
-      if (!snapshot.fresh || !snapshot.gazebo_task_object_stationary ||
-          !snapshot.gazebo_task_object_pose_world) {
-        return {ActionStatus::FAILED,
-                Failure{FailureCategory::POSTCONDITION,
-                        "PHYSICAL_GRASP_NOT_STABLE",
-                        "Cup/contact/arm evidence was not stable for three samples",
-                        {}}};
-      }
-      if (!snapshot.arm_stationary || !*snapshot.gazebo_task_object_stationary) {
-        consecutive = 0;
-        consecutive_unilateral = 0;
-        if (sample + 1 < max_samples)
-          std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        continue;
-      }
-      const bool bilateral =
-        snapshot.gazebo_task_object_gripper_contact.value_or(false) &&
-        snapshot.gazebo_task_object_fixed_finger_contact.value_or(false) &&
-        snapshot.gazebo_task_object_moving_jaw_contact.value_or(false) &&
-        snapshot.gazebo_task_object_gripper_max_depth &&
-        *snapshot.gazebo_task_object_gripper_max_depth <= profile_.max_gripper_contact_depth;
-      if (!before_lift_ || bilateral) {
-        ++consecutive;
-        consecutive_unilateral = 0;
-        last = snapshot;
-        if (consecutive >= required_consecutive) {
-          if (before_lift_ && !regrasp_attempted) {
-            // A bilateral contact indication proves geometry, not load-bearing
-            // normal force. Apply one bounded preload and keep it through the
-            // physical micro-lift. ATTACH_GAZEBO releases it to q6_contact only
-            // after the detachable joint has become authoritative.
-            const double retry_target = std::max(
-              profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
-            const auto retry = gripper_->command(retry_target);
-            const bool contact_abort = retry.status == ActionStatus::FAILED && retry.failure &&
-                                       retry.failure->code == "GRIPPER_ACTION_ABORTED";
-            if (retry.status != ActionStatus::SUCCEEDED && !contact_abort)
-              return retry;
-            regrasp_attempted = true;
-            consecutive = 0;
-            last.reset();
-          } else {
-            break;
-          }
-        }
-      } else {
-        consecutive = 0;
-        ++consecutive_unilateral;
-        // Spend the single bounded regrasp as soon as unilateral contact is
-        // observed.  Delaying this squeeze lets the lightly seated cup tilt
-        // before attachment and produces an unstable carrying transform.
-        if (!regrasp_attempted && consecutive_unilateral >= 1) {
-          if (!gripper_) {
-            return {ActionStatus::FAILED,
-                    Failure{FailureCategory::CONFIGURATION,
-                            "PHYSICAL_REGRASP_COMMAND_MISSING",
-                            "Bilateral contact retry requires the production gripper command",
-                            {}}};
-          }
-          const double retry_target = std::max(
-            profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
-          const auto retry = gripper_->command(retry_target);
-          const bool contact_abort = retry.status == ActionStatus::FAILED && retry.failure &&
-                                     retry.failure->code == "GRIPPER_ACTION_ABORTED";
-          if (retry.status != ActionStatus::SUCCEEDED && !contact_abort)
-            return retry;
-          regrasp_attempted = true;
-        }
-      }
-      if (sample + 1 < max_samples)
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    if (!last || consecutive < required_consecutive) {
-      return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
-                                            "PHYSICAL_GRASP_BILATERAL_STABILITY_TIMEOUT",
-                                            "Bilateral fixed-finger and moving-jaw contact did not "
-                                            "remain stable after one bounded regrasp",
-                                            {}}};
-    }
-    const auto failure = before_lift_ ? evidence_->saveBefore(*last) : evidence_->saveAfter(*last);
-    if (failure)
-      return {ActionStatus::FAILED, *failure};
-    return {ActionStatus::SUCCEEDED, std::nullopt};
+    return before_lift_ ? stabilizer_->captureBeforeLift() : stabilizer_->captureAfterLift();
   }
 
   ActionResult cancel() override
   {
-    return {ActionStatus::SUCCEEDED, std::nullopt};
+    return stabilizer_->cancel();
   }
 
 private:
-  State state_;
   bool before_lift_;
-  std::shared_ptr<IWorldObserver> observer_;
-  std::shared_ptr<IPhysicalGraspEvidenceStore> evidence_;
-  std::shared_ptr<ISO101GripperCommand> gripper_;
-  SO101Profile profile_;
+  std::shared_ptr<SO101PhysicalGraspStabilizer> stabilizer_;
 };
 
 class DetachAndWaitForStationary final : public IStateExecutor
@@ -824,18 +714,16 @@ void registerPhysicalGrasp(SO101PickPlaceRuntimeRegistries & runtime,
   const PhysicalGraspGeometry geometry{config.profile.table_pose.z +
                                          config.profile.table_size[2] * 0.5,
                                        -config.profile.task_object_height * 0.5};
-  runtime.actions.registerExecutor(State::WAIT_GRASP_STABLE,
-                                   std::make_shared<StablePhysicalGraspAction>(
-                                     State::WAIT_GRASP_STABLE, true, dependencies.physical_observer,
-                                     dependencies.physical_grasp_evidence, dependencies.gripper,
-                                     config.profile));
+  auto stabilizer = std::make_shared<SO101PhysicalGraspStabilizer>(
+    dependencies.physical_observer, dependencies.physical_grasp_evidence, dependencies.gripper,
+    config.profile);
+  runtime.actions.registerExecutor(
+    State::WAIT_GRASP_STABLE, std::make_shared<PhysicalGraspStabilizerAction>(true, stabilizer));
   runtime.actions.registerExecutor(
     State::MICRO_LIFT, std::make_shared<WorldZMicroLiftAction>(dependencies.micro_lift));
   runtime.actions.registerExecutor(
     State::WAIT_MICRO_LIFT_STABLE,
-    std::make_shared<StablePhysicalGraspAction>(
-      State::WAIT_MICRO_LIFT_STABLE, false, dependencies.physical_observer,
-      dependencies.physical_grasp_evidence, dependencies.gripper, config.profile));
+    std::make_shared<PhysicalGraspStabilizerAction>(false, stabilizer));
   runtime.actions.registerExecutor(
     State::VERIFY_PHYSICAL_GRASP,
     std::make_shared<VerifyPhysicalGraspAction>(dependencies.physical_grasp_evidence,
