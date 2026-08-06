@@ -269,7 +269,7 @@
       <static>true</static>
       <pose>0.6 0 1.775 -2.356 0 -1.571</pose>
       <link name="link">
-        <sensor name="rgbd_camera" type="rgbd_camera">
+        <sensor name="camera" type="camera">
           <topic>camera</topic>
           <update_rate>10</update_rate>
           <camera>

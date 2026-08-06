@@ -180,7 +180,6 @@ def generate_launch_description():
         name='camera_bridge',
         arguments=[
             '/camera@sensor_msgs/msg/Image[gz.msgs.Image',
-            '/camera/depth@sensor_msgs/msg/Image[gz.msgs.Image',
             '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
         ],
         output='screen',
