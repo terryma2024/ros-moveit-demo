@@ -17,7 +17,7 @@
 
     <!-- V5-T004: 运行 camera/rgbd 等 sensor 的系统插件 -->
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
-      <render_engine>ogre2</render_engine>
+      <render_engine>ogre</render_engine>
     </plugin>
 
     <gui fullscreen="0">
