@@ -65,6 +65,26 @@ bound to the simulation session and policy-bundle fingerprint. A fresh run remov
 prior sidecar evidence; continuous execution and subprocess-per-step execution use
 the same persisted samples and therefore the same validation result.
 
+A retryable failed 2 mm probe is bounded to five total attempts: one initial
+attempt and no more than four retries. Each retry executes `PREOPEN`, descends
+to that attempt's persisted before-lift world Z, recloses, captures a stable
+window, performs the unchanged 2 mm MICRO_LIFT, and verifies again. With contact
+present, the reclose q6 is unchanged. With contact missing, only the reclose
+target is reduced by exactly 0.001 rad, to at most 0.004 rad cumulative. The
+existing fixed seating preload remains exactly
+`max(q6_safe_lower, q6_contact - 0.006)` on every attempt and remains commanded
+through MICRO_LIFT. Nonretryable clearance, slip, orientation, unsafe-world, or
+inconsistent-evidence failures cause no retry. On exhaustion the fifth failure
+code/message is preserved and retry metrics are appended.
+
+The sidecar persists `attempt_index`, `contact_missing_count`,
+`current_reclose_target_q6`, `micro_lift_preload_target_q6`, and a write-ahead
+retry `phase`. A process interrupted in `OPEN_PENDING`, `DESCEND_PENDING`,
+`CLOSE_PENDING`, `LIFT_PENDING`, or `VERIFY_PENDING` cannot be resumed by
+assuming a side effect's outcome; it returns `PHYSICAL_GRASP_RETRY_INTERRUPTED`.
+There is no launch argument that injects or weakens these physical facts. This
+policy is SO-101-only: Panda and the common runner do not expose it.
+
 A physical validation failure produces a FORWARD checkpoint at
 `VALIDATION_FAILED` retaining the original failure. A normal execute resume is
 side-effect-free at that checkpoint: it reports the same validation pause and
