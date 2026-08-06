@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 
 #include "so101_gazebo_demo/pick_place/physical_grasp_evidence_store.hpp"
@@ -29,6 +30,7 @@ private:
   std::shared_ptr<IPhysicalGraspEvidenceStore> evidence_;
   std::shared_ptr<ISO101GripperCommand> gripper_;
   SO101Profile profile_;
+  std::atomic_bool cancelled_{false};
 };
 
 }  // namespace so101_gazebo_demo::pick_place
