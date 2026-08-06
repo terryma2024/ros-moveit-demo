@@ -24,7 +24,7 @@ open gripper
   -> validate cup/TCP following
 ```
 
-If contact remains, the next close command reuses the current target. If contact is absent, the next close target becomes 1.0 mrad tighter. The initial probe counts as attempt 1; no more than five total attempts are permitted.
+If contact remains, the next reclose command reuses the current reclose target. If contact is absent, the next reclose target becomes 1.0 mrad tighter. After that reclose command, the existing fixed `q6_contact - 6.0 mrad` preload is still applied and held through MICRO_LIFT. The initial probe counts as attempt 1; no more than five total attempts are permitted.
 
 ## 2. Verified implementation constraints
 
@@ -33,6 +33,7 @@ If contact remains, the next close command reuses the current target. If contact
 - The calibrated nominal close target is `SO101Profile::q6_contact`.
 - Lower q6 values close the SO-101 moving jaw more tightly.
 - The existing transient seating action is bounded by `q6_regrasp_squeeze_offset = 0.0060` rad and `q6_safe_lower`.
+- The current runtime holds that fixed 6.0 mrad preload through MICRO_LIFT and releases it only after Gazebo attachment becomes authoritative.
 - Four contact-missing retries at 1.0 mrad each produce at most 4.0 mrad cumulative tightening, which remains inside both existing bounds.
 - Physical-grasp samples already persist the before/after TCP pose, cup pose, contact fact, simulation session, and configuration fingerprint in the SO-101 sidecar.
 - The current common runner has no generic representation for a robot-specific open/descend/reclose/probe sequence. Adding one would leak SO-101 grasp policy into Panda/common.
@@ -40,8 +41,8 @@ If contact remains, the next close command reuses the current target. If contact
 ## 3. Goals
 
 1. Retry only the observed failure mode in which the MICRO_LIFT motion succeeds but the cup does not follow it.
-2. Reuse the current close target when cup/gripper contact remains.
-3. Tighten the close target by exactly 0.001 rad after each contact-missing failed attempt.
+2. Reuse the current reclose target when cup/gripper contact remains.
+3. Tighten only the reclose target by exactly 0.001 rad after each contact-missing failed attempt.
 4. Cap the full operation at five total attempts: one initial attempt plus at most four retries.
 5. Descend to the saved pre-lift TCP world-Z position before every regrasp, without cumulative Z drift.
 6. Preserve the latest real physical-grasp failure and its metrics if all attempts fail.
@@ -50,7 +51,7 @@ If contact remains, the next close command reuses the current target. If contact
 
 ## 4. Non-goals
 
-- No change to the current nominal gripper angle, 2 mm lift distance, fixed-finger geometry, cup geometry, friction coefficients, physical-grasp thresholds, attachment policy, or existing pre-lift bilateral seating strategy.
+- No change to the current nominal gripper angle, fixed 6.0 mrad MICRO_LIFT preload, 2 mm lift distance, fixed-finger geometry, cup geometry, friction coefficients, physical-grasp thresholds, attachment policy, or existing pre-lift bilateral seating strategy.
 - No force/torque-controlled grasping and no online optimization of q6.
 - No retry for planning failure, execution failure, stale observation, unsafe motion, excessive XY slip, excessive cup tilt, inconsistent Gazebo/MoveIt attachment state, or a moved/unstable support object.
 - No new common state, common runner retry directive, checkpoint schema change, or Panda retry behavior.
@@ -110,19 +111,19 @@ An attempt is retryable only when every condition below is true:
 
 The contact branch uses the aggregate fresh Gazebo cup/gripper contact fact from the after-lift sample:
 
-- `gripper_contact == true`: preserve `current_close_target_q6` exactly;
+- `gripper_contact == true`: preserve `current_reclose_target_q6` exactly;
 - `gripper_contact == false`: set
 
 ```text
 contact_missing_count += 1
-current_close_target_q6 = max(
+current_reclose_target_q6 = max(
     q6_contact - contact_missing_count * 0.001,
     q6_contact - physical_grasp_max_tighten_q6,
     q6_contact - q6_regrasp_squeeze_offset,
     q6_safe_lower)
 ```
 
-Because at most four retries exist, the selected configuration reaches at most `q6_contact - 0.004`. A contact-present retry never resets a previously tightened target and never tightens it further.
+Because at most four retries exist, the selected reclose configuration reaches at most `q6_contact - 0.004`. A contact-present retry never resets a previously tightened target and never tightens it further. This dynamic reclose target is not the preload held during MICRO_LIFT: every attempt still uses the existing fixed `max(q6_safe_lower, q6_contact - q6_regrasp_squeeze_offset)` preload.
 
 The coordinator must not use controller goal abort as a substitute for Gazebo contact evidence. A controller abort may accompany physical contact but does not prove cup contact.
 
@@ -130,20 +131,21 @@ The coordinator must not use controller goal abort as a substitute for Gazebo co
 
 For each eligible retry, the coordinator performs exactly this sequence:
 
-1. Persist `attempt_index`, `contact_missing_count`, `current_close_target_q6`, and phase `OPEN_PENDING`.
+1. Persist `attempt_index`, `contact_missing_count`, `current_reclose_target_q6`, and phase `OPEN_PENDING`.
 2. Command the existing SO-101 `PREOPEN` target and verify the normal gripper convergence contract.
 3. Re-observe the world and compute `descend_delta_z = saved_before_lift_tcp_z - current_tcp_z`.
 4. Require the delta to be finite, negative, no larger in magnitude than the configured 2 mm probe plus its existing endpoint tolerance, and targeted at the saved before-lift TCP Z.
 5. Execute a collision-aware SO-101 world-Z micro-descend and verify the final TCP against that saved Z. The target is always the saved pre-lift Z, not `current_z - 0.002`, so retries cannot accumulate vertical drift.
 6. Re-observe and revalidate detached/stationary/session/fingerprint preconditions.
-7. Command `current_close_target_q6` and wait for convergence. Keep the current pre-lift bilateral-contact stabilization/preload behavior; parameterizing its relaxed close target must not weaken its depth and bilateral-contact checks.
-8. Capture and atomically replace the before-lift evidence for this attempt.
-9. Execute the existing positive 2 mm world-Z MICRO_LIFT.
-10. Wait for stable after-lift evidence and atomically replace the after-lift sample.
-11. Run the unchanged `PhysicalGraspValidator` thresholds.
-12. On success, persist phase `COMPLETE`, return success, and allow `ATTACH_GAZEBO` to proceed.
-13. On a retryable result with attempts remaining, return to step 1.
-14. On a non-retryable result or attempt 5 failure, return failure without attachment.
+7. Command `current_reclose_target_q6` and wait for convergence.
+8. Run the unchanged pre-lift bilateral stabilization. It commands the same fixed `max(q6_safe_lower, q6_contact - q6_regrasp_squeeze_offset)` preload as the initial attempt, proves the same depth-bounded bilateral stable window, and holds that preload through MICRO_LIFT. It does not subtract the retry tightening from the preload.
+9. Capture and atomically replace the before-lift evidence for this attempt.
+10. Execute the existing positive 2 mm world-Z MICRO_LIFT while the fixed preload remains commanded.
+11. Wait for stable after-lift evidence and atomically replace the after-lift sample.
+12. Run the unchanged `PhysicalGraspValidator` thresholds.
+13. On success, persist phase `COMPLETE`, return success, and allow `ATTACH_GAZEBO` to proceed.
+14. On a retryable result with attempts remaining, return to step 1.
+15. On a non-retryable result or attempt 5 failure, return failure without attachment.
 
 The initial normal MICRO_LIFT is attempt 1. Retry sequences use attempt indices 2 through 5. No sixth lift, open, descend, or close command is allowed.
 
@@ -173,7 +175,7 @@ The robot-local physical-grasp evidence schema is extended to record:
 
 - total attempt index;
 - contact-missing count;
-- current q6 close target;
+- current q6 reclose target and fixed MICRO_LIFT preload target;
 - retry phase;
 - the before/after samples for the current attempt;
 - the existing session ID and configuration fingerprint.
@@ -182,14 +184,15 @@ Every phase transition is written atomically before the next side effect. A fres
 
 If the process exits or crashes during `OPEN_PENDING`, `DESCEND_PENDING`, `CLOSE_PENDING`, `LIFT_PENDING`, or `VERIFY_PENDING`, a later resume must not continue from the middle and must not replay an uncertain command. It returns a deterministic SO-101 postcondition failure such as `PHYSICAL_GRASP_RETRY_INTERRUPTED`, containing attempt, phase, and q6 metrics. Existing common checkpoint bytes, session identity, state ownership, and resume authorization remain unchanged.
 
-An ordinary substep failure preserves its exact category, code, message, and metrics, augmented only with retry diagnostics. The coordinator calls the appropriate request-scoped cancel method and issues no later retry action.
+An ordinary substep failure preserves its exact category, code, message, and metrics, augmented only with retry diagnostics. The coordinator calls the request-scoped cancel method owned by the failed substep and issues no later retry action.
 
 When all five attempts fail physical verification, the final returned failure is the fifth attempt's original `PhysicalGraspValidator` failure. It is augmented with:
 
 - `physical_grasp_attempts = 5`;
 - `physical_grasp_retries = 4`;
 - `contact_missing_count`;
-- `final_close_target_q6`;
+- `final_reclose_target_q6`;
+- `micro_lift_preload_target_q6`;
 - `retry_exhausted = 1`.
 
 The failure must then follow the already-approved SO-101 validation parking/recovery semantics. It must not be replaced by a generic retry-exhausted code.
@@ -228,9 +231,9 @@ Implementation follows RED -> GREEN with deterministic fakes before live simulat
 ### 12.1 Unit tests
 
 1. Initial attempt succeeds: no PREOPEN, descend, extra close, or extra lift.
-2. Failed lift with contact: retry sequence executes and reuses the exact current q6 target.
+2. Failed lift with contact: retry sequence executes and reuses the exact current reclose q6 target.
 3. Failed lift without contact: retry sequence tightens by exactly 0.001 rad.
-4. Contact sequence `false, true, false, true`: close targets are `q6_contact-0.001`, `-0.001`, `-0.002`, `-0.002` relative to nominal.
+4. Contact sequence `false, true, false, true`: reclose targets are `q6_contact-0.001`, `-0.001`, `-0.002`, `-0.002` relative to nominal, while all four MICRO_LIFT preload targets remain `q6_contact-0.006` subject only to `q6_safe_lower`.
 5. Success on attempts 2, 3, 4, and 5 stops immediately with no later command.
 6. Five failures produce exactly five lifts and four retry sequences; no sixth side effect occurs.
 7. Exhaustion preserves the fifth physical failure code/message/metrics and adds retry metrics.
@@ -283,11 +286,11 @@ Capture fresh Gazebo screenshots for at least the contact-present retry, contact
 
 The work is accepted only if all of the following are independently verified:
 
-1. The current nominal q6 close strategy remains unchanged.
+1. The current nominal q6 close strategy and fixed 6.0 mrad MICRO_LIFT preload remain unchanged.
 2. The initial lift is attempt 1 and the maximum is exactly five total attempts.
-3. Every contact-present retry reuses the previous close target byte-for-byte.
-4. Every contact-missing retry tightens by exactly 0.001 rad, cumulatively, with a maximum 0.004 rad change.
-5. Tightening never crosses `q6_contact - q6_regrasp_squeeze_offset` or `q6_safe_lower`.
+3. Every contact-present retry reuses the previous reclose target byte-for-byte.
+4. Every contact-missing retry tightens only the reclose target by exactly 0.001 rad, cumulatively, with a maximum 0.004 rad change.
+5. Every retry uses the unchanged fixed `q6_contact - q6_regrasp_squeeze_offset` MICRO_LIFT preload subject to `q6_safe_lower`; the dynamic reclose offset is never added to that preload.
 6. Every retry descends to the matching saved pre-lift TCP Z with no cumulative drift.
 7. Success stops the loop immediately and is the only path to Gazebo attachment.
 8. Exhaustion issues no sixth side effect and preserves the fifth validator failure.
@@ -304,7 +307,7 @@ The work is accepted only if all of the following are independently verified:
 After implementation, update the SO-101 runtime/launch documentation to describe:
 
 - five total attempts rather than five additional retries;
-- the contact-present versus contact-missing q6 rule;
+- the contact-present versus contact-missing reclose q6 rule and unchanged fixed MICRO_LIFT preload;
 - the 1.0 mrad incremental and 4.0 mrad cumulative bounds;
 - the exact retry sequence;
 - non-retryable failures;
