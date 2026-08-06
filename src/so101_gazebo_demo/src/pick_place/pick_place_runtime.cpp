@@ -742,6 +742,16 @@ public:
     if (std::holds_alternative<Failure>(loaded))
       return {ActionStatus::FAILED, std::get<Failure>(std::move(loaded))};
     const auto record = std::get<PhysicalGraspEvidenceRecord>(std::move(loaded));
+    if (record.retry.phase != PhysicalGraspRetryPhase::IDLE &&
+        record.retry.phase != PhysicalGraspRetryPhase::COMPLETE) {
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::POSTCONDITION,
+                      "PHYSICAL_GRASP_RETRY_INTERRUPTED",
+                      "Physical-grasp retry stopped during an uncertain side-effect phase",
+                      {{"attempt_index", static_cast<double>(record.retry.progress.attempt_index)},
+                       {"phase", static_cast<double>(record.retry.phase)},
+                       {"close_target_q6", record.retry.progress.current_reclose_target_q6}}}};
+    }
     if (!record.before_lift || !record.after_lift) {
       return {ActionStatus::FAILED, Failure{FailureCategory::POSTCONDITION,
                                             "PHYSICAL_GRASP_EVIDENCE_INCOMPLETE",
