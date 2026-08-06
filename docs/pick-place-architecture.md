@@ -35,6 +35,26 @@ CLI processes. Its pre-attachment chain is `WAIT_GRASP_STABLE -> MICRO_LIFT ->
 WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP`; validator failure takes
 `VERIFY_PHYSICAL_GRASP -> VALIDATION_FAILED`.
 
+SO-101's verification executor owns a bounded physical retry coordinator. It
+allows five total attempts, not five additional retries. Each retry is
+`PREOPEN -> saved-before-lift world-Z descend -> reclose -> stable capture ->
+2 mm MICRO_LIFT -> verify`. A contact-present failure keeps the current reclose
+q6. A contact-missing failure tightens only that target by exactly 1.0 mrad,
+with a 4.0 mrad cumulative cap. The pre-lift stabilizer then applies the same
+fixed 6.0 mrad preload on every attempt and holds it through MICRO_LIFT; the
+retry adjustment never changes that preload. Nonretryable results cause no
+retry. Exhaustion copies the fifth physical failure unchanged and only appends
+attempt/retry/q6 metrics.
+
+The sidecar's retry record contains the attempt index, cumulative missing-contact
+count, current reclose target, fixed preload target, and a write-ahead phase for
+each external side effect. Any resume with `OPEN_PENDING`, `DESCEND_PENDING`,
+`CLOSE_PENDING`, `LIFT_PENDING`, or `VERIFY_PENDING` fails closed as
+`PHYSICAL_GRASP_RETRY_INTERRUPTED`; it never guesses whether an interrupted
+command completed. The workflow graph and common runner are unchanged. Panda
+and `pick_place_common` have no SO-101 physical retry coordinator, parameters,
+or sidecar semantics.
+
 The common runner supports workflow-declared validation parking. Passive normal
 execute resume at a validation pause has no side effects and preserves both the
 original failure and checkpoint bytes. Only a declared execute-resume,
