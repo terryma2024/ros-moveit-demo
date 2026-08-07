@@ -360,6 +360,29 @@ TEST(SO101WorldResetCoordinator, RepeatedResetDoesNotIssueHistoricalDetachCalls)
   EXPECT_EQ(4, moveit->task_object_upsert_calls);
 }
 
+TEST(SO101WorldReset, DefensivelyDetachesStaleGazeboJointInSeparateTransaction)
+{
+  auto gazebo = std::make_shared<FakeGazeboResetAdapter>();
+  auto moveit = std::make_shared<FakeMoveItSceneAdapter>();
+  auto robot = robotAdapter();
+  auto events = std::make_shared<std::vector<std::string>>();
+  gazebo->events = events;
+  moveit->events = events;
+  robot->events = events;
+  seed(gazebo, moveit, true, false);
+  WorldResetCoordinator resetter(gazebo, moveit, robot, canonicalConfig());
+
+  const auto result = resetter.reset();
+
+  ASSERT_EQ(ActionStatus::SUCCEEDED, result.status);
+  ASSERT_EQ(1, gazebo->detach_calls);
+  const auto detach = std::find(events->begin(), events->end(), "gazebo_detach");
+  const auto pose = std::find(events->begin(), events->end(), "gazebo_pose");
+  ASSERT_NE(events->end(), detach);
+  ASSERT_NE(events->end(), pose);
+  EXPECT_LT(detach, pose);
+}
+
 TEST(SO101WorldResetCoordinator, AcceptsAmbiguousSetPoseTimeoutOnlyAfterDurablePoseConverges)
 {
   auto gazebo = std::make_shared<FakeGazeboResetAdapter>();

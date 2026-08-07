@@ -24,6 +24,7 @@ pick_place::WorldSnapshot observed(bool gazebo_attached, bool moveit_attached, d
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   pick_place::WorldSnapshot snapshot;
+  snapshot.observed_at = std::chrono::steady_clock::now();
   snapshot.fresh = true;
   snapshot.arm_stationary = true;
   for (std::size_t index = 0; index < profile.arm_joints.size(); ++index) {
@@ -33,6 +34,8 @@ pick_place::WorldSnapshot observed(bool gazebo_attached, bool moveit_attached, d
   snapshot.joint_positions.emplace(profile.gripper_joint, q6);
   snapshot.joint_velocities.emplace(profile.gripper_joint, 0.0);
   snapshot.gazebo_task_object_pose_world = profile.task_object_pose;
+  snapshot.gazebo_pose_observed_at = snapshot.observed_at;
+  snapshot.gazebo_pose_sequence = 1;
   snapshot.gazebo_task_object_stationary = true;
   snapshot.gazebo_task_object_attached = gazebo_attached;
   snapshot.moveit_task_object_attached = moveit_attached;
@@ -44,6 +47,14 @@ pick_place::WorldSnapshot observed(bool gazebo_attached, bool moveit_attached, d
     snapshot.moveit_task_object_touch_links = {profile.moveit_attach_link, "jaw"};
   }
   return snapshot;
+}
+
+void markPhysicallyHeld(pick_place::WorldSnapshot & snapshot, bool supported)
+{
+  snapshot.gazebo_task_object_gripper_contact = true;
+  snapshot.gazebo_gripper_contact_observed_at = snapshot.observed_at;
+  snapshot.gazebo_task_object_intended_support_contact = supported;
+  snapshot.gazebo_support_contact_observed_at = snapshot.observed_at;
 }
 
 }  // namespace
@@ -76,11 +87,10 @@ TEST(SO101RecoveryPolicy, CurrentQ6AndAttachmentFactsChooseMinimalSafeReleaseRou
   pick_place::SO101RecoveryPolicy policy(profile);
   const auto failure = originalFailure();
 
-  EXPECT_EQ(
-    pick_place::State::RECOVER_OPEN_GRIPPER,
-    policy
-      .select(pick_place::State::ATTACH_MOVEIT, failure, observed(true, true, profile.q6_contact))
-      .next_state);
+  auto held_with_shadow = observed(true, true, profile.q6_contact);
+  markPhysicallyHeld(held_with_shadow, true);
+  EXPECT_FALSE(
+    policy.select(pick_place::State::ATTACH_MOVEIT, failure, held_with_shadow).next_state);
   EXPECT_EQ(
     pick_place::State::RECOVER_DETACH_GAZEBO,
     policy
@@ -104,11 +114,10 @@ TEST(SO101RecoveryPolicy, DetachedFactsChooseOpenSyncOrRetreat)
   pick_place::SO101RecoveryPolicy policy(profile);
   const auto failure = originalFailure();
 
-  EXPECT_EQ(
-    pick_place::State::RECOVER_OPEN_GRIPPER,
-    policy
-      .select(pick_place::State::DETACH_MOVEIT, failure, observed(false, false, profile.q6_contact))
-      .next_state);
+  auto supported = observed(false, false, profile.q6_contact);
+  markPhysicallyHeld(supported, true);
+  EXPECT_EQ(pick_place::State::RECOVER_OPEN_GRIPPER,
+            policy.select(pick_place::State::DETACH_MOVEIT, failure, supported).next_state);
 
   auto mismatch = observed(false, false, profile.q6_full_open);
   mismatch.moveit_world_object_poses[profile.task_object_id].x +=
@@ -156,6 +165,66 @@ TEST(SO101RecoveryPolicy, AttachedTaskObjectAwayFromKnownSupportFailsClosedUntil
   ASSERT_TRUE(route.failure);
   EXPECT_EQ(pick_place::FailureCategory::WORLD_INCONSISTENCY, route.failure->category);
   EXPECT_EQ("UNSAFE_RECOVERY_OBSERVATION", route.failure->code);
+}
+
+TEST(SO101RecoveryPolicy, PhysicallyHeldUnsupportedCupStopsWithoutOpening)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  pick_place::SO101RecoveryPolicy policy(profile);
+  auto unsupported = observed(false, false, profile.q6_contact);
+  markPhysicallyHeld(unsupported, false);
+
+  const auto route = policy.select(pick_place::State::LIFT, originalFailure(), unsupported);
+
+  EXPECT_FALSE(route.next_state);
+  ASSERT_TRUE(route.failure);
+  EXPECT_EQ("ORIGINAL", route.failure->code);
+  EXPECT_DOUBLE_EQ(1.0, route.failure->metrics.at("recovery_disposition_hold_for_operator"));
+}
+
+TEST(SO101RecoveryPolicy, SupportedHeldCupMaySelectControlledOpen)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  pick_place::SO101RecoveryPolicy policy(profile);
+  auto supported = observed(false, false, profile.q6_contact);
+  markPhysicallyHeld(supported, true);
+
+  EXPECT_EQ(
+    pick_place::State::RECOVER_OPEN_GRIPPER,
+    policy.select(pick_place::State::DESCEND_TO_PLACE, originalFailure(), supported).next_state);
+
+  supported.moveit_task_object_attached = true;
+  supported.moveit_world_object_poses.erase(profile.task_object_id);
+  EXPECT_FALSE(
+    policy.select(pick_place::State::DESCEND_TO_PLACE, originalFailure(), supported).next_state);
+}
+
+TEST(SO101RecoveryPolicy, PostReleaseFailurePreservesEvidenceWithoutMotion)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  pick_place::SO101RecoveryPolicy policy(profile);
+  auto released = observed(false, false, profile.q6_full_open);
+  released.gazebo_task_object_gripper_contact = false;
+  released.gazebo_task_object_intended_support_contact = true;
+  released.gazebo_support_contact_observed_at = released.observed_at;
+
+  const auto route =
+    policy.select(pick_place::State::VALIDATE_FINAL_PLACEMENT, originalFailure(), released);
+
+  EXPECT_FALSE(route.next_state);
+  ASSERT_TRUE(route.failure);
+  EXPECT_EQ("ORIGINAL", route.failure->code);
+}
+
+TEST(SO101RecoveryPolicy, StaleGazeboJointStillSelectsDefensiveDetachDuringReset)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  pick_place::SO101RecoveryPolicy policy(profile);
+  auto stale_joint = observed(true, false, profile.q6_full_open);
+  stale_joint.gazebo_task_object_gripper_contact = false;
+
+  EXPECT_EQ(pick_place::State::RECOVER_DETACH_GAZEBO,
+            policy.select(pick_place::State::IDLE, originalFailure(), stale_joint).next_state);
 }
 
 TEST(SO101RecoveryPolicy, SkipsRetreatOnlyForAnUnexecutedPlanValidationTargetAtSafeHome)
