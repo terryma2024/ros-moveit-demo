@@ -176,6 +176,8 @@ TEST(RegistrationCoverage, FactoryBuildsTheCompleteRuntimeGraph)
   EXPECT_EQ(runtime.actions.findExecutor(State::DETACH_GAZEBO), gazebo_detach.get());
   EXPECT_EQ(runtime.actions.findExecutor(State::RECOVER_DETACH_GAZEBO),
             recovery_gazebo_detach.get());
+  EXPECT_EQ(runtime.actions.findExecutor(State::WAIT_RELEASE_SETTLE), nullptr);
+  EXPECT_EQ(runtime.actions.findExecutor(State::VALIDATE_FINAL_PLACEMENT), nullptr);
 
   for (const auto & [state, edges] : TransitionTable::entries()) {
     static_cast<void>(edges);
