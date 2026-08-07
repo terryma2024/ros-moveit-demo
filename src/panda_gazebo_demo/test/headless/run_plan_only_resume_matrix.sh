@@ -206,7 +206,7 @@ import sys
 checkpoint = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
 snapshot = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding='utf-8'))
 target = sys.argv[3]
-assert checkpoint['schema_version'] == 3
+assert checkpoint['schema_version'] == 4
 assert checkpoint['source_mode'] == 'execute'
 assert checkpoint['phase'] == 'FORWARD'
 assert checkpoint['next_state'] == target

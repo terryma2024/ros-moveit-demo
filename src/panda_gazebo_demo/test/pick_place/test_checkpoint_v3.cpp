@@ -167,7 +167,7 @@ public:
 
 }  // namespace
 
-TEST(CheckpointV3, RecoveryJsonRoundTripsPhaseFailureAndNextState)
+TEST(CheckpointV4, RecoveryJsonRoundTripsPhaseFailureAndNextState)
 {
   const auto path = checkpointPath("round_trip");
   std::filesystem::remove(path);
@@ -182,7 +182,7 @@ TEST(CheckpointV3, RecoveryJsonRoundTripsPhaseFailureAndNextState)
   const auto loaded = store.loadLatestCompatible();
 
   ASSERT_TRUE(loaded.checkpoint);
-  EXPECT_EQ(3U, loaded.checkpoint->schema_version);
+  EXPECT_EQ(4U, loaded.checkpoint->schema_version);
   EXPECT_EQ(pick_place::CheckpointPhase::RECOVERY, loaded.checkpoint->phase);
   EXPECT_EQ(pick_place::State::MOVE_ABOVE_PLACE, loaded.checkpoint->failed_state);
   ASSERT_TRUE(loaded.checkpoint->original_failure);
@@ -194,11 +194,11 @@ TEST(CheckpointV3, RecoveryJsonRoundTripsPhaseFailureAndNextState)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, RejectsSchemaV2AsIncompatible)
+TEST(CheckpointV4, RejectsSchemaV3AsIncompatible)
 {
   const auto path = checkpointPath("v2");
   std::ofstream output(path, std::ios::out | std::ios::trunc);
-  output << nlohmann::json{{"schema_version", 2}};
+  output << nlohmann::json{{"schema_version", 3}};
   output.close();
   pick_place::FileCheckpointStore store(path);
 
@@ -210,7 +210,7 @@ TEST(CheckpointV3, RejectsSchemaV2AsIncompatible)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, ForwardJsonRoundTripsWithoutRecoveryContext)
+TEST(CheckpointV4, ForwardJsonRoundTripsWithoutRecoveryContext)
 {
   const auto path = checkpointPath("forward_round_trip");
   std::filesystem::remove(path);

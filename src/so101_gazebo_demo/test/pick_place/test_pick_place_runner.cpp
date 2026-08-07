@@ -415,14 +415,14 @@ const std::vector<State> kActionStates{State::PREPARE_OPEN_GRIPPER,
                                        State::MICRO_LIFT,
                                        State::WAIT_MICRO_LIFT_STABLE,
                                        State::VERIFY_PHYSICAL_GRASP,
-                                       State::ATTACH_GAZEBO,
                                        State::ATTACH_MOVEIT,
                                        State::LIFT,
                                        State::MOVE_ABOVE_PLACE,
                                        State::DESCEND_TO_PLACE,
                                        State::OPEN_GRIPPER,
-                                       State::DETACH_GAZEBO,
                                        State::DETACH_MOVEIT,
+                                       State::WAIT_RELEASE_SETTLE,
+                                       State::VALIDATE_FINAL_PLACEMENT,
                                        State::SYNC_WORLD_OBJECT,
                                        State::RETREAT,
                                        State::RECOVER_LIFT_TO_SAFE_HEIGHT,
@@ -465,7 +465,7 @@ struct Harness
     for (const auto state : kActionStates) {
       registerState(state, kPlannedStates.count(state) != 0);
     }
-    contracts.registerContract({State::VALIDATION_FAILED, State::ATTACH_GAZEBO},
+    contracts.registerContract({State::VALIDATION_FAILED, State::ATTACH_MOVEIT},
                                std::make_shared<FakeContract>(State::VALIDATION_FAILED, scenario));
   }
 
@@ -532,14 +532,14 @@ std::vector<State> normalTrace()
           State::MICRO_LIFT,
           State::WAIT_MICRO_LIFT_STABLE,
           State::VERIFY_PHYSICAL_GRASP,
-          State::ATTACH_GAZEBO,
           State::ATTACH_MOVEIT,
           State::LIFT,
           State::MOVE_ABOVE_PLACE,
           State::DESCEND_TO_PLACE,
-          State::OPEN_GRIPPER,
-          State::DETACH_GAZEBO,
           State::DETACH_MOVEIT,
+          State::OPEN_GRIPPER,
+          State::WAIT_RELEASE_SETTLE,
+          State::VALIDATE_FINAL_PLACEMENT,
           State::SYNC_WORLD_OBJECT,
           State::RETREAT,
           State::DONE};
@@ -721,44 +721,44 @@ TEST(PureRunnerIntegration, GripperActionWaitsForArmQuiescenceAfterContact)
   EXPECT_EQ(0, harness.scenario.cancel_calls);
 }
 
-TEST(PureRunnerIntegration, AttachmentWaitsForArmQuiescenceBeforeSideEffect)
+TEST(PureRunnerIntegration, MoveItShadowAttachmentWaitsForArmQuiescenceBeforeSideEffect)
 {
   Harness harness;
   harness.registerAll();
-  harness.scenario.transient_precondition_state = State::ATTACH_GAZEBO;
+  harness.scenario.transient_precondition_state = State::ATTACH_MOVEIT;
   harness.scenario.transient_precondition_failures = 1;
 
   const auto result = harness.runner().run(
-    makeRunRequest(RunMode::EXECUTE, State::ATTACH_GAZEBO, false, std::nullopt, 20));
+    makeRunRequest(RunMode::EXECUTE, State::ATTACH_MOVEIT, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
-  EXPECT_EQ(State::ATTACH_GAZEBO, result.current_state);
-  EXPECT_EQ(State::ATTACH_MOVEIT, result.next_state);
+  EXPECT_EQ(State::ATTACH_MOVEIT, result.current_state);
+  EXPECT_EQ(State::LIFT, result.next_state);
   EXPECT_GE(harness.scenario.observation_calls, 3);
   EXPECT_GE(harness.scenario.precondition_calls, 2);
   EXPECT_EQ(1, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
-                          "execute:ATTACH_GAZEBO"));
+                          "execute:ATTACH_MOVEIT"));
   EXPECT_EQ(0, harness.scenario.cancel_calls);
 }
 
-TEST(PureRunnerIntegration, AttachmentWaitsForTransientBilateralContactBeforeSideEffect)
+TEST(PureRunnerIntegration, MoveItShadowAttachmentWaitsForTransientBilateralContact)
 {
   Harness harness;
   harness.registerAll();
-  harness.scenario.transient_precondition_state = State::ATTACH_GAZEBO;
+  harness.scenario.transient_precondition_state = State::ATTACH_MOVEIT;
   harness.scenario.transient_precondition_failures = 2;
   harness.scenario.transient_precondition_failure_code = "BILATERAL_GRIPPER_CONTACT_REQUIRED";
 
   const auto result = harness.runner().run(
-    makeRunRequest(RunMode::EXECUTE, State::ATTACH_GAZEBO, false, std::nullopt, 20));
+    makeRunRequest(RunMode::EXECUTE, State::ATTACH_MOVEIT, false, std::nullopt, 20));
 
   EXPECT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
-  EXPECT_EQ(State::ATTACH_GAZEBO, result.current_state);
-  EXPECT_EQ(State::ATTACH_MOVEIT, result.next_state);
+  EXPECT_EQ(State::ATTACH_MOVEIT, result.current_state);
+  EXPECT_EQ(State::LIFT, result.next_state);
   EXPECT_GE(harness.scenario.observation_calls, 4);
   EXPECT_GE(harness.scenario.precondition_calls, 3);
   EXPECT_EQ(1, std::count(harness.scenario.events.begin(), harness.scenario.events.end(),
-                          "execute:ATTACH_GAZEBO"));
+                          "execute:ATTACH_MOVEIT"));
   EXPECT_EQ(0, harness.scenario.cancel_calls);
 }
 
@@ -1018,12 +1018,8 @@ TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTra
                                     State::MICRO_LIFT,
                                     State::WAIT_MICRO_LIFT_STABLE,
                                     State::VERIFY_PHYSICAL_GRASP,
-                                    State::ATTACH_GAZEBO,
                                     State::ATTACH_MOVEIT,
                                     State::LIFT,
-                                    State::RECOVER_LIFT_TO_SAFE_HEIGHT,
-                                    State::RECOVER_MOVE_ABOVE_PICK,
-                                    State::RECOVER_DESCEND_TO_PICK,
                                     State::RECOVER_OPEN_GRIPPER,
                                     State::RECOVER_DETACH_GAZEBO,
                                     State::RECOVER_DETACH_MOVEIT,
@@ -1031,6 +1027,28 @@ TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTra
                                     State::RECOVER_RETREAT,
                                     State::ERROR};
   EXPECT_EQ(expected, recovered.state_trace);
+}
+
+TEST(CommonRunner, CommitsFinalFailureBeforeSelectingRecovery)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_execute = State::WAIT_RELEASE_SETTLE;
+
+  const auto result =
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
+
+  ASSERT_TRUE(result.failure);
+  ASSERT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status)
+    << result.failure->code << ": " << result.failure->message;
+  EXPECT_EQ("EXECUTION_INJECTED", result.failure->code);
+  EXPECT_EQ(0, harness.recovery.calls);
+  ASSERT_TRUE(harness.store.latest);
+  EXPECT_FALSE(harness.store.latest->resumable);
+  EXPECT_EQ(State::WAIT_RELEASE_SETTLE, harness.store.latest->failed_state);
+  const auto recovery_event = std::find(
+    harness.scenario.events.begin(), harness.scenario.events.end(), "recover:WAIT_RELEASE_SETTLE");
+  EXPECT_EQ(harness.scenario.events.end(), recovery_event);
 }
 
 TEST(PureRunnerIntegration, RecoveryResumeReclassifiesFromCurrentFactsInsteadOfCheckpointHistory)

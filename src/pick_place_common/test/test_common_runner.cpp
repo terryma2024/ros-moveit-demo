@@ -117,9 +117,7 @@ public:
   {
     if (snapshot.arm_stationary)
       return {true, {}, {}};
-    return {false,
-            {{pp::FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT", "transient", {}}},
-            {}};
+    return {false, {{pp::FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT", "transient", {}}}, {}};
   }
   pp::ValidationResult validate(const pp::WorldSnapshot &, const pp::WorldSnapshot &,
                                 const pp::ActionResult &) const override
@@ -150,16 +148,34 @@ public:
   {
     return false;
   }
-  bool includeIdleInTrace() const noexcept override { return false; }
-  bool runExecutePreflight() const noexcept override { return false; }
-  bool recoverForwardObservationFailure() const noexcept override { return true; }
-  bool preserveEnvironmentFailureWithoutRecovery() const noexcept override { return false; }
+  bool includeIdleInTrace() const noexcept override
+  {
+    return false;
+  }
+  bool runExecutePreflight() const noexcept override
+  {
+    return false;
+  }
+  bool recoverForwardObservationFailure() const noexcept override
+  {
+    return true;
+  }
+  bool preserveEnvironmentFailureWithoutRecovery() const noexcept override
+  {
+    return false;
+  }
   bool retryTransientObservation(pp::State, const pp::Failure &, std::size_t) const override
   {
     return false;
   }
-  bool waitForStationaryObjectOnResume() const noexcept override { return true; }
-  bool preserveOriginalFailureOnRecoveryError() const noexcept override { return false; }
+  bool waitForStationaryObjectOnResume() const noexcept override
+  {
+    return true;
+  }
+  bool preserveOriginalFailureOnRecoveryError() const noexcept override
+  {
+    return false;
+  }
 };
 class Validator final : public pp::IPlanValidator
 {
@@ -197,9 +213,10 @@ class Store final : public pp::ICheckpointStore
 {
 public:
   explicit Store(Scenario & s) : s_(s) {}
-  std::optional<pp::Failure> commit(const pp::Checkpoint &) override
+  std::optional<pp::Failure> commit(const pp::Checkpoint & checkpoint) override
   {
     s_.events.push_back("checkpoint:MOVE_ABOVE_OBJECT");
+    checkpoints.push_back(checkpoint);
     return {};
   }
   pp::CheckpointLoadResult loadLatestCompatible() override
@@ -209,6 +226,9 @@ public:
 
 private:
   Scenario & s_;
+
+public:
+  std::vector<pp::Checkpoint> checkpoints;
 };
 class ResumePolicy final : public pp::IResumeValidationPolicy
 {
@@ -249,7 +269,9 @@ TEST(CommonRunnerBehaviorPolicy, DefaultPolicyCharacterizesPandaNullBaseline)
   pick_place_common::DefaultRunnerBehaviorPolicy policy;
   const pick_place_common::Failure observation_failure{
     pick_place_common::FailureCategory::OBSERVATION,
-    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION", "transient", {}};
+    "ROBOT_STATE_CHANGED_DURING_MOVEIT_OBSERVATION",
+    "transient",
+    {}};
 
   EXPECT_FALSE(policy.runExecutePreflight());
   EXPECT_TRUE(policy.recoverForwardObservationFailure());
@@ -284,6 +306,53 @@ TEST(CommonRunner, ExecutePreservesBoundaryOrder)
               "transition-validate:MOVE_ABOVE_OBJECT", "checkpoint:MOVE_ABOVE_OBJECT"}),
             s.events);
 }
+
+TEST(CheckpointV4, MarksOpenThroughFinalSyncBoundaryNonResumable)
+{
+  Scenario scenario;
+  Observer observer(scenario);
+  Store store(scenario);
+  pp::StateActionRegistry actions;
+  pp::TransitionContractRegistry contracts;
+  for (const auto state : {pp::State::OPEN_GRIPPER, pp::State::WAIT_RELEASE_SETTLE,
+                           pp::State::VALIDATE_FINAL_PLACEMENT, pp::State::SYNC_WORLD_OBJECT}) {
+    actions.registerExecutor(state, std::make_shared<Executor>(scenario));
+  }
+  pp::WorkflowDefinition definition;
+  definition.transitions[pp::State::IDLE] = {pp::State::OPEN_GRIPPER, pp::State::ERROR};
+  definition.transitions[pp::State::OPEN_GRIPPER] = {pp::State::WAIT_RELEASE_SETTLE,
+                                                     pp::State::ERROR};
+  definition.transitions[pp::State::WAIT_RELEASE_SETTLE] = {pp::State::VALIDATE_FINAL_PLACEMENT,
+                                                            pp::State::ERROR};
+  definition.transitions[pp::State::VALIDATE_FINAL_PLACEMENT] = {pp::State::SYNC_WORLD_OBJECT,
+                                                                 pp::State::ERROR};
+  definition.transitions[pp::State::SYNC_WORLD_OBJECT] = {pp::State::DONE, pp::State::ERROR};
+  definition.action_states = {pp::State::OPEN_GRIPPER, pp::State::WAIT_RELEASE_SETTLE,
+                              pp::State::VALIDATE_FINAL_PLACEMENT, pp::State::SYNC_WORLD_OBJECT};
+  definition.forward_states = {pp::State::IDLE,
+                               pp::State::OPEN_GRIPPER,
+                               pp::State::WAIT_RELEASE_SETTLE,
+                               pp::State::VALIDATE_FINAL_PLACEMENT,
+                               pp::State::SYNC_WORLD_OBJECT,
+                               pp::State::DONE};
+  definition.terminal_states = {pp::State::DONE, pp::State::ERROR};
+  for (const auto & [state, transition] : definition.transitions) {
+    if (state != pp::State::IDLE) {
+      contracts.registerContract({state, transition.succeeded},
+                                 std::make_shared<Contract>(scenario));
+    }
+  }
+  pp::StateMachineRunner runner(definition, actions, contracts, &observer, &store);
+
+  const auto result = runner.run({pp::RunMode::EXECUTE});
+
+  ASSERT_EQ(pp::RunStatus::DONE, result.status);
+  ASSERT_EQ(4U, store.checkpoints.size());
+  EXPECT_FALSE(store.checkpoints[0].resumable);
+  EXPECT_FALSE(store.checkpoints[1].resumable);
+  EXPECT_FALSE(store.checkpoints[2].resumable);
+  EXPECT_TRUE(store.checkpoints[3].resumable);
+}
 TEST(CommonRunner, PlannerReceivesObservationThatPassedConvergedPrecondition)
 {
   Scenario scenario;
@@ -297,8 +366,7 @@ TEST(CommonRunner, PlannerReceivesObservationThatPassedConvergedPrecondition)
   contracts.registerContract({pp::State::MOVE_ABOVE_OBJECT, pp::State::DONE},
                              std::make_shared<StationaryContract>());
   pp::PlanValidatorRegistry validators;
-  validators.registerValidator(pp::State::MOVE_ABOVE_OBJECT,
-                               std::make_shared<Validator>(scenario));
+  validators.registerValidator(pp::State::MOVE_ABOVE_OBJECT, std::make_shared<Validator>(scenario));
   const ConvergencePolicy policy;
   const auto definition = workflow();
   pp::StateMachineRunner runner(definition, actions, contracts, &observer, &store, nullptr, nullptr,
