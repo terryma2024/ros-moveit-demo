@@ -73,3 +73,36 @@ def test_force_continue_rejects_action_failure_and_stale_checkpoint():
             await gateway.force_continue("force-1", "run-a", 2, "FORCE CONTINUE")
 
     asyncio.run(scenario())
+
+
+def test_workflow_accepts_new_states_without_python_transition_table():
+    async def scenario():
+        gateway = WorkflowGateway(FakeRunner())
+        await gateway.start("run-a", "session-a")
+        gateway._snapshot = WorkflowSnapshot(
+            run_id="run-a", current_state="WAIT_RELEASE_SETTLE",
+            next_state="VALIDATE_FINAL_PLACEMENT", checkpoint_fresh=True)
+
+        result = await gateway.step("run-a", snapshot_revision=8)
+
+        assert result.current_state == "VALIDATION_FAILED"
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("failure_code", [
+    "FINAL_PLACEMENT_STILL_MOVING",
+    "PLANNING_SHADOW_DIVERGENCE",
+])
+def test_force_continue_rejects_final_outcome_and_shadow_failures(failure_code):
+    async def scenario():
+        gateway = WorkflowGateway(FakeRunner())
+        await gateway.start("run-a", "session-a")
+        gateway._snapshot = WorkflowSnapshot(
+            run_id="run-a", current_state="VALIDATION_FAILED", checkpoint_fresh=True,
+            validation=ValidationEvidence(passed=False, failure_code=failure_code))
+
+        with pytest.raises(WorkflowRejected, match="OVERRIDE_NOT_ALLOWED"):
+            await gateway.force_continue("force-1", "run-a", 8, "FORCE CONTINUE")
+
+    asyncio.run(scenario())

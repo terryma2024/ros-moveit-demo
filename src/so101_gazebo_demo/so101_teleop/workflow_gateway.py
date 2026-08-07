@@ -46,7 +46,7 @@ class WorkflowGateway:
         self._require_revision(snapshot_revision)
         validation = self._snapshot.validation
         blocked_prefixes = ("ACTION_", "CONTROLLER_", "LEASE_", "READINESS_", "CHECKPOINT_",
-                            "SESSION_", "STALE_")
+                            "SESSION_", "STALE_", "FINAL_PLACEMENT_", "PLANNING_SHADOW_")
         if (self._override_consumed or self._snapshot.current_state != "VALIDATION_FAILED" or
                 not self._snapshot.checkpoint_fresh or validation is None or validation.passed or
                 not validation.failure_code or not validation.failure_code.startswith("PHYSICAL_GRASP_") or
