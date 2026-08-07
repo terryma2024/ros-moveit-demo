@@ -20,7 +20,8 @@ def test_every_action_failure_and_stop_boundary_is_machine_comparable() -> None:
     for state in sorted(SO101_WORKFLOW.action_states,key=lambda item:item.value):
         failed=run_behavior(["--mode","dry_run","--fail-at",state.value])
         if state.value in forward:
-            assert failed["exit_code"] == 1 and failed["failure_code"] == "INJECTED_FAILURE"
+            expected_exit = 0 if state is State.VERIFY_PHYSICAL_GRASP else 1
+            assert failed["exit_code"] == expected_exit and failed["failure_code"] == "INJECTED_FAILURE"
         else:
             assert failed["status"] == "DONE"
         stopped=run_behavior(["--mode","dry_run","--stop-after",state.value])

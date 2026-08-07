@@ -95,6 +95,12 @@ class StateMachineRunner:
             commit_failure = self._commit(request, current, next_state, count, original_failure)
             if commit_failure is not None:
                 return RunResult(RunStatus.ERROR, current, None, commit_failure, count, tuple(trace))
+            if next_state is State.VALIDATION_FAILED:
+                trace.append(State.VALIDATION_FAILED)
+                return RunResult(
+                    RunStatus.CHECKPOINT_COMPLETE, State.VALIDATION_FAILED,
+                    State.ATTACH_GAZEBO, original_failure, count, tuple(trace),
+                )
             if request.stop_after is current or request.single_step:
                 return RunResult(
                     RunStatus.CHECKPOINT_COMPLETE, current, next_state,
