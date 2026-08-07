@@ -158,6 +158,47 @@ struct RuntimeValidationConfig
   double q6_contact_stop_tolerance_rad{0.0};
 };
 
+struct AxisAlignedTargetRegion
+{
+  double min_x{0.0};
+  double min_y{0.0};
+  double max_x{0.0};
+  double max_y{0.0};
+};
+
+struct CatastrophicLossPolicy
+{
+  std::optional<std::array<double, 6>> workspace_bounds_m;
+  std::optional<double> max_relative_position_drift_m;
+  std::optional<double> max_relative_orientation_drift_rad;
+};
+
+struct PlanningShadowPolicy
+{
+  std::optional<double> max_position_divergence_m;
+  std::optional<double> max_orientation_divergence_rad;
+  std::optional<double> max_pair_age_s;
+};
+
+struct PhysicalOutcomePolicyConfig
+{
+  std::string intended_support_collision;
+  std::optional<AxisAlignedTargetRegion> final_target_region;
+  std::optional<std::array<double, 2>> support_height_range_m;
+  std::optional<double> max_upright_tilt_rad;
+  std::optional<double> max_linear_speed_m_s;
+  std::optional<double> max_angular_speed_rad_s;
+  std::optional<std::size_t> consecutive_samples;
+  std::optional<double> minimum_stable_duration_s;
+  std::optional<double> sample_interval_s;
+  std::optional<double> settle_timeout_s;
+  std::optional<double> max_observation_age_s;
+  std::optional<std::size_t> max_telemetry_samples;
+  CatastrophicLossPolicy catastrophic_loss;
+  PlanningShadowPolicy planning_shadow;
+  bool calibration_complete{false};
+};
+
 struct ValidationPolicyConfig
 {
   int schema_version{0};
@@ -165,6 +206,7 @@ struct ValidationPolicyConfig
   std::string object_id;
   GraspContactValidationConfig grasp_contact;
   RuntimeValidationConfig runtime;
+  PhysicalOutcomePolicyConfig physical_outcome;
   std::map<State, StateValidationConfig> states;
 };
 

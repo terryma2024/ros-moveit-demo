@@ -29,6 +29,22 @@ def load_yaml(name):
     return yaml.safe_load((CONFIG_DIR / name).read_text())
 
 
+def test_physical_outcome_policy_requires_explicit_calibration():
+    validation = load_yaml('validation_policies/light_cup_wall_pick.yaml')
+    assert validation['schema_version'] == 2
+    physical = validation['physical_outcome']
+    assert physical['intended_support_collision'] == 'table::link::collision'
+    threshold_fields = {
+        'final_target_region', 'support_height_range_m', 'max_upright_tilt_rad',
+        'max_linear_speed_m_s', 'max_angular_speed_rad_s', 'consecutive_samples',
+        'minimum_stable_duration_s', 'sample_interval_s', 'settle_timeout_s',
+        'max_observation_age_s', 'max_telemetry_samples',
+    }
+    assert {physical[field] for field in threshold_fields} == {'CALIBRATION_REQUIRED'}
+    assert set(physical['catastrophic_loss'].values()) == {'CALIBRATION_REQUIRED'}
+    assert set(physical['planning_shadow'].values()) == {'CALIBRATION_REQUIRED'}
+
+
 def test_descend_monotonic_tolerance_covers_measured_endpoint_settling_only():
     """Accept the observed 22.7-um endpoint settle, well inside the 0.1-mm gate."""
     validation = load_yaml('validation_policies/light_cup_wall_pick.yaml')
