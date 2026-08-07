@@ -13,5 +13,6 @@ using pick_place_common::Pose3d;
 using pick_place_common::positionDistance;
 using pick_place_common::relativePose;
 using pick_place_common::TaskObjectContactSample;
+using pick_place_common::TaskObjectSupportContactSample;
 using pick_place_common::WorldSnapshot;
 }  // namespace so101_gazebo_demo::pick_place
