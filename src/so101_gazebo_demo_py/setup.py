@@ -8,7 +8,7 @@ package_name = "so101_gazebo_demo_py"
 
 def installed_assets() -> list[tuple[str, list[str]]]:
     entries: list[tuple[str, list[str]]] = []
-    for directory in ("config", "urdf", "meshes", "worlds", "rviz"):
+    for directory in ("config", "urdf", "meshes", "worlds", "rviz", "launch"):
         for path in sorted(Path(directory).rglob("*")):
             if path.is_file():
                 destination = f"share/{package_name}/{path.parent}"
