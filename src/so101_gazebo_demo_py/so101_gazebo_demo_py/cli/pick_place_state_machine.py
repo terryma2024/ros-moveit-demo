@@ -2,6 +2,7 @@
 
 import argparse
 from pathlib import Path
+import sys
 
 from ..checkpoint import FileCheckpointStore
 from ..domain import RunMode, RunRequest, RunStatus, State
@@ -57,6 +58,10 @@ def print_result(result) -> None:
 
 
 def main(arguments: list[str] | None = None) -> int:
+    if arguments is None:
+        arguments = sys.argv[1:]
+        if "--ros-args" in arguments:
+            arguments = arguments[:arguments.index("--ros-args")]
     options = build_parser().parse_args(arguments)
     request = RunRequest(
         mode=RunMode(options.mode), stop_after=_state(options.stop_after), resume=options.resume,
