@@ -100,7 +100,7 @@ next_command: 建立 CAL-PHYSICAL-001 PLANNED 条目并只读采集隔离 headle
 
 ```yaml
 experiment_id: CAL-PHYSICAL-001
-status: RUNNING
+status: INVALID
 prior_experiment: VER-PHYSICAL-001
 hypothesis: 隔离 headless physics evidence 可为全部新阈值提供有限分布与保守 margin，而无需提高任何既有 collision/penetration ceiling
 prediction: source/install/session/controller/contact/pose 均新鲜且独立；可测得 target/support/tilt/speed/cadence/settle/shadow distributions
@@ -120,23 +120,40 @@ failure_criteria:
 invalid_criteria:
   - provenance、初态、controller、contact、session、重复 stack 或证据时间边界错误
 provenance:
-  source_commit: 4119099
+  source_commit: bd5bf09
   install_overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
   runtime_executable: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/build/so101_gazebo_demo/pick_place_state_machine
   ros_domain_id: 119
   gz_partition: so101-physical-outcome-707d1460-3904-49bd-b60c-de0e36739bcb
   cleanup_owner: root agent; only PIDs launched under this experiment
 commands:
-  - command: isolated headless calibration launch and bounded evidence collection
-    exit_code: PENDING
+  - command: ros2 launch so101_gazebo_demo so101_gazebo.launch.py headless:=true
+    exit_code: RUNNING_THEN_OWNED_CLEANUP
+  - command: ros2 control list_controllers
+    exit_code: 0
+  - command: timeout 8s gz topic -e -t <task_object_contact_bottom> -n 1
+    exit_code: 124
+  - command: controlled cup set_pose down-probe while bottom subscriber was active
+    exit_code: 124
+    note: set_pose succeeded, but bottom contact sample remained absent
+  - command: controlled lift/drop with simultaneous bottom and wall_near subscribers
+    exit_code: 0
+    note: bottom timed out; wall_near produced table contact
 observed:
   - candidate ROS domain node list empty before launch
-  - provenance 已复核，准备启动 owned headless Gazebo/controller stack
-conclusion: PENDING
+  - arm_controller、gripper_controller、joint_state_broadcaster 均为 active
+  - bottom contact topic 有 publisher/subscriber，但静置、下压和抬起后自由落体均没有消息
+  - 对照落杯消息为 plastic_cup::body::wall_near ↔ table::table_top::collision；contact point 的 world z 约为桌面顶面 0.12 m
+  - Gazebo 最终 cup pose 回到约 z=0.165 m，说明物理支撑存在，但当前 scoped collision/sensor identity 不能提供批准 contract 要求的 bottom-to-table 证据
+  - 未从本次数据派生或修改任何 production threshold；既有 collision/penetration ceiling 未改
+conclusion: contact identity 前置条件失败；CAL-PHYSICAL-001 不具备有效支撑证据，必须停止且不得计入校准或成功批次
 evidence:
   - /tmp/so101-debug-physical-outcome-xZlFSI/calibration
-decision: PENDING
-next_experiment: PENDING
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration/bottom-contact-probe.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration/drop-bottom.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration/drop-wall.txt
+decision: INVALIDATE_AND_DEBUG_CONTACT_IDENTITY
+next_experiment: CAL-PHYSICAL-002 after a focused RED/GREEN regression proves exact bottom-to-table evidence
 ```
 
 ## CP-PHYSICAL-002
