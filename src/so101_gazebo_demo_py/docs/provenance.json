@@ -899,6 +899,13 @@
       "destination_sha256": "f47ca5ea84846b5cdbcaf2972d2f870dfb0ea816db4d62c46dfa26b232073171"
     },
     {
+      "source": "src/so101_gazebo_demo/scripts/prepare_simulation_model.py",
+      "destination": "models/so101_prepared.sdf",
+      "source_dirty": false,
+      "source_sha256": "3bfabfd83deab4ba314047e1750bac570d83b6c14319e1dc7f3da14488f0d90e",
+      "destination_sha256": "37fed193f539ba9e53314c6be12f4e577b9c4e4f04a5f7cc3255d0445ccb086f"
+    },
+    {
       "source": "src/so101_gazebo_demo/worlds/so101_pick_place.sdf",
       "destination": "worlds/so101_pick_place.sdf",
       "source_dirty": false,

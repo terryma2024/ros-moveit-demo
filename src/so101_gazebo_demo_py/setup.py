@@ -8,9 +8,9 @@ package_name = "so101_gazebo_demo_py"
 
 def installed_assets() -> list[tuple[str, list[str]]]:
     entries: list[tuple[str, list[str]]] = []
-    for directory in ("config", "urdf", "meshes", "worlds", "rviz", "launch"):
+    for directory in ("config", "urdf", "meshes", "models", "worlds", "rviz", "launch"):
         for path in sorted(Path(directory).rglob("*")):
-            if path.is_file():
+            if path.is_file() and "__pycache__" not in path.parts:
                 destination = f"share/{package_name}/{path.parent}"
                 entries.append((destination, [str(path)]))
     return entries
@@ -35,6 +35,7 @@ setup(
     entry_points={
         "console_scripts": [
             "pick_place_state_machine = so101_gazebo_demo_py.cli.pick_place_state_machine:main",
+            "gazebo_attachment_state_relay = so101_gazebo_demo_py.cli.gazebo_attachment_state_relay:main",
         ]
     },
 )
