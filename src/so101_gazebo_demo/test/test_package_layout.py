@@ -57,6 +57,17 @@ def test_package_records_verified_source_provenance():
     assert '65c371e' in readme
 
 
+def test_operator_docs_assign_physical_truth_and_keep_reset_detach_defensive():
+    readme = (PACKAGE_DIR / 'README.md').read_text()
+    architecture = (PACKAGE_DIR.parents[1] / 'docs' / 'pick-place-architecture.md').read_text()
+
+    assert 'Gazebo physics owns cup motion' in readme
+    assert 'normal forward workflow never calls `ATTACH_GAZEBO` or `DETACH_GAZEBO`' in readme
+    assert 'defensive Gazebo detach' in readme
+    assert 'planning shadow' in architecture
+    assert 'five consecutive' in architecture
+
+
 def test_installed_tool_dependencies_are_declared_directly():
     package = ET.parse(PACKAGE_DIR / 'package.xml').getroot()
     dependencies = {

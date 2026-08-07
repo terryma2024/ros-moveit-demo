@@ -29,3 +29,14 @@ def test_robot_consumers_compile_only_the_shared_common_algorithms():
             assert source not in cmake
         assert "pick_place_common::core" in cmake
         assert "pick_place_common::ros_adapters" in cmake
+
+
+def test_shared_state_contract_documents_panda_compatible_release_states():
+    root = Path(__file__).parents[1]
+    readme = (root / "README.md").read_text()
+    domain = (root / "include" / "pick_place_common" / "domain_types.hpp").read_text()
+
+    assert "WAIT_RELEASE_SETTLE" in domain
+    assert "VALIDATE_FINAL_PLACEMENT" in domain
+    assert "Panda" in readme
+    assert "SO-101-only" in readme

@@ -82,3 +82,26 @@ PYTHONNOUSERSITE=1 colcon test \
   --event-handlers console_direct+
 colcon test-result --verbose
 ```
+
+## SO-101 physical outcome ownership
+
+SO-101 的 normal forward workflow 中，Gazebo physics 是杯子运动的唯一 physical truth；
+MoveIt attachment 仅是 planning shadow，不能驱动 Gazebo。物理抓取验证通过后，
+`ATTACH_MOVEIT` 必须使用最新 Gazebo cup pose 建立 collision shadow；每个 carrying plan 前都
+必须验证 shadow divergence。放置时先 `DETACH_MOVEIT`，再 `OPEN_GRIPPER`，随后执行
+`WAIT_RELEASE_SETTLE -> VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> RETREAT -> DONE`。
+
+Release epoch 从确认物理开夹后的 Gazebo pose sequence 开始，所有 pre-release samples 都被
+拒绝；post-release epoch is non-resumable。最终判定要求连续样本与最短持续时间、目标 XY、
+support height、upright tilt、derived linear/angular speed、cup-bottom-to-table support contact、
+无 gripper contact、Gazebo/MoveIt 均 detached，以及最终 world-object synchronization。
+阈值来自 schema-2 validation policy；`CALIBRATION_REQUIRED` 不得用于宣称成功。
+
+中间 contact/q6/object-relative drift 波动只作为有界 telemetry/distribution evidence。硬门仍包括
+fresh finite evidence、controller/execution health、既有 collision/penetration ceilings、无
+catastrophic loss，以及 planning shadow divergence。验收要求 five consecutive 有效运行，且每次
+都有独立 Gazebo、MoveIt、controller、pose、contact 和 fresh visual evidence。
+
+失败后不得在无支撑时自动开夹爪；应 stop/hold 并冻结证据，reset 是独立受控事务。拒绝恢复
+R3 已证伪路线：0.75 mm seat、independent CLOSE seat、仅延长 close duration、放宽 safety gates，
+以及 unregistered fixed-port retry fixture。

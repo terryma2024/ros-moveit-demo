@@ -40,6 +40,15 @@ def test_launch_manual_documents_r3_physical_validation_and_resume_contract():
     assert 'checkpoint bytes unchanged' in manual
 
 
+def test_launch_manual_documents_physics_owned_final_outcome_contract():
+    manual = LAUNCH_MANUAL.read_text()
+    assert 'DETACH_MOVEIT -> OPEN_GRIPPER -> WAIT_RELEASE_SETTLE' in manual
+    assert 'VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> RETREAT -> DONE' in manual
+    assert 'schema_version: 2' in manual
+    assert 'CALIBRATION_REQUIRED' in manual
+    assert 'post-release epoch is non-resumable' in manual
+
+
 @pytest.mark.parametrize('launch_path', [MOVEIT_LAUNCH, MOVE_GROUP_HEADLESS_LAUNCH])
 def test_move_group_allows_low_speed_simulation_execution_jitter(launch_path):
     source = launch_path.read_text()
