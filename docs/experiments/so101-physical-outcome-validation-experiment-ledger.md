@@ -7,7 +7,7 @@ success_contract: 同一提交和已校准策略下五次连续 VALID execute，
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
 branch: codex/so101-physical-outcome-validation
 base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
-current_commit: 02c929364f889d73333ec76f7384040cce58d7f0
+current_commit: 4119099
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI
 confirmed_conclusions:
   - Task 13 branch-tree build、三包测试、dry-run trace 与 uncalibrated plan-only fail-closed gate 已验证（VER-PHYSICAL-001）
@@ -19,7 +19,7 @@ disproven_routes:
   - unregistered fixed-port retry fixture
 open_hypotheses:
   - 每个 CALIBRATION_REQUIRED 字段的 live calibration 值
-latest_checkpoint: CP-PHYSICAL-001
+latest_checkpoint: CP-PHYSICAL-002
 next_experiment: CAL-PHYSICAL-001
 ```
 
@@ -95,3 +95,59 @@ next_command: 建立 CAL-PHYSICAL-001 PLANNED 条目并只读采集隔离 headle
 ## 五次连续最终结果批次（尚未开始）
 
 每次必须记录：run ID、source/policy hash、`ROS_DOMAIN_ID`、`GZ_PARTITION`、overlay、cleanup owner、final code、release epoch id/start/first/last sequence、sample count/duration、final pose、support/gripper contacts、Gazebo/MoveIt detached、world sync、shadow 最大 divergence、collision/penetration maxima、controller health、fresh screenshot 路径与结果。没有五次连续 `VALID` 不得声明验收成功。
+
+## CAL-PHYSICAL-001：隔离 headless observation-only calibration
+
+```yaml
+experiment_id: CAL-PHYSICAL-001
+status: PLANNED
+prior_experiment: VER-PHYSICAL-001
+hypothesis: 隔离 headless physics evidence 可为全部新阈值提供有限分布与保守 margin，而无需提高任何既有 collision/penetration ceiling
+prediction: source/install/session/controller/contact/pose 均新鲜且独立；可测得 target/support/tilt/speed/cadence/settle/shadow distributions
+single_variable: observation-only calibration
+lifecycle: FULL_RESTART
+preconditions:
+  - source commit 4119099 且 overlay 为当前 worktree install
+  - ROS_DOMAIN_ID 119 无既有 node
+  - GZ_PARTITION 唯一且仅启动本实验拥有的进程
+  - reset 后 cup/robot/MoveIt scene 初态可独立证明
+success_criteria:
+  - 每个新阈值都有原始样本、bounded summary、margin 与语义依据
+  - controller、Gazebo pose/contact、MoveIt scene evidence 均新鲜有限
+  - 既有 forbidden collision 与 penetration ceilings 未改变
+failure_criteria:
+  - 有效观测显示 workflow 或物理 outcome 失败；保留结果且不计五连成功
+invalid_criteria:
+  - provenance、初态、controller、contact、session、重复 stack 或证据时间边界错误
+provenance:
+  source_commit: 4119099
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/build/so101_gazebo_demo/pick_place_state_machine
+  ros_domain_id: 119
+  gz_partition: so101-physical-outcome-707d1460-3904-49bd-b60c-de0e36739bcb
+  cleanup_owner: root agent; only PIDs launched under this experiment
+commands:
+  - command: isolated headless calibration launch and bounded evidence collection
+    exit_code: PENDING
+observed:
+  - candidate ROS domain node list empty before launch
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration
+decision: PENDING
+next_experiment: PENDING
+```
+
+## CP-PHYSICAL-002
+
+```yaml
+checkpoint_id: CP-PHYSICAL-002
+last_valid_experiment: VER-PHYSICAL-001
+current_hypothesis: CAL-PHYSICAL-001
+working_tree_status: new ledger PLANNED entry only
+owned_processes: NONE
+preserved_processes: 其他 worktree 的 gz sim 与 clang-tidy
+open_risks:
+  - production policy 仍全为 CALIBRATION_REQUIRED
+next_command: 以 ROS_DOMAIN_ID=119 和唯一 GZ_PARTITION 启动 owned headless calibration stack
+```
