@@ -24,7 +24,7 @@ TEST(DryRun, AttachMoveItFailureRunsCompleteRecoveryAndEndsError)
   EXPECT_EQ(pick_place::State::ERROR, result.current_state);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("DRY_RUN_FAILURE_INJECTED", result.failure->code);
-  EXPECT_EQ(16U, result.transition_count);
+  EXPECT_EQ(15U, result.transition_count);
 }
 
 TEST(DryRun, StopAfterPersistsTheNextBoundary)

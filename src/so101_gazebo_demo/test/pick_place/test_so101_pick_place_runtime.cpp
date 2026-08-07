@@ -356,8 +356,6 @@ spp::SO101PickPlaceRuntimeDependencies completeDependencies()
   spp::SO101PickPlaceRuntimeDependencies dependencies;
   dependencies.gripper = std::make_shared<FakeGripper>();
   dependencies.moveit_scene = std::make_shared<FakeScene>();
-  dependencies.gazebo_attach = std::make_shared<FakeExecutor>();
-  dependencies.gazebo_detach = std::make_shared<FakeExecutor>();
   dependencies.recovery_gazebo_detach = std::make_shared<FakeExecutor>();
   dependencies.motion_policy = configuredPolicy();
   dependencies.motion = std::make_shared<RecordingMotion>();
@@ -372,6 +370,8 @@ spp::SO101PickPlaceRuntimeDependencies completeDependencies()
   observer->snapshot.gazebo_task_object_gripper_contact = true;
   dependencies.physical_observer = std::move(observer);
   dependencies.physical_grasp_evidence = std::make_shared<MemoryPhysicalEvidenceStore>();
+  dependencies.final_placement_evidence =
+    std::make_shared<spp::InMemoryFinalPlacementEvidenceStore>();
   return dependencies;
 }
 
@@ -487,6 +487,11 @@ TEST(SO101PickPlaceRuntime, RegistersEveryConcreteActionValidatorAndContractExac
   }
   EXPECT_EQ(runtime.actions.findPlanner(spp::State::ATTACH_MOVEIT), nullptr);
   EXPECT_FALSE(runtime.plan_validators.hasValidator(spp::State::ATTACH_MOVEIT));
+  EXPECT_EQ(runtime.actions.findExecutor(spp::State::ATTACH_GAZEBO), nullptr);
+  EXPECT_EQ(runtime.actions.findExecutor(spp::State::DETACH_GAZEBO), nullptr);
+  EXPECT_NE(runtime.actions.findExecutor(spp::State::WAIT_RELEASE_SETTLE), nullptr);
+  EXPECT_NE(runtime.actions.findExecutor(spp::State::VALIDATE_FINAL_PLACEMENT), nullptr);
+  EXPECT_NE(runtime.actions.findExecutor(spp::State::RECOVER_DETACH_GAZEBO), nullptr);
 }
 
 TEST(SO101PickPlaceRuntime, MarksPersistedPhysicalSamplesFreshBeforeValidation)
@@ -516,7 +521,7 @@ TEST(SO101PickPlaceRuntime, MarksPersistedPhysicalSamplesFreshBeforeValidation)
   ASSERT_TRUE(executor);
 
   const auto result =
-    executor->execute({spp::State::VERIFY_PHYSICAL_GRASP, spp::State::ATTACH_GAZEBO, {}, nullptr});
+    executor->execute({spp::State::VERIFY_PHYSICAL_GRASP, spp::State::ATTACH_MOVEIT, {}, nullptr});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
@@ -554,7 +559,7 @@ TEST(SO101PickPlaceRuntime, VerifyPhysicalGraspDelegatesFailureToBoundedRetryCoo
   ASSERT_TRUE(executor);
 
   const auto result =
-    executor->execute({spp::State::VERIFY_PHYSICAL_GRASP, spp::State::ATTACH_GAZEBO, {}, nullptr});
+    executor->execute({spp::State::VERIFY_PHYSICAL_GRASP, spp::State::ATTACH_MOVEIT, {}, nullptr});
 
   ASSERT_EQ(result.status, spp::ActionStatus::NOT_SUPPORTED);
   ASSERT_TRUE(result.failure);
@@ -582,7 +587,7 @@ TEST(SO101PickPlaceRuntime, StableGraspKeepsTheBoundedSqueezeThroughMicroLift)
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
   ASSERT_TRUE(executor);
-  const spp::ExecutionContext context{spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO,
+  const spp::ExecutionContext context{spp::State::WAIT_GRASP_STABLE, spp::State::MICRO_LIFT,
                                       observer->snapshot, nullptr};
 
   const auto result = executor->execute(context);
@@ -645,7 +650,7 @@ TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
   ASSERT_TRUE(executor);
 
   const auto result = executor->execute(
-    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+    {spp::State::WAIT_GRASP_STABLE, spp::State::MICRO_LIFT, observer->snapshot, nullptr});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
@@ -673,7 +678,7 @@ TEST(SO101PickPlaceRuntime, StableBilateralGraspAddsOneBoundedSqueezeBeforeMicro
   ASSERT_TRUE(executor);
 
   const auto result = executor->execute(
-    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+    {spp::State::WAIT_GRASP_STABLE, spp::State::MICRO_LIFT, observer->snapshot, nullptr});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
@@ -702,7 +707,7 @@ TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
   ASSERT_TRUE(executor);
 
   const auto result = executor->execute(
-    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+    {spp::State::WAIT_GRASP_STABLE, spp::State::MICRO_LIFT, observer->snapshot, nullptr});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
@@ -729,7 +734,7 @@ TEST(SO101PickPlaceRuntime, StableGraspGetsIndependentPostPreloadObservationBudg
   ASSERT_TRUE(executor);
 
   const auto result = executor->execute(
-    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+    {spp::State::WAIT_GRASP_STABLE, spp::State::MICRO_LIFT, observer->snapshot, nullptr});
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
@@ -758,36 +763,13 @@ TEST(SO101PickPlaceRuntime, PostPreloadObservationBudgetRemainsFinite)
   ASSERT_TRUE(executor);
 
   const auto result = executor->execute(
-    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+    {spp::State::WAIT_GRASP_STABLE, spp::State::MICRO_LIFT, observer->snapshot, nullptr});
 
   ASSERT_EQ(result.status, spp::ActionStatus::FAILED);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(result.failure->code, "PHYSICAL_GRASP_BILATERAL_STABILITY_TIMEOUT");
   EXPECT_EQ(gripper->calls, 1);
   EXPECT_EQ(observer->next_sample, 55U);
-}
-
-TEST(SO101PickPlaceRuntime, GazeboDetachWaitsForThreeConsecutiveStationarySamples)
-{
-  auto dependencies = completeDependencies();
-  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
-  ASSERT_TRUE(observer);
-  auto moving = observer->snapshot;
-  moving.gazebo_task_object_attached = false;
-  moving.gazebo_task_object_stationary = false;
-  auto stationary = moving;
-  stationary.gazebo_task_object_stationary = true;
-  observer->samples = {moving, stationary, stationary, stationary};
-  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
-  const auto executor = runtime.actions.findExecutor(spp::State::DETACH_GAZEBO);
-  ASSERT_TRUE(executor);
-
-  const auto result = executor->execute(
-    {spp::State::DETACH_GAZEBO, spp::State::DETACH_MOVEIT, observer->snapshot, nullptr});
-
-  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
-    << (result.failure ? result.failure->code : "");
-  EXPECT_EQ(observer->next_sample, 4U);
 }
 
 TEST(SO101PickPlaceRuntime, MissingDependenciesRemainUnsafeWithoutPlaceholderActions)

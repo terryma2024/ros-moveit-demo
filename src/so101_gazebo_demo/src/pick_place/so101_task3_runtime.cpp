@@ -3,10 +3,7 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
-#include <cmath>
 #include <string>
-#include <thread>
 #include <utility>
 
 #include "so101_gazebo_demo/pick_place/moveit_scene_executor.hpp"
@@ -19,69 +16,6 @@ namespace so101_gazebo_demo::pick_place
 {
 namespace
 {
-
-class AttachThenHoldGripper final : public IStateExecutor
-{
-public:
-  AttachThenHoldGripper(std::shared_ptr<IStateExecutor> attach,
-                        std::shared_ptr<ISO101GripperCommand> gripper, std::string gripper_joint,
-                        double carry_hold_q6, double settle_seconds) :
-      attach_(std::move(attach)), gripper_(std::move(gripper)),
-      gripper_joint_(std::move(gripper_joint)), carry_hold_q6_(carry_hold_q6),
-      settle_seconds_(settle_seconds)
-  {
-  }
-
-  ActionResult execute(const ExecutionContext & context) override
-  {
-    auto attached = attach_->execute(context);
-    if (attached.status != ActionStatus::SUCCEEDED)
-      return attached;
-    const auto measured_q6 = context.before.joint_positions.find(gripper_joint_);
-    if (measured_q6 == context.before.joint_positions.end() ||
-        !std::isfinite(measured_q6->second)) {
-      return {ActionStatus::FAILED,
-              Failure{FailureCategory::OBSERVATION,
-                      "CARRY_HOLD_Q6_UNAVAILABLE",
-                      "A finite measured gripper position is required after Gazebo attachment",
-                      {}}};
-    }
-    // Never ask the position controller to squeeze farther into a contact that
-    // already stopped shallower than the calibrated target.  Conversely, a
-    // transiently deeper regrasp is released back to the calibrated carry value
-    // so it cannot preserve excessive wall interference.
-    const double hold_q6 = std::max(measured_q6->second, carry_hold_q6_);
-    auto held = gripper_->command(hold_q6);
-    // Gazebo's DetachableJoint can oppose the gripper position controller
-    // immediately after attachment.  The hold command is advisory at this
-    // boundary: defer only the controller's contact-stop abort and let the
-    // attachment transition contract prove bilateral, bounded, stationary
-    // grasp evidence from the fresh post-state.
-    if (held.status == ActionStatus::FAILED && held.failure &&
-        held.failure->code == "GRIPPER_ACTION_ABORTED") {
-      held = {ActionStatus::SUCCEEDED, std::nullopt};
-    }
-    if (held.status == ActionStatus::SUCCEEDED && settle_seconds_ > 0.0) {
-      std::this_thread::sleep_for(std::chrono::duration<double>(settle_seconds_));
-    }
-    return held;
-  }
-
-  ActionResult cancel() override
-  {
-    const auto gripper_cancelled = gripper_->cancelAndWait();
-    const auto attach_cancelled = attach_->cancel();
-    return gripper_cancelled.status == ActionStatus::SUCCEEDED ? attach_cancelled
-                                                               : gripper_cancelled;
-  }
-
-private:
-  std::shared_ptr<IStateExecutor> attach_;
-  std::shared_ptr<ISO101GripperCommand> gripper_;
-  std::string gripper_joint_;
-  double carry_hold_q6_;
-  double settle_seconds_;
-};
 
 void registerGripper(SO101Task3Runtime & runtime,
                      const SO101Task3RuntimeDependencies & dependencies,
@@ -105,23 +39,8 @@ void registerGripper(SO101Task3Runtime & runtime,
   }
 }
 
-void registerGazebo(SO101Task3Runtime & runtime, const SO101Task3RuntimeDependencies & dependencies,
-                    const SO101Profile & profile)
+void registerGazebo(SO101Task3Runtime & runtime, const SO101Task3RuntimeDependencies & dependencies)
 {
-  if (dependencies.gazebo_attach) {
-    if (dependencies.gripper) {
-      runtime.actions.registerExecutor(
-        State::ATTACH_GAZEBO,
-        std::make_shared<AttachThenHoldGripper>(dependencies.gazebo_attach, dependencies.gripper,
-                                                profile.gripper_joint, profile.q6_contact,
-                                                profile.post_attach_hold_settle_seconds));
-    } else {
-      runtime.actions.registerExecutor(State::ATTACH_GAZEBO, dependencies.gazebo_attach);
-    }
-  }
-  if (dependencies.gazebo_detach) {
-    runtime.actions.registerExecutor(State::DETACH_GAZEBO, dependencies.gazebo_detach);
-  }
   if (dependencies.recovery_gazebo_detach) {
     runtime.actions.registerExecutor(State::RECOVER_DETACH_GAZEBO,
                                      dependencies.recovery_gazebo_detach);
@@ -173,11 +92,14 @@ void registerMoveItScene(SO101Task3Runtime & runtime,
      config.state_poll_interval_seconds},
   }};
   for (const auto & scene_config : configs) {
-    runtime.actions.registerExecutor(
-      scene_config.state, std::make_shared<MoveItSceneExecutor>(
-                            dependencies.moveit_scene, scene_config,
-                            std::make_shared<SO101MoveItScenePolicy>(config.profile.task_object_id,
-                                                                     scene_config.idempotent)));
+    runtime.actions.registerExecutor(scene_config.state,
+                                     std::make_shared<MoveItSceneExecutor>(
+                                       dependencies.moveit_scene, scene_config,
+                                       std::make_shared<SO101MoveItScenePolicy>(
+                                         config.profile.task_object_id, scene_config.idempotent,
+                                         scene_config.state == State::SYNC_WORLD_OBJECT
+                                           ? dependencies.final_placement_evidence.get()
+                                           : nullptr)));
   }
 }
 
@@ -188,7 +110,7 @@ SO101Task3Runtime makeSO101Task3Runtime(const SO101Task3RuntimeDependencies & de
 {
   SO101Task3Runtime runtime;
   registerGripper(runtime, dependencies, config.profile);
-  registerGazebo(runtime, dependencies, config.profile);
+  registerGazebo(runtime, dependencies);
   registerMoveItScene(runtime, dependencies, config);
   registerSO101AttachmentContracts(runtime.contracts, config.profile, config.object,
                                    config.grasp_contact);

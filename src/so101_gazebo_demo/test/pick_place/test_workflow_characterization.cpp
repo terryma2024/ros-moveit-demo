@@ -32,14 +32,14 @@ TEST(SO101WorkflowCharacterization, DefaultDryRunTraceAndExtendedStatesRemainSta
                                         pp::State::MICRO_LIFT,
                                         pp::State::WAIT_MICRO_LIFT_STABLE,
                                         pp::State::VERIFY_PHYSICAL_GRASP,
-                                        pp::State::ATTACH_GAZEBO,
                                         pp::State::ATTACH_MOVEIT,
                                         pp::State::LIFT,
                                         pp::State::MOVE_ABOVE_PLACE,
                                         pp::State::DESCEND_TO_PLACE,
-                                        pp::State::OPEN_GRIPPER,
-                                        pp::State::DETACH_GAZEBO,
                                         pp::State::DETACH_MOVEIT,
+                                        pp::State::OPEN_GRIPPER,
+                                        pp::State::WAIT_RELEASE_SETTLE,
+                                        pp::State::VALIDATE_FINAL_PLACEMENT,
                                         pp::State::SYNC_WORLD_OBJECT,
                                         pp::State::RETREAT,
                                         pp::State::DONE};
@@ -85,7 +85,7 @@ TEST(SO101WorkflowCharacterization, AttachMoveItFailureContractRemainsStable)
   EXPECT_EQ(pp::State::ERROR, result.current_state);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("DRY_RUN_FAILURE_INJECTED", result.failure->code);
-  EXPECT_EQ(16U, result.transition_count);
+  EXPECT_EQ(15U, result.transition_count);
   const std::vector<pp::State> expected{pp::State::IDLE,
                                         pp::State::PREPARE_OPEN_GRIPPER,
                                         pp::State::MOVE_ABOVE_OBJECT,
@@ -95,7 +95,6 @@ TEST(SO101WorkflowCharacterization, AttachMoveItFailureContractRemainsStable)
                                         pp::State::MICRO_LIFT,
                                         pp::State::WAIT_MICRO_LIFT_STABLE,
                                         pp::State::VERIFY_PHYSICAL_GRASP,
-                                        pp::State::ATTACH_GAZEBO,
                                         pp::State::ATTACH_MOVEIT,
                                         pp::State::RECOVER_OPEN_GRIPPER,
                                         pp::State::RECOVER_DETACH_GAZEBO,

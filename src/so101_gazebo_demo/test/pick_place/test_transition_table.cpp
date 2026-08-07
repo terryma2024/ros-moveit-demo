@@ -57,24 +57,27 @@ TEST(TransitionTable, StableContactRequiresPhysicalValidationBeforeAttachment)
   EXPECT_EQ(pick_place::State::VERIFY_PHYSICAL_GRASP,
             pick_place::TransitionTable::resolve(pick_place::State::WAIT_MICRO_LIFT_STABLE,
                                                  pick_place::ActionStatus::SUCCEEDED));
-  EXPECT_EQ(pick_place::State::ATTACH_GAZEBO,
+  EXPECT_EQ(pick_place::State::ATTACH_MOVEIT,
             pick_place::TransitionTable::resolve(pick_place::State::VERIFY_PHYSICAL_GRASP,
                                                  pick_place::ActionStatus::SUCCEEDED));
 }
 
-TEST(TransitionTable, PlacementOpensUnderAttachmentBeforeDetachingAndRetreating)
+TEST(TransitionTable, PlacementDetachesShadowBeforePhysicalReleaseAndFinalValidation)
 {
-  EXPECT_EQ(pick_place::State::OPEN_GRIPPER,
+  EXPECT_EQ(pick_place::State::DETACH_MOVEIT,
             pick_place::TransitionTable::resolve(pick_place::State::DESCEND_TO_PLACE,
                                                  pick_place::ActionStatus::SUCCEEDED));
-  EXPECT_EQ(pick_place::State::DETACH_GAZEBO,
+  EXPECT_EQ(pick_place::State::OPEN_GRIPPER,
+            pick_place::TransitionTable::resolve(pick_place::State::DETACH_MOVEIT,
+                                                 pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::WAIT_RELEASE_SETTLE,
             pick_place::TransitionTable::resolve(pick_place::State::OPEN_GRIPPER,
                                                  pick_place::ActionStatus::SUCCEEDED));
-  EXPECT_EQ(pick_place::State::DETACH_MOVEIT,
-            pick_place::TransitionTable::resolve(pick_place::State::DETACH_GAZEBO,
+  EXPECT_EQ(pick_place::State::VALIDATE_FINAL_PLACEMENT,
+            pick_place::TransitionTable::resolve(pick_place::State::WAIT_RELEASE_SETTLE,
                                                  pick_place::ActionStatus::SUCCEEDED));
   EXPECT_EQ(pick_place::State::SYNC_WORLD_OBJECT,
-            pick_place::TransitionTable::resolve(pick_place::State::DETACH_MOVEIT,
+            pick_place::TransitionTable::resolve(pick_place::State::VALIDATE_FINAL_PLACEMENT,
                                                  pick_place::ActionStatus::SUCCEEDED));
 }
 
