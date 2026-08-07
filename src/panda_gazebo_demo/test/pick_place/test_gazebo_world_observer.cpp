@@ -99,6 +99,9 @@ TEST(GazeboWorldObserver, WaitsForFirstPoseAndAttachmentMessages)
   ASSERT_TRUE(result.snapshot->gazebo_task_object_pose_world);
   ASSERT_TRUE(result.snapshot->gazebo_task_object_attached);
   EXPECT_FALSE(*result.snapshot->gazebo_task_object_attached);
+  EXPECT_FALSE(result.snapshot->gazebo_task_object_intended_support_contact);
+  EXPECT_FALSE(result.snapshot->gazebo_support_contact_observed_at);
+  EXPECT_TRUE(result.snapshot->gazebo_task_object_support_contacts.empty());
 }
 
 TEST(GazeboWorldObserver, MissingInitialPoseStillFailsClosedAtDeadline)

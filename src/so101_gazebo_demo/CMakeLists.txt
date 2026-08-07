@@ -257,6 +257,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_support_pose so101_pick_place_runtime)
   ament_add_gtest(test_so101_gazebo_attachment test/pick_place/test_so101_gazebo_attachment.cpp)
   target_link_libraries(test_so101_gazebo_attachment so101_pick_place_runtime gz-msgs10::core gz-transport13::core)
+  ament_add_gtest(test_gazebo_world_observer test/pick_place/test_gazebo_world_observer.cpp)
+  target_link_libraries(test_gazebo_world_observer so101_pick_place_runtime gz-msgs10::core gz-transport13::core)
   ament_add_gtest(test_attachment_state_reducer
     test/pick_place/test_attachment_state_reducer.cpp)
   target_link_libraries(test_attachment_state_reducer so101_pick_place_runtime)

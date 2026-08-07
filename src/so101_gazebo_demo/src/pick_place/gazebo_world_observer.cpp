@@ -56,6 +56,20 @@ std::string unscopedCollisionName(const std::string & scoped)
   return separator == std::string::npos ? scoped : scoped.substr(separator + 2);
 }
 
+std::string normalizedCollisionIdentity(const std::string & scoped)
+{
+  auto end = scoped.size();
+  for (int separator_count = 0; separator_count < 3; ++separator_count) {
+    const auto separator = scoped.rfind("::", end == 0U ? 0U : end - 1U);
+    if (separator == std::string::npos)
+      return scoped;
+    if (separator_count == 2)
+      return scoped.substr(separator + 2U);
+    end = separator;
+  }
+  return scoped;
+}
+
 }  // namespace
 
 class GazeboWorldObserver::Impl
@@ -105,8 +119,15 @@ public:
       if (pose.name() == task_object_id_ ||
           pose.name().find("::" + task_object_id_) != std::string::npos) {
         const auto observed_at = std::chrono::steady_clock::now();
-        task_object_pose_ = toPose3d(pose);
+        const auto candidate = toPose3d(pose);
+        if (!isFinitePose(candidate)) {
+          nonfinite_pose_received_at_ = observed_at;
+          condition_.notify_all();
+          return;
+        }
+        task_object_pose_ = candidate;
         task_object_pose_received_at_ = observed_at;
+        ++task_object_pose_sequence_;
         if (last_stability_sample_at_ == std::chrono::steady_clock::time_point{} ||
             observed_at - last_stability_sample_at_ >= task_object_settle_interval_) {
           task_object_pose_stability_.addSample(*task_object_pose_, observed_at);
@@ -134,6 +155,10 @@ public:
 
   void onContacts(const std::string & sensor, const gz::msgs::Contacts & message)
   {
+    if (sensor == "task_object_contact_bottom") {
+      onSupportContacts(message);
+      return;
+    }
     ContactEvidence evidence;
     std::optional<Pose3d> object_pose;
     {
@@ -214,6 +239,48 @@ public:
     condition_.notify_all();
   }
 
+  void onSupportContacts(const gz::msgs::Contacts & message)
+  {
+    SupportEvidence evidence;
+    evidence.observed_at = std::chrono::steady_clock::now();
+    for (const auto & contact : message.contact()) {
+      const auto & first = contact.collision1().name();
+      const auto & second = contact.collision2().name();
+      const bool first_task_object = first.find(task_object_id_ + "::") != std::string::npos;
+      const bool second_task_object = second.find(task_object_id_ + "::") != std::string::npos;
+      if (first_task_object == second_task_object)
+        continue;
+      const auto & object_collision = first_task_object ? first : second;
+      const auto & other_collision = first_task_object ? second : first;
+      const auto normalized_support = normalizedCollisionIdentity(other_collision);
+      const double normal_sign = first_task_object ? 1.0 : -1.0;
+      for (int index = 0; index < contact.position_size(); ++index) {
+        if (index >= contact.depth_size() || !std::isfinite(contact.depth(index)) ||
+            contact.depth(index) < 0.0) {
+          continue;
+        }
+        TaskObjectSupportContactSample sample;
+        sample.task_object_collision = normalizedCollisionIdentity(object_collision);
+        sample.support_collision = normalized_support;
+        const auto & point = contact.position(index);
+        sample.point_world = {point.x(), point.y(), point.z()};
+        if (index < contact.normal_size()) {
+          const auto & normal = contact.normal(index);
+          sample.normal_toward_support_world = {normal_sign * normal.x(), normal_sign * normal.y(),
+                                                normal_sign * normal.z()};
+        }
+        sample.depth = contact.depth(index);
+        sample.observed_at = evidence.observed_at;
+        evidence.collision_names.insert(normalized_support);
+        evidence.intended = evidence.intended || normalized_support == intended_support_collision_;
+        evidence.samples.push_back(std::move(sample));
+      }
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    support_evidence_ = std::move(evidence);
+    condition_.notify_all();
+  }
+
   [[nodiscard]] ObservationResult enrich(WorldSnapshot snapshot) const
   {
     if (!pose_subscription_ok_ || !attachment_subscription_ok_) {
@@ -230,6 +297,12 @@ public:
              now - attachment_received_at_ <= max_observation_age_;
     });
     const auto now = std::chrono::steady_clock::now();
+    if (nonfinite_pose_received_at_ != std::chrono::steady_clock::time_point{} &&
+        nonfinite_pose_received_at_ >= task_object_pose_received_at_) {
+      return {std::nullopt,
+              observationFailure("GAZEBO_TASK_OBJECT_POSE_NONFINITE",
+                                 "Gazebo TaskObject pose contains nonfinite evidence")};
+    }
     if (!task_object_pose_) {
       return {std::nullopt, observationFailure("GAZEBO_TASK_OBJECT_POSE_UNAVAILABLE",
                                                "Gazebo TaskObject pose is missing or stale")};
@@ -250,9 +323,12 @@ public:
                                                "Gazebo TaskObject pose is missing or stale")};
     }
     snapshot.gazebo_task_object_pose_world = task_object_pose_;
+    snapshot.gazebo_pose_sequence = task_object_pose_sequence_;
+    snapshot.gazebo_pose_observed_at = task_object_pose_received_at_;
     snapshot.gazebo_task_object_attached = task_object_attached_;
     snapshot.gazebo_task_object_stationary = task_object_pose_stability_.stationary();
-    if (contact_subscription_ok_ && now - contact_received_at_ <= max_observation_age_) {
+    if (contact_subscription_ok_ && task_object_gripper_contact_observed_at_ &&
+        now - *task_object_gripper_contact_observed_at_ <= max_observation_age_) {
       snapshot.gazebo_task_object_gripper_contact = task_object_gripper_contact_;
       snapshot.gazebo_task_object_fixed_finger_contact = task_object_fixed_finger_contact_;
       snapshot.gazebo_task_object_moving_jaw_contact = task_object_moving_jaw_contact_;
@@ -266,6 +342,14 @@ public:
         task_object_moving_contact_max_height_;
       snapshot.gazebo_task_object_fixed_finger_contacts = task_object_fixed_finger_contacts_;
       snapshot.gazebo_task_object_moving_jaw_contacts = task_object_moving_jaw_contacts_;
+      snapshot.gazebo_gripper_contact_observed_at = task_object_gripper_contact_observed_at_;
+    }
+    if (contact_subscription_ok_ && support_evidence_ &&
+        now - support_evidence_->observed_at <= max_observation_age_) {
+      snapshot.gazebo_task_object_intended_support_contact = support_evidence_->intended;
+      snapshot.gazebo_task_object_support_collision_names = support_evidence_->collision_names;
+      snapshot.gazebo_task_object_support_contacts = support_evidence_->samples;
+      snapshot.gazebo_support_contact_observed_at = support_evidence_->observed_at;
     }
     snapshot.simulation_session_id = simulation_session_id_;
     return {snapshot, std::nullopt};
@@ -288,6 +372,14 @@ private:
     std::chrono::steady_clock::time_point observed_at{};
   };
 
+  struct SupportEvidence
+  {
+    bool intended{false};
+    std::set<std::string> collision_names;
+    std::vector<TaskObjectSupportContactSample> samples;
+    std::chrono::steady_clock::time_point observed_at{};
+  };
+
   void mergeFreshContactEvidence()
   {
     const auto now = std::chrono::steady_clock::now();
@@ -302,6 +394,7 @@ private:
     task_object_moving_contact_max_height_.reset();
     task_object_fixed_finger_contacts_.clear();
     task_object_moving_jaw_contacts_.clear();
+    task_object_gripper_contact_observed_at_.reset();
     const auto merge_height = [](const std::optional<double> & source,
                                  std::optional<double> & destination, bool minimum) {
       if (!source)
@@ -313,6 +406,10 @@ private:
     for (const auto & [_, evidence] : contact_evidence_) {
       if (now - evidence.observed_at > max_observation_age_)
         continue;
+      if (!task_object_gripper_contact_observed_at_ ||
+          evidence.observed_at > *task_object_gripper_contact_observed_at_) {
+        task_object_gripper_contact_observed_at_ = evidence.observed_at;
+      }
       task_object_gripper_contact_ = task_object_gripper_contact_ || evidence.gripper;
       task_object_fixed_finger_contact_ = task_object_fixed_finger_contact_ || evidence.fixed;
       task_object_moving_jaw_contact_ = task_object_moving_jaw_contact_ || evidence.moving;
@@ -330,11 +427,11 @@ private:
                                               evidence.moving_samples.begin(),
                                               evidence.moving_samples.end());
     }
-    contact_received_at_ = now;
   }
 
   std::string task_object_id_;
   std::string simulation_session_id_;
+  const std::string intended_support_collision_{"table::link::collision"};
   std::chrono::duration<double> max_observation_age_;
   bool pose_subscription_ok_{false};
   bool attachment_subscription_ok_{false};
@@ -349,18 +446,21 @@ private:
   double task_object_gripper_max_depth_{0.0};
   std::set<std::string> task_object_gripper_collision_names_;
   std::map<std::string, ContactEvidence> contact_evidence_;
+  std::optional<SupportEvidence> support_evidence_;
   std::vector<TaskObjectContactSample> task_object_fixed_finger_contacts_;
   std::vector<TaskObjectContactSample> task_object_moving_jaw_contacts_;
   std::optional<double> task_object_fixed_contact_min_height_;
   std::optional<double> task_object_fixed_contact_max_height_;
   std::optional<double> task_object_moving_contact_min_height_;
   std::optional<double> task_object_moving_contact_max_height_;
-  std::chrono::steady_clock::time_point contact_received_at_{};
+  std::optional<std::chrono::steady_clock::time_point> task_object_gripper_contact_observed_at_;
   std::chrono::steady_clock::time_point attachment_received_at_{};
   pick_place_common::PoseStabilityTracker task_object_pose_stability_;
   std::chrono::duration<double> task_object_settle_interval_;
   std::chrono::steady_clock::time_point last_stability_sample_at_{};
   std::chrono::steady_clock::time_point task_object_pose_received_at_{};
+  std::chrono::steady_clock::time_point nonfinite_pose_received_at_{};
+  std::uint64_t task_object_pose_sequence_{0};
   // Keep the transport last so it is destroyed first and unsubscribes every
   // callback before the mutexes and callback-owned evidence above disappear.
   gz::transport::Node transport_;
