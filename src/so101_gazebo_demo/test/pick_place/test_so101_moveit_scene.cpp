@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -127,7 +128,14 @@ public:
 
 ExecutionContext contextFor(State state)
 {
-  return {state, State::ERROR, WorldSnapshot{}, nullptr};
+  WorldSnapshot snapshot;
+  snapshot.fresh = true;
+  snapshot.observed_at = std::chrono::steady_clock::now();
+  snapshot.gazebo_task_object_pose_world = Pose3d{};
+  snapshot.gazebo_pose_sequence = 1;
+  snapshot.gazebo_pose_observed_at = snapshot.observed_at;
+  snapshot.moveit_gripper_pose_world = Pose3d{};
+  return {state, State::ERROR, std::move(snapshot), nullptr};
 }
 
 TEST(SO101MoveItSceneGeometry, BuildsExactProfileDrivenCollisionObjects)
@@ -217,7 +225,9 @@ TEST(SO101MoveItSceneExecutor, AttachRejectsMissingSettledGazeboPose)
                                 "plastic_cup", canonicalAttachment(), 0.05, 0.001},
                                std::make_shared<SO101MoveItScenePolicy>("plastic_cup", false));
 
-  const auto result = executor.execute(contextFor(State::ATTACH_MOVEIT));
+  auto context = contextFor(State::ATTACH_MOVEIT);
+  context.before.gazebo_task_object_pose_world.reset();
+  const auto result = executor.execute(context);
 
   EXPECT_EQ(ActionStatus::FAILED, result.status);
   ASSERT_TRUE(result.failure);
