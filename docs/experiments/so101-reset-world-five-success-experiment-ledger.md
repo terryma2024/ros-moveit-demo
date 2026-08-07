@@ -1518,3 +1518,49 @@ supersession:
   - no further Gazebo runtime batch was launched after EXP-030; EXP-031 through EXP-033 were not run
 next_command: review intended diff, commit and push codex/so101-five-success, then safely merge and verify main
 ```
+
+## Physical-outcome campaign
+
+```yaml
+task_id: so101-physical-outcome-validation
+success_contract: five consecutive VALID execute runs whose post-release stable physical outcome and every hard safety invariant pass
+worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
+branch: codex/so101-physical-outcome-validation
+base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
+current_commit: 130bd7e8caae037fa7d8643aba80b7f2101f6a27
+evidence_root: /tmp/so101-debug-physical-outcome-kon1M2
+confirmed_conclusions:
+  - approved physical truth versus planning shadow semantics from the design commit
+disproven_routes:
+  - 0.75 mm seat
+  - independent CLOSE seat motion
+  - longer close duration as a fix
+  - safety-gate relaxation
+  - unregistered fixed-port retry fixture
+open_hypotheses:
+  - live calibration values for every CALIBRATION_REQUIRED field
+latest_checkpoint: CP-PHYSICAL-001
+next_experiment: CAL-PHYSICAL-001
+```
+
+```yaml
+checkpoint_id: CP-PHYSICAL-001
+date: 2026-08-07
+last_valid_historical_experiment: EXP-034
+working_tree_status:
+  branch: codex/so101-physical-outcome-validation
+  dirty_paths_before_checkpoint: []
+  dirty_paths_after_checkpoint:
+    - docs/experiments/so101-reset-world-five-success-experiment-ledger.md
+owned_processes: []
+preserved_processes:
+  - tmux session codex (attached)
+  - tmux session codex-cua (attached)
+  - tmux session so101-py-task8
+  - PID 652055 sampler run-clang-tidy in worktree so101-workspace-sampler
+  - PIDs 2834279 and 2834281 Gazebo processes in worktree so101-gazebo-demo-py
+open_risks:
+  - every new physical-outcome and planning-shadow threshold remains CALIBRATION_REQUIRED until justified by live evidence
+  - no new final-outcome execute run has been attempted or accepted
+next_command: add the Task 2 shared-state and Panda compatibility RED tests
+```
