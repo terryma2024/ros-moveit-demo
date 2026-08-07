@@ -70,6 +70,15 @@ def test_force_continue_is_rejected_outside_validation_failed() -> None:
     assert result.failure.code == "FORCE_CONTINUE_NOT_ALLOWED"
 
 
+def test_validation_failure_pauses_without_overwriting_physical_failure() -> None:
+    machine, _ = runner()
+    result = machine.run(RunRequest(fail_at=State.VERIFY_PHYSICAL_GRASP))
+    assert result.status is RunStatus.CHECKPOINT_COMPLETE
+    assert result.current_state is State.VALIDATION_FAILED
+    assert result.next_state is State.ATTACH_GAZEBO
+    assert result.failure.code == "INJECTED_FAILURE"
+
+
 def test_transition_limit_fails_closed() -> None:
     machine, _ = runner()
     result = machine.run(RunRequest(max_state_transitions=2))
