@@ -23,6 +23,7 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
+        (f"share/{package_name}", ["README.md"]),
         (f"share/{package_name}/docs", ["docs/provenance.json"]),
     ] + installed_assets(),
     install_requires=["setuptools"],
