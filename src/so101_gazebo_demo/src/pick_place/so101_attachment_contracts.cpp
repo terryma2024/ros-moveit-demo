@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <set>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
@@ -342,7 +344,8 @@ void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot &
 }
 
 void requireExactMoveItAttachment(ValidationResult & result, const WorldSnapshot & snapshot,
-                                  const SO101Profile & profile)
+                                  const SO101Profile & profile,
+                                  const std::optional<Pose3d> & expected_relative)
 {
   const std::set<std::string> expected(profile.moveit_touch_links.begin(),
                                        profile.moveit_touch_links.end());
@@ -355,15 +358,13 @@ void requireExactMoveItAttachment(ValidationResult & result, const WorldSnapshot
     add(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_TOUCH_LINKS_MISMATCH",
         "MoveIt TaskObject touch links do not match the SO-101 profile");
   }
-  if (!snapshot.moveit_task_object_attached_relative_pose ||
-      positionDistance(*snapshot.moveit_task_object_attached_relative_pose,
-                       profile.calibrated_grasp_relative_pose) >
+  if (!expected_relative || !snapshot.moveit_task_object_attached_relative_pose ||
+      positionDistance(*snapshot.moveit_task_object_attached_relative_pose, *expected_relative) >
         profile.task_object_position_drift_tolerance ||
-      orientationDistance(*snapshot.moveit_task_object_attached_relative_pose,
-                          profile.calibrated_grasp_relative_pose) >
+      orientationDistance(*snapshot.moveit_task_object_attached_relative_pose, *expected_relative) >
         profile.task_object_orientation_drift_tolerance_rad) {
     add(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_ATTACHED_RELATIVE_POSE_MISMATCH",
-        "MoveIt TaskObject attachment must preserve the calibrated full 6D relative pose");
+        "MoveIt TaskObject attachment must use the latest observed Gazebo-relative pose");
   }
   if (snapshot.moveit_world_object_poses.count(profile.task_object_id) != 0) {
     add(result, FailureCategory::MOVEIT_SCENE, "MOVEIT_ATTACHED_TASK_OBJECT_STILL_IN_WORLD",
@@ -416,7 +417,9 @@ public:
       requireSameWallSurfaceContact(result, before, object_, grasp_contact_);
       requireAttachments(result, before, false, false);
     } else if (key_.from == State::ATTACH_MOVEIT) {
-      requireAttachments(result, before, true, false);
+      requireAttachments(result, before, false, false);
+      requireBilateralFingerContact(result, before, profile_);
+      requireSameWallSurfaceContact(result, before, object_, grasp_contact_);
       requireDetachedMoveItWorld(result, before, profile_);
     } else if (key_.from == State::DETACH_GAZEBO) {
       requireAttachments(result, before, true, true);
@@ -458,8 +461,12 @@ public:
       requireAttachments(result, after, true, false);
       requireNoTaskObjectJump(result, before, after, profile_);
     } else if (key_.from == State::ATTACH_MOVEIT) {
-      requireAttachments(result, after, true, true);
-      requireExactMoveItAttachment(result, after, profile_);
+      requireAttachments(result, after, false, true);
+      std::optional<Pose3d> expected_relative;
+      const auto derived = derivePlanningShadowPose(before);
+      if (std::holds_alternative<Pose3d>(derived))
+        expected_relative = std::get<Pose3d>(derived);
+      requireExactMoveItAttachment(result, after, profile_, expected_relative);
       requireNoTaskObjectJump(result, before, after, profile_);
     } else if (key_.from == State::DETACH_GAZEBO || key_.from == State::RECOVER_DETACH_GAZEBO) {
       const bool moveit = key_.from == State::DETACH_GAZEBO ? true
@@ -530,6 +537,93 @@ bool supported(TransitionKey key)
 }
 
 }  // namespace
+
+std::variant<Pose3d, Failure> derivePlanningShadowPose(const WorldSnapshot & snapshot)
+{
+  if (!snapshot.fresh || !snapshot.gazebo_pose_sequence || !snapshot.gazebo_pose_observed_at ||
+      !snapshot.gazebo_task_object_pose_world || !snapshot.moveit_gripper_pose_world ||
+      !isFinitePose(*snapshot.gazebo_task_object_pose_world) ||
+      !isFinitePose(*snapshot.moveit_gripper_pose_world)) {
+    return Failure{FailureCategory::OBSERVATION,
+                   "PLANNING_SHADOW_SOURCE_EVIDENCE_INVALID",
+                   "Planning shadow creation requires fresh finite paired Gazebo and gripper poses",
+                   {}};
+  }
+  const auto relative =
+    relativePose(*snapshot.moveit_gripper_pose_world, *snapshot.gazebo_task_object_pose_world);
+  if (!relative || !isFinitePose(*relative)) {
+    return Failure{FailureCategory::OBSERVATION,
+                   "PLANNING_SHADOW_SOURCE_EVIDENCE_INVALID",
+                   "Planning shadow relative pose could not be derived from physical truth",
+                   {}};
+  }
+  return *relative;
+}
+
+ValidationResult evaluatePlanningShadowDivergence(const WorldSnapshot & snapshot,
+                                                  const PhysicalOutcomePolicyConfig & policy)
+{
+  ValidationResult result{true, {}, {}};
+  const auto fail = [&result](std::string message) {
+    add(result, FailureCategory::PLAN_VALIDATION, "PLANNING_SHADOW_DIVERGENCE", std::move(message));
+  };
+  if (!policy.calibration_complete || !policy.planning_shadow.max_position_divergence_m ||
+      !policy.planning_shadow.max_orientation_divergence_rad ||
+      !policy.planning_shadow.max_pair_age_s) {
+    fail("Planning shadow divergence policy requires calibrated explicit limits");
+    result.ok = false;
+    return result;
+  }
+  if (!snapshot.fresh || !snapshot.gazebo_pose_sequence || !snapshot.gazebo_pose_observed_at ||
+      !snapshot.gazebo_task_object_pose_world || !snapshot.moveit_gripper_pose_world ||
+      !snapshot.moveit_task_object_attached_relative_pose ||
+      !snapshot.gazebo_task_object_attached || !snapshot.moveit_task_object_attached ||
+      !isFinitePose(*snapshot.gazebo_task_object_pose_world) ||
+      !isFinitePose(*snapshot.moveit_gripper_pose_world) ||
+      !isFinitePose(*snapshot.moveit_task_object_attached_relative_pose)) {
+    fail("Planning requires fresh finite paired Gazebo and MoveIt shadow evidence");
+    result.ok = false;
+    return result;
+  }
+  if (*snapshot.gazebo_task_object_attached) {
+    add(result, FailureCategory::GAZEBO_ATTACHMENT, "GAZEBO_FORWARD_ATTACHMENT_FORBIDDEN",
+        "Normal SO-101 carrying requires Gazebo to remain physically detached");
+  }
+  if (!*snapshot.moveit_task_object_attached) {
+    fail("MoveIt planning shadow must remain attached during carrying plans");
+  }
+  const double pair_age =
+    std::abs(std::chrono::duration<double>(snapshot.observed_at - *snapshot.gazebo_pose_observed_at)
+               .count());
+  result.metrics["planning_shadow_pair_age_s"] = pair_age;
+  if (!std::isfinite(pair_age) || pair_age > *policy.planning_shadow.max_pair_age_s)
+    fail("Gazebo and MoveIt shadow evidence is not a fresh pair");
+
+  const auto shadow_world = composePose(*snapshot.moveit_gripper_pose_world,
+                                        *snapshot.moveit_task_object_attached_relative_pose);
+  if (!shadow_world) {
+    fail("MoveIt planning shadow world pose could not be reconstructed");
+  } else {
+    const double position =
+      positionDistance(*snapshot.gazebo_task_object_pose_world, *shadow_world);
+    const double orientation =
+      orientationDistance(*snapshot.gazebo_task_object_pose_world, *shadow_world);
+    result.metrics["planning_shadow_position_divergence_m"] = position;
+    result.metrics["planning_shadow_orientation_divergence_rad"] = orientation;
+    const auto reaches_limit = [](double value, double limit) {
+      const double tolerance =
+        std::numeric_limits<double>::epsilon() * 8.0 * std::max({1.0, value, limit});
+      return value >= limit || limit - value <= tolerance;
+    };
+    if (!std::isfinite(position) || !std::isfinite(orientation) ||
+        reaches_limit(position, *policy.planning_shadow.max_position_divergence_m) ||
+        reaches_limit(orientation, *policy.planning_shadow.max_orientation_divergence_rad)) {
+      fail("MoveIt collision shadow diverged beyond its strict calibrated planning bound");
+    }
+  }
+  result.ok = result.failures.empty();
+  return result;
+}
 
 std::shared_ptr<const Contract>
 makeSO101AttachmentContract(TransitionKey key, const SO101Profile & profile,

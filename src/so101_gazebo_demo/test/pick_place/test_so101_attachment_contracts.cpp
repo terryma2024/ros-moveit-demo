@@ -1,12 +1,16 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <set>
 #include <sstream>
+#include <variant>
 #include <vector>
 
+#include "so101_gazebo_demo/pick_place/final_placement_evidence_store.hpp"
 #include "so101_gazebo_demo/pick_place/so101_attachment_contracts.hpp"
+#include "so101_gazebo_demo/pick_place/so101_moveit_scene_policy.hpp"
 
 namespace pick_place = so101_gazebo_demo::pick_place;
 
@@ -21,10 +25,13 @@ pick_place::WorldSnapshot world(bool gazebo_attached, bool moveit_attached)
   const auto & profile = pick_place::SO101Profile::canonical();
   pick_place::WorldSnapshot snapshot;
   snapshot.fresh = true;
+  snapshot.observed_at = std::chrono::steady_clock::time_point{std::chrono::milliseconds{100}};
   snapshot.arm_stationary = true;
   snapshot.joint_positions.emplace(profile.gripper_joint, profile.q6_contact);
   snapshot.joint_velocities.emplace(profile.gripper_joint, 0.0);
   snapshot.gazebo_task_object_pose_world = profile.task_object_pose;
+  snapshot.gazebo_pose_sequence = 7;
+  snapshot.gazebo_pose_observed_at = snapshot.observed_at;
   snapshot.gazebo_task_object_stationary = true;
   snapshot.gazebo_task_object_gripper_contact = true;
   snapshot.gazebo_task_object_fixed_finger_contact = true;
@@ -44,6 +51,7 @@ pick_place::WorldSnapshot world(bool gazebo_attached, bool moveit_attached)
     snapshot.moveit_task_object_touch_links =
       std::set<std::string>(profile.moveit_touch_links.begin(), profile.moveit_touch_links.end());
     snapshot.moveit_task_object_attached_relative_pose = profile.calibrated_grasp_relative_pose;
+    snapshot.moveit_gripper_pose_world = pick_place::Pose3d{};
   } else {
     snapshot.moveit_world_object_poses.emplace(profile.task_object_id, profile.task_object_pose);
   }
@@ -118,6 +126,16 @@ pick_place::GraspContactValidationConfig testContactPolicy()
 {
   return {true,   true,  "wall_near", "outside", "inside",
           0.0008, 0.008, 0.035,       0.020,     {"rim", "bottom", "wall_opposite"}};
+}
+
+pick_place::PhysicalOutcomePolicyConfig physicalOutcomePolicy()
+{
+  pick_place::PhysicalOutcomePolicyConfig result;
+  result.planning_shadow.max_position_divergence_m = 0.01;
+  result.planning_shadow.max_orientation_divergence_rad = 0.1;
+  result.planning_shadow.max_pair_age_s = 0.2;
+  result.calibration_complete = true;
+  return result;
 }
 
 std::shared_ptr<const pick_place::TransitionContractRegistry::ITransitionContract>
@@ -401,30 +419,6 @@ TEST(SO101AttachmentContracts, GazeboAttachRejectsCanTopEdgeContact)
   EXPECT_FALSE(result.ok);
 }
 
-TEST(SO101AttachmentContracts, MoveItAttachNeedsIndependentExactMetadataAndBothWorldsAttached)
-{
-  const auto & profile = pick_place::SO101Profile::canonical();
-  const auto contract =
-    attachmentContract(key(pick_place::State::ATTACH_MOVEIT, pick_place::State::LIFT), profile);
-  const auto before = world(true, false);
-  auto after = world(true, true);
-  const auto accepted = contract->validate(before, after, succeeded());
-  EXPECT_TRUE(accepted.ok) << failureCodes(accepted);
-
-  after.moveit_task_object_attached_link = "jaw";
-  EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
-  after = world(true, true);
-  after.moveit_task_object_touch_links = {"gripper"};
-  EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
-  after = world(true, true);
-  after.moveit_world_object_poses.emplace(profile.task_object_id, profile.task_object_pose);
-  EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
-  after = world(true, true);
-  after.moveit_task_object_attached_relative_pose->x +=
-    profile.task_object_position_drift_tolerance * 2.0;
-  EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
-}
-
 TEST(SO101AttachmentContracts, ForwardDetachOrderUsesCurrentDualWorldFacts)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
@@ -630,4 +624,105 @@ TEST(SO101AttachmentContracts, ForwardDetachAllowsBoundedHighPoseBeforeStrictlyS
 
   EXPECT_TRUE(contract->validatePrecondition(before).ok);
   EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
+}
+
+TEST(SO101AttachmentContracts, MoveItAttachUsesLatestFreshGazeboPoseAndDerivedRelativePose)
+{
+  auto snapshot = world(false, false);
+  snapshot.gazebo_task_object_pose_world =
+    pick_place::Pose3d{0.04, -0.22, 0.19, 0.0, 0.0, 0.0, 1.0};
+  snapshot.moveit_gripper_pose_world = pick_place::Pose3d{0.01, -0.20, 0.21, 0.0, 0.0, 0.0, 1.0};
+  pick_place::SO101MoveItScenePolicy policy("plastic_cup", false);
+
+  const auto prepared =
+    policy.prepare(pick_place_common::ros_adapters::MoveItSceneOperation::ATTACH,
+                   {pick_place::State::ATTACH_MOVEIT, pick_place::State::LIFT, snapshot, nullptr});
+  const auto derived = pick_place::derivePlanningShadowPose(snapshot);
+
+  EXPECT_FALSE(prepared.failure);
+  EXPECT_TRUE(prepared.upsert_before_attach);
+  ASSERT_TRUE(prepared.task_object_pose);
+  EXPECT_DOUBLE_EQ(snapshot.gazebo_task_object_pose_world->x, prepared.task_object_pose->x);
+  ASSERT_TRUE(std::holds_alternative<pick_place::Pose3d>(derived));
+  const auto expected = pick_place::relativePose(*snapshot.moveit_gripper_pose_world,
+                                                 *snapshot.gazebo_task_object_pose_world);
+  ASSERT_TRUE(expected);
+  EXPECT_NEAR(0.0, pick_place::positionDistance(std::get<pick_place::Pose3d>(derived), *expected),
+              1e-12);
+}
+
+TEST(SO101AttachmentContracts, NormalForwardCarryRequiresGazeboDetached)
+{
+  auto snapshot = world(true, true);
+  snapshot.moveit_task_object_attached_relative_pose = snapshot.gazebo_task_object_pose_world;
+
+  const auto result =
+    pick_place::evaluatePlanningShadowDivergence(snapshot, physicalOutcomePolicy());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_NE(std::string::npos, failureCodes(result).find("GAZEBO_FORWARD_ATTACHMENT_FORBIDDEN"));
+}
+
+TEST(SO101AttachmentContracts, PreservesForbiddenCollisionAndPenetrationCeilings)
+{
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT));
+  auto forbidden = semanticWallGrasp();
+  forbidden.gazebo_task_object_fixed_finger_contacts.front().task_object_collision = "bottom";
+  auto penetrated = semanticWallGrasp();
+  penetrated.gazebo_task_object_moving_jaw_contacts.front().depth =
+    testContactPolicy().max_penetration_m * 2.0;
+
+  EXPECT_FALSE(contract->validatePrecondition(forbidden).ok);
+  EXPECT_FALSE(contract->validatePrecondition(penetrated).ok);
+}
+
+TEST(SO101AttachmentContracts, ShadowDivergenceWithinLimitIsTelemetry)
+{
+  auto snapshot = world(false, true);
+  snapshot.moveit_task_object_attached_relative_pose = snapshot.gazebo_task_object_pose_world;
+  snapshot.moveit_task_object_attached_relative_pose->x += 0.005;
+
+  const auto result =
+    pick_place::evaluatePlanningShadowDivergence(snapshot, physicalOutcomePolicy());
+
+  EXPECT_TRUE(result.ok) << failureCodes(result);
+  EXPECT_DOUBLE_EQ(0.005, result.metrics.at("planning_shadow_position_divergence_m"));
+}
+
+TEST(SO101AttachmentContracts, ShadowDivergenceAtLimitFailsPlanningValidity)
+{
+  auto snapshot = world(false, true);
+  snapshot.moveit_task_object_attached_relative_pose = snapshot.gazebo_task_object_pose_world;
+  snapshot.moveit_task_object_attached_relative_pose->x += 0.01;
+
+  const auto result =
+    pick_place::evaluatePlanningShadowDivergence(snapshot, physicalOutcomePolicy());
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_NE(std::string::npos, failureCodes(result).find("PLANNING_SHADOW_DIVERGENCE"));
+}
+
+TEST(SO101AttachmentContracts, FinalSyncUsesFrozenFinalGazeboPose)
+{
+  pick_place::InMemoryFinalPlacementEvidenceStore evidence;
+  const pick_place::ReleaseEpoch epoch{"release", "session", 10};
+  ASSERT_FALSE(evidence.beginEpoch(epoch));
+  pick_place::FinalPlacementEvaluation evaluation;
+  evaluation.stable = true;
+  const pick_place::Pose3d final_pose{-0.07, -0.31, 0.165, 0.0, 0.0, 0.0, 1.0};
+  evaluation.evidence = pick_place::FinalPlacementEvidence{epoch, 11, 14, final_pose, 3, 0.2};
+  ASSERT_FALSE(evidence.recordEvaluation(evaluation));
+  pick_place::SO101MoveItScenePolicy policy("plastic_cup", false, &evidence);
+  auto snapshot = world(false, false);
+  snapshot.gazebo_task_object_pose_world->x = 0.5;
+
+  const auto prepared = policy.prepare(
+    pick_place_common::ros_adapters::MoveItSceneOperation::SYNC,
+    {pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT, snapshot, nullptr});
+
+  ASSERT_FALSE(prepared.failure);
+  ASSERT_TRUE(prepared.task_object_pose);
+  EXPECT_DOUBLE_EQ(final_pose.x, prepared.task_object_pose->x);
+  EXPECT_DOUBLE_EQ(final_pose.y, prepared.task_object_pose->y);
 }

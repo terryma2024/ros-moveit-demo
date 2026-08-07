@@ -866,7 +866,9 @@ TEST(SO101PickPlaceRuntime, AttachMoveItIsOnlyExecutedInItsOwnState)
   auto scene = std::dynamic_pointer_cast<FakeScene>(dependencies.moveit_scene);
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   auto before = *detachedObservation().snapshot;
-  before.gazebo_task_object_attached = true;
+  before.gazebo_pose_sequence = 1;
+  before.gazebo_pose_observed_at = std::chrono::steady_clock::now();
+  before.moveit_gripper_pose_world = spp::Pose3d{};
 
   const auto attach = runtime.actions.findExecutor(spp::State::ATTACH_MOVEIT)
                         ->execute({spp::State::ATTACH_MOVEIT, spp::State::LIFT, before, nullptr});
@@ -1102,7 +1104,37 @@ TEST(SO101PickPlaceRuntime, CarryPlanUsesAbsoluteAttachmentTiltTolerance)
     observed, tilted(profile.task_object_attachment_orientation_tolerance_rad + 0.001), profile));
 }
 
-TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)
+TEST(SO101PickPlaceRuntime, CarryingPlansGateFreshPairedShadowEvidence)
+{
+  auto dependencies = completeDependencies();
+  spp::SO101PickPlaceRuntimeConfig config;
+  config.physical_outcome.planning_shadow.max_position_divergence_m = 0.01;
+  config.physical_outcome.planning_shadow.max_orientation_divergence_rad = 0.1;
+  config.physical_outcome.planning_shadow.max_pair_age_s = 0.2;
+  config.physical_outcome.calibration_complete = true;
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies, config);
+  auto snapshot = detachedMotionWorld(*dependencies.motion_policy->spec(spp::State::LIFT),
+                                      spp::SO101Profile::canonical());
+  snapshot.gazebo_task_object_attached = false;
+  snapshot.moveit_task_object_attached = true;
+  snapshot.moveit_world_object_poses.erase(spp::SO101Profile::canonical().task_object_id);
+  snapshot.moveit_task_object_attached_link = spp::SO101Profile::canonical().moveit_attach_link;
+  snapshot.moveit_task_object_touch_links = {"gripper", "jaw"};
+  snapshot.moveit_gripper_pose_world = spp::Pose3d{};
+  snapshot.moveit_task_object_attached_relative_pose = snapshot.gazebo_task_object_pose_world;
+  snapshot.gazebo_pose_observed_at = std::chrono::steady_clock::time_point{};
+  snapshot.observed_at = std::chrono::steady_clock::time_point{std::chrono::seconds{1}};
+  spp::MotionPlanArtifact artifact;
+
+  const auto result = runtime.plan_validators.validate(spp::State::LIFT, snapshot, artifact);
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_TRUE(std::any_of(result.failures.begin(), result.failures.end(), [](const auto & failure) {
+    return failure.code == "PLANNING_SHADOW_DIVERGENCE";
+  }));
+}
+
+TEST(SO101MotionContract, CarryRetainsContactQ6AndRelativeDriftAsTelemetry)
 {
   auto profile = configuredProfile();
   const auto spec = configuredPolicy()->spec(spp::State::DESCEND_TO_PLACE);
@@ -1112,7 +1144,7 @@ TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)
 
   auto carrying_world = [&](double rotation, bool axial_yaw) {
     auto world = detachedMotionWorld(*spec, profile);
-    world.gazebo_task_object_attached = true;
+    world.gazebo_task_object_attached = false;
     world.moveit_task_object_attached = true;
     world.moveit_world_object_poses.erase(profile.task_object_id);
     world.moveit_task_object_attached_link = profile.moveit_attach_link;
@@ -1146,6 +1178,7 @@ TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)
   // gripper is holding the attached cup.  The carry boundary remains valid
   // when q6 position, geometry, and both attachment facts are still in bounds.
   axial_spin.joint_velocities[profile.gripper_joint] = -0.188;
+  axial_spin.gazebo_task_object_stationary = false;
   const auto tilted =
     carrying_world(profile.task_object_orientation_drift_tolerance_rad + 0.001, false);
 
@@ -1159,12 +1192,10 @@ TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)
     << " position=" << spin_result.metrics.at("task_object_follow_position_error")
     << " orientation=" << spin_result.metrics.at("task_object_follow_orientation_error_rad")
     << " tilt=" << spin_result.metrics.at("task_object_follow_tilt_error_rad");
-  EXPECT_FALSE(tilt_result.ok);
-  EXPECT_NE(std::find_if(tilt_result.failures.begin(), tilt_result.failures.end(),
-                         [](const auto & failure) {
-                           return failure.code == "TASK_OBJECT_DID_NOT_FOLLOW_GRIPPER";
-                         }),
-            tilt_result.failures.end());
+  EXPECT_TRUE(tilt_result.ok) << (tilt_result.failures.empty() ? ""
+                                                               : tilt_result.failures.front().code);
+  EXPECT_GT(tilt_result.metrics.at("task_object_follow_tilt_error_rad"),
+            profile.task_object_orientation_drift_tolerance_rad);
 }
 
 TEST(SO101MotionContract, ContactCriticalDescentsRejectSucceededActionsOutsideArmEndpointContract)
@@ -1188,7 +1219,7 @@ TEST(SO101MotionContract, ContactCriticalDescentsRejectSucceededActionsOutsideAr
     ASSERT_TRUE(contract) << spp::toString(state);
     auto before = detachedMotionWorld(contract_spec, profile);
     if (state == spp::State::RECOVER_DESCEND_TO_PICK) {
-      before.gazebo_task_object_attached = true;
+      before.gazebo_task_object_attached = false;
       before.moveit_task_object_attached = true;
       before.moveit_world_object_poses.erase(profile.task_object_id);
       before.moveit_task_object_attached_link = profile.moveit_attach_link;
@@ -1235,7 +1266,7 @@ TEST(SO101MotionContract, ContactCriticalDescentsRejectSucceededActionsOutsideJo
     ASSERT_TRUE(contract) << spp::toString(state);
     auto before = detachedMotionWorld(contract_spec, profile);
     if (state == spp::State::RECOVER_DESCEND_TO_PICK) {
-      before.gazebo_task_object_attached = true;
+      before.gazebo_task_object_attached = false;
       before.moveit_task_object_attached = true;
       before.moveit_world_object_poses.erase(profile.task_object_id);
       before.moveit_task_object_attached_link = profile.moveit_attach_link;
@@ -1280,7 +1311,7 @@ TEST(SO101MotionContract, ContactCriticalDescentsAcceptLiveEndpointInsideDerived
     ASSERT_TRUE(contract) << spp::toString(state);
     auto before = detachedMotionWorld(contract_spec, profile);
     if (state == spp::State::RECOVER_DESCEND_TO_PICK) {
-      before.gazebo_task_object_attached = true;
+      before.gazebo_task_object_attached = false;
       before.moveit_task_object_attached = true;
       before.moveit_world_object_poses.erase(profile.task_object_id);
       before.moveit_task_object_attached_link = profile.moveit_attach_link;
