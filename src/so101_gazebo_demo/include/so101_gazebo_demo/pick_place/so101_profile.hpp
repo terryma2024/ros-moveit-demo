@@ -88,6 +88,7 @@ struct SO101Profile
   // body is rotationally symmetric; lateral error and tilt remain bounded.
   double place_support_xy_tolerance{0.005};
   double place_detach_xy_tolerance{0.006};
+  double place_pre_detach_height_tolerance{0.012};
   double place_support_height_tolerance{0.010};
   double place_support_tilt_tolerance_rad{0.08726646259971647};
   // Live Gazebo attachment settling reaches about 0.066 rad while preserving

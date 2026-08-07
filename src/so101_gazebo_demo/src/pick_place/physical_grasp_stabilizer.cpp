@@ -53,11 +53,13 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
   }
   std::optional<WorldSnapshot> last;
   const int required_consecutive = before_lift ? 6 : 3;
-  const int max_samples = before_lift ? 30 : 3;
+  const int max_samples_per_phase = before_lift ? 30 : 3;
   int consecutive = 0;
   int consecutive_unilateral = 0;
+  int samples_in_phase = 0;
   bool regrasp_attempted = false;
-  for (int sample = 0; sample < max_samples; ++sample) {
+  while (samples_in_phase < max_samples_per_phase) {
+    ++samples_in_phase;
     if (auto stopped = cancelled())
       return *stopped;
     const auto observed = observer_->observe();
@@ -80,7 +82,7 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
     if (!snapshot.arm_stationary || !*snapshot.gazebo_task_object_stationary) {
       consecutive = 0;
       consecutive_unilateral = 0;
-      if (sample + 1 < max_samples)
+      if (samples_in_phase < max_samples_per_phase)
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
       continue;
     }
@@ -115,6 +117,7 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
           regrasp_attempted = true;
           consecutive = 0;
           last.reset();
+          samples_in_phase = 0;
         } else {
           break;
         }
@@ -140,9 +143,10 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
         if (retry.status != ActionStatus::SUCCEEDED && !contact_abort)
           return retry;
         regrasp_attempted = true;
+        samples_in_phase = 0;
       }
     }
-    if (sample + 1 < max_samples)
+    if (samples_in_phase < max_samples_per_phase)
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
   if (!last || consecutive < required_consecutive) {

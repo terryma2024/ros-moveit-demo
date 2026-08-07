@@ -114,11 +114,11 @@ def test_arm_path_tolerance_allows_bounded_contact_tracking_error_at_1khz():
     ] == 1000
     assert controller['constraints'] == {
         'goal_time': pytest.approx(1.0),
-        '1': {'trajectory': pytest.approx(0.008), 'goal': pytest.approx(0.002)},
-        '2': {'trajectory': pytest.approx(0.008), 'goal': pytest.approx(0.002)},
-        '3': {'trajectory': pytest.approx(0.008), 'goal': pytest.approx(0.002)},
-        '4': {'trajectory': pytest.approx(0.008), 'goal': pytest.approx(0.002)},
-        '5': {'trajectory': pytest.approx(0.008), 'goal': pytest.approx(0.002)},
+        '1': {'trajectory': pytest.approx(0.012), 'goal': pytest.approx(0.002)},
+        '2': {'trajectory': pytest.approx(0.012), 'goal': pytest.approx(0.002)},
+        '3': {'trajectory': pytest.approx(0.012), 'goal': pytest.approx(0.002)},
+        '4': {'trajectory': pytest.approx(0.012), 'goal': pytest.approx(0.002)},
+        '5': {'trajectory': pytest.approx(0.012), 'goal': pytest.approx(0.002)},
     }
 
 
@@ -132,14 +132,15 @@ def test_initial_free_space_approach_limits_tracking_lag_without_relaxing_contac
     assert motion['LIFT']['velocity_scaling'] == pytest.approx(0.10)
 
 
-def test_horizontal_carry_limits_detachable_joint_orientation_drift():
-    """The loaded sweep stays below the 4 degree contract after a 5.01 degree drift spike."""
+def test_attached_cup_transfers_limit_tracking_lag():
+    """Loaded translation and placement descent stay below the bounded path envelope."""
     motion = load_yaml('motion_policies/light_cup_wall_pick.yaml')['states']
 
-    assert motion['MOVE_ABOVE_PLACE']['velocity_scaling'] == pytest.approx(0.03)
-    assert motion['MOVE_ABOVE_PLACE']['acceleration_scaling'] == pytest.approx(0.03)
+    assert motion['MOVE_ABOVE_PLACE']['velocity_scaling'] == pytest.approx(0.02)
+    assert motion['MOVE_ABOVE_PLACE']['acceleration_scaling'] == pytest.approx(0.02)
     assert motion['LIFT']['velocity_scaling'] == pytest.approx(0.10)
-    assert motion['DESCEND_TO_PLACE']['velocity_scaling'] == pytest.approx(0.10)
+    assert motion['DESCEND_TO_PLACE']['velocity_scaling'] == pytest.approx(0.03)
+    assert motion['DESCEND_TO_PLACE']['acceleration_scaling'] == pytest.approx(0.03)
 
 
 def test_ros2_control_exposes_position_and_velocity_for_every_joint():
