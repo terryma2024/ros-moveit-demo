@@ -176,10 +176,6 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     return fail(FailureCategory::OBSERVATION, "CURRENT_GRIPPER_STATE_UNAVAILABLE",
                 "Motion planning requires fresh finite q6 position and velocity evidence");
   }
-  if (std::abs(q6_velocity->second) > profile_.q6_velocity_tolerance) {
-    return fail(FailureCategory::PRECONDITION, "GRIPPER_NOT_STATIONARY_BEFORE_PLAN",
-                "Gripper joint 6 must be stationary before planning");
-  }
   const bool contact_context = request.carrying && std::isfinite(request.gripper_position) &&
                                std::abs(request.gripper_position - profile_.q6_contact) <= 1e-12;
   const bool full_open_context =
@@ -194,6 +190,12 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     *observation.snapshot->gazebo_task_object_gripper_max_depth >= 0.0 &&
     *observation.snapshot->gazebo_task_object_gripper_max_depth <=
       profile_.max_gripper_contact_depth;
+  if (std::abs(q6_velocity->second) > profile_.q6_velocity_tolerance &&
+      !bounded_bilateral_contact_stop) {
+    return fail(FailureCategory::PRECONDITION, "GRIPPER_NOT_STATIONARY_BEFORE_PLAN",
+                "Gripper joint 6 must be stationary before planning unless bounded bilateral "
+                "contact is verified for the carrying contact target");
+  }
   const double context_tolerance =
     contact_context ? profile_.contact_q6_stop_tolerance
                     : (full_open_context ? profile_.q6_full_open_tolerance : profile_.q6_tolerance);

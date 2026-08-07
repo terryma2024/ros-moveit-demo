@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
@@ -284,7 +285,7 @@ bool requiresStableSupport(TransitionKey key)
 
 void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot & before,
                                 const WorldSnapshot & after, TransitionKey key,
-                                const SO101Profile & profile)
+                                const SO101Profile & profile, bool validating_precondition = false)
 {
   if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world)
     return;
@@ -314,8 +315,14 @@ void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot &
     const bool detaching = key.from == State::DETACH_GAZEBO || key.from == State::DETACH_MOVEIT;
     const double xy_tolerance =
       detaching ? profile.place_detach_xy_tolerance : profile.place_support_xy_tolerance;
+    const bool before_physical_detach =
+      key.from == State::DETACH_GAZEBO &&
+      (validating_precondition || std::string_view(phase) == "before");
+    const double height_tolerance = before_physical_detach
+                                      ? profile.place_pre_detach_height_tolerance
+                                      : profile.place_support_height_tolerance;
     return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
-           xy_error <= xy_tolerance && height_error <= profile.place_support_height_tolerance &&
+           xy_error <= xy_tolerance && height_error <= height_tolerance &&
            tilt <= profile.place_support_tilt_tolerance_rad;
   };
   const bool supported =
@@ -402,7 +409,7 @@ public:
     else
       requireQ6(result, before, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
-      requireExpectedSupportPose(result, before, before, key_, profile_);
+      requireExpectedSupportPose(result, before, before, key_, profile_, true);
     }
     if (key_.from == State::ATTACH_GAZEBO) {
       requireBilateralFingerContact(result, before, profile_);

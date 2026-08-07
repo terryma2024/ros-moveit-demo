@@ -614,3 +614,20 @@ TEST(SO101AttachmentContracts, ForwardDetachAcceptsCylindricalYawInsideSupportEn
     profile.place_task_object_pose.x + profile.place_detach_xy_tolerance + 0.001;
   EXPECT_FALSE(contract->validatePrecondition(before).ok);
 }
+
+TEST(SO101AttachmentContracts, ForwardDetachAllowsBoundedHighPoseBeforeStrictlySupportedAfterPose)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto contract = attachmentContract(
+    key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT), profile);
+  auto before = world(true, true);
+  auto after = world(false, true);
+  before.joint_positions[profile.gripper_joint] = profile.q6_full_open;
+  after.joint_positions[profile.gripper_joint] = profile.q6_full_open;
+  before.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  before.gazebo_task_object_pose_world->z += 0.010111;
+  after.gazebo_task_object_pose_world = profile.place_task_object_pose;
+
+  EXPECT_TRUE(contract->validatePrecondition(before).ok);
+  EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
+}
