@@ -36,6 +36,8 @@ setup(
         "console_scripts": [
             "pick_place_state_machine = so101_gazebo_demo_py.cli.pick_place_state_machine:main",
             "gazebo_attachment_state_relay = so101_gazebo_demo_py.cli.gazebo_attachment_state_relay:main",
+            "reset_so101_world = so101_gazebo_demo_py.cli.reset_so101_world:main",
+            "so101_moveit_scene = so101_gazebo_demo_py.cli.so101_moveit_scene:main",
         ]
     },
 )
