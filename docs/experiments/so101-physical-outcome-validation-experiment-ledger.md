@@ -100,7 +100,7 @@ next_command: 建立 CAL-PHYSICAL-001 PLANNED 条目并只读采集隔离 headle
 
 ```yaml
 experiment_id: CAL-PHYSICAL-001
-status: PLANNED
+status: RUNNING
 prior_experiment: VER-PHYSICAL-001
 hypothesis: 隔离 headless physics evidence 可为全部新阈值提供有限分布与保守 margin，而无需提高任何既有 collision/penetration ceiling
 prediction: source/install/session/controller/contact/pose 均新鲜且独立；可测得 target/support/tilt/speed/cadence/settle/shadow distributions
@@ -131,6 +131,7 @@ commands:
     exit_code: PENDING
 observed:
   - candidate ROS domain node list empty before launch
+  - provenance 已复核，准备启动 owned headless Gazebo/controller stack
 conclusion: PENDING
 evidence:
   - /tmp/so101-debug-physical-outcome-xZlFSI/calibration
