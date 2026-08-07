@@ -970,6 +970,39 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
   }
   const auto route = recovery_policy_->select(state, original_failure, *stopped.snapshot);
   if (!route.next_state) {
+    const bool hold_for_operator = route.failure && [&route]() {
+      const auto disposition =
+        route.failure->metrics.find("recovery_disposition_hold_for_operator");
+      return disposition != route.failure->metrics.end() && disposition->second == 1.0;
+    }();
+    if (hold_for_operator) {
+      original_failure.metrics["recovery_disposition_hold_for_operator"] = 1.0;
+      if (checkpoint_store_ == nullptr) {
+        return error(state, std::move(original_failure));
+      }
+      Checkpoint checkpoint;
+      checkpoint.run_id = "pick_place_state_machine";
+      checkpoint.sequence = checkpoint_sequence;
+      checkpoint.phase = CheckpointPhase::FORWARD;
+      checkpoint.last_completed_state = state;
+      checkpoint.failed_state = state;
+      checkpoint.original_failure = original_failure;
+      checkpoint.next_state = resolve(state, ActionStatus::FAILED);
+      checkpoint.resumable = false;
+      setExpectedWorldState(checkpoint, *stopped.snapshot);
+      checkpoint.configuration_fingerprint =
+        resume_validator_ ? resume_validator_->configurationFingerprint() : std::string{};
+      checkpoint.simulation_session_id = resume_validator_
+                                           ? resume_validator_->simulationSessionId()
+                                           : stopped.snapshot->simulation_session_id;
+      if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
+        return {RunStatus::RUNNING, state, checkpoint.next_state,
+                withCheckpointPersistenceFailure(std::move(original_failure), *checkpoint_failure),
+                1};
+      }
+      return {RunStatus::CHECKPOINT_COMPLETE, state, checkpoint.next_state,
+              std::move(original_failure), 1};
+    }
     auto route_failure =
       route.failure.value_or(Failure{FailureCategory::INTERNAL,
                                      "RECOVERY_ROUTE_MISSING",

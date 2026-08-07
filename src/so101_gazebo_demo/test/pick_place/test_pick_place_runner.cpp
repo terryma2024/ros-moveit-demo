@@ -1051,6 +1051,48 @@ TEST(CommonRunner, CommitsFinalFailureBeforeSelectingRecovery)
   EXPECT_EQ(harness.scenario.events.end(), recovery_event);
 }
 
+TEST(CommonRunner, FreezesFinalFailureBeforeRecoverySelection)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_transition = State::VALIDATE_FINAL_PLACEMENT;
+
+  const auto result =
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
+
+  ASSERT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  ASSERT_TRUE(harness.store.latest);
+  EXPECT_FALSE(harness.store.latest->resumable);
+  EXPECT_EQ(State::VALIDATE_FINAL_PLACEMENT, harness.store.latest->failed_state);
+  EXPECT_EQ(0, harness.recovery.calls);
+}
+
+TEST(CommonRunner, CommitsHoldDispositionWithoutAutomaticRecovery)
+{
+  Harness harness;
+  harness.registerAll();
+  harness.scenario.fail_execute = State::LIFT;
+  harness.recovery.route_failure = Failure{FailureCategory::EXECUTION,
+                                           "HOLD_FOR_OPERATOR",
+                                           "preserve physically held unsupported cup",
+                                           {{"recovery_disposition_hold_for_operator", 1.0}}};
+
+  const auto result =
+    harness.runner().run(makeRunRequest(RunMode::EXECUTE, std::nullopt, false, std::nullopt, 100));
+
+  ASSERT_EQ(pick_place::RunStatus::CHECKPOINT_COMPLETE, result.status);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ("EXECUTION_INJECTED", result.failure->code);
+  EXPECT_DOUBLE_EQ(1.0, result.failure->metrics.at("recovery_disposition_hold_for_operator"));
+  ASSERT_TRUE(harness.store.latest);
+  EXPECT_FALSE(harness.store.latest->resumable);
+  EXPECT_EQ(State::LIFT, harness.store.latest->failed_state);
+  EXPECT_EQ(1, harness.recovery.calls);
+  EXPECT_EQ(harness.scenario.events.end(),
+            std::find(harness.scenario.events.begin(), harness.scenario.events.end(),
+                      "execute:RECOVER_OPEN_GRIPPER"));
+}
+
 TEST(PureRunnerIntegration, RecoveryResumeReclassifiesFromCurrentFactsInsteadOfCheckpointHistory)
 {
   Harness harness;

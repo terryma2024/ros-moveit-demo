@@ -6,6 +6,7 @@
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
+#include "so101_gazebo_demo/pick_place/support_pose.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -15,6 +16,37 @@ namespace
 RecoveryRoute error(FailureCategory category, std::string code, std::string message)
 {
   return {std::nullopt, Failure{category, std::move(code), std::move(message), {}}};
+}
+
+RecoveryRoute holdForOperator(const Failure & original_failure, std::string reason)
+{
+  auto failure = original_failure;
+  failure.message = std::move(reason) + "; original failure: " + original_failure.code + ": " +
+                    original_failure.message;
+  failure.metrics["recovery_disposition_hold_for_operator"] = 1.0;
+  return {std::nullopt, std::move(failure)};
+}
+
+bool currentEvidence(const std::optional<std::chrono::steady_clock::time_point> & observed_at,
+                     const WorldSnapshot & current)
+{
+  return observed_at && *observed_at <= current.observed_at;
+}
+
+bool supportedByFreshPhysicalEvidence(const WorldSnapshot & current, const SO101Profile & profile)
+{
+  return current.gazebo_task_object_intended_support_contact.value_or(false) &&
+         currentEvidence(current.gazebo_support_contact_observed_at, current) &&
+         currentEvidence(current.gazebo_pose_observed_at, current) &&
+         current.gazebo_task_object_pose_world &&
+         (supportedAtPick(*current.gazebo_task_object_pose_world, profile) ||
+          supportedAtPlace(*current.gazebo_task_object_pose_world, profile));
+}
+
+bool postReleaseState(State state)
+{
+  return state == State::OPEN_GRIPPER || state == State::WAIT_RELEASE_SETTLE ||
+         state == State::VALIDATE_FINAL_PLACEMENT || state == State::SYNC_WORLD_OBJECT;
 }
 
 bool nearPose(const Pose3d & actual, const Pose3d & expected, const SO101Profile & profile)
@@ -81,8 +113,6 @@ bool SO101RecoveryPolicy::canSkipRecoveryAction(State, const Failure & original_
 RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & original_failure,
                                           const WorldSnapshot & current) const
 {
-  static_cast<void>(failed_state);
-  static_cast<void>(original_failure);
   if (!current.fresh) {
     return error(FailureCategory::OBSERVATION, "RECOVERY_OBSERVATION_NOT_FRESH",
                  "Recovery classification requires a fresh observation");
@@ -117,6 +147,22 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
   const bool gripper_full_open =
     validateSO101GripperTarget(current, SO101GripperTarget::FULL_OPEN, profile_).ok;
 
+  if (postReleaseState(failed_state)) {
+    return holdForOperator(original_failure,
+                           "Post-release evidence must be preserved without automatic motion");
+  }
+
+  const bool gripper_contact = current.gazebo_task_object_gripper_contact.value_or(false) &&
+                               currentEvidence(current.gazebo_gripper_contact_observed_at, current);
+  const bool physically_held = !gripper_full_open && gripper_contact;
+  if (physically_held &&
+      (!supportedByFreshPhysicalEvidence(current, profile_) || moveit_attached)) {
+    return holdForOperator(original_failure,
+                           moveit_attached
+                             ? "MoveIt planning shadow must be detached before physical opening"
+                             : "Physically held TaskObject lacks fresh support evidence");
+  }
+
   if ((gazebo_attached || moveit_attached) &&
       !nearPose(*current.gazebo_task_object_pose_world, profile_.task_object_pose, profile_)) {
     return error(
@@ -125,6 +171,11 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
       "configured");
   }
   if (!gripper_full_open) {
+    if (!supportedByFreshPhysicalEvidence(current, profile_) || moveit_attached) {
+      return holdForOperator(original_failure,
+                             "Controlled opening requires fresh physical support evidence and a "
+                             "detached MoveIt planning shadow");
+    }
     return {State::RECOVER_OPEN_GRIPPER, std::nullopt};
   }
   if (gazebo_attached) {
