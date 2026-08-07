@@ -21,3 +21,15 @@ def test_every_pick_place_implementation_is_in_the_build_manifest() -> None:
         unaccounted
     )
     assert all(ALLOWLIST.values()), 'Every allowlist entry must explain why it is not built'
+
+
+def test_physical_outcome_implementation_and_headers_are_manifested() -> None:
+    cmake = (PACKAGE_ROOT / 'CMakeLists.txt').read_text(encoding='utf-8')
+    for source in (
+        'final_placement_evaluator.cpp',
+        'final_placement_evidence_store.cpp',
+        'release_settle_executor.cpp',
+        'support_pose.cpp',
+    ):
+        assert f'src/pick_place/{source}' in cmake
+    assert re.search(r'install\s*\(\s*DIRECTORY[^)]*\binclude/', cmake, re.DOTALL)

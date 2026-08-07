@@ -200,3 +200,20 @@ ros2 node list
 gz topic -e -t /panda/coke_attached -n 1
 ros2 service call /get_planning_scene moveit_msgs/srv/GetPlanningScene '{components: {components: 28}}'
 ```
+
+## SO-101 physical-outcome workflow contract
+
+正常执行顺序为：
+
+`CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> DETACH_MOVEIT -> OPEN_GRIPPER -> WAIT_RELEASE_SETTLE -> VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> RETREAT -> DONE`
+
+Normal forward path 不包含 `ATTACH_GAZEBO` 或 `DETACH_GAZEBO`；reset/recovery 仍可对 stale
+Gazebo joint 执行 defensive detach。Validation policy 使用 `schema_version: 2`。所有新增 final
+outcome / planning shadow threshold 必须有校准证据；占位值标为 `CALIBRATION_REQUIRED`，不可执行
+live success campaign。The post-release epoch is non-resumable；post-release epoch is non-resumable，
+恢复必须开始新的 release epoch，
+不得重用 opening 前样本。
+
+最终失败代码分别保留 out-of-region、unsupported、tipped、still-moving、gripper-contact、
+stale-evidence、planning-shadow divergence 与 safety failure。`FINAL_PLACEMENT_*` 和
+`PLANNING_SHADOW_*` 不允许 force-continue。

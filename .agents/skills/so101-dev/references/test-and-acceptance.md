@@ -118,3 +118,11 @@ Remaining risks / next exact command:
 ```
 
 任何空白项都表示不能笼统宣布“完整修复”。
+
+## Physical outcome acceptance addendum
+
+Policy 仍含 `CALIBRATION_REQUIRED` 时不得宣称 live success。记录 runtime provenance、隔离的
+`ROS_DOMAIN_ID`/`GZ_PARTITION`/overlay、cleanup ownership，以及独立 Gazebo pose/support contact、
+MoveIt shadow/detachment/world sync、controller health 和 fresh GUI screenshot evidence。必须有
+five consecutive valid runs；中间随机样本作为 bounded distributions 保留，不要求完全相同。
+最终失败必须先保存 observed outcome，再开始独立 reset transaction。

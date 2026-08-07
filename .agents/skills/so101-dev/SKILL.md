@@ -107,3 +107,11 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 - 用 GUI 截图代替状态查询，或用状态查询代替 GUI 验收。两者都要有。
 - 为获得“干净环境”清理用户 worktree。用独立 `/tmp` 证据目录和最小补丁隔离。
 - 只在聊天、tmux 或 `/tmp` 中保存长程实验结论。先更新持久账本和 checkpoint，再交接或继续下一轮。
+
+## Physical-outcome evidence boundary
+
+SO-101 normal forward workflow 以 Gazebo physics 作为 cup-motion truth，MoveIt attachment 仅是
+planning shadow。物理 `OPEN_GRIPPER` 前必须 `DETACH_MOVEIT`，随后以新的 non-resumable release
+epoch 执行 `WAIT_RELEASE_SETTLE` 与 `VALIDATE_FINAL_PLACEMENT`，不得复用 pre-release samples。
+无支撑且被物理持有的杯子不得自动开夹爪；stop/hold、保存证据，reset 作为独立事务。Live
+acceptance 必须包含独立 Gazebo/MoveIt/controller/pose/contact evidence 和 fresh screenshot。

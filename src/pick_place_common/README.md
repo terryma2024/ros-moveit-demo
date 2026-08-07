@@ -38,3 +38,8 @@ colcon test-result --verbose
 For another robot, depend on this package, implement a `WorkflowDefinition`
 and the required behavior/adapter policies, and reuse the exported runner and
 executors. Do not copy their implementations into the consumer package.
+
+The shared `State` enum includes the SO-101-only `WAIT_RELEASE_SETTLE` and
+`VALIDATE_FINAL_PLACEMENT` identifiers, while the default workflow and transition definition keeps
+them out of the Panda path. Panda state order, serialized names, and behavior remain compatible;
+robot-specific physical truth, planning shadow, and final-outcome policies stay in the consumer.

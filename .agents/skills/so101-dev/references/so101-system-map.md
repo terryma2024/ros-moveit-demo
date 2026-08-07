@@ -97,3 +97,11 @@ ros2 param get /move_group robot_description_kinematics.arm.kinematics_solver
 ```
 
 `No kinematics plugins defined` 还必须定位到具体进程。客户端本地 `RobotModelLoader` 的 warning 不等于 `/move_group` 缺少 solver；如果当前路径只使用 joint-space target，它也可能不阻塞执行。若加入客户端本地 IK，再重新评估影响。
+
+## Physical outcome ownership addendum
+
+- Gazebo pose/contact/friction/gravity 从 close 到 release 拥有杯子的 physical truth。
+- MoveIt attachment 是从最新 Gazebo pose 派生的 collision-planning shadow。
+- Carry plan 必须检查 Gazebo-vs-shadow divergence；开夹爪前先 detach shadow。
+- `WAIT_RELEASE_SETTLE` 和 `VALIDATE_FINAL_PLACEMENT` 只消费当前 release epoch。
+- Reset 可防御性 detach stale Gazebo joint；normal forward execution 永不 attach Gazebo。

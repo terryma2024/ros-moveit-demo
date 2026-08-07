@@ -162,3 +162,20 @@ and `0600` permissions. Failures preserve the original workflow/checkpoint
 result even if writing fails, successful plans create no artifact, and operators
 own retention. Artifacts have no checkpoint or resume meaning. The test-only,
 non-installed replay harness is plan-only and its planner result is stochastic.
+
+## Physical outcome workflow
+
+Gazebo physics owns cup motion throughout the normal forward workflow. MoveIt attachment is only a
+collision-planning shadow created from the latest authoritative Gazebo pose after physical-grasp
+validation. The normal forward workflow never calls `ATTACH_GAZEBO` or `DETACH_GAZEBO`.
+
+Release order is `DETACH_MOVEIT -> OPEN_GRIPPER -> WAIT_RELEASE_SETTLE ->
+VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> RETREAT -> DONE`. A failed final outcome freezes
+the observed evidence before any reset. A physically held unsupported cup is held for operator
+intervention and is never opened automatically. Reset remains a separate transaction and retains
+defensive Gazebo detach for a stale historical joint.
+
+Physical-outcome policy is schema 2 and must not run while any required threshold remains
+`CALIBRATION_REQUIRED`. Acceptance requires five consecutive final physical successes with hard
+safety invariants and independent Gazebo, MoveIt, controller, pose, contact, and fresh screenshot
+evidence; identical intermediate samples are not required.
