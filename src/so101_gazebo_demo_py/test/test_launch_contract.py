@@ -5,6 +5,7 @@ from launch import LaunchContext, LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
+from so101_gazebo_demo_py.gazebo.model_asset import materialize_prepared_model
 
 
 PACKAGE = Path(__file__).parents[1]
@@ -38,6 +39,27 @@ def test_gazebo_headless_default_is_false() -> None:
         if isinstance(entity, DeclareLaunchArgument)
     }
     assert arguments["headless"] == "false"
+
+
+def test_gazebo_spawn_uses_calibrated_collision_model() -> None:
+    source = (PACKAGE / "launch" / "so101_gazebo.launch.py").read_text()
+    assert " gazebo_collision_primitives:=true" in source
+    prepared = (PACKAGE / "models" / "so101_prepared.sdf").read_text()
+    assert 'optimization="convex_hull"' in prepared
+    assert "@SO101_PACKAGE_SHARE@/config/so101_controllers.yaml" in prepared
+    assert "model://so101_gazebo_demo_py/" in prepared
+    assert "model://so101_gazebo_demo/" not in prepared
+    assert "libso101_attachment_collision_system.so" not in prepared
+
+
+def test_prepared_model_materialization_only_resolves_owned_share(tmp_path: Path) -> None:
+    template = tmp_path / "template.sdf"
+    output = tmp_path / "runtime.sdf"
+    template.write_text("<parameters>@SO101_PACKAGE_SHARE@/config/c.yaml</parameters>")
+    materialize_prepared_model(template, Path("/owned/share/so101_gazebo_demo_py"), output)
+    assert output.read_text() == (
+        "<parameters>/owned/share/so101_gazebo_demo_py/config/c.yaml</parameters>"
+    )
 
 
 def test_controller_launch_names_all_public_controllers() -> None:

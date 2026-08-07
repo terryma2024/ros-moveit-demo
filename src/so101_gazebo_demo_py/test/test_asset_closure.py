@@ -12,6 +12,7 @@ REQUIRED = (
     "urdf/so101.urdf.xacro", "urdf/so101_base.xacro",
     "urdf/so101_gazebo.xacro", "urdf/so101_ros2_control.xacro",
     "worlds/so101_pick_place.sdf", "rviz/display.rviz",
+    "models/so101_prepared.sdf",
     "meshes/so101/base_so101_v2.stl",
     "meshes/so101/generated/fixed/fingertip_pad.stl",
     "meshes/so101/generated/fixed/fingertip_pad_collision_006.stl",
@@ -32,7 +33,7 @@ def test_text_assets_have_no_forbidden_runtime_reference() -> None:
         "/data/work",
     )
     candidates = [
-        path for folder in ("config", "urdf", "worlds", "rviz")
+        path for folder in ("config", "urdf", "models", "worlds", "rviz")
         for path in (PACKAGE / folder).rglob("*") if path.is_file()
     ]
     violations = {

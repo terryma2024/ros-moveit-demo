@@ -1,13 +1,16 @@
+import os
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable, TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable, TimerAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+from so101_gazebo_demo_py.gazebo.model_asset import materialize_prepared_model
 
 
 def _gazebo(headless: bool):
@@ -20,6 +23,16 @@ def _gazebo(headless: bool):
     )
 
 
+def _spawn_prepared_model(_context, share: Path):
+    output_root = Path(os.environ.get("ROS_LOG_DIR", "/tmp"))
+    runtime_model = output_root / f"so101-prepared-{os.getpid()}.sdf"
+    materialize_prepared_model(share / "models/so101_prepared.sdf", share, runtime_model)
+    return [Node(
+        package="ros_gz_sim", executable="create",
+        arguments=["-file", str(runtime_model), "-name", "so101"], output="screen",
+    )]
+
+
 def generate_launch_description():
     share = Path(get_package_share_directory("so101_gazebo_demo_py"))
     model_arg = DeclareLaunchArgument("model", default_value=str(share / "urdf/so101.urdf.xacro"))
@@ -29,8 +42,14 @@ def generate_launch_description():
     object_config_arg = DeclareLaunchArgument("object_config", default_value=str(share / "config/task_objects/light_plastic_cup.yaml"))
     description = ParameterValue(Command([
         "xacro ", LaunchConfiguration("model"), " base_height:=", LaunchConfiguration("base_height"),
-        " use_gazebo:=true object_config:=", LaunchConfiguration("object_config"),
+        " use_gazebo:=true gazebo_collision_primitives:=true object_config:=",
+        LaunchConfiguration("object_config"),
     ]), value_type=str)
+    contact_topics = tuple(
+        "/world/so101_pick_place/model/plastic_cup/link/body/sensor/"
+        f"task_object_contact_{name}/contact"
+        for name in ("wall_near", "wall_01", "wall_02", "wall_03", "wall_04", "wall_05", "wall_opposite", "wall_07", "wall_08", "wall_09", "wall_10", "wall_11", "bottom")
+    )
     bridge = Node(
         package="ros_gz_bridge", executable="parameter_bridge",
         arguments=[
@@ -40,18 +59,27 @@ def generate_launch_description():
             "/so101/object_attached_event@std_msgs/msg/String[gz.msgs.StringMsg",
             "/world/so101_pick_place/pose/info@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
             "/world/so101_pick_place/stats@ros_gz_interfaces/msg/WorldStatistics[gz.msgs.WorldStatistics",
+            *[f"{topic}@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts" for topic in contact_topics],
         ],
         remappings=[
             ("/world/so101_pick_place/pose/info", "/so101/gazebo_pose_info"),
             ("/world/so101_pick_place/stats", "/so101/gazebo_world_stats"),
+            *[(topic, "/task_object/contacts") for topic in contact_topics],
         ],
     )
-    delayed_stack = TimerAction(period=3.0, actions=[
-        Node(package="ros_gz_sim", executable="create", arguments=["-topic", "robot_description", "-name", "so101"]),
-        bridge,
+    relay = TimerAction(period=2.0, actions=[
         Node(package="so101_gazebo_demo_py", executable="gazebo_attachment_state_relay", output="screen"),
+    ])
+    spawn_and_bridge = TimerAction(period=4.0, actions=[
+        OpaqueFunction(function=_spawn_prepared_model, args=[share]),
+        bridge,
+    ])
+    controllers = TimerAction(period=10.0, actions=[
         *[
-            Node(package="controller_manager", executable="spawner", arguments=[name, "--controller-manager", "/controller_manager"])
+            Node(
+                package="controller_manager", executable="spawner",
+                arguments=[name, "--controller-manager", "/controller_manager", "--switch-timeout", "30"],
+            )
             for name in ("joint_state_broadcaster", "arm_controller", "gripper_controller")
         ],
     ])
@@ -60,5 +88,5 @@ def generate_launch_description():
         SetEnvironmentVariable("GZ_SIM_RESOURCE_PATH", str(share.parent)),
         _gazebo(False), _gazebo(True),
         Node(package="robot_state_publisher", executable="robot_state_publisher", parameters=[{"robot_description": description, "use_sim_time": True}]),
-        delayed_stack,
+        relay, spawn_and_bridge, controllers,
     ])
