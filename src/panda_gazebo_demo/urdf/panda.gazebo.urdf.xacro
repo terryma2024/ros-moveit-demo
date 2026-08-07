@@ -37,7 +37,7 @@
         <parent link="panda_link0" />
         <child link="camera_link" />
         <!-- 相机在底座前方 0.6m、高度 1.0m，RPY 与 SDF camera model 一致 -->
-        <origin xyz="0.6 0 1.0" rpy="0 1.782 0" />
+        <origin xyz="0.6 0 1.0" rpy="0 3.351 0" />
     </joint>
 
     <!-- Fix Panda base to the Gazebo world at the table-top height. -->

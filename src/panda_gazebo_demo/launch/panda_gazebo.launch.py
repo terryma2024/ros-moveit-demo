@@ -185,16 +185,6 @@ def generate_launch_description():
         output='screen',
     )
 
-    # V5-T004: SDF camera sensor 的 frame_id 与 URDF camera_link 之间的 identity TF
-    camera_frame_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        arguments=[
-            '0', '0', '0', '0', '0', '0',
-            'rgbd_camera/link/camera', 'camera_link',
-        ],
-    )
-
     moveit_config = (
         MoveItConfigsBuilder('moveit_resources_panda')
         .robot_description(
@@ -328,7 +318,6 @@ def generate_launch_description():
             gazebo_with_gui,
             clock_bridge,
             camera_bridge,
-            camera_frame_tf,
             attachment_state_relay,
             robot_state_publisher,
             spawn_panda,
