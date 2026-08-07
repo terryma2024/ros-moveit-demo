@@ -9,6 +9,7 @@ makes controller/MoveIt unavailability a fail-closed API result.
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import os
 import re
@@ -43,9 +44,9 @@ from gz.msgs10.stringmsg_pb2 import StringMsg
 from .api import create_app, validate_bind_address
 from .camera import CameraController
 from .control import CommandCoordinator, CommandIdReused, PlanRejected, PlanStore
-from .models import (CommandResult, JointPlanRequest, JointSample, PlanSummary,
-                     Pose6D, ServerMode, TcpPlanRequest, TelemetrySnapshot)
-from .telemetry import TelemetryCollector
+from .models import (CommandResult, JointPlanRequest, JointSample, PhysicalOutcomeEvidence,
+                     PlanSummary, Pose6D, ServerMode, TcpPlanRequest, TelemetrySnapshot)
+from .telemetry import physical_outcome_from_checkpoint, TelemetryCollector
 
 JOINT_START_FINGERPRINT_RESOLUTION_RAD = 1e-4
 SO101_JOINT_POSITION_LIMITS_RAD: dict[str, tuple[float, float]] = {
@@ -116,6 +117,7 @@ class RosTelemetryWorker:
         self._moveit_collisions = []; self._moveit_stamp = 0.0
         self._plans: dict[str, StoredTrajectory] = {}; self._active_goal = None
         self._attachment_evidence: dict[str, str] = {}
+        self._physical_outcome: PhysicalOutcomeEvidence | None = None
         self._gazebo_transport = None
         self._scene_revision = 0; self._scene_tuple = None; self._scene_stamp = 0.0
 
@@ -286,7 +288,8 @@ class RosTelemetryWorker:
             source_ages_s={"joints": max(0.0, now - self._joint_stamp) if self._joint_stamp else 999.0,
                            "tcp": 0.0 if tcp else 999.0, "object": object_age, "gazebo_contacts": contact_age,
                            "moveit_collisions": moveit_age, "scene": max(0.0, now - self._scene_stamp) if self._scene_stamp else 999.0},
-            scene_revision=self._scene_revision, revision=int(now * 1000))
+            scene_revision=self._scene_revision, revision=int(now * 1000),
+            physical_outcome=self._physical_outcome)
         with self._lock: self._latest = self._collector.publish(snapshot)
 
     def snapshot(self) -> TelemetrySnapshot:
@@ -591,11 +594,11 @@ class TeleopService:
                 if name == "parameters_save":
                     if gate:=self._mutation_gate(body): return gate
                     payload={"target_joints_rad":body.get("target_joints_rad",{}),"target_tcp":body.get("target_tcp"),"saved_session_id":self._worker.snapshot().simulation_session_id}
-                    self._parameters.parent.mkdir(parents=True,exist_ok=True); import json; self._parameters.write_text(json.dumps(payload,indent=2)); return self._result(body,True,"OK","target parameters saved",data={"parameters":payload})
+                    self._parameters.parent.mkdir(parents=True,exist_ok=True); self._parameters.write_text(json.dumps(payload,indent=2)); return self._result(body,True,"OK","target parameters saved",data={"parameters":payload})
                 if name == "parameters_load":
                     if gate:=self._mutation_gate(body): return gate
                     if not self._parameters.is_file(): return self._result(body,False,"PARAMETERS_NOT_FOUND","no saved server parameter file")
-                    import json; payload=json.loads(self._parameters.read_text()); return self._result(body,True,"OK","target parameters restored",data={"parameters":payload})
+                    payload=json.loads(self._parameters.read_text()); return self._result(body,True,"OK","target parameters restored",data={"parameters":payload})
                 if name in ("robot_home", "scene_repair", "simulation_reset"):
                     if gate:=self._mutation_gate(body): return gate
                     required="CONFIRM " + name.upper()
@@ -644,7 +647,15 @@ class TeleopService:
                     output=await asyncio.to_thread(self._worker.package_cli,"pick_place_state_machine",args,120.0)
                     trace=next((line.removeprefix("trace=") for line in output.splitlines() if line.startswith("trace=")),"")
                     states=[state.strip() for state in trace.split("->") if state.strip()]
-                    return self._result(body,True,"OK","C++ checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file()}})
+                    physical_outcome = None
+                    if checkpoint.is_file():
+                        checkpoint_data = json.loads(checkpoint.read_text())
+                        if checkpoint_data.get("last_completed_state") in {
+                                "WAIT_RELEASE_SETTLE", "VALIDATE_FINAL_PLACEMENT",
+                                "SYNC_WORLD_OBJECT"}:
+                            physical_outcome = physical_outcome_from_checkpoint(checkpoint_data)
+                            self._worker._physical_outcome = physical_outcome
+                    return self._result(body,True,"OK","C++ checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file(),"physical_outcome":physical_outcome.dict() if physical_outcome else None}})
                 return self._result(body,False,"READINESS_NOT_SATISFIED",f"{name} requires a live dedicated gateway")
             except (RuntimeError, PlanRejected, KeyError, ValueError) as error:
                 layers = dict(getattr(self._worker, "_attachment_evidence", {})) if name.startswith("attachment_") else {}

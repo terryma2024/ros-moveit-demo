@@ -61,6 +61,22 @@ class ValidationEvidence(BaseModel):
     sample_ages_s: Dict[str, float] = Field(default_factory=dict)
 
 
+class PhysicalOutcomeEvidence(BaseModel):
+    release_epoch_id: Optional[str] = None
+    first_sequence: Optional[int] = None
+    last_sequence: Optional[int] = None
+    sample_count: int = 0
+    duration_s: float = 0.0
+    metrics: Dict[str, float] = Field(default_factory=dict)
+    final_pose: Optional[Pose6D] = None
+    intended_support_contact: Optional[bool] = None
+    gripper_contact: Optional[bool] = None
+    gazebo_attached: Optional[bool] = None
+    moveit_attached: Optional[bool] = None
+    world_object_synchronized: Optional[bool] = None
+    primary_failure: Optional[str] = None
+
+
 class OverrideAudit(BaseModel):
     command_id: str
     workflow_run_id: str
@@ -81,6 +97,7 @@ class WorkflowSnapshot(BaseModel):
     checkpoint_session_id: Optional[str] = None
     checkpoint_fresh: bool = False
     validation: Optional[ValidationEvidence] = None
+    physical_outcome: Optional[PhysicalOutcomeEvidence] = None
     override_audit: List[OverrideAudit] = Field(default_factory=list)
 
 
@@ -102,6 +119,7 @@ class TelemetrySnapshot(BaseModel):
     moveit_collisions: List[CollisionPair] = Field(default_factory=list)
     gazebo_contacts: List[CollisionPair] = Field(default_factory=list)
     real_time_factor: Optional[float] = None
+    physical_outcome: Optional[PhysicalOutcomeEvidence] = None
 
 
 class JointPlanRequest(BaseModel):

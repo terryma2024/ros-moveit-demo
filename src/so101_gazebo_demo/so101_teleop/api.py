@@ -6,9 +6,11 @@ import ipaddress
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from .models import TelemetrySnapshot
 
 
 def validate_bind_address(address: str) -> str:
@@ -29,7 +31,7 @@ def create_app(service, static_dir: str | Path | None = None, capture_dir: str |
     async def health():
         return await service.health()
 
-    @app.get("/snapshot")
+    @app.get("/snapshot", response_model=TelemetrySnapshot)
     async def snapshot():
         return await service.current_snapshot()
 

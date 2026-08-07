@@ -1,5 +1,6 @@
 from so101_teleop.models import (
     CommandResult,
+    PhysicalOutcomeEvidence,
     Pose6D,
     ServerMode,
     StepFrame,
@@ -46,3 +47,23 @@ def test_telemetry_defaults_to_starting_mode_and_keeps_sequence_metadata():
     assert snapshot.sequence == 7
     assert snapshot.simulation_session_id == "sim-a"
     assert StepFrame.WORLD.value == "WORLD"
+
+
+def test_snapshot_exposes_bounded_physical_outcome_evidence():
+    evidence = PhysicalOutcomeEvidence(
+        release_epoch_id="sim-a:release:41",
+        first_sequence=42,
+        last_sequence=46,
+        sample_count=5,
+        duration_s=0.8,
+        metrics={"max_linear_speed_m_s": 0.01},
+        intended_support_contact=True,
+        gripper_contact=False,
+        gazebo_attached=False,
+        moveit_attached=False,
+        world_object_synchronized=True,
+    )
+    snapshot = TelemetrySnapshot(physical_outcome=evidence)
+
+    assert snapshot.physical_outcome == evidence
+    assert snapshot.dict()["physical_outcome"]["last_sequence"] == 46

@@ -1,6 +1,50 @@
 {
   "components": {
     "schemas": {
+      "CollisionPair": {
+        "properties": {
+          "allowed": {
+            "default": false,
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "depth_m": {
+            "title": "Depth M",
+            "type": "number"
+          },
+          "first_seen_at": {
+            "title": "First Seen At",
+            "type": "number"
+          },
+          "last_seen_at": {
+            "title": "Last Seen At",
+            "type": "number"
+          },
+          "object_a": {
+            "title": "Object A",
+            "type": "string"
+          },
+          "object_b": {
+            "title": "Object B",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "waypoint_index": {
+            "title": "Waypoint Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "object_a",
+          "object_b"
+        ],
+        "title": "CollisionPair",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -12,6 +56,266 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "JointSample": {
+        "properties": {
+          "age_s": {
+            "default": 0.0,
+            "title": "Age S",
+            "type": "number"
+          },
+          "lower_limit_rad": {
+            "title": "Lower Limit Rad",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position_rad": {
+            "title": "Position Rad",
+            "type": "number"
+          },
+          "upper_limit_rad": {
+            "title": "Upper Limit Rad",
+            "type": "number"
+          },
+          "velocity_rad_s": {
+            "default": 0.0,
+            "title": "Velocity Rad S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "position_rad"
+        ],
+        "title": "JointSample",
+        "type": "object"
+      },
+      "PhysicalOutcomeEvidence": {
+        "properties": {
+          "duration_s": {
+            "default": 0.0,
+            "title": "Duration S",
+            "type": "number"
+          },
+          "final_pose": {
+            "$ref": "#/components/schemas/Pose6D"
+          },
+          "first_sequence": {
+            "title": "First Sequence",
+            "type": "integer"
+          },
+          "gazebo_attached": {
+            "title": "Gazebo Attached",
+            "type": "boolean"
+          },
+          "gripper_contact": {
+            "title": "Gripper Contact",
+            "type": "boolean"
+          },
+          "intended_support_contact": {
+            "title": "Intended Support Contact",
+            "type": "boolean"
+          },
+          "last_sequence": {
+            "title": "Last Sequence",
+            "type": "integer"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "moveit_attached": {
+            "title": "Moveit Attached",
+            "type": "boolean"
+          },
+          "primary_failure": {
+            "title": "Primary Failure",
+            "type": "string"
+          },
+          "release_epoch_id": {
+            "title": "Release Epoch Id",
+            "type": "string"
+          },
+          "sample_count": {
+            "default": 0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "world_object_synchronized": {
+            "title": "World Object Synchronized",
+            "type": "boolean"
+          }
+        },
+        "title": "PhysicalOutcomeEvidence",
+        "type": "object"
+      },
+      "Pose6D": {
+        "properties": {
+          "frame_id": {
+            "title": "Frame Id",
+            "type": "string"
+          },
+          "pitch_rad": {
+            "title": "Pitch Rad",
+            "type": "number"
+          },
+          "roll_rad": {
+            "title": "Roll Rad",
+            "type": "number"
+          },
+          "tcp_frame": {
+            "title": "Tcp Frame",
+            "type": "string"
+          },
+          "x_m": {
+            "title": "X M",
+            "type": "number"
+          },
+          "y_m": {
+            "title": "Y M",
+            "type": "number"
+          },
+          "yaw_rad": {
+            "title": "Yaw Rad",
+            "type": "number"
+          },
+          "z_m": {
+            "title": "Z M",
+            "type": "number"
+          }
+        },
+        "required": [
+          "frame_id",
+          "tcp_frame",
+          "x_m",
+          "y_m",
+          "z_m",
+          "roll_rad",
+          "pitch_rad",
+          "yaw_rad"
+        ],
+        "title": "Pose6D",
+        "type": "object"
+      },
+      "ServerMode": {
+        "description": "An enumeration.",
+        "enum": [
+          "STARTING",
+          "READ_ONLY",
+          "READY",
+          "BUSY",
+          "DEGRADED"
+        ],
+        "title": "ServerMode",
+        "type": "string"
+      },
+      "TelemetrySnapshot": {
+        "properties": {
+          "controllers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Controllers",
+            "type": "object"
+          },
+          "environment": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Environment",
+            "type": "object"
+          },
+          "gazebo_attached": {
+            "title": "Gazebo Attached",
+            "type": "boolean"
+          },
+          "gazebo_contacts": {
+            "items": {
+              "$ref": "#/components/schemas/CollisionPair"
+            },
+            "title": "Gazebo Contacts",
+            "type": "array"
+          },
+          "joints": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JointSample"
+            },
+            "title": "Joints",
+            "type": "object"
+          },
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ServerMode"
+              }
+            ],
+            "default": "STARTING"
+          },
+          "moveit_attached": {
+            "title": "Moveit Attached",
+            "type": "boolean"
+          },
+          "moveit_collisions": {
+            "items": {
+              "$ref": "#/components/schemas/CollisionPair"
+            },
+            "title": "Moveit Collisions",
+            "type": "array"
+          },
+          "object_pose": {
+            "$ref": "#/components/schemas/Pose6D"
+          },
+          "physical_outcome": {
+            "$ref": "#/components/schemas/PhysicalOutcomeEvidence"
+          },
+          "real_time_factor": {
+            "title": "Real Time Factor",
+            "type": "number"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scene_revision": {
+            "default": 0,
+            "title": "Scene Revision",
+            "type": "integer"
+          },
+          "sequence": {
+            "default": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "server_timestamp": {
+            "default": 0.0,
+            "title": "Server Timestamp",
+            "type": "number"
+          },
+          "simulation_session_id": {
+            "default": "",
+            "title": "Simulation Session Id",
+            "type": "string"
+          },
+          "source_ages_s": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Source Ages S",
+            "type": "object"
+          },
+          "tcp": {
+            "$ref": "#/components/schemas/Pose6D"
+          }
+        },
+        "title": "TelemetrySnapshot",
         "type": "object"
       },
       "ValidationError": {
@@ -672,7 +976,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TelemetrySnapshot"
+                }
               }
             },
             "description": "Successful Response"

@@ -18,3 +18,13 @@ def test_openapi_export_is_byte_deterministic_and_contains_control_routes(tmp_pa
     assert "/workflow/{operation}" in schema["paths"]
     assert "/gazebo/camera/presets" in schema["paths"]
     assert "/gazebo/camera/presets/{preset}" in schema["paths"]
+
+
+def test_openapi_contains_physical_outcome_evidence_schema(tmp_path):
+    output = tmp_path / "openapi.json"
+    export_openapi(output)
+
+    schema = json.loads(output.read_text())
+    assert "PhysicalOutcomeEvidence" in schema["components"]["schemas"]
+    snapshot = schema["components"]["schemas"]["TelemetrySnapshot"]
+    assert "physical_outcome" in snapshot["properties"]
