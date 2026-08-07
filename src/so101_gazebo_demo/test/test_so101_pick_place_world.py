@@ -190,8 +190,8 @@ def _sample_clock(environment):
     return int(clock.get('sec', 0)), int(clock.get('nanosec', 0))
 
 
-def _sample_controller_convergence(environment):
-    """Return (reference_joint1, feedback_joint1, sim_sec) or (None, None, None)."""
+def _sample_controller_convergence(environment, joint_index):
+    """Return one joint's reference, feedback, and sim time when available."""
     try:
         output = run(
             ['ros2', 'topic', 'echo', '--once',
@@ -213,22 +213,26 @@ def _sample_controller_convergence(environment):
     stamp = parsed.get('header', {}).get('stamp', {}) or {}
     sim_sec = int(stamp.get('sec', 0))
     return (
-        reference[0] if reference else None,
-        feedback[0] if feedback else None,
+        reference[joint_index]
+        if reference and len(reference) > joint_index else None,
+        feedback[joint_index]
+        if feedback and len(feedback) > joint_index else None,
         sim_sec,
     )
 
 
 def wait_for_controller_convergence(
-    environment, target, *, wall_safety=30, tolerance=0.01
+    environment, target, *, joint_index=0, wall_safety=30, tolerance=0.01
 ):
-    """Poll the controller state until joint 1 feedback is within tolerance."""
+    """Poll controller state until the selected joint is within tolerance."""
     start_wall = time.monotonic()
     deadline = start_wall + wall_safety
     reference = feedback = sim_sec = None
     last_sample_wall = None
     while time.monotonic() < deadline:
-        reference, feedback, sim_sec = _sample_controller_convergence(environment)
+        reference, feedback, sim_sec = _sample_controller_convergence(
+            environment, joint_index
+        )
         last_sample_wall = time.monotonic() - start_wall
         if (
             reference is not None
@@ -241,7 +245,8 @@ def wait_for_controller_convergence(
     clock = _sample_clock(environment)
     elapsed = time.monotonic() - start_wall
     pytest.fail(
-        f'joint 1 did not converge to {target} within {wall_safety}s wall: '
+        f'joint {joint_index + 1} did not converge to {target} '
+        f'within {wall_safety}s wall: '
         f'reference={reference}, feedback={feedback}, '
         f'controller_stamp_sim_sec={sim_sec}, '
         f'last_sample_wall_sec={elapsed:.2f}, '
@@ -249,10 +254,13 @@ def wait_for_controller_convergence(
     )
 
 
-def command_arm(environment, joint_1):
+def command_arm(environment, target, *, joint_index=0):
+    positions = [0.0] * 5
+    positions[joint_index] = target
+    positions_yaml = ', '.join(str(value) for value in positions)
     message = (
         "{joint_names: ['1', '2', '3', '4', '5'], points: ["
-        f"{{positions: [{joint_1}, 0.0, 0.0, 0.0, 0.0], "
+        f"{{positions: [{positions_yaml}], "
         "time_from_start: {sec: 2, nanosec: 0}}]}"
     )
     pub_deadline = time.monotonic() + 10
@@ -267,14 +275,34 @@ def command_arm(environment, joint_1):
             timeout=15,
         )
         time.sleep(0.25)
-        reference, _feedback, _sim = _sample_controller_convergence(environment)
-        if reference is not None and abs(reference - joint_1) < 0.05:
+        reference, _feedback, _sim = _sample_controller_convergence(
+            environment, joint_index
+        )
+        if reference is not None and abs(reference - target) < 0.05:
             break
-    wait_for_controller_convergence(environment, joint_1)
+    wait_for_controller_convergence(
+        environment, target, joint_index=joint_index
+    )
 
 
 def distance(first, second):
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(first, second)))
+
+
+def wait_for_gripper_displacement(
+    environment, initial, *, minimum=0.01, timeout=5
+):
+    """Return the first fresh dynamic-pose sample beyond the motion gate."""
+    deadline = time.monotonic() + timeout
+    latest = initial
+    while time.monotonic() < deadline:
+        latest = sample_dynamic_positions(environment)
+        if distance(initial['gripper'], latest['gripper']) > minimum:
+            return latest
+    pytest.fail(
+        f'gripper displacement did not exceed {minimum} m: '
+        f'latest={distance(initial["gripper"], latest["gripper"])}'
+    )
 
 
 def relative_position(child, parent):
@@ -611,8 +639,10 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             )
 
             initial_detached = sample_dynamic_positions(environment)
-            command_arm(environment, 0.25)
-            detached_probe = sample_dynamic_positions(environment)
+            command_arm(environment, 0.25, joint_index=1)
+            detached_probe = wait_for_gripper_displacement(
+                environment, initial_detached
+            )
             initial_detached_gripper_delta = distance(
                 initial_detached['gripper'], detached_probe['gripper']
             )
@@ -622,7 +652,7 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             assert initial_detached_gripper_delta > 0.01
             assert initial_detached_task_object_delta < 0.01
 
-            command_arm(environment, 0.0)
+            command_arm(environment, 0.0, joint_index=1)
             before_attach = sample_dynamic_positions(environment)
             publish_attachment_command(environment, 'attach')
             durable_attached = wait_for_durable_attachment_state(
@@ -633,7 +663,7 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
             assert attach_jump < 0.005
 
             command_arm(environment, 0.25)
-            carried = sample_dynamic_positions(environment)
+            carried = wait_for_gripper_displacement(environment, after_attach)
             carried_delta = distance(after_attach['plastic_cup'], carried['plastic_cup'])
             assert carried_delta > 0.01
             assert distance(
@@ -646,8 +676,10 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
                 environment, 'detached'
             )
             detached = sample_dynamic_positions(environment)
-            command_arm(environment, 0.0)
-            after_detached_motion = sample_dynamic_positions(environment)
+            command_arm(environment, 0.0, joint_index=1)
+            after_detached_motion = wait_for_gripper_displacement(
+                environment, detached
+            )
             gripper_delta = distance(
                 detached['gripper'], after_detached_motion['gripper']
             )
