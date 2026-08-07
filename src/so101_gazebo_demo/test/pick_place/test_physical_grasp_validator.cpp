@@ -33,6 +33,33 @@ TEST(PhysicalGraspValidator, PassesWhenCupClearsTableAndFollowsTcp)
   EXPECT_EQ(result.failure.code, "");
 }
 
+TEST(PhysicalGraspValidator, AllowsMillimetreScaleLateralComplianceByDefault)
+{
+  const auto before = snapshot(0.205, 0.165);
+  auto after = snapshot(0.207, 0.167);
+  after.gazebo_task_object_pose_world->x += 0.0016;
+  const spp::PhysicalGraspValidator validator;
+
+  const auto result = validator.evaluate(before, after, {0.12, -0.045});
+
+  EXPECT_TRUE(result.passed);
+  EXPECT_NEAR(result.xy_slip_m, 0.0016, 1e-12);
+  EXPECT_EQ(result.failure.code, "");
+}
+
+TEST(PhysicalGraspValidator, RejectsClearlyUnstableLateralMotionByDefault)
+{
+  const auto before = snapshot(0.205, 0.165);
+  auto after = snapshot(0.207, 0.167);
+  after.gazebo_task_object_pose_world->x += 0.0031;
+  const spp::PhysicalGraspValidator validator;
+
+  const auto result = validator.evaluate(before, after, {0.12, -0.045});
+
+  EXPECT_FALSE(result.passed);
+  EXPECT_EQ(result.failure.code, "PHYSICAL_GRASP_XY_SLIP");
+}
+
 TEST(PhysicalGraspValidator, RejectsMissingContactEvenWhenCupMoved)
 {
   const auto before = snapshot(0.205, 0.165);

@@ -5,6 +5,7 @@
 #include <mutex>
 
 #include <gtest/gtest.h>
+#include <moveit_msgs/msg/move_it_error_codes.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
@@ -12,6 +13,9 @@
 #include "so101_gazebo_demo/pick_place/node_spinner.hpp"
 
 namespace spp = so101_gazebo_demo::pick_place;
+
+static_assert(spp::kMicroLiftPositionToleranceM == 0.0002);
+static_assert(spp::kMicroLiftOrientationToleranceRad == 0.005);
 
 namespace
 {
@@ -96,6 +100,71 @@ TEST(RequestScopedGoalCancellation, PropagatesCancelAcknowledgementFailure)
   EXPECT_EQ(result.status, spp::ActionStatus::TIMED_OUT);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ(result.failure->code, "MOVE_GROUP_CANCEL_ACK_TIMEOUT");
+}
+
+TEST(MicroLiftPlanningOutcome, PreservesTheSevenPublicFailureMappings)
+{
+  struct Case
+  {
+    spp::PlanningFailureStage stage;
+    spp::ActionStatus status;
+    const char * code;
+  };
+  const std::vector<Case> cases{
+    {spp::PlanningFailureStage::GOAL_ACCEPT_TIMEOUT, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVE_GROUP_GOAL_TIMEOUT"},
+    {spp::PlanningFailureStage::GOAL_REJECTED, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVE_GROUP_GOAL_REJECTED"},
+    {spp::PlanningFailureStage::RESULT_TIMEOUT, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVE_GROUP_RESULT_TIMEOUT"},
+    {spp::PlanningFailureStage::TRANSPORT_FAILURE, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVEIT_PLAN_FAILED"},
+    {spp::PlanningFailureStage::MISSING_RESULT, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVEIT_PLAN_FAILED"},
+    {spp::PlanningFailureStage::MOVEIT_ERROR, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVEIT_PLAN_FAILED"},
+    {spp::PlanningFailureStage::EMPTY_TRAJECTORY, spp::ActionStatus::FAILED,
+     "MICRO_LIFT_MOVEIT_PLAN_FAILED"},
+  };
+  for (const auto & item : cases) {
+    spp::MicroLiftPlanningOutcome outcome;
+    outcome.action = {spp::ActionStatus::SUCCEEDED, std::nullopt};
+    outcome.failure_stage = item.stage;
+    const auto result = spp::classifyMicroLiftPlanningOutcome(outcome);
+    EXPECT_EQ(result.status, item.status);
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ(result.failure->category, spp::FailureCategory::PLANNING);
+    EXPECT_EQ(result.failure->code, item.code);
+  }
+}
+
+TEST(MicroLiftPlanningOutcome, CancellationFailureWinsOverResultTimeoutMapping)
+{
+  spp::MicroLiftPlanningOutcome outcome;
+  outcome.action = {spp::ActionStatus::TIMED_OUT, spp::Failure{spp::FailureCategory::PLANNING,
+                                                               "MOVE_GROUP_CANCEL_TERMINAL_TIMEOUT",
+                                                               "terminal timeout",
+                                                               {}}};
+  outcome.failure_stage = spp::PlanningFailureStage::RESULT_TIMEOUT;
+
+  const auto result = spp::classifyMicroLiftPlanningOutcome(outcome);
+
+  EXPECT_EQ(result.status, outcome.action.status);
+  EXPECT_EQ(result.failure->code, outcome.action.failure->code);
+}
+
+TEST(MicroLiftPlanningOutcome, SuccessRequiresMoveItSuccessAndNonemptyTrajectory)
+{
+  spp::MicroLiftPlanningOutcome outcome;
+  outcome.action = {spp::ActionStatus::SUCCEEDED, std::nullopt};
+  outcome.result = std::make_shared<moveit_msgs::action::MoveGroup::Result>();
+  outcome.result->error_code.val = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
+  outcome.result->planned_trajectory.joint_trajectory.points.resize(1);
+
+  const auto result = spp::classifyMicroLiftPlanningOutcome(outcome);
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED);
+  EXPECT_FALSE(result.failure);
 }
 
 TEST(ValidatedMotionArtifact, ReconstructsTheExactValidatedTrajectoryWithoutPlanning)
@@ -209,4 +278,21 @@ TEST(MoveItJointPlanningBoundary, WaitsForTheFirstCompleteJointState)
   ASSERT_TRUE(evidence);
   EXPECT_EQ((std::vector<double>{0.1, 0.2, 0.3, 0.4, 0.5}), evidence->positions);
   EXPECT_DOUBLE_EQ(0.795386732, *evidence->gripper_position);
+}
+
+TEST(MoveItJointPlanningBoundary, RejectsInvalidMicroDescendTargetsBeforeMoveItDispatch)
+{
+  if (!rclcpp::ok())
+    rclcpp::init(0, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("micro_descend_target_validation");
+  spp::MoveItJointPlanningBoundary boundary(node, spp::SO101Profile::canonical(),
+                                            "RRTConnectkConfigDefault", 0.1, 0.1, 0.01);
+  const spp::Pose3d current{0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0};
+  for (const auto target : {std::numeric_limits<double>::quiet_NaN(), 0.3, 0.301, 0.29779}) {
+    const auto captured = boundary.captureWorldZMicroDescendPlanningRequest(current, target);
+    ASSERT_TRUE(std::holds_alternative<spp::ActionResult>(captured));
+    const auto & result = std::get<spp::ActionResult>(captured);
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ(result.failure->code, "MICRO_DESCEND_TARGET_INVALID");
+  }
 }

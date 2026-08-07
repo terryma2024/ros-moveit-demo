@@ -20,6 +20,8 @@
 #include "so101_gazebo_demo/pick_place/moveit_scene_initializer.hpp"
 #include "so101_gazebo_demo/pick_place/node_spinner.hpp"
 #include "so101_gazebo_demo/pick_place/pick_place_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_evidence_store.hpp"
+#include "so101_gazebo_demo/pick_place/planning_failure_diagnostics.hpp"
 #include "so101_gazebo_demo/pick_place/runner.hpp"
 #include "so101_gazebo_demo/pick_place/simulation_session_id.hpp"
 #include "so101_gazebo_demo/pick_place/world_readiness_gate.hpp"
@@ -34,6 +36,7 @@ struct CliOptions
   spp::RunRequest request;
   std::filesystem::path checkpoint_path{"/tmp/so101_pick_place_checkpoint.json"};
   std::string simulation_session_id;
+  std::filesystem::path planning_diagnostics_dir;
   spp::PolicyPaths policy_paths;
 };
 
@@ -111,6 +114,10 @@ std::optional<CliOptions> parse(int argc, char ** argv)
         return std::nullopt;
     } else if (argument == "--session-id" && i + 1 < arguments.size()) {
       options.simulation_session_id = arguments[++i];
+    } else if (argument == "--planning-diagnostics-dir" && i + 1 < arguments.size()) {
+      options.planning_diagnostics_dir = arguments[++i];
+      if (options.planning_diagnostics_dir.empty())
+        return std::nullopt;
     } else if (argument == "--object-config" && i + 1 < arguments.size()) {
       options.policy_paths.object = arguments[++i];
     } else if (argument == "--motion-policy" && i + 1 < arguments.size()) {
@@ -159,7 +166,8 @@ void printPolicyProvenance(const spp::LoadedPolicyBundle & bundle,
   }
 }
 
-int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bundle, int argc,
+int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bundle,
+                  std::shared_ptr<spp::IPlanningFailureDiagnosticsSink> diagnostics_sink, int argc,
                   char ** argv)
 {
   rclcpp::init(argc, argv);
@@ -184,7 +192,11 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
         return 2;
       }
 
-      auto boundary = std::make_shared<spp::MoveItJointPlanningBoundary>(node, profile);
+      spp::MoveItJointPlanningBoundaryOptions boundary_options;
+      boundary_options.diagnostics = spp::MoveItJointPlanningDiagnostics{
+        *session.value, bundle.bundle_sha256, std::move(diagnostics_sink)};
+      auto boundary =
+        std::make_shared<spp::MoveItJointPlanningBoundary>(node, profile, boundary_options);
       auto motion = std::make_shared<spp::ProfiledJointMotionAdapter>(boundary, boundary, profile);
       auto policy =
         std::make_shared<spp::SO101ConfiguredMotionTargetPolicy>(bundle.motion, bundle.validation);
@@ -238,6 +250,16 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       }
 
       spp::SO101PickPlaceRuntimeDependencies dependencies;
+      auto physical_evidence = std::make_shared<spp::FilePhysicalGraspEvidenceStore>(
+        options.checkpoint_path.string() + ".physical-grasp.json", *session.value,
+        bundle.bundle_sha256);
+      if (!options.request.resume) {
+        if (const auto failure = physical_evidence->resetForFreshRun()) {
+          printPreRunnerFailure(*failure);
+          rclcpp::shutdown();
+          return 1;
+        }
+      }
       dependencies.gripper = gripper;
       dependencies.moveit_scene = scene;
       dependencies.gazebo_attach = gazebo_attach;
@@ -247,6 +269,7 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       dependencies.motion = motion;
       dependencies.micro_lift = boundary;
       dependencies.physical_observer = observer;
+      dependencies.physical_grasp_evidence = physical_evidence;
       spp::SO101PickPlaceRuntimeConfig runtime_config;
       runtime_config.profile = profile;
       runtime_config.object = bundle.object;
@@ -294,6 +317,7 @@ int main(int argc, char ** argv)
                  "[--resume [true|false]] [--step] "
                  "[--force-continue] "
                  "[--checkpoint PATH] [--session-id ID] "
+                 "[--planning-diagnostics-dir PATH] "
                  "[--object-config PATH] [--motion-policy PATH] "
                  "[--validation-policy PATH]\n";
     return 2;
@@ -316,11 +340,21 @@ int main(int argc, char ** argv)
   printPolicyProvenance(*loaded.bundle,
                         options->request.plan_only_state.value_or(
                           options->request.stop_after.value_or(spp::State::MOVE_ABOVE_OBJECT)));
+  const auto diagnostics = spp::selectPlanningFailureDiagnostics(options->planning_diagnostics_dir);
+  if (diagnostics.failure) {
+    std::cerr << spp::formatFailure(*diagnostics.failure) << '\n';
+    return 2;
+  }
+  if (options->planning_diagnostics_dir.empty()) {
+    std::cout << "planning_diagnostics=disabled\n";
+  } else {
+    std::cout << "planning_diagnostics_dir=" << options->planning_diagnostics_dir.string() << '\n';
+  }
   if (options->request.mode == spp::RunMode::DRY_RUN) {
     spp::StateMachineRunner runner;
     const auto result = runner.run(options->request);
     print(result);
     return result.status == spp::RunStatus::ERROR ? 1 : 0;
   }
-  return runProduction(*options, *loaded.bundle, argc, argv);
+  return runProduction(*options, *loaded.bundle, diagnostics.sink, argc, argv);
 }

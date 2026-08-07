@@ -35,11 +35,13 @@ class GazeboWorldObserver::Impl
 {
 public:
   Impl(const std::string & world_name, std::string coke_model, const std::string & attachment_topic,
-       std::string simulation_session_id, double max_observation_age_seconds,
-       std::size_t coke_settle_samples, double coke_settle_interval_seconds,
-       double coke_settle_position_tolerance, double coke_settle_orientation_tolerance_rad,
-       bool initially_detached) :
+       std::string simulation_session_id, double initial_observation_timeout_seconds,
+       double max_observation_age_seconds, std::size_t coke_settle_samples,
+       double coke_settle_interval_seconds, double coke_settle_position_tolerance,
+       double coke_settle_orientation_tolerance_rad, bool initially_detached) :
       coke_model_(std::move(coke_model)), simulation_session_id_(std::move(simulation_session_id)),
+      initial_observation_timeout_(
+        std::chrono::duration<double>(initial_observation_timeout_seconds)),
       max_observation_age_(std::chrono::duration<double>(max_observation_age_seconds)),
       coke_pose_stability_(coke_settle_samples, coke_settle_position_tolerance,
                            coke_settle_orientation_tolerance_rad),
@@ -92,7 +94,9 @@ public:
                                  "Unable to subscribe to Gazebo Coke pose or attachment topic")};
     }
     std::unique_lock<std::mutex> lock(mutex_);
-    condition_.wait_for(lock, max_observation_age_, [this]() {
+    const auto wait_budget =
+      coke_pose_ && coke_attached_ ? max_observation_age_ : initial_observation_timeout_;
+    condition_.wait_for(lock, wait_budget, [this]() {
       const auto now = std::chrono::steady_clock::now();
       return coke_pose_.has_value() && coke_attached_.has_value() &&
              now - coke_pose_received_at_ <= max_observation_age_ &&
@@ -123,6 +127,7 @@ public:
 private:
   std::string coke_model_;
   std::string simulation_session_id_;
+  std::chrono::duration<double> initial_observation_timeout_;
   std::chrono::duration<double> max_observation_age_;
   gz::transport::Node transport_;
   bool pose_subscription_ok_{false};
@@ -141,14 +146,16 @@ private:
 GazeboWorldObserver::GazeboWorldObserver(
   IWorldObserver & moveit_observer, const std::string & world_name, std::string coke_model,
   const std::string & attachment_topic, std::string simulation_session_id,
-  double max_observation_age_seconds, std::size_t coke_settle_samples,
-  double coke_settle_interval_seconds, double coke_settle_position_tolerance,
-  double coke_settle_orientation_tolerance_rad, bool initially_detached) :
+  double initial_observation_timeout_seconds, double max_observation_age_seconds,
+  std::size_t coke_settle_samples, double coke_settle_interval_seconds,
+  double coke_settle_position_tolerance, double coke_settle_orientation_tolerance_rad,
+  bool initially_detached) :
     moveit_observer_(moveit_observer),
     impl_(std::make_unique<Impl>(
       world_name, std::move(coke_model), attachment_topic, std::move(simulation_session_id),
-      max_observation_age_seconds, coke_settle_samples, coke_settle_interval_seconds,
-      coke_settle_position_tolerance, coke_settle_orientation_tolerance_rad, initially_detached))
+      initial_observation_timeout_seconds, max_observation_age_seconds, coke_settle_samples,
+      coke_settle_interval_seconds, coke_settle_position_tolerance,
+      coke_settle_orientation_tolerance_rad, initially_detached))
 {
 }
 

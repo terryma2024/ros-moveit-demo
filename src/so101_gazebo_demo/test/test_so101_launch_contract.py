@@ -16,6 +16,7 @@ from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
+from launch_ros.utilities import evaluate_parameters
 
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
@@ -27,6 +28,16 @@ MOVE_GROUP_HEADLESS_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_move_group_headless
 PICK_PLACE_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_pick_place.launch.py'
 PICK_PLACE_WORLD_TEST = PACKAGE_DIR / 'test' / 'test_so101_pick_place_world.py'
 TELEOP_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_teleop.launch.py'
+LAUNCH_MANUAL = PACKAGE_DIR.parents[1] / 'docs' / 'pick-place-launch-parameters.md'
+
+
+def test_launch_manual_documents_r3_physical_validation_and_resume_contract():
+    manual = LAUNCH_MANUAL.read_text()
+    assert 'WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE' in manual
+    assert 'VERIFY_PHYSICAL_GRASP -> VALIDATION_FAILED' in manual
+    assert 'FORCE_CONTINUE_STATE_MISMATCH' in manual
+    assert 'normal execute resume' in manual
+    assert 'checkpoint bytes unchanged' in manual
 
 
 @pytest.mark.parametrize('launch_path', [MOVEIT_LAUNCH, MOVE_GROUP_HEADLESS_LAUNCH])
@@ -34,6 +45,33 @@ def test_move_group_allows_low_speed_simulation_execution_jitter(launch_path):
     source = launch_path.read_text()
     assert '"trajectory_execution.allowed_execution_duration_scaling": 1.5' in source
     assert '"trajectory_execution.allowed_goal_duration_margin": 1.0' in source
+
+
+@pytest.mark.parametrize('launch_path', [MOVEIT_LAUNCH, MOVE_GROUP_HEADLESS_LAUNCH])
+def test_move_group_loads_the_named_so101_rrtconnect_configuration(launch_path):
+    """Catch silently falling back from the requested planner to OMPL defaults."""
+    parameters = evaluated_move_group_parameters(launch_path)
+
+    assert parameters['planning_pipelines'] == ('ompl',)
+    assert parameters['default_planning_pipeline'] == 'ompl'
+    assert parameters['ompl.arm.planner_configs'] == ('RRTConnectkConfigDefault',)
+    assert (
+        parameters['ompl.planner_configs.RRTConnectkConfigDefault.type']
+        == 'geometric::RRTConnect'
+    )
+    assert parameters['ompl.planner_configs.RRTConnectkConfigDefault.range'] == 0.0
+    assert parameters['robot_description_kinematics.arm.kinematics_solver_timeout'] == 0.05
+    assert parameters['robot_description_kinematics.arm.position_only_ik'] is True
+
+
+def test_gazebo_fingertips_load_the_object_friction_contract():
+    preparation = (
+        PACKAGE_DIR / 'scripts' / 'prepare_simulation_model.py'
+    ).read_text()
+
+    assert 'apply_fingertip_contact_material' in preparation
+    assert "object_data['fingertip_pads']['contact_material']" in preparation
+    assert 'prepared = apply_fingertip_contact_material(' in preparation
 
 
 def load_launch_module(path):
@@ -49,6 +87,31 @@ def load_launch_module(path):
 def load_launch_description(path):
     """Load a launch description directly from source."""
     return load_launch_module(path).generate_launch_description()
+
+
+def evaluated_move_group_parameters(path):
+    """Evaluate the real move_group parameter payload from one launch file."""
+    description = load_launch_description(path)
+    move_group = next(
+        entity
+        for entity in description.entities
+        if isinstance(entity, Node)
+        and entity.node_package == 'moveit_ros_move_group'
+        and entity.node_executable == 'move_group'
+    )
+    context = LaunchContext()
+    context.launch_configurations.update({
+        'is_sim': 'True',
+        'base_height': '0.1899186',
+        'object_config': str(
+            PACKAGE_DIR / 'config' / 'task_objects' / 'light_plastic_cup.yaml'
+        ),
+    })
+    merged = {}
+    for parameter_set in evaluate_parameters(context, move_group._Node__parameters):
+        if isinstance(parameter_set, dict):
+            merged.update(parameter_set)
+    return merged
 
 
 def declared_arguments(path):
@@ -167,15 +230,19 @@ def test_pick_place_runtime_launch_is_safe_by_default_and_wires_all_cli_gates():
     assert arguments['start_simulation'] == 'false'
     assert arguments['headless'] == 'false'
     assert arguments['plan_only_state'] == ''
+    assert arguments['planning_diagnostics_dir'] == ''
     assert {'stop_after', 'resume', 'checkpoint_path', 'simulation_session_id'} <= set(arguments)
 
-    runtime = next(
+    runtime_factory = next(
         entity
         for entity in description.entities
-        if isinstance(entity, Node)
-        and entity.node_package == 'so101_gazebo_demo'
-        and entity.node_executable == 'pick_place_state_machine'
+        if isinstance(entity, OpaqueFunction)
     )
+    context = LaunchContext()
+    context.launch_configurations.update(arguments)
+    runtime = runtime_factory.execute(context)[0]
+    assert runtime.node_package == 'so101_gazebo_demo'
+    assert runtime.node_executable == 'pick_place_state_machine'
     source = PICK_PLACE_LAUNCH.read_text()
     assert '--mode' in source
     assert '--plan-only-state' in source
@@ -194,6 +261,24 @@ def test_pick_place_cli_exposes_plan_only_state_and_uses_it_for_provenance():
     ).read_text()
     assert '--plan-only-state STATE' in source
     assert 'options->request.plan_only_state.value_or(' in source
+
+
+def test_pick_place_planning_diagnostics_are_default_off_and_tokenized():
+    module = load_launch_module(PICK_PLACE_LAUNCH)
+    values = {name: '' for name in module._RUNTIME_ARGUMENTS}
+    assert '--planning-diagnostics-dir' not in module._runtime_arguments(values)
+    values['planning_diagnostics_dir'] = '/tmp/so101-r3-planning-diagnostics/artifacts'
+    arguments = module._runtime_arguments(values)
+    index = arguments.index('--planning-diagnostics-dir')
+    assert arguments[index:index + 2] == [
+        '--planning-diagnostics-dir',
+        '/tmp/so101-r3-planning-diagnostics/artifacts',
+    ]
+    source = (
+        PACKAGE_DIR / 'src' / 'pick_place' / 'pick_place_state_machine.cpp'
+    ).read_text()
+    assert '--planning-diagnostics-dir PATH' in source
+    assert 'MoveItJointPlanningBoundaryOptions boundary_options;' in source
 
 
 def test_pick_place_runtime_launch_wires_three_independent_installed_policy_files():

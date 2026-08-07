@@ -101,11 +101,18 @@ fingertip_pads:
   shore_hardness_a: 95.0
   contact_model: rigid_link_local_mesh
   geometry_reference_q6: 0.30
-  safe_lower_q6: -0.059303612618397
+  safe_lower_q6: -0.059600220867817
   safe_gap_m: 0.001
   grasp_gap_m: 0.001960000000000000
-  calibration_fingerprint: b101b7db33a13c82797eb80c2356f1c6b509e04bdae7999efd4b6a8ce0d1094f
+  calibration_fingerprint: f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8
   friction_coefficient: 1.2
+  contact_material:
+    axial_friction_coefficient: 3.0
+    transverse_friction_coefficient: 1.2
+    contact_stiffness_n_m: 1000000.0
+    contact_damping_n_s_m: 100.0
+    max_correcting_velocity_m_s: 0.01
+    min_depth_m: 0.0001
   fixed_pad:
     opening_axis_thickness_m: 0.005
     contact_direction_x: 1.0
@@ -130,7 +137,7 @@ arm_joints: ["1", "2", "3", "4", "5"]
 approach_outside_clearance_m: 0.001
 gripper_actions:
   preopen_q6: 0.465038
-  grasp_close_q6: -0.047409691482075
+  grasp_close_q6: -0.047608632840292
   release_q6: 1.70
 states:
 )";
@@ -143,7 +150,7 @@ states:
       yaml += "      - [0.1, 0.2, 0.3, 0.4, 0.5]\n";
       yaml += "    require_waypoint_ladder: false\n";
       yaml += "    require_axial_path_validation: false\n";
-      yaml += "    gripper_q6: -0.047409691482075\n";
+      yaml += "    gripper_q6: -0.047608632840292\n";
       yaml += "    velocity_scaling: 0.10\n";
       yaml += "    acceleration_scaling: 0.10\n";
     }
@@ -251,7 +258,7 @@ TEST(PolicyConfig, LoadsValidBundleWithCanonicalPathsAndContentDigests)
   EXPECT_DOUBLE_EQ(0.00125, result.bundle->validation.runtime.q6_contact_stop_tolerance_rad);
   EXPECT_DOUBLE_EQ(0.465038, result.bundle->motion.gripper_actions.preopen_q6);
   EXPECT_DOUBLE_EQ(0.001, result.bundle->motion.approach_outside_clearance_m);
-  EXPECT_DOUBLE_EQ(-0.047409691482075, result.bundle->motion.gripper_actions.grasp_close_q6);
+  EXPECT_DOUBLE_EQ(-0.047608632840292, result.bundle->motion.gripper_actions.grasp_close_q6);
   EXPECT_DOUBLE_EQ(1.70, result.bundle->motion.gripper_actions.release_q6);
   const auto & pads = result.bundle->object.fingertip_pads;
   EXPECT_TRUE(pads.enabled);
@@ -259,8 +266,14 @@ TEST(PolicyConfig, LoadsValidBundleWithCanonicalPathsAndContentDigests)
   EXPECT_DOUBLE_EQ(95.0, pads.shore_hardness_a);
   EXPECT_EQ("rigid_link_local_mesh", pads.contact_model);
   EXPECT_DOUBLE_EQ(0.30, pads.geometry_reference_q6);
-  EXPECT_DOUBLE_EQ(-0.059303612618397, pads.safe_lower_q6);
+  EXPECT_DOUBLE_EQ(-0.059600220867817, pads.safe_lower_q6);
   EXPECT_DOUBLE_EQ(1.2, pads.friction_coefficient);
+  EXPECT_DOUBLE_EQ(3.0, pads.contact_material.axial_friction_coefficient);
+  EXPECT_DOUBLE_EQ(1.2, pads.contact_material.transverse_friction_coefficient);
+  EXPECT_DOUBLE_EQ(1000000.0, pads.contact_material.contact_stiffness_n_m);
+  EXPECT_DOUBLE_EQ(100.0, pads.contact_material.contact_damping_n_s_m);
+  EXPECT_DOUBLE_EQ(0.01, pads.contact_material.max_correcting_velocity_m_s);
+  EXPECT_DOUBLE_EQ(0.0001, pads.contact_material.min_depth_m);
   EXPECT_DOUBLE_EQ(0.005, pads.fixed_pad.opening_axis_thickness_m);
   EXPECT_DOUBLE_EQ(0.005, pads.moving_pad.opening_axis_thickness_m);
   EXPECT_EQ(8U, pads.fixed_pad.profile_points.size());
@@ -294,7 +307,7 @@ TEST(PolicyConfig, LoadsNativeFingertipPadConfiguration)
   EXPECT_DOUBLE_EQ(0.465038, result.bundle->motion.gripper_actions.preopen_q6);
   EXPECT_DOUBLE_EQ(0.001, result.bundle->validation.runtime.q6_position_tolerance_rad);
   EXPECT_DOUBLE_EQ(0.00125, result.bundle->validation.runtime.q6_contact_stop_tolerance_rad);
-  EXPECT_EQ("b101b7db33a13c82797eb80c2356f1c6b509e04bdae7999efd4b6a8ce0d1094f",
+  EXPECT_EQ("f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8",
             pads.calibration_fingerprint);
 }
 
@@ -305,7 +318,7 @@ TEST(PolicyConfig, RejectsNativePadCalibrationFingerprintMismatchAtRuntimeProfil
     fixture.objectPath(),
     replaceOnce(
       PolicyFixture::nativeFingertipPadObjectYaml(),
-      "calibration_fingerprint: b101b7db33a13c82797eb80c2356f1c6b509e04bdae7999efd4b6a8ce0d1094f",
+      "calibration_fingerprint: f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8",
       "calibration_fingerprint: wrong-pad-model"));
   PolicyFixture::write(fixture.motionPath(), PolicyFixture::nativeFingertipPadMotionYaml());
   PolicyFixture::write(fixture.validationPath(), PolicyFixture::nativeFingertipPadValidationYaml());
@@ -335,8 +348,8 @@ TEST(PolicyConfig, FingertipPadRejectsGraspBelowSafeLower)
   PolicyFixture::write(fixture.objectPath(), PolicyFixture::nativeFingertipPadObjectYaml());
   PolicyFixture::write(fixture.motionPath(),
                        replaceOnce(PolicyFixture::nativeFingertipPadMotionYaml(),
-                                   "grasp_close_q6: -0.047409691482075",
-                                   "grasp_close_q6: -0.0594"));
+                                   "grasp_close_q6: -0.047608632840292",
+                                   "grasp_close_q6: -0.0600"));
   PolicyFixture::write(fixture.validationPath(), PolicyFixture::nativeFingertipPadValidationYaml());
   expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
 }
@@ -351,8 +364,8 @@ TEST(PolicyConfig, ConfiguresRuntimeGripperTargetsAndTolerancesFromYaml)
                                                      result.bundle->validation);
 
   EXPECT_DOUBLE_EQ(0.465038, profile.q6_preopen);
-  EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_close);
-  EXPECT_DOUBLE_EQ(-0.047409691482075, profile.q6_contact);
+  EXPECT_DOUBLE_EQ(-0.047608632840292, profile.q6_close);
+  EXPECT_DOUBLE_EQ(-0.047608632840292, profile.q6_contact);
   EXPECT_DOUBLE_EQ(1.70, profile.q6_full_open);
   ASSERT_EQ(profile.release_stages_q6.size(), 3U);
   EXPECT_DOUBLE_EQ(1.70, profile.release_stages_q6.back());

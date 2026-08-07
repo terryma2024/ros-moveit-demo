@@ -34,6 +34,14 @@ struct NamedTargetPlanningRequest
   std::string target_name;
 };
 
+struct SafeNamedTargetPlanningRequest
+{
+  State state;
+  State next_state;
+  Pose3d clearance_pose;
+  std::string target_name;
+};
+
 class IMoveItMotionAdapter
 {
 public:
@@ -49,6 +57,19 @@ public:
              Failure{FailureCategory::PLANNING,
                      "NAMED_TARGET_PLANNING_NOT_SUPPORTED",
                      "MoveIt motion adapter does not support named-target planning",
+                     {}}},
+            nullptr};
+  }
+  [[nodiscard]] virtual PlanResult
+  planSafeNamedTarget(const SafeNamedTargetPlanningRequest & request,
+                      const ObservationResult & observation)
+  {
+    static_cast<void>(request);
+    static_cast<void>(observation);
+    return {{ActionStatus::NOT_SUPPORTED,
+             Failure{FailureCategory::PLANNING,
+                     "SAFE_NAMED_TARGET_PLANNING_NOT_SUPPORTED",
+                     "MoveIt motion adapter does not support safe named-target planning",
                      {}}},
             nullptr};
   }
@@ -76,6 +97,8 @@ public:
                                 const ObservationResult & observation) override;
   [[nodiscard]] PlanResult planNamedTarget(const NamedTargetPlanningRequest & request,
                                            const ObservationResult & observation) override;
+  [[nodiscard]] PlanResult planSafeNamedTarget(const SafeNamedTargetPlanningRequest & request,
+                                               const ObservationResult & observation) override;
   [[nodiscard]] std::optional<std::map<std::string, double>>
   namedTargetJointPositions(const std::string & target_name) override;
   [[nodiscard]] ActionResult execute(const MotionPlanEvidence & evidence) override;

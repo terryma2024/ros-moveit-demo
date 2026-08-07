@@ -49,6 +49,21 @@ public:
   int calls{0};
 };
 
+class DelayedSettlingWorldObserver final : public pick_place::IWorldObserver
+{
+public:
+  pick_place::ObservationResult observe() override
+  {
+    ++calls;
+    return {calls >= settle_after_calls ? settled : moving, std::nullopt};
+  }
+
+  pick_place::WorldSnapshot moving;
+  pick_place::WorldSnapshot settled;
+  int settle_after_calls{1};
+  int calls{0};
+};
+
 pick_place::Pose3d task_objectPose()
 {
   return pick_place::SO101Profile::canonical().task_object_pose;
@@ -181,6 +196,64 @@ TEST(SO101GripperStateExecutor, StagedOpenAcceptsAbortOnlyAfterObservedPhysicalC
 
   EXPECT_EQ(result.status, pick_place::ActionStatus::SUCCEEDED);
   EXPECT_EQ(observer->calls, 3);
+}
+
+TEST(SO101GripperStateExecutor, StagedOpenWaitsForDelayedAbortConvergence)
+{
+  auto profile = pick_place::SO101Profile::canonical();
+  constexpr double release_stage = 0.506;
+  profile.release_stages_q6 = {release_stage};
+  auto command = std::make_shared<FakeGripperCommand>();
+  command->command_result = {pick_place::ActionStatus::FAILED,
+                             pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                                 "GRIPPER_ACTION_ABORTED",
+                                                 "controller aborted before delayed settling",
+                                                 {}}};
+  auto observer = std::make_shared<DelayedSettlingWorldObserver>();
+  observer->moving = snapshot(release_stage - 0.005443, 0.02);
+  observer->settled = snapshot(release_stage + 0.000107, -0.00001095);
+  setAttached(observer->moving);
+  setAttached(observer->settled);
+  observer->settle_after_calls = 25;
+  pick_place::SO101GripperStateExecutor executor(
+    command, {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false},
+    profile, observer);
+
+  const auto result =
+    executor.execute(context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
+
+  EXPECT_EQ(result.status, pick_place::ActionStatus::SUCCEEDED);
+  EXPECT_EQ(observer->calls, 27);
+}
+
+TEST(SO101GripperStateExecutor, StagedOpenDelayedAbortConvergenceRemainsBounded)
+{
+  auto profile = pick_place::SO101Profile::canonical();
+  constexpr double release_stage = 0.506;
+  profile.release_stages_q6 = {release_stage};
+  auto command = std::make_shared<FakeGripperCommand>();
+  command->command_result = {pick_place::ActionStatus::FAILED,
+                             pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                                 "GRIPPER_ACTION_ABORTED",
+                                                 "controller never settled within the bound",
+                                                 {}}};
+  auto observer = std::make_shared<DelayedSettlingWorldObserver>();
+  observer->moving = snapshot(release_stage - 0.005443, 0.02);
+  observer->settled = snapshot(release_stage + 0.000107, 0.0);
+  setAttached(observer->moving);
+  setAttached(observer->settled);
+  observer->settle_after_calls = 41;
+  pick_place::SO101GripperStateExecutor executor(
+    command, {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false},
+    profile, observer);
+
+  const auto result =
+    executor.execute(context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
+
+  ASSERT_EQ(result.status, pick_place::ActionStatus::FAILED);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "GRIPPER_ACTION_ABORTED");
+  EXPECT_EQ(observer->calls, 40);
 }
 
 TEST(SO101GripperValidation, ContactAcceptsPassiveStopWindowButOtherTargetsStayExact)
@@ -387,6 +460,25 @@ TEST(SO101GripperTransitionContract, NormalReleaseRejectsSettlingOutsideSupportE
 
   EXPECT_FALSE(result.ok);
   EXPECT_EQ(result.failures.front().code, "TASK_OBJECT_RELEASE_SUPPORT_INVALID");
+}
+
+TEST(SO101GripperTransitionContract, NormalReleaseAllowsObservedBoundedPreDetachHeight)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto open = pick_place::makeSO101GripperContract(
+    {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
+  auto before = snapshot(profile.q6_contact);
+  auto after = snapshot(profile.q6_full_open);
+  setAttached(before);
+  setAttached(after);
+  before.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  after.gazebo_task_object_pose_world = profile.place_task_object_pose;
+  after.gazebo_task_object_pose_world->z += 0.010111;
+  const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+
+  const auto result = open->validate(before, after, action);
+
+  EXPECT_TRUE(result.ok) << (result.failures.empty() ? "" : result.failures.front().code);
 }
 
 TEST(SO101GripperTransitionContract, RecoveryOpenAcceptsOnlyInternallyExactMixedAttachmentFacts)

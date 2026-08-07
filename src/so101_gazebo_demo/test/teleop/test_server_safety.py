@@ -20,6 +20,11 @@ from so101_teleop.control import PlanRejected, PlanStore
 from so101_teleop.main import installed_web_assets
 
 
+def test_legacy_gazebo_pose_callback_is_removed():
+    source = (Path(__file__).resolve().parents[2] / 'so101_teleop' / 'server.py').read_text()
+    assert '_legacy_bridge_pose_unused' not in source
+
+
 class Worker:
     def __init__(self):
         self._plans = {}; self.attaches = []; self.executed = []; self.fingerprint = "start-a"
@@ -388,7 +393,7 @@ def test_joint_samples_publish_authoritative_so101_urdf_position_limits():
         "3": (-1.74533, 1.5708),
         "4": (-1.65806, 1.65806),
         "5": (-2.79253, 2.79253),
-        "6": (-0.059303612618397, 1.74533),
+        "6": (-0.059600220867817, 1.74533),
     }
     assert {
         name: (sample.lower_limit_rad, sample.upper_limit_rad)

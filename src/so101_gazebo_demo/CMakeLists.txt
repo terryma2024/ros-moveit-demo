@@ -111,6 +111,10 @@ add_library(so101_pick_place_runtime
   src/pick_place/so101_workflow.cpp
   src/pick_place/policy_config.cpp
   src/pick_place/physical_grasp_validator.cpp
+  src/pick_place/physical_grasp_retry.cpp
+  src/pick_place/physical_grasp_stabilizer.cpp
+  src/pick_place/physical_grasp_evidence_store.cpp
+  src/pick_place/planning_failure_diagnostics.cpp
   src/pick_place/transition_table.cpp
   src/pick_place/so101_profile.cpp
   src/pick_place/so101_gripper_validation.cpp
@@ -238,6 +242,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_pick_place_runner so101_pick_place_runtime)
   ament_add_gtest(test_physical_grasp_validator test/pick_place/test_physical_grasp_validator.cpp)
   target_link_libraries(test_physical_grasp_validator so101_pick_place_runtime)
+  ament_add_gtest(test_physical_grasp_retry test/pick_place/test_physical_grasp_retry.cpp)
+  target_link_libraries(test_physical_grasp_retry so101_pick_place_runtime)
+  ament_add_gtest(test_physical_grasp_evidence_store test/pick_place/test_physical_grasp_evidence_store.cpp)
+  target_link_libraries(test_physical_grasp_evidence_store so101_pick_place_runtime)
   ament_add_gtest(test_so101_gripper_adapter test/pick_place/test_so101_gripper_adapter.cpp)
   target_link_libraries(test_so101_gripper_adapter so101_pick_place_runtime)
   ament_add_gtest(test_ros_trajectory_action_client
@@ -322,6 +330,23 @@ if(BUILD_TESTING)
   ament_add_gtest(test_request_scoped_goal_cancellation
     test/pick_place/test_request_scoped_goal_cancellation.cpp)
   target_link_libraries(test_request_scoped_goal_cancellation so101_pick_place_runtime)
+  ament_add_gtest(test_planning_failure_diagnostics
+    test/pick_place/test_planning_failure_diagnostics.cpp)
+  target_link_libraries(test_planning_failure_diagnostics so101_pick_place_runtime)
+  add_library(so101_planning_failure_replay_core
+    test/pick_place/planning_failure_replay.cpp)
+  target_include_directories(so101_planning_failure_replay_core PRIVATE test/pick_place)
+  target_link_libraries(so101_planning_failure_replay_core so101_pick_place_runtime)
+  ament_target_dependencies(so101_planning_failure_replay_core rclcpp rclcpp_action moveit_msgs)
+  add_executable(so101_planning_failure_replay
+    test/pick_place/planning_failure_replay_main.cpp)
+  target_include_directories(so101_planning_failure_replay PRIVATE test/pick_place)
+  target_link_libraries(so101_planning_failure_replay so101_planning_failure_replay_core)
+  ament_target_dependencies(so101_planning_failure_replay rclcpp)
+  ament_add_gtest(test_planning_failure_replay
+    test/pick_place/test_planning_failure_replay.cpp)
+  target_include_directories(test_planning_failure_replay PRIVATE test/pick_place)
+  target_link_libraries(test_planning_failure_replay so101_planning_failure_replay_core)
   ament_add_gtest(test_so101_joint_motion_adapter
     test/pick_place/test_so101_joint_motion_adapter.cpp)
   target_link_libraries(test_so101_joint_motion_adapter so101_pick_place_runtime)

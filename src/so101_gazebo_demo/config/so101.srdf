@@ -45,10 +45,10 @@ are defined
         <joint name="5" value="0" />
     </group_state>
     <group_state name="home" group="gripper">
-        <joint name="6" value="-0.059303612618397" />
+        <joint name="6" value="-0.059600220867817" />
     </group_state>
     <group_state name="fullclose" group="gripper">
-        <joint name="6" value="-0.059303612618397" />
+        <joint name="6" value="-0.059600220867817" />
     </group_state>
     <group_state name="fullopen" group="gripper">
         <joint name="6" value="1.7" />
@@ -57,7 +57,7 @@ are defined
         <joint name="6" value="0.465038" />
     </group_state>
     <group_state name="contact" group="gripper">
-        <joint name="6" value="-0.047409691482075" />
+        <joint name="6" value="-0.047608632840292" />
     </group_state>
 
     <!--END

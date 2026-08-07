@@ -89,6 +89,8 @@ private:
   [[nodiscard]] StopObservationResult stopAndObserveAfterFailure(IStateExecutor &) const;
   [[nodiscard]] static RunResult error(State, Failure, std::uint64_t transition_count = 0);
   [[nodiscard]] State resolve(State, ActionStatus) const;
+  [[nodiscard]] bool isForceContinueState(State) const noexcept;
+  [[nodiscard]] bool isForceContinuableFailure(State, const Failure &) const noexcept;
   [[nodiscard]] bool terminal(State) const;
   [[nodiscard]] bool forwardAction(State) const;
 

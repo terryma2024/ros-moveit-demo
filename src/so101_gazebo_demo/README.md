@@ -131,3 +131,34 @@ command id, and a non-stale plan.  The web UI treats axes 1–5 as the arm and
 axis 6 as gripper opening; it never makes axis 6 a Cartesian planning target.
 `Force Continue` is limited to a fresh, auditable physical-grasp
 post-validation failure and is never evidence of a successful grasp.
+
+The pick/place physical gate is `WAIT_GRASP_STABLE -> MICRO_LIFT ->
+WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP` before attachment. Its durable
+robot-local sidecar is `checkpoint_path + ".physical-grasp.json"`; it binds
+samples to the simulation session and policy fingerprint and is reset for a
+fresh run, so continuous and `--step` subprocess runs validate identically.
+If the 2 mm probe fails only for retryable follow/contact evidence, SO-101 makes
+at most five total physical-grasp attempts (the initial attempt plus four
+retries). A retry performs `PREOPEN -> descend to the saved before-lift world Z
+-> reclose -> stable capture -> 2 mm MICRO_LIFT -> verify`. Contact-present
+failures retain the current reclose q6; contact-missing failures subtract exactly
+1.0 mrad from only that target, capped at 4.0 mrad cumulative tightening. Every
+attempt still applies and holds the unchanged fixed 6.0 mrad seating preload
+through MICRO_LIFT. Nonretryable physical failures dispatch no retry, and
+exhaustion preserves the fifth physical failure while appending retry metrics.
+The sidecar records `attempt_index`, `contact_missing_count`,
+`current_reclose_target_q6`, `micro_lift_preload_target_q6`, and the persisted
+phase (`OPEN_PENDING`, `DESCEND_PENDING`, `CLOSE_PENDING`, `LIFT_PENDING`, or
+`VERIFY_PENDING`) before each side effect. Resuming any pending phase fails
+closed with `PHYSICAL_GRASP_RETRY_INTERRUPTED`. This bounded retry is SO-101
+runtime behavior; neither Panda nor `pick_place_common` implements it.
+For control syntax and validation-pause/force-resume semantics, see
+`docs/pick-place-launch-parameters.md`.
+
+Request-scoped micro-lift planning diagnostics are opt-in via
+`planning_diagnostics_dir:=/tmp/so101-r3-planning-diagnostics/artifacts`; the
+empty default disables them. The directory and artifacts use owner-only `0700`
+and `0600` permissions. Failures preserve the original workflow/checkpoint
+result even if writing fails, successful plans create no artifact, and operators
+own retention. Artifacts have no checkpoint or resume meaning. The test-only,
+non-installed replay harness is plan-only and its planner result is stochastic.

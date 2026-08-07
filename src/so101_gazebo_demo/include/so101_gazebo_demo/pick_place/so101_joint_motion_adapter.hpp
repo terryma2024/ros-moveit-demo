@@ -93,6 +93,22 @@ public:
   [[nodiscard]] virtual ActionResult executeWorldZMicroLift(const Pose3d & current_tcp_world,
                                                             double world_z_delta_m) = 0;
   [[nodiscard]] virtual ActionResult cancelWorldZMicroLift() = 0;
+  [[nodiscard]] virtual ActionResult executeWorldZMicroDescend(const Pose3d &, double)
+  {
+    return {ActionStatus::NOT_SUPPORTED,
+            Failure{FailureCategory::CONFIGURATION,
+                    "WORLD_Z_MICRO_DESCEND_NOT_SUPPORTED",
+                    "World-Z micro-descend is not supported by this adapter",
+                    {}}};
+  }
+  [[nodiscard]] virtual ActionResult cancelWorldZMicroDescend()
+  {
+    return {ActionStatus::NOT_SUPPORTED,
+            Failure{FailureCategory::CONFIGURATION,
+                    "WORLD_Z_MICRO_DESCEND_NOT_SUPPORTED",
+                    "World-Z micro-descend is not supported by this adapter",
+                    {}}};
+  }
 };
 
 class ProfiledJointMotionAdapter final : public IMoveItJointMotionAdapter

@@ -21,6 +21,7 @@ struct ReadyRetreatConfig
   double joint_tolerance;
   double close_position;
   double max_effort;
+  double clearance_height;
 };
 
 class ReadyRetreatAction final : public IStatePlanner, public IStateExecutor

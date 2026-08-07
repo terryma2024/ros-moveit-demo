@@ -24,6 +24,7 @@ int main(int argc, char * argv[])
 {
   if (argc == 2 && std::string(argv[1]) == "--help") {
     std::cout << "reset_so101_world [--ros-args ...]\n";
+    std::cout << "default gripper_trajectory_seconds=2.0\n";
     return EXIT_SUCCESS;
   }
 
@@ -66,7 +67,7 @@ int main(int argc, char * argv[])
   const auto arm_acceleration_scaling =
     node->declare_parameter<double>("arm_acceleration_scaling", 0.15);
   const auto gripper_trajectory_seconds =
-    node->declare_parameter<double>("gripper_trajectory_seconds", 1.0);
+    node->declare_parameter<double>("gripper_trajectory_seconds", 2.0);
   const auto gripper_action_timeout_seconds =
     node->declare_parameter<double>("gripper_action_timeout_seconds", 8.0);
   const auto arm_home_position_tolerance =
