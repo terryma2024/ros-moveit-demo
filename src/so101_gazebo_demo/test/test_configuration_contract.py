@@ -126,8 +126,8 @@ def test_initial_free_space_approach_limits_tracking_lag_without_relaxing_contac
     """The long home-to-pick sweep runs slower after an observed unloaded lag spike."""
     motion = load_yaml('motion_policies/light_cup_wall_pick.yaml')['states']
 
-    assert motion['MOVE_ABOVE_OBJECT']['velocity_scaling'] == pytest.approx(0.05)
-    assert motion['MOVE_ABOVE_OBJECT']['acceleration_scaling'] == pytest.approx(0.05)
+    assert motion['MOVE_ABOVE_OBJECT']['velocity_scaling'] == pytest.approx(0.03)
+    assert motion['MOVE_ABOVE_OBJECT']['acceleration_scaling'] == pytest.approx(0.03)
     assert motion['DESCEND']['velocity_scaling'] == pytest.approx(0.10)
     assert motion['LIFT']['velocity_scaling'] == pytest.approx(0.10)
 

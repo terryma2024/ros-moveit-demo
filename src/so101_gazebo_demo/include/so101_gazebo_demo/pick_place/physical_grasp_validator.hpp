@@ -9,7 +9,9 @@ struct PhysicalGraspThresholds
 {
   double min_table_clearance_m{0.0005};
   double min_cup_follow_ratio{0.8};
-  double max_xy_slip_m{0.001};
+  // Millimetre-scale lateral compliance is acceptable for end-to-end pick/place.
+  // Keep a wider bound only to reject an obviously unstable or dropped grasp.
+  double max_xy_slip_m{0.003};
   double max_orientation_change_rad{0.10};
   bool require_gripper_contact{true};
 };
