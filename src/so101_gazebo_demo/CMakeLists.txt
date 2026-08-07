@@ -115,6 +115,8 @@ add_library(so101_pick_place_runtime
   src/pick_place/physical_grasp_stabilizer.cpp
   src/pick_place/physical_grasp_evidence_store.cpp
   src/pick_place/final_placement_evaluator.cpp
+  src/pick_place/final_placement_evidence_store.cpp
+  src/pick_place/release_settle_executor.cpp
   src/pick_place/planning_failure_diagnostics.cpp
   src/pick_place/transition_table.cpp
   src/pick_place/so101_profile.cpp
@@ -263,6 +265,9 @@ if(BUILD_TESTING)
   ament_add_gtest(test_final_placement_evaluator
     test/pick_place/test_final_placement_evaluator.cpp)
   target_link_libraries(test_final_placement_evaluator so101_pick_place_runtime)
+  ament_add_gtest(test_release_settle_executor
+    test/pick_place/test_release_settle_executor.cpp)
+  target_link_libraries(test_release_settle_executor so101_pick_place_runtime)
   ament_add_gtest(test_attachment_state_reducer
     test/pick_place/test_attachment_state_reducer.cpp)
   target_link_libraries(test_attachment_state_reducer so101_pick_place_runtime)
