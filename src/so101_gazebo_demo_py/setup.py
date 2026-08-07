@@ -32,5 +32,9 @@ setup(
     description="Standalone Python SO-101 Gazebo pick-place demonstration.",
     license="Apache-2.0",
     tests_require=["pytest"],
-    entry_points={"console_scripts": []},
+    entry_points={
+        "console_scripts": [
+            "pick_place_state_machine = so101_gazebo_demo_py.cli.pick_place_state_machine:main",
+        ]
+    },
 )
