@@ -174,7 +174,7 @@ states:
 
   static std::string validValidationYaml()
   {
-    std::string yaml = R"(schema_version: 1
+    std::string yaml = R"(schema_version: 2
 policy_id: light_cup_wall_pick
 object_id: plastic_cup
 grasp_contact:
@@ -193,6 +193,30 @@ runtime:
   q6_velocity_tolerance_rad_s: 0.01
   q6_position_tolerance_rad: 0.001
   q6_contact_stop_tolerance_rad: 0.00125
+physical_outcome:
+  intended_support_collision: table::link::collision
+  final_target_region:
+    kind: axis_aligned_box
+    min_xy_m: [-0.12, -0.32]
+    max_xy_m: [-0.04, -0.20]
+  support_height_range_m: [0.15, 0.18]
+  max_upright_tilt_rad: 0.10
+  max_linear_speed_m_s: 0.02
+  max_angular_speed_rad_s: 0.20
+  consecutive_samples: 3
+  minimum_stable_duration_s: 0.20
+  sample_interval_s: 0.05
+  settle_timeout_s: 1.00
+  max_observation_age_s: 0.10
+  max_telemetry_samples: 20
+  catastrophic_loss:
+    workspace_bounds_m: [-0.50, -0.50, 0.00, 0.50, 0.50, 0.80]
+    max_relative_position_drift_m: 0.10
+    max_relative_orientation_drift_rad: 0.50
+  planning_shadow:
+    max_position_divergence_m: 0.02
+    max_orientation_divergence_rad: 0.20
+    max_pair_age_s: 0.10
 states:
 )";
     for (const auto & state : kMotionStates) {
@@ -211,6 +235,36 @@ states:
       yaml += "    allowed_touch_pairs: []\n";
       yaml += "    temporal_contact: null\n";
     }
+    return yaml;
+  }
+
+  static std::string calibrationRequiredValidationYaml()
+  {
+    auto yaml = validValidationYaml();
+    const auto start = yaml.find("  final_target_region:\n");
+    const auto end = yaml.find("states:\n", start);
+    EXPECT_NE(start, std::string::npos);
+    EXPECT_NE(end, std::string::npos);
+    yaml.replace(start, end - start, R"(  final_target_region: CALIBRATION_REQUIRED
+  support_height_range_m: CALIBRATION_REQUIRED
+  max_upright_tilt_rad: CALIBRATION_REQUIRED
+  max_linear_speed_m_s: CALIBRATION_REQUIRED
+  max_angular_speed_rad_s: CALIBRATION_REQUIRED
+  consecutive_samples: CALIBRATION_REQUIRED
+  minimum_stable_duration_s: CALIBRATION_REQUIRED
+  sample_interval_s: CALIBRATION_REQUIRED
+  settle_timeout_s: CALIBRATION_REQUIRED
+  max_observation_age_s: CALIBRATION_REQUIRED
+  max_telemetry_samples: CALIBRATION_REQUIRED
+  catastrophic_loss:
+    workspace_bounds_m: CALIBRATION_REQUIRED
+    max_relative_position_drift_m: CALIBRATION_REQUIRED
+    max_relative_orientation_drift_rad: CALIBRATION_REQUIRED
+  planning_shadow:
+    max_position_divergence_m: CALIBRATION_REQUIRED
+    max_orientation_divergence_rad: CALIBRATION_REQUIRED
+    max_pair_age_s: CALIBRATION_REQUIRED
+)");
     return yaml;
   }
 
@@ -235,6 +289,108 @@ std::string replaceOnce(std::string value, const std::string & from, const std::
 }
 
 }  // namespace
+
+TEST(PolicyConfig, LoadsExplicitCalibrationRequiredPhysicalOutcomePolicy)
+{
+  PolicyFixture fixture("physical_outcome_calibration_required");
+  PolicyFixture::write(fixture.validationPath(),
+                       PolicyFixture::calibrationRequiredValidationYaml());
+
+  const auto result = spp::loadPolicyBundle(fixture.paths());
+
+  ASSERT_TRUE(result.bundle) << (result.failure ? result.failure->message : "");
+  const auto & policy = result.bundle->validation.physical_outcome;
+  EXPECT_EQ("table::link::collision", policy.intended_support_collision);
+  EXPECT_FALSE(policy.calibration_complete);
+  EXPECT_FALSE(policy.final_target_region);
+  EXPECT_FALSE(policy.planning_shadow.max_position_divergence_m);
+}
+
+TEST(PolicyConfig, LoadsFullyCalibratedPhysicalOutcomePolicyFromFixture)
+{
+  PolicyFixture fixture("physical_outcome_numeric");
+
+  const auto result = spp::loadPolicyBundle(fixture.paths());
+
+  ASSERT_TRUE(result.bundle) << (result.failure ? result.failure->message : "");
+  const auto & policy = result.bundle->validation.physical_outcome;
+  EXPECT_TRUE(policy.calibration_complete);
+  ASSERT_TRUE(policy.final_target_region);
+  EXPECT_DOUBLE_EQ(-0.12, policy.final_target_region->min_x);
+  EXPECT_DOUBLE_EQ(-0.20, policy.final_target_region->max_y);
+  ASSERT_TRUE(policy.consecutive_samples);
+  EXPECT_EQ(3U, *policy.consecutive_samples);
+  ASSERT_TRUE(policy.catastrophic_loss.workspace_bounds_m);
+  EXPECT_DOUBLE_EQ(0.80, (*policy.catastrophic_loss.workspace_bounds_m)[5]);
+}
+
+TEST(PolicyConfig, RejectsUnknownPhysicalOutcomeField)
+{
+  PolicyFixture fixture("physical_outcome_unknown");
+  PolicyFixture::write(
+    fixture.validationPath(),
+    replaceOnce(PolicyFixture::validValidationYaml(),
+                "  intended_support_collision: table::link::collision\n",
+                "  intended_support_collision: table::link::collision\n  surprise: true\n"));
+  expectFailure(fixture.paths(), "POLICY_UNKNOWN_FIELD");
+}
+
+TEST(PolicyConfig, RejectsMissingPhysicalOutcomeField)
+{
+  PolicyFixture fixture("physical_outcome_missing");
+  PolicyFixture::write(fixture.validationPath(), replaceOnce(PolicyFixture::validValidationYaml(),
+                                                             "  max_telemetry_samples: 20\n", ""));
+  expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
+}
+
+TEST(PolicyConfig, RejectsNonFiniteOrNonPositivePhysicalOutcomeThreshold)
+{
+  for (const auto & [name, replacement] :
+       std::vector<std::pair<std::string, std::string>>{{"zero", "0.0"}, {"nan", ".nan"}}) {
+    PolicyFixture fixture("physical_outcome_bad_" + name);
+    PolicyFixture::write(fixture.validationPath(),
+                         replaceOnce(PolicyFixture::validValidationYaml(),
+                                     "max_linear_speed_m_s: 0.02",
+                                     "max_linear_speed_m_s: " + replacement));
+    expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
+  }
+}
+
+TEST(PolicyConfig, RejectsReversedRegionHeightAndWorkspaceBounds)
+{
+  const std::vector<std::pair<std::string, std::pair<std::string, std::string>>> cases{
+    {"region", {"max_xy_m: [-0.04, -0.20]", "max_xy_m: [-0.13, -0.20]"}},
+    {"height", {"support_height_range_m: [0.15, 0.18]", "support_height_range_m: [0.18, 0.15]"}},
+    {"workspace",
+     {"workspace_bounds_m: [-0.50, -0.50, 0.00, 0.50, 0.50, 0.80]",
+      "workspace_bounds_m: [0.50, -0.50, 0.00, -0.50, 0.50, 0.80]"}}};
+  for (const auto & [name, replacement] : cases) {
+    PolicyFixture fixture("physical_outcome_reversed_" + name);
+    PolicyFixture::write(
+      fixture.validationPath(),
+      replaceOnce(PolicyFixture::validValidationYaml(), replacement.first, replacement.second));
+    expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
+  }
+}
+
+TEST(PolicyConfig, RejectsSettleTimeoutShorterThanMinimumDuration)
+{
+  PolicyFixture fixture("physical_outcome_short_timeout");
+  PolicyFixture::write(fixture.validationPath(),
+                       replaceOnce(PolicyFixture::validValidationYaml(), "settle_timeout_s: 1.00",
+                                   "settle_timeout_s: 0.10"));
+  expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
+}
+
+TEST(PolicyConfig, RejectsMixedSentinelAndNumericCalibration)
+{
+  PolicyFixture fixture("physical_outcome_mixed");
+  PolicyFixture::write(fixture.validationPath(),
+                       replaceOnce(PolicyFixture::calibrationRequiredValidationYaml(),
+                                   "max_upright_tilt_rad: CALIBRATION_REQUIRED",
+                                   "max_upright_tilt_rad: 0.10"));
+  expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
+}
 
 TEST(PolicyConfig, LoadsValidBundleWithCanonicalPathsAndContentDigests)
 {

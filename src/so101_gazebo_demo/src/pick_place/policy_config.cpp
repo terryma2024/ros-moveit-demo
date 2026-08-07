@@ -201,16 +201,18 @@ FingertipPadGeometryConfig parseFingertipPadGeometry(const YAML::Node & node,
   return result;
 }
 
-int parseSchemaVersion(const YAML::Node & root, std::string_view context)
+int parseSchemaVersion(const YAML::Node & root, std::string_view context, int expected)
 {
   const auto node = requireField(root, "schema_version", context);
   if (!node.IsScalar()) {
-    throw PolicyError("POLICY_INVALID_VALUE", std::string(context) + " schema_version must be 1");
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      std::string(context) + " schema_version must be scalar");
   }
   const int version = node.as<int>();
-  if (version != 1) {
-    throw PolicyError("POLICY_SCHEMA_UNSUPPORTED",
-                      std::string(context) + " schema_version must equal 1");
+  if (version != expected) {
+    throw PolicyError("POLICY_SCHEMA_UNSUPPORTED", std::string(context) +
+                                                     " schema_version must equal " +
+                                                     std::to_string(expected));
   }
   return version;
 }
@@ -276,7 +278,7 @@ TaskObjectConfig parseObject(const YAML::Node & root)
     root, {"schema_version", "object_id", "model", "scene", "grasp_frame", "fingertip_pads"},
     "object config");
   TaskObjectConfig result;
-  result.schema_version = parseSchemaVersion(root, "object config");
+  result.schema_version = parseSchemaVersion(root, "object config", 1);
   result.object_id = parseString(requireField(root, "object_id", "object config"), "object_id");
 
   const auto model = requireField(root, "model", "object config");
@@ -420,7 +422,7 @@ MotionPolicyConfig parseMotion(const YAML::Node & root)
                        "approach_outside_clearance_m", "gripper_actions", "states"},
                       "motion policy");
   MotionPolicyConfig result;
-  result.schema_version = parseSchemaVersion(root, "motion policy");
+  result.schema_version = parseSchemaVersion(root, "motion policy", 1);
   result.policy_id =
     parseString(requireField(root, "policy_id", "motion policy"), "motion policy_id");
   result.object_id =
@@ -513,13 +515,183 @@ std::optional<TemporalContactPolicy> parseTemporal(const YAML::Node & node,
   return result;
 }
 
+bool isCalibrationRequired(const YAML::Node & node)
+{
+  return node.IsScalar() && node.as<std::string>() == "CALIBRATION_REQUIRED";
+}
+
+std::array<double, 2> parseFinitePair(const YAML::Node & node, const std::string & context)
+{
+  const auto values = parseVector(node, 2, context);
+  return {values[0], values[1]};
+}
+
+std::array<double, 6> parseFiniteBounds(const YAML::Node & node, const std::string & context)
+{
+  const auto values = parseVector(node, 6, context);
+  return {values[0], values[1], values[2], values[3], values[4], values[5]};
+}
+
+std::size_t parsePositiveSize(const YAML::Node & node, const std::string & context)
+{
+  if (!node.IsScalar()) {
+    throw PolicyError("POLICY_INVALID_VALUE", context + " must be a positive integer");
+  }
+  const auto value = node.as<long long>();
+  if (value <= 0) {
+    throw PolicyError("POLICY_INVALID_VALUE", context + " must be a positive integer");
+  }
+  return static_cast<std::size_t>(value);
+}
+
+PhysicalOutcomePolicyConfig parsePhysicalOutcome(const YAML::Node & node)
+{
+  constexpr std::string_view context = "physical_outcome";
+  rejectUnknownFields(
+    node,
+    {"intended_support_collision", "final_target_region", "support_height_range_m",
+     "max_upright_tilt_rad", "max_linear_speed_m_s", "max_angular_speed_rad_s",
+     "consecutive_samples", "minimum_stable_duration_s", "sample_interval_s", "settle_timeout_s",
+     "max_observation_age_s", "max_telemetry_samples", "catastrophic_loss", "planning_shadow"},
+    context);
+  PhysicalOutcomePolicyConfig result;
+  result.intended_support_collision =
+    parseString(requireField(node, "intended_support_collision", context),
+                "physical_outcome.intended_support_collision");
+  if (result.intended_support_collision != "table::link::collision") {
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      "physical_outcome.intended_support_collision must be table::link::collision");
+  }
+
+  const std::array<const char *, 11> direct_thresholds{
+    "final_target_region",       "support_height_range_m",  "max_upright_tilt_rad",
+    "max_linear_speed_m_s",      "max_angular_speed_rad_s", "consecutive_samples",
+    "minimum_stable_duration_s", "sample_interval_s",       "settle_timeout_s",
+    "max_observation_age_s",     "max_telemetry_samples"};
+  const auto catastrophic = requireField(node, "catastrophic_loss", context);
+  rejectUnknownFields(
+    catastrophic,
+    {"workspace_bounds_m", "max_relative_position_drift_m", "max_relative_orientation_drift_rad"},
+    "physical_outcome.catastrophic_loss");
+  const auto shadow = requireField(node, "planning_shadow", context);
+  rejectUnknownFields(
+    shadow, {"max_position_divergence_m", "max_orientation_divergence_rad", "max_pair_age_s"},
+    "physical_outcome.planning_shadow");
+
+  std::size_t sentinel_count = 0;
+  for (const auto * field : direct_thresholds) {
+    sentinel_count += isCalibrationRequired(requireField(node, field, context)) ? 1U : 0U;
+  }
+  for (const auto * field : {"workspace_bounds_m", "max_relative_position_drift_m",
+                             "max_relative_orientation_drift_rad"}) {
+    sentinel_count +=
+      isCalibrationRequired(requireField(catastrophic, field, "physical_outcome.catastrophic_loss"))
+        ? 1U
+        : 0U;
+  }
+  for (const auto * field :
+       {"max_position_divergence_m", "max_orientation_divergence_rad", "max_pair_age_s"}) {
+    sentinel_count +=
+      isCalibrationRequired(requireField(shadow, field, "physical_outcome.planning_shadow")) ? 1U
+                                                                                             : 0U;
+  }
+  constexpr std::size_t threshold_count = 17U;
+  if (sentinel_count != 0U && sentinel_count != threshold_count) {
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      "physical_outcome cannot mix CALIBRATION_REQUIRED and numeric thresholds");
+  }
+  if (sentinel_count == threshold_count) {
+    return result;
+  }
+
+  const auto region = requireField(node, "final_target_region", context);
+  rejectUnknownFields(region, {"kind", "min_xy_m", "max_xy_m"},
+                      "physical_outcome.final_target_region");
+  if (parseString(requireField(region, "kind", "physical_outcome.final_target_region"),
+                  "physical_outcome.final_target_region.kind") != "axis_aligned_box") {
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      "physical_outcome.final_target_region.kind must be axis_aligned_box");
+  }
+  const auto min_xy =
+    parseFinitePair(requireField(region, "min_xy_m", "physical_outcome.final_target_region"),
+                    "physical_outcome.final_target_region.min_xy_m");
+  const auto max_xy =
+    parseFinitePair(requireField(region, "max_xy_m", "physical_outcome.final_target_region"),
+                    "physical_outcome.final_target_region.max_xy_m");
+  if (!(min_xy[0] < max_xy[0] && min_xy[1] < max_xy[1])) {
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      "physical_outcome.final_target_region bounds must be ordered");
+  }
+  result.final_target_region = {min_xy[0], min_xy[1], max_xy[0], max_xy[1]};
+  result.support_height_range_m =
+    parseFinitePair(requireField(node, "support_height_range_m", context),
+                    "physical_outcome.support_height_range_m");
+  if (!((*result.support_height_range_m)[0] < (*result.support_height_range_m)[1])) {
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      "physical_outcome.support_height_range_m must be ordered");
+  }
+  result.max_upright_tilt_rad = parsePositive(requireField(node, "max_upright_tilt_rad", context),
+                                              "physical_outcome.max_upright_tilt_rad");
+  result.max_linear_speed_m_s = parsePositive(requireField(node, "max_linear_speed_m_s", context),
+                                              "physical_outcome.max_linear_speed_m_s");
+  result.max_angular_speed_rad_s =
+    parsePositive(requireField(node, "max_angular_speed_rad_s", context),
+                  "physical_outcome.max_angular_speed_rad_s");
+  result.consecutive_samples = parsePositiveSize(requireField(node, "consecutive_samples", context),
+                                                 "physical_outcome.consecutive_samples");
+  result.minimum_stable_duration_s =
+    parsePositive(requireField(node, "minimum_stable_duration_s", context),
+                  "physical_outcome.minimum_stable_duration_s");
+  result.sample_interval_s = parsePositive(requireField(node, "sample_interval_s", context),
+                                           "physical_outcome.sample_interval_s");
+  result.settle_timeout_s = parsePositive(requireField(node, "settle_timeout_s", context),
+                                          "physical_outcome.settle_timeout_s");
+  result.max_observation_age_s = parsePositive(requireField(node, "max_observation_age_s", context),
+                                               "physical_outcome.max_observation_age_s");
+  result.max_telemetry_samples = parsePositiveSize(
+    requireField(node, "max_telemetry_samples", context), "physical_outcome.max_telemetry_samples");
+  if (*result.settle_timeout_s < *result.minimum_stable_duration_s) {
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      "physical_outcome.settle_timeout_s must cover minimum_stable_duration_s");
+  }
+
+  result.catastrophic_loss.workspace_bounds_m = parseFiniteBounds(
+    requireField(catastrophic, "workspace_bounds_m", "physical_outcome.catastrophic_loss"),
+    "physical_outcome.catastrophic_loss.workspace_bounds_m");
+  const auto & bounds = *result.catastrophic_loss.workspace_bounds_m;
+  if (!(bounds[0] < bounds[3] && bounds[1] < bounds[4] && bounds[2] < bounds[5])) {
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      "physical_outcome catastrophic workspace bounds must be ordered");
+  }
+  result.catastrophic_loss.max_relative_position_drift_m =
+    parsePositive(requireField(catastrophic, "max_relative_position_drift_m",
+                               "physical_outcome.catastrophic_loss"),
+                  "physical_outcome.catastrophic_loss.max_relative_position_drift_m");
+  result.catastrophic_loss.max_relative_orientation_drift_rad =
+    parsePositive(requireField(catastrophic, "max_relative_orientation_drift_rad",
+                               "physical_outcome.catastrophic_loss"),
+                  "physical_outcome.catastrophic_loss.max_relative_orientation_drift_rad");
+  result.planning_shadow.max_position_divergence_m = parsePositive(
+    requireField(shadow, "max_position_divergence_m", "physical_outcome.planning_shadow"),
+    "physical_outcome.planning_shadow.max_position_divergence_m");
+  result.planning_shadow.max_orientation_divergence_rad = parsePositive(
+    requireField(shadow, "max_orientation_divergence_rad", "physical_outcome.planning_shadow"),
+    "physical_outcome.planning_shadow.max_orientation_divergence_rad");
+  result.planning_shadow.max_pair_age_s =
+    parsePositive(requireField(shadow, "max_pair_age_s", "physical_outcome.planning_shadow"),
+                  "physical_outcome.planning_shadow.max_pair_age_s");
+  result.calibration_complete = true;
+  return result;
+}
+
 ValidationPolicyConfig parseValidation(const YAML::Node & root)
 {
-  rejectUnknownFields(
-    root, {"schema_version", "policy_id", "object_id", "grasp_contact", "runtime", "states"},
-    "validation policy");
+  rejectUnknownFields(root,
+                      {"schema_version", "policy_id", "object_id", "grasp_contact", "runtime",
+                       "physical_outcome", "states"},
+                      "validation policy");
   ValidationPolicyConfig result;
-  result.schema_version = parseSchemaVersion(root, "validation policy");
+  result.schema_version = parseSchemaVersion(root, "validation policy", 2);
   result.policy_id =
     parseString(requireField(root, "policy_id", "validation policy"), "validation policy_id");
   result.object_id =
@@ -579,6 +751,8 @@ ValidationPolicyConfig parseValidation(const YAML::Node & root)
   if (result.runtime.min_real_time_factor > 1.0) {
     throw PolicyError("POLICY_INVALID_VALUE", "runtime.min_real_time_factor must not exceed 1");
   }
+  result.physical_outcome =
+    parsePhysicalOutcome(requireField(root, "physical_outcome", "validation policy"));
   const auto states = requireField(root, "states", "validation policy");
   requireMap(states, "validation states");
   for (const auto & entry : states) {

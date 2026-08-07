@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 policy_id: light_cup_wall_pick
 object_id: plastic_cup
 grasp_contact:
@@ -20,6 +20,27 @@ runtime:
   q6_velocity_tolerance_rad_s: 0.01
   q6_position_tolerance_rad: 0.001
   q6_contact_stop_tolerance_rad: 0.00125
+physical_outcome:
+  intended_support_collision: table::link::collision
+  final_target_region: CALIBRATION_REQUIRED
+  support_height_range_m: CALIBRATION_REQUIRED
+  max_upright_tilt_rad: CALIBRATION_REQUIRED
+  max_linear_speed_m_s: CALIBRATION_REQUIRED
+  max_angular_speed_rad_s: CALIBRATION_REQUIRED
+  consecutive_samples: CALIBRATION_REQUIRED
+  minimum_stable_duration_s: CALIBRATION_REQUIRED
+  sample_interval_s: CALIBRATION_REQUIRED
+  settle_timeout_s: CALIBRATION_REQUIRED
+  max_observation_age_s: CALIBRATION_REQUIRED
+  max_telemetry_samples: CALIBRATION_REQUIRED
+  catastrophic_loss:
+    workspace_bounds_m: CALIBRATION_REQUIRED
+    max_relative_position_drift_m: CALIBRATION_REQUIRED
+    max_relative_orientation_drift_rad: CALIBRATION_REQUIRED
+  planning_shadow:
+    max_position_divergence_m: CALIBRATION_REQUIRED
+    max_orientation_divergence_rad: CALIBRATION_REQUIRED
+    max_pair_age_s: CALIBRATION_REQUIRED
 states:
   MOVE_ABOVE_OBJECT:
     endpoint_position: [0.020673889, -0.254030551, 0.259837209]
