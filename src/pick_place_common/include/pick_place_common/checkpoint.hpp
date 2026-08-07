@@ -8,7 +8,11 @@
 #include "pick_place_common/world_observer.hpp"
 namespace pick_place_common
 {
-enum class CheckpointPhase { FORWARD, RECOVERY };
+enum class CheckpointPhase
+{
+  FORWARD,
+  RECOVERY
+};
 struct ExpectedWorldState
 {
   Pose3d tcp_pose_world{};
@@ -19,11 +23,17 @@ struct ExpectedWorldState
   std::optional<Pose3d> gazebo_task_object_pose_world;
   std::optional<bool> gazebo_task_object_attached;
   std::optional<bool> gazebo_task_object_stationary;
+  std::optional<std::uint64_t> gazebo_pose_sequence;
+  std::optional<std::int64_t> observation_timestamp_ns;
+  std::optional<std::int64_t> gazebo_pose_timestamp_ns;
+  std::optional<bool> gazebo_task_object_intended_support_contact;
+  std::vector<std::string> gazebo_task_object_support_collision_names;
+  std::optional<std::int64_t> gazebo_support_contact_timestamp_ns;
   std::vector<std::string> required_world_objects;
 };
 struct Checkpoint
 {
-  std::uint32_t schema_version{3};
+  std::uint32_t schema_version{4};
   std::string run_id;
   std::uint64_t sequence{0};
   RunMode source_mode{RunMode::EXECUTE};

@@ -40,7 +40,7 @@ pick_place::Pose3d makePose(double offset)
 pick_place::Checkpoint makeRecoveryCheckpoint()
 {
   pick_place::Checkpoint checkpoint;
-  checkpoint.schema_version = 3;
+  checkpoint.schema_version = 4;
   checkpoint.run_id = "run-42";
   checkpoint.sequence = 42;
   checkpoint.source_mode = pick_place::RunMode::EXECUTE;
@@ -61,6 +61,12 @@ pick_place::Checkpoint makeRecoveryCheckpoint()
   checkpoint.expected.gazebo_task_object_pose_world = makePose(0.3);
   checkpoint.expected.gazebo_task_object_attached = true;
   checkpoint.expected.gazebo_task_object_stationary = true;
+  checkpoint.expected.gazebo_pose_sequence = 123U;
+  checkpoint.expected.observation_timestamp_ns = 1000;
+  checkpoint.expected.gazebo_pose_timestamp_ns = 900;
+  checkpoint.expected.gazebo_task_object_intended_support_contact = true;
+  checkpoint.expected.gazebo_task_object_support_collision_names = {"cup_bottom", "table"};
+  checkpoint.expected.gazebo_support_contact_timestamp_ns = 950;
   checkpoint.expected.required_world_objects = {"object", "table"};
   checkpoint.configuration_fingerprint = "configuration-sha256";
   checkpoint.simulation_session_id = "simulation-session";
@@ -138,17 +144,17 @@ void expectPoseEqual(const pick_place::Pose3d & lhs, const pick_place::Pose3d & 
 
 }  // namespace
 
-TEST(CheckpointV3, RequiresSchemaV3AndResumeSession)
+TEST(CheckpointV4, RequiresSchemaV4AndResumeSession)
 {
   pick_place::Checkpoint checkpoint;
-  EXPECT_EQ(3U, checkpoint.schema_version);
+  EXPECT_EQ(4U, checkpoint.schema_version);
   const auto resume =
     pick_place::resolveSimulationSessionId(pick_place::RunMode::EXECUTE, true, "", 1);
   EXPECT_FALSE(resume.value);
   EXPECT_FALSE(resume.error.empty());
 }
 
-TEST(CheckpointV3, FullJsonRoundTripPreservesEveryCheckpointAndExpectedWorldField)
+TEST(CheckpointV4, RoundTripPreservesObservationSequencesAndSupportEvidence)
 {
   const auto path = checkpointPath("full_round_trip");
   pick_place::FileCheckpointStore store(path);
@@ -178,6 +184,18 @@ TEST(CheckpointV3, FullJsonRoundTripPreservesEveryCheckpointAndExpectedWorldFiel
   EXPECT_EQ(checkpoint.next_state, loaded.checkpoint->next_state);
   expectPoseEqual(checkpoint.expected.tcp_pose_world, loaded.checkpoint->expected.tcp_pose_world);
   EXPECT_EQ(checkpoint.expected.gripper_open, loaded.checkpoint->expected.gripper_open);
+  EXPECT_EQ(checkpoint.expected.gazebo_pose_sequence,
+            loaded.checkpoint->expected.gazebo_pose_sequence);
+  EXPECT_EQ(checkpoint.expected.observation_timestamp_ns,
+            loaded.checkpoint->expected.observation_timestamp_ns);
+  EXPECT_EQ(checkpoint.expected.gazebo_pose_timestamp_ns,
+            loaded.checkpoint->expected.gazebo_pose_timestamp_ns);
+  EXPECT_EQ(checkpoint.expected.gazebo_task_object_intended_support_contact,
+            loaded.checkpoint->expected.gazebo_task_object_intended_support_contact);
+  EXPECT_EQ(checkpoint.expected.gazebo_task_object_support_collision_names,
+            loaded.checkpoint->expected.gazebo_task_object_support_collision_names);
+  EXPECT_EQ(checkpoint.expected.gazebo_support_contact_timestamp_ns,
+            loaded.checkpoint->expected.gazebo_support_contact_timestamp_ns);
   EXPECT_EQ(checkpoint.expected.joint_positions, loaded.checkpoint->expected.joint_positions);
   ASSERT_EQ(checkpoint.expected.moveit_world_object_poses.size(),
             loaded.checkpoint->expected.moveit_world_object_poses.size());
@@ -201,7 +219,7 @@ TEST(CheckpointV3, FullJsonRoundTripPreservesEveryCheckpointAndExpectedWorldFiel
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, OptionalWorldAndRecoveryEvidenceRoundTripsAsJsonNull)
+TEST(CheckpointV4, OptionalWorldAndRecoveryEvidenceRoundTripsAsJsonNull)
 {
   const auto path = checkpointPath("optional_null");
   pick_place::FileCheckpointStore store(path);
@@ -227,7 +245,7 @@ TEST(CheckpointV3, OptionalWorldAndRecoveryEvidenceRoundTripsAsJsonNull)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, SchemaV3IntentionallyExcludesRuntimeAttachmentMetadata)
+TEST(CheckpointV4, SchemaV4IntentionallyExcludesRuntimeAttachmentMetadata)
 {
   const auto path = checkpointPath("attachment_metadata_excluded");
   pick_place::FileCheckpointStore store(path);
@@ -239,7 +257,7 @@ TEST(CheckpointV3, SchemaV3IntentionallyExcludesRuntimeAttachmentMetadata)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, RejectsPlanOnlyRecoveryCombinationOnCommitAndLoad)
+TEST(CheckpointV4, RejectsPlanOnlyRecoveryCombinationOnCommitAndLoad)
 {
   const auto path = checkpointPath("plan_only_recovery");
   pick_place::FileCheckpointStore store(path);
@@ -258,7 +276,7 @@ TEST(CheckpointV3, RejectsPlanOnlyRecoveryCombinationOnCommitAndLoad)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, RejectsWrongSchemaAndMalformedOrTruncatedJson)
+TEST(CheckpointV4, RejectsSchemaThreeInsteadOfSilentlyMigrating)
 {
   const auto path = checkpointPath("malformed");
   {
@@ -272,7 +290,7 @@ TEST(CheckpointV3, RejectsWrongSchemaAndMalformedOrTruncatedJson)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, RejectsMissingUnknownAndWrongTypedRequiredKeys)
+TEST(CheckpointV4, RejectsMissingUnknownAndWrongTypedRequiredKeys)
 {
   const auto path = checkpointPath("required_keys");
   pick_place::FileCheckpointStore store(path);
@@ -301,7 +319,7 @@ TEST(CheckpointV3, RejectsMissingUnknownAndWrongTypedRequiredKeys)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, RejectsUnknownStateModePhaseAndFailureCategoryNames)
+TEST(CheckpointV4, RejectsUnknownStateModePhaseAndFailureCategoryNames)
 {
   const auto path = checkpointPath("invalid_enums");
   pick_place::FileCheckpointStore store(path);
@@ -327,7 +345,7 @@ TEST(CheckpointV3, RejectsUnknownStateModePhaseAndFailureCategoryNames)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, RejectsWrongOptionalShapesAndNonFiniteNumericEvidence)
+TEST(CheckpointV4, RejectsWrongOptionalShapesAndNonFiniteNumericEvidence)
 {
   const auto path = checkpointPath("optional_and_finite");
   pick_place::FileCheckpointStore store(path);
@@ -368,7 +386,7 @@ TEST(CheckpointV3, RejectsWrongOptionalShapesAndNonFiniteNumericEvidence)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, AtomicCommitReplacesTargetAndLeavesNoTemporaryFile)
+TEST(CheckpointV4, AtomicCommitReplacesTargetAndLeavesNoTemporaryFile)
 {
   const auto path = checkpointPath("atomic_success");
   {
@@ -378,7 +396,7 @@ TEST(CheckpointV3, AtomicCommitReplacesTargetAndLeavesNoTemporaryFile)
   pick_place::FileCheckpointStore store(path);
 
   ASSERT_FALSE(store.commit(makeRecoveryCheckpoint()));
-  EXPECT_EQ(3U, readJson(path).at("schema_version").get<std::uint32_t>());
+  EXPECT_EQ(4U, readJson(path).at("schema_version").get<std::uint32_t>());
   for (const auto & entry : std::filesystem::directory_iterator(path.parent_path())) {
     EXPECT_EQ(std::string::npos,
               entry.path().filename().string().find(path.filename().string() + ".tmp"));
@@ -386,7 +404,7 @@ TEST(CheckpointV3, AtomicCommitReplacesTargetAndLeavesNoTemporaryFile)
   std::filesystem::remove(path);
 }
 
-TEST(CheckpointV3, CommitFailurePreservesExistingTargetAndCleansTemporaryFile)
+TEST(CheckpointV4, CommitFailurePreservesExistingTargetAndCleansTemporaryFile)
 {
   const auto path = checkpointPath("rename_failure");
   std::filesystem::create_directory(path);
@@ -408,7 +426,7 @@ TEST(CheckpointV3, CommitFailurePreservesExistingTargetAndCleansTemporaryFile)
   std::filesystem::remove_all(path);
 }
 
-TEST(CheckpointV3, ReportsDirectoryCreationWriteAndLoadFailures)
+TEST(CheckpointV4, ReportsDirectoryCreationWriteAndLoadFailures)
 {
   const auto root = checkpointPath("io_failures");
   {
@@ -627,4 +645,21 @@ TEST(CommonResumeValidator, RejectsNonResumableAndIncompleteRecoveryContext)
   checkpoint.resumable = true;
   checkpoint.original_failure.reset();
   EXPECT_FALSE(validator.validate(checkpoint, snapshot).ok);
+}
+
+TEST(CommonResumeValidator, RejectsPostReleaseEpochCheckpoint)
+{
+  auto checkpoint = makeForwardCheckpointWithNullOptionals();
+  checkpoint.last_completed_state = pick_place::State::WAIT_RELEASE_SETTLE;
+  checkpoint.next_state = pick_place::State::VALIDATE_FINAL_PLACEMENT;
+  checkpoint.resumable = false;
+  const auto current = snapshotFrom(checkpoint);
+  const pick_place::CommonResumeValidator validator(checkpoint.configuration_fingerprint,
+                                                    checkpoint.simulation_session_id);
+
+  const auto result = validator.validate(checkpoint, current);
+
+  ASSERT_FALSE(result.ok);
+  ASSERT_FALSE(result.failures.empty());
+  EXPECT_EQ("POST_RELEASE_EPOCH_NON_RESUMABLE", result.failures.front().code);
 }

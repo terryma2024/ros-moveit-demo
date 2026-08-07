@@ -22,8 +22,8 @@ ValidationResult CommonResumeValidator::validate(const Checkpoint & checkpoint,
     failures.push_back(
       {FailureCategory::RESUME_VALIDATION, std::move(code), std::move(message), {}});
   };
-  if (checkpoint.schema_version != 3)
-    add("CHECKPOINT_INCOMPATIBLE", "checkpoint schema is not v3");
+  if (checkpoint.schema_version != 4)
+    add("CHECKPOINT_INCOMPATIBLE", "checkpoint schema is not v4");
   if (checkpoint.configuration_fingerprint.empty() || configuration_fingerprint_.empty() ||
       checkpoint.configuration_fingerprint != configuration_fingerprint_)
     add(policy_->fingerprintMismatchCode(), "configuration fingerprint mismatch");

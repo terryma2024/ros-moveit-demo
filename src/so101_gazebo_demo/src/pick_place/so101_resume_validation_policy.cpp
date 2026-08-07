@@ -34,7 +34,7 @@ double positionError(const Pose3d & expected, const Pose3d & current) noexcept
 
 double orientationError(const Pose3d & expected, const Pose3d & current) noexcept
 {
-  // Resume schema v3 owns this sign-invariant quaternion chord metric, not angular distance.
+  // Resume schema v4 owns this sign-invariant quaternion chord metric, not angular distance.
   const auto direct = std::hypot(std::hypot(expected.qx - current.qx, expected.qy - current.qy),
                                  std::hypot(expected.qz - current.qz, expected.qw - current.qw));
   const auto negated = std::hypot(std::hypot(expected.qx + current.qx, expected.qy + current.qy),
@@ -87,7 +87,8 @@ SO101ResumeValidationPolicy::validateBoundary(const pick_place_common::Checkpoin
                          checkpoint.next_state == State::WAIT_GRASP_STABLE ||
                          checkpoint.next_state == State::WAIT_MICRO_LIFT_STABLE);
   if (!checkpoint.resumable) {
-    addFailure(result, "CHECKPOINT_INCOMPATIBLE", "Resume requires a resumable checkpoint");
+    addFailure(result, "POST_RELEASE_EPOCH_NON_RESUMABLE",
+               "Post-release checkpoints cannot reuse release-epoch evidence");
   }
   const bool has_failed_state = checkpoint.failed_state.has_value();
   const bool has_original_failure = checkpoint.original_failure.has_value();

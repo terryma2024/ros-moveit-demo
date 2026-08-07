@@ -49,8 +49,8 @@ after_bytes = after_path.read_bytes()
 if before_bytes != after_bytes:
     fail('checkpoint bytes changed during plan-only resume')
 checkpoint = json.loads(before_bytes)
-if checkpoint.get('schema_version') != 3:
-    fail('checkpoint schema_version is not 3')
+if checkpoint.get('schema_version') != 4:
+    fail('checkpoint schema_version is not 4')
 if checkpoint.get('source_mode') != 'execute':
     fail('plan-only target-entry checkpoint source_mode is not execute')
 if checkpoint.get('phase') != expected_phase:

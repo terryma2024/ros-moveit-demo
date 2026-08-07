@@ -16,6 +16,35 @@ namespace
 constexpr auto kStationaryTimeout = std::chrono::seconds(2);
 constexpr auto kStationaryPollInterval = std::chrono::milliseconds(25);
 
+std::int64_t timestampNanoseconds(std::chrono::steady_clock::time_point value)
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(value.time_since_epoch()).count();
+}
+
+bool usesPostReleaseEpoch(const WorkflowDefinition & workflow)
+{
+  return workflow.action_states.count(State::WAIT_RELEASE_SETTLE) != 0U &&
+         workflow.action_states.count(State::VALIDATE_FINAL_PLACEMENT) != 0U;
+}
+
+bool checkpointIsInsidePostReleaseEpoch(const WorkflowDefinition & workflow, State completed)
+{
+  if (!usesPostReleaseEpoch(workflow)) {
+    return false;
+  }
+  return completed == State::OPEN_GRIPPER || completed == State::WAIT_RELEASE_SETTLE ||
+         completed == State::VALIDATE_FINAL_PLACEMENT;
+}
+
+bool failureIsInsidePostReleaseEpoch(const WorkflowDefinition & workflow, State failed)
+{
+  if (!usesPostReleaseEpoch(workflow)) {
+    return false;
+  }
+  return failed == State::OPEN_GRIPPER || failed == State::WAIT_RELEASE_SETTLE ||
+         failed == State::VALIDATE_FINAL_PLACEMENT || failed == State::SYNC_WORLD_OBJECT;
+}
+
 const IRunnerBehaviorPolicy & defaultRunnerBehaviorPolicy()
 {
   static const DefaultRunnerBehaviorPolicy policy;
@@ -37,6 +66,12 @@ WorldSnapshot snapshotFromExpected(const ExpectedWorldState & expected,
   snapshot.gazebo_task_object_pose_world = expected.gazebo_task_object_pose_world;
   snapshot.gazebo_task_object_attached = expected.gazebo_task_object_attached;
   snapshot.gazebo_task_object_stationary = expected.gazebo_task_object_stationary;
+  snapshot.gazebo_pose_sequence = expected.gazebo_pose_sequence;
+  snapshot.gazebo_task_object_intended_support_contact =
+    expected.gazebo_task_object_intended_support_contact;
+  snapshot.gazebo_task_object_support_collision_names = {
+    expected.gazebo_task_object_support_collision_names.begin(),
+    expected.gazebo_task_object_support_collision_names.end()};
   snapshot.simulation_session_id = simulation_session_id;
   return snapshot;
 }
@@ -51,6 +86,21 @@ void setExpectedWorldState(Checkpoint & checkpoint, const WorldSnapshot & snapsh
   checkpoint.expected.gazebo_task_object_pose_world = snapshot.gazebo_task_object_pose_world;
   checkpoint.expected.gazebo_task_object_attached = snapshot.gazebo_task_object_attached;
   checkpoint.expected.gazebo_task_object_stationary = snapshot.gazebo_task_object_stationary;
+  checkpoint.expected.gazebo_pose_sequence = snapshot.gazebo_pose_sequence;
+  checkpoint.expected.observation_timestamp_ns = timestampNanoseconds(snapshot.observed_at);
+  if (snapshot.gazebo_pose_observed_at) {
+    checkpoint.expected.gazebo_pose_timestamp_ns =
+      timestampNanoseconds(*snapshot.gazebo_pose_observed_at);
+  }
+  checkpoint.expected.gazebo_task_object_intended_support_contact =
+    snapshot.gazebo_task_object_intended_support_contact;
+  checkpoint.expected.gazebo_task_object_support_collision_names.assign(
+    snapshot.gazebo_task_object_support_collision_names.begin(),
+    snapshot.gazebo_task_object_support_collision_names.end());
+  if (snapshot.gazebo_support_contact_observed_at) {
+    checkpoint.expected.gazebo_support_contact_timestamp_ns =
+      timestampNanoseconds(*snapshot.gazebo_support_contact_observed_at);
+  }
   for (const auto & [object_id, pose] : snapshot.moveit_world_object_poses) {
     static_cast<void>(pose);
     checkpoint.expected.required_world_objects.push_back(object_id);
@@ -106,7 +156,8 @@ bool StateMachineRunner::isForceContinueState(State state) const noexcept
   return workflow_.force_continue_states.count(state) != 0;
 }
 
-bool StateMachineRunner::isForceContinuableFailure(State state, const Failure & failure) const noexcept
+bool StateMachineRunner::isForceContinuableFailure(State state,
+                                                   const Failure & failure) const noexcept
 {
   return failure.category == FailureCategory::POSTCONDITION &&
          isForceContinueState(resolve(state, ActionStatus::FAILED));
@@ -202,8 +253,7 @@ RunResult StateMachineRunner::run(const RunRequest & request) const
     case RunMode::EXECUTE:
       return runExecuteWorkflow(resolve(workflow_.initial_state, ActionStatus::SUCCEEDED), request,
                                 std::nullopt, 1, 1, CheckpointPhase::FORWARD, std::nullopt,
-                                std::nullopt,
-                                behavior_policy_.includeIdleInTrace());
+                                std::nullopt, behavior_policy_.includeIdleInTrace());
   }
   return error(State::IDLE, {FailureCategory::INTERNAL, "UNKNOWN_MODE", "Unknown run mode", {}});
 }
@@ -415,7 +465,7 @@ RunResult StateMachineRunner::runExecuteWorkflow(
     }
     trace.push_back(*step.next_state);
     if (step.status == RunStatus::CHECKPOINT_COMPLETE &&
-        (request.stop_after == state || request.single_step)) {
+        (step.failure || request.stop_after == state || request.single_step)) {
       auto stopped = step;
       stopped.transition_count = transition_count;
       stopped.state_trace = std::move(trace);
@@ -589,9 +639,9 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   }
   auto after = observer_->observe();
   std::size_t post_observation_attempt = 1;
-  while (!after.snapshot && after.failure &&
-         behavior_policy_.retryTransientObservation(state, *after.failure,
-                                                    post_observation_attempt++)) {
+  while (
+    !after.snapshot && after.failure &&
+    behavior_policy_.retryTransientObservation(state, *after.failure, post_observation_attempt++)) {
     after = observer_->observe();
   }
   if (!after.snapshot) {
@@ -638,6 +688,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
   checkpoint.failed_state = failed_state;
   checkpoint.original_failure = original_failure;
   checkpoint.next_state = next_state;
+  checkpoint.resumable = !checkpointIsInsidePostReleaseEpoch(workflow_, state);
   setExpectedWorldState(checkpoint, *after.snapshot);
   checkpoint.simulation_session_id = resume_validator_ ? resume_validator_->simulationSessionId()
                                                        : after.snapshot->simulation_session_id;
@@ -687,13 +738,19 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
       resolve(checkpoint.last_completed_state, ActionStatus::SUCCEEDED) != checkpoint.next_state));
   const bool invalid_recovery_context = checkpoint.phase == CheckpointPhase::RECOVERY &&
                                         (!checkpoint.failed_state || !checkpoint.original_failure);
-  if (checkpoint.schema_version != 3 || checkpoint.source_mode != RunMode::EXECUTE ||
-      !checkpoint.resumable || invalid_forward_transition || invalid_recovery_context) {
+  if (!checkpoint.resumable) {
+    return error(State::IDLE, {FailureCategory::RESUME_VALIDATION,
+                               "POST_RELEASE_EPOCH_NON_RESUMABLE",
+                               "Post-release checkpoints cannot reuse release-epoch evidence",
+                               {}});
+  }
+  if (checkpoint.schema_version != 4 || checkpoint.source_mode != RunMode::EXECUTE ||
+      invalid_forward_transition || invalid_recovery_context) {
     return error(State::IDLE,
                  {FailureCategory::RESUME_VALIDATION,
                   "CHECKPOINT_INCOMPATIBLE",
                   "Checkpoint does not describe a valid successful workflow transition",
-                 {}});
+                  {}});
   }
   if (request.force_continue && !validation_pause) {
     return error(checkpoint.next_state,
@@ -802,7 +859,7 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
     const auto selected = *route.next_state;
     if (recovery_policy_->canSkipRecoveryAction(*checkpoint.failed_state,
                                                 *checkpoint.original_failure, selected, snapshot)) {
-      return {RunStatus::ERROR, State::ERROR, std::nullopt, *checkpoint.original_failure, 0,
+      return {RunStatus::ERROR,        State::ERROR, std::nullopt, *checkpoint.original_failure, 0,
               {selected, State::ERROR}};
     }
     return runExecuteWorkflow(selected, request, snapshot, checkpoint.sequence + 1, 0,
@@ -817,12 +874,10 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
             0,
             {checkpoint.next_state}};
   }
-  const TransitionKey resumed_transition = validation_pause
-                                            ? TransitionKey{checkpoint.next_state,
-                                                            resolve(checkpoint.next_state,
-                                                                    ActionStatus::SUCCEEDED)}
-                                            : TransitionKey{checkpoint.last_completed_state,
-                                                            checkpoint.next_state};
+  const TransitionKey resumed_transition =
+    validation_pause ? TransitionKey{checkpoint.next_state,
+                                     resolve(checkpoint.next_state, ActionStatus::SUCCEEDED)}
+                     : TransitionKey{checkpoint.last_completed_state, checkpoint.next_state};
   if (!contracts_.hasContract(resumed_transition)) {
     return error(checkpoint.next_state, {FailureCategory::CONFIGURATION,
                                          "MISSING_TRANSITION_CONTRACT",
@@ -856,6 +911,32 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
   }
   original_failure.metrics["cancel_succeeded"] = 1.0;
   original_failure.metrics["arm_stationary_after_cancel"] = 1.0;
+  if (failureIsInsidePostReleaseEpoch(workflow_, state)) {
+    if (checkpoint_store_ == nullptr) {
+      return error(state, std::move(original_failure));
+    }
+    Checkpoint checkpoint;
+    checkpoint.run_id = "pick_place_state_machine";
+    checkpoint.sequence = checkpoint_sequence;
+    checkpoint.phase = CheckpointPhase::FORWARD;
+    checkpoint.last_completed_state = state;
+    checkpoint.failed_state = state;
+    checkpoint.original_failure = original_failure;
+    checkpoint.next_state = resolve(state, ActionStatus::FAILED);
+    checkpoint.resumable = false;
+    setExpectedWorldState(checkpoint, *stopped.snapshot);
+    checkpoint.configuration_fingerprint =
+      resume_validator_ ? resume_validator_->configurationFingerprint() : std::string{};
+    checkpoint.simulation_session_id = resume_validator_ ? resume_validator_->simulationSessionId()
+                                                         : stopped.snapshot->simulation_session_id;
+    if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
+      return {RunStatus::RUNNING, state, checkpoint.next_state,
+              withCheckpointPersistenceFailure(std::move(original_failure), *checkpoint_failure),
+              1};
+    }
+    return {RunStatus::CHECKPOINT_COMPLETE, state, checkpoint.next_state,
+            std::move(original_failure), 1};
+  }
   if (isForceContinuableFailure(state, original_failure) && checkpoint_store_ != nullptr &&
       resume_validator_ != nullptr) {
     const auto pause_state = resolve(state, ActionStatus::FAILED);
@@ -875,8 +956,8 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
               withCheckpointPersistenceFailure(std::move(original_failure), *checkpoint_failure),
               1};
     }
-    return {RunStatus::CHECKPOINT_COMPLETE, pause_state, pause_state,
-            std::move(original_failure), 1};
+    return {RunStatus::CHECKPOINT_COMPLETE, pause_state, pause_state, std::move(original_failure),
+            1};
   }
   if (!forwardAction(state) || resolve(state, ActionStatus::FAILED) == State::ERROR) {
     return error(state, std::move(original_failure));
@@ -947,7 +1028,7 @@ StateMachineRunner::stopAndObserveAfterFailure(IStateExecutor & executor) const
     latest_observation = observer_->observe();
     if (!latest_observation->snapshot) {
       if (latest_observation->failure && behavior_policy_.retryTransientObservation(
-            State::ERROR, *latest_observation->failure, 0)) {
+                                           State::ERROR, *latest_observation->failure, 0)) {
         continue;
       }
       return {std::nullopt, latest_observation->failure.value_or(

@@ -165,7 +165,7 @@ PY
 
 cat >"${temporary_directory}/checkpoint.json" <<'EOF'
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "sequence": 2,
   "source_mode": "execute",
   "phase": "FORWARD",

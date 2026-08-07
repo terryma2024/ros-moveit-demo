@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert a real forward boundary and observed fault fixture to recovery v3."""
+"""Convert a real forward boundary and observed fault fixture to recovery v4."""
 
 import json
 import math
@@ -34,8 +34,8 @@ checkpoint_path = Path(sys.argv[1])
 snapshot_path = Path(sys.argv[2])
 checkpoint = json.loads(checkpoint_path.read_text(encoding='utf-8'))
 snapshot = json.loads(snapshot_path.read_text(encoding='utf-8'))
-if checkpoint.get('schema_version') != 3:
-    fail('only checkpoint schema v3 can seed recovery')
+if checkpoint.get('schema_version') != 4:
+    fail('only checkpoint schema v4 can seed recovery')
 if checkpoint.get('phase') != 'FORWARD':
     fail('recovery fixture must start from a forward checkpoint')
 if not isinstance(snapshot.get('tcp_pose'), list):

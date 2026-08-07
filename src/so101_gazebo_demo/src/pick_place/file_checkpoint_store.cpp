@@ -138,9 +138,9 @@ template <typename Value> bool mapHasValidNames(const std::map<std::string, Valu
 
 std::optional<Failure> validateCheckpoint(const Checkpoint & checkpoint)
 {
-  if (checkpoint.schema_version != 3) {
+  if (checkpoint.schema_version != 4) {
     return checkpointFailure("CHECKPOINT_INCOMPATIBLE",
-                             "Only checkpoint schema version 3 is supported");
+                             "Only checkpoint schema version 4 is supported");
   }
   if (!runModeName(checkpoint.source_mode) || !checkpointPhaseName(checkpoint.phase) ||
       !stateName(checkpoint.last_completed_state) || !stateName(checkpoint.next_state) ||
@@ -161,16 +161,23 @@ std::optional<Failure> validateCheckpoint(const Checkpoint & checkpoint)
     checkpoint.next_state == State::VALIDATION_FAILED && checkpoint.original_failure &&
     checkpoint.original_failure->category == FailureCategory::POSTCONDITION &&
     checkpoint.original_failure->code.rfind("PHYSICAL_GRASP_", 0) == 0;
+  const bool is_post_release_failure_checkpoint =
+    checkpoint.phase == CheckpointPhase::FORWARD && !checkpoint.resumable &&
+    checkpoint.failed_state == checkpoint.last_completed_state && checkpoint.original_failure &&
+    (checkpoint.last_completed_state == State::OPEN_GRIPPER ||
+     checkpoint.last_completed_state == State::WAIT_RELEASE_SETTLE ||
+     checkpoint.last_completed_state == State::VALIDATE_FINAL_PLACEMENT ||
+     checkpoint.last_completed_state == State::SYNC_WORLD_OBJECT);
   if (checkpoint.source_mode == RunMode::DRY_RUN ||
       (checkpoint.phase == CheckpointPhase::RECOVERY &&
-       (checkpoint.source_mode != RunMode::EXECUTE || !checkpoint.resumable))) {
+       checkpoint.source_mode != RunMode::EXECUTE)) {
     return checkpointFailure("CHECKPOINT_INVALID_DATA",
-                             "Recovery checkpoints require execute mode and a resumable context");
+                             "Recovery checkpoints require execute mode");
   }
   if (has_failed_state != has_original_failure ||
       (checkpoint.phase == CheckpointPhase::RECOVERY && !has_failed_state) ||
       (checkpoint.phase == CheckpointPhase::FORWARD && has_failed_state &&
-       !is_physical_validation_checkpoint)) {
+       !is_physical_validation_checkpoint && !is_post_release_failure_checkpoint)) {
     return checkpointFailure("CHECKPOINT_INVALID_DATA",
                              "Checkpoint recovery context does not match its phase");
   }
@@ -274,6 +281,25 @@ Json checkpointToJson(const Checkpoint & checkpoint)
       {"gazebo_task_object_stationary", checkpoint.expected.gazebo_task_object_stationary
                                           ? Json(*checkpoint.expected.gazebo_task_object_stationary)
                                           : Json(nullptr)},
+      {"gazebo_pose_sequence", checkpoint.expected.gazebo_pose_sequence
+                                 ? Json(*checkpoint.expected.gazebo_pose_sequence)
+                                 : Json(nullptr)},
+      {"observation_timestamp_ns", checkpoint.expected.observation_timestamp_ns
+                                     ? Json(*checkpoint.expected.observation_timestamp_ns)
+                                     : Json(nullptr)},
+      {"gazebo_pose_timestamp_ns", checkpoint.expected.gazebo_pose_timestamp_ns
+                                     ? Json(*checkpoint.expected.gazebo_pose_timestamp_ns)
+                                     : Json(nullptr)},
+      {"gazebo_task_object_intended_support_contact",
+       checkpoint.expected.gazebo_task_object_intended_support_contact
+         ? Json(*checkpoint.expected.gazebo_task_object_intended_support_contact)
+         : Json(nullptr)},
+      {"gazebo_task_object_support_collision_names",
+       checkpoint.expected.gazebo_task_object_support_collision_names},
+      {"gazebo_support_contact_timestamp_ns",
+       checkpoint.expected.gazebo_support_contact_timestamp_ns
+         ? Json(*checkpoint.expected.gazebo_support_contact_timestamp_ns)
+         : Json(nullptr)},
       {"required_world_objects", checkpoint.expected.required_world_objects}}},
     {"policy_bundle_sha256", checkpoint.configuration_fingerprint},
     {"simulation_session_id", checkpoint.simulation_session_id},
@@ -330,6 +356,22 @@ bool isOptionalBool(const Json & json)
   return json.is_null() || json.is_boolean();
 }
 
+bool isOptionalUnsigned(const Json & json)
+{
+  return json.is_null() || json.is_number_unsigned();
+}
+
+bool isOptionalInteger(const Json & json)
+{
+  return json.is_null() || json.is_number_integer();
+}
+
+bool isStringArray(const Json & json)
+{
+  return json.is_array() && std::all_of(json.begin(), json.end(),
+                                        [](const auto & value) { return value.is_string(); });
+}
+
 bool isRequiredObjectArray(const Json & json)
 {
   if (!json.is_array()) {
@@ -371,16 +413,16 @@ std::optional<Failure> validateJsonShape(const Json & json)
     return checkpointFailure("CHECKPOINT_PARSE_FAILED",
                              "Checkpoint root or schema_version has the wrong type");
   }
-  if (json.at("schema_version").get<std::uint32_t>() != 3) {
+  if (json.at("schema_version").get<std::uint32_t>() != 4) {
     return checkpointFailure("CHECKPOINT_INCOMPATIBLE",
-                             "Only checkpoint schema version 3 is supported");
+                             "Only checkpoint schema version 4 is supported");
   }
   if (!hasExactKeys(json,
                     {"schema_version", "run_id", "sequence", "source_mode", "phase",
                      "last_completed_state", "failed_state", "original_failure", "next_state",
                      "expected", "policy_bundle_sha256", "simulation_session_id", "resumable"})) {
     return checkpointFailure("CHECKPOINT_PARSE_FAILED",
-                             "Checkpoint root keys do not match schema v3");
+                             "Checkpoint root keys do not match schema v4");
   }
   if (!json.at("run_id").is_string() || !json.at("sequence").is_number_unsigned() ||
       !json.at("source_mode").is_string() || !json.at("phase").is_string() ||
@@ -396,7 +438,11 @@ std::optional<Failure> validateJsonShape(const Json & json)
   if (!hasExactKeys(expected, {"tcp_pose_world", "gripper_open", "joint_positions",
                                "moveit_world_object_poses", "moveit_task_object_attached",
                                "gazebo_task_object_pose_world", "gazebo_task_object_attached",
-                               "gazebo_task_object_stationary", "required_world_objects"}) ||
+                               "gazebo_task_object_stationary", "gazebo_pose_sequence",
+                               "observation_timestamp_ns", "gazebo_pose_timestamp_ns",
+                               "gazebo_task_object_intended_support_contact",
+                               "gazebo_task_object_support_collision_names",
+                               "gazebo_support_contact_timestamp_ns", "required_world_objects"}) ||
       !isStrictPose(expected.at("tcp_pose_world")) || !expected.at("gripper_open").is_boolean() ||
       !isFiniteNumberMap(expected.at("joint_positions")) ||
       !isPoseMap(expected.at("moveit_world_object_poses")) ||
@@ -405,9 +451,15 @@ std::optional<Failure> validateJsonShape(const Json & json)
         isStrictPose(expected.at("gazebo_task_object_pose_world"))) ||
       !isOptionalBool(expected.at("gazebo_task_object_attached")) ||
       !isOptionalBool(expected.at("gazebo_task_object_stationary")) ||
+      !isOptionalUnsigned(expected.at("gazebo_pose_sequence")) ||
+      !isOptionalInteger(expected.at("observation_timestamp_ns")) ||
+      !isOptionalInteger(expected.at("gazebo_pose_timestamp_ns")) ||
+      !isOptionalBool(expected.at("gazebo_task_object_intended_support_contact")) ||
+      !isStringArray(expected.at("gazebo_task_object_support_collision_names")) ||
+      !isOptionalInteger(expected.at("gazebo_support_contact_timestamp_ns")) ||
       !isRequiredObjectArray(expected.at("required_world_objects"))) {
     return checkpointFailure("CHECKPOINT_PARSE_FAILED",
-                             "Checkpoint world expectation does not match schema v3");
+                             "Checkpoint world expectation does not match schema v4");
   }
   if (!json.at("original_failure").is_null()) {
     const auto & failure = json.at("original_failure");
@@ -415,7 +467,7 @@ std::optional<Failure> validateJsonShape(const Json & json)
         !failure.at("category").is_string() || !failure.at("code").is_string() ||
         !failure.at("message").is_string() || !isFiniteNumberMap(failure.at("metrics"))) {
       return checkpointFailure("CHECKPOINT_PARSE_FAILED",
-                               "Checkpoint failure context does not match schema v3");
+                               "Checkpoint failure context does not match schema v4");
     }
   }
   return std::nullopt;
@@ -484,6 +536,28 @@ CheckpointLoadResult checkpointFromJson(const Json & json)
   if (!expected.at("gazebo_task_object_stationary").is_null()) {
     checkpoint.expected.gazebo_task_object_stationary =
       expected.at("gazebo_task_object_stationary").get<bool>();
+  }
+  if (!expected.at("gazebo_pose_sequence").is_null()) {
+    checkpoint.expected.gazebo_pose_sequence =
+      expected.at("gazebo_pose_sequence").get<std::uint64_t>();
+  }
+  if (!expected.at("observation_timestamp_ns").is_null()) {
+    checkpoint.expected.observation_timestamp_ns =
+      expected.at("observation_timestamp_ns").get<std::int64_t>();
+  }
+  if (!expected.at("gazebo_pose_timestamp_ns").is_null()) {
+    checkpoint.expected.gazebo_pose_timestamp_ns =
+      expected.at("gazebo_pose_timestamp_ns").get<std::int64_t>();
+  }
+  if (!expected.at("gazebo_task_object_intended_support_contact").is_null()) {
+    checkpoint.expected.gazebo_task_object_intended_support_contact =
+      expected.at("gazebo_task_object_intended_support_contact").get<bool>();
+  }
+  checkpoint.expected.gazebo_task_object_support_collision_names =
+    expected.at("gazebo_task_object_support_collision_names").get<std::vector<std::string>>();
+  if (!expected.at("gazebo_support_contact_timestamp_ns").is_null()) {
+    checkpoint.expected.gazebo_support_contact_timestamp_ns =
+      expected.at("gazebo_support_contact_timestamp_ns").get<std::int64_t>();
   }
   checkpoint.expected.required_world_objects =
     expected.at("required_world_objects").get<std::vector<std::string>>();
