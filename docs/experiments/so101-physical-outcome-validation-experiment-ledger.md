@@ -169,3 +169,57 @@ open_risks:
   - production policy 仍全为 CALIBRATION_REQUIRED
 next_command: 以 ROS_DOMAIN_ID=119 和唯一 GZ_PARTITION 启动 owned headless calibration stack
 ```
+
+## DBG-PHYSICAL-001：Gazebo stable support contact identity/depth
+
+```yaml
+experiment_id: DBG-PHYSICAL-001
+status: VALID
+prior_experiment: CAL-PHYSICAL-001
+hypothesis: 当前 Bullet Featherstone compound-link contact routing 无法同时提供独立 bottom identity 与稳定 non-negative depth
+single_variable_matrix:
+  - production world + Bullet Featherstone
+  - production world + DART
+  - production world + classic Bullet
+  - temporary separate bottom link + Bullet Featherstone
+  - temporary compound-owner sensor alias + Bullet Featherstone
+lifecycle: FULL_RESTART_PER_VARIANT
+provenance:
+  source_commit: 5d7d72a
+  source_world: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/src/so101_gazebo_demo/worlds/so101_pick_place.sdf
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
+  evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI
+observed:
+  - Bullet Featherstone production world 把真实 table support 路由为 plastic_cup::body::wall_near；bottom topic 无消息
+  - 静止 Featherstone owner contact 的 1000 messages / 4080 depths 全为负值，范围约 -3.65127e-7 至 -3.57628e-7 m
+  - 临时独立 bottom link 恢复 plastic_cup::support_probe::bottom identity，但静止 depth 仍全部为微小负值；drop transient 同时含正负 depth
+  - DART production cup 提供 bottom↔table 且正 depth，但完整机器人 spawn 报多项 mesh/VHACD collision couldn't be created，不能保留碰撞安全层
+  - classic Bullet 的 cup contact sensors 在 bounded probe 中均无消息
+  - compound-owner alias 不改变任何物理属性，但其静止 depth 同样全负，不能满足批准的 negative-depth rejection
+  - 所有模型/launch 变体只存在于 /tmp；source tree 未修改
+conclusion: 当前平台上，原批准条件“稳定 bottom sensor identity + reject every negative depth + 不改 engine/geometry/physics”不可同时满足
+decision: REQUIRE_NARROW_DESIGN_DIRECTION
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration/drop-wall.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/contact-ab-dart/bottom.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/contact-separate-link-bottom-40.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/contact-support-root-drop-500.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/contact-owner-alias-bottom-30.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/contact-featherstone-stable-1000.txt
+required_direction: 是否允许把 Bullet compound owner 的真实 table contact 作为 support evidence，并以配置化、live-calibrated 的数值噪声下限处理微小负 depth，同时仍拒绝缺失、non-finite、超出噪声界的负 depth
+```
+
+## CP-PHYSICAL-003
+
+```yaml
+checkpoint_id: CP-PHYSICAL-003
+last_valid_experiment: DBG-PHYSICAL-001
+confirmed_conclusions:
+  - DART/classic Bullet/独立 link 均不能在现有批准边界内替代 production Featherstone
+  - production threshold 仍全部为 CALIBRATION_REQUIRED；未从无效数据派生值
+  - 既有 collision/penetration ceiling、engine、质量、摩擦、几何、controller 和 motion target 均未修改
+owned_processes: NONE
+preserved_processes: 其他 worktree 的 Gazebo 与 clang-tidy 未触碰
+open_risk: support evidence contract 在当前 backend 下不可满足
+next_command: 获得窄化语义授权后，先写 stable Featherstone support regression RED，再做最小 GREEN
+```
