@@ -13,6 +13,10 @@ REQUIRED = (
     "urdf/so101_gazebo.xacro", "urdf/so101_ros2_control.xacro",
     "worlds/so101_pick_place.sdf", "rviz/display.rviz",
     "meshes/so101/base_so101_v2.stl",
+    "meshes/so101/generated/fixed/fingertip_pad.stl",
+    "meshes/so101/generated/fixed/fingertip_pad_collision_006.stl",
+    "meshes/so101/generated/moving/fingertip_pad.stl",
+    "meshes/so101/generated/moving/fingertip_pad_collision_005.stl",
 )
 
 
