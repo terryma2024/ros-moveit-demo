@@ -192,6 +192,11 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_source_manifest test/test_source_manifest.py)
   ament_add_pytest_test(test_panda_launch_contract test/test_panda_launch_contract.py)
+  ament_add_pytest_test(test_readiness_probe test/test_readiness_probe.py)
+  ament_add_pytest_test(
+    test_reset_world_discovery
+    test/test_reset_world_discovery.py
+  )
 
   ament_add_gtest(
     test_workflow_characterization

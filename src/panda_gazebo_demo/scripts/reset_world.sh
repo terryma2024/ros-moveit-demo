@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# macOS System Integrity Protection strips DYLD_* variables while entering the
+# /usr/bin/env shebang. Re-source the selected ROS overlay inside this process
+# so rclpy and ros2 can find their dylibs again.
+if [[ -n "${PANDA_RUNTIME_SETUP:-}" ]]; then
+  if [[ ! -r "${PANDA_RUNTIME_SETUP}" ]]; then
+    printf 'Runtime setup file is not readable: %s\n' \
+      "${PANDA_RUNTIME_SETUP}" >&2
+    exit 1
+  fi
+  set +u
+  source "${PANDA_RUNTIME_SETUP}"
+  set -u
+fi
+
 WORLD_NAME="${WORLD_NAME:-pick_place_world}"
 MODEL_NAME="${MODEL_NAME:-coke}"
 TIMEOUT_MS="${TIMEOUT_MS:-3000}"
@@ -17,12 +31,14 @@ ATTACHMENT_OUTPUT_TOPIC="${ATTACHMENT_OUTPUT_TOPIC:-/panda/coke_attached}"
 ATTACHMENT_OBSERVATION_TIMEOUT_SECONDS="${ATTACHMENT_OBSERVATION_TIMEOUT_SECONDS:-3}"
 MOVEIT_RESET_PACKAGE="${MOVEIT_RESET_PACKAGE:-panda_gazebo_demo}"
 MOVEIT_RESET_EXECUTABLE="${MOVEIT_RESET_EXECUTABLE:-reset_moveit_world}"
-MOVEIT_RESET_TIMEOUT_SECONDS="${MOVEIT_RESET_TIMEOUT_SECONDS:-10}"
+MOVEIT_RESET_TIMEOUT_SECONDS="${MOVEIT_RESET_TIMEOUT_SECONDS:-120}"
 EXPECTED_COKE_DETACHED="${EXPECTED_COKE_DETACHED:-false}"
 GAZEBO_RESET_POSITION_TOLERANCE="${GAZEBO_RESET_POSITION_TOLERANCE:-0.002}"
 GAZEBO_RESET_ORIENTATION_TOLERANCE_RAD="${GAZEBO_RESET_ORIENTATION_TOLERANCE_RAD:-0.02}"
 GAZEBO_POSE_OBSERVATION_ATTEMPTS="${GAZEBO_POSE_OBSERVATION_ATTEMPTS:-30}"
 GAZEBO_POSE_POLL_INTERVAL_SECONDS="${GAZEBO_POSE_POLL_INTERVAL_SECONDS:-0.1}"
+GAZEBO_SERVICE_DISCOVERY_TIMEOUT_SECONDS="${GAZEBO_SERVICE_DISCOVERY_TIMEOUT_SECONDS:-30}"
+GAZEBO_SERVICE_DISCOVERY_POLL_INTERVAL_SECONDS="${GAZEBO_SERVICE_DISCOVERY_POLL_INTERVAL_SECONDS:-0.25}"
 
 CONTROL_SERVICE="/world/${WORLD_NAME}/control"
 SET_POSE_SERVICE="/world/${WORLD_NAME}/set_pose"
@@ -253,6 +269,20 @@ require_canonical_gazebo_pose() {
   return 1
 }
 
+wait_for_gazebo_service() {
+  local service="$1"
+  local deadline=$((SECONDS + GAZEBO_SERVICE_DISCOVERY_TIMEOUT_SECONDS))
+
+  while ((SECONDS <= deadline)); do
+    if gz service -l | grep -Fxq "${service}"; then
+      return 0
+    fi
+    sleep "${GAZEBO_SERVICE_DISCOVERY_POLL_INTERVAL_SECONDS}"
+  done
+
+  return 1
+}
+
 trap resume_world EXIT
 
 if ! command -v gz >/dev/null 2>&1; then
@@ -263,11 +293,11 @@ if ! command -v ros2 >/dev/null 2>&1; then
   printf 'ros2 command not found. Source the ROS environment first.\n' >&2
   exit 1
 fi
-if ! gz service -l | grep -Fxq "${CONTROL_SERVICE}"; then
+if ! wait_for_gazebo_service "${CONTROL_SERVICE}"; then
   printf 'Gazebo control service not found: %s\n' "${CONTROL_SERVICE}" >&2
   exit 1
 fi
-if ! gz service -l | grep -Fxq "${SET_POSE_SERVICE}"; then
+if ! wait_for_gazebo_service "${SET_POSE_SERVICE}"; then
   printf 'Gazebo set_pose service not found: %s\n' "${SET_POSE_SERVICE}" >&2
   exit 1
 fi

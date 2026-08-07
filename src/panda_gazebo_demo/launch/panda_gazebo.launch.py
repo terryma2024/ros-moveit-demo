@@ -1,8 +1,13 @@
+import os
+from pathlib import Path
+
+from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
     RegisterEventHandler,
+    SetEnvironmentVariable,
 )
 from launch.conditions import IfCondition, UnlessCondition
 from launch.event_handlers import OnProcessExit
@@ -14,10 +19,28 @@ from launch_ros.substitutions import FindPackageShare
 from moveit_configs_utils import MoveItConfigsBuilder
 
 
+def gz_ros2_control_system_plugin_path(existing_path):
+    plugin_directory = Path(get_package_prefix('gz_ros2_control')) / 'lib'
+    paths = [str(plugin_directory)]
+    if existing_path:
+        paths.append(existing_path)
+    return os.pathsep.join(paths)
+
+
 def generate_launch_description():
     package_share = FindPackageShare('panda_gazebo_demo')
     headless = LaunchConfiguration('headless')
     run_state_machine = LaunchConfiguration('run_state_machine')
+    controller_manager_timeout = LaunchConfiguration('controller_manager_timeout')
+    controller_service_call_timeout = LaunchConfiguration(
+        'controller_service_call_timeout'
+    )
+    gazebo_system_plugin_path = SetEnvironmentVariable(
+        name='GZ_SIM_SYSTEM_PLUGIN_PATH',
+        value=gz_ros2_control_system_plugin_path(
+            os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH')
+        ),
+    )
 
     runtime_defaults = {
         'velocity_scaling': '0.10',
@@ -60,6 +83,10 @@ def generate_launch_description():
     runtime_arguments.extend(
         [
             DeclareLaunchArgument('run_state_machine', default_value='false'),
+            DeclareLaunchArgument('controller_manager_timeout', default_value='240'),
+            DeclareLaunchArgument(
+                'controller_service_call_timeout', default_value='60'
+            ),
             DeclareLaunchArgument('mode', default_value='execute'),
             DeclareLaunchArgument('resume', default_value='false'),
             DeclareLaunchArgument('stop_after', default_value=''),
@@ -108,15 +135,23 @@ def generate_launch_description():
         condition=IfCondition(headless),
     )
 
-    gazebo_with_gui = IncludeLaunchDescription(
+    # Gazebo Sim on macOS cannot run server and GUI in one process. Launch the
+    # server and client separately; GZ_PARTITION connects them to the same world.
+    gazebo_gui_server = IncludeLaunchDescription(
         gazebo_launch_source,
         launch_arguments={
             'gz_args': [
-                '-r -v 4 ',
+                '-s -r -v 4 ',
                 '--physics-engine gz-physics-bullet-featherstone-plugin ',
                 world_file,
             ],
         }.items(),
+        condition=UnlessCondition(headless),
+    )
+
+    gazebo_gui_client = IncludeLaunchDescription(
+        gazebo_launch_source,
+        launch_arguments={'gz_args': '-g -v 4'}.items(),
         condition=UnlessCondition(headless),
     )
 
@@ -141,35 +176,20 @@ def generate_launch_description():
         output='screen',
     )
 
-    joint_state_broadcaster = Node(
+    controllers_spawner = Node(
         package='controller_manager',
         executable='spawner',
         arguments=[
             'joint_state_broadcaster',
-            '--controller-manager-timeout',
-            '60',
-        ],
-        output='screen',
-    )
-
-    panda_arm_controller = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=[
             'panda_arm_controller',
-            '--controller-manager-timeout',
-            '60',
-        ],
-        output='screen',
-    )
-
-    panda_hand_controller = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=[
             'panda_hand_controller',
             '--controller-manager-timeout',
-            '60',
+            controller_manager_timeout,
+            '--service-call-timeout',
+            controller_service_call_timeout,
+            '--switch-timeout',
+            controller_service_call_timeout,
+            '--activate-as-group',
         ],
         output='screen',
     )
@@ -309,27 +329,15 @@ def generate_launch_description():
         ],
     )
 
-    spawn_to_joint_state = RegisterEventHandler(
+    spawn_to_controllers = RegisterEventHandler(
         OnProcessExit(
             target_action=spawn_panda,
-            on_exit=[joint_state_broadcaster],
+            on_exit=[controllers_spawner],
         )
     )
-    joint_state_to_arm = RegisterEventHandler(
+    controllers_to_moveit_world = RegisterEventHandler(
         OnProcessExit(
-            target_action=joint_state_broadcaster,
-            on_exit=[panda_arm_controller],
-        )
-    )
-    arm_to_hand = RegisterEventHandler(
-        OnProcessExit(
-            target_action=panda_arm_controller,
-            on_exit=[panda_hand_controller],
-        )
-    )
-    hand_to_moveit_world = RegisterEventHandler(
-        OnProcessExit(
-            target_action=panda_hand_controller,
+            target_action=controllers_spawner,
             on_exit=[moveit_world_setup_node],
         )
     )
@@ -342,6 +350,7 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            gazebo_system_plugin_path,
             DeclareLaunchArgument(
                 'headless',
                 default_value='false',
@@ -349,15 +358,14 @@ def generate_launch_description():
             ),
             *runtime_arguments,
             gazebo_headless,
-            gazebo_with_gui,
+            gazebo_gui_server,
+            gazebo_gui_client,
             clock_bridge,
             attachment_state_relay,
             robot_state_publisher,
             spawn_panda,
-            spawn_to_joint_state,
-            joint_state_to_arm,
-            arm_to_hand,
-            hand_to_moveit_world,
+            spawn_to_controllers,
+            controllers_to_moveit_world,
             moveit_world_to_state_machine,
             move_group_node,
             rviz_node,
