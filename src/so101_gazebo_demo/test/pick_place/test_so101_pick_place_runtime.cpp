@@ -1082,8 +1082,12 @@ TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)
     return world;
   };
   const auto before = carrying_world(0.0, true);
-  const auto axial_spin =
+  auto axial_spin =
     carrying_world(profile.task_object_orientation_drift_tolerance_rad + 0.003, true);
+  // Bullet may report a non-zero instantaneous q6 velocity while the closed
+  // gripper is holding the attached cup.  The carry boundary remains valid
+  // when q6 position, geometry, and both attachment facts are still in bounds.
+  axial_spin.joint_velocities[profile.gripper_joint] = -0.188;
   const auto tilted =
     carrying_world(profile.task_object_orientation_drift_tolerance_rad + 0.001, false);
 
