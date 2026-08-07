@@ -21,6 +21,20 @@ pp::WorkflowDefinition validPlanOnlyWorkflow()
 }
 }  // namespace
 
+TEST(WorkflowDefinition, NewPhysicalOutcomeStatesRoundTripWithoutGlobalWorkflowMembership)
+{
+  const auto workflow = validPlanOnlyWorkflow();
+  for (const auto state :
+       {pp::State::WAIT_RELEASE_SETTLE, pp::State::VALIDATE_FINAL_PLACEMENT}) {
+    const auto parsed = pp::stateFromString(pp::toString(state));
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(state, *parsed);
+    EXPECT_FALSE(workflow.transitions.count(state));
+    EXPECT_FALSE(workflow.action_states.count(state));
+    EXPECT_FALSE(workflow.forward_states.count(state));
+  }
+}
+
 TEST(WorkflowDefinition, RejectsMissingTransitionAndUnknownTarget)
 {
   pp::WorkflowDefinition missing;

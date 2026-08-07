@@ -42,6 +42,12 @@ TEST(PandaWorkflowCharacterization, ForwardAndRecoveryEdgesRemainStable)
             pp::TransitionTable::resolve(pp::State::DESCEND, pp::ActionStatus::FAILED));
   EXPECT_EQ(pp::State::RECOVER_LIFT_TO_SAFE_HEIGHT,
             pp::TransitionTable::resolve(pp::State::LIFT, pp::ActionStatus::FAILED));
+
+  const auto & workflow = pp::pandaWorkflowDefinition();
+  EXPECT_FALSE(workflow.transitions.count(pp::State::WAIT_RELEASE_SETTLE));
+  EXPECT_FALSE(workflow.transitions.count(pp::State::VALIDATE_FINAL_PLACEMENT));
+  EXPECT_FALSE(workflow.action_states.count(pp::State::WAIT_RELEASE_SETTLE));
+  EXPECT_FALSE(workflow.action_states.count(pp::State::VALIDATE_FINAL_PLACEMENT));
 }
 
 TEST(PandaWorkflowCharacterization, RequestDefaultsRemainStable)
