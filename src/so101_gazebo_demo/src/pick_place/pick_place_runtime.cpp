@@ -17,6 +17,7 @@
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_stabilizer.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_retry.hpp"
+#include "so101_gazebo_demo/pick_place/release_settle_executor.hpp"
 #include "so101_gazebo_demo/pick_place/so101_attachment_contracts.hpp"
 #include "so101_gazebo_demo/pick_place/support_pose.hpp"
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
@@ -527,60 +528,82 @@ private:
   std::shared_ptr<SO101PhysicalGraspStabilizer> stabilizer_;
 };
 
-class DetachAndWaitForStationary final : public IStateExecutor
+class RuntimeReleaseSettleAction final : public IStateExecutor
 {
 public:
-  DetachAndWaitForStationary(std::shared_ptr<IStateExecutor> detach,
-                             std::shared_ptr<IWorldObserver> observer) :
-      detach_(std::move(detach)), observer_(std::move(observer))
+  RuntimeReleaseSettleAction(IWorldObserver & observer, IFinalPlacementEvidenceStore & evidence,
+                             const PhysicalOutcomePolicyConfig & policy) :
+      delegate_(observer, FinalPlacementEvaluator(policy), evidence, policy, waiter_)
   {
   }
 
   ActionResult execute(const ExecutionContext & context) override
   {
-    auto detached = detach_->execute(context);
-    if (detached.status != ActionStatus::SUCCEEDED)
-      return detached;
-    constexpr int kRequiredConsecutive = 3;
-    constexpr int kMaxSamples = 40;
-    int consecutive = 0;
-    for (int sample = 0; sample < kMaxSamples; ++sample) {
-      const auto observed = observer_->observe();
-      if (!observed.snapshot) {
-        return {ActionStatus::FAILED, observed.failure.value_or(Failure{
-                                        FailureCategory::OBSERVATION,
-                                        "POST_DETACH_OBSERVATION_UNAVAILABLE",
-                                        "Gazebo detach settling requires a fresh world observation",
-                                        {}})};
-      }
-      const auto & snapshot = *observed.snapshot;
-      const bool stationary_detached =
-        snapshot.fresh && snapshot.arm_stationary && snapshot.gazebo_task_object_attached &&
-        !*snapshot.gazebo_task_object_attached && snapshot.gazebo_task_object_pose_world &&
-        snapshot.gazebo_task_object_stationary && *snapshot.gazebo_task_object_stationary;
-      consecutive = stationary_detached ? consecutive + 1 : 0;
-      if (consecutive >= kRequiredConsecutive) {
-        return {ActionStatus::SUCCEEDED, std::nullopt};
-      }
-      if (sample + 1 < kMaxSamples) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      }
-    }
-    return {ActionStatus::TIMED_OUT,
-            Failure{FailureCategory::POSTCONDITION,
-                    "GAZEBO_TASK_OBJECT_SETTLE_TIMEOUT",
-                    "Detached TaskObject did not become stationary for three consecutive samples",
-                    {}}};
+    return delegate_.execute(context);
   }
 
   ActionResult cancel() override
   {
-    return detach_->cancel();
+    return delegate_.cancel();
   }
 
 private:
-  std::shared_ptr<IStateExecutor> detach_;
-  std::shared_ptr<IWorldObserver> observer_;
+  ThreadSettleWaiter waiter_;
+  ReleaseSettleExecutor delegate_;
+};
+
+class FrozenFinalPlacementAction final : public IStateExecutor
+{
+public:
+  explicit FrozenFinalPlacementAction(const IFinalPlacementEvidenceStore & evidence) :
+      evidence_(evidence)
+  {
+  }
+
+  ActionResult execute(const ExecutionContext &) override
+  {
+    const auto frozen = evidence_.frozen();
+    if (!frozen || !frozen->evaluation.stable || frozen->evaluation.failure)
+      return {ActionStatus::FAILED,
+              frozen && frozen->evaluation.failure
+                ? frozen->evaluation.failure
+                : std::optional<Failure>{
+                    Failure{FailureCategory::OBSERVATION,
+                            "FINAL_PLACEMENT_EVIDENCE_NOT_FROZEN",
+                            "Final placement validation requires a stable frozen outcome",
+                            {}}}};
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+
+  ActionResult cancel() override
+  {
+    return {ActionStatus::SUCCEEDED, std::nullopt};
+  }
+
+private:
+  const IFinalPlacementEvidenceStore & evidence_;
+};
+
+class SuccessfulActionContract final : public TransitionContractRegistry::ITransitionContract
+{
+public:
+  [[nodiscard]] ValidationResult validatePrecondition(const WorldSnapshot &) const override
+  {
+    return {true, {}, {}};
+  }
+
+  [[nodiscard]] ValidationResult validate(const WorldSnapshot &, const WorldSnapshot &,
+                                          const ActionResult & action) const override
+  {
+    if (action.status == ActionStatus::SUCCEEDED)
+      return {true, {}, {}};
+    return {false,
+            {{FailureCategory::POSTCONDITION,
+              "POST_RELEASE_ACTION_DID_NOT_SUCCEED",
+              "Post-release action must succeed before advancing",
+              {}}},
+            {}};
+  }
 };
 
 class WorldZMicroLiftAction final : public IStateExecutor
@@ -712,8 +735,28 @@ void registerPhysicalGrasp(SO101PickPlaceRuntimeRegistries & runtime,
       {state, TransitionTable::resolve(state, ActionStatus::SUCCEEDED)},
       std::make_shared<PhysicalGraspContract>());
   }
-  runtime.contracts.registerContract({State::VALIDATION_FAILED, State::ATTACH_GAZEBO},
+  runtime.contracts.registerContract({State::VALIDATION_FAILED, State::ATTACH_MOVEIT},
                                      std::make_shared<PhysicalGraspContract>());
+}
+
+void registerFinalPlacement(SO101PickPlaceRuntimeRegistries & runtime,
+                            const SO101PickPlaceRuntimeDependencies & dependencies,
+                            const SO101PickPlaceRuntimeConfig & config)
+{
+  if (!dependencies.physical_observer || !dependencies.final_placement_evidence)
+    return;
+  runtime.actions.registerExecutor(
+    State::WAIT_RELEASE_SETTLE, std::make_shared<RuntimeReleaseSettleAction>(
+                                  *dependencies.physical_observer,
+                                  *dependencies.final_placement_evidence, config.physical_outcome));
+  runtime.actions.registerExecutor(
+    State::VALIDATE_FINAL_PLACEMENT,
+    std::make_shared<FrozenFinalPlacementAction>(*dependencies.final_placement_evidence));
+  const auto contract = std::make_shared<SuccessfulActionContract>();
+  runtime.contracts.registerContract({State::WAIT_RELEASE_SETTLE, State::VALIDATE_FINAL_PLACEMENT},
+                                     contract);
+  runtime.contracts.registerContract({State::VALIDATE_FINAL_PLACEMENT, State::SYNC_WORLD_OBJECT},
+                                     contract);
 }
 
 std::optional<Failure>
@@ -724,10 +767,6 @@ missingDependencyFailure(const SO101PickPlaceRuntimeDependencies & dependencies)
     missing.emplace_back("gripper");
   if (!dependencies.moveit_scene)
     missing.emplace_back("moveit_scene");
-  if (!dependencies.gazebo_attach)
-    missing.emplace_back("gazebo_attach");
-  if (!dependencies.gazebo_detach)
-    missing.emplace_back("gazebo_detach");
   if (!dependencies.recovery_gazebo_detach)
     missing.emplace_back("recovery_gazebo_detach");
   if (!dependencies.motion_policy)
@@ -740,6 +779,8 @@ missingDependencyFailure(const SO101PickPlaceRuntimeDependencies & dependencies)
     missing.emplace_back("physical_observer");
   if (!dependencies.physical_grasp_evidence)
     missing.emplace_back("physical_grasp_evidence");
+  if (!dependencies.final_placement_evidence)
+    missing.emplace_back("final_placement_evidence");
   if (missing.empty())
     return std::nullopt;
   std::ostringstream message;
@@ -929,13 +970,9 @@ makeSO101PickPlaceRuntimeRegistries(const SO101PickPlaceRuntimeDependencies & de
                                     const SO101PickPlaceRuntimeConfig & config)
 {
   SO101Task3RuntimeDependencies task3_dependencies{
-    dependencies.gripper,       dependencies.moveit_scene,           dependencies.gazebo_attach,
-    dependencies.gazebo_detach, dependencies.recovery_gazebo_detach, dependencies.gripper_observer};
+    dependencies.gripper, dependencies.moveit_scene, dependencies.recovery_gazebo_detach,
+    dependencies.gripper_observer, dependencies.final_placement_evidence};
   task3_dependencies.gripper_observer = dependencies.physical_observer;
-  if (task3_dependencies.gazebo_detach && dependencies.physical_observer) {
-    task3_dependencies.gazebo_detach = std::make_shared<DetachAndWaitForStationary>(
-      task3_dependencies.gazebo_detach, dependencies.physical_observer);
-  }
   const auto & task3_config = static_cast<const SO101Task3RuntimeConfig &>(config);
   auto task3 = makeSO101Task3Runtime(task3_dependencies, task3_config);
   SO101PickPlaceRuntimeRegistries runtime{
@@ -946,6 +983,7 @@ makeSO101PickPlaceRuntimeRegistries(const SO101PickPlaceRuntimeDependencies & de
     return runtime;
 
   registerPhysicalGrasp(runtime, dependencies, config);
+  registerFinalPlacement(runtime, dependencies, config);
 
   for (const auto state : kMotionStates) {
     const auto spec = dependencies.motion_policy->spec(state);

@@ -223,12 +223,6 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
         }
       }
 
-      auto gazebo_attach = std::make_shared<spp::GazeboAttachmentExecutor>(
-        spp::State::ATTACH_GAZEBO, true, profile.attach_topic, profile.detach_topic,
-        profile.attachment_event_topic, 3.0, 0.05, false);
-      auto gazebo_detach = std::make_shared<spp::GazeboAttachmentExecutor>(
-        spp::State::DETACH_GAZEBO, false, profile.attach_topic, profile.detach_topic,
-        profile.attachment_event_topic, 3.0, 0.05, false);
       auto recovery_gazebo_detach = std::make_shared<spp::GazeboAttachmentExecutor>(
         spp::State::RECOVER_DETACH_GAZEBO, false, profile.attach_topic, profile.detach_topic,
         profile.attachment_event_topic, 3.0, 0.05, true);
@@ -260,20 +254,21 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
           return 1;
         }
       }
+      auto final_evidence = std::make_shared<spp::InMemoryFinalPlacementEvidenceStore>();
       dependencies.gripper = gripper;
       dependencies.moveit_scene = scene;
-      dependencies.gazebo_attach = gazebo_attach;
-      dependencies.gazebo_detach = gazebo_detach;
       dependencies.recovery_gazebo_detach = recovery_gazebo_detach;
       dependencies.motion_policy = policy;
       dependencies.motion = motion;
       dependencies.micro_lift = boundary;
       dependencies.physical_observer = observer;
       dependencies.physical_grasp_evidence = physical_evidence;
+      dependencies.final_placement_evidence = final_evidence;
       spp::SO101PickPlaceRuntimeConfig runtime_config;
       runtime_config.profile = profile;
       runtime_config.object = bundle.object;
       runtime_config.grasp_contact = bundle.validation.grasp_contact;
+      runtime_config.physical_outcome = bundle.validation.physical_outcome;
       const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies, runtime_config);
       if (!runtime.execution_safe) {
         const auto failure = runtime.configuration_failure.value_or(
@@ -355,6 +350,14 @@ int main(int argc, char ** argv)
     const auto result = runner.run(options->request);
     print(result);
     return result.status == spp::RunStatus::ERROR ? 1 : 0;
+  }
+  if (!loaded.bundle->validation.physical_outcome.calibration_complete) {
+    printPreRunnerFailure(
+      {spp::FailureCategory::CONFIGURATION,
+       "PHYSICAL_OUTCOME_CALIBRATION_REQUIRED",
+       "PLAN_ONLY and EXECUTE require calibrated physical-outcome policy values",
+       {}});
+    return 2;
   }
   return runProduction(*options, *loaded.bundle, diagnostics.sink, argc, argv);
 }
