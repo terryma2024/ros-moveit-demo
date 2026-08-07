@@ -668,6 +668,125 @@
       "destination_sha256": "d497b1d0006dac80466d79a9ba5c147d21be7cd0fe191020f54f88f12efd9139"
     },
     {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/fingertip_pad.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "0c707b10ba8fe5918431a3d42a764266440ac8fbe37a8e1e66496f288c4d3781"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/fingertip_pad_collision_000.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "4ed2aaf97c3e3d0b81f09fd455a3d1fd15943bc9fc7f1c9b036055af3c8ac94f"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/fingertip_pad_collision_001.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "da44c27835986cd33523119dfcb2ba19746fb03e0c5e32a6676f64c912e28e83"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/fingertip_pad_collision_002.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "6088659394460f8df1823f288a472cafd255e0647079b5d7a5097020fa3f9000"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/fingertip_pad_collision_003.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "f7178f814128d3ace3e07ac187e3d9759e61a916f60d7052af01659c8fb877ae"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/fingertip_pad_collision_004.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "12fd4b9ba58aac4a5b9dc5b33ca7eb65ee3a73a3c0c7d3f34ac4ef800453fa3a"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/fingertip_pad_collision_005.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "237dc9e5b434bd27d612c8931c2798aac30fc4032504df30fed5f983e10e8f90"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/fingertip_pad_collision_006.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "4f0e8c155d53471d0054a49ef6d8e284df3f19106fb290742870b9404f542b95"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/fixed/manifest.yaml",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "4f2d5966f0ee83fc7ccebed45292a0a9b59c476651d999fabed8837117504bc4"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/moving/fingertip_pad.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "f33f0818f86177fbe2e12faf10c08b6eb48d8f39cd6b66c2e900268f0161995a"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/moving/fingertip_pad_collision_000.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "e6150b6802d3fca81fa00afc914c507b447e26ffdcb3d3576eb9c0cc4dc266f8"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/moving/fingertip_pad_collision_001.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "6f1f62636a5797541ec9ea9cfee93d5403ceeaba7be4d465a875a0c409435ffa"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/moving/fingertip_pad_collision_002.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "f214afa2469ccd71f915633fe18c8ef5bbd218d50da5e83d72f759552413bcf8"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/moving/fingertip_pad_collision_003.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "a62d1b03a6dfe1032071aefdaab6d7a44c4c4c6f6bd1ab0d69070562b81ddd36"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/moving/fingertip_pad_collision_004.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "715d97a2c93b97ed3e5136616c7a0a13978500910c3ca62c77f3c2e18654be08"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/moving/fingertip_pad_collision_005.stl",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "81ec88739dfce54344f6bff1face0c4f466075711003c1637a460fb9a1a7027f"
+    },
+    {
+      "source": "src/so101_gazebo_demo/scripts/generate_fingertip_pad_meshes.py",
+      "destination": "meshes/so101/generated/moving/manifest.yaml",
+      "source_dirty": false,
+      "source_sha256": "14e4bf9e1bac450b0ce56023ced470cbce398001cd15493df826c4c499a8d2d0",
+      "destination_sha256": "b30af8f597f7c27d88e153a2facb51b7cdb9f05f3b9da02820b821c90669e33c"
+    },
+    {
       "source": "src/so101_gazebo_demo/meshes/so101/motor_holder_so101_base_v1.stl",
       "destination": "meshes/so101/motor_holder_so101_base_v1.stl",
       "source_dirty": false,
