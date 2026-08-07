@@ -114,6 +114,7 @@ add_library(so101_pick_place_runtime
   src/pick_place/physical_grasp_retry.cpp
   src/pick_place/physical_grasp_stabilizer.cpp
   src/pick_place/physical_grasp_evidence_store.cpp
+  src/pick_place/final_placement_evaluator.cpp
   src/pick_place/planning_failure_diagnostics.cpp
   src/pick_place/transition_table.cpp
   src/pick_place/so101_profile.cpp
@@ -259,6 +260,9 @@ if(BUILD_TESTING)
   target_link_libraries(test_so101_gazebo_attachment so101_pick_place_runtime gz-msgs10::core gz-transport13::core)
   ament_add_gtest(test_gazebo_world_observer test/pick_place/test_gazebo_world_observer.cpp)
   target_link_libraries(test_gazebo_world_observer so101_pick_place_runtime gz-msgs10::core gz-transport13::core)
+  ament_add_gtest(test_final_placement_evaluator
+    test/pick_place/test_final_placement_evaluator.cpp)
+  target_link_libraries(test_final_placement_evaluator so101_pick_place_runtime)
   ament_add_gtest(test_attachment_state_reducer
     test/pick_place/test_attachment_state_reducer.cpp)
   target_link_libraries(test_attachment_state_reducer so101_pick_place_runtime)
