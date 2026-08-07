@@ -1,0 +1,70 @@
+schema_version: 1
+object_id: plastic_cup
+model:
+  mass_kg: 0.020
+  height_m: 0.090
+  outer_radius_m: 0.040
+  wall_thickness_m: 0.002
+  bottom_thickness_m: 0.002
+  side_count: 12
+  collision_kind: compound_primitives
+scene:
+  spawn_pose_xyz_xyzw: [0.020, -0.280, 0.165, 0.0, 0.0, 0.0, 1.0]
+  place_pose_xyz_xyzw: [-0.080, -0.250, 0.165, 0.0, 0.0, 0.0, 1.0]
+  reset_parking_pose_xyz_xyzw: [0.190, -0.440, 0.165, 0.0, 0.0, 0.0, 1.0]
+grasp_frame:
+  near_wall_outward_world: [0.0, 1.0, 0.0]
+  fixed_finger_side: outside
+  moving_jaw_side: inside
+  insertion_depth_below_rim_m: 0.025
+  rim_clearance_m: 0.008
+  bottom_clearance_m: 0.020
+  attachment_relative_pose_xyz_xyzw: [0.037183642525793, -0.000689425946786, -0.120078909731665, 0.010791308226273, 0.010788113635732, 0.706745063117382, 0.707303739584456]
+fingertip_pads:
+  enabled: true
+  material: TPU_95A
+  shore_hardness_a: 95
+  contact_model: rigid_link_local_mesh
+  geometry_reference_q6: 0.30
+  safe_lower_q6: -0.059600220867817
+  safe_gap_m: 0.001
+  grasp_gap_m: 0.001960000000000000
+  calibration_fingerprint: f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8
+  friction_coefficient: 1.2
+  contact_material:
+    # TPU-on-plastic bound.  Preparation also applies this material to the
+    # compound link's first collision because Bullet reads friction there.
+    axial_friction_coefficient: 3.0
+    transverse_friction_coefficient: 1.2
+    contact_stiffness_n_m: 1000000.0
+    contact_damping_n_s_m: 100.0
+    max_correcting_velocity_m_s: 0.01
+    min_depth_m: 0.0001
+  fixed_pad:
+    opening_axis_thickness_m: 0.005
+    contact_direction_x: 1.0
+    axial_axis: z
+    native_axial_bounds_m: [0.065720335, 0.105374999]
+    profile_points:
+      - [0.06622, 0.00720, -0.01160]
+      - [0.07500, 0.00715, -0.01160]
+      - [0.084875, 0.00680, -0.01160]
+      - [0.085875, 0.00580, -0.00990]
+      - [0.094875, 0.00545, -0.00990]
+      - [0.095875, 0.00490, -0.00790]
+      - [0.10000, 0.00410, -0.00790]
+      - [0.104875, 0.00145, -0.00790]
+  moving_pad:
+    opening_axis_thickness_m: 0.005
+    contact_direction_x: -1.0
+    axial_axis: y
+    native_axial_bounds_m: [-0.082000002, -0.061999999]
+    profile_points:
+      - [-0.0815, 0.0036, -0.01230]
+      - [-0.0780, 0.0045, -0.01230]
+      - [-0.0730, 0.0054, -0.01230]
+      # Counter-rotate only the native short load-bearing face at runtime preload.
+      - [-0.0722, 0.0057, -0.0123232903]
+      - [-0.0718, 0.0058, -0.01030]
+      - [-0.0670, 0.0060, -0.01030]
+      - [-0.0625, 0.0060, -0.01030]
