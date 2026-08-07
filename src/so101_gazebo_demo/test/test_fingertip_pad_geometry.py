@@ -610,7 +610,7 @@ def test_exact_native_pad_to_cup_wall_diagnostic_at_descend_and_close_samples():
         calculator, calibration, gripper_transform,
         _cup_wall_boxes(calculator, policy), calibration.grasp_q6,
     )
-    assert 0.0012 <= np.linalg.norm(seating_shift) <= 0.0015
+    assert 0.00080 <= np.linalg.norm(seating_shift) <= 0.00110
     assert np.linalg.norm(seating_shift - nominal_attachment_shift) < 0.003
     assert preclose['fixed_signed_clearance_m'] == pytest.approx(
         np.linalg.norm(seating_shift), abs=2e-9
@@ -1005,7 +1005,7 @@ def test_full_active_mesh_contact_and_preopen_swept_audit():
     walls, seating_shift, _ = _seat_walls_on_fixed_pad(
         calculator, calibration, nominal_gripper, approach_walls, contact_q6
     )
-    assert 0.0012 <= np.linalg.norm(seating_shift) <= 0.0015
+    assert 0.00080 <= np.linalg.norm(seating_shift) <= 0.00110
     rim_z = max(transform[2, 3] + half[2] for _, transform, half in walls)
     table_top_z = 0.12
     cup_bottom_top_z = policy['scene']['spawn_pose_xyz_xyzw'][2] - 0.044 + 0.001
@@ -1203,7 +1203,7 @@ def test_fixed_pad_pick_lane_has_live_margin_and_no_cup_contact_through_descend(
     seated_walls, seating_shift, _ = _seat_walls_on_fixed_pad(
         calculator, calibration, gripper, walls, calibration.grasp_q6
     )
-    assert 0.0012 <= np.linalg.norm(seating_shift) <= 0.0015
+    assert 0.00080 <= np.linalg.norm(seating_shift) <= 0.00110
     q6_tolerance = validation['runtime']['q6_position_tolerance_rad']
     for q6 in (
         calibration.grasp_q6 + q6_tolerance,
@@ -1289,16 +1289,16 @@ def test_close_entry_geometry_caps_first_contact_and_retains_bilateral_seating()
     q6_tolerance = validation['runtime']['q6_position_tolerance_rad']
     contact_stop_tolerance = validation['runtime']['q6_contact_stop_tolerance_rad']
 
-    # Rigidly extrapolating the final q6 against the unshifted spawn wall exceeds
-    # the dynamic depth limit.  The cup is free at this phase, so this proves
-    # why attachment must wait for the cup to translate and settle onto the
-    # fixed support; it is not an admissible attached-contact pose.
+    # A4 moves the fixed finger close enough that final q6 already establishes
+    # bounded moving-pad contact against the unshifted spawn wall.  The cup is
+    # still free at this phase and may translate the remaining sub-millimetre
+    # clearance before attachment is allowed.
     for q6 in (calibration.grasp_q6, calibration.grasp_q6 - q6_tolerance):
         entry = _signed_native_pad_wall_depths(
             calculator, calibration, gripper, spawn_walls, q6
         )
         assert 0.0 < entry['fixed_signed_clearance_m'] < 0.003
-        assert entry['moving_penetration_m'] > max_depth
+        assert 0.0 < entry['moving_penetration_m'] <= max_depth
 
     seated_walls, seating_shift, _ = _seat_walls_on_fixed_pad(
         calculator, calibration, gripper, spawn_walls, calibration.grasp_q6
@@ -1359,13 +1359,13 @@ def test_descend_precontact_reduces_fixed_pad_clearance_without_static_penetrati
         calibration.preopen_q6,
     )
 
-    # The live no-load trial kept the cup at its canonical spawn pose while
-    # reducing the visible fixed-side gap by about 0.56 mm.  Keep a bounded
-    # positive analytical margin because Bullet's convex margin reports
-    # contact before the rendered mesh reaches the wall.
-    assert selected['fixed_signed_clearance_m'] <= 0.0015
-    assert selected['fixed_signed_clearance_m'] >= 0.0012
-    assert previous['fixed_signed_clearance_m'] - selected['fixed_signed_clearance_m'] >= 0.0005
+    # A4 settled trials found that the previous 1.2--1.5 mm fixed-side clearance
+    # still admitted unilateral grasps.  Move the pre-close TCP 0.45 mm toward
+    # the cup while retaining a bounded positive analytical margin; Bullet's
+    # convex margin reports contact before the rendered mesh reaches the wall.
+    assert selected['fixed_signed_clearance_m'] <= 0.00110
+    assert selected['fixed_signed_clearance_m'] >= 0.00080
+    assert previous['fixed_signed_clearance_m'] - selected['fixed_signed_clearance_m'] >= 0.00090
     assert selected['fixed_penetration_m'] == pytest.approx(0.0, abs=2e-9)
 
 
@@ -1395,10 +1395,10 @@ def test_close_geometry_brackets_the_near_wall_with_bilateral_pad_contact():
     )
     outward = np.asarray(policy['grasp_frame']['near_wall_outward_world'], dtype=float)
     seating_distance = float(seating_shift @ outward)
-    # The fixed-finger precontact lane leaves roughly 1.39 mm for the bounded
-    # regrasp to seat the free cup onto the fixed pad.  This is smaller than the
-    # previous 1.95-mm lane and remains inside the 3-mm drift budget.
-    assert 0.0012 <= seating_distance <= 0.0015
+    # The A4 fixed-finger precontact lane leaves only the bounded positive
+    # clearance validated above; runtime acceptance must still independently
+    # prove bilateral contact after close within the 3-mm drift budget.
+    assert 0.00080 <= seating_distance <= 0.00110
     assert seating_shift == pytest.approx(outward * seating_distance, abs=5e-9)
     assert np.linalg.norm(seating_shift) < 0.003
     assert preclose_depths['fixed_signed_clearance_m'] == pytest.approx(
@@ -1414,10 +1414,11 @@ def test_close_geometry_brackets_the_near_wall_with_bilateral_pad_contact():
         policy['model']['wall_thickness_m'] - calibration.gap_at(calibration.grasp_q6)
     )
     assert wall_interference > 0.0
-    # The 40-um calibrated face gap stays within 15 um after projection onto
-    # the selected lane's slightly tilted cup-wall normal and extended axial edge.
+    # The 40-um calibrated face gap stays within 16 um after projection onto
+    # the A4 lane's slightly tilted cup-wall normal and extended axial edge.
+    # This remains below the independent 60-um absolute penetration bound.
     assert depths['moving_penetration_m'] <= 0.00006
-    assert abs(depths['moving_penetration_m'] - wall_interference) < 0.000015
+    assert abs(depths['moving_penetration_m'] - wall_interference) < 0.000016
 
 
 def test_selected_close_contact_band_stays_below_the_rim_leverage_zone():
@@ -1441,7 +1442,7 @@ def test_selected_close_contact_band_stays_below_the_rim_leverage_zone():
         calculator, calibration, gripper, _cup_wall_boxes(calculator, policy),
         calibration.grasp_q6,
     )
-    assert 0.0012 <= np.linalg.norm(seating_shift) <= 0.0015
+    assert 0.00080 <= np.linalg.norm(seating_shift) <= 0.00110
     probed_walls = []
     for name, transform, half_extents in walls:
         seated_transform = transform.copy()
