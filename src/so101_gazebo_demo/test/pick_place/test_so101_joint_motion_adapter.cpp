@@ -363,6 +363,57 @@ TEST(SO101JointMotionAdapter, CarryingLoadDriftRequiresBoundedBilateralContact)
   EXPECT_EQ(too_deep.action.failure->code, "GRIPPER_CONTEXT_MISMATCH_BEFORE_PLAN");
 }
 
+TEST(SO101JointMotionAdapter,
+     CarryingContactLoadVelocityRequiresBoundedBilateralContactAndCanonicalScene)
+{
+  auto profile = spp::SO101Profile::canonical();
+  auto request = goalRequest();
+  request.state = spp::State::MOVE_ABOVE_PLACE;
+  request.carrying = true;
+  request.gripper_position = profile.q6_contact;
+
+  auto observed = carryingObservation();
+  observed.snapshot->joint_positions[profile.gripper_joint] = -0.045269254595041275;
+  observed.snapshot->joint_velocities[profile.gripper_joint] = -0.10117190331220627;
+  observed.snapshot->gazebo_task_object_gripper_contact = true;
+  observed.snapshot->gazebo_task_object_fixed_finger_contact = true;
+  observed.snapshot->gazebo_task_object_moving_jaw_contact = true;
+  observed.snapshot->gazebo_task_object_gripper_max_depth =
+    profile.max_gripper_contact_depth - 0.0001;
+
+  auto boundary = std::make_shared<FakeBoundary>();
+  boundary->scene = carryingScene();
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary, profile);
+  const auto canonical = adapter.plan(request, observed);
+  EXPECT_EQ(canonical.action.status, spp::ActionStatus::SUCCEEDED)
+    << (canonical.action.failure ? canonical.action.failure->code : "");
+
+  observed.snapshot->gazebo_task_object_moving_jaw_contact = false;
+  const auto unilateral = adapter.plan(request, observed);
+  ASSERT_EQ(unilateral.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(unilateral.action.failure);
+  EXPECT_EQ(unilateral.action.failure->code, "GRIPPER_NOT_STATIONARY_BEFORE_PLAN");
+
+  observed.snapshot->gazebo_task_object_moving_jaw_contact = true;
+  boundary->scene.attached_link = std::string("wrong_link");
+  const auto invalid_scene = adapter.plan(request, observed);
+  ASSERT_EQ(invalid_scene.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(invalid_scene.action.failure);
+  EXPECT_EQ(invalid_scene.action.failure->code, "CARRYING_ENVIRONMENT_OBSERVATION_INVALID");
+}
+
+TEST(SO101JointMotionAdapter, DetachedHighGripperVelocityRemainsStrict)
+{
+  auto boundary = std::make_shared<FakeBoundary>();
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+
+  const auto result = adapter.plan(goalRequest(), observation(0.707194871, -0.10117190331220627));
+
+  ASSERT_EQ(result.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(result.action.failure);
+  EXPECT_EQ(result.action.failure->code, "GRIPPER_NOT_STATIONARY_BEFORE_PLAN");
+}
+
 TEST(SO101JointMotionAdapter, PlansGoalFromObservedCurrentStateAndBuildsEvidence)
 {
   auto boundary = std::make_shared<FakeBoundary>();

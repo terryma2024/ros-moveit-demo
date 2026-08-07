@@ -270,6 +270,57 @@ ActionResult cancelRequestScopedGoalAndWait(IRequestScopedGoalCancellation & goa
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
+ActionResult classifyMicroLiftPlanningOutcome(const MicroLiftPlanningOutcome & outcome)
+{
+  if (!outcome.failure_stage) {
+    if (outcome.result &&
+        outcome.result->error_code.val == moveit_msgs::msg::MoveItErrorCodes::SUCCESS &&
+        !outcome.result->planned_trajectory.joint_trajectory.points.empty()) {
+      return {ActionStatus::SUCCEEDED, std::nullopt};
+    }
+    return {ActionStatus::FAILED,
+            Failure{FailureCategory::PLANNING,
+                    "MICRO_LIFT_MOVEIT_PLAN_FAILED",
+                    "MoveIt could not produce a request-scoped touch-aware world-Z micro-lift plan",
+                    {}}};
+  }
+  switch (*outcome.failure_stage) {
+    case PlanningFailureStage::GOAL_ACCEPT_TIMEOUT:
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::PLANNING,
+                      "MICRO_LIFT_MOVE_GROUP_GOAL_TIMEOUT",
+                      "MoveGroup did not accept the request-scoped micro-lift goal in time",
+                      {}}};
+    case PlanningFailureStage::GOAL_REJECTED:
+      return {ActionStatus::FAILED, Failure{FailureCategory::PLANNING,
+                                            "MICRO_LIFT_MOVE_GROUP_GOAL_REJECTED",
+                                            "MoveGroup rejected the request-scoped micro-lift goal",
+                                            {}}};
+    case PlanningFailureStage::RESULT_TIMEOUT:
+      if (outcome.action.status != ActionStatus::SUCCEEDED && outcome.action.failure)
+        return outcome.action;
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::PLANNING,
+                      "MICRO_LIFT_MOVE_GROUP_RESULT_TIMEOUT",
+                      "Request-scoped micro-lift planning did not finish in time",
+                      {}}};
+    case PlanningFailureStage::TRANSPORT_FAILURE:
+    case PlanningFailureStage::MISSING_RESULT:
+    case PlanningFailureStage::MOVEIT_ERROR:
+    case PlanningFailureStage::EMPTY_TRAJECTORY:
+      return {
+        ActionStatus::FAILED,
+        Failure{FailureCategory::PLANNING,
+                "MICRO_LIFT_MOVEIT_PLAN_FAILED",
+                "MoveIt could not produce a request-scoped touch-aware world-Z micro-lift plan",
+                {}}};
+  }
+  return {ActionStatus::FAILED, Failure{FailureCategory::INTERNAL,
+                                        "MICRO_LIFT_OUTCOME_INVALID",
+                                        "Micro-lift planning outcome was not classifiable",
+                                        {}}};
+}
+
 namespace
 {
 
@@ -292,6 +343,7 @@ public:
     const auto future = client_->async_cancel_goal(goal_handle_);
     if (future.wait_for(std::chrono::duration<double>(timeout_seconds)) !=
         std::future_status::ready) {
+      cancel_acknowledged_ = false;
       return {ActionStatus::TIMED_OUT, Failure{FailureCategory::PLANNING,
                                                "MOVE_GROUP_CANCEL_ACK_TIMEOUT",
                                                "MoveGroup did not acknowledge cancellation in time",
@@ -300,12 +352,14 @@ public:
     const auto & response = future.get();
     if (!response || response->return_code != action_msgs::srv::CancelGoal::Response::ERROR_NONE ||
         response->goals_canceling.empty()) {
+      cancel_acknowledged_ = false;
       return {ActionStatus::FAILED,
               Failure{FailureCategory::PLANNING,
                       "MOVE_GROUP_CANCEL_REJECTED",
                       "MoveGroup rejected cancellation of the timed-out planning goal",
                       {}}};
     }
+    cancel_acknowledged_ = true;
     return {ActionStatus::SUCCEEDED, std::nullopt};
   }
 
@@ -317,20 +371,35 @@ public:
     }
     switch (result_future_.get().code) {
       case rclcpp_action::ResultCode::SUCCEEDED:
-        return RequestScopedGoalTerminal::SUCCEEDED;
+        terminal_ = RequestScopedGoalTerminal::SUCCEEDED;
+        return terminal_;
       case rclcpp_action::ResultCode::ABORTED:
-        return RequestScopedGoalTerminal::ABORTED;
+        terminal_ = RequestScopedGoalTerminal::ABORTED;
+        return terminal_;
       case rclcpp_action::ResultCode::CANCELED:
-        return RequestScopedGoalTerminal::CANCELED;
+        terminal_ = RequestScopedGoalTerminal::CANCELED;
+        return terminal_;
       default:
         return std::nullopt;
     }
+  }
+
+  [[nodiscard]] std::optional<bool> cancelAcknowledged() const
+  {
+    return cancel_acknowledged_;
+  }
+
+  [[nodiscard]] std::optional<RequestScopedGoalTerminal> terminal() const
+  {
+    return terminal_;
   }
 
 private:
   rclcpp_action::Client<moveit_msgs::action::MoveGroup>::SharedPtr client_;
   MoveGroupGoalHandle::SharedPtr goal_handle_;
   std::shared_future<MoveGroupGoalHandle::WrappedResult> result_future_;
+  std::optional<bool> cancel_acknowledged_;
+  std::optional<RequestScopedGoalTerminal> terminal_;
 };
 
 }  // namespace
@@ -338,11 +407,13 @@ private:
 class MoveItJointPlanningBoundary::Impl
 {
 public:
-  Impl(std::shared_ptr<rclcpp::Node> node, SO101Profile profile, std::string planner_id,
-       double velocity_scaling, double acceleration_scaling, double state_timeout_seconds) :
-      node(std::move(node)), profile(std::move(profile)), planner_id(std::move(planner_id)),
-      velocity_scaling(velocity_scaling), acceleration_scaling(acceleration_scaling),
-      state_timeout_seconds(state_timeout_seconds)
+  Impl(std::shared_ptr<rclcpp::Node> node, SO101Profile profile,
+       MoveItJointPlanningBoundaryOptions options) :
+      node(std::move(node)), profile(std::move(profile)), planner_id(std::move(options.planner_id)),
+      velocity_scaling(options.velocity_scaling),
+      acceleration_scaling(options.acceleration_scaling),
+      state_timeout_seconds(options.state_timeout_seconds),
+      diagnostics(std::move(options.diagnostics))
   {
     joint_state_subscription = this->node->create_subscription<sensor_msgs::msg::JointState>(
       "/joint_states", rclcpp::SensorDataQoS(),
@@ -432,13 +503,41 @@ public:
   mutable std::mutex joint_state_mutex;
   std::condition_variable joint_state_condition;
   std::optional<CurrentJointStateEvidence> latest_joint_state;
+  std::optional<MoveItJointPlanningDiagnostics> diagnostics;
+  std::atomic<std::uint64_t> diagnostic_sequence{1};
 };
+
+namespace
+{
+
+MoveItJointPlanningBoundaryOptions legacyBoundaryOptions(std::string planner_id,
+                                                         double velocity_scaling,
+                                                         double acceleration_scaling,
+                                                         double state_timeout_seconds)
+{
+  MoveItJointPlanningBoundaryOptions options;
+  options.planner_id = std::move(planner_id);
+  options.velocity_scaling = velocity_scaling;
+  options.acceleration_scaling = acceleration_scaling;
+  options.state_timeout_seconds = state_timeout_seconds;
+  return options;
+}
+
+}  // namespace
 
 MoveItJointPlanningBoundary::MoveItJointPlanningBoundary(
   std::shared_ptr<rclcpp::Node> node, SO101Profile profile, std::string planner_id,
   double velocity_scaling, double acceleration_scaling, double state_timeout_seconds) :
-    impl_(std::make_unique<Impl>(std::move(node), std::move(profile), std::move(planner_id),
-                                 velocity_scaling, acceleration_scaling, state_timeout_seconds))
+    MoveItJointPlanningBoundary(std::move(node), std::move(profile),
+                                legacyBoundaryOptions(std::move(planner_id), velocity_scaling,
+                                                      acceleration_scaling, state_timeout_seconds))
+{
+}
+
+MoveItJointPlanningBoundary::MoveItJointPlanningBoundary(
+  std::shared_ptr<rclcpp::Node> node, SO101Profile profile,
+  MoveItJointPlanningBoundaryOptions options) :
+    impl_(std::make_unique<Impl>(std::move(node), std::move(profile), std::move(options)))
 {
 }
 
@@ -524,27 +623,56 @@ ActionResult MoveItJointPlanningBoundary::cancel()
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
 
-ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & current_tcp_world,
-                                                                 double world_z_delta_m)
+std::variant<MicroLiftPlanningCapture, ActionResult>
+MoveItJointPlanningBoundary::captureWorldZMicroLiftPlanningRequest(const Pose3d & current_tcp_world,
+                                                                   double world_z_delta_m)
 {
   if (!std::isfinite(current_tcp_world.x) || !std::isfinite(current_tcp_world.y) ||
       !std::isfinite(current_tcp_world.z) || !std::isfinite(current_tcp_world.qx) ||
       !std::isfinite(current_tcp_world.qy) || !std::isfinite(current_tcp_world.qz) ||
       !std::isfinite(current_tcp_world.qw) || !std::isfinite(world_z_delta_m) ||
       world_z_delta_m <= 0.0 || world_z_delta_m > 0.002) {
-    return {
+    return ActionResult{
       ActionStatus::FAILED,
       Failure{FailureCategory::CONFIGURATION,
               "MICRO_LIFT_REQUEST_INVALID",
               "World-Z physical-grasp probe must be a finite positive lift no larger than 2 mm",
               {}}};
   }
+  return captureWorldZPlanningRequest(current_tcp_world, current_tcp_world.z + world_z_delta_m);
+}
+
+std::variant<MicroLiftPlanningCapture, ActionResult>
+MoveItJointPlanningBoundary::captureWorldZMicroDescendPlanningRequest(
+  const Pose3d & current_tcp_world, double target_world_z_m)
+{
+  const auto displacement = current_tcp_world.z - target_world_z_m;
+  if (!std::isfinite(current_tcp_world.x) || !std::isfinite(current_tcp_world.y) ||
+      !std::isfinite(current_tcp_world.z) || !std::isfinite(current_tcp_world.qx) ||
+      !std::isfinite(current_tcp_world.qy) || !std::isfinite(current_tcp_world.qz) ||
+      !std::isfinite(current_tcp_world.qw) || !std::isfinite(target_world_z_m) ||
+      target_world_z_m >= current_tcp_world.z ||
+      displacement > 0.002 + kMicroLiftPositionToleranceM) {
+    return ActionResult{
+      ActionStatus::FAILED,
+      Failure{FailureCategory::CONFIGURATION,
+              "MICRO_DESCEND_TARGET_INVALID",
+              "World-Z micro-descend target must be finite, lower, and no more than 2 mm away",
+              {}}};
+  }
+  return captureWorldZPlanningRequest(current_tcp_world, target_world_z_m);
+}
+
+std::variant<MicroLiftPlanningCapture, ActionResult>
+MoveItJointPlanningBoundary::captureWorldZPlanningRequest(const Pose3d & current_tcp_world,
+                                                          double target_world_z_m)
+{
   geometry_msgs::msg::PoseStamped target;
   target.header.frame_id = impl_->profile.world_frame;
   target.header.stamp = impl_->node->now();
   target.pose.position.x = current_tcp_world.x;
   target.pose.position.y = current_tcp_world.y;
-  target.pose.position.z = current_tcp_world.z + world_z_delta_m;
+  target.pose.position.z = target_world_z_m;
   target.pose.orientation.x = current_tcp_world.qx;
   target.pose.orientation.y = current_tcp_world.qy;
   target.pose.orientation.z = current_tcp_world.qz;
@@ -552,93 +680,244 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & 
   auto & group = impl_->moveGroup();
   const auto current = group.getCurrentState(impl_->state_timeout_seconds);
   if (!current) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::OBSERVATION,
-                    "MICRO_LIFT_CURRENT_STATE_TIMEOUT",
-                    "MoveIt current state was unavailable before world-Z micro lift",
-                    {}}};
+    return ActionResult{ActionStatus::FAILED,
+                        Failure{FailureCategory::OBSERVATION,
+                                "MICRO_LIFT_CURRENT_STATE_TIMEOUT",
+                                "MoveIt current state was unavailable before world-Z micro lift",
+                                {}}};
   }
   if (!impl_->refreshScene()) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::MOVEIT_SCENE,
-                    "MICRO_LIFT_SCENE_UNAVAILABLE",
-                    "Planning Scene was unavailable for request-scoped micro-lift planning",
-                    {}}};
+    return ActionResult{
+      ActionStatus::FAILED,
+      Failure{FailureCategory::MOVEIT_SCENE,
+              "MICRO_LIFT_SCENE_UNAVAILABLE",
+              "Planning Scene was unavailable for request-scoped micro-lift planning",
+              {}}};
   }
+  MicroLiftPlanningCapture capture;
+  capture.request.request.group_name = impl_->profile.planning_group;
+  capture.request.request.planner_id = impl_->planner_id;
+  capture.request.request.num_planning_attempts = 1;
+  capture.request.request.allowed_planning_time = 5.0;
+  capture.request.request.max_velocity_scaling_factor = 0.03;
+  capture.request.request.max_acceleration_scaling_factor = 0.03;
+  moveit::core::robotStateToRobotStateMsg(*current, capture.request.request.start_state, true);
+  capture.request.request.goal_constraints.push_back(
+    kinematic_constraints::constructGoalConstraints(impl_->profile.tcp_link, target,
+                                                    kMicroLiftPositionToleranceM,
+                                                    kMicroLiftOrientationToleranceRad));
+  capture.request.planning_options.plan_only = true;
+  capture.request.planning_options.planning_scene_diff.is_diff = true;
+  {
+    std::lock_guard<std::mutex> lock(impl_->scene_mutex);
+    impl_->scene->getPlanningSceneMsg(capture.observed_scene);
+    collision_detection::CollisionRequest collision_request;
+    collision_request.group_name = impl_->profile.planning_group;
+    collision_request.contacts = true;
+    collision_request.max_contacts = 256;
+    collision_request.max_contacts_per_pair = 1;
+    collision_detection::AllowedCollisionMatrix raw_acm(impl_->scene->getAllowedCollisionMatrix());
+    collision_detection::CollisionResult raw_result;
+    impl_->scene->checkCollision(collision_request, raw_result, impl_->scene->getCurrentState(),
+                                 raw_acm);
+    collision_detection::AllowedCollisionMatrix request_acm(raw_acm);
+    for (const auto & link : impl_->profile.moveit_touch_links) {
+      request_acm.setEntry(impl_->profile.task_object_id, link, true);
+    }
+    collision_detection::CollisionResult request_result;
+    impl_->scene->checkCollision(collision_request, request_result, impl_->scene->getCurrentState(),
+                                 request_acm);
+    request_acm.getMessage(
+      capture.request.planning_options.planning_scene_diff.allowed_collision_matrix);
+    capture.contacts.raw_collision = raw_result.collision;
+    capture.contacts.request_collision = request_result.collision;
+    for (const auto & [pair, contacts] : raw_result.contacts)
+      capture.contacts.raw_contacts[pair.first + "|" + pair.second] = contacts.size();
+    for (const auto & [pair, contacts] : request_result.contacts)
+      capture.contacts.request_contacts[pair.first + "|" + pair.second] = contacts.size();
+  }
+  return capture;
+}
+
+ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & current_tcp_world,
+                                                                 double world_z_delta_m)
+{
+  return executeWorldZPlanningRequest(current_tcp_world, world_z_delta_m, false);
+}
+
+ActionResult
+MoveItJointPlanningBoundary::executeWorldZMicroDescend(const Pose3d & current_tcp_world,
+                                                       double target_world_z_m)
+{
+  return executeWorldZPlanningRequest(current_tcp_world, target_world_z_m - current_tcp_world.z,
+                                      true);
+}
+
+ActionResult MoveItJointPlanningBoundary::executeWorldZPlanningRequest(
+  const Pose3d & current_tcp_world, double world_z_displacement_m, bool descend)
+{
+  auto captured =
+    descend ? captureWorldZMicroDescendPlanningRequest(current_tcp_world,
+                                                       current_tcp_world.z + world_z_displacement_m)
+            : captureWorldZMicroLiftPlanningRequest(current_tcp_world, world_z_displacement_m);
+  if (std::holds_alternative<ActionResult>(captured)) {
+    auto failure = std::get<ActionResult>(std::move(captured));
+    if (!descend || (failure.failure && failure.failure->code == "MICRO_DESCEND_TARGET_INVALID"))
+      return failure;
+    return {
+      failure.status,
+      Failure{failure.failure ? failure.failure->category : FailureCategory::PLANNING,
+              "MICRO_DESCEND_PLANNING_FAILED",
+              failure.failure ? failure.failure->message : "World-Z micro-descend planning failed",
+              {}}};
+  }
+  const auto capture = std::get<MicroLiftPlanningCapture>(std::move(captured));
   auto client = impl_->moveGroupAction();
   if (!client->wait_for_action_server(
         std::chrono::duration<double>(impl_->state_timeout_seconds))) {
     return {ActionStatus::FAILED,
             Failure{FailureCategory::OBSERVATION,
-                    "MICRO_LIFT_MOVE_GROUP_UNAVAILABLE",
-                    "MoveGroup action is unavailable for request-scoped micro-lift planning",
+                    descend ? "MICRO_DESCEND_PLANNING_FAILED" : "MICRO_LIFT_MOVE_GROUP_UNAVAILABLE",
+                    descend
+                      ? "MoveGroup action is unavailable for request-scoped micro-descend planning"
+                      : "MoveGroup action is unavailable for request-scoped micro-lift planning",
                     {}}};
   }
-  moveit_msgs::action::MoveGroup::Goal request;
-  request.request.group_name = impl_->profile.planning_group;
-  request.request.planner_id = impl_->planner_id;
-  request.request.num_planning_attempts = 1;
-  request.request.allowed_planning_time = 5.0;
-  request.request.max_velocity_scaling_factor = 0.03;
-  request.request.max_acceleration_scaling_factor = 0.03;
-  moveit::core::robotStateToRobotStateMsg(*current, request.request.start_state, true);
-  request.request.goal_constraints.push_back(kinematic_constraints::constructGoalConstraints(
-    impl_->profile.tcp_link, target, 0.0002, 0.005));
-  request.planning_options.plan_only = true;
-  request.planning_options.planning_scene_diff.is_diff = true;
-  {
-    std::lock_guard<std::mutex> lock(impl_->scene_mutex);
-    collision_detection::AllowedCollisionMatrix acm(impl_->scene->getAllowedCollisionMatrix());
-    for (const auto & link : impl_->profile.moveit_touch_links) {
-      acm.setEntry(impl_->profile.task_object_id, link, true);
+  const auto record_failure = [&](const MicroLiftPlanningOutcome & outcome,
+                                  const ActionResult & original) {
+    if (!impl_->diagnostics || !impl_->diagnostics->sink || !outcome.failure_stage)
+      return;
+    PlanningFailureResultEvidence result{*outcome.failure_stage, original};
+    result.transport_result_code = outcome.transport_result_code;
+    result.cancel_acknowledged = outcome.cancel_acknowledged;
+    result.cancel_terminal = outcome.terminal;
+    if (outcome.result) {
+      result.moveit_error_code = outcome.result->error_code.val;
+      result.planning_time = outcome.result->planning_time;
+      result.trajectory_joint_names =
+        outcome.result->planned_trajectory.joint_trajectory.joint_names;
+      const auto & points = outcome.result->planned_trajectory.joint_trajectory.points;
+      result.trajectory_points = points.size();
+      if (!points.empty())
+        result.trajectory_duration_seconds = durationSeconds(points.back().time_from_start);
     }
-    acm.getMessage(request.planning_options.planning_scene_diff.allowed_collision_matrix);
-  }
-  const auto goal_future = client->async_send_goal(request);
+    const auto captured_at = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                               std::chrono::system_clock::now().time_since_epoch())
+                               .count();
+    PlanningFailureArtifact artifact{
+      captured_at,
+      impl_->diagnostic_sequence.fetch_add(1, std::memory_order_relaxed),
+      impl_->diagnostics->simulation_session_id,
+      impl_->diagnostics->configuration_fingerprint,
+      current_tcp_world,
+      world_z_displacement_m,
+      capture.request,
+      capture.observed_scene,
+      capture.contacts,
+      impl_->profile,
+      std::move(result)};
+    std::optional<Failure> diagnostic_failure;
+    try {
+      diagnostic_failure = impl_->diagnostics->sink->record(artifact);
+    } catch (const std::exception & error) {
+      diagnostic_failure =
+        Failure{FailureCategory::INTERNAL, "PLANNING_DIAGNOSTIC_WRITE_FAILED", error.what(), {}};
+    } catch (...) {
+      diagnostic_failure = Failure{FailureCategory::INTERNAL,
+                                   "PLANNING_DIAGNOSTIC_WRITE_FAILED",
+                                   "planning diagnostic sink threw an unknown exception",
+                                   {}};
+    }
+    if (diagnostic_failure) {
+      RCLCPP_WARN_THROTTLE(impl_->node->get_logger(), *impl_->node->get_clock(), 5000,
+                           "PLANNING_DIAGNOSTIC_WRITE_FAILED: %s",
+                           diagnostic_failure->message.c_str());
+    }
+  };
+  const auto finish_failure = [&](const MicroLiftPlanningOutcome & outcome) {
+    auto original = classifyMicroLiftPlanningOutcome(outcome);
+    record_failure(outcome, original);
+    if (!descend || original.status == ActionStatus::SUCCEEDED)
+      return original;
+    return ActionResult{original.status, Failure{original.failure->category,
+                                                 "MICRO_DESCEND_PLANNING_FAILED",
+                                                 original.failure->message,
+                                                 {}}};
+  };
+  const auto goal_future = client->async_send_goal(capture.request);
   if (goal_future.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::PLANNING,
-                    "MICRO_LIFT_MOVE_GROUP_GOAL_TIMEOUT",
-                    "MoveGroup did not accept the request-scoped micro-lift goal in time",
-                    {}}};
+    MicroLiftPlanningOutcome outcome;
+    outcome.action = {ActionStatus::SUCCEEDED, std::nullopt};
+    outcome.failure_stage = PlanningFailureStage::GOAL_ACCEPT_TIMEOUT;
+    return finish_failure(outcome);
   }
   const auto & goal_handle = goal_future.get();
   if (!goal_handle) {
-    return {ActionStatus::FAILED, Failure{FailureCategory::PLANNING,
-                                          "MICRO_LIFT_MOVE_GROUP_GOAL_REJECTED",
-                                          "MoveGroup rejected the request-scoped micro-lift goal",
-                                          {}}};
+    MicroLiftPlanningOutcome outcome;
+    outcome.action = {ActionStatus::SUCCEEDED, std::nullopt};
+    outcome.failure_stage = PlanningFailureStage::GOAL_REJECTED;
+    return finish_failure(outcome);
   }
   const auto result_future = client->async_get_result(goal_handle);
   if (result_future.wait_for(std::chrono::seconds(15)) != std::future_status::ready) {
     RosMoveGroupGoalCancellation cancellation(client, goal_handle, result_future);
     auto cleanup = cancelRequestScopedGoalAndWait(cancellation, impl_->state_timeout_seconds,
                                                   impl_->state_timeout_seconds);
-    if (cleanup.status != ActionStatus::SUCCEEDED)
-      return cleanup;
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::PLANNING,
-                    "MICRO_LIFT_MOVE_GROUP_RESULT_TIMEOUT",
-                    "Request-scoped micro-lift planning did not finish in time",
-                    {}}};
+    MicroLiftPlanningOutcome outcome;
+    outcome.action = cleanup;
+    outcome.failure_stage = PlanningFailureStage::RESULT_TIMEOUT;
+    outcome.cancel_acknowledged = cancellation.cancelAcknowledged();
+    outcome.terminal = cancellation.terminal();
+    return finish_failure(outcome);
   }
   const auto & wrapped = result_future.get();
-  if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result ||
-      wrapped.result->error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS ||
-      wrapped.result->planned_trajectory.joint_trajectory.points.empty()) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::PLANNING,
-                    "MICRO_LIFT_MOVEIT_PLAN_FAILED",
-                    "MoveIt could not produce a request-scoped touch-aware world-Z micro-lift plan",
-                    {}}};
+  MicroLiftPlanningOutcome outcome;
+  outcome.action = {ActionStatus::SUCCEEDED, std::nullopt};
+  outcome.transport_result_code = static_cast<std::int8_t>(wrapped.code);
+  outcome.result = wrapped.result;
+  if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED) {
+    outcome.failure_stage = PlanningFailureStage::TRANSPORT_FAILURE;
+  } else if (!wrapped.result) {
+    outcome.failure_stage = PlanningFailureStage::MISSING_RESULT;
+  } else if (wrapped.result->error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
+    outcome.failure_stage = PlanningFailureStage::MOVEIT_ERROR;
+  } else if (wrapped.result->planned_trajectory.joint_trajectory.points.empty()) {
+    outcome.failure_stage = PlanningFailureStage::EMPTY_TRAJECTORY;
   }
-  const auto executed = group.execute(wrapped.result->planned_trajectory);
+  auto classified = classifyMicroLiftPlanningOutcome(outcome);
+  if (classified.status != ActionStatus::SUCCEEDED) {
+    record_failure(outcome, classified);
+    return classified;
+  }
+  const auto executed = impl_->moveGroup().execute(wrapped.result->planned_trajectory);
   if (!static_cast<bool>(executed)) {
-    return {ActionStatus::FAILED,
-            Failure{FailureCategory::EXECUTION,
-                    "MICRO_LIFT_MOVEIT_EXECUTION_FAILED",
-                    "MoveIt failed to execute the validated world-Z micro-lift plan",
-                    {}}};
+    return {
+      ActionStatus::FAILED,
+      Failure{FailureCategory::EXECUTION,
+              descend ? "MICRO_DESCEND_EXECUTION_FAILED" : "MICRO_LIFT_MOVEIT_EXECUTION_FAILED",
+              descend ? "MoveIt failed to execute the validated world-Z micro-descend plan"
+                      : "MoveIt failed to execute the validated world-Z micro-lift plan",
+              {}}};
+  }
+  if (descend) {
+    const auto reached = poseFrom(impl_->moveGroup().getCurrentPose(impl_->profile.tcp_link).pose);
+    const Vec3 expected_position{current_tcp_world.x, current_tcp_world.y,
+                                 current_tcp_world.z + world_z_displacement_m};
+    const Eigen::Quaterniond expected_orientation(current_tcp_world.qw, current_tcp_world.qx,
+                                                  current_tcp_world.qy, current_tcp_world.qz);
+    const Eigen::Quaterniond reached_orientation(reached.qw, reached.qx, reached.qy, reached.qz);
+    const auto orientation_error =
+      2.0 * std::acos(std::clamp(
+              std::abs(expected_orientation.normalized().dot(reached_orientation.normalized())),
+              0.0, 1.0));
+    if (distance(reached, expected_position) > kMicroLiftPositionToleranceM ||
+        orientation_error > kMicroLiftOrientationToleranceRad) {
+      return {ActionStatus::FAILED,
+              Failure{FailureCategory::POSTCONDITION,
+                      "MICRO_DESCEND_ENDPOINT_OUTSIDE_TOLERANCE",
+                      "World-Z micro-descend endpoint is outside position or orientation tolerance",
+                      {}}};
+    }
   }
   return {ActionStatus::SUCCEEDED, std::nullopt};
 }
@@ -646,6 +925,19 @@ ActionResult MoveItJointPlanningBoundary::executeWorldZMicroLift(const Pose3d & 
 ActionResult MoveItJointPlanningBoundary::cancelWorldZMicroLift()
 {
   return cancel();
+}
+
+ActionResult MoveItJointPlanningBoundary::cancelWorldZMicroDescend()
+{
+  auto result = cancel();
+  if (result.status != ActionStatus::SUCCEEDED) {
+    return {result.status, Failure{FailureCategory::EXECUTION,
+                                   "MICRO_DESCEND_CANCEL_FAILED",
+                                   result.failure ? result.failure->message
+                                                  : "World-Z micro-descend cancellation failed",
+                                   {}}};
+  }
+  return result;
 }
 
 JointSegmentPlanResult MoveItJointPlanningBoundary::planSegment(

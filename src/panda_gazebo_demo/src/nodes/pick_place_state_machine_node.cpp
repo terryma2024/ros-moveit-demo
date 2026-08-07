@@ -341,6 +341,9 @@ int main(int argc, char * argv[])
     node, "planning_scene_timeout_seconds", parameters.planning_scene_timeout_seconds);
   parameters.state_poll_interval_seconds =
     parameterOrDeclare(node, "state_poll_interval_seconds", parameters.state_poll_interval_seconds);
+  parameters.gazebo_initial_observation_timeout_seconds =
+    parameterOrDeclare(node, "gazebo_initial_observation_timeout_seconds",
+                       parameters.gazebo_initial_observation_timeout_seconds);
   parameters.gazebo_observation_max_age_seconds = parameterOrDeclare(
     node, "gazebo_observation_max_age_seconds", parameters.gazebo_observation_max_age_seconds);
   const auto coke_settle_samples = parameterOrDeclare<std::int64_t>(
@@ -491,6 +494,7 @@ int main(int argc, char * argv[])
     runtime_config.ready_named_target = parameters.ready_named_target;
     runtime_config.ready_joint_positions = *ready_joints;
     runtime_config.ready_joint_tolerance = parameters.ready_joint_tolerance;
+    runtime_config.retreat_clearance_height = parameters.recovery_safe_height;
     runtime_config.contract.ready_joint_positions = runtime_config.ready_joint_positions;
     runtime_config.contract.ready_joint_tolerance = runtime_config.ready_joint_tolerance;
     runtime_config.contract.gripper_close_position = runtime_config.gripper_close_position;
@@ -506,6 +510,7 @@ int main(int argc, char * argv[])
     world_observer = std::make_unique<pick_place::GazeboWorldObserver>(
       *motion_adapter, parameters.gazebo_world_name, parameters.gazebo_coke_model,
       parameters.gazebo_attachment_topic, simulation_session_id,
+      parameters.gazebo_initial_observation_timeout_seconds,
       parameters.gazebo_observation_max_age_seconds, parameters.coke_settle_samples,
       parameters.coke_settle_interval_seconds, parameters.coke_settle_position_tolerance,
       parameters.coke_settle_orientation_tolerance_rad, parameters.gazebo_coke_initially_detached);

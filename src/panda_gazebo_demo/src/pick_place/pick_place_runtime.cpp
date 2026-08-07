@@ -59,7 +59,8 @@ void registerReadyRetreatActions(PickPlaceRuntimeRegistries & runtime,
                                            config.ready_joint_positions,
                                            config.ready_joint_tolerance,
                                            config.gripper_close_position,
-                                           config.gripper_max_effort};
+                                           config.gripper_max_effort,
+                                           config.retreat_clearance_height};
     auto action = std::make_shared<ReadyRetreatAction>(dependencies.motion, dependencies.gripper,
                                                        dependencies.observer, action_config);
     runtime.actions.registerPlanner(state, action);

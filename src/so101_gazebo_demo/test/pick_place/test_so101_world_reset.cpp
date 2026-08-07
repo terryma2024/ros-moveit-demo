@@ -191,7 +191,7 @@ public:
     if (events)
       events->emplace_back("gripper:" + std::to_string(q6));
     if (gripper_result.status == ActionStatus::SUCCEEDED &&
-        (q6 != -0.059303612618397 || home_gripper_converges)) {
+        (q6 != -0.059600220867817 || home_gripper_converges)) {
       joints->gripper_position = q6 + home_gripper_offset;
       joints->gripper_velocity = 0.0;
     }
@@ -468,7 +468,7 @@ TEST(SO101ProfileCanonical, RobotHomeMatchesTheSrdfNamedState)
 {
   const auto & profile = SO101Profile::canonical();
   EXPECT_EQ((std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0}), profile.arm_home_positions);
-  EXPECT_DOUBLE_EQ(-0.059303612618397, profile.q6_home);
+  EXPECT_DOUBLE_EQ(-0.059600220867817, profile.q6_home);
   EXPECT_DOUBLE_EQ(1.7, profile.q6_full_open);
 }
 
@@ -513,7 +513,7 @@ TEST(SO101WorldResetCoordinator, ParksBothWorldLayersBeforeArmHomeThenRestoresCa
   EXPECT_EQ((std::vector<std::string>{"cancel", "gazebo_pose", "moveit_table", "moveit_pedestal",
                                       "moveit_task_object", "gripper:1.700000", "plan_arm_home",
                                       "execute_arm_home", "gazebo_pose", "moveit_task_object",
-                                      "gripper:-0.059304"}),
+                                      "gripper:-0.059600"}),
             commands);
   EXPECT_EQ((std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0}), robot->last_arm_goal);
   const Pose3d parking{0.190, -0.440, 0.165, 0.0, 0.0, 0.0, 1.0};
@@ -608,7 +608,7 @@ TEST(SO101WorldResetCoordinator, FinalGripperMismatchReportsExpectedAndActualQ6)
   EXPECT_EQ(ActionStatus::TIMED_OUT, result.status);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("WORLD_RESET_GRIPPER_HOME_TIMEOUT", result.failure->code);
-  EXPECT_DOUBLE_EQ(-0.059303612618397, result.failure->metrics.at("expected_q6"));
+  EXPECT_DOUBLE_EQ(-0.059600220867817, result.failure->metrics.at("expected_q6"));
   EXPECT_DOUBLE_EQ(1.7, result.failure->metrics.at("actual_q6"));
 }
 

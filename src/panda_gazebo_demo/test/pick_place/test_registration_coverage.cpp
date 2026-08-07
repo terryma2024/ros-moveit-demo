@@ -255,6 +255,7 @@ TEST(RuntimeParameters, DefaultsAreValidAndEveryBehaviorParameterChangesTheHash)
   add([](auto & value) { value.attachment_timeout_seconds = 2.1; });
   add([](auto & value) { value.planning_scene_timeout_seconds = 2.1; });
   add([](auto & value) { value.state_poll_interval_seconds = 0.04; });
+  add([](auto & value) { value.gazebo_initial_observation_timeout_seconds = 31.0; });
   add([](auto & value) { value.gazebo_observation_max_age_seconds = 0.6; });
   add([](auto & value) { value.coke_settle_samples = 6; });
   add([](auto & value) { value.coke_settle_interval_seconds = 0.04; });
@@ -281,6 +282,9 @@ TEST(RuntimeParameters, RejectsNonFiniteAndUnsafeRanges)
 {
   PickPlaceParameters parameters;
   parameters.velocity_scaling = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_TRUE(validatePickPlaceParameters(parameters));
+  parameters = {};
+  parameters.gazebo_initial_observation_timeout_seconds = 0.1;
   EXPECT_TRUE(validatePickPlaceParameters(parameters));
   parameters = {};
   parameters.cartesian_min_fraction = 1.1;

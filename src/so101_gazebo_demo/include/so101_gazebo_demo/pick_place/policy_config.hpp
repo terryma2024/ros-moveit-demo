@@ -59,6 +59,16 @@ struct FingertipPadGeometryConfig
 
 struct FingertipPadConfig
 {
+  struct ContactMaterial
+  {
+    double axial_friction_coefficient{0.0};
+    double transverse_friction_coefficient{0.0};
+    double contact_stiffness_n_m{0.0};
+    double contact_damping_n_s_m{0.0};
+    double max_correcting_velocity_m_s{0.0};
+    double min_depth_m{0.0};
+  };
+
   bool enabled{false};
   std::string material;
   double shore_hardness_a{0.0};
@@ -69,6 +79,7 @@ struct FingertipPadConfig
   double grasp_gap_m{0.0};
   std::string calibration_fingerprint;
   double friction_coefficient{0.0};
+  ContactMaterial contact_material;
   FingertipPadGeometryConfig fixed_pad;
   FingertipPadGeometryConfig moving_pad;
 };

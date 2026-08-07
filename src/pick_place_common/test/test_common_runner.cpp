@@ -98,6 +98,69 @@ public:
 private:
   Scenario & s_;
 };
+class ConvergingObserver final : public pp::IWorldObserver
+{
+public:
+  pp::ObservationResult observe() override
+  {
+    pp::WorldSnapshot snapshot;
+    snapshot.fresh = true;
+    snapshot.arm_stationary = calls++ > 0;
+    return {snapshot, {}};
+  }
+  int calls{};
+};
+class StationaryContract final : public pp::TransitionContractRegistry::ITransitionContract
+{
+public:
+  pp::ValidationResult validatePrecondition(const pp::WorldSnapshot & snapshot) const override
+  {
+    if (snapshot.arm_stationary)
+      return {true, {}, {}};
+    return {false,
+            {{pp::FailureCategory::PRECONDITION, "ARM_NOT_QUIESCENT", "transient", {}}},
+            {}};
+  }
+  pp::ValidationResult validate(const pp::WorldSnapshot &, const pp::WorldSnapshot &,
+                                const pp::ActionResult &) const override
+  {
+    return {true, {}, {}};
+  }
+};
+class ObservationRecordingPlanner final : public pp::IStatePlanner
+{
+public:
+  pp::PlanResult plan(pp::State, pp::State, const pp::ObservationResult & observation) override
+  {
+    saw_stationary = observation.snapshot && observation.snapshot->arm_stationary;
+    auto artifact = std::make_shared<pp::PlanArtifact>();
+    artifact->trajectory_points = 1;
+    return {{pp::ActionStatus::SUCCEEDED, {}}, artifact};
+  }
+  bool saw_stationary{};
+};
+class ConvergencePolicy final : public pp::IRunnerBehaviorPolicy
+{
+public:
+  bool retryPrecondition(pp::State, const pp::Failure &, std::size_t attempt) const override
+  {
+    return attempt == 0;
+  }
+  bool retryPostcondition(pp::State, const pp::Failure &, std::size_t) const override
+  {
+    return false;
+  }
+  bool includeIdleInTrace() const noexcept override { return false; }
+  bool runExecutePreflight() const noexcept override { return false; }
+  bool recoverForwardObservationFailure() const noexcept override { return true; }
+  bool preserveEnvironmentFailureWithoutRecovery() const noexcept override { return false; }
+  bool retryTransientObservation(pp::State, const pp::Failure &, std::size_t) const override
+  {
+    return false;
+  }
+  bool waitForStationaryObjectOnResume() const noexcept override { return true; }
+  bool preserveOriginalFailureOnRecoveryError() const noexcept override { return false; }
+};
 class Validator final : public pp::IPlanValidator
 {
 public:
@@ -220,6 +283,31 @@ TEST(CommonRunner, ExecutePreservesBoundaryOrder)
               "plan-validate:MOVE_ABOVE_OBJECT", "execute:MOVE_ABOVE_OBJECT", "observe",
               "transition-validate:MOVE_ABOVE_OBJECT", "checkpoint:MOVE_ABOVE_OBJECT"}),
             s.events);
+}
+TEST(CommonRunner, PlannerReceivesObservationThatPassedConvergedPrecondition)
+{
+  Scenario scenario;
+  ConvergingObserver observer;
+  Store store(scenario);
+  auto planner = std::make_shared<ObservationRecordingPlanner>();
+  pp::StateActionRegistry actions;
+  actions.registerPlanner(pp::State::MOVE_ABOVE_OBJECT, planner);
+  actions.registerExecutor(pp::State::MOVE_ABOVE_OBJECT, std::make_shared<Executor>(scenario));
+  pp::TransitionContractRegistry contracts;
+  contracts.registerContract({pp::State::MOVE_ABOVE_OBJECT, pp::State::DONE},
+                             std::make_shared<StationaryContract>());
+  pp::PlanValidatorRegistry validators;
+  validators.registerValidator(pp::State::MOVE_ABOVE_OBJECT,
+                               std::make_shared<Validator>(scenario));
+  const ConvergencePolicy policy;
+  const auto definition = workflow();
+  pp::StateMachineRunner runner(definition, actions, contracts, &observer, &store, nullptr, nullptr,
+                                &validators, nullptr, &policy);
+
+  const auto result = runner.run({pp::RunMode::EXECUTE});
+
+  EXPECT_EQ(pp::RunStatus::DONE, result.status);
+  EXPECT_TRUE(planner->saw_stationary);
 }
 TEST(CommonRunner, PlanOnlyDoesNotExecute)
 {

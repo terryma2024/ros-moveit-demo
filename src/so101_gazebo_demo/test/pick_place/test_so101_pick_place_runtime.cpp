@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "so101_gazebo_demo/pick_place/pick_place_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/physical_grasp_stabilizer.hpp"
 #include "so101_gazebo_demo/pick_place/so101_fixed_motion_targets.hpp"
 #include "so101_gazebo_demo/pick_place/transition_table.hpp"
 
@@ -73,6 +74,17 @@ public:
   }
   int calls{0};
 };
+
+TEST(WorldZMicroDescendInterface, ExistingAdaptersFailClosedAsNotSupported)
+{
+  FakeMicroLift adapter;
+  const spp::Pose3d current{0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0};
+  const auto execute = adapter.executeWorldZMicroDescend(current, 0.298);
+  EXPECT_EQ(execute.status, spp::ActionStatus::NOT_SUPPORTED);
+  ASSERT_TRUE(execute.failure);
+  EXPECT_EQ(execute.failure->code, "WORLD_Z_MICRO_DESCEND_NOT_SUPPORTED");
+  EXPECT_EQ(adapter.cancelWorldZMicroDescend().status, spp::ActionStatus::NOT_SUPPORTED);
+}
 
 class FakePhysicalObserver final : public spp::IWorldObserver
 {
@@ -286,6 +298,31 @@ public:
   }
 };
 
+class MemoryPhysicalEvidenceStore final : public spp::IPhysicalGraspEvidenceStore
+{
+public:
+  std::optional<spp::PhysicalGraspEvidenceRecord> record;
+
+  std::optional<spp::Failure> resetForFreshRun() override
+  {
+    return std::nullopt;
+  }
+  std::optional<spp::Failure> saveBefore(const spp::WorldSnapshot &) override
+  {
+    return std::nullopt;
+  }
+  std::optional<spp::Failure> saveAfter(const spp::WorldSnapshot &) override
+  {
+    return std::nullopt;
+  }
+  [[nodiscard]] std::variant<spp::PhysicalGraspEvidenceRecord, spp::Failure> load() const override
+  {
+    if (record)
+      return *record;
+    return spp::Failure{spp::FailureCategory::OBSERVATION, "TEST_EVIDENCE_UNUSED", "unused", {}};
+  }
+};
+
 std::shared_ptr<const spp::SO101ConfiguredMotionTargetPolicy> configuredPolicy()
 {
   const std::filesystem::path root(SO101_TEST_POLICY_CONFIG_ROOT);
@@ -334,6 +371,7 @@ spp::SO101PickPlaceRuntimeDependencies completeDependencies()
   observer->snapshot.gazebo_task_object_stationary = true;
   observer->snapshot.gazebo_task_object_gripper_contact = true;
   dependencies.physical_observer = std::move(observer);
+  dependencies.physical_grasp_evidence = std::make_shared<MemoryPhysicalEvidenceStore>();
   return dependencies;
 }
 
@@ -451,7 +489,81 @@ TEST(SO101PickPlaceRuntime, RegistersEveryConcreteActionValidatorAndContractExac
   EXPECT_FALSE(runtime.plan_validators.hasValidator(spp::State::ATTACH_MOVEIT));
 }
 
-TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSamples)
+TEST(SO101PickPlaceRuntime, MarksPersistedPhysicalSamplesFreshBeforeValidation)
+{
+  auto dependencies = completeDependencies();
+  auto evidence =
+    std::dynamic_pointer_cast<MemoryPhysicalEvidenceStore>(dependencies.physical_grasp_evidence);
+  ASSERT_TRUE(evidence);
+  const auto & profile = spp::SO101Profile::canonical();
+  spp::PhysicalGraspEvidenceRecord record;
+  record.simulation_session_id = "freshness-regression";
+  record.configuration_fingerprint = "fingerprint";
+  record.before_lift = spp::PhysicalGraspSample{spp::State::WAIT_GRASP_STABLE,
+                                                100,
+                                                {0.02, -0.28, 0.200, 0.0, 0.0, 0.0, 1.0},
+                                                profile.task_object_pose,
+                                                true};
+  auto after_tcp = record.before_lift->tcp_pose_world;
+  auto after_cup = record.before_lift->task_object_pose_world;
+  after_tcp.z += 0.002;
+  after_cup.z += 0.002;
+  record.after_lift =
+    spp::PhysicalGraspSample{spp::State::WAIT_MICRO_LIFT_STABLE, 200, after_tcp, after_cup, true};
+  evidence->record = record;
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::VERIFY_PHYSICAL_GRASP);
+  ASSERT_TRUE(executor);
+
+  const auto result =
+    executor->execute({spp::State::VERIFY_PHYSICAL_GRASP, spp::State::ATTACH_GAZEBO, {}, nullptr});
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+}
+
+TEST(SO101PickPlaceRuntime, VerifyPhysicalGraspDelegatesFailureToBoundedRetryCoordinator)
+{
+  auto dependencies = completeDependencies();
+  auto evidence =
+    std::dynamic_pointer_cast<MemoryPhysicalEvidenceStore>(dependencies.physical_grasp_evidence);
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(evidence);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  const auto & profile = spp::SO101Profile::canonical();
+  spp::PhysicalGraspEvidenceRecord record;
+  record.simulation_session_id = "runtime-retry";
+  record.retry.progress = {1, 0, profile.q6_contact};
+  record.before_lift = spp::PhysicalGraspSample{spp::State::WAIT_GRASP_STABLE,
+                                                100,
+                                                {0.02, -0.28, 0.200, 0.0, 0.0, 0.0, 1.0},
+                                                profile.task_object_pose,
+                                                true};
+  record.after_lift = *record.before_lift;
+  record.after_lift->capture_state = spp::State::WAIT_MICRO_LIFT_STABLE;
+  record.after_lift->tcp_pose_world.z += 0.002;
+  evidence->record = record;
+  observer->snapshot.simulation_session_id = record.simulation_session_id;
+  observer->snapshot.gazebo_task_object_attached = false;
+  observer->snapshot.moveit_task_object_attached = false;
+  observer->snapshot.moveit_world_object_poses[profile.task_object_id] = profile.task_object_pose;
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::VERIFY_PHYSICAL_GRASP);
+  ASSERT_TRUE(executor);
+
+  const auto result =
+    executor->execute({spp::State::VERIFY_PHYSICAL_GRASP, spp::State::ATTACH_GAZEBO, {}, nullptr});
+
+  ASSERT_EQ(result.status, spp::ActionStatus::NOT_SUPPORTED);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "WORLD_Z_MICRO_DESCEND_NOT_SUPPORTED");
+  ASSERT_EQ(gripper->targets.size(), 1U);
+  EXPECT_DOUBLE_EQ(gripper->targets.front(), profile.q6_preopen);
+}
+
+TEST(SO101PickPlaceRuntime, StableGraspKeepsTheBoundedSqueezeThroughMicroLift)
 {
   auto dependencies = completeDependencies();
   auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
@@ -477,12 +589,39 @@ TEST(SO101PickPlaceRuntime, StableGraspRetriesOnceThenRequiresSixBilateralSample
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  ASSERT_EQ(gripper->calls, 2);
+  ASSERT_EQ(gripper->calls, 1);
   EXPECT_DOUBLE_EQ(gripper->targets.front(),
                    spp::SO101Profile::canonical().q6_contact -
                      spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
-  EXPECT_DOUBLE_EQ(gripper->targets.back(), spp::SO101Profile::canonical().q6_contact);
-  EXPECT_EQ(observer->next_sample, 13U);
+  EXPECT_EQ(observer->next_sample, 7U);
+}
+
+TEST(SO101PhysicalGraspStabilizer, PreservesTheFixedPreloadAndStableWindow)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto evidence = std::make_shared<MemoryPhysicalEvidenceStore>();
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  auto bilateral = observer->snapshot;
+  bilateral.gazebo_task_object_fixed_finger_contact = true;
+  bilateral.gazebo_task_object_moving_jaw_contact = true;
+  bilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  observer->snapshot = bilateral;
+  observer->samples.assign(12, bilateral);
+  spp::SO101PhysicalGraspStabilizer stabilizer(observer, evidence, gripper);
+
+  const auto result = stabilizer.captureBeforeLift();
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  ASSERT_EQ(gripper->targets.size(), 1U);
+  const auto & profile = spp::SO101Profile::canonical();
+  EXPECT_DOUBLE_EQ(
+    gripper->targets.front(),
+    std::max(profile.q6_safe_lower, profile.q6_contact - profile.q6_regrasp_squeeze_offset));
+  EXPECT_EQ(observer->next_sample, 12U);
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
@@ -510,9 +649,39 @@ TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  EXPECT_EQ(gripper->calls, 2);
-  EXPECT_DOUBLE_EQ(gripper->last_target, spp::SO101Profile::canonical().q6_contact);
-  EXPECT_EQ(observer->next_sample, 13U);
+  EXPECT_EQ(gripper->calls, 1);
+  EXPECT_DOUBLE_EQ(gripper->last_target,
+                   spp::SO101Profile::canonical().q6_contact -
+                     spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
+  EXPECT_EQ(observer->next_sample, 7U);
+}
+
+TEST(SO101PickPlaceRuntime, StableBilateralGraspAddsOneBoundedSqueezeBeforeMicroLift)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  auto bilateral = observer->snapshot;
+  bilateral.gazebo_task_object_fixed_finger_contact = true;
+  bilateral.gazebo_task_object_moving_jaw_contact = true;
+  bilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  observer->samples.assign(12, bilateral);
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
+  ASSERT_TRUE(executor);
+
+  const auto result = executor->execute(
+    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  ASSERT_EQ(gripper->calls, 1);
+  EXPECT_DOUBLE_EQ(gripper->last_target,
+                   spp::SO101Profile::canonical().q6_contact -
+                     spp::SO101Profile::canonical().q6_regrasp_squeeze_offset);
+  EXPECT_EQ(observer->next_sample, 12U);
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
@@ -526,7 +695,8 @@ TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
   bilateral.gazebo_task_object_fixed_finger_contact = true;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
   bilateral.gazebo_task_object_gripper_max_depth = 0.001;
-  observer->samples = {moving, bilateral, bilateral, bilateral, bilateral, bilateral, bilateral};
+  observer->samples = {moving,    bilateral, bilateral, bilateral, bilateral, bilateral, bilateral,
+                       bilateral, bilateral, bilateral, bilateral, bilateral, bilateral};
   const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
   const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
   ASSERT_TRUE(executor);
@@ -536,7 +706,65 @@ TEST(SO101PickPlaceRuntime, StableGraspWaitsThroughTransientSettlingMotion)
 
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
-  EXPECT_EQ(observer->next_sample, 7U);
+  EXPECT_EQ(observer->next_sample, 13U);
+}
+
+TEST(SO101PickPlaceRuntime, StableGraspGetsIndependentPostPreloadObservationBudget)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  auto moving = observer->snapshot;
+  moving.gazebo_task_object_stationary = false;
+  auto bilateral = observer->snapshot;
+  bilateral.gazebo_task_object_fixed_finger_contact = true;
+  bilateral.gazebo_task_object_moving_jaw_contact = true;
+  bilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  observer->samples.assign(19, moving);
+  observer->samples.insert(observer->samples.end(), 12, bilateral);
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
+  ASSERT_TRUE(executor);
+
+  const auto result = executor->execute(
+    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  EXPECT_EQ(gripper->calls, 1);
+  EXPECT_EQ(observer->next_sample, 31U);
+}
+
+TEST(SO101PickPlaceRuntime, PostPreloadObservationBudgetRemainsFinite)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  auto moving = observer->snapshot;
+  moving.gazebo_task_object_stationary = false;
+  auto bilateral = observer->snapshot;
+  bilateral.gazebo_task_object_fixed_finger_contact = true;
+  bilateral.gazebo_task_object_moving_jaw_contact = true;
+  bilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  observer->samples.assign(19, moving);
+  observer->samples.insert(observer->samples.end(), 6, bilateral);
+  observer->samples.insert(observer->samples.end(), 30, moving);
+  const auto runtime = spp::makeSO101PickPlaceRuntimeRegistries(dependencies);
+  const auto executor = runtime.actions.findExecutor(spp::State::WAIT_GRASP_STABLE);
+  ASSERT_TRUE(executor);
+
+  const auto result = executor->execute(
+    {spp::State::WAIT_GRASP_STABLE, spp::State::ATTACH_GAZEBO, observer->snapshot, nullptr});
+
+  ASSERT_EQ(result.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "PHYSICAL_GRASP_BILATERAL_STABILITY_TIMEOUT");
+  EXPECT_EQ(gripper->calls, 1);
+  EXPECT_EQ(observer->next_sample, 55U);
 }
 
 TEST(SO101PickPlaceRuntime, GazeboDetachWaitsForThreeConsecutiveStationarySamples)
@@ -912,8 +1140,12 @@ TEST(SO101MotionContract, CarryAllowsCylindricalAxialSelfSpinButRejectsTilt)
     return world;
   };
   const auto before = carrying_world(0.0, true);
-  const auto axial_spin =
+  auto axial_spin =
     carrying_world(profile.task_object_orientation_drift_tolerance_rad + 0.003, true);
+  // Bullet may report a non-zero instantaneous q6 velocity while the closed
+  // gripper is holding the attached cup.  The carry boundary remains valid
+  // when q6 position, geometry, and both attachment facts are still in bounds.
+  axial_spin.joint_velocities[profile.gripper_joint] = -0.188;
   const auto tilted =
     carrying_world(profile.task_object_orientation_drift_tolerance_rad + 0.001, false);
 

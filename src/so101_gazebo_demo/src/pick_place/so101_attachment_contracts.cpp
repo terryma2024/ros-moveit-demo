@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
@@ -96,6 +97,32 @@ void requireQ6(ValidationResult & result, const WorldSnapshot & snapshot, SO101G
                const SO101Profile & profile)
 {
   merge(result, validateSO101GripperTarget(snapshot, target, profile));
+}
+
+void requireAttachPreloadQ6(ValidationResult & result, const WorldSnapshot & snapshot,
+                            const SO101Profile & profile)
+{
+  const auto position = snapshot.joint_positions.find(profile.gripper_joint);
+  const auto velocity = snapshot.joint_velocities.find(profile.gripper_joint);
+  const double lower = profile.q6_contact - profile.q6_regrasp_squeeze_offset;
+  const double upper = profile.q6_contact + profile.contact_q6_stop_tolerance;
+  if (position == snapshot.joint_positions.end() || velocity == snapshot.joint_velocities.end() ||
+      !std::isfinite(position->second) || !std::isfinite(velocity->second)) {
+    add(result, FailureCategory::OBSERVATION, "ATTACH_PRELOAD_Q6_EVIDENCE_REQUIRED",
+        "Gazebo attach requires finite gripper position and velocity evidence");
+    return;
+  }
+  result.metrics["attach_preload_q6"] = position->second;
+  result.metrics["attach_preload_q6_lower"] = lower;
+  result.metrics["attach_preload_q6_upper"] = upper;
+  if (position->second < lower - 1e-12 || position->second > upper + 1e-12) {
+    add(result, FailureCategory::GRIPPER, "ATTACH_PRELOAD_Q6_OUT_OF_BOUNDS",
+        "Gazebo attach precondition exceeds the configured bounded preload interval");
+  }
+  if (std::abs(velocity->second) > profile.q6_velocity_tolerance) {
+    add(result, FailureCategory::GRIPPER, "Q6_NOT_STATIONARY",
+        "Joint 6 velocity exceeds the stop threshold");
+  }
 }
 
 void requireBilateralFingerContact(ValidationResult & result, const WorldSnapshot & snapshot,
@@ -258,7 +285,7 @@ bool requiresStableSupport(TransitionKey key)
 
 void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot & before,
                                 const WorldSnapshot & after, TransitionKey key,
-                                const SO101Profile & profile)
+                                const SO101Profile & profile, bool validating_precondition = false)
 {
   if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world)
     return;
@@ -288,8 +315,14 @@ void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot &
     const bool detaching = key.from == State::DETACH_GAZEBO || key.from == State::DETACH_MOVEIT;
     const double xy_tolerance =
       detaching ? profile.place_detach_xy_tolerance : profile.place_support_xy_tolerance;
+    const bool before_physical_detach =
+      key.from == State::DETACH_GAZEBO &&
+      (validating_precondition || std::string_view(phase) == "before");
+    const double height_tolerance = before_physical_detach
+                                      ? profile.place_pre_detach_height_tolerance
+                                      : profile.place_support_height_tolerance;
     return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
-           xy_error <= xy_tolerance && height_error <= profile.place_support_height_tolerance &&
+           xy_error <= xy_tolerance && height_error <= height_tolerance &&
            tilt <= profile.place_support_tilt_tolerance_rad;
   };
   const bool supported =
@@ -371,9 +404,12 @@ public:
                                     key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
                                   ? SO101GripperTarget::FULL_OPEN
                                   : SO101GripperTarget::CONTACT;
-    requireQ6(result, before, gripper_target, profile_);
+    if (key_.from == State::ATTACH_GAZEBO)
+      requireAttachPreloadQ6(result, before, profile_);
+    else
+      requireQ6(result, before, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
-      requireExpectedSupportPose(result, before, before, key_, profile_);
+      requireExpectedSupportPose(result, before, before, key_, profile_, true);
     }
     if (key_.from == State::ATTACH_GAZEBO) {
       requireBilateralFingerContact(result, before, profile_);

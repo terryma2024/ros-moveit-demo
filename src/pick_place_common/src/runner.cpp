@@ -101,6 +101,17 @@ State StateMachineRunner::resolve(State state, ActionStatus status) const
   return status == ActionStatus::SUCCEEDED ? found->second.succeeded : found->second.failed;
 }
 
+bool StateMachineRunner::isForceContinueState(State state) const noexcept
+{
+  return workflow_.force_continue_states.count(state) != 0;
+}
+
+bool StateMachineRunner::isForceContinuableFailure(State state, const Failure & failure) const noexcept
+{
+  return failure.category == FailureCategory::POSTCONDITION &&
+         isForceContinueState(resolve(state, ActionStatus::FAILED));
+}
+
 bool StateMachineRunner::terminal(State state) const
 {
   return workflow_.terminal_states.count(state) != 0;
@@ -320,13 +331,20 @@ RunResult StateMachineRunner::runExecuteWorkflow(
   }
   trace.push_back(state);
   while (!terminal(state) && transition_count < request.max_state_transitions) {
-    if (state == State::VALIDATION_FAILED) {
-      return {RunStatus::CHECKPOINT_COMPLETE,
-              state,
-              state,
-              workflow_failure,
-              transition_count,
-              std::move(trace)};
+    if (isForceContinueState(state)) {
+      if (!request.force_continue) {
+        return {RunStatus::CHECKPOINT_COMPLETE,
+                state,
+                state,
+                workflow_failure,
+                transition_count,
+                std::move(trace)};
+      }
+      state = resolve(state, ActionStatus::SUCCEEDED);
+      ++transition_count;
+      trace.push_back(state);
+      workflow_failure.reset();
+      continue;
     }
     if (phase == CheckpointPhase::RECOVERY && request.mode == RunMode::PLAN_ONLY &&
         state == State::RECOVER_RETREAT && workflow_failure && observer_ != nullptr) {
@@ -492,7 +510,6 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
     }
     before = *observation.snapshot;
   }
-  const ObservationResult planning_observation{*before, std::nullopt};
   auto precondition = contracts_.validatePrecondition({state, next_state}, *before);
   std::size_t precondition_attempt = 0;
   while (!precondition.ok && !precondition.failures.empty() &&
@@ -540,6 +557,7 @@ RunResult StateMachineRunner::runExecuteStep(State state, std::optional<WorldSna
                            std::string("No plan validator is registered for ") + toString(state),
                            {}});
     }
+    const ObservationResult planning_observation{*before, std::nullopt};
     const auto plan = planner->plan(state, next_state, planning_observation);
     if (plan.action.status != ActionStatus::SUCCEEDED || !plan.artifact) {
       auto failure = plan.action.failure.value_or(Failure{FailureCategory::PLAN_VALIDATION,
@@ -657,10 +675,16 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
                                                               {}}));
   }
   const auto & checkpoint = *loaded.checkpoint;
+  const bool validation_pause =
+    checkpoint.phase == CheckpointPhase::FORWARD &&
+    checkpoint.failed_state == checkpoint.last_completed_state && checkpoint.original_failure &&
+    isForceContinueState(checkpoint.next_state) &&
+    resolve(checkpoint.last_completed_state, ActionStatus::FAILED) == checkpoint.next_state;
   const bool invalid_forward_transition =
     checkpoint.phase == CheckpointPhase::FORWARD &&
     (terminal(checkpoint.last_completed_state) ||
-     resolve(checkpoint.last_completed_state, ActionStatus::SUCCEEDED) != checkpoint.next_state);
+     (!validation_pause &&
+      resolve(checkpoint.last_completed_state, ActionStatus::SUCCEEDED) != checkpoint.next_state));
   const bool invalid_recovery_context = checkpoint.phase == CheckpointPhase::RECOVERY &&
                                         (!checkpoint.failed_state || !checkpoint.original_failure);
   if (checkpoint.schema_version != 3 || checkpoint.source_mode != RunMode::EXECUTE ||
@@ -669,6 +693,13 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
                  {FailureCategory::RESUME_VALIDATION,
                   "CHECKPOINT_INCOMPATIBLE",
                   "Checkpoint does not describe a valid successful workflow transition",
+                 {}});
+  }
+  if (request.force_continue && !validation_pause) {
+    return error(checkpoint.next_state,
+                 {FailureCategory::RESUME_VALIDATION,
+                  "FORCE_CONTINUE_STATE_MISMATCH",
+                  "force_continue requires a declared validation-pause checkpoint",
                   {}});
   }
   if (request.mode == RunMode::PLAN_ONLY) {
@@ -778,7 +809,20 @@ RunResult StateMachineRunner::runResume(const RunRequest & request) const
                               CheckpointPhase::RECOVERY, checkpoint.failed_state,
                               checkpoint.original_failure);
   }
-  const TransitionKey resumed_transition{checkpoint.last_completed_state, checkpoint.next_state};
+  if (validation_pause && !request.force_continue) {
+    return {RunStatus::CHECKPOINT_COMPLETE,
+            checkpoint.next_state,
+            checkpoint.next_state,
+            checkpoint.original_failure,
+            0,
+            {checkpoint.next_state}};
+  }
+  const TransitionKey resumed_transition = validation_pause
+                                            ? TransitionKey{checkpoint.next_state,
+                                                            resolve(checkpoint.next_state,
+                                                                    ActionStatus::SUCCEEDED)}
+                                            : TransitionKey{checkpoint.last_completed_state,
+                                                            checkpoint.next_state};
   if (!contracts_.hasContract(resumed_transition)) {
     return error(checkpoint.next_state, {FailureCategory::CONFIGURATION,
                                          "MISSING_TRANSITION_CONTRACT",
@@ -812,6 +856,28 @@ RunResult StateMachineRunner::handleActionFailure(State state, IStateExecutor & 
   }
   original_failure.metrics["cancel_succeeded"] = 1.0;
   original_failure.metrics["arm_stationary_after_cancel"] = 1.0;
+  if (isForceContinuableFailure(state, original_failure) && checkpoint_store_ != nullptr &&
+      resume_validator_ != nullptr) {
+    const auto pause_state = resolve(state, ActionStatus::FAILED);
+    Checkpoint checkpoint;
+    checkpoint.run_id = "pick_place_state_machine";
+    checkpoint.sequence = checkpoint_sequence;
+    checkpoint.phase = CheckpointPhase::FORWARD;
+    checkpoint.last_completed_state = state;
+    checkpoint.failed_state = state;
+    checkpoint.original_failure = original_failure;
+    checkpoint.next_state = pause_state;
+    setExpectedWorldState(checkpoint, *stopped.snapshot);
+    checkpoint.configuration_fingerprint = resume_validator_->configurationFingerprint();
+    checkpoint.simulation_session_id = resume_validator_->simulationSessionId();
+    if (const auto checkpoint_failure = checkpoint_store_->commit(checkpoint)) {
+      return {RunStatus::RUNNING, state, pause_state,
+              withCheckpointPersistenceFailure(std::move(original_failure), *checkpoint_failure),
+              1};
+    }
+    return {RunStatus::CHECKPOINT_COMPLETE, pause_state, pause_state,
+            std::move(original_failure), 1};
+  }
   if (!forwardAction(state) || resolve(state, ActionStatus::FAILED) == State::ERROR) {
     return error(state, std::move(original_failure));
   }

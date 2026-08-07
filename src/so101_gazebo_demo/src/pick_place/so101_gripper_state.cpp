@@ -13,6 +13,10 @@ namespace so101_gazebo_demo::pick_place
 namespace
 {
 
+constexpr int kReleaseConvergenceMaxSamples = 40;
+constexpr int kReleaseConvergenceRequiredSamples = 3;
+constexpr auto kReleaseConvergenceSamplePeriod = std::chrono::milliseconds(50);
+
 std::pair<double, double> targetFor(SO101GripperTarget target, const SO101Profile & profile)
 {
   switch (target) {
@@ -182,7 +186,7 @@ public:
         result.metrics["task_object_final_tilt_rad"] = final_tilt;
         const bool release_settled_on_support =
           config_.state == State::OPEN_GRIPPER &&
-          supportedAtPlace(*after.gazebo_task_object_pose_world, profile_);
+          supportedAtPlaceBeforeDetach(*after.gazebo_task_object_pose_world, profile_);
         if (config_.state == State::OPEN_GRIPPER && !release_settled_on_support) {
           result.failures.push_back(
             {FailureCategory::POSTCONDITION,
@@ -269,7 +273,7 @@ ActionResult SO101GripperStateExecutor::execute(const ExecutionContext & context
       if (!action_aborted || !observer_)
         return result;
       int consecutive = 0;
-      for (int sample = 0; sample < 20; ++sample) {
+      for (int sample = 0; sample < kReleaseConvergenceMaxSamples; ++sample) {
         const auto observed = observer_->observe();
         if (!observed.snapshot)
           return result;
@@ -286,12 +290,12 @@ ActionResult SO101GripperStateExecutor::execute(const ExecutionContext & context
           std::abs(position->second - stage) <= profile_.q6_full_open_tolerance &&
           std::abs(velocity->second) <= profile_.q6_velocity_tolerance;
         consecutive = physically_reached ? consecutive + 1 : 0;
-        if (consecutive >= 3)
+        if (consecutive >= kReleaseConvergenceRequiredSamples)
           break;
-        if (sample + 1 < 20)
-          std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        if (sample + 1 < kReleaseConvergenceMaxSamples)
+          std::this_thread::sleep_for(kReleaseConvergenceSamplePeriod);
       }
-      if (consecutive < 3)
+      if (consecutive < kReleaseConvergenceRequiredSamples)
         return result;
     }
     return {ActionStatus::SUCCEEDED, std::nullopt};

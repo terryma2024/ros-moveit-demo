@@ -1,5 +1,7 @@
 #include "panda_gazebo_demo/pick_place/ready_retreat_action.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace panda_gazebo_demo::pick_place
@@ -54,7 +56,8 @@ PlanResult ReadyRetreatAction::plan(State current_state, State next_state,
                                            {}}},
             nullptr};
   }
-  if (config_.named_target.empty() || config_.ready_joint_positions.empty()) {
+  if (config_.named_target.empty() || config_.ready_joint_positions.empty() ||
+      !std::isfinite(config_.clearance_height)) {
     return {
       {ActionStatus::FAILED, Failure{FailureCategory::CONFIGURATION,
                                      "READY_RETREAT_TARGET_MISSING",
@@ -62,7 +65,18 @@ PlanResult ReadyRetreatAction::plan(State current_state, State next_state,
                                      {}}},
       nullptr};
   }
-  return motion_->planNamedTarget({current_state, next_state, config_.named_target}, observation);
+  if (!observation.snapshot) {
+    return {
+      {ActionStatus::FAILED, Failure{FailureCategory::OBSERVATION,
+                                     "READY_RETREAT_OBSERVATION_MISSING",
+                                     "Ready retreat planning requires a current world observation",
+                                     {}}},
+      nullptr};
+  }
+  auto clearance_pose = observation.snapshot->tcp_pose_world;
+  clearance_pose.z = std::max(clearance_pose.z, config_.clearance_height);
+  return motion_->planSafeNamedTarget(
+    {current_state, next_state, clearance_pose, config_.named_target}, observation);
 }
 
 ActionResult ReadyRetreatAction::execute(const ExecutionContext & context)

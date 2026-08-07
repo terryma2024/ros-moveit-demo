@@ -40,6 +40,7 @@ struct PickPlaceRuntimeConfig
   std::string ready_named_target{"ready"};
   std::map<std::string, double> ready_joint_positions;
   double ready_joint_tolerance{0.010};
+  double retreat_clearance_height{0.987};
   double planning_scene_timeout_seconds{2.0};
   double state_poll_interval_seconds{0.05};
 };

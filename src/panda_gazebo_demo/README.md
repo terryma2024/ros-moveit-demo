@@ -12,6 +12,9 @@ for the ownership boundary and extension rules. See
 [`../../docs/pick-place-launch-parameters.md`](../../docs/pick-place-launch-parameters.md)
 for the authoritative launch, run-to-plan-only, resume, and safety contract.
 
+Panda has no force-continue state. The retired `attach_and_lift_demo` is not an
+installed entry point; use the state-machine and documented launch controls.
+
 Build and source the workspace before running the headless checks:
 
 ```bash

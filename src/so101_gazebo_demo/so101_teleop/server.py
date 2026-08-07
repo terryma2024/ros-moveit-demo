@@ -54,7 +54,7 @@ SO101_JOINT_POSITION_LIMITS_RAD: dict[str, tuple[float, float]] = {
     "3": (-1.74533, 1.5708),
     "4": (-1.65806, 1.65806),
     "5": (-2.79253, 2.79253),
-    "6": (-0.059303612618397, 1.74533),
+    "6": (-0.059600220867817, 1.74533),
 }
 TELEOP_ENVIRONMENT_KEYS = (
     "ROS_DOMAIN_ID", "ROS_DISTRO", "ROS_VERSION", "ROS_PYTHON_VERSION",
@@ -206,18 +206,6 @@ class RosTelemetryWorker:
             except RuntimeError:
                 self._moveit_attached = None
             time.sleep(1.0)
-
-    def _legacy_bridge_pose_unused(self, message: TFMessage) -> None:
-        for transform in message.transforms:
-            if transform.child_frame_id.rsplit("/", 1)[-1] != "plastic_cup":
-                continue
-            translation, rotation = transform.transform.translation, transform.transform.rotation
-            roll, pitch, yaw = _quaternion_to_rpy(rotation.x, rotation.y, rotation.z, rotation.w)
-            self._object_pose = Pose6D(frame_id=transform.header.frame_id or "world", tcp_frame="plastic_cup",
-                x_m=translation.x, y_m=translation.y, z_m=translation.z,
-                roll_rad=roll, pitch_rad=pitch, yaw_rad=yaw)
-            self._object_stamp = time.time()
-            return
 
     def _on_contacts(self, message: Contacts) -> None:
         from .models import CollisionPair
@@ -501,7 +489,7 @@ class RosTelemetryWorker:
     def home(self) -> None:
         stored=self.plan_joints({str(i): 0.0 for i in range(1, 6)})
         self.execute_plan(stored.summary.plan_id)
-        self.gripper(-0.059303612618397)
+        self.gripper(-0.059600220867817)
 
     def invalidate_session(self) -> str:
         self._plans.clear(); self._active_goal=None; self._attached=None; self._session_id=f"reset-{uuid.uuid4()}"

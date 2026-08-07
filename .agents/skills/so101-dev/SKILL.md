@@ -21,9 +21,18 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
    - 查找源码、launch、安装产物或运行边界：[`references/so101-system-map.md`](references/so101-system-map.md)
    - 定位根因和区分证据层：[`references/debug-evidence.md`](references/debug-evidence.md)
    - 修改代码、运行测试或声明完成：[`references/test-and-acceptance.md`](references/test-and-acceptance.md)
+   - 多轮实验、生命周期比较、上下文压缩或 agent 交接：[`references/experiment-ledger.md`](references/experiment-ledger.md)
 3. 从当前 orchestrator 和 ai-station 分别记录 `pwd`、commit、branch、submodule 和 `git status --short`；已经位于 ai-station 的 coding agent 直接在本机取证，不再 SSH 自身。已有改动均视为用户工作，不能覆盖、清理或夹带。
 4. 检查现有进程、ROS graph 和 `codex-cua` tmux 状态。不得在不知情时启动第二套 `/move_group`、RViz 或 Gazebo。
 5. 给本轮建立一个 `/tmp/so101-debug-<时间或短ID>/` 证据目录；不要把日志、截图或构建产物写进源码目录。
+
+## 长程任务实验账本
+
+预计需要两轮以上实验、需要比较环境生命周期或连续成功、任务可能跨上下文压缩/goal 暂停/agent 交接，或用户要求避免重复路线时，必须在当前实现 worktree 建立并持续更新 `docs/experiments/<task-slug>-experiment-ledger.md`。详细状态机、字段和模板见 [`references/experiment-ledger.md`](references/experiment-ledger.md)。
+
+恢复任务时必须先读账本，复述最后可信 checkpoint、已确认结论、已证伪路线和下一条实验引用；完成前不得启动 stack、调参、操作 GUI 或清理进程。原始日志和截图继续放在唯一的 `/tmp` 证据根目录，不能让 `/tmp` 或聊天成为长期结论的唯一载体。
+
+每条实验记录必须显式写出 source commit、install overlay、runtime executable 或 package prefix、`ROS_DOMAIN_ID` 和 `GZ_PARTITION`；不得只写笼统的 “provenance 已确认”。每轮结束、上下文压缩、暂停或交接前，必须先更新账本 checkpoint，再发送聊天或 tmux 摘要。
 
 ## Web 工具链
 
@@ -37,7 +46,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 1. **定义症状**：写清操作、期望、实际结果、首次失败边界和运行模式 `dry_run | plan_only | execute`。
 2. **最小复现**：复用一套已知进程；必要时用 `stop_after`、单状态 CLI 或单测缩短路径。保存命令、退出码、时间戳和拥有该日志的进程。
 3. **分层取证**：至少检查源码/安装产物、ROS/MoveIt、控制器与反馈、Gazebo 物理、Planning Scene、视觉六层中的相关层。把结论标为 `OBSERVED`、`INFERRED` 或 `HYPOTHESIS`。
-4. **A/B 隔离**：只改变一个变量。优先在第一个出现分叉的边界修复，不在下游用补偿逻辑掩盖上游错误。
+4. **A/B 隔离**：只改变一个变量。长程任务必须先写 `PLANNED` 实验条目，冻结历史引用、唯一变量、`REUSE_STACK | RESET_WORLD | FULL_RESTART` 生命周期和判据；结束后落为 `VALID` 或 `INVALID`。优先在第一个出现分叉的边界修复，不在下游用补偿逻辑掩盖上游错误。
 5. **最小修改**：先建立会失败的自动化回归测试；如果缺陷只能在 live runtime 重现，保留失败命令和前后状态断言，再补最接近所属边界的测试。只修改根因所属层。
 6. **重新验证**：重新构建、重新 source、确认执行的是新安装产物；先跑定向测试，再跑包级测试，最后跑一次真实复现并做新的 GUI 截图。
 
@@ -88,6 +97,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 - 使用本轮新截图确认可见结果；截图不能只证明窗口存在。
 - 没有覆盖用户既有改动，没有遗留重复 stack 或失控后台进程。
 - 未通过的层、剩余风险和下一条验证命令已明确列出。
+- 长程任务的实验结论和最新 checkpoint 已写入账本；不同生命周期没有混算，无效运行没有计入成功率或连续成功。
 
 ## 常见错误
 
@@ -96,3 +106,4 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 - 修改 source 后直接 `ros2 run`。必须 build、source，再验证 package prefix/产物。
 - 用 GUI 截图代替状态查询，或用状态查询代替 GUI 验收。两者都要有。
 - 为获得“干净环境”清理用户 worktree。用独立 `/tmp` 证据目录和最小补丁隔离。
+- 只在聊天、tmux 或 `/tmp` 中保存长程实验结论。先更新持久账本和 checkpoint，再交接或继续下一轮。

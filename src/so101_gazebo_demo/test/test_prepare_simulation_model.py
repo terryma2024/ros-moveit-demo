@@ -185,6 +185,109 @@ def test_fingertip_convex_hulls_marks_native_tpu_pad_pieces():
         assert mesh.attrib.get('optimization') == 'convex_hull'
 
 
+def test_fingertip_contact_material_is_injected_into_generated_sdf():
+    """The URDF converter drops Gazebo contact tags; preparation must restore them."""
+    module = load_module()
+    fixed = _read_manifest(FIXED_MANIFEST)
+    moving = _read_manifest(MOVING_MANIFEST)
+    sdf = _fingertip_sdf(fixed, moving).replace(
+        '</link>', _native_pad_collisions() + '</link>', 1
+    )
+    material = {
+        'axial_friction_coefficient': 3.0,
+        'transverse_friction_coefficient': 1.2,
+        'contact_stiffness_n_m': 1000000.0,
+        'contact_damping_n_s_m': 100.0,
+        'max_correcting_velocity_m_s': 0.01,
+        'min_depth_m': 0.0001,
+    }
+
+    result = module.apply_fingertip_contact_material(sdf, material)
+    root = ET.fromstring(result)
+    pads = [
+        collision for collision in root.iter('collision')
+        if '_fingertip_pad_collision_' in collision.attrib.get('name', '')
+    ]
+    assert len(pads) == 13
+    for collision in pads:
+        direction = (
+            '0 0 1'
+            if 'fixed_fingertip' in collision.attrib['name'] else '0 1 0'
+        )
+        assert collision.findtext('surface/friction/ode/mu') == '3.0'
+        assert collision.findtext('surface/friction/ode/mu2') == '1.2'
+        assert collision.findtext('surface/friction/ode/fdir1') == direction
+        assert collision.findtext('surface/friction/bullet/friction') == '3.0'
+        assert collision.findtext('surface/friction/bullet/friction2') == '1.2'
+        # bullet-featherstone ignores SDF fdir1.  Its anisotropic axes are the
+        # compound link's local axes, so emitting fdir1 would promise behavior
+        # that the selected engine cannot provide.
+        assert collision.find('surface/friction/bullet/fdir1') is None
+        assert collision.findtext('surface/contact/ode/kp') == '1000000.0'
+        assert collision.findtext('surface/contact/ode/kd') == '100.0'
+        assert collision.findtext('surface/contact/ode/max_vel') == '0.01'
+        assert collision.findtext('surface/contact/ode/min_depth') == '0.0001'
+        assert collision.findtext('surface/contact/bullet/kp') == '1000000.0'
+        assert collision.findtext('surface/contact/bullet/kd') == '100.0'
+
+
+def test_fingertip_material_reaches_bullet_compound_link_owner_collision():
+    """Bullet reads friction only from the first collision of a compound link."""
+    module = load_module()
+    fixed_pads = ''.join(
+        f'''<collision name="fixed_fingertip_pad_collision_{index:03d}_collision_{index}">
+          <geometry><mesh><uri>fixed-{index}.stl</uri></mesh></geometry>
+        </collision>'''
+        for index in range(7)
+    )
+    moving_pads = ''.join(
+        f'''<collision name="moving_fingertip_pad_collision_{index:03d}_collision_{index}">
+          <geometry><mesh><uri>moving-{index}.stl</uri></mesh></geometry>
+        </collision>'''
+        for index in range(6)
+    )
+    sdf = f'''<sdf version="1.11"><model name="so101">
+      <link name="gripper">
+        <collision name="fixed_finger_contact_convex_000_collision"/>
+        {fixed_pads}
+      </link>
+      <link name="jaw">
+        <collision name="moving_jaw_contact_convex_000_collision"/>
+        {moving_pads}
+      </link>
+    </model></sdf>'''
+    material = {
+        'axial_friction_coefficient': 3.0,
+        'transverse_friction_coefficient': 1.2,
+        'contact_stiffness_n_m': 1000000.0,
+        'contact_damping_n_s_m': 100.0,
+        'max_correcting_velocity_m_s': 0.01,
+        'min_depth_m': 0.0001,
+    }
+
+    root = ET.fromstring(module.apply_fingertip_contact_material(sdf, material))
+    for link_name in ('gripper', 'jaw'):
+        owner = root.find(f".//link[@name='{link_name}']/collision")
+        assert owner is not None
+        assert owner.findtext('surface/friction/bullet/friction') == '3.0'
+        assert owner.findtext('surface/friction/bullet/friction2') == '1.2'
+        assert owner.find('surface/friction/bullet/fdir1') is None
+        # Bullet Featherstone also resolves compound-contact material from the
+        # first collision owned by the link.  Stiffness only on a later pad
+        # child is therefore as ineffective as friction only on that child.
+        assert owner.findtext('surface/contact/bullet/kp') == '1000000.0'
+        assert owner.findtext('surface/contact/bullet/kd') == '100.0'
+
+
+def test_generated_sdf_native_pad_detection_parses_collision_names():
+    module = load_module()
+    sdf = '''<sdf version="1.11"><model name="so101"><link name="gripper">
+      <collision name="gripper_fixed_joint_lump__fixed_fingertip_pad_collision_000_collision_7"/>
+    </link></model></sdf>'''
+
+    assert module.has_native_fingertip_pads(sdf)
+
+
 def test_fingertip_convex_hulls_rejects_name_mismatch():
     module = load_module()
     fixed = _read_manifest(FIXED_MANIFEST)

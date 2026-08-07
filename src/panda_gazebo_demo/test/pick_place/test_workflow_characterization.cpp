@@ -54,6 +54,14 @@ TEST(PandaWorkflowCharacterization, RequestDefaultsRemainStable)
   EXPECT_EQ(100U, request.max_state_transitions);
 }
 
+TEST(PandaWorkflowCharacterization, HistoricalPositionalRequestAggregateRemainsSupported)
+{
+  const pp::RunRequest request{pp::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100};
+  EXPECT_TRUE(request.resume);
+  EXPECT_EQ(100U, request.max_state_transitions);
+  EXPECT_FALSE(request.plan_only_state);
+}
+
 TEST(PandaWorkflowCharacterization, CompatibilityTableMatchesEveryWorkflowEdge)
 {
   const auto & workflow = pp::pandaWorkflowDefinition();

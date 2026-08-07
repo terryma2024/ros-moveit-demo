@@ -18,6 +18,20 @@ double uprightTilt(const Pose3d & pose) noexcept
   return std::acos(std::clamp(local_z_world_z, -1.0, 1.0));
 }
 
+bool supportedAtPlaceWithHeightTolerance(const Pose3d & pose, const SO101Profile & profile,
+                                         double height_tolerance) noexcept
+{
+  if (!isFinitePose(pose))
+    return false;
+  const auto & expected = profile.place_task_object_pose;
+  const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
+  const double height_error = std::abs(pose.z - expected.z);
+  const double tilt = uprightTilt(pose);
+  return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
+         xy_error <= profile.place_support_xy_tolerance && height_error <= height_tolerance &&
+         tilt <= profile.place_support_tilt_tolerance_rad;
+}
+
 }  // namespace
 
 bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile) noexcept
@@ -30,16 +44,13 @@ bool supportedAtPick(const Pose3d & pose, const SO101Profile & profile) noexcept
 
 bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile) noexcept
 {
-  if (!isFinitePose(pose))
-    return false;
-  const auto & expected = profile.place_task_object_pose;
-  const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
-  const double height_error = std::abs(pose.z - expected.z);
-  const double tilt = uprightTilt(pose);
-  return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
-         xy_error <= profile.place_support_xy_tolerance &&
-         height_error <= profile.place_support_height_tolerance &&
-         tilt <= profile.place_support_tilt_tolerance_rad;
+  return supportedAtPlaceWithHeightTolerance(pose, profile, profile.place_support_height_tolerance);
+}
+
+bool supportedAtPlaceBeforeDetach(const Pose3d & pose, const SO101Profile & profile) noexcept
+{
+  return supportedAtPlaceWithHeightTolerance(pose, profile,
+                                             profile.place_pre_detach_height_tolerance);
 }
 
 }  // namespace so101_gazebo_demo::pick_place

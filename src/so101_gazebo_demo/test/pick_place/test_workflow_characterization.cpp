@@ -29,6 +29,9 @@ TEST(SO101WorkflowCharacterization, DefaultDryRunTraceAndExtendedStatesRemainSta
                                         pp::State::DESCEND,
                                         pp::State::CLOSE_GRIPPER,
                                         pp::State::WAIT_GRASP_STABLE,
+                                        pp::State::MICRO_LIFT,
+                                        pp::State::WAIT_MICRO_LIFT_STABLE,
+                                        pp::State::VERIFY_PHYSICAL_GRASP,
                                         pp::State::ATTACH_GAZEBO,
                                         pp::State::ATTACH_MOVEIT,
                                         pp::State::LIFT,
@@ -44,6 +47,10 @@ TEST(SO101WorkflowCharacterization, DefaultDryRunTraceAndExtendedStatesRemainSta
   EXPECT_EQ("MICRO_LIFT", std::string(pp::toString(pp::State::MICRO_LIFT)));
   EXPECT_EQ("VERIFY_PHYSICAL_GRASP", std::string(pp::toString(pp::State::VERIFY_PHYSICAL_GRASP)));
   EXPECT_EQ("VALIDATION_FAILED", std::string(pp::toString(pp::State::VALIDATION_FAILED)));
+  const auto & workflow = pp::so101WorkflowDefinition();
+  EXPECT_EQ(pp::State::MICRO_LIFT, workflow.transitions.at(pp::State::WAIT_GRASP_STABLE).succeeded);
+  EXPECT_EQ(pp::State::VALIDATION_FAILED,
+            workflow.transitions.at(pp::State::VERIFY_PHYSICAL_GRASP).failed);
 }
 
 TEST(SO101WorkflowCharacterization, RequestDefaultsRemainStable)
@@ -58,6 +65,15 @@ TEST(SO101WorkflowCharacterization, RequestDefaultsRemainStable)
   EXPECT_FALSE(request.force_continue);
 }
 
+TEST(SO101WorkflowCharacterization, HistoricalPositionalRequestAggregateRemainsSupported)
+{
+  const pp::RunRequest request{
+    pp::RunMode::EXECUTE, std::nullopt, true, std::nullopt, 100, true, true};
+  EXPECT_TRUE(request.single_step);
+  EXPECT_TRUE(request.force_continue);
+  EXPECT_FALSE(request.plan_only_state);
+}
+
 TEST(SO101WorkflowCharacterization, AttachMoveItFailureContractRemainsStable)
 {
   const pp::StateMachineRunner runner;
@@ -69,13 +85,16 @@ TEST(SO101WorkflowCharacterization, AttachMoveItFailureContractRemainsStable)
   EXPECT_EQ(pp::State::ERROR, result.current_state);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("DRY_RUN_FAILURE_INJECTED", result.failure->code);
-  EXPECT_EQ(13U, result.transition_count);
+  EXPECT_EQ(16U, result.transition_count);
   const std::vector<pp::State> expected{pp::State::IDLE,
                                         pp::State::PREPARE_OPEN_GRIPPER,
                                         pp::State::MOVE_ABOVE_OBJECT,
                                         pp::State::DESCEND,
                                         pp::State::CLOSE_GRIPPER,
                                         pp::State::WAIT_GRASP_STABLE,
+                                        pp::State::MICRO_LIFT,
+                                        pp::State::WAIT_MICRO_LIFT_STABLE,
+                                        pp::State::VERIFY_PHYSICAL_GRASP,
                                         pp::State::ATTACH_GAZEBO,
                                         pp::State::ATTACH_MOVEIT,
                                         pp::State::RECOVER_OPEN_GRIPPER,

@@ -21,3 +21,11 @@ def test_every_pick_place_implementation_is_in_the_build_manifest() -> None:
         unaccounted
     )
     assert all(ALLOWLIST.values()), 'Every allowlist entry must explain why it is not built'
+
+
+def test_no_state_machine_bypass_executable_is_built_or_installed() -> None:
+    cmake = (PACKAGE_ROOT / 'CMakeLists.txt').read_text(encoding='utf-8')
+    assert 'attach_and_lift_demo' not in cmake
+    assert not (PACKAGE_ROOT / 'src' / 'attach_and_lift_demo.cpp').exists()
+    assert not (PACKAGE_ROOT / 'include' / 'panda_gazebo_demo' / 'pick_place' /
+                'headless_fault_fixture.hpp').exists()

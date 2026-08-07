@@ -46,10 +46,19 @@ TEST(TransitionTable, AttachMoveItFailureSelectsCompleteSafeRecoveryChain)
   }
 }
 
-TEST(TransitionTable, StableContactAttachesBeforeAnyCarryingLift)
+TEST(TransitionTable, StableContactRequiresPhysicalValidationBeforeAttachment)
 {
-  EXPECT_EQ(pick_place::State::ATTACH_GAZEBO,
+  EXPECT_EQ(pick_place::State::MICRO_LIFT,
             pick_place::TransitionTable::resolve(pick_place::State::WAIT_GRASP_STABLE,
+                                                 pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::WAIT_MICRO_LIFT_STABLE,
+            pick_place::TransitionTable::resolve(pick_place::State::MICRO_LIFT,
+                                                 pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::VERIFY_PHYSICAL_GRASP,
+            pick_place::TransitionTable::resolve(pick_place::State::WAIT_MICRO_LIFT_STABLE,
+                                                 pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::ATTACH_GAZEBO,
+            pick_place::TransitionTable::resolve(pick_place::State::VERIFY_PHYSICAL_GRASP,
                                                  pick_place::ActionStatus::SUCCEEDED));
 }
 

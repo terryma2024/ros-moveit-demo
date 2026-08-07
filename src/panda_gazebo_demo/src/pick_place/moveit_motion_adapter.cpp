@@ -32,6 +32,7 @@ class MoveItMotionPlanEvidence final : public MotionPlanEvidence
 {
 public:
   moveit_msgs::msg::RobotTrajectory trajectory;
+  std::vector<moveit_msgs::msg::RobotTrajectory> execution_trajectories;
 };
 
 PlanResult planningFailure(FailureCategory category, std::string code, std::string message)
@@ -99,6 +100,40 @@ double durationSeconds(const builtin_interfaces::msg::Duration & duration)
   return static_cast<double>(duration.sec) + static_cast<double>(duration.nanosec) / 1.0e9;
 }
 
+std::int64_t durationNanoseconds(const builtin_interfaces::msg::Duration & duration)
+{
+  return static_cast<std::int64_t>(duration.sec) * 1000000000LL + duration.nanosec;
+}
+
+void setDurationNanoseconds(builtin_interfaces::msg::Duration & duration, std::int64_t nanoseconds)
+{
+  duration.sec = static_cast<std::int32_t>(nanoseconds / 1000000000LL);
+  duration.nanosec = static_cast<std::uint32_t>(nanoseconds % 1000000000LL);
+}
+
+std::optional<moveit_msgs::msg::RobotTrajectory>
+combineTrajectories(const moveit_msgs::msg::RobotTrajectory & first,
+                    const moveit_msgs::msg::RobotTrajectory & second)
+{
+  if (first.joint_trajectory.joint_names != second.joint_trajectory.joint_names ||
+      first.joint_trajectory.points.empty() || second.joint_trajectory.points.empty()) {
+    return std::nullopt;
+  }
+  auto combined = first;
+  const auto offset = durationNanoseconds(combined.joint_trajectory.points.back().time_from_start);
+  auto previous = offset;
+  for (auto point : second.joint_trajectory.points) {
+    auto time = offset + durationNanoseconds(point.time_from_start);
+    if (time <= previous) {
+      time = previous + 1;
+    }
+    setDurationNanoseconds(point.time_from_start, time);
+    combined.joint_trajectory.points.push_back(std::move(point));
+    previous = time;
+  }
+  return combined;
+}
+
 std::shared_ptr<MoveItMotionPlanEvidence>
 buildEvidence(State state_id, State next_state, MotionKind kind, bool carrying,
               const moveit_msgs::msg::RobotTrajectory & trajectory,
@@ -113,6 +148,7 @@ buildEvidence(State state_id, State next_state, MotionKind kind, bool carrying,
   evidence->carrying = carrying;
   evidence->cartesian_fraction = cartesian_fraction;
   evidence->trajectory = trajectory;
+  evidence->execution_trajectories = {trajectory};
   const auto & joint_trajectory = evidence->trajectory.joint_trajectory;
   evidence->trajectory_points = joint_trajectory.points.size();
   evidence->collision_aware = true;
@@ -451,6 +487,76 @@ PlanResult MoveItMotionAdapter::planNamedTarget(const NamedTargetPlanningRequest
   return {{ActionStatus::SUCCEEDED, std::nullopt}, evidence};
 }
 
+PlanResult MoveItMotionAdapter::planSafeNamedTarget(const SafeNamedTargetPlanningRequest & request,
+                                                    const ObservationResult & observation)
+{
+  if (!observation.snapshot) {
+    return planningFailure(FailureCategory::OBSERVATION, "MOTION_OBSERVATION_MISSING",
+                           "Safe named-target planning requires a current world observation");
+  }
+  const MotionPlanningRequest clearance_request{
+    request.state, request.next_state, MotionKind::CARTESIAN_UP, false, request.clearance_pose};
+  auto clearance_result = plan(clearance_request, observation);
+  const auto clearance_evidence =
+    std::dynamic_pointer_cast<const MoveItMotionPlanEvidence>(clearance_result.artifact);
+  if (clearance_result.action.status != ActionStatus::SUCCEEDED || !clearance_evidence) {
+    return clearance_result;
+  }
+
+  auto & move_group = impl_->moveGroup();
+  const auto current_state = move_group.getCurrentState(2.0);
+  if (!current_state) {
+    return planningFailure(FailureCategory::OBSERVATION, "CURRENT_STATE_UNAVAILABLE",
+                           "MoveIt did not provide the safe-retreat start state");
+  }
+  auto clearance_end_state = *current_state;
+  for (const auto & [joint, position] : clearance_evidence->planned_end_joint_positions) {
+    clearance_end_state.setVariablePosition(joint, position);
+  }
+  clearance_end_state.update();
+
+  const auto target_joint_positions = move_group.getNamedTargetValues(request.target_name);
+  if (target_joint_positions.empty()) {
+    return planningFailure(FailureCategory::CONFIGURATION, "NAMED_TARGET_UNAVAILABLE",
+                           "MoveIt named target is unavailable: " + request.target_name);
+  }
+  move_group.clearPoseTargets();
+  move_group.setStartState(clearance_end_state);
+  if (!move_group.setNamedTarget(request.target_name)) {
+    return planningFailure(FailureCategory::CONFIGURATION, "NAMED_TARGET_UNAVAILABLE",
+                           "MoveIt rejected named target: " + request.target_name);
+  }
+  MoveGroupInterface::Plan ready_plan;
+  if (!static_cast<bool>(move_group.plan(ready_plan))) {
+    return planningFailure(FailureCategory::PLANNING, "MOVEIT_SAFE_NAMED_TARGET_PLAN_FAILED",
+                           "MoveIt failed to plan from the retreat clearance pose to ready");
+  }
+  const auto combined = combineTrajectories(clearance_evidence->trajectory, ready_plan.trajectory);
+  if (!combined) {
+    return planningFailure(FailureCategory::PLAN_VALIDATION, "MOTION_SEQUENCE_INVALID",
+                           "Safe retreat trajectories could not be combined for validation");
+  }
+  auto evidence = buildEvidence(request.state, request.next_state, MotionKind::NAMED_TARGET, false,
+                                *combined, *current_state, impl_->tcp_link, 1.0, false, false);
+  if (!evidence) {
+    return planningFailure(FailureCategory::PLAN_VALIDATION, "MOTION_TCP_PATH_UNAVAILABLE",
+                           "Could not reconstruct the safe retreat TCP path");
+  }
+  evidence->execution_trajectories = {clearance_evidence->trajectory, ready_plan.trajectory};
+  evidence->named_target = request.target_name;
+  evidence->target_joint_positions = target_joint_positions;
+  RCLCPP_INFO(impl_->node->get_logger(),
+              "SAFE_NAMED_JOINT_TARGET state=%s target=%s segments=2 clearance_z=%.6f",
+              toString(request.state), request.target_name.c_str(), request.clearance_pose.z);
+  logPose(impl_->node->get_logger(), "START_TCP_POSE", request.state, request.next_state,
+          evidence->start_tcp_pose);
+  logPose(impl_->node->get_logger(), "PLANNED_END_TCP_POSE", request.state, request.next_state,
+          evidence->end_tcp_pose);
+  RCLCPP_INFO(impl_->node->get_logger(), "TRAJECTORY_POINTS state=%s value=%zu",
+              toString(request.state), evidence->trajectory_points);
+  return {{ActionStatus::SUCCEEDED, std::nullopt}, evidence};
+}
+
 ActionResult MoveItMotionAdapter::execute(const MotionPlanEvidence & evidence)
 {
   const auto * moveit_evidence = dynamic_cast<const MoveItMotionPlanEvidence *>(&evidence);
@@ -481,9 +587,13 @@ ActionResult MoveItMotionAdapter::execute(const MotionPlanEvidence & evidence)
                             "MoveIt execution start state changed after plan validation: " +
                               failure.message);
   }
-  if (!static_cast<bool>(impl_->move_group->execute(moveit_evidence->trajectory))) {
-    return executionFailure("MOVEIT_MOTION_EXECUTION_FAILED",
-                            "MoveIt failed to execute the validated motion trajectory");
+  for (std::size_t index = 0; index < moveit_evidence->execution_trajectories.size(); ++index) {
+    if (!static_cast<bool>(
+          impl_->move_group->execute(moveit_evidence->execution_trajectories[index]))) {
+      return executionFailure("MOVEIT_MOTION_SEGMENT_EXECUTION_FAILED",
+                              "MoveIt failed to execute validated motion segment " +
+                                std::to_string(index + 1));
+    }
   }
   logPose(impl_->node->get_logger(), "EXECUTED_END_TCP_POSE", evidence.state, evidence.next_state,
           toPose(impl_->move_group->getCurrentPose(impl_->tcp_link).pose));

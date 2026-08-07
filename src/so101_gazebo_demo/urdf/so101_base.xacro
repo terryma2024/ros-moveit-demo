@@ -414,7 +414,7 @@
 		</inertial>
 		<!-- Part moving_jaw_so101_v1 -->
 		<visual>
-			<origin xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<origin xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
 			<geometry>
 				<mesh filename="package://so101_gazebo_demo/meshes/so101/moving_jaw_so101_v1.stl" />
 			</geometry>
@@ -422,7 +422,7 @@
 		</visual>
 		<xacro:unless value="$(arg gazebo_collision_primitives)">
 			<collision>
-				<origin xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+				<origin xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
 				<geometry>
 					<mesh filename="package://so101_gazebo_demo/meshes/so101/moving_jaw_so101_v1.stl" />
 				</geometry>
@@ -430,16 +430,16 @@
 		</xacro:unless>
 		<xacro:if value="$(arg gazebo_collision_primitives)">
 			<!-- Offline VHACD for the moving load-bearing fingertip only. -->
-			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_000" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
-			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_001" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
-			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_002" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
-			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_003" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
-			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_004" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
-			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_005" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
-			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_006" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
-			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_007" directory="moving_jaw_contact" xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_000" directory="moving_jaw_contact" xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_001" directory="moving_jaw_contact" xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_002" directory="moving_jaw_contact" xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_003" directory="moving_jaw_contact" xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_004" directory="moving_jaw_contact" xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_005" directory="moving_jaw_contact" xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_006" directory="moving_jaw_contact" xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+			<xacro:fingertip_convex_collision piece="moving_jaw_contact_convex_007" directory="moving_jaw_contact" xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
 		</xacro:if>
-		<xacro:configured_moving_fingertip_pad xyz="-5.55112e-17 -1.94746e-17 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
+		<xacro:configured_moving_fingertip_pad xyz="-5.55112e-17 0.0004 0.0189" rpy="9.53145e-17 -4.66093e-24 0" />
 	</link>
 
 	<!-- Joint from gripper to jaw -->
@@ -448,7 +448,7 @@
 		<parent link="gripper" />
 		<child link="jaw" />
 		<axis xyz="0 0 1" />
-		<limit effort="10" velocity="10" lower="-0.059303612618397" upper="1.74533" />
+		<limit effort="10" velocity="10" lower="-0.059600220867817" upper="1.74533" />
 	</joint>
 
 	<transmission name="6_trans">
