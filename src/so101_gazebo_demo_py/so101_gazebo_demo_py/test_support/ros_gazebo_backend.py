@@ -81,15 +81,32 @@ def select_stamped_transform(transforms, child_frame_id: str):
     for item in reversed(tuple(transforms)):
         if item.child_frame_id != child_frame_id:
             continue
-        translation=item.transform.translation; rotation=item.transform.rotation
-        pose=(
-            float(translation.x),float(translation.y),float(translation.z),
-            float(rotation.x),float(rotation.y),float(rotation.z),float(rotation.w),
+        translation = item.transform.translation
+        rotation = item.transform.rotation
+        pose = (
+            float(translation.x), float(translation.y), float(translation.z),
+            float(rotation.x), float(rotation.y), float(rotation.z), float(rotation.w),
         )
-        stamp=float(item.header.stamp.sec)+float(item.header.stamp.nanosec)*1e-9
-        if not all(math.isfinite(value) for value in (*pose,stamp)):
+        stamp = float(item.header.stamp.sec) + float(item.header.stamp.nanosec) * 1e-9
+        if not all(math.isfinite(value) for value in (*pose, stamp)):
             return None
-        return pose,stamp
+        return pose, stamp
+    return None
+
+
+def select_gazebo_pose(message, entity_name: str):
+    for item in reversed(tuple(message.pose)):
+        if item.name != entity_name:
+            continue
+        pose = (
+            float(item.position.x), float(item.position.y), float(item.position.z),
+            float(item.orientation.x), float(item.orientation.y),
+            float(item.orientation.z), float(item.orientation.w),
+        )
+        stamp = float(message.header.stamp.sec) + float(message.header.stamp.nsec) * 1e-9
+        if not all(math.isfinite(value) for value in (*pose, stamp)):
+            return None
+        return pose, stamp
     return None
 
 
@@ -206,40 +223,64 @@ class RosGazeboLiveBackend:
         raise RuntimeError(f"durable Gazebo attachment state did not converge to {requested}")
 
     def sample(self) -> PoseSample:
+        from gz.msgs10.pose_v_pb2 import Pose_V
+        from gz.transport13 import Node as GazeboNode
         import rclpy
-        from rclpy.qos import qos_profile_sensor_data
-        from tf2_msgs.msg import TFMessage
+        from rclpy.duration import Duration
+        from tf2_ros import Buffer, TransformListener
 
-        rclpy.init(); node=rclpy.create_node("so101_live_pose_pair_probe")
-        observed={"object":None,"tcp":None}
+        rclpy.init()
+        node = rclpy.create_node("so101_live_pose_pair_probe")
+        observed = {"object": None, "tcp": None}
+        gazebo_node = GazeboNode()
+        buffer = Buffer()
+        listener = TransformListener(buffer, node)
+
         def receive_object(message):
-            selected=select_stamped_transform(message.transforms,"plastic_cup")
-            if selected is not None: observed["object"]=selected
-        def receive_tcp(message):
-            selected=select_stamped_transform(message.transforms,"so101_tcp")
-            if selected is not None: observed["tcp"]=selected
-        object_subscription=node.create_subscription(
-            TFMessage,"/so101/gazebo_pose_info",receive_object,qos_profile_sensor_data,
-        )
-        tcp_subscription=node.create_subscription(
-            TFMessage,"/tf",receive_tcp,qos_profile_sensor_data,
-        )
-        deadline=time.monotonic()+3.0
+            selected = select_gazebo_pose(message, "plastic_cup")
+            if selected is not None:
+                observed["object"] = selected
+
+        if not gazebo_node.subscribe(
+            Pose_V, "/world/so101_pick_place/pose/info", receive_object,
+        ):
+            node.destroy_node()
+            rclpy.shutdown()
+            raise RuntimeError("cannot subscribe to Gazebo pose info")
+        deadline = time.monotonic() + 3.0
         try:
-            while time.monotonic()<deadline and None in observed.values():
-                rclpy.spin_once(node,timeout_sec=.05)
+            while time.monotonic() < deadline and None in observed.values():
+                rclpy.spin_once(node, timeout_sec=0.05)
+                try:
+                    transform = buffer.lookup_transform(
+                        "world", "so101_tcp", rclpy.time.Time(),
+                        timeout=Duration(seconds=0.01),
+                    )
+                    translation = transform.transform.translation
+                    rotation = transform.transform.rotation
+                    stamp = transform.header.stamp
+                    observed["tcp"] = (
+                        (
+                            float(translation.x), float(translation.y), float(translation.z),
+                            float(rotation.x), float(rotation.y),
+                            float(rotation.z), float(rotation.w),
+                        ),
+                        float(stamp.sec) + float(stamp.nanosec) * 1e-9,
+                    )
+                except Exception:
+                    pass
         finally:
-            node.destroy_subscription(object_subscription)
-            node.destroy_subscription(tcp_subscription)
-            node.destroy_node(); rclpy.shutdown()
+            del listener
+            node.destroy_node()
+            rclpy.shutdown()
         if None in observed.values():
             raise RuntimeError(f"fresh Gazebo/TCP pose pair unavailable: {observed}")
-        object_pose,object_stamp=observed["object"]
-        tcp_pose,tcp_stamp=observed["tcp"]
-        self._arm_moved_since_sample=False
+        object_pose, object_stamp = observed["object"]
+        tcp_pose, tcp_stamp = observed["tcp"]
+        self._arm_moved_since_sample = False
         return PoseSample(
-            object_pose[:3],tcp_pose[:3],object_pose[3:],tcp_pose[3:],
-            abs(object_stamp-tcp_stamp),
+            object_pose[:3], tcp_pose[:3], object_pose[3:], tcp_pose[3:],
+            abs(object_stamp - tcp_stamp),
         )
 
     def attachment_state(self) -> str:

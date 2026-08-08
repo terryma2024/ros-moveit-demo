@@ -9,7 +9,7 @@ from so101_gazebo_demo_py.live_execute import (
 )
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
-    parse_model_pose, parse_tf_pose, select_stamped_transform,
+    parse_model_pose, parse_tf_pose, select_gazebo_pose, select_stamped_transform,
 )
 
 
@@ -101,6 +101,25 @@ def test_stamped_transform_selector_preserves_source_timestamp() -> None:
         (1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0), 12.5,
     )
     assert select_stamped_transform([transform], "so101_tcp") is None
+
+
+def test_gazebo_pose_selector_uses_entity_name_and_source_timestamp() -> None:
+    pose = SimpleNamespace(
+        name="plastic_cup",
+        position=SimpleNamespace(x=1.0, y=2.0, z=3.0),
+        orientation=SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0),
+    )
+    message = SimpleNamespace(
+        pose=[pose],
+        header=SimpleNamespace(stamp=SimpleNamespace(sec=20, nsec=250_000_000)),
+    )
+    assert select_gazebo_pose(message, "plastic_cup") == (
+        (1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0), 20.25,
+    )
+    assert select_gazebo_pose(message, "other") is None
+
+    pose.position.x = float("nan")
+    assert select_gazebo_pose(message, "plastic_cup") is None
 
 
 def test_plan_only_validates_every_waypoint_as_a_contiguous_sequence() -> None:
