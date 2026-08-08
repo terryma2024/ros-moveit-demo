@@ -2534,3 +2534,43 @@ states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, R
 success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
 invalid_criteria: startup/readiness/provenance failure before planning
 ```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-0003-PLAN-001
+status: VALID_SUCCESS
+completed_at: 2026-08-08 Asia/Shanghai
+planned_points: {MOVE_ABOVE_OBJECT: 199, DESCEND: 129, LIFT: 119, MOVE_ABOVE_PLACE: 127, DESCEND_TO_PLACE: 100, RETREAT: 132}
+bundle_sha256_observed: 144566c04ca0df1f2cc61eacb6d4e03515f1e0f4659b21a3d90c5c3c2b3854fb
+runtime_arm_trajectory_constraint: 0.008 for joints 1-5
+forbidden_runtime_events: NONE_OBSERVED (only startup plugin-list mention)
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 remains
+  ros_domain_221_daemon: stopped
+decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
+next_experiment: PY-C-Q6-PRELOAD-0003-GRASP-001
+```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-0003-GRASP-001
+status: PLANNED
+candidate: {layer: C_Q6_SEATING_PRELOAD, preload_rad: 0.003, anchor_offset_m: [0.0, 0.0, 0.0004]}
+lifecycle: FULL_RESTART
+source_commit: 6c78b87
+bundle_sha256: 144566c04ca0df1f2cc61eacb6d4e03515f1e0f4659b21a3d90c5c3c2b3854fb
+motion_config_sha256: 0121db0dc606864f2e0aecd161ab6304fb98bd56e44b1dfe376804ec8216c4d2
+ros_domain_id: 222
+gz_partition: so101_py_c_q6_preload_0003_grasp_001_222
+evidence_root: /tmp/so101-py-c-q6-preload-0003-grasp-001-222
+owned_tmux_session: so101-py-q6-p3-grasp-222
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+success_criteria: bilateral stable contact within 0.000800002 m ceiling for both pads and physical 0.002 m micro-lift within existing lateral bound
+failure_criteria: any frozen hard gate failure
+post_failure: stop/hold; no open; preserve evidence
+prelaunch_process_audit:
+  removed: []
+  preserved: ["PID 3272995 uncertain gz sim server", "PID 652055 unrelated clang-tidy", "tmux codex", "tmux codex-cua", "tmux kimi"]
+  uncertain: [3272995]
+  task_stack_present: false
+```
