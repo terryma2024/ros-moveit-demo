@@ -37,6 +37,9 @@ RETRY_Q6_TARGETS = tuple(-0.047608632840292 - 0.001 * step for step in range(1, 
 class PoseSample:
     object_xyz: tuple[float, float, float]
     tcp_xyz: tuple[float, float, float]
+    object_xyzw: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    tcp_xyzw: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    pose_pair_age_s: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)

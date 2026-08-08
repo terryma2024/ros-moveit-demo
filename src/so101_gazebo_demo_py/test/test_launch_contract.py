@@ -39,6 +39,9 @@ def test_gazebo_headless_default_is_false() -> None:
         if isinstance(entity, DeclareLaunchArgument)
     }
     assert arguments["headless"] == "false"
+    assert arguments["controller_config"].endswith(
+        "/config/so101_controllers_physical_outcome.yaml"
+    )
 
 
 def test_gazebo_spawn_uses_calibrated_collision_model() -> None:
@@ -55,10 +58,15 @@ def test_gazebo_spawn_uses_calibrated_collision_model() -> None:
 def test_prepared_model_materialization_only_resolves_owned_share(tmp_path: Path) -> None:
     template = tmp_path / "template.sdf"
     output = tmp_path / "runtime.sdf"
-    template.write_text("<parameters>@SO101_PACKAGE_SHARE@/config/c.yaml</parameters>")
-    materialize_prepared_model(template, Path("/owned/share/so101_gazebo_demo_py"), output)
+    template.write_text(
+        "<parameters>@SO101_PACKAGE_SHARE@/config/so101_controllers.yaml</parameters>"
+    )
+    materialize_prepared_model(
+        template, Path("/owned/share/so101_gazebo_demo_py"), output,
+        controller_config=Path("/safe/so101_controllers.yaml"),
+    )
     assert output.read_text() == (
-        "<parameters>/owned/share/so101_gazebo_demo_py/config/c.yaml</parameters>"
+        "<parameters>/safe/so101_controllers.yaml</parameters>"
     )
 
 

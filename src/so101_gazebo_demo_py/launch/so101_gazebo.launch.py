@@ -26,7 +26,11 @@ def _gazebo(headless: bool):
 def _spawn_prepared_model(_context, share: Path):
     output_root = Path(os.environ.get("ROS_LOG_DIR", "/tmp"))
     runtime_model = output_root / f"so101-prepared-{os.getpid()}.sdf"
-    materialize_prepared_model(share / "models/so101_prepared.sdf", share, runtime_model)
+    controller_config = Path(LaunchConfiguration("controller_config").perform(_context))
+    materialize_prepared_model(
+        share / "models/so101_prepared.sdf", share, runtime_model,
+        controller_config=controller_config,
+    )
     return [Node(
         package="ros_gz_sim", executable="create",
         arguments=["-file", str(runtime_model), "-name", "so101"], output="screen",
@@ -40,6 +44,10 @@ def generate_launch_description():
     headless_arg = DeclareLaunchArgument("headless", default_value="false")
     base_height_arg = DeclareLaunchArgument("base_height", default_value="0.1899186")
     object_config_arg = DeclareLaunchArgument("object_config", default_value=str(share / "config/task_objects/light_plastic_cup.yaml"))
+    controller_config_arg = DeclareLaunchArgument(
+        "controller_config",
+        default_value=str(share / "config/so101_controllers_physical_outcome.yaml"),
+    )
     description = ParameterValue(Command([
         "xacro ", LaunchConfiguration("model"), " base_height:=", LaunchConfiguration("base_height"),
         " use_gazebo:=true gazebo_collision_primitives:=true object_config:=",
@@ -85,6 +93,7 @@ def generate_launch_description():
     ])
     return LaunchDescription([
         model_arg, world_arg, headless_arg, base_height_arg, object_config_arg,
+        controller_config_arg,
         SetEnvironmentVariable("GZ_SIM_RESOURCE_PATH", str(share.parent)),
         _gazebo(False), _gazebo(True),
         Node(package="robot_state_publisher", executable="robot_state_publisher", parameters=[{"robot_description": description, "use_sim_time": True}]),

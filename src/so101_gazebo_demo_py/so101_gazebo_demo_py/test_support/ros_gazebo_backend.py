@@ -22,6 +22,75 @@ _XYZ = re.compile(r"\[\s*(-?[0-9.eE+]+)\s+(-?[0-9.eE+]+)\s+(-?[0-9.eE+]+)\s*\]")
 _TF_TRANSLATION = re.compile(
     r"Translation:\s*\[\s*(-?[0-9.eE+]+),\s*(-?[0-9.eE+]+),\s*(-?[0-9.eE+]+)\s*\]"
 )
+_TF_QUATERNION = re.compile(
+    r"Rotation:\s*in Quaternion\s*\[\s*(-?[0-9.eE+]+),\s*(-?[0-9.eE+]+),"
+    r"\s*(-?[0-9.eE+]+),\s*(-?[0-9.eE+]+)\s*\]"
+)
+
+
+def contact_probe_complete(observed) -> bool:
+    """A stability sample is complete once one fresh contact message is decoded."""
+    return bool(observed)
+
+
+def waypoint_step_seconds(point_count: int, velocity_scaling: float | None = None) -> int:
+    if velocity_scaling is not None:
+        return max(1, round(0.1 / velocity_scaling))
+    return 2 if point_count == 10 else 3 if point_count == 5 else 4
+
+
+def gripper_result_acceptable(output: str, bilateral: bool) -> bool:
+    return "status: SUCCEEDED" in output or (
+        bilateral and "error_code: -5" in output and "status: ABORTED" in output
+    )
+
+
+def parse_model_pose(output: str) -> tuple[float, ...]:
+    """Parse Gazebo's authoritative world position and RPY orientation."""
+    matches = _XYZ.findall(output)
+    if len(matches) < 2:
+        raise ValueError("Gazebo model pose requires position and orientation")
+    x, y, z = (float(value) for value in matches[0])
+    roll, pitch, yaw = (float(value) for value in matches[1])
+    cr, sr = math.cos(roll / 2.0), math.sin(roll / 2.0)
+    cp, sp = math.cos(pitch / 2.0), math.sin(pitch / 2.0)
+    cy, sy = math.cos(yaw / 2.0), math.sin(yaw / 2.0)
+    quaternion = (
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+        cr * cp * cy + sr * sp * sy,
+    )
+    if not all(math.isfinite(value) for value in (x, y, z, *quaternion)):
+        raise ValueError("Gazebo model pose is non-finite")
+    return x, y, z, *quaternion
+
+
+def parse_tf_pose(output: str) -> tuple[float, ...]:
+    translation = _TF_TRANSLATION.findall(output)
+    quaternion = _TF_QUATERNION.findall(output)
+    if not translation or not quaternion:
+        raise ValueError("TF pose requires translation and quaternion")
+    pose = tuple(float(value) for value in (*translation[-1], *quaternion[-1]))
+    if not all(math.isfinite(value) for value in pose):
+        raise ValueError("TF pose is non-finite")
+    return pose
+
+
+def select_stamped_transform(transforms, child_frame_id: str):
+    for item in reversed(tuple(transforms)):
+        if item.child_frame_id != child_frame_id:
+            continue
+        translation=item.transform.translation; rotation=item.transform.rotation
+        pose=(
+            float(translation.x),float(translation.y),float(translation.z),
+            float(rotation.x),float(rotation.y),float(rotation.z),float(rotation.w),
+        )
+        stamp=float(item.header.stamp.sec)+float(item.header.stamp.nanosec)*1e-9
+        if not all(math.isfinite(value) for value in (*pose,stamp)):
+            return None
+        return pose,stamp
+    return None
 
 
 def _command(arguments: list[str], timeout_s: float = 40.0, *, check: bool = True) -> str:
@@ -38,11 +107,12 @@ class RosGazeboLiveBackend:
         if not os.environ.get("GZ_PARTITION") or not os.environ.get("ROS_DOMAIN_ID"):
             raise RuntimeError("live attachment gate requires isolated GZ_PARTITION and ROS_DOMAIN_ID")
         self.transport = GazeboTransport()
-        self._last_tcp_xyz: tuple[float, float, float] | None = None
         self._arm_moved_since_sample = True
 
-    def move_arm(self, points: tuple[tuple[float, ...], ...]) -> None:
-        step = 2 if len(points) == 10 else 3 if len(points) == 5 else 4
+    def move_arm(
+        self, points: tuple[tuple[float, ...], ...], velocity_scaling: float | None = None
+    ) -> None:
+        step = waypoint_step_seconds(len(points), velocity_scaling)
         goal = {
             "trajectory": {
                 "joint_names": list("12345"),
@@ -72,7 +142,17 @@ class RosGazeboLiveBackend:
             "ros2", "action", "send_goal", "/gripper_controller/follow_joint_trajectory",
             "control_msgs/action/FollowJointTrajectory", json.dumps(goal),
         ], timeout_s=duration + 20.0)
-        if "status: SUCCEEDED" not in output:
+        safe_bilateral=False
+        if "error_code: -5" in output:
+            from ..gazebo.observer import (
+                evaluate_bilateral_contact, MOVING_PAD_MESH_PENETRATION_CEILING_M,
+            )
+            evidence=evaluate_bilateral_contact(self.contacts())
+            safe_bilateral=(
+                evidence.bilateral and evidence.max_moving_pad_penetration_m is not None
+                and evidence.max_moving_pad_penetration_m <= MOVING_PAD_MESH_PENETRATION_CEILING_M
+            )
+        if not gripper_result_acceptable(output,safe_bilateral):
             raise RuntimeError(f"gripper trajectory did not succeed:\n{output}")
 
     def contacts(self) -> tuple[ContactPair, ...]:
@@ -103,6 +183,9 @@ class RosGazeboLiveBackend:
         try:
             while time.monotonic() < deadline:
                 rclpy.spin_once(node, timeout_sec=0.1)
+                with lock:
+                    if contact_probe_complete(observed):
+                        break
         finally:
             node.destroy_subscription(subscription)
             node.destroy_node()
@@ -123,30 +206,41 @@ class RosGazeboLiveBackend:
         raise RuntimeError(f"durable Gazebo attachment state did not converge to {requested}")
 
     def sample(self) -> PoseSample:
-        time.sleep(1.0)
-        model_output = _command(["gz", "model", "-m", "plastic_cup", "-p"], timeout_s=5.0)
-        model_matches = _XYZ.findall(model_output)
-        if not model_matches:
-            raise RuntimeError(f"plastic_cup pose unavailable:\n{model_output}")
-        object_xyz = tuple(float(value) for value in model_matches[0])
-        tf_output = ""
-        tf_matches = []
-        for _attempt in range(3):
-            tf_output = _command([
-                "timeout", "3", "ros2", "run", "tf2_ros", "tf2_echo", "world", "so101_tcp",
-            ], timeout_s=5.0, check=False)
-            tf_matches = _TF_TRANSLATION.findall(tf_output)
-            if tf_matches:
-                break
-        if not tf_matches:
-            if self._arm_moved_since_sample or self._last_tcp_xyz is None:
-                raise RuntimeError(f"fresh so101_tcp transform unavailable:\n{tf_output}")
-            tcp_xyz = self._last_tcp_xyz
-        else:
-            tcp_xyz = tuple(float(value) for value in tf_matches[-1])
-            self._last_tcp_xyz = tcp_xyz
-        self._arm_moved_since_sample = False
-        return PoseSample(object_xyz, tcp_xyz)
+        import rclpy
+        from rclpy.qos import qos_profile_sensor_data
+        from tf2_msgs.msg import TFMessage
+
+        rclpy.init(); node=rclpy.create_node("so101_live_pose_pair_probe")
+        observed={"object":None,"tcp":None}
+        def receive_object(message):
+            selected=select_stamped_transform(message.transforms,"plastic_cup")
+            if selected is not None: observed["object"]=selected
+        def receive_tcp(message):
+            selected=select_stamped_transform(message.transforms,"so101_tcp")
+            if selected is not None: observed["tcp"]=selected
+        object_subscription=node.create_subscription(
+            TFMessage,"/so101/gazebo_pose_info",receive_object,qos_profile_sensor_data,
+        )
+        tcp_subscription=node.create_subscription(
+            TFMessage,"/tf",receive_tcp,qos_profile_sensor_data,
+        )
+        deadline=time.monotonic()+3.0
+        try:
+            while time.monotonic()<deadline and None in observed.values():
+                rclpy.spin_once(node,timeout_sec=.05)
+        finally:
+            node.destroy_subscription(object_subscription)
+            node.destroy_subscription(tcp_subscription)
+            node.destroy_node(); rclpy.shutdown()
+        if None in observed.values():
+            raise RuntimeError(f"fresh Gazebo/TCP pose pair unavailable: {observed}")
+        object_pose,object_stamp=observed["object"]
+        tcp_pose,tcp_stamp=observed["tcp"]
+        self._arm_moved_since_sample=False
+        return PoseSample(
+            object_pose[:3],tcp_pose[:3],object_pose[3:],tcp_pose[3:],
+            abs(object_stamp-tcp_stamp),
+        )
 
     def attachment_state(self) -> str:
         output = _command([
