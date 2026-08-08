@@ -2130,3 +2130,29 @@ commit_scope: only docs/experiments/so101-gazebo-demo-py-experiment-ledger.md, d
 next_experiment: PY-A-Z-POS-00045-PLAN-001 (Phase 1 candidate 1, +0.000450000 m; PLANNED registration after this authorization commit)
 next_command: append-only authorization commit, then config/contract RED for the Phase 1 Z candidate
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-00045-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.00045]}
+rationale: Phase 1 candidate 1 of the approved Z bisection; midpoint of the [+0.000400000, +0.000500000] m bracket
+lifecycle: FULL_RESTART
+source_commit: 39ba00a
+bundle_sha256: 2f1132a9be0cae3327fec949f62c067beee6cf471f86d0a9901ca14cc2812181
+config_sha256:
+  motion: 4c9db0309fac56a3a27ec25e009825d5dc3f3de4c0054ee126a524732cd058fd
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+red_green:
+  red: test_policy_config.py assertion (0.0, 0.0, 0.00045) failed against committed 0.0004 config (1 failed, 14 passed)
+  green: config scalar changed to 0.00045; focused 15 passed; full package suite 136 passed, 2 skipped in sourced ROS shell
+  build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded; installed motion config sha256 matches source 4c9db030
+ros_domain_id: 215
+gz_partition: so101_py_a_z_pos_00045_plan_001_215
+evidence_root: /tmp/so101-py-a-z-pos-00045-plan-001-215
+owned_tmux_session: so101-py-a-z-mid-plan-215
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
