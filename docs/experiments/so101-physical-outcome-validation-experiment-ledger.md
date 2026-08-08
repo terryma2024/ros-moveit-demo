@@ -1505,3 +1505,34 @@ disproven_routes: [unchanged-target stochastic retry, support routing contaminat
 open_risks: [x-only IK must preserve y/z/orientation and every existing path contract]
 next_command: add and run SO101FixedMotionTargets.GraspTcpXCandidateMovesTowardCupCenterOnly RED
 ```
+
+## CP-PHYSICAL-006：C++ target route stopped; handoff to standalone Python
+
+```yaml
+checkpoint_id: CP-PHYSICAL-006
+recorded_at: 2026-08-08 Asia/Shanghai
+source_head: 641f7c470bfea81934b0dc094afc42da4aaa5111
+route_status: STOPPED_BY_USER_DIRECTION
+red_result:
+  first_attempt: INVALID_INFRASTRUCTURE_FAILURE; local clang-format violation prevented the business assertion
+  corrected_attempt: EXPECTED_RED
+  focused_suite: 20 tests; 19 passed; 1 failed
+  failing_test: SO101FixedMotionTargets.GraspTcpXCandidateMovesTowardCupCenterOnly
+  observed_tcp_x_m: 0.020676683781586519
+  required_candidate_tcp_x_m: 0.020000000000000000
+  observed_error_m: 0.00067668378158651857
+  invariant_assertions: y, z and orientation did not report failures
+commands_complete: true
+owned_processes: NONE
+preserved_uncommitted_changes:
+  - docs/superpowers/plans/2026-08-07-so101-physical-outcome-validation.md leading blank line
+  - src/so101_gazebo_demo/test/pick_place/test_so101_fixed_motion_targets.cpp RED test
+prohibited_next_actions:
+  - no IK/target GREEN in this worktree
+  - no further C++ target experiment, build or runtime run
+handoff:
+  worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
+  branch: codex/so101-gazebo-demo-py
+  first_action: audit existing dirty Task 15 work and append design/plan/ledger migration documentation
+old_reset_world_ledger: ZERO_DIFF
+```
