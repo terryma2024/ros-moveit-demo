@@ -1398,3 +1398,28 @@ preflight:
   authoritative_closest_pose_pair_age_s: 0.004
   candidate_retry_count: 0
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0005-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+observed:
+  max_moving_pad_penetration_m: 0.0010889314580708742
+  frozen_ceiling_m: 0.000800002
+  initial_contact: {fixed_finger: true, moving_jaw: false, max_fixed_pad_penetration_m: 0.0006955949938856065}
+  q6_contact: -0.0476076677441597
+  seating_target_q6: -0.0536076677441597
+  gazebo_attachment_state: detached
+  candidate_retry_count: 0
+  micro_lift_executed: false
+comparison_to_baseline_failure_capture:
+  baseline_max_moving_pad_penetration_m: 0.0011105769081041217
+  candidate_reduction_m: 0.0000216454500332475
+evidence_file: /tmp/so101-py-a-x-neg-0005-grasp-001-200/physical-failure.json
+recovery_open_commanded: false
+candidate_result: ELIMINATED
+decision: TRY_SECOND_AND_FINAL_LARGER_NEGATIVE_X_BOUND_CANDIDATE
+next_candidate_offset_m: [-0.001, 0.0, 0.0]
+```
