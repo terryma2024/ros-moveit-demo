@@ -34,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--motion-policy", type=Path)
     parser.add_argument("--validation-policy", type=Path)
     parser.add_argument("--max-state-transitions", type=int, default=100)
+    parser.add_argument("--live-runtime", action="store_true")
     return parser
 
 
@@ -63,23 +64,30 @@ def main(arguments: list[str] | None = None) -> int:
         if "--ros-args" in arguments:
             arguments = arguments[:arguments.index("--ros-args")]
     options = build_parser().parse_args(arguments)
-    if options.mode == RunMode.EXECUTE.value:
+    if options.mode == RunMode.EXECUTE.value or (
+        options.mode == RunMode.PLAN_ONLY.value and options.live_runtime
+    ):
         import os
-        from ..live_execute import run_live_execute
+        from ..live_execute import run_live_execute, run_live_plan_only
         evidence_dir = Path(os.environ.get("SO101_PY_EVIDENCE_DIR", "/tmp/so101-py-runtime"))
         try:
-            result = run_live_execute(evidence_dir)
+            if options.mode == RunMode.EXECUTE.value:
+                result = run_live_execute(evidence_dir, stop_after=options.stop_after)
+            else:
+                if options.plan_only_state is None:
+                    raise ValueError("live plan_only requires --plan-only-state")
+                result = run_live_plan_only(evidence_dir, options.plan_only_state)
         except Exception as error:
             print("status=ERROR")
             print("current_state=ERROR")
             print("failure=LIVE_EXECUTE_FAILED")
             print(f"failure_message={error}")
             return 1
-        print("status=DONE")
-        print("current_state=DONE")
-        print("transition_count=19")
+        print(f"status={result['status']}")
+        print(f"current_state={result['current_state']}")
+        print(f"transition_count={len(result['state_trace'])-1}")
         print("state_trace=" + ",".join(result["state_trace"]))
-        return 0
+        return int(result.get("exit_code", 0))
     request = RunRequest(
         mode=RunMode(options.mode), stop_after=_state(options.stop_after), resume=options.resume,
         fail_at=_state(options.fail_at), max_state_transitions=options.max_state_transitions,

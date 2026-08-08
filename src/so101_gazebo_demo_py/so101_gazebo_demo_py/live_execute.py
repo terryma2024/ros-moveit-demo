@@ -163,7 +163,7 @@ def make_pose_move_group_goal(names, positions, target_xyz_xyzw):
     return goal
 
 
-def _moveit_plan_execute(target: tuple[float,...]) -> int:
+def _moveit_plan_execute(target: tuple[float,...], execute: bool = True) -> int:
     import rclpy
     from moveit_msgs.action import ExecuteTrajectory
     from moveit_msgs.srv import GetMotionPlan
@@ -183,10 +183,12 @@ def _moveit_plan_execute(target: tuple[float,...]) -> int:
     outcome=planner.plan_joint_path(JointPlanRequest(names,current,target,.03,.03,8.),15.)
     if outcome.failure: raise RuntimeError(str(outcome.failure))
     points=len(outcome.trajectory.joint_trajectory.points)
-    executor=MoveItExecutionClient(ActionClient(node,ExecuteTrajectory,"/execute_trajectory"),make_execute_goal,progress)
-    result=executor.execute(outcome.trajectory,30.)
+    result=None
+    if execute:
+        executor=MoveItExecutionClient(ActionClient(node,ExecuteTrajectory,"/execute_trajectory"),make_execute_goal,progress)
+        result=executor.execute(outcome.trajectory,30.)
     node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
-    if result.failure: raise RuntimeError(str(result.failure))
+    if result is not None and result.failure: raise RuntimeError(str(result.failure))
     return points
 
 
@@ -328,7 +330,26 @@ def _apply_scene(operation: str, object_pose: tuple[float,...] | None = None) ->
     node.destroy_node(); rclpy.shutdown(); return result
 
 
-def run_live_execute(evidence_directory: Path) -> dict:
+def run_live_plan_only(evidence_directory: Path, state_name: str) -> dict:
+    from ament_index_python.packages import get_package_share_directory
+    from .domain import State
+    share=Path(get_package_share_directory("so101_gazebo_demo_py"))
+    bundle=load_policy_bundle(
+        share/"config/task_objects/light_plastic_cup.yaml",
+        share/"config/motion_policies/light_cup_wall_pick.yaml",
+        share/"config/validation_policies/light_cup_wall_pick.yaml",
+    )
+    state=State(state_name)
+    if state not in bundle.motion.states:
+        raise ValueError(f"motion policy missing state {state_name}")
+    points=_moveit_plan_execute(bundle.motion.states[state].waypoints[-1],execute=False)
+    result={"status":"PLAN_ONLY_COMPLETE","current_state":state_name,"state_trace":[state_name],"exit_code":0,"planned_points":points,"policy_sha256":bundle.sha256}
+    evidence_directory=Path(evidence_directory); evidence_directory.mkdir(parents=True,exist_ok=True)
+    (evidence_directory/f"plan-only-{state_name}.json").write_text(json.dumps(result,indent=2))
+    return result
+
+
+def run_live_execute(evidence_directory: Path, stop_after: str | None = None) -> dict:
     from ament_index_python.packages import get_package_share_directory
     share=Path(get_package_share_directory("so101_gazebo_demo_py"))
     bundle=load_policy_bundle(share/"config/task_objects/light_plastic_cup.yaml",share/"config/motion_policies/light_cup_wall_pick.yaml",share/"config/validation_policies/light_cup_wall_pick.yaml")
@@ -360,6 +381,10 @@ def run_live_execute(evidence_directory: Path) -> dict:
         raise RuntimeError(f"physical gate changed after retraction lift={lift} lateral={lateral}")
     gate={"status":"PROVED","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target}
     (evidence_directory/"physical-gate.json").write_text(json.dumps(gate,indent=2))
+    if stop_after == "VERIFY_PHYSICAL_GRASP":
+        result={"status":"CHECKPOINT_COMPLETE","current_state":stop_after,"state_trace":list(TRACE[:9]),"exit_code":0,"physical":gate,"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
+        (evidence_directory/"live-summary.json").write_text(json.dumps(result,indent=2))
+        return result
     shadow_pose=(*after.object_xyz,*after.object_xyzw)
     attached_scene=_apply_scene("attach",shadow_pose)
     object_in_tcp=relative_pose((*after.tcp_xyz,*after.tcp_xyzw),shadow_pose)
