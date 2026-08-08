@@ -7,7 +7,7 @@ success_contract: 同一提交和已校准策略下五次连续 VALID execute，
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
 branch: codex/so101-physical-outcome-validation
 base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
-current_commit: 48709c3
+current_commit: 2f2b315
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI
 confirmed_conclusions:
   - Task 13 branch-tree build、三包测试、dry-run trace 与 uncalibrated plan-only fail-closed gate 已验证（VER-PHYSICAL-001）
@@ -22,8 +22,8 @@ disproven_routes:
 open_hypotheses:
   - 每个 CALIBRATION_REQUIRED 字段的 live calibration 值
   - minimum_support_contact_depth_m 与其他 physical-outcome threshold 的有效 live calibration
-latest_checkpoint: CP-PHYSICAL-005
-next_experiment: CAL-PHYSICAL-002
+latest_checkpoint: CP-PHYSICAL-006
+next_experiment: TDD-PHYSICAL-002
 ```
 
 ## VER-PHYSICAL-001：Task 13 自动验证
@@ -320,7 +320,7 @@ next_command: 先创建 CAL-PHYSICAL-002 PLANNED 记录并冻结隔离环境、�
 
 ```yaml
 experiment_id: CAL-PHYSICAL-002
-status: RUNNING
+status: INVALID
 prior_experiment: TDD-PHYSICAL-001
 hypothesis: production Featherstone 的稳定 owner-contact、pose cadence、release settling 与 MoveIt shadow pairing distributions 足以为全部 sentinel 提供非宽松、可复核的冻结值
 prediction:
@@ -354,6 +354,33 @@ evidence_paths:
   - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-002
   - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-domain-probe.txt
 cleanup_ownership: only PIDs created by CAL-PHYSICAL-002; preserved so101-gazebo-demo-py stacks and workspace-sampler clang-tidy are out of scope
-next_transition: PLANNED -> RUNNING only after ledger commit and repeated empty-domain/provenance check
-started_at: 2026-08-08T05:25:00+08:00
+started_at: 2026-08-08T13:26:24+08:00
+ended_at: 2026-08-08T13:28:25+08:00
+observed:
+  - exact production pair is plastic_cup::body::wall_near ↔ table::table_top::collision
+  - configured/parser-required intended identity remains table::link::collision, so production support would be classified non-intended
+  - raw bounded capture contained 1001 contact messages and 4004 depths; values are retained only as invalid diagnostic evidence and cannot calibrate a threshold
+  - all controllers were active and Bullet Featherstone provenance was confirmed
+invalid_reason: frozen contact identity precondition mismatched the exact production collision identity
+cleanup:
+  - owned launch PID 3839349 and children stopped with launch-session SIGINT
+  - preserved so101-gazebo-demo-py stacks and workspace-sampler clang-tidy were not touched
+decision: DO_NOT_DERIVE_THRESHOLDS
+next_experiment: TDD-PHYSICAL-002
+```
+
+## CP-PHYSICAL-006
+
+```yaml
+checkpoint_id: CP-PHYSICAL-006
+last_valid_experiment: TDD-PHYSICAL-001
+invalid_experiment: CAL-PHYSICAL-002
+first_bad_boundary: intended_support_collision identity contract
+current_hypothesis: parser/config/test contract must use the exact production table::table_top::collision identity before calibration can be valid
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-002/wall-near-1000.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-002/depth-summary.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-002/stack.log
+owned_processes: NONE
+next_command: RED exact production identity in policy/observer/world contract, then minimal GREEN without changing physics or safety ceilings
 ```
