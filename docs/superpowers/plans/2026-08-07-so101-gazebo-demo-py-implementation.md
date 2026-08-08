@@ -1102,3 +1102,21 @@ target 校准。仅取代：（1）同方向三候选失败后的 no-interpolati
    q6_contact/final、pose-pair age、controller result、Gazebo/MoveIt attachment、exit code、证据路径。
 7. 无论结果，scalar 复原 `0.0`（RED/GREEN + 全量 suite + scoped commit），ledger 写终态结论，
    向用户汇报并等待 ceiling 重校准决策；不自行进入 qualification。
+
+## 2026-08-09 增补执行计划：ceiling 重校准 + QUALIFICATION
+
+对应设计增补「2026-08-09 增补授权：moving-pad penetration ceiling 重校准」。
+
+1. 授权增补写入本计划/设计/ledger，docs-only 提交（preserved dirty path 不入）。
+2. RED/GREEN 把 `MOVING_PAD_MESH_PENETRATION_CEILING_M` 改为 `0.00125`，override 界改
+   `(0.00125, 0.0013]`；更新相关断言（含本地未跟踪 parity 测试的界面适配，不 stage）；
+   全量 suite 无回退；scoped commit；rebuild + 验证 installed provenance。
+3. ledger 预注册三次 qualification（独立 FULL_RESTART，新 domain/partition/tmux/证据目录，
+   冻结同一 commit/config fingerprint，锚点配置，execute 到 `VERIFY_PHYSICAL_GRASP`，其内部
+   含 +0.002 m micro-lift 探针）。
+4. 每次运行先 plan-only 合同（随 runner preflight），provenance/preflight 通过后记 RUNNING；
+   任一 VALID failure 结束 qualification 回到用户；INVALID 终止批次并先调试污染/实现缺陷。
+5. 三次通过后按计划继续：完整物理 pick/place（D→E→F 边界、shadow gate、release/settle、
+   最终 outcome 稳定/直立/落区、MoveIt membership 独立验证），随后验收电池（clean build/
+   全量 suite、dry-run、完整 plan-only、headless、GUI/CUA 新截图）与同一冻结 commit/policy
+   连续五次 FULL_RESTART 成功，最后才 scoped commit、推 Gitee、合 main。
