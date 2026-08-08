@@ -21,27 +21,32 @@ runtime:
   q6_position_tolerance_rad: 0.001
   q6_contact_stop_tolerance_rad: 0.00125
 physical_outcome:
+  # Frozen from CAL-PHYSICAL-003 production Bullet Featherstone evidence.
+  # These outcome limits do not replace or relax grasp/collision penetration ceilings.
   intended_support_collision: table::table_top::collision
-  minimum_support_contact_depth_m: CALIBRATION_REQUIRED
-  final_target_region: CALIBRATION_REQUIRED
-  support_height_range_m: CALIBRATION_REQUIRED
-  max_upright_tilt_rad: CALIBRATION_REQUIRED
-  max_linear_speed_m_s: CALIBRATION_REQUIRED
-  max_angular_speed_rad_s: CALIBRATION_REQUIRED
-  consecutive_samples: CALIBRATION_REQUIRED
-  minimum_stable_duration_s: CALIBRATION_REQUIRED
-  sample_interval_s: CALIBRATION_REQUIRED
-  settle_timeout_s: CALIBRATION_REQUIRED
-  max_observation_age_s: CALIBRATION_REQUIRED
-  max_telemetry_samples: CALIBRATION_REQUIRED
+  minimum_support_contact_depth_m: -0.0000001
+  final_target_region:
+    kind: axis_aligned_box
+    min_xy_m: [-0.085, -0.255]
+    max_xy_m: [-0.075, -0.245]
+  support_height_range_m: [0.155, 0.175]
+  max_upright_tilt_rad: 0.08726646259971647
+  max_linear_speed_m_s: 0.001
+  max_angular_speed_rad_s: 0.05
+  consecutive_samples: 5
+  minimum_stable_duration_s: 0.20
+  sample_interval_s: 0.05
+  settle_timeout_s: 2.0
+  max_observation_age_s: 0.10
+  max_telemetry_samples: 40
   catastrophic_loss:
-    workspace_bounds_m: CALIBRATION_REQUIRED
-    max_relative_position_drift_m: CALIBRATION_REQUIRED
-    max_relative_orientation_drift_rad: CALIBRATION_REQUIRED
+    workspace_bounds_m: [-0.21, -0.46, 0.12, 0.21, 0.06, 0.30]
+    max_relative_position_drift_m: 0.005
+    max_relative_orientation_drift_rad: 0.070
   planning_shadow:
-    max_position_divergence_m: CALIBRATION_REQUIRED
-    max_orientation_divergence_rad: CALIBRATION_REQUIRED
-    max_pair_age_s: CALIBRATION_REQUIRED
+    max_position_divergence_m: 0.005
+    max_orientation_divergence_rad: 0.070
+    max_pair_age_s: 0.10
 states:
   MOVE_ABOVE_OBJECT:
     endpoint_position: [0.020673889, -0.254030551, 0.259837209]

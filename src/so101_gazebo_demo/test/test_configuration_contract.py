@@ -29,21 +29,40 @@ def load_yaml(name):
     return yaml.safe_load((CONFIG_DIR / name).read_text())
 
 
-def test_physical_outcome_policy_requires_explicit_calibration():
+def test_physical_outcome_policy_matches_cal_physical_003():
     validation = load_yaml('validation_policies/light_cup_wall_pick.yaml')
     assert validation['schema_version'] == 2
     physical = validation['physical_outcome']
     assert physical['intended_support_collision'] == 'table::table_top::collision'
-    threshold_fields = {
-        'minimum_support_contact_depth_m', 'final_target_region',
-        'support_height_range_m', 'max_upright_tilt_rad',
-        'max_linear_speed_m_s', 'max_angular_speed_rad_s', 'consecutive_samples',
-        'minimum_stable_duration_s', 'sample_interval_s', 'settle_timeout_s',
-        'max_observation_age_s', 'max_telemetry_samples',
+    assert physical == {
+        'intended_support_collision': 'table::table_top::collision',
+        'minimum_support_contact_depth_m': pytest.approx(-1.0e-7),
+        'final_target_region': {
+            'kind': 'axis_aligned_box',
+            'min_xy_m': pytest.approx([-0.085, -0.255]),
+            'max_xy_m': pytest.approx([-0.075, -0.245]),
+        },
+        'support_height_range_m': pytest.approx([0.155, 0.175]),
+        'max_upright_tilt_rad': pytest.approx(0.08726646259971647),
+        'max_linear_speed_m_s': pytest.approx(0.001),
+        'max_angular_speed_rad_s': pytest.approx(0.05),
+        'consecutive_samples': 5,
+        'minimum_stable_duration_s': pytest.approx(0.20),
+        'sample_interval_s': pytest.approx(0.05),
+        'settle_timeout_s': pytest.approx(2.0),
+        'max_observation_age_s': pytest.approx(0.10),
+        'max_telemetry_samples': 40,
+        'catastrophic_loss': {
+            'workspace_bounds_m': pytest.approx([-0.21, -0.46, 0.12, 0.21, 0.06, 0.30]),
+            'max_relative_position_drift_m': pytest.approx(0.005),
+            'max_relative_orientation_drift_rad': pytest.approx(0.070),
+        },
+        'planning_shadow': {
+            'max_position_divergence_m': pytest.approx(0.005),
+            'max_orientation_divergence_rad': pytest.approx(0.070),
+            'max_pair_age_s': pytest.approx(0.10),
+        },
     }
-    assert {physical[field] for field in threshold_fields} == {'CALIBRATION_REQUIRED'}
-    assert set(physical['catastrophic_loss'].values()) == {'CALIBRATION_REQUIRED'}
-    assert set(physical['planning_shadow'].values()) == {'CALIBRATION_REQUIRED'}
 
 
 def test_descend_monotonic_tolerance_covers_measured_endpoint_settling_only():
