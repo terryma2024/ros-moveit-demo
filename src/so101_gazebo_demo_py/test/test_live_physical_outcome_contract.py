@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from so101_gazebo_demo_py.live_execute import (
     carry_with_shadow_gates, compose_pose, plan_waypoint_sequence, relative_pose,
-    shadow_divergence_healthy,
+    run_bounded_physical_grasp_attempts, shadow_divergence_healthy,
 )
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
@@ -120,3 +120,17 @@ def test_plan_only_validates_every_waypoint_as_a_contiguous_sequence() -> None:
     assert requests[0][0].current_positions == (0.0, 0.0)
     assert requests[0][0].target_positions == requests[1][0].current_positions == (0.1, 0.2)
     assert requests[1][0].target_positions == (0.3, 0.4)
+
+
+def test_calibration_candidate_stops_after_first_valid_physical_failure(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "so101_gazebo_demo_py.live_execute._stable_bilateral",
+        lambda backend: calls.append("stable") or (_ for _ in ()).throw(RuntimeError("missing")),
+    )
+    with pytest.raises(RuntimeError, match="missing"):
+        run_bounded_physical_grasp_attempts(
+            SimpleNamespace(move_gripper=lambda value: calls.append(value)),
+            -0.053, 0.465, -0.0596, max_attempts=1,
+        )
+    assert calls == ["stable"]
