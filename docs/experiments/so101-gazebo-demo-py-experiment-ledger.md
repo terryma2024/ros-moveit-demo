@@ -2946,3 +2946,37 @@ candidate_result: ELIMINATED (plan failure eliminates the candidate with no phys
 early_stop_decision: larger magnitudes (0.04363323129985824, 0.08726646259971647 rad) deviate strictly further from the achievable orientation manifold under the same frozen constraints, so the response can only worsen; orientation experiments in the selected direction stop here per the approved early-stop rule; no other axis or opposite sign is tried
 decision: STOP_ORIENTATION_AND_ADVANCE_TO_PHASE4_FEASIBILITY_AUDIT
 ```
+
+```yaml
+checkpoint_id: CP-PHASE4-FEASIBILITY-AUDIT-001
+recorded_at: 2026-08-08 Asia/Shanghai
+phase: PHASE_4_READ_ONLY_GEOMETRY_CONTRACT_FEASIBILITY_AUDIT
+method: read-only audit of existing evidence, URDF/config geometry, and computed pad contact-face orientations; no stack started; no file controlling geometry, physics, controller, or gates changed
+geometry_contract:
+  cup: {outer_radius_m: 0.040, wall_thickness_m: 0.002, height_m: 0.090, spawn_xyz: [0.020, -0.280, 0.165], grasped_wall_outward: +Y}
+  pads: {opening_axis_thickness_m: 0.005, grasp_gap_m: 0.00196, safe_gap_m: 0.001, contact_model: rigid_link_local_mesh, TPU_95A, friction 1.2 / axial 3.0}
+  nominal_interference_m: 0.00004 (wall 0.002 vs grasp gap 0.00196)
+  frozen_ceiling_per_pad_m: 0.000800002
+  pad_face_tilt_at_grasp: {fixed: +4.5 deg out of vertical, moving: +1.2 deg out of vertical, both aligned to wall normal within 0.11 deg}
+measured_contact_distribution:
+  bilateral_initial_moving_pad_depth_m: {min: 0.000486, max: 0.001193, mean: 0.000721, stdev: 0.000318, spread: 0.000707, runs: 7}
+  ceiling_margin_over_best_case_m: 0.000314
+  spread_over_margin_ratio: 2.25
+  initial_breach_fraction: 2 of 7 bilateral runs already exceeded the ceiling at close before any preload
+  q6_contact_spread_rad: [-0.047608, -0.044669]
+  final_stage: every run that reached the stability/preload stage ended with at least one pad above the ceiling at every permitted configuration tested
+permitted_dof_exhaustion:
+  - X translation: closed previously (negative-X bound reached; valid failures)
+  - Y translation: closed previously (three bounded positive-Y candidates; valid failures)
+  - Z translation: Phase 1 closed; three deterministic bisection candidates (+0.00045, +0.000475, +0.0004875 m) plus three prior bracket points all valid failures
+  - q6 seating preload: Phase 2 closed; 0.003 penetration, 0.0015 contact loss, 0.00375 penetration; all valid failures
+  - orientation: Phase 3 evidence-selected world-X negative direction is unplannable at 0.017453292519943295 rad under the frozen pose-constraint contract (GOAL_STATE_INVALID); early-stop rule bars other axes/signs and larger magnitudes
+  - D/E/F layers remain downstream of the grasp gate and are not permitted to relax it
+analysis:
+  - The gate requires stable bilateral contact with BOTH pads at or below 0.000800002 m for every checked sample.
+  - The physical contact distribution at fixed configuration has spread 0.000707 m, 2.25 times the best-case margin 0.000314 m, so no tested or interpolated configuration is robust against the frozen gate.
+  - The one mechanism that could reduce peak depth (pad-face verticalization via world-X orientation) is unreachable inside the frozen planning constraint contract.
+  - Remaining variance sources (servo contact stop q6 spread 0.0029 rad, cup tilt during squeeze, TPU edge concentration) are physical/model properties the approved target DOFs cannot bound.
+conclusion: TARGET_ONLY_INFEASIBLE_UNDER_CURRENT_MODEL
+required_next_step: stop and request a user decision; the gate must not be relaxed and geometry must not be edited under the current authorization
+```
