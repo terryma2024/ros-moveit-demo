@@ -1523,3 +1523,27 @@ forbidden_runtime_events: NONE_OBSERVED
 decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
 next_experiment: PY-A-Y-POS-0005-GRASP-001
 ```
+
+```yaml
+experiment_id: PY-A-Y-POS-0005-GRASP-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0005, 0.0]}
+lifecycle: FULL_RESTART
+source_commit: 14854f795d956630fb0057532c82cdd52ffb39ea
+bundle_sha256: b46016443888aee569a8170c56dd06c9b00d757b30dc7ee1de7f21851595076b
+motion_config_sha256: 41b306d7d9e38aae04e45715b9b90863b65eb64a582e70b623c53246d1fa68b1
+ros_domain_id: 204
+gz_partition: so101_py_a_y_pos_0005_grasp_001_204
+evidence_root: /tmp/so101-py-a-y-pos-0005-grasp-001-204
+owned_tmux_session: so101-py-a-y-grasp-204
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+success_criteria: bilateral stable within 0.000800002 m ceiling and physical 0.002 m micro-lift within existing lateral bound
+failure_criteria: any frozen hard gate failure
+post_failure: stop/hold; no open; preserve evidence
+prelaunch_process_audit:
+  removed: []
+  preserved: ["PID 3272995 gz sim server: pre-existing uncertain physical-worktree ownership", "PID 652055 clang-tidy: unrelated workspace command still running", "tmux codex", "tmux codex-cua"]
+  uncertain: [3272995]
+  task_stack_present: false
+```
