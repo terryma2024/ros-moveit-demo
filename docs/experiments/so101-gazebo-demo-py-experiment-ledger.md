@@ -1734,3 +1734,17 @@ prelaunch_process_audit:
   uncertain: [3272995]
   task_stack_present: false
 ```
+
+```yaml
+experiment_id: PY-A-Y-POS-000225-GRASP-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  initial_attachment_state: attached
+  defensive_detach_readback: detached
+  controllers: [joint_state_broadcaster_active, arm_controller_active, gripper_controller_active]
+  runtime_arm_trajectory_constraint: 0.008
+  installed_motion_config_sha256: 5a453e3d1728a49898aac41fc41d4475b88e29cd729bc7d72f45a56c0938d27c
+  authoritative_gazebo_pose_stream: fresh
+  candidate_retry_count: 0
+```
