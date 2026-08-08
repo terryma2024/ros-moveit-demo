@@ -1193,3 +1193,27 @@ evidence:
 cleanup: only owned launch process group stopped after evidence freeze；ROS_DOMAIN_ID 217 returned empty；no reset
 decision: HARD_GATE_WORKED_RETRY_UNCHANGED_POLICY_FRESH_LIFECYCLE
 ```
+
+## HEADLESS-PHYSICAL-013：fresh-lifecycle carry qualification retry
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-013
+status: PLANNED
+implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 218
+GZ_PARTITION: so101-physical-outcome-headless-013-20260808
+lifecycle: FULL_RESTART
+domain_preflight: no nodes
+partition_preflight: no topics
+single_variable: fresh physics lifecycle；code、policy、physics、motion and safety ceilings unchanged from HEADLESS-PHYSICAL-012
+success_criteria: complete DONE trace、stable release-epoch physical outcome and every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013
+cleanup_ownership: only HEADLESS-PHYSICAL-013 launch process group and any daemon created for ROS_DOMAIN_ID 218
+acceptance_counting: qualification only；not part of five-consecutive acceptance
+safety_disposition: freeze evidence before cleanup；no reset；never open a held unsupported cup
+```
