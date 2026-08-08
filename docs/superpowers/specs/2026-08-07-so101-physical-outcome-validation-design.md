@@ -524,3 +524,31 @@ rollout 不提供 legacy SO-101 forward-attach 开关。保留开关会形成两
 
 这些细节将在用户审阅本 spec 后由单独的 implementation plan 分解为 TDD tasks。本文件不授权
 生产代码、测试、配置、账本或 runtime state 的修改。
+
+## 16. 2026-08-08 经用户批准的 support-evidence 窄化修订
+
+`DBG-PHYSICAL-001` 的 live A/B 证明：production `gz-physics-bullet-featherstone-plugin` 把同一
+link 的真实杯底/桌面接触归到 compound owner collision，并在稳定静止时报告量级很小的负
+`depth` 数值噪声。DART 无法创建现有机器人 mesh/VHACD collision，classic Bullet 则不提供所需
+contact stream；因此不能靠更换 physics engine 解决，同时仍保持既有碰撞安全层。
+
+用户明确批准以下窄化语义，替代第 5.2 节中“只能来自专用 bottom collision identity”与“任何负
+depth 一律拒绝”的过强实现假设，但不改变物理结果所有权：
+
+- `GazeboWorldObserver` 可以把 Bullet Featherstone compound owner 上真实的
+  `task object ↔ intended table` contact 作为 intended support evidence；counterparty 仍必须精确
+  匹配配置的 table collision，不能以 pose 距离、标称高度或 MoveIt 几何替代真实 contact。
+- 增加严格配置化的 `minimum_support_contact_depth_m`。它是经 live calibration 证明的负向数值
+  噪声下限；仅接受 finite 且 `depth >= minimum_support_contact_depth_m` 的 sample。缺失、non-finite
+  或更负的 depth 继续拒绝。该阈值不是 penetration ceiling，不得用于放宽任何既有碰撞/穿透门控。
+- compound-owner identity、原始 collision names、原始 depth min/max、被 noise bound 接受/拒绝的
+  sample count 必须保留为 bounded metrics，确保 ledger 可审计。
+- 最终成功仍同时要求 target XY region、support-height range、upright tilt、derived linear/angular
+  speed、无 gripper contact、Gazebo detached、MoveIt detached 和最终 world-object sync。
+- physics engine、collision geometry、cup mass/friction、controller、motion target，以及现有
+  forbidden-collision/penetration safety ceilings 均不得改变。
+- 正常 SO-101 forward path 仍不得 Gazebo attach/detach；MoveIt attachment 仍只作为从最新 Gazebo
+  pose 创建的 collision-planning shadow，并在物理 `OPEN_GRIPPER` 前 detach。
+
+该修订必须先经 stable Featherstone compound-owner + bounded-negative-noise 的自动回归
+RED→GREEN，再重新执行现场校准。此前 `CAL-PHYSICAL-001` 继续保持 `INVALID`，不得反向用于选值。
