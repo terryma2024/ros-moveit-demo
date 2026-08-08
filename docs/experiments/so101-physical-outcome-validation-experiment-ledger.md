@@ -1248,9 +1248,9 @@ decision: CARRY_SCENE_DIAGNOSTIC_QUALIFIED_KEEP_PENETRATION_CEILING
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-014
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: a36aa72209c2bd814632170ac5cb5c13a4574397
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 219
@@ -1265,4 +1265,33 @@ evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-0
 cleanup_ownership: only HEADLESS-PHYSICAL-014 launch process group and ROS_DOMAIN_ID 219 daemon if created
 acceptance_counting: qualification only
 safety_disposition: freeze evidence before cleanup；no reset；never open a held unsupported cup
+started_at: 2026-08-08T16:50:01+08:00
+ended_at: 2026-08-08T16:52:10+08:00
+observed:
+  original_failure: PLANNING_SHADOW_DIVERGENCE
+  reported_failure_after_recovery: UNSAFE_RECOVERY_OBSERVATION
+  failed_state: DESCEND_TO_PLACE
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> ERROR
+  planning_shadow_position_divergence_m: 0.00212028861
+  planning_shadow_axial_tilt_divergence_rad: 0.0898560240801
+  position_limit_m: 0.005
+  orientation_limit_rad: 0.070
+  gazebo_attached_at_checkpoint: false
+  moveit_attached_at_checkpoint: true
+  gripper_open_at_checkpoint: false
+safety_audit:
+  - position divergence remained within its frozen limit；orientation divergence exceeded its frozen limit and was correctly rejected before planning
+  - no threshold、physics、motion、geometry、controller or penetration ceiling changed
+  - recovery refused automatic motion/opening while the cup was held away from known support
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014/source-head.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014/failure-wall-near-contact.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014/failure-evidence.sha256
+cleanup: evidence frozen before stopping only the owned launch process group；no reset
+decision: PLANNING_VALIDITY_GATE_WORKED_DO_NOT_RELAX
 ```
