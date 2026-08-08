@@ -2389,3 +2389,44 @@ states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, R
 success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
 invalid_criteria: startup/readiness/provenance failure before planning
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-0004875-PLAN-001
+status: VALID_SUCCESS
+completed_at: 2026-08-08 Asia/Shanghai
+planned_points: {MOVE_ABOVE_OBJECT: 199, DESCEND: 129, LIFT: 119, MOVE_ABOVE_PLACE: 127, DESCEND_TO_PLACE: 100, RETREAT: 132}
+descend_correction: DESCEND total 129 includes the FK-derived +0.0004875 m world-Z grasp translation pose plan
+bundle_sha256_observed: 2513fa417bac9b64834ee429abbfb4ae3e459b6e64fc3200ccb1b515a7d53cda
+runtime_arm_trajectory_constraint: 0.008 for joints 1-5
+forbidden_runtime_events: NONE_OBSERVED (only startup plugin-list mention)
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 remains
+  ros_domain_219_daemon: stopped
+decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
+next_experiment: PY-A-Z-POS-0004875-GRASP-001
+```
+
+```yaml
+experiment_id: PY-A-Z-POS-0004875-GRASP-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.0004875]}
+lifecycle: FULL_RESTART
+source_commit: 556f510
+bundle_sha256: 2513fa417bac9b64834ee429abbfb4ae3e459b6e64fc3200ccb1b515a7d53cda
+motion_config_sha256: ae0e86b8773fbd711ed8ebb82dcf1fea483f4b00f7810bc3b333b4c32d8f54a4
+ros_domain_id: 220
+gz_partition: so101_py_a_z_pos_0004875_grasp_001_220
+evidence_root: /tmp/so101-py-a-z-pos-0004875-grasp-001-220
+owned_tmux_session: so101-py-a-z-mid3-grasp-220
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+success_criteria: bilateral stable contact within 0.000800002 m ceiling for both pads and physical 0.002 m micro-lift within existing lateral bound
+failure_criteria: any frozen hard gate failure
+post_failure: stop/hold; no open; preserve evidence
+prelaunch_process_audit:
+  removed: []
+  preserved: ["PID 3272995 uncertain gz sim server", "PID 652055 unrelated clang-tidy", "tmux codex", "tmux codex-cua", "tmux kimi"]
+  uncertain: [3272995]
+  task_stack_present: false
+```
