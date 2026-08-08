@@ -2363,3 +2363,29 @@ bracket_update: bilateral contact remained but penetration exceeded the ceiling,
 decision: TRY_PHASE1_CANDIDATE_3_EXACT_MIDPOINT_0004875
 next_candidate_offset_m: [0.0, 0.0, 0.0004875]
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-0004875-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.0004875]}
+rationale: Phase 1 candidate 3 (final); exact midpoint of the updated [+0.000475000, +0.000500000] m bracket
+lifecycle: FULL_RESTART
+source_commit: 556f510
+bundle_sha256: 2513fa417bac9b64834ee429abbfb4ae3e459b6e64fc3200ccb1b515a7d53cda
+config_sha256:
+  motion: ae0e86b8773fbd711ed8ebb82dcf1fea483f4b00f7810bc3b333b4c32d8f54a4
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+red_green:
+  red: test_policy_config.py assertion (0.0, 0.0, 0.0004875) failed against 0.000475 config (1 failed, 14 passed)
+  green: config scalar changed to 0.0004875; focused 15 passed; full package suite 136 passed, 2 skipped
+  build: colcon build succeeded; installed motion config sha256 ae0e86b8773f matches source
+ros_domain_id: 219
+gz_partition: so101_py_a_z_pos_0004875_plan_001_219
+evidence_root: /tmp/so101-py-a-z-pos-0004875-plan-001-219
+owned_tmux_session: so101-py-a-z-mid3-plan-219
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
