@@ -491,3 +491,22 @@ commit/policy 连续五次 FULL_RESTART 物理结果成功（INVALID 不计且�
 连击）。仅在完整 contract 与五连成功后才做 scoped commit、推送 feature branch 到 Gitee、验证
 remote SHA、按既有批准 merge gate 合并到干净 main worktree、重跑合并树测试并推送 main。禁止
 force-push、禁止 `gh`、禁止在 dirty main 上合并。
+
+## 2026-08-08 增补授权：penetration gate 诊断性放宽（非重校准）
+
+用户在 know-how 总结（`docs/experiments/2026-08-08-so101-grasp-gate-failure-knowhow.md`）之后授权一次诊断性尝试：
+在文档化诊断锚点（`grasp_tcp_translation_offset_m [0.0, 0.0, 0.0004]`、`seating_preload_rad 0.006`、
+`grasp_tcp_world_x_rotation_rad 0.0`）下，适度放开 moving-pad penetration gate，观察 MICRO_LIFT
+物理上能否把杯子带起来。明确不解除 orientation 可规划性。
+
+- 该尝试不是 qualification，也不是 ceiling 重校准；`0.000800002 m` frozen ceiling 仍是未来任何
+  qualification 的验收 gate。诊断结束无论结果如何都把诊断 scalar 复原为禁用。
+- 实现为 motion policy 的可选字段 `diagnostic_moving_pad_penetration_ceiling_m`：`0.0` 表示禁用
+  （默认，走 frozen 常量），启用值界为 `(0.000800002, 0.0012]`。诊断取值 `0.0012 m`：高于双侧运行
+  观测到的最大 moving-pad 深度（`0.001193 m`），低于 solver 上报接触深度上限 `0.0013 m` 与
+  profile 的 2 mm 硬安全上限。
+- 几何、物理引擎、质量、摩擦、controller/plugin/gain、task-object、attachment 语义全部不变；
+  不做 forward Gazebo attach；execute 仍只走到 `VERIFY_PHYSICAL_GRASP`（其内部含 `+0.002 m`
+  micro-lift 探针），以 Gazebo cup pose 为物理事实源读出 `cup_world_z_delta_m`、lateral drift 与
+  双侧 contact/depth。
+- 结论与证据写回 experiment ledger；任何 ceiling 重校准都只能由用户决策。

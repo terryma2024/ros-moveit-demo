@@ -3014,3 +3014,26 @@ document: docs/experiments/2026-08-08-so101-grasp-gate-failure-knowhow.md
 summary: failure mode is invariant across every authorized scalar direction (moving-pad peak penetration exceeds the frozen ceiling); root causes ordered as (1) pad-face tilt edge concentration (systematic, blocked by the frozen planning contract), (2) physical variance exceeding the ceiling margin (statistical, blocks five-consecutive acceptance), (3) ceiling calibration semantics (user decision only); target-only tuning is closed
 state: resting at commit 1298792 config anchor (Z +0.0004, preload 0.006, rotation 0.0); awaiting user decision
 ```
+
+```yaml
+checkpoint_id: CP-AUTHORIZATION-PENETRATION-DIAGNOSTIC-001
+recorded_at: 2026-08-08 Asia/Shanghai
+trigger: new user authorization issued after CP-KNOWHOW-SUMMARY-001
+sole_writer: tmux kimi (unchanged; codex-cua remains paused)
+authorization:
+  scope: one user-authorized diagnostic attempt with a moderately relaxed moving-pad penetration gate, to observe whether MICRO_LIFT physically carries the cup at the documented diagnostic anchor
+  explicit_non_goals:
+    - orientation plannability is NOT unblocked (explicit user directive)
+    - this is NOT a qualification and NOT a ceiling recalibration; the frozen ceiling 0.000800002 m remains the acceptance gate for any future qualification
+    - no geometry, physics engine, mass, friction, controller/plugin/gain, or task-object change; no forward Gazebo attach; attachment semantics unchanged
+  frozen_targets:
+    grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+    seating_preload_rad: 0.006
+    grasp_tcp_world_x_rotation_rad: 0.0
+  mechanism: minimal TDD-backed opt-in plumbing diagnostic_moving_pad_penetration_ceiling_m in the motion policy; 0.0 disables (frozen constant 0.000800002 m applies); enabled values bounded to (0.000800002, 0.0012]; default disabled so the frozen gate and all existing gate tests are unchanged
+  diagnostic_value_m: 0.0012
+  value_rationale: above the worst observed bilateral moving-pad depth 0.001152 m and the Phase-4 distribution max 0.001193 m, below the solver-reported contact depth limit 0.0013 m and the profile 2 mm hard safety ceiling
+  execution_contract: same per-candidate ladder (exact RED, minimal scalar GREEN, focused + full package suite with no regression, scoped commit, rebuild + installed provenance verification, ledger PLANNED pre-registration, six-state plan-only, unique owned FULL_RESTART stack, execute through VERIFY_PHYSICAL_GRASP which itself includes the +0.002 m micro-lift probe); exactly one physical attempt; an INVALID run stops the diagnostic before any physical retry
+  readout: cup_world_z_delta_m versus the +0.002 m command, lateral drift, post-lift bilateral contact and per-pad max depths, q6_contact/final, pose-pair age, controller result, Gazebo/MoveIt attachment state, exit code, exact evidence path
+  after: revert the scalar to 0.0 (disabled) with RED/GREEN + full suite and scoped commit regardless of outcome; record conclusion; await user decision on any ceiling recalibration
+```
