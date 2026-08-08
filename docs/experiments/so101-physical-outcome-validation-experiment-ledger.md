@@ -599,3 +599,49 @@ invariants:
 decision: QUALIFIED_FOR_DRY_RUN_PLAN_ONLY
 next_experiment: DRY-PHYSICAL-001
 ```
+
+## DRY-PHYSICAL-001：calibrated workflow trace
+
+```yaml
+experiment_id: DRY-PHYSICAL-001
+status: VALID
+source_commit: 9e6e5ae7b48e9f7ae93412774b28d08c1325276f
+run_mode: dry_run
+start_simulation: false
+ROS_DOMAIN_ID: 163
+GZ_PARTITION: so101-physical-outcome-dry-20260808
+result:
+  exit: 0
+  status: DONE
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> DETACH_MOVEIT -> OPEN_GRIPPER -> WAIT_RELEASE_SETTLE -> VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> RETREAT -> DONE
+assertions:
+  - no ATTACH_GAZEBO or DETACH_GAZEBO in normal forward trace
+  - DETACH_MOVEIT precedes OPEN_GRIPPER
+  - release settle and final validation precede synchronization and retreat
+evidence: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/dry-run.log
+decision: KEEP
+next_experiment: PLAN-PHYSICAL-001
+```
+
+## PLAN-PHYSICAL-001：isolated calibrated plan-only qualification
+
+```yaml
+experiment_id: PLAN-PHYSICAL-001
+status: PLANNED
+source_commit: 9e6e5ae7b48e9f7ae93412774b28d08c1325276f
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: plan_only
+start_simulation: true
+headless: true
+ROS_DOMAIN_ID: 164
+GZ_PARTITION: so101-physical-outcome-plan-20260808
+success_criteria:
+  - isolated stack provenance and controllers healthy
+  - plan-only completes without physical execution or final-success claim
+  - planning shadow gate is available and no forward Gazebo attachment is invoked
+invalid_criteria:
+  - duplicate domain/partition、wrong overlay、stale stack or uncontrolled cleanup
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/plan-only-001
+cleanup_ownership: only process group created by this experiment
+next_transition: commit PLANNED then RUNNING
+```
