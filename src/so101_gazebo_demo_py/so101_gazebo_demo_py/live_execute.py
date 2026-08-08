@@ -231,6 +231,18 @@ def _moveit_plan_waypoints(waypoints) -> int:
         rclpy.spin_once(node,timeout_sec=.1)
     if not latest:
         node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
+        raise RuntimeError("joint states unavailable")
+    names=("1","2","3","4","5"); index={name:i for i,name in enumerate(latest[-1].name)}
+    current=tuple(latest[-1].position[index[name]] for name in names)
+    progress=lambda: rclpy.spin_once(node,timeout_sec=.01)
+    planner=MoveItPlanningClient(
+        node.create_client(GetMotionPlan,"/plan_kinematic_path"),
+        make_get_motion_plan_request,progress,
+    )
+    try:
+        return plan_waypoint_sequence(planner,names,current,waypoints)
+    finally:
+        node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
 
 
 def _moveit_plan_grasp_translation(start_positions, translation_offset_m) -> int:
@@ -283,18 +295,6 @@ def _moveit_plan_grasp_translation(start_positions, translation_offset_m) -> int
         return points
     finally:
         node.destroy_node(); rclpy.shutdown()
-        raise RuntimeError("joint states unavailable")
-    names=("1","2","3","4","5"); index={name:i for i,name in enumerate(latest[-1].name)}
-    current=tuple(latest[-1].position[index[name]] for name in names)
-    progress=lambda: rclpy.spin_once(node,timeout_sec=.01)
-    planner=MoveItPlanningClient(
-        node.create_client(GetMotionPlan,"/plan_kinematic_path"),
-        make_get_motion_plan_request,progress,
-    )
-    try:
-        return plan_waypoint_sequence(planner,names,current,waypoints)
-    finally:
-        node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
 
 
 def _moveit_world_z_execute(
