@@ -59,6 +59,13 @@ def translated_grasp_pose(pose, translation_offset_m):
     )
 
 
+def rotated_grasp_pose(pose, world_x_rotation_rad: float):
+    """Rotate only the pose orientation about the world X axis."""
+    half = world_x_rotation_rad / 2.0
+    rotation = (math.sin(half), 0.0, 0.0, math.cos(half))
+    return (*pose[:3], *_quaternion_multiply(rotation, pose[3:]))
+
+
 def carry_with_shadow_gates(backend, policies, shadow_gate):
     for name, policy in policies.items():
         shadow_gate(name)
@@ -245,7 +252,7 @@ def _moveit_plan_waypoints(waypoints) -> int:
         node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
 
 
-def _moveit_plan_grasp_translation(start_positions, translation_offset_m) -> int:
+def _moveit_plan_grasp_translation(start_positions, translation_offset_m, world_x_rotation_rad: float = 0.0) -> int:
     import rclpy
     from moveit_msgs.action import MoveGroup
     from moveit_msgs.srv import GetPositionFK
@@ -273,7 +280,7 @@ def _moveit_plan_grasp_translation(start_positions, translation_offset_m) -> int
             pose.position.x,pose.position.y,pose.position.z,
             pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w,
         )
-        target=translated_grasp_pose(baseline,translation_offset_m)
+        target=rotated_grasp_pose(translated_grasp_pose(baseline,translation_offset_m),world_x_rotation_rad)
         client=ActionClient(node,MoveGroup,"/move_action")
         if not client.wait_for_server(timeout_sec=10.0):
             raise RuntimeError("/move_action unavailable")
@@ -301,6 +308,7 @@ def _moveit_world_z_execute(
     delta_m: float,
     local_x_m: float = 0.0,
     world_translation_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    world_x_rotation_rad: float = 0.0,
 ) -> tuple[int, float]:
     import rclpy
     from moveit_msgs.action import ExecuteTrajectory, MoveGroup
@@ -322,7 +330,7 @@ def _moveit_world_z_execute(
     target_pose=make_world_z_target((transform.transform.translation.x,transform.transform.translation.y,transform.transform.translation.z,transform.transform.rotation.x,transform.transform.rotation.y,transform.transform.rotation.z,transform.transform.rotation.w),delta_m)
     dx,dy,dz=local_x_world_delta(target_pose[3:],local_x_m)
     target_pose=(target_pose[0]+dx,target_pose[1]+dy,target_pose[2]+dz,*target_pose[3:])
-    target_pose=translated_grasp_pose(target_pose,world_translation_m)
+    target_pose=rotated_grasp_pose(translated_grasp_pose(target_pose,world_translation_m),world_x_rotation_rad)
     client=ActionClient(node,MoveGroup,"/move_action")
     if not client.wait_for_server(timeout_sec=10.): raise RuntimeError("/move_action unavailable")
     future=client.send_goal_async(make_pose_move_group_goal(names,positions,target_pose)); rclpy.spin_until_future_complete(node,future,timeout_sec=5.)
@@ -463,10 +471,11 @@ def run_live_plan_only(
     if state not in bundle.motion.states:
         raise ValueError(f"motion policy missing state {state_name}")
     points=_moveit_plan_waypoints(bundle.motion.states[state].waypoints)
-    if state.value == "DESCEND" and any(bundle.motion.grasp_tcp_translation_offset_m):
+    if state.value == "DESCEND" and (any(bundle.motion.grasp_tcp_translation_offset_m) or bundle.motion.grasp_tcp_world_x_rotation_rad):
         points += _moveit_plan_grasp_translation(
             bundle.motion.states[state].waypoints[-1],
             bundle.motion.grasp_tcp_translation_offset_m,
+            bundle.motion.grasp_tcp_world_x_rotation_rad,
         )
     result={"status":"PLAN_ONLY_COMPLETE","current_state":state_name,"state_trace":[state_name],"exit_code":0,"planned_points":points,"policy_sha256":bundle.sha256}
     evidence_directory=Path(evidence_directory); evidence_directory.mkdir(parents=True,exist_ok=True)
@@ -491,8 +500,9 @@ def run_live_execute(
     backend.move_arm(move_above[:-1]); moveit_points=_moveit_plan_execute(move_above[-1])
     state=next(state for state in bundle.motion.states if state.value=="DESCEND"); descend=bundle.motion.states[state]; backend.move_arm(descend.waypoints)
     grasp_offset=bundle.motion.grasp_tcp_translation_offset_m
-    if any(grasp_offset):
-        _moveit_world_z_execute(0.0,world_translation_m=grasp_offset)
+    grasp_rotation=bundle.motion.grasp_tcp_world_x_rotation_rad
+    if any(grasp_offset) or grasp_rotation:
+        _moveit_world_z_execute(0.0,world_translation_m=grasp_offset,world_x_rotation_rad=grasp_rotation)
     close_target=bundle.motion.grasp_close_q6
     backend.move_gripper(close_target)
     initial_contact=evaluate_bilateral_contact(backend.contacts())
