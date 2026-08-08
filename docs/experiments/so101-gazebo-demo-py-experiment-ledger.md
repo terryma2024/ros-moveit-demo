@@ -3279,3 +3279,18 @@ qualification_rules:
   any INVALID run stops the batch; debug only the contamination/implementation defect with a fresh batch/id
   after three VALID_SUCCESS runs: continue per plan to full physical pick/place, acceptance battery, and five consecutive FULL_RESTART successes at the same frozen fingerprint
 ```
+
+```yaml
+experiment_id: EXP-QUAL-PLAN-230
+lifecycle: VALID_SUCCESS
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-001 (commit 71f844f, bundle f99f5ec7)
+ros_domain_id: 230
+gz_partition: so101_py_qual_230
+tmux_session: so101-py-qual-plan-230 (stopped after run)
+evidence_root: /tmp/so101-py-qual-plan-230
+results:
+  six_states: [DESCEND 129, DESCEND_TO_PLACE 100, LIFT 119, MOVE_ABOVE_OBJECT 199, MOVE_ABOVE_PLACE 127, RETREAT 132] all PLAN_ONLY_COMPLETE exit 0, policy_sha256 f99f5ec7 in every artifact
+  forbidden_events: execute_trajectory_mentions=1 (startup noise only)
+  cleanup: exact owned PIDs; preserved tmux/processes intact
+```
