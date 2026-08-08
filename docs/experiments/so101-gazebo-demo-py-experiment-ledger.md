@@ -963,3 +963,28 @@ invalid_criteria:
   - startup, provenance, bridge, controller, MoveIt, or pose/contact observation fails before target behavior is exercised
 post_failure: stop/hold; preserve evidence; no automatic open or reset before capture
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-003
+status: INVALID
+completed_at: 2026-08-08 Asia/Shanghai
+target_behavior_exercised: false
+command_boundary: defensive startup detach
+observed:
+  - ROS actions became visible, but controller_manager initialization and prepared-model mesh loading were still converging.
+  - Gazebo logged Already detached for the early defensive command, then performed the prepared DetachableJoint initial attach after entity creation.
+  - Durable state therefore remained attached and the preflight correctly withheld all motion.
+root_cause: Readiness checked action discovery but did not wait for the prepared model's initial durable attachment state before defensive detach.
+evidence:
+  directory: /tmp/so101-py-a0-baseline-003-194
+  gazebo_log: gazebo.log lines 241-250
+cleanup:
+  tmux_session: removed
+  detached_owned_gz_pid: 116079 terminated by exact PID
+  ros_domain_194_daemon: stopped
+  unrelated_tmux_and_ros_stacks: untouched
+candidate_result: EXCLUDED
+hard_gate_result: NOT_EVALUATED
+decision: TERMINATE_BATCH_AND_WAIT_FOR_INITIAL_ATTACHMENT_BEFORE_DETACH
+next_experiment: PY-A0-BASELINE-GRASP-004
+```
