@@ -3205,3 +3205,77 @@ authorization:
   unchanged: anchor targets (Z +0.0004, preload 0.006, rot 0.0), geometry, physics, friction, mass, controllers, attachment semantics, all other gates (lateral 0.001, lift +0.002, shadow, freshness, support, final outcome)
   qualification: per the previously approved plan - at least three independent FULL_RESTART grasp runs through VERIFY_PHYSICAL_GRASP at one frozen commit/config fingerprint; any VALID failure ends qualification and returns to the user (all bounded target phases are closed); any INVALID stops the batch
 ```
+
+```yaml
+checkpoint_id: CP-QUALIFICATION-FINGERPRINT-001
+recorded_at: 2026-08-09 Asia/Shanghai
+authorization: CP-AUTHORIZATION-CEILING-RECALIBRATION-001
+frozen_fingerprint:
+  commit: 71f844f
+  bundle_sha256: f99f5ec7dbe190a503bac4b4d2e94c9ec902a4717357dd68191a5d78287a6a62
+  moving_pad_penetration_ceiling_m: 0.00125 (installed runtime constant verified)
+  diagnostic_override: 0.0 (disabled)
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+  seating_preload_rad: 0.006
+  grasp_tcp_world_x_rotation_rad: 0.0
+package_suite: 147 passed, 2 skipped
+installed_provenance:
+  observer_sha256: 988a7faac7ee818c4067600cf476a8e5299bc771d2cec22040519efbc26419b5 (build == src)
+  policy_config_sha256: 1f9df96e385ce6a8ebdf9774b49e90a6531e38448aea97f321cb76b5006c4ff0 (build == src)
+  live_execute_sha256: b4cdfc61d230c3f427a293e6dd193a1707f0a455c395c8371fbae5bb0589dd0c (build == src)
+```
+
+```yaml
+experiment_id: EXP-QUAL-PLAN-230
+lifecycle: PLANNED
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-001 (commit 71f844f, bundle f99f5ec7)
+mode: plan_only six-state ladder
+tmux_session: so101-py-qual-plan-230
+ros_domain_id: 230
+gz_partition: so101_py_qual_230
+evidence_root: /tmp/so101-py-qual-plan-230
+```
+
+```yaml
+experiment_id: EXP-QUAL-GRASP-1-231
+lifecycle: PLANNED (conditional on EXP-QUAL-PLAN-230 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-001 (commit 71f844f, bundle f99f5ec7)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP (includes +0.002 m micro-lift probe)
+tmux_session: so101-py-qual-grasp-1-231
+ros_domain_id: 231
+gz_partition: so101_py_qual_231
+evidence_root: /tmp/so101-py-qual-grasp-1-231
+```
+
+```yaml
+experiment_id: EXP-QUAL-GRASP-2-232
+lifecycle: PLANNED (conditional on EXP-QUAL-GRASP-1-231 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-001 (commit 71f844f, bundle f99f5ec7)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP
+tmux_session: so101-py-qual-grasp-2-232
+ros_domain_id: 232
+gz_partition: so101_py_qual_232
+evidence_root: /tmp/so101-py-qual-grasp-2-232
+```
+
+```yaml
+experiment_id: EXP-QUAL-GRASP-3-233
+lifecycle: PLANNED (conditional on EXP-QUAL-GRASP-2-232 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-001 (commit 71f844f, bundle f99f5ec7)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP
+tmux_session: so101-py-qual-grasp-3-233
+ros_domain_id: 233
+gz_partition: so101_py_qual_233
+evidence_root: /tmp/so101-py-qual-grasp-3-233
+```
+
+```yaml
+qualification_rules:
+  any VALID failure ends qualification and returns to the user (all bounded target phases closed)
+  any INVALID run stops the batch; debug only the contamination/implementation defect with a fresh batch/id
+  after three VALID_SUCCESS runs: continue per plan to full physical pick/place, acceptance battery, and five consecutive FULL_RESTART successes at the same frozen fingerprint
+```
