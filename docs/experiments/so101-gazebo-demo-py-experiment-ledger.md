@@ -2980,3 +2980,28 @@ analysis:
 conclusion: TARGET_ONLY_INFEASIBLE_UNDER_CURRENT_MODEL
 required_next_step: stop and request a user decision; the gate must not be relaxed and geometry must not be edited under the current authorization
 ```
+
+```yaml
+checkpoint_id: CP-PHASE4-RESTING-STATE-001
+recorded_at: 2026-08-08 Asia/Shanghai
+resting_commit: 1298792
+resting_config:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+  seating_preload_rad: 0.006
+  grasp_tcp_world_x_rotation_rad: 0.0
+  bundle_sha256: 060228e848e0beba00aaba6f25b9a4a3ccf4216096398c258bbc21648d6fb67a
+note: eliminated candidate values were reverted to the documented diagnostic anchor and q6 baseline with RED/GREEN and full suite (141 passed, 2 skipped); the seating_preload_rad and grasp_tcp_world_x_rotation_rad plumbing remains for any future authorized direction
+package_suite: 141 passed, 2 skipped
+owned_processes: NONE
+preserved_processes: [PID 3272995 uncertain gz sim server, PID 652055 unrelated clang-tidy, tmux codex, tmux codex-cua, tmux kimi]
+preserved_dirty_paths:
+  - M src/so101_gazebo_demo_py/config/so101_controllers.yaml
+  - M src/so101_gazebo_demo_py/config/task_objects/light_plastic_cup.yaml
+  - M src/so101_gazebo_demo_py/config/validation_policies/light_cup_wall_pick.yaml
+  - M src/so101_gazebo_demo_py/docs/provenance.json
+  - M src/so101_gazebo_demo_py/test/test_provenance.py
+  - ?? src/so101_gazebo_demo_py/test/test_main_strategy_parity.py
+experiment_domains_used: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227]
+audit_conclusion: TARGET_ONLY_INFEASIBLE_UNDER_CURRENT_MODEL (CP-PHASE4-FEASIBILITY-AUDIT-001)
+awaiting: user decision per the approved Phase 4 rule; no gate relaxation or geometry edit is authorized
+```
