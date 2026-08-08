@@ -932,3 +932,34 @@ hard_gate_result: NOT_EVALUATED
 decision: TERMINATE_BATCH_AND_FULL_RESTART_WITH_EXPLICIT_BASH_LC
 next_experiment: PY-A0-BASELINE-GRASP-003
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-003
+status: PLANNED
+purpose: Exercise the unchanged Python target baseline once with the corrected explicit bash overlay boundary.
+single_variable: NONE_BASELINE
+lifecycle: FULL_RESTART
+source_commit: d3ab88da26703295d9b20ef12832c79a98b56816
+config_sha256:
+  motion: 4ba7b35c315615a73238276ea511306bb98e2b4f30bddf0134f3183a6ef1ad4e
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+ros_domain_id: 194
+gz_partition: so101_py_a0_baseline_003_194
+evidence_root: /tmp/so101-py-a0-baseline-003-194
+owned_tmux_session: so101-py-a0-194
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+orchestration_control: each tmux launch command runs inside explicit bash -lc
+success_criteria:
+  - defensive Gazebo detach/readback and all runtime readiness checks pass
+  - bilateral contact is stable for the configured consecutive evidence samples
+  - moving-pad penetration <= 0.000800002 m
+  - 2 mm world-Z micro-lift and existing lateral bound pass
+failure_criteria:
+  - any existing controller/collision/penetration/physical-grasp hard gate fails
+invalid_criteria:
+  - startup, provenance, bridge, controller, MoveIt, or pose/contact observation fails before target behavior is exercised
+post_failure: stop/hold; preserve evidence; no automatic open or reset before capture
+```
