@@ -1889,3 +1889,21 @@ candidate_result: ELIMINATED
 decision: TRY_SECOND_POSITIVE_Z_MIDPOINT_CANDIDATE_00025
 next_candidate_offset_m: [0.0, 0.0, 0.00025]
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-00025-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.00025]}
+rationale: second positive-Z candidate at the midpoint between bilateral baseline and the +0.0005 m missing-moving-contact boundary
+lifecycle: FULL_RESTART
+source_commit: d13bb5f
+bundle_sha256: 6618132a948a16a8f92e5d539e5cae14dfd0d1ffe6f09ecafcd15ce3d4ceeb4f
+motion_config_sha256: 7da7668d86208ab7d4d2b8be293a58804eb67dc3fb4ef68ae3b43d1746031bb0
+ros_domain_id: 211
+gz_partition: so101_py_a_z_pos_00025_plan_001_211
+evidence_root: /tmp/so101-py-a-z-pos-00025-plan-001-211
+owned_tmux_session: so101-py-a-z-mid-plan-211
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
