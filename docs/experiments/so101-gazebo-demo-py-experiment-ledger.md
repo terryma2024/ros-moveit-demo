@@ -1148,3 +1148,34 @@ uncertain_preserved:
   - {pid: 4167482, domain: 222, partition: so101-physical-outcome-headless-017-20260808, kind: ros2_daemon}
 cleanup_protocol: exact PID TERM, wait, same-PID readback, KILL only if the confirmed same PID survives; no broad matching commands
 ```
+
+```yaml
+checkpoint_id: CP-PROCESS-OWNERSHIP-002
+status: POST_CLEANUP_VERIFIED
+recorded_at: 2026-08-08 Asia/Shanghai
+removed:
+  term_only:
+    baseline_005_pids: [129607, 129622, 129701, 129702, 129713, 129714, 129734, 129757, 129758, 129759, 129857, 129948, 129823]
+  term_then_kill_after_same_pid_readback:
+    historical_python_gz_pids: [2968848, 2976509, 2991921, 3001845, 3013329, 3022491, 3032619, 3041130, 3048965, 3065920, 3081104, 3087448, 3095640, 3102528]
+  verification:
+    every_recorded_pid_absent: true
+    domain_196_ros_graph_no_daemon: empty
+    owned_tmux_session_so101_py_a0_196: removed
+preserved:
+  tmux_sessions: [codex, codex-cua]
+  running_command: {pid: 652055, command: run-clang-tidy-18, state: allowed_to_finish_naturally}
+uncertain_preserved:
+  - {pid: 3272995, domain: 121, kind: gz_sim}
+  - {pid: 4149957, domain: 219, kind: ros2_daemon}
+  - {pid: 4154973, domain: 220, kind: ros2_daemon}
+  - {pid: 4161729, domain: 221, kind: ros2_daemon}
+  - {pid: 4167482, domain: 222, kind: ros2_daemon}
+naturally_exited_without_cleanup_action:
+  - {pid: 4144503, domain: 218, kind: ros2_daemon}
+recoverability:
+  process_state: terminated processes are not recoverable
+  evidence: all ledger files and /tmp experiment evidence were preserved; no evidence directory was deleted
+  restart: any future runtime uses a new experiment ID, domain, partition, and FULL_RESTART
+next_action: complete deterministic source-history pose pairing, commit it, then preregister PY-A0-BASELINE-GRASP-006
+```
