@@ -4,6 +4,7 @@ from so101_gazebo_demo_py.domain import (
     ActionResult, ActionStatus, Failure, FailureCategory, RunMode, RunRequest, RunStatus, State,
 )
 from so101_gazebo_demo_py.runner import ExecutionContext, StateMachineRunner
+from so101_gazebo_demo_py.checkpoint import FileCheckpointStore
 from so101_gazebo_demo_py.workflow import SO101_WORKFLOW
 
 
@@ -84,3 +85,15 @@ def test_transition_limit_fails_closed() -> None:
     machine, _ = runner()
     result = machine.run(RunRequest(max_state_transitions=2))
     assert result.failure.code == "MAX_STATE_TRANSITIONS_EXCEEDED"
+
+
+def test_post_release_checkpoint_is_non_resumable_and_has_fresh_epoch(tmp_path) -> None:
+    machine, _ = runner()
+    machine.checkpoint_store = FileCheckpointStore(tmp_path / "checkpoint.json")
+    result = machine.run(RunRequest(stop_after=State.OPEN_GRIPPER))
+    assert result.status is RunStatus.CHECKPOINT_COMPLETE
+    checkpoint, failure = machine.checkpoint_store.load()
+    assert failure is None
+    assert checkpoint.resumable is False
+    assert checkpoint.release_epoch_id
+    assert checkpoint.release_marker_sequence == checkpoint.sequence

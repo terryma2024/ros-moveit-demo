@@ -35,6 +35,8 @@ class StateMachineRunner:
         self.checkpoint_store = checkpoint_store
         self.session_id = session_id
         self.policy_bundle_sha256 = policy_bundle_sha256
+        self.release_epoch_id: str | None = None
+        self.release_marker_sequence: int | None = None
 
     def _error(
         self, code: str, trace: list[State], count: int,
@@ -50,6 +52,13 @@ class StateMachineRunner:
     ) -> Failure | None:
         if self.checkpoint_store is None:
             return None
+        if completed is State.OPEN_GRIPPER and self.release_epoch_id is None:
+            self.release_epoch_id = str(uuid.uuid4())
+            self.release_marker_sequence = count
+        release_active = completed in {
+            State.OPEN_GRIPPER, State.WAIT_RELEASE_SETTLE,
+            State.VALIDATE_FINAL_PLACEMENT,
+        }
         checkpoint = Checkpoint(
             run_id=str(uuid.uuid4()), sequence=count, source_mode=request.mode,
             phase=CheckpointPhase.RECOVERY if completed.name.startswith("RECOVER_") else CheckpointPhase.FORWARD,
@@ -57,7 +66,9 @@ class StateMachineRunner:
             original_failure=failure, next_state=next_state,
             expected=ExpectedWorldState(),
             policy_bundle_sha256=self.policy_bundle_sha256 or "unconfigured",
-            simulation_session_id=self.session_id or "dry-run", resumable=True,
+            simulation_session_id=self.session_id or "dry-run", resumable=not release_active,
+            release_epoch_id=self.release_epoch_id if release_active else None,
+            release_marker_sequence=self.release_marker_sequence if release_active else None,
         )
         return self.checkpoint_store.commit(checkpoint)
 

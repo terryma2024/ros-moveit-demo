@@ -8,7 +8,10 @@ def test_single_step_checkpoint_preserves_schema_and_resume_bindings(tmp_path) -
     result=run_behavior(["--mode","dry_run","--step","--checkpoint",str(path),"--session-id","session"])
     assert result["status"] == "CHECKPOINT_COMPLETE"
     document=json.loads(path.read_text())
-    assert document["schema_version"] == 3
+    assert document["schema_version"] == 4
+    assert document["release_epoch_id"] is None
+    assert document["release_marker_sequence"] is None
+    assert document["resumable"] is True
     assert document["simulation_session_id"] == "session"
     assert document["source_mode"] == "dry_run"
     assert document["last_completed_state"] == "PREPARE_OPEN_GRIPPER"
