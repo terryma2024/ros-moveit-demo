@@ -744,3 +744,69 @@ runtime_status: NOT_RUN after parity migration
 next_experiment: PY-PARITY-PLAN-001
 next_command: preregister isolated all-state live plan-only with unique domain/partition/evidence root
 ```
+
+```yaml
+experiment_id: PY-PARITY-PLAN-001
+status: PLANNED
+purpose: Prove every configured motion waypoint ladder plans under the physical-outcome package before any target experiment.
+single_variable: runtime parity only; no target value changes
+lifecycle: FULL_RESTART
+source_commit: a152bc532d80bee9162d4e24d478e19f778bd8cf
+config_sha256:
+  motion: 4ba7b35c315615a73238276ea511306bb98e2b4f30bddf0134f3183a6ef1ad4e
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+ros_domain_id: 191
+gz_partition: so101_py_plan_191_20260808_a152bc5
+evidence_root: /tmp/so101-py-plan-20260808-a152bc5-191
+owned_tmux_session: so101-py-plan-191-a152
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria:
+  - package prefix is this worktree
+  - generated SDF names so101_controllers_physical_outcome.yaml
+  - every waypoint segment returns a nonempty MoveIt plan
+  - no ExecuteTrajectory/controller goal and no Gazebo attachment command occurs
+invalid_criteria:
+  - startup/readiness/provenance failure before the first plan
+cleanup_owner: only so101-py-plan-191-a152 and its recorded descendants
+```
+
+```yaml
+experiment_id: PY-PARITY-PLAN-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  domain_partition_collision: NONE_OBSERVED
+  preserved_ros_domain_181_stack: UNTOUCHED
+  target_changes_after_registration: NONE
+```
+
+```yaml
+experiment_id: PY-PARITY-PLAN-001
+status: VALID_SUCCESS
+completed_at: 2026-08-08 Asia/Shanghai
+package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+effective_controller_evidence:
+  generated_sdf: /tmp/so101-py-plan-20260808-a152bc5-191/ros-logs/so101-prepared-90312.sdf
+  config: config/so101_controllers_physical_outcome.yaml
+  runtime_dump_trajectory_rad: 0.008 for joints 1-5
+planned_points:
+  MOVE_ABOVE_OBJECT: 199
+  DESCEND: 125
+  LIFT: 119
+  MOVE_ABOVE_PLACE: 127
+  DESCEND_TO_PLACE: 100
+  RETREAT: 132
+observed:
+  - Every configured waypoint segment returned a nonempty plan; CLI returned PLAN_ONLY_COMPLETE for all six states.
+  - Plan logs contain no workflow-issued ExecuteTrajectory, FollowJointTrajectory goal, attach, or detach command.
+  - Startup durable attachment state was attached without a workflow command; this does not affect plan-only validity but requires defensive owned detach/readback before execute.
+cleanup:
+  tmux_session: removed
+  detached_owned_gz_pid: 90360 terminated by exact PID after tmux cleanup left it orphaned
+  partition_processes_remaining: NONE
+  unrelated_domain_181_and_other_stacks: UNTOUCHED
+conclusion: Python physical-outcome planning parity gate passed; target calibration may proceed to baseline short-path execution.
+next_experiment: PY-A0-BASELINE-GRASP-001
+```
