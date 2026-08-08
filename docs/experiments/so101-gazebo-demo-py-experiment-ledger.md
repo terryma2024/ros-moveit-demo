@@ -2735,3 +2735,29 @@ bisection_update: valid contact/stability lost, so increase within [0.0015, 0.00
 decision: TRY_PHASE2_CANDIDATE_3_MIDPOINT_PRELOAD_000375
 next_candidate_preload_rad: 0.00375
 ```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-000375-PLAN-001
+status: PLANNED
+candidate: {layer: C_Q6_SEATING_PRELOAD, preload_rad: 0.00375, anchor_offset_m: [0.0, 0.0, 0.0004]}
+rationale: Phase 2 candidate 3 (final); exact midpoint of [0.0015, 0.006] rad after candidate 2 contact loss
+lifecycle: FULL_RESTART
+source_commit: 28efaed
+bundle_sha256: a0d7c683f4eef58d8f47aab9e7bd7418ea10772e82d9bc88f326ee01e6e7815f
+config_sha256:
+  motion: dd60869c840970a643793cd22de226586348451be2442cde5b1f2d53590f1fd8
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+red_green:
+  red: test_policy_config.py preload assertion 0.00375 failed against 0.0015 config (1 failed, 16 passed)
+  green: config scalar changed to 0.00375; focused 17 passed; full package suite 138 passed, 2 skipped
+  build: colcon build succeeded; installed motion config sha256 dd60869c8409 matches source
+ros_domain_id: 225
+gz_partition: so101_py_c_q6_preload_000375_plan_001_225
+evidence_root: /tmp/so101-py-c-q6-preload-000375-plan-001-225
+owned_tmux_session: so101-py-q6-p375-plan-225
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
