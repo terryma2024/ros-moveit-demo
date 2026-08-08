@@ -1748,3 +1748,29 @@ preflight:
   authoritative_gazebo_pose_stream: fresh
   candidate_retry_count: 0
 ```
+
+```yaml
+experiment_id: PY-A-Y-POS-000225-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+observed:
+  fixed_finger_contact: true
+  moving_jaw_contact: true
+  max_fixed_pad_penetration_m: 0.0003809269401244819
+  max_moving_pad_penetration_m: 0.0009042673627845943
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.04747437313199043
+  q6_final: -0.0528433732688427
+  pose_pair_age_s: 0.006
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+evidence_file: /tmp/so101-py-a-y-pos-000225-grasp-001-208/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+candidate_result: ELIMINATED
+positive_y_direction_conclusion: Three bounded positive-Y candidates failed valid hard gates; stop without interpolation, random retry, or scope expansion.
+workflow_result: NO_SUCCESSFUL_PHYSICAL_GRASP
+decision: STOP_AND_REPORT_PER_THREE_CANDIDATE_DIRECTION_RULE
+```
