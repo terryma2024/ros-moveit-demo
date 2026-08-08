@@ -968,3 +968,26 @@ evidence_root_frozen: true
 cleanup: pose、contact、controllers、MoveIt scene and checkpoint frozen before Ctrl-C；owned launch and ROS_DOMAIN_ID 211 daemon stopped；no reset
 decision: TDD_NORMAL_CARRY_SCENE_REQUIRES_GAZEBO_DETACHED_AND_LIVE_SHADOW
 ```
+
+## HEADLESS-PHYSICAL-008：detached physical carry qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-008
+status: PLANNED
+implementation_commit: 50fde52
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 212
+GZ_PARTITION: so101-physical-outcome-headless-008-20260808
+lifecycle: FULL_RESTART
+domain_preflight: ros2 node list --no-daemon --spin-time 2 returned no nodes
+partition_preflight: gz topic -l returned no topics
+overlay_preflight: LD_LIBRARY_PATH contains install/so101_gazebo_demo/lib；no generated manifest exists
+success_criteria: complete DONE trace、stable final physical outcome and every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-008
+cleanup_ownership: only HEADLESS-PHYSICAL-008 launch process group and any daemon created for ROS_DOMAIN_ID 212
+acceptance_counting: qualification only；not part of the five-consecutive-run batch
+```
