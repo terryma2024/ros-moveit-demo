@@ -2923,3 +2923,26 @@ states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, R
 success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
 invalid_criteria: startup/readiness/provenance failure before planning
 ```
+
+```yaml
+experiment_id: PY-B-XROT-NEG-00173-PLAN-001
+status: VALID_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+target_behavior_exercised: false
+failure_boundary: DESCEND FK-derived grasp translation planning
+planned_points: {MOVE_ABOVE_OBJECT: 199}
+observed:
+  - MOVE_ABOVE_OBJECT planned successfully on the same healthy stack (services up, provenance verified), so planning infrastructure is not the cause
+  - "OMPL RRTConnect: Unable to sample any valid states; planner failed with error code GOAL_STATE_INVALID for the -0.017453292519943295 rad world-X rotated grasp target under the unchanged 0.0004 m position box and 0.005 rad orientation tolerance"
+  - the 5-DOF arm cannot reach the rotated orientation within the frozen pose-constraint contract
+  - no ExecuteTrajectory, FollowJointTrajectory, Gazebo attach, or detach command occurred
+evidence:
+  moveit_log: /tmp/so101-py-b-xrot-neg-00173-plan-001-227/moveit.log (GOAL_STATE_INVALID)
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 remains
+  ros_domain_227_daemon: stopped
+candidate_result: ELIMINATED (plan failure eliminates the candidate with no physical execute)
+early_stop_decision: larger magnitudes (0.04363323129985824, 0.08726646259971647 rad) deviate strictly further from the achievable orientation manifold under the same frozen constraints, so the response can only worsen; orientation experiments in the selected direction stop here per the approved early-stop rule; no other axis or opposite sign is tried
+decision: STOP_ORIENTATION_AND_ADVANCE_TO_PHASE4_FEASIBILITY_AUDIT
+```
