@@ -9,7 +9,7 @@ from so101_gazebo_demo_py.live_execute import (
 )
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
-    close_gazebo_subscription, parse_model_pose, parse_tf_pose,
+    close_gazebo_subscription, closest_pose_pair, parse_model_pose, parse_tf_pose,
     pose_pair_ready, select_gazebo_pose, select_stamped_transform,
 )
 
@@ -141,6 +141,18 @@ def test_pose_pair_waits_for_configured_source_timestamp_freshness() -> None:
 
     observed["object"] = ((0.0,) * 7, 10.02)
     assert pose_pair_ready(observed, 0.10)
+
+
+def test_closest_pose_pair_retains_cross_source_history() -> None:
+    object_samples = [((1.0,) * 7, 10.0), ((2.0,) * 7, 10.2)]
+    tcp_samples = [((3.0,) * 7, 9.89), ((4.0,) * 7, 10.09)]
+
+    pair = closest_pose_pair(object_samples, tcp_samples)
+
+    assert pair == {
+        "object": ((1.0,) * 7, 10.0),
+        "tcp": ((4.0,) * 7, 10.09),
+    }
 
 
 def test_plan_only_validates_every_waypoint_as_a_contiguous_sequence() -> None:
