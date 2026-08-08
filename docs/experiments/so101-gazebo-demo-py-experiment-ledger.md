@@ -852,30 +852,6 @@ preflight:
 ```
 
 ```yaml
-experiment_id: PY-A-Y-POS-0005-GRASP-001
-status: VALID_SAFETY_FAILURE
-completed_at: 2026-08-08 Asia/Shanghai
-attempt_count: 1
-first_hard_gate_failure: BILATERAL_CONTACT_AND_PENETRATION_CEILING_FAILED
-observed:
-  moving_jaw_contact: false
-  max_moving_pad_penetration_m: null
-  fixed_finger_contact: true
-  max_fixed_pad_penetration_m: 0.0010688621550798416
-  frozen_ceiling_m: 0.000800002
-  q6_contact: -0.04760623350739479
-  q6_final: -0.05360383540391922
-  pose_pair_age_s: 0.006
-  micro_lift_executed: false
-  gazebo_attachment_state: detached
-evidence_file: /tmp/so101-py-a-y-pos-0005-grasp-001-204/physical-failure.json
-recovery_open_commanded: false
-retry_count: 0
-candidate_result: ELIMINATED
-decision: CONTINUE_BOUNDED_LAYER_A_DIAGNOSIS_WITHOUT_RETRY
-```
-
-```yaml
 experiment_id: PY-A0-BASELINE-GRASP-001
 status: INVALID
 completed_at: 2026-08-08 Asia/Shanghai
@@ -1585,4 +1561,28 @@ preflight:
   installed_motion_config_sha256: 41b306d7d9e38aae04e45715b9b90863b65eb64a582e70b623c53246d1fa68b1
   authoritative_gazebo_pose_stream: fresh
   candidate_retry_count: 0
+```
+
+```yaml
+experiment_id: PY-A-Y-POS-0005-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: BILATERAL_CONTACT_AND_PENETRATION_CEILING_FAILED
+observed:
+  moving_jaw_contact: false
+  max_moving_pad_penetration_m: null
+  fixed_finger_contact: true
+  max_fixed_pad_penetration_m: 0.0010688621550798416
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.04760623350739479
+  q6_final: -0.05360383540391922
+  pose_pair_age_s: 0.006
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+evidence_file: /tmp/so101-py-a-y-pos-0005-grasp-001-204/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+candidate_result: ELIMINATED
+decision: CONTINUE_BOUNDED_LAYER_A_DIAGNOSIS_WITHOUT_RETRY
 ```
