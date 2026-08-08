@@ -1098,3 +1098,53 @@ preflight:
   authoritative_pose_pair_age_s: 0.079
   candidate_retry_count: 0
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-005
+status: INVALID
+completed_at: 2026-08-08 Asia/Shanghai
+target_behavior_exercised: false
+command_boundary: initial authoritative pose sample
+observed:
+  - Execute exited before PREPARE_OPEN_GRIPPER with Gazebo source stamp 69.255 s and tf2 source stamp 69.145 s.
+  - Pair age 0.110 s exceeded the unchanged configured 0.10 s freshness gate.
+root_cause: The observer retained only each source's newest sample, losing closer cross-source history within the bounded observation window.
+candidate_result: EXCLUDED
+hard_gate_result: NOT_EVALUATED
+decision: TERMINATE_BATCH_AND_FIX_HISTORY_PAIRING_WITHOUT_RELAXING_FRESHNESS
+next_experiment: PY-A0-BASELINE-GRASP-006
+```
+
+```yaml
+checkpoint_id: CP-PROCESS-OWNERSHIP-001
+status: PRE_CLEANUP_AUDIT
+recorded_at: 2026-08-08 Asia/Shanghai
+scope: ai-station ROS/Gazebo/MoveIt/controller/bridge/daemon processes
+ownership_fields_checked: [pid, ppid, start_time, cmdline, cwd, ros_domain_id, gz_partition, tmux_session, ledger_evidence]
+cleanup_candidates:
+  historical_python_orphan_gz:
+    ledger_domains: [181, 182, 183, 184, 185, 186, 187, 188, 189, 170, 171, 172, 173, 174]
+    pids: [2968848, 2976509, 2991921, 3001845, 3013329, 3022491, 3032619, 3041130, 3048965, 3065920, 3081104, 3087448, 3095640, 3102528]
+    ownership: PPID 1; cwd this Python worktree; matching ROS_DOMAIN_ID and so101_py_e2e_* GZ_PARTITION; matching EXP ledger records; no owning tmux session remains
+  invalid_baseline_005_tree:
+    ledger_experiment: PY-A0-BASELINE-GRASP-005
+    tmux_session: so101-py-a0-196
+    roots: [129607, 129622]
+    descendants: [129701, 129702, 129713, 129714, 129734, 129757, 129758, 129759, 129857, 129948]
+    daemon_pid: 129823
+    ownership: cwd this Python worktree; ROS_DOMAIN_ID 196; GZ_PARTITION so101_py_a0_baseline_005_196; evidence /tmp/so101-py-a0-baseline-005-196
+preserved:
+  tmux_sessions: [codex, codex-cua]
+  running_non_ros_command:
+    pid: 652055
+    command: run-clang-tidy-18
+    reason: running command in so101-workspace-sampler; must finish naturally
+uncertain_preserved:
+  - {pid: 3272995, domain: 121, partition: so101-full-dart-ab-20260808, cwd: so101-physical-outcome-validation, kind: gz_sim}
+  - {pid: 4144503, domain: 218, partition: so101-physical-outcome-headless-013-20260808, kind: ros2_daemon}
+  - {pid: 4149957, domain: 219, partition: so101-physical-outcome-headless-014-20260808, kind: ros2_daemon}
+  - {pid: 4154973, domain: 220, partition: so101-physical-outcome-headless-015-20260808, kind: ros2_daemon}
+  - {pid: 4161729, domain: 221, partition: so101-physical-outcome-headless-016-20260808, kind: ros2_daemon}
+  - {pid: 4167482, domain: 222, partition: so101-physical-outcome-headless-017-20260808, kind: ros2_daemon}
+cleanup_protocol: exact PID TERM, wait, same-PID readback, KILL only if the confirmed same PID survives; no broad matching commands
+```
