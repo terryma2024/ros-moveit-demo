@@ -226,7 +226,7 @@ def test_calibration_candidate_stops_after_first_valid_physical_failure(monkeypa
 def test_stable_bilateral_fails_immediately_on_moving_pad_hard_ceiling() -> None:
     contacts = (
         ContactPair("plastic_cup::body::wall_near", "fixed_fingertip_pad_collision_001", (0.0004,)),
-        ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (0.000800003,)),
+        ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (0.001250001,)),
     )
     backend = SimpleNamespace(contacts=lambda: contacts)
 
@@ -237,21 +237,21 @@ def test_stable_bilateral_fails_immediately_on_moving_pad_hard_ceiling() -> None
 def test_stable_bilateral_honors_diagnostic_ceiling_override() -> None:
     contacts = (
         ContactPair("plastic_cup::body::wall_near", "fixed_fingertip_pad_collision_001", (0.0004,)),
-        ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (0.001,)),
+        ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (0.00128,)),
     )
     backend = SimpleNamespace(contacts=lambda: contacts)
 
     with pytest.raises(RuntimeError, match="moving-pad penetration ceiling exceeded"):
         _stable_bilateral(backend)
-    evidence = _stable_bilateral(backend, ceiling=0.0012)
+    evidence = _stable_bilateral(backend, ceiling=0.0013)
     assert evidence.bilateral
-    assert evidence.max_moving_pad_penetration_m == 0.001
+    assert evidence.max_moving_pad_penetration_m == 0.00128
 
 
 def test_attachment_safe_contact_honors_diagnostic_ceiling_override() -> None:
     from so101_gazebo_demo_py.gazebo.observer import BilateralContactEvidence
     from so101_gazebo_demo_py.live_execute import attachment_safe_contact
 
-    evidence = BilateralContactEvidence(True, True, 0.0004, 0.001, True)
+    evidence = BilateralContactEvidence(True, True, 0.0004, 0.00128, True)
     assert not attachment_safe_contact(evidence)
-    assert attachment_safe_contact(evidence, ceiling=0.0012)
+    assert attachment_safe_contact(evidence, ceiling=0.0013)

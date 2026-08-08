@@ -80,14 +80,14 @@ def test_bilateral_contact_requires_independent_calibrated_pad_witnesses() -> No
         ContactPair(
             "plastic_cup::body::wall_near",
             "so101::jaw::moving_fingertip_pad_collision_002",
-            (0.000800002,),
+            (0.00125,),
         ),
     ])
     assert evidence.fixed_finger
     assert evidence.moving_jaw
     assert evidence.bilateral
-    assert MOVING_PAD_MESH_PENETRATION_CEILING_M == 0.000800002
-    assert evidence.max_moving_pad_penetration_m == 0.000800002
+    assert MOVING_PAD_MESH_PENETRATION_CEILING_M == 0.00125
+    assert evidence.max_moving_pad_penetration_m == 0.00125
 
 
 def test_bilateral_contact_rejects_legacy_collision_and_solver_depth_excess() -> None:
