@@ -403,12 +403,10 @@ TEST(SO101GripperTransitionContract, EnforcesStateSpecificIndependentAttachmentF
     {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
   auto placed_before = snapshot(profile.q6_contact);
   auto placed_after = snapshot(profile.q6_full_open);
-  setAttached(placed_before);
-  setAttached(placed_after);
   placed_before.gazebo_task_object_pose_world = profile.place_task_object_pose;
   placed_after.gazebo_task_object_pose_world = profile.place_task_object_pose;
   EXPECT_TRUE(open->validate(placed_before, placed_after, action).ok);
-  placed_after.moveit_task_object_attached = false;
+  placed_after.gazebo_task_object_attached = true;
   EXPECT_FALSE(open->validate(placed_before, placed_after, action).ok);
 
   const auto recovery = pick_place::makeSO101GripperContract(
@@ -418,21 +416,20 @@ TEST(SO101GripperTransitionContract, EnforcesStateSpecificIndependentAttachmentF
     recovery->validate(snapshot(profile.q6_contact), snapshot(profile.q6_full_open), action).ok);
 }
 
-TEST(SO101GripperTransitionContract, NormalReleaseAllowsBoundedSupportSettling)
+TEST(SO101GripperTransitionContract, NormalReleaseDefersFinalOutcomeToReleaseEpoch)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   const auto open = pick_place::makeSO101GripperContract(
     {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
   auto before = snapshot(profile.q6_contact);
   auto after = snapshot(profile.q6_full_open);
-  setAttached(before);
-  setAttached(after);
   before.gazebo_task_object_pose_world = profile.place_task_object_pose;
   before.gazebo_task_object_pose_world->z += 0.008;
   after.gazebo_task_object_pose_world = profile.place_task_object_pose;
-  after.gazebo_task_object_pose_world->x += 0.0015;
-  after.gazebo_task_object_pose_world->qz = std::sin(0.20);
+  after.gazebo_task_object_pose_world->x += profile.place_support_xy_tolerance + 0.001;
+  after.gazebo_task_object_pose_world->qx = std::sin(0.20);
   after.gazebo_task_object_pose_world->qw = std::cos(0.20);
+  after.gazebo_task_object_stationary = false;
   const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
 
   const auto result = open->validate(before, after, action);
@@ -442,24 +439,19 @@ TEST(SO101GripperTransitionContract, NormalReleaseAllowsBoundedSupportSettling)
             profile.task_object_position_drift_tolerance);
 }
 
-TEST(SO101GripperTransitionContract, NormalReleaseRejectsSettlingOutsideSupportEnvelope)
+TEST(SO101GripperTransitionContract, NormalOpenRejectsPoseOutsideSafeReleaseEnvelope)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   const auto open = pick_place::makeSO101GripperContract(
     {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
   auto before = snapshot(profile.q6_contact);
-  auto after = snapshot(profile.q6_full_open);
-  setAttached(before);
-  setAttached(after);
   before.gazebo_task_object_pose_world = profile.place_task_object_pose;
-  after.gazebo_task_object_pose_world = profile.place_task_object_pose;
-  after.gazebo_task_object_pose_world->x += profile.place_support_xy_tolerance + 0.001;
-  const pick_place::ActionResult action{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
+  before.gazebo_task_object_pose_world->x += profile.place_detach_xy_tolerance + 0.001;
 
-  const auto result = open->validate(before, after, action);
+  const auto result = open->validatePrecondition(before);
 
   EXPECT_FALSE(result.ok);
-  EXPECT_EQ(result.failures.front().code, "TASK_OBJECT_RELEASE_SUPPORT_INVALID");
+  EXPECT_EQ(result.failures.back().code, "TASK_OBJECT_RELEASE_ENVELOPE_INVALID");
 }
 
 TEST(SO101GripperTransitionContract, NormalReleaseAllowsObservedBoundedPreDetachHeight)
@@ -469,8 +461,6 @@ TEST(SO101GripperTransitionContract, NormalReleaseAllowsObservedBoundedPreDetach
     {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false}, profile);
   auto before = snapshot(profile.q6_contact);
   auto after = snapshot(profile.q6_full_open);
-  setAttached(before);
-  setAttached(after);
   before.gazebo_task_object_pose_world = profile.place_task_object_pose;
   after.gazebo_task_object_pose_world = profile.place_task_object_pose;
   after.gazebo_task_object_pose_world->z += 0.010111;

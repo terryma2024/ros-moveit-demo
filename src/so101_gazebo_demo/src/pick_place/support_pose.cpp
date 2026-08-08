@@ -53,4 +53,16 @@ bool supportedAtPlaceBeforeDetach(const Pose3d & pose, const SO101Profile & prof
                                              profile.place_pre_detach_height_tolerance);
 }
 
+bool insidePlaceReleaseEnvelope(const Pose3d & pose, const SO101Profile & profile) noexcept
+{
+  if (!isFinitePose(pose))
+    return false;
+  const auto & expected = profile.place_task_object_pose;
+  const double xy_error = std::hypot(pose.x - expected.x, pose.y - expected.y);
+  const double height_error = std::abs(pose.z - expected.z);
+  return std::isfinite(xy_error) && std::isfinite(height_error) &&
+         xy_error <= profile.place_detach_xy_tolerance &&
+         height_error <= profile.place_pre_detach_height_tolerance;
+}
+
 }  // namespace so101_gazebo_demo::pick_place

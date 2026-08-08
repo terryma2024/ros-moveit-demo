@@ -355,18 +355,19 @@ void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot &
     result.metrics[std::string("task_object_support_") + phase + "_xy_error"] = xy_error;
     result.metrics[std::string("task_object_support_") + phase + "_height_error"] = height_error;
     result.metrics[std::string("task_object_support_") + phase + "_tilt_error_rad"] = tilt;
-    const bool detaching = key.from == State::DETACH_GAZEBO || key.from == State::DETACH_MOVEIT;
+    const bool planning_shadow_detach = key.from == State::DETACH_MOVEIT;
+    const bool detaching = key.from == State::DETACH_GAZEBO || planning_shadow_detach;
     const double xy_tolerance =
       detaching ? profile.place_detach_xy_tolerance : profile.place_support_xy_tolerance;
     const bool before_physical_detach =
       key.from == State::DETACH_GAZEBO &&
       (validating_precondition || std::string_view(phase) == "before");
-    const double height_tolerance = before_physical_detach
+    const double height_tolerance = before_physical_detach || planning_shadow_detach
                                       ? profile.place_pre_detach_height_tolerance
                                       : profile.place_support_height_tolerance;
     return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
            xy_error <= xy_tolerance && height_error <= height_tolerance &&
-           tilt <= profile.place_support_tilt_tolerance_rad;
+           (planning_shadow_detach || tilt <= profile.place_support_tilt_tolerance_rad);
   };
   const bool supported =
     isRecovery(key) ? std::isfinite(before_position) && std::isfinite(before_orientation) &&

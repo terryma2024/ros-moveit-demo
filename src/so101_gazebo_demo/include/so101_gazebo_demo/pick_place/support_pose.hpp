@@ -10,5 +10,7 @@ namespace so101_gazebo_demo::pick_place
 [[nodiscard]] bool supportedAtPlace(const Pose3d & pose, const SO101Profile & profile) noexcept;
 [[nodiscard]] bool supportedAtPlaceBeforeDetach(const Pose3d & pose,
                                                 const SO101Profile & profile) noexcept;
+[[nodiscard]] bool insidePlaceReleaseEnvelope(const Pose3d & pose,
+                                              const SO101Profile & profile) noexcept;
 
 }  // namespace so101_gazebo_demo::pick_place
