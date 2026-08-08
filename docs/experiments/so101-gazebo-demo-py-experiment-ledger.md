@@ -3186,3 +3186,22 @@ preserved_dirty_paths:
 experiment_domains_used: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229]
 awaiting: user decision on ceiling recalibration; no qualification started; diagnostic plumbing remains disabled by default
 ```
+
+```yaml
+checkpoint_id: CP-AUTHORIZATION-CEILING-RECALIBRATION-001
+recorded_at: 2026-08-09 Asia/Shanghai
+trigger: user decision "ceiling 重校准" after CP-PEN-DIAG-RESTING-STATE-001
+sole_writer: tmux kimi (unchanged)
+authorization:
+  scope: recalibrate the frozen moving-pad penetration acceptance ceiling using the physical evidence from EXP-PEN-DIAG-001-GRASP-229 and the Phase-4 distribution audit, then enter the previously approved QUALIFICATION pipeline at the frozen anchor configuration
+  deterministic_value_rule: new ceiling = SOLVER_REPORTED_CONTACT_DEPTH_LIMIT_M (0.0013) - 0.00005 measurability guard = 0.00125 m
+  value_evidence:
+    - above observed bilateral moving-pad distribution max 0.001193 m (margin 57 um)
+    - above diagnostic post-micro-lift depth 0.0010077 m (cup physically carried, EXP-PEN-DIAG-001-GRASP-229)
+    - 50 um below solver saturation 0.0013 m so every accepted sample remains measurable and distinguishable from solver-limit clipping
+    - far below the profile 2 mm hard safety ceiling
+  statistical_caveat: margin over observed max is about 0.18 sigma (stdev 0.000318 m); five-consecutive robustness is NOT guaranteed by construction and will be tested empirically by qualification; recurrence of VALID penetration failures at 0.00125 m means the model/solver limit is the binding constraint and returns to the user
+  mechanism: change MOVING_PAD_MESH_PENETRATION_CEILING_M constant to 0.00125 with documented comment; update the diagnostic override bound to (0.00125, 0.0013] so an override can never silently tighten the acceptance gate; RED/GREEN + full suite + scoped commit + rebuild + provenance
+  unchanged: anchor targets (Z +0.0004, preload 0.006, rot 0.0), geometry, physics, friction, mass, controllers, attachment semantics, all other gates (lateral 0.001, lift +0.002, shadow, freshness, support, final outcome)
+  qualification: per the previously approved plan - at least three independent FULL_RESTART grasp runs through VERIFY_PHYSICAL_GRASP at one frozen commit/config fingerprint; any VALID failure ends qualification and returns to the user (all bounded target phases are closed); any INVALID stops the batch
+```

@@ -510,3 +510,19 @@ force-push、禁止 `gh`、禁止在 dirty main 上合并。
   micro-lift 探针），以 Gazebo cup pose 为物理事实源读出 `cup_world_z_delta_m`、lateral drift 与
   双侧 contact/depth。
 - 结论与证据写回 experiment ledger；任何 ceiling 重校准都只能由用户决策。
+
+## 2026-08-09 增补授权：moving-pad penetration ceiling 重校准
+
+基于 EXP-PEN-DIAG-001-GRASP-229 的物理证据（杯子在 moving-pad 深度约 0.0010 m 时被
+micro-lift 稳定带起，lift 误差 0.4 µm、lateral 0.216 mm、双侧接触稳定）与 Phase-4 分布审计，
+用户裁决重校准验收 ceiling。
+
+- 确定性取值规则：新 ceiling = solver 上报深度上限 `0.0013 m` − `0.00005 m` 可测量性护栏
+  = `0.00125 m`。高于观测分布 max `0.001193 m`（余量 57 µm），低于 solver 饱和点，
+  远低于 2 mm 硬安全上限。
+- 实现：`MOVING_PAD_MESH_PENETRATION_CEILING_M` 常量改为 `0.00125`；诊断 override 界同步改为
+  `(0.00125, 0.0013]`，防止 override 隐式收紧验收 gate；override 默认 0.0 禁用不变。
+- 统计坦白：余量约 0.18σ，不保证五连成功；qualification 实证检验。若 0.00125 m 下仍复发
+  VALID penetration failure，则绑定约束是模型/solver 上限本身，回到用户决策。
+- 其余全部不变：锚点 target、几何、物理、摩擦、质量、controller、attachment 语义、
+  lateral/lift/shadow/freshness/support/final-outcome gates。
