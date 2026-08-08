@@ -2,6 +2,9 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
+
+from so101_gazebo_demo_py.cli import pick_place_state_machine
 
 
 PACKAGE = Path(__file__).parents[1]
@@ -31,3 +34,39 @@ def test_cli_syntax_and_injected_failure_exit_codes() -> None:
     failed = run_cli("--mode", "dry_run", "--fail-at", "DESCEND")
     assert failed.returncode == 1
     assert "failure=INJECTED_FAILURE" in failed.stdout
+
+
+def test_live_execute_propagates_stop_after(monkeypatch, capsys, tmp_path) -> None:
+    observed = {}
+    monkeypatch.setenv("SO101_PY_EVIDENCE_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "so101_gazebo_demo_py.live_execute.run_live_execute",
+        lambda evidence, stop_after=None: observed.update(
+            evidence=evidence, stop_after=stop_after,
+        ) or {
+            "status": "CHECKPOINT_COMPLETE", "current_state": stop_after,
+            "state_trace": ["IDLE", stop_after], "exit_code": 0,
+        },
+    )
+    assert pick_place_state_machine.main([
+        "--mode", "execute", "--stop-after", "VERIFY_PHYSICAL_GRASP",
+    ]) == 0
+    assert observed["stop_after"] == "VERIFY_PHYSICAL_GRASP"
+    assert "status=CHECKPOINT_COMPLETE" in capsys.readouterr().out
+
+
+def test_explicit_live_plan_only_uses_real_planner(monkeypatch, capsys, tmp_path) -> None:
+    monkeypatch.setenv("SO101_PY_EVIDENCE_DIR", str(tmp_path))
+    calls = []
+    monkeypatch.setattr(
+        "so101_gazebo_demo_py.live_execute.run_live_plan_only",
+        lambda evidence, state: calls.append((evidence, state)) or {
+            "status": "PLAN_ONLY_COMPLETE", "current_state": state,
+            "state_trace": [state], "exit_code": 0,
+        },
+    )
+    assert pick_place_state_machine.main([
+        "--mode", "plan_only", "--plan-only-state", "LIFT", "--live-runtime",
+    ]) == 0
+    assert calls[0][1] == "LIFT"
+    assert "status=PLAN_ONLY_COMPLETE" in capsys.readouterr().out
