@@ -885,3 +885,23 @@ cleanup: all evidence frozen before Ctrl-C；only owned launch process group sto
 decision: APPLY_APPROVED_CARRY_TELEMETRY_SEMANTICS_TO_MOTION_CONTRACT_WITH_TDD
 next_experiment: none until the LIFT motion-contract RED/GREEN is committed and focused verification passes
 ```
+
+## HEADLESS-PHYSICAL-005：full carry telemetry qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-005
+status: PLANNED
+implementation_commit: 49f7cc3
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 170
+GZ_PARTITION: so101-physical-outcome-headless-005-20260808
+lifecycle: FULL_RESTART
+success_criteria: stable final physical outcome plus every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-005
+cleanup_ownership: only HEADLESS-PHYSICAL-005 launch process group and ROS_DOMAIN_ID 170 daemon
+next_transition: commit PLANNED, freeze resulting HEAD, then RUNNING
+```
