@@ -1256,3 +1256,25 @@ resolution_commit: 2a002b5ea439a97176457496c1f201a7429d41e6
 decision: REPEAT_UNCHANGED_BASELINE_ONCE_WITH_CORRECT_SAFETY_PRECEDENCE_BEFORE_TARGET_SEARCH
 next_experiment: PY-A0-BASELINE-GRASP-007
 ```
+
+```yaml
+checkpoint_id: CP-A-LAYER-001
+status: TARGET_CANDIDATE_SELECTED_FOR_TDD
+recorded_at: 2026-08-08 Asia/Shanghai
+supersedes_decision: REPEAT_UNCHANGED_BASELINE_ONCE_WITH_CORRECT_SAFETY_PRECEDENCE_BEFORE_TARGET_SEARCH
+reason: PY-A0-BASELINE-GRASP-006 is a VALID failure; repeating the identical candidate would violate the no-random-success-selection rule.
+eliminated_candidate: unchanged baseline TCP translation [0.0, 0.0, 0.0] m
+layer: A_TCP_TRANSLATION
+axis_frame: world
+single_variable: grasp TCP world-X translation offset
+candidate_value_m: [-0.0005, 0.0, 0.0]
+baseline_value_m: [0.0, 0.0, 0.0]
+approved_bound_m: [-0.001, 0.001]
+evidence_basis:
+  baseline_initial_cup_x_m: 0.020001133903861046
+  baseline_failure_cup_x_m: 0.019565850496292114
+  observed_cup_x_delta_m: -0.000435283407568932
+hypothesis: Moving the pre-close grasp TCP target 0.5 mm in world -X reduces the observed X pull/tilt and post-micro-lift moving-pad penetration while preserving bilateral contact.
+frozen_values: [world_y_offset, world_z_offset, orientation, q6, micro_lift, waypoints_except_preclose_tcp_target, timing, controller, physics, geometry, mass, friction, final_tolerances, all_hard_ceilings]
+next_action: config/range RED then minimal GREEN; no runtime experiment until source commit and config hash are fixed
+```
