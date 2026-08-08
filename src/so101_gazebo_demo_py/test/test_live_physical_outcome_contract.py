@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from so101_gazebo_demo_py.live_execute import (
     _stable_bilateral, carry_with_shadow_gates, compose_pose,
-    plan_waypoint_sequence, relative_pose,
+    plan_waypoint_sequence, relative_pose, rotated_grasp_pose,
     run_bounded_physical_grasp_attempts, shadow_divergence_healthy,
     translated_grasp_pose,
 )
@@ -44,6 +44,15 @@ def test_grasp_tcp_translation_preserves_orientation() -> None:
     assert translated_grasp_pose(baseline, (-0.0005, 0.0, 0.0)) == (
         0.0195, -0.262, 0.201, 0.1, 0.2, 0.3, 0.9,
     )
+
+
+def test_grasp_world_x_rotation_changes_only_orientation() -> None:
+    baseline = (0.02, -0.262, 0.201, 0.0, 0.0, 0.0, 1.0)
+    rotated = rotated_grasp_pose(baseline, -0.017453292519943295)
+    assert rotated[:3] == baseline[:3]
+    half = -0.017453292519943295 / 2.0
+    assert rotated[3:] == pytest.approx((math.sin(half), 0.0, 0.0, math.cos(half)))
+    assert rotated_grasp_pose(baseline, 0.0) == baseline
 
 
 def test_live_cli_forwards_selected_motion_policy() -> None:

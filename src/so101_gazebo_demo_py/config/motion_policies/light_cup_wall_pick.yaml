@@ -4,6 +4,7 @@ object_id: plastic_cup
 arm_joints: ["1", "2", "3", "4", "5"]
 approach_outside_clearance_m: 0.001
 grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+grasp_tcp_world_x_rotation_rad: -0.017453292519943295
 gripper_actions:
   preopen_q6: 0.465038000
   grasp_close_q6: -0.047608632840292

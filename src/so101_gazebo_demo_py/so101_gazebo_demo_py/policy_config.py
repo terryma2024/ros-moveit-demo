@@ -55,6 +55,7 @@ class MotionPolicyConfig:
     gripper_joint: str
     approach_outside_clearance_m: float
     grasp_tcp_translation_offset_m: tuple[float, float, float]
+    grasp_tcp_world_x_rotation_rad: float
     preopen_q6: float
     grasp_close_q6: float
     seating_preload_rad: float
@@ -246,6 +247,15 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
             "CONFIGURATION_GRASP_TCP_TRANSLATION",
             "grasp TCP translation candidate exceeds approach clearance",
         )
+    world_x_rotation = _number(
+        document.get("grasp_tcp_world_x_rotation_rad"),
+        "grasp_tcp_world_x_rotation_rad",
+    )
+    if abs(world_x_rotation) > 0.08726646259971647:
+        raise ConfigurationError(
+            "CONFIGURATION_GRASP_TCP_WORLD_X_ROTATION",
+            "grasp TCP world-X rotation candidate exceeds axis tolerance",
+        )
     states: dict[State, StateMotionConfig] = {}
     preload = _number(actions.get("seating_preload_rad"), "gripper_actions.seating_preload_rad")
     if not 0.0 <= preload <= 0.006:
@@ -277,6 +287,7 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
         gripper_joint="6",
         approach_outside_clearance_m=clearance,
         grasp_tcp_translation_offset_m=grasp_offset,
+        grasp_tcp_world_x_rotation_rad=world_x_rotation,
         preopen_q6=_number(actions.get("preopen_q6"), "gripper_actions.preopen_q6"),
         grasp_close_q6=_number(actions.get("grasp_close_q6"), "gripper_actions.grasp_close_q6"),
         seating_preload_rad=preload,

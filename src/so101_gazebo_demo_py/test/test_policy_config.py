@@ -34,6 +34,7 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert bundle.motion.approach_outside_clearance_m == 0.001
     assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.0, 0.0004)
     assert bundle.motion.seating_preload_rad == 0.006
+    assert bundle.motion.grasp_tcp_world_x_rotation_rad == -0.017453292519943295
     assert len(bundle.sha256) == 64
 
 
@@ -47,6 +48,23 @@ def test_rejects_out_of_range_seating_preload(tmp_path: Path, preload: float) ->
     motion_path.write_text(yaml.safe_dump(motion, sort_keys=False))
 
     with pytest.raises(ConfigurationError, match="seating preload"):
+        load_policy_bundle(
+            CONFIG / "task_objects/light_plastic_cup.yaml",
+            motion_path,
+            CONFIG / "validation_policies/light_cup_wall_pick.yaml",
+        )
+
+
+@pytest.mark.parametrize("rotation", [-0.0873, 0.087266463])
+def test_rejects_out_of_tolerance_world_x_rotation(tmp_path: Path, rotation: float) -> None:
+    motion = yaml.safe_load(
+        (CONFIG / "motion_policies/light_cup_wall_pick.yaml").read_text()
+    )
+    motion["grasp_tcp_world_x_rotation_rad"] = rotation
+    motion_path = tmp_path / "motion.yaml"
+    motion_path.write_text(yaml.safe_dump(motion, sort_keys=False))
+
+    with pytest.raises(ConfigurationError, match="grasp TCP world-X rotation"):
         load_policy_bundle(
             CONFIG / "task_objects/light_plastic_cup.yaml",
             motion_path,
