@@ -1300,9 +1300,9 @@ decision: PLANNING_VALIDITY_GATE_WORKED_DO_NOT_RELAX
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-015
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: fb20e97
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 220
@@ -1317,4 +1317,33 @@ evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-0
 cleanup_ownership: only HEADLESS-PHYSICAL-015 launch process group and ROS_DOMAIN_ID 220 daemon if created
 acceptance_counting: qualification only
 safety_disposition: freeze evidence before cleanup；no reset；never open a held unsupported cup
+started_at: 2026-08-08T16:53:15+08:00
+ended_at: 2026-08-08T16:55:20+08:00
+observed:
+  original_failure: GRIPPER_CONTACT_PENETRATION_EXCEEDED
+  reported_failure_after_recovery: RECOVERY_GRIPPER_NOT_STATIONARY
+  failed_state: MOVE_ABOVE_PLACE
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> ERROR
+  solver_reported_max_depth_m: 0.00134449661709
+  stable_solver_depth_limit_m: 0.0013
+  task_object_follow_position_error_m: 0.00710024893681
+  task_object_follow_orientation_error_rad: 0.157934951101
+  task_object_follow_tilt_error_rad: 0.142165983442
+  actual_q6_velocity_rad_s: -0.0236519817263
+systematic_debugging:
+  - repeated fresh-lifecycle qualification failures now establish a physical carry-stability problem rather than a generic diagnostic or provenance problem
+  - the depth exceedance co-occurs with large object-follow drift；it is not treated as bounded numerical noise
+  - no further unchanged-policy retry may be counted as progress before a RED regression isolates the evidence/contract root cause
+  - existing penetration、shadow、collision and catastrophic-loss ceilings remain unchanged
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-015/source-head.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-015/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-015/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-015/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-015/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-015/failure-wall-near-contact.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-015/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-015/failure-evidence.sha256
+cleanup: evidence frozen before stopping only the owned launch process group；no reset
+decision: STOP_RETRY_STACKING_AND_DEBUG_PHYSICAL_CARRY_STABILITY
 ```
