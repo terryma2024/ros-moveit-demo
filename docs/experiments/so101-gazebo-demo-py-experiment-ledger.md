@@ -2247,3 +2247,29 @@ bracket_update: bilateral contact remained but penetration exceeded the ceiling,
 decision: TRY_PHASE1_CANDIDATE_2_EXACT_MIDPOINT_000475
 next_candidate_offset_m: [0.0, 0.0, 0.000475]
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-000475-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.000475]}
+rationale: Phase 1 candidate 2; exact midpoint of the updated [+0.000450000, +0.000500000] m bracket
+lifecycle: FULL_RESTART
+source_commit: cbfb68e
+bundle_sha256: e3448be9139becc8643ad5cf68c52267240f6e1fa3aee6a71dc53434dacc4ddd
+config_sha256:
+  motion: 229722195e93b46757c41fb8fe39b0cefcb7b6fbc77fe0edf56cd2b7ab800212
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+red_green:
+  red: test_policy_config.py assertion (0.0, 0.0, 0.000475) failed against 0.00045 config (1 failed, 14 passed)
+  green: config scalar changed to 0.000475; focused 15 passed; full package suite 136 passed, 2 skipped
+  build: colcon build succeeded; installed motion config sha256 229722195e93 matches source
+ros_domain_id: 217
+gz_partition: so101_py_a_z_pos_000475_plan_001_217
+evidence_root: /tmp/so101-py-a-z-pos-000475-plan-001-217
+owned_tmux_session: so101-py-a-z-mid2-plan-217
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
