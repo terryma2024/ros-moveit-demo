@@ -1243,3 +1243,26 @@ evidence:
 cleanup: evidence frozen before stopping only the owned launch process group；ROS_DOMAIN_ID 218 returned empty；no reset
 decision: CARRY_SCENE_DIAGNOSTIC_QUALIFIED_KEEP_PENETRATION_CEILING
 ```
+
+## HEADLESS-PHYSICAL-014：release-epoch qualification after carry-scene proof
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-014
+status: PLANNED
+implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 219
+GZ_PARTITION: so101-physical-outcome-headless-014-20260808
+lifecycle: FULL_RESTART
+domain_preflight: no nodes
+partition_preflight: no topics
+single_variable: fresh physics lifecycle；all code、policy、motion、physics and safety ceilings unchanged
+success_criteria: complete DONE trace、stable post-release physical outcome and all hard gates
+failure_criteria: any valid hard-gate or final-outcome failure after evidence freeze
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-014
+cleanup_ownership: only HEADLESS-PHYSICAL-014 launch process group and ROS_DOMAIN_ID 219 daemon if created
+acceptance_counting: qualification only
+safety_disposition: freeze evidence before cleanup；no reset；never open a held unsupported cup
+```
