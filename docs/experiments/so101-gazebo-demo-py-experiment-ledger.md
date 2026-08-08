@@ -1319,3 +1319,23 @@ candidate_result: EXCLUDED
 decision: TERMINATE_BATCH_AND_FULL_RESTART_PLAN_ONLY_WITH_NEW_ID
 next_experiment: PY-A-X-NEG-0005-PLAN-002
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0005-PLAN-002
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [-0.0005, 0.0, 0.0]}
+lifecycle: FULL_RESTART
+source_commit: 05a00771a89a23df6102020272ac7467b4a04f02
+bundle_sha256: 823ab791350ffcff935eef3c568339a01273ab1b8951db62cc8c9c2892f88a75
+motion_config_sha256: 06ac45ce70ef19e96d58d9548811f9c5f861cd3f66081503064c25a440517748
+ros_domain_id: 199
+gz_partition: so101_py_a_x_neg_0005_plan_002_199
+evidence_root: /tmp/so101-py-a-x-neg-0005-plan-002-199
+owned_tmux_session: so101-py-a-x-plan-199
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria:
+  - every state and the FK-derived DESCEND correction return nonempty plans
+  - no trajectory execution or attachment command occurs
+invalid_criteria:
+  - startup/readiness/provenance failure before planning
+```
