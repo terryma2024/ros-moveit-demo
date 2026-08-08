@@ -3005,3 +3005,12 @@ experiment_domains_used: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225,
 audit_conclusion: TARGET_ONLY_INFEASIBLE_UNDER_CURRENT_MODEL (CP-PHASE4-FEASIBILITY-AUDIT-001)
 awaiting: user decision per the approved Phase 4 rule; no gate relaxation or geometry edit is authorized
 ```
+
+```yaml
+checkpoint_id: CP-KNOWHOW-SUMMARY-001
+recorded_at: 2026-08-08 Asia/Shanghai
+trigger: user requested a know-how summary after all Phase 2 candidates failed
+document: docs/experiments/2026-08-08-so101-grasp-gate-failure-knowhow.md
+summary: failure mode is invariant across every authorized scalar direction (moving-pad peak penetration exceeds the frozen ceiling); root causes ordered as (1) pad-face tilt edge concentration (systematic, blocked by the frozen planning contract), (2) physical variance exceeding the ceiling margin (statistical, blocks five-consecutive acceptance), (3) ceiling calibration semantics (user decision only); target-only tuning is closed
+state: resting at commit 1298792 config anchor (Z +0.0004, preload 0.006, rotation 0.0); awaiting user decision
+```
