@@ -320,3 +320,61 @@ The rewrite is complete only when all of the following are true:
 7. Gazebo physics, MoveIt Planning Scene, controller/joint/TF state, and the new screenshot independently prove the expected result.
 8. The original R3 dirty files remain preserved and are not included in rewrite commits.
 9. Remaining differences and risks are documented precisely; no unverified claim is reported as complete.
+
+## 2026-08-08 Physical-outcome validation addendum
+
+本 addendum 覆盖原设计中 normal forward workflow 使用 `DetachableJoint` 搬杯的语义。只读参考为
+physical worktree `641f7c470bfea81934b0dc094afc42da4aaa5111`；Python 逐项重建外部 contract
+和证据，禁止 import、link、执行或 runtime 查找 `so101_gazebo_demo`、`pick_place_common` 及其
+binary/asset。
+
+### Ownership 与状态机
+
+从 `CLOSE_GRIPPER` 到 physical release，cup motion 只由 Gazebo contact、friction、gravity 和 robot
+motion 决定。normal forward path 不调用 Gazebo attach/detach，也不保留 no-op state。MoveIt attach
+仅是从 physical grasp 后最新 fresh finite Gazebo cup pose 派生的 collision-planning shadow。
+
+```text
+CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE
+-> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE
+-> DESCEND_TO_PLACE -> DETACH_MOVEIT -> OPEN_GRIPPER -> WAIT_RELEASE_SETTLE
+-> VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> RETREAT -> DONE
+```
+
+Python `State` 新增 `WAIT_RELEASE_SETTLE` 与 `VALIDATE_FINAL_PLACEMENT`。Reset/recovery 可防御性清理
+stale Gazebo joint，但该接口不进入 forward graph。checkpoint 记录 release epoch；post-release window
+首版 non-resumable，中断后必须新建 epoch，绝不复用 pre-release/旧 epoch sample。
+
+### Policy、observer 与 evaluator
+
+validation policy 新增 strict `physical_outcome`：intended table collision、live-calibrated
+`minimum_support_contact_depth_m`、final XY region、support height、upright tilt、derived linear/angular
+speed、consecutive samples/minimum duration、freshness/cadence/timeout、bounded telemetry capacity 和
+Planning Shadow divergence/pair-age limits。只复用 `641f7c4` 中语义/单位相同且已有证据的值；其余
+使用 fail-closed calibration sentinel，禁止选择 permissive value。
+
+snapshot 为 cup/TCP/joints/q6/controller、Gazebo attachment、MoveIt scene、finger/support contact 分别
+保存 source timestamp、receipt sequence、freshness。Bullet Featherstone compound-owner 上真实
+`task object ↔ intended table` contact 可作 support evidence；counterparty 必须匹配 intended table，
+depth 必须 finite 且 `>= minimum_support_contact_depth_m`。缺失、non-finite、更负 depth fail-closed；
+raw names、owner、depth min/max、accepted/rejected counts 作为 bounded metrics。
+
+carry contact/q6/object-relative drift 的随机波动是 telemetry，不单独决定成功。fresh finite evidence、
+controller/execution health、所有 collision/penetration ceilings、catastrophic loss 和每个 carrying plan 前
+Gazebo-vs-shadow divergence 仍为 hard gates。support noise bound 不得用于 finger penetration；现有
+`0.000800002 m` moving-pad ceiling 及其他 ceiling 不变。
+
+`DETACH_MOVEIT` 先于 `OPEN_GRIPPER`。opening 后创建 release epoch；settle executor 负责 cadence、
+cancellation、timeout，只收 marker 后 samples。纯 deterministic evaluator 无 ROS/sleep，以相邻
+fresh pose/time 导出线/角速度，并同时要求 target XY、height、upright、stable speeds、真实 table
+support、无 gripper contact、Gazebo detached、MoveIt detached。之后用冻结 Gazebo pose 同步 MoveIt
+world object。failure code 区分 out-of-region、unsupported、tipped、still-moving、gripper-contact、
+stale、shadow divergence、safety failure，并保留全部 bounded metrics。
+
+### Recovery 与 acceptance
+
+unsupported held cup 永不自动 open；先 stop/hold、冻结 controller/Gazebo/MoveIt/pose/contact/policy
+证据，再进行独立 reset。final failure 在证据冻结前不得移动 cup。验收按 targeted Python tests、
+package full test、dry-run、plan-only、isolated headless、GUI fresh screenshot、同 commit/policy 每次
+FULL_RESTART 连续五次。纯 policy/domain/evaluator 循环不触发 C++ quality gate；只有 Python package
+安装/ROS runtime 边界才做必要 colcon build。
