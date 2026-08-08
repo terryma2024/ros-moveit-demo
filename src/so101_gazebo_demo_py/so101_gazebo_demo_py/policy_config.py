@@ -60,6 +60,7 @@ class MotionPolicyConfig:
     grasp_close_q6: float
     seating_preload_rad: float
     release_q6: float
+    diagnostic_moving_pad_penetration_ceiling_m: float
     states: Mapping[State, StateMotionConfig]
     data: Mapping[str, Any]
 
@@ -263,6 +264,16 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
             "CONFIGURATION_SEATING_PRELOAD",
             "seating preload candidate must stay within [0.0, 0.006] rad",
         )
+    diagnostic_ceiling = _number(
+        document.get("diagnostic_moving_pad_penetration_ceiling_m", 0.0),
+        "diagnostic_moving_pad_penetration_ceiling_m",
+    )
+    if diagnostic_ceiling != 0.0 and not 0.000800002 < diagnostic_ceiling <= 0.0012:
+        raise ConfigurationError(
+            "CONFIGURATION_DIAGNOSTIC_PENETRATION_CEILING",
+            "diagnostic moving-pad penetration ceiling must be 0.0 (disabled) "
+            "or within (0.000800002, 0.0012] m",
+        )
     for name, raw in _mapping(document, "states").items():
         state = _state(name, "motion.states")
         if not isinstance(raw, dict):
@@ -292,6 +303,7 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
         grasp_close_q6=_number(actions.get("grasp_close_q6"), "gripper_actions.grasp_close_q6"),
         seating_preload_rad=preload,
         release_q6=_number(actions.get("release_q6"), "gripper_actions.release_q6"),
+        diagnostic_moving_pad_penetration_ceiling_m=diagnostic_ceiling,
         states=MappingProxyType(states),
         data=MappingProxyType(document),
     )
