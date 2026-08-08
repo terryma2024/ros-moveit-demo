@@ -43,7 +43,7 @@ def test_loads_diagnostic_penetration_ceiling_override(tmp_path: Path) -> None:
     motion = yaml.safe_load(
         (CONFIG / "motion_policies/light_cup_wall_pick.yaml").read_text()
     )
-    motion["diagnostic_moving_pad_penetration_ceiling_m"] = 0.0012
+    motion["diagnostic_moving_pad_penetration_ceiling_m"] = 0.00128
     motion_path = tmp_path / "motion.yaml"
     motion_path.write_text(yaml.safe_dump(motion, sort_keys=False))
 
@@ -52,10 +52,10 @@ def test_loads_diagnostic_penetration_ceiling_override(tmp_path: Path) -> None:
         motion_path,
         CONFIG / "validation_policies/light_cup_wall_pick.yaml",
     )
-    assert bundle.motion.diagnostic_moving_pad_penetration_ceiling_m == 0.0012
+    assert bundle.motion.diagnostic_moving_pad_penetration_ceiling_m == 0.00128
 
 
-@pytest.mark.parametrize("ceiling", [-0.001, 0.0008, 0.0013])
+@pytest.mark.parametrize("ceiling", [-0.001, 0.0012, 0.001300001])
 def test_rejects_out_of_range_diagnostic_penetration_ceiling(
     tmp_path: Path, ceiling: float,
 ) -> None:

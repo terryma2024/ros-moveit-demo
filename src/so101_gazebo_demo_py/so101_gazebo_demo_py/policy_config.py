@@ -268,11 +268,11 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
         document.get("diagnostic_moving_pad_penetration_ceiling_m", 0.0),
         "diagnostic_moving_pad_penetration_ceiling_m",
     )
-    if diagnostic_ceiling != 0.0 and not 0.000800002 < diagnostic_ceiling <= 0.0012:
+    if diagnostic_ceiling != 0.0 and not 0.00125 < diagnostic_ceiling <= 0.0013:
         raise ConfigurationError(
             "CONFIGURATION_DIAGNOSTIC_PENETRATION_CEILING",
             "diagnostic moving-pad penetration ceiling must be 0.0 (disabled) "
-            "or within (0.000800002, 0.0012] m",
+            "or within (0.00125, 0.0013] m",
         )
     for name, raw in _mapping(document, "states").items():
         state = _state(name, "motion.states")
