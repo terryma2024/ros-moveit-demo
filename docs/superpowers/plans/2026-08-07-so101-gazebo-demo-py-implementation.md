@@ -1082,3 +1082,23 @@ target 校准。仅取代：（1）同方向三候选失败后的 no-interpolati
   controller/joint/TF、Gazebo contact/pose/attachment、MoveIt membership、必要的本轮新视觉证据、
   preserved 进程与精确 cleanup readback。结论先写
   `docs/experiments/so101-gazebo-demo-py-experiment-ledger.md` 再做聊天汇报或继续。
+
+## 2026-08-08 增补执行计划：penetration gate 诊断性放宽的 micro-lift 观察
+
+对应设计增补「2026-08-08 增补授权：penetration gate 诊断性放宽（非重校准）」。
+
+1. 授权增补先写入本计划、设计与 experiment ledger，并作为独立 docs-only commit 提交
+   （六个 preserved dirty path 不入该 commit）。
+2. TDD 增加可选 plumbing：motion policy `diagnostic_moving_pad_penetration_ceiling_m`
+   （默认 `0.0` 禁用，启用界 `(0.000800002, 0.0012]`），loader 校验 + gate 函数 ceiling 参数
+   （默认 frozen 常量，既有测试不回退）。
+3. scoped commit plumbing；随后单 scalar 把该字段置 `0.0012`（RED→GREEN→全量 suite→scoped
+   commit→rebuild→验证 installed provenance/hash）。
+4. ledger 预注册 PLANNED；跑六状态 plan-only（唯一 FULL_RESTART stack，新 ROS_DOMAIN_ID /
+   GZ_PARTITION / tmux / 证据目录）；plan-only 通过且 provenance/preflight 完成后记 RUNNING。
+5. 第二次 FULL_RESTART 执行到 `VERIFY_PHYSICAL_GRASP`（含 `+0.002 m` micro-lift 探针，无
+   forward attach）；恰好一次物理尝试；INVALID 即停止诊断。
+6. 读出并记录：cup_world_z_delta_m、lateral、post-lift 双侧 contact 与各 pad max depth、
+   q6_contact/final、pose-pair age、controller result、Gazebo/MoveIt attachment、exit code、证据路径。
+7. 无论结果，scalar 复原 `0.0`（RED/GREEN + 全量 suite + scoped commit），ledger 写终态结论，
+   向用户汇报并等待 ceiling 重校准决策；不自行进入 qualification。
