@@ -2574,3 +2574,53 @@ prelaunch_process_audit:
   uncertain: [3272995]
   task_stack_present: false
 ```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-0003-GRASP-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  initial_attachment_state: attached
+  defensive_detach_readback: detached
+  controllers: [joint_state_broadcaster_active, arm_controller_active, gripper_controller_active]
+  runtime_arm_trajectory_constraint: 0.008
+  installed_package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  installed_motion_config_sha256: 0121db0dc606864f2e0aecd161ab6304fb98bd56e44b1dfe376804ec8216c4d2
+  candidate_retry_count: 0
+```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-0003-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+observed:
+  fixed_finger_contact: true
+  moving_jaw_contact: true
+  initial_max_fixed_pad_penetration_m: 0.00042183365439996123
+  initial_max_moving_pad_penetration_m: 0.0011931612389162183
+  final_max_fixed_pad_penetration_m: 0.00038937950739637017
+  final_max_moving_pad_penetration_m: 0.0010638391831889749
+  reported_ceiling_breach_m: 0.0010636085644364357
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.04747490584850311
+  seating_target_q6: -0.050474905848503115
+  q6_final: -0.05008614435791969
+  pose_pair_age_s: 0.009
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+  exit_code: 1
+  note: initial moving-pad penetration at close was already above the ceiling before the reduced preload; run-to-run contact variance is larger than the preload effect observed in Phase 1
+evidence_file: /tmp/so101-py-c-q6-preload-0003-grasp-001-222/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 remains
+  ros_domain_222_daemon: stopped
+candidate_result: ELIMINATED
+bisection_update: bilateral contact remained but penetration exceeded the ceiling, so reduce within [0, 0.003]
+decision: TRY_PHASE2_CANDIDATE_2_MIDPOINT_PRELOAD_00015
+next_candidate_preload_rad: 0.0015
+```
