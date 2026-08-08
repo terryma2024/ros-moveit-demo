@@ -2690,3 +2690,48 @@ prelaunch_process_audit:
   uncertain: [3272995]
   task_stack_present: false
 ```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-00015-GRASP-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  initial_attachment_state: attached
+  defensive_detach_readback: detached
+  controllers: [joint_state_broadcaster_active, arm_controller_active, gripper_controller_active]
+  runtime_arm_trajectory_constraint: 0.008
+  installed_motion_config_sha256: e96063fc4c0b106332f0981090e2452767e728e2f3e61fcb8e844d0cbc97a96a
+  candidate_retry_count: 0
+```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-00015-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: BILATERAL_CONTACT_FAILED
+observed:
+  fixed_finger_contact: true
+  moving_jaw_contact: false
+  max_fixed_pad_penetration_m: 0.0006831553182564676
+  max_moving_pad_penetration_m: null
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.04760627821087837
+  seating_target_q6: -0.049106278210878374
+  q6_final: -0.04910528287291527
+  pose_pair_age_s: 0.004
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+  exit_code: 1
+evidence_file: /tmp/so101-py-c-q6-preload-00015-grasp-001-224/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 remains
+  ros_domain_224_daemon: stopped
+candidate_result: ELIMINATED
+bisection_update: valid contact/stability lost, so increase within [0.0015, 0.006]
+decision: TRY_PHASE2_CANDIDATE_3_MIDPOINT_PRELOAD_000375
+next_candidate_preload_rad: 0.00375
+```
