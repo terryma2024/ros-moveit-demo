@@ -18,6 +18,59 @@ class ContactPair:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceEvidence:
+    source_timestamp_s: float
+    receipt_sequence: int
+
+
+@dataclass(frozen=True, slots=True)
+class SupportContactEvidence:
+    supported: bool
+    compound_owner_collision: str | None
+    intended_support_collision: str
+    minimum_depth_m: float | None
+    maximum_depth_m: float | None
+    accepted_depth_count: int
+    rejected_depth_count: int
+
+
+def evaluate_support_contact(
+    contacts: list[ContactPair] | tuple[ContactPair, ...],
+    intended_support_collision: str,
+    minimum_depth_m: float,
+) -> SupportContactEvidence:
+    """Reduce real task-object/table contacts with calibrated solver-noise handling."""
+    if not math.isfinite(minimum_depth_m) or minimum_depth_m > 0.0:
+        raise ValueError("minimum support depth must be a finite non-positive value")
+    accepted: list[float] = []
+    observed_finite: list[float] = []
+    rejected = 0
+    owner: str | None = None
+    for contact in contacts:
+        if contact.finger_collision != intended_support_collision:
+            continue
+        owner = contact.object_collision
+        for depth in contact.depths_m:
+            if not math.isfinite(depth):
+                rejected += 1
+                continue
+            observed_finite.append(depth)
+            if depth >= minimum_depth_m:
+                accepted.append(depth)
+            else:
+                rejected += 1
+    return SupportContactEvidence(
+        supported=bool(accepted),
+        compound_owner_collision=owner,
+        intended_support_collision=intended_support_collision,
+        minimum_depth_m=min(observed_finite, default=None),
+        maximum_depth_m=max(observed_finite, default=None),
+        accepted_depth_count=len(accepted),
+        rejected_depth_count=rejected,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class BilateralContactEvidence:
     fixed_finger: bool
     moving_jaw: bool
@@ -70,6 +123,8 @@ class WorldObservation:
     fixed_finger_contact: bool
     moving_jaw_contact: bool
     max_penetration_m: float | None = None
+    pose_source: SourceEvidence = SourceEvidence(0.0, 0)
+    support_source: SourceEvidence = SourceEvidence(0.0, 0)
 
 
 class GazeboWorldObserver:
