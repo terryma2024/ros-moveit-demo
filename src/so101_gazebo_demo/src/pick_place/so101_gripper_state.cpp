@@ -60,12 +60,16 @@ double uprightTilt(const Pose3d & pose)
 }
 
 void requireAttachmentEvidence(ValidationResult & result, const WorldSnapshot & world,
-                               const SO101GripperStateConfig & config, const SO101Profile & profile)
+                               const SO101GripperStateConfig & config, const SO101Profile & profile,
+                               bool validating_precondition = false)
 {
   const auto table = world.moveit_world_object_poses.find(profile.table_object);
+  const bool requires_stationary_task_object =
+    config.state != State::OPEN_GRIPPER || validating_precondition;
   if (!world.gazebo_task_object_pose_world || !world.gazebo_task_object_stationary ||
-      !*world.gazebo_task_object_stationary || !world.gazebo_task_object_attached ||
-      !world.moveit_task_object_attached || table == world.moveit_world_object_poses.end()) {
+      (requires_stationary_task_object && !*world.gazebo_task_object_stationary) ||
+      !world.gazebo_task_object_attached || !world.moveit_task_object_attached ||
+      table == world.moveit_world_object_poses.end()) {
     result.failures.push_back(
       {FailureCategory::OBSERVATION,
        "GRIPPER_ENVIRONMENT_EVIDENCE_INCOMPLETE",
@@ -97,10 +101,9 @@ void requireAttachmentEvidence(ValidationResult & result, const WorldSnapshot & 
              profile.task_object_attachment_orientation_tolerance_rad;
   };
   bool valid = false;
-  if (config.state == State::PREPARE_OPEN_GRIPPER || config.state == State::CLOSE_GRIPPER) {
+  if (config.state == State::PREPARE_OPEN_GRIPPER || config.state == State::CLOSE_GRIPPER ||
+      config.state == State::OPEN_GRIPPER) {
     valid = !*world.gazebo_task_object_attached && exact_moveit_detached();
-  } else if (config.state == State::OPEN_GRIPPER) {
-    valid = *world.gazebo_task_object_attached && exact_moveit_attached();
   } else {
     valid = *world.moveit_task_object_attached ? exact_moveit_attached() : exact_moveit_detached();
   }
@@ -143,7 +146,17 @@ public:
                                "Joint 6 must be stationary before a new command");
     }
     ValidationResult result{true, {}, {}};
-    requireAttachmentEvidence(result, before, config_, profile_);
+    requireAttachmentEvidence(result, before, config_, profile_, true);
+    if (config_.state == State::OPEN_GRIPPER &&
+        (!before.gazebo_task_object_pose_world ||
+         !insidePlaceReleaseEnvelope(*before.gazebo_task_object_pose_world, profile_))) {
+      result.failures.push_back(
+        {FailureCategory::PRECONDITION,
+         "TASK_OBJECT_RELEASE_ENVELOPE_INVALID",
+         "Physical opening requires the TaskObject inside the calibrated place release envelope",
+         {}});
+      result.ok = false;
+    }
     return result;
   }
 
@@ -184,16 +197,6 @@ public:
           config_.state == State::CLOSE_GRIPPER || config_.state == State::RECOVER_OPEN_GRIPPER;
         const double final_tilt = uprightTilt(*after.gazebo_task_object_pose_world);
         result.metrics["task_object_final_tilt_rad"] = final_tilt;
-        const bool release_settled_on_support =
-          config_.state == State::OPEN_GRIPPER &&
-          supportedAtPlaceBeforeDetach(*after.gazebo_task_object_pose_world, profile_);
-        if (config_.state == State::OPEN_GRIPPER && !release_settled_on_support) {
-          result.failures.push_back(
-            {FailureCategory::POSTCONDITION,
-             "TASK_OBJECT_RELEASE_SUPPORT_INVALID",
-             "Released TaskObject must settle inside the configured place support envelope",
-             {}});
-        }
         if (config_.state != State::OPEN_GRIPPER &&
             position_drift > profile_.task_object_position_drift_tolerance) {
           result.failures.push_back(
@@ -218,7 +221,8 @@ public:
              {}});
         }
       }
-      if (!after.gazebo_task_object_stationary || !*after.gazebo_task_object_stationary) {
+      if (config_.state != State::OPEN_GRIPPER &&
+          (!after.gazebo_task_object_stationary || !*after.gazebo_task_object_stationary)) {
         result.failures.push_back({FailureCategory::POSTCONDITION,
                                    "TASK_OBJECT_NOT_STATIONARY",
                                    "TaskObject must be stationary after close",

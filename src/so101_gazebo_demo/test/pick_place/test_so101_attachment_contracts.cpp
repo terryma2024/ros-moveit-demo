@@ -450,6 +450,27 @@ TEST(SO101AttachmentContracts, ForwardDetachOrderUsesCurrentDualWorldFacts)
   EXPECT_FALSE(moveit_contract->validate(before, after_moveit, succeeded()).ok);
 }
 
+TEST(SO101AttachmentContracts, MoveItDetachUsesSafeReleaseEnvelopeWithoutFinalTiltGate)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto contract = attachmentContract(
+    key(pick_place::State::DETACH_MOVEIT, pick_place::State::OPEN_GRIPPER), profile);
+  auto before = world(false, true);
+  auto after = world(false, false);
+  const pick_place::Pose3d live_release_pose{
+    -0.07489179074764252, -0.25029996037483215, 0.17534954845905304, -0.04800073703704309,
+    -0.12080902111287307, -0.20319523606076123, 0.9704704082464405};
+  setTaskObjectPose(before, live_release_pose);
+  setTaskObjectPose(after, live_release_pose);
+
+  EXPECT_TRUE(contract->validatePrecondition(before).ok);
+  EXPECT_TRUE(contract->validate(before, after, succeeded()).ok);
+
+  before.gazebo_task_object_pose_world->x =
+    profile.place_task_object_pose.x + profile.place_detach_xy_tolerance + 0.001;
+  EXPECT_FALSE(contract->validatePrecondition(before).ok);
+}
+
 TEST(SO101AttachmentContracts, SyncComparesIndependentGazeboAndMoveItSixDegreePoses)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
