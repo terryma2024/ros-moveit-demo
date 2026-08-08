@@ -2897,3 +2897,29 @@ plumbing: grasp orientation scalar is absent; add minimal TDD-backed grasp_tcp_w
 next_action: RED/GREEN plumbing for candidate 1 (-0.017453292519943295 rad) at the frozen Z anchor +0.0004 m with documented q6 baseline 0.006
 next_experiment: PY-B-XROT-NEG-00173-PLAN-001
 ```
+
+```yaml
+experiment_id: PY-B-XROT-NEG-00173-PLAN-001
+status: PLANNED
+candidate: {layer: B_ORIENTATION, axis: world_x, rotation_rad: -0.017453292519943295, anchor_offset_m: [0.0, 0.0, 0.0004], seating_preload_rad: 0.006}
+rationale: Phase 3 candidate 1 in the evidence-selected direction (H3, CP-PHASE3-ORIENTATION-ANALYSIS-002); smallest deterministic magnitude in the selected sign
+lifecycle: FULL_RESTART
+source_commit: fde88d7
+bundle_sha256: 00b27104f13f77ff5d58bf4f17208f3f929137c4f707e8c7953cea7e724ac2fa
+config_sha256:
+  motion: 35a6a0513dd4c86c2bc1e7522afefc3187d05a4ed3d91266ed0be741ca6eb02f
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+red_green:
+  red: rotated_grasp_pose import error plus missing config field/range rejection (collection error)
+  green: grasp_tcp_world_x_rotation_rad plumbing added (config, loader bound 0.08726646259971647, rotated_grasp_pose, plan/execute grasp-correction wiring); focused 39 passed; full package suite 141 passed, 2 skipped
+  build: colcon build succeeded; installed motion config sha256 35a6a0513dd4 matches source; installed live_execute sha256 67e39fe2 matches source
+ros_domain_id: 227
+gz_partition: so101_py_b_xrot_neg_00173_plan_001_227
+evidence_root: /tmp/so101-py-b-xrot-neg-00173-plan-001-227
+owned_tmux_session: so101-py-b-x1-plan-227
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
