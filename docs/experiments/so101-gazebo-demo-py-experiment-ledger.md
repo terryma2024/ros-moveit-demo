@@ -3155,3 +3155,34 @@ conclusion: |
   0.000800002 m ceiling remains the acceptance gate pending a user ceiling-recalibration decision.
 next: revert diagnostic scalar to 0.0 (RED/GREEN + full suite + scoped commit); await user decision
 ```
+
+```yaml
+checkpoint_id: CP-PEN-DIAG-RESTING-STATE-001
+recorded_at: 2026-08-08 Asia/Shanghai
+resting_commit: 394bbf6
+resting_config:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+  seating_preload_rad: 0.006
+  grasp_tcp_world_x_rotation_rad: 0.0
+  diagnostic_moving_pad_penetration_ceiling_m: 0.0 (disabled; frozen 0.000800002 m gate restored)
+  bundle_sha256: f99f5ec7dbe190a503bac4b4d2e94c9ec902a4717357dd68191a5d78287a6a62
+package_suite: 147 passed, 2 skipped
+diagnostic_summary:
+  question: can MICRO_LIFT physically carry the cup when the penetration gate is moderately relaxed?
+  answer: YES - EXP-PEN-DIAG-001-GRASP-229 VALID_SUCCESS, cup_world_z_delta_m 0.0020004 m vs +0.002 m
+    command, lateral 0.000216 m, stable bilateral contact, moving-pad depth 0.0010077 m, one attempt,
+    no forward Gazebo attach
+  implication: frozen-ceiling grasp failures are gate-calibration failures, not physical incapacity;
+    next direction is a user ceiling-recalibration decision (know-how doc section 3.4 item 1)
+owned_processes: NONE
+preserved_processes: [PID 3272995 uncertain gz sim server, PID 652055 unrelated clang-tidy, tmux codex, tmux codex-cua, tmux kimi]
+preserved_dirty_paths:
+  - M src/so101_gazebo_demo_py/config/so101_controllers.yaml
+  - M src/so101_gazebo_demo_py/config/task_objects/light_plastic_cup.yaml
+  - M src/so101_gazebo_demo_py/config/validation_policies/light_cup_wall_pick.yaml
+  - M src/so101_gazebo_demo_py/docs/provenance.json
+  - M src/so101_gazebo_demo_py/test/test_provenance.py
+  - ?? src/so101_gazebo_demo_py/test/test_main_strategy_parity.py (one-line ceiling-kwarg interface adaptation, unstaged by rule)
+experiment_domains_used: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229]
+awaiting: user decision on ceiling recalibration; no qualification started; diagnostic plumbing remains disabled by default
+```
