@@ -1278,3 +1278,29 @@ hypothesis: Moving the pre-close grasp TCP target 0.5 mm in world -X reduces the
 frozen_values: [world_y_offset, world_z_offset, orientation, q6, micro_lift, waypoints_except_preclose_tcp_target, timing, controller, physics, geometry, mass, friction, final_tolerances, all_hard_ceilings]
 next_action: config/range RED then minimal GREEN; no runtime experiment until source commit and config hash are fixed
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0005-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [-0.0005, 0.0, 0.0]}
+lifecycle: FULL_RESTART
+source_commit: a5d3bcbbf29290fde407d83bc0cdabf84781a3c2
+bundle_sha256: 823ab791350ffcff935eef3c568339a01273ab1b8951db62cc8c9c2892f88a75
+config_sha256:
+  motion: 06ac45ce70ef19e96d58d9548811f9c5f861cd3f66081503064c25a440517748
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+ros_domain_id: 198
+gz_partition: so101_py_a_x_neg_0005_plan_001_198
+evidence_root: /tmp/so101-py-a-x-neg-0005-plan-001-198
+owned_tmux_session: so101-py-a-x-plan-198
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria:
+  - every state returns a nonempty plan
+  - DESCEND adds a nonempty FK-derived grasp translation pose plan
+  - no ExecuteTrajectory, FollowJointTrajectory, Gazebo attach, or Gazebo detach command occurs
+invalid_criteria:
+  - startup/readiness/provenance failure before the first planning request
+cleanup_owner: only domain 198 / candidate partition / recorded tmux descendants
+```
