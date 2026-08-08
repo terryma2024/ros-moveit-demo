@@ -7,10 +7,11 @@ success_contract: 同一提交和已校准策略下五次连续 VALID execute，
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
 branch: codex/so101-physical-outcome-validation
 base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
-current_commit: 4119099
+current_commit: 45e3b67
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI
 confirmed_conclusions:
   - Task 13 branch-tree build、三包测试、dry-run trace 与 uncalibrated plan-only fail-closed gate 已验证（VER-PHYSICAL-001）
+  - 用户已批准 Bullet compound-owner support + live-calibrated bounded-negative-depth noise 下限（APR-PHYSICAL-001）
 disproven_routes:
   - 0.75 mm seat
   - independent CLOSE seat motion
@@ -19,8 +20,9 @@ disproven_routes:
   - unregistered fixed-port retry fixture
 open_hypotheses:
   - 每个 CALIBRATION_REQUIRED 字段的 live calibration 值
-latest_checkpoint: CP-PHYSICAL-002
-next_experiment: CAL-PHYSICAL-001
+  - stable Featherstone support regression 的最小 observer/policy wiring
+latest_checkpoint: CP-PHYSICAL-004
+next_experiment: TDD-PHYSICAL-001
 ```
 
 ## VER-PHYSICAL-001：Task 13 自动验证
@@ -222,4 +224,41 @@ owned_processes: NONE
 preserved_processes: 其他 worktree 的 Gazebo 与 clang-tidy 未触碰
 open_risk: support evidence contract 在当前 backend 下不可满足
 next_command: 获得窄化语义授权后，先写 stable Featherstone support regression RED，再做最小 GREEN
+```
+
+## APR-PHYSICAL-001：用户批准 support-evidence 窄化修订
+
+```yaml
+approval_id: APR-PHYSICAL-001
+status: APPROVED
+date: 2026-08-08
+prior_experiment: DBG-PHYSICAL-001
+approved_semantics:
+  - Bullet Featherstone compound owner 上真实 task object ↔ intended table contact 可作为 support evidence
+  - 增加配置化且经 live calibration 确定的负 depth 数值噪声下限
+  - 缺失、non-finite、比噪声下限更负的 depth 必须拒绝
+  - target region/height/upright/speed/no-gripper-contact/Gazebo-detached/MoveIt-detached 全部继续强制
+  - 不放宽 collision/penetration safety ceilings
+  - 不改变 engine、geometry、mass、friction、controller 或 motion target
+  - MoveIt attachment 只作为 planning shadow；SO101 normal forward path 不使用 Gazebo attach/detach
+excluded_ledger: docs/experiments/so101-reset-world-five-success-experiment-ledger.md
+decision: PROCEED_TDD_THEN_RECALIBRATE
+next_experiment: TDD-PHYSICAL-001
+```
+
+## CP-PHYSICAL-004
+
+```yaml
+checkpoint_id: CP-PHYSICAL-004
+last_valid_experiment: DBG-PHYSICAL-001
+current_hypothesis: observer 可在不改变物理与安全 ceiling 的条件下严格适配 compound-owner contact 和 bounded-negative-depth noise
+working_tree_status:
+  - docs/superpowers/plans/2026-08-07-so101-physical-outcome-validation.md 开头有来源未确认的空行，必须保留
+  - 本批准记录将以独立 docs commit 提交
+owned_processes: NONE
+preserved_processes: 其他 worktree 的 Gazebo 与 clang-tidy 未触碰
+open_risks:
+  - minimum_support_contact_depth_m 尚未经新的有效 live calibration 冻结
+  - production policy 仍须 fail closed
+next_command: 先写 stable Featherstone compound-owner + bounded-negative-noise observer/policy RED tests
 ```

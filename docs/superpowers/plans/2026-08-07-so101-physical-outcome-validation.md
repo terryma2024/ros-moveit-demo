@@ -1066,6 +1066,34 @@ Expected: push exits 0 and the remote SHA exactly equals the locally tested merg
 
 Report feature SHA, main SHA, remote SHA, exact build/test commands and counts, five-run experiment ids, screenshot paths, preserved processes, and any remaining risk. Do not claim physical success from `DONE`, MoveIt success, plan-only, headless logs, or screenshots alone.
 
+## 2026-08-08 approved support-evidence amendment
+
+用户已明确批准 `DBG-PHYSICAL-001` 所要求的窄化修订。以下步骤插入 Task 14，必须在任何重新校准
+或 execute 前完成；本段修改与文件开头来源未确认的空行无关，该空行必须原样保留：
+
+1. 在 policy schema 增加严格 finite、`<= 0` 的
+   `physical_outcome.minimum_support_contact_depth_m` sentinel/解析/序列化字段；production 数值只能
+   来自新的有效 live calibration，不能复制测试向量。
+2. RED：扩展 `test_gazebo_world_observer.cpp`，证明 Featherstone compound owner 的真实
+   task-object/table contact 在 depth 位于配置 noise bound 内时成为 intended support；缺失、
+   non-finite、比 bound 更负的 depth 必须拒绝，并保留原始 collision/depth metrics。现有专用
+   bottom-topic 正例继续通过。
+3. GREEN：`GazeboWorldObserver` 同时订阅专用 bottom topic 与已知 compound-owner contact stream，
+   但只有 counterparty 精确匹配 `intended_support_collision` 的真实 contact 才可成为 support。
+   finger/contact freshness 继续独立；不得从 pose/height/MoveIt 推断 support。
+4. 增加 world/launch contract，锁定 production Bullet Featherstone owner mapping；不得修改 engine、
+   geometry、mass、friction、controller 或 motion target。
+5. 以一个逻辑提交完成上述 regression 和最小实现；定向 observer/policy/config/launch tests、包级测试
+   和 `git diff --check` 全部 GREEN 后，创建新的 calibration experiment。任何意外失败继续调用
+   systematic-debugging，不能叠加修改。
+6. 新 calibration 必须独立测量稳定 owner-contact depth 分布并给出保守 margin；该 noise bound 只
+   决定 support sample 的数值有效性，不改变既有 collision/penetration safety ceilings。随后才校准
+   Task 14 的其他 sentinel，并继续 Task 15/16 的 headless、GUI、五次连续成功、push/merge gates。
+
+批准后仍不允许：forward Gazebo attach/detach、MoveIt shadow 驱动 Gazebo、off-support 自动 open、
+R3 已证伪路线、安全 gate 放宽，或修改旧
+`docs/experiments/so101-reset-world-five-success-experiment-ledger.md`。
+
 ## Spec coverage self-review
 
 - Sections 1–4: Tasks 2, 7, and 8 establish physics ownership, shared/Panda compatibility, and the exact SO-101 state graph.
