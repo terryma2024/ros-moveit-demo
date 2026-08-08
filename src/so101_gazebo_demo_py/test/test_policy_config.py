@@ -35,7 +35,7 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.0, 0.0004)
     assert bundle.motion.seating_preload_rad == 0.006
     assert bundle.motion.grasp_tcp_world_x_rotation_rad == 0.0
-    assert bundle.motion.diagnostic_moving_pad_penetration_ceiling_m == 0.0
+    assert bundle.motion.diagnostic_moving_pad_penetration_ceiling_m == 0.0012
     assert len(bundle.sha256) == 64
 
 
