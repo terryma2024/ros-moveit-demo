@@ -1352,9 +1352,9 @@ decision: STOP_RETRY_STACKING_AND_DEBUG_PHYSICAL_CARRY_STABILITY
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-016
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: 0d3af18c4da970de596595d849b185bdaac11d17
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 221
@@ -1369,4 +1369,22 @@ evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-0
 cleanup_ownership: only HEADLESS-PHYSICAL-016 launch process group and ROS_DOMAIN_ID 221 daemon if created
 acceptance_counting: qualification only；a successful run proves the active one-task objective but does not start the frozen five-run campaign until recorded
 safety_disposition: freeze evidence before cleanup；no reset；never open a held unsupported cup
+started_at: 2026-08-08T16:57:41+08:00
+ended_at: 2026-08-08T16:59:40+08:00
+observed:
+  original_failure: PLANNING_SHADOW_DIVERGENCE
+  reported_failure_after_recovery: UNSAFE_RECOVERY_OBSERVATION
+  failed_state: DESCEND_TO_PLACE
+  planning_shadow_position_divergence_m: 0.00247496629272
+  planning_shadow_axial_tilt_divergence_rad: 0.106524517287
+  position_limit_m: 0.005
+  orientation_limit_rad: 0.070
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> ERROR
+comparison:
+  - HEADLESS-PHYSICAL-013 passed the same shadow gates through DESCEND_TO_PLACE under identical policy
+  - 014 and 016 independently show out-of-bound relative axial tilt before DESCEND；the gate is repeatable and not a generic-scene artifact
+  - no approved hard limit or physical parameter changed
+evidence_root_frozen: true
+cleanup: only owned launch process group stopped after evidence freeze；no reset
+decision: RETAIN_HARD_GATE_COMPARE_CARRY_EVIDENCE_BEFORE_NEXT_RUN
 ```
