@@ -113,6 +113,15 @@ double parseNonNegative(const YAML::Node & node, std::string_view context)
   return value;
 }
 
+double parseNonPositive(const YAML::Node & node, std::string_view context)
+{
+  const double value = parseFinite(node, context);
+  if (value > 0.0) {
+    throw PolicyError("POLICY_INVALID_VALUE", std::string(context) + " must be non-positive");
+  }
+  return value;
+}
+
 double parsePositive(const YAML::Node & node, std::string_view context)
 {
   const double value = parseFinite(node, context);
@@ -547,13 +556,14 @@ std::size_t parsePositiveSize(const YAML::Node & node, const std::string & conte
 PhysicalOutcomePolicyConfig parsePhysicalOutcome(const YAML::Node & node)
 {
   constexpr std::string_view context = "physical_outcome";
-  rejectUnknownFields(
-    node,
-    {"intended_support_collision", "final_target_region", "support_height_range_m",
-     "max_upright_tilt_rad", "max_linear_speed_m_s", "max_angular_speed_rad_s",
-     "consecutive_samples", "minimum_stable_duration_s", "sample_interval_s", "settle_timeout_s",
-     "max_observation_age_s", "max_telemetry_samples", "catastrophic_loss", "planning_shadow"},
-    context);
+  rejectUnknownFields(node,
+                      {"intended_support_collision", "minimum_support_contact_depth_m",
+                       "final_target_region", "support_height_range_m", "max_upright_tilt_rad",
+                       "max_linear_speed_m_s", "max_angular_speed_rad_s", "consecutive_samples",
+                       "minimum_stable_duration_s", "sample_interval_s", "settle_timeout_s",
+                       "max_observation_age_s", "max_telemetry_samples", "catastrophic_loss",
+                       "planning_shadow"},
+                      context);
   PhysicalOutcomePolicyConfig result;
   result.intended_support_collision =
     parseString(requireField(node, "intended_support_collision", context),
@@ -563,11 +573,18 @@ PhysicalOutcomePolicyConfig parsePhysicalOutcome(const YAML::Node & node)
                       "physical_outcome.intended_support_collision must be table::link::collision");
   }
 
-  const std::array<const char *, 11> direct_thresholds{
-    "final_target_region",       "support_height_range_m",  "max_upright_tilt_rad",
-    "max_linear_speed_m_s",      "max_angular_speed_rad_s", "consecutive_samples",
-    "minimum_stable_duration_s", "sample_interval_s",       "settle_timeout_s",
-    "max_observation_age_s",     "max_telemetry_samples"};
+  const std::array<const char *, 12> direct_thresholds{"minimum_support_contact_depth_m",
+                                                       "final_target_region",
+                                                       "support_height_range_m",
+                                                       "max_upright_tilt_rad",
+                                                       "max_linear_speed_m_s",
+                                                       "max_angular_speed_rad_s",
+                                                       "consecutive_samples",
+                                                       "minimum_stable_duration_s",
+                                                       "sample_interval_s",
+                                                       "settle_timeout_s",
+                                                       "max_observation_age_s",
+                                                       "max_telemetry_samples"};
   const auto catastrophic = requireField(node, "catastrophic_loss", context);
   rejectUnknownFields(
     catastrophic,
@@ -595,7 +612,7 @@ PhysicalOutcomePolicyConfig parsePhysicalOutcome(const YAML::Node & node)
       isCalibrationRequired(requireField(shadow, field, "physical_outcome.planning_shadow")) ? 1U
                                                                                              : 0U;
   }
-  constexpr std::size_t threshold_count = 17U;
+  constexpr std::size_t threshold_count = 18U;
   if (sentinel_count != 0U && sentinel_count != threshold_count) {
     throw PolicyError("POLICY_INVALID_VALUE",
                       "physical_outcome cannot mix CALIBRATION_REQUIRED and numeric thresholds");
@@ -603,6 +620,10 @@ PhysicalOutcomePolicyConfig parsePhysicalOutcome(const YAML::Node & node)
   if (sentinel_count == threshold_count) {
     return result;
   }
+
+  result.minimum_support_contact_depth_m =
+    parseNonPositive(requireField(node, "minimum_support_contact_depth_m", context),
+                     "physical_outcome.minimum_support_contact_depth_m");
 
   const auto region = requireField(node, "final_target_region", context);
   rejectUnknownFields(region, {"kind", "min_xy_m", "max_xy_m"},

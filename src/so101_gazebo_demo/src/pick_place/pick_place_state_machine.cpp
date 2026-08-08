@@ -230,7 +230,9 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       auto moveit_observer = std::make_shared<spp::SO101MoveItWorldObserver>(boundary, profile);
       auto observer = std::make_shared<spp::GazeboWorldObserver>(
         *moveit_observer, profile.gazebo_world, profile.task_object_id,
-        profile.attachment_state_topic, *session.value, 2.0, 3, 0.02,
+        profile.attachment_state_topic, *session.value,
+        bundle.validation.physical_outcome.intended_support_collision,
+        *bundle.validation.physical_outcome.minimum_support_contact_depth_m, 2.0, 3, 0.02,
         profile.task_object_position_drift_tolerance,
         profile.task_object_orientation_drift_tolerance_rad, true);
       spp::FileCheckpointStore checkpoint(options.checkpoint_path);

@@ -22,6 +22,7 @@ runtime:
   q6_contact_stop_tolerance_rad: 0.00125
 physical_outcome:
   intended_support_collision: table::link::collision
+  minimum_support_contact_depth_m: CALIBRATION_REQUIRED
   final_target_region: CALIBRATION_REQUIRED
   support_height_range_m: CALIBRATION_REQUIRED
   max_upright_tilt_rad: CALIBRATION_REQUIRED
