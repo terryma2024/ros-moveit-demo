@@ -568,9 +568,9 @@ PhysicalOutcomePolicyConfig parsePhysicalOutcome(const YAML::Node & node)
   result.intended_support_collision =
     parseString(requireField(node, "intended_support_collision", context),
                 "physical_outcome.intended_support_collision");
-  if (result.intended_support_collision != "table::link::collision") {
-    throw PolicyError("POLICY_INVALID_VALUE",
-                      "physical_outcome.intended_support_collision must be table::link::collision");
+  if (result.intended_support_collision != "table::table_top::collision") {
+    throw PolicyError("POLICY_INVALID_VALUE", "physical_outcome.intended_support_collision must be "
+                                              "table::table_top::collision");
   }
 
   const std::array<const char *, 12> direct_thresholds{"minimum_support_contact_depth_m",

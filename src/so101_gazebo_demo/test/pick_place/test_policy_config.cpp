@@ -194,7 +194,7 @@ runtime:
   q6_position_tolerance_rad: 0.001
   q6_contact_stop_tolerance_rad: 0.00125
 physical_outcome:
-  intended_support_collision: table::link::collision
+  intended_support_collision: table::table_top::collision
   final_target_region:
     kind: axis_aligned_box
     min_xy_m: [-0.12, -0.32]
@@ -302,7 +302,7 @@ TEST(PolicyConfig, LoadsExplicitCalibrationRequiredPhysicalOutcomePolicy)
 
   ASSERT_TRUE(result.bundle) << (result.failure ? result.failure->message : "");
   const auto & policy = result.bundle->validation.physical_outcome;
-  EXPECT_EQ("table::link::collision", policy.intended_support_collision);
+  EXPECT_EQ("table::table_top::collision", policy.intended_support_collision);
   EXPECT_FALSE(policy.calibration_complete);
   EXPECT_FALSE(policy.minimum_support_contact_depth_m);
   EXPECT_FALSE(policy.final_target_region);
@@ -335,8 +335,8 @@ TEST(PolicyConfig, RejectsUnknownPhysicalOutcomeField)
   PolicyFixture::write(
     fixture.validationPath(),
     replaceOnce(PolicyFixture::validValidationYaml(),
-                "  intended_support_collision: table::link::collision\n",
-                "  intended_support_collision: table::link::collision\n  surprise: true\n"));
+                "  intended_support_collision: table::table_top::collision\n",
+                "  intended_support_collision: table::table_top::collision\n  surprise: true\n"));
   expectFailure(fixture.paths(), "POLICY_UNKNOWN_FIELD");
 }
 

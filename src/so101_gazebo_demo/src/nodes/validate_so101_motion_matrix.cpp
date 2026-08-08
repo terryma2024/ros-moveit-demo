@@ -537,7 +537,7 @@ int main(int argc, char ** argv)
   MatrixMoveItObserver moveit_observer(real, profile);
   spp::GazeboWorldObserver observer(moveit_observer, profile.gazebo_world, profile.task_object_id,
                                     profile.attachment_state_topic, "task4-live-matrix",
-                                    "table::link::collision", 0.0, 2.0, 3, 0.02,
+                                    "table::table_top::collision", 0.0, 2.0, 3, 0.02,
                                     profile.task_object_position_drift_tolerance,
                                     profile.task_object_orientation_drift_tolerance_rad, false);
   const std::vector<spp::State> states{spp::State::MOVE_ABOVE_OBJECT,
