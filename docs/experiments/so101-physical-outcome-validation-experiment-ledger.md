@@ -320,7 +320,7 @@ next_command: 先创建 CAL-PHYSICAL-002 PLANNED 记录并冻结隔离环境、�
 
 ```yaml
 experiment_id: CAL-PHYSICAL-002
-status: PLANNED
+status: RUNNING
 prior_experiment: TDD-PHYSICAL-001
 hypothesis: production Featherstone 的稳定 owner-contact、pose cadence、release settling 与 MoveIt shadow pairing distributions 足以为全部 sentinel 提供非宽松、可复核的冻结值
 prediction:
@@ -355,4 +355,5 @@ evidence_paths:
   - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-domain-probe.txt
 cleanup_ownership: only PIDs created by CAL-PHYSICAL-002; preserved so101-gazebo-demo-py stacks and workspace-sampler clang-tidy are out of scope
 next_transition: PLANNED -> RUNNING only after ledger commit and repeated empty-domain/provenance check
+started_at: 2026-08-08T05:25:00+08:00
 ```
