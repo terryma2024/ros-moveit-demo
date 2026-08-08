@@ -2156,3 +2156,45 @@ states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, R
 success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
 invalid_criteria: startup/readiness/provenance failure before planning
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-00045-PLAN-001
+status: VALID_SUCCESS
+completed_at: 2026-08-08 Asia/Shanghai
+planned_points: {MOVE_ABOVE_OBJECT: 199, DESCEND: 130, LIFT: 119, MOVE_ABOVE_PLACE: 127, DESCEND_TO_PLACE: 100, RETREAT: 132}
+descend_correction: DESCEND total 130 includes the FK-derived +0.00045 m world-Z grasp translation pose plan
+bundle_sha256_observed: 2f1132a9be0cae3327fec949f62c067beee6cf471f86d0a9901ca14cc2812181
+runtime_arm_trajectory_constraint: 0.008 for joints 1-5 (evidence arm-trajectory-constraint.txt)
+prepared_sdf: references config/so101_controllers_physical_outcome.yaml (evidence prepared-sdf.txt)
+forbidden_runtime_events: NONE_OBSERVED (only move_group startup plugin-list mention of execute_trajectory_action)
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 (uncertain ownership) and PID 652055 (unrelated clang-tidy) remain
+  ros_domain_215_daemon: stopped
+decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
+next_experiment: PY-A-Z-POS-00045-GRASP-001
+```
+
+```yaml
+experiment_id: PY-A-Z-POS-00045-GRASP-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.00045]}
+lifecycle: FULL_RESTART
+source_commit: 39ba00a
+bundle_sha256: 2f1132a9be0cae3327fec949f62c067beee6cf471f86d0a9901ca14cc2812181
+motion_config_sha256: 4c9db0309fac56a3a27ec25e009825d5dc3f3de4c0054ee126a524732cd058fd
+ros_domain_id: 216
+gz_partition: so101_py_a_z_pos_00045_grasp_001_216
+evidence_root: /tmp/so101-py-a-z-pos-00045-grasp-001-216
+owned_tmux_session: so101-py-a-z-mid-grasp-216
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+success_criteria: bilateral stable contact within 0.000800002 m ceiling for both pads and physical 0.002 m micro-lift within existing lateral bound
+failure_criteria: any frozen hard gate failure
+post_failure: stop/hold; no open; preserve evidence
+prelaunch_process_audit:
+  removed: []
+  preserved: ["PID 3272995 uncertain gz sim server", "PID 652055 unrelated clang-tidy", "tmux codex", "tmux codex-cua", "tmux kimi"]
+  uncertain: [3272995]
+  task_stack_present: false
+```
