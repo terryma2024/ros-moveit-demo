@@ -9,7 +9,8 @@ from so101_gazebo_demo_py.live_execute import (
 )
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
-    parse_model_pose, parse_tf_pose, select_gazebo_pose, select_stamped_transform,
+    close_gazebo_subscription, parse_model_pose, parse_tf_pose,
+    pose_pair_ready, select_gazebo_pose, select_stamped_transform,
 )
 
 
@@ -120,6 +121,26 @@ def test_gazebo_pose_selector_uses_entity_name_and_source_timestamp() -> None:
 
     pose.position.x = float("nan")
     assert select_gazebo_pose(message, "plastic_cup") is None
+
+
+def test_gazebo_pose_subscription_is_explicitly_closed() -> None:
+    calls = []
+    node = SimpleNamespace(unsubscribe=lambda topic: calls.append(topic))
+
+    close_gazebo_subscription(node, "/world/example/pose/info")
+
+    assert calls == ["/world/example/pose/info"]
+
+
+def test_pose_pair_waits_for_configured_source_timestamp_freshness() -> None:
+    observed = {
+        "object": ((0.0,) * 7, 10.0),
+        "tcp": ((0.0,) * 7, 10.11),
+    }
+    assert not pose_pair_ready(observed, 0.10)
+
+    observed["object"] = ((0.0,) * 7, 10.02)
+    assert pose_pair_ready(observed, 0.10)
 
 
 def test_plan_only_validates_every_waypoint_as_a_contiguous_sequence() -> None:

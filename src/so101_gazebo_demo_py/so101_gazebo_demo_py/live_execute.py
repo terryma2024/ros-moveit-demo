@@ -402,7 +402,10 @@ def run_live_execute(evidence_directory: Path, stop_after: str | None = None) ->
     from ament_index_python.packages import get_package_share_directory
     share=Path(get_package_share_directory("so101_gazebo_demo_py"))
     bundle=load_policy_bundle(share/"config/task_objects/light_plastic_cup.yaml",share/"config/motion_policies/light_cup_wall_pick.yaml",share/"config/validation_policies/light_cup_wall_pick.yaml")
-    backend=RosGazeboLiveBackend(); evidence_directory=Path(evidence_directory); evidence_directory.mkdir(parents=True,exist_ok=True)
+    backend=RosGazeboLiveBackend(
+        bundle.validation.physical_outcome.planning_shadow.max_pair_age_s,
+    )
+    evidence_directory=Path(evidence_directory); evidence_directory.mkdir(parents=True,exist_ok=True)
     initial=backend.sample(); backend.move_gripper(bundle.motion.preopen_q6)
     move_above=bundle.motion.states[next(state for state in bundle.motion.states if state.value=="MOVE_ABOVE_OBJECT")].waypoints
     backend.move_arm(move_above[:-1]); moveit_points=_moveit_plan_execute(move_above[-1])
