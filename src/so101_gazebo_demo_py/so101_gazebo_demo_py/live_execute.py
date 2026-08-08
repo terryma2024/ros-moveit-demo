@@ -318,12 +318,15 @@ def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
 
 
 def run_bounded_physical_grasp_attempts(
-    backend, seating_target: float, preopen_q6: float, q6_safe_lower: float
+    backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
+    max_attempts: int = 1,
 ):
-    """Run no more than five complete stabilize/micro-lift physical attempts."""
+    """Run a pre-registered number of complete physical attempts."""
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive")
     last_error=None
     lifted=False
-    for attempt in range(5):
+    for attempt in range(max_attempts):
         target=seating_target
         if attempt:
             if lifted:
@@ -413,7 +416,7 @@ def run_live_execute(evidence_directory: Path, stop_after: str | None = None) ->
     q6_contact=_current_joint_position("6")
     seating_target=seating_preload_target(q6_contact,-.059600220867817)
     backend.move_gripper(seating_target)
-    contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817)
+    contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,max_attempts=1)
     lift,lateral,micro_points,micro_start_z,before,after=physical
     if not attachment_safe_contact(contact) and final_grasp_target < seating_target:
         backend.move_gripper(seating_target)
