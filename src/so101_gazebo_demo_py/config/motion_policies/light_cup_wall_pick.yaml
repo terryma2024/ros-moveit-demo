@@ -8,7 +8,7 @@ grasp_tcp_world_x_rotation_rad: 0.0
 # User-authorized diagnostic override (2026-08-08, CP-AUTHORIZATION-PENETRATION-DIAGNOSTIC-001):
 # 0.0 keeps the frozen 0.000800002 m moving-pad ceiling; enabled values are bounded
 # to (0.000800002, 0.0012] m and never qualify a grasp.
-diagnostic_moving_pad_penetration_ceiling_m: 0.0012
+diagnostic_moving_pad_penetration_ceiling_m: 0.0
 gripper_actions:
   preopen_q6: 0.465038000
   grasp_close_q6: -0.047608632840292
