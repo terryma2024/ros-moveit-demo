@@ -67,10 +67,40 @@ class StateValidationConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PlanningShadowConfig:
+    max_position_divergence_m: float
+    max_orientation_divergence_rad: float
+    max_pair_age_s: float
+
+
+@dataclass(frozen=True, slots=True)
+class PhysicalOutcomeConfig:
+    intended_support_collision: str
+    minimum_support_contact_depth_m: float
+    final_target_min_xy_m: tuple[float, float]
+    final_target_max_xy_m: tuple[float, float]
+    support_height_range_m: tuple[float, float]
+    max_upright_tilt_rad: float
+    max_linear_speed_m_s: float
+    max_angular_speed_rad_s: float
+    consecutive_samples: int
+    minimum_stable_duration_s: float
+    sample_interval_s: float
+    settle_timeout_s: float
+    max_observation_age_s: float
+    max_telemetry_samples: int
+    catastrophic_workspace_bounds_m: tuple[float, ...]
+    max_relative_position_drift_m: float
+    max_relative_orientation_drift_rad: float
+    planning_shadow: PlanningShadowConfig
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationPolicyConfig:
     schema_version: int
     policy_id: str
     object_id: str
+    physical_outcome: PhysicalOutcomeConfig
     states: Mapping[State, StateValidationConfig]
     data: Mapping[str, Any]
 
@@ -141,6 +171,29 @@ def _vector(value: Any, length: int, location: str) -> tuple[float, ...]:
     return tuple(_number(item, f"{location}[{index}]") for index, item in enumerate(value))
 
 
+def _exact_keys(document: Mapping[str, Any], expected: set[str], location: str) -> None:
+    unknown = set(document) - expected
+    missing = expected - set(document)
+    if unknown:
+        raise ConfigurationError("CONFIGURATION_UNKNOWN_KEY", f"unknown keys at {location}: {sorted(unknown)}")
+    if missing:
+        raise ConfigurationError("CONFIGURATION_MISSING_KEY", f"missing keys at {location}: {sorted(missing)}")
+
+
+def _positive(value: Any, location: str) -> float:
+    result = _number(value, location)
+    if result <= 0.0:
+        raise ConfigurationError("CONFIGURATION_INVALID_RANGE", f"{location} must be positive")
+    return result
+
+
+def _positive_integer(value: Any, location: str) -> int:
+    result = _number(value, location)
+    if result <= 0.0 or not result.is_integer():
+        raise ConfigurationError("CONFIGURATION_INVALID_RANGE", f"{location} must be a positive integer")
+    return int(result)
+
+
 def _state(name: str, location: str) -> State:
     try:
         return State(name)
@@ -203,6 +256,62 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
 
 
 def _validation(document: dict[str, Any]) -> ValidationPolicyConfig:
+    raw_outcome = _mapping(document, "physical_outcome")
+    _exact_keys(raw_outcome, {
+        "intended_support_collision", "minimum_support_contact_depth_m", "final_target_region",
+        "support_height_range_m", "max_upright_tilt_rad", "max_linear_speed_m_s",
+        "max_angular_speed_rad_s", "consecutive_samples", "minimum_stable_duration_s",
+        "sample_interval_s", "settle_timeout_s", "max_observation_age_s",
+        "max_telemetry_samples", "catastrophic_loss", "planning_shadow",
+    }, "physical_outcome")
+    region = _mapping(raw_outcome, "final_target_region")
+    _exact_keys(region, {"kind", "min_xy_m", "max_xy_m"}, "physical_outcome.final_target_region")
+    if region.get("kind") != "axis_aligned_box":
+        raise ConfigurationError("CONFIGURATION_INVALID_VALUE", "final target region must be axis_aligned_box")
+    minimum_xy = _vector(region.get("min_xy_m"), 2, "physical_outcome.final_target_region.min_xy_m")
+    maximum_xy = _vector(region.get("max_xy_m"), 2, "physical_outcome.final_target_region.max_xy_m")
+    height = _vector(raw_outcome.get("support_height_range_m"), 2, "physical_outcome.support_height_range_m")
+    if any(low >= high for low, high in zip(minimum_xy, maximum_xy)) or height[0] >= height[1]:
+        raise ConfigurationError("CONFIGURATION_INVALID_RANGE", "physical outcome ranges must increase")
+    catastrophic = _mapping(raw_outcome, "catastrophic_loss")
+    _exact_keys(catastrophic, {
+        "workspace_bounds_m", "max_relative_position_drift_m",
+        "max_relative_orientation_drift_rad",
+    }, "physical_outcome.catastrophic_loss")
+    shadow = _mapping(raw_outcome, "planning_shadow")
+    _exact_keys(shadow, {
+        "max_position_divergence_m", "max_orientation_divergence_rad", "max_pair_age_s",
+    }, "physical_outcome.planning_shadow")
+    interval = _positive(raw_outcome.get("sample_interval_s"), "physical_outcome.sample_interval_s")
+    duration = _positive(raw_outcome.get("minimum_stable_duration_s"), "physical_outcome.minimum_stable_duration_s")
+    timeout = _positive(raw_outcome.get("settle_timeout_s"), "physical_outcome.settle_timeout_s")
+    count = _positive_integer(raw_outcome.get("consecutive_samples"), "physical_outcome.consecutive_samples")
+    if timeout < duration or timeout < interval * (count - 1):
+        raise ConfigurationError("CONFIGURATION_INVALID_TIMING", "settle timeout cannot satisfy stable window")
+    outcome = PhysicalOutcomeConfig(
+        intended_support_collision=_string(raw_outcome, "intended_support_collision"),
+        minimum_support_contact_depth_m=_number(raw_outcome.get("minimum_support_contact_depth_m"), "physical_outcome.minimum_support_contact_depth_m"),
+        final_target_min_xy_m=(minimum_xy[0], minimum_xy[1]),
+        final_target_max_xy_m=(maximum_xy[0], maximum_xy[1]),
+        support_height_range_m=(height[0], height[1]),
+        max_upright_tilt_rad=_positive(raw_outcome.get("max_upright_tilt_rad"), "physical_outcome.max_upright_tilt_rad"),
+        max_linear_speed_m_s=_positive(raw_outcome.get("max_linear_speed_m_s"), "physical_outcome.max_linear_speed_m_s"),
+        max_angular_speed_rad_s=_positive(raw_outcome.get("max_angular_speed_rad_s"), "physical_outcome.max_angular_speed_rad_s"),
+        consecutive_samples=count,
+        minimum_stable_duration_s=duration,
+        sample_interval_s=interval,
+        settle_timeout_s=timeout,
+        max_observation_age_s=_positive(raw_outcome.get("max_observation_age_s"), "physical_outcome.max_observation_age_s"),
+        max_telemetry_samples=_positive_integer(raw_outcome.get("max_telemetry_samples"), "physical_outcome.max_telemetry_samples"),
+        catastrophic_workspace_bounds_m=_vector(catastrophic.get("workspace_bounds_m"), 6, "physical_outcome.catastrophic_loss.workspace_bounds_m"),
+        max_relative_position_drift_m=_positive(catastrophic.get("max_relative_position_drift_m"), "physical_outcome.catastrophic_loss.max_relative_position_drift_m"),
+        max_relative_orientation_drift_rad=_positive(catastrophic.get("max_relative_orientation_drift_rad"), "physical_outcome.catastrophic_loss.max_relative_orientation_drift_rad"),
+        planning_shadow=PlanningShadowConfig(
+            _positive(shadow.get("max_position_divergence_m"), "physical_outcome.planning_shadow.max_position_divergence_m"),
+            _positive(shadow.get("max_orientation_divergence_rad"), "physical_outcome.planning_shadow.max_orientation_divergence_rad"),
+            _positive(shadow.get("max_pair_age_s"), "physical_outcome.planning_shadow.max_pair_age_s"),
+        ),
+    )
     states: dict[State, StateValidationConfig] = {}
     for name, raw in _mapping(document, "states").items():
         state = _state(name, "validation.states")
@@ -216,6 +325,7 @@ def _validation(document: dict[str, Any]) -> ValidationPolicyConfig:
         schema_version=int(_number(document.get("schema_version"), "validation.schema_version")),
         policy_id=_string(document, "policy_id"),
         object_id=_string(document, "object_id"),
+        physical_outcome=outcome,
         states=MappingProxyType(states),
         data=MappingProxyType(document),
     )
@@ -224,8 +334,10 @@ def _validation(document: dict[str, Any]) -> ValidationPolicyConfig:
 def load_policy_bundle(object_path: Path, motion_path: Path, validation_path: Path) -> PolicyBundle:
     documents = (_load(Path(object_path)), _load(Path(motion_path)), _load(Path(validation_path)))
     task_object, motion, validation = _task_object(documents[0]), _motion(documents[1]), _validation(documents[2])
-    if not (task_object.schema_version == motion.schema_version == validation.schema_version == 1):
-        raise ConfigurationError("CONFIGURATION_SCHEMA_VERSION", "all policy schema versions must be 1")
+    if task_object.schema_version != 1 or motion.schema_version != 1 or validation.schema_version != 2:
+        raise ConfigurationError(
+            "CONFIGURATION_SCHEMA_VERSION", "object/motion schema must be 1 and validation schema must be 2",
+        )
     if task_object.object_id != motion.object_id or motion.object_id != validation.object_id:
         raise ConfigurationError("CONFIGURATION_OBJECT_ID_MISMATCH", "policy object_id values differ")
     if motion.policy_id != validation.policy_id:

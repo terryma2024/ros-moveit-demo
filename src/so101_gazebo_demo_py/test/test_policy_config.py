@@ -34,6 +34,64 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert len(bundle.sha256) == 64
 
 
+def test_loads_calibrated_physical_outcome_policy() -> None:
+    outcome = load_bundle().validation.physical_outcome
+    assert outcome.intended_support_collision == "table::table_top::collision"
+    assert outcome.minimum_support_contact_depth_m == -0.0000001
+    assert outcome.final_target_min_xy_m == (-0.085, -0.255)
+    assert outcome.final_target_max_xy_m == (-0.075, -0.245)
+    assert outcome.support_height_range_m == (0.155, 0.175)
+    assert outcome.consecutive_samples == 5
+    assert outcome.max_telemetry_samples == 40
+    assert outcome.planning_shadow.max_position_divergence_m == 0.005
+    assert outcome.planning_shadow.max_orientation_divergence_rad == 0.070
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("physical_outcome", "consecutive_samples"), 0),
+        (("physical_outcome", "minimum_stable_duration_s"), 0.0),
+        (("physical_outcome", "settle_timeout_s"), 0.1),
+        (("physical_outcome", "final_target_region", "max_xy_m"), [-0.09, -0.26]),
+        (("physical_outcome", "support_height_range_m"), [0.18, 0.15]),
+    ],
+)
+def test_rejects_invalid_physical_outcome_contract(
+    tmp_path: Path, path: tuple[str, ...], value: object,
+) -> None:
+    validation = yaml.safe_load(
+        (CONFIG / "validation_policies/light_cup_wall_pick.yaml").read_text()
+    )
+    target = validation
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    validation_path = tmp_path / "validation.yaml"
+    validation_path.write_text(yaml.safe_dump(validation, sort_keys=False))
+    with pytest.raises(ConfigurationError):
+        load_policy_bundle(
+            CONFIG / "task_objects/light_plastic_cup.yaml",
+            CONFIG / "motion_policies/light_cup_wall_pick.yaml",
+            validation_path,
+        )
+
+
+def test_rejects_unknown_physical_outcome_key(tmp_path: Path) -> None:
+    validation = yaml.safe_load(
+        (CONFIG / "validation_policies/light_cup_wall_pick.yaml").read_text()
+    )
+    validation["physical_outcome"]["permissive_escape_hatch"] = True
+    validation_path = tmp_path / "validation.yaml"
+    validation_path.write_text(yaml.safe_dump(validation, sort_keys=False))
+    with pytest.raises(ConfigurationError, match="unknown"):
+        load_policy_bundle(
+            CONFIG / "task_objects/light_plastic_cup.yaml",
+            CONFIG / "motion_policies/light_cup_wall_pick.yaml",
+            validation_path,
+        )
+
+
 def test_fingerprint_depends_on_data_not_yaml_formatting(tmp_path: Path) -> None:
     original = load_bundle()
     paths = []
