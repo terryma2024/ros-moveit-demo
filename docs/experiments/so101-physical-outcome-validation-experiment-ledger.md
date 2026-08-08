@@ -541,3 +541,33 @@ cleanup:
 decision: FREEZE_VALUES_FOR_CONFIG_TDD
 next_experiment: TDD-PHYSICAL-003
 ```
+
+## TDD-PHYSICAL-003：freeze calibrated production policy
+
+```yaml
+experiment_id: TDD-PHYSICAL-003
+status: VALID
+prior_experiment: CAL-PHYSICAL-003
+hypothesis: production policy 可精确冻结 CAL-PHYSICAL-003 的全部值并通过 strict parser/config contract
+single_variable: 将全部 physical_outcome sentinel 替换为已记录的 calibrated value
+red:
+  command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_gazebo_demo/test/test_configuration_contract.py::test_physical_outcome_policy_matches_cal_physical_003
+  result: 1 failed；production YAML 仍返回 CALIBRATION_REQUIRED，符合预期
+green:
+  build: pick_place_common + so101_gazebo_demo passed
+  focused_ctest:
+    test_policy_config: 29/29 passed
+    test_configuration_contract: 18/18 passed
+  direct_exact_config_test: 1/1 passed
+  parser_numeric_fixture_smoke: 1/1 passed
+systematic_debugging:
+  symptom: focused ctest 全绿后 colcon test-result --verbose 仍非零
+  root_cause: 汇总包含 13:17/13:18 的旧 package-suite XML；本次两个 fresh XML 时间为 13:47 且均通过
+  action: 未修改 production、测试 timeout 或 safety gate；后续 fresh full-suite verification 重新生成全量结果
+invariants:
+  - grasp max_penetration_m 0.0013 与所有 collision/penetration ceiling 未修改
+  - physics、geometry、mass、friction、controller、motion target 未修改
+  - old so101-reset-world-five-success ledger remains unmodified
+decision: KEEP
+next_experiment: VERIFY-PHYSICAL-002
+```
