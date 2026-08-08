@@ -676,6 +676,38 @@ TEST(SO101AttachmentContracts, PreservesForbiddenCollisionAndPenetrationCeilings
   EXPECT_FALSE(contract->validatePrecondition(penetrated).ok);
 }
 
+TEST(SO101AttachmentContracts, MoveItAttachTreatsBoundedRegraspQ6AsTelemetry)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  const auto contract =
+    attachmentContract(key(pick_place::State::ATTACH_MOVEIT, pick_place::State::LIFT), profile);
+  auto before = semanticWallGrasp();
+  before.joint_positions[profile.gripper_joint] =
+    profile.q6_contact - profile.q6_regrasp_squeeze_offset;
+  before.moveit_gripper_pose_world = pick_place::Pose3d{};
+  auto after = world(false, true);
+  after.joint_positions[profile.gripper_joint] = before.joint_positions.at(profile.gripper_joint);
+  after.moveit_gripper_pose_world = pick_place::Pose3d{};
+  after.moveit_task_object_attached_relative_pose = before.gazebo_task_object_pose_world;
+
+  const auto precondition = contract->validatePrecondition(before);
+  const auto postcondition = contract->validate(before, after, succeeded());
+
+  EXPECT_TRUE(precondition.ok) << failureCodes(precondition);
+  EXPECT_TRUE(postcondition.ok) << failureCodes(postcondition);
+  EXPECT_DOUBLE_EQ(-profile.q6_regrasp_squeeze_offset,
+                   precondition.metrics.at("q6_controller_error"));
+
+  before.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth + 1e-6;
+  EXPECT_FALSE(contract->validatePrecondition(before).ok);
+  before.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth;
+  after.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth + 1e-6;
+  EXPECT_FALSE(contract->validate(before, after, succeeded()).ok);
+  after.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth;
+  before.joint_positions[profile.gripper_joint] = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_FALSE(contract->validatePrecondition(before).ok);
+}
+
 TEST(SO101AttachmentContracts, ShadowDivergenceWithinLimitIsTelemetry)
 {
   auto snapshot = world(false, true);

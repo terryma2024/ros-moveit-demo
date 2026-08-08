@@ -101,6 +101,47 @@ void requireQ6(ValidationResult & result, const WorldSnapshot & snapshot, SO101G
   merge(result, validateSO101GripperTarget(snapshot, target, profile));
 }
 
+void requireCarryQ6Telemetry(ValidationResult & result, const WorldSnapshot & snapshot,
+                             const SO101Profile & profile)
+{
+  const auto position = snapshot.joint_positions.find(profile.gripper_joint);
+  const auto velocity = snapshot.joint_velocities.find(profile.gripper_joint);
+  if (!snapshot.fresh || position == snapshot.joint_positions.end() ||
+      velocity == snapshot.joint_velocities.end() || !std::isfinite(position->second) ||
+      !std::isfinite(velocity->second)) {
+    add(result, FailureCategory::GRIPPER, "Q6_EVIDENCE_INCOMPLETE",
+        "Carry requires fresh finite joint 6 position and velocity evidence");
+    return;
+  }
+  result.metrics["actual_q6"] = position->second;
+  result.metrics["actual_q6_velocity"] = velocity->second;
+  result.metrics["q6_controller_error"] = position->second - profile.q6_contact;
+  if (position->second < profile.q6_safe_lower) {
+    add(result, FailureCategory::GRIPPER, "Q6_NATIVE_PAD_SAFE_FLOOR_VIOLATED",
+        "Carry joint 6 is below the generated native-pad safe floor");
+  }
+  if (std::abs(velocity->second) > profile.q6_velocity_tolerance) {
+    add(result, FailureCategory::GRIPPER, "Q6_NOT_STATIONARY",
+        "Joint 6 velocity exceeds the stop threshold");
+  }
+  if (!snapshot.gazebo_task_object_gripper_contact.value_or(false))
+    return;
+  if (!snapshot.gazebo_task_object_gripper_max_depth ||
+      !std::isfinite(*snapshot.gazebo_task_object_gripper_max_depth)) {
+    add(result, FailureCategory::OBSERVATION, "CONTACT_PENETRATION_EVIDENCE_REQUIRED",
+        "Carry contact requires finite solver-reported penetration evidence");
+    return;
+  }
+  result.metrics["gazebo_task_object_gripper_solver_reported_max_depth"] =
+    *snapshot.gazebo_task_object_gripper_max_depth;
+  result.metrics["stable_solver_reported_depth_limit"] = profile.max_gripper_contact_depth;
+  if (*snapshot.gazebo_task_object_gripper_max_depth < 0.0 ||
+      *snapshot.gazebo_task_object_gripper_max_depth > profile.max_gripper_contact_depth) {
+    add(result, FailureCategory::COLLISION, "GRIPPER_CONTACT_PENETRATION_EXCEEDED",
+        "Carry solver-reported depth exceeds the existing penetration limit");
+  }
+}
+
 void requireAttachPreloadQ6(ValidationResult & result, const WorldSnapshot & snapshot,
                             const SO101Profile & profile)
 {
@@ -406,6 +447,8 @@ public:
         : SO101GripperTarget::CONTACT;
     if (key_.from == State::ATTACH_GAZEBO)
       requireAttachPreloadQ6(result, before, profile_);
+    else if (key_.from == State::ATTACH_MOVEIT)
+      requireCarryQ6Telemetry(result, before, profile_);
     else
       requireQ6(result, before, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
@@ -445,7 +488,10 @@ public:
       key_.from == State::DETACH_GAZEBO || key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
         ? SO101GripperTarget::FULL_OPEN
         : SO101GripperTarget::CONTACT;
-    requireQ6(result, after, gripper_target, profile_);
+    if (key_.from == State::ATTACH_MOVEIT)
+      requireCarryQ6Telemetry(result, after, profile_);
+    else
+      requireQ6(result, after, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
       // Removing the physical attachment intentionally lets the cup settle
       // onto the table.  Bound both endpoints by the place support envelope;
