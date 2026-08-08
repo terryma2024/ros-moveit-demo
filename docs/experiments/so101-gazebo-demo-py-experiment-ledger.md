@@ -1982,3 +1982,21 @@ candidate_result: ELIMINATED
 decision: TRY_THIRD_AND_FINAL_POSITIVE_Z_CANDIDATE_0004
 next_candidate_offset_m: [0.0, 0.0, 0.0004]
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-0004-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.0004]}
+rationale: third and final positive-Z candidate between the +0.00025 m seating penetration failure and +0.0005 m missing-contact boundary
+lifecycle: FULL_RESTART
+source_commit: 65700af
+bundle_sha256: 92606daadd9cd012e001071898b0d6f15c16af44822d36d60cd19d0961cf12ca
+motion_config_sha256: e460d9a1375e217d33f161862aa996b7dd8540d1dda6fdf25b5433c7615b1a36
+ros_domain_id: 213
+gz_partition: so101_py_a_z_pos_0004_plan_001_213
+evidence_root: /tmp/so101-py-a-z-pos-0004-plan-001-213
+owned_tmux_session: so101-py-a-z-final-plan-213
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
