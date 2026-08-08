@@ -1198,9 +1198,9 @@ decision: HARD_GATE_WORKED_RETRY_UNCHANGED_POLICY_FRESH_LIFECYCLE
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-013
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: 7e8ec0445cc27753a296329e6a254dc574bd16ef
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 218
@@ -1216,4 +1216,30 @@ evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-0
 cleanup_ownership: only HEADLESS-PHYSICAL-013 launch process group and any daemon created for ROS_DOMAIN_ID 218
 acceptance_counting: qualification only；not part of five-consecutive acceptance
 safety_disposition: freeze evidence before cleanup；no reset；never open a held unsupported cup
+started_at: 2026-08-08T16:46:29+08:00
+ended_at: 2026-08-08T16:48:30+08:00
+observed:
+  original_failure: GRIPPER_CONTACT_PENETRATION_EXCEEDED
+  reported_failure_after_recovery: RECOVERY_GRIPPER_NOT_STATIONARY
+  failed_state: DESCEND_TO_PLACE
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> ERROR
+  gazebo_attached_at_checkpoint: false
+  moveit_attached_at_checkpoint: true
+  gripper_open_at_checkpoint: false
+  task_object_stationary_at_checkpoint: false
+diagnostic_result:
+  - LIFT、MOVE_ABOVE_PLACE and DESCEND_TO_PLACE planning all passed the unchanged stationarity and planning-shadow gates
+  - no CARRYING_TASK_OBJECT_NOT_STATIONARY or PLANNING_SHADOW_DIVERGENCE occurred
+  - failure arose from the existing post-motion solver penetration ceiling；no ceiling was changed
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013/source-head.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013/failure-wall-near-contact.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-013/failure-evidence.sha256
+cleanup: evidence frozen before stopping only the owned launch process group；ROS_DOMAIN_ID 218 returned empty；no reset
+decision: CARRY_SCENE_DIAGNOSTIC_QUALIFIED_KEEP_PENETRATION_CEILING
 ```
