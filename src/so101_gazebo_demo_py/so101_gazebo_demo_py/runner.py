@@ -99,7 +99,7 @@ class StateMachineRunner:
                 trace.append(State.VALIDATION_FAILED)
                 return RunResult(
                     RunStatus.CHECKPOINT_COMPLETE, State.VALIDATION_FAILED,
-                    State.ATTACH_GAZEBO, original_failure, count, tuple(trace),
+                    State.ATTACH_MOVEIT, original_failure, count, tuple(trace),
                 )
             if request.stop_after is current or request.single_step:
                 return RunResult(

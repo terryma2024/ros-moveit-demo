@@ -34,9 +34,10 @@ def test_full_dry_run_reaches_done_in_reference_order() -> None:
         State.IDLE, State.PREPARE_OPEN_GRIPPER, State.MOVE_ABOVE_OBJECT,
         State.DESCEND, State.CLOSE_GRIPPER, State.WAIT_GRASP_STABLE,
         State.MICRO_LIFT, State.WAIT_MICRO_LIFT_STABLE,
-        State.VERIFY_PHYSICAL_GRASP, State.ATTACH_GAZEBO, State.ATTACH_MOVEIT,
+        State.VERIFY_PHYSICAL_GRASP, State.ATTACH_MOVEIT,
         State.LIFT, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE,
-        State.OPEN_GRIPPER, State.DETACH_GAZEBO, State.DETACH_MOVEIT,
+        State.DETACH_MOVEIT, State.OPEN_GRIPPER, State.WAIT_RELEASE_SETTLE,
+        State.VALIDATE_FINAL_PLACEMENT,
         State.SYNC_WORLD_OBJECT, State.RETREAT, State.DONE,
     )
     assert all(action.calls == 1 for state, action in actions.items() if state in result.state_trace)
@@ -75,7 +76,7 @@ def test_validation_failure_pauses_without_overwriting_physical_failure() -> Non
     result = machine.run(RunRequest(fail_at=State.VERIFY_PHYSICAL_GRASP))
     assert result.status is RunStatus.CHECKPOINT_COMPLETE
     assert result.current_state is State.VALIDATION_FAILED
-    assert result.next_state is State.ATTACH_GAZEBO
+    assert result.next_state is State.ATTACH_MOVEIT
     assert result.failure.code == "INJECTED_FAILURE"
 
 

@@ -22,8 +22,9 @@ class RuntimeDependencies:
     gripper: Callable[[State], ActionResult]
     stabilize: Callable[[State], ActionResult]
     verify_grasp: Callable[[], ActionResult]
-    gazebo_attachment: Callable[[bool], ActionResult]
     moveit_attachment: Callable[[bool], ActionResult]
+    release_settle: Callable[[], ActionResult]
+    validate_final: Callable[[], ActionResult]
     sync_world: Callable[[], ActionResult]
     recovery: Callable[[State], ActionResult]
 
@@ -59,10 +60,10 @@ def build_runtime(node: Any, profile: Any, policies: Any, options: Any,
     for state in GRIPPER_STATES: actions[state]=CallableAction(lambda context, s=state: dependencies.gripper(s))
     for state in (State.WAIT_GRASP_STABLE,State.WAIT_MICRO_LIFT_STABLE): actions[state]=CallableAction(lambda context,s=state: dependencies.stabilize(s))
     actions[State.VERIFY_PHYSICAL_GRASP]=CallableAction(lambda context: dependencies.verify_grasp())
-    actions[State.ATTACH_GAZEBO]=CallableAction(lambda context: dependencies.gazebo_attachment(True))
-    actions[State.DETACH_GAZEBO]=CallableAction(lambda context: dependencies.gazebo_attachment(False))
     actions[State.ATTACH_MOVEIT]=CallableAction(lambda context: dependencies.moveit_attachment(True))
     actions[State.DETACH_MOVEIT]=CallableAction(lambda context: dependencies.moveit_attachment(False))
+    actions[State.WAIT_RELEASE_SETTLE]=CallableAction(lambda context: dependencies.release_settle())
+    actions[State.VALIDATE_FINAL_PLACEMENT]=CallableAction(lambda context: dependencies.validate_final())
     actions[State.SYNC_WORLD_OBJECT]=CallableAction(lambda context: dependencies.sync_world())
     for state in SO101_WORKFLOW.action_states-actions.keys():
         actions[state]=CallableAction(lambda context,s=state: dependencies.recovery(s))

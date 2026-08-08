@@ -12,8 +12,9 @@ def dependencies(calls):
         lambda state: calls.append(("gripper",state)) or ok(),
         lambda state: calls.append(("stable",state)) or ok(),
         lambda: calls.append("verify") or ok(),
-        lambda attached: calls.append(("gazebo",attached)) or ok(),
         lambda attached: calls.append(("moveit",attached)) or ok(),
+        lambda: calls.append("release_settle") or ok(),
+        lambda: calls.append("validate_final") or ok(),
         lambda: calls.append("sync") or ok(),
         lambda state: calls.append(("recovery",state)) or ok(),
     )
@@ -34,8 +35,15 @@ def test_execute_readiness_once_then_plan_and_execute() -> None:
     assert calls == ["ready",("plan",State.MOVE_ABOVE_OBJECT),("execute",State.MOVE_ABOVE_OBJECT),("plan",State.DESCEND),("execute",State.DESCEND)]
 
 
-def test_attachment_and_scene_states_have_separate_ownership() -> None:
+def test_forward_runtime_owns_only_moveit_shadow_and_physical_outcome() -> None:
     calls=[]; runtime=build_runtime(None,None,None,None,dependencies(calls))
-    for state in (State.ATTACH_GAZEBO,State.ATTACH_MOVEIT,State.DETACH_GAZEBO,State.DETACH_MOVEIT,State.SYNC_WORLD_OBJECT):
+    for state in (
+        State.ATTACH_MOVEIT, State.DETACH_MOVEIT, State.OPEN_GRIPPER,
+        State.WAIT_RELEASE_SETTLE, State.VALIDATE_FINAL_PLACEMENT,
+        State.SYNC_WORLD_OBJECT,
+    ):
         run(runtime.actions[state],state,RunMode.EXECUTE)
-    assert calls == [("gazebo",True),("moveit",True),("gazebo",False),("moveit",False),"sync"]
+    assert calls == [
+        ("moveit",True), ("moveit",False), ("gripper",State.OPEN_GRIPPER),
+        "release_settle", "validate_final", "sync",
+    ]
