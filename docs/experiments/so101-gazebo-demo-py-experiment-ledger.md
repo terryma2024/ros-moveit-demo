@@ -1477,3 +1477,21 @@ status: RUNNING
 started_at: 2026-08-08 Asia/Shanghai
 preflight: {initial_attachment: attached, defensive_readback: detached, pair_age_s: 0.009, runtime_arm_trajectory_constraint: 0.008, retry_count: 0}
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0010-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+first_hard_gate_failure: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+max_moving_pad_penetration_m: 0.0010753870010375977
+frozen_ceiling_m: 0.000800002
+initial_fixed_pad_penetration_m: 0.0007748714415356517
+micro_lift_executed: false
+gazebo_attachment_state: detached
+retry_count: 0
+evidence_file: /tmp/so101-py-a-x-neg-0010-grasp-001-202/physical-failure.json
+candidate_result: ELIMINATED
+x_axis_conclusion: Negative X reached the approved -0.001 m bound without eliminating the first hard gate; no range expansion or interpolation retry is allowed.
+decision: ADVANCE_WITHIN_A_LAYER_TO_WORLD_Y_POSITIVE_0005
+next_candidate_offset_m: [0.0, 0.0005, 0.0]
+```
