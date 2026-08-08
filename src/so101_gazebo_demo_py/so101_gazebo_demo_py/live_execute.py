@@ -416,7 +416,18 @@ def run_live_execute(evidence_directory: Path, stop_after: str | None = None) ->
     q6_contact=_current_joint_position("6")
     seating_target=seating_preload_target(q6_contact,-.059600220867817)
     backend.move_gripper(seating_target)
-    contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,max_attempts=1)
+    try:
+        contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,max_attempts=1)
+    except Exception as error:
+        failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"attempts":1}
+        try:
+            latest_contact=evaluate_bilateral_contact(backend.contacts())
+            latest_pose=backend.sample()
+            failure_evidence.update({"latest_contact":asdict(latest_contact),"cup_pose_xyz_xyzw":[*latest_pose.object_xyz,*latest_pose.object_xyzw],"tcp_pose_xyz_xyzw":[*latest_pose.tcp_xyz,*latest_pose.tcp_xyzw],"pose_pair_age_s":latest_pose.pose_pair_age_s,"q6_final":_current_joint_position("6"),"gazebo_attachment_state":backend.attachment_state()})
+        except Exception as capture_error:
+            failure_evidence["evidence_capture_error"]=str(capture_error)
+        (evidence_directory/"physical-failure.json").write_text(json.dumps(failure_evidence,indent=2))
+        raise
     lift,lateral,micro_points,micro_start_z,before,after=physical
     if not attachment_safe_contact(contact) and final_grasp_target < seating_target:
         backend.move_gripper(seating_target)

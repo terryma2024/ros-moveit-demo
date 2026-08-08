@@ -22,6 +22,7 @@ def test_live_forward_path_never_commands_gazebo_attachment() -> None:
     assert ".set_attached(" not in source
     assert '"ATTACH_GAZEBO"' not in source
     assert '"DETACH_GAZEBO"' not in source
+    assert '"physical-failure.json"' in source
 
 
 def test_live_release_order_and_physical_outcome_states_are_explicit() -> None:
