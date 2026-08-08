@@ -7,7 +7,7 @@ success_contract: 同一提交和已校准策略下五次连续 VALID execute，
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
 branch: codex/so101-physical-outcome-validation
 base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
-current_commit: 2f2b315
+current_commit: eacdff2
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI
 confirmed_conclusions:
   - Task 13 branch-tree build、三包测试、dry-run trace 与 uncalibrated plan-only fail-closed gate 已验证（VER-PHYSICAL-001）
@@ -23,7 +23,7 @@ open_hypotheses:
   - 每个 CALIBRATION_REQUIRED 字段的 live calibration 值
   - minimum_support_contact_depth_m 与其他 physical-outcome threshold 的有效 live calibration
 latest_checkpoint: CP-PHYSICAL-006
-next_experiment: TDD-PHYSICAL-002
+next_experiment: CAL-PHYSICAL-003
 ```
 
 ## VER-PHYSICAL-001：Task 13 自动验证
@@ -405,4 +405,31 @@ observed:
   - no physics、motion、controller、geometry、mass、friction、threshold or safety ceiling changed
 decision: KEEP
 next_experiment: CAL-PHYSICAL-003
+```
+
+## CAL-PHYSICAL-003：corrected production identity calibration
+
+```yaml
+experiment_id: CAL-PHYSICAL-003
+status: PLANNED
+prior_experiment: TDD-PHYSICAL-002
+hypothesis: corrected exact identity enables valid production observation-only calibration of every physical-outcome sentinel
+single_variable: observation-only calibration on corrected identity contract
+lifecycle: FULL_RESTART
+preconditions:
+  - source commit eacdff21e046d110ad3c60d8b41cd9353fef9744
+  - overlay /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
+  - ROS_DOMAIN_ID 162 initially empty
+  - GZ_PARTITION so101-physical-outcome-e8207b3d-8fd4-4cc6-ae2b-9671cf27b40a unique
+  - all owned PIDs recorded and production Bullet Featherstone confirmed
+success_criteria:
+  - exact owner/table identity and finite depth samples are stable across bounded capture
+  - every sentinel gets source distribution or semantically identical already-justified gate plus conservative non-permissive margin
+  - all values remain separate from immutable collision/penetration safety ceilings
+failure_criteria:
+  - evidence cannot support a finite non-permissive value without semantic relaxation
+invalid_criteria:
+  - wrong identity/provenance、stale evidence、duplicate domain/partition、controller failure or cleanup contamination
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003
+next_transition: commit PLANNED, recheck domain/provenance, then RUNNING
 ```
