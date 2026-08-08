@@ -699,7 +699,7 @@ next_experiment: HEADLESS-PHYSICAL-001
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-001
-status: PLANNED
+status: INVALID
 source_commit: bd54288
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
@@ -717,5 +717,50 @@ failure_semantics: freeze all evidence before any separate reset；never auto-op
 invalid_criteria: duplicate runtime、wrong overlay/provenance、stale session or cleanup contamination
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001
 cleanup_ownership: only process group created by HEADLESS-PHYSICAL-001
-next_transition: commit PLANNED then RUNNING
+started_at: 2026-08-08T14:11:22+08:00
+ended_at: 2026-08-08T14:13:48+08:00
+invalid_reason: planned source_commit bd54288 did not equal runtime branch HEAD d544ed4；strict provenance mismatch
+diagnostic_only:
+  original_failure: PHYSICAL_GRASP_BILATERAL_STABILITY_TIMEOUT
+  terminal_failure: TASK_OBJECT_SUPPORT_POSE_MISMATCH
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> RECOVER_OPEN_GRIPPER -> RECOVER_DETACH_GAZEBO -> ERROR
+  frozen_gazebo_pose_xyz_m: [0.0100756352767, -0.279838770628, 0.168406680226]
+  intended_support_contact: true
+  gazebo_attached: false
+  moveit_attached: false
+  controllers: all active
+  recovery_checkpoint_issue: CHECKPOINT_INVALID_DATA recovery context does not match phase
+  counting: NONE；不得派生成功/失败率或改阈值
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001/failure-wall-near-contact.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001/failure-gazebo-attachment.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001/failure-controllers.txt
+cleanup: evidence frozen before Ctrl-C；only owned launch session 29797 stopped；no reset performed
+decision: DO_NOT_COUNT_RESTART_WITH_FROZEN_HEAD
+next_experiment: HEADLESS-PHYSICAL-002
+```
+
+## HEADLESS-PHYSICAL-002：provenance-correct execute qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-002
+status: PLANNED
+implementation_commit: 669cd236cf27b9ec592779c05581ac4b8cf3353a
+runtime_source_head: freeze from git rev-parse HEAD after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 167
+GZ_PARTITION: so101-physical-outcome-headless-002-20260808
+lifecycle: FULL_RESTART
+success_criteria: stable final physical outcome plus every hard invariant and independent evidence layer
+failure_criteria: any valid workflow/hard-gate/final-outcome failure after evidence freeze
+invalid_criteria: any source/overlay/domain/partition/session/evidence/cleanup mismatch
+failure_semantics: preserve evidence before separate cleanup；no reset and no off-support automatic open
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002
+cleanup_ownership: only process group created by HEADLESS-PHYSICAL-002
+next_transition: commit PLANNED, freeze resulting HEAD, then RUNNING
 ```
