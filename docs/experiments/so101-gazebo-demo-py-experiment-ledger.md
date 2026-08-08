@@ -2050,3 +2050,30 @@ preflight:
   authoritative_gazebo_pose_stream: fresh
   candidate_retry_count: 0
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-0004-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+observed:
+  fixed_finger_contact: true
+  moving_jaw_contact: true
+  max_fixed_pad_penetration_m: 0.0007116440683603287
+  max_moving_pad_penetration_m: 0.0009567769011482596
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.04760761186480522
+  q6_final: -0.053605206310749054
+  pose_pair_age_s: 0.005
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+evidence_file: /tmp/so101-py-a-z-pos-0004-grasp-001-214/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+candidate_result: ELIMINATED
+positive_z_direction_conclusion: Three bounded positive-Z candidates failed valid hard gates; stop without interpolation, random retry, or scope expansion.
+a_layer_evidence_conclusion: tested improving directions negative-X, positive-Y, and positive-Z did not eliminate the penetration/contact hard gate within their approved bounded candidate sequences
+workflow_result: NO_SUCCESSFUL_PHYSICAL_GRASP
+decision: STOP_AND_REPORT_APPROVAL_BOUNDARY_EXHAUSTED
+```
