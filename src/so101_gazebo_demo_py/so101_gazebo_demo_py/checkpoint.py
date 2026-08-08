@@ -1,4 +1,4 @@
-"""Durable schema-v3 workflow checkpoints."""
+"""Durable schema-v4 workflow checkpoints."""
 
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -47,7 +47,9 @@ class Checkpoint:
     policy_bundle_sha256: str
     simulation_session_id: str
     resumable: bool
-    schema_version: int = 3
+    release_epoch_id: str | None = None
+    release_marker_sequence: int | None = None
+    schema_version: int = 4
 
 
 def _failure(code: str, message: str) -> Failure:
@@ -131,6 +133,8 @@ def _checkpoint_json(value: Checkpoint) -> dict[str, Any]:
         "next_state": value.next_state.value, "expected": _expected_json(value.expected),
         "policy_bundle_sha256": value.policy_bundle_sha256,
         "simulation_session_id": value.simulation_session_id, "resumable": value.resumable,
+        "release_epoch_id": value.release_epoch_id,
+        "release_marker_sequence": value.release_marker_sequence,
     }
 
 
@@ -140,8 +144,15 @@ class FileCheckpointStore:
 
     def commit(self, checkpoint: Checkpoint) -> Failure | None:
         try:
-            if checkpoint.schema_version != 3 or checkpoint.sequence < 0:
+            if checkpoint.schema_version != 4 or checkpoint.sequence < 0:
                 raise ValueError("invalid schema or sequence")
+            if checkpoint.release_epoch_id is not None:
+                if not checkpoint.release_epoch_id or checkpoint.release_marker_sequence is None:
+                    raise ValueError("release epoch requires marker sequence")
+                if checkpoint.release_marker_sequence < 0 or checkpoint.resumable:
+                    raise ValueError("active release epoch must be non-resumable")
+            elif checkpoint.release_marker_sequence is not None:
+                raise ValueError("release marker requires epoch")
             body = json.dumps(_checkpoint_json(checkpoint), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         except (TypeError, ValueError) as error:
             return _failure("CHECKPOINT_INVALID_DATA", str(error))
@@ -159,8 +170,9 @@ class FileCheckpointStore:
                 "schema_version", "run_id", "sequence", "source_mode", "phase",
                 "last_completed_state", "failed_state", "original_failure", "next_state",
                 "expected", "policy_bundle_sha256", "simulation_session_id", "resumable",
+                "release_epoch_id", "release_marker_sequence",
             }
-            if set(document) != expected_keys or document["schema_version"] != 3:
+            if set(document) != expected_keys or document["schema_version"] != 4:
                 raise ValueError("incompatible checkpoint schema")
             expected = document["expected"]
             expected_world = ExpectedWorldState(
@@ -188,7 +200,17 @@ class FileCheckpointStore:
                 expected=expected_world, policy_bundle_sha256=str(document["policy_bundle_sha256"]),
                 simulation_session_id=str(document["simulation_session_id"]),
                 resumable=_bool(document["resumable"]),
+                release_epoch_id=(
+                    None if document["release_epoch_id"] is None
+                    else str(document["release_epoch_id"])
+                ),
+                release_marker_sequence=(
+                    None if document["release_marker_sequence"] is None
+                    else _integer(document["release_marker_sequence"])
+                ),
             )
+            if checkpoint.release_epoch_id is not None and checkpoint.resumable:
+                raise ValueError("active release epoch must be non-resumable")
             return checkpoint, None
         except (KeyError, TypeError, ValueError) as error:
             code = "CHECKPOINT_INVALID_ENUM" if isinstance(error, ValueError) and "is not a valid" in str(error) else "CHECKPOINT_INCOMPATIBLE"

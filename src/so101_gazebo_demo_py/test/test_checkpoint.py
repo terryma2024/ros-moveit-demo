@@ -24,10 +24,11 @@ def checkpoint(sequence: int = 4) -> Checkpoint:
             required_world_objects=("plastic_cup", "table", "pedestal"),
         ),
         policy_bundle_sha256="a" * 64, simulation_session_id="sim-1", resumable=True,
+        release_epoch_id=None, release_marker_sequence=None,
     )
 
 
-def test_checkpoint_round_trips_schema_three_with_owner_permissions(tmp_path: Path) -> None:
+def test_checkpoint_round_trips_release_epoch_schema_with_owner_permissions(tmp_path: Path) -> None:
     path = tmp_path / "state/checkpoint.json"
     store = FileCheckpointStore(path)
     assert store.commit(checkpoint()) is None
@@ -37,8 +38,33 @@ def test_checkpoint_round_trips_schema_three_with_owner_permissions(tmp_path: Pa
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     payload = json.loads(path.read_text())
-    assert payload["schema_version"] == 3
+    assert payload["schema_version"] == 4
     assert payload["policy_bundle_sha256"] == "a" * 64
+
+
+def test_release_epoch_marker_round_trips_and_requires_non_resumable(tmp_path: Path) -> None:
+    value = checkpoint()
+    value = Checkpoint(
+        **{
+            field: getattr(value, field)
+            for field in value.__dataclass_fields__
+            if field not in {"release_epoch_id", "release_marker_sequence", "resumable"}
+        },
+        release_epoch_id="release-1", release_marker_sequence=41, resumable=False,
+    )
+    store = FileCheckpointStore(tmp_path / "release.json")
+    assert store.commit(value) is None
+    assert store.load() == (value, None)
+
+    invalid = Checkpoint(
+        **{
+            field: getattr(value, field)
+            for field in value.__dataclass_fields__
+            if field != "resumable"
+        },
+        resumable=True,
+    )
+    assert store.commit(invalid).code == "CHECKPOINT_INVALID_DATA"
 
 
 def test_corrupt_and_missing_checkpoint_fail_closed(tmp_path: Path) -> None:
