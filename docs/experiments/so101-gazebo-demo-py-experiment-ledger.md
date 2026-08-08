@@ -1423,3 +1423,20 @@ candidate_result: ELIMINATED
 decision: TRY_SECOND_AND_FINAL_LARGER_NEGATIVE_X_BOUND_CANDIDATE
 next_candidate_offset_m: [-0.001, 0.0, 0.0]
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0010-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [-0.001, 0.0, 0.0]}
+lifecycle: FULL_RESTART
+source_commit: 67974bd0f887236e730bcb4aca4fdab6426dc4b3
+bundle_sha256: 48d4715d25bb2154e283d53787d04771a0b8ae8c511d144490eafe77104e2502
+motion_config_sha256: 61907b3a236f8ad43a0c9f2cf688f40e086518c253a13556cd02c1e3e97e5e2c
+ros_domain_id: 201
+gz_partition: so101_py_a_x_neg_0010_plan_001_201
+evidence_root: /tmp/so101-py-a-x-neg-0010-plan-001-201
+owned_tmux_session: so101-py-a-x-plan-201
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
