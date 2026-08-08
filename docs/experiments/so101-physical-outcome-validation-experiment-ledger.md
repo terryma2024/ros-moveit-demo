@@ -1047,12 +1047,11 @@ observed:
   gazebo_attached_at_checkpoint: false
   moveit_attached_at_checkpoint: true
   gripper_open_at_checkpoint: false
-  reconstructed_shadow_position_divergence_m: 0.07356959451535688
-  reconstructed_shadow_orientation_divergence_rad: 0.33214455317902525
+  retracted_unusable_tcp_frame_reconstruction: true
 hard_limits_unchanged:
   planning_shadow_position_m: 0.005
   planning_shadow_orientation_rad: 0.070
-root_cause: physical cup pose diverged catastrophically from the collision-planning shadow before the next carrying plan；the hard planning-validity gate rejected it as designed
+root_cause: undetermined within the adapter's combined CARRYING_ENVIRONMENT_OBSERVATION_INVALID code；checkpoint tcp_pose_world cannot be compared directly with the gripper-link-relative Planning Scene attachment
 safety_disposition: recovery rejected automatic motion/opening away from known support；no reset
 evidence:
   - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-009/source-head.txt
@@ -1063,7 +1062,7 @@ evidence:
   - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-009/failure-evidence.sha256
 evidence_limitation: pose/contact bridge topics disappeared after state-machine exit；last fresh pose is frozen in checkpoint and shadow pose in Planning Scene response
 cleanup: all available evidence frozen before Ctrl-C；only owned launch and ROS_DOMAIN_ID 213 daemon stopped；no reset
-decision: VALID_HARD_SHADOW_DIVERGENCE_FAILURE_RETRY_UNCHANGED_POLICY
+decision: VALID_COMBINED_CARRY_SCENE_FAILURE_REQUIRES_DIAGNOSTIC_DISAMBIGUATION
 ```
 
 ## HEADLESS-PHYSICAL-010：unchanged-policy release qualification retry
@@ -1095,22 +1094,21 @@ observed:
   gazebo_attached_at_checkpoint: false
   moveit_attached_at_checkpoint: true
   gripper_open_at_checkpoint: false
-  reconstructed_shadow_position_divergence_m: 0.08394561123534634
-  reconstructed_shadow_orientation_divergence_rad: 0.2662385317108087
-root_cause: physical cup pose diverged beyond the unchanged planning-shadow hard limits before DESCEND_TO_PLACE
+  retracted_unusable_tcp_frame_reconstruction: true
+root_cause: undetermined within the adapter's combined CARRYING_ENVIRONMENT_OBSERVATION_INVALID code；the attempted tcp-vs-gripper-frame reconstruction is invalid
 safety_disposition: no physical opening、recovery motion or reset
 evidence_root_frozen: true
 cleanup: owned launch and ROS_DOMAIN_ID 215 daemon stopped after evidence freeze；no reset
-decision: VALID_HARD_SHADOW_DIVERGENCE_FAILURE_RETRY_UNCHANGED_POLICY
+decision: VALID_COMBINED_CARRY_SCENE_FAILURE_REQUIRES_DIAGNOSTIC_DISAMBIGUATION
 ```
 
 ## HEADLESS-PHYSICAL-011：second unchanged-policy release qualification retry
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-011
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: d4766f6
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: ba229c79e00010f1038d014e867fb796980411ef
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 216
@@ -1122,4 +1120,18 @@ invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup 
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-011
 cleanup_ownership: only HEADLESS-PHYSICAL-011 launch process group and any daemon created for ROS_DOMAIN_ID 216
 acceptance_counting: qualification only；not part of the five-consecutive-run batch
+observed:
+  failure: CARRYING_ENVIRONMENT_OBSERVATION_INVALID
+  recovery_failure: UNSAFE_RECOVERY_OBSERVATION
+  failed_state: DESCEND_TO_PLACE
+  process_exit_after_failure_report: -11
+  last_completed_state: MOVE_ABOVE_PLACE
+  gazebo_attached_at_checkpoint: false
+  moveit_attached_at_checkpoint: true
+  gripper_open_at_checkpoint: false
+root_cause: undetermined within the adapter's combined carry-scene predicate；requires code-level diagnostic disambiguation before another live retry
+safety_disposition: no physical opening、recovery motion or reset
+evidence_root_frozen: true
+cleanup: owned launch and ROS_DOMAIN_ID 216 daemon stopped after evidence freeze；no reset
+decision: TDD_DISAMBIGUATE_CARRY_SCENE_FAILURE_WITHOUT_CHANGING_GATES
 ```
