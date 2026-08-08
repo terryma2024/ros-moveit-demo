@@ -1470,3 +1470,10 @@ success_criteria: bilateral stable within 0.000800002 m ceiling and physical 0.0
 failure_criteria: any frozen hard gate failure
 post_failure: stop/hold; no open; preserve evidence
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0010-GRASP-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight: {initial_attachment: attached, defensive_readback: detached, pair_age_s: 0.009, runtime_arm_trajectory_constraint: 0.008, retry_count: 0}
+```
