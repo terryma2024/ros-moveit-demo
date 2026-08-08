@@ -1228,3 +1228,31 @@ preflight:
   authoritative_closest_pose_pair_age_s: 0.054
   candidate_retry_count: 0
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-006
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+target_behavior_exercised: true
+first_reported_failure:
+  code: PHYSICAL_MICRO_LIFT_FAILED
+  cup_world_z_delta_m: 0.0012211650609970093
+  lateral_drift_m: 0.0004687790657594292
+safety_precedence:
+  code: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+  initial_max_moving_pad_penetration_m: 0.0005366428522393107
+  failure_capture_max_moving_pad_penetration_m: 0.0011105769081041217
+  frozen_ceiling_m: 0.000800002
+  decision: safety failure takes precedence over motion-outcome failure
+held_failure_evidence:
+  file: /tmp/so101-py-a0-baseline-006-197/physical-failure.json
+  gazebo_attachment_state: detached
+  q6_final: -0.05141725763678551
+  cup_pose_xyz_xyzw: [0.019565850496292114, -0.2807137966156006, 0.16890425980091095, -0.0223275439731697, 0.00637778280226077, -0.0025441182369601604, 0.9997271299600919]
+  pose_pair_age_s: 0.008000000000009777
+  recovery_open_commanded: false
+resolution_commit: 2a002b5ea439a97176457496c1f201a7429d41e6
+decision: REPEAT_UNCHANGED_BASELINE_ONCE_WITH_CORRECT_SAFETY_PRECEDENCE_BEFORE_TARGET_SEARCH
+next_experiment: PY-A0-BASELINE-GRASP-007
+```
