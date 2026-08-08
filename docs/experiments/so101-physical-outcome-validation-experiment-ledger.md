@@ -411,7 +411,7 @@ next_experiment: CAL-PHYSICAL-003
 
 ```yaml
 experiment_id: CAL-PHYSICAL-003
-status: PLANNED
+status: RUNNING
 prior_experiment: TDD-PHYSICAL-002
 hypothesis: corrected exact identity enables valid production observation-only calibration of every physical-outcome sentinel
 single_variable: observation-only calibration on corrected identity contract
@@ -432,4 +432,5 @@ invalid_criteria:
   - wrong identity/provenance、stale evidence、duplicate domain/partition、controller failure or cleanup contamination
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003
 next_transition: commit PLANNED, recheck domain/provenance, then RUNNING
+started_at: 2026-08-08T13:39:00+08:00
 ```
