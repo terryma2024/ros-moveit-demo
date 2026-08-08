@@ -2000,3 +2000,15 @@ states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, R
 success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
 invalid_criteria: startup/readiness/provenance failure before planning
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-0004-PLAN-001
+status: VALID_SUCCESS
+completed_at: 2026-08-08 Asia/Shanghai
+planned_points: {MOVE_ABOVE_OBJECT: 199, DESCEND: 129, LIFT: 119, MOVE_ABOVE_PLACE: 127, DESCEND_TO_PLACE: 100, RETREAT: 132}
+descend_correction_points: 4
+bundle_sha256_observed: 92606daadd9cd012e001071898b0d6f15c16af44822d36d60cd19d0961cf12ca
+forbidden_runtime_events: NONE_OBSERVED
+decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
+next_experiment: PY-A-Z-POS-0004-GRASP-001
+```
