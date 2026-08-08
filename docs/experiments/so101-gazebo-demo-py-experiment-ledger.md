@@ -988,3 +988,38 @@ hard_gate_result: NOT_EVALUATED
 decision: TERMINATE_BATCH_AND_WAIT_FOR_INITIAL_ATTACHMENT_BEFORE_DETACH
 next_experiment: PY-A0-BASELINE-GRASP-004
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-004
+status: PLANNED
+purpose: Exercise the unchanged Python target baseline once after full prepared-joint and controller readiness.
+single_variable: NONE_BASELINE
+lifecycle: FULL_RESTART
+source_commit: d7c65dd571fa8f7b32a4aca2a2fc58dc53a8479d
+config_sha256:
+  motion: 4ba7b35c315615a73238276ea511306bb98e2b4f30bddf0134f3183a6ef1ad4e
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+ros_domain_id: 195
+gz_partition: so101_py_a0_baseline_004_195
+evidence_root: /tmp/so101-py-a0-baseline-004-195
+owned_tmux_session: so101-py-a0-195
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+readiness_contract:
+  - explicit bash -lc overlay boundary resolves this worktree prefix
+  - prepared DetachableJoint durable initial state is observed as attached
+  - defensive detach converges and durable readback is detached
+  - joint_state_broadcaster, arm_controller, and gripper_controller are active
+  - MoveIt and trajectory actions are available
+success_criteria:
+  - bilateral contact is stable for the configured consecutive evidence samples
+  - moving-pad penetration <= 0.000800002 m
+  - 2 mm world-Z micro-lift and existing lateral bound pass
+failure_criteria:
+  - any existing controller/collision/penetration/physical-grasp hard gate fails
+invalid_criteria:
+  - startup, provenance, bridge, controller, MoveIt, or pose/contact observation fails before target behavior is exercised
+post_failure: stop/hold; preserve evidence; no automatic open or reset before capture
+```
