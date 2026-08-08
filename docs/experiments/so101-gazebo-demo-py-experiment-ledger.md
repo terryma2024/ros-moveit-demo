@@ -810,3 +810,67 @@ cleanup:
 conclusion: Python physical-outcome planning parity gate passed; target calibration may proceed to baseline short-path execution.
 next_experiment: PY-A0-BASELINE-GRASP-001
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-001
+status: PLANNED
+purpose: Establish the first hard-gate failure of the preserved Python target baseline with exactly one physical attempt.
+single_variable: NONE_BASELINE
+lifecycle: FULL_RESTART
+source_commit: c4fb2b88b976fb6d0744070d84d7276420558844
+config_sha256:
+  motion: 4ba7b35c315615a73238276ea511306bb98e2b4f30bddf0134f3183a6ef1ad4e
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+ros_domain_id: 192
+gz_partition: so101_py_a0_baseline_001_192
+evidence_root: /tmp/so101-py-a0-baseline-001-192
+owned_tmux_session: so101-py-a0-192
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+success_criteria:
+  - startup owned reset proves Gazebo detached
+  - bilateral contact is stable for the configured consecutive evidence samples
+  - moving-pad penetration <= 0.000800002 m
+  - 2 mm world-Z micro-lift and existing lateral bound pass
+failure_criteria:
+  - any existing controller/collision/penetration/physical-grasp hard gate fails
+invalid_criteria:
+  - startup, provenance, bridge, controller, MoveIt, or pose/contact observation fails before target behavior is exercised
+post_failure: stop/hold; preserve evidence; no automatic open or reset before capture
+```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  domain_partition_collision: NONE_OBSERVED
+  all_waypoint_plan_only: PASSED_BY_PY-PARITY-PLAN-001
+  candidate_retry_count: 0
+```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-001
+status: INVALID
+completed_at: 2026-08-08 Asia/Shanghai
+target_behavior_exercised: false
+command_boundary: before MOVE_ABOVE_OBJECT
+observed:
+  - "CLI failed closed before motion: fresh Gazebo/TCP pose pair unavailable; object and TCP were both None in the workflow sample."
+  - "Root cause: /so101/gazebo_pose_info discards Gazebo entity names, while so101_tcp is a composite TF frame and is not published as a standalone dynamic /tf transform."
+  - "Read-only diagnosis after fix 7df97ec resolved plastic_cup directly from Gazebo Pose_V and world->so101_tcp through tf2; observed pose_pair_age_s was 0.073 s against the unchanged 0.1 s freshness gate."
+evidence:
+  directory: /tmp/so101-py-a0-baseline-001-192
+  observer_fix_commit: 7df97ec24333a467822f59ed96942f92de4b6803
+cleanup:
+  tmux_session: removed
+  detached_owned_gz_pid: 99290 terminated by exact PID after tmux cleanup left it orphaned
+  ros_domain_192_daemon: stopped
+  unrelated_tmux_and_ros_stacks: untouched
+candidate_result: EXCLUDED
+hard_gate_result: NOT_EVALUATED
+decision: TERMINATE_BATCH_AND_FULL_RESTART_WITH_NEW_EXPERIMENT_ID
+next_experiment: PY-A0-BASELINE-GRASP-002
+```
