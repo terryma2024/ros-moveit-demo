@@ -35,7 +35,8 @@ def test_physical_outcome_policy_requires_explicit_calibration():
     physical = validation['physical_outcome']
     assert physical['intended_support_collision'] == 'table::link::collision'
     threshold_fields = {
-        'final_target_region', 'support_height_range_m', 'max_upright_tilt_rad',
+        'minimum_support_contact_depth_m', 'final_target_region',
+        'support_height_range_m', 'max_upright_tilt_rad',
         'max_linear_speed_m_s', 'max_angular_speed_rad_s', 'consecutive_samples',
         'minimum_stable_duration_s', 'sample_interval_s', 'settle_timeout_s',
         'max_observation_age_s', 'max_telemetry_samples',

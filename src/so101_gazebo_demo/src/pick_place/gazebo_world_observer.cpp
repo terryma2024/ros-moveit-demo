@@ -70,6 +70,14 @@ std::string normalizedCollisionIdentity(const std::string & scoped)
   return scoped;
 }
 
+bool isGripperCollision(const std::string & collision)
+{
+  return collision.find("fixed_finger_contact_convex_") != std::string::npos ||
+         collision.find("fixed_fingertip_pad_collision_") != std::string::npos ||
+         collision.find("moving_jaw_contact_convex_") != std::string::npos ||
+         collision.find("moving_fingertip_pad_collision_") != std::string::npos;
+}
+
 }  // namespace
 
 class GazeboWorldObserver::Impl
@@ -77,11 +85,14 @@ class GazeboWorldObserver::Impl
 public:
   Impl(const std::string & world_name, std::string task_object_id,
        const std::string & attachment_topic, std::string simulation_session_id,
+       std::string intended_support_collision, double minimum_support_contact_depth_m,
        double max_observation_age_seconds, std::size_t task_object_settle_samples,
        double task_object_settle_interval_seconds, double task_object_settle_position_tolerance,
        double task_object_settle_orientation_tolerance_rad, bool initially_detached) :
       task_object_id_(std::move(task_object_id)),
       simulation_session_id_(std::move(simulation_session_id)),
+      intended_support_collision_(std::move(intended_support_collision)),
+      minimum_support_contact_depth_m_(minimum_support_contact_depth_m),
       max_observation_age_(std::chrono::duration<double>(max_observation_age_seconds)),
       task_object_pose_stability_(task_object_settle_samples, task_object_settle_position_tolerance,
                                   task_object_settle_orientation_tolerance_rad),
@@ -155,8 +166,8 @@ public:
 
   void onContacts(const std::string & sensor, const gz::msgs::Contacts & message)
   {
+    onSupportContacts(message);
     if (sensor == "task_object_contact_bottom") {
-      onSupportContacts(message);
       return;
     }
     ContactEvidence evidence;
@@ -243,6 +254,7 @@ public:
   {
     SupportEvidence evidence;
     evidence.observed_at = std::chrono::steady_clock::now();
+    bool has_support_counterparty = false;
     for (const auto & contact : message.contact()) {
       const auto & first = contact.collision1().name();
       const auto & second = contact.collision2().name();
@@ -252,13 +264,28 @@ public:
         continue;
       const auto & object_collision = first_task_object ? first : second;
       const auto & other_collision = first_task_object ? second : first;
+      if (isGripperCollision(other_collision))
+        continue;
+      has_support_counterparty = true;
       const auto normalized_support = normalizedCollisionIdentity(other_collision);
       const double normal_sign = first_task_object ? 1.0 : -1.0;
       for (int index = 0; index < contact.position_size(); ++index) {
-        if (index >= contact.depth_size() || !std::isfinite(contact.depth(index)) ||
-            contact.depth(index) < 0.0) {
+        if (index >= contact.depth_size()) {
+          ++evidence.rejected_depth_count;
           continue;
         }
+        const double depth = contact.depth(index);
+        if (std::isfinite(depth)) {
+          evidence.raw_min_depth =
+            evidence.raw_min_depth ? std::min(*evidence.raw_min_depth, depth) : depth;
+          evidence.raw_max_depth =
+            evidence.raw_max_depth ? std::max(*evidence.raw_max_depth, depth) : depth;
+        }
+        if (!std::isfinite(depth) || depth < minimum_support_contact_depth_m_) {
+          ++evidence.rejected_depth_count;
+          continue;
+        }
+        ++evidence.accepted_depth_count;
         TaskObjectSupportContactSample sample;
         sample.task_object_collision = normalizedCollisionIdentity(object_collision);
         sample.support_collision = normalized_support;
@@ -269,13 +296,15 @@ public:
           sample.normal_toward_support_world = {normal_sign * normal.x(), normal_sign * normal.y(),
                                                 normal_sign * normal.z()};
         }
-        sample.depth = contact.depth(index);
+        sample.depth = depth;
         sample.observed_at = evidence.observed_at;
         evidence.collision_names.insert(normalized_support);
         evidence.intended = evidence.intended || normalized_support == intended_support_collision_;
         evidence.samples.push_back(std::move(sample));
       }
     }
+    if (!has_support_counterparty)
+      return;
     std::lock_guard<std::mutex> lock(mutex_);
     support_evidence_ = std::move(evidence);
     condition_.notify_all();
@@ -349,6 +378,12 @@ public:
       snapshot.gazebo_task_object_intended_support_contact = support_evidence_->intended;
       snapshot.gazebo_task_object_support_collision_names = support_evidence_->collision_names;
       snapshot.gazebo_task_object_support_contacts = support_evidence_->samples;
+      snapshot.gazebo_task_object_support_raw_min_depth_m = support_evidence_->raw_min_depth;
+      snapshot.gazebo_task_object_support_raw_max_depth_m = support_evidence_->raw_max_depth;
+      snapshot.gazebo_task_object_support_accepted_depth_count =
+        support_evidence_->accepted_depth_count;
+      snapshot.gazebo_task_object_support_rejected_depth_count =
+        support_evidence_->rejected_depth_count;
       snapshot.gazebo_support_contact_observed_at = support_evidence_->observed_at;
     }
     snapshot.simulation_session_id = simulation_session_id_;
@@ -377,6 +412,10 @@ private:
     bool intended{false};
     std::set<std::string> collision_names;
     std::vector<TaskObjectSupportContactSample> samples;
+    std::optional<double> raw_min_depth;
+    std::optional<double> raw_max_depth;
+    std::size_t accepted_depth_count{0};
+    std::size_t rejected_depth_count{0};
     std::chrono::steady_clock::time_point observed_at{};
   };
 
@@ -431,7 +470,8 @@ private:
 
   std::string task_object_id_;
   std::string simulation_session_id_;
-  const std::string intended_support_collision_{"table::link::collision"};
+  std::string intended_support_collision_;
+  double minimum_support_contact_depth_m_{0.0};
   std::chrono::duration<double> max_observation_age_;
   bool pose_subscription_ok_{false};
   bool attachment_subscription_ok_{false};
@@ -469,15 +509,17 @@ private:
 GazeboWorldObserver::GazeboWorldObserver(
   IWorldObserver & moveit_observer, const std::string & world_name, std::string task_object_id,
   const std::string & attachment_topic, std::string simulation_session_id,
+  std::string intended_support_collision, double minimum_support_contact_depth_m,
   double max_observation_age_seconds, std::size_t task_object_settle_samples,
   double task_object_settle_interval_seconds, double task_object_settle_position_tolerance,
   double task_object_settle_orientation_tolerance_rad, bool initially_detached) :
     moveit_observer_(moveit_observer),
-    impl_(std::make_unique<Impl>(world_name, std::move(task_object_id), attachment_topic,
-                                 std::move(simulation_session_id), max_observation_age_seconds,
-                                 task_object_settle_samples, task_object_settle_interval_seconds,
-                                 task_object_settle_position_tolerance,
-                                 task_object_settle_orientation_tolerance_rad, initially_detached))
+    impl_(std::make_unique<Impl>(
+      world_name, std::move(task_object_id), attachment_topic, std::move(simulation_session_id),
+      std::move(intended_support_collision), minimum_support_contact_depth_m,
+      max_observation_age_seconds, task_object_settle_samples, task_object_settle_interval_seconds,
+      task_object_settle_position_tolerance, task_object_settle_orientation_tolerance_rad,
+      initially_detached))
 {
 }
 

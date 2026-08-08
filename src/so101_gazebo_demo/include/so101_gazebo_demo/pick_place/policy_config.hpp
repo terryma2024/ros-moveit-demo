@@ -183,6 +183,7 @@ struct PlanningShadowPolicy
 struct PhysicalOutcomePolicyConfig
 {
   std::string intended_support_collision;
+  std::optional<double> minimum_support_contact_depth_m;
   std::optional<AxisAlignedTargetRegion> final_target_region;
   std::optional<std::array<double, 2>> support_height_range_m;
   std::optional<double> max_upright_tilt_rad;

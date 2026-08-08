@@ -154,8 +154,9 @@ TEST(SO101GazeboWorldObserver, RequiresFreshPoseAndDurableAttachmentState)
   BaseObserver base;
   const auto world = unique("world").substr(1);
   const auto state_topic = unique("durable");
-  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.5,
-                                           3, 0.005, 0.002, 0.02);
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session",
+                                           "table::link::collision", 0.0, 0.5, 3, 0.005, 0.002,
+                                           0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);
@@ -279,8 +280,9 @@ TEST(SO101GazeboWorldObserver, RejectsNonfiniteTaskObjectPoseEvidence)
   BaseObserver base;
   const auto world = unique("world_nonfinite").substr(1);
   const auto state_topic = unique("durable_nonfinite");
-  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.2,
-                                           3, 0.005, 0.002, 0.02);
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session",
+                                           "table::link::collision", 0.0, 0.2, 3, 0.005, 0.002,
+                                           0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);
@@ -316,8 +318,9 @@ TEST(SO101GazeboWorldObserver, ReobservesMoveItAfterGazeboWait)
   base.fail_on_second = true;
   const auto world = unique("world_moveit_refresh").substr(1);
   const auto state_topic = unique("durable_moveit_refresh");
-  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session", 0.2,
-                                           2, 0.005, 0.002, 0.02);
+  pick_place::GazeboWorldObserver observer(base, world, "plastic_cup", state_topic, "session",
+                                           "table::link::collision", 0.0, 0.2, 2, 0.005, 0.002,
+                                           0.02);
   gz::transport::Node peer;
   auto poses = peer.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info");
   auto state = peer.Advertise<gz::msgs::StringMsg>(state_topic);

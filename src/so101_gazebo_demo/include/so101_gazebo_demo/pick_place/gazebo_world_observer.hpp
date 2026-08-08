@@ -19,7 +19,8 @@ class GazeboWorldObserver final : public IWorldObserver
 public:
   GazeboWorldObserver(IWorldObserver & moveit_observer, const std::string & world_name,
                       std::string task_object_id, const std::string & attachment_topic,
-                      std::string simulation_session_id, double max_observation_age_seconds,
+                      std::string simulation_session_id, std::string intended_support_collision,
+                      double minimum_support_contact_depth_m, double max_observation_age_seconds,
                       std::size_t task_object_settle_samples,
                       double task_object_settle_interval_seconds,
                       double task_object_settle_position_tolerance,

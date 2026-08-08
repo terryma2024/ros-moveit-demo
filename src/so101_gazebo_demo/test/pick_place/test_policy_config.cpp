@@ -199,6 +199,7 @@ physical_outcome:
     kind: axis_aligned_box
     min_xy_m: [-0.12, -0.32]
     max_xy_m: [-0.04, -0.20]
+  minimum_support_contact_depth_m: -0.000001
   support_height_range_m: [0.15, 0.18]
   max_upright_tilt_rad: 0.10
   max_linear_speed_m_s: 0.02
@@ -246,6 +247,7 @@ states:
     EXPECT_NE(start, std::string::npos);
     EXPECT_NE(end, std::string::npos);
     yaml.replace(start, end - start, R"(  final_target_region: CALIBRATION_REQUIRED
+  minimum_support_contact_depth_m: CALIBRATION_REQUIRED
   support_height_range_m: CALIBRATION_REQUIRED
   max_upright_tilt_rad: CALIBRATION_REQUIRED
   max_linear_speed_m_s: CALIBRATION_REQUIRED
@@ -302,6 +304,7 @@ TEST(PolicyConfig, LoadsExplicitCalibrationRequiredPhysicalOutcomePolicy)
   const auto & policy = result.bundle->validation.physical_outcome;
   EXPECT_EQ("table::link::collision", policy.intended_support_collision);
   EXPECT_FALSE(policy.calibration_complete);
+  EXPECT_FALSE(policy.minimum_support_contact_depth_m);
   EXPECT_FALSE(policy.final_target_region);
   EXPECT_FALSE(policy.planning_shadow.max_position_divergence_m);
 }
@@ -315,6 +318,8 @@ TEST(PolicyConfig, LoadsFullyCalibratedPhysicalOutcomePolicyFromFixture)
   ASSERT_TRUE(result.bundle) << (result.failure ? result.failure->message : "");
   const auto & policy = result.bundle->validation.physical_outcome;
   EXPECT_TRUE(policy.calibration_complete);
+  ASSERT_TRUE(policy.minimum_support_contact_depth_m);
+  EXPECT_DOUBLE_EQ(-0.000001, *policy.minimum_support_contact_depth_m);
   ASSERT_TRUE(policy.final_target_region);
   EXPECT_DOUBLE_EQ(-0.12, policy.final_target_region->min_x);
   EXPECT_DOUBLE_EQ(-0.20, policy.final_target_region->max_y);
@@ -352,6 +357,20 @@ TEST(PolicyConfig, RejectsNonFiniteOrNonPositivePhysicalOutcomeThreshold)
                          replaceOnce(PolicyFixture::validValidationYaml(),
                                      "max_linear_speed_m_s: 0.02",
                                      "max_linear_speed_m_s: " + replacement));
+    expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
+  }
+}
+
+TEST(PolicyConfig, RejectsPositiveOrNonFiniteMinimumSupportContactDepth)
+{
+  for (const auto & [name, replacement] :
+       std::vector<std::pair<std::string, std::string>>{{"positive", "0.000001"},
+                                                        {"nan", ".nan"}}) {
+    PolicyFixture fixture("physical_outcome_bad_support_depth_" + name);
+    PolicyFixture::write(fixture.validationPath(),
+                         replaceOnce(PolicyFixture::validValidationYaml(),
+                                     "minimum_support_contact_depth_m: -0.000001",
+                                     "minimum_support_contact_depth_m: " + replacement));
     expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
   }
 }

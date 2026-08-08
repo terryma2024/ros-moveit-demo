@@ -7,11 +7,12 @@ success_contract: 同一提交和已校准策略下五次连续 VALID execute，
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
 branch: codex/so101-physical-outcome-validation
 base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
-current_commit: 45e3b67
+current_commit: f3e49db
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI
 confirmed_conclusions:
   - Task 13 branch-tree build、三包测试、dry-run trace 与 uncalibrated plan-only fail-closed gate 已验证（VER-PHYSICAL-001）
   - 用户已批准 Bullet compound-owner support + live-calibrated bounded-negative-depth noise 下限（APR-PHYSICAL-001）
+  - compound-owner support 与 bounded-negative-depth policy regression 已按 RED→GREEN 验证（TDD-PHYSICAL-001）
 disproven_routes:
   - 0.75 mm seat
   - independent CLOSE seat motion
@@ -20,9 +21,9 @@ disproven_routes:
   - unregistered fixed-port retry fixture
 open_hypotheses:
   - 每个 CALIBRATION_REQUIRED 字段的 live calibration 值
-  - stable Featherstone support regression 的最小 observer/policy wiring
-latest_checkpoint: CP-PHYSICAL-004
-next_experiment: TDD-PHYSICAL-001
+  - minimum_support_contact_depth_m 与其他 physical-outcome threshold 的有效 live calibration
+latest_checkpoint: CP-PHYSICAL-005
+next_experiment: CAL-PHYSICAL-002
 ```
 
 ## VER-PHYSICAL-001：Task 13 自动验证
@@ -261,4 +262,56 @@ open_risks:
   - minimum_support_contact_depth_m 尚未经新的有效 live calibration 冻结
   - production policy 仍须 fail closed
 next_command: 先写 stable Featherstone compound-owner + bounded-negative-noise observer/policy RED tests
+```
+
+## TDD-PHYSICAL-001：compound-owner support + bounded negative noise regression
+
+```yaml
+experiment_id: TDD-PHYSICAL-001
+status: VALID
+prior_experiment: APR-PHYSICAL-001
+hypothesis: observer 可从现有 Featherstone compound-owner stream 接受 noise bound 内的真实 table contact，同时严格拒绝缺失、non-finite 与越界负 depth
+single_variable: support evidence classification 与 minimum_support_contact_depth_m policy wiring
+lifecycle: NO_RUNTIME_STACK_FOR_RED_GREEN
+provenance:
+  source_commit: f3e49db6078e89ae47f39a76d388554b6f858def
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
+  evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/tdd-physical-001
+red:
+  command: compile test_gazebo_world_observer.cpp against pre-change headers
+  result: expected compile failure for missing constructor arguments and WorldSnapshot support depth metrics
+green:
+  - build: pick_place_common + so101_gazebo_demo passed, including clang-tidy/clang-format quality gate
+  - observer: 7/7 passed
+  - policy: 29/29 passed
+  - configuration contract: 18/18 passed
+  - launch contract: 35/35 passed
+  - compound-owner static world contract: 1/1 passed
+  - package suite: 81/83 passed in concurrent run; both unrelated timing failures passed unchanged when isolated
+  - fingertip geometry isolated rerun: 17/17 passed in 100.62s after the concurrent suite hit its 60s timeout
+  - runtime attach smoke isolated reruns: 1/1 passed twice; no product change made for the concurrent timing failures
+observed:
+  - raw task-object collision identity plastic_cup::body::wall_near is retained
+  - finite depth at or above the configured lower bound is accepted; missing、non-finite、or more-negative depth is rejected
+  - accepted/rejected counts and finite raw min/max depth are retained in WorldSnapshot
+  - gripper-contact freshness remains independent and a gripper-only callback does not overwrite support evidence
+  - production policy remains CALIBRATION_REQUIRED; no test vector was copied into production
+  - physics engine、geometry、mass、friction、controller、motion target 与 safety ceilings 均未改变
+  - old so101-reset-world-five-success experiment ledger remains unmodified
+decision: KEEP
+next_experiment: CAL-PHYSICAL-002
+```
+
+## CP-PHYSICAL-005
+
+```yaml
+checkpoint_id: CP-PHYSICAL-005
+last_valid_experiment: TDD-PHYSICAL-001
+current_hypothesis: production Featherstone stable owner-contact depth distribution 可为 minimum_support_contact_depth_m 提供独立、保守且不影响 safety ceiling 的 live calibration
+owned_processes: NONE
+preserved_processes: 其他 worktree 的 Gazebo 与 clang-tidy 未触碰
+open_risks:
+  - production minimum_support_contact_depth_m 仍为 CALIBRATION_REQUIRED
+  - 其他 physical-outcome threshold 仍未完成 live calibration
+next_command: 先创建 CAL-PHYSICAL-002 PLANNED 记录并冻结隔离环境、采样分布、margin 与 invalid criteria，再启动 headless calibration stack
 ```

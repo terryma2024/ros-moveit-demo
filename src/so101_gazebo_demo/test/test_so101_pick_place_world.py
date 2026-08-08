@@ -377,6 +377,7 @@ def test_pick_place_world_has_open_twenty_gram_plastic_cup_geometry():
     assert float(cup.findtext('.//mass')) == pytest.approx(0.020)
 
     collisions = cup.findall('./link/collision')
+    assert collisions[0].attrib['name'] == 'wall_near'
     collision_names = {collision.attrib['name'] for collision in collisions}
     expected_walls = {'wall_near', 'wall_opposite'} | {
         f'wall_{index:02d}' for index in range(1, 12) if index != 6

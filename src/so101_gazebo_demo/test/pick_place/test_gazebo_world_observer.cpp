@@ -59,9 +59,11 @@ bool connected(gz::transport::Node::Publisher & publisher)
 
 struct ObserverFixture
 {
-  explicit ObserverFixture(double max_age = 0.5) :
+  explicit ObserverFixture(double max_age = 0.5,
+                           double minimum_support_contact_depth_m = -0.000001) :
       world(uniqueName("world")), state_topic("/test/" + uniqueName("attachment")),
-      observer(base, world, "plastic_cup", state_topic, "session", max_age, 2, 0.001, 0.002, 0.02),
+      observer(base, world, "plastic_cup", state_topic, "session", "table::link::collision",
+               minimum_support_contact_depth_m, max_age, 2, 0.001, 0.002, 0.02),
       poses(transport.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info")),
       attachment(transport.Advertise<gz::msgs::StringMsg>(state_topic)),
       bottom(transport.Advertise<gz::msgs::Contacts>(
@@ -140,6 +142,33 @@ TEST(GazeboWorldObserver, PreservesFreshBottomToIntendedTableContact)
   EXPECT_TRUE(result.snapshot->gazebo_support_contact_observed_at);
 }
 
+TEST(GazeboWorldObserver, PreservesStableFeatherstoneCompoundOwnerContactWithinNoiseBound)
+{
+  configurePartition();
+  ObserverFixture fixture;
+  fixture.publishReady();
+  ObserverFixture::publishContact(fixture.finger, "plastic_cup::body::wall_near",
+                                  "default::table::link::collision", -0.0000004);
+
+  const auto result = fixture.observer.observe();
+
+  ASSERT_TRUE(result.snapshot) << (result.failure ? result.failure->code : "missing snapshot");
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_intended_support_contact);
+  EXPECT_TRUE(*result.snapshot->gazebo_task_object_intended_support_contact);
+  ASSERT_EQ(1U, result.snapshot->gazebo_task_object_support_contacts.size());
+  EXPECT_EQ("plastic_cup::body::wall_near",
+            result.snapshot->gazebo_task_object_support_contacts.front().task_object_collision);
+  EXPECT_DOUBLE_EQ(-0.0000004, result.snapshot->gazebo_task_object_support_contacts.front().depth);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_support_raw_min_depth_m);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_support_raw_max_depth_m);
+  EXPECT_DOUBLE_EQ(-0.0000004, *result.snapshot->gazebo_task_object_support_raw_min_depth_m);
+  EXPECT_DOUBLE_EQ(-0.0000004, *result.snapshot->gazebo_task_object_support_raw_max_depth_m);
+  EXPECT_EQ(1U, result.snapshot->gazebo_task_object_support_accepted_depth_count);
+  EXPECT_EQ(0U, result.snapshot->gazebo_task_object_support_rejected_depth_count);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_gripper_contact);
+  EXPECT_FALSE(*result.snapshot->gazebo_task_object_gripper_contact);
+}
+
 TEST(GazeboWorldObserver, DoesNotTreatOtherBottomCollisionAsSupport)
 {
   configurePartition();
@@ -177,13 +206,33 @@ TEST(GazeboWorldObserver, KeepsBottomAndFingerFreshnessIndependent)
   EXPECT_GT(*result.snapshot->gazebo_gripper_contact_observed_at, bottom_time);
 }
 
-TEST(GazeboWorldObserver, RejectsNegativeMissingAndNonFiniteSupportDepth)
+TEST(GazeboWorldObserver, RejectsDepthBelowNoiseBoundAndRetainsRawMetrics)
 {
   configurePartition();
   ObserverFixture fixture;
   fixture.publishReady();
-  for (const auto depth : {std::optional<double>{-0.001}, std::optional<double>{},
-                           std::optional<double>{std::numeric_limits<double>::quiet_NaN()}}) {
+  ObserverFixture::publishContact(fixture.finger, "plastic_cup::body::wall_near",
+                                  "table::link::collision", -0.000002);
+
+  const auto result = fixture.observer.observe();
+
+  ASSERT_TRUE(result.snapshot);
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_intended_support_contact);
+  EXPECT_FALSE(*result.snapshot->gazebo_task_object_intended_support_contact);
+  EXPECT_TRUE(result.snapshot->gazebo_task_object_support_contacts.empty());
+  ASSERT_TRUE(result.snapshot->gazebo_task_object_support_raw_min_depth_m);
+  EXPECT_DOUBLE_EQ(-0.000002, *result.snapshot->gazebo_task_object_support_raw_min_depth_m);
+  EXPECT_EQ(0U, result.snapshot->gazebo_task_object_support_accepted_depth_count);
+  EXPECT_EQ(1U, result.snapshot->gazebo_task_object_support_rejected_depth_count);
+}
+
+TEST(GazeboWorldObserver, RejectsMissingAndNonFiniteSupportDepth)
+{
+  configurePartition();
+  ObserverFixture fixture;
+  fixture.publishReady();
+  for (const auto depth :
+       {std::optional<double>{}, std::optional<double>{std::numeric_limits<double>::quiet_NaN()}}) {
     ObserverFixture::publishContact(fixture.bottom, "plastic_cup::body::bottom",
                                     "table::link::collision", depth);
   }
@@ -194,6 +243,8 @@ TEST(GazeboWorldObserver, RejectsNegativeMissingAndNonFiniteSupportDepth)
   ASSERT_TRUE(result.snapshot->gazebo_task_object_intended_support_contact);
   EXPECT_FALSE(*result.snapshot->gazebo_task_object_intended_support_contact);
   EXPECT_TRUE(result.snapshot->gazebo_task_object_support_contacts.empty());
+  EXPECT_EQ(0U, result.snapshot->gazebo_task_object_support_accepted_depth_count);
+  EXPECT_EQ(1U, result.snapshot->gazebo_task_object_support_rejected_depth_count);
 }
 
 TEST(GazeboWorldObserver, IncrementsPoseReceiptSequenceAndTimestamp)
