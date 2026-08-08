@@ -1680,3 +1680,21 @@ candidate_result: ELIMINATED
 decision: TRY_THIRD_AND_FINAL_POSITIVE_Y_DIRECTION_CANDIDATE_000225
 next_candidate_offset_m: [0.0, 0.000225, 0.0]
 ```
+
+```yaml
+experiment_id: PY-A-Y-POS-000225-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.000225, 0.0]}
+rationale: third and final bounded positive-Y candidate, 25 um toward the bilateral baseline from the +0.00025 m missing-contact boundary
+lifecycle: FULL_RESTART
+source_commit: aee37549c1cfb758b58ef44ab88098d2c3344f40
+bundle_sha256: dd5f7bccb82290310f405c1315c0eaafc2bf3cd8e9e3627594893ec11dab3306
+motion_config_sha256: 5a453e3d1728a49898aac41fc41d4475b88e29cd729bc7d72f45a56c0938d27c
+ros_domain_id: 207
+gz_partition: so101_py_a_y_pos_000225_plan_001_207
+evidence_root: /tmp/so101-py-a-y-pos-000225-plan-001-207
+owned_tmux_session: so101-py-a-y-final-plan-207
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
