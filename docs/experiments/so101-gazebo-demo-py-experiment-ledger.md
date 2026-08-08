@@ -1357,3 +1357,32 @@ forbidden_runtime_events: NONE_OBSERVED
 decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
 next_experiment: PY-A-X-NEG-0005-GRASP-001
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0005-GRASP-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [-0.0005, 0.0, 0.0]}
+lifecycle: FULL_RESTART
+source_commit: a6983e8c119903dffc79b80f7a7b76a3e0b9d265
+bundle_sha256: 823ab791350ffcff935eef3c568339a01273ab1b8951db62cc8c9c2892f88a75
+motion_config_sha256: 06ac45ce70ef19e96d58d9548811f9c5f861cd3f66081503064c25a440517748
+ros_domain_id: 200
+gz_partition: so101_py_a_x_neg_0005_grasp_001_200
+evidence_root: /tmp/so101-py-a-x-neg-0005-grasp-001-200
+owned_tmux_session: so101-py-a-x-grasp-200
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+preconditions:
+  - PY-A-X-NEG-0005-PLAN-002 is VALID_SUCCESS
+  - prepared initial attached state observed before defensive detach/readback
+  - all controllers active, runtime arm trajectory constraint 0.008, fresh pose pair
+success_criteria:
+  - bilateral stable contact remains within moving-pad penetration ceiling for every checked sample
+  - physical cup world-Z micro-lift >= 0.002 m and lateral drift <= 0.001 m
+  - Gazebo remains detached and no physical open/recovery occurs
+failure_criteria:
+  - any frozen controller/collision/penetration/physical-grasp hard gate fails
+invalid_criteria:
+  - startup/runtime observation failure before candidate target is exercised
+post_failure: stop/hold and preserve physical-failure.json before cleanup
+```
