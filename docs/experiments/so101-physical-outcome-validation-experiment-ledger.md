@@ -411,7 +411,7 @@ next_experiment: CAL-PHYSICAL-003
 
 ```yaml
 experiment_id: CAL-PHYSICAL-003
-status: RUNNING
+status: VALID
 prior_experiment: TDD-PHYSICAL-002
 hypothesis: corrected exact identity enables valid production observation-only calibration of every physical-outcome sentinel
 single_variable: observation-only calibration on corrected identity contract
@@ -433,4 +433,111 @@ invalid_criteria:
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003
 next_transition: commit PLANNED, recheck domain/provenance, then RUNNING
 started_at: 2026-08-08T13:39:00+08:00
+ended_at: 2026-08-08T13:43:50+08:00
+observed:
+  support_identity:
+    pair: plastic_cup::body::wall_near <-> table::table_top::collision
+    contact_pairs: 3017
+    depth_samples: 12068
+    depth_min_m: -1.49011984973e-08
+    depth_max_m: -1.87528118034e-11
+    depth_mean_m: -7.81770738521e-09
+    depth_stddev_m: 1.6854477327e-09
+  target_pose:
+    commanded_xyz_m: [-0.08, -0.25, 0.165]
+    samples: 1000
+    x_range_m: [-0.0800199732184, -0.0799964815378]
+    y_range_m: [-0.250000029802, -0.249995708466]
+    z_range_m: [0.164993032813, 0.165000006557]
+    observation_span_s: 16.993
+  intended_support_at_target:
+    contact_messages: 1040
+    depth_samples: 4160
+    depth_min_m: -3.72691602024e-08
+    depth_max_m: 7.45178638795e-08
+    depth_mean_m: 1.4075708649e-08
+    depth_stddev_m: 3.68146151999e-08
+  derived_speed:
+    usable_adjacent_pairs: 977
+    raw_nominal_period_s: 0.017
+    linear_max_m_s: 0.000342196114006
+    linear_mean_m_s: 1.87302040927e-06
+    angular_max_rad_s: 0.0134827757314
+    angular_mean_rad_s: 2.00330759412e-05
+calibrated_policy:
+  minimum_support_contact_depth_m:
+    value: -1.0e-07
+    basis: 包络 owner-contact 与 target-contact 的最负有效样本，分别留 6.7x 与 2.7x 数值裕量
+    safety_separation: 该绝对值仅为 0.0008 m grasp ceiling 的 1/8000、0.0013 m final penetration ceiling 的 1/13000；不改变二者
+  final_target_region:
+    value: {kind: axis_aligned_box, min_xy_m: [-0.085, -0.255], max_xy_m: [-0.075, -0.245]}
+    basis: 精确 place target 各轴 +/- 既有且同语义的 place_support_xy_tolerance 0.005 m；远宽于本次稳定 span
+  support_height_range_m:
+    value: [0.155, 0.175]
+    basis: 精确 place target z=0.165 m +/- 既有且同语义的 place_support_height_tolerance 0.010 m
+  max_upright_tilt_rad:
+    value: 0.08726646259971647
+    basis: 复用既有 supportedAtPlace 的同语义 place_support_tilt_tolerance_rad，不放宽
+  max_linear_speed_m_s:
+    value: 0.001
+    basis: 本次稳定窗口最大值 0.000342196114006 m/s 的 2.9x conservative margin，仍要求近静止
+  max_angular_speed_rad_s:
+    value: 0.05
+    basis: 本次稳定窗口最大值 0.0134827757314 rad/s 的 3.7x conservative margin，仍要求近静止
+  consecutive_samples:
+    value: 5
+    basis: 与 0.05 s executor cadence 配合，至少覆盖 0.20 s；不能由单样本成功
+  minimum_stable_duration_s:
+    value: 0.20
+    basis: 五个 counted samples 的首尾跨度；本次稳定证据连续 16.993 s
+  sample_interval_s:
+    value: 0.05
+    basis: 慢于约 0.017 s 原始 Gazebo pose 周期，保证每次采样可获得新的 sequence
+  settle_timeout_s:
+    value: 2.0
+    basis: 复用既有 post_attach_hold_settle_seconds 的已验证物理 settling 时间预算；大于 0.20 s minimum duration
+  max_observation_age_s:
+    value: 0.10
+    basis: 两倍 executor sample interval，且约为正常 0.017 s pose 周期的 5.9x；超时/停更仍 fail closed
+  max_telemetry_samples:
+    value: 40
+    basis: 完整容纳 2.0 s / 0.05 s 的 bounded settle window，不截断 timeout 内分布证据
+  catastrophic_loss:
+    workspace_bounds_m:
+      value: [-0.21, -0.46, 0.12, 0.21, 0.06, 0.30]
+      basis: production table top footprint x=[-0.25,0.25]、y=[-0.50,0.10] 各内缩 cup outer radius 0.04 m；z 下界为 table top 0.12 m，上界覆盖 release/place 而拒绝异常飞失
+    max_relative_position_drift_m:
+      value: 0.005
+      basis: 复用既有 hard carry task_object_position_drift_tolerance，不放宽
+    max_relative_orientation_drift_rad:
+      value: 0.070
+      basis: 复用既有 hard carry task_object_orientation_drift_tolerance_rad，不放宽
+  planning_shadow:
+    max_position_divergence_m:
+      value: 0.005
+      basis: collision shadow 规划有效性不得比既有 hard carry position drift gate 更宽
+    max_orientation_divergence_rad:
+      value: 0.070
+      basis: collision shadow 规划有效性不得比既有 hard carry orientation drift gate 更宽
+    max_pair_age_s:
+      value: 0.10
+      basis: 与独立 final evidence freshness gate 相同，约为正常 pose cadence 的 5.9x，停更仍拒绝
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003/wall-near-1.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003/wall-near-2.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003/wall-near-3.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003/place-pose-1000.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003/place-contact-1000.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003/place-pose-summary.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-003/place-derived-speeds-summary.txt
+invariants:
+  - production Bullet Featherstone、geometry、mass、friction、controller、motion target 未修改
+  - grasp max_penetration_m=0.0013 与所有既有 collision/penetration ceiling 未修改
+  - calibration run 不计入 five-consecutive acceptance
+cleanup:
+  - 仅向 owned launch session 32350 / PID 3861046 发送 SIGINT
+  - owned PIDs 3861046、3861089、3861090、3861120 均已退出
+  - 其他 worktree 的 Gazebo 与 clang-tidy 未触碰
+decision: FREEZE_VALUES_FOR_CONFIG_TDD
+next_experiment: TDD-PHYSICAL-003
 ```
