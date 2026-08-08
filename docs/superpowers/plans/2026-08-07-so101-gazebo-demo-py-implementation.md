@@ -1032,3 +1032,53 @@ detached/world-sync 与视觉独立证据。valid failure 清零，invalid 终�
 - 只有 qualification 后执行 full physical outcome；然后 fresh full package suite、headless、GUI fresh
   screenshot、同 commit/policy 五次连续 FULL_RESTART。controller/physics/geometry/material/final tolerance/
   all hard ceilings 始终冻结。
+
+### P11: Z → q6 → orientation 恢复计划（批准于 2026-08-08，取代仅限两项旧边界）
+
+本任务在 A 层 X/Y/Z 有界候选全部 VALID failure（止于 `PY-A-Z-POS-0004-GRASP-001`）之后恢复
+target 校准。仅取代：（1）同方向三候选失败后的 no-interpolation 停止规则；（2）严格 A→B→C
+顺序。所有 frozen 约束（见 design 同名 addendum）与 process/session ownership 规则不变。
+
+- **唯一写者**：tmux `codex-cua` 已暂停且不得恢复；Python ledger/worktree 唯一写者为 tmux
+  `kimi`。Phase 0 checkpoint recovery 只读（git/ledger/既有测试证据/status/PID ownership），不
+  rerun 测试、不 build、不 launch、不改 target；授权文档作为独立 scoped commit 先行提交，六个
+  preserved dirty path 不进入该 commit。
+- **Phase 1（Z 二分，≤3 VALID 物理候选）**：bracket `[+0.000400000, +0.000500000] m`，只改
+  `grasp_tcp_translation_offset_m[2]`。候选 1 `+0.000450000 m`；按规则替换下界（bilateral 保持但
+  penetration 越顶）或上界（moving contact 缺失/不稳定），候选 2/3 取更新后 bracket 精确中点。
+  全 gate 通过即停；三败则关闭 bracket 进入 Phase 2，不细分、不组合轴。
+- **Phase 2（q6 seating-preload 因果二分，≤3 VALID 候选）**：显式批准的顺序修正，q6 先于
+  orientation。确定性冻结 bilateral contact 且 worst normalized penetration 最小的 Z 候选为诊断
+  锚点；其余全冻结。仅在缺失时以 TDD 增加最小 `seating_preload_rad` plumbing。幅度
+  `[0.0, 0.006] rad`，`safe_lower_q6 <= q6_target <= baseline grasp_close_q6`，仍由实测
+  `q6_contact` 推导。候选 1 `0.003 rad`；penetration 过高则在 `[0, current]` 减小二分，
+  contact/stability 丢失则在 `[current, 0.006]` 增大二分；首个全 gate 通过即停。
+- **Phase 3（单一证据选定 orientation 方向，≤3 VALID 候选）**：先只读 geometry/contact-normal/
+  TF/FK 分析并写竞争假设，选定唯一轴与符号；无可辩护轴/符号则跳过物理实验直接 Phase 4。
+  冻结最佳诊断 Z 锚点并恢复文档化 q6 baseline（除非 Phase 2 已通过）。只改一个 scalar，幅度
+  1°/2.5°/5°（`0.017453292519943295`/`0.04363323129985824`/`0.08726646259971647 rad`），不超过
+  `axis_tolerance_rad`；恶化或通过即提前停止，不自动换轴/反号。
+- **Phase 4（只读可行性审计）**：停止 target 实验，审计 cup/pad 几何、contact normal/depth
+  分布、实测 q6、TCP/cup pose 与 `0.000800002 m` ceiling，提交审计 checkpoint 并恰好给出
+  `FEASIBLE_WITH_NEXT_EXACT_TARGET_HYPOTHESIS` 或 `TARGET_ONLY_INFEASIBLE_UNDER_CURRENT_MODEL`；
+  不可行则停止并请求用户决策，绝不放宽 gate 或改 geometry。
+- **每候选执行 contract**：精确 config/contract RED（先观察到预期失败）→最小 scalar GREEN→
+  focused test + 全量 Python package suite（不回退于 136 passed, 2 skipped）→rebuild、source 正确
+  overlay、验证 installed provenance/prefix/hash→六状态 plan-only（plan 失败即无物理执行淘汰）→
+  唯一 owned FULL_RESTART stack，仅执行到 `VERIFY_PHYSICAL_GRASP`→记录六个 post-command sample、
+  双侧 contact、各 pad max penetration、q6_contact/final、pose-pair age、controller result、Gazebo/
+  MoveIt attachment 状态、exit code、精确证据路径。仅在 bilateral 稳定接触、两侧 depth
+  `<= 0.000800002 m` 且其余 frozen gate 全过时判通过。
+- **Qualification 与发布**：首个通过后冻结 commit/config/policy fingerprint，≥3 次独立
+  FULL_RESTART grasp qualification（VALID failure 结束并仅回到仍授权 phase；INVALID 终止批次）→
+  预注册 detached 物理 micro-lift（精确 `+0.002 m` world-Z，无 forward attach）→在下一个首个失败
+  边界重接 D→E→F→完整物理 pick/place（最终 pose 稳定/直立/在批准范围内，MoveIt membership 独立
+  验证）→fresh clean-cache build/全量 suite、dry-run、完整 plan-only、headless、GUI/CUA 新截图→
+  同冻结 commit/policy 连续五次 FULL_RESTART 成功（INVALID 不计且终止批次，VALID failure 清零）。
+  全部成立后才 scoped commit、推 Gitee、验证 remote SHA、按批准 merge gate 合干净 main、重跑
+  合并树测试、推 main。禁止 force-push、`gh`、dirty main 合并。
+- 每批次保留：source commit 与精确 dirty status、installed overlay/executable/prefix/hash、
+  experiment ID/lifecycle/ROS_DOMAIN_ID/GZ_PARTITION/tmux/PID、命令与 exit code、plan trajectory、
+  controller/joint/TF、Gazebo contact/pose/attachment、MoveIt membership、必要的本轮新视觉证据、
+  preserved 进程与精确 cleanup readback。结论先写
+  `docs/experiments/so101-gazebo-demo-py-experiment-ledger.md` 再做聊天汇报或继续。

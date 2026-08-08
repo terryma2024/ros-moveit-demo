@@ -405,3 +405,89 @@ limits 和原 state validation envelope 内；F timing/scaling 仅使用预注�
 FULL_RESTART 的 `stop_after=VERIFY_PHYSICAL_GRASP`。VALID failure 淘汰且不重复抽样；INVALID 终止批次。
 入选值冻结后至少三次独立 FULL_RESTART qualification，任一 valid failure 回退。只有短路径通过后
 才做 full physical outcome、GUI 和同 commit/policy 连续五次 acceptance。
+
+## 2026-08-08 Z → q6 → orientation 恢复授权 addendum
+
+本 addendum 记录用户在 A 层 X/Y/Z 有界候选全部 VALID failure（止于 ledger
+`PY-A-Z-POS-0004-GRASP-001`，decision `STOP_AND_REPORT_APPROVAL_BOUNDARY_EXHAUSTED`）之后批准的
+新实验计划。它**仅**取代此前两条边界：（1）同方向三个有界候选失败后禁止继续细分的
+no-interpolation 停止规则；（2）严格 A 全层完成后才进入 B、再进入 C 的顺序约束。所有其他
+safety gate、frozen 约束与 process/session ownership 规则不变。
+
+### 唯一写者转移
+
+此前 executor（tmux `codex-cua`）在只读 Phase-0 audit 后暂停，未追加本授权、未改 target、未
+build、未启动 stack。自本 checkpoint 起，Python ledger/worktree 的唯一写者为 tmux 会话 `kimi`
+中的本 executor；不得恢复或向 `codex-cua` 发送输入。checkpoint recovery 为只读（git、ledger、
+既有测试证据、status、PID ownership），不 rerun test suite、不 build、不 launch。
+
+### 冻结约束（不变）
+
+- 不改/不放宽 collision、penetration、planning-shadow、controller、freshness、finite-value、
+  recovery、final-outcome、support、pose-stability 任何 gate；pad penetration ceiling 保持
+  `0.000800002 m`。
+- 不改 physics engine、geometry、mass、friction、controller/plugin/gain、task-object geometry、
+  attachment 语义；normal forward 禁止 Gazebo attach。
+- 无随机重试、无结果挑选、不复用 experiment ID；一个候选只改一个 scalar。
+- VALID failure 淘汰该候选；INVALID 终止该批次，先只调试 contamination/实现缺陷，再用新
+  batch/id；绝不把 target 变更叠加到未解决缺陷上。
+- 每个实验先 PLANNED 预注册；provenance/preflight 后才记 RUNNING；以 VALID_SUCCESS /
+  VALID_FAILURE / VALID_SAFETY_FAILURE / INVALID 之一加精确证据收尾。
+
+### Phase 1：Z 二分，最多三个确定性候选
+
+已知 bracket：下界 `+0.000400000 m`（bilateral、moving depth 过高），上界 `+0.000500000 m`
+（moving contact 缺失）。只改 `grasp_tcp_translation_offset_m[2]`，X/Y/orientation/q6/路径/
+scaling/gate 全部冻结。候选 1 为 `+0.000450000 m`；若 bilateral 保持但 penetration 越顶则以候选
+替换下界，若 moving contact 缺失/不稳定则替换上界，候选 2/3 依次取更新后 bracket 的精确中点。
+任一候选全部 hard gate 通过立即停止；本 phase 最多三个 VALID 物理候选。每候选走完整
+RED→GREEN、focused+全量 package suite（不得回退于 136 passed, 2 skipped）、rebuild/source/
+installed provenance 验证、六状态 plan-only（plan 失败即无物理执行地淘汰）、唯一 owned
+FULL_RESTART、仅执行到 `VERIFY_PHYSICAL_GRASP` 的阶梯，并记录六个 post-command sample、双侧
+contact、各 pad 最大 penetration、q6_contact/final、pose-pair age、controller result、Gazebo/
+MoveIt attachment 状态、exit code 与精确证据路径。三个候选全败则关闭该 Z bracket，不再细分，
+不组合 X/Y/Z，进入 Phase 2。
+
+### Phase 2：q6 seating-preload 因果二分，最多三个 VALID 候选
+
+这是对当前失败的显式批准顺序修正：q6 preload 先于 orientation 测试。确定性选择并冻结具有
+bilateral contact 且 worst normalized penetration 最小的 Z 候选作为诊断锚点（非 qualified
+winner）；冻结其余全部 target/config。若缺少 `seating_preload_rad` 配置 plumbing，仅以 TDD 增加
+最小实现。允许幅度 `[0.0, 0.006] rad`；q6 target 必须保持在
+`safe_lower_q6 <= q6_target <= baseline grasp_close_q6` 且继续由实测 `q6_contact` 推导。候选 1 为
+`0.003 rad`；bilateral 保持但 penetration 过高则在 `[0, current]` 内减小二分，contact/stability
+丢失则在 `[current, 0.006]` 内增大二分。最多三个 VALID 物理候选，首个全 gate 通过即停。全部失败
+则关闭 q6 preload，进入 Phase 3。
+
+### Phase 3：单一证据选定的 orientation 方向，最多三个 VALID 候选
+
+先对既有证据做只读 geometry/contact-normal/TF/FK 分析，写出竞争假设并选定最可能在保持 fixed
+contact 的同时卸载 moving pad 的唯一 roll/pitch/yaw 轴与符号；不得猜测。若无可辩护的轴/符号，
+不做任何 orientation 物理实验，直接进入 Phase 4。冻结最佳诊断 Z 锚点，并恢复文档化 q6 baseline
+（除非 Phase 2 已全 gate 通过）。只改一个 orientation scalar，幅度按序为
+`0.017453292519943295`、`0.04363323129985824`、`0.08726646259971647 rad`，不超过既有
+`axis_tolerance_rad`。响应与假设相反地恶化或候选通过即提前停止；不自动尝试另一轴或反号。
+
+### Phase 4：只读 geometry/contract 可行性审计
+
+停止 target 实验。在不改任何控制 geometry/physics/controller/gate 的文件前提下审计 cup
+radius/wall、pad gap/thickness/collision surface、contact normal/depth 分布、实测 q6、TCP/cup
+pose 与 `0.000800002 m` ceiling，判断在当前模型与已授权 target DOF 下是否存在非空稳健区域使
+bilateral contact 且双侧 penetration 均在 ceiling 内。提交审计证据/checkpoint 并恰好给出以下之一
+结论：`FEASIBLE_WITH_NEXT_EXACT_TARGET_HYPOTHESIS` 或
+`TARGET_ONLY_INFEASIBLE_UNDER_CURRENT_MODEL`。若不可行，停止并请求用户决策；绝不放宽 gate 或
+修改 geometry。
+
+### Qualification 与原流水线
+
+首个 grasp 候选通过后：冻结完整 commit/config/policy fingerprint，至少三次独立 FULL_RESTART
+grasp qualification（任一 VALID failure 结束 qualification 并仅回到仍获授权的有界 phase；INVALID
+终止批次）；三次通过后预注册并运行 detached 物理 micro-lift（精确 world-Z `+0.002 m`，无 forward
+Gazebo attach，lateral/orientation/penetration/shadow gate 不变）；随后在下一个首个失败边界重新
+接入已批准的 D→E→F target-only 流程，一次一个 scalar；执行完整物理 pick/place，最终 Gazebo cup
+pose 必须稳定、直立、落在已批准放置范围内，MoveIt scene membership 独立验证；之后 fresh
+clean-cache build/全量 suite、dry-run、完整 plan-only、headless、GUI/CUA 新截图，以及同一冻结
+commit/policy 连续五次 FULL_RESTART 物理结果成功（INVALID 不计且终止批次，VALID failure 清零
+连击）。仅在完整 contract 与五连成功后才做 scoped commit、推送 feature branch 到 Gitee、验证
+remote SHA、按既有批准 merge gate 合并到干净 main worktree、重跑合并树测试并推送 main。禁止
+force-push、禁止 `gh`、禁止在 dirty main 上合并。

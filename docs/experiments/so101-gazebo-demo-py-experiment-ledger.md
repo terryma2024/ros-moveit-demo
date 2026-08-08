@@ -2077,3 +2077,56 @@ a_layer_evidence_conclusion: tested improving directions negative-X, positive-Y,
 workflow_result: NO_SUCCESSFUL_PHYSICAL_GRASP
 decision: STOP_AND_REPORT_APPROVAL_BOUNDARY_EXHAUSTED
 ```
+
+```yaml
+checkpoint_id: CP-AUTHORIZATION-Z-Q6-ORIENTATION-001
+recorded_at: 2026-08-08 20:53 Asia/Shanghai
+branch: codex/so101-gazebo-demo-py
+recovery_head: deecea5aa020b9e3db57eef6eae5d83b1cf8878a
+recovery_head_subject: docs(so101_py): close raised grasp search
+sole_ledger_writer:
+  previous_executor: tmux codex-cua (paused after read-only Phase-0 audit; appended nothing, changed no target, built nothing, started no stack)
+  current_executor: tmux kimi (this session); only this session may write the Python ledger/worktree
+  instruction: do not resume or send input to codex-cua
+checkpoint_recovery_method: READ_ONLY from git, ledger, existing test evidence, git status, and PID ownership; no test suite rerun, no build, no launch, no process cleanup, no target change before this authorization commit
+recovered_state:
+  committed_motion_policy: grasp_tcp_translation_offset_m [0.0, 0.0, 0.0004] in config/motion_policies/light_cup_wall_pick.yaml
+  last_experiment: PY-A-Z-POS-0004-GRASP-001 VALID_SAFETY_FAILURE (moving depth 0.0009567769011482596 m > 0.000800002 m ceiling; q6_contact -0.04760761186480522; q6_final -0.053605206310749054)
+  last_decision: STOP_AND_REPORT_APPROVAL_BOUNDARY_EXHAUSTED
+  package_suite_checkpoint: 136 passed, 2 skipped
+  installed_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install (pick_place_state_machine installed 2026-08-08 20:00:42 +0800)
+  dirty_status_exact:
+    - M src/so101_gazebo_demo_py/config/so101_controllers.yaml
+    - M src/so101_gazebo_demo_py/config/task_objects/light_plastic_cup.yaml
+    - M src/so101_gazebo_demo_py/config/validation_policies/light_cup_wall_pick.yaml
+    - M src/so101_gazebo_demo_py/docs/provenance.json
+    - M src/so101_gazebo_demo_py/test/test_provenance.py
+    - ?? src/so101_gazebo_demo_py/test/test_main_strategy_parity.py
+  owned_processes: NONE
+  preserved_processes:
+    - {pid: 3272995, process: gz_sim_server, reason: uncertain pre-existing physical-worktree ownership}
+    - {pid: 652055, process: run-clang-tidy-18, reason: unrelated so101-workspace-sampler command}
+    - {tmux: codex}
+    - {tmux: codex-cua}
+    - {tmux: kimi}
+  handoff_pid_307640: ABSENT at recovery (previously non-tmux Kimi process on pts/1; not terminated by this session)
+  task_stack_present: false
+new_authorization:
+  supersedes_only:
+    - no-interpolation stop rule after three failed bounded candidates in one direction
+    - strict A-before-B-before-C layer ordering
+  unchanged: all frozen safety gates (pad penetration ceiling 0.000800002 m, collision, planning-shadow, controller, freshness, finite-value, recovery, final-outcome, support, pose-stability), physics/geometry/mass/friction/controller semantics, attachment semantics, one-scalar-per-candidate, PLANNED->RUNNING->terminal lifecycle, no random retry/result shopping/reused IDs, INVALID stops batch
+  phases:
+    phase_1: deterministic Z bisection within [+0.000400000, +0.000500000] m, candidates +0.000450000 then exact bracket midpoints, maximum three VALID physical candidates, stop on all-gate pass
+    phase_2: q6 seating-preload causal bisection in [0.0, 0.006] rad from achieved q6_contact, candidate 1 preload 0.003 rad, maximum three VALID candidates; explicitly approved to run before orientation
+    phase_3: one evidence-selected orientation axis/sign after read-only geometry analysis, magnitudes 1/2.5/5 deg within axis_tolerance_rad, maximum three VALID candidates; skipped if no defensible axis/sign
+    phase_4: read-only geometry/contract feasibility audit concluding exactly FEASIBLE_WITH_NEXT_EXACT_TARGET_HYPOTHESIS or TARGET_ONLY_INFEASIBLE_UNDER_CURRENT_MODEL; infeasible stops for user decision
+  qualification: freeze commit/config/policy fingerprint; >=3 independent FULL_RESTART grasp qualifications; then detached +0.002 m world-Z micro-lift; rejoin D->E->F at next first failing boundary; full physical pick/place; fresh clean-cache build/full suite, dry-run, plan-only, headless, GUI/CUA fresh screenshots; five consecutive frozen commit/policy FULL_RESTART successes before scoped Gitee push and approved clean-main merge
+reference_addenda_read:
+  - /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/docs/superpowers/specs/2026-08-07-so101-physical-outcome-validation-design.md sections 17.1-17.3
+  - /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/docs/superpowers/plans/2026-08-07-so101-physical-outcome-validation.md section "Approved execution addendum: bounded grasp/motion target calibration"
+  - skill reference .agents/skills/so101-dev/references/experiment-ledger.md does not exist in this checkout (verified by directory glob); remaining mandatory reads completed in full
+commit_scope: only docs/experiments/so101-gazebo-demo-py-experiment-ledger.md, docs/superpowers/specs/2026-08-07-so101-gazebo-demo-py-design.md, docs/superpowers/plans/2026-08-07-so101-gazebo-demo-py-implementation.md
+next_experiment: PY-A-Z-POS-00045-PLAN-001 (Phase 1 candidate 1, +0.000450000 m; PLANNED registration after this authorization commit)
+next_command: append-only authorization commit, then config/contract RED for the Phase 1 Z candidate
+```
