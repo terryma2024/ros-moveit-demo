@@ -52,6 +52,13 @@ def relative_pose(parent, child):
     return (*translation,*_quaternion_multiply(inverse,child[3:]))
 
 
+def translated_grasp_pose(pose, translation_offset_m):
+    return (
+        *(pose[index] + translation_offset_m[index] for index in range(3)),
+        *pose[3:],
+    )
+
+
 def carry_with_shadow_gates(backend, policies, shadow_gate):
     for name, policy in policies.items():
         shadow_gate(name)
@@ -224,6 +231,58 @@ def _moveit_plan_waypoints(waypoints) -> int:
         rclpy.spin_once(node,timeout_sec=.1)
     if not latest:
         node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
+
+
+def _moveit_plan_grasp_translation(start_positions, translation_offset_m) -> int:
+    import rclpy
+    from moveit_msgs.action import MoveGroup
+    from moveit_msgs.srv import GetPositionFK
+    from rclpy.action import ActionClient
+    from sensor_msgs.msg import JointState
+
+    rclpy.init(); node=rclpy.create_node("so101_py_grasp_translation_planner")
+    names=("1","2","3","4","5")
+    fk=node.create_client(GetPositionFK,"/compute_fk")
+    try:
+        if not fk.wait_for_service(timeout_sec=10.0):
+            raise RuntimeError("/compute_fk unavailable")
+        request=GetPositionFK.Request()
+        request.header.frame_id="world"; request.fk_link_names=["so101_tcp"]
+        request.robot_state.joint_state=JointState(
+            name=list(names),position=list(start_positions),
+        )
+        future=fk.call_async(request)
+        rclpy.spin_until_future_complete(node,future,timeout_sec=10.0)
+        response=future.result() if future.done() else None
+        if response is None or response.error_code.val != 1 or not response.pose_stamped:
+            raise RuntimeError("DESCEND endpoint FK failed")
+        pose=response.pose_stamped[0].pose
+        baseline=(
+            pose.position.x,pose.position.y,pose.position.z,
+            pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w,
+        )
+        target=translated_grasp_pose(baseline,translation_offset_m)
+        client=ActionClient(node,MoveGroup,"/move_action")
+        if not client.wait_for_server(timeout_sec=10.0):
+            raise RuntimeError("/move_action unavailable")
+        future=client.send_goal_async(
+            make_pose_move_group_goal(names,start_positions,target),
+        )
+        rclpy.spin_until_future_complete(node,future,timeout_sec=10.0)
+        handle=future.result() if future.done() else None
+        if handle is None or not handle.accepted:
+            raise RuntimeError("grasp translation plan rejected")
+        future=handle.get_result_async()
+        rclpy.spin_until_future_complete(node,future,timeout_sec=20.0)
+        wrapped=future.result() if future.done() else None
+        if wrapped is None or wrapped.result.error_code.val != 1:
+            raise RuntimeError("grasp translation planning failed")
+        points=len(wrapped.result.planned_trajectory.joint_trajectory.points)
+        if points == 0:
+            raise RuntimeError("grasp translation plan was empty")
+        return points
+    finally:
+        node.destroy_node(); rclpy.shutdown()
         raise RuntimeError("joint states unavailable")
     names=("1","2","3","4","5"); index={name:i for i,name in enumerate(latest[-1].name)}
     current=tuple(latest[-1].position[index[name]] for name in names)
@@ -238,7 +297,11 @@ def _moveit_plan_waypoints(waypoints) -> int:
         node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
 
 
-def _moveit_world_z_execute(delta_m: float, local_x_m: float = 0.0) -> tuple[int, float]:
+def _moveit_world_z_execute(
+    delta_m: float,
+    local_x_m: float = 0.0,
+    world_translation_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> tuple[int, float]:
     import rclpy
     from moveit_msgs.action import ExecuteTrajectory, MoveGroup
     from rclpy.action import ActionClient
@@ -259,6 +322,7 @@ def _moveit_world_z_execute(delta_m: float, local_x_m: float = 0.0) -> tuple[int
     target_pose=make_world_z_target((transform.transform.translation.x,transform.transform.translation.y,transform.transform.translation.z,transform.transform.rotation.x,transform.transform.rotation.y,transform.transform.rotation.z,transform.transform.rotation.w),delta_m)
     dx,dy,dz=local_x_world_delta(target_pose[3:],local_x_m)
     target_pose=(target_pose[0]+dx,target_pose[1]+dy,target_pose[2]+dz,*target_pose[3:])
+    target_pose=translated_grasp_pose(target_pose,world_translation_m)
     client=ActionClient(node,MoveGroup,"/move_action")
     if not client.wait_for_server(timeout_sec=10.): raise RuntimeError("/move_action unavailable")
     future=client.send_goal_async(make_pose_move_group_goal(names,positions,target_pose)); rclpy.spin_until_future_complete(node,future,timeout_sec=5.)
@@ -382,29 +446,42 @@ def _apply_scene(operation: str, object_pose: tuple[float,...] | None = None) ->
     node.destroy_node(); rclpy.shutdown(); return result
 
 
-def run_live_plan_only(evidence_directory: Path, state_name: str) -> dict:
+def run_live_plan_only(
+    evidence_directory: Path,
+    state_name: str,
+    motion_policy: Path | None = None,
+) -> dict:
     from ament_index_python.packages import get_package_share_directory
     from .domain import State
     share=Path(get_package_share_directory("so101_gazebo_demo_py"))
     bundle=load_policy_bundle(
         share/"config/task_objects/light_plastic_cup.yaml",
-        share/"config/motion_policies/light_cup_wall_pick.yaml",
+        motion_policy or share/"config/motion_policies/light_cup_wall_pick.yaml",
         share/"config/validation_policies/light_cup_wall_pick.yaml",
     )
     state=State(state_name)
     if state not in bundle.motion.states:
         raise ValueError(f"motion policy missing state {state_name}")
     points=_moveit_plan_waypoints(bundle.motion.states[state].waypoints)
+    if state.value == "DESCEND" and any(bundle.motion.grasp_tcp_translation_offset_m):
+        points += _moveit_plan_grasp_translation(
+            bundle.motion.states[state].waypoints[-1],
+            bundle.motion.grasp_tcp_translation_offset_m,
+        )
     result={"status":"PLAN_ONLY_COMPLETE","current_state":state_name,"state_trace":[state_name],"exit_code":0,"planned_points":points,"policy_sha256":bundle.sha256}
     evidence_directory=Path(evidence_directory); evidence_directory.mkdir(parents=True,exist_ok=True)
     (evidence_directory/f"plan-only-{state_name}.json").write_text(json.dumps(result,indent=2))
     return result
 
 
-def run_live_execute(evidence_directory: Path, stop_after: str | None = None) -> dict:
+def run_live_execute(
+    evidence_directory: Path,
+    stop_after: str | None = None,
+    motion_policy: Path | None = None,
+) -> dict:
     from ament_index_python.packages import get_package_share_directory
     share=Path(get_package_share_directory("so101_gazebo_demo_py"))
-    bundle=load_policy_bundle(share/"config/task_objects/light_plastic_cup.yaml",share/"config/motion_policies/light_cup_wall_pick.yaml",share/"config/validation_policies/light_cup_wall_pick.yaml")
+    bundle=load_policy_bundle(share/"config/task_objects/light_plastic_cup.yaml",motion_policy or share/"config/motion_policies/light_cup_wall_pick.yaml",share/"config/validation_policies/light_cup_wall_pick.yaml")
     backend=RosGazeboLiveBackend(
         bundle.validation.physical_outcome.planning_shadow.max_pair_age_s,
     )
@@ -413,6 +490,9 @@ def run_live_execute(evidence_directory: Path, stop_after: str | None = None) ->
     move_above=bundle.motion.states[next(state for state in bundle.motion.states if state.value=="MOVE_ABOVE_OBJECT")].waypoints
     backend.move_arm(move_above[:-1]); moveit_points=_moveit_plan_execute(move_above[-1])
     state=next(state for state in bundle.motion.states if state.value=="DESCEND"); descend=bundle.motion.states[state]; backend.move_arm(descend.waypoints)
+    grasp_offset=bundle.motion.grasp_tcp_translation_offset_m
+    if any(grasp_offset):
+        _moveit_world_z_execute(0.0,world_translation_m=grasp_offset)
     close_target=bundle.motion.grasp_close_q6
     backend.move_gripper(close_target)
     initial_contact=evaluate_bilateral_contact(backend.contacts())

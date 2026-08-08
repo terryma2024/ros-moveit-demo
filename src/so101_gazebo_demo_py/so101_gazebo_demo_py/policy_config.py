@@ -53,6 +53,8 @@ class MotionPolicyConfig:
     object_id: str
     arm_joints: tuple[str, ...]
     gripper_joint: str
+    approach_outside_clearance_m: float
+    grasp_tcp_translation_offset_m: tuple[float, float, float]
     preopen_q6: float
     grasp_close_q6: float
     release_q6: float
@@ -224,6 +226,25 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
     if joint_names != ["1", "2", "3", "4", "5"]:
         raise ConfigurationError("CONFIGURATION_ARM_JOINTS", "arm_joints must be exactly 1 through 5")
     actions = _mapping(document, "gripper_actions")
+    clearance = _positive(
+        document.get("approach_outside_clearance_m"),
+        "approach_outside_clearance_m",
+    )
+    grasp_offset = _vector(
+        document.get("grasp_tcp_translation_offset_m"),
+        3,
+        "grasp_tcp_translation_offset_m",
+    )
+    if sum(value != 0.0 for value in grasp_offset) > 1:
+        raise ConfigurationError(
+            "CONFIGURATION_GRASP_TCP_TRANSLATION",
+            "grasp TCP translation candidate must change only one axis",
+        )
+    if any(abs(value) > clearance for value in grasp_offset):
+        raise ConfigurationError(
+            "CONFIGURATION_GRASP_TCP_TRANSLATION",
+            "grasp TCP translation candidate exceeds approach clearance",
+        )
     states: dict[State, StateMotionConfig] = {}
     for name, raw in _mapping(document, "states").items():
         state = _state(name, "motion.states")
@@ -247,6 +268,8 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
         object_id=_string(document, "object_id"),
         arm_joints=tuple(joint_names),
         gripper_joint="6",
+        approach_outside_clearance_m=clearance,
+        grasp_tcp_translation_offset_m=grasp_offset,
         preopen_q6=_number(actions.get("preopen_q6"), "gripper_actions.preopen_q6"),
         grasp_close_q6=_number(actions.get("grasp_close_q6"), "gripper_actions.grasp_close_q6"),
         release_q6=_number(actions.get("release_q6"), "gripper_actions.release_q6"),
