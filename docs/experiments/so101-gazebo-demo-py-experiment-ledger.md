@@ -2801,3 +2801,64 @@ prelaunch_process_audit:
   uncertain: [3272995]
   task_stack_present: false
 ```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-000375-GRASP-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  initial_attachment_state: attached
+  defensive_detach_readback: detached
+  controllers: [joint_state_broadcaster_active, arm_controller_active, gripper_controller_active]
+  runtime_arm_trajectory_constraint: 0.008
+  installed_motion_config_sha256: dd60869c840970a643793cd22de226586348451be2442cde5b1f2d53590f1fd8
+  candidate_retry_count: 0
+```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-000375-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+observed:
+  fixed_finger_contact: true
+  moving_jaw_contact: true
+  initial_max_fixed_pad_penetration_m: 0.0006290905294008553
+  initial_max_moving_pad_penetration_m: 0.00048624485498294234
+  final_max_fixed_pad_penetration_m: 0.0009917902061715722
+  final_max_moving_pad_penetration_m: 0.0008523993310518563
+  reported_ceiling_breach_m: 0.0008779686759226024
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.044668737798929214
+  seating_target_q6: -0.04841873779892922
+  q6_final: -0.03925427794456482
+  pose_pair_age_s: 0.005
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+  exit_code: 1
+  note: both pads exceeded the ceiling at the stability stage and q6 was pushed back by the cup; run-to-run physical variance remains large
+evidence_file: /tmp/so101-py-c-q6-preload-000375-grasp-001-226/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 remains
+  ros_domain_226_daemon: stopped
+candidate_result: ELIMINATED
+phase2_conclusion: All three q6 seating-preload candidates failed valid hard gates (0.003 penetration, 0.0015 contact loss, 0.00375 penetration); the q6 preload causal bisection is closed
+decision: CLOSE_Q6_PRELOAD_AND_ADVANCE_TO_PHASE3_ORIENTATION_ANALYSIS
+```
+
+```yaml
+checkpoint_id: CP-PHASE3-ORIENTATION-ANALYSIS-001
+recorded_at: 2026-08-08 Asia/Shanghai
+phase: PHASE_3_ONE_EVIDENCE_SELECTED_ORIENTATION_DIRECTION
+contract:
+  - restore documented q6 baseline (seating_preload_rad 0.006) and freeze the diagnostic Z anchor +0.0004 m before any orientation candidate
+  - read-only geometry/contact-normal/TF/FK analysis of existing evidence first; write competing hypotheses and select one axis and sign; do not guess
+  - if no defensible axis/sign exists, perform no physical orientation experiment and advance to Phase 4
+  - magnitudes in selected sign: 0.017453292519943295, 0.04363323129985824, 0.08726646259971647 rad, within axis_tolerance_rad
+  - stop early if response worsens contrary to hypothesis or a candidate passes; never try another axis or opposite sign automatically
+next_action: RED/GREEN restore seating_preload_rad 0.006, then read-only orientation analysis
+```
