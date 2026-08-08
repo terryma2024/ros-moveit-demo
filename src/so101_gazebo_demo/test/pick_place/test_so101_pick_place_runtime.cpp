@@ -1153,9 +1153,17 @@ TEST(SO101MotionContract, CarryRetainsContactQ6AndRelativeDriftAsTelemetry)
                     expected.qy * perturbation.qy - expected.qz * perturbation.qz};
     return world;
   };
-  const auto before = carrying_world(0.0, true);
+  auto before = carrying_world(0.0, true);
   auto axial_spin =
     carrying_world(profile.task_object_orientation_drift_tolerance_rad + 0.003, true);
+  before.joint_positions[profile.gripper_joint] =
+    profile.q6_contact - profile.q6_regrasp_squeeze_offset;
+  axial_spin.joint_positions[profile.gripper_joint] =
+    before.joint_positions.at(profile.gripper_joint);
+  before.gazebo_task_object_gripper_contact = true;
+  axial_spin.gazebo_task_object_gripper_contact = true;
+  before.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth;
+  axial_spin.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth;
   // Bullet may report a non-zero instantaneous q6 velocity while the closed
   // gripper is holding the attached cup.  The carry boundary remains valid
   // when q6 position, geometry, and both attachment facts are still in bounds.
@@ -1178,6 +1186,15 @@ TEST(SO101MotionContract, CarryRetainsContactQ6AndRelativeDriftAsTelemetry)
                                                                : tilt_result.failures.front().code);
   EXPECT_GT(tilt_result.metrics.at("task_object_follow_tilt_error_rad"),
             profile.task_object_orientation_drift_tolerance_rad);
+
+  auto penetrated = axial_spin;
+  penetrated.gazebo_task_object_gripper_max_depth = profile.max_gripper_contact_depth + 1e-6;
+  EXPECT_FALSE(
+    contract->validate(before, penetrated, {spp::ActionStatus::SUCCEEDED, std::nullopt}).ok);
+  auto nonfinite = axial_spin;
+  nonfinite.joint_positions[profile.gripper_joint] = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_FALSE(
+    contract->validate(before, nonfinite, {spp::ActionStatus::SUCCEEDED, std::nullopt}).ok);
 }
 
 TEST(SO101MotionContract, ContactCriticalDescentsRejectSucceededActionsOutsideArmEndpointContract)
