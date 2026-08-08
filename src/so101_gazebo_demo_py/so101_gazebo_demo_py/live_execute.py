@@ -61,6 +61,22 @@ def carry_with_shadow_gates(backend, policies, shadow_gate):
         )
 
 
+def plan_waypoint_sequence(planner, names, start, waypoints) -> int:
+    current=tuple(start); total=0
+    for target in waypoints:
+        target=tuple(target)
+        outcome=planner.plan_joint_path(
+            JointPlanRequest(tuple(names),current,target,.03,.03,8.),15.,
+        )
+        if outcome.failure:
+            raise RuntimeError(str(outcome.failure))
+        points=len(outcome.trajectory.joint_trajectory.points)
+        if points == 0:
+            raise RuntimeError("MoveIt returned an empty waypoint plan")
+        total+=points; current=target
+    return total
+
+
 def attachment_safe_contact(evidence) -> bool:
     depth=evidence.max_moving_pad_penetration_m
     return evidence.bilateral and depth is not None and depth <= MOVING_PAD_MESH_PENETRATION_CEILING_M
@@ -190,6 +206,36 @@ def _moveit_plan_execute(target: tuple[float,...], execute: bool = True) -> int:
     node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
     if result is not None and result.failure: raise RuntimeError(str(result.failure))
     return points
+
+
+def _moveit_plan_waypoints(waypoints) -> int:
+    import rclpy
+    from moveit_msgs.srv import GetMotionPlan
+    from rclpy.qos import qos_profile_sensor_data
+    from sensor_msgs.msg import JointState
+    rclpy.init(); node=rclpy.create_node("so101_py_live_waypoint_planner")
+    latest=[]
+    subscription=node.create_subscription(
+        JointState,"/joint_states",lambda message:latest.append(message),
+        qos_profile_sensor_data,
+    )
+    deadline=time.monotonic()+10.0
+    while not latest and time.monotonic()<deadline:
+        rclpy.spin_once(node,timeout_sec=.1)
+    if not latest:
+        node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
+        raise RuntimeError("joint states unavailable")
+    names=("1","2","3","4","5"); index={name:i for i,name in enumerate(latest[-1].name)}
+    current=tuple(latest[-1].position[index[name]] for name in names)
+    progress=lambda: rclpy.spin_once(node,timeout_sec=.01)
+    planner=MoveItPlanningClient(
+        node.create_client(GetMotionPlan,"/plan_kinematic_path"),
+        make_get_motion_plan_request,progress,
+    )
+    try:
+        return plan_waypoint_sequence(planner,names,current,waypoints)
+    finally:
+        node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
 
 
 def _moveit_world_z_execute(delta_m: float, local_x_m: float = 0.0) -> tuple[int, float]:
@@ -342,7 +388,7 @@ def run_live_plan_only(evidence_directory: Path, state_name: str) -> dict:
     state=State(state_name)
     if state not in bundle.motion.states:
         raise ValueError(f"motion policy missing state {state_name}")
-    points=_moveit_plan_execute(bundle.motion.states[state].waypoints[-1],execute=False)
+    points=_moveit_plan_waypoints(bundle.motion.states[state].waypoints)
     result={"status":"PLAN_ONLY_COMPLETE","current_state":state_name,"state_trace":[state_name],"exit_code":0,"planned_points":points,"policy_sha256":bundle.sha256}
     evidence_directory=Path(evidence_directory); evidence_directory.mkdir(parents=True,exist_ok=True)
     (evidence_directory/f"plan-only-{state_name}.json").write_text(json.dumps(result,indent=2))
