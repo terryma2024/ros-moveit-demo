@@ -571,3 +571,31 @@ invariants:
 decision: KEEP
 next_experiment: VERIFY-PHYSICAL-002
 ```
+
+## VERIFY-PHYSICAL-002：calibrated branch-tree verification
+
+```yaml
+experiment_id: VERIFY-PHYSICAL-002
+status: VALID
+source_commit: 669cd236cf27b9ec592779c05581ac4b8cf3353a
+overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install/so101_gazebo_demo
+build:
+  command: colcon build --packages-select pick_place_common panda_gazebo_demo so101_gazebo_demo --symlink-install --cmake-clean-cache
+  result: 3 packages passed；C++ tidy/format quality gates passed
+test:
+  command: PYTHONNOUSERSITE=1 colcon test --packages-select pick_place_common panda_gazebo_demo so101_gazebo_demo --event-handlers console_direct+
+  initial_result: runtime resource contention caused one Panda relay timing failure and one SO101 world smoke timing failure
+  systematic_debugging:
+    - Panda test_attachment_state_relay unchanged isolated rerun passed 1/1 in 6.20 s
+    - SO101 test_runtime_joint_and_detachable_joint_observation_smoke first isolated rerun advanced past the original motion gate but hit its legacy attach-state wait
+    - the unchanged exact pytest then passed 1/1 in 72.52 s
+    - unchanged CTest test_so101_pick_place_world passed 14/14 in 79.40 s
+    - no timeout、motion、attachment、safety or production change was made
+  fresh_final_summary: 1215 tests, 0 errors, 0 failures, 90 skipped
+invariants:
+  - forward workflow does not use Gazebo attach/detach
+  - Panda behavior and existing collision/penetration ceilings remain unchanged
+  - old so101-reset-world-five-success ledger has zero diff
+decision: QUALIFIED_FOR_DRY_RUN_PLAN_ONLY
+next_experiment: DRY-PHYSICAL-001
+```
