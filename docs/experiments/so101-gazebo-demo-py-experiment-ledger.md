@@ -1084,3 +1084,17 @@ invalid_criteria:
   - startup, provenance, bridge, controller, MoveIt, or pose/contact observation fails before target behavior is exercised
 post_failure: stop/hold; preserve evidence; no automatic open or reset before capture
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-005
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  initial_attachment_state: attached
+  defensive_detach_readback: detached
+  controllers: [joint_state_broadcaster_active, arm_controller_active, gripper_controller_active]
+  moveit: available
+  runtime_arm_trajectory_constraint: 0.008
+  authoritative_pose_pair_age_s: 0.079
+  candidate_retry_count: 0
+```
