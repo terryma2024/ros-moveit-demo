@@ -939,7 +939,7 @@ next_experiment: choose a domain only after a clean preflight proves no nodes；
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-007
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: 49f7cc3
 runtime_source_head: freeze after this PLANNED record commit
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
@@ -954,5 +954,17 @@ failure_criteria: any valid workflow、hard-gate or final-outcome failure after 
 invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-007
 cleanup_ownership: only HEADLESS-PHYSICAL-007 launch process group and any daemon created for ROS_DOMAIN_ID 211
-next_transition: commit PLANNED, freeze resulting HEAD, repeat clean no-daemon preflight, then RUNNING
+started_at: 2026-08-08T15:18:42+08:00
+ended_at: 2026-08-08T15:20:00+08:00
+observed:
+  failure: CARRYING_ENVIRONMENT_OBSERVATION_INVALID
+  failed_state: LIFT
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> RECOVER_LIFT_TO_SAFE_HEIGHT -> ERROR
+  gazebo_attached_at_checkpoint: false
+  moveit_attached_at_checkpoint: true
+  acceptance_counting: valid qualification failure；not part of five-run batch
+root_cause_checkpoint: ProfiledJointMotionAdapter::validScene still requires Gazebo attached and calibrated legacy relative pose for carrying, contradicting the approved physics-only carry and latest-pose planning shadow
+evidence_root_frozen: true
+cleanup: pose、contact、controllers、MoveIt scene and checkpoint frozen before Ctrl-C；owned launch and ROS_DOMAIN_ID 211 daemon stopped；no reset
+decision: TDD_NORMAL_CARRY_SCENE_REQUIRES_GAZEBO_DETACHED_AND_LIVE_SHADOW
 ```
