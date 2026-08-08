@@ -1452,3 +1452,21 @@ forbidden_runtime_events: NONE_OBSERVED
 decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
 next_experiment: PY-A-X-NEG-0010-GRASP-001
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0010-GRASP-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [-0.001, 0.0, 0.0]}
+lifecycle: FULL_RESTART
+source_commit: 5c11ba43d9fb4b5cc3d420321c9f4745f7ab26cd
+bundle_sha256: 48d4715d25bb2154e283d53787d04771a0b8ae8c511d144490eafe77104e2502
+ros_domain_id: 202
+gz_partition: so101_py_a_x_neg_0010_grasp_001_202
+evidence_root: /tmp/so101-py-a-x-neg-0010-grasp-001-202
+owned_tmux_session: so101-py-a-x-grasp-202
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+success_criteria: bilateral stable within 0.000800002 m ceiling and physical 0.002 m micro-lift within existing lateral bound
+failure_criteria: any frozen hard gate failure
+post_failure: stop/hold; no open; preserve evidence
+```
