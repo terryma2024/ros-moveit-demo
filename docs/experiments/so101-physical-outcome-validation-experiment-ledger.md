@@ -1393,9 +1393,9 @@ decision: RETAIN_HARD_GATE_COMPARE_CARRY_EVIDENCE_BEFORE_NEXT_RUN
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-017
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: e928a5a
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 222
@@ -1410,4 +1410,23 @@ evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-0
 cleanup_ownership: only HEADLESS-PHYSICAL-017 launch group and ROS_DOMAIN_ID 222 daemon if created
 acceptance_counting: qualification only
 safety_disposition: preserve evidence first；no reset；never open a held unsupported cup
+started_at: 2026-08-08T17:01:19+08:00
+ended_at: 2026-08-08T17:03:10+08:00
+observed:
+  original_failure: GRIPPER_CONTACT_PENETRATION_EXCEEDED
+  reported_failure_after_recovery: UNSAFE_RECOVERY_OBSERVATION
+  failed_state: MOVE_ABOVE_PLACE
+  solver_reported_max_depth_m: 0.00143691746052
+  stable_solver_depth_limit_m: 0.0013
+  task_object_follow_position_error_m: 0.00528967213822
+  task_object_follow_orientation_error_rad: 0.230848103034
+  task_object_follow_tilt_error_rad: 0.229376293963
+  actual_q6_velocity_rad_s: -0.00766886305064
+root_cause_audit:
+  - observer gripper depth path only accepts actual task-object ↔ fixed/moving finger collisions and does not mix support-table contacts
+  - depth exceedance co-occurs with out-of-bound physical relative drift；not numerical support-depth noise
+  - all prohibited physics、motion、controller、geometry and hard-limit changes remain absent
+evidence_root_frozen: true
+cleanup: only owned launch process group stopped after evidence freeze；no reset
+decision: APPROVED_BOUNDARY_EXHAUSTED_BY_REPEATABLE_PHYSICAL_CARRY_LIMIT_FAILURE
 ```
