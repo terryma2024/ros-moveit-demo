@@ -1388,3 +1388,26 @@ evidence_root_frozen: true
 cleanup: only owned launch process group stopped after evidence freeze；no reset
 decision: RETAIN_HARD_GATE_COMPARE_CARRY_EVIDENCE_BEFORE_NEXT_RUN
 ```
+
+## HEADLESS-PHYSICAL-017：unchanged-boundary physical qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-017
+status: PLANNED
+implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 222
+GZ_PARTITION: so101-physical-outcome-headless-017-20260808
+lifecycle: FULL_RESTART
+domain_preflight: no nodes
+partition_preflight: no topics
+single_variable: fresh physics lifecycle only；all implementation、policy、motion、controller and safety values frozen
+success_criteria: complete DONE trace and stable final physical outcome with every hard invariant
+failure_criteria: any valid hard-gate or final evaluator failure after evidence freeze
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-017
+cleanup_ownership: only HEADLESS-PHYSICAL-017 launch group and ROS_DOMAIN_ID 222 daemon if created
+acceptance_counting: qualification only
+safety_disposition: preserve evidence first；no reset；never open a held unsupported cup
+```
