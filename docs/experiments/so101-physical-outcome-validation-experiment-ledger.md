@@ -890,7 +890,7 @@ next_experiment: none until the LIFT motion-contract RED/GREEN is committed and 
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-005
-status: PLANNED
+status: INVALID
 implementation_commit: 49f7cc3
 runtime_source_head: freeze after this PLANNED record commit
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
@@ -903,5 +903,29 @@ failure_criteria: any valid workflow、hard-gate or final-outcome failure after 
 invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-005
 cleanup_ownership: only HEADLESS-PHYSICAL-005 launch process group and ROS_DOMAIN_ID 170 daemon
+observed: preflight found generated untracked symlink_install_manifest.txt；startup then failed to resolve libso101_attachment_collision_system.so because direct cmake install had overwritten the colcon-generated LD_LIBRARY_PATH hook
+workflow_started: false
+cleanup: immediate Ctrl-C；only owned launch process group stopped；no reset performed
+decision: INVALID_PROVENANCE_AND_OVERLAY_HOOK
+remediation: removed only the generated manifest with an explicit patch；restored the supported overlay using colcon build --symlink-install；verified LD_LIBRARY_PATH contains the package lib directory
+```
+
+## HEADLESS-PHYSICAL-006：clean-overlay full carry qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-006
+status: PLANNED
+implementation_commit: 49f7cc3
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 171
+GZ_PARTITION: so101-physical-outcome-headless-006-20260808
+lifecycle: FULL_RESTART
+success_criteria: stable final physical outcome plus every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-006
+cleanup_ownership: only HEADLESS-PHYSICAL-006 launch process group and ROS_DOMAIN_ID 171 daemon
 next_transition: commit PLANNED, freeze resulting HEAD, then RUNNING
 ```
