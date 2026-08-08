@@ -2508,3 +2508,29 @@ phase2_contract:
 next_action: revert Z anchor config to +0.0004 m and add seating_preload_rad plumbing via RED/GREEN, then candidate 1 preload 0.003 rad
 next_experiment: PY-C-Q6-PRELOAD-0003-PLAN-001
 ```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-0003-PLAN-001
+status: PLANNED
+candidate: {layer: C_Q6_SEATING_PRELOAD, preload_rad: 0.003, anchor_offset_m: [0.0, 0.0, 0.0004]}
+rationale: Phase 2 candidate 1 of the approved q6 seating-preload causal bisection at the frozen diagnostic Z anchor
+lifecycle: FULL_RESTART
+source_commit: 6c78b87
+bundle_sha256: 144566c04ca0df1f2cc61eacb6d4e03515f1e0f4659b21a3d90c5c3c2b3854fb
+config_sha256:
+  motion: 0121db0dc606864f2e0aecd161ab6304fb98bd56e44b1dfe376804ec8216c4d2
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+red_green:
+  red: test_policy_config.py anchor/preload assertions and range rejections failed (3 failed, 14 passed)
+  green: seating_preload_rad plumbing added (config, loader bounds [0.0, 0.006], live_execute uses configured amplitude with 0.006 default preserved for the parity test); focused 17 passed; full package suite 138 passed, 2 skipped
+  build: colcon build succeeded; installed motion config sha256 0121db0d matches source; installed live_execute sha256 d6063c99 matches source
+ros_domain_id: 221
+gz_partition: so101_py_c_q6_preload_0003_plan_001_221
+evidence_root: /tmp/so101-py-c-q6-preload-0003-plan-001-221
+owned_tmux_session: so101-py-q6-p3-plan-221
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
