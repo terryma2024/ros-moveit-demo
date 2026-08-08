@@ -1796,3 +1796,21 @@ uncertain: [3272995]
 post_cleanup_graph: no task-owned domains 204-208 stack remains
 recoverability: process state is intentionally not recoverable; all experiment logs and JSON evidence remain under their registered /tmp evidence roots and each stack can be relaunched only under a new experiment ID
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-0005-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.0005]}
+rationale: first independent positive-Z candidate changes only the pad contact band after the positive-Y direction was closed
+lifecycle: FULL_RESTART
+source_commit: 95457ab752293e041d69cbcf3ae19b599a729e61
+bundle_sha256: eaf41abbe2bcbd3ce1a01b9f5a2f656df120b3be3717d9d3ea9983fddf5f21bd
+motion_config_sha256: 7e25d3f6e8fee18c615a5a5d27de04406dc0a5d8520a931e8fa93aac8b53aff0
+ros_domain_id: 209
+gz_partition: so101_py_a_z_pos_0005_plan_001_209
+evidence_root: /tmp/so101-py-a-z-pos-0005-plan-001-209
+owned_tmux_session: so101-py-a-z-plan-209
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
