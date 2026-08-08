@@ -2328,3 +2328,38 @@ preflight:
   installed_motion_config_sha256: 229722195e93b46757c41fb8fe39b0cefcb7b6fbc77fe0edf56cd2b7ab800212
   candidate_retry_count: 0
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-000475-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+observed:
+  fixed_finger_contact: true
+  moving_jaw_contact: true
+  initial_max_fixed_pad_penetration_m: 0.00042754330206662416
+  initial_max_moving_pad_penetration_m: 0.0005508091999217868
+  final_max_fixed_pad_penetration_m: 0.00037170821451582015
+  final_max_moving_pad_penetration_m: 0.0010358289582654834
+  reported_ceiling_breach_m: 0.0010356972925364971
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.047477006912231445
+  seating_target_q6: -0.053477006912231444
+  q6_final: -0.05284332111477852
+  pose_pair_age_s: 0.081
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+  exit_code: 1
+evidence_file: /tmp/so101-py-a-z-pos-000475-grasp-001-218/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 remains
+  ros_domain_218_daemon: stopped
+candidate_result: ELIMINATED
+bracket_update: bilateral contact remained but penetration exceeded the ceiling, so the lower bound moves from +0.000450000 to +0.000475000 m
+decision: TRY_PHASE1_CANDIDATE_3_EXACT_MIDPOINT_0004875
+next_candidate_offset_m: [0.0, 0.0, 0.0004875]
+```
