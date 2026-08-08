@@ -1070,9 +1070,9 @@ decision: VALID_HARD_SHADOW_DIVERGENCE_FAILURE_RETRY_UNCHANGED_POLICY
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-010
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: d4766f6
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: 8be1ef4d5fc28912c9222c653742ed654783ff48
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 215
@@ -1086,5 +1086,40 @@ failure_criteria: any valid workflow、hard-gate or final-outcome failure after 
 invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-010
 cleanup_ownership: only HEADLESS-PHYSICAL-010 launch process group and any daemon created for ROS_DOMAIN_ID 215
+acceptance_counting: qualification only；not part of the five-consecutive-run batch
+observed:
+  failure: CARRYING_ENVIRONMENT_OBSERVATION_INVALID
+  recovery_failure: UNSAFE_RECOVERY_OBSERVATION
+  failed_state: DESCEND_TO_PLACE
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> ERROR
+  gazebo_attached_at_checkpoint: false
+  moveit_attached_at_checkpoint: true
+  gripper_open_at_checkpoint: false
+  reconstructed_shadow_position_divergence_m: 0.08394561123534634
+  reconstructed_shadow_orientation_divergence_rad: 0.2662385317108087
+root_cause: physical cup pose diverged beyond the unchanged planning-shadow hard limits before DESCEND_TO_PLACE
+safety_disposition: no physical opening、recovery motion or reset
+evidence_root_frozen: true
+cleanup: owned launch and ROS_DOMAIN_ID 215 daemon stopped after evidence freeze；no reset
+decision: VALID_HARD_SHADOW_DIVERGENCE_FAILURE_RETRY_UNCHANGED_POLICY
+```
+
+## HEADLESS-PHYSICAL-011：second unchanged-policy release qualification retry
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-011
+status: PLANNED
+implementation_commit: d4766f6
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 216
+GZ_PARTITION: so101-physical-outcome-headless-011-20260808
+lifecycle: FULL_RESTART
+success_criteria: complete DONE trace、stable final physical outcome and every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-011
+cleanup_ownership: only HEADLESS-PHYSICAL-011 launch process group and any daemon created for ROS_DOMAIN_ID 216
 acceptance_counting: qualification only；not part of the five-consecutive-run batch
 ```
