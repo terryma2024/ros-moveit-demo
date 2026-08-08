@@ -7,7 +7,7 @@ success_contract: 同一提交和已校准策略下五次连续 VALID execute，
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
 branch: codex/so101-physical-outcome-validation
 base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
-current_commit: f3e49db
+current_commit: 48709c3
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI
 confirmed_conclusions:
   - Task 13 branch-tree build、三包测试、dry-run trace 与 uncalibrated plan-only fail-closed gate 已验证（VER-PHYSICAL-001）
@@ -314,4 +314,45 @@ open_risks:
   - production minimum_support_contact_depth_m 仍为 CALIBRATION_REQUIRED
   - 其他 physical-outcome threshold 仍未完成 live calibration
 next_command: 先创建 CAL-PHYSICAL-002 PLANNED 记录并冻结隔离环境、采样分布、margin 与 invalid criteria，再启动 headless calibration stack
+```
+
+## CAL-PHYSICAL-002：production Featherstone physical-outcome calibration
+
+```yaml
+experiment_id: CAL-PHYSICAL-002
+status: PLANNED
+prior_experiment: TDD-PHYSICAL-001
+hypothesis: production Featherstone 的稳定 owner-contact、pose cadence、release settling 与 MoveIt shadow pairing distributions 足以为全部 sentinel 提供非宽松、可复核的冻结值
+prediction:
+  - stable plastic_cup::body::wall_near ↔ table::link::collision depth distribution 有界且 finite
+  - conservative minimum_support_contact_depth_m margin 仅包络数值噪声，不接近或改变任何 collision/penetration ceiling
+  - 其余 threshold 可由相同 production source/overlay 的观测分布或语义完全相同的既有已证明 gate 得出
+single_variable: observation-only calibration；不改变 engine、geometry、mass、friction、controller、motion target 或 safety ceiling
+lifecycle: FULL_RESTART
+preconditions:
+  - source commit 48709c3cb944f9ab77bc40f2d0ff2f8b0400e314
+  - install overlay /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
+  - executable /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/build/so101_gazebo_demo/pick_place_state_machine
+  - ROS_DOMAIN_ID 39 initially empty
+  - GZ_PARTITION so101-physical-outcome-4fc1e1f5-a06b-4e21-9430-467d4470f802 unique
+  - production policy remains CALIBRATION_REQUIRED；calibration run cannot count as success
+success_criteria:
+  - provenance、controller、pose、contact、scene evidence fresh and finite
+  - each new threshold has sample source、distribution summary、conservative margin and semantic justification
+  - negative-depth bound remains orders of magnitude below immutable grasp max_penetration_m 0.0008 and final validation penetration ceiling 0.0013
+  - no existing hard safety number is increased
+failure_criteria:
+  - production evidence shows a threshold cannot be calibrated without semantic relaxation
+  - compound-owner/table identity is absent or depth distribution is unbounded/non-finite
+invalid_criteria:
+  - duplicate node/partition、wrong overlay/binary、stale session、controller unhealthy、contact source mismatch、incomplete cleanup or contaminated screenshot timing
+commands:
+  - headless production stack with the frozen ROS_DOMAIN_ID/GZ_PARTITION and owned PID log
+  - bounded raw Gazebo pose/contact samples under the same lifecycle
+  - plan-only/shadow pairing probes after support-only calibration permits controlled runtime gating
+evidence_paths:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-002
+  - /tmp/so101-debug-physical-outcome-xZlFSI/calibration-domain-probe.txt
+cleanup_ownership: only PIDs created by CAL-PHYSICAL-002; preserved so101-gazebo-demo-py stacks and workspace-sampler clang-tidy are out of scope
+next_transition: PLANNED -> RUNNING only after ledger commit and repeated empty-domain/provenance check
 ```
