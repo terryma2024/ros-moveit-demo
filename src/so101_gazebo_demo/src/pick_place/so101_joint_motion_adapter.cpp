@@ -72,15 +72,6 @@ bool posesMatch(const Pose3d & first, const Pose3d & second, const SO101Profile 
          orientationDistance(first, second) <= profile.task_object_orientation_drift_tolerance_rad;
 }
 
-bool posesMatchAttachmentCalibration(const Pose3d & first, const Pose3d & second,
-                                     const SO101Profile & profile)
-{
-  return isFinitePose(first) && isFinitePose(second) &&
-         positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
-         axialTiltDistance(first, second) <=
-           profile.task_object_attachment_orientation_tolerance_rad;
-}
-
 bool posesMatchCylindricalCarry(const Pose3d & first, const Pose3d & second,
                                 const SO101Profile & profile)
 {
@@ -107,16 +98,14 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
     return false;
   }
   if (carrying) {
-    if (!*observed.gazebo_task_object_attached || facts.task_object_in_world ||
+    if (*observed.gazebo_task_object_attached || facts.task_object_in_world ||
         !facts.task_object_attached || !facts.attached_link || !facts.attached_relative_pose ||
         !facts.current_gripper_pose_world) {
       return false;
     }
     const auto expected_task_object =
       composePose(*facts.current_gripper_pose_world, *facts.attached_relative_pose);
-    return posesMatchAttachmentCalibration(*facts.attached_relative_pose,
-                                           profile.calibrated_grasp_relative_pose, profile) &&
-           expected_task_object &&
+    return expected_task_object &&
            posesMatchCylindricalCarry(*observed.gazebo_task_object_pose_world,
                                       *expected_task_object, profile) &&
            *facts.attached_link == profile.moveit_attach_link &&
