@@ -914,7 +914,7 @@ remediation: removed only the generated manifest with an explicit patch；restor
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-006
-status: PLANNED
+status: INVALID
 implementation_commit: 49f7cc3
 runtime_source_head: freeze after this PLANNED record commit
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
@@ -927,5 +927,10 @@ failure_criteria: any valid workflow、hard-gate or final-outcome failure after 
 invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-006
 cleanup_ownership: only HEADLESS-PHYSICAL-006 launch process group and ROS_DOMAIN_ID 171 daemon
-next_transition: commit PLANNED, freeze resulting HEAD, then RUNNING
+observed: preflight-nodes already contained /controller_manager、/arm_controller、/gripper_controller、/gz_ros_control and /joint_state_broadcaster；controller spawners then collided and PREPARE_OPEN_GRIPPER timed out
+workflow_started: false
+failure_after_invalid_preflight: GRIPPER_RESULT_TIMEOUT
+cleanup: immediate Ctrl-C；owned launch PIDs verified absent；pre-existing ROS_DOMAIN_ID 171 processes and daemon were not touched；no reset performed
+decision: INVALID_DOMAIN_COLLISION
+next_experiment: choose a domain only after a clean preflight proves no nodes；do not count this run
 ```
