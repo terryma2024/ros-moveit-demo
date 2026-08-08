@@ -844,9 +844,9 @@ next_experiment: none until a RED test proves the root cause and a focused GREEN
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-004
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: 65b40df
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: 24204c39be278750a0d3758169925ee10e55d9d9
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 169
@@ -858,5 +858,30 @@ failure_criteria: any valid workflow、hard-gate or final-outcome failure after 
 invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004
 cleanup_ownership: only HEADLESS-PHYSICAL-004 launch process group and ROS_DOMAIN_ID 169 daemon
-next_transition: commit PLANNED, freeze resulting HEAD, then RUNNING
+started_at: 2026-08-08T14:54:04+08:00
+ended_at: 2026-08-08T14:56:04+08:00
+observed:
+  failure: Q6_NATIVE_PAD_INTERFERENCE_EXCEEDED
+  failed_state: LIFT
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> RECOVER_LIFT_TO_SAFE_HEIGHT -> ERROR
+  q6_at_attach_checkpoint: -0.053083520382642746
+  gazebo_attached_at_checkpoint: false
+  moveit_attached_at_checkpoint: true
+  acceptance_counting: valid qualification failure；not part of five-run batch
+regression_result:
+  - ATTACH_MOVEIT completed, proving the bounded-regrasp-q6 attachment regression GREEN live
+  - the same nominal-q6 validator remained in the LIFT motion contract and rejected before carrying execution
+  - no threshold、controller、motion target or penetration ceiling changed
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004/source-head.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004/failure-wall-near-contact.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-004/failure-evidence.sha256
+cleanup: all evidence frozen before Ctrl-C；only owned launch process group stopped；no reset performed
+decision: APPLY_APPROVED_CARRY_TELEMETRY_SEMANTICS_TO_MOTION_CONTRACT_WITH_TDD
+next_experiment: none until the LIFT motion-contract RED/GREEN is committed and focused verification passes
 ```
