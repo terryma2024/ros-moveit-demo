@@ -973,9 +973,9 @@ decision: TDD_NORMAL_CARRY_SCENE_REQUIRES_GAZEBO_DETACHED_AND_LIVE_SHADOW
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-008
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: 50fde52
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: dc22bb34cbacfbeb1ee2586cdab38c1f35b97e18
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 212
@@ -990,4 +990,30 @@ invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup 
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-008
 cleanup_ownership: only HEADLESS-PHYSICAL-008 launch process group and any daemon created for ROS_DOMAIN_ID 212
 acceptance_counting: qualification only；not part of the five-consecutive-run batch
+started_at: 2026-08-08T15:36:17+08:00
+ended_at: 2026-08-08T15:37:57+08:00
+observed:
+  failure: TASK_OBJECT_SUPPORT_POSE_MISMATCH
+  failed_state: DETACH_MOVEIT
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> DETACH_MOVEIT -> ERROR
+  gazebo_attached_at_checkpoint: false
+  moveit_attached_at_checkpoint: true
+  gripper_open_at_checkpoint: false
+  task_object_pose_xyz: [-0.07489179074764252, -0.25029996037483215, 0.17534954845905304]
+  release_xy_error_m: 0.005117008695745988
+  release_height_error_m: 0.010349548459053032
+  carry_tilt_rad: 0.26072934935969655
+root_cause: DETACH_MOVEIT and OPEN_GRIPPER contracts retained the legacy post-physical-detach support/upright/attachment semantics；they rejected bounded pre-release carry evidence before the release epoch
+safety_disposition: stopped before OPEN_GRIPPER with the cup physically held；no recovery motion and no reset
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-008/source-head.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-008/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-008/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-008/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-008/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-008/failure-evidence.sha256
+evidence_limitation: state-machine exit removed pose/contact bridge topics before bounded captures completed；empty captures are retained and the last fresh Gazebo pose remains frozen in the checkpoint
+cleanup: all available evidence frozen before Ctrl-C；only owned launch and ROS_DOMAIN_ID 212 daemon stopped；no reset
+decision: TDD_ALIGN_PLANNING_SHADOW_DETACH_AND_PHYSICAL_OPEN_WITH_RELEASE_EPOCH
+fix_commit: d4766f6
 ```
