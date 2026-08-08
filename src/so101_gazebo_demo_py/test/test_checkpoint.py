@@ -21,6 +21,7 @@ def checkpoint(sequence: int = 4) -> Checkpoint:
             moveit_task_object_attached=False,
             gazebo_task_object_pose_world=(0.0, -0.28, 0.165, 0, 0, 0, 1),
             gazebo_task_object_attached=False, gazebo_task_object_stationary=True,
+            task_object_supported=True, gripper_task_object_contact=False,
             required_world_objects=("plastic_cup", "table", "pedestal"),
         ),
         policy_bundle_sha256="a" * 64, simulation_session_id="sim-1", resumable=True,

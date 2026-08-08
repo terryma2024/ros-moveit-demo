@@ -30,6 +30,8 @@ class ExpectedWorldState:
     gazebo_task_object_pose_world: Pose | None = None
     gazebo_task_object_attached: bool | None = None
     gazebo_task_object_stationary: bool | None = None
+    task_object_supported: bool | None = None
+    gripper_task_object_contact: bool | None = None
     required_world_objects: tuple[str, ...] = ()
 
 
@@ -119,6 +121,8 @@ def _expected_json(value: ExpectedWorldState) -> dict[str, Any]:
         "gazebo_task_object_pose_world": None if value.gazebo_task_object_pose_world is None else list(value.gazebo_task_object_pose_world),
         "gazebo_task_object_attached": value.gazebo_task_object_attached,
         "gazebo_task_object_stationary": value.gazebo_task_object_stationary,
+        "task_object_supported": value.task_object_supported,
+        "gripper_task_object_contact": value.gripper_task_object_contact,
         "required_world_objects": list(value.required_world_objects),
     }
 
@@ -184,6 +188,8 @@ class FileCheckpointStore:
                 gazebo_task_object_pose_world=None if expected["gazebo_task_object_pose_world"] is None else _pose(expected["gazebo_task_object_pose_world"]),
                 gazebo_task_object_attached=_optional_bool(expected["gazebo_task_object_attached"]),
                 gazebo_task_object_stationary=_optional_bool(expected["gazebo_task_object_stationary"]),
+                task_object_supported=_optional_bool(expected["task_object_supported"]),
+                gripper_task_object_contact=_optional_bool(expected["gripper_task_object_contact"]),
                 required_world_objects=tuple(str(value) for value in expected["required_world_objects"]),
             )
             original = document["original_failure"]
