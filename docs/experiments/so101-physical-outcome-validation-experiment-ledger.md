@@ -627,7 +627,7 @@ next_experiment: PLAN-PHYSICAL-001
 
 ```yaml
 experiment_id: PLAN-PHYSICAL-001
-status: PLANNED
+status: INVALID
 source_commit: 9e6e5ae7b48e9f7ae93412774b28d08c1325276f
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: plan_only
@@ -643,5 +643,39 @@ invalid_criteria:
   - duplicate domain/partition、wrong overlay、stale stack or uncontrolled cleanup
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/plan-only-001
 cleanup_ownership: only process group created by this experiment
+started_at: 2026-08-08T14:07:33+08:00
+ended_at: 2026-08-08T14:08:14+08:00
+observed:
+  status: ERROR
+  trace: BOOTSTRAP -> ERROR
+  failure: PLAN_ONLY_STATE_REQUIRED
+invalid_reason: operator command omitted required plan_only_state；state machine rejected before planning or physical execution
+cleanup:
+  - Ctrl-C sent only to owned launch pipeline session 21671
+  - owned PIDs 3909665、3909688、3909689、3909693、3909743 no longer exist
+decision: DO_NOT_COUNT
+next_experiment: PLAN-PHYSICAL-002
+```
+
+## PLAN-PHYSICAL-002：bounded MOVE_ABOVE_OBJECT plan-only qualification
+
+```yaml
+experiment_id: PLAN-PHYSICAL-002
+status: PLANNED
+source_commit: 47f4a7a
+run_mode: plan_only
+plan_only_state: MOVE_ABOVE_OBJECT
+start_simulation: true
+headless: true
+ROS_DOMAIN_ID: 165
+GZ_PARTITION: so101-physical-outcome-plan-002-20260808
+success_criteria:
+  - exact isolated stack reaches healthy controllers and MoveIt scene
+  - MOVE_ABOVE_OBJECT planning succeeds without trajectory execution
+  - no physical success claim and no forward Gazebo attachment
+invalid_criteria:
+  - provenance、domain、partition、overlay or cleanup contamination
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/plan-only-002
+cleanup_ownership: only process group created by PLAN-PHYSICAL-002
 next_transition: commit PLANNED then RUNNING
 ```
