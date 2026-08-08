@@ -2444,3 +2444,67 @@ preflight:
   installed_motion_config_sha256: ae0e86b8773fbd711ed8ebb82dcf1fea483f4b00f7810bc3b333b4c32d8f54a4
   candidate_retry_count: 0
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-0004875-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: MOVING_PAD_PENETRATION_CEILING_EXCEEDED
+observed:
+  fixed_finger_contact: true
+  moving_jaw_contact: true
+  initial_max_fixed_pad_penetration_m: 0.00042721518548205495
+  initial_max_moving_pad_penetration_m: 0.0005544513696804643
+  final_max_fixed_pad_penetration_m: 0.00037360371788963675
+  final_max_moving_pad_penetration_m: 0.0010098539059981704
+  reported_ceiling_breach_m: 0.0010094671742990613
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.04747766628861427
+  seating_target_q6: -0.05347766628861427
+  q6_final: -0.05284542590379715
+  pose_pair_age_s: 0.006
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+  exit_code: 1
+evidence_file: /tmp/so101-py-a-z-pos-0004875-grasp-001-220/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+cleanup:
+  tmux_session: removed
+  owned_gz_processes: none survived; only preserved PID 3272995 remains
+  ros_domain_220_daemon: stopped
+candidate_result: ELIMINATED
+phase1_conclusion: All three deterministic Z bisection candidates (+0.000450000, +0.000475000, +0.0004875 m) failed valid hard gates with bilateral contact but excessive moving-pad penetration after the fixed 0.006 rad seating preload; the Z bracket is closed without further subdivision or axis combination
+workflow_result: NO_SUCCESSFUL_PHYSICAL_GRASP
+decision: CLOSE_Z_BRACKET_AND_ADVANCE_TO_PHASE2_Q6_SEATING_PRELOAD
+```
+
+```yaml
+checkpoint_id: CP-PHASE2-Q6-ANCHOR-001
+recorded_at: 2026-08-08 Asia/Shanghai
+phase: PHASE_2_Q6_SEATING_PRELOAD_CAUSAL_BISECTION
+ordering_amendment: q6 preload is explicitly approved to run before orientation for the current failure
+diagnostic_anchor_selection:
+  rule: bilateral contact AND smallest worst normalized penetration (worst pad depth / 0.000800002 m ceiling)
+  candidates:
+    - {offset_z_m: 0.0004, worst_pad_depth_m: 0.0009567769011482596, worst_normalized: 1.19597, source: PY-A-Z-POS-0004-GRASP-001}
+    - {offset_z_m: 0.00045, worst_pad_depth_m: 0.0010242564603686333, worst_normalized: 1.28032, source: PY-A-Z-POS-00045-GRASP-001}
+    - {offset_z_m: 0.000475, worst_pad_depth_m: 0.0010358289582654834, worst_normalized: 1.29479, source: PY-A-Z-POS-000475-GRASP-001}
+    - {offset_z_m: 0.0004875, worst_pad_depth_m: 0.0010098539059981704, worst_normalized: 1.26232, source: PY-A-Z-POS-0004875-GRASP-001}
+  selected_anchor_offset_m: [0.0, 0.0, 0.0004]
+  note: diagnostic anchor only, not a qualified winner; all other targets/config frozen
+causal_evidence:
+  observation: initial moving-pad depth about 0.000547-0.000554 m becomes 0.00101-0.00115 m after the fixed 0.006 rad preload across all bilateral runs
+  lever: seating preload amplitude derived from achieved q6_contact
+phase2_contract:
+  amplitude_range_rad: [0.0, 0.006]
+  q6_target_rule: max(q6_safe_lower, q6_contact - preload); must stay within safe_lower_q6 <= q6_target <= baseline grasp_close_q6 and derive from achieved q6_contact
+  candidate_1_preload_rad: 0.003
+  bisection: if bilateral remains but penetration too high, reduce within [0,current]; if valid contact/stability lost, increase within [current,0.006]
+  max_valid_physical_candidates: 3
+  stop_on: first all-hard-gate pass
+  plumbing: seating_preload_rad is currently hardcoded at 0.006 in live_execute.seating_preload_target; add minimal TDD-backed config plumbing
+next_action: revert Z anchor config to +0.0004 m and add seating_preload_rad plumbing via RED/GREEN, then candidate 1 preload 0.003 rad
+next_experiment: PY-C-Q6-PRELOAD-0003-PLAN-001
+```
