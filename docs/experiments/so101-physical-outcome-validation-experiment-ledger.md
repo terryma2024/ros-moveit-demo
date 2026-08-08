@@ -1430,3 +1430,78 @@ evidence_root_frozen: true
 cleanup: only owned launch process group stopped after evidence freeze；no reset
 decision: APPROVED_BOUNDARY_EXHAUSTED_BY_REPEATABLE_PHYSICAL_CARRY_LIMIT_FAILURE
 ```
+
+## AUTH-TARGET-001：target-only calibration authorization and matrix
+
+```yaml
+authorization_id: AUTH-TARGET-001
+approved_at: 2026-08-08 Asia/Shanghai
+baseline_commit: 2eda34cebc26f359b6687e1f03808fe700c49d01
+allowed: TCP grasp pose; q6 close; micro-lift pose/vector; carry/place/retreat targets; trajectory timing/scaling; minimal TDD plumbing
+frozen: controller; physics; geometry; mass; friction; attach/shadow semantics; final tolerances; every penetration/shadow/collision/recovery ceiling
+baseline:
+  grasp_tcp_xyz_m: [0.020676684, -0.262821021, 0.200630611]
+  cup_spawn_xyz_m: [0.020, -0.280, 0.165]
+  grasp_tcp_relative_translation_m: [0.000676684, 0.017178979, 0.035630611]
+  q6_preopen_close_safe_lower_release_rad: [0.465038000, -0.047608632840292, -0.059600220867817, 0.750]
+  micro_lift_world_z_m: 0.002
+  velocity_acceleration_scaling: {above: [0.03, 0.03], descend_lift: [0.10, 0.10], carry: [0.02, 0.02], place_retreat: [0.03, 0.03]}
+geometry:
+  cup_height_radius_wall_bottom_m: [0.090, 0.040, 0.002, 0.002]
+  below_rim_nominal_min_max_m: [0.025, 0.008, 0.035]
+  bottom_clearance_pad_thickness_pad_gap_m: [0.020, 0.005, 0.00196]
+matrix:
+  A: TCP translation x,y,z; each baseline +/- 0.001 m and geometry intersection
+  B: orientation roll,pitch,yaw; each within existing axis_tolerance_rad
+  C: safe_lower_q6 <= q6 <= baseline close q6
+  D: 0 < micro-lift norm <= 0.002 m
+  E: one waypoint/pose scalar within existing endpoint/axis/workspace/joint/collision contracts
+  F: one finite-positive timing/scaling scalar; conservative non-acceleration range first
+selection: unchanged hard gates all pass; greatest worst normalized safety margin
+qualification: selected candidate requires >=3 independent FULL_RESTART runs
+publication_gate: five consecutive frozen-commit final-outcome VALID_SUCCESS
+old_ledger: MUST_REMAIN_ZERO_DIFF
+```
+
+## TARGET-A-X-001：first single-variable TCP-x candidate
+
+```yaml
+experiment_id: TARGET-A-X-001
+status: PLANNED
+prior_experiment: HEADLESS-PHYSICAL-017
+hypothesis: 将 grasp TCP x 对齐 cup-center x 可降低偏心载荷，同时保持 y/z/orientation 与全部 hard ceilings
+prediction: FK 只改变 x -0.000676684 m；plan-only 仍满足 IK/path/collision；短路径消除首个 hard-gate failure，否则一次 valid failure 淘汰
+single_variable: DESCEND grasp TCP x 0.020676684 -> 0.020000000 m
+lifecycle: FULL_RESTART
+preconditions: [exact RED/GREEN contract, clean build/source/prefix, full plan_only before execute]
+success_criteria: [all unchanged hard gates pass, fresh controller/Gazebo/MoveIt/contact short-path evidence]
+failure_criteria: [any valid existing hard-gate failure eliminates candidate and ends sequence]
+invalid_criteria: [provenance, initial-state, domain/partition, controller, hash or evidence contamination]
+provenance:
+  source_commit: PENDING_GREEN_COMMIT
+  config_hash: PENDING_GREEN_COMMIT
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
+  runtime_executable: PENDING_BUILD
+  ros_domain_id: PENDING_UNIQUE
+  gz_partition: PENDING_UNIQUE
+  evidence_root: /tmp/so101-debug-physical-outcome-target-a-x-001/
+decision: PENDING
+next_experiment: NONE_UNTIL_RESULT
+```
+
+## CP-PHYSICAL-005
+
+```yaml
+checkpoint_id: CP-PHYSICAL-005
+last_valid_experiment: HEADLESS-PHYSICAL-017
+current_hypothesis: TARGET-A-X-001
+working_tree_status: plan leading blank-line diff preserved separately; authorization docs pending commit
+owned_processes: NONE
+preserved_processes: other worktrees' Gazebo servers and so101-workspace-sampler clang-tidy
+confirmed_conclusions:
+  - repeated valid failures isolate physical grasp/carry stability inside the target-only authorization
+  - support calibration and every hard ceiling remain frozen
+disproven_routes: [unchanged-target stochastic retry, support routing contamination as finger-depth cause]
+open_risks: [x-only IK must preserve y/z/orientation and every existing path contract]
+next_command: add and run SO101FixedMotionTargets.GraspTcpXCandidateMovesTowardCupCenterOnly RED
+```

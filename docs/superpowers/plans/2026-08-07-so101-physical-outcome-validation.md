@@ -1106,3 +1106,44 @@ R3 已证伪路线、安全 gate 放宽，或修改旧
 - Section 13: Tasks 2, 8, 9, 11, 12, and 16 cover migration, Teleop, rollout, branch publication, safe main merge, merged-tree tests, and remote SHA proof.
 - Section 14: Global constraints and Tasks 7, 10, and 14 explicitly exclude every rejected R3 route and safety relaxation.
 - Section 15: Locked decisions resolve region shape, speed derivation, failure precedence, final pose, non-resumable epoch, evidence handoff, bounded metrics, collision identity, and calibration protocol without altering approved semantics.
+
+## Approved execution addendum: bounded grasp/motion target calibration (2026-08-08)
+
+This addendum resumes the blocked checkpoint at baseline HEAD `2eda34c`; it does not change Tasks 1–16
+physical ownership or hard-safety semantics. Exclude
+`docs/experiments/so101-reset-world-five-success-experiment-ledger.md` from every future add. Use only the new
+physical-outcome ledger. Preserve and do not stage the pre-existing leading blank-line diff in this file.
+
+### Ordered TDD calibration workflow
+
+1. Commit authorization, baseline and matrix documentation separately.
+2. Execute A TCP translation (x,y,z), B orientation (roll,pitch,yaw), C q6, D micro-lift, E carry/place/
+   retreat, F timing/scaling. One candidate changes exactly one scalar; a layer advances only after the previous
+   layer removes the current first hard-gate failure.
+3. Each candidate starts with an exact named unit/config RED. Apply minimal target/config plumbing, rerun focused
+   GREEN and make one logical commit. Unexpected failure invokes systematic-debugging before another change.
+4. Clean build, source, verify `ros2 pkg prefix so101_gazebo_demo`, and run full `plan_only`. Only then run an
+   owned `execute stop_after:=<earliest-boundary>` with isolated FULL_RESTART provenance.
+5. Ledger transition is `PLANNED -> RUNNING -> VALID_FAILURE|VALID_SUCCESS` or `INVALID`, with unique id,
+   domain, partition, source SHA, config hash and `/tmp` evidence root. Valid failure eliminates the candidate;
+   invalid ends the batch. Never repeat a candidate to select a random success.
+6. Rank only all-hard-gate-passing candidates by greatest worst normalized safety margin. Freeze the winner for
+   at least three FULL_RESTART qualifications. Any valid failure returns to the layer; three failed candidates in
+   one direction stop the search.
+7. After short-path qualification, run full headless final outcome, a genuine fresh three-package clean-cache
+   build/full suite, dry-run, plan-only, headless, GUI/CUA fresh screenshot and five consecutive frozen-policy
+   successes. No push/merge before all five.
+
+Design §17.2–17.3 is the authoritative baseline/range table. The first A-x candidate moves only TCP x from
+`0.020676684 m` to cup-center `0.020000000 m` (`-0.000676684 m`, inside the existing `0.001 m` bound).
+
+```text
+RED test: SO101FixedMotionTargets.GraspTcpXCandidateMovesTowardCupCenterOnly
+RED command: colcon test --packages-select so101_gazebo_demo --ctest-args -R test_so101_fixed_motion_targets --output-on-failure
+Expected RED: FK x remains baseline; assertions require cup-center x while y/z/orientation remain baseline.
+GREEN scope: the exact DESCEND endpoint and paired LIFT/recovery endpoint target plus validation endpoint only.
+GREEN command: the same focused test, followed by clean build/source/prefix and full plan_only before execute.
+```
+
+If IK cannot preserve y/z/orientation and all existing path/collision contracts, record a plan-only valid failure;
+do not compensate by changing a second scalar or any ceiling.
