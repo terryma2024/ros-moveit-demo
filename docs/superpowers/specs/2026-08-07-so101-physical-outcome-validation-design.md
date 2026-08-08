@@ -552,3 +552,61 @@ depth 一律拒绝”的过强实现假设，但不改变物理结果所有权�
 
 该修订必须先经 stable Featherstone compound-owner + bounded-negative-noise 的自动回归
 RED→GREEN，再重新执行现场校准。此前 `CAL-PHYSICAL-001` 继续保持 `INVALID`，不得反向用于选值。
+
+## 17. 2026-08-08 经用户批准的 grasp/motion target 校准 addendum
+
+### 17.1 授权边界
+
+HEAD `2eda34cebc26f359b6687e1f03808fe700c49d01` 的 fresh-lifecycle 证据把首个有效失败收敛到
+真实杯子/指垫接触深度与 object-relative drift。用户仅批准有界调整：杯子相对 TCP 的抓取位置/
+姿态、`q6` 闭合目标、micro-lift 向量/高度/姿态、carry/place/retreat waypoint 与目标姿态，以及
+轨迹目标时长/速度/加速度；缺少配置边界时可按 TDD 增加最小 plumbing。
+
+controller 算法/增益/plugin、physics engine、杯子/夹爪 geometry、mass、friction、Gazebo forward
+attach、MoveIt planning-shadow 语义、final-outcome 容忍范围，以及所有 penetration、planning-shadow、
+collision、recovery hard ceiling 继续冻结。候选必须通过原 hard gates，不得为接受候选而改 gate。
+
+### 17.2 baseline、单位与几何约束
+
+长度单位为 metre，角度/joint 为 rad，scaling 为无量纲比例。权威 baseline 如下：
+
+| 层 | 来源 | baseline |
+|---|---|---|
+| 抓取 TCP endpoint | motion policy `DESCEND` terminal joints 的 real-model FK；validation policy 锁定 | xyz `[0.020676684, -0.262821021, 0.200630611]`；approach axis `-Z` |
+| cup spawn/geometry | task-object policy | xyz `[0.020, -0.280, 0.165]`；height `0.090`；radius `0.040`；wall/bottom `0.002` |
+| 抓取轴向约束 | task-object + validation policy | below-rim nominal `0.025`、range `[0.008, 0.035]`；bottom clearance `0.020` |
+| 指垫/q6 | task-object + URDF collision + motion policy | pad thickness `0.005`；gap `0.00196`；safe lower `-0.059600220867817`；close `-0.047608632840292` |
+| micro-lift | runtime/retry + planning boundary | world-Z `+0.002`；hard upper bound `0.002` |
+| carry/place/retreat | motion policy fixed joint ladders | 当前 `LIFT`、`MOVE_ABOVE_PLACE`、`DESCEND_TO_PLACE`、`RETREAT` ladders |
+| velocity/acceleration | motion policy | above `0.03/0.03`；descend/lift `0.10/0.10`；carry `0.02/0.02`；place/retreat `0.03/0.03` |
+
+TCP 相对 cup spawn 平移约为 `[+0.000676684, +0.017178979, +0.035630611]`，仅为当前 FK 差值，
+不是 pass threshold。URDF 中 `so101_tcp` 固连于 `gripper`；fixed/moving pad collision profile 与
+task-object native axial bounds 是不可修改的几何约束。
+
+### 17.3 固定分层矩阵与有界范围
+
+变量顺序固定 A→F；每次只改变一个 scalar，上一层消除当前首个 hard-gate failure 后才进入下一层：
+
+1. **A / TCP translation**：x、y、z 依次。每轴相对 baseline 限于现有
+   `approach_outside_clearance_m` 的 `±0.001 m`；z 还必须满足既有 below-rim/bottom-clearance 交集。
+   FK 必须证明未选两轴与 orientation 不变。
+2. **B / orientation**：roll、pitch、yaw 依次；单分量变化不超过现有 `axis_tolerance_rad`，且未选
+   分量、TCP position、IK、collision/path contract 通过。
+3. **C / q6**：`safe_lower_q6 <= candidate <= baseline grasp_close_q6`；仍满足 pad gap/fingerprint、
+   feedback stability 与原 `max_penetration_m`。
+4. **D / micro-lift**：位移范数 `(0, 0.002] m`；一次只改一个 vector/height/orientation 分量。
+5. **E / carry/place/retreat**：一次只改一个 waypoint position 或 orientation 分量；范围为现有
+   endpoint/axis tolerance、workspace、joint limit 与 trajectory collision contract 的交集。
+6. **F / timing/scaling**：一次只改 duration、velocity 或 acceleration；finite positive，先限于
+   controller 接受范围和当前值定义的保守不加速区间，除非 plan-only/controller contract 为更快值
+   给出独立依据。
+
+每个候选先 exact config/range contract RED，再最小 GREEN、clean build/source/prefix、完整
+`plan_only`，最后才用 `stop_after`/最早可观测边界做隔离 headless 短路径。保留 solver depth、
+cup/TCP pose、tilt/orientation drift、q6 feedback/velocity 与 shadow divergence。
+
+探索候选一次 `VALID_FAILURE` 即淘汰；`INVALID` 终止批次；同方向连续三个有界候选失败则停止，
+不扩大到禁止层。入选候选至少三次独立 `FULL_RESTART` qualification，任一 valid failure 退回本层。
+只有冻结 commit/policy 的 full suite、dry-run、plan-only、headless、GUI 与连续五次最终物理结果
+`VALID_SUCCESS` 全部成立后，才允许 push/merge。
