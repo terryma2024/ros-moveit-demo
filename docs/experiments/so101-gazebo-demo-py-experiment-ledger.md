@@ -1386,3 +1386,15 @@ invalid_criteria:
   - startup/runtime observation failure before candidate target is exercised
 post_failure: stop/hold and preserve physical-failure.json before cleanup
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0005-GRASP-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  initial_attachment_state: attached
+  defensive_detach_readback: detached
+  runtime_arm_trajectory_constraint: 0.008
+  authoritative_closest_pose_pair_age_s: 0.004
+  candidate_retry_count: 0
+```
