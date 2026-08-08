@@ -470,6 +470,46 @@ TEST(SO101JointMotionAdapter, RejectsWrongCarryingAttachmentBeforePlanning)
   EXPECT_EQ(boundary->plan_calls, 0);
 }
 
+TEST(SO101JointMotionAdapter, DistinguishesCarryingStationarityFromSceneStructureFailure)
+{
+  auto boundary = std::make_shared<FakeBoundary>();
+  boundary->scene = carryingScene();
+  auto request = goalRequest();
+  request.state = spp::State::DESCEND_TO_PLACE;
+  request.carrying = true;
+  request.gripper_position = 0.662818811;
+  auto observed = carryingObservation();
+  observed.snapshot->gazebo_task_object_stationary = false;
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+
+  const auto result = adapter.plan(request, observed);
+
+  ASSERT_EQ(result.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(result.action.failure);
+  EXPECT_EQ(result.action.failure->code, "CARRYING_TASK_OBJECT_NOT_STATIONARY");
+}
+
+TEST(SO101JointMotionAdapter, ReportsPlanningShadowDivergenceWithBoundedMetrics)
+{
+  const auto & profile = spp::SO101Profile::canonical();
+  auto boundary = std::make_shared<FakeBoundary>();
+  boundary->scene = carryingScene();
+  boundary->scene.attached_relative_pose->x += profile.task_object_position_drift_tolerance + 0.001;
+  auto request = goalRequest();
+  request.state = spp::State::DESCEND_TO_PLACE;
+  request.carrying = true;
+  request.gripper_position = 0.662818811;
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+
+  const auto result = adapter.plan(request, carryingObservation());
+
+  ASSERT_EQ(result.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(result.action.failure);
+  EXPECT_EQ(result.action.failure->code, "PLANNING_SHADOW_DIVERGENCE");
+  EXPECT_GT(result.action.failure->metrics.at("planning_shadow_position_divergence_m"),
+            profile.task_object_position_drift_tolerance);
+}
+
 TEST(SO101JointMotionAdapter, StitchesLadderWithoutDuplicateBoundaryAndWithIncreasingTime)
 {
   auto boundary = std::make_shared<FakeBoundary>();
@@ -539,7 +579,9 @@ TEST(SO101JointMotionAdapter, RejectsBadAttachedRelativeTiltBeforePlanning)
   const auto result = adapter.plan(request, carryingObservation());
   ASSERT_EQ(result.action.status, spp::ActionStatus::FAILED);
   ASSERT_TRUE(result.action.failure);
-  EXPECT_EQ(result.action.failure->category, spp::FailureCategory::OBSERVATION);
+  EXPECT_EQ(result.action.failure->category, spp::FailureCategory::MOVEIT_SCENE);
+  EXPECT_EQ(result.action.failure->code, "PLANNING_SHADOW_DIVERGENCE");
+  EXPECT_GT(result.action.failure->metrics.at("planning_shadow_axial_tilt_divergence_rad"), 0.0);
   EXPECT_EQ(boundary->plan_calls, 0);
 }
 

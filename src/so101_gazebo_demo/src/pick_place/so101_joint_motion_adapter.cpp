@@ -210,6 +210,27 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     return fail(FailureCategory::MOVEIT_SCENE, "PLANNING_SCENE_OBSERVATION_UNAVAILABLE",
                 "Current MoveIt Planning Scene facts are unavailable");
   }
+  if (request.carrying && observation.snapshot->gazebo_task_object_stationary &&
+      !*observation.snapshot->gazebo_task_object_stationary) {
+    return fail(FailureCategory::PRECONDITION, "CARRYING_TASK_OBJECT_NOT_STATIONARY",
+                "Physical TaskObject must be stationary before a carrying plan");
+  }
+  if (request.carrying && observation.snapshot->gazebo_task_object_pose_world &&
+      scene->current_gripper_pose_world && scene->attached_relative_pose) {
+    const auto shadow_world =
+      composePose(*scene->current_gripper_pose_world, *scene->attached_relative_pose);
+    if (shadow_world &&
+        !posesMatchCylindricalCarry(*observation.snapshot->gazebo_task_object_pose_world,
+                                    *shadow_world, profile_)) {
+      auto result = fail(FailureCategory::MOVEIT_SCENE, "PLANNING_SHADOW_DIVERGENCE",
+                         "Physical TaskObject diverged beyond the planning-shadow bounds");
+      result.action.failure->metrics["planning_shadow_position_divergence_m"] =
+        positionDistance(*observation.snapshot->gazebo_task_object_pose_world, *shadow_world);
+      result.action.failure->metrics["planning_shadow_axial_tilt_divergence_rad"] =
+        axialTiltDistance(*observation.snapshot->gazebo_task_object_pose_world, *shadow_world);
+      return result;
+    }
+  }
   if (!validScene(*scene, *observation.snapshot, request.state, request.carrying, profile_)) {
     return fail(
       FailureCategory::OBSERVATION,
