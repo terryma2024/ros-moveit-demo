@@ -3104,3 +3104,54 @@ results:
   cleanup: exact owned PIDs only; post-cleanup audit shows preserved PID 3272995 gz sim server intact; tmux codex/codex-cua/kimi untouched
 next: EXP-PEN-DIAG-001-GRASP-229 RUNNING after provenance/preflight
 ```
+
+```yaml
+experiment_id: EXP-PEN-DIAG-001-GRASP-229
+lifecycle: RUNNING
+recorded_at: 2026-08-08 Asia/Shanghai
+commit: c17b87d
+bundle_sha256: 3817a0bdb0853a09ca3098f965cd5ed60d77cc8b8f4f4dc9fd1b3653952242ad
+ros_domain_id: 229
+gz_partition: so101_py_pen_diag_001_229
+tmux_session: so101-py-pen-diag-001-grasp-229
+evidence_root: /tmp/so101-py-pen-diag-001-grasp-229
+preflight:
+  prepared_sdf: references so101_controllers_physical_outcome.yaml (runner-checked)
+  attachment_preflight: initial_attachment_observed=true, defensive_detach_readback=true
+  controllers: three controllers active; arm constraints.1-5.trajectory 0.008 (runner-checked)
+```
+
+```yaml
+experiment_id: EXP-PEN-DIAG-001-GRASP-229
+lifecycle: VALID_SUCCESS
+recorded_at: 2026-08-08 Asia/Shanghai
+commit: c17b87d
+bundle_sha256: 3817a0bdb0853a09ca3098f965cd5ed60d77cc8b8f4f4dc9fd1b3653952242ad
+ros_domain_id: 229
+gz_partition: so101_py_pen_diag_001_229
+tmux_session: so101-py-pen-diag-001-grasp-229 (stopped after run)
+evidence_root: /tmp/so101-py-pen-diag-001-grasp-229
+command: live execute --stop-after VERIFY_PHYSICAL_GRASP (state trace IDLE..VERIFY_PHYSICAL_GRASP, 8 transitions)
+exit_code: 0
+results:
+  gate_status: PROVED (physical-gate.json)
+  bilateral_stable: true (pre- and post-micro-lift stability)
+  max_moving_pad_penetration_m: 0.0010076748440042138 (above frozen 0.000800002, below diagnostic 0.0012)
+  moving_pad_penetration_ceiling_m: 0.0012 (diagnostic override)
+  cup_world_z_delta_m: 0.0020004063844680786 vs micro_lift_command_m 0.002
+  lateral_drift_m: 0.0002164849356293908 (limit 0.001)
+  attempts: 1
+  q6_final_grasp_target: -0.05347743532061577 (implies q6_contact about -0.0474774 at preload 0.006)
+  gazebo_attachment_state: detached (no forward Gazebo attach; MoveIt shadow only)
+  fixed_pad: bilateral true implies fixed contact present (per-pad fixed depth not separately dumped on success path)
+cleanup: exact owned PIDs only; post-cleanup audit shows preserved PID 3272995 gz sim server and PID 652055 clang-tidy intact; tmux codex/codex-cua/kimi untouched
+conclusion: |
+  PHYSICAL MICRO-LIFT CARRIES THE CUP at the documented anchor (Z +0.0004, preload 0.006, rot 0.0)
+  when the moving-pad penetration gate is relaxed to the authorized diagnostic 0.0012 m.
+  The cup tracked the +0.002 m world-Z probe to within 0.5 um with 0.216 mm lateral drift and
+  stable bilateral contact throughout. The VERIFY_PHYSICAL_GRASP failures at the frozen ceiling
+  are therefore gate-calibration failures, not physical grasp incapacity: the physical grasp
+  holds at moving-pad depths around 0.0010 m. This does NOT qualify the grasp; the frozen
+  0.000800002 m ceiling remains the acceptance gate pending a user ceiling-recalibration decision.
+next: revert diagnostic scalar to 0.0 (RED/GREEN + full suite + scoped commit); await user decision
+```
