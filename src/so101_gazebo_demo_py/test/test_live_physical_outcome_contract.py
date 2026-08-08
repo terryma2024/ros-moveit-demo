@@ -4,7 +4,8 @@ import pytest
 from types import SimpleNamespace
 
 from so101_gazebo_demo_py.live_execute import (
-    carry_with_shadow_gates, compose_pose, relative_pose, shadow_divergence_healthy,
+    carry_with_shadow_gates, compose_pose, plan_waypoint_sequence, relative_pose,
+    shadow_divergence_healthy,
 )
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
@@ -99,3 +100,23 @@ def test_stamped_transform_selector_preserves_source_timestamp() -> None:
         (1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0), 12.5,
     )
     assert select_stamped_transform([transform], "so101_tcp") is None
+
+
+def test_plan_only_validates_every_waypoint_as_a_contiguous_sequence() -> None:
+    requests = []
+    class Planner:
+        def plan_joint_path(self, request, timeout):
+            requests.append((request, timeout))
+            return SimpleNamespace(
+                failure=None,
+                trajectory=SimpleNamespace(
+                    joint_trajectory=SimpleNamespace(points=[object(), object()]),
+                ),
+            )
+    points = plan_waypoint_sequence(
+        Planner(), ("1", "2"), (0.0, 0.0), ((0.1, 0.2), (0.3, 0.4)),
+    )
+    assert points == 4
+    assert requests[0][0].current_positions == (0.0, 0.0)
+    assert requests[0][0].target_positions == requests[1][0].current_positions == (0.1, 0.2)
+    assert requests[1][0].target_positions == (0.3, 0.4)
