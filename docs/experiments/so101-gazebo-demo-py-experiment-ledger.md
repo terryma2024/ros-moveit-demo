@@ -3294,3 +3294,70 @@ results:
   forbidden_events: execute_trajectory_mentions=1 (startup noise only)
   cleanup: exact owned PIDs; preserved tmux/processes intact
 ```
+
+```yaml
+experiment_id: EXP-QUAL-GRASP-1-231
+lifecycle: RUNNING
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-001 (commit 71f844f, bundle f99f5ec7)
+ros_domain_id: 231
+gz_partition: so101_py_qual_231
+tmux_session: so101-py-qual-grasp-1-231
+evidence_root: /tmp/so101-py-qual-grasp-1-231
+preflight:
+  prepared_sdf: references so101_controllers_physical_outcome.yaml (runner-checked)
+  attachment_preflight: initial_attachment_observed=true, defensive_detach_readback=true
+  controllers: three controllers active; arm constraints 0.008 (runner-checked)
+```
+
+```yaml
+experiment_id: EXP-QUAL-GRASP-1-231
+lifecycle: VALID_FAILURE
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-001 (commit 71f844f, bundle f99f5ec7)
+ros_domain_id: 231
+gz_partition: so101_py_qual_231
+tmux_session: so101-py-qual-grasp-1-231 (stopped after run)
+evidence_root: /tmp/so101-py-qual-grasp-1-231
+exit_code: 1
+failure:
+  boundary: seating preload gripper move (target q6 -0.05358350923657417, implies q6_contact about -0.0475835 at preload 0.006; diagnostic success had q6_contact -0.0474774)
+  symptom: gripper FollowJointTrajectory ABORTED error_code -5 (goal_time_tolerance exceeded by 1.001 s on the 8 s point, controller goal_time 1.0 s)
+  classification_basis: |
+    move_gripper accepts an error -5 abort when bilateral contact is safe at that moment
+    (gripper_result_acceptable, ros_gazebo_backend.py:43). The run raised, so contact at the
+    abort was NOT safe under the recalibrated 0.00125 m ceiling: moving-pad depth above
+    0.00125 m, or beyond the 0.0013 m solver report limit, or bilateral contact lost.
+    All three are physical gate outcomes on an uncontaminated stack (fresh FULL_RESTART,
+    preflight passed, plan-only VALID_SUCCESS at the same fingerprint minutes earlier),
+    so this is a VALID physical failure, not an INVALID run.
+  evidence_gap: the backend computes safe_bilateral on the abort path but does not dump the
+    contact evidence; exact depth at the abort was not captured (physical-failure.json is only
+    written by the later gate path, which was never reached)
+cleanup: exact owned PIDs; no so101_py_qual_231 partition processes remain; preserved PID 3272995 / 652055 and tmux codex/codex-cua/kimi intact
+```
+
+```yaml
+checkpoint_id: CP-QUALIFICATION-ENDED-001
+recorded_at: 2026-08-09 Asia/Shanghai
+rule: any VALID failure ends qualification and returns to the user (all bounded target phases closed)
+result: qualification ended at run 1 of 3 (EXP-QUAL-GRASP-1-231 VALID_FAILURE)
+interpretation: |
+  The recalibrated 0.00125 m ceiling passed the diagnostic run but failed the very next
+  independent run at nearly identical q6_contact (-0.04758 vs -0.04748 rad). This is the
+  documented statistical caveat realized: the 57 um margin over the observed distribution max
+  (~0.18 sigma) is not robust against run-to-run physical variance. Under the current model
+  the only headroom left below solver saturation (0.0013 m) is 50 um, so a further target-only
+  or ceiling-only adjustment cannot manufacture robustness: the binding constraint is the
+  physical depth variance itself relative to the solver report limit.
+decision_options_for_user:
+  - gate semantics: accept the solver-limit regime (ceiling at/above 0.0013 makes the depth gate
+    vacuous; the within-solver-limit check becomes the only depth gate) and qualify on the
+    physical carry evidence instead
+  - variance reduction: unfreeze one model-level lever (pad geometry/friction, cup wall,
+    gripper controller gains) - explicitly out of scope under current authorization
+  - replan around the variance: e.g. shallower close with carry verification (changes grasp
+    contract; needs new authorization)
+  - stop: keep the recalibrated implementation and the diagnostic result as the final state
+state: resting at commit 71f844f fingerprint (bundle f99f5ec7); no further qualification runs started; awaiting user decision
+```
