@@ -101,9 +101,9 @@ def shadow_divergence_healthy(gazebo_pose, shadow_pose, pair_age_s, policy) -> b
     return position <= policy.max_position_divergence_m and orientation <= policy.max_orientation_divergence_rad
 
 
-def seating_preload_target(q6_contact: float, q6_safe_lower: float) -> float:
-    """Return the main-workspace fixed preload without exceeding the q6 floor."""
-    return max(q6_safe_lower, q6_contact - 0.006)
+def seating_preload_target(q6_contact: float, q6_safe_lower: float, preload_rad: float = 0.006) -> float:
+    """Return the configured seating preload without exceeding the q6 floor."""
+    return max(q6_safe_lower, q6_contact - preload_rad)
 
 
 def select_joint_position(names, positions, joint_name: str) -> float:
@@ -500,7 +500,7 @@ def run_live_execute(
         try: _stable_bilateral(backend)
         except RuntimeError: pass
     q6_contact=_current_joint_position("6")
-    seating_target=seating_preload_target(q6_contact,-.059600220867817)
+    seating_target=seating_preload_target(q6_contact,-.059600220867817,bundle.motion.seating_preload_rad)
     backend.move_gripper(seating_target)
     try:
         contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,max_attempts=1)
@@ -580,5 +580,5 @@ def run_live_execute(
     final_pose=(*final.object_xyz,*final.object_xyzw)
     synchronized_scene=_apply_scene("detach",final_pose)
     state=next(state for state in bundle.motion.states if state.value=="RETREAT"); retreat=bundle.motion.states[state]; backend.move_arm(retreat.waypoints)
-    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene,"synchronized_scene":synchronized_scene,"shadow_checks":shadow_checks},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":.006,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"final_outcome":{"success":settle.evaluation.success,"failure_code":settle.evaluation.failure_code,"sample_count":settle.evaluation.sample_count,"duration_s":settle.evaluation.duration_s,"max_linear_speed_m_s":settle.evaluation.max_linear_speed_m_s,"max_angular_speed_rad_s":settle.evaluation.max_angular_speed_rad_s,"metrics":dict(settle.evaluation.metrics),"telemetry":[sample.as_dict() for sample in settle.evaluation.telemetry]},"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
+    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene,"synchronized_scene":synchronized_scene,"shadow_checks":shadow_checks},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"final_outcome":{"success":settle.evaluation.success,"failure_code":settle.evaluation.failure_code,"sample_count":settle.evaluation.sample_count,"duration_s":settle.evaluation.duration_s,"max_linear_speed_m_s":settle.evaluation.max_linear_speed_m_s,"max_angular_speed_rad_s":settle.evaluation.max_angular_speed_rad_s,"metrics":dict(settle.evaluation.metrics),"telemetry":[sample.as_dict() for sample in settle.evaluation.telemetry]},"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
     path=evidence_directory/"live-summary.json"; path.write_text(json.dumps(summary,indent=2)); return summary

@@ -32,8 +32,26 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert all(len(state.waypoints[0]) == 5 for state in bundle.motion.states.values())
     assert State.MOVE_ABOVE_OBJECT in bundle.motion.states
     assert bundle.motion.approach_outside_clearance_m == 0.001
-    assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.0, 0.0004875)
+    assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.0, 0.0004)
+    assert bundle.motion.seating_preload_rad == 0.003
     assert len(bundle.sha256) == 64
+
+
+@pytest.mark.parametrize("preload", [-0.001, 0.006001])
+def test_rejects_out_of_range_seating_preload(tmp_path: Path, preload: float) -> None:
+    motion = yaml.safe_load(
+        (CONFIG / "motion_policies/light_cup_wall_pick.yaml").read_text()
+    )
+    motion["gripper_actions"]["seating_preload_rad"] = preload
+    motion_path = tmp_path / "motion.yaml"
+    motion_path.write_text(yaml.safe_dump(motion, sort_keys=False))
+
+    with pytest.raises(ConfigurationError, match="seating preload"):
+        load_policy_bundle(
+            CONFIG / "task_objects/light_plastic_cup.yaml",
+            motion_path,
+            CONFIG / "validation_policies/light_cup_wall_pick.yaml",
+        )
 
 
 @pytest.mark.parametrize(

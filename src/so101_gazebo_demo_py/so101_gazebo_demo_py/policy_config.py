@@ -57,6 +57,7 @@ class MotionPolicyConfig:
     grasp_tcp_translation_offset_m: tuple[float, float, float]
     preopen_q6: float
     grasp_close_q6: float
+    seating_preload_rad: float
     release_q6: float
     states: Mapping[State, StateMotionConfig]
     data: Mapping[str, Any]
@@ -246,6 +247,12 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
             "grasp TCP translation candidate exceeds approach clearance",
         )
     states: dict[State, StateMotionConfig] = {}
+    preload = _number(actions.get("seating_preload_rad"), "gripper_actions.seating_preload_rad")
+    if not 0.0 <= preload <= 0.006:
+        raise ConfigurationError(
+            "CONFIGURATION_SEATING_PRELOAD",
+            "seating preload candidate must stay within [0.0, 0.006] rad",
+        )
     for name, raw in _mapping(document, "states").items():
         state = _state(name, "motion.states")
         if not isinstance(raw, dict):
@@ -272,6 +279,7 @@ def _motion(document: dict[str, Any]) -> MotionPolicyConfig:
         grasp_tcp_translation_offset_m=grasp_offset,
         preopen_q6=_number(actions.get("preopen_q6"), "gripper_actions.preopen_q6"),
         grasp_close_q6=_number(actions.get("grasp_close_q6"), "gripper_actions.grasp_close_q6"),
+        seating_preload_rad=preload,
         release_q6=_number(actions.get("release_q6"), "gripper_actions.release_q6"),
         states=MappingProxyType(states),
         data=MappingProxyType(document),
