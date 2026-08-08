@@ -748,9 +748,9 @@ next_experiment: HEADLESS-PHYSICAL-002
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-002
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: 669cd236cf27b9ec592779c05581ac4b8cf3353a
-runtime_source_head: freeze from git rev-parse HEAD after this PLANNED record commit
+runtime_source_head: 5e52539cb639970e233fe42918ff7205e9c50768
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 167
@@ -762,5 +762,48 @@ invalid_criteria: any source/overlay/domain/partition/session/evidence/cleanup m
 failure_semantics: preserve evidence before separate cleanup；no reset and no off-support automatic open
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002
 cleanup_ownership: only process group created by HEADLESS-PHYSICAL-002
+started_at: 2026-08-08T14:15:34+08:00
+ended_at: 2026-08-08T14:18:15+08:00
+observed:
+  failure: Q6_NATIVE_PAD_INTERFERENCE_EXCEEDED
+  failed_state: ATTACH_MOVEIT
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> RECOVER_OPEN_GRIPPER -> RECOVER_DETACH_GAZEBO -> RECOVER_DETACH_MOVEIT -> RECOVER_SYNC_WORLD_OBJECT -> RECOVER_RETREAT -> ERROR
+  hard_gate: native-pad wall-interference ceiling remained strict；no value changed
+  final_outcome_reached: false
+  acceptance_counting: valid qualification failure；not part of five-run batch
+recovery_audit:
+  - source requires fresh intended support and detached MoveIt shadow before controlled opening
+  - frozen post-recovery evidence cannot establish that opening occurred off-support；no speculative patch made
+  - CHECKPOINT_INVALID_DATA recovery-context persistence annotation remains an open defect/risk for later TDD
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002/source-head.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002/failure-wall-near-contact.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002/failure-gazebo-attachment.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-002/failure-moveit-scene.txt
+cleanup: all evidence frozen before Ctrl-C；only owned launch session 13296 stopped；no reset performed
+decision: HARD_GATE_WORKED_RETRY_FRESH_LIFECYCLE
+next_experiment: HEADLESS-PHYSICAL-003
+```
+
+## HEADLESS-PHYSICAL-003：fresh execute qualification retry
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-003
+status: PLANNED
+implementation_commit: 669cd236cf27b9ec592779c05581ac4b8cf3353a
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 168
+GZ_PARTITION: so101-physical-outcome-headless-003-20260808
+lifecycle: FULL_RESTART
+success_criteria: stable final physical outcome plus all independent hard-gate evidence
+failure_criteria: any valid workflow/hard-gate/final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003
+cleanup_ownership: only HEADLESS-PHYSICAL-003 process group
 next_transition: commit PLANNED, freeze resulting HEAD, then RUNNING
 ```
