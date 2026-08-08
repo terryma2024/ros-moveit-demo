@@ -3037,3 +3037,52 @@ authorization:
   readout: cup_world_z_delta_m versus the +0.002 m command, lateral drift, post-lift bilateral contact and per-pad max depths, q6_contact/final, pose-pair age, controller result, Gazebo/MoveIt attachment state, exit code, exact evidence path
   after: revert the scalar to 0.0 (disabled) with RED/GREEN + full suite and scoped commit regardless of outcome; record conclusion; await user decision on any ceiling recalibration
 ```
+
+```yaml
+experiment_id: EXP-PEN-DIAG-001-PLAN-228
+lifecycle: PLANNED
+recorded_at: 2026-08-08 Asia/Shanghai
+authorization: CP-AUTHORIZATION-PENETRATION-DIAGNOSTIC-001
+commit: c17b87d
+config:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+  seating_preload_rad: 0.006
+  grasp_tcp_world_x_rotation_rad: 0.0
+  diagnostic_moving_pad_penetration_ceiling_m: 0.0012
+  bundle_sha256: 3817a0bdb0853a09ca3098f965cd5ed60d77cc8b8f4f4dc9fd1b3653952242ad
+installed_provenance:
+  package_share: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py/share/so101_gazebo_demo_py
+  live_execute_sha256: b4cdfc61d230c3f427a293e6dd193a1707f0a455c395c8371fbae5bb0589dd0c (build == src)
+  policy_config_sha256: b8af7451b1fdc6ccfd6ceb8259c1ed5cbed20fa6dc94a4a311a6cc235d38cddb (build == src)
+package_suite: 147 passed, 2 skipped
+plan:
+  mode: plan_only (six-state ladder)
+  tmux_session: so101-py-pen-diag-001-plan-228
+  ros_domain_id: 228
+  gz_partition: so101_py_pen_diag_001_228
+  evidence_root: /tmp/so101-py-pen-diag-001-plan-228
+  runner: /tmp/so101-py-exp-runner.sh so101-py-pen-diag-001-plan-228 228 so101_py_pen_diag_001_228 /tmp/so101-py-pen-diag-001-plan-228 plan
+```
+
+```yaml
+experiment_id: EXP-PEN-DIAG-001-GRASP-229
+lifecycle: PLANNED (conditional on EXP-PEN-DIAG-001-PLAN-228 VALID_SUCCESS)
+recorded_at: 2026-08-08 Asia/Shanghai
+authorization: CP-AUTHORIZATION-PENETRATION-DIAGNOSTIC-001
+commit: c17b87d
+config:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+  seating_preload_rad: 0.006
+  grasp_tcp_world_x_rotation_rad: 0.0
+  diagnostic_moving_pad_penetration_ceiling_m: 0.0012
+  bundle_sha256: 3817a0bdb0853a09ca3098f965cd5ed60d77cc8b8f4f4dc9fd1b3653952242ad
+plan:
+  mode: FULL_RESTART physical execute --stop-after VERIFY_PHYSICAL_GRASP (includes the +0.002 m micro-lift probe; no forward Gazebo attach)
+  tmux_session: so101-py-pen-diag-001-grasp-229
+  ros_domain_id: 229
+  gz_partition: so101_py_pen_diag_001_229
+  evidence_root: /tmp/so101-py-pen-diag-001-grasp-229
+  runner: /tmp/so101-py-exp-runner.sh so101-py-pen-diag-001-grasp-229 229 so101_py_pen_diag_001_229 /tmp/so101-py-pen-diag-001-grasp-229 grasp
+readout: cup_world_z_delta_m vs +0.002 m command, lateral drift, post-lift bilateral contact and per-pad max depths, q6_contact/final, pose-pair age, controller result, Gazebo/MoveIt attachment state, exit code
+note: exactly one physical attempt; an INVALID run stops the diagnostic with no retry; the diagnostic ceiling is not a qualification gate change
+```
