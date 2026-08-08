@@ -1065,3 +1065,26 @@ evidence_limitation: pose/contact bridge topics disappeared after state-machine 
 cleanup: all available evidence frozen before Ctrl-C；only owned launch and ROS_DOMAIN_ID 213 daemon stopped；no reset
 decision: VALID_HARD_SHADOW_DIVERGENCE_FAILURE_RETRY_UNCHANGED_POLICY
 ```
+
+## HEADLESS-PHYSICAL-010：unchanged-policy release qualification retry
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-010
+status: PLANNED
+implementation_commit: d4766f6
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 215
+GZ_PARTITION: so101-physical-outcome-headless-010-20260808
+lifecycle: FULL_RESTART
+domain_preflight: ros2 node list --no-daemon --spin-time 2 returned no nodes
+partition_preflight: gz topic -l returned no topics
+overlay_preflight: same supported colcon overlay built from d4766f6；no generated manifest exists
+success_criteria: complete DONE trace、stable final physical outcome and every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-010
+cleanup_ownership: only HEADLESS-PHYSICAL-010 launch process group and any daemon created for ROS_DOMAIN_ID 215
+acceptance_counting: qualification only；not part of the five-consecutive-run batch
+```
