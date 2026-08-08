@@ -1140,9 +1140,9 @@ decision: TDD_DISAMBIGUATE_CARRY_SCENE_FAILURE_WITHOUT_CHANGING_GATES
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-012
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: 8e8ff9e90a1f3ab8f02b476646adfb25d26ef95b
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 217
@@ -1162,5 +1162,34 @@ evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-0
 cleanup_ownership: only HEADLESS-PHYSICAL-012 launch process group and any daemon created for ROS_DOMAIN_ID 217
 acceptance_counting: qualification only；not part of the five-consecutive-run batch
 safety_disposition: freeze evidence before cleanup；no reset；never open a physically held unsupported cup
-next_transition: commit this PLANNED record, freeze resulting runtime_source_head, then RUNNING
+started_at: 2026-08-08T16:43:12+08:00
+ended_at: 2026-08-08T16:45:10+08:00
+observed:
+  original_failure: GRIPPER_CONTACT_PENETRATION_EXCEEDED
+  reported_failure_after_recovery: TASK_OBJECT_POSITION_DRIFT
+  failed_state: ATTACH_MOVEIT
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> RECOVER_OPEN_GRIPPER -> ERROR
+  final_outcome_reached: false
+  diagnostic_branch_reached: false
+  gazebo_attached_at_checkpoint: false
+  moveit_attached_at_checkpoint: false
+  controllers_at_freeze: all active
+hard_gate_audit:
+  - existing carry solver penetration ceiling rejected the physical sample；no ceiling or policy value changed
+  - failure occurred before any carrying plan, so neither CARRYING_TASK_OBJECT_NOT_STATIONARY nor PLANNING_SHADOW_DIVERGENCE was expected
+recovery_audit:
+  - runtime reported original_recovery_disposition_hold_for_operator=1
+  - recovery checkpoint persistence still failed with CHECKPOINT_INVALID_DATA and remains a separate defect
+  - no reset was run；all available evidence was frozen before owned-stack cleanup
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012/source-head.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012/failure-wall-near-contact.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012/failure-evidence.sha256
+cleanup: only owned launch process group stopped after evidence freeze；ROS_DOMAIN_ID 217 returned empty；no reset
+decision: HARD_GATE_WORKED_RETRY_UNCHANGED_POLICY_FRESH_LIFECYCLE
 ```
