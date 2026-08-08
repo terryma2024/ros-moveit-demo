@@ -2624,3 +2624,29 @@ bisection_update: bilateral contact remained but penetration exceeded the ceilin
 decision: TRY_PHASE2_CANDIDATE_2_MIDPOINT_PRELOAD_00015
 next_candidate_preload_rad: 0.0015
 ```
+
+```yaml
+experiment_id: PY-C-Q6-PRELOAD-00015-PLAN-001
+status: PLANNED
+candidate: {layer: C_Q6_SEATING_PRELOAD, preload_rad: 0.0015, anchor_offset_m: [0.0, 0.0, 0.0004]}
+rationale: Phase 2 candidate 2; exact midpoint of [0.0, 0.003] rad after candidate 1 penetration failure
+lifecycle: FULL_RESTART
+source_commit: 940d91f
+bundle_sha256: f9e5c3bd0d3058abd8bb4368cf1aacd1662dbbcb28c1f13a2db20945ed0fb7cb
+config_sha256:
+  motion: e96063fc4c0b106332f0981090e2452767e728e2f3e61fcb8e844d0cbc97a96a
+  object: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  effective_controller: 7c4c2c5660cb13f2efbf2cfdbc224e20ec0e1c39d77d60f8d9fc62cd6e3ffdea
+red_green:
+  red: test_policy_config.py preload assertion 0.0015 failed against 0.003 config (1 failed, 16 passed)
+  green: config scalar changed to 0.0015; focused 17 passed; full package suite 138 passed, 2 skipped
+  build: colcon build succeeded; installed motion config sha256 e96063fc4c0b matches source
+ros_domain_id: 223
+gz_partition: so101_py_c_q6_preload_00015_plan_001_223
+evidence_root: /tmp/so101-py-c-q6-preload-00015-plan-001-223
+owned_tmux_session: so101-py-q6-p15-plan-223
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
