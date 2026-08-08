@@ -146,9 +146,26 @@ ValidationResult validateMotionQ6(const WorldSnapshot & snapshot, double expecte
                                          [](const Failure & failure) {
                                            return failure.code == "Q6_TARGET_OUT_OF_TOLERANCE" ||
                                                   failure.code == "Q6_WIDTH_OUT_OF_TOLERANCE" ||
-                                                  failure.code == "Q6_NOT_STATIONARY";
+                                                  failure.code == "Q6_NOT_STATIONARY" ||
+                                                  failure.code ==
+                                                    "Q6_NATIVE_PAD_INTERFERENCE_EXCEEDED";
                                          }),
                           result.failures.end());
+    if (snapshot.gazebo_task_object_gripper_contact.value_or(false)) {
+      if (!snapshot.gazebo_task_object_gripper_max_depth ||
+          !finite(*snapshot.gazebo_task_object_gripper_max_depth)) {
+        addFailure(result, FailureCategory::OBSERVATION, "CONTACT_PENETRATION_EVIDENCE_REQUIRED",
+                   "Carry contact requires finite solver-reported penetration evidence");
+      } else {
+        const double depth = *snapshot.gazebo_task_object_gripper_max_depth;
+        result.metrics["gazebo_task_object_gripper_solver_reported_max_depth"] = depth;
+        result.metrics["stable_solver_reported_depth_limit"] = profile.max_gripper_contact_depth;
+        if (depth < 0.0 || depth > profile.max_gripper_contact_depth) {
+          addFailure(result, FailureCategory::COLLISION, "GRIPPER_CONTACT_PENETRATION_EXCEEDED",
+                     "Carry solver-reported depth exceeds the existing penetration limit");
+        }
+      }
+    }
     result.ok = result.failures.empty();
   }
   return result;
