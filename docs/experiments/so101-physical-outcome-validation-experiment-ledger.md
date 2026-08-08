@@ -661,7 +661,7 @@ next_experiment: PLAN-PHYSICAL-002
 
 ```yaml
 experiment_id: PLAN-PHYSICAL-002
-status: PLANNED
+status: VALID
 source_commit: 47f4a7a
 run_mode: plan_only
 plan_only_state: MOVE_ABOVE_OBJECT
@@ -677,5 +677,45 @@ invalid_criteria:
   - provenance、domain、partition、overlay or cleanup contamination
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/plan-only-002
 cleanup_ownership: only process group created by PLAN-PHYSICAL-002
+started_at: 2026-08-08T14:09:23+08:00
+ended_at: 2026-08-08T14:10:10+08:00
+observed:
+  physics: gz::physics::bullet_featherstone::Plugin
+  controllers: joint_state_broadcaster、arm_controller、gripper_controller active
+  moveit: repeated OMPL plans computed successfully
+  status: PLAN_ONLY_COMPLETE
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT
+  physical_execution: NONE
+  forward_gazebo_attachment: NONE
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/plan-only-002/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/plan-only-002/preflight-nodes.txt
+cleanup: Ctrl-C sent only to owned launch session 20128 after PLAN_ONLY_COMPLETE；owned PIDs exited
+decision: QUALIFIED_FOR_HEADLESS_EXECUTE
+next_experiment: HEADLESS-PHYSICAL-001
+```
+
+## HEADLESS-PHYSICAL-001：final-outcome execute qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-001
+status: PLANNED
+source_commit: bd54288
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+start_simulation: true
+headless: true
+ROS_DOMAIN_ID: 166
+GZ_PARTITION: so101-physical-outcome-headless-001-20260808
+lifecycle: FULL_RESTART
+success_criteria:
+  - final release-epoch evaluator reports stable physical outcome and all hard gates pass
+  - controller、Gazebo pose/contact、MoveIt scene/shadow and checkpoint evidence are independent and fresh
+  - Gazebo remains detached throughout forward path；MoveIt detaches before OPEN_GRIPPER
+  - no forbidden collision or existing penetration ceiling violation
+failure_semantics: freeze all evidence before any separate reset；never auto-open a held unsupported cup
+invalid_criteria: duplicate runtime、wrong overlay/provenance、stale session or cleanup contamination
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-001
+cleanup_ownership: only process group created by HEADLESS-PHYSICAL-001
 next_transition: commit PLANNED then RUNNING
 ```
