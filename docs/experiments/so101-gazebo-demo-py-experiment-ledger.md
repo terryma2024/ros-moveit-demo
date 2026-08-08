@@ -1023,3 +1023,30 @@ invalid_criteria:
   - startup, provenance, bridge, controller, MoveIt, or pose/contact observation fails before target behavior is exercised
 post_failure: stop/hold; preserve evidence; no automatic open or reset before capture
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-004
+status: INVALID
+completed_at: 2026-08-08 Asia/Shanghai
+target_behavior_exercised: false
+command_boundary: authoritative pose preflight
+observed:
+  - Full initial-attachment and controller readiness passed; defensive detach converged to durable detached.
+  - Runtime arm trajectory constraint was 0.008 and the first pose pair was fresh at 0.024 s.
+  - The probe then exposed missing Gazebo subscription teardown and a later first-arrival pair age of 0.372 s, above the unchanged 0.10 s policy gate.
+root_cause: The live observer returned the first available cross-source pair and did not explicitly unsubscribe its Gazebo callback before interpreter teardown.
+resolution:
+  commit: 76ac55b3dc7cc20437a1a35637c53171fabbd96b
+  verification: 22 targeted tests passed; live detached probe returned pair age 0.054 s and exit code 0
+evidence:
+  directory: /tmp/so101-py-a0-baseline-004-195
+  runtime_constraint: arm-trajectory-constraint.txt
+cleanup:
+  tmux_session: removed
+  detached_owned_gz_pid: 121400 terminated by exact PID
+  unrelated_tmux_and_ros_stacks: untouched
+candidate_result: EXCLUDED
+hard_gate_result: NOT_EVALUATED
+decision: TERMINATE_BATCH_AND_FULL_RESTART_FROM_OBSERVER_FIX_COMMIT
+next_experiment: PY-A0-BASELINE-GRASP-005
+```
