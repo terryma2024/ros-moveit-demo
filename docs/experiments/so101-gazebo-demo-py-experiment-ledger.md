@@ -2862,3 +2862,38 @@ contract:
   - stop early if response worsens contrary to hypothesis or a candidate passes; never try another axis or opposite sign automatically
 next_action: RED/GREEN restore seating_preload_rad 0.006, then read-only orientation analysis
 ```
+
+```yaml
+checkpoint_id: CP-PHASE3-ORIENTATION-ANALYSIS-002
+recorded_at: 2026-08-08 Asia/Shanghai
+phase: PHASE_3_READ_ONLY_ORIENTATION_ANALYSIS
+method: offline geometry/TF/FK computation only; no stack started, no file controlling geometry/physics/controller/gates changed
+evidence_script: /tmp/so101-py-phase3-analysis/pad_orientation_analysis.py
+inputs:
+  - pad mount frames and joint 6 frame from urdf/so101_base.xacro (gripper==TCP orientation via fixed joint)
+  - generated pad collision meshes meshes/so101/generated/{fixed,moving}/fingertip_pad_collision_*.stl (area-weighted contact-face normals)
+  - evidence TCP poses and q6_final from six physical-failure.json files (Z anchor series and q6 preload series)
+observed:
+  - fixed pad contact-face world normal tips UP +4.42..+4.58 deg out of horizontal across all grasp-failure runs (pad mount adds +2.77 deg on top of the grasp orientation tilt)
+  - moving pad contact-face world normal tips UP +1.15..+1.28 deg at preload 0.006/0.003 (0.37 deg in the anomalous 0.00375 run)
+  - both pad normals are aligned with the wall normal world Y within 0.11 deg (closing axis already aligned; cup outward wall is +Y per task object near_wall_outward_world)
+  - pad face tipping up concentrates wall contact on the pad lower edge, raising peak penetration at equal load
+competing_hypotheses:
+  - id: H1_YAW_WORLD_Z
+    claim: rotating the closing axis relative to the wall normal unloads the moving pad
+    verdict: REJECTED; measured closing-axis/wall-normal misalignment is at most 0.11 deg, so yaw can only add misalignment
+  - id: H2_ROLL_WORLD_Y_CLOSING_AXIS
+    claim: rolling about the closing axis repositions pad contact on the curved wall
+    verdict: REJECTED as primary lever; pad faces stay vertical under this rotation and the cup-curvature sagitta across pad width (about 0.00015 m) is far below the observed penetration excess (0.0002-0.0006 m)
+  - id: H3_PITCH_WORLD_X_WALL_TANGENT
+    claim: a negative rotation of the grasp TCP orientation about world X (wall-tangent horizontal axis) verticalizes the pad faces (moving +1.2 deg toward 0, fixed +4.5 deg toward 3.5 at -1 deg), spreads wall contact off the pad lower edge, and reduces peak moving-pad penetration while preserving fixed contact
+    verdict: SELECTED; axis = world X, sign = negative; falsifiable because penetration must decrease versus the anchor run moving depth 0.0009567769011482596 m
+selected_direction:
+  axis: world_x
+  sign: negative
+  candidate_magnitudes_rad: [0.017453292519943295, 0.04363323129985824, 0.08726646259971647]
+  stop_early: if penetration or contact stability worsens contrary to H3, stop orientation experiments and advance to Phase 4
+plumbing: grasp orientation scalar is absent; add minimal TDD-backed grasp_tcp_world_x_rotation_rad config plumbing bounded by axis_tolerance_rad 0.08726646259971647
+next_action: RED/GREEN plumbing for candidate 1 (-0.017453292519943295 rad) at the frozen Z anchor +0.0004 m with documented q6 baseline 0.006
+next_experiment: PY-B-XROT-NEG-00173-PLAN-001
+```
