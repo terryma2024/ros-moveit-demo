@@ -213,7 +213,7 @@ def test_calibration_candidate_stops_after_first_valid_physical_failure(monkeypa
     calls = []
     monkeypatch.setattr(
         "so101_gazebo_demo_py.live_execute._stable_bilateral",
-        lambda backend: calls.append("stable") or (_ for _ in ()).throw(RuntimeError("missing")),
+        lambda backend, ceiling=None: calls.append("stable") or (_ for _ in ()).throw(RuntimeError("missing")),
     )
     with pytest.raises(RuntimeError, match="missing"):
         run_bounded_physical_grasp_attempts(
@@ -232,3 +232,26 @@ def test_stable_bilateral_fails_immediately_on_moving_pad_hard_ceiling() -> None
 
     with pytest.raises(RuntimeError, match="moving-pad penetration ceiling exceeded"):
         _stable_bilateral(backend)
+
+
+def test_stable_bilateral_honors_diagnostic_ceiling_override() -> None:
+    contacts = (
+        ContactPair("plastic_cup::body::wall_near", "fixed_fingertip_pad_collision_001", (0.0004,)),
+        ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (0.001,)),
+    )
+    backend = SimpleNamespace(contacts=lambda: contacts)
+
+    with pytest.raises(RuntimeError, match="moving-pad penetration ceiling exceeded"):
+        _stable_bilateral(backend)
+    evidence = _stable_bilateral(backend, ceiling=0.0012)
+    assert evidence.bilateral
+    assert evidence.max_moving_pad_penetration_m == 0.001
+
+
+def test_attachment_safe_contact_honors_diagnostic_ceiling_override() -> None:
+    from so101_gazebo_demo_py.gazebo.observer import BilateralContactEvidence
+    from so101_gazebo_demo_py.live_execute import attachment_safe_contact
+
+    evidence = BilateralContactEvidence(True, True, 0.0004, 0.001, True)
+    assert not attachment_safe_contact(evidence)
+    assert attachment_safe_contact(evidence, ceiling=0.0012)

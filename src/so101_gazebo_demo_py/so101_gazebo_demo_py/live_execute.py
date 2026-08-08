@@ -91,9 +91,9 @@ def plan_waypoint_sequence(planner, names, start, waypoints) -> int:
     return total
 
 
-def attachment_safe_contact(evidence) -> bool:
+def attachment_safe_contact(evidence, ceiling=MOVING_PAD_MESH_PENETRATION_CEILING_M) -> bool:
     depth=evidence.max_moving_pad_penetration_m
-    return evidence.bilateral and depth is not None and depth <= MOVING_PAD_MESH_PENETRATION_CEILING_M
+    return evidence.bilateral and depth is not None and depth <= ceiling
 
 
 def shadow_divergence_healthy(gazebo_pose, shadow_pose, pair_age_s, policy) -> bool:
@@ -349,12 +349,12 @@ def _moveit_world_z_execute(
     return points, transform.transform.translation.z
 
 
-def _stable_bilateral(backend: RosGazeboLiveBackend, required: int = 6):
+def _stable_bilateral(backend: RosGazeboLiveBackend, required: int = 6, ceiling=MOVING_PAD_MESH_PENETRATION_CEILING_M):
     consecutive=0; last=None
     for _ in range(30):
         last=evaluate_bilateral_contact(backend.contacts())
         depth=last.max_moving_pad_penetration_m
-        if depth is not None and depth > MOVING_PAD_MESH_PENETRATION_CEILING_M:
+        if depth is not None and depth > ceiling:
             raise RuntimeError(f"moving-pad penetration ceiling exceeded: {depth}")
         consecutive = consecutive + 1 if last.bilateral else 0
         if consecutive >= required: return last
@@ -379,11 +379,11 @@ def stabilize_with_contact_missing_retries(
     raise last_error
 
 
-def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
+def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute, ceiling=MOVING_PAD_MESH_PENETRATION_CEILING_M):
     """Execute the 2 mm probe, wait for stable contact, then verify object motion."""
     before=backend.sample()
     micro_points,micro_start_z=execute(.002)
-    _stable_bilateral(backend)
+    _stable_bilateral(backend, ceiling=ceiling)
     after=backend.sample()
     lift=after.object_xyz[2]-before.object_xyz[2]
     lateral=math.dist(after.object_xyz[:2],before.object_xyz[:2])
@@ -394,7 +394,7 @@ def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
 
 def run_bounded_physical_grasp_attempts(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
-    max_attempts: int = 1,
+    max_attempts: int = 1, ceiling=MOVING_PAD_MESH_PENETRATION_CEILING_M,
 ):
     """Run a pre-registered number of complete physical attempts."""
     if max_attempts < 1:
@@ -411,9 +411,9 @@ def run_bounded_physical_grasp_attempts(
             _moveit_world_z_execute(0.0,local_x_m=-.0002)
             backend.move_gripper(target)
         try:
-            contact=_stable_bilateral(backend)
+            contact=_stable_bilateral(backend, ceiling=ceiling)
             lifted=True
-            result=verify_physical_micro_lift(backend)
+            result=verify_physical_micro_lift(backend, ceiling=ceiling)
             return contact,result,attempt+1,target
         except RuntimeError as error:
             last_error=error
@@ -504,16 +504,17 @@ def run_live_execute(
     if any(grasp_offset) or grasp_rotation:
         _moveit_world_z_execute(0.0,world_translation_m=grasp_offset,world_x_rotation_rad=grasp_rotation)
     close_target=bundle.motion.grasp_close_q6
+    ceiling=bundle.motion.diagnostic_moving_pad_penetration_ceiling_m or MOVING_PAD_MESH_PENETRATION_CEILING_M
     backend.move_gripper(close_target)
     initial_contact=evaluate_bilateral_contact(backend.contacts())
     if initial_contact.bilateral:
-        try: _stable_bilateral(backend)
+        try: _stable_bilateral(backend, ceiling=ceiling)
         except RuntimeError: pass
     q6_contact=_current_joint_position("6")
     seating_target=seating_preload_target(q6_contact,-.059600220867817,bundle.motion.seating_preload_rad)
     backend.move_gripper(seating_target)
     try:
-        contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,max_attempts=1)
+        contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,max_attempts=1,ceiling=ceiling)
     except Exception as error:
         failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"attempts":1}
         try:
@@ -525,17 +526,17 @@ def run_live_execute(
         (evidence_directory/"physical-failure.json").write_text(json.dumps(failure_evidence,indent=2))
         raise
     lift,lateral,micro_points,micro_start_z,before,after=physical
-    if not attachment_safe_contact(contact) and final_grasp_target < seating_target:
+    if not attachment_safe_contact(contact,ceiling=ceiling) and final_grasp_target < seating_target:
         backend.move_gripper(seating_target)
-        contact=_stable_bilateral(backend)
+        contact=_stable_bilateral(backend, ceiling=ceiling)
         after=backend.sample()
         lift=after.object_xyz[2]-before.object_xyz[2]
         lateral=math.dist(after.object_xyz[:2],before.object_xyz[:2])
-    if not attachment_safe_contact(contact):
+    if not attachment_safe_contact(contact,ceiling=ceiling):
         raise RuntimeError(f"moving-pad attachment ceiling exceeded: {contact.max_moving_pad_penetration_m}")
     if lift < .002 or lateral > .001:
         raise RuntimeError(f"physical gate changed after retraction lift={lift} lateral={lateral}")
-    gate={"status":"PROVED","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target}
+    gate={"status":"PROVED","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"moving_pad_penetration_ceiling_m":ceiling,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target}
     (evidence_directory/"physical-gate.json").write_text(json.dumps(gate,indent=2))
     if stop_after == "VERIFY_PHYSICAL_GRASP":
         result={"status":"CHECKPOINT_COMPLETE","current_state":stop_after,"state_trace":list(TRACE[:9]),"exit_code":0,"physical":gate,"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
