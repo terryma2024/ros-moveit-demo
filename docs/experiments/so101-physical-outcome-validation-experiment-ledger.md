@@ -934,3 +934,25 @@ cleanup: immediate Ctrl-C；owned launch PIDs verified absent；pre-existing ROS
 decision: INVALID_DOMAIN_COLLISION
 next_experiment: choose a domain only after a clean preflight proves no nodes；do not count this run
 ```
+
+## HEADLESS-PHYSICAL-007：clean-domain full physical qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-007
+status: PLANNED
+implementation_commit: 49f7cc3
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 211
+GZ_PARTITION: so101-physical-outcome-headless-007-20260808
+lifecycle: FULL_RESTART
+domain_preflight: ros2 node list --no-daemon --spin-time 2 returned no nodes；domains 171-174 were rejected as occupied
+overlay_preflight: LD_LIBRARY_PATH contains install/so101_gazebo_demo/lib；no generated manifest remains
+success_criteria: complete DONE trace、stable final physical outcome and every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-007
+cleanup_ownership: only HEADLESS-PHYSICAL-007 launch process group and any daemon created for ROS_DOMAIN_ID 211
+next_transition: commit PLANNED, freeze resulting HEAD, repeat clean no-daemon preflight, then RUNNING
+```
