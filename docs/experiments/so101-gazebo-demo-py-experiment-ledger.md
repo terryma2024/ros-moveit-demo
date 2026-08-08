@@ -1339,3 +1339,21 @@ success_criteria:
 invalid_criteria:
   - startup/readiness/provenance failure before planning
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0005-PLAN-002
+status: VALID_SUCCESS
+completed_at: 2026-08-08 Asia/Shanghai
+bundle_sha256_observed: 823ab791350ffcff935eef3c568339a01273ab1b8951db62cc8c9c2892f88a75
+planned_points:
+  MOVE_ABOVE_OBJECT: 199
+  DESCEND: 129
+  LIFT: 119
+  MOVE_ABOVE_PLACE: 127
+  DESCEND_TO_PLACE: 100
+  RETREAT: 132
+descend_correction_evidence: baseline DESCEND ladder 125 points plus 4-point FK-derived world-X -0.0005 m pose plan
+forbidden_runtime_events: NONE_OBSERVED
+decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
+next_experiment: PY-A-X-NEG-0005-GRASP-001
+```
