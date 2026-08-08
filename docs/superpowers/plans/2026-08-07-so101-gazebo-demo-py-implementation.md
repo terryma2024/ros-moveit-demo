@@ -944,3 +944,75 @@ git commit -m "docs(so101_py): record runtime acceptance"
 ```
 
 If acceptance is incomplete, leave the report uncommitted or commit it explicitly as a partial evidence report with no completion claim. Do not push or merge without separate user authorization.
+
+## Physical-outcome parity migration tasks (approved 2026-08-08)
+
+这些任务覆盖 Task 15 的 forward Gazebo-attachment acceptance 路径。保留所有现有 Task 15 脏文件，
+先建立 parity，不把来源不明改动夹入提交。只读参考 physical worktree `641f7c4`；installed Python
+package 绝不 import/link/execute C++ package。
+
+### P1: Domain、workflow 与 package independence
+
+- 在 `test/test_domain.py`、`test/test_workflow.py`、`test/test_package_independence.py` 写 RED：两个新
+  state 精确序列化；forward trace 无 Gazebo attach/detach；MoveIt detach 早于 open；扫描拒绝 C++
+  import、binary、asset lookup。
+- 最小 GREEN 修改 `domain.py`/`workflow.py`；防御性 Gazebo detach 只留 reset/recovery protocol。
+- 运行 `python3 -m pytest -q` 的上述文件；预期 RED 为 state/trace 缺失，GREEN 为零失败。单独提交。
+
+### P2: Strict physical-outcome policy
+
+- `test/test_policy_config.py` RED 覆盖每个 final/shadow 字段、missing/unknown/non-finite、range/timing
+  consistency 和 calibration sentinel。
+- GREEN 修改 `policy_config.py` 与 validation YAML。仅复用 `641f7c4` 中语义相同的证据值；不得改
+  现有 hard ceiling。纯 pytest 循环不运行 C++ quality gate。
+
+### P3: Snapshot、observer 与 evidence
+
+- observer/snapshot/checkpoint RED 覆盖独立 source timestamp/sequence、fresh finite evidence、bounded
+  telemetry、真实 intended-table contact、compound-owner identity、bounded-negative-depth 与 release epoch。
+- GREEN 保留 raw collision/depth metrics，support depth 不得进入 finger penetration；CLI/snapshot 暴露
+  epoch、sample、support/detach/sync facts，但不复制 evaluator 逻辑。
+
+### P4: Pure evaluator 与 release settle
+
+- RED 精确覆盖 post-release-only、consecutive/minimum duration、derived linear/angular speed、非单调/
+  non-finite 时间、全部 final predicates、bounded metrics 和固定 failure precedence。
+- 纯 evaluator 无 ROS、无 sleep；settle executor 拥有 cadence/cancel/timeout，新 epoch non-resumable。
+  注册 `WAIT_RELEASE_SETTLE`/`VALIDATE_FINAL_PLACEMENT`，冻结 final evidence 交给 sync。
+
+### P5: MoveIt-only planning shadow
+
+- RED 证明 ATTACH_MOVEIT 使用最新 Gazebo pose、每个 carrying plan 前 shadow divergence gate、detach
+  先于 open，forward adapter 不发布 Gazebo attach/detach。
+- GREEN 移除 forward `backend.set_attached(True/False)` 与 attach events，不能变成 no-op；reset readiness
+  仍可 detach stale state。保留所有 collision/penetration/shadow ceilings 与 carry telemetry。
+
+### P6: Hold-first recovery 与 consumers
+
+- RED 证明 unsupported held cup 不 open、final failure 在 reset 前冻结、headless wrapper 传播 installed
+  execute 非零状态。
+- GREEN 更新 recovery/CLI/launch/headless assertion；checkpoint 禁止恢复 interrupted release epoch。
+
+### P7: Python parity gate
+
+先 targeted pytest，再 package source 全 pytest。仅 source 全绿后做
+`colcon build --packages-select so101_gazebo_demo_py --symlink-install`、source overlay、验证 package prefix
+和 package tests；随后 dry-run、所有 plan-only state 和一个唯一 domain/partition/session/hash/evidence
+root 的 isolated headless。physical-outcome parity 未成立前不调 target。
+
+### P8: 固定单变量 target 顺序
+
+顺序为 grasp TCP position（逐轴）、orientation（逐分量）、q6 close、micro-lift、carry/place waypoint、
+trajectory timing。每个候选先 Python config/range RED→最小 GREEN→targeted pytest→installed policy→
+full plan_only→`stop_after`/最早边界 headless；记录 solver depth、cup/TCP pose、tilt/orientation drift、
+q6 feedback/velocity、shadow divergence。valid failure 淘汰，invalid 终止批次，禁止随机筛成功。
+controller、physics、geometry、mass、friction、final tolerance 和 hard ceilings 全部冻结。
+
+### P9: Qualification、acceptance 与 publication
+
+冻结候选后做 fresh Python package 全测、完整 headless outcome、GUI/CUA fresh screenshot、同 commit/
+policy 五次连续 FULL_RESTART。保留 controller/joint/TF、Gazebo pose/contact/detached、MoveIt shadow/
+detached/world-sync 与视觉独立证据。valid failure 清零，invalid 终止。五连前不 push/merge；之后才按
+授权做 scoped Gitee publication 和 remote SHA verification。
+
+任何 unexpected failure 先用 systematic-debugging，不叠加第二变量。
