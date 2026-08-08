@@ -1347,3 +1347,26 @@ evidence:
 cleanup: evidence frozen before stopping only the owned launch process group；no reset
 decision: STOP_RETRY_STACKING_AND_DEBUG_PHYSICAL_CARRY_STABILITY
 ```
+
+## HEADLESS-PHYSICAL-016：fresh-lifecycle final-outcome qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-016
+status: PLANNED
+implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 221
+GZ_PARTITION: so101-physical-outcome-headless-016-20260808
+lifecycle: FULL_RESTART
+domain_preflight: no nodes
+partition_preflight: no topics
+single_variable: fresh physics lifecycle；code、policy、motion、controller、physics and every hard ceiling unchanged
+success_criteria: complete DONE trace、stable final release-epoch physical outcome and every hard invariant
+failure_criteria: any valid hard-gate or final-outcome failure after evidence freeze
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-016
+cleanup_ownership: only HEADLESS-PHYSICAL-016 launch process group and ROS_DOMAIN_ID 221 daemon if created
+acceptance_counting: qualification only；a successful run proves the active one-task objective but does not start the frozen five-run campaign until recorded
+safety_disposition: freeze evidence before cleanup；no reset；never open a held unsupported cup
+```
