@@ -1655,3 +1655,28 @@ preflight:
   authoritative_gazebo_pose_stream: fresh
   candidate_retry_count: 0
 ```
+
+```yaml
+experiment_id: PY-A-Y-POS-00025-GRASP-001
+status: VALID_SAFETY_FAILURE
+completed_at: 2026-08-08 Asia/Shanghai
+attempt_count: 1
+first_hard_gate_failure: BILATERAL_CONTACT_AND_PENETRATION_CEILING_FAILED
+observed:
+  moving_jaw_contact: false
+  max_moving_pad_penetration_m: null
+  fixed_finger_contact: true
+  max_fixed_pad_penetration_m: 0.0008068110328167677
+  frozen_ceiling_m: 0.000800002
+  q6_contact: -0.047606226056814194
+  q6_final: -0.053603820502758026
+  pose_pair_age_s: 0.001
+  micro_lift_executed: false
+  gazebo_attachment_state: detached
+evidence_file: /tmp/so101-py-a-y-pos-00025-grasp-001-206/physical-failure.json
+recovery_open_commanded: false
+retry_count: 0
+candidate_result: ELIMINATED
+decision: TRY_THIRD_AND_FINAL_POSITIVE_Y_DIRECTION_CANDIDATE_000225
+next_candidate_offset_m: [0.0, 0.000225, 0.0]
+```
