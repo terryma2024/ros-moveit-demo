@@ -1016,3 +1016,19 @@ detached/world-sync 与视觉独立证据。valid failure 清零，invalid 终�
 授权做 scoped Gitee publication 和 remote SHA verification。
 
 任何 unexpected failure 先用 systematic-debugging，不叠加第二变量。
+
+### P10: Target-only calibration matrix（批准于 2026-08-08）
+
+- 以 preserved Task 15/current Python target 为未 qualification baseline；记录 source commit、dirty
+  config hash、单位、杯/指垫几何与 symbolic bounded range。不得把 preserved `0.012 rad` controller
+  tolerance 实验值用于有效运行；runtime 必须证明加载冻结 `0.008 rad` physical-outcome config。
+- 固定顺序 A TCP translation（每次一轴）→B orientation（每次一分量）→C q6→D micro-lift→E
+  carry/place/retreat waypoint→F timing/scaling。具体候选必须先在新 ledger `PLANNED`，不得并改。
+- 每候选：精确 config/range contract RED→GREEN；fresh Python build/source/prefix；所有 motion state
+  `--mode plan_only --live-runtime`；唯一 FULL_RESTART `--stop-after VERIFY_PHYSICAL_GRASP`；保存
+  cup↔finger depth、cup/TCP 7D pose、tilt/orientation drift、q6/velocity 和 shadow divergence。
+- VALID failure 淘汰，不重跑挑随机成功；INVALID 终止批次。连续三个同方向有界候选失败即停止该
+  方向。短路径候选需冻结后三次 FULL_RESTART qualification，任一 valid failure 回退。
+- 只有 qualification 后执行 full physical outcome；然后 fresh full package suite、headless、GUI fresh
+  screenshot、同 commit/policy 五次连续 FULL_RESTART。controller/physics/geometry/material/final tolerance/
+  all hard ceilings 始终冻结。

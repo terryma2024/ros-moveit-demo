@@ -378,3 +378,30 @@ unsupported held cup 永不自动 open；先 stop/hold、冻结 controller/Gazeb
 package full test、dry-run、plan-only、isolated headless、GUI fresh screenshot、同 commit/policy 每次
 FULL_RESTART 连续五次。纯 policy/domain/evaluator 循环不触发 C++ quality gate；只有 Python package
 安装/ROS runtime 边界才做必要 colcon build。
+
+## 2026-08-08 Target-only calibration authorization addendum
+
+用户在 physical-outcome ownership 不变的前提下，仅授权调 grasp/motion target：TCP 抓取位置/姿态、
+q6 close、micro-lift、carry/place/retreat waypoint 与姿态、trajectory duration/velocity/acceleration。
+controller algorithm/gain/plugin、physics engine、geometry、mass、friction、final tolerance、collision/
+penetration/planning-shadow/recovery ceiling 均冻结。normal forward Gazebo attach 继续禁止。
+
+Python migration baseline 来自 preserved Task 15 target 及 `main@05dff7a` 对齐记录；physical
+`641f7c4` 仅提供 contract/evidence 语义，不形成 C++ runtime dependency。baseline 尚未 qualification：
+`grasp_close_q6=-0.047608632840292 rad`、micro-lift `+0.002 m world Z`、当前 motion YAML waypoints/
+scaling，以及 task-object YAML 的 measured grasp-relative pose。杯体约束为 radius `0.040 m`、height
+`0.090 m`、rim clearance `0.008 m`、bottom clearance `0.020 m`；q6 hard lower limit 为
+`-0.059600220867817 rad`。fingertip geometry 只作约束，不允许修改。
+
+搜索严格逐层、逐分量：A TCP translation 每轴独立，范围不超过已配置
+`approach_outside_clearance_m` 的正负界；B orientation 每分量独立，范围不超过该 state 已有
+`axis_tolerance_rad`；C q6 仅在 baseline 与 URDF safe lower limit 间；D micro-lift 从既有 `0.002 m`
+起且必须严格低于既有 catastrophic relative-position ceiling；E waypoint 候选必须同时在 joint
+limits 和原 state validation envelope 内；F timing/scaling 仅使用预注册且不超过当前 policy 的候选。
+这些是探索边界，不是新 pass threshold；每个具体数值必须先由 geometry/plan-only/live evidence
+说明并写入 ledger。变量顺序固定 A→B→C→D→E→F，上一层未消除首个 hard-gate failure 不进入下一层。
+
+每个候选先 contract RED→GREEN，再 fresh install、全 state live plan-only，随后唯一
+FULL_RESTART 的 `stop_after=VERIFY_PHYSICAL_GRASP`。VALID failure 淘汰且不重复抽样；INVALID 终止批次。
+入选值冻结后至少三次独立 FULL_RESTART qualification，任一 valid failure 回退。只有短路径通过后
+才做 full physical outcome、GUI 和同 commit/policy 连续五次 acceptance。
