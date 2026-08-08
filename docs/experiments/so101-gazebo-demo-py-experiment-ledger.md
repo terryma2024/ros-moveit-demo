@@ -1826,3 +1826,27 @@ forbidden_runtime_events: NONE_OBSERVED
 decision: PROCEED_TO_ONE_FULL_RESTART_STOP_AFTER_PHYSICAL_GRASP
 next_experiment: PY-A-Z-POS-0005-GRASP-001
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-0005-GRASP-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0, 0.0005]}
+lifecycle: FULL_RESTART
+source_commit: e068ddf
+bundle_sha256: eaf41abbe2bcbd3ce1a01b9f5a2f656df120b3be3717d9d3ea9983fddf5f21bd
+motion_config_sha256: 7e25d3f6e8fee18c615a5a5d27de04406dc0a5d8520a931e8fa93aac8b53aff0
+ros_domain_id: 210
+gz_partition: so101_py_a_z_pos_0005_grasp_001_210
+evidence_root: /tmp/so101-py-a-z-pos-0005-grasp-001-210
+owned_tmux_session: so101-py-a-z-grasp-210
+command_boundary: execute --stop-after VERIFY_PHYSICAL_GRASP
+attempt_count: 1
+success_criteria: bilateral stable within 0.000800002 m ceiling and physical 0.002 m micro-lift within existing lateral bound
+failure_criteria: any frozen hard gate failure
+post_failure: stop/hold; no open; preserve evidence
+prelaunch_process_audit:
+  removed: ["domain 209 roots 235852, 235866 and owned gz PID 235982 by TERM; no survivors"]
+  preserved: ["PID 3272995 uncertain gz sim server", "PID 652055 unrelated clang-tidy", "tmux codex", "tmux codex-cua"]
+  uncertain: [3272995]
+  task_stack_present: false
+```
