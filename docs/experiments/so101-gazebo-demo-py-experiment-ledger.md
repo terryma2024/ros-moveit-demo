@@ -1495,3 +1495,19 @@ x_axis_conclusion: Negative X reached the approved -0.001 m bound without elimin
 decision: ADVANCE_WITHIN_A_LAYER_TO_WORLD_Y_POSITIVE_0005
 next_candidate_offset_m: [0.0, 0.0005, 0.0]
 ```
+
+```yaml
+experiment_id: PY-A-Y-POS-0005-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.0005, 0.0]}
+lifecycle: FULL_RESTART
+source_commit: 2a0931805b78908725cd8efb8f1f0e21944c2f9b
+bundle_sha256: b46016443888aee569a8170c56dd06c9b00d757b30dc7ee1de7f21851595076b
+motion_config_sha256: 41b306d7d9e38aae04e45715b9b90863b65eb64a582e70b623c53246d1fa68b1
+ros_domain_id: 203
+gz_partition: so101_py_a_y_pos_0005_plan_001_203
+evidence_root: /tmp/so101-py-a-y-pos-0005-plan-001-203
+owned_tmux_session: so101-py-a-y-plan-203
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+```
