@@ -32,7 +32,7 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert all(len(state.waypoints[0]) == 5 for state in bundle.motion.states.values())
     assert State.MOVE_ABOVE_OBJECT in bundle.motion.states
     assert bundle.motion.approach_outside_clearance_m == 0.001
-    assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.0005, 0.0)
+    assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.00025, 0.0)
     assert len(bundle.sha256) == 64
 
 
