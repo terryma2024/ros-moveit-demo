@@ -1017,3 +1017,26 @@ cleanup: all available evidence frozen before Ctrl-C；only owned launch and ROS
 decision: TDD_ALIGN_PLANNING_SHADOW_DETACH_AND_PHYSICAL_OPEN_WITH_RELEASE_EPOCH
 fix_commit: d4766f6
 ```
+
+## HEADLESS-PHYSICAL-009：release-epoch qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-009
+status: PLANNED
+implementation_commit: d4766f6
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 213
+GZ_PARTITION: so101-physical-outcome-headless-009-20260808
+lifecycle: FULL_RESTART
+domain_preflight: ros2 node list --no-daemon --spin-time 2 returned no nodes
+partition_preflight: gz topic -l returned no topics
+overlay_preflight: LD_LIBRARY_PATH contains install/so101_gazebo_demo/lib；no generated manifest exists
+success_criteria: complete DONE trace、stable final physical outcome and every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-009
+cleanup_ownership: only HEADLESS-PHYSICAL-009 launch process group and any daemon created for ROS_DOMAIN_ID 213
+acceptance_counting: qualification only；not part of the five-consecutive-run batch
+```
