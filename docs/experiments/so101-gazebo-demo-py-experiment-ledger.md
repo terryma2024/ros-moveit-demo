@@ -1586,3 +1586,21 @@ retry_count: 0
 candidate_result: ELIMINATED
 decision: CONTINUE_BOUNDED_LAYER_A_DIAGNOSIS_WITHOUT_RETRY
 ```
+
+```yaml
+experiment_id: PY-A-Y-POS-00025-PLAN-001
+status: PLANNED
+candidate: {layer: A_TCP_TRANSLATION, frame: world, offset_m: [0.0, 0.00025, 0.0]}
+rationale: midpoint between bilateral baseline and the +0.0005 m missing-moving-contact boundary; second candidate in the same bounded positive-Y direction
+lifecycle: FULL_RESTART
+source_commit: dc55445fbdab3bdfdd42354a88fd6f7e6efc451b
+bundle_sha256: a1e1d2c13bcab1f9dd397b2916f97b38852762778dabc5f1ebe6464bbb65f2f8
+motion_config_sha256: b73ca932d1e73b364315fa1a923b37553678789fd8100b94288fa9bbc5f8ee16
+ros_domain_id: 205
+gz_partition: so101_py_a_y_pos_00025_plan_001_205
+evidence_root: /tmp/so101-py-a-y-pos-00025-plan-001-205
+owned_tmux_session: so101-py-a-y-mid-plan-205
+states: [MOVE_ABOVE_OBJECT, DESCEND, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, RETREAT]
+success_criteria: every state and FK-derived correction return nonempty plans with no execution/attachment command
+invalid_criteria: startup/readiness/provenance failure before planning
+```
