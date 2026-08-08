@@ -72,11 +72,19 @@ def main(arguments: list[str] | None = None) -> int:
         evidence_dir = Path(os.environ.get("SO101_PY_EVIDENCE_DIR", "/tmp/so101-py-runtime"))
         try:
             if options.mode == RunMode.EXECUTE.value:
-                result = run_live_execute(evidence_dir, stop_after=options.stop_after)
+                result = run_live_execute(
+                    evidence_dir,
+                    stop_after=options.stop_after,
+                    motion_policy=options.motion_policy,
+                )
             else:
                 if options.plan_only_state is None:
                     raise ValueError("live plan_only requires --plan-only-state")
-                result = run_live_plan_only(evidence_dir, options.plan_only_state)
+                result = run_live_plan_only(
+                    evidence_dir,
+                    options.plan_only_state,
+                    motion_policy=options.motion_policy,
+                )
         except Exception as error:
             print("status=ERROR")
             print("current_state=ERROR")

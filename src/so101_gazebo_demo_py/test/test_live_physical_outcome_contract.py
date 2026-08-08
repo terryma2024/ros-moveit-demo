@@ -7,6 +7,7 @@ from so101_gazebo_demo_py.live_execute import (
     _stable_bilateral, carry_with_shadow_gates, compose_pose,
     plan_waypoint_sequence, relative_pose,
     run_bounded_physical_grasp_attempts, shadow_divergence_healthy,
+    translated_grasp_pose,
 )
 from so101_gazebo_demo_py.gazebo.observer import ContactPair
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
@@ -18,6 +19,7 @@ from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
 
 PACKAGE = Path(__file__).parents[1]
 LIVE_EXECUTE = PACKAGE / "so101_gazebo_demo_py/live_execute.py"
+LIVE_CLI = PACKAGE / "so101_gazebo_demo_py/cli/pick_place_state_machine.py"
 
 
 def test_live_forward_path_never_commands_gazebo_attachment() -> None:
@@ -26,6 +28,27 @@ def test_live_forward_path_never_commands_gazebo_attachment() -> None:
     assert '"ATTACH_GAZEBO"' not in source
     assert '"DETACH_GAZEBO"' not in source
     assert '"physical-failure.json"' in source
+
+
+def test_grasp_tcp_translation_occurs_before_physical_close() -> None:
+    source = LIVE_EXECUTE.read_text()
+    assert "_moveit_plan_grasp_translation" in source
+    assert 'state.value == "DESCEND"' in source
+    assert source.index("grasp_tcp_translation_offset_m") < source.index(
+        "backend.move_gripper(close_target)"
+    )
+
+
+def test_grasp_tcp_translation_preserves_orientation() -> None:
+    baseline = (0.02, -0.262, 0.201, 0.1, 0.2, 0.3, 0.9)
+    assert translated_grasp_pose(baseline, (-0.0005, 0.0, 0.0)) == (
+        0.0195, -0.262, 0.201, 0.1, 0.2, 0.3, 0.9,
+    )
+
+
+def test_live_cli_forwards_selected_motion_policy() -> None:
+    source = LIVE_CLI.read_text()
+    assert "motion_policy=options.motion_policy" in source
 
 
 def test_live_release_order_and_physical_outcome_states_are_explicit() -> None:

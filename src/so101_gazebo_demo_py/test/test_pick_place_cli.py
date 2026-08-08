@@ -41,8 +41,8 @@ def test_live_execute_propagates_stop_after(monkeypatch, capsys, tmp_path) -> No
     monkeypatch.setenv("SO101_PY_EVIDENCE_DIR", str(tmp_path))
     monkeypatch.setattr(
         "so101_gazebo_demo_py.live_execute.run_live_execute",
-        lambda evidence, stop_after=None: observed.update(
-            evidence=evidence, stop_after=stop_after,
+        lambda evidence, stop_after=None, motion_policy=None: observed.update(
+            evidence=evidence, stop_after=stop_after, motion_policy=motion_policy,
         ) or {
             "status": "CHECKPOINT_COMPLETE", "current_state": stop_after,
             "state_trace": ["IDLE", stop_after], "exit_code": 0,
@@ -52,6 +52,7 @@ def test_live_execute_propagates_stop_after(monkeypatch, capsys, tmp_path) -> No
         "--mode", "execute", "--stop-after", "VERIFY_PHYSICAL_GRASP",
     ]) == 0
     assert observed["stop_after"] == "VERIFY_PHYSICAL_GRASP"
+    assert observed["motion_policy"] is None
     assert "status=CHECKPOINT_COMPLETE" in capsys.readouterr().out
 
 
@@ -60,7 +61,9 @@ def test_explicit_live_plan_only_uses_real_planner(monkeypatch, capsys, tmp_path
     calls = []
     monkeypatch.setattr(
         "so101_gazebo_demo_py.live_execute.run_live_plan_only",
-        lambda evidence, state: calls.append((evidence, state)) or {
+        lambda evidence, state, motion_policy=None: calls.append(
+            (evidence, state, motion_policy)
+        ) or {
             "status": "PLAN_ONLY_COMPLETE", "current_state": state,
             "state_trace": [state], "exit_code": 0,
         },
@@ -69,4 +72,5 @@ def test_explicit_live_plan_only_uses_real_planner(monkeypatch, capsys, tmp_path
         "--mode", "plan_only", "--plan-only-state", "LIFT", "--live-runtime",
     ]) == 0
     assert calls[0][1] == "LIFT"
+    assert calls[0][2] is None
     assert "status=PLAN_ONLY_COMPLETE" in capsys.readouterr().out

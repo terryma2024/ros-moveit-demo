@@ -31,7 +31,31 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert len(bundle.object.spawn_pose.values) == 7
     assert all(len(state.waypoints[0]) == 5 for state in bundle.motion.states.values())
     assert State.MOVE_ABOVE_OBJECT in bundle.motion.states
+    assert bundle.motion.approach_outside_clearance_m == 0.001
+    assert bundle.motion.grasp_tcp_translation_offset_m == (-0.0005, 0.0, 0.0)
     assert len(bundle.sha256) == 64
+
+
+@pytest.mark.parametrize(
+    "offset",
+    [(-0.001001, 0.0, 0.0), (-0.0005, 0.0005, 0.0)],
+)
+def test_rejects_out_of_range_or_multi_axis_tcp_candidate(
+    tmp_path: Path, offset: tuple[float, float, float],
+) -> None:
+    motion = yaml.safe_load(
+        (CONFIG / "motion_policies/light_cup_wall_pick.yaml").read_text()
+    )
+    motion["grasp_tcp_translation_offset_m"] = list(offset)
+    motion_path = tmp_path / "motion.yaml"
+    motion_path.write_text(yaml.safe_dump(motion, sort_keys=False))
+
+    with pytest.raises(ConfigurationError, match="grasp TCP translation"):
+        load_policy_bundle(
+            CONFIG / "task_objects/light_plastic_cup.yaml",
+            motion_path,
+            CONFIG / "validation_policies/light_cup_wall_pick.yaml",
+        )
 
 
 def test_loads_calibrated_physical_outcome_policy() -> None:
