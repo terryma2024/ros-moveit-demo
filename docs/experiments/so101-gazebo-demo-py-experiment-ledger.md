@@ -908,3 +908,27 @@ invalid_criteria:
   - startup, provenance, bridge, controller, MoveIt, or pose/contact observation fails before target behavior is exercised
 post_failure: stop/hold; preserve evidence; no automatic open or reset before capture
 ```
+
+```yaml
+experiment_id: PY-A0-BASELINE-GRASP-002
+status: INVALID
+completed_at: 2026-08-08 Asia/Shanghai
+target_behavior_exercised: false
+command_boundary: launch overlay setup
+observed:
+  - Both owned tmux windows exited before launching ROS nodes with package so101_gazebo_demo_py not found.
+  - The tmux default zsh sourced setup.bash without an explicit bash -lc boundary; a read-only bash -lc probe resolved the correct worktree package prefix.
+evidence:
+  directory: /tmp/so101-py-a0-baseline-002-193
+  gazebo_log: gazebo.log
+  moveit_log: moveit.log
+cleanup:
+  tmux_session: exited without surviving session
+  ros_domain_193_daemon: stopped
+  partition_processes_remaining: NONE
+  unrelated_tmux_and_ros_stacks: untouched
+candidate_result: EXCLUDED
+hard_gate_result: NOT_EVALUATED
+decision: TERMINATE_BATCH_AND_FULL_RESTART_WITH_EXPLICIT_BASH_LC
+next_experiment: PY-A0-BASELINE-GRASP-003
+```
