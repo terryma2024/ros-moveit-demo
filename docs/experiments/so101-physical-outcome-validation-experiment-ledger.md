@@ -1135,3 +1135,32 @@ evidence_root_frozen: true
 cleanup: owned launch and ROS_DOMAIN_ID 216 daemon stopped after evidence freeze；no reset
 decision: TDD_DISAMBIGUATE_CARRY_SCENE_FAILURE_WITHOUT_CHANGING_GATES
 ```
+
+## HEADLESS-PHYSICAL-012：disambiguated carry-scene qualification
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-012
+status: PLANNED
+implementation_commit: b7d43a64078a94b2a6b968c1eb1f7f395b7265f6
+runtime_source_head: freeze after this PLANNED record commit
+policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
+run_mode: execute
+ROS_DOMAIN_ID: 217
+GZ_PARTITION: so101-physical-outcome-headless-012-20260808
+lifecycle: FULL_RESTART
+domain_preflight: ros2 node list --no-daemon --spin-time 2 returned no nodes
+partition_preflight: gz topic -l returned no topics
+overlay_preflight: supported colcon symlink-install overlay rebuilt from b7d43a6
+success_criteria: complete DONE trace、stable release-epoch physical outcome and every independent hard invariant
+failure_criteria: any valid workflow、hard-gate or final-outcome failure after evidence freeze
+invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
+diagnostic_contract:
+  - carrying stationarity failure reports CARRYING_TASK_OBJECT_NOT_STATIONARY
+  - planning-shadow mismatch reports PLANNING_SHADOW_DIVERGENCE with bounded position/axial-tilt metrics
+  - existing planning-shadow、collision and penetration thresholds remain unchanged
+evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-012
+cleanup_ownership: only HEADLESS-PHYSICAL-012 launch process group and any daemon created for ROS_DOMAIN_ID 217
+acceptance_counting: qualification only；not part of the five-consecutive-run batch
+safety_disposition: freeze evidence before cleanup；no reset；never open a physically held unsupported cup
+next_transition: commit this PLANNED record, freeze resulting runtime_source_head, then RUNNING
+```
