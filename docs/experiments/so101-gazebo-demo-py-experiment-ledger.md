@@ -1304,3 +1304,18 @@ invalid_criteria:
   - startup/readiness/provenance failure before the first planning request
 cleanup_owner: only domain 198 / candidate partition / recorded tmux descendants
 ```
+
+```yaml
+experiment_id: PY-A-X-NEG-0005-PLAN-001
+status: INVALID
+completed_at: 2026-08-08 Asia/Shanghai
+target_behavior_exercised: false
+observed:
+  MOVE_ABOVE_OBJECT: PLAN_ONLY_COMPLETE
+  DESCEND: failed before grasp translation planning with Context.init must only be called once
+root_cause: helper insertion split _moveit_plan_waypoints before its planning/cleanup body, leaving the default rclpy context initialized.
+resolution_commit: 5ff4f67ef16c0815108870334b6e66b2b94fa949
+candidate_result: EXCLUDED
+decision: TERMINATE_BATCH_AND_FULL_RESTART_PLAN_ONLY_WITH_NEW_ID
+next_experiment: PY-A-X-NEG-0005-PLAN-002
+```
