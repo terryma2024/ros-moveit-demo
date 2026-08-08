@@ -11,16 +11,20 @@ EXPECTED_TRANSITIONS = {
     State.WAIT_GRASP_STABLE: (State.MICRO_LIFT, State.RECOVER_OPEN_GRIPPER),
     State.MICRO_LIFT: (State.WAIT_MICRO_LIFT_STABLE, State.RECOVER_OPEN_GRIPPER),
     State.WAIT_MICRO_LIFT_STABLE: (State.VERIFY_PHYSICAL_GRASP, State.RECOVER_OPEN_GRIPPER),
-    State.VERIFY_PHYSICAL_GRASP: (State.ATTACH_GAZEBO, State.VALIDATION_FAILED),
-    State.VALIDATION_FAILED: (State.ATTACH_GAZEBO, State.VALIDATION_FAILED),
-    State.ATTACH_GAZEBO: (State.ATTACH_MOVEIT, State.RECOVER_OPEN_GRIPPER),
+    State.VERIFY_PHYSICAL_GRASP: (State.ATTACH_MOVEIT, State.VALIDATION_FAILED),
+    State.VALIDATION_FAILED: (State.ATTACH_MOVEIT, State.VALIDATION_FAILED),
     State.ATTACH_MOVEIT: (State.LIFT, State.RECOVER_OPEN_GRIPPER),
     State.LIFT: (State.MOVE_ABOVE_PLACE, State.RECOVER_LIFT_TO_SAFE_HEIGHT),
     State.MOVE_ABOVE_PLACE: (State.DESCEND_TO_PLACE, State.RECOVER_LIFT_TO_SAFE_HEIGHT),
-    State.DESCEND_TO_PLACE: (State.OPEN_GRIPPER, State.RECOVER_LIFT_TO_SAFE_HEIGHT),
-    State.OPEN_GRIPPER: (State.DETACH_GAZEBO, State.RECOVER_LIFT_TO_SAFE_HEIGHT),
-    State.DETACH_GAZEBO: (State.DETACH_MOVEIT, State.RECOVER_DETACH_GAZEBO),
-    State.DETACH_MOVEIT: (State.SYNC_WORLD_OBJECT, State.RECOVER_DETACH_MOVEIT),
+    State.DESCEND_TO_PLACE: (State.DETACH_MOVEIT, State.RECOVER_LIFT_TO_SAFE_HEIGHT),
+    State.DETACH_MOVEIT: (State.OPEN_GRIPPER, State.RECOVER_DETACH_MOVEIT),
+    State.OPEN_GRIPPER: (State.WAIT_RELEASE_SETTLE, State.RECOVER_LIFT_TO_SAFE_HEIGHT),
+    State.WAIT_RELEASE_SETTLE: (
+        State.VALIDATE_FINAL_PLACEMENT, State.RECOVER_LIFT_TO_SAFE_HEIGHT,
+    ),
+    State.VALIDATE_FINAL_PLACEMENT: (
+        State.SYNC_WORLD_OBJECT, State.RECOVER_LIFT_TO_SAFE_HEIGHT,
+    ),
     State.SYNC_WORLD_OBJECT: (State.RETREAT, State.RECOVER_SYNC_WORLD_OBJECT),
     State.RETREAT: (State.DONE, State.RECOVER_RETREAT),
     State.RECOVER_LIFT_TO_SAFE_HEIGHT: (State.RECOVER_MOVE_ABOVE_PICK, State.ERROR),
@@ -48,7 +52,18 @@ def test_physical_grasp_precedes_attachment() -> None:
     assert resolve_transition(State.WAIT_GRASP_STABLE, ActionStatus.SUCCEEDED) is State.MICRO_LIFT
     assert resolve_transition(State.MICRO_LIFT, ActionStatus.SUCCEEDED) is State.WAIT_MICRO_LIFT_STABLE
     assert resolve_transition(State.WAIT_MICRO_LIFT_STABLE, ActionStatus.SUCCEEDED) is State.VERIFY_PHYSICAL_GRASP
-    assert resolve_transition(State.VERIFY_PHYSICAL_GRASP, ActionStatus.SUCCEEDED) is State.ATTACH_GAZEBO
+    assert resolve_transition(State.VERIFY_PHYSICAL_GRASP, ActionStatus.SUCCEEDED) is State.ATTACH_MOVEIT
+
+
+def test_forward_workflow_uses_physics_only_and_detaches_shadow_before_release() -> None:
+    assert "ATTACH_GAZEBO" not in {state.value for state in SO101_WORKFLOW.forward_states}
+    assert "DETACH_GAZEBO" not in {state.value for state in SO101_WORKFLOW.forward_states}
+    assert SO101_WORKFLOW.forward_states.index(State.DETACH_MOVEIT) < (
+        SO101_WORKFLOW.forward_states.index(State.OPEN_GRIPPER)
+    )
+    assert resolve_transition(State.OPEN_GRIPPER, ActionStatus.SUCCEEDED) is (
+        State.WAIT_RELEASE_SETTLE
+    )
 
 
 def test_non_success_action_status_uses_failure_transition() -> None:
