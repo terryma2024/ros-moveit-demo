@@ -2198,3 +2198,17 @@ prelaunch_process_audit:
   uncertain: [3272995]
   task_stack_present: false
 ```
+
+```yaml
+experiment_id: PY-A-Z-POS-00045-GRASP-001
+status: RUNNING
+started_at: 2026-08-08 Asia/Shanghai
+preflight:
+  initial_attachment_state: attached
+  defensive_detach_readback: detached
+  controllers: [joint_state_broadcaster_active, arm_controller_active, gripper_controller_active]
+  runtime_arm_trajectory_constraint: 0.008
+  installed_package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  installed_motion_config_sha256: 4c9db0309fac56a3a27ec25e009825d5dc3f3de4c0054ee126a524732cd058fd
+  candidate_retry_count: 0
+```
