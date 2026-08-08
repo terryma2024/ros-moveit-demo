@@ -33,7 +33,7 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert State.MOVE_ABOVE_OBJECT in bundle.motion.states
     assert bundle.motion.approach_outside_clearance_m == 0.001
     assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.0, 0.0004)
-    assert bundle.motion.seating_preload_rad == 0.00375
+    assert bundle.motion.seating_preload_rad == 0.006
     assert len(bundle.sha256) == 64
 
 
