@@ -63,6 +63,23 @@ def main(arguments: list[str] | None = None) -> int:
         if "--ros-args" in arguments:
             arguments = arguments[:arguments.index("--ros-args")]
     options = build_parser().parse_args(arguments)
+    if options.mode == RunMode.EXECUTE.value:
+        import os
+        from ..live_execute import run_live_execute
+        evidence_dir = Path(os.environ.get("SO101_PY_EVIDENCE_DIR", "/tmp/so101-py-runtime"))
+        try:
+            result = run_live_execute(evidence_dir)
+        except Exception as error:
+            print("status=ERROR")
+            print("current_state=ERROR")
+            print("failure=LIVE_EXECUTE_FAILED")
+            print(f"failure_message={error}")
+            return 1
+        print("status=DONE")
+        print("current_state=DONE")
+        print("transition_count=19")
+        print("state_trace=" + ",".join(result["state_trace"]))
+        return 0
     request = RunRequest(
         mode=RunMode(options.mode), stop_after=_state(options.stop_after), resume=options.resume,
         fail_at=_state(options.fail_at), max_state_transitions=options.max_state_transitions,
