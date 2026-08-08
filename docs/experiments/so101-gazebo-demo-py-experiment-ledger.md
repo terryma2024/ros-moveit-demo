@@ -1774,3 +1774,25 @@ positive_y_direction_conclusion: Three bounded positive-Y candidates failed vali
 workflow_result: NO_SUCCESSFUL_PHYSICAL_GRASP
 decision: STOP_AND_REPORT_PER_THREE_CANDIDATE_DIRECTION_RULE
 ```
+
+```yaml
+checkpoint_id: CP-PROCESS-OWNERSHIP-POST-Y-SEARCH-001
+recorded_at: 2026-08-08 Asia/Shanghai
+scope: post-experiment ownership audit after domains 204-208
+removed:
+  - {pid: 195132, domain: 204, partition: so101_py_a_y_pos_0005_grasp_001_204, signal: TERM}
+  - {pid: 208470, domain: 205, partition: so101_py_a_y_pos_00025_plan_001_205, signal: TERM}
+  - {pid: 214005, domain: 206, partition: so101_py_a_y_pos_00025_grasp_001_206, signal: TERM}
+  - {pid: 222273, domain: 207, partition: so101_py_a_y_pos_000225_plan_001_207, signal: TERM}
+  - {pid: 225661, domain: 208, partition: so101_py_a_y_pos_000225_grasp_001_208, signal: TERM}
+  - {pid: 231141, owner: audit-created ROS daemon for domain 208, signal: TERM}
+kill_required: false
+preserved:
+  - {pid: 3272995, process: gz_sim_server, reason: uncertain pre-existing ownership}
+  - {pid: 652055, process: run-clang-tidy-18, reason: unrelated workspace command}
+  - {tmux: codex}
+  - {tmux: codex-cua}
+uncertain: [3272995]
+post_cleanup_graph: no task-owned domains 204-208 stack remains
+recoverability: process state is intentionally not recoverable; all experiment logs and JSON evidence remain under their registered /tmp evidence roots and each stack can be relaunched only under a new experiment ID
+```
