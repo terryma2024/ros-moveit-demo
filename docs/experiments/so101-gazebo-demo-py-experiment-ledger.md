@@ -3086,3 +3086,21 @@ plan:
 readout: cup_world_z_delta_m vs +0.002 m command, lateral drift, post-lift bilateral contact and per-pad max depths, q6_contact/final, pose-pair age, controller result, Gazebo/MoveIt attachment state, exit code
 note: exactly one physical attempt; an INVALID run stops the diagnostic with no retry; the diagnostic ceiling is not a qualification gate change
 ```
+
+```yaml
+experiment_id: EXP-PEN-DIAG-001-PLAN-228
+lifecycle: VALID_SUCCESS
+recorded_at: 2026-08-08 Asia/Shanghai
+commit: c17b87d
+bundle_sha256: 3817a0bdb0853a09ca3098f965cd5ed60d77cc8b8f4f4dc9fd1b3653952242ad
+ros_domain_id: 228
+gz_partition: so101_py_pen_diag_001_228
+tmux_session: so101-py-pen-diag-001-plan-228 (stopped after run)
+evidence_root: /tmp/so101-py-pen-diag-001-plan-228
+results:
+  six_states: [DESCEND 129 pts, DESCEND_TO_PLACE 100, LIFT 119, MOVE_ABOVE_OBJECT 199, MOVE_ABOVE_PLACE 127, RETREAT 132] all PLAN_ONLY_COMPLETE exit_code 0
+  forbidden_events: execute_trajectory_mentions=1 (startup noise only); no attach/detach commands (only planning-scene listener startup lines)
+  prepared_sdf: references so101_controllers_physical_outcome.yaml (checked by runner)
+  cleanup: exact owned PIDs only; post-cleanup audit shows preserved PID 3272995 gz sim server intact; tmux codex/codex-cua/kimi untouched
+next: EXP-PEN-DIAG-001-GRASP-229 RUNNING after provenance/preflight
+```
