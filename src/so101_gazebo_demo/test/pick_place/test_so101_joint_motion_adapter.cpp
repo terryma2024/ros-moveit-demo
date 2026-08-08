@@ -133,7 +133,7 @@ spp::ObservationResult carryingObservation()
   auto result = observation(0.662818811, 0.0);
   const spp::Pose3d gripper{0.25, -0.10, 0.40, 0.0, 0.0, 0.0, 1.0};
   result.snapshot->gazebo_task_object_pose_world = compose(gripper, graspRelativePose());
-  result.snapshot->gazebo_task_object_attached = true;
+  result.snapshot->gazebo_task_object_attached = false;
   return result;
 }
 
@@ -387,6 +387,13 @@ TEST(SO101JointMotionAdapter,
   const auto canonical = adapter.plan(request, observed);
   EXPECT_EQ(canonical.action.status, spp::ActionStatus::SUCCEEDED)
     << (canonical.action.failure ? canonical.action.failure->code : "");
+
+  auto forbidden_gazebo_attachment = observed;
+  forbidden_gazebo_attachment.snapshot->gazebo_task_object_attached = true;
+  const auto physically_attached = adapter.plan(request, forbidden_gazebo_attachment);
+  ASSERT_EQ(physically_attached.action.status, spp::ActionStatus::FAILED);
+  ASSERT_TRUE(physically_attached.action.failure);
+  EXPECT_EQ(physically_attached.action.failure->code, "CARRYING_ENVIRONMENT_OBSERVATION_INVALID");
 
   observed.snapshot->gazebo_task_object_moving_jaw_contact = false;
   const auto unilateral = adapter.plan(request, observed);
