@@ -281,6 +281,9 @@ def _stable_bilateral(backend: RosGazeboLiveBackend, required: int = 6):
     consecutive=0; last=None
     for _ in range(30):
         last=evaluate_bilateral_contact(backend.contacts())
+        depth=last.max_moving_pad_penetration_m
+        if depth is not None and depth > MOVING_PAD_MESH_PENETRATION_CEILING_M:
+            raise RuntimeError(f"moving-pad penetration ceiling exceeded: {depth}")
         consecutive = consecutive + 1 if last.bilateral else 0
         if consecutive >= required: return last
     raise RuntimeError(f"bilateral stability timeout: {last}")

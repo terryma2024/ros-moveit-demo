@@ -4,9 +4,11 @@ import pytest
 from types import SimpleNamespace
 
 from so101_gazebo_demo_py.live_execute import (
-    carry_with_shadow_gates, compose_pose, plan_waypoint_sequence, relative_pose,
+    _stable_bilateral, carry_with_shadow_gates, compose_pose,
+    plan_waypoint_sequence, relative_pose,
     run_bounded_physical_grasp_attempts, shadow_divergence_healthy,
 )
+from so101_gazebo_demo_py.gazebo.observer import ContactPair
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
     close_gazebo_subscription, closest_pose_pair, parse_model_pose, parse_tf_pose,
@@ -187,3 +189,14 @@ def test_calibration_candidate_stops_after_first_valid_physical_failure(monkeypa
             -0.053, 0.465, -0.0596, max_attempts=1,
         )
     assert calls == ["stable"]
+
+
+def test_stable_bilateral_fails_immediately_on_moving_pad_hard_ceiling() -> None:
+    contacts = (
+        ContactPair("plastic_cup::body::wall_near", "fixed_fingertip_pad_collision_001", (0.0004,)),
+        ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (0.000800003,)),
+    )
+    backend = SimpleNamespace(contacts=lambda: contacts)
+
+    with pytest.raises(RuntimeError, match="moving-pad penetration ceiling exceeded"):
+        _stable_bilateral(backend)
