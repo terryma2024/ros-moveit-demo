@@ -792,9 +792,9 @@ next_experiment: HEADLESS-PHYSICAL-003
 
 ```yaml
 experiment_id: HEADLESS-PHYSICAL-003
-status: PLANNED
+status: VALID_FAILURE
 implementation_commit: 669cd236cf27b9ec592779c05581ac4b8cf3353a
-runtime_source_head: freeze after this PLANNED record commit
+runtime_source_head: 5c8bc7e7c1aa30eb61695aa05dba6f8c7ae587c4
 policy_bundle_sha256: af24ad5bd5daa1bad10c3d7e1164f1b836a020412f9ffb8b80d86a601dd0a47d
 run_mode: execute
 ROS_DOMAIN_ID: 168
@@ -805,5 +805,37 @@ failure_criteria: any valid workflow/hard-gate/final-outcome failure after evide
 invalid_criteria: provenance、overlay、runtime identity、evidence or cleanup mismatch
 evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003
 cleanup_ownership: only HEADLESS-PHYSICAL-003 process group
-next_transition: commit PLANNED, freeze resulting HEAD, then RUNNING
+started_at: 2026-08-08T14:21:22+08:00
+ended_at: 2026-08-08T14:25:24+08:00
+observed:
+  failure: Q6_NATIVE_PAD_INTERFERENCE_EXCEEDED
+  reported_failure_after_recovery: GRIPPER_ENVIRONMENT_EVIDENCE_INCOMPLETE
+  failed_state: ATTACH_MOVEIT
+  trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> RECOVER_OPEN_GRIPPER -> ERROR
+  actual_q6: 0.75000244379
+  expected_q6: 0.75
+  actual_q6_velocity: 0.0000113565474749
+  final_outcome_reached: false
+  acceptance_counting: valid qualification failure；not part of five-run batch
+hard_gate_audit:
+  - native-pad wall-interference ceiling rejected the transition；no ceiling or motion value changed
+  - Gazebo pose/contact evidence and MoveIt Planning Scene were frozen before cleanup
+  - MoveIt scene reported attached_collision_objects=[]；Gazebo attachment relay had no publisher at freeze time
+recovery_audit:
+  - workflow reported original_recovery_disposition_hold_for_operator=1
+  - post-recovery GRIPPER_ENVIRONMENT_EVIDENCE_INCOMPLETE cannot prove an off-support open；no speculative recovery patch made
+  - recovery checkpoint persistence still reports CHECKPOINT_INVALID_DATA and remains a separate open risk
+evidence:
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/source-head.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/launch.log
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/failure-wall-near-contact.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/failure-gazebo-attachment.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-xZlFSI/qualification/headless-003/failure-evidence.sha256
+cleanup: all evidence frozen before Ctrl-C；only owned launch and ROS_DOMAIN_ID 168 daemon stopped；no reset performed
+decision: REPEATED_HARD_GATE_FAILURE_INVOKE_SYSTEMATIC_DEBUGGING
+next_experiment: none until a RED test proves the root cause and a focused GREEN preserves every existing safety ceiling
 ```
