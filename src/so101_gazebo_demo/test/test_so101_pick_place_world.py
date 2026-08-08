@@ -366,6 +366,7 @@ def test_pick_place_world_has_open_twenty_gram_plastic_cup_geometry():
     assert pedestal_size == pytest.approx((0.18, 0.18, 0.10))
 
     assert table.findtext('static') == 'true'
+    assert table.find("./link[@name='table_top']/collision[@name='collision']") is not None
     table_pose = parse_vector(table.findtext('pose'))
     table_size = parse_vector(table.findtext('.//box/size'))
     assert table_pose == pytest.approx((0, -0.20, 0.10, 0, 0, 0))

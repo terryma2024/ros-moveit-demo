@@ -33,7 +33,7 @@ def test_physical_outcome_policy_requires_explicit_calibration():
     validation = load_yaml('validation_policies/light_cup_wall_pick.yaml')
     assert validation['schema_version'] == 2
     physical = validation['physical_outcome']
-    assert physical['intended_support_collision'] == 'table::link::collision'
+    assert physical['intended_support_collision'] == 'table::table_top::collision'
     threshold_fields = {
         'minimum_support_contact_depth_m', 'final_target_region',
         'support_height_range_m', 'max_upright_tilt_rad',

@@ -62,7 +62,7 @@ struct ObserverFixture
   explicit ObserverFixture(double max_age = 0.5,
                            double minimum_support_contact_depth_m = -0.000001) :
       world(uniqueName("world")), state_topic("/test/" + uniqueName("attachment")),
-      observer(base, world, "plastic_cup", state_topic, "session", "table::link::collision",
+      observer(base, world, "plastic_cup", state_topic, "session", "table::table_top::collision",
                minimum_support_contact_depth_m, max_age, 2, 0.001, 0.002, 0.02),
       poses(transport.Advertise<gz::msgs::Pose_V>("/world/" + world + "/pose/info")),
       attachment(transport.Advertise<gz::msgs::StringMsg>(state_topic)),
@@ -129,7 +129,7 @@ TEST(GazeboWorldObserver, PreservesFreshBottomToIntendedTableContact)
   ObserverFixture fixture;
   fixture.publishReady();
   ObserverFixture::publishContact(fixture.bottom, "plastic_cup::body::bottom",
-                                  "default::table::link::collision");
+                                  "table::table_top::collision");
 
   const auto result = fixture.observer.observe();
 
@@ -137,7 +137,7 @@ TEST(GazeboWorldObserver, PreservesFreshBottomToIntendedTableContact)
   ASSERT_TRUE(result.snapshot->gazebo_task_object_intended_support_contact);
   EXPECT_TRUE(*result.snapshot->gazebo_task_object_intended_support_contact);
   ASSERT_EQ(1U, result.snapshot->gazebo_task_object_support_contacts.size());
-  EXPECT_EQ("table::link::collision",
+  EXPECT_EQ("table::table_top::collision",
             result.snapshot->gazebo_task_object_support_contacts.front().support_collision);
   EXPECT_TRUE(result.snapshot->gazebo_support_contact_observed_at);
 }
@@ -148,7 +148,7 @@ TEST(GazeboWorldObserver, PreservesStableFeatherstoneCompoundOwnerContactWithinN
   ObserverFixture fixture;
   fixture.publishReady();
   ObserverFixture::publishContact(fixture.finger, "plastic_cup::body::wall_near",
-                                  "default::table::link::collision", -0.0000004);
+                                  "table::table_top::collision", -0.0000004);
 
   const auto result = fixture.observer.observe();
 

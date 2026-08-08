@@ -384,3 +384,25 @@ evidence:
 owned_processes: NONE
 next_command: RED exact production identity in policy/observer/world contract, then minimal GREEN without changing physics or safety ceilings
 ```
+
+## TDD-PHYSICAL-002：exact intended table collision identity
+
+```yaml
+experiment_id: TDD-PHYSICAL-002
+status: VALID
+prior_experiment: CAL-PHYSICAL-002
+hypothesis: 用 production 实际 table::table_top::collision 替换过时的 table::link::collision 即可让 intended support identity 与 runtime 一致
+red:
+  command: pytest test_configuration_contract.py::test_physical_outcome_policy_requires_explicit_calibration
+  result: expected table::table_top::collision but production YAML contained table::link::collision
+green:
+  - pick_place_common + so101_gazebo_demo build and full C++ quality gate passed
+  - PolicyConfig 29/29 passed
+  - GazeboWorldObserver 7/7 passed
+  - exact configuration/world/launch contracts 37/37 passed
+observed:
+  - policy parser、production YAML、observer fixture and legacy matrix diagnostic now agree on table::table_top::collision
+  - no physics、motion、controller、geometry、mass、friction、threshold or safety ceiling changed
+decision: KEEP
+next_experiment: CAL-PHYSICAL-003
+```
