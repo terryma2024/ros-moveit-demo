@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: a6d6a6a
+current_commit: 82739e6
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -31,8 +31,51 @@ open_hypotheses:
   - The 0.020 kg / limiting-friction-1.2 baseline remains the best observed end-to-end material profile among EXP-063/064/065; the next useful variable is reducing non-motion dwell and/or shortening motion exposure while preserving all outcome and hard-safety bounds.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-065-203
+latest_checkpoint: CP-PRE-EXP-066-204
 next_experiment: EXP-066
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-066-204
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-066
+status: PLANNED
+prior_experiment: EXP-065
+control_restore_commit: 82739e6
+hypothesis: retaining one isolated Planning Scene service client for the complete execute process removes repeated ROS context/node/service-discovery overhead at carry shadow resynchronization and reduces the time a physically held cup is exposed without commanded arm motion
+single_variable: Planning Scene Apply/Get client lifecycle changes from one create/discover/destroy cycle per scene transaction to one process-scoped client; every existing shadow gate, divergence threshold, ApplyPlanningScene mutation and GetPlanningScene readback remains intact
+control_profile:
+  cup_mass_kg: 0.020
+  cup_wall_friction: {mu: 1.2, mu2: 1.2}
+  fingertip_pad_friction: {axial: 3.0, transverse: 1.2}
+  source_asset_sha256:
+    object_config: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+    world: 386f293037aa0c38687803b21a2989901f7c33b84adc553ea7306c780f6386f2
+    prepared_model: 37fed193f539ba9e53314c6be12f4e577b9c4e4f04a5f7cc3255d0445ccb086f
+prediction:
+  - all automated contracts pass and the persistent client uses its own rclpy Context and executor with deterministic close
+  - physical grasp passes the unchanged bilateral-contact, penetration, micro-lift, lateral-drift and arm-stability bounds
+  - the MOVE_ABOVE_PLACE-to-DESCEND_TO_PLACE non-motion interval is <= 1.5 s, compared with 2.89-3.65 s in EXP-063/064/065
+  - tilt growth during that non-motion interval is <= 0.04 rad with no table contact
+  - MOVE_ABOVE_PLACE and DESCEND_TO_PLACE remain diagnostic outcome boundaries; no intermediate angle/penetration gate is relaxed to obtain the latency result
+lifecycle: FULL_RESTART
+preconditions:
+  - RED proves the current execute path recreates Planning Scene clients per transaction
+  - focused/full pytest and colcon build/test pass from the restored 20g/friction-1.2 source profile
+  - stop only the owned so101-py-qual stack and start exactly one replacement GUI stack using a fresh ROS domain and Gazebo partition
+  - prove initial cup pose, Gazebo detach, MoveIt world-only membership, no finger contact and finite TCP
+  - bounded 50 Hz telemetry and 5 fps half-resolution H.264 are active
+unchanged:
+  - all joint waypoints, target poses, motion velocity/acceleration scaling and q6 commands
+  - all physical-outcome, arm-stability, penetration-ceiling, shadow-divergence and final-placement thresholds
+  - physics engine, mass, friction, geometry, contact material, controller/gains and collision model
+  - Gazebo remains physically detached; MoveIt Planning Scene attach remains the collision shadow through carry and release
+failure_criteria:
+  - client reuse changes scene membership semantics, omits a readback/gate, leaks a live executor, causes any hard-safety violation, or fails the <= 1.5 s interval prediction
+invalid_criteria:
+  - source/install/runtime mismatch, stale Gazebo world, duplicate stack/client, missing reset proof, telemetry/video or disk pressure
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
