@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 40a0a2c
+current_commit: 01f45bf
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -60,8 +60,37 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-081-259
+latest_checkpoint: CP-EXP-081-IMPLEMENTED-260
 next_experiment: EXP-081
+```
+
+```yaml
+checkpoint_id: CP-EXP-081-IMPLEMENTED-260
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-081
+planning_commit: 3035a8d
+implementation_commit: 01f45bf
+single_variable: no-alignment release now executes the existing fast fixed retreat while the MoveIt shadow stays attached, then detaches/synchronizes the shadow at the fresh Gazebo pose and collects only the authoritative post-retreat outcome
+red:
+  focused: 3 failed because the immediate-retreat collector and branch did not exist
+green:
+  focused: 43 passed
+  full_pytest: 202 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 204 tests, 0 errors, 0 failures, 2 skipped
+behavior:
+  - no-alignment path has no stationary pre-retreat outcome epoch
+  - fixed retreat remains the existing joint ladder at velocity scaling 0.10
+  - MoveIt Planning Scene shadow remains attached until the fixed retreat ends
+  - shadow detach and authoritative final epoch both use a fresh post-retreat Gazebo cup pose
+  - aligned path retains its independent pre-retreat epoch and prior planned separation behavior
+unchanged:
+  - Gazebo physical attachment is never commanded
+  - penetration normalization, all hard safety bounds, motion targets, release compensation, material/physics/controller settings and final physical-outcome contract
+environment_note: the first full-pytest invocation sourced only /opt/ros/jazzy and produced five package-not-found failures; rerunning with the current worktree install overlay passed 202 tests, and no code change was made for that environment error
+next_command: prove RESET_WORLD on the sole ROS_DOMAIN_ID 229 stack, then run one bounded EXP-081 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
