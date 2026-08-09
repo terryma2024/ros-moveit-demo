@@ -5900,3 +5900,56 @@ strategy:
 next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
 next_on_valid_failure: compare clean-release final displacement with EXP-024 and change only one evidenced strategy family
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-025
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_UNSUPPORTED
+physical_grasp:
+  cup_world_z_delta_m: 0.0019074082374572754
+  lateral_drift_m: 0.0002464456659044867
+  moving_pad_depth_m: 0.00036971637746319175
+carry_orientation:
+  before_move_above_place_tilt_rad: 0.0013808686822851706
+  after_move_above_place_tilt_rad: 0.10238028819200275
+pre_retreat:
+  failure_code: FINAL_GRIPPER_CONTACT
+  cup_xyz_m: [-0.05677109584212303, -0.2524684965610504, 0.16808684170246124]
+  upright_tilt_rad: 0.08129177627683588
+  support_contact: false
+post_retreat:
+  cup_xyz_m: [-0.049740053713321686, -0.20255234837532043, 0.16499999165534973]
+  upright_tilt_rad: 0.0000003868566449209228
+  maximum_linear_speed_m_s: 0.022768043749792233
+  maximum_angular_speed_rad_s: 0.491072566805271
+interpretation: fixed cross-run compensation over-shifted x by roughly 23 mm, left the cup touching the gripper, and RETREAT dragged it about 50 mm in y; run-to-run grasp-relative pose variation invalidates static last-error compensation
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-025
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-025-057
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-025/reset-after-final-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000017128494855959126
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-REJECT-STATIC-PLACE-COMPENSATION-058
+recorded_at: 2026-08-09 Asia/Shanghai
+decision:
+  rejected: applying the previous run's final XY error as a fixed place ladder shift
+  restored: EXP-024 place, descend, retreat and recovery ladders
+  retained: MOVE_ABOVE_PLACE velocity and acceleration scaling 0.05 because it reduced carry tilt and produced a clean release in EXP-024
+next_strategy_family: bounded same-run place alignment from authoritative Gazebo cup pose while the MoveIt Planning Scene object remains attached; final bounds and all safety ceilings stay frozen
+```
