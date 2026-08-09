@@ -20,17 +20,98 @@ confirmed_conclusions:
   - QUAL-FULL-01 was a valid clean FULL_RESTART failure: the release-start pose was inside the target region, but immediate RETREAT displaced the otherwise upright, supported and stable cup 0.000059242 m beyond the y boundary.
   - EXP-061 proved that detaching the Planning Scene shadow before a planned retreat is not viable: the radial move executed but the subsequent 60 mm world-Z plan failed with MoveIt error 99999, while the already-tilted cup fell onto its side.
   - EXP-063 activated the configured LIFT velocity scaling and reduced the measured lift boundary from 14.9-18.6 s to 8.53 s; LIFT ended at 0.00804 rad tilt with q6 range 0.00315 rad, and MOVE_ABOVE_PLACE ended at 0.15396 rad tilt.
+  - EXP-064 jointly changed the cup to 0.010 kg and raised cup/pad limiting friction to 2.0; MOVE_ABOVE_PLACE end tilt improved from 0.15114 to 0.09895 rad and q6 range from 0.00738 to 0.000168 rad, but DESCEND_TO_PLACE later reached 0.77106 rad tilt.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - The user-authorized joint profile of 0.010 kg cup mass and higher cup/pad friction will reduce gravity-driven rolling through MOVE_ABOVE_PLACE relative to EXP-063; the two effects cannot be separately attributed in this experiment.
+  - Restoring 0.020 kg while retaining the 2.0 limiting friction profile can distinguish whether the EXP-064 downstream DESCEND_TO_PLACE regression is caused primarily by the lighter mass while preserving the horizontal-carry gain.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-064-IMPLEMENTED-199
-next_experiment: EXP-064
+latest_checkpoint: CP-RESULT-EXP-064-200
+next_experiment: EXP-065
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-064-200
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_SCOPED_SUCCESS_WITH_DOWNSTREAM_REGRESSION
+experiment_id: EXP-064
+execution_commit: 50c4c78
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 222
+  gz_partition: so101_py_qual_exp064
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+reset_proof: /tmp/so101-py-qualification/exp064/reset/reset-world.json
+reset:
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.0000005391912699700056
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.00020937775843776762
+  micro_lift_world_z_m: 0.0019791126251220703
+  lateral_drift_m: 0.00030147683099148424
+move_above_place_comparison:
+  baseline_exp063:
+    duration_s: 4.9097479889169335
+    start_tilt_rad: 0.004821870506456855
+    end_tilt_rad: 0.15114010255559407
+    max_tilt_rad: 0.1516679455431296
+    q6_position_range_rad: 0.0073810480535030365
+    table_contact_samples: 0
+  exp064:
+    duration_s: 4.88866064697504
+    start_tilt_rad: 0.01615718921690388
+    end_tilt_rad: 0.09895493546195651
+    max_tilt_rad: 0.09895493546195651
+    q6_position_range_rad: 0.00016843527555465698
+    table_contact_samples: 0
+  improvement:
+    end_tilt_reduction_rad: 0.05218516709363756
+    q6_range_reduction_rad: 0.0072126127779483795
+post_move_shadow_dwell:
+  duration_s: 3.645847228821367
+  tilt_start_rad: 0.09895493546195651
+  tilt_end_rad: 0.1517717643072517
+  tilt_growth_rad: 0.05281682884529519
+  q6_position_range_rad: 0.00022016093134880066
+  table_contact_samples: 0
+prediction_evaluation:
+  unchanged_physical_grasp_safety: PASS
+  lift_end_tilt_at_most_0_10_rad: PASS_AT_0_01220
+  move_end_tilt_at_most_0_10_rad: PASS_AT_0_09895
+  no_table_contact_through_move: PASS
+downstream_diagnostic:
+  descend_to_place_end_tilt_rad: 0.7710553781740812
+  descend_to_place_end_bottom_clearance_m: 0.0015866749885759118
+  open_gripper_end_tilt_rad: 0.8946820213602549
+  later_failure_code: MOVEIT_WORLD_Z_PLAN_FAILED
+  later_moveit_error_code: 99999
+  interpretation: the combined profile improves horizontal carry but does not improve the complete pick-place; the lighter cup may be more susceptible during the slower descent, but the two-variable design cannot attribute cause
+evidence:
+  execute_log: /tmp/so101-py-qualification/exp064/run/execute.log
+  physical_gate: /tmp/so101-py-qualification/exp064/run/physical-gate.json
+  telemetry: /tmp/so101-py-qualification/exp064/run/diagnostic/samples.jsonl
+  telemetry_sha256: 431c9eaa79f3cc35ffa6524ad1e491e5e377fbcf445bad13d6708aa3f6705458
+  bounded_video: /tmp/so101-py-qualification/exp064/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 169a221a269572ca5a120f8eee4de5ef4a67c7421abfbc8366fb3019a14e05a7
+visual_observation:
+  - The inspected MOVE_ABOVE_PLACE video contact sheet shows the cup remaining visually near upright throughout the horizontal carry with no table contact.
+  - The standard desktop capture helper was not applicable because this stack intentionally uses headless MoveIt without an RViz window; bounded Gazebo H.264 remains the visual evidence.
+attribution_limit: mass and friction changed together, so only their combined effect is established
+decision: KEEP_AS_CARRY_EVIDENCE_ONLY; do not freeze as the final end-to-end candidate
+counts_toward_success_streak: false
+next_experiment: EXP-065 restoring only mass to 0.020 kg while retaining friction 2.0
 ```
 
 ```yaml
