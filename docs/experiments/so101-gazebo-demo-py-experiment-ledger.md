@@ -3542,3 +3542,53 @@ results:
   forbidden_events: execute_trajectory_mentions=1 (startup noise only)
   cleanup: exact owned PIDs; preserved processes/tmux intact
 ```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-1-233
+lifecycle: INVALID
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+ros_domain_id: 233
+evidence_root: /tmp/so101-py-qual2-grasp-1-233
+failure: READINESS_TIMEOUT; same RTPS "domainId is over 232" startup deaths (moveit.log, gazebo.log)
+root_cause: my own domain selection error - 233 also exceeds the FastDDS maximum 232; no physics executed
+contamination_check: no so101_py_qual2b_233 partition processes or tmux sessions remain; preserved intact
+consequence: batch stopped per rule; grasp batch re-registered on 200/201/202 below
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-1-200
+lifecycle: PLANNED
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP (includes +0.002 m micro-lift carry probe)
+tmux_session: so101-py-qual2-grasp-1-200
+ros_domain_id: 200
+gz_partition: so101_py_qual2c_200
+evidence_root: /tmp/so101-py-qual2-grasp-1-200
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-2-201
+lifecycle: PLANNED (conditional on EXP-QUAL2-GRASP-1-200 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP
+tmux_session: so101-py-qual2-grasp-2-201
+ros_domain_id: 201
+gz_partition: so101_py_qual2c_201
+evidence_root: /tmp/so101-py-qual2-grasp-2-201
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-3-202
+lifecycle: PLANNED (conditional on EXP-QUAL2-GRASP-2-201 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP
+tmux_session: so101-py-qual2-grasp-3-202
+ros_domain_id: 202
+gz_partition: so101_py_qual2c_202
+evidence_root: /tmp/so101-py-qual2-grasp-3-202
+note: all domain ids <= 232 (FastDDS max); 200/201/202 previously unused
+```
