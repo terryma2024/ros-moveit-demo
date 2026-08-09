@@ -30,12 +30,12 @@ fingertip_pads:
   safe_gap_m: 0.001
   grasp_gap_m: 0.001960000000000000
   calibration_fingerprint: f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8
-  friction_coefficient: 2.0
+  friction_coefficient: 1.2
   contact_material:
     # TPU-on-plastic bound.  Preparation also applies this material to the
     # compound link's first collision because Bullet reads friction there.
     axial_friction_coefficient: 3.0
-    transverse_friction_coefficient: 2.0
+    transverse_friction_coefficient: 1.2
     contact_stiffness_n_m: 1000000.0
     contact_damping_n_s_m: 100.0
     max_correcting_velocity_m_s: 0.01
