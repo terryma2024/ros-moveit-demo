@@ -225,9 +225,9 @@ def carry_with_shadow_gates(backend, policies, shadow_gate):
 
 def release_alignment_target(
     place_xyz: tuple[float, float, float],
-    settling_compensation_m: tuple[float, float, float] = (0.0050, -0.0050, 0.0040),
+    settling_compensation_m: tuple[float, float, float] = (0.0050, -0.0050, 0.0140),
 ) -> tuple[float, float, float]:
-    """Offset the held-cup target to compensate measured release/retreat drift."""
+    """Offset the held-cup target while preserving pre-open table clearance."""
     return tuple(
         value + compensation
         for value, compensation in zip(
