@@ -4907,3 +4907,32 @@ provenance:
 evidence_root: /tmp/so101-py-outcome-search-203/candidate-012/q1-plus-007-plan-only
 next: commit locally, preregister candidate 013, and run one RESET_WORLD search trial
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-013
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: the EXP-011 release geometry with a q1-only +0.007 rad place-path rotation will retain clean physical release and place the stable cup inside every frozen final bound
+execute_commit: 78631765928faf3c48064fd73968fa2f80865c9e
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: 67518c7ec42d116ac83216593c8838b585da2667e7fb31a6bfb1381d6d0e9c94
+motion_policy_sha256: eede4ce9fb5e4e9b0511ec172dcfa548900958ea6a195fa8aa48203c8fcf0f8b
+validation_policy_sha256: c6395b5267c92ac33cc32c3fde16983b9a1c508a73f652723db61c84f5ca369b
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-013
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-012/reset-after-failure/reset-world.json
+strategy:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  seating_preload_rad: 0.004
+  place_family_base: EXP-011 q2-q5 and vertical reverse descent
+  place_q1_delta_rad: 0.007
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained
+  intermediate_validation: outcome-first cup state and arm stability
+  final_acceptance: frozen position, uprightness, and stability region
+next_on_valid_success: freeze this strategy; run two independent RESET_WORLD confirmations without parameter changes
+next_on_valid_failure: classify physical release versus final region; do not relax final acceptance
+```
