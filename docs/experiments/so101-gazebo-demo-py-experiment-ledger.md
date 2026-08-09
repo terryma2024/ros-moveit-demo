@@ -4564,3 +4564,56 @@ strategy:
 next_on_valid_success: freeze and run two independent RESET_WORLD confirmations
 next_on_valid_failure: compare persisted pre/post tilt and displacement to EXP-009 before selecting the next single motion family
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-010
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_OUT_OF_REGION
+physical_grasp:
+  cup_world_z_delta_m: 0.0020105987787246704
+  lateral_drift_m: 0.00023214941098270757
+  bilateral_contact: true
+  moving_pad_depth_m: 0.0011902617989107966
+pre_retreat:
+  cup_xyz_m: [-0.0803435668349266, -0.2456844598054886, 0.16923652589321136]
+  upright_tilt_rad: 0.11403454411480035
+post_retreat:
+  cup_xyz_m: [-0.06059938296675682, -0.2337794154882431, 0.16499999165534973]
+  upright_tilt_rad: 0.0000004773025923385357
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.00358618085891882
+pre_to_post_delta_m: [0.01974418386816978, 0.0119050443172455, -0.00423653423786163]
+comparison_to_exp_009: midpoint preload improved pre-release tilt and micro-lift, but changed release/drop displacement enough to overshoot final x and further worsen y
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-010
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-010-023
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-010/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000016936773495349027
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+diagnostic_id: DIAG-Y-SHIFTED-PLACE-TARGETS-024
+lifecycle: PLANNED_PLAN_ONLY
+recorded_at: 2026-08-09 Asia/Shanghai
+purpose: test whether final-y error can be corrected independently without the unreachable +X shift
+requested_tcp_translation_m: [0.0, -0.012, 0.0]
+mode: MoveGroup plan_only for shifted above-place and descend-place endpoints; no ExecuteTrajectory
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-010/y-shifted-place-plan-024
+acceptance: both targets return nonempty collision-checked plans; otherwise retain the existing place path and choose a different release-control family
+```
