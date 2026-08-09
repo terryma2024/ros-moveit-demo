@@ -3899,3 +3899,88 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: commit the reset wiring and bounded reseat strategy, then execute one RESET_WORLD candidate in the already-proved stack
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-003
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: bounded outcome-based reseat will recover a contact-loss MICRO_LIFT without changing q6 safety or physical parameters and allow authoritative full-path evaluation
+execute_commit: 14ad99a977dd570832cd9f76be25e40a50e50e90
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: launch/world/controller/object/motion/validation assets unchanged between launch and execute commits; only Python reset wiring and bounded live retry changed; search evidence only, never qualification evidence
+bundle_sha256: 060228e848e0beba00aaba6f25b9a4a3ccf4216096398c258bbc21648d6fb67a
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-003
+reset_proof: /tmp/so101-py-outcome-search-203/reset-after-failure-2/reset-world.json
+strategy:
+  max_complete_grasp_attempts: 3
+  reseat_local_x_delta_m_per_retry: -0.0002
+  seating_target_rule: q6_contact - 0.006 bounded by unchanged q6 safe lower
+  final_motion_targets: unchanged
+next_on_success: analyze final target margin and repeat twice from RESET_WORLD before freezing
+next_on_failure: use the first physical outcome failure to select one causally related motion family
+```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-003
+lifecycle: INVALID_STRATEGY
+result:
+  execute_rc: 1
+  failure_boundary: first in-run physical reseat after a failed MICRO_LIFT outcome
+  reported_error: "world-Z MoveGroup planning failed: 99999"
+moveit_evidence:
+  adapter: CheckStartStateCollision
+  collision_pair: jaw - plastic_cup
+  interpretation: the cup correctly remained a MoveIt Planning Scene world object, so planning a contact-state reseat began from a colliding world-object state
+decision:
+  rejected: attach the cup in MoveIt merely to make the retry plan pass, because that would assert carried-object state before Gazebo physics had demonstrated it
+  replacement: interpret the three-attempt budget as three independently reset candidates; default live execution performs one physical grasp attempt per proven RESET_WORLD
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-003
+counts_toward_search_or_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-INVALID-007
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-003/reset-after-invalid
+proof:
+  cup_spawn_pose_error_m: 0.0000006672607915494899
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+next: restore the default one-attempt live contract, then test one causal motion candidate from this proven reset state
+```
+
+```yaml
+checkpoint_id: CP-CANDIDATE-LEVEL-RETRY-008
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_correction:
+  default_in_run_grasp_attempts: 1
+  explicit_helper_attempts: still parameterized for isolated tests, not used by the live main path
+  candidate_budget: up to 3 independently reset candidates selected from recorded outcome evidence
+candidate_004_change:
+  family: grasp seating motion target
+  seating_preload_rad: {from: 0.006, to: 0.002}
+  causal_basis: EXP-002 had bilateral contact before the extra seating closure but lost moving-jaw contact afterward; reduce only the added closure amplitude
+frozen:
+  - penetration global safety upper bound
+  - q6 safety lower bound
+  - grasp translation and orientation
+  - physics engine, geometry, mass/friction, controller/gains, collision
+  - outcome-first continuation and final acceptance thresholds
+tests:
+  retry_contract_red: old default reached the third attempt instead of raising after the first failed outcome
+  retry_contract_green: focused outcome tests passed
+  preload_red: typed bundle still loaded 0.006 instead of the preregistered 0.002
+  preload_green: policy config tests passed
+  package_pytest: 156 passed, 2 skipped
+  colcon_test: 158 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance: destination motion policy sha256 updated to 72e58bbe6c1617b7d1bb0685fc586e8193a9ea35cdd1d652eccce08f2fd10a24 and recomputation test passed
+next: commit locally, preregister EXP-004, then execute it in the sole existing domain-203 stack
+```

@@ -535,10 +535,10 @@ def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
 
 def run_bounded_physical_grasp_attempts(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
-    max_attempts: int = 3,
+    max_attempts: int = 1,
     execute=_moveit_world_z_execute,
 ):
-    """Run a pre-registered number of complete physical attempts."""
+    """Run a pre-registered number of physical attempts; live defaults to one."""
     if max_attempts < 1:
         raise ValueError("max_attempts must be positive")
     last_error=None
