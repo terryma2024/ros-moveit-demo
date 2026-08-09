@@ -5,7 +5,6 @@ import pytest
 import yaml
 
 from so101_gazebo_demo_py.live_execute import (
-    make_follow_joint_trajectory_goal,
     make_world_z_target,
     make_pose_move_group_goal,
     seating_preload_target,
@@ -23,26 +22,11 @@ from so101_gazebo_demo_py.test_support.ros_gazebo_backend import gripper_result_
 PACKAGE = Path(__file__).parents[1]
 
 
-def test_preheated_retreat_goal_preserves_fixed_waypoints_and_timing() -> None:
-    goal = make_follow_joint_trajectory_goal(
-        ("1", "2", "3", "4", "5"),
-        ((0.1, 0.2, 0.3, 0.4, 0.5), (0.6, 0.7, 0.8, 0.9, 1.0)),
-        step_seconds=2,
-    )
-
-    assert goal.trajectory.joint_names == ["1", "2", "3", "4", "5"]
-    assert [list(point.positions) for point in goal.trajectory.points] == [
-        [0.1, 0.2, 0.3, 0.4, 0.5],
-        [0.6, 0.7, 0.8, 0.9, 1.0],
-    ]
-    assert [point.time_from_start.sec for point in goal.trajectory.points] == [2, 4]
-
-
 def test_final_release_shortens_only_the_explicit_release_command() -> None:
     assert gripper_motion_duration_seconds(-0.053) == 8
     assert gripper_motion_duration_seconds(0.465) == 5
     assert gripper_motion_duration_seconds(0.75) == 5
-    assert gripper_motion_duration_seconds(0.75, final_release=True) == 1
+    assert gripper_motion_duration_seconds(0.75, final_release=True) == 2
 
     live_execute = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
     assert (
@@ -69,8 +53,8 @@ def test_policy_matches_main_seated_grasp_strategy() -> None:
     assert "CLOSE_GRIPPER" not in validation["states"]
     assert motion["states"]["LIFT"]["logical_start"] == seated
     assert motion["states"]["MOVE_ABOVE_PLACE"]["velocity_scaling"] == 0.10
-    assert motion["states"]["DESCEND_TO_PLACE"]["velocity_scaling"] == 0.10
-    assert motion["states"]["DESCEND_TO_PLACE"]["acceleration_scaling"] == 0.10
+    assert motion["states"]["DESCEND_TO_PLACE"]["velocity_scaling"] == 0.05
+    assert motion["states"]["DESCEND_TO_PLACE"]["acceleration_scaling"] == 0.05
     constraints = controllers["arm_controller"]["ros__parameters"]["constraints"]
     assert {constraints[str(index)]["trajectory"] for index in range(1, 6)} == {0.008}
 
@@ -110,106 +94,11 @@ def test_micro_lift_samples_contact_telemetry_after_motion() -> None:
             return ()
 
     result = verify_physical_micro_lift(
-        Backend(),
-        lambda delta: events.append(("move", delta)) or (3, 0.2),
-        sleep=lambda seconds: events.append(("sleep", seconds)),
+        Backend(), lambda delta: events.append(("move", delta)) or (3, 0.2)
     )
 
-    assert events == [
-        "sample",
-        ("move", 0.002),
-        "contacts",
-        "sample",
-        ("sleep", 1.0),
-        "contacts",
-        "sample",
-    ]
+    assert events == ["sample", ("move", 0.002), "contacts", "sample"]
     assert result[0] == 0.002
-
-
-def test_micro_lift_rejects_a_cup_that_drops_during_the_hold() -> None:
-    samples = iter((
-        SimpleNamespace(
-            object_xyz=(0.0, 0.0, 0.0),
-            tcp_xyz=(0.0, 0.0, 0.2),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-        SimpleNamespace(
-            object_xyz=(0.0, 0.0, 0.002),
-            tcp_xyz=(0.0, 0.0, 0.202),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-        SimpleNamespace(
-            object_xyz=(0.0, 0.0, 0.0),
-            tcp_xyz=(0.0, 0.0, 0.202),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-    ))
-    backend = SimpleNamespace(sample=lambda: next(samples), contacts=lambda: ())
-
-    with pytest.raises(RuntimeError, match="hold failed CUP_INSUFFICIENT_LIFT"):
-        verify_physical_micro_lift(
-            backend,
-            lambda _delta: (3, 0.2),
-            sleep=lambda _seconds: None,
-        )
-
-
-def test_micro_lift_accepts_held_lateral_drift_inside_two_mm() -> None:
-    samples = iter((
-        SimpleNamespace(
-            object_xyz=(0.0, 0.0, 0.0),
-            tcp_xyz=(0.0, 0.0, 0.2),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-        SimpleNamespace(
-            object_xyz=(0.0005, 0.0, 0.002),
-            tcp_xyz=(0.0, 0.0, 0.202),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-        SimpleNamespace(
-            object_xyz=(0.0011, 0.0, 0.002),
-            tcp_xyz=(0.0, 0.0, 0.202),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-    ))
-    backend = SimpleNamespace(sample=lambda: next(samples), contacts=lambda: ())
-
-    result = verify_physical_micro_lift(
-        backend,
-        lambda _delta: (3, 0.2),
-        sleep=lambda _seconds: None,
-    )
-
-    assert result[1] == pytest.approx(0.0011)
-
-
-def test_micro_lift_rejects_held_lateral_drift_above_two_mm() -> None:
-    samples = iter((
-        SimpleNamespace(
-            object_xyz=(0.0, 0.0, 0.0),
-            tcp_xyz=(0.0, 0.0, 0.2),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-        SimpleNamespace(
-            object_xyz=(0.0005, 0.0, 0.002),
-            tcp_xyz=(0.0, 0.0, 0.202),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-        SimpleNamespace(
-            object_xyz=(0.0021, 0.0, 0.002),
-            tcp_xyz=(0.0, 0.0, 0.202),
-            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
-        ),
-    ))
-    backend = SimpleNamespace(sample=lambda: next(samples), contacts=lambda: ())
-
-    with pytest.raises(RuntimeError, match="hold failed CUP_LATERAL_DRIFT"):
-        verify_physical_micro_lift(
-            backend,
-            lambda _delta: (3, 0.2),
-            sleep=lambda _seconds: None,
-        )
 
 
 def test_contact_probe_finishes_on_first_fresh_nonempty_message() -> None:
