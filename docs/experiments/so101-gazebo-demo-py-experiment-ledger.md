@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 7b0cbd6
+current_commit: 1393a9e
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -48,8 +48,41 @@ open_hypotheses:
   - A short radial separation planned while the MoveIt Planning Scene shadow is still attached may remain collision-plannable and break sub-millimetre pad contact; the shadow must be detached and resynchronized only after that physical separation.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-077-238
+latest_checkpoint: CP-EXP-077-IMPLEMENTED-239
 next_experiment: EXP-077
+```
+
+```yaml
+checkpoint_id: CP-EXP-077-IMPLEMENTED-239
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-077
+planning_commit: db1442e
+implementation_commit: 1393a9e
+single_variable: on the no-alignment path, execute a 0.004 m radial separation while the MoveIt Planning Scene shadow remains attached, then gate divergence and detach/synchronize from the fresh Gazebo pose
+red:
+  targeted: 1 failed, 35 deselected
+  observed: source contract could not find the required no-alignment attached-shadow separation path
+green:
+  focused: 36 passed
+  full_pytest: 198 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 200 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  install_mode: symlink-install
+implementation_order:
+  - OPEN_GRIPPER reaches the retained 2 s final-open target
+  - if no release-alignment correction was needed, calculate and execute the 0.004 m radial TCP translation while the shadow remains attached
+  - sample the fresh Gazebo cup/TCP pair and fail closed if pre-sync shadow divergence exceeded the configured bound
+  - detach and synchronize the MoveIt object from the separated Gazebo pose
+  - collect pre-retreat settle and execute the unchanged retreat path
+unchanged:
+  - Gazebo physical attachment remains disabled throughout
+  - y compensation remains -0.005 m
+  - all other motion/material/controller/collision/physics/validation values
+next_command: prove RESET_WORLD on ROS_DOMAIN_ID 227 / GZ_PARTITION so101_py_qual_baseline_restored, then record one bounded EXP-077 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
