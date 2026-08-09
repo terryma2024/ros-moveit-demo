@@ -136,13 +136,18 @@ def pose_pair_ready(observed, max_pair_age_s: float) -> bool:
     return abs(object_stamp - tcp_stamp) <= max_pair_age_s
 
 
-def closest_pose_pair(object_samples, tcp_samples):
-    if not object_samples or not tcp_samples:
+def closest_pose_pair(object_samples, tcp_samples, *, lock=None):
+    if lock is None:
+        object_snapshot=tuple(object_samples); tcp_snapshot=tuple(tcp_samples)
+    else:
+        with lock:
+            object_snapshot=tuple(object_samples); tcp_snapshot=tuple(tcp_samples)
+    if not object_snapshot or not tcp_snapshot:
         return {"object": None, "tcp": None}
     object_sample, tcp_sample = min(
         ((object_sample, tcp_sample)
-         for object_sample in object_samples
-         for tcp_sample in tcp_samples),
+         for object_sample in object_snapshot
+         for tcp_sample in tcp_snapshot),
         key=lambda pair: abs(pair[0][1] - pair[1][1]),
     )
     return {"object": object_sample, "tcp": tcp_sample}
@@ -208,12 +213,14 @@ class RosGazeboFinalObserver:
         self._executor=SingleThreadedExecutor(context=self._context)
         self._executor.add_node(self._node)
         self._object_samples=deque(maxlen=64); self._tcp_samples=deque(maxlen=64)
+        self._sample_lock=threading.Lock()
         self._contacts=ContactSnapshot()
         self._buffer=Buffer(); self._listener=TransformListener(self._buffer,self._node)
         self._gazebo_node=GazeboNode(); self._pose_topic="/world/so101_pick_place/pose/info"
         def receive_object(message):
             selected=select_gazebo_pose(message,"plastic_cup")
-            if selected is not None: self._object_samples.append(selected)
+            if selected is not None:
+                with self._sample_lock: self._object_samples.append(selected)
         if not self._gazebo_node.subscribe(Pose_V,self._pose_topic,receive_object):
             self.close(); raise RuntimeError("cannot subscribe to Gazebo pose info")
         def receive_contacts(message):
@@ -231,7 +238,8 @@ class RosGazeboFinalObserver:
 
     def observe(self) -> tuple[PoseSample, tuple[ContactPair, ...]]:
         from rclpy.duration import Duration
-        self._object_samples.clear(); self._tcp_samples.clear()
+        with self._sample_lock:
+            self._object_samples.clear(); self._tcp_samples.clear()
         deadline=time.monotonic()+3.0
         while time.monotonic() < deadline:
             self._executor.spin_once(timeout_sec=0.02)
@@ -246,11 +254,14 @@ class RosGazeboFinalObserver:
                     float(translation.x),float(translation.y),float(translation.z),
                     float(rotation.x),float(rotation.y),float(rotation.z),float(rotation.w),
                 ),float(stamp.sec)+float(stamp.nanosec)*1e-9)
-                if not self._tcp_samples or self._tcp_samples[-1][1] != tcp_sample[1]:
-                    self._tcp_samples.append(tcp_sample)
+                with self._sample_lock:
+                    if not self._tcp_samples or self._tcp_samples[-1][1] != tcp_sample[1]:
+                        self._tcp_samples.append(tcp_sample)
             except Exception:
                 pass
-            observed=closest_pose_pair(self._object_samples,self._tcp_samples)
+            observed=closest_pose_pair(
+                self._object_samples,self._tcp_samples,lock=self._sample_lock,
+            )
             if (
                 pose_pair_ready(observed,self._max_pair_age_s)
                 and self._contacts.fresh(time.monotonic(),1.0)
@@ -385,6 +396,7 @@ class RosGazeboLiveBackend:
         node = rclpy.create_node("so101_live_pose_pair_probe")
         object_samples = deque(maxlen=64)
         tcp_samples = deque(maxlen=64)
+        sample_lock = threading.Lock()
         gazebo_node = GazeboNode()
         buffer = Buffer()
         listener = TransformListener(buffer, node)
@@ -392,7 +404,8 @@ class RosGazeboLiveBackend:
         def receive_object(message):
             selected = select_gazebo_pose(message, "plastic_cup")
             if selected is not None:
-                object_samples.append(selected)
+                with sample_lock:
+                    object_samples.append(selected)
 
         pose_topic = "/world/so101_pick_place/pose/info"
         if not gazebo_node.subscribe(Pose_V, pose_topic, receive_object):
@@ -402,7 +415,9 @@ class RosGazeboLiveBackend:
         deadline = time.monotonic() + 3.0
         try:
             while time.monotonic() < deadline:
-                observed = closest_pose_pair(object_samples, tcp_samples)
+                observed = closest_pose_pair(
+                    object_samples, tcp_samples, lock=sample_lock,
+                )
                 if pose_pair_ready(observed, self.max_pair_age_s):
                     break
                 rclpy.spin_once(node, timeout_sec=0.05)
@@ -422,8 +437,9 @@ class RosGazeboLiveBackend:
                         ),
                         float(stamp.sec) + float(stamp.nanosec) * 1e-9,
                     )
-                    if not tcp_samples or tcp_samples[-1][1] != tcp_sample[1]:
-                        tcp_samples.append(tcp_sample)
+                    with sample_lock:
+                        if not tcp_samples or tcp_samples[-1][1] != tcp_sample[1]:
+                            tcp_samples.append(tcp_sample)
                 except Exception:
                     pass
         finally:
@@ -431,7 +447,9 @@ class RosGazeboLiveBackend:
             del listener
             node.destroy_node()
             rclpy.shutdown()
-        observed = closest_pose_pair(object_samples, tcp_samples)
+        observed = closest_pose_pair(
+            object_samples, tcp_samples, lock=sample_lock,
+        )
         if not pose_pair_ready(observed, self.max_pair_age_s):
             raise RuntimeError(f"fresh Gazebo/TCP pose pair unavailable: {observed}")
         object_pose, object_stamp = observed["object"]
