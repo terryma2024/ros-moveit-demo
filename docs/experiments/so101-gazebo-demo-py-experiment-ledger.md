@@ -53,6 +53,7 @@ confirmed_conclusions:
   - EXP-095 clean FULL_RESTART restored a first-attempt strong grasp (1.852 mm persistent lift, 0.182 mm drift), but a second release-alignment correction ran even though the first correction had already put cup XY inside the final region; the final cup was upright/stable/supported/free but rolled to [-0.101764,-0.269317] m.
   - EXP-096 did not reach its region-aware alignment variable: three bounded grasp attempts ended with negative micro-lift and loss of fixed-pad contact, so it stopped safely before carry.
   - EXP-097 reached release with a strong first grasp, but the exact final-region shortcut did not trigger: one 13.45 mm compensated-point correction ended 3.09 mm from that point (outside the final box), amplified release tilt, and the cup rolled to [-0.100238,-0.274534] m.
+  - EXP-098 did not reach its expanded no-correction envelope: bounded seating normalization ended fixed-pad-only, so it stopped safely before micro-lift or carry.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -71,8 +72,72 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-098-IMPLEMENTED-310
-next_experiment: EXP-098
+latest_checkpoint: CP-PRE-EXP-099-312
+next_experiment: EXP-099
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-099-312
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-099
+status: PREREGISTERED_TERMINAL_FREEZE_CONFIRMATION
+prior_experiment: EXP-098
+terminal_policy: five consecutive successes are mathematically impossible within the remaining EXP-099 and EXP-100 slots, so stop introducing variables and freeze the most recent authoritative success
+frozen_success:
+  experiment_id: EXP-081
+  implementation_commit: 01f45bf
+  execution_head: 9b1089a
+  final_object_xyz: [-0.08177115023136139, -0.2471921592950821, 0.16499999165534973]
+  minimum_xy_boundary_margin_m: 0.0021921592950821
+single_variable: restore the executable package tree exactly to frozen successful implementation 01f45bf; preserve the later experiment ledger/spec/plan history
+lifecycle: FULL_RESTART
+prediction:
+  - source/install provenance matches the frozen implementation
+  - physical grasp and authoritative final outcome reproduce EXP-081 success
+  - no later failed or unverified candidate remains active in the frozen executable tree
+unchanged:
+  - 0.020 kg cup, physical engine/geometry/material/controller/collision model and final acceptance contract
+  - Gazebo physically detached and MoveIt Planning Scene shadow semantics from EXP-081
+preconditions:
+  - restore only src/so101_gazebo_demo_py from 01f45bf and preserve ledger/spec/plan
+  - full pytest and colcon build/test
+  - exact clean FULL_RESTART with one Gazebo/MoveIt stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-098-311
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_BEFORE_GRASP
+experiment_id: EXP-098
+execution_head: d4ba10c
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp098/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000006426952229261222
+physical_seating:
+  phase: POST_SEATING_PHYSICAL_STABILITY
+  failure: bilateral stability timeout
+  q6_contact: -0.04760638251900673
+  seating_target_q6: -0.05360638251900673
+  fixed_pad_depth_m: 0.0007458008476532996
+  moving_pad_depth_m: null
+  gazebo_attachment_state: detached
+expanded_alignment_evaluation: NOT_REACHED
+interpretation:
+  - the unchanged seating safety gate stopped before micro-lift because bilateral contact was absent
+  - the EXP-098 variable remains unvalidated and cannot become the frozen candidate
+  - with only EXP-099 and EXP-100 remaining, terminate search and restore the most recent authoritative success EXP-081
+evidence_sha256:
+  reset_proof: 179cd27724971495f97f3ee8283f5c0b3a6a87ea82bb57a9adc9f531a4736d00
+  execute_log: b7f04e08ece7788d8dc7c11bcb2e54ca0a602b32ac1dac7853aad5bc48b3c436
+  physical_failure: f8b623fd3efb5722d550ef17697c2012a26388cb262ced832516b609e0440113
+  telemetry: 1271bfbf97367b3739648f4e1f85a37833afcf4a710408ba0ad7aebd734c4648
+  bounded_video: 3d6ed0b9ecdf1552f7818a92fa4980c12ef54cb4fa35f446cd3ab6a7b228d3d4
+  final_screenshot: ecde21807cfe4f58228a62ecd73328d949fd9a012e0a09fa50b0f55d0f0db60e
+decision: stop parameter search; freeze EXP-081 implementation for EXP-099 and final EXP-100 confirmation
+counts_toward_success_streak: false
 ```
 
 ```yaml
