@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 539103c
+current_commit: 576e03a
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -72,8 +72,37 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-099-312
+latest_checkpoint: CP-EXP-099-FROZEN-313
 next_experiment: EXP-099
+```
+
+```yaml
+checkpoint_id: CP-EXP-099-FROZEN-313
+recorded_at: 2026-08-10 Asia/Shanghai
+status: AUTHORITATIVE_SUCCESS_IMPLEMENTATION_RESTORED_AND_TESTED
+experiment_id: EXP-099
+planning_commit: 377ec54
+frozen_source_commit: 01f45bf
+freeze_commit: 576e03a
+scope: src/so101_gazebo_demo_py restored byte-for-byte to frozen EXP-081 implementation; later ledger/spec/plan history preserved
+verification:
+  tree_diff_against_01f45bf: empty
+  full_pytest: 202 passed, 2 skipped
+  colcon: 204 tests, 0 errors, 0 failures, 2 skipped
+frozen_key_parameters:
+  release_q6: 0.750
+  descend_to_place_velocity_scaling: 0.05
+  descend_to_place_acceleration_scaling: 0.05
+  place_alignment_xy_tolerance_m: 0.010
+  max_grasp_attempts: 1
+  micro_lift_max_lateral_drift_m: 0.006
+  release_order: OPEN_GRIPPER then existing fixed RETREAT with MoveIt shadow attached, then detach/sync and authoritative final epoch
+retained_contract:
+  - Gazebo remains physically detached
+  - MoveIt Planning Scene shadow attach retained through carry/retreat
+  - final target region, upright/stability/support/free/detach/controller contract unchanged
+decision: clean FULL_RESTART and run EXP-099 confirmation; no new search variables
+counts_toward_success_streak: false
 ```
 
 ```yaml
