@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 6569c3fbefb9d133c1b55bbdb6919879c329ba69
+current_commit: f6380f105e629799170e171d06f5399e14b09894
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -16,17 +16,17 @@ confirmed_conclusions:
   - EXP-057 raised the approach enough to eliminate every cup/table contact sample from the raised descent endpoint through OPEN_GRIPPER, but cup tilt still grew from 0.3765 rad to 0.8981 rad during DESCEND_TO_PLACE.
   - EXP-058 slowed DESCEND_TO_PLACE to 10 seconds per waypoint; tilt exceeded 0.70 rad while still 44.2 mm clear of the table and reached 1.0774 rad at waypoint 1, proving that longer gravitational dwell worsens held-cup roll.
   - EXP-059 stronger preload reduced strict pre-open tilt to 0.3302 rad with 12.6 mm clearance and zero table-contact samples, moving the first bad boundary to the immediate post-open retreat.
+  - EXP-060 combined the retained 0.006 preload with MOVE_ABOVE_PLACE velocity scaling 0.10 and achieved an authoritative physical-outcome success at [-0.08451, -0.25333, 0.16500] m.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Increasing only MOVE_ABOVE_PLACE velocity scaling from 0.05 to 0.10 will halve the longest tilt-producing horizontal carry dwell and reduce pre-open tilt while preserving the improved 0.006 preload grasp.
-  - If the post-open boundary still fails, detaching the MoveIt shadow at physical OPEN_GRIPPER and collecting one bounded physical settle epoch before retreat will prevent the gripper from throwing the released cup.
-  - If release sequencing alone is insufficient, the user has authorized an isolated cup-mass candidate down to 0.020 kg.
-latest_checkpoint: CP-EXP-060-IMPLEMENTED-183
-next_experiment: EXP-060
+  - The EXP-060 candidate is ready for clean-environment consecutive qualification without changing cup mass or release sequencing.
+  - A 0.020 kg cup and settle-before-retreat remain authorized fallback branches only if qualification exposes a repeatable failure.
+latest_checkpoint: CP-RESULT-EXP-060-184
+next_experiment: QUAL-FULL-01
 ```
 
 ## Historical evidence imported before ledger activation
@@ -8754,4 +8754,62 @@ installed_provenance:
   policy_sha256: bc0c1e8b87192b0ad44341569e747f9f8cf49b37253c778895088689433856f7
 next_command: RESET_WORLD on so101-py-gui-214, then bounded telemetry/H.264 and one EXP-060 execute
 counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-060-184
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FINAL_SUCCESS
+experiment_id: EXP-060
+execution_commit: f6380f105e629799170e171d06f5399e14b09894
+reset_proof: /tmp/so101-py-gui-214/candidate-060/reset-before-execute/reset-world.json
+evidence:
+  live_summary: /tmp/so101-py-gui-214/candidate-060/live-summary.json
+  physical_gate: /tmp/so101-py-gui-214/candidate-060/physical-gate.json
+  telemetry: /tmp/so101-py-gui-214/candidate-060/diagnostic/samples.jsonl
+  analysis: /tmp/so101-py-gui-214/candidate-060/diagnostic/exp060-analysis.json
+  bounded_video: /tmp/so101-py-gui-214/candidate-060/diagnostic/gazebo-gui.mp4
+physical_grasp:
+  status: PROVED
+  target_q6: -0.05348237133026123
+  actual_q6: -0.052854023873806
+  post_seating_moving_pad_penetration_m: 0.00023840408539399505
+  micro_lift_world_z_m: 0.002127617597579956
+  lateral_drift_m: 0.00028257897572408016
+  gazebo_attachment_used: false
+phase_profile:
+  lift_endpoint: {cup_tilt_rad: 0.014709032410291091, table_contact: false}
+  move_above_place_endpoint: {cup_tilt_rad: 0.17968608303201591, bottom_clearance_m: 0.060490779661142885, table_contact: false}
+  raised_descend_endpoint: {cup_tilt_rad: 0.20357379195479577, bottom_clearance_m: 0.01404764941930381, table_contact: false}
+strict_pre_open:
+  cup_tilt_rad: 0.22902416718212001
+  bottom_clearance_m: 0.0036281663237203027
+  table_contact_samples_from_raised_endpoint: 0
+place_alignment:
+  attempts: 1
+  release_start_xyz_m: [-0.07145357877016068, -0.25217893719673157, 0.1722552329301834]
+  release_start_tilt_rad: 0.25004237575764326
+  release_separation_m: [0.0066627556817639025, 0.007457056170173512, 0.0]
+final:
+  success: true
+  object_xyz_m: [-0.08450652658939362, -0.25332871079444885, 0.16499999165534973]
+  upright_tilt_rad: 0.0000007160314188441169
+  sample_count: 5
+  duration_s: 0.222024155315
+  max_linear_speed_m_s: 0.0
+  max_angular_speed_rad_s: 0.0
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+prediction_evaluation:
+  move_above_tilt_below_0_15_rad: FAIL_BUT_IMPROVED
+  strict_pre_open_tilt_below_0_25_rad: PASS
+  penetration_in_approved_range: PASS
+  no_pre_open_table_contact: PASS
+  authoritative_final_outcome: PASS
+decision: freeze this candidate; do not apply the authorized 0.020 kg mass or release-order fallback unless a qualification failure provides new evidence
+counts_toward_success_streak: false
+reason_not_counted: search confirmation run; qualification begins from a fresh stack launched from the frozen result commit
 ```
