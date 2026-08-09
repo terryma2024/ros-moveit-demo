@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 60e810b
+current_commit: ef5690a
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -65,8 +65,32 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-088-283
+latest_checkpoint: CP-EXP-088-IMPLEMENTED-284
 next_experiment: EXP-088
+```
+
+```yaml
+checkpoint_id: CP-EXP-088-IMPLEMENTED-284
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-088
+planning_commit: 8948fa9
+implementation_commit: ef5690a
+single_strategy_variable: trigger place alignment above 6 mm and use the same immediate fixed RETREAT for every alignment outcome
+red:
+  focused: 3 failed, 70 passed because the 8.37 mm residual still deferred, the corrected path still branched, and the live call lacked the 6 mm tolerance
+green:
+  focused: 73 passed
+  full_pytest: 203 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 205 tests, 0 errors, 0 failures, 2 skipped
+runtime_behavior:
+  - corrected and uncorrected paths both keep the MoveIt shadow attached through the fixed RETREAT
+  - detach/world sync occurs only after the fixed RETREAT
+  - only the authoritative post-retreat outcome epoch is collected
+  - no live detach-first radial or world-Z release retreat remains
+next_command: RESET_WORLD on domain 231, then one bounded EXP-088 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
