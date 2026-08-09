@@ -65,8 +65,81 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-088-IMPLEMENTED-284
-next_experiment: EXP-088
+latest_checkpoint: CP-PRE-EXP-089-286
+next_experiment: EXP-089
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-089-286
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-089
+status: PREREGISTERED_EXACT_REPEAT
+prior_experiment: EXP-088
+hypothesis: EXP-088 achieved a passing physical terminal state but received only one fresh final-observer sample; an exact repeat will distinguish a transient evidence-window miss from a deterministic observer timing defect without changing the successful motion strategy
+single_variable: none; exact repeat of execution commit c3de8f5 and installed EXP-088 strategy
+lifecycle: RESET_WORLD
+prediction:
+  - bounded feedback place alignment converges and the fixed RETREAT completes without error 99999
+  - final observer obtains at least 5 consecutive fresh samples over at least 0.20 s
+  - authoritative final outcome passes with >=1 mm XY margin, upright/stable/support/free/detached/healthy
+unchanged:
+  - every code/config/runtime parameter and every safety/final validation bound
+decision_rule:
+  - success freezes the EXP-088/089 candidate and starts clean FULL_RESTART qualification
+  - repeated FINAL_STALE_EVIDENCE sends EXP-090 to evidence-acquisition timing only; no motion parameter changes
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-088-285
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_PHYSICAL_TERMINAL_STATE_PASSED
+experiment_id: EXP-088
+execution_head: c3de8f5
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp088/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000008051879920877289
+physical_grasp:
+  normalized_target_q6: -0.05348062789440155
+  moving_pad_depth_m: 0.00023845475516282022
+  held_micro_lift_world_z_m: 0.002134189009666443
+  held_lateral_drift_m: 0.00017553658750351367
+  attempts: 1
+place_alignment:
+  attempts: 1
+  before_xy_error_m: 0.00931643684430808
+  commanded_translation_m: [0.008683885633945468, 0.0033743333816528276, -0.0028027198314666546]
+  after_xy_error_m: 0.002249138232689799
+release:
+  release_start_xyz_m: [-0.07413715869188309, -0.2529229521751404, 0.17627303302288055]
+  final_xyz_m: [-0.07919355481863022, -0.252203106880188, 0.16500000655651093]
+final:
+  failure_code: FINAL_STALE_EVIDENCE
+  sample_count: 1
+  duration_s: 0.0
+  min_xy_boundary_margin_m: 0.002796893119812
+  upright_tilt_rad: 0.0000017434995386935003
+  stable: true
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+interpretation:
+  - the first and only fresh authoritative sample passes every physical terminal-state predicate
+  - failure is solely insufficient fresh sample count/duration, so motion tuning is frozen for an exact-repeat diagnosis
+evidence_sha256:
+  reset_proof: c19e9dd6e14871fdf822f0cd1ced6dbccf4126aa101074482d014b682d952116
+  execute_log: d3d2ff5b9db0bda433f6d3a18ab5c7ec241dbda42297449dc305832094794749
+  physical_gate: 7a384ad2748dea008fb4bacd704eddd27dcaea30a1304798eb59922648dafcec
+  failure_json: 9c0204e765f149bae8016f980417c51f6a352ebd3499c8f0da322bdaab8b451a
+  telemetry: 72887093d2e6f9b352ece9a839649ab98839dc26cccefdc23555f3f6da6907b7
+  bounded_video: ad351f963dd41e6081741e498f15299df808a9eaff1e2355c9e7a6b3bef2358c
+  final_screenshot: 4f31355552b77560a7d88fbba3017f0264d83a88b2eca6e539e432157864a855
+decision: retain every EXP-088 parameter and execute exact-repeat EXP-089
+counts_toward_success_streak: false
 ```
 
 ```yaml
