@@ -4091,3 +4091,56 @@ next_on_valid_success: classify the frozen post-RETREAT final margins
 next_on_valid_failure: choose the next motion family from the first physical result boundary
 next_on_invalid: debug the implementation/environment and do not consume another motion candidate
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-005
+lifecycle: INVALID_STRATEGY
+result:
+  execute_rc: 1
+  reported_error: "world-Z MoveGroup planning failed: 99999"
+corrected_boundary:
+  state: grasp TCP translation correction after DESCEND and before physical close
+  configured_world_translation_m: [0.0, 0.0, 0.0004]
+  evidence: q6 remained at preopen 0.465039; Planning Scene contained plastic_cup only as a world object; no physical-failure.json was created because the failure preceded the close/probe try block
+moveit_evidence:
+  adapter: CheckStartStateCollision
+  collision_pair: jaw - plastic_cup
+classification: the pre-probe shadow attach code was never reached; no physical result for seating_preload_rad 0.002 was produced
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-005
+counts_toward_search_or_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-005-011
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-005/reset-after-invalid
+proof:
+  cup_spawn_pose_error_m: 0.000000824744057722748
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-REMOVE-POST-CONTACT-GRASP-CORRECTION-012
+recorded_at: 2026-08-09 Asia/Shanghai
+candidate_change:
+  family: grasp TCP translation target
+  grasp_tcp_translation_offset_m: {from: [0.0, 0.0, 0.0004], to: [0.0, 0.0, 0.0]}
+  causal_basis: the extra correction was planned only after DESCEND had already put jaw and world cup in contact; removing it lets the approved DESCEND endpoint proceed directly to physical close
+preserved:
+  seating_preload_rad: 0.002
+  grasp_tcp_world_x_rotation_rad: 0.0
+  all other motion targets and frozen safety/physical parameters: unchanged
+tests:
+  red: typed policy bundle still exposed the +0.0004 m correction
+  policy_green: 19 passed
+  package_pytest: 157 passed, 2 skipped
+  colcon_test: 159 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance: motion policy destination sha256 updated to 044850ccce09f7e74f9cc613194e1d3db18c32a9659332e2dc1589370f254a31
+next: commit locally, preregister the zero-correction candidate, then run from the proven reset state
+```
