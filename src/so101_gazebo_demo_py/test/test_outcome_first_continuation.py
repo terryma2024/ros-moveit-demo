@@ -545,6 +545,42 @@ def test_same_run_place_alignment_does_not_recover_unstable_arm_after_abort() ->
         )
 
 
+def test_same_run_place_alignment_uses_third_feedback_attempt_after_second_abort() -> None:
+    samples = iter((
+        sample(-0.089, -0.250, 0.169),
+        sample(-0.086, -0.250, 0.169),
+        sample(-0.064, -0.264, 0.174),
+        sample(-0.064, -0.264, 0.174),
+        sample(-0.081, -0.251, 0.170),
+    ))
+    commands = []
+
+    class Backend:
+        def sample(self):
+            return next(samples)
+
+    def execute(delta, _orientation_tolerance_rad):
+        commands.append(delta)
+        if len(commands) == 2:
+            raise RuntimeError(
+                "Failure(code='MOVEIT_EXECUTION_FAILED', "
+                "message='MoveIt execution error -4')"
+            )
+        return 12, (0.39, 0.49, 0.11, 1.0, 0.002)
+
+    times = iter((10.0, 10.25))
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.080, -0.250, 0.169), execute=execute,
+        wait=lambda _seconds: None,
+        monotonic=lambda: next(times),
+    )
+
+    assert aligned.object_xyz == pytest.approx((-0.081, -0.251, 0.170))
+    assert len(commands) == 3
+    assert len(reverse_waypoints) == 2
+    assert telemetry[1]["execution_recovered"] is True
+
+
 def test_same_run_place_alignment_fails_after_attempt_budget() -> None:
     samples = iter((
         sample(-0.097, -0.256, 0.165),
@@ -560,4 +596,5 @@ def test_same_run_place_alignment_fails_after_attempt_budget() -> None:
         live_execute.align_cup_for_release(
             Backend(), (-0.080, -0.250, 0.165),
             execute=lambda *_args: (12, (0.39, 0.49, 0.11, 1.0, 0.002)),
+            max_attempts=2,
         )
