@@ -7,6 +7,7 @@ from so101_gazebo_demo_py.live_execute import (
     _stable_bilateral, carry_with_shadow_gates, compose_pose,
     plan_waypoint_sequence, relative_pose, rotated_grasp_pose,
     run_bounded_physical_grasp_attempts, shadow_divergence_healthy,
+    synchronize_planning_shadow,
     translated_grasp_pose,
 )
 from so101_gazebo_demo_py.gazebo.observer import ContactPair
@@ -95,6 +96,54 @@ def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:
     tilted = (0.0, 0.0, 0.2, math.sin(0.08 / 2), 0.0, 0.0, math.cos(0.08 / 2))
     assert not shadow_divergence_healthy(gazebo, tilted, 0.01, policy)
     assert not shadow_divergence_healthy(gazebo, gazebo, 0.11, policy)
+
+
+def test_fresh_physical_slip_resynchronizes_moveit_shadow() -> None:
+    observed = SimpleNamespace(
+        object_xyz=(0.010, 0.0, 0.2),
+        object_xyzw=(0.0, 0.0, 0.0, 1.0),
+        tcp_xyz=(0.0, 0.0, 0.3),
+        tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        pose_pair_age_s=0.01,
+    )
+    applied = []
+
+    check, object_in_tcp = synchronize_planning_shadow(
+        SimpleNamespace(sample=lambda: observed),
+        (0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 1.0),
+        PlanningShadowConfig(0.005, 0.070, 0.10),
+        apply_scene=lambda operation, pose: (
+            applied.append((operation, pose))
+            or {"world_objects": [], "attached_objects": ["plastic_cup"]}
+        ),
+    )
+
+    assert check["healthy_before_sync"] is False
+    assert check["resynchronized"] is True
+    assert applied == [("attach", (0.010, 0.0, 0.2, 0.0, 0.0, 0.0, 1.0))]
+    assert compose_pose(
+        (*observed.tcp_xyz, *observed.tcp_xyzw), object_in_tcp,
+    ) == pytest.approx((*observed.object_xyz, *observed.object_xyzw))
+
+
+def test_stale_physical_pose_cannot_resynchronize_moveit_shadow() -> None:
+    observed = SimpleNamespace(
+        object_xyz=(0.010, 0.0, 0.2),
+        object_xyzw=(0.0, 0.0, 0.0, 1.0),
+        tcp_xyz=(0.0, 0.0, 0.3),
+        tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        pose_pair_age_s=0.11,
+    )
+
+    with pytest.raises(RuntimeError, match="planning shadow evidence stale"):
+        synchronize_planning_shadow(
+            SimpleNamespace(sample=lambda: observed),
+            (0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 1.0),
+            PlanningShadowConfig(0.005, 0.070, 0.10),
+            apply_scene=lambda operation, pose: pytest.fail(
+                "stale evidence must not update the Planning Scene"
+            ),
+        )
 
 
 def test_gazebo_model_pose_preserves_authoritative_orientation() -> None:
