@@ -3885,6 +3885,55 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-EXP-056-RESULT-171
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_DIAGNOSTIC_CONFIRMATION
+experiment_id: EXP-056
+evidence_root: /tmp/so101-py-gui-214/candidate-056
+execution_result:
+  state: ERROR_BEFORE_OPEN_GRIPPER
+  failure: place alignment did not converge within 3 attempts
+  reported_cup_xyz_m: [-0.0806671753525734, -0.2482825070619583, 0.17395225167274475]
+  open_gripper_observed: false
+diagnostic_integrity:
+  telemetry_samples: 10457
+  sampling: bounded 50 Hz JSONL
+  gui_recording: 207.4 s, 6.3 MiB H.264
+  contact_age_at_boundary_s: 0.000025797169655561447
+  disk_space_preserved: true
+pre_open_contact_result:
+  placement_samples: 2612
+  placement_duration_s: 56.135113642085344
+  fresh_table_contact_samples: 2345
+  fresh_table_contact_fraction: 0.8977794793261868
+  contacting_cup_collision: plastic_cup::body::wall_near
+  first_contact_cup_xyz_m: [-0.07899964600801468, -0.2565174698829651, 0.1721980720758438]
+  first_contact_bottom_clearance_m: 0.0004799343727106692
+  first_reported_contact_depth_m: 0.000511959136929363
+would_be_release_boundary:
+  nearest_sample_distance_to_reported_failure_m: 0.00003641409965673562
+  cup_xyz_m: [-0.0806775614619255, -0.24825061857700348, 0.1739664375782013]
+  cup_upright_tilt_rad: 1.1679322290606082
+  bottom_collision_clearance_m: -0.0004737023760798542
+  table_contact_fraction_in_plus_minus_0_5_s_window: 1.0
+  cup_linear_speed_m_s: {median: 0.0021346187218598688, maximum: 0.014052901922712335}
+  arm_max_joint_position_speed_rad_s: {median: 0.00001672416909930415, maximum: 0.007728187140271849}
+  q6_rad: -0.05196358636021614
+visual_evidence:
+  full_video: /tmp/so101-py-gui-214/candidate-056/diagnostic/gazebo-gui.mp4
+  boundary_frame: /tmp/so101-py-gui-214/candidate-056/diagnostic/preopen-boundary.png
+  boundary_clip: /tmp/so101-py-gui-214/candidate-056/diagnostic/preopen-contact-clip.mp4
+interpretation:
+  - user hypothesis is confirmed for cup/table contact before OPEN_GRIPPER
+  - contact is abnormal cup-wall/table contact caused by a roughly 66.9 degree cup tilt, not a normal upright bottom landing
+  - the cup is moving while the arm is comparatively stable in the boundary window, so the visible oscillation is dominated by held-cup/contact physics rather than an arm-only controller oscillation
+  - because alignment aborted before OPEN_GRIPPER, this run validates the pre-open collision diagnosis but does not count as a pick-place success
+recommended_next_change: raise and stabilize the held-cup release approach so the cup remains clear of the table until physical gripper opening; add a pre-open result gate on fresh cup/table contact and cup attitude, while keeping final outcome validation authoritative
+motion_parameters_changed: false
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-EXP-055-INVALID-168
 recorded_at: 2026-08-09 Asia/Shanghai
 status: INVALID_ENVIRONMENT
