@@ -65,8 +65,65 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-086-IMPLEMENTED-278
-next_experiment: EXP-086
+latest_checkpoint: CP-PRE-EXP-087-280
+next_experiment: EXP-087
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-087-280
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-087
+status: PREREGISTERED
+prior_experiment: EXP-086
+retained_baseline: EXP-085 with its original broad 0.1-1.0 mm penetration normalization and release q6=0.465038
+hypothesis: EXP-085's weak grasp passed an instantaneous 2 mm micro-lift but slipped during LIFT; requiring the cup to remain at the lifted outcome for one second will reject that transient grasp and activate the existing single bounded regrasp attempt before the carry begins
+single_variable: after the existing 2 mm MICRO_LIFT, add a 1.0 s cup-position hold validation before continuation; no new motion target is introduced
+lifecycle: RESET_WORLD
+prediction:
+  - a transient grasp that drops during the one-second hold fails with CUP_INSUFFICIENT_LIFT and triggers the existing bounded regrasp path
+  - a continued grasp keeps the cup at least 0.1 mm above its pre-lift height with <=6 mm lateral drift after the hold
+  - the selected grasp remains held through LIFT and MOVE_ABOVE_PLACE
+  - the complete chain reaches release and authoritative final validation
+unchanged:
+  - original 0.1-1.0 mm penetration target interval, 1.0 mrad normalization step and 1.3 mm hard ceiling
+  - cup mass/materials, all arm/gripper targets, fast raised descent, 1 s release to q6=0.465038, release ordering, MoveIt shadow semantics, physics/controllers/collision settings and every final/hard safety bound
+preconditions:
+  - revert only the rejected EXP-086 penetration-policy constants/call overrides
+  - TDD, full pytest, colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-086-279
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_BEFORE_LIFT
+experiment_id: EXP-086
+execution_head: ef5105b
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp086/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.000001001695471692533
+failure:
+  phase: POST_SEATING_PHYSICAL_STABILITY
+  code: TARGET_PENETRATION_NOT_REACHED
+  detail: fine-step upper-band search lost moving-pad contact and timed out with fixed-pad-only contact
+  fixed_pad_depth_m: 0.000830582866910845
+  moving_pad_contact: false
+  q6_contact: -0.047480933368206024
+  requested_seating_q6: -0.05348093336820602
+  gazebo_attachment_state: detached
+release_variable_evaluation: NOT_REACHED; release q6=0.465038 remains active
+evidence_sha256:
+  reset_proof: a964f47b88a66b31ba7d41cdb39841733ce7fe525c3e57580a753adb0cbf9079
+  execute_log: 3caf6352c76fca531bba3b9e23276b89e26035637c48116138432f341be6a501
+  physical_failure: c2384f3ce99b6b9171006200f12b4335b52cfaf8f6af99fef9bcbf85c8c8aea5
+  telemetry: fa0f2c759d754dbb5fed36f2c7d6c83fd1f7d6b3d9924beb70b8f100a4acc8dd
+  bounded_video: 4d247aebf784a960aa3d134fd8f0df5d16376d9ba69a933e0eab11b96638a4b7
+  final_screenshot: 59d22ff081fea74873a0de2bf03d62ef03b216a3bf2b0c01c9bc336570f7c22b
+decision: reject the EXP-086 upper-band/fine-step policy; restore the EXP-085 penetration policy and detect transient retention through a cup-outcome hold gate in EXP-087
+counts_toward_success_streak: false
 ```
 
 ```yaml
