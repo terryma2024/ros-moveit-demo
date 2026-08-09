@@ -336,6 +336,25 @@ def test_same_run_place_alignment_allows_pre_release_drop_height() -> None:
     assert telemetry == ()
 
 
+def test_same_run_place_alignment_defers_pre_release_tilt_to_final_outcome() -> None:
+    class Backend:
+        def sample(self):
+            return PoseSample(
+                object_xyz=(-0.081, -0.251, 0.175),
+                tcp_xyz=(0.020, -0.263, 0.375),
+                object_xyzw=(0.22427, 0.0, 0.0, 0.97453),
+            )
+
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.080, -0.250, 0.165),
+        execute=lambda *_args: pytest.fail("already-aligned cup must not move"),
+    )
+
+    assert aligned.object_xyzw == pytest.approx((0.22427, 0.0, 0.0, 0.97453))
+    assert reverse_waypoints == ()
+    assert telemetry == ()
+
+
 def test_same_run_place_alignment_rejects_implausible_pre_release_height() -> None:
     class Backend:
         def sample(self):
