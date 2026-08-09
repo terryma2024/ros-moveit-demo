@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: fa28e93
+current_commit: 1b4ce0d
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -32,8 +32,30 @@ open_hypotheses:
   - Retaining EXP-066 client reuse while increasing only DESCEND_TO_PLACE velocity/acceleration scaling from 0.03 to 0.05 should reduce the observed 8.73 s gravity-exposure interval without changing targets or safety bounds.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-067-208
+latest_checkpoint: CP-EXP-067-IMPLEMENTED-209
 next_experiment: EXP-067
+```
+
+```yaml
+checkpoint_id: CP-EXP-067-IMPLEMENTED-209
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-067
+implementation_commit: 1b4ce0d
+single_variable: DESCEND_TO_PLACE velocity_scaling and acceleration_scaling 0.03 -> 0.05
+red:
+  targeted: 1 expected failure; installed/source policy still reported 0.03
+green:
+  targeted: 1 passed
+  full_pytest: 195 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 197 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  source_policy_sha256: 19f0dd93551c815d96a3f4cbf0b0054081833328898c5bc82827c11736fcbb4b
+  installed_policy_sha256: 19f0dd93551c815d96a3f4cbf0b0054081833328898c5bc82827c11736fcbb4b
+unchanged: all waypoints/targets, q6, non-DESCEND speed profiles, outcome/safety bounds, material/physics/controller/collision and attachment semantics
+next_command: prove RESET_WORLD on the sole domain-224 stack, start bounded telemetry/H.264, then run one execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
