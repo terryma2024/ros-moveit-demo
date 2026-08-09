@@ -3361,3 +3361,28 @@ decision_options_for_user:
   - stop: keep the recalibrated implementation and the diagnostic result as the final state
 state: resting at commit 71f844f fingerprint (bundle f99f5ec7); no further qualification runs started; awaiting user decision
 ```
+
+```yaml
+checkpoint_id: CP-AUTHORIZATION-SOLVER-LIMIT-GATE-001
+recorded_at: 2026-08-09 Asia/Shanghai
+trigger: user decision option 1 after CP-QUALIFICATION-ENDED-001
+sole_writer: tmux kimi (unchanged)
+authorization:
+  scope: change grasp gate semantics to the solver-limit regime and qualify on physical carry evidence
+  semantics: MOVING_PAD_MESH_PENETRATION_CEILING_M = 0.0013 (= SOLVER_REPORTED_CONTACT_DEPTH_LIMIT_M);
+    the instantaneous-depth ceiling becomes vacuous for bilateral (reportable) contacts and the
+    within-solver-limit reportability check becomes the only depth gate; grasp acceptance rests on
+    stable bilateral contact plus the physical micro-lift carry gate (lift +0.002 m, lateral <= 0.001 m)
+  rationale: virtual penetration depth in this contact model is not a usable health metric at the
+    observed physical variance; the diagnostic proved the cup is physically carried at ~0.0010 m
+    depth (EXP-PEN-DIAG-001-GRASP-229), and 0.00125 m failed on run-to-run variance
+    (EXP-QUAL-GRASP-1-231) with only 50 um of headroom below solver saturation
+  plumbing_cleanup: remove the diagnostic override apparatus entirely (motion policy field
+    diagnostic_moving_pad_penetration_ceiling_m, loader bound, gate ceiling kwargs); a ceiling above
+    the solver limit is unmeasurable and an override below it would silently tighten the gate;
+    restores single-constant gate semantics
+  unchanged: anchor targets (Z +0.0004, preload 0.006, rot 0.0), geometry, physics, friction, mass,
+    controllers, attachment semantics, lift/lateral/shadow/freshness/support/final-outcome gates
+  qualification: restart per the previously approved plan at a new frozen fingerprint; EXP-QUAL-GRASP-2-232
+    and EXP-QUAL-GRASP-3-233 are NOT_RUN (superseded by CP-QUALIFICATION-ENDED-001)
+```

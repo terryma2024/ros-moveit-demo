@@ -1120,3 +1120,19 @@ target 校准。仅取代：（1）同方向三候选失败后的 no-interpolati
    最终 outcome 稳定/直立/落区、MoveIt membership 独立验证），随后验收电池（clean build/
    全量 suite、dry-run、完整 plan-only、headless、GUI/CUA 新截图）与同一冻结 commit/policy
    连续五次 FULL_RESTART 成功，最后才 scoped commit、推 Gitee、合 main。
+
+## 2026-08-09 增补执行计划：solver-limit gate + 重启 QUALIFICATION
+
+对应设计增补「2026-08-09 增补授权：solver-limit gate 语义（用户选项 1）」。
+
+1. 授权增补写入本计划/设计/ledger，docs-only 提交（preserved dirty path 不入）。
+2. RED/GREEN：`MOVING_PAD_MESH_PENETRATION_CEILING_M` 改 `0.0013`；移除 diagnostic override
+   apparatus（policy 字段/loader/gate kwargs/相关测试）；更新边界断言（含本地未跟踪 parity
+   测试界面适配，不 stage）；全量 suite 无回退；scoped commit；rebuild + 验证 provenance。
+3. ledger 预注册新 fingerprint 下的 plan-only + 三次 FULL_RESTART grasp qualification
+   （新 domain/partition/tmux/证据目录）；EXP-QUAL-GRASP-2-232 / EXP-QUAL-GRASP-3-233 记 NOT_RUN。
+4. 任一 VALID failure 结束 qualification 回到用户；INVALID 终止批次先调试。
+5. 三次通过后继续：完整物理 pick/place（D→E→F、shadow、release/settle、最终 outcome、
+   MoveIt membership 独立验证）→ 验收电池（clean build/全量 suite、dry-run、完整 plan-only、
+   headless、GUI/CUA 新截图）→ 同冻结 fingerprint 连续五次 FULL_RESTART 成功 → scoped commit、
+   推 Gitee、合 main。
