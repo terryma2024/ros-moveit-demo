@@ -6128,6 +6128,30 @@ next: commit locally, then preregister a fresh RESET_WORLD trial
 ```
 
 ```yaml
+checkpoint_id: CP-PRE-EXP-031-079
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-031
+purpose: exhaust the bounded two-attempt feedback budget before deciding alignment convergence
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 95fa838
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-030/reset-after-intermediate-progress-gate/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-031
+candidate:
+  alignment_target_offset_m: [0.0050, 0.0055, 0.0]
+  max_attempts: 2
+  per_attempt_minimum_progress_gate: removed
+  final_alignment_tolerance_m: 0.003
+prediction: alignment either converges within two bounded corrections and reaches final physical outcome, or stops only after the budget is exhausted
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-028-068
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
