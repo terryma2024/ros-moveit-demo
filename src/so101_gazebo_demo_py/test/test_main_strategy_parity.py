@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import yaml
 
 from so101_gazebo_demo_py.live_execute import (
@@ -9,7 +10,7 @@ from so101_gazebo_demo_py.live_execute import (
     seating_preload_target,
     select_joint_position,
     verify_physical_micro_lift,
-    stabilize_with_contact_missing_retries,
+    stabilize_to_target_penetration,
     local_x_world_delta,
 )
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import contact_probe_complete
@@ -133,21 +134,60 @@ def test_carrying_waypoint_timing_applies_policy_velocity_scaling() -> None:
     assert waypoint_step_seconds(5, 0.10) == 1
 
 
-def test_contact_missing_retry_is_bounded_to_four_milliradians(monkeypatch) -> None:
+def test_target_penetration_closes_after_missing_contact(monkeypatch) -> None:
     targets = []
-    attempts = iter([RuntimeError("missing"), RuntimeError("missing"), "stable"])
+    stable = SimpleNamespace(max_moving_pad_penetration_m=0.0004)
+    attempts = iter([RuntimeError("missing"), RuntimeError("missing"), stable])
     monkeypatch.setattr(
         "so101_gazebo_demo_py.live_execute._stable_bilateral",
         lambda _backend: (_ for _ in ()).throw(value)
         if isinstance((value := next(attempts)), Exception) else value,
     )
 
-    result = stabilize_with_contact_missing_retries(
+    contact, target, adjustments = stabilize_to_target_penetration(
         SimpleNamespace(move_gripper=targets.append), -0.053, 0.465, -0.0596
     )
 
-    assert result == "stable"
+    assert contact is stable
+    assert target == -0.055
+    assert adjustments == 2
     assert targets == [0.465, -0.054, 0.465, -0.055]
+
+
+def test_target_penetration_opens_one_milliradian_when_too_deep(monkeypatch) -> None:
+    targets = []
+    contacts = iter([
+        SimpleNamespace(max_moving_pad_penetration_m=0.001064),
+        SimpleNamespace(max_moving_pad_penetration_m=0.000620),
+    ])
+    monkeypatch.setattr(
+        "so101_gazebo_demo_py.live_execute._stable_bilateral",
+        lambda _backend: next(contacts),
+    )
+
+    contact, target, adjustments = stabilize_to_target_penetration(
+        SimpleNamespace(move_gripper=targets.append), -0.0536, 0.465, -0.0596
+    )
+
+    assert contact.max_moving_pad_penetration_m == 0.000620
+    assert target == -0.0526
+    assert adjustments == 1
+    assert targets == [-0.0526]
+
+
+def test_target_penetration_never_recovers_through_hard_ceiling(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "so101_gazebo_demo_py.live_execute._stable_bilateral",
+        lambda _backend: (_ for _ in ()).throw(
+            RuntimeError("moving-pad penetration ceiling exceeded: 0.00131")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="penetration ceiling exceeded"):
+        stabilize_to_target_penetration(
+            SimpleNamespace(move_gripper=lambda _target: None),
+            -0.053, 0.465, -0.0596,
+        )
 
 
 def test_contact_stopped_gripper_goal_defers_to_cup_outcome() -> None:
