@@ -7763,3 +7763,28 @@ tests:
   package_pytest: 187 passed, 2 skipped
 next: commit locally, then preregister one RESET_WORLD trial
 ```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-051-152
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-051
+purpose: obtain complete feedback and final evidence with one bounded re-subscription available for any transient empty pose probe
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 1c004e3
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-050-reset/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-051
+candidate:
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  maximum_alignment_commands: 3
+  pose_subscription_attempts: 2
+  immediate_radial_separation_m: 0.010
+  changed_motion_parameters_since_EXP_050: false
+prediction: transient pose loss no longer discards the candidate after one empty subscription; physical release and final outcome are reached unless both bounded attempts fail
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
