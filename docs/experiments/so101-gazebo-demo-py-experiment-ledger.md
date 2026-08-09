@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: ef5690a
+current_commit: d97a204
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -65,8 +65,30 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-090-288
+latest_checkpoint: CP-EXP-090-IMPLEMENTED-289
 next_experiment: EXP-090
+```
+
+```yaml
+checkpoint_id: CP-EXP-090-IMPLEMENTED-289
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-090
+planning_commit: 282844a
+implementation_commit: d97a204
+single_variable: immediate and held MICRO_LIFT maximum cup lateral drift 0.006 m to 0.001 m
+red:
+  focused: 1 failed, 15 passed because a 1.1 mm held lateral drift was still admitted
+green:
+  focused: 16 passed
+  full_pytest: 204 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 206 tests, 0 errors, 0 failures, 2 skipped
+runtime_behavior:
+  - CUP_LATERAL_DRIFT now fails before carry above 1 mm
+  - the existing one bounded regrasp attempt and all motion/release logic remain unchanged
+next_command: RESET_WORLD on domain 231, then one bounded EXP-090 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
