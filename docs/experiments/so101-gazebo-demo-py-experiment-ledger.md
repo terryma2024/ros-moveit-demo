@@ -65,8 +65,64 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-085-IMPLEMENTED-275
-next_experiment: EXP-085
+latest_checkpoint: CP-PRE-EXP-086-277
+next_experiment: EXP-086
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-086-277
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-086
+status: PREREGISTERED
+prior_experiment: EXP-085
+hypothesis: the broad 0.1-1.0 mm seating target admitted a 0.640 mm grasp that passed the 2 mm micro-lift but slipped during the larger LIFT; targeting the upper safe portion of the already-approved penetration range with finer q6 steps will increase carry retention without crossing the global ceiling
+single_variable: penetration normalization policy changes from target 0.1-1.0 mm with 1.0 mrad q6 steps to target 0.75-1.0 mm with 0.25 mrad q6 steps
+lifecycle: RESET_WORLD
+prediction:
+  - stable post-seating moving-pad penetration lies in 0.75-1.0 mm
+  - the cup remains physically held through LIFT and acquires the commanded horizontal displacement during MOVE_ABOVE_PLACE
+  - no sample exceeds the unchanged 1.3 mm hard penetration ceiling
+  - the complete physical pick-place chain reaches release and the authoritative final outcome passes
+unchanged:
+  - cup mass/materials, arm and gripper targets, fast raised descent, 1 s release to q6=0.465038, release ordering, MoveIt shadow semantics, physics/controllers/collision settings and every final/hard safety bound
+preconditions:
+  - TDD, full pytest, colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-085-276
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_BEFORE_RELEASE
+experiment_id: EXP-085
+execution_head: 0f224bc
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp085/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000016898389199518121
+physical_grasp:
+  normalized_target_q6: -0.05255974560976028
+  adjustments: 1
+  moving_pad_depth_m: 0.0006404980085790157
+  micro_lift_world_z_m: 0.0015184581279754639
+  lateral_drift_m: 0.0002342673189872757
+observed_failure:
+  - cup rose from the pick table only to z=0.183856 m, then fell back upright to the original pick-table position while q6 remained approximately -0.05256
+  - the arm continued to the place-side endpoint without the cup
+  - place alignment correctly stopped before release because the required correction was [-0.094616, 0.015796] m, outside the retained 30 mm bound
+  - final observed cup position was approximately [0.019615, -0.270797, 0.165000] m
+release_variable_evaluation: NOT_REACHED; release q6=0.465038 remains active for the next experiment
+evidence_sha256:
+  reset_proof: f48fb26e8806836467e7f26eaaea18f68aa07357f7618d4f81a239f8720fe4cf
+  execute_log: d3736e8bb88f34123aab7d127770c833bdf0d74ca279fc14aa38f73a0eee0833
+  physical_gate: 3ef3c8ad3fb6db207723a00c4b37f15669ef1ecb35b392f0a6fde16dcf1bf9e4
+  telemetry: 799f835371040826513751d49be4d076e2492d1d265b89fe3126c93b4fb32e13
+  bounded_video: d2df263cdeb5ea58f398b97492e8df21c60fb3eafa53e11582b97fffb1741cc3
+  final_screenshot: b9e77426bfd4f70fc14e9895db908df1924df95d84658d46cd5ea09cb7f382c4
+decision: retain the unexercised reduced release target; use EXP-086 to isolate carry retention by targeting a stronger but still approved seating penetration
+counts_toward_success_streak: false
 ```
 
 ```yaml
