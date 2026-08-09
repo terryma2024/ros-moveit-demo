@@ -223,6 +223,64 @@ def carry_with_shadow_gates(backend, policies, shadow_gate):
         )
 
 
+def align_cup_for_release(
+    backend, target_xyz, *, execute,
+    max_attempts: int = 2, xy_tolerance_m: float = 0.003,
+    max_axis_correction_m: float = 0.030,
+):
+    """Use same-run cup pose feedback for a bounded pre-release XY alignment."""
+    current=backend.sample(); reverse_waypoints=[]; telemetry=[]
+    for attempt in range(max_attempts+1):
+        values=(*current.object_xyz,*current.object_xyzw,*current.tcp_xyz,*current.tcp_xyzw)
+        if not all(math.isfinite(value) for value in values):
+            raise RuntimeError("place alignment requires finite cup and arm poses")
+        height_error=abs(current.object_xyz[2]-target_xyz[2])
+        x_error=target_xyz[0]-current.object_xyz[0]
+        y_error=target_xyz[1]-current.object_xyz[1]
+        xy_error=math.hypot(x_error,y_error)
+        if height_error > 0.010:
+            raise RuntimeError(
+                f"place alignment support height outside bound: {height_error}"
+            )
+        x,y,_,w=current.object_xyzw
+        upright=math.acos(max(-1.0,min(1.0,1.0-2.0*(x*x+y*y))))
+        if upright > 0.35:
+            raise RuntimeError(f"place alignment cup tilt outside bound: {upright}")
+        if xy_error <= xy_tolerance_m:
+            return current,tuple(reverse_waypoints),tuple(telemetry)
+        if attempt == max_attempts:
+            break
+        if abs(x_error) > max_axis_correction_m or abs(y_error) > max_axis_correction_m:
+            raise RuntimeError(
+                f"place alignment correction exceeds bound: {(x_error,y_error)}"
+            )
+        delta=(x_error,y_error,0.0)
+        points,start_positions=execute(delta,0.15)
+        after=backend.sample()
+        after_error=math.hypot(
+            target_xyz[0]-after.object_xyz[0],
+            target_xyz[1]-after.object_xyz[1],
+        )
+        telemetry.append({
+            "attempt":attempt+1,
+            "commanded_translation_m":delta,
+            "planned_points":points,
+            "before_object_xyz":current.object_xyz,
+            "after_object_xyz":after.object_xyz,
+            "before_xy_error_m":xy_error,
+            "after_xy_error_m":after_error,
+        })
+        if after_error > xy_error-0.001:
+            raise RuntimeError(
+                f"place alignment did not reduce cup error: {xy_error} -> {after_error}"
+            )
+        reverse_waypoints.append(tuple(start_positions)); current=after
+    raise RuntimeError(
+        f"place alignment did not converge within {max_attempts} attempts: "
+        f"{current.object_xyz}"
+    )
+
+
 def plan_waypoint_sequence(planner, names, start, waypoints) -> int:
     current=tuple(start); total=0
     for target in waypoints:
@@ -484,7 +542,9 @@ def _moveit_world_z_execute(
     local_x_m: float = 0.0,
     world_translation_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
     world_x_rotation_rad: float = 0.0,
-) -> tuple[int, float]:
+    orientation_tolerance_rad: float = 0.005,
+    return_arm_start: bool = False,
+):
     import rclpy
     from moveit_msgs.action import ExecuteTrajectory, MoveGroup
     from rclpy.action import ActionClient
@@ -502,13 +562,20 @@ def _moveit_world_z_execute(
         except Exception: transform=None
     if not latest or transform is None: raise RuntimeError("fresh joint/TF state unavailable for world-Z micro lift")
     names=tuple(latest[-1].name); positions=tuple(latest[-1].position)
+    position_by_name=dict(zip(names,positions))
+    arm_start=tuple(position_by_name[name] for name in ("1","2","3","4","5"))
     target_pose=make_world_z_target((transform.transform.translation.x,transform.transform.translation.y,transform.transform.translation.z,transform.transform.rotation.x,transform.transform.rotation.y,transform.transform.rotation.z,transform.transform.rotation.w),delta_m)
     dx,dy,dz=local_x_world_delta(target_pose[3:],local_x_m)
     target_pose=(target_pose[0]+dx,target_pose[1]+dy,target_pose[2]+dz,*target_pose[3:])
     target_pose=rotated_grasp_pose(translated_grasp_pose(target_pose,world_translation_m),world_x_rotation_rad)
     client=ActionClient(node,MoveGroup,"/move_action")
     if not client.wait_for_server(timeout_sec=10.): raise RuntimeError("/move_action unavailable")
-    future=client.send_goal_async(make_pose_move_group_goal(names,positions,target_pose)); rclpy.spin_until_future_complete(node,future,timeout_sec=5.)
+    goal=make_pose_move_group_goal(names,positions,target_pose)
+    orientation=goal.request.goal_constraints[0].orientation_constraints[0]
+    orientation.absolute_x_axis_tolerance=orientation_tolerance_rad
+    orientation.absolute_y_axis_tolerance=orientation_tolerance_rad
+    orientation.absolute_z_axis_tolerance=orientation_tolerance_rad
+    future=client.send_goal_async(goal); rclpy.spin_until_future_complete(node,future,timeout_sec=5.)
     handle=future.result() if future.done() else None
     if handle is None or not handle.accepted: raise RuntimeError("world-Z MoveGroup goal rejected")
     future=handle.get_result_async(); rclpy.spin_until_future_complete(node,future,timeout_sec=15.)
@@ -521,7 +588,21 @@ def _moveit_world_z_execute(
     result=MoveItExecutionClient(ActionClient(node,ExecuteTrajectory,"/execute_trajectory"),make_execute_goal,progress).execute(trajectory,30.)
     node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
     if result.failure: raise RuntimeError(str(result.failure))
-    return points, transform.transform.translation.z
+    if return_arm_start:
+        return points,transform.transform.translation.z,arm_start
+    return points,transform.transform.translation.z
+
+
+def _moveit_world_translation_execute(
+    translation_m: tuple[float,float,float], orientation_tolerance_rad: float,
+):
+    points,_,arm_start=_moveit_world_z_execute(
+        0.0,
+        world_translation_m=translation_m,
+        orientation_tolerance_rad=orientation_tolerance_rad,
+        return_arm_start=True,
+    )
+    return points,arm_start
 
 
 def _stable_bilateral(backend: RosGazeboLiveBackend, required: int = 6):
@@ -764,7 +845,13 @@ def run_live_execute(
         state=next(state for state in bundle.motion.states if state.value==name)
         carry_policies[name]=bundle.motion.states[state]
     carry_with_shadow_gates(backend,carry_policies,gate_shadow)
-    placed=backend.sample()
+    target_place_xyz=tuple(bundle.object.place_pose.values[:3])
+    def execute_place_correction(delta,orientation_tolerance_rad):
+        gate_shadow("PLACE_ALIGNMENT")
+        return _moveit_world_translation_execute(delta,orientation_tolerance_rad)
+    placed,place_reverse_waypoints,place_alignment=align_cup_for_release(
+        backend,target_place_xyz,execute=execute_place_correction,
+    )
     pose=(*placed.object_xyz,*placed.object_xyzw); detached_scene=_apply_scene("detach",pose)
     backend.move_gripper(bundle.motion.release_q6)
     outcome_policy=bundle.validation.physical_outcome
@@ -776,6 +863,8 @@ def run_live_execute(
         pre_pose=(*pre_retreat.final_sample.object_xyz,*pre_retreat.final_sample.object_xyzw)
         synchronized_scene[0]=_apply_scene("detach",pre_pose)
         scene_membership[0]=synchronized_scene[0]
+        if place_reverse_waypoints:
+            backend.move_arm(tuple(reversed(place_reverse_waypoints)),0.05)
         backend.move_arm(retreat_policy.waypoints)
     with backend.final_observer() as final_observer:
         def collect_final_epoch():
@@ -812,11 +901,12 @@ def run_live_execute(
             "gazebo_attachment_state":backend.attachment_state(),
             "planning_scene":synchronized_scene[0],
             "shadow_checks":shadow_checks,
+            "place_alignment":place_alignment,
         }
         (evidence_directory/"final-outcome-failure.json").write_text(
             json.dumps(failure,indent=2)
         )
         raise RuntimeError(f"post-retreat final physical outcome failed: {settle.evaluation.failure_code}")
     final=outcomes.post_retreat.final_sample
-    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene,"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),"final_outcome":outcome_payload(outcomes.post_retreat.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
+    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene,"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),"final_outcome":outcome_payload(outcomes.post_retreat.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
     path=evidence_directory/"live-summary.json"; path.write_text(json.dumps(summary,indent=2)); return summary

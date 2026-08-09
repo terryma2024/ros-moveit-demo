@@ -5953,3 +5953,32 @@ decision:
   retained: MOVE_ABOVE_PLACE velocity and acceleration scaling 0.05 because it reduced carry tilt and produced a clean release in EXP-024
 next_strategy_family: bounded same-run place alignment from authoritative Gazebo cup pose while the MoveIt Planning Scene object remains attached; final bounds and all safety ceilings stay frozen
 ```
+
+```yaml
+checkpoint_id: CP-SAME-RUN-PLACE-ALIGNMENT-059
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  family: bounded same-run pre-release placement feedback
+  observation: fresh authoritative Gazebo cup pose and finite TCP pose after DESCEND_TO_PLACE
+  objective: target the configured place center in XY; cup Z is observed but never commanded by this controller
+  max_attempts: 2
+  xy_tolerance_m: 0.003
+  max_axis_correction_m: 0.030
+  support_height_error_limit_m: 0.010
+  cup_tilt_limit_rad: 0.35
+  minimum_error_reduction_per_attempt_m: 0.001
+  moveit_orientation_tolerance_rad: 0.15
+  retreat: reverse every executed correction start waypoint before the restored EXP-024 RETREAT ladder
+failure_semantics: nonfinite pose, height/tilt/translation bound, planning failure, no convergence or insufficient error reduction stops before Planning Scene detach and gripper release
+unchanged:
+  - faster MOVE_ABOVE_PLACE timing 0.05
+  - physical grasp and Gazebo-detached carry semantics
+  - MoveIt Planning Scene attach and per-correction shadow resynchronization
+  - final acceptance, penetration ceiling and all frozen physics/geometry/material/controller/collision settings
+tests:
+  red: 4 alignment/source-order tests failed before implementation
+  focused_green: 43 passed
+  package_pytest: 171 passed, 2 skipped
+  colcon: 173 tests, 0 errors, 0 failures, 2 skipped
+next: commit locally, then preregister one RESET_WORLD search trial
+```

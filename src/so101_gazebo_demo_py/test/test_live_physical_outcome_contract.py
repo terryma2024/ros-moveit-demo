@@ -117,6 +117,19 @@ def test_moveit_shadow_attach_precedes_physical_micro_lift_planning() -> None:
     assert ".set_attached(" not in forward_path
 
 
+def test_same_run_place_alignment_precedes_release_and_is_reversed_before_retreat() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+
+    assert forward_path.index("align_cup_for_release(") < forward_path.index(
+        'detached_scene=_apply_scene("detach"'
+    )
+    assert "reversed(place_reverse_waypoints)" in forward_path
+    assert forward_path.index("reversed(place_reverse_waypoints)") < forward_path.index(
+        "backend.move_arm(retreat_policy.waypoints)"
+    )
+
+
 def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:
     policy = PlanningShadowConfig(0.005, 0.070, 0.10)
     gazebo = (0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 1.0)

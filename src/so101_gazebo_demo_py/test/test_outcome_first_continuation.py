@@ -293,3 +293,58 @@ def test_contact_stopped_gripper_result_defers_to_cup_outcome_gate() -> None:
     output = "error_code: -5\nGoal finished with status: ABORTED"
 
     assert gripper_result_acceptable(output, bilateral=False)
+
+
+def test_same_run_place_alignment_uses_cup_error_and_returns_reverse_path() -> None:
+    samples = iter((
+        sample(-0.097, -0.256, 0.165),
+        sample(-0.081, -0.251, 0.165),
+    ))
+    commands = []
+
+    class Backend:
+        def sample(self):
+            return next(samples)
+
+    def execute(delta, orientation_tolerance_rad):
+        commands.append((delta, orientation_tolerance_rad))
+        return 12, (0.39, 0.49, 0.11, 1.0, 0.002)
+
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.080, -0.250, 0.165), execute=execute,
+    )
+
+    assert aligned.object_xyz == pytest.approx((-0.081, -0.251, 0.165))
+    assert commands[0][0] == pytest.approx((0.017, 0.006, 0.0))
+    assert commands[0][1] == 0.15
+    assert reverse_waypoints == ((0.39, 0.49, 0.11, 1.0, 0.002),)
+    assert telemetry[-1]["after_xy_error_m"] < telemetry[-1]["before_xy_error_m"]
+
+
+def test_same_run_place_alignment_fails_closed_outside_translation_bound() -> None:
+    class Backend:
+        def sample(self):
+            return sample(-0.1201, -0.250, 0.165)
+
+    with pytest.raises(RuntimeError, match="place alignment correction exceeds bound"):
+        live_execute.align_cup_for_release(
+            Backend(), (-0.080, -0.250, 0.165),
+            execute=lambda *_args: pytest.fail("out-of-bound correction must not execute"),
+        )
+
+
+def test_same_run_place_alignment_fails_when_cup_does_not_converge() -> None:
+    samples = iter((
+        sample(-0.097, -0.256, 0.165),
+        sample(-0.0968, -0.2559, 0.165),
+    ))
+
+    class Backend:
+        def sample(self):
+            return next(samples)
+
+    with pytest.raises(RuntimeError, match="did not reduce cup error"):
+        live_execute.align_cup_for_release(
+            Backend(), (-0.080, -0.250, 0.165),
+            execute=lambda *_args: (12, (0.39, 0.49, 0.11, 1.0, 0.002)),
+        )
