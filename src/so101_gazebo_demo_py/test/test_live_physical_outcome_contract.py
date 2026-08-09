@@ -191,7 +191,9 @@ def test_release_settles_after_scene_detach_before_existing_retreat() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
 
-    release_index = forward_path.index("backend.move_gripper(bundle.motion.release_q6)")
+    release_index = forward_path.index(
+        "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
+    )
     detach_index = forward_path.index('apply_scene("detach",released_pose)', release_index)
     epochs_index = forward_path.index(
         "collect_final_outcomes_around_retreat(", detach_index,

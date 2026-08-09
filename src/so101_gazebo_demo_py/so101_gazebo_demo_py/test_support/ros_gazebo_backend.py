@@ -40,6 +40,16 @@ def waypoint_step_seconds(point_count: int, velocity_scaling: float | None = Non
     return 2 if point_count == 10 else 3 if point_count == 5 else 4
 
 
+def gripper_motion_duration_seconds(
+    target_q6: float, *, final_release: bool = False
+) -> int:
+    if final_release:
+        if target_q6 < 0.0:
+            raise ValueError("final release requires a non-negative q6 target")
+        return 2
+    return 8 if target_q6 < 0.0 else 5
+
+
 def gripper_result_acceptable(output: str, bilateral: bool) -> bool:
     del bilateral
     return "status: SUCCEEDED" in output or (
@@ -344,8 +354,10 @@ class RosGazeboLiveBackend:
             raise RuntimeError(f"arm trajectory did not succeed:\n{output}")
         self._arm_moved_since_sample = True
 
-    def move_gripper(self, target_q6: float) -> None:
-        duration = 8 if target_q6 < 0.0 else 5
+    def move_gripper(self, target_q6: float, *, final_release: bool = False) -> None:
+        duration = gripper_motion_duration_seconds(
+            target_q6, final_release=final_release
+        )
         goal = {
             "trajectory": {
                 "joint_names": ["6"],
