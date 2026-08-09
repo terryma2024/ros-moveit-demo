@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 6cfb4e5
+current_commit: ef159a4
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -45,6 +45,7 @@ confirmed_conclusions:
   - EXP-081 removed the no-alignment stationary pre-retreat wait, retained the Planning Scene shadow through the fixed retreat, and achieved authoritative success at [-0.081771, -0.247192, 0.165000] m with a 2.192 mm minimum XY boundary margin, no gripper contact and no pre-retreat epoch.
   - QUAL-FULL-IMM-01 passed on a clean stack, but QUAL-FULL-IMM-02 ended upright/stable/supported/free at x=-0.091415 m, 6.415 mm beyond the final x boundary; its release started 16.708 mm above the supported center height and rolled 9.533 mm in negative x during free placement.
   - EXP-082 lowered the release TCP by 4.637 mm but increased pre-open table penetration to about 1.143 mm and still rolled 11.621 mm in negative x, ending 5.882 mm beyond the x boundary; release height is not the controlling variable.
+  - EXP-083 fast descent produced an immediate endpoint cup tilt of only 0.0294 rad, but during the retained 2 s gripper-opening command the last still-closed telemetry reached 0.2175 rad/table contact and the cup later rolled 9.732 mm in positive x; the next boundary is opening duration.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -63,8 +64,76 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-083-IMPLEMENTED-269
-next_experiment: EXP-083
+latest_checkpoint: CP-PRE-EXP-084-271
+next_experiment: EXP-084
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-084-271
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-084
+status: PREREGISTERED
+prior_experiment: EXP-083
+hypothesis: the fast descent reaches the release endpoint with low tilt, but cup tilt grows while q6 spends 2 s opening through contact; shortening only the explicit final release command to 1 s will clear pad contact before the cup acquires enough side-roll energy to leave the target region
+single_variable: gripper_motion_duration_seconds final_release duration changes from 2 s to 1 s
+lifecycle: RESET_WORLD
+prediction:
+  - fast raised DESCEND_TO_PLACE and immediate fixed retreat remain unchanged
+  - q6 reaches the open state in approximately 1 s
+  - peak cup tilt while q6 is still below zero is lower than EXP-083's 0.2175 rad
+  - final upright/stable/supported/free cup lies inside the target box with at least 1 mm XY margin
+unchanged:
+  - all arm/grasp/release targets, q6 target, preload/penetration bounds, other motion durations, release ordering/compensation, materials/physics/controllers/collision settings and every final/hard validation bound
+preconditions:
+  - TDD, full pytest, colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-083-270
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_WITH_RETAINED_IMPROVEMENT
+experiment_id: EXP-083
+execution_head: ef159a4
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp083/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000007013207453439397
+physical_grasp:
+  normalized_target_q6: -0.05348108983039856
+  adjustments: 0
+  moving_pad_depth_m: 0.00023889579460956156
+  micro_lift_world_z_m: 0.0019836723804473877
+  lateral_drift_m: 0.00015909188621820628
+release:
+  endpoint_snapshot_xyz_m: [-0.07378137111663818, -0.2623435854911804, 0.18092955648899078]
+  endpoint_snapshot_tilt_rad: 0.029447
+  last_q6_below_zero_tilt_rad: 0.21750220531372658
+  last_q6_below_zero_table_contact: true
+  final_xyz_m: [-0.06404907256364822, -0.25197160243988037, 0.16500000655651093]
+  endpoint_to_final_delta_xy_m: [0.00973229855298996, 0.01037198305130003]
+final:
+  failure_code: FINAL_OUT_OF_REGION
+  x_upper_boundary_m: -0.075
+  x_out_of_region_m: 0.01095092743635178
+  upright_tilt_rad: 0.0000017893186296506501
+  stable: true
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+evidence_sha256:
+  execute_log: 5d2d5815c0fd4439b5f17d3de2204ef8ed1a6327337e06bc06c17e3f74e985ea
+  physical_gate: 2397125407fbb3d355715ee9ad818148e921cb6473b830bd8f45fc860d9b25a0
+  failure_json: c0c18e9c9f5e47cf8dbe66138f7688c573ec5bd5280761f8e760247f901904a8
+  telemetry: d11f7443006b4849e1b67b3659793e340745072288eed88e5f726a97b169aec4
+  bounded_video: a5dc8ddb8873ff621b175d3d780713f2498427a0af27ff61449e1667be951fdb
+  final_screenshot: 90f34f5ba1c82633a0bdaf2ee9dad9ccd18947bad23411ca435a2ec6214a1ff8
+decision: retain fast descent, keep raised geometry, and isolate final gripper-opening duration in EXP-084
+counts_toward_success_streak: false
 ```
 
 ```yaml
