@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 74e8c3162db10471a16a0b3fc5d28b9354c36f62
+current_commit: f191bd03e5e2a8c2dbccb2d9174f68f060209571
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -18,15 +18,17 @@ confirmed_conclusions:
   - EXP-059 stronger preload reduced strict pre-open tilt to 0.3302 rad with 12.6 mm clearance and zero table-contact samples, moving the first bad boundary to the immediate post-open retreat.
   - EXP-060 combined the retained 0.006 preload with MOVE_ABOVE_PLACE velocity scaling 0.10 and achieved an authoritative physical-outcome success at [-0.08451, -0.25333, 0.16500] m.
   - QUAL-FULL-01 was a valid clean FULL_RESTART failure: the release-start pose was inside the target region, but immediate RETREAT displaced the otherwise upright, supported and stable cup 0.000059242 m beyond the y boundary.
+  - EXP-061 proved that detaching the Planning Scene shadow before a planned retreat is not viable: the radial move executed but the subsequent 60 mm world-Z plan failed with MoveIt error 99999, while the already-tilted cup fell onto its side.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Detaching the MoveIt shadow immediately after physical OPEN_GRIPPER, collecting a bounded physical settle epoch while the arm remains stationary, and only then retreating will prevent the already-20 g cup from being displaced out of region.
-latest_checkpoint: CP-FULL-01-VIDEO-ANALYSIS-190
-next_experiment: EXP-061
+  - Reusing a persistent combined Gazebo/TF observer for carry shadow gates will remove most of the 4.1-4.4 second pre-descent observation dwell while preserving the same divergence/resynchronization safety check.
+  - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
+latest_checkpoint: CP-RESULT-EXP-061-191
+next_experiment: EXP-062
 ```
 
 ## Historical evidence imported before ledger activation
@@ -3904,6 +3906,70 @@ decision:
   - run already-preregistered EXP-061 release-order verification first
   - before consecutive qualification, test one separate implementation change that preserves the shadow gate but reuses a low-latency persistent pose observer
 next_experiment: EXP-061
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-061-191
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FAILURE
+experiment_id: EXP-061
+execution_commit: f191bd03e5e2a8c2dbccb2d9174f68f060209571
+lifecycle: RESET_WORLD
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 221
+  gz_partition: so101_py_qual_full_01
+reset_proof: /tmp/so101-py-qualification/exp061/reset/reset-world.json
+reset:
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.0000007269599716807382
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.0002384745457675308
+  micro_lift_world_z_m: 0.0021791309118270874
+  lateral_drift_m: 0.00022617986386049948
+  gazebo_attachment_used: false
+phase_profile:
+  move_above_place_start_tilt_rad: 0.01101820711363414
+  move_above_place_end_tilt_rad: 0.12662187205305805
+  post_move_pre_descend_duration_s: 4.405398258939385
+  post_move_pre_descend_end_tilt_rad: 0.1737998638387525
+  descend_to_place_end_tilt_rad: 0.3057030173920196
+  last_closed_pre_open_tilt_rad: 0.37427118103457624
+  open_gripper_end_tilt_rad: 1.1452975244778858
+failure:
+  boundary: planned retreat after OPEN_GRIPPER and pre-retreat settle attempt
+  code: MOVEIT_WORLD_Z_PLAN_FAILED
+  moveit_error_code: 99999
+  observed_sequence:
+    - physical OPEN_GRIPPER completed
+    - Planning Scene shadow was detached to a world object at the fresh Gazebo pose
+    - pre-retreat collection did not obtain an upright supported outcome; the cup continued tipping
+    - radial release-separation translation executed, as proven by final arm joint displacement
+    - subsequent 0.060 m world-Z MoveGroup request failed
+  final_visual: cup on its side adjacent to the open gripper; arm stopped before vertical retreat
+evidence:
+  execute_log: /tmp/so101-py-qualification/exp061/run/execute.log
+  physical_gate: /tmp/so101-py-qualification/exp061/run/physical-gate.json
+  telemetry: /tmp/so101-py-qualification/exp061/run/diagnostic/samples.jsonl
+  telemetry_sha256: e1f19727cfe27a443f45892b9d45018bcf965436bbe35f81cfa2a93429ba7a12
+  bounded_video: /tmp/so101-py-qualification/exp061/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: cee460930a2b30436c10832e4bbf25555d3fddfb83c4ea499c283b5dd737eced
+interpretation:
+  - The release-settle idea cannot recover a cup already at 0.3743 rad tilt before opening; the five-second opening interval amplified tilt to 1.1453 rad.
+  - Planning Scene world-only detachment before retreat converts the contact-adjacent release geometry into a planning collision and must not be retained.
+  - The upstream carry/observation dwell must be reduced before another release-order trial; 20 g, the faster carry and all hard bounds remain active.
+evidence_gap:
+  - the collected pre-retreat outcome was not persisted because the retreat callback raised before collect_final_outcomes_around_retreat returned
+  - fix this persistence defect before another release-order trial, without changing physical behavior
+decision: keep the diagnostic result, do not count toward a streak, and next test only persistent low-latency shadow observation
+counts_toward_success_streak: false
+next_experiment: EXP-062
 ```
 
 ```yaml
