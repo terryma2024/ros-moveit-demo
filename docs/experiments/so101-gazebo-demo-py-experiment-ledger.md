@@ -6212,6 +6212,30 @@ next: commit locally, then preregister one RESET_WORLD trial
 ```
 
 ```yaml
+checkpoint_id: CP-PRE-EXP-042-118
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-042
+purpose: validate immediate radial release retreat with detectable-positive micro-lift semantics
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 149d0b4
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-041/reset-after-lift-progress-floor/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-042
+candidate:
+  minimum_micro_lift_progress_m: 0.0001
+  intermediate_release_wait: none
+  immediate_radial_separation_m: 0.015
+  immediate_vertical_retreat_m: 0.060
+prediction: produce authoritative final evidence with no gripper contact and reduced displacement from aligned release pose
+acceptance: unchanged authoritative final physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-040-111
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
