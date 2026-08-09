@@ -7844,3 +7844,29 @@ tests:
   package_pytest: 188 passed, 2 skipped
 next: commit locally, then preregister one RESET_WORLD physical release trial
 ```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-052-156
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-052
+purpose: reach physical release and let the authoritative final cup/arm outcome judge bounded held-target residuals
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: af56599
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-051-reset/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-052
+candidate:
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  pre_release_xy_convergence_tolerance_m: 0.006
+  pre_release_z_convergence_tolerance_m: 0.010
+  maximum_alignment_commands: 3
+  pose_subscription_attempts: 2
+  immediate_radial_separation_m: 0.010
+prediction: a finite stable held-cup result within the widened non-authoritative window proceeds through physical open and retreat, producing final placement evidence
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
