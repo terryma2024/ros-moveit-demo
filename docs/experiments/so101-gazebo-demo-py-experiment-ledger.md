@@ -55,6 +55,7 @@ confirmed_conclusions:
   - EXP-097 reached release with a strong first grasp, but the exact final-region shortcut did not trigger: one 13.45 mm compensated-point correction ended 3.09 mm from that point (outside the final box), amplified release tilt, and the cup rolled to [-0.100238,-0.274534] m.
   - EXP-098 did not reach its expanded no-correction envelope: bounded seating normalization ended fixed-pad-only, so it stopped safely before micro-lift or carry.
   - EXP-099 frozen EXP-081 implementation passed its physical gate but failed after OPEN_GRIPPER at the legacy world-Z MoveGroup plan with error 99999; it does not supersede EXP-081 as the frozen valid-success evidence.
+  - EXP-100 final-cap clean FULL_RESTART passed the physical grasp gate and ended upright, stable, supported, gripper-free and detached, but y=-0.2444382459 m missed the target-region upper bound by 0.0005617541 m; it is a valid final-placement failure, no five-success streak was achieved, and the series terminates with the EXP-081 implementation frozen.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -73,8 +74,84 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-100-315
-next_experiment: EXP-100
+latest_checkpoint: CP-TERMINAL-EXP-100-317
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-TERMINAL-EXP-100-317
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-100
+status: TERMINATED_AT_CAP_FROZEN_EXP081
+terminal_policy_applied: true
+five_consecutive_successes_achieved: false
+decision:
+  - stop all further strategy experiments; EXP-101 is forbidden
+  - freeze the most recent authoritative valid-success implementation from EXP-081
+  - audit, commit, push the feature branch, and merge it into the local main workspace
+frozen_success:
+  experiment_id: EXP-081
+  implementation_commit: 01f45bf
+  freeze_commit: 576e03a
+  final_position_m: [-0.08177115023136139, -0.2471921592950821, 0.16499999165534973]
+  minimum_xy_boundary_margin_m: 0.0021921592950821
+  outcome: in-region, upright, stable, table-supported, gripper-free, Gazebo-detached, MoveIt-detached, controller-healthy
+reason: EXP-100 exhausted the user-approved hard cap without establishing five consecutive successes; a failed EXP-100 parameter set must not replace the last authoritative success
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-100-316
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-100
+status: VALID_FINAL_PLACEMENT_FAILURE_AT_HARD_CAP
+lifecycle: FULL_RESTART
+implementation:
+  source_commit: 576e03a
+  frozen_from_experiment: EXP-081
+  frozen_implementation_commit: 01f45bf
+reset_proof:
+  passed: true
+  cup_pose_error_m: 5.473127791398649e-07
+  gazebo_attachment: detached
+  moveit_state: world-only
+  finger_contact: false
+  arm_tcp: finite
+physical_gate:
+  passed: true
+  grasp_attempts: 1
+  normalized_target_q6_rad: -0.05348217388987541
+  normalization_adjustments: 0
+  persistent_lift_m: 0.0019471347332000732
+  lateral_drift_m: 0.00016105278425977798
+  moving_pad_depth_m: 0.0010752517264336348
+final_outcome:
+  failure_code: FINAL_OUT_OF_REGION
+  position_m: [-0.08475978672504425, -0.24443824589252472, 0.16500000655651093]
+  target_y_upper_bound_m: -0.245
+  y_miss_m: 0.00056175410747528
+  tilt_rad: 4.712160915e-08
+  stable: true
+  supported: true
+  gripper_free: true
+  gazebo_attachment: detached
+  moveit_attachment: detached
+  controller_healthy: true
+  sample_count: 28
+  observation_duration_s: 1.7675
+  maximum_linear_speed_mps: 0.0
+  maximum_angular_speed_radps: 0.0
+evidence:
+  reset_sha256: bc4ead92c63ac9ffb1e4b046d3a692c9e5beca8530778c12a423172ad6954a62
+  execute_log_sha256: 5d2d5815c0fd4439b5f17d3de2204ef8ed1a6327337e06bc06c17e3f74e985ea
+  physical_gate_sha256: d49390ebe7d632a44f2bc54748b97ebcec22ed097a36d96ca93011d2532e11eb
+  final_failure_sha256: e36255db462f1a99cdef3f0598f0c89d47dec014e48aade668fedfbb6ab5ea30
+  telemetry_sha256: ea14d340792017fef5ce6262e7e476f6a732c5fb2742ad334b6f496a7134a915
+  video_sha256: 078126d197847977d2ec6662c722e9592dd6359b4562a7188573f7c5d71e57ff
+  screenshot_sha256: 20d5faae7490f8250dafb041ac0f64db1cc0ff95bf8ef586fec45ba7226b2b1b
+  root: /tmp/so101-py-qualification/exp100/
+decision: valid failure; terminate at EXP-100, do not tune or execute another candidate, and preserve EXP-081 as the frozen implementation
+counts_toward_success_streak: false
 ```
 
 ```yaml
