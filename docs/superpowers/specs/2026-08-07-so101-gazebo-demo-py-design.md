@@ -526,3 +526,18 @@ micro-lift 稳定带起，lift 误差 0.4 µm、lateral 0.216 mm、双侧接触�
   VALID penetration failure，则绑定约束是模型/solver 上限本身，回到用户决策。
 - 其余全部不变：锚点 target、几何、物理、摩擦、质量、controller、attachment 语义、
   lateral/lift/shadow/freshness/support/final-outcome gates。
+
+## 2026-08-09 增补授权：solver-limit gate 语义（用户选项 1）
+
+用户在 `CP-QUALIFICATION-ENDED-001` 之后选择选项 1：把 grasp 深度 gate 改为 solver-limit 区间。
+
+- `MOVING_PAD_MESH_PENETRATION_CEILING_M = 0.0013`（= solver 上报上限）：对 bilateral（可上报）
+  接触，瞬时深度 ceiling 实际 vacuous；唯一深度 gate 是 within-solver-limit 可上报性检查。
+  grasp 验收落在稳定双侧接触 + 物理 micro-lift 携带 gate（lift `+0.002 m`、lateral `<= 0.001 m`）。
+- 依据：该接触模型下的虚拟穿透深度在观测物理方差下不是可用健康指标；诊断已证明杯子在
+  ~0.0010 m 深度被物理携带（EXP-PEN-DIAG-001-GRASP-229），0.00125 m 在 run 间方差下失败
+  （EXP-QUAL-GRASP-1-231），solver 饱和点以下仅剩 50 µm。
+- 连带移除 diagnostic override 全部 apparatus（motion policy 字段、loader 界、gate ceiling
+  kwargs）：solver 上限以上不可测量、以下会隐式收紧 gate；恢复单一常量 gate 语义。
+- 其余不变：锚点 target、几何、物理、摩擦、质量、controller、attachment 语义、
+  lift/lateral/shadow/freshness/support/final-outcome gates。
