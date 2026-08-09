@@ -6290,6 +6290,67 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-038-104
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-038
+execution_commit: 4d64c5e
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-038
+alignment:
+  attempts: 2
+  final_error_m: 0.0015979014161112172
+  aligned_object_xy_m: [-0.07563706487417221, -0.24303458631038666]
+pre_retreat_after_wait:
+  object_xyz_m: [-0.09415547549724579, -0.2564584016799927, 0.17829598486423492]
+  displacement_from_aligned_xy_m: [-0.01851841062307358, -0.01342381536960604]
+post_retreat:
+  failure_code: FINAL_UNSUPPORTED
+  object_xyz_m: [-0.09741270542144775, -0.2634444832801819, 0.16499963402748108]
+  upright_tilt_rad: 0.0000002602375924076591
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+interpretation: radial separation removed final gripper contact and let the cup settle upright, but the two-second intermediate pre-retreat observation allowed the hooked cup to move far from the aligned pose before separation began
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-038-105
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-038/reset-after-unsupported-final
+proof:
+  cup_spawn_pose_error_m: 0.0000016867820937880418
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-IMMEDIATE-RELEASE-RETREAT-106
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  removed: settled pre-retreat outcome epoch between gripper opening and separation
+  immediate_sequence:
+    - open physical gripper
+    - execute precomputed same-run radial separation
+    - execute world-Z retreat
+    - detach Planning Scene at latest authoritative Gazebo cup pose
+    - collect the sole authoritative final settled epoch
+rationale: intermediate waiting changes the physical outcome and is not an acceptance requirement; final post-retreat cup and arm state remains authoritative
+unchanged:
+  - final outcome thresholds and freshness rules
+  - Gazebo physical-only release and MoveIt Planning Scene shadow semantics
+tests:
+  red: live path still called collect_final_outcomes_around_retreat before separation
+  initial_full_gate: 2 source-contract tests failed because they still required two final epochs
+  package_pytest: 178 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-036-096
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
