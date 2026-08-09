@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: b69ce39
+current_commit: 533a7a6
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -45,8 +45,34 @@ open_hypotheses:
   - EXP-075 proves that a 2 s final opening can succeed, but it did not reduce peak opening tilt and retained fixed-pad contact through q6>=0.74; the next release-boundary candidate should explicitly separate the open gripper from the fixed pad before the existing retreat without changing y compensation.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-076-234
+latest_checkpoint: CP-EXP-076-IMPLEMENTED-235
 next_experiment: EXP-076
+```
+
+```yaml
+checkpoint_id: CP-EXP-076-IMPLEMENTED-235
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-076
+planning_commit: 26caeb3
+implementation_commit: 533a7a6
+single_variable: immediate 0.010 m radial release separation on the no-alignment path before pre-retreat settle
+red:
+  exit_code: 1
+  evidence: /tmp/so101-py-qualification/exp076-red.log
+  observed: source contract could not find the required no-alignment separation before settle
+green:
+  focused: 36 passed
+  full_pytest: 198 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 200 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  install_mode: symlink-install
+unchanged:
+  - EXP-075 2 s final opening and every policy/material/controller/collision/physics/validation value
+next_command: prove RESET_WORLD on ROS_DOMAIN_ID 227 / GZ_PARTITION so101_py_qual_baseline_restored, then record one bounded EXP-076 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
