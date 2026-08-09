@@ -749,11 +749,34 @@ def run_live_execute(
         collect_epoch=collect_final_epoch,
         retreat=retreat_after_pre_outcome,
     )
-    settle=outcomes.post_retreat.result
-    if not settle.evaluation.success:
-        raise RuntimeError(f"post-retreat final physical outcome failed: {settle.evaluation.failure_code}")
-    final=outcomes.post_retreat.final_sample
     def outcome_payload(evaluation):
         return {"success":evaluation.success,"failure_code":evaluation.failure_code,"sample_count":evaluation.sample_count,"duration_s":evaluation.duration_s,"max_linear_speed_m_s":evaluation.max_linear_speed_m_s,"max_angular_speed_rad_s":evaluation.max_angular_speed_rad_s,"metrics":dict(evaluation.metrics),"telemetry":[sample.as_dict() for sample in evaluation.telemetry]}
+    def final_sample_payload(sample):
+        if sample is None:
+            return None
+        return {
+            "object_xyz":[*sample.object_xyz],
+            "object_xyzw":[*sample.object_xyzw],
+            "tcp_xyz":[*sample.tcp_xyz],
+            "tcp_xyzw":[*sample.tcp_xyzw],
+            "pose_pair_age_s":sample.pose_pair_age_s,
+        }
+    settle=outcomes.post_retreat.result
+    if not settle.evaluation.success:
+        failure={
+            "status":"VALID_FAILURE",
+            "pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),
+            "post_retreat_outcome":outcome_payload(outcomes.post_retreat.evaluation),
+            "pre_retreat_final_sample":final_sample_payload(outcomes.pre_retreat.final_sample),
+            "post_retreat_final_sample":final_sample_payload(outcomes.post_retreat.final_sample),
+            "gazebo_attachment_state":backend.attachment_state(),
+            "planning_scene":synchronized_scene[0],
+            "shadow_checks":shadow_checks,
+        }
+        (evidence_directory/"final-outcome-failure.json").write_text(
+            json.dumps(failure,indent=2)
+        )
+        raise RuntimeError(f"post-retreat final physical outcome failed: {settle.evaluation.failure_code}")
+    final=outcomes.post_retreat.final_sample
     summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene,"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),"final_outcome":outcome_payload(outcomes.post_retreat.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
     path=evidence_directory/"live-summary.json"; path.write_text(json.dumps(summary,indent=2)); return summary

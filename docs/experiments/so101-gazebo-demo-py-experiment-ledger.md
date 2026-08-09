@@ -4338,3 +4338,65 @@ strategy:
 next_on_valid_success: freeze and run two independent RESET_WORLD confirmations
 next_on_valid_failure: adjust only the final placement motion family using the returned final margins
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-008
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_OUT_OF_REGION
+  reached: complete path through post-RETREAT final epoch
+post_retreat_readback:
+  cup_xyz_m: [-0.11376877129077911, -0.3495955765247345, 0.15999971330165863]
+  cup_xyzw: [0.6921351018375405, -0.14473778690014893, -0.4714185281767015, 0.5270337359146132]
+  support_contact: table::table_top::collision
+  q6_rad: 0.7500013113021851
+  gazebo_attachment_state: detached
+frozen_target_region:
+  min_xy_m: [-0.085, -0.255]
+  max_xy_m: [-0.075, -0.245]
+interpretation: grasp/carry/release completed, but the diagonal RETREAT displaced and tipped the already released cup; final out-of-region takes precedence in the evaluator
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-008
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-008-017
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-008/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000007450720703576446
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-VERTICAL-POST-RELEASE-RETREAT-018
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  family: RETREAT motion target/path
+  from: six-waypoint diagonal clearance path
+  to: reverse DESCEND_TO_PLACE lift path ending at the unchanged MOVE_ABOVE_PLACE pose
+  q6_release: unchanged at 0.75
+  validation_path_direction: synchronized to world +Z
+observability_fix: persist pre- and post-RETREAT outcomes, final samples, scene state and shadow checks to final-outcome-failure.json before raising a valid final failure
+frozen:
+  - grasp strategy and placement endpoint
+  - final target region, upright, support and stability thresholds
+  - physics, geometry, material, controller/gains and collision rules
+tests:
+  red: RETREAT did not match the reverse descent lift and final failure was not persisted
+  focused_green: 23 passed
+  package_pytest: 161 passed, 2 skipped
+  colcon_test: 163 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance:
+  motion_policy_sha256: b1ad2e0f8cc0392ac28363d01ee189629018b8d7dc5fe10d74db11061f67e4a3
+  validation_policy_sha256: a4795169631be86de501b100ecec52d52ac0e96ef3fc72a2d37770127f7a2937
+next: commit locally, preregister the vertical-retreat candidate, and use persisted pre/post margins to isolate any remaining placement offset
+```
