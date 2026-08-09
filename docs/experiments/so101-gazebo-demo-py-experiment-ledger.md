@@ -5982,3 +5982,28 @@ tests:
   colcon: 173 tests, 0 errors, 0 failures, 2 skipped
 next: commit locally, then preregister one RESET_WORLD search trial
 ```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-026-060
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-026
+purpose: test whether bounded same-run cup-pose feedback removes run-to-run place XY variation before physical release
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 258ac30
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-025/reset-after-final-failure/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-026
+candidate:
+  change: same-run pre-release XY alignment from authoritative Gazebo cup pose
+  attempts: 2
+  xy_tolerance_m: 0.003
+  max_axis_correction_m: 0.030
+  cup_z_observed_not_commanded: true
+prediction: a valid run either enters the final XY tolerance before release or fails closed before release; a final miss will expose per-attempt before/after cup telemetry rather than motivate a static cross-run offset
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
