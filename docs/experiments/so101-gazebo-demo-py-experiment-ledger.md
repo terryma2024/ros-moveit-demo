@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 70c6dbe
+current_commit: a767447
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -67,8 +67,31 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-094-299
+latest_checkpoint: CP-EXP-094-IMPLEMENTED-300
 next_experiment: EXP-094
+```
+
+```yaml
+checkpoint_id: CP-EXP-094-IMPLEMENTED-300
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-094
+planning_commit: 1ccb26a
+implementation_commit: a767447
+single_variable: immediate and held micro-lift maximum lateral drift change from 1 mm to 2 mm
+red:
+  focused: 1 failed, 17 passed; a held 1.1 mm drift was still rejected by the prior 1 mm implementation
+green:
+  focused: 55 passed
+  full_pytest: 206 passed, 2 skipped
+  colcon: 208 tests, 0 errors, 0 failures, 2 skipped
+retained_negative_test: held 2.1 mm drift is rejected as CUP_LATERAL_DRIFT
+unchanged:
+  - persistent lift minimum, 6 mm commanded-pose error envelope and finite arm gate
+  - grasp/retry geometry, penetration policy and hard ceiling
+  - all final placement and attachment/controller contracts
+decision: run exactly one bounded RESET_WORLD EXP-094 on the sole domain 231 stack
+counts_toward_success_streak: false
 ```
 
 ```yaml
