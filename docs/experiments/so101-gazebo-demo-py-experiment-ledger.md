@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: df43497
+current_commit: d864eab
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -44,6 +44,7 @@ confirmed_conclusions:
   - QUAL-FULL-NORM-01 exercised one bounded q6 normalization adjustment and reached a safe 0.33421 mm seating penetration, but after OPEN_GRIPPER the cup rolled about 56 mm in y during the stationary pre-retreat outcome epoch, remained caught on the gripper, and was lifted by the subsequent fixed retreat.
   - EXP-081 removed the no-alignment stationary pre-retreat wait, retained the Planning Scene shadow through the fixed retreat, and achieved authoritative success at [-0.081771, -0.247192, 0.165000] m with a 2.192 mm minimum XY boundary margin, no gripper contact and no pre-retreat epoch.
   - QUAL-FULL-IMM-01 passed on a clean stack, but QUAL-FULL-IMM-02 ended upright/stable/supported/free at x=-0.091415 m, 6.415 mm beyond the final x boundary; its release started 16.708 mm above the supported center height and rolled 9.533 mm in negative x during free placement.
+  - EXP-082 lowered the release TCP by 4.637 mm but increased pre-open table penetration to about 1.143 mm and still rolled 11.621 mm in negative x, ending 5.882 mm beyond the x boundary; release height is not the controlling variable.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -62,8 +63,77 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-082-IMPLEMENTED-266
-next_experiment: EXP-082
+latest_checkpoint: CP-PRE-EXP-083-268
+next_experiment: EXP-083
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-083-268
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-083
+status: PREREGISTERED
+prior_experiment: EXP-082
+baseline_restore: restore the frozen EXP-081 raised DESCEND_TO_PLACE endpoint because EXP-082 failed its prediction and worsened pre-open table penetration; this restore is not the EXP-083 variable
+hypothesis: held-cup tilt grows with gravitational dwell during DESCEND_TO_PLACE; increasing only its effective velocity scaling from 0.05 to 0.10 will reduce the three-waypoint descent from approximately 2 s to 1 s per waypoint, lowering release tilt and stochastic XY roll without changing the geometric path
+single_variable_relative_to_frozen_EXP081: DESCEND_TO_PLACE velocity_scaling and acceleration_scaling change from 0.05/0.05 to 0.10/0.10
+lifecycle: RESET_WORLD
+prediction:
+  - raised release geometry and no-alignment immediate retreat remain identical to EXP-081
+  - measured DESCEND_TO_PLACE duration decreases materially
+  - pre-open cup tilt is below 0.20 rad and table penetration does not exceed the EXP-081 raised-path observation
+  - final authoritative outcome passes with at least 1 mm XY margin
+unchanged:
+  - every joint waypoint, grasp/preload/penetration rule, release ordering and compensation, materials/physics/controller/collision settings and all hard/final validation bounds
+preconditions:
+  - TDD proves raised target restoration and the isolated speed change
+  - full pytest and colcon build/test pass
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-082-267
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE
+experiment_id: EXP-082
+execution_head: d864eab
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp082/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.000001166786520060916
+physical_grasp:
+  normalized_target_q6: -0.05348047515749931
+  adjustments: 0
+  moving_pad_depth_m: 0.00023898853396531194
+  micro_lift_world_z_m: 0.0020506829023361206
+  lateral_drift_m: 0.00018083157432338112
+release:
+  release_start_xyz_m: [-0.07926127314567566, -0.25494372844696045, 0.17403368651866913]
+  pre_open_tilt_rad: 0.3124330329306328
+  observed_bottom_clearance_m: -0.0011429151950639177
+  table_contact: true
+  final_xyz_m: [-0.09088243544101715, -0.24885393679141998, 0.16499999165534973]
+  release_to_final_delta_xy_m: [-0.01162116229534149, 0.00608979165554047]
+final:
+  failure_code: FINAL_OUT_OF_REGION
+  x_out_of_region_m: 0.00588243544101715
+  upright_tilt_rad: 0.0000011524099887005316
+  stable: true
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+evidence_sha256:
+  execute_log: 5d2d5815c0fd4439b5f17d3de2204ef8ed1a6327337e06bc06c17e3f74e985ea
+  physical_gate: 209c1a2d7c5f96bf32702e1b6a6f3c206c0b28080ee55a1b4c00c827cea42085
+  failure_json: d39435943798e4b34e9549753a2dc3aade37343405c76d0e7ba8c7347597cf3f
+  telemetry: 77e0a9d4d2ebfec5aeb1e468670381eeefe67afee5a5d9ef31319a2da325e4a6
+  bounded_video: f11ac739bd228bd5e5950b0f17ef55057ea90f140a8963b7effb503e7b052432
+  final_screenshot: 3d1996ee9c5945cfda2aff5406597cc33bd91b78dc74add5792f6dd14776c3ac
+decision: reject the lower target, restore the EXP-081 raised geometry, and test descent dwell as EXP-083
+counts_toward_success_streak: false
 ```
 
 ```yaml
