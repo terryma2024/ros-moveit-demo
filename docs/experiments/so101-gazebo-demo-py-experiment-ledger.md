@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 01586e2
+current_commit: 7b0cbd6
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -48,8 +48,46 @@ open_hypotheses:
   - A short radial separation planned while the MoveIt Planning Scene shadow is still attached may remain collision-plannable and break sub-millimetre pad contact; the shadow must be detached and resynchronized only after that physical separation.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-076-237
+latest_checkpoint: CP-PRE-EXP-077-238
 next_experiment: EXP-077
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-077-238
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-077
+status: PLANNED
+prior_experiment: EXP-076
+hypothesis: the EXP-076 radial plan failed because the MoveIt Planning Scene shadow was detached while the open gripper and cup were still contact-adjacent; planning and executing a shorter 0.004 m radial separation while the shadow remains attached will preserve a collision-plannable held-object model, break pad contact, and permit a clean detach/sync before settle and retreat
+single_variable: on the no-alignment path, change release separation policy from no pre-retreat separation to one 0.004 m radial TCP translation after OPEN_GRIPPER while the MoveIt shadow remains attached, then sample the physical cup pose and detach/synchronize the shadow before the pre-retreat epoch
+lifecycle: RESET_WORLD
+evidence_basis:
+  - EXP-075 retained fixed-pad contact throughout opening and the fixed retreat moved cup y by +0.011010 m
+  - EXP-076 reached the new post-open boundary but its post-detach 0.010 m radial translation failed at planning with MoveIt error 99999
+  - the configured Planning Scene shadow position-divergence ceiling is 0.005 m
+  - observed moving-pad penetration is sub-millimetre, so a 0.004 m separation is large relative to contact depth while remaining inside the shadow-divergence ceiling
+prediction:
+  - the 0.004 m radial translation plans and executes after q6 reaches the open target and before Planning Scene detach
+  - the freshly sampled separated cup pose remains within 0.005 m of the attached shadow pose until detach/sync
+  - the pre-retreat epoch is table-supported and free of fixed/moving-pad contact
+  - the subsequent existing fixed retreat adds less than 0.002 m cup XY displacement
+  - the authoritative final outcome is in-region, upright, stable, supported, Gazebo/MoveIt detached, gripper-free and controller healthy with at least 0.001 m y-boundary margin
+preconditions:
+  - implementation commit 533a7a6 is reverted and EXP-074/075 2 s final opening remains active
+  - focused/full pytest and colcon build/test pass after the minimal ordering change
+  - prove RESET_WORLD on the sole so101-py-qual GUI stack immediately before one execute
+unchanged:
+  - Gazebo cup remains physically detached throughout; only the MoveIt Planning Scene collision shadow stays attached through the new separation
+  - release target and settling compensation including y -0.005 m
+  - no-alignment tolerance, final target region, physical-outcome contract and penetration ceiling
+  - all motion targets/orientations outside the new 0.004 m release separation
+  - cup mass/inertia, friction, physics engine, geometry, collision model, controllers and gains
+failure_criteria:
+  - radial planning/execution failure, shadow divergence above 0.005 m before detach, grasp/motion/controller failure, retained pre-retreat gripper contact or authoritative final-outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, stale install, missing telemetry/video or any additional active variable
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
