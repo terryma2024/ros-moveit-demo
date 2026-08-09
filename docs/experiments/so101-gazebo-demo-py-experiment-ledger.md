@@ -5876,3 +5876,27 @@ provenance:
   bundle_sha256: 5a5e15452b6f9da79f7a9c7bc0c23b497635cd0d01b98b1c7ab51bbb2518547c
 next: commit locally before preregistration and physical execution
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-025
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: retaining the faster carry while translating the reachable place and reverse-retreat ladders by the EXP-024 physical outcome error will leave the released cup upright, stable and inside the frozen final region
+execute_commit: 24a48b6
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 5a5e15452b6f9da79f7a9c7bc0c23b497635cd0d01b98b1c7ab51bbb2518547c
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-025
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-024/reset-after-final-failure/reset-world.json
+strategy:
+  move_above_place_velocity_and_acceleration_scaling: 0.05
+  place_tcp_translation_from_exp024_path_m: [0.017, 0.006, 0.0]
+  retreat: exact reverse of the new descend ladder
+  grasp_release_safety_and_final_acceptance: unchanged
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained and dynamically resynchronized
+next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
+next_on_valid_failure: compare clean-release final displacement with EXP-024 and change only one evidenced strategy family
+```
