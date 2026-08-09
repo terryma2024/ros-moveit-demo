@@ -1064,7 +1064,7 @@ def _run_live_execute_with_scene(
                 0.060, orientation_tolerance_rad=0.15,
             )
         else:
-            backend.move_arm(retreat_policy.waypoints)
+            backend.move_arm(retreat_policy.waypoints, velocity_scaling=retreat_policy.velocity_scaling)
         retreated=backend.sample()
         retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
         detached_scene[0]=apply_scene("detach",retreated_pose)
