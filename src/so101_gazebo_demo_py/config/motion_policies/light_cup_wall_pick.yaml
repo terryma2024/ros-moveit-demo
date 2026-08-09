@@ -66,8 +66,8 @@ states:
     require_waypoint_ladder: true
     require_axial_path_validation: false
     gripper_q6: -0.047608632840292
-    velocity_scaling: 0.02
-    acceleration_scaling: 0.02
+    velocity_scaling: 0.05
+    acceleration_scaling: 0.05
   DESCEND_TO_PLACE:
     logical_start: [0.394374618045, 0.210717795147, 0.109628805069, 1.174687840559, 0.001586862580]
     waypoints:

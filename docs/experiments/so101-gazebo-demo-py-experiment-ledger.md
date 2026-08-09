@@ -5692,3 +5692,75 @@ strategy:
 next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
 next_on_valid_failure: use only authoritative post-retreat cup and arm outcome to choose one strategy-family adjustment
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-023
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_OUT_OF_REGION
+physical_grasp:
+  cup_world_z_delta_m: 0.0021691322326660156
+  lateral_drift_m: 0.00031056523740180205
+  moving_pad_depth_m: 0.000369903544196859
+carry_orientation:
+  before_lift_tilt_rad: 0.0499139258002221
+  before_move_above_place_tilt_rad: 0.04153974865957555
+  after_move_above_place_tilt_rad: 0.3864412095636021
+pre_retreat:
+  failure_code: FINAL_GRIPPER_CONTACT
+  cup_xyz_m: [-0.1215038150548935, -0.26438969373703003, 0.1793651431798935]
+  upright_tilt_rad: 0.5632323495504149
+post_retreat:
+  cup_xyz_m: [-0.2102302759885788, -0.3361714482307434, 0.1600000113248825]
+  upright_tilt_rad: 1.5707969243180333
+  support_contact: true
+  gripper_contact: false
+  stable: true
+interpretation: cup remained upright through LIFT but rotated by about 0.345 rad during the 25 second MOVE_ABOVE_PLACE traverse; the tipped cup wedged at release and RETREAT displaced it
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-023
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-023-052
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-023/reset-after-final-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000016774815282554621
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-FASTER-CARRY-TIMING-053
+recorded_at: 2026-08-09 Asia/Shanghai
+candidate_change:
+  family: MOVE_ABOVE_PLACE motion timing
+  velocity_scaling: {from: 0.02, to: 0.05}
+  acceleration_scaling: {from: 0.02, to: 0.05}
+  waypoint_step_seconds: {from: 5, to: 2}
+causal_basis: EXP-023 cup tilt stayed below 0.05 rad through LIFT and grew from 0.0415 to 0.3864 rad during the approximately 25 second MOVE_ABOVE_PLACE traverse; shortening only this dwell-loaded traverse tests whether gravity-driven slip is reduced
+frozen:
+  - all arm joint waypoints and placement/retreat geometry
+  - grasp target, preload, retry rule and penetration safety ceiling
+  - final acceptance and intermediate cup/arm outcome gates
+  - physics, geometry, mass/friction, controllers/gains and collision
+  - Gazebo attachment forbidden; MoveIt Planning Scene attach retained
+tests:
+  red: policy parity expected 0.05 while the YAML still exposed 0.02
+  focused_green: 30 passed
+  first_full_run: provenance hash gate failed after 166 passed and 2 skipped because the changed destination hash was stale
+  package_pytest_after_provenance_update: 167 passed, 2 skipped
+  colcon_test: 169 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance:
+  motion_policy_sha256: 0274eec822982ecd9da946ddaf5d7c8cd3e776d257414ef2d7c6819ecdacadb5
+  bundle_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+next: commit locally and run one preregistered RESET_WORLD search candidate
+```
