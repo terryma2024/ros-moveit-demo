@@ -3386,3 +3386,77 @@ authorization:
   qualification: restart per the previously approved plan at a new frozen fingerprint; EXP-QUAL-GRASP-2-232
     and EXP-QUAL-GRASP-3-233 are NOT_RUN (superseded by CP-QUALIFICATION-ENDED-001)
 ```
+
+```yaml
+checkpoint_id: CP-QUALIFICATION-FINGERPRINT-002
+recorded_at: 2026-08-09 Asia/Shanghai
+authorization: CP-AUTHORIZATION-SOLVER-LIMIT-GATE-001
+frozen_fingerprint:
+  commit: 6cd8c7d
+  bundle_sha256: 060228e848e0beba00aaba6f25b9a4a3ccf4216096398c258bbc21648d6fb67a
+  moving_pad_penetration_ceiling_m: 0.0013 (solver-limit semantics; installed runtime constant verified)
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+  seating_preload_rad: 0.006
+  grasp_tcp_world_x_rotation_rad: 0.0
+package_suite: 141 passed, 2 skipped (override tests removed with the plumbing)
+installed_provenance:
+  observer_sha256: 756e624490c4160e76131824776da7cc40bdd343f385d1f4261579d9f522e136 (build == src)
+  live_execute_sha256: 07c594392ea903bebe53b7c41f21c74b8f455d1c95310e55aeae53b58b213b12 (build == src)
+  policy_config_sha256: 8b4779ce3ae9955ef5b893461ef9ebe36f601711d83565e882f7eaa72802e940 (build == src)
+superseded: [EXP-QUAL-GRASP-2-232 NOT_RUN, EXP-QUAL-GRASP-3-233 NOT_RUN] (CP-QUALIFICATION-ENDED-001)
+```
+
+```yaml
+experiment_id: EXP-QUAL2-PLAN-234
+lifecycle: PLANNED
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: plan_only six-state ladder
+tmux_session: so101-py-qual2-plan-234
+ros_domain_id: 234
+gz_partition: so101_py_qual2_234
+evidence_root: /tmp/so101-py-qual2-plan-234
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-1-235
+lifecycle: PLANNED (conditional on EXP-QUAL2-PLAN-234 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP (includes +0.002 m micro-lift carry probe)
+tmux_session: so101-py-qual2-grasp-1-235
+ros_domain_id: 235
+gz_partition: so101_py_qual2_235
+evidence_root: /tmp/so101-py-qual2-grasp-1-235
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-2-236
+lifecycle: PLANNED (conditional on EXP-QUAL2-GRASP-1-235 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP
+tmux_session: so101-py-qual2-grasp-2-236
+ros_domain_id: 236
+gz_partition: so101_py_qual2_236
+evidence_root: /tmp/so101-py-qual2-grasp-2-236
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-3-237
+lifecycle: PLANNED (conditional on EXP-QUAL2-GRASP-2-236 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP
+tmux_session: so101-py-qual2-grasp-3-237
+ros_domain_id: 237
+gz_partition: so101_py_qual2_237
+evidence_root: /tmp/so101-py-qual2-grasp-3-237
+```
+
+```yaml
+qualification_rules_002:
+  any VALID failure ends qualification and returns to the user
+  any INVALID run stops the batch; debug only the contamination/implementation defect with a fresh batch/id
+  after three VALID_SUCCESS runs: continue per plan to full physical pick/place, acceptance battery, and five consecutive FULL_RESTART successes at this frozen fingerprint
+```
