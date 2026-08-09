@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 8666ba93093ea56d08a98c7e8bb7ca185f77d15c
+current_commit: 5452a3ebea4b560af0146652752bc5328642d63a
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -25,10 +25,11 @@ disproven_routes:
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Reusing a persistent combined Gazebo/TF observer for carry shadow gates will remove most of the 4.1-4.4 second pre-descent observation dwell while preserving the same divergence/resynchronization safety check.
+  - Passing the already-configured LIFT velocity scaling 0.10 to the direct FollowJointTrajectory backend will reduce the current 15-second five-waypoint lift to about 5 seconds and prevent time-dependent cup/q6 roll before MOVE_ABOVE_PLACE.
+  - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-062-IMPLEMENTED-193
-next_experiment: EXP-062
+latest_checkpoint: CP-RESULT-EXP-062-194
+next_experiment: EXP-063
 ```
 
 ```yaml
@@ -74,6 +75,64 @@ commands:
   - command: pytest RED, minimal persistent-observer edit, focused/full pytest, colcon build/test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
     exit_code: PENDING
 counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-062-194
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FAILURE_WITH_PARTIAL_LATENCY_IMPROVEMENT
+experiment_id: EXP-062
+execution_commit: 5452a3ebea4b560af0146652752bc5328642d63a
+lifecycle: RESET_WORLD
+reset_proof: /tmp/so101-py-qualification/exp062/reset/reset-world.json
+reset:
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.000001722076534560165
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.0011142686707898974
+  global_penetration_ceiling_result: PASS
+  micro_lift_world_z_m: 0.00257013738155365
+  lateral_drift_m: 0.0032208121417273785
+phase_profile:
+  lift_duration_s: 17.443273595999926
+  lift_start_tilt_rad: 0.1255092206045865
+  lift_end_tilt_rad: 0.21730870768641208
+  lift_q6_position_range_rad: 0.027820732444524765
+  move_above_place_end_tilt_rad: 0.25239794651508457
+  post_move_pre_descend_duration_s: 3.618967443238944
+  post_move_pre_descend_tilt_start_rad: 0.25239794651508457
+  post_move_pre_descend_tilt_end_rad: 0.29827015103973975
+  post_move_pre_descend_tilt_growth_rad: 0.04587220452465518
+  descend_to_place_end_tilt_rad: 0.2659101752728015
+prediction_evaluation:
+  interval_at_most_1_second: FAIL
+  interval_tilt_growth_at_most_0_03_rad: FAIL
+  descend_start_tilt_at_most_0_18_rad: FAIL
+  shadow_gate_preserved: PASS_BY_CODE_AND_AUTOMATED_CONTRACT
+later_known_failure:
+  code: MOVEIT_WORLD_Z_PLAN_FAILED
+  moveit_error_code: 99999
+  reason_not_primary: known unchanged EXP-061 release boundary occurred after the scoped carry measurement
+evidence:
+  execute_log: /tmp/so101-py-qualification/exp062/run/execute.log
+  physical_gate: /tmp/so101-py-qualification/exp062/run/physical-gate.json
+  telemetry: /tmp/so101-py-qualification/exp062/run/diagnostic/samples.jsonl
+  telemetry_sha256: f02b639a3718f88c6836bb5d2925f789005217687f7c37d63115a7f838110c71
+  bounded_video: /tmp/so101-py-qualification/exp062/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 0dfa39c0f38faa4f779366f2062f97802bb5e0edba28924d8cac2309cea83bb4
+interpretation:
+  - Persistent observation removed only about 0.8 seconds relative to EXP-061; the remaining Planning Scene resynchronization path still dominates the pre-descent pause.
+  - This run's first large stochastic divergence began earlier: q6 varied 0.0278 rad and cup tilt increased during the approximately 17.4-second LIFT.
+  - LIFT policy velocity_scaling is 0.10, but carry_with_shadow_gates deliberately passes None for LIFT, causing the backend to use its legacy three-second waypoint duration.
+decision: keep the persistent observer safety-preserving optimization; next change only activate the configured LIFT velocity scaling 0.10
+counts_toward_success_streak: false
+next_experiment: EXP-063
 ```
 
 ```yaml
