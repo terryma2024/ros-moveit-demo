@@ -5620,3 +5620,52 @@ strategy:
 next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
 next_on_valid_failure: classify authoritative final cup and arm metrics; change at most one strategy family
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-022
+lifecycle: INVALID_RUNTIME_EXECUTOR
+result:
+  execute_rc: 1
+  failure: "'NoneType' object does not support the context manager protocol"
+  executor_warning: partially initialized SingleThreadedExecutor lacked _sigint_gc during destruction
+  phase: final observer construction before the pre-retreat outcome epoch
+root_cause: rclpy.spin_once(node) selected the default global executor even though the observer node owned a dedicated context; the complete flow had already shut down that default context
+interpretation: no RETREAT and no authoritative post-retreat result occurred; the observed placement before reset is not acceptance evidence
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-022
+counts_toward_search: false
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-022-050
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-022/reset-after-executor-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000007187418782189474
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-DEDICATED-FINAL-EXECUTOR-051
+recorded_at: 2026-08-09 Asia/Shanghai
+revision:
+  final_observer_executor: dedicated SingleThreadedExecutor bound to the observer context
+  spin_once: invoked on the dedicated executor, never through rclpy global executor lookup
+  cleanup: removes the observer node and shuts down the dedicated executor before destroying the node and context
+  motion_grasp_and_acceptance: unchanged
+tests:
+  red: final observer contract failed because no dedicated executor ownership, spin, or cleanup existed
+  focused_green: 26 passed
+  package_pytest: 167 passed, 2 skipped
+  colcon_test: 169 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+live_read_only_smoke:
+  sequence: default-context sample followed by dedicated final observer observe
+  status: combined Gazebo cup pose, TF TCP pose, and contact snapshot returned without context or executor errors
+next: commit locally, preregister the unchanged strategy, and rerun after the proved RESET_WORLD state
+```

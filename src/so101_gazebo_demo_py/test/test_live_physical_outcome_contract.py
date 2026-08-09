@@ -90,6 +90,11 @@ def test_final_epochs_share_one_observer_with_bounded_evidence_wait() -> None:
     assert "deadline=time.monotonic()+3.0" in backend_source
     assert "self._context=rclpy.Context()" in backend_source
     assert "context=self._context" in backend_source
+    assert "SingleThreadedExecutor(context=self._context)" in backend_source
+    assert "self._executor.add_node(self._node)" in backend_source
+    assert "self._executor.spin_once(timeout_sec=0.02)" in backend_source
+    assert "self._executor.remove_node(self._node)" in backend_source
+    assert "self._executor.shutdown()" in backend_source
     assert "self._context.shutdown()" in backend_source
     assert "pose_pair_ready(observed,self._max_pair_age_s)" in backend_source
     assert "self._contacts.fresh(time.monotonic(),1.0)" in backend_source
