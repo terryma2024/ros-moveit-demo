@@ -7,15 +7,15 @@ import yaml
 PACKAGE = Path(__file__).parents[1]
 
 
-def test_light_cup_uses_20g_high_friction_profile() -> None:
+def test_light_cup_uses_20g_baseline_friction_profile() -> None:
     object_config = yaml.safe_load(
         (PACKAGE / "config/task_objects/light_plastic_cup.yaml").read_text()
     )
     assert object_config["model"]["mass_kg"] == 0.020
     pads = object_config["fingertip_pads"]
-    assert pads["friction_coefficient"] == 2.0
+    assert pads["friction_coefficient"] == 1.2
     assert pads["contact_material"]["axial_friction_coefficient"] == 3.0
-    assert pads["contact_material"]["transverse_friction_coefficient"] == 2.0
+    assert pads["contact_material"]["transverse_friction_coefficient"] == 1.2
 
     world = ET.parse(PACKAGE / "worlds/so101_pick_place.sdf").getroot()
     cup = world.find(".//model[@name='plastic_cup']/link")
@@ -30,10 +30,10 @@ def test_light_cup_uses_20g_high_friction_profile() -> None:
     ]
     assert len(walls) == 12
     for wall in walls:
-        assert float(wall.findtext("surface/friction/ode/mu")) == 2.0
-        assert float(wall.findtext("surface/friction/ode/mu2")) == 2.0
-        assert float(wall.findtext("surface/friction/bullet/friction")) == 2.0
-        assert float(wall.findtext("surface/friction/bullet/friction2")) == 2.0
+        assert float(wall.findtext("surface/friction/ode/mu")) == 1.2
+        assert float(wall.findtext("surface/friction/ode/mu2")) == 1.2
+        assert float(wall.findtext("surface/friction/bullet/friction")) == 1.2
+        assert float(wall.findtext("surface/friction/bullet/friction2")) == 1.2
 
     prepared = ET.parse(PACKAGE / "models/so101_prepared.sdf").getroot()
     pad_collisions = [
@@ -43,6 +43,6 @@ def test_light_cup_uses_20g_high_friction_profile() -> None:
     assert len(pad_collisions) == 15
     for collision in pad_collisions:
         assert float(collision.findtext("surface/friction/ode/mu")) == 3.0
-        assert float(collision.findtext("surface/friction/ode/mu2")) == 2.0
+        assert float(collision.findtext("surface/friction/ode/mu2")) == 1.2
         assert float(collision.findtext("surface/friction/bullet/friction")) == 3.0
-        assert float(collision.findtext("surface/friction/bullet/friction2")) == 2.0
+        assert float(collision.findtext("surface/friction/bullet/friction2")) == 1.2
