@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 3fcd887
+current_commit: 70c6dbe
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -65,8 +65,31 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-092-294
+latest_checkpoint: CP-EXP-092-IMPLEMENTED-295
 next_experiment: EXP-092
+```
+
+```yaml
+checkpoint_id: CP-EXP-092-IMPLEMENTED-295
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-092
+planning_commit: 1271014
+implementation_commit: 70c6dbe
+single_variable: max_grasp_attempts changes from 2 to 3
+red:
+  focused: 1 failed, 36 passed; the new max_grasp_attempts=3 contract correctly failed against the prior implementation
+green:
+  focused: 37 passed
+  full_pytest: 205 passed, 2 skipped
+  colcon: 207 tests, 0 errors, 0 failures, 2 skipped
+unchanged:
+  - 1 mm immediate and held cup lateral-drift gates
+  - grasp geometry, penetration target range and 1.3 mm hard ceiling
+  - cup mass/materials, motion/release/alignment parameters and prewarmed RETREAT
+  - physics engine, geometry, controllers/gains, collision model and authoritative final contract
+decision: run exactly one bounded RESET_WORLD EXP-092 on the sole domain 231 stack
+counts_toward_success_streak: false
 ```
 
 ```yaml
