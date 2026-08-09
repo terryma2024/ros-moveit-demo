@@ -46,7 +46,7 @@ def gripper_motion_duration_seconds(
     if final_release:
         if target_q6 < 0.0:
             raise ValueError("final release requires a non-negative q6 target")
-        return 2
+        return 1
     return 8 if target_q6 < 0.0 else 5
 
 
