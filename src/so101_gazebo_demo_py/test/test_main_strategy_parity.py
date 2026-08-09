@@ -5,6 +5,9 @@ import pytest
 import yaml
 
 from so101_gazebo_demo_py.live_execute import (
+    TARGET_SEATING_PENETRATION_MAX_M,
+    TARGET_SEATING_PENETRATION_MIN_M,
+    TARGET_SEATING_Q6_ADJUSTMENT_RAD,
     make_world_z_target,
     make_pose_move_group_goal,
     seating_preload_target,
@@ -20,6 +23,17 @@ from so101_gazebo_demo_py.test_support.ros_gazebo_backend import gripper_result_
 
 
 PACKAGE = Path(__file__).parents[1]
+
+
+def test_live_carry_targets_upper_safe_penetration_band_with_fine_steps() -> None:
+    assert TARGET_SEATING_PENETRATION_MIN_M == 0.00075
+    assert TARGET_SEATING_PENETRATION_MAX_M == 0.001
+    assert TARGET_SEATING_Q6_ADJUSTMENT_RAD == 0.00025
+
+    live_execute = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
+    assert "minimum_penetration_m=TARGET_SEATING_PENETRATION_MIN_M" in live_execute
+    assert "maximum_penetration_m=TARGET_SEATING_PENETRATION_MAX_M" in live_execute
+    assert "adjustment_rad=TARGET_SEATING_Q6_ADJUSTMENT_RAD" in live_execute
 
 
 def test_final_release_shortens_only_the_explicit_release_command() -> None:
