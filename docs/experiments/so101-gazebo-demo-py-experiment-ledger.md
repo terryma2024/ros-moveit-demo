@@ -3460,3 +3460,70 @@ qualification_rules_002:
   any INVALID run stops the batch; debug only the contamination/implementation defect with a fresh batch/id
   after three VALID_SUCCESS runs: continue per plan to full physical pick/place, acceptance battery, and five consecutive FULL_RESTART successes at this frozen fingerprint
 ```
+
+```yaml
+experiment_id: EXP-QUAL2-PLAN-234
+lifecycle: INVALID
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+ros_domain_id: 234
+evidence_root: /tmp/so101-py-qual2-plan-234
+failure: READINESS_TIMEOUT; every ROS process died at startup with "RTPS Error: Calculated port
+  number is too high. Probably the domainId is over 232" (gazebo.log, moveit.log)
+root_cause: implementation defect in my own experiment orchestration - ROS_DOMAIN_ID 234 exceeds the
+  FastDDS maximum domain id 232, so no stack ever came up; no physics executed
+defect_fix: select only domain ids <= 232; cosmetic runner cleanup redirect reordered
+  (/tmp/so101-py-exp-runner.sh, stderr before stdin redirect)
+contamination_check: no so101_py_qual2_234 partition processes or tmux sessions remain; preserved
+  PID 3272995 / 652055 and tmux codex/codex-cua/kimi intact
+consequence: batch stopped per rule; fresh ids below; EXP-QUAL2-PLAN-234 is not a physics result
+```
+
+```yaml
+experiment_id: EXP-QUAL2-PLAN-232
+lifecycle: PLANNED
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: plan_only six-state ladder
+tmux_session: so101-py-qual2-plan-232
+ros_domain_id: 232
+gz_partition: so101_py_qual2b_232
+evidence_root: /tmp/so101-py-qual2-plan-232
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-1-233
+lifecycle: PLANNED (conditional on EXP-QUAL2-PLAN-232 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP (includes +0.002 m micro-lift carry probe)
+tmux_session: so101-py-qual2-grasp-1-233
+ros_domain_id: 233
+gz_partition: so101_py_qual2b_233
+evidence_root: /tmp/so101-py-qual2-grasp-1-233
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-2-200
+lifecycle: PLANNED (conditional on EXP-QUAL2-GRASP-1-233 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP
+tmux_session: so101-py-qual2-grasp-2-200
+ros_domain_id: 200
+gz_partition: so101_py_qual2b_200
+evidence_root: /tmp/so101-py-qual2-grasp-2-200
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-3-201
+lifecycle: PLANNED (conditional on EXP-QUAL2-GRASP-2-200 VALID_SUCCESS)
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+mode: FULL_RESTART execute --stop-after VERIFY_PHYSICAL_GRASP
+tmux_session: so101-py-qual2-grasp-3-201
+ros_domain_id: 201
+gz_partition: so101_py_qual2b_201
+evidence_root: /tmp/so101-py-qual2-grasp-3-201
+note: domain ids 232 max respected; 200/201 are previously unused (used so far 215-231, 234)
+```
