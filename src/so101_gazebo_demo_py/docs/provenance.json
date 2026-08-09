@@ -77,7 +77,7 @@
       "destination": "config/task_objects/light_plastic_cup.yaml",
       "source_dirty": true,
       "source_sha256": "da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe",
-      "destination_sha256": "da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe"
+      "destination_sha256": "e1f51b025af1eaf22d7230c6a865da1387bcee38e44496336de88b2c991ddb1d"
     },
     {
       "source": "src/so101_gazebo_demo/config/validation_policies/light_cup_wall_pick.yaml",
@@ -903,14 +903,14 @@
       "destination": "models/so101_prepared.sdf",
       "source_dirty": false,
       "source_sha256": "3bfabfd83deab4ba314047e1750bac570d83b6c14319e1dc7f3da14488f0d90e",
-      "destination_sha256": "37fed193f539ba9e53314c6be12f4e577b9c4e4f04a5f7cc3255d0445ccb086f"
+      "destination_sha256": "98af297a2ede5b225c1f2d0d9b5acd8adb1fecd3e393533ca2ae89a07879006e"
     },
     {
       "source": "src/so101_gazebo_demo/worlds/so101_pick_place.sdf",
       "destination": "worlds/so101_pick_place.sdf",
       "source_dirty": false,
       "source_sha256": "386f293037aa0c38687803b21a2989901f7c33b84adc553ea7306c780f6386f2",
-      "destination_sha256": "386f293037aa0c38687803b21a2989901f7c33b84adc553ea7306c780f6386f2"
+      "destination_sha256": "3ccc663709b2c2a000f5c9c1ec0f04d9314e216f00d0daaf63f8e9f4efaff058"
     }
   ]
 }
