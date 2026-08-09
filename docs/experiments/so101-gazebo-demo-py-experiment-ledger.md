@@ -5669,3 +5669,26 @@ live_read_only_smoke:
   status: combined Gazebo cup pose, TF TCP pose, and contact snapshot returned without context or executor errors
 next: commit locally, preregister the unchanged strategy, and rerun after the proved RESET_WORLD state
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-023
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: unchanged physical motion will complete both final epochs and RETREAT using the observer-owned context and executor, yielding an authoritative final cup and arm outcome
+execute_commit: f2298d8
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-023
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-022/reset-after-executor-failure/reset-world.json
+strategy:
+  motion_and_grasp: identical to EXP-020 through EXP-022
+  final_observer: persistent across both epochs with dedicated context and executor
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained and dynamically resynchronized
+  final_acceptance: frozen
+next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
+next_on_valid_failure: use only authoritative post-retreat cup and arm outcome to choose one strategy-family adjustment
+```
