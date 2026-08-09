@@ -776,7 +776,7 @@ def verify_physical_micro_lift(
         commanded_object_delta_m=(0.0,0.0,0.002),
         position_tolerance_m=0.006,
         minimum_axial_progress_m=0.0001,
-        maximum_lateral_drift_m=0.006,
+        maximum_lateral_drift_m=0.001,
         arm_stable=all(math.isfinite(value) for value in (*after.tcp_xyz,*after.tcp_xyzw)),
         contact_evidence=contact,
         q6_position=None,
@@ -797,7 +797,7 @@ def verify_physical_micro_lift(
         commanded_object_delta_m=(0.0,0.0,0.002),
         position_tolerance_m=0.006,
         minimum_axial_progress_m=0.0001,
-        maximum_lateral_drift_m=0.006,
+        maximum_lateral_drift_m=0.001,
         arm_stable=all(
             math.isfinite(value) for value in (*held.tcp_xyz,*held.tcp_xyzw)
         ),
