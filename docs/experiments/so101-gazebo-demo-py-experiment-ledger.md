@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: e8a1cb0
+current_commit: e6d5f3e
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -54,8 +54,41 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-QUAL-FULL-NORM-PLAN-256
+latest_checkpoint: CP-QUAL-FULL-NORM-01-RUNNING-257
 next_experiment: QUAL-FULL-NORM-01
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-NORM-01-RUNNING-257
+recorded_at: 2026-08-10 Asia/Shanghai
+status: RUNNING
+qualification_run: QUAL-FULL-NORM-01
+candidate_implementation_commit: f714e30
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 229
+  gz_partition: so101_py_full_norm_01
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  prior_stack_terminated: true
+  new_gazebo_server_pid: 2742963
+  new_move_group_pid: 2742915
+  controllers_active: [joint_state_broadcaster, arm_controller, gripper_controller]
+  gazebo_servers: 1
+  move_group_processes: 1
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/full-norm-01/reset/reset-world.json
+  command_exit_code: 0
+  cup_spawn_pose_error_m: 0.000002365925194593787
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+next_command: record one bounded execute; this run counts only if normalized penetration and full final success contracts pass
+current_full_restart_streak: 0
+counts_toward_success_streak: pending
 ```
 
 ```yaml
