@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 8d7913e
+current_commit: a0f831d
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -46,6 +46,42 @@ open_hypotheses:
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
 latest_checkpoint: CP-RESULT-EXP-073-226
 next_experiment: EXP-074
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-074-227
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-074
+status: PLANNED
+prior_experiment: EXP-073
+hypothesis: shortening only the final OPEN_GRIPPER trajectory reduces dwell in the observed asymmetric fixed-pad contact topology, so the cup reaches table support with less release tilt and less lateral displacement
+single_variable: final OPEN_GRIPPER command duration changes from 5 s to 2 s
+lifecycle: RESET_WORLD
+evidence_basis:
+  - EXP-073 opening took 6.758 s from the release boundary to q6 >= 0.74 including action and observation overhead
+  - the moving pad lost contact at 2.215 s and table contact began 0.020 s later, while the fixed pad remained in contact through the fully open sample
+  - during OPEN_GRIPPER the cup moved +6.860 mm in x, +1.124 mm in y and -13.259 mm in z, and tilt peaked at 0.241266 rad
+prediction:
+  - final opening reaches q6 >= 0.74 materially sooner than EXP-073
+  - time spent in one-sided fixed-pad plus table contact is reduced
+  - post-retreat cup remains upright, stable, supported and gripper-free with less lateral release displacement
+  - authoritative final placement is inside the unchanged target region
+preconditions:
+  - branch is rebased onto origin/codex/so101-gazebo-demo-py at remote commit 8464038; the MuJoCo migration plan is not executed by this experiment
+  - focused/full pytest and colcon build/test pass after the minimal implementation
+  - prove RESET_WORLD on the sole so101-py-qual GUI stack immediately before one execute
+unchanged:
+  - ordinary positive-q6 commands including initial pre-open, reset and recovery remain 5 s; negative-q6 closing commands remain 8 s
+  - final release q6 target, release target and settling compensation including y -0.005 m
+  - 0.010 m intermediate release-alignment tolerance retained from EXP-073
+  - all arm targets, orientations, velocity/acceleration scalings, mass, friction, controller/gains, collision model and physics engine
+  - penetration bounds, final physical-outcome contract, Gazebo-detached semantics and MoveIt Planning Scene shadow attach
+failure_criteria:
+  - grasp, hard-safety/controller, motion or authoritative final-outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, stale install, missing telemetry/video, or any non-final gripper duration changes
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
