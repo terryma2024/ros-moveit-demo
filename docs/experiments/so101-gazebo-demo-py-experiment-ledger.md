@@ -65,8 +65,65 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-091-IMPLEMENTED-292
-next_experiment: EXP-091
+latest_checkpoint: CP-PRE-EXP-092-294
+next_experiment: EXP-092
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-092-294
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-092
+status: PREREGISTERED
+prior_experiment: EXP-091
+hypothesis: the stricter 1 mm cup-outcome gate correctly rejected two off-center grasps, but the existing implementation and tests already support a third deterministic regrasp; raising only the attempt budget to three increases the chance of selecting a centered grasp without relaxing any physical bound
+single_variable: max_grasp_attempts changes from 2 to 3
+lifecycle: RESET_WORLD
+prediction:
+  - if either of the first two grasps exceeds 1 mm lateral drift, a third preopen/local-x reseat is attempted
+  - the selected grasp has <=1 mm immediate and held lateral drift and continues through carry
+  - the prewarmed RETREAT path is finally exercised with q6>=0.40-to-arm-motion below 0.75 s
+  - authoritative final outcome passes
+unchanged:
+  - 1 mm drift bound, penetration policy/ceiling, 1 s hold, retry geometry/target, cup mass/materials, all motion/release/alignment parameters, prewarmed retreat transport, physics/controllers/collision settings and every final/hard safety bound
+preconditions:
+  - TDD, full pytest, colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-091-293
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_BEFORE_CARRY
+experiment_id: EXP-091
+execution_head: 33460eb
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp091/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000031381721306675308
+physical_grasp:
+  attempts: 2
+  final_failure_code: CUP_LATERAL_DRIFT
+  final_lift_m: 0.0031111538410186768
+  final_lateral_drift_m: 0.0011532720508272898
+  normalized_target_q6: -0.0535815050303936
+  post_seating_moving_pad_depth_m: 0.0009845771128311753
+  latest_moving_pad_depth_m: 0.0010867718374356627
+  gazebo_attachment_state: detached
+prewarmed_retreat_evaluation: NOT_REACHED
+interpretation:
+  - the stricter drift gate behaved as designed and stopped before carry
+  - both allowed attempts failed the unchanged 1 mm result bound, so attempt budget rather than threshold is the next isolated variable
+evidence_sha256:
+  reset_proof: 22b0ff0710062326ed05cb6ad5cc236459bbece43d3054514129de2468f0feac
+  execute_log: 132054ee00a8e0c34fb077f4682819c67960cd47305906952f9e77c6f00d8632
+  physical_failure: eee2a0717e1a6cfe9eddbad6299c3a130cba62bed244086a8e0fa30adfb5b0c7
+  telemetry: 52a91d1df3d2a06a2af57581686a874dbcc8ce650f575cbf6a75ec878d0e14da
+  bounded_video: ad66f72a09588cc80788100bddbf4a356034ef16816931bca6720bdde704bd55
+  final_screenshot: aef565775f223f9098d3860e4a99677c02824b65db3b429c61d9ae5dbb749e77
+decision: retain the prewarmed RETREAT and every strict bound; raise only the deterministic grasp-attempt budget to three in EXP-092
+counts_toward_success_streak: false
 ```
 
 ```yaml
