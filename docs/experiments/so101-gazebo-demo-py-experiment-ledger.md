@@ -4400,3 +4400,28 @@ provenance:
   validation_policy_sha256: a4795169631be86de501b100ecec52d52ac0e96ef3fc72a2d37770127f7a2937
 next: commit locally, preregister the vertical-retreat candidate, and use persisted pre/post margins to isolate any remaining placement offset
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-009
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: vertical reverse-descent RETREAT will preserve the released cup pose and upright stability; the authoritative final result will then expose only the static XY placement error, if any
+execute_commit: 7361626cd28880c0e7e4b45fbd325c61fc0b6c1a
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: a3776ff5c320e9bd90bfa03e6ba071c4c85db12f121b0fe523db71e5505b2b0f
+motion_policy_sha256: b1ad2e0f8cc0392ac28363d01ee189629018b8d7dc5fe10d74db11061f67e4a3
+validation_policy_sha256: a4795169631be86de501b100ecec52d52ac0e96ef3fc72a2d37770127f7a2937
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-009
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-008/reset-after-failure/reset-world.json
+strategy:
+  grasp: direct close plus 0.002 seating preload
+  place_endpoint: unchanged
+  retreat: reverse DESCEND_TO_PLACE vertical lift
+  failure_evidence: pre/post final epochs persisted
+next_on_valid_success: freeze and run two independent RESET_WORLD confirmations
+next_on_valid_failure: use persisted pre/post displacement to adjust only placement or retreat, never final tolerances
+```
