@@ -146,11 +146,25 @@ def test_moveit_shadow_attach_requires_authoritative_gazebo_pose() -> None:
     assert "object_pose[:3]" in source
 
 
+def test_live_run_reuses_one_isolated_planning_scene_client() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+
+    assert "class PlanningSceneShadowClient:" in source
+    assert "self._context=rclpy.Context()" in source
+    assert "SingleThreadedExecutor(context=self._context)" in source
+    assert "with PlanningSceneShadowClient() as scene_client:" in forward_path
+    assert "apply_scene=scene_client.apply" in forward_path
+    assert "apply_scene(\"attach\",shadow_pose)" in source
+    assert "apply_scene(\"detach\",released_pose)" in source
+    assert "_apply_scene(" not in forward_path
+
+
 def test_moveit_shadow_attach_precedes_physical_micro_lift_planning() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
 
-    assert forward_path.index('attached_scene=_apply_scene("attach"') < (
+    assert forward_path.index('attached_scene=apply_scene("attach"') < (
         forward_path.index("run_bounded_physical_grasp_attempts(")
     )
     assert ".set_attached(" not in forward_path
@@ -178,7 +192,7 @@ def test_release_settles_after_scene_detach_before_existing_retreat() -> None:
     forward_path = source[source.index("def run_live_execute"):]
 
     release_index = forward_path.index("backend.move_gripper(bundle.motion.release_q6)")
-    detach_index = forward_path.index('_apply_scene("detach",released_pose)', release_index)
+    detach_index = forward_path.index('apply_scene("detach",released_pose)', release_index)
     epochs_index = forward_path.index(
         "collect_final_outcomes_around_retreat(", detach_index,
     )
