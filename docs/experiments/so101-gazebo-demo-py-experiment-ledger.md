@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: a64f89d
+current_commit: b0a3524
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -39,8 +39,36 @@ open_hypotheses:
   - With the rejected friction candidates restored to 1.2, the next useful boundary is the motion/alignment interval in which tilt grows between MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and OPEN_GRIPPER; target compensation should not be used to mask the tilt source.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-071-219
+latest_checkpoint: CP-RESTORE-BASELINE-220
 next_experiment: NONE_PENDING_NEXT_MOTION_HYPOTHESIS
+```
+
+```yaml
+checkpoint_id: CP-RESTORE-BASELINE-220
+recorded_at: 2026-08-09 Asia/Shanghai
+status: REJECTED_FRICTION_CANDIDATES_REVERTED_AND_BASELINE_STACK_READY
+last_valid_experiment: EXP-071
+current_hypothesis: isolate the motion/alignment interval that grows cup tilt before OPEN_GRIPPER; do not compensate final y before controlling tilt
+working_tree_status: clean
+restored_commit: b0a3524
+restored_material:
+  cup_mass_kg: 0.020
+  cup_friction: 1.2
+  fingertip_axial_friction: 3.0
+  fingertip_transverse_friction: 1.2
+  object_config_source_install_sha256: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  prepared_model_source_install_sha256: 37fed193f539ba9e53314c6be12f4e577b9c4e4f04a5f7cc3255d0445ccb086f
+automated_verification:
+  colcon_build: 1 package finished
+  colcon_test: 197 tests, 0 errors, 0 failures, 2 skipped
+owned_processes: sole so101-py-qual GUI stack on ROS_DOMAIN_ID 227 and GZ_PARTITION so101_py_qual_baseline_restored; no execute, recorder or video process
+reset_proof: /tmp/so101-py-qualification/baseline-restored/reset/reset-world.json
+reset_status: RESET_WORLD_PROVED with object_pose_error_m 0.0000015965228875947647
+preserved_processes: codex, codex-cua and kimi tmux sessions untouched
+open_risks:
+  - next motion/alignment hypothesis is not yet preregistered
+  - baseline candidate still lacks a five-success qualification streak
+next_command: inspect and preregister one motion/alignment timing variable at the first tilt-growth boundary before another execute
 ```
 
 ```yaml
