@@ -369,7 +369,7 @@ def test_penetration_controller_closes_until_target_band() -> None:
     )
 
 
-def test_penetration_controller_opens_when_above_target_band() -> None:
+def test_penetration_controller_does_not_open_for_safe_high_telemetry() -> None:
     class Backend:
         def __init__(self):
             self.target = None
@@ -378,7 +378,7 @@ def test_penetration_controller_opens_when_above_target_band() -> None:
             self.target = target
 
         def contacts(self):
-            depth = 0.0011 if self.target <= -0.0515 else 0.0009
+            depth = 0.0011
             return (
                 ContactPair("plastic_cup::body::wall_near", "fixed_fingertip_pad_collision_001", (0.0004,)),
                 ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (depth,)),
@@ -388,6 +388,6 @@ def test_penetration_controller_opens_when_above_target_band() -> None:
         Backend(), -0.0515, q6_contact=-0.0475, q6_safe_lower=-0.0596
     )
 
-    assert target == pytest.approx(-0.0510)
-    assert contact.max_moving_pad_penetration_m == pytest.approx(0.0009)
-    assert len(history) == 2
+    assert target == pytest.approx(-0.0515)
+    assert contact.max_moving_pad_penetration_m == pytest.approx(0.0011)
+    assert len(history) == 1

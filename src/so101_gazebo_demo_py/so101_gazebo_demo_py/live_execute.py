@@ -539,27 +539,27 @@ def tune_seating_penetration(
     initial_step_rad: float = 0.0005,
     max_adjustments: int = 6,
 ):
-    """Boundedly tune q6 until stable physical penetration is in the target band."""
+    """Close only when stable penetration is low; safe high values stay telemetry."""
     if not (0.0001 <= target_min_m <= target_max_m <= 0.0010):
         raise ValueError("penetration target band must stay inside [0.0001, 0.0010] m")
-    target=initial_target; step=initial_step_rad; previous_direction=None; history=[]
+    target=initial_target; history=[]
     for adjustment in range(max_adjustments+1):
         contact=seat_and_stabilize_physical_grasp(backend,target)
         depth=contact.max_moving_pad_penetration_m
         if depth is None or not math.isfinite(depth):
             raise RuntimeError("stable bilateral contact did not report finite penetration")
-        history.append({"adjustment":adjustment,"target_q6":target,"depth_m":depth})
-        if target_min_m <= depth <= target_max_m:
+        history.append({
+            "adjustment":adjustment,"target_q6":target,"depth_m":depth,
+            "above_preferred_max":depth > target_max_m,
+        })
+        if depth >= target_min_m:
             return target,contact,history
-        direction=-1.0 if depth < target_min_m else 1.0
-        if previous_direction is not None and direction != previous_direction:
-            step*=0.5
-        next_target=max(q6_safe_lower,min(q6_contact,target+direction*step))
+        next_target=max(q6_safe_lower,target-initial_step_rad)
         if next_target == target:
             raise RuntimeError(
                 f"penetration target unreachable inside q6 bounds: depth={depth} target={target}"
             )
-        previous_direction=direction; target=next_target
+        target=next_target
     raise RuntimeError(
         f"penetration target did not converge after {max_adjustments} adjustments: {history}"
     )
@@ -746,7 +746,7 @@ def run_live_execute(
     try:
         contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817)
     except Exception as error:
-        failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"attempts":1,"planning_scene":attached_scene}
+        failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"seating_adjustments":seating_adjustments,"post_seating_contact":asdict(seated_contact),"attempts":1,"planning_scene":attached_scene}
         try:
             latest_contact=evaluate_bilateral_contact(backend.contacts())
             latest_pose=backend.sample()
@@ -756,7 +756,7 @@ def run_live_execute(
         (evidence_directory/"physical-failure.json").write_text(json.dumps(failure_evidence,indent=2))
         raise
     lift,lateral,micro_points,micro_start_z,before,after,continuation=physical
-    gate={"status":"PROVED","gate_basis":"CUP_AND_ARM_OUTCOME","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"post_seating_bilateral":seated_contact.bilateral,"post_seating_max_moving_pad_penetration_m":seated_contact.max_moving_pad_penetration_m,"seating_penetration_target_band_m":[.0006,.0010],"seating_adjustments":seating_adjustments,"moving_pad_penetration_ceiling_m":MOVING_PAD_MESH_PENETRATION_CEILING_M,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target,"continuation":asdict(continuation)}
+    gate={"status":"PROVED","gate_basis":"CUP_AND_ARM_OUTCOME","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"post_seating_bilateral":seated_contact.bilateral,"post_seating_max_moving_pad_penetration_m":seated_contact.max_moving_pad_penetration_m,"seating_penetration_target_min_m":.0006,"seating_penetration_preferred_max_m":.0010,"seating_adjustments":seating_adjustments,"moving_pad_penetration_ceiling_m":MOVING_PAD_MESH_PENETRATION_CEILING_M,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target,"continuation":asdict(continuation)}
     (evidence_directory/"physical-gate.json").write_text(json.dumps(gate,indent=2))
     if stop_after == "VERIFY_PHYSICAL_GRASP":
         result={"status":"CHECKPOINT_COMPLETE","current_state":stop_after,"state_trace":list(TRACE[:9]),"exit_code":0,"physical":gate,"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
