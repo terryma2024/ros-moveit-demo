@@ -769,14 +769,6 @@ def run_live_execute(
     backend.move_gripper(bundle.motion.release_q6)
     outcome_policy=bundle.validation.physical_outcome
     scene_membership=[detached_scene]
-    def collect_final_epoch():
-        gazebo_detached=backend.attachment_state() == "detached"
-        with backend.final_observer() as final_observer:
-            return collect_final_outcome_epoch(
-                final_observer,outcome_policy,
-                gazebo_detached=gazebo_detached,
-                scene_membership=scene_membership[0],
-            )
     synchronized_scene=[detached_scene]
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
@@ -785,10 +777,18 @@ def run_live_execute(
         synchronized_scene[0]=_apply_scene("detach",pre_pose)
         scene_membership[0]=synchronized_scene[0]
         backend.move_arm(retreat_policy.waypoints)
-    outcomes=collect_final_outcomes_around_retreat(
-        collect_epoch=collect_final_epoch,
-        retreat=retreat_after_pre_outcome,
-    )
+    with backend.final_observer() as final_observer:
+        def collect_final_epoch():
+            gazebo_detached=backend.attachment_state() == "detached"
+            return collect_final_outcome_epoch(
+                final_observer,outcome_policy,
+                gazebo_detached=gazebo_detached,
+                scene_membership=scene_membership[0],
+            )
+        outcomes=collect_final_outcomes_around_retreat(
+            collect_epoch=collect_final_epoch,
+            retreat=retreat_after_pre_outcome,
+        )
     def outcome_payload(evaluation):
         return {"success":evaluation.success,"failure_code":evaluation.failure_code,"sample_count":evaluation.sample_count,"duration_s":evaluation.duration_s,"max_linear_speed_m_s":evaluation.max_linear_speed_m_s,"max_angular_speed_rad_s":evaluation.max_angular_speed_rad_s,"metrics":dict(evaluation.metrics),"telemetry":[sample.as_dict() for sample in evaluation.telemetry]}
     def final_sample_payload(sample):

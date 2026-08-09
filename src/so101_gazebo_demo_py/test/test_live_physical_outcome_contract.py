@@ -22,6 +22,7 @@ from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
 PACKAGE = Path(__file__).parents[1]
 LIVE_EXECUTE = PACKAGE / "so101_gazebo_demo_py/live_execute.py"
 LIVE_CLI = PACKAGE / "so101_gazebo_demo_py/cli/pick_place_state_machine.py"
+ROS_GAZEBO_BACKEND = PACKAGE / "so101_gazebo_demo_py/test_support/ros_gazebo_backend.py"
 
 
 def test_live_forward_path_never_commands_gazebo_attachment() -> None:
@@ -76,6 +77,19 @@ def test_live_release_order_and_physical_outcome_states_are_explicit() -> None:
     assert '"WAIT_RELEASE_SETTLE"' in source
     assert '"VALIDATE_FINAL_PLACEMENT"' in source
     assert "time.sleep(2.)" not in source
+
+
+def test_final_epochs_share_one_observer_with_bounded_evidence_wait() -> None:
+    live_source = LIVE_EXECUTE.read_text()
+    live_path = live_source[live_source.index("def run_live_execute") :]
+    assert live_path.count("with backend.final_observer() as final_observer:") == 1
+    assert live_path.index("with backend.final_observer() as final_observer:") < (
+        live_path.index("def collect_final_epoch")
+    )
+    backend_source = ROS_GAZEBO_BACKEND.read_text()
+    assert "deadline=time.monotonic()+3.0" in backend_source
+    assert "pose_pair_ready(observed,self._max_pair_age_s)" in backend_source
+    assert "self._contacts.fresh(time.monotonic(),1.0)" in backend_source
 
 
 def test_moveit_shadow_attach_requires_authoritative_gazebo_pose() -> None:
