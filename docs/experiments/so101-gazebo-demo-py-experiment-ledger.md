@@ -6230,3 +6230,56 @@ prediction: stable post-RETREAT cup pose falls inside the unchanged final region
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-029-073
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_CONTROLLER_ABORT
+experiment_id: EXP-029
+execution_commit: 2a1e990
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-029
+failure:
+  stage: DESCEND_TO_PLACE
+  controller_error_code: -4
+  controller_error: path tolerance violation
+  alignment_reached: false
+  physical_release_reached: false
+interpretation: this run provides no evidence for or against settling compensation; it stopped in the unchanged three-point descend ladder before the candidate behavior
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-029-074
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-029/reset-after-descend-controller-abort
+proof:
+  cup_spawn_pose_error_m: 0.0000007799279761610116
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-030-075
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-030
+purpose: retry the unchanged controlled-settling candidate after an unrelated pre-alignment controller abort
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 2a1e990
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-029/reset-after-descend-controller-abort/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-030
+candidate:
+  alignment_target_offset_m: [0.0050, 0.0055, 0.0]
+  changed_since_EXP_029: false
+prediction: reach the feedback alignment and authoritative final outcome; the final region remains unchanged
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
