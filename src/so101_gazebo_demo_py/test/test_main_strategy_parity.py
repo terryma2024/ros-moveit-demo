@@ -5,9 +5,6 @@ import pytest
 import yaml
 
 from so101_gazebo_demo_py.live_execute import (
-    TARGET_SEATING_PENETRATION_MAX_M,
-    TARGET_SEATING_PENETRATION_MIN_M,
-    TARGET_SEATING_Q6_ADJUSTMENT_RAD,
     make_world_z_target,
     make_pose_move_group_goal,
     seating_preload_target,
@@ -23,17 +20,6 @@ from so101_gazebo_demo_py.test_support.ros_gazebo_backend import gripper_result_
 
 
 PACKAGE = Path(__file__).parents[1]
-
-
-def test_live_carry_targets_upper_safe_penetration_band_with_fine_steps() -> None:
-    assert TARGET_SEATING_PENETRATION_MIN_M == 0.00075
-    assert TARGET_SEATING_PENETRATION_MAX_M == 0.001
-    assert TARGET_SEATING_Q6_ADJUSTMENT_RAD == 0.00025
-
-    live_execute = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
-    assert "minimum_penetration_m=TARGET_SEATING_PENETRATION_MIN_M" in live_execute
-    assert "maximum_penetration_m=TARGET_SEATING_PENETRATION_MAX_M" in live_execute
-    assert "adjustment_rad=TARGET_SEATING_Q6_ADJUSTMENT_RAD" in live_execute
 
 
 def test_final_release_shortens_only_the_explicit_release_command() -> None:
@@ -108,11 +94,49 @@ def test_micro_lift_samples_contact_telemetry_after_motion() -> None:
             return ()
 
     result = verify_physical_micro_lift(
-        Backend(), lambda delta: events.append(("move", delta)) or (3, 0.2)
+        Backend(),
+        lambda delta: events.append(("move", delta)) or (3, 0.2),
+        sleep=lambda seconds: events.append(("sleep", seconds)),
     )
 
-    assert events == ["sample", ("move", 0.002), "contacts", "sample"]
+    assert events == [
+        "sample",
+        ("move", 0.002),
+        "contacts",
+        "sample",
+        ("sleep", 1.0),
+        "contacts",
+        "sample",
+    ]
     assert result[0] == 0.002
+
+
+def test_micro_lift_rejects_a_cup_that_drops_during_the_hold() -> None:
+    samples = iter((
+        SimpleNamespace(
+            object_xyz=(0.0, 0.0, 0.0),
+            tcp_xyz=(0.0, 0.0, 0.2),
+            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        ),
+        SimpleNamespace(
+            object_xyz=(0.0, 0.0, 0.002),
+            tcp_xyz=(0.0, 0.0, 0.202),
+            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        ),
+        SimpleNamespace(
+            object_xyz=(0.0, 0.0, 0.0),
+            tcp_xyz=(0.0, 0.0, 0.202),
+            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        ),
+    ))
+    backend = SimpleNamespace(sample=lambda: next(samples), contacts=lambda: ())
+
+    with pytest.raises(RuntimeError, match="hold failed CUP_INSUFFICIENT_LIFT"):
+        verify_physical_micro_lift(
+            backend,
+            lambda _delta: (3, 0.2),
+            sleep=lambda _seconds: None,
+        )
 
 
 def test_contact_probe_finishes_on_first_fresh_nonempty_message() -> None:
