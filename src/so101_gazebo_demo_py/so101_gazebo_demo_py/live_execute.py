@@ -19,11 +19,6 @@ from .test_support.ros_gazebo_backend import RosGazeboLiveBackend
 
 TRACE=("IDLE","PREPARE_OPEN_GRIPPER","MOVE_ABOVE_OBJECT","DESCEND","CLOSE_GRIPPER","WAIT_GRASP_STABLE","MICRO_LIFT","WAIT_MICRO_LIFT_STABLE","VERIFY_PHYSICAL_GRASP","ATTACH_MOVEIT","LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE","OPEN_GRIPPER","RETREAT","DETACH_MOVEIT","WAIT_RELEASE_SETTLE","VALIDATE_FINAL_PLACEMENT","SYNC_WORLD_OBJECT","DONE")
 
-TARGET_SEATING_PENETRATION_MIN_M = 0.00075
-TARGET_SEATING_PENETRATION_MAX_M = 0.001
-TARGET_SEATING_Q6_ADJUSTMENT_RAD = 0.00025
-
-
 @dataclass(frozen=True, slots=True)
 class ContinuationEvaluation:
     can_continue: bool
@@ -764,8 +759,11 @@ def stabilize_to_target_penetration(
     )
 
 
-def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
-    """Execute the 2 mm probe and gate continuation on the cup/arm result."""
+def verify_physical_micro_lift(
+    backend, execute=_moveit_world_z_execute, *, hold_seconds: float = 1.0,
+    sleep=time.sleep,
+):
+    """Execute the 2 mm probe and require the cup outcome to persist."""
     before=backend.sample()
     micro_points,micro_start_z=execute(.002)
     contact=evaluate_bilateral_contact(backend.contacts())
@@ -788,13 +786,40 @@ def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
             f"physical micro-lift failed {continuation.failure_code} "
             f"lift={lift} lateral={lateral}"
         )
-    return lift,lateral,micro_points,micro_start_z,before,after,continuation
+    sleep(hold_seconds)
+    held_contact=evaluate_bilateral_contact(backend.contacts())
+    held=backend.sample()
+    held_lift=held.object_xyz[2]-before.object_xyz[2]
+    held_lateral=math.dist(held.object_xyz[:2],before.object_xyz[:2])
+    held_continuation=evaluate_continuation(
+        before=before,
+        after=held,
+        commanded_object_delta_m=(0.0,0.0,0.002),
+        position_tolerance_m=0.006,
+        minimum_axial_progress_m=0.0001,
+        maximum_lateral_drift_m=0.006,
+        arm_stable=all(
+            math.isfinite(value) for value in (*held.tcp_xyz,*held.tcp_xyzw)
+        ),
+        contact_evidence=held_contact,
+        q6_position=None,
+    )
+    if not held_continuation.can_continue:
+        raise RuntimeError(
+            f"physical micro-lift hold failed {held_continuation.failure_code} "
+            f"lift={held_lift} lateral={held_lateral}"
+        )
+    return (
+        held_lift,held_lateral,micro_points,micro_start_z,
+        before,held,held_continuation,
+    )
 
 
 def run_bounded_physical_grasp_attempts(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
     max_attempts: int = 1,
     execute=_moveit_world_z_execute,
+    hold_seconds: float = 1.0,
 ):
     """Run a pre-registered number of physical attempts; live defaults to one."""
     if max_attempts < 1:
@@ -813,7 +838,9 @@ def run_bounded_physical_grasp_attempts(
         try:
             contact=evaluate_bilateral_contact(backend.contacts())
             lifted=True
-            result=verify_physical_micro_lift(backend,execute=execute)
+            result=verify_physical_micro_lift(
+                backend,execute=execute,hold_seconds=hold_seconds,
+            )
             return contact,result,attempt+1,target
         except RuntimeError as error:
             last_error=error
@@ -1000,9 +1027,6 @@ def _run_live_execute_with_scene(
         backend.move_gripper(seating_target)
         seated_contact,normalized_seating_target,seating_adjustments=stabilize_to_target_penetration(
             backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,
-            minimum_penetration_m=TARGET_SEATING_PENETRATION_MIN_M,
-            maximum_penetration_m=TARGET_SEATING_PENETRATION_MAX_M,
-            adjustment_rad=TARGET_SEATING_Q6_ADJUSTMENT_RAD,
         )
         seating_actual_q6=_current_joint_position("6")
     except Exception as error:

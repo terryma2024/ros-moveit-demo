@@ -178,7 +178,7 @@ def test_micro_lift_continues_when_penetration_telemetry_exceeds_old_gate() -> N
             )
 
     result = live_execute.verify_physical_micro_lift(
-        Backend(), execute=lambda delta: (3, 0.200),
+        Backend(), execute=lambda delta: (3, 0.200), hold_seconds=0.0,
     )
 
     assert result[0] == pytest.approx(0.002)
@@ -236,6 +236,7 @@ def test_full_grasp_attempt_reaches_cup_result_gate_without_bilateral_contact() 
             q6_safe_lower=-0.0596,
             max_attempts=1,
             execute=lambda delta: (3, 0.200),
+            hold_seconds=0.0,
         )
     )
 
@@ -257,8 +258,7 @@ def test_explicit_three_attempt_grasp_strategy_can_succeed_on_third_outcome() ->
 
         def sample(self) -> PoseSample:
             self.sample_count += 1
-            attempt = (self.sample_count + 1) // 2
-            lifted = self.sample_count % 2 == 0 and attempt == 3
+            lifted = self.sample_count in (6, 7)
             return sample(0.0, 0.0, 0.167 if lifted else 0.165)
 
         def contacts(self):
@@ -272,6 +272,7 @@ def test_explicit_three_attempt_grasp_strategy_can_succeed_on_third_outcome() ->
     _, result, attempts, _ = live_execute.run_bounded_physical_grasp_attempts(
         Backend(), seating_target=-0.053, preopen_q6=0.465,
         q6_safe_lower=-0.0596, max_attempts=3, execute=execute,
+        hold_seconds=0.0,
     )
 
     assert attempts == 3
