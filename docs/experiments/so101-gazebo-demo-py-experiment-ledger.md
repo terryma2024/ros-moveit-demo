@@ -4479,3 +4479,30 @@ gz_partition: so101_py_outcome_search_203
 evidence_root: /tmp/so101-py-outcome-search-203/candidate-009/shifted-place-plan
 acceptance: both shifted above-place and descend-place pose goals return SUCCESS and nonempty planned trajectories; generated joint targets are then subjected to config tests and full plan-only validation before any execute
 ```
+
+```yaml
+diagnostic_id: DIAG-SHIFTED-PLACE-TARGETS-020
+lifecycle: INVALID_UNREACHABLE
+result:
+  execute_trajectory_count: 0
+  first_goal: shifted MOVE_ABOVE_PLACE
+  requested_tcp_translation_m: [0.0133949202299118, -0.0103067010641098, 0.0]
+  moveit_error: GOAL_STATE_INVALID / Unable to sample any valid states for goal tree
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-009/shifted-place-plan
+conclusion: moving the expected landing point to the exact target center is not an admissible pose target with the frozen orientation/collision model
+```
+
+```yaml
+diagnostic_id: DIAG-SHIFTED-PLACE-TARGETS-021
+lifecycle: PLANNED_PLAN_ONLY
+recorded_at: 2026-08-09 Asia/Shanghai
+purpose: find the smallest reachable whole-path XY shift that places the EXP-009 landing point inside the frozen target box rather than at its center
+requested_tcp_translation_m: [0.010, -0.007, 0.0]
+predicted_post_retreat_xy_m: [-0.0833949202299118, -0.2466932989358902]
+target_membership_prediction: inside x [-0.085,-0.075] and y [-0.255,-0.245]
+mode: MoveGroup plan_only; no ExecuteTrajectory
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-009/shifted-place-plan-021
+acceptance: shifted above and descend targets both produce nonempty collision-checked plans
+```
