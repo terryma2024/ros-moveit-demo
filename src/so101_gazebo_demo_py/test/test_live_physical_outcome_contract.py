@@ -75,6 +75,16 @@ def test_moveit_shadow_attach_requires_authoritative_gazebo_pose() -> None:
     assert "object_pose[:3]" in source
 
 
+def test_moveit_shadow_attach_precedes_physical_micro_lift_planning() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+
+    assert forward_path.index('attached_scene=_apply_scene("attach"') < (
+        forward_path.index("run_bounded_physical_grasp_attempts(")
+    )
+    assert ".set_attached(" not in forward_path
+
+
 def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:
     policy = PlanningShadowConfig(0.005, 0.070, 0.10)
     gazebo = (0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 1.0)

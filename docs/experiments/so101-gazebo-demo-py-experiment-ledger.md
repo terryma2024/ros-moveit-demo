@@ -4012,3 +4012,56 @@ authoritative_gates:
 next_on_success: preserve this grasp family and classify final placement margin before changing any placement target
 next_on_valid_failure: use the first failed result boundary to choose one new causal motion-target family, then RESET_WORLD before execution
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-004
+lifecycle: INVALID_STRATEGY
+result:
+  execute_rc: 1
+  reported_error: "world-Z MoveGroup planning failed: 99999"
+  failed_boundary: planning the first +0.002 m MICRO_LIFT
+moveit_evidence:
+  adapter: CheckStartStateCollision
+  collision_pair: jaw - plastic_cup
+  cause: the Planning Scene still represented the physically grasped cup as a world object while planning the first carrying motion
+classification: no cup-motion outcome was produced, so this run cannot accept or reject seating_preload_rad 0.002
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-004
+counts_toward_search_or_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-004-009
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-004/reset-after-invalid
+proof:
+  cup_spawn_pose_error_m: 0.0000006261504281998941
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-PROBE-MOVEIT-SHADOW-010
+recorded_at: 2026-08-09 Asia/Shanghai
+problem: a physically established jaw/cup contact is a forbidden start collision while the cup remains a Planning Scene world object, so MoveIt cannot plan even the first carrying probe
+fix:
+  moveit_shadow: attach from the latest authoritative Gazebo cup pose after close/seating and before MICRO_LIFT planning
+  gazebo_attachment: remains detached; no forward Gazebo attach API is added
+  physical_truth: the cup must still follow the +0.002 m command in Gazebo or the continuation gate fails
+  failure_evidence: records Planning Scene membership in addition to physical telemetry
+tests:
+  red: ordering contract observed Planning Scene attach after the physical probe call
+  focused_green: 31 passed
+  package_pytest: 157 passed, 2 skipped
+  colcon_test: 159 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+unchanged:
+  - seating_preload_rad 0.002 candidate
+  - all physical, geometry, material, controller and collision parameters
+  - outcome-first intermediate and final gates
+  - no forward Gazebo attach
+next: commit the shadow-timing fix, preregister the same motion candidate under a new experiment ID, then rerun from the proven reset state
+```
