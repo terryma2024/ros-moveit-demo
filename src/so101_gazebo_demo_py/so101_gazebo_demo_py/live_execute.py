@@ -387,9 +387,11 @@ def shadow_divergence_healthy(gazebo_pose, shadow_pose, pair_age_s, policy) -> b
     return position <= policy.max_position_divergence_m and orientation <= policy.max_orientation_divergence_rad
 
 
-def synchronize_planning_shadow(backend, object_in_tcp, policy, apply_scene):
+def synchronize_planning_shadow(
+    backend, object_in_tcp, policy, apply_scene, *, observe_pose=None,
+):
     """Refresh a slipped attached-object shadow from fresh Gazebo truth."""
-    observed=backend.sample()
+    observed=backend.sample() if observe_pose is None else observe_pose()
     gazebo_pose=(*observed.object_xyz,*observed.object_xyzw)
     tcp_pose=(*observed.tcp_xyz,*observed.tcp_xyzw)
     if (
@@ -915,19 +917,27 @@ def run_live_execute(
     shadow_pose=(*after.object_xyz,*after.object_xyzw)
     object_in_tcp=relative_pose((*after.tcp_xyz,*after.tcp_xyzw),shadow_pose)
     shadow_checks=[]
-    def gate_shadow(name):
+    def gate_shadow(name, observe_pose=None):
         nonlocal object_in_tcp
+        started=time.monotonic()
         check,object_in_tcp=synchronize_planning_shadow(
             backend,object_in_tcp,
             bundle.validation.physical_outcome.planning_shadow,
             _apply_scene,
+            observe_pose=observe_pose,
         )
+        check["observation_duration_s"]=time.monotonic()-started
         shadow_checks.append({"state":name,**check})
     carry_policies={}
     for name in ("LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE"):
         state=next(state for state in bundle.motion.states if state.value==name)
         carry_policies[name]=bundle.motion.states[state]
-    carry_with_shadow_gates(backend,carry_policies,gate_shadow)
+    with backend.final_observer() as carry_observer:
+        observe_carry_pose=lambda:carry_observer.observe()[0]
+        carry_with_shadow_gates(
+            backend,carry_policies,
+            lambda name:gate_shadow(name,observe_pose=observe_carry_pose),
+        )
     target_place_xyz=release_alignment_target(
         tuple(bundle.object.place_pose.values[:3])
     )
