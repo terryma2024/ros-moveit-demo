@@ -1,6 +1,52 @@
 from types import SimpleNamespace
+from pathlib import Path
 
 from so101_gazebo_demo_py import live_execute
+from so101_gazebo_demo_py.gazebo.observer import ContactPair
+from so101_gazebo_demo_py.policy_config import load_policy_bundle
+from so101_gazebo_demo_py.test_support.live_attachment import PoseSample
+
+
+PACKAGE = Path(__file__).parents[1]
+
+
+def test_final_epoch_reuses_one_combined_observer_for_five_fresh_samples() -> None:
+    bundle = load_policy_bundle(
+        PACKAGE / "config/task_objects/light_plastic_cup.yaml",
+        PACKAGE / "config/motion_policies/light_cup_wall_pick.yaml",
+        PACKAGE / "config/validation_policies/light_cup_wall_pick.yaml",
+    )
+    calls = []
+
+    class Observer:
+        def observe(self):
+            calls.append("observe")
+            return (
+                PoseSample(
+                    (-0.08, -0.25, 0.165), (-0.07, -0.23, 0.26),
+                    (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0), 0.0,
+                ),
+                (ContactPair("plastic_cup::body::bottom", "table::table_top::collision", (0.0,)),),
+            )
+
+    class Clock:
+        def __init__(self):
+            self.value = 0.0
+
+        def __call__(self):
+            self.value += 0.05
+            return self.value
+
+    result = live_execute.collect_final_outcome_epoch(
+        Observer(), bundle.validation.physical_outcome,
+        gazebo_detached=True,
+        scene_membership={"world_objects": ["plastic_cup"], "attached_objects": []},
+        monotonic=Clock(), wait=lambda _: None,
+    )
+
+    assert result.evaluation.success
+    assert result.evaluation.sample_count == 5
+    assert calls == ["observe"] * 5
 
 
 def test_arm_tcp_motion_is_an_outcome_gate() -> None:

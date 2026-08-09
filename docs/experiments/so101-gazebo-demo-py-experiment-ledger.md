@@ -3750,3 +3750,75 @@ lifecycle_rule: the former stub is invalid evidence and no historical invocation
 runtime_started: false
 next: commit reset implementation, pre-register the first full-path candidate, then launch exactly one owned isolated stack
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-001
+lifecycle: PLANNED_FULL_RESTART_BASELINE_FOR_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: the current full continuous strategy will carry the cup by Gazebo contact physics and place it inside the frozen final target region; intermediate contact/q6/penetration telemetry will not reject an otherwise valid physical outcome
+commit: 494a8ad11bcc84750ed9ff547ec50b7d69022463
+bundle_sha256: 060228e848e0beba00aaba6f25b9a4a3ccf4216096398c258bbc21648d6fb67a
+motion_policy_sha256: a2fa54e5b980b8d5329586cd1e454476649c4254d7607436bf3102af0efec1ad
+ros_domain_id: 202
+gz_partition: so101_py_outcome_search_202
+tmux_session: so101-py-outcome-search-202
+evidence_root: /tmp/so101-py-outcome-search-202
+command_boundary: complete execute path through post-RETREAT final outcome
+invariants:
+  gazebo_forward_attach: forbidden during task execution
+  moveit_planning_scene_attach: retained
+  physics_geometry_material_controller_collision: frozen
+  final_gate: frozen target/upright/support/stability/detach/world-membership/arm-stability result
+ownership:
+  evidence_root_preexisting: false
+  tmux_session_preexisting: false
+  preserved: PID 3272995 unrelated gz sim server; PID 652055 unrelated clang-tidy; tmux codex/codex-cua/kimi
+next_on_success: run two independent proven RESET_WORLD confirmations unchanged
+next_on_valid_failure: classify the first failing outcome boundary before changing one motion family
+```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-001
+lifecycle: INVALID_CODE
+result:
+  execute_rc: 1
+  reported_failure: FINAL_STALE_EVIDENCE
+  action_boundary_reached: post-RETREAT final outcome collection
+root_cause_evidence:
+  stale_reproduction_wall_duration_s: 2.1073316941037774
+  stale_reproduction_sample_count: 2
+  required_sample_count: 5
+  sample_call_s: 0.5356947528198361
+  contacts_call_s: 0.17719171987846494
+  attachment_call_s: 0.09720935579389334
+  classification: each final sample rebuilt ROS/TF/Gazebo/contact observers; observer construction cost exhausted the frozen 2.0 s collection window
+physical_readback_after_retreat:
+  cup_xyz_m: [-0.08173587918281555, -0.25600630044937134, 0.16499999165534973]
+  upright_tilt_rad: 0.0000019163495821107943
+  maximum_linear_speed_m_s: 0.0000008686295152195708
+  gazebo_attachment_state: detached
+  support_contact: table::table_top::collision
+  interpretation: cup was stable and upright; y was about 0.001006 m outside the frozen target lower bound, but the invalid observer prevented authoritative classification
+evidence:
+  root: /tmp/so101-py-outcome-search-202
+  files: [execute.log, execute.rc, physical-gate.json, post-failure-observation-timing.txt, stale-evidence-reproduction.txt, cleanup.txt]
+cleanup: exact owned tmux session and partition processes removed; owned_survivors empty; PID 3272995 and unrelated sessions preserved
+counts_toward_search_or_streak: false
+```
+
+```yaml
+checkpoint_id: CP-PERSISTENT-FINAL-OBSERVER-004
+recorded_at: 2026-08-09 Asia/Shanghai
+fix: one persistent combined Gazebo pose / TF / contact observer is reused for every sample in a final epoch
+unchanged_contract:
+  settle_timeout_s: 2.0
+  consecutive_samples: 5
+  minimum_stable_duration_s: 0.20
+  final_position_upright_speed_and_detach_thresholds: unchanged
+tests:
+  tdd: persistent five-sample epoch test failed before implementation and passed after
+  focused: 31 passed
+  package: 153 passed, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: rerun the unchanged motion policy on a new FULL_RESTART fingerprint to obtain an authoritative final outcome before any motion-target change
+```
