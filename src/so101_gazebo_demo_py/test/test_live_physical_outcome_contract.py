@@ -209,7 +209,7 @@ def test_every_release_path_retreats_before_scene_detach_and_settle() -> None:
 
     assert forward_path.index("align_cup_for_release(") < release_index
     assert release_index < retreat_definition < immediate_index
-    assert forward_path.index("backend.move_arm(", retreat_definition) < detach_index
+    assert forward_path.index("execute_retreat(", retreat_definition) < detach_index
     assert detach_index < immediate_index
     assert "if not place_alignment:" not in forward_path
     assert "detach_and_sync(released)" not in forward_path
@@ -234,17 +234,24 @@ def test_live_alignment_uses_six_mm_tolerance_and_fixed_retreat() -> None:
     assert "collect_final_outcomes_around_retreat(" not in forward_path
 
 
-def test_no_alignment_retreat_uses_explicit_fast_policy_scaling() -> None:
+def test_retreat_uses_preheated_client_and_explicit_fast_policy_scaling() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
     retreat = MOTION_POLICY.read_text().split("  RETREAT:", 1)[1].split(
         "  RECOVER_LIFT_TO_SAFE_HEIGHT:", 1,
     )[0]
 
+    assert "with PrewarmedArmTrajectoryExecutor() as retreat_executor:" in forward_path
+    assert forward_path.index("with PrewarmedArmTrajectoryExecutor()") < (
+        forward_path.index("_run_live_execute_with_scene(")
+    )
     assert (
-        "backend.move_arm(retreat_policy.waypoints, "
-        "velocity_scaling=retreat_policy.velocity_scaling)"
+        "execute_retreat(retreat_policy.waypoints, "
+        "retreat_policy.velocity_scaling)"
     ) in forward_path
+    assert "backend.move_arm(retreat_policy.waypoints" not in forward_path
+    assert 'ActionClient(self._node,FollowJointTrajectory,"/arm_controller/follow_joint_trajectory")' in source
+    assert "wait_for_server(timeout_sec=10.0)" in source
     assert "velocity_scaling: 0.10" in retreat
 
 

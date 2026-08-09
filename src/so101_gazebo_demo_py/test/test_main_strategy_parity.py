@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 from so101_gazebo_demo_py.live_execute import (
+    make_follow_joint_trajectory_goal,
     make_world_z_target,
     make_pose_move_group_goal,
     seating_preload_target,
@@ -20,6 +21,21 @@ from so101_gazebo_demo_py.test_support.ros_gazebo_backend import gripper_result_
 
 
 PACKAGE = Path(__file__).parents[1]
+
+
+def test_preheated_retreat_goal_preserves_fixed_waypoints_and_timing() -> None:
+    goal = make_follow_joint_trajectory_goal(
+        ("1", "2", "3", "4", "5"),
+        ((0.1, 0.2, 0.3, 0.4, 0.5), (0.6, 0.7, 0.8, 0.9, 1.0)),
+        step_seconds=2,
+    )
+
+    assert goal.trajectory.joint_names == ["1", "2", "3", "4", "5"]
+    assert [list(point.positions) for point in goal.trajectory.points] == [
+        [0.1, 0.2, 0.3, 0.4, 0.5],
+        [0.6, 0.7, 0.8, 0.9, 1.0],
+    ]
+    assert [point.time_from_start.sec for point in goal.trajectory.points] == [2, 4]
 
 
 def test_final_release_shortens_only_the_explicit_release_command() -> None:

@@ -14,10 +14,92 @@ from .release_settle import ReleaseSettleExecutor
 from .moveit.planning import JointPlanRequest, MoveItPlanningClient, make_get_motion_plan_request
 from .motion.executor import MoveItExecutionClient, make_execute_goal
 from .policy_config import load_policy_bundle
-from .test_support.ros_gazebo_backend import RosGazeboLiveBackend
+from .test_support.ros_gazebo_backend import (
+    RosGazeboLiveBackend,
+    waypoint_step_seconds,
+)
 
 
 TRACE=("IDLE","PREPARE_OPEN_GRIPPER","MOVE_ABOVE_OBJECT","DESCEND","CLOSE_GRIPPER","WAIT_GRASP_STABLE","MICRO_LIFT","WAIT_MICRO_LIFT_STABLE","VERIFY_PHYSICAL_GRASP","ATTACH_MOVEIT","LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE","OPEN_GRIPPER","RETREAT","DETACH_MOVEIT","WAIT_RELEASE_SETTLE","VALIDATE_FINAL_PLACEMENT","SYNC_WORLD_OBJECT","DONE")
+
+
+def make_follow_joint_trajectory_goal(joint_names, points, step_seconds: int):
+    """Build the unchanged fixed-joint trajectory for a warmed action client."""
+    from control_msgs.action import FollowJointTrajectory
+    from trajectory_msgs.msg import JointTrajectoryPoint
+
+    goal=FollowJointTrajectory.Goal()
+    goal.trajectory.joint_names=list(joint_names)
+    for index,positions in enumerate(points,1):
+        point=JointTrajectoryPoint()
+        point.positions=list(positions)
+        point.time_from_start.sec=step_seconds*index
+        goal.trajectory.points.append(point)
+    return goal
+
+
+class PrewarmedArmTrajectoryExecutor:
+    """Own one isolated arm action client before the cup is grasped."""
+
+    def __init__(self) -> None:
+        import rclpy
+        from control_msgs.action import FollowJointTrajectory
+        from rclpy.action import ActionClient
+        from rclpy.executors import SingleThreadedExecutor
+
+        self._context=rclpy.Context()
+        self._context.init()
+        self._executor=SingleThreadedExecutor(context=self._context)
+        self._node=rclpy.create_node(
+            "so101_py_preheated_retreat",context=self._context,
+        )
+        self._executor.add_node(self._node)
+        self._client=ActionClient(self._node,FollowJointTrajectory,"/arm_controller/follow_joint_trajectory")
+        if not self._client.wait_for_server(timeout_sec=10.0):
+            self.close()
+            raise RuntimeError("arm trajectory action unavailable for preheated retreat")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self,*_exc_info) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if getattr(self,"_closed",False):
+            return
+        self._closed=True
+        if hasattr(self,"_client"):
+            self._client.destroy()
+        if hasattr(self,"_executor") and hasattr(self,"_node"):
+            self._executor.remove_node(self._node)
+            self._executor.shutdown()
+        if hasattr(self,"_node"):
+            self._node.destroy_node()
+        if hasattr(self,"_context") and self._context.ok():
+            self._context.shutdown()
+
+    def execute(self, points, velocity_scaling: float | None) -> None:
+        step=waypoint_step_seconds(len(points),velocity_scaling)
+        goal=make_follow_joint_trajectory_goal(tuple("12345"),points,step)
+        future=self._client.send_goal_async(goal)
+        self._executor.spin_until_future_complete(future,timeout_sec=5.0)
+        handle=future.result() if future.done() else None
+        if handle is None or not handle.accepted:
+            raise RuntimeError("preheated retreat goal rejected")
+        future=handle.get_result_async()
+        timeout_s=step*len(points)+20.0
+        self._executor.spin_until_future_complete(future,timeout_sec=timeout_s)
+        wrapped=future.result() if future.done() else None
+        if wrapped is None:
+            handle.cancel_goal_async()
+            raise RuntimeError("preheated retreat execution timed out")
+        code=int(wrapped.result.error_code)
+        if code != 0:
+            raise RuntimeError(
+                f"preheated retreat trajectory failed with error {code}: "
+                f"{wrapped.result.error_string}"
+            )
 
 @dataclass(frozen=True, slots=True)
 class ContinuationEvaluation:
@@ -987,10 +1069,12 @@ def run_live_execute(
     motion_policy: Path | None = None,
 ) -> dict:
     with PlanningSceneShadowClient() as scene_client:
-        return _run_live_execute_with_scene(
-            evidence_directory,stop_after,motion_policy,
-            apply_scene=scene_client.apply,
-        )
+        with PrewarmedArmTrajectoryExecutor() as retreat_executor:
+            return _run_live_execute_with_scene(
+                evidence_directory,stop_after,motion_policy,
+                apply_scene=scene_client.apply,
+                execute_retreat=retreat_executor.execute,
+            )
 
 
 def _run_live_execute_with_scene(
@@ -999,6 +1083,7 @@ def _run_live_execute_with_scene(
     motion_policy: Path | None,
     *,
     apply_scene,
+    execute_retreat,
 ) -> dict:
     from ament_index_python.packages import get_package_share_directory
     share=Path(get_package_share_directory("so101_gazebo_demo_py"))
@@ -1125,7 +1210,7 @@ def _run_live_execute_with_scene(
                 scene_membership=scene_membership[0],
             )
     def immediate_retreat():
-        backend.move_arm(retreat_policy.waypoints, velocity_scaling=retreat_policy.velocity_scaling)
+        execute_retreat(retreat_policy.waypoints, retreat_policy.velocity_scaling)
         retreated=backend.sample()
         retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
         detached_scene[0]=apply_scene("detach",retreated_pose)
