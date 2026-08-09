@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: f2a846f
+current_commit: 419017b
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -50,8 +50,45 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-077-241
+latest_checkpoint: CP-PRE-EXP-078-242
 next_experiment: EXP-078
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-078-242
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-078
+status: PLANNED
+prior_experiment: EXP-077
+hypothesis: after OPEN_GRIPPER the existing no-alignment fixed RETREAT ladder is geometrically executable but its implicit 4 s per waypoint prolongs fixed-pad drag; executing the identical three joint waypoints at 1 s per waypoint will clear the gripper sooner and reduce cup displacement without invoking the blocked contact-adjacent MoveGroup planner
+single_variable: no-alignment fixed RETREAT execution velocity_scaling from the adapter's implicit default timing of 4 s per waypoint to explicit 0.10 timing of 1 s per waypoint
+lifecycle: RESET_WORLD
+evidence_basis:
+  - EXP-075 proved the fixed RETREAT joint ladder completes from this release boundary and can end in authoritative success
+  - EXP-075 fixed-pad contact persisted through opening and the 12 s fixed RETREAT moved cup y by +0.011010 m, leaving only 0.103 mm final y margin
+  - EXP-076 and EXP-077 proved that a new post-open MoveGroup Cartesian separation cannot be planned at the contact-adjacent release pose
+  - user observation and prior speed experiments show cup instability grows with dwell time
+prediction:
+  - no post-open MoveGroup separation is requested and the existing fixed RETREAT controller action succeeds
+  - measured three-waypoint RETREAT duration falls from approximately 12 s to approximately 3 s
+  - fixed-pad contact clears during RETREAT and post-retreat cup XY displacement from the pre-retreat sample is below 0.005 m
+  - authoritative final outcome is in-region, upright, stable, supported, Gazebo/MoveIt detached, gripper-free and controller healthy with at least 0.001 m y-boundary margin
+preconditions:
+  - EXP-077 implementation is reverted and EXP-074/075 2 s final opening remains active
+  - only RETREAT velocity policy and its existing backend call-through may change
+  - focused/full pytest and colcon build/test pass
+  - prove RESET_WORLD on the sole so101-py-qual GUI stack immediately before one execute
+unchanged:
+  - all RETREAT joint waypoints, release pose, y compensation -0.005 m and alignment tolerance
+  - all other motion speeds, targets and orientations
+  - cup mass/inertia, friction, physics engine, geometry, collision model, controllers and gains
+  - penetration ceiling, final physical-outcome contract, Gazebo-detached and MoveIt-shadow semantics
+failure_criteria:
+  - controller/path failure, physical grasp failure, cup XY displacement at or above 0.005 m, retained post-retreat gripper contact or authoritative final-outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, stale install, missing telemetry/video or any additional active variable
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
