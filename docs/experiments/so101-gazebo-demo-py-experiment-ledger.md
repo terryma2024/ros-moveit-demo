@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: c04ef48
+current_commit: efd5b77
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -34,8 +34,31 @@ open_hypotheses:
   - Matching fingertip-pad transverse friction to the existing 3.0 axial friction may reduce cup roll during carry/descent and therefore reduce the downstream placement/release displacement without changing the motion target.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-069-212
+latest_checkpoint: CP-EXP-069-IMPLEMENTED-213
 next_experiment: EXP-069
+```
+
+```yaml
+checkpoint_id: CP-EXP-069-IMPLEMENTED-213
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-069
+implementation_commit: efd5b77
+single_variable: fingertip-pad transverse friction 1.2 -> 3.0 in source configuration and all 15 prepared ODE/Bullet collision surfaces
+red:
+  targeted: 1 failed at transverse_friction_coefficient 1.2 != expected 3.0
+green:
+  targeted: 1 passed
+  full_pytest: 195 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 197 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  object_config_source_install_sha256: 29f2816801baf03a8d51ba5b3df35df8b6818231e90e01f9ae9d40805569f247
+  prepared_model_source_install_sha256: 4fafe47ef0069e19144cbcba708199265da135851f4d75e2d2657e1be01ab3d7
+unchanged: release y compensation -0.005 m, all motion targets, 0.020 kg cup mass, cup friction 1.2, axial pad friction 3.0, motion policy, hard safety and final outcome contracts
+next_command: FULL_RESTART the owned so101-py-qual stack on a new domain/partition, prove reset, start bounded telemetry/video and run one EXP-069 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
