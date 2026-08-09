@@ -1047,6 +1047,11 @@ def _run_live_execute_with_scene(
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
     release_separation=[None]
+    if not place_alignment:
+        release_separation[0]=release_separation_translation(released)
+        _moveit_world_translation_execute(
+            release_separation[0],0.15,
+        )
     def collect_release_epoch():
         with backend.final_observer() as final_observer:
             return collect_final_outcome_epoch(
