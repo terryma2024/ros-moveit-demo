@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 9b1089a
+current_commit: 24ccbbf
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -61,8 +61,47 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-QUAL-FULL-IMM-PLAN-262
-next_experiment: QUAL-FULL-IMM-01
+latest_checkpoint: CP-QUAL-FULL-IMM-01-PASS-263
+next_experiment: QUAL-FULL-IMM-02
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-IMM-01-PASS-263
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FINAL_SUCCESS
+qualification_run: QUAL-FULL-IMM-01
+execution_head: 24ccbbf
+lifecycle: FULL_RESTART
+stack: {ros_domain_id: 230, gz_partition: so101_py_full_imm_01}
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/full-imm-01/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000007266984848050864
+physical_grasp:
+  normalized_target_q6: -0.053481123358011244
+  adjustments: 0
+  moving_pad_depth_m: 0.00023826818505767733
+  micro_lift_world_z_m: 0.0018788725137710571
+  lateral_drift_m: 0.00010354177666705694
+final:
+  object_xyz_m: [-0.08479243516921997, -0.24793414771556854, 0.16500000655651093]
+  minimum_xy_boundary_margin_m: 0.00206585228443146
+  upright_tilt_rad: 0.00000009185692672385244
+  stable: true
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+evidence_sha256:
+  live_summary: 619b1ae02c1c391016464f3b37893a4b7c392b087e0525d995795d671e179e7e
+  physical_gate: 1b416d826f1f16d27f84e438f2f0acf7ef416d054eccc9edb39405f4d7971ac3
+  telemetry: 4e31e0299be3397b88a16a7b1a76c6d705e3be283a5494768f3029b6aef721fc
+  bounded_video: 7f230aa733103a9d014566c82f4768a77e5b00c38620667ce315ad3865966ebf
+  final_screenshot: 6359d8b81439e843849d4c5df5037c26ec7682aeb603e56149f099a0581e0590
+current_full_restart_streak: 1
+counts_toward_success_streak: true
+next_run: QUAL-FULL-IMM-02 on a new clean stack
 ```
 
 ```yaml
