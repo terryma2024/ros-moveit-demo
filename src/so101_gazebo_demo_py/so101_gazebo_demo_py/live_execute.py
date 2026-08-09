@@ -1013,6 +1013,7 @@ def _run_live_execute_with_scene(
         )
         check["observation_duration_s"]=time.monotonic()-started
         shadow_checks.append({"state":name,**check})
+        return check
     carry_policies={}
     for name in ("LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE"):
         state=next(state for state in bundle.motion.states if state.value==name)
@@ -1040,13 +1041,25 @@ def _run_live_execute_with_scene(
     detached_scene=[None]
     backend.move_gripper(bundle.motion.release_q6, final_release=True)
     released=backend.sample()
-    released_pose=(*released.object_xyz,*released.object_xyzw)
-    detached_scene[0]=apply_scene("detach",released_pose)
+    release_separation=[None]
+    separated=released
+    if not place_alignment:
+        release_separation[0]=release_separation_translation(released, distance_m=0.004)
+        _moveit_world_translation_execute(
+            release_separation[0],0.15,
+        )
+        separated=backend.sample()
+        separation_check=gate_shadow("RELEASE_SEPARATION", observe_pose=lambda:separated)
+        if not separation_check["healthy_before_sync"]:
+            raise RuntimeError(
+                "release separation exceeded planning shadow divergence bound"
+            )
+    separated_pose=(*separated.object_xyz,*separated.object_xyzw)
+    detached_scene[0]=apply_scene("detach",separated_pose)
     scene_membership=[detached_scene[0]]
     synchronized_scene=[detached_scene[0]]
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
-    release_separation=[None]
     def collect_release_epoch():
         with backend.final_observer() as final_observer:
             return collect_final_outcome_epoch(
