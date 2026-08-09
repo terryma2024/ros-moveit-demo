@@ -209,18 +209,32 @@ def test_plan_only_validates_every_waypoint_as_a_contiguous_sequence() -> None:
     assert requests[1][0].target_positions == (0.3, 0.4)
 
 
-def test_calibration_candidate_stops_after_first_valid_physical_failure(monkeypatch) -> None:
+def test_calibration_candidate_stops_after_first_cup_outcome_failure() -> None:
     calls = []
-    monkeypatch.setattr(
-        "so101_gazebo_demo_py.live_execute._stable_bilateral",
-        lambda backend, ceiling=None: calls.append("stable") or (_ for _ in ()).throw(RuntimeError("missing")),
-    )
-    with pytest.raises(RuntimeError, match="missing"):
+
+    class Backend:
+        def contacts(self):
+            calls.append("contacts")
+            return ()
+
+        def sample(self):
+            calls.append("sample")
+            return SimpleNamespace(
+                object_xyz=(0.0, 0.0, 0.165),
+                tcp_xyz=(0.0, 0.0, 0.2),
+                tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+            )
+
+        def move_gripper(self, value):
+            calls.append(("gripper", value))
+
+    with pytest.raises(RuntimeError, match="CUP_INTERMEDIATE_POSITION"):
         run_bounded_physical_grasp_attempts(
-            SimpleNamespace(move_gripper=lambda value: calls.append(value)),
-            -0.053, 0.465, -0.0596, max_attempts=1,
+            Backend(), -0.053, 0.465, -0.0596, max_attempts=1,
+            execute=lambda delta: calls.append(("move", delta)) or (3, 0.2),
         )
-    assert calls == ["stable"]
+    assert calls.count(("move", 0.002)) == 1
+    assert not any(isinstance(value, tuple) and value[0] == "gripper" for value in calls)
 
 
 def test_stable_bilateral_fails_immediately_on_moving_pad_hard_ceiling() -> None:

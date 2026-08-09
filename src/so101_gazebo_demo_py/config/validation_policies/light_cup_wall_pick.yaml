@@ -63,7 +63,7 @@ states:
     allowed_touch_pairs: []
     temporal_contact: null
   DESCEND:
-    endpoint_position: [0.020689711743, -0.262368529811, 0.200624359724]
+    endpoint_position: [0.020676683784, -0.262821021238, 0.200630610584]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, -1.0]
@@ -74,21 +74,6 @@ states:
     joint_endpoint_tolerance_rad: 0.00025
     contact_wall_normal_endpoint_tolerance_m: 0.0001
     min_duration_s: 0.1
-    monotonic_tolerance_m: 0.00003
-    allowed_touch_pairs: []
-    temporal_contact: null
-  CLOSE_GRIPPER:
-    endpoint_position: [0.020676683263, -0.263120686817, 0.200631445985]
-    local_approach_axis: [0.0, 0.0, -1.0]
-    target_approach_axis: [0.0, 0.0, -1.0]
-    path_direction: [0.0, -1.0, 0.0]
-    position_tolerance_m: 0.0002
-    axis_tolerance_rad: 0.08726646259971647
-    max_lateral_deviation_m: 0.0005
-    max_joint_jump_rad: 0.15
-    joint_endpoint_tolerance_rad: 0.00025
-    contact_wall_normal_endpoint_tolerance_m: 0.0001
-    min_duration_s: 0.05
     monotonic_tolerance_m: 0.00003
     allowed_touch_pairs: []
     temporal_contact: null
@@ -186,7 +171,7 @@ states:
     allowed_touch_pairs: []
     temporal_contact: null
   RECOVER_DESCEND_TO_PICK:
-    endpoint_position: [0.020676683263, -0.263120686817, 0.200631445985]
+    endpoint_position: [0.020676683784, -0.262821021238, 0.200630610584]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, -1.0]
