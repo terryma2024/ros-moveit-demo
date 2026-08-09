@@ -3885,6 +3885,62 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-EXP-055-INVALID-168
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_ENVIRONMENT
+experiment_id: EXP-055
+evidence_root: /tmp/so101-py-gui-214/candidate-055
+observed:
+  - the temporary XWD recorder captured the reset-state cup from startup and generated 173 uncompressed 3774x2091 frames
+  - /tmp reached 100 percent usage and MoveIt/ROS logging reported No space left on device during execution
+  - generated XWD files occupied 4.9 GiB and were deleted; /tmp recovered to 4.9 GiB available
+  - execution later ended FINAL_GRIPPER_CONTACT, but telemetry continuity was already broken
+classification: invalid; neither the final failure nor partial contact samples may decide the user hypothesis or count toward a success streak
+motion_parameters_changed: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-055-INVALID-169
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-gui-214/reset-after-exp055-invalid
+proof:
+  cup_spawn_pose_error_m: 0.0000017239915186961637
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-056-170
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-056
+purpose: valid rerun of the user-requested pre-OPEN_GRIPPER cup/table collision diagnostic
+execution:
+  stack: so101-py-gui-214
+  ros_domain_id: 214
+  gz_partition: so101_py_gui_214
+  execution_commit: 3774797
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-gui-214/reset-after-exp055-invalid/reset-world.json
+  evidence_root: /tmp/so101-py-gui-214/candidate-056
+diagnostic_changes_only:
+  telemetry: bounded 50 Hz JSONL; no raw frame generation
+  visual: compressed 5 fps H.264 recording at half resolution
+  free_space_before_run_requirement: at least 4 GiB on /tmp
+hypothesis: the cup bottom is already in Gazebo contact with table::table_top::collision before OPEN_GRIPPER, causing the observed oscillation
+decision_rule:
+  confirmed: fresh pre-open contact pairs contain plastic_cup and table::table_top::collision
+  rejected: no such pair and positive collision clearance throughout the pre-open window
+  inconclusive: missing/stale contact or pose/joint telemetry at the release boundary
+motion_parameters_changed: false
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-RESULT-EXP-048-140
 recorded_at: 2026-08-09 Asia/Shanghai
 status: INVALID_INTERMEDIATE_HEIGHT_GATE
