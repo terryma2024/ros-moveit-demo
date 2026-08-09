@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: ef159a4
+current_commit: 16a59e9
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -64,8 +64,30 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-084-271
+latest_checkpoint: CP-EXP-084-IMPLEMENTED-272
 next_experiment: EXP-084
+```
+
+```yaml
+checkpoint_id: CP-EXP-084-IMPLEMENTED-272
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-084
+planning_commit: b905cbf
+implementation_commit: 16a59e9
+single_variable: explicit final gripper release duration 2 s to 1 s
+red:
+  focused: 1 failed because final_release still returned 2 s
+green:
+  focused: 51 passed
+  full_pytest: 202 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 204 tests, 0 errors, 0 failures, 2 skipped
+unchanged_behavior:
+  - negative-q6 closing remains 8 s and ordinary non-negative gripper commands remain 5 s
+  - only backend.move_gripper(..., final_release=True) uses 1 s
+next_command: RESET_WORLD on domain 231, then one bounded EXP-084 execute with q6/tilt/contact telemetry
+counts_toward_success_streak: false
 ```
 
 ```yaml
