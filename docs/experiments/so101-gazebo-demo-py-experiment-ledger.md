@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: b34b93c29ba68ff9922e68c5f670aa6a860a56aa
+current_commit: 05007b6a440d99c9958ac7c88a54fe02c59a602d
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -24,9 +24,8 @@ disproven_routes:
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Reducing only cup mass to 0.020 kg may reduce release disturbance enough to keep the final cup inside the target region while preserving the EXP-060 strategy.
-  - If the 0.020 kg mass-only trial still fails after OPEN_GRIPPER, detach the MoveIt shadow immediately, collect a bounded physical settle epoch while the arm remains stationary, and only then retreat.
-latest_checkpoint: CP-ENABLE-20G-186
+  - Detaching the MoveIt shadow immediately after physical OPEN_GRIPPER, collecting a bounded physical settle epoch while the arm remains stationary, and only then retreating will prevent the already-20 g cup from being displaced out of region.
+latest_checkpoint: CP-PRE-EXP-061-188
 next_experiment: EXP-061
 ```
 
@@ -8870,6 +8869,69 @@ interpretation:
   - The only failed authoritative result was a 59 micrometre y-region miss after immediate arm retreat, so the first bad boundary is release ordering rather than grasp, carry speed, cup mass, support, tilt or controller stability.
 decision: stop the qualification batch at streak 0; return to one RESET_WORLD search experiment
 next_experiment: EXP-061
+```
+
+```yaml
+checkpoint_id: CP-CORRECTION-20G-187
+recorded_at: 2026-08-09 Asia/Shanghai
+status: CORRECTION
+corrects: CP-ENABLE-20G-186
+observed:
+  - source task object config has model.mass_kg 0.020 since base commit 90c6c11
+  - source world SDF has plastic_cup inertial mass 0.020 kg since base commit 90c6c11
+  - source and qualification installed world SDF SHA-256 are both 386f293037aa0c38687803b21a2989901f7c33b84adc553ea7306c780f6386f2
+  - the installed qualification SDF contains plastic_cup mass 0.020 kg
+correction: the user's request to enable 20 g is already satisfied by every recorded Python-branch experiment, including EXP-060 and QUAL-FULL-01; mass cannot be treated as a new EXP-061 variable
+decision: retain 0.020 kg unchanged and use EXP-061 for the release-order variable identified by QUAL-FULL-01
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-061-188
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-061
+status: PREREGISTERED
+prior_experiment: QUAL-FULL-01
+hypothesis: immediate arm retreat after OPEN_GRIPPER displaces a cup that would otherwise settle upright and inside the target region
+prediction:
+  - after OPEN_GRIPPER the 0.020 kg cup reaches a supported, upright, stable and in-region pre-retreat physical outcome while the arm remains stationary
+  - after MoveIt world-only detachment and retreat, an independent post-retreat epoch remains supported, upright, stable and in-region without gripper contact
+  - Gazebo remains physically detached for the entire run and the MoveIt Planning Scene shadow remains attached only through carry and release
+single_variable: release ordering changes from OPEN then immediate RETREAT then one outcome epoch to OPEN then MoveIt detach/world sync then bounded physical settle epoch then RETREAT then independent outcome epoch
+lifecycle: RESET_WORLD
+preconditions:
+  - reuse only tmux stack so101-py-qual with ROS_DOMAIN_ID 221 and GZ_PARTITION so101_py_qual_full_01
+  - reset proof must show cup pose error <= 0.001 m, Gazebo detached, MoveIt world-only, no finger contact and finite arm TCP
+  - no second Gazebo/MoveIt stack and no execute client
+success_criteria:
+  - physical grasp gate and all unchanged hard safety bounds pass
+  - pre-retreat and post-retreat outcome epochs are independently recorded
+  - authoritative post-retreat outcome is in-region, upright, stable, supported, detached, free of gripper contact and controller healthy
+failure_criteria:
+  - grasp/motion/controller failure, pre-retreat physical settle failure, retreat planning failure, or authoritative post-retreat outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, missing independent epochs, stale installed asset or disk pressure
+candidate:
+  cup_mass_kg: 0.020
+  seating_preload_rad: 0.006
+  move_above_place_velocity_scaling: 0.10
+  descend_to_place_velocity_scaling: 0.03
+  release_sequence:
+    - OPEN_GRIPPER
+    - detach MoveIt shadow to world at the fresh Gazebo cup pose
+    - collect bounded pre-retreat settle epoch with the arm stationary
+    - execute the existing retreat motion
+    - resynchronize the MoveIt world object at the fresh Gazebo cup pose
+    - collect an independent authoritative post-retreat epoch
+  unchanged: all motion targets/orientations, physics engine, geometry, mass, inertia, friction, controller/gains, collision model, penetration bounds, final region/tilt/stability/support/contact contract, and Gazebo-detached semantics
+provenance:
+  planning_commit: 05007b6a440d99c9958ac7c88a54fe02c59a602d
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  ros_domain_id: 221
+  gz_partition: so101_py_qual_full_01
+commands:
+  - command: pytest RED, minimal release-order edit, focused/full pytest, colcon build/test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
+    exit_code: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
