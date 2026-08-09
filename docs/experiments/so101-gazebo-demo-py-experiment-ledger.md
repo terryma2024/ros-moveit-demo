@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 3592618
+current_commit: 4714bb0
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -35,6 +35,7 @@ confirmed_conclusions:
   - EXP-077 kept the MoveIt shadow attached and shortened the radial target to 0.004 m, but the same MoveIt error 99999 occurred before any arm-joint motion; therefore the contact-adjacent release pose itself, not only detach ordering or separation distance, blocks a newly planned Cartesian separation.
   - EXP-078 reached OPEN_GRIPPER but stochastic place alignment selected the unchanged aligned-path 10 mm radial plus 60 mm world-Z release retreat; the radial move changed arm joints, then world-Z failed with error 99999 before the new fast fixed RETREAT variable was exercised.
   - EXP-079 exact repeat exercised the fast fixed RETREAT in 2.908 s and achieved authoritative final success at [-0.080489, -0.250643, 0.165000] m, with at least 4.357 mm margin to every XY boundary, upright/stable/supported/gripper-free and Gazebo/MoveIt detached.
+  - QUAL-FULL-FAST-01 clean-stack run failed before OPEN_GRIPPER: post-seating moving-pad penetration was 1.06393 mm versus EXP-079's 0.23831 mm, and the cup reached [-0.073652, -0.290274, 0.179158] m tilted/table-contacting at DESCEND_TO_PLACE, requiring a 36.075 mm y correction beyond the retained 30 mm safety bound.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -52,8 +53,89 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-QUAL-FULL-FAST-01-RUNNING-250
-next_experiment: QUAL-FULL-FAST-01
+latest_checkpoint: CP-PRE-EXP-080-252
+next_experiment: EXP-080
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-080-252
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-080
+status: PLANNED
+prior_experiment: QUAL-FULL-FAST-01
+hypothesis: the clean-stack failure's 1.06393 mm post-seating penetration exceeded the user-approved target interval and produced a much less stable held-cup state than EXP-079's 0.23831 mm success; bounded q6 adjustments until stable bilateral penetration lies in [0.0001, 0.001] m will normalize the physical grasp before carry and reduce full-path stochastic tilt
+single_variable: replace contact-missing-only seating stabilization with closed-loop target-penetration normalization using at most four 0.001 rad q6 adjustments; open for depth above 0.001 m, close for missing/depth below 0.0001 m, and retain the global 0.0013 m hard ceiling
+lifecycle: RESET_WORLD
+evidence_basis:
+  - EXP-079 success post-seating penetration 0.00023831393627915531 m
+  - QUAL-FULL-FAST-01 failure post-seating penetration 0.001063929288648069 m
+  - both runs passed the same hard 0.0013 m ceiling, but only the success lay inside the approved target interval [0.0001, 0.001] m
+  - the clean-stack failure's micro-lift lateral drift was 0.00091856 m versus EXP-079's 0.00027777 m and it later tilted into the table during DESCEND_TO_PLACE
+prediction:
+  - seating stabilization returns bilateral contact inside [0.0001, 0.001] m and records the actual normalized target q6
+  - hard penetration ceiling 0.0013 m remains fail-closed on every stability sample
+  - micro-lift lateral drift remains below 0.0006 m
+  - full state machine reaches OPEN_GRIPPER without exceeding the 30 mm alignment correction bound
+  - final authoritative physical outcome succeeds with all XY boundary margins at least 0.001 m
+preconditions:
+  - retain candidate implementation 068eb89 including the 2 s final opening and fast fixed RETREAT
+  - focused/full pytest and colcon build/test pass
+  - prove RESET_WORLD on the sole clean stack ROS_DOMAIN_ID 228 / GZ_PARTITION so101_py_full_fast_01
+unchanged:
+  - seating preload request 0.006 rad; adaptation changes only the resulting q6 when observed penetration is outside the approved target interval
+  - all arm targets/orientations, motion speeds and release/alignment bounds
+  - cup mass/inertia, friction, physics engine, geometry, collision model, controllers and gains
+  - final physical-outcome contract, Gazebo-detached and MoveIt-shadow semantics
+failure_criteria:
+  - target penetration cannot be reached within four adjustments, hard ceiling violation, grasp/motion/release failure or authoritative final-outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, stale install, missing telemetry/video or any additional active variable
+decision: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-FAST-01-FAIL-251
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_STREAK_RESET
+qualification_run: QUAL-FULL-FAST-01
+execution_head: 4714bb0
+candidate_implementation_commit: 068eb89
+lifecycle: FULL_RESTART
+command_exit_code: 1
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/full-fast-01/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000013122366374921727
+physical_grasp:
+  status: PROVED_UNDER_OLD_HARD_CEILING_ONLY
+  max_moving_pad_penetration_m: 0.0010638694511726499
+  post_seating_moving_pad_penetration_m: 0.001063929288648069
+  micro_lift_world_z_m: 0.0018980354070663452
+  lateral_drift_m: 0.0009185603217825647
+failure:
+  phase: PLACE_ALIGNMENT_BEFORE_OPEN_GRIPPER
+  message: "place alignment correction exceeds bound: (-0.0028814569115638705, 0.03607478260993957, -0.0009061447381973065)"
+  last_object_xyz_m: [-0.07365183532238007, -0.2902736961841583, 0.17915798723697662]
+  last_object_quaternion_xyzw: [-0.2156242464735064, 0.25467484612560354, 0.16469514663892298, 0.9281823211205903]
+  table_contact: true
+  moving_pad_contact: true
+  final_open_gripper_reached: false
+  fast_fixed_retreat_reached: false
+evidence:
+  execute_log_sha256: e1a9f863e941099a80fce15307ec20d6d683259eee61c963e4fc39168110e3d7
+  physical_gate_sha256: 9576751210e8d02cd46fc9231ad52d3b27ef4a749601d9bdac03896a2453477b
+  telemetry_sha256: 3a8deca1b65f1e6b266f8c9099b0d794b3f53c93b71eedd5fce510bfed84415e
+  bounded_video_sha256: c4805facc27282b2973ae5c292ae0cf2b07940386cc49b2ac71b62a178e47490
+  final_screenshot_sha256: a82e8f6b889e1e3ac59ac57d9e10033cce4db2418cd3eb2533b3c5b999aff61a
+interpretation:
+  - this is a valid candidate failure on a genuinely fresh Gazebo/MoveIt stack
+  - the first rejected safety boundary is the 30 mm place correction, not final placement
+  - the observed grasp penetration exceeded the approved target interval before the later tilt, motivating bounded physical-state normalization rather than relaxing alignment safety
+decision: reset FULL_RESTART streak to zero and return to one RESET_WORLD search experiment EXP-080 on the same sole clean stack
+current_full_restart_streak: 0
+counts_toward_success_streak: false
+next_experiment: EXP-080
 ```
 
 ```yaml
