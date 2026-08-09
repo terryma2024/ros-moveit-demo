@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 24ccbbf
+current_commit: 421cf0b
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -43,6 +43,7 @@ confirmed_conclusions:
   - EXP-080 with penetration normalization completed authoritative final success at [-0.081599, -0.247043, 0.165000] m; this reset naturally produced 0.23845 mm seating penetration and required zero adjustments, so clean-stack qualification must still exercise environmental variability.
   - QUAL-FULL-NORM-01 exercised one bounded q6 normalization adjustment and reached a safe 0.33421 mm seating penetration, but after OPEN_GRIPPER the cup rolled about 56 mm in y during the stationary pre-retreat outcome epoch, remained caught on the gripper, and was lifted by the subsequent fixed retreat.
   - EXP-081 removed the no-alignment stationary pre-retreat wait, retained the Planning Scene shadow through the fixed retreat, and achieved authoritative success at [-0.081771, -0.247192, 0.165000] m with a 2.192 mm minimum XY boundary margin, no gripper contact and no pre-retreat epoch.
+  - QUAL-FULL-IMM-01 passed on a clean stack, but QUAL-FULL-IMM-02 ended upright/stable/supported/free at x=-0.091415 m, 6.415 mm beyond the final x boundary; its release started 16.708 mm above the supported center height and rolled 9.533 mm in negative x during free placement.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -61,8 +62,85 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-QUAL-FULL-IMM-01-PASS-263
-next_experiment: QUAL-FULL-IMM-02
+latest_checkpoint: CP-PRE-EXP-082-265
+next_experiment: EXP-082
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-082-265
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-082
+status: PREREGISTERED
+prior_experiment: QUAL-FULL-IMM-02
+hypothesis: the 16.708 mm release-center height above the supported center gives a tilted physically released cup enough free-fall distance to roll outside the 10 mm XY region; lowering only the final DESCEND_TO_PLACE joint target halfway toward the previously rejected table-contact endpoint will reduce TCP height by 4.637 mm while retaining approximately half of the proven raised clearance
+single_variable: final DESCEND_TO_PLACE joint target changes to the exact midpoint between the current raised endpoint and the former low endpoint; RETREAT and recovery logical_start are updated to the same joint state
+candidate:
+  final_joint_target: [0.3891596136725, 0.4661630993095, 0.112658526293, 1.011113667668, 0.0019745811935]
+  computed_tcp_endpoint_world_m: [-0.07054270683954042, -0.24544726842649361, 0.21210028210795123]
+  current_tcp_z_m: 0.21673740393615668
+  former_table_contact_tcp_z_m: 0.20766067159987928
+  delta_from_current_tcp_z_m: -0.00463712182820545
+lifecycle: RESET_WORLD
+prediction:
+  - no cup/table contact occurs before OPEN_GRIPPER and all unchanged descent safety gates pass
+  - release center height is reduced by approximately 4.6 mm
+  - immediate fixed retreat still clears both fingertips
+  - final cup is upright/stable/supported/free and lies inside the unchanged target box with at least 1 mm XY margin
+preconditions:
+  - focused/full pytest and colcon build/test pass
+  - reuse only the clean domain 231 stack after a proved RESET_WORLD
+unchanged:
+  - all grasp targets, penetration normalization, release ordering, release compensation, other motion waypoints, 0.020 kg mass, physics/material/controller/collision settings and every hard/final validation bound
+failure_criteria:
+  - any pre-open table contact, motion/grasp/controller failure, or authoritative final-outcome failure
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-IMM-02-FAIL-264
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_STREAK_RESET
+qualification_run: QUAL-FULL-IMM-02
+execution_head: 421cf0b
+lifecycle: FULL_RESTART
+stack: {ros_domain_id: 231, gz_partition: so101_py_full_imm_02}
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/full-imm-02/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000006437610387460976
+physical_grasp:
+  normalized_target_q6: -0.05348140648007393
+  adjustments: 0
+  moving_pad_depth_m: 0.00023841440270189196
+  micro_lift_world_z_m: 0.0021050870418548584
+  lateral_drift_m: 0.00020502053794673836
+release:
+  place_alignment_attempts: 0
+  release_start_xyz_m: [-0.0818825364112854, -0.25987187027931213, 0.1817082166671753]
+  final_xyz_m: [-0.09141527116298676, -0.2508951723575592, 0.16499999165534973]
+  release_to_final_delta_xy_m: [-0.00953273475170136, 0.00897669792175293]
+final:
+  failure_code: FINAL_OUT_OF_REGION
+  x_boundary_m: -0.085
+  x_out_of_region_m: 0.00641527116298676
+  upright_tilt_rad: 0.00000009884312124119404
+  stable: true
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+evidence_sha256:
+  execute_log: 5d2d5815c0fd4439b5f17d3de2204ef8ed1a6327337e06bc06c17e3f74e985ea
+  physical_gate: 82d03e48338761f43c9e583dba9416fbcab953b431dcd20ec2631abfaaf1e412
+  failure_json: 00aeb802e557199908cc9d0dfa9b65b9d0b9f9dd7b04960750b1b079919068ee
+  telemetry: f9abb67bfce1004c992d768407141b232b62ac3e7efd14a1b864d70de4ed4177
+  bounded_video: caba3c722ffaa8107bd0b30407ba40ff415fd7d28140de565ea8e3d090392d46
+  final_screenshot: c8977cb7443ca83a3f7ce7c19d1125069aa8ef281a2997b020b93c8d84a11381
+current_full_restart_streak: 0
+decision: return to one bounded RESET_WORLD search experiment without relaxing the final region
+next_experiment: EXP-082
+counts_toward_success_streak: false
 ```
 
 ```yaml
