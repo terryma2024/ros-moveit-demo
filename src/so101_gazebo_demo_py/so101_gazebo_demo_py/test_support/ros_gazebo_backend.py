@@ -199,8 +199,11 @@ class RosGazeboFinalObserver:
         from tf2_ros import Buffer, TransformListener
 
         self._rclpy=rclpy; self._max_pair_age_s=max_pair_age_s
-        rclpy.init()
-        self._node=rclpy.create_node("so101_live_final_outcome_observer")
+        self._context=rclpy.Context()
+        rclpy.init(context=self._context)
+        self._node=rclpy.create_node(
+            "so101_live_final_outcome_observer",context=self._context,
+        )
         self._object_samples=deque(maxlen=64); self._tcp_samples=deque(maxlen=64)
         self._contacts=ContactSnapshot()
         self._buffer=Buffer(); self._listener=TransformListener(self._buffer,self._node)
@@ -267,7 +270,7 @@ class RosGazeboFinalObserver:
                 self._node.destroy_subscription(self._contact_subscription)
             self._listener=None
             self._node.destroy_node()
-        if hasattr(self,"_rclpy") and self._rclpy.ok(): self._rclpy.shutdown()
+        if hasattr(self,"_context") and self._context.ok(): self._context.shutdown()
 
 
 class RosGazeboLiveBackend:

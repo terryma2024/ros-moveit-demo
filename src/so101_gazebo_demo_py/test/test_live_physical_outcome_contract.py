@@ -88,6 +88,9 @@ def test_final_epochs_share_one_observer_with_bounded_evidence_wait() -> None:
     )
     backend_source = ROS_GAZEBO_BACKEND.read_text()
     assert "deadline=time.monotonic()+3.0" in backend_source
+    assert "self._context=rclpy.Context()" in backend_source
+    assert "context=self._context" in backend_source
+    assert "self._context.shutdown()" in backend_source
     assert "pose_pair_ready(observed,self._max_pair_age_s)" in backend_source
     assert "self._contacts.fresh(time.monotonic(),1.0)" in backend_source
 
