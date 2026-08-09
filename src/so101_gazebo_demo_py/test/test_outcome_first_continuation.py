@@ -327,6 +327,17 @@ def test_release_alignment_target_compensates_observed_settling_drift() -> None:
     ) == pytest.approx((-0.075, -0.2445, 0.165))
 
 
+def test_release_separation_moves_tcp_radially_away_from_cup() -> None:
+    observed = PoseSample(
+        object_xyz=(0.0, 0.0, 0.165),
+        tcp_xyz=(0.003, 0.004, 0.200),
+    )
+
+    assert live_execute.release_separation_translation(
+        observed, distance_m=0.015,
+    ) == pytest.approx((0.009, 0.012, 0.0))
+
+
 def test_same_run_place_alignment_allows_pre_release_drop_height() -> None:
     class Backend:
         def sample(self):

@@ -124,6 +124,9 @@ def test_same_run_place_alignment_precedes_release_and_uses_vertical_retreat() -
     retreat_path = forward_path[forward_path.index("def retreat_after_pre_outcome"):]
     assert "reversed(place_reverse_waypoints)" not in retreat_path
     assert "_moveit_world_z_execute(" in retreat_path
+    assert retreat_path.index("_moveit_world_translation_execute(") < (
+        retreat_path.index("_moveit_world_z_execute(")
+    )
     assert forward_path.index("align_cup_for_release(") < forward_path.index(
         "backend.move_gripper(bundle.motion.release_q6)"
     )

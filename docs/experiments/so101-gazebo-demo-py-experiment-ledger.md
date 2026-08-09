@@ -6236,6 +6236,64 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-036-097
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-036
+execution_commit: be8c0d1
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-036
+alignment:
+  before_xy_error_m: 0.014542479025869014
+  after_xy_error_m: 0.0013959854177547
+  aligned_object_xy_m: [-0.0757405087351799, -0.24331660568714142]
+pre_retreat:
+  object_xyz_m: [-0.07545536756515503, -0.243778795003891, 0.17622943222522736]
+post_retreat:
+  failure_code: FINAL_GRIPPER_CONTACT
+  object_xyz_m: [-0.07640896737575531, -0.24692383408546448, 0.23793816566467285]
+  tcp_xyz_m: [-0.06346966463090689, -0.23166885904728604, 0.26738540039188996]
+  support_contact: false
+  gripper_contact: true
+  gazebo_detached: true
+  moveit_detached: true
+interpretation: scene-attached retreat planning succeeded, but the physically open gripper remained hooked on the cup and lifted it by about 61.7 mm; a radial disengagement is required before vertical lift
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-036-098
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-036/reset-after-cup-lifted-on-retreat
+proof:
+  cup_spawn_pose_error_m: 0.0000017224286257358995
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-RADIAL-RELEASE-SEPARATION-099
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  before_vertical_retreat: move the opened TCP 0.015 m in the observed cup-center-to-TCP XY direction
+  direction_source: same-run pre-retreat authoritative cup and TCP poses
+  planning_scene: keep the cup attached only as a planning shadow through radial separation and vertical retreat
+  after_separation: execute world Z +0.060 m, then detach Planning Scene using the latest Gazebo cup pose
+safety:
+  radial_distance_max_m: 0.030
+  nonfinite_or_degenerate_direction: fail closed
+  final acceptance: unchanged
+tests:
+  red: radial helper absent and retreat sequence lacked horizontal separation
+  focused_green: 2 passed
+  package_pytest: 178 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-032-083
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED

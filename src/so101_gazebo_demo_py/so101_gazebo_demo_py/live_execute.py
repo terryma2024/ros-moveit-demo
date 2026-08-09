@@ -236,6 +236,20 @@ def release_alignment_target(
     )
 
 
+def release_separation_translation(
+    observed, *, distance_m: float = 0.015,
+) -> tuple[float, float, float]:
+    """Move the opened gripper radially away from the observed cup center."""
+    if not 0.0 < distance_m <= 0.030:
+        raise ValueError("release separation must stay within the 0.030 m bound")
+    dx=observed.tcp_xyz[0]-observed.object_xyz[0]
+    dy=observed.tcp_xyz[1]-observed.object_xyz[1]
+    radial=math.hypot(dx,dy)
+    if not math.isfinite(radial) or radial < 0.001:
+        raise RuntimeError("release separation requires a finite radial direction")
+    return dx/radial*distance_m,dy/radial*distance_m,0.0
+
+
 def align_cup_for_release(
     backend, target_xyz, *, execute,
     max_attempts: int = 2, xy_tolerance_m: float = 0.003,
@@ -876,8 +890,15 @@ def run_live_execute(
     outcome_policy=bundle.validation.physical_outcome
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
+    release_separation=[None]
     def retreat_after_pre_outcome(pre_retreat):
         if place_alignment:
+            release_separation[0]=release_separation_translation(
+                pre_retreat.final_sample,
+            )
+            _moveit_world_translation_execute(
+                release_separation[0],0.15,
+            )
             _moveit_world_z_execute(
                 0.060, orientation_tolerance_rad=0.15,
             )
@@ -928,11 +949,12 @@ def run_live_execute(
             "planning_scene":synchronized_scene[0],
             "shadow_checks":shadow_checks,
             "place_alignment":place_alignment,
+            "release_separation_m":release_separation[0],
         }
         (evidence_directory/"final-outcome-failure.json").write_text(
             json.dumps(failure,indent=2)
         )
         raise RuntimeError(f"post-retreat final physical outcome failed: {settle.evaluation.failure_code}")
     final=outcomes.post_retreat.final_sample
-    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene[0],"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),"final_outcome":outcome_payload(outcomes.post_retreat.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
+    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene[0],"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment,"release_separation_m":release_separation[0]},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),"final_outcome":outcome_payload(outcomes.post_retreat.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
     path=evidence_directory/"live-summary.json"; path.write_text(json.dumps(summary,indent=2)); return summary
