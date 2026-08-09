@@ -253,7 +253,7 @@ def release_separation_translation(
 def align_cup_for_release(
     backend, target_xyz, *, execute,
     max_attempts: int = 2, xy_tolerance_m: float = 0.003,
-    z_tolerance_m: float = 0.002,
+    z_tolerance_m: float = 0.006,
     max_axis_correction_m: float = 0.030,
     max_pre_release_height_error_m: float = 0.030,
     max_arm_linear_speed_m_s: float = 0.005,

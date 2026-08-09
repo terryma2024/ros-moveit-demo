@@ -400,6 +400,23 @@ def test_same_run_place_alignment_allows_bounded_pre_release_height_error() -> N
     assert telemetry == ()
 
 
+def test_same_run_place_alignment_defers_six_mm_release_height_error_to_final_outcome() -> None:
+    class Backend:
+        def sample(self):
+            return sample(-0.076172, -0.255962, 0.174066)
+
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.075, -0.255, 0.169),
+        execute=lambda *_args: pytest.fail(
+            "bounded release height must defer to the physical final outcome"
+        ),
+    )
+
+    assert aligned.object_xyz == pytest.approx((-0.076172, -0.255962, 0.174066))
+    assert reverse_waypoints == ()
+    assert telemetry == ()
+
+
 def test_same_run_place_alignment_defers_pre_release_tilt_to_final_outcome() -> None:
     class Backend:
         def sample(self):
