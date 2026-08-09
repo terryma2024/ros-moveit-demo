@@ -49,6 +49,7 @@ confirmed_conclusions:
   - EXP-084's 1 s full-range opening still displaced the cup 10.379 mm in negative y and ended 19.074 mm beyond the lower y boundary; opening duration alone does not control the pad-sweep impulse.
   - EXP-092 did not exercise the three-attempt budget: the initial bounded seating normalization lost moving-pad contact while fixed-pad depth was 0.73929 mm, so it stopped safely before micro-lift or carry.
   - EXP-093 reached all three grasp attempts and the last held probe retained 0.806 mm lift, bilateral pad contact and a finite arm, but its 1.024 mm lateral drift exceeded the 1 mm intermediate gate by 0.024 mm; this is an outcome-gate boundary rather than a final-placement result.
+  - EXP-094 accepted a weak first grasp at 0.745 mm persistent lift and 1.770 mm drift, then the cup diverged during carry/place and remained hooked on the moving pad after release; the prewarmed RETREAT itself was exercised and reduced q6>=0.40-to-arm-motion to 60.6 ms.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -67,8 +68,82 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-094-IMPLEMENTED-300
-next_experiment: EXP-094
+latest_checkpoint: CP-PRE-EXP-095-302
+next_experiment: EXP-095
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-095-302
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-095
+status: PREREGISTERED
+prior_experiment: EXP-094
+hypothesis: the long-lived RESET_WORLD stack has developed a repeatable weak-grasp regime that contrasts with the approximately 2 mm lift and <0.3 mm drift seen in EXP-075/079/080/081/087/088/090; a single clean FULL_RESTART can restore the strong-grasp distribution without changing source or parameters
+single_variable: lifecycle changes from RESET_WORLD on the long-lived stack to one clean FULL_RESTART of the same sole stack
+lifecycle: FULL_RESTART
+prediction:
+  - reset/stack provenance is clean and no duplicate Gazebo/MoveIt process exists
+  - the first physical micro-lift is near 2 mm with sub-millimeter lateral drift, avoiding retries
+  - the already-proved 60.6 ms prewarmed release-to-retreat transition clears the fingers before pad hooking
+  - authoritative final outcome passes
+unchanged:
+  - source and installed assets at implementation commit a767447
+  - 2 mm intermediate lateral envelope, 0.1 mm persistent-lift minimum and three-attempt cap
+  - every grasp/motion/release/alignment parameter, physical material, attachment semantic, hard safety and final contract
+preconditions:
+  - stop the exact current Gazebo and MoveIt processes before launching replacements in the same tmux windows
+  - prove exactly one Gazebo, one MoveIt, ROS_DOMAIN_ID 231 and GZ_PARTITION so101_py_full_imm_02
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-094-301
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-094
+execution_head: cd73458
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp094/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000016822354427512257
+physical_gate:
+  status: PROVED
+  attempts: 1
+  persistent_lift_m: 0.0007448941469192505
+  lateral_drift_m: 0.0017701221279387246
+  bilateral: true
+  moving_pad_depth_m: 0.0011750608682632446
+  gazebo_attachment_state: detached
+release_and_retreat:
+  release_start_object_xyz: [-0.0726277306675911, -0.25544965267181396, 0.17792390286922455]
+  q6_ge_0_40_to_first_arm_motion_s: 0.06055755540728569
+  prewarmed_prediction_under_0_75_s: true
+final:
+  failure_code: FINAL_GRIPPER_CONTACT
+  sample_count: 25
+  final_object_xyz: [-0.09807860106229782, -0.26975059509277344, 0.21898041665554047]
+  final_upright_tilt_rad: 1.2507402723594239
+  support_contact: false
+  gripper_contact: true
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+interpretation:
+  - the 2 mm envelope correctly exercised the downstream path but admitted a grasp much weaker than all recent successful-carry probes
+  - the cup diverged before release and remained physically hooked; this parameter set is not a valid-success candidate
+  - the prewarmed transport is independently validated and should be retained
+  - before adding a second parameter change, perform one clean-stack exact trial because the recent weak-grasp regime emerged on a long-lived RESET_WORLD stack
+evidence_sha256:
+  reset_proof: fad203cc291085097031da04fe341dcb66d0896db77c5db7220beab69f68c5ab
+  execute_log: 4b0e258f642185c407bfabf63b11a2c9df9908ef42979e229e23ea93d76e6e26
+  physical_gate: 32d96a2789481885f3016b0ac65a12fe89a72cae805adfbb21babd83d9756d3f
+  final_failure: 10c063511dde19b3ec49fd29062af399bc5b5d4bbb9565d151c44cd19ca68a50
+  telemetry: 9da6a7b78dfd212bcd577ccb48eaf259f8465d902be92ed39ecbc17d408c9ff0
+  bounded_video: bfde860ab6efafe0b1f1ee57e3c6b16cd6d97b42240174710716cd6cd6ec7904
+  final_screenshot: 3a0dcb78a93fbfaf9adb223df51eca4cc1213ebe69ca32f1776ff6ac83d23c1e
+decision: retain the prewarmed RETREAT; run one exact clean FULL_RESTART EXP-095 before any new parameter change
+counts_toward_success_streak: false
 ```
 
 ```yaml
