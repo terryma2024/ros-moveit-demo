@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: efd5b77
+current_commit: ffeefea
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -25,6 +25,7 @@ confirmed_conclusions:
   - EXP-066 retained one Planning Scene client and reduced the MOVE-to-DESCEND non-motion interval from the EXP-063 baseline 2.89 s to 2.13 s; it missed the 1.5 s prediction but limited dwell tilt growth to 0.01735 rad and improved DESCEND_TO_PLACE end tilt to 0.22522 rad.
   - EXP-067 increased only DESCEND_TO_PLACE scaling to 0.05, reduced descent from 8.73 to 5.82 s and completed the formerly blocked release/retreat chain. The final cup was upright, motionless, supported and gripper-free, but y=-0.244315 m missed the target-region upper bound by 0.000685 m.
   - EXP-068 was superseded before implementation after the user identified the final y displacement as a downstream effect of cup tilt during placement/release, not a MOVE_TO_PLACE target bias; release y compensation remains -0.005 m.
+  - EXP-069 first FULL_RESTART run with fingertip transverse friction 3.0 was a valid grasp failure before lift: fixed-pad contact reached 0.000796263 m, but moving-pad contact never formed, so no carry/descent tilt comparison was possible.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -34,8 +35,86 @@ open_hypotheses:
   - Matching fingertip-pad transverse friction to the existing 3.0 axial friction may reduce cup roll during carry/descent and therefore reduce the downstream placement/release displacement without changing the motion target.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-069-IMPLEMENTED-213
-next_experiment: EXP-069
+latest_checkpoint: CP-PRE-EXP-070-215
+next_experiment: EXP-070
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-070-215
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-070
+status: PLANNED
+prior_experiment: EXP-069
+hypothesis: EXP-069's missing moving-pad contact was a stochastic initial-contact miss rather than a deterministic consequence of transverse friction 3.0
+single_variable: NONE; fixed-configuration repeat of EXP-069
+lifecycle: RESET_WORLD
+prediction:
+  - bilateral contact and the unchanged physical grasp gate pass within one attempt
+  - if carry is reached, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and release-q6 tilt are measured against EXP-067 without changing any parameter
+  - authoritative final outcome remains the end-to-end success criterion
+preconditions:
+  - reuse only the healthy domain-225/so101_py_qual_exp069 stack built from the same installed material asset
+  - RESET_WORLD proves initial pose, detached Gazebo, MoveIt world-only membership, no finger contact and finite TCP
+  - no execute/recorder/video process remains before bounded telemetry/H.264 starts
+unchanged:
+  - all EXP-069 code, material, mass, motion, target, validation, controller, collision and attachment parameters
+failure_criteria:
+  - repeated bilateral stability failure, any later hard-safety/controller failure or authoritative final-outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate client/stack, missing telemetry/video or disk pressure
+decision: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-069-214
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_GRASP_FAILURE_NO_TILT_COMPARISON
+experiment_id: EXP-069
+execution_commit: ffeefea
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 225
+  gz_partition: so101_py_qual_exp069
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp069/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000010976669128790778
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+failure:
+  phase: POST_SEATING_PHYSICAL_STABILITY
+  error: bilateral stability timeout
+  q6_contact: -0.0476062148809433
+  seating_target_q6: -0.0536062148809433
+  fixed_finger_contact: true
+  moving_jaw_contact: false
+  max_fixed_pad_penetration_m: 0.0007962632807902992
+  max_moving_pad_penetration_m: NONE
+  gazebo_attachment_state: detached
+prediction_evaluation:
+  physical_grasp_contract: FAIL
+  move_above_place_tilt: NOT_REACHED
+  descend_to_place_tilt: NOT_REACHED
+  release_q6_tilt: NOT_REACHED
+  authoritative_final_outcome: NOT_REACHED
+evidence:
+  physical_failure: /tmp/so101-py-qualification/exp069/run/physical-failure.json
+  telemetry: /tmp/so101-py-qualification/exp069/run/diagnostic/samples.jsonl
+  telemetry_sha256: c8acc06fbf01f7f63a58dd78ebfd16c60e7b4fd0b68a3de02a908fc0d4c25f0c
+  bounded_video: /tmp/so101-py-qualification/exp069/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 576b85fcffefd45529ed91545b4cdf187234011375c670a3c01796cd77ff76da
+visual_observation:
+  - The bounded Gazebo video shows the arm descend to and remain at the upright cup; the cup never leaves the table and no carry/place phase begins.
+interpretation:
+  - The first 3.0 transverse-friction run is a valid end-to-end failure, but it provides no evidence about placement tilt because the moving pad never engaged.
+decision: REPEAT_ONCE_WITH_IDENTICAL_CONFIGURATION
+counts_toward_success_streak: false
+next_experiment: EXP-070
 ```
 
 ```yaml
