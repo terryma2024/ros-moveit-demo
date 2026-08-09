@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 8f002bb364e628c4c8b90813c5232a3b5023d68b
+current_commit: 99773bf92b8c1fb08e1ddd3d195def1d06ed90a9
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -20,7 +20,7 @@ disproven_routes:
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
 open_hypotheses:
   - Reducing only the live-effective DESCEND_TO_PLACE velocity scaling from 0.03 to 0.01 will reduce inertial slip and preserve a recoverable held-cup attitude at the already safe raised endpoint.
-latest_checkpoint: CP-PRE-EXP-058-176
+latest_checkpoint: CP-EXP-058-IMPLEMENTED-177
 next_experiment: EXP-058
 ```
 
@@ -8452,5 +8452,35 @@ provenance:
 commands:
   - command: pytest RED after expectation change, minimal policy change, full pytest/build/colcon test, RESET_WORLD, bounded 50 Hz telemetry plus 5 fps half-resolution H.264, one GUI execute
     exit_code: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-EXP-058-IMPLEMENTED-177
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-058
+implementation_commit: 99773bf92b8c1fb08e1ddd3d195def1d06ed90a9
+single_variable: DESCEND_TO_PLACE velocity_scaling from 0.03 to 0.01
+unchanged_live_parameters:
+  - acceleration_scaling remains 0.03 because the direct FollowJointTrajectory backend does not consume it
+  - all targets, other state speeds, grasp/release parameters and safety policies remain unchanged
+red:
+  targeted: 1 failed and 1 passed; live policy still exposed velocity_scaling 0.03 instead of the preregistered 0.01
+green:
+  targeted: 2 passed
+  full_pytest: 189 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 191 tests, 0 errors, 0 failures, 2 skipped
+  dry_run: DONE with 19 transitions using a dedicated candidate evidence directory
+test_environment_notes:
+  - one preliminary full-pytest invocation sourced Jazzy but omitted the worktree overlay; five installed-package tests correctly failed because ament searched only /opt/ros/jazzy
+  - the same preliminary invocation also caught the intentionally stale provenance hash; the destination SHA was updated and the correctly sourced full suite passed
+  - a preliminary dry-run checkpoint directly under /tmp was rejected by the checkpoint directory policy; the candidate-scoped path succeeded
+installed_provenance:
+  motion_policy_source_install_sha256: a2ab5f35a0cb343166d2c239ca5a05d1e92a8a84a473015528a190628da527d3
+  validation_policy_source_install_sha256: f702e030ad64d10326640e51e5cb0e8b7e8388cc790f66b557baf127bada3ff2
+  policy_sha256: 637587bf8ae54239a7573af9e3ce9e90f9faf1514c22a444fa31e2404ad2dd26
+next_command: prove RESET_WORLD on so101-py-gui-214, start bounded telemetry/H.264, then execute EXP-058 once
 counts_toward_success_streak: false
 ```
