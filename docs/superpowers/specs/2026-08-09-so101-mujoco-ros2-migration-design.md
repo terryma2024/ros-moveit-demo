@@ -1,8 +1,10 @@
 # SO-101 + MuJoCo + ROS 2 迁移设计
 
-**状态：** 设计冻结，已授权启动实施
+**状态：** 已按 2026-08-10 package 隔离决策修订，等待用户书面审阅
 
 **设计基线：** `codex/so101-gazebo-demo-py` @ `8d7913e7f552a40ee627d65be8b873ac16748bc9`
+
+**实现 kickoff：** `8464038e7cc13f638e2e336c625ed6677fa7db22`
 
 **目标平台：** ai-station，Ubuntu 24.04，ROS 2 Jazzy
 
@@ -18,7 +20,8 @@
 - Gazebo Harmonic、`gz_ros2_control`、`ros_gz_bridge`、Gazebo pose/contact topic 和 Gazebo reset/transport 适配器替换为 MuJoCo、官方 `mujoco_ros2_control` 0.0.3、MuJoCo reset/step 服务与项目自有的只读原子仿真证据插件。
 - 机器人和任务场景使用仓库内受版本控制的 MJCF；URDF 继续作为 MoveIt、TF 与语义模型的来源。两者通过自动几何一致性测试约束，而不是运行时临时转换。
 - 抓取主链保持纯物理：不使用 weld/equality 约束，不把物体 teleport 当作搬运，不把 Planning Scene attachment 当成物理抓取成功。
-- 迁移期间在同一 Python 包中建立 backend-neutral 边界并保留 Gazebo 对照；通过验收后删除 Gazebo 资产并把公开包名改为 `so101_mujoco_demo_py`。
+- 从第一步创建独立 `ament_python` package `src/so101_mujoco_demo_py/`；backend-neutral domain、workflow、MoveIt adapter 和物理结果语义只迁入这个新 package，不在 `so101_gazebo_demo_py` 内建立中间层。
+- `src/so101_gazebo_demo_py/**` 是只读行为基线，正式迁移分支必须始终与 kickoff `8464038` 中该目录字节级一致；新 package 不导入、不依赖、不读取其 installed assets。
 - MuJoCo 接触数值必须重新标定。Gazebo 的 penetration/depth 数值不跨引擎复用，但“真实双侧接触、微抬后杯子实际随动、无禁碰、最终稳定放置”的断言语义保持不变。
 
 ## 2. 背景与当前证据
@@ -44,6 +47,16 @@
 - fingertip 横向摩擦候选经过 `3.0`、`2.0` 的失败实验后回到 `1.2`。这些结论属于 Gazebo/Bullet 材料语义，只作为“不可直接跨引擎复制”的证据，不成为 MuJoCo friction 数值。
 - EXP-073 只有 RED/GREEN、全量 pytest、colcon build/test 证据，尚无 live runtime 或连续资格验证。因此新基线仍是未完成资格验证的行为对照，Task 12–14 的 MuJoCo 标定和连续成功门槛不放宽。
 - 上述 delta 不改变 ROS 2、MoveIt、控制器、状态机、原子物理证据、纯物理抓取和 reset 架构决策。
+
+#### 2.1.2 2026-08-10 package 隔离修正
+
+初版设计曾要求先在 `so101_gazebo_demo_py` 内建立 backend-neutral 层，最后再改名。该路线已被用户明确否决。修正后的边界是：
+
+- 正式分支从 kickoff `8464038` 严格重建；`src/so101_gazebo_demo_py/**` 从第一项任务到最终验收均不得变化。
+- 旧路线的 committed/dirty 状态已保存到 ai-station 备份分支 `codex/so101-mujoco-ros2-pre-isolation-20260810` @ `3add34f8390b78a1f4a13ff49aefb2dc87638245`，只用于审计和选择性重写，不允许整体 cherry-pick 回正式分支。
+- Python 实现、测试、配置、launch、MJCF 和 package metadata 全部新建在 `src/so101_mujoco_demo_py/**`。
+- C++ message/plugin/parity 支持继续独立位于 `src/so101_mujoco_support/**`。
+- 可以从 Gazebo 基线逐文件移植 ROS-free 行为，但目标文件必须使用新 import namespace，并在 provenance manifest 中记录源 commit、源路径和目标路径；运行时不得回退导入旧 package。
 
 ### 2.2 ai-station 当前依赖状态
 
@@ -73,7 +86,8 @@
 4. 建立可审计的 URDF ↔ MJCF 几何、关节方向、零位和 limit 一致性证明。
 5. 建立来自同一 MuJoCo simulation step 的物体 pose、twist、contact distance、contact force 和 reset 证据链。
 6. 在 headless 与 GUI 两种模式下完成分层验收，并分别完成连续 5 次完整重启和连续 5 次世界重置成功。
-7. 最终 package 独立，不在运行时依赖 Gazebo package、Gazebo binary 或原 package 的 installed assets。
+7. 从第一项实现任务起 package 即独立，不在 build、test 或 runtime 中依赖 `so101_gazebo_demo_py`、Gazebo binary 或原 package 的 installed assets。
+8. 在每个 task 和最终验收中证明 `git diff --quiet 8464038 -- src/so101_gazebo_demo_py`。
 
 ### 3.2 非目标
 
@@ -84,6 +98,8 @@
 - 软体杯、可变形物体；
 - 为“提高成功率”引入 weld、equality、mocap 跟随、循环 teleport 或隐藏的外力；
 - 在迁移同时重写 MoveIt 接口、状态机或业务策略；
+- 修改、格式化、删除或向 `src/so101_gazebo_demo_py/**` 添加任何文件；
+- 新建需要 Gazebo package 同步修改才能工作的共享 common package；
 - 把 Menagerie 的 SO-ARM100 模型直接当作 SO-101 的正确模型。
 
 ## 4. 方案选择
@@ -119,27 +135,33 @@
 | 直接采用 Menagerie SO-ARM100 | 它是 5DOF SO-ARM100 的简化模型，只能借鉴建模方法，不能证明 SO-101 link/joint/夹爪几何一致 |
 | MuJoCo weld/equality 代替抓取 | 绕过物理抓取验收，无法证明摩擦与夹持产生了真实搬运 |
 | 保留 Gazebo contact bridge，同时只换动力学 | 两套仿真 source of truth 冲突，接触与 pose 不再属于同一物理世界 |
+| 先在 `so101_gazebo_demo_py` 内抽象、最后改名 | 违反 package 隔离和 Gazebo 基线零差异要求，已于 2026-08-10 废止 |
+| 抽取 `so101_demo_common_py` 并让两包共同依赖 | 会要求修改 Gazebo package 或产生双包同步发布面；当前范围不需要第三个 Python package |
+| 整包复制后逐步删除 Gazebo 文件 | 起步快但容易残留 Gazebo import、package metadata 和 installed-asset 依赖；采用逐边界移植与显式 provenance 代替 |
 
 ## 5. 总体架构
 
 ```mermaid
 flowchart LR
-    CLI["pick_place CLI / launch"] --> Runner["Python workflow + recovery"]
+    subgraph PY["so101_mujoco_demo_py (independent ament_python package)"]
+      CLI["pick_place CLI / launch"] --> Runner["Python workflow + recovery"]
+      Observer["MujocoWorldObserver"] --> Runner
+      Runner --> Reset["MujocoResetClient"]
+    end
     Runner --> MoveIt["MoveIt 2 services/actions"]
     MoveIt --> CM["mujoco_ros2_control node + controller_manager"]
     CM --> MJ["MuJoCo MJCF physics"]
     MJ --> JS["/joint_states + /clock"]
-    MJ --> SEP["SO101 SimulationEvidencePlugin"]
-    SEP --> Observer["MujocoWorldObserver"]
-    Observer --> Runner
+    MJ --> SEP["so101_mujoco_support::SimulationEvidencePlugin"]
+    SEP --> Observer
     Runner --> Scene["MoveIt Planning Scene shadow"]
-    Runner --> Reset["MujocoResetClient"]
     Reset --> CM
+    GZ["so101_gazebo_demo_py read-only baseline"] -. "no import / no dependency / no file change" .-> PY
 ```
 
 ### 5.1 保留层
 
-除 backend-neutral 命名调整外，以下层不重写：
+以下行为从 `8d7913e` 逐边界移植到新 namespace；保持外部契约，但不修改或运行时导入原文件：
 
 - `domain.py`、`workflow.py`、`runner.py`；
 - `motion/`；
@@ -162,14 +184,16 @@ flowchart LR
 
 ## 6. 包与文件边界
 
-### 6.1 迁移期
+### 6.1 独立 Python package
 
-迁移期继续使用源目录 `src/so101_gazebo_demo_py`，先建立 backend-neutral 端口，再加入 MuJoCo backend。这样每一步都能用现有 Gazebo tests 做 characterization，避免大爆炸式重写。
-
-新增主要结构：
+正式实现从第一项任务就使用下面的 package 和 import namespace：
 
 ```text
-src/so101_gazebo_demo_py/
+src/so101_mujoco_demo_py/
+  package.xml
+  setup.py
+  setup.cfg
+  resource/so101_mujoco_demo_py
   mjcf/
     so101.xml
     scene.xml
@@ -178,7 +202,11 @@ src/so101_gazebo_demo_py/
     mujoco_plugins.yaml
   launch/
     so101_mujoco.launch.py
-  so101_gazebo_demo_py/
+    so101_pick_place.launch.py
+  so101_mujoco_demo_py/
+    domain.py
+    workflow.py
+    runner.py
     simulation/
       evidence.py
       protocols.py
@@ -186,7 +214,21 @@ src/so101_gazebo_demo_py/
       client.py
       observer.py
       reset.py
+    moveit/
+    motion/
+    recovery/
+  test/
 ```
+
+隔离规则：
+
+- `package.xml`、`setup.py`、Python import、launch substitution 和 runtime resource lookup 不得出现 `so101_gazebo_demo_py`；
+- 新 package 可以拥有从 `8d7913e` 移植的 ROS-free 代码副本，但必须在 `docs/provenance.json` 记录 source commit/path、destination path 和 SHA-256；
+- characterization test 必须复制到新 package 并针对新 namespace 运行，不能通过修改原测试获得通过；
+- 不创建跨 package symlink，不从原 package install/share 读取 URDF、mesh、config、launch 或 policy；所需资产进入新 package 并记录 provenance；
+- 公开 ROS graph 契约可以相同，Python package/import/resource identity 必须不同。
+
+### 6.2 独立 C++ 支持 package
 
 新增一个最小 `ament_cmake` 支持包：
 
@@ -202,15 +244,16 @@ src/so101_mujoco_support/
   test/
 ```
 
-### 6.2 切换后
+### 6.3 Gazebo package 完整性门
 
-全部资格验证通过后：
+`src/so101_gazebo_demo_py/**` 在正式分支上是不可写基线。每个 task 提交前和最终验收必须运行：
 
-- package 和 Python import namespace 改名为 `so101_mujoco_demo_py`；
-- `so101_pick_place.launch.py`、`pick_place_state_machine` 等公开入口保持；
-- 删除 `gazebo/`、Gazebo launch/world、`ros_gz_*` 和 `gz_ros2_control` 依赖；
-- 保留迁移 provenance 与结果摘要；
-- 原 Gazebo 分支保留为历史行为基线，不成为新 package 的 runtime 依赖。
+```bash
+git diff --quiet 8464038e7cc13f638e2e336c625ed6677fa7db22 -- src/so101_gazebo_demo_py
+test -z "$(git status --short -- src/so101_gazebo_demo_py)"
+```
+
+任一命令失败即停止，不允许用 allowlist、生成文件例外或后续恢复提交继续该 task。全部资格验证通过后只发布 `so101_mujoco_demo_py` 与 `so101_mujoco_support`；Gazebo package 不删除、不改名、不成为新 package 依赖。
 
 ## 7. Backend-neutral Python 合约
 
@@ -223,7 +266,7 @@ src/so101_mujoco_support/
 class ContactPointEvidence:
     signed_distance_m: float
     penetration_m: float
-    normal_force_n: float | None
+    normal_force_n: float
 
 @dataclass(frozen=True, slots=True)
 class ContactPair:
@@ -243,8 +286,8 @@ class SimulationObservation:
 约束：
 
 - 所有数值必须有限；
-- `penetration_m` 是跨引擎统一的非负几何量；Gazebo depth 映射为 `signed_distance_m=-depth`，MuJoCo 使用原生 signed distance 并令 `penetration_m=max(0, -signed_distance_m)`；
-- Gazebo 没有可靠 force 时 `normal_force_n=None`，MuJoCo 必须提供有限且非负的 normal force；
+- `penetration_m` 是非负几何量；MuJoCo 使用原生 signed distance 并令 `penetration_m=max(0, -signed_distance_m)`；
+- `normal_force_n` 必须有限且非负；新 package 不实现 Gazebo 的 nullable-force 兼容 adapter；
 - quaternion 采用 ROS 顺序 `x, y, z, w`，MJCF 的 `w, x, y, z` 只允许在 adapter 边界转换；
 - `source_timestamp_s` 使用 simulation time；
 - `receipt_sequence` 单调递增；
@@ -262,7 +305,7 @@ class SimulationResetter(Protocol):
         raise NotImplementedError
 ```
 
-业务层只依赖这两个协议，不导入 Gazebo 或 MuJoCo message/service 类型。
+新 package 的业务层只依赖这两个协议，不导入 Gazebo message/service 类型；MuJoCo message/service 类型只允许出现在 `so101_mujoco_demo_py.mujoco` adapter 边界。
 
 ### 7.3 命名迁移
 
@@ -325,7 +368,7 @@ URDF 中的 simulation hardware 配置为：
 
 ```xml
 <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
-<param name="mujoco_model">$(find so101_gazebo_demo_py)/mjcf/scene.xml</param>
+<param name="mujoco_model">$(find so101_mujoco_demo_py)/mjcf/scene.xml</param>
 ```
 
 使用 `mujoco_ros2_control` 自带的 `ros2_control_node`。MJCF 中每个关节使用 position actuator，并映射到现有 position command interface；controller YAML 中的 controller 名和 joint 列表保持不变。
@@ -466,7 +509,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 ## 13. Launch 与公开行为
 
-迁移期新增 `so101_mujoco.launch.py`，并让 `so101_pick_place.launch.py` 通过 backend 参数选择对照后端。切换完成后只保留 MuJoCo。
+独立 package 从创建时就同时提供 `so101_mujoco.launch.py` 和 `so101_pick_place.launch.py`。前者启动 MuJoCo/control 基础栈，后者组合 MoveIt、任务层与可选 MuJoCo 启动；不增加 Gazebo backend selector，也不修改原 package 的同名 launch。
 
 需要保持：
 
@@ -484,11 +527,15 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 ### P0：冻结 Gazebo 对照
 
 - 冻结 source commit、installed package、policy fingerprint 和现有资格验证状态；
+- 严格重建正式分支并保存旧路线到独立备份分支；
+- 建立 `git diff --quiet 8464038 -- src/so101_gazebo_demo_py` 零差异门；
 - 建立独立 MuJoCo 迁移账本；
 - 不把后续 Gazebo 实验结果静默混入迁移基线。
 
-### P1：最小控制 PoC
+### P1：独立 package 与最小控制 PoC
 
+- 创建 `so101_mujoco_demo_py`/`so101_mujoco_support` package metadata 和独立 namespace；
+- 逐边界移植最小 ROS-free contract 与 provenance，禁止依赖原 package；
 - 安装并探测 `mujoco_ros2_control`；
 - 用 1 个关节和现有 controller 名称证明 MoveIt/trajectory/controller boundary；
 - 验证 `/clock`、pause、step、reset。
@@ -507,8 +554,8 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 ### P4：Python runtime 后端迁移
 
-- Gazebo adapter 先收敛到 backend-neutral protocol；
-- 接入 MuJoCo observer/reset；
+- 在新 package 内建立 backend-neutral protocol，并直接接入 MuJoCo observer/reset；
+- 逐文件移植 domain/workflow/MoveIt/motion/recovery/physical-outcome 行为和 tests，不修改 Gazebo adapter 或原测试；
 - checkpoint v5 与 profile 命名迁移；
 - 保持 MoveIt、状态机与最终结果层不变。
 
@@ -519,19 +566,21 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 - 输出 force/distance/friction 建议与误判矩阵；
 - 等待用户确认后再固化阈值。
 
-### P6：资格验证与切换
+### P6：资格验证与独立发布
 
 - headless contract；
 - GUI + RViz 视觉验收；
 - 连续 5 次 `FULL_RESTART`；
 - 连续 5 次 `RESET_WORLD`；
-- 删除 Gazebo backend、改 package 名和 README；
+- 证明新 package metadata/import/install/share/runtime 全部独立；
+- 再次证明 Gazebo package 相对 kickoff 零差异；
 - 从干净 install overlay 复验。
 
 ## 15. 验收矩阵
 
 | 层 | 必须证明 |
 |---|---|
+| Package isolation | `src/so101_gazebo_demo_py/**` 相对 `8464038` 零差异；新 package metadata/import/resource/runtime 不依赖旧 package |
 | Provenance | source commit、MJCF SHA-256、installed prefix、MuJoCo/package 版本、PID/cmdline、ROS domain/service prefix 一致 |
 | Model | MJCF compile；home + 10 poses 几何门槛；joint limit/direction/q6 语义一致 |
 | ROS graph | 单套 control node；`/clock`、controller、service/action、topic 类型正确 |
@@ -560,6 +609,8 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 | 通过 weld/teleport 获得假成功 | runtime interface/write audit；forward phase 无 object mutation API；MJCF 禁止 equality/adhesion |
 | GUI 与 headless 物理配置不一致 | 同一 MJCF/policy/hash，只改变 headless renderer flag |
 | 迁移与当前 Gazebo worker 冲突 | 独立 worktree/branch，不复用或清理现有 tmux/process |
+| 新实现再次渗入 Gazebo package | 每个 task 提交前执行 kickoff tree/status 双门；失败立即停止，不允许例外路径 |
+| 复制行为代码造成 provenance 丢失 | 新 package `docs/provenance.json` 记录源 commit/path、目标 path 与 SHA-256，测试只运行新 namespace |
 | 依赖版本升级导致接口漂移 | 固定稳定 tag/commit；apt binary 与 source fallback 都写入 preflight/provenance；更新 tag 先做 delta review |
 
 ## 17. 实施停止条件
@@ -571,6 +622,8 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 - contact plugin 需要修改 MuJoCo state 才能提供证据；
 - 只能通过 weld、teleport、禁碰或放宽最终结果阈值才能完成 pick-place；
 - 当前 ai-station worktree、tmux 或 ROS domain 与其他 worker 冲突；
+- `src/so101_gazebo_demo_py/**` 相对 kickoff 出现任何 tracked 或 untracked 变化；
+- 新 package 的 metadata、import、launch 或 resource lookup 引用 `so101_gazebo_demo_py`；
 - 新的 MuJoCo force/distance 门槛尚未获得用户确认；
 - 现有物理/安全断言与新实现发生不可解释冲突。
 
