@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: ba6b97e
+current_commit: 3592618
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -52,8 +52,44 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-QUAL-FULL-FAST-PLAN-249
+latest_checkpoint: CP-QUAL-FULL-FAST-01-RUNNING-250
 next_experiment: QUAL-FULL-FAST-01
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-FAST-01-RUNNING-250
+recorded_at: 2026-08-10 Asia/Shanghai
+status: RUNNING
+qualification_run: QUAL-FULL-FAST-01
+candidate_implementation_commit: 068eb89
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 228
+  gz_partition: so101_py_full_fast_01
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  prior_stack_terminated: true
+  new_gazebo_server_pid: 2708072
+  new_move_group_pid: 2708021
+  gazebo_servers: 1
+  move_group_processes: 1
+readiness:
+  first_reset_attempt: INVALID_NOT_COUNTED
+  first_reset_error: /so101/object_attached relay had not yet emitted within the reset probe timeout while controllers were still spawning
+  correction: waited for the sole new stack to finish controller/attachment-relay startup; no process or configuration change
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/full-fast-01/reset/reset-world.json
+  command_exit_code: 0
+  cup_spawn_pose_error_m: 0.0000013122366374921727
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+next_command: record one bounded execute; this run counts only if the full final success contract passes
+current_full_restart_streak: 0
+counts_toward_success_streak: pending
 ```
 
 ```yaml
