@@ -3527,3 +3527,18 @@ gz_partition: so101_py_qual2b_201
 evidence_root: /tmp/so101-py-qual2-grasp-3-201
 note: domain ids 232 max respected; 200/201 are previously unused (used so far 215-231, 234)
 ```
+
+```yaml
+experiment_id: EXP-QUAL2-PLAN-232
+lifecycle: VALID_SUCCESS
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+ros_domain_id: 232
+gz_partition: so101_py_qual2b_232
+tmux_session: so101-py-qual2-plan-232 (stopped after run)
+evidence_root: /tmp/so101-py-qual2-plan-232
+results:
+  six_states: all PLAN_ONLY_COMPLETE exit 0, policy_sha256 060228e8 in every artifact
+  forbidden_events: execute_trajectory_mentions=1 (startup noise only)
+  cleanup: exact owned PIDs; preserved processes/tmux intact
+```
