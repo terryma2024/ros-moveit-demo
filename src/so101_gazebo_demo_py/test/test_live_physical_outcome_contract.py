@@ -36,7 +36,7 @@ def test_live_path_does_not_gate_on_penetration_target() -> None:
     source = LIVE_EXECUTE.read_text()
     live_path = source[source.index("def run_live_execute") :]
     assert "tune_seating_penetration(" not in live_path
-    assert "seat_and_stabilize_physical_grasp(" in live_path
+    assert "stabilize_with_contact_missing_retries(" in live_path
     assert "moving-pad penetration ceiling exceeded" in source
 
 
