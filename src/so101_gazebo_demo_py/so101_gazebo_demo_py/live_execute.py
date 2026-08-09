@@ -225,7 +225,7 @@ def carry_with_shadow_gates(backend, policies, shadow_gate):
 
 def release_alignment_target(
     place_xyz: tuple[float, float, float],
-    settling_compensation_m: tuple[float, float, float] = (0.0050, 0.0055, 0.0),
+    settling_compensation_m: tuple[float, float, float] = (0.0050, -0.0050, 0.0),
 ) -> tuple[float, float, float]:
     """Offset the held-cup target to compensate measured release/retreat drift."""
     return tuple(
@@ -237,7 +237,7 @@ def release_alignment_target(
 
 
 def release_separation_translation(
-    observed, *, distance_m: float = 0.015,
+    observed, *, distance_m: float = 0.010,
 ) -> tuple[float, float, float]:
     """Move the opened gripper radially away from the observed cup center."""
     if not 0.0 < distance_m <= 0.030:

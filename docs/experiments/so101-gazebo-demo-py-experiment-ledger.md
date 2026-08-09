@@ -6236,6 +6236,63 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-042-119
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-042
+execution_commit: 149d0b4
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-042
+alignment:
+  final_error_m: 0.0027753591431124557
+  release_start_xyz_m: [-0.0763692706823349, -0.24208593368530273, 0.17698299884796143]
+release:
+  separation_xy_m: [0.008266446621609741, 0.01251662335664363]
+final:
+  failure_code: FINAL_OUT_OF_REGION
+  object_xyz_m: [-0.0906120166182518, -0.23115065693855286, 0.16499997675418854]
+  upright_tilt_rad: 0.0000006486713546418934
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+interpretation: immediate separation solved contact and stability, but the 15 mm radial motion displaced the cup about -14.2 mm X and +10.9 mm Y from release start
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-042-120
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-042/reset-after-final-out-of-region
+proof:
+  cup_spawn_pose_error_m: 0.0000005158559257706894
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-TUNE-IMMEDIATE-RELEASE-TARGET-121
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  radial_separation_m: 0.010
+  previous_radial_separation_m: 0.015
+  alignment_target_offset_m: [0.005, -0.005, 0.0]
+  previous_alignment_target_offset_m: [0.005, 0.0055, 0.0]
+rationale: retain enough radial motion to disengage while reducing impulse; bias held-cup Y negative to compensate the observed positive-Y immediate-release displacement
+unchanged:
+  - final target region and authoritative physical conditions
+  - per-axis motion ceiling and all frozen simulation/controller settings
+tests:
+  red: target and separation helpers returned the old candidate
+  focused_green: 2 passed
+  package_pytest: 179 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-040-111
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
