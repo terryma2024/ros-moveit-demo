@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 4e74a1a
+current_commit: c04ef48
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -24,17 +24,66 @@ confirmed_conclusions:
   - EXP-065 restored 0.020 kg while retaining limiting friction 2.0; MOVE_ABOVE_PLACE regressed to 0.26479 rad end tilt and 0.01068 rad q6 range, while DESCEND_TO_PLACE improved relative to EXP-064 but still ended at 0.44172 rad. The material profile is not an end-to-end candidate.
   - EXP-066 retained one Planning Scene client and reduced the MOVE-to-DESCEND non-motion interval from the EXP-063 baseline 2.89 s to 2.13 s; it missed the 1.5 s prediction but limited dwell tilt growth to 0.01735 rad and improved DESCEND_TO_PLACE end tilt to 0.22522 rad.
   - EXP-067 increased only DESCEND_TO_PLACE scaling to 0.05, reduced descent from 8.73 to 5.82 s and completed the formerly blocked release/retreat chain. The final cup was upright, motionless, supported and gripper-free, but y=-0.244315 m missed the target-region upper bound by 0.000685 m.
+  - EXP-068 was superseded before implementation after the user identified the final y displacement as a downstream effect of cup tilt during placement/release, not a MOVE_TO_PLACE target bias; release y compensation remains -0.005 m.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Retaining EXP-067 and shifting only release-alignment y compensation by approximately -0.006 m should counter the observed +0.011805 m retreat displacement and move the final cup from y=-0.244315 m toward the -0.250 m region center.
+  - Matching fingertip-pad transverse friction to the existing 3.0 axial friction may reduce cup roll during carry/descent and therefore reduce the downstream placement/release displacement without changing the motion target.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-068-211
-next_experiment: EXP-068
+latest_checkpoint: CP-PRE-EXP-069-212
+next_experiment: EXP-069
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-069-212
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-069
+status: PLANNED
+prior_experiment: EXP-067
+supersedes_checkpoint: CP-PRE-EXP-068-211
+hypothesis: the cup's placement/release displacement is downstream of held-cup tilt, and the existing axial/transverse fingertip friction asymmetry permits lateral rolling; matching transverse friction to axial friction will reduce tilt before release
+single_variable: fingertip-pad transverse friction changes from 1.2 to 3.0 in both ODE mu2 and Bullet friction2, matching the unchanged axial friction 3.0
+lifecycle: FULL_RESTART
+prediction:
+  - physical grasp and arm/controller hard-safety contracts pass unchanged
+  - MOVE_ABOVE_PLACE endpoint tilt does not regress above EXP-067 0.15199 rad
+  - DESCEND_TO_PLACE endpoint tilt is <= 0.20 rad, improved from EXP-067 0.316995 rad
+  - cup tilt when release q6 first reaches 0.74 is <= 0.20 rad, improved from EXP-067 0.260008 rad
+  - authoritative final outcome is in-region, upright, stable, table-supported, detached, free of gripper contact and arm/controller healthy
+preconditions:
+  - RED material-contract test proves source config and all 15 prepared fingertip-pad collisions still use transverse friction 1.2
+  - focused/full pytest and colcon build/test pass with source/install parity
+  - stop only the owned so101-py-qual Gazebo/MoveIt processes before relaunching the same tmux session; do not touch codex, codex-cua or kimi
+  - launch one GUI stack on a new ROS domain and Gazebo partition, then prove initial cup pose, Gazebo detach, MoveIt world-only membership, no finger contact and finite TCP
+  - bounded telemetry and half-resolution H.264 start before one execute
+unchanged:
+  - release settling compensation remains [-0.005, -0.005, 0.006] m; no target or waypoint changes
+  - cup mass 0.020 kg, cup-wall friction 1.2, fingertip axial friction 3.0 and generic fallback friction 1.2
+  - DESCEND_TO_PLACE velocity/acceleration scaling 0.05, every other motion profile and q6 command
+  - physics engine, geometry, inertia other than the already-fixed 0.020 kg mass, contact stiffness/damping, controller/gains, collision model and attachment semantics
+  - all authoritative final-outcome thresholds and every hard arm/cup/controller safety bound
+failure_criteria:
+  - any hard-safety/controller failure or any authoritative post-retreat final-outcome failure
+invalid_criteria:
+  - source/install mismatch, duplicate stack/client, missing reset proof, telemetry/video, stale material asset or disk pressure
+decision: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-SUPERSEDE-EXP-068-211A
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-068
+status: ABANDONED_BEFORE_IMPLEMENTATION
+supersedes_checkpoint: CP-PRE-EXP-068-211
+user_correction: the cup tilts during placement and then moves; MOVE_TO_PLACE target error is not the supported cause
+preserved_configuration: release_alignment_target default settling_compensation_m.y remains -0.005 m
+decision: ABANDON
+next_experiment: EXP-069
 ```
 
 ```yaml
