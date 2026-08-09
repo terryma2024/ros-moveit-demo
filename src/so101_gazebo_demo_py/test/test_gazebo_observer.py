@@ -1,4 +1,5 @@
 import math
+from types import SimpleNamespace
 
 from so101_gazebo_demo_py.gazebo.observer import (
     ContactPair,
@@ -6,6 +7,17 @@ from so101_gazebo_demo_py.gazebo.observer import (
     WorldObservation,
     evaluate_support_contact,
 )
+from so101_gazebo_demo_py.test_support.ros_gazebo_backend import ContactSnapshot
+
+
+def test_empty_contact_message_is_a_reusable_fresh_snapshot() -> None:
+    snapshot = ContactSnapshot()
+
+    snapshot.replace(SimpleNamespace(contacts=[]), received_at_s=10.0)
+
+    assert snapshot.pairs == ()
+    assert snapshot.fresh(now_s=10.25, max_age_s=1.0)
+    assert not snapshot.fresh(now_s=11.01, max_age_s=1.0)
 
 
 def test_accepts_featherstone_compound_owner_support_with_bounded_negative_noise() -> None:
