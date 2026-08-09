@@ -1,0 +1,115 @@
+"""Command-line entry point for dry-run and, later, live execution."""
+
+import argparse
+from pathlib import Path
+import sys
+
+from ..checkpoint import FileCheckpointStore
+from ..domain import RunMode, RunRequest, RunStatus, State
+from ..runner import StateMachineRunner, dry_run_actions
+
+
+def _optional_bool(value: str) -> bool:
+    lowered = value.lower()
+    if lowered in ("true", "1", "yes"):
+        return True
+    if lowered in ("false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError("expected true or false")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="pick_place_state_machine")
+    parser.add_argument("--mode", choices=[mode.value for mode in RunMode], default=RunMode.DRY_RUN.value)
+    parser.add_argument("--fail-at", choices=[state.value for state in State])
+    parser.add_argument("--stop-after", choices=[state.value for state in State])
+    parser.add_argument("--plan-only-state", choices=[state.value for state in State])
+    parser.add_argument("--resume", nargs="?", const=True, default=False, type=_optional_bool)
+    parser.add_argument("--step", action="store_true")
+    parser.add_argument("--force-continue", action="store_true")
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--session-id", default="")
+    parser.add_argument("--planning-diagnostics-dir", type=Path)
+    parser.add_argument("--object-config", type=Path)
+    parser.add_argument("--motion-policy", type=Path)
+    parser.add_argument("--validation-policy", type=Path)
+    parser.add_argument("--max-state-transitions", type=int, default=100)
+    parser.add_argument("--live-runtime", action="store_true")
+    return parser
+
+
+def _state(value: str | None) -> State | None:
+    return None if value is None else State(value)
+
+
+def print_result(result) -> None:
+    print(f"status={result.status.value}")
+    print(f"current_state={result.current_state.value}")
+    if result.next_state is not None:
+        print(f"next_state={result.next_state.value}")
+    print(f"transition_count={result.transition_count}")
+    print("state_trace=" + ",".join(state.value for state in result.state_trace))
+    if result.failure is not None:
+        print(f"failure={result.failure.code}")
+        if result.failure.message:
+            print(f"failure_message={result.failure.message}")
+        if result.failure.metrics:
+            metrics = " ".join(f"{key}={value:.12g}" for key, value in sorted(result.failure.metrics.items()))
+            print(f"failure_metrics {metrics}")
+
+
+def main(arguments: list[str] | None = None) -> int:
+    if arguments is None:
+        arguments = sys.argv[1:]
+        if "--ros-args" in arguments:
+            arguments = arguments[:arguments.index("--ros-args")]
+    options = build_parser().parse_args(arguments)
+    if options.mode == RunMode.EXECUTE.value or (
+        options.mode == RunMode.PLAN_ONLY.value and options.live_runtime
+    ):
+        import os
+        from ..live_execute import run_live_execute, run_live_plan_only
+        evidence_dir = Path(os.environ.get("SO101_PY_EVIDENCE_DIR", "/tmp/so101-py-runtime"))
+        try:
+            if options.mode == RunMode.EXECUTE.value:
+                result = run_live_execute(
+                    evidence_dir,
+                    stop_after=options.stop_after,
+                    motion_policy=options.motion_policy,
+                )
+            else:
+                if options.plan_only_state is None:
+                    raise ValueError("live plan_only requires --plan-only-state")
+                result = run_live_plan_only(
+                    evidence_dir,
+                    options.plan_only_state,
+                    motion_policy=options.motion_policy,
+                )
+        except Exception as error:
+            print("status=ERROR")
+            print("current_state=ERROR")
+            print("failure=LIVE_EXECUTE_FAILED")
+            print(f"failure_message={error}")
+            return 1
+        print(f"status={result['status']}")
+        print(f"current_state={result['current_state']}")
+        print(f"transition_count={len(result['state_trace'])-1}")
+        print("state_trace=" + ",".join(result["state_trace"]))
+        return int(result.get("exit_code", 0))
+    request = RunRequest(
+        mode=RunMode(options.mode), stop_after=_state(options.stop_after), resume=options.resume,
+        fail_at=_state(options.fail_at), max_state_transitions=options.max_state_transitions,
+        single_step=options.step, force_continue=options.force_continue,
+        plan_only_state=_state(options.plan_only_state),
+    )
+    store = None if options.checkpoint is None else FileCheckpointStore(options.checkpoint)
+    runner = StateMachineRunner(dry_run_actions(), store, options.session_id)
+    result = runner.run(request)
+    print_result(result)
+    return 0 if result.status in {
+        RunStatus.DONE, RunStatus.PLAN_ONLY_COMPLETE, RunStatus.CHECKPOINT_COMPLETE,
+    } else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,82 @@
+gz_ros_control:
+  ros__parameters:
+    # gz_ros2_control maps position error to a discrete joint velocity.
+    # Keep gain at 1.0: the Jazzy contract permits at most 1.0 without
+    # oscillation; the controller-manager rate below sets response time.
+    position_proportional_gain: 1.0
+
+controller_manager:
+  ros__parameters:
+    # position velocity = gain * position error * update_rate.  At gain 1.0,
+    # 1000 Hz matches Gazebo's measured 1 ms physics step without raising
+    # the stable gain.
+    update_rate: 1000 # Hz
+
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    # gripper_controller:
+    #   type: forward_command_controller/ForwardCommandController
+
+    gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
+
+    # Contact-critical DESCEND success must be evaluated against measured arm
+    # state; a commanded setpoint is not endpoint evidence.
+    open_loop_control: false
+    allow_integration_in_goal_trajectories: true
+
+    constraints:
+      goal_time: 1.0
+      # Gazebo carrying trials observed transient arm tracking errors up to
+      # 10.287 mrad.  The path tolerance covers that load disturbance without
+      # weakening the 2 mrad controller goal or the tighter state-specific
+      # endpoint postconditions (0.25 mrad at contact-critical boundaries).
+      "1": {trajectory: 0.0120, goal: 0.002}
+      "2": {trajectory: 0.0120, goal: 0.002}
+      "3": {trajectory: 0.0120, goal: 0.002}
+      "4": {trajectory: 0.0120, goal: 0.002}
+      "5": {trajectory: 0.0120, goal: 0.002}
+
+gripper_controller:
+  ros__parameters:
+    joints:
+      - "6"
+    interface_name: position
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
+
+    # The joint-6 action result is evidence of physical convergence only when
+    # the controller evaluates its trajectory against the measured position.
+    open_loop_control: false
+    allow_integration_in_goal_trajectories: true
+
+    constraints:
+      # Permit a bounded settling interval, but reject a terminal action whose
+      # measured jaw position remains materially away from the commanded q6.
+      goal_time: 1.0
+      "6":
+        trajectory: 0.05
+        goal: 0.001
