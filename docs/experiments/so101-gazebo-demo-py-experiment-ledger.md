@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: ffeefea
+current_commit: ff1a1b6
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -26,17 +26,91 @@ confirmed_conclusions:
   - EXP-067 increased only DESCEND_TO_PLACE scaling to 0.05, reduced descent from 8.73 to 5.82 s and completed the formerly blocked release/retreat chain. The final cup was upright, motionless, supported and gripper-free, but y=-0.244315 m missed the target-region upper bound by 0.000685 m.
   - EXP-068 was superseded before implementation after the user identified the final y displacement as a downstream effect of cup tilt during placement/release, not a MOVE_TO_PLACE target bias; release y compensation remains -0.005 m.
   - EXP-069 first FULL_RESTART run with fingertip transverse friction 3.0 was a valid grasp failure before lift: fixed-pad contact reached 0.000796263 m, but moving-pad contact never formed, so no carry/descent tilt comparison was possible.
+  - EXP-070 repeated the 3.0 transverse-friction candidate after a proved RESET_WORLD and reproduced the same fixed-only contact failure (0.000796725 m, no moving-pad contact); this configuration is rejected before carry/place.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
+  - Matching fingertip transverse friction to axial friction at 3.0; EXP-069 and EXP-070 both failed bilateral grasp because the fixed pad engaged while the moving pad never contacted.
 open_hypotheses:
   - Matching fingertip-pad transverse friction to the existing 3.0 axial friction may reduce cup roll during carry/descent and therefore reduce the downstream placement/release displacement without changing the motion target.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-070-215
-next_experiment: EXP-070
+latest_checkpoint: CP-PRE-EXP-071-217
+next_experiment: EXP-071
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-071-217
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-071
+status: PLANNED
+prior_experiment: EXP-070
+hypothesis: an intermediate transverse friction 2.0 avoids the 3.0 candidate's fixed-pad stiction while providing more lateral roll resistance than the 1.2 baseline
+single_variable: fingertip-pad transverse friction changes from the restored 1.2 baseline to 2.0 in both ODE mu2 and Bullet friction2; axial friction remains 3.0
+lifecycle: FULL_RESTART
+prediction:
+  - bilateral contact and the unchanged physical grasp gate pass within one attempt
+  - if carry is reached, MOVE_ABOVE_PLACE endpoint tilt is <= EXP-067 0.15199 rad
+  - DESCEND_TO_PLACE endpoint and release-q6 tilt improve relative to EXP-067 0.316995/0.260008 rad
+  - authoritative final outcome remains the end-to-end success criterion
+preconditions:
+  - revert the rejected 3.0 implementation to the clean 1.2 baseline before RED/GREEN implementation of 2.0
+  - focused/full pytest and colcon build/test pass with source/install parity
+  - restart only the owned so101-py-qual stack on a new domain/partition and prove initial state before recording one execute
+unchanged:
+  - cup friction 1.2, cup mass 0.020 kg, axial pad friction 3.0, generic fallback friction 1.2
+  - release y compensation -0.005 m, all motion targets/policies/q6, hard safety/final outcome contracts, physics, geometry, controller/gains, collision and attachment semantics
+failure_criteria:
+  - grasp, hard-safety/controller or authoritative final-outcome failure
+invalid_criteria:
+  - source/install/reset mismatch, duplicate stack/client, missing telemetry/video or disk pressure
+decision: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-070-216
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_REPEATED_GRASP_FAILURE_CONFIGURATION_REJECTED
+experiment_id: EXP-070
+execution_commit: ff1a1b6
+lifecycle: RESET_WORLD
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 225
+  gz_partition: so101_py_qual_exp069
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp070/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000019866846181315585
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+failure:
+  phase: POST_SEATING_PHYSICAL_STABILITY
+  error: bilateral stability timeout
+  q6_contact: -0.0476062148809433
+  seating_target_q6: -0.0536062148809433
+  fixed_finger_contact: true
+  moving_jaw_contact: false
+  max_fixed_pad_penetration_m: 0.0007967253332026303
+  max_moving_pad_penetration_m: NONE
+  gazebo_attachment_state: detached
+evidence:
+  physical_failure: /tmp/so101-py-qualification/exp070/run/physical-failure.json
+  telemetry: /tmp/so101-py-qualification/exp070/run/diagnostic/samples.jsonl
+  telemetry_sha256: 55271d0c338c180210430e04124f9601095a8493297d5652179ffec2b5bb1f7d
+  bounded_video: /tmp/so101-py-qualification/exp070/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 4c83fd0ba90a1ffc6be82e201548091c13ea7501a30a753adee75105fa383cca
+interpretation:
+  - A fresh reset reproduced EXP-069 at the same first bad boundary, so the 3.0 transverse-friction candidate is rejected without testing placement tilt.
+decision: REVERT_TO_1_2_BASELINE_THEN_TEST_2_0
+counts_toward_success_streak: false
+next_experiment: EXP-071
 ```
 
 ```yaml
