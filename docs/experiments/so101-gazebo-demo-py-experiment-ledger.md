@@ -65,8 +65,83 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-090-IMPLEMENTED-289
-next_experiment: EXP-090
+latest_checkpoint: CP-PRE-EXP-091-291
+next_experiment: EXP-091
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-091-291
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-091
+status: PREREGISTERED
+prior_experiment: EXP-090
+hypothesis: the fresh ros2 action CLI used for RETREAT creates a 3.31 s post-open idle interval in which the released cup drifts several millimetres before the arm moves; prewarming and reusing one in-process arm FollowJointTrajectory client before grasp will start the unchanged fixed RETREAT immediately after opening and remove that destabilizing dwell
+single_variable: fixed RETREAT transport changes from a fresh ros2 action CLI subprocess to one prewarmed request-scoped in-process action client; trajectory points and timing stay identical
+lifecycle: RESET_WORLD
+prediction:
+  - q6>=0.40 to first RETREAT arm motion is below 0.75 s instead of EXP-090's 3.31 s
+  - pre-retreat cup drift after q6>=0.40 is below 0.002 m in XY
+  - the cup does not enter the high-speed post-open oscillation seen in EXP-090
+  - authoritative final outcome passes in-region/upright/stable/support/free/detached/healthy
+unchanged:
+  - 1 mm MICRO_LIFT lateral bound, sustained hold/regrasp budget, penetration policy/ceiling, cup mass/materials, every trajectory point and waypoint time, compensation, release q6=0.465038, alignment tolerance, shadow/detach ordering, physics/controllers/collision settings and every final/hard safety bound
+preconditions:
+  - TDD, full pytest, colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-090-290
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_AFTER_COMPLETE_CHAIN
+experiment_id: EXP-090
+execution_head: 73a067d
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp090/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000007449565795790913
+physical_grasp:
+  normalized_target_q6: -0.053480903565883635
+  moving_pad_depth_m: 0.00023828183475416154
+  held_micro_lift_world_z_m: 0.002090767025947571
+  held_lateral_drift_m: 0.0002717660188137752
+  attempts: 1
+place_alignment:
+  attempts: 1
+  before_xy_error_m: 0.008177563057397353
+  after_xy_error_m: 0.0019262228085950123
+release:
+  release_start_xyz_m: [-0.07592112571001053, -0.2533082962036133, 0.17639409005641937]
+  q6_0_40_xyz_m: [-0.07289473712444305, -0.2533394396305084, 0.173389732837677]
+  retreat_start_xyz_m: [-0.06905612349510193, -0.2561359405517578, 0.17127427458763123]
+  q6_0_40_to_retreat_start_s: 3.307153551
+  idle_delta_xyz_m: [0.00383861362934112, -0.0027965009212494, -0.00211545825004577]
+final:
+  failure_code: FINAL_UNSUPPORTED
+  final_xyz_m: [-0.061480551958084106, -0.25350049138069153, 0.16615888476371765]
+  x_out_of_region_m: 0.0135194480419159
+  upright_tilt_rad: 0.034933604663780635
+  max_linear_speed_m_s: 0.06356432458156713
+  max_angular_speed_rad_s: 1.3726759680323302
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+interpretation:
+  - the 1 mm grasp gate avoided EXP-089's path-tolerance failure and the release start was inside the final XY box
+  - the first actionable release boundary is now the 3.31 s transport-induced post-open idle before fixed RETREAT motion
+evidence_sha256:
+  reset_proof: 99e23c8a11ad70e013d3c26dacd6b892b9f816272a0ce742b472967ad937db2a
+  execute_log: 417e2c05db8addda59eefd0be1f58df8321dd24bce8533147cbbde3834872ff9
+  physical_gate: 2afd14a09c2590b9f70a0c76239e9ccabd05f71e3573fef86a34e75d16c6d045
+  failure_json: eb0563617e1918b4a1f6c0c1e00bde044d38b75b4e18de1f2b4c3fea3f3d3eb7
+  telemetry: a4776f169fa342aa4522c0df9f62d3e80bcfc5da400d14c4458c6c924b7ef9bd
+  bounded_video: 7f022d48de84f69dc85189d0ab76e38068dcae14d94a5a684b71fcc61f26a2d9
+  final_screenshot: 3c59fb96253a76a8cec1e9426ebfce72220c25e410275ddd3dadd2fd0d4f1445
+decision: retain every EXP-090 gate/motion parameter and eliminate only the post-open RETREAT client startup delay in EXP-091
+counts_toward_success_streak: false
 ```
 
 ```yaml
