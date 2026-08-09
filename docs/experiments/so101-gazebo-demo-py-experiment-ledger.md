@@ -6152,6 +6152,66 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-031-080
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-031
+execution_commit: 95fa838
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-031
+alignment:
+  attempts: 1
+  before_xy_error_m: 0.013800671520980945
+  after_xy_error_m: 0.0029949233845443218
+  aligned_object_xy_m: [-0.07426100224256516, -0.24159768223762512]
+pre_retreat:
+  object_xyz_m: [-0.06971851736307144, -0.2457985281944275, 0.17171898484230042]
+  failure_code: FINAL_GRIPPER_CONTACT
+post_retreat:
+  object_xyz_m: [-0.0863264948129654, -0.25914210081100464, 0.16499997675418854]
+  failure_code: FINAL_OUT_OF_REGION
+  upright_tilt_rad: 0.0000008867130009420113
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+interpretation: alignment converged, but reversing the XY correction while pre-retreat gripper contact was still true dragged the cup before the fixed retreat; target-offset tuning cannot stabilize this retreat-induced displacement
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-031-081
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-031/reset-after-final-out-of-region
+proof:
+  cup_spawn_pose_error_m: 0.00000044271097247504636
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-DYNAMIC-VERTICAL-RETREAT-082
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  when_feedback_alignment_executed: plan and execute a 0.060 m world-Z retreat from the current corrected arm pose
+  removed: horizontal reversal of correction waypoints followed by a fixed ladder from the uncorrected start
+  fallback: retain the original fixed RETREAT ladder when no alignment correction was required
+rationale: separate the opened gripper vertically from the cup instead of sweeping horizontally while contact may still exist
+unchanged:
+  - Gazebo physical release with no virtual attachment
+  - MoveIt Planning Scene detach and world-pose synchronization before retreat planning
+  - final target region and all authoritative final outcome conditions
+tests:
+  red: source-order contract still found reversed correction waypoints
+  focused_green: 1 passed
+  package_pytest: 176 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-028-068
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED

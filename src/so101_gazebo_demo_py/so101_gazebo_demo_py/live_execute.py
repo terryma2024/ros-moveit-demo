@@ -858,7 +858,7 @@ def run_live_execute(
     def execute_place_correction(delta,orientation_tolerance_rad):
         gate_shadow("PLACE_ALIGNMENT")
         return _moveit_world_translation_execute(delta,orientation_tolerance_rad)
-    placed,place_reverse_waypoints,place_alignment=align_cup_for_release(
+    placed,_place_reverse_waypoints,place_alignment=align_cup_for_release(
         backend,target_place_xyz,execute=execute_place_correction,
     )
     pose=(*placed.object_xyz,*placed.object_xyzw); detached_scene=_apply_scene("detach",pose)
@@ -872,9 +872,12 @@ def run_live_execute(
         pre_pose=(*pre_retreat.final_sample.object_xyz,*pre_retreat.final_sample.object_xyzw)
         synchronized_scene[0]=_apply_scene("detach",pre_pose)
         scene_membership[0]=synchronized_scene[0]
-        if place_reverse_waypoints:
-            backend.move_arm(tuple(reversed(place_reverse_waypoints)),0.05)
-        backend.move_arm(retreat_policy.waypoints)
+        if place_alignment:
+            _moveit_world_z_execute(
+                0.060, orientation_tolerance_rad=0.15,
+            )
+        else:
+            backend.move_arm(retreat_policy.waypoints)
     with backend.final_observer() as final_observer:
         def collect_final_epoch():
             gazebo_detached=backend.attachment_state() == "detached"
