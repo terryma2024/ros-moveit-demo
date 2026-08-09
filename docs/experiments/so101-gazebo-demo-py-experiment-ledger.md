@@ -6007,3 +6007,53 @@ prediction: a valid run either enters the final XY tolerance before release or f
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-026-061
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_PRE_RELEASE_GATE
+experiment_id: EXP-026
+execution_commit: 258ac30
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-026
+observed:
+  grasp_gate: PROVED
+  micro_lift_world_z_delta_m: 0.002001523971557617
+  micro_lift_lateral_drift_m: 0.0003309644802779561
+  moving_pad_penetration_m: 0.0011233766563236713
+  failure: place alignment support height outside bound
+  pre_release_height_error_m: 0.01069231986999511
+interpretation: the cup was still physically held before release and exceeded the temporary 10 mm nominal-Z gate by only 0.692 mm; this gate incorrectly treated a pre-release variable as final support evidence and prevented the intended gravity-settled outcome measurement
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-026-062
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-026/reset-after-pre-release-height-gate
+proof:
+  cup_spawn_pose_error_m: 0.0000006259834027133865
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-RELAX-PRE-RELEASE-Z-063
+recorded_at: 2026-08-09 Asia/Shanghai
+change:
+  old_precision_gate_m: 0.010
+  new_plausibility_bound_m: 0.030
+  rationale: allow the physically held cup to drop and settle under Gazebo physics; authoritative final Z, support, stability and arm conditions remain evaluated after RETREAT
+unchanged:
+  - same-run XY tolerance and correction bounds
+  - final physical outcome acceptance
+  - penetration hard ceiling and frozen physics, geometry, materials, controller and collision settings
+tests:
+  red: pre-release height 0.0107 m was rejected
+  focused_green: 5 passed
+  package_pytest: 173 passed, 2 skipped
+next: commit locally, preregister a fresh RESET_WORLD trial
+```
