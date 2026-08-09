@@ -542,43 +542,6 @@ def seat_and_stabilize_physical_grasp(backend, seating_target: float):
     return _stable_bilateral(backend)
 
 
-def tune_seating_penetration(
-    backend,
-    initial_target: float,
-    *,
-    q6_contact: float,
-    q6_safe_lower: float,
-    target_min_m: float = 0.0006,
-    target_max_m: float = 0.0010,
-    initial_step_rad: float = 0.0005,
-    max_adjustments: int = 6,
-):
-    """Close only when stable penetration is low; safe high values stay telemetry."""
-    if not (0.0001 <= target_min_m <= target_max_m <= 0.0010):
-        raise ValueError("penetration target band must stay inside [0.0001, 0.0010] m")
-    target=initial_target; history=[]
-    for adjustment in range(max_adjustments+1):
-        contact=seat_and_stabilize_physical_grasp(backend,target)
-        depth=contact.max_moving_pad_penetration_m
-        if depth is None or not math.isfinite(depth):
-            raise RuntimeError("stable bilateral contact did not report finite penetration")
-        history.append({
-            "adjustment":adjustment,"target_q6":target,"depth_m":depth,
-            "above_preferred_max":depth > target_max_m,
-        })
-        if depth >= target_min_m:
-            return target,contact,history
-        next_target=max(q6_safe_lower,target-initial_step_rad)
-        if next_target == target:
-            raise RuntimeError(
-                f"penetration target unreachable inside q6 bounds: depth={depth} target={target}"
-            )
-        target=next_target
-    raise RuntimeError(
-        f"penetration target did not converge after {max_adjustments} adjustments: {history}"
-    )
-
-
 def stabilize_with_contact_missing_retries(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float
 ):
@@ -745,24 +708,27 @@ def run_live_execute(
     q6_contact=_current_joint_position("6")
     seating_target=seating_preload_target(q6_contact,-.059600220867817,bundle.motion.seating_preload_rad)
     try:
-        seating_target,seated_contact,seating_adjustments=tune_seating_penetration(
-            backend,seating_target,q6_contact=q6_contact,q6_safe_lower=-.059600220867817,
-        )
+        seated_contact=seat_and_stabilize_physical_grasp(backend,seating_target)
     except Exception as error:
         (evidence_directory/"physical-failure.json").write_text(json.dumps({
-            "status":"FAILED","phase":"POST_SEATING_PENETRATION_CONTROL",
+            "status":"FAILED","phase":"POST_SEATING_PHYSICAL_STABILITY",
             "error":str(error),"q6_contact":q6_contact,
-            "initial_seating_target_q6":seating_target,
+            "seating_target_q6":seating_target,
             "gazebo_attachment_state":backend.attachment_state(),
         },indent=2))
         raise
+    seating_telemetry={
+        "target_q6":seating_target,
+        "bilateral":seated_contact.bilateral,
+        "moving_pad_depth_m":seated_contact.max_moving_pad_penetration_m,
+    }
     pre_probe=backend.sample()
     shadow_pose=(*pre_probe.object_xyz,*pre_probe.object_xyzw)
     attached_scene=_apply_scene("attach",shadow_pose)
     try:
         contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817)
     except Exception as error:
-        failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"seating_adjustments":seating_adjustments,"post_seating_contact":asdict(seated_contact),"attempts":1,"planning_scene":attached_scene}
+        failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"seating_telemetry":seating_telemetry,"post_seating_contact":asdict(seated_contact),"attempts":1,"planning_scene":attached_scene}
         try:
             latest_contact=evaluate_bilateral_contact(backend.contacts())
             latest_pose=backend.sample()
@@ -772,7 +738,7 @@ def run_live_execute(
         (evidence_directory/"physical-failure.json").write_text(json.dumps(failure_evidence,indent=2))
         raise
     lift,lateral,micro_points,micro_start_z,before,after,continuation=physical
-    gate={"status":"PROVED","gate_basis":"CUP_AND_ARM_OUTCOME","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"post_seating_bilateral":seated_contact.bilateral,"post_seating_max_moving_pad_penetration_m":seated_contact.max_moving_pad_penetration_m,"seating_penetration_target_min_m":.0006,"seating_penetration_preferred_max_m":.0010,"seating_adjustments":seating_adjustments,"moving_pad_penetration_ceiling_m":MOVING_PAD_MESH_PENETRATION_CEILING_M,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target,"continuation":asdict(continuation)}
+    gate={"status":"PROVED","gate_basis":"CUP_AND_ARM_OUTCOME","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"post_seating_bilateral":seated_contact.bilateral,"post_seating_max_moving_pad_penetration_m":seated_contact.max_moving_pad_penetration_m,"seating_telemetry":seating_telemetry,"moving_pad_penetration_ceiling_m":MOVING_PAD_MESH_PENETRATION_CEILING_M,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target,"continuation":asdict(continuation)}
     (evidence_directory/"physical-gate.json").write_text(json.dumps(gate,indent=2))
     if stop_after == "VERIFY_PHYSICAL_GRASP":
         result={"status":"CHECKPOINT_COMPLETE","current_state":stop_after,"state_trace":list(TRACE[:9]),"exit_code":0,"physical":gate,"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
