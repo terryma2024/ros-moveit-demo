@@ -343,6 +343,9 @@ def align_cup_for_release(
     backend, target_xyz, *, execute,
     max_attempts: int = 3, xy_tolerance_m: float = 0.006,
     z_tolerance_m: float = 0.010,
+    acceptable_xy_bounds: tuple[
+        tuple[float, float], tuple[float, float]
+    ] | None = None,
     max_axis_correction_m: float = 0.030,
     max_pre_release_height_error_m: float = 0.030,
     max_arm_linear_speed_m_s: float = 0.005,
@@ -352,6 +355,13 @@ def align_cup_for_release(
     wait=time.sleep,
 ):
     """Use same-run cup pose feedback for a bounded pre-release XY alignment."""
+    if acceptable_xy_bounds is not None:
+        minimum_xy,maximum_xy=acceptable_xy_bounds
+        if (
+            not all(math.isfinite(value) for value in (*minimum_xy,*maximum_xy))
+            or any(low > high for low,high in zip(minimum_xy,maximum_xy))
+        ):
+            raise ValueError("acceptable XY bounds must be finite and ordered")
     current=backend.sample(); reverse_waypoints=[]; telemetry=[]
     for attempt in range(max_attempts+1):
         values=(*current.object_xyz,*current.object_xyzw,*current.tcp_xyz,*current.tcp_xyzw)
@@ -367,7 +377,15 @@ def align_cup_for_release(
                 f"place alignment pre-release height outside plausibility bound: "
                 f"{height_error}"
             )
-        if xy_error <= xy_tolerance_m and abs(z_error) <= z_tolerance_m:
+        inside_acceptable_xy=(
+            acceptable_xy_bounds is not None
+            and minimum_xy[0] <= current.object_xyz[0] <= maximum_xy[0]
+            and minimum_xy[1] <= current.object_xyz[1] <= maximum_xy[1]
+        )
+        if (
+            (inside_acceptable_xy or xy_error <= xy_tolerance_m)
+            and abs(z_error) <= z_tolerance_m
+        ):
             return current,tuple(reverse_waypoints),tuple(telemetry)
         if attempt == max_attempts:
             break
@@ -1190,6 +1208,10 @@ def _run_live_execute_with_scene(
     placed,_place_reverse_waypoints,place_alignment=align_cup_for_release(
         backend,target_place_xyz,execute=execute_place_correction,
         xy_tolerance_m=0.006,
+        acceptable_xy_bounds=(
+            outcome_policy.final_target_min_xy_m,
+            outcome_policy.final_target_max_xy_m,
+        ),
         max_arm_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
         max_arm_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
     )

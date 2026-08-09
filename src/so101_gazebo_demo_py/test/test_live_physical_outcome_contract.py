@@ -230,6 +230,9 @@ def test_live_alignment_uses_six_mm_tolerance_and_fixed_retreat() -> None:
         )
     ]
     assert "xy_tolerance_m=0.006" in alignment_call
+    assert "acceptable_xy_bounds=(" in alignment_call
+    assert "outcome_policy.final_target_min_xy_m" in alignment_call
+    assert "outcome_policy.final_target_max_xy_m" in alignment_call
     assert "collect_final_outcome_after_immediate_retreat(" in forward_path
     assert "collect_final_outcomes_around_retreat(" not in forward_path
 
