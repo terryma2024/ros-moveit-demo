@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: e2dc797
+current_commit: e8a1cb0
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -36,6 +36,7 @@ confirmed_conclusions:
   - EXP-078 reached OPEN_GRIPPER but stochastic place alignment selected the unchanged aligned-path 10 mm radial plus 60 mm world-Z release retreat; the radial move changed arm joints, then world-Z failed with error 99999 before the new fast fixed RETREAT variable was exercised.
   - EXP-079 exact repeat exercised the fast fixed RETREAT in 2.908 s and achieved authoritative final success at [-0.080489, -0.250643, 0.165000] m, with at least 4.357 mm margin to every XY boundary, upright/stable/supported/gripper-free and Gazebo/MoveIt detached.
   - QUAL-FULL-FAST-01 clean-stack run failed before OPEN_GRIPPER: post-seating moving-pad penetration was 1.06393 mm versus EXP-079's 0.23831 mm, and the cup reached [-0.073652, -0.290274, 0.179158] m tilted/table-contacting at DESCEND_TO_PLACE, requiring a 36.075 mm y correction beyond the retained 30 mm safety bound.
+  - EXP-080 with penetration normalization completed authoritative final success at [-0.081599, -0.247043, 0.165000] m; this reset naturally produced 0.23845 mm seating penetration and required zero adjustments, so clean-stack qualification must still exercise environmental variability.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -53,8 +54,90 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-080-RUNNING-254
-next_experiment: EXP-080
+latest_checkpoint: CP-QUAL-FULL-NORM-PLAN-256
+next_experiment: QUAL-FULL-NORM-01
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-NORM-PLAN-256
+recorded_at: 2026-08-10 Asia/Shanghai
+status: QUALIFICATION_PLANNED
+candidate:
+  implementation_commit: f714e30
+  frozen_result_commit: e8a1cb0
+  penetration_target_interval_m: [0.0001, 0.001]
+  penetration_hard_ceiling_m: 0.0013
+  maximum_q6_adjustments: 4
+  q6_adjustment_rad: 0.001
+  final_open_gripper_duration_s: 2
+  no_alignment_retreat_velocity_scaling: 0.10
+qualification_order:
+  - five consecutive FULL_RESTART successes, each on a new ROS domain and Gazebo partition
+  - then five consecutive RESET_WORLD successes on the fifth clean stack
+next_run:
+  id: QUAL-FULL-NORM-01
+  ros_domain_id: 229
+  gz_partition: so101_py_full_norm_01
+success_contract: unchanged authoritative physical-outcome contract plus normalized seating penetration inside [0.0001, 0.001] m before carry
+failure_contract: any valid grasp/motion/release/final-outcome failure resets streak to zero and returns to search; hard safety and alignment bounds remain unchanged
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-080-255
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FINAL_SUCCESS_CANDIDATE_FROZEN
+experiment_id: EXP-080
+execution_head: e8a1cb0
+implementation_commit: f714e30
+lifecycle: RESET_WORLD
+command_exit_code: 0
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp080/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000014319297985750764
+physical_grasp:
+  requested_target_q6: -0.05348167097568512
+  normalized_target_q6: -0.05348167097568512
+  adjustments: 0
+  actual_q6: -0.05285172164440155
+  post_seating_moving_pad_penetration_m: 0.00023844999668654054
+  max_moving_pad_penetration_m: 0.00023862719535827637
+  micro_lift_world_z_m: 0.001960858702659607
+  lateral_drift_m: 0.0002520330517551812
+release:
+  place_alignment_attempts: 0
+  post_open_movegroup_separation: false
+  fast_fixed_retreat: true
+final:
+  success: true
+  object_xyz_m: [-0.08159945905208588, -0.24704253673553467, 0.16499991714954376]
+  minimum_xy_boundary_margin_m: 0.00204253673553467
+  upright_tilt_rad: 0.0000011342514892808249
+  sample_count: 5
+  duration_s: 0.250677358825
+  max_linear_speed_m_s: 0.0
+  max_angular_speed_rad_s: 0.0
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+evidence:
+  live_summary_sha256: d38b72573093214bbc81a74139d91b37db7f29e032a15add9bd3bc4ad4f7550c
+  physical_gate_sha256: 2996fd250e24d2d4c123ffe559dbe973a94cad127ded72e71877ebad34aaed94
+  telemetry_sha256: e0a3ca30c5d765a4fdd7b0c4b3d90779d9d1fc3e34085b60391d95fd9deed436
+  bounded_video_sha256: e44db85edc2c50a89bda33017f6c0e040dc63b97ad10a0690140399aef05aa53
+  final_screenshot_sha256: 45e869647910fd5b2dc370b24d91e4be7d0b87c06e97712d4858bbce4beb9341
+prediction_evaluation:
+  target_penetration_interval: PASS_WITHOUT_ADJUSTMENT
+  micro_lift_lateral_drift_below_0_0006_m: PASS
+  reaches_open_without_alignment_bound_failure: PASS
+  authoritative_final_outcome: PASS
+decision: freeze f714e30 for clean-stack qualification; automated tests prove both adjustment directions and hard-ceiling behavior, while FULL_RESTART variability must supply live branch evidence
+counts_toward_success_streak: false
+reason_not_counted: RESET_WORLD search confirmation run
+next_experiment: QUAL-FULL-NORM-01
 ```
 
 ```yaml
