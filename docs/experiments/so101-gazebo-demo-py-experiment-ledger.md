@@ -7930,3 +7930,31 @@ tests:
   package_pytest: 189 passed, 2 skipped
 next: commit locally, then preregister one RESET_WORLD trial
 ```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-053-160
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-053
+purpose: validate one bounded physical regrasp when the first micro-lift cup outcome fails
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 3774797
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-052-reset/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-053
+candidate:
+  physical_grasp_attempts: 2
+  retry_local_x_m: -0.0002
+  retry_seating_target: original_requested_preload
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  pre_release_xy_convergence_tolerance_m: 0.006
+  pre_release_z_convergence_tolerance_m: 0.010
+  maximum_alignment_commands: 3
+  immediate_radial_separation_m: 0.010
+prediction: if the first physical micro-lift loses the cup, the single regrasp obtains sufficient cup lift and the run proceeds to final physical release evidence
+acceptance: unchanged micro-lift cup-result gate followed by unchanged authoritative post-RETREAT final outcome contract
+counts_toward_success_streak: false
+```
