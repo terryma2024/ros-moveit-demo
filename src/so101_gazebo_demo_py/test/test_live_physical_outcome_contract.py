@@ -185,7 +185,7 @@ def test_live_path_retries_one_failed_micro_lift_at_requested_preload() -> None:
         ))
     ]
 
-    assert "max_grasp_attempts=2" in forward_path
+    assert "max_grasp_attempts=3" in forward_path
     assert "max_attempts=max_grasp_attempts" in grasp_call
     assert "seating_actual_q6=_current_joint_position(\"6\")" in forward_path
     assert "seating_target=_current_joint_position(\"6\")" not in forward_path

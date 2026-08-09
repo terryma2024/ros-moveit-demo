@@ -1133,7 +1133,7 @@ def _run_live_execute_with_scene(
     pre_probe=backend.sample()
     shadow_pose=(*pre_probe.object_xyz,*pre_probe.object_xyzw)
     attached_scene=apply_scene("attach",shadow_pose)
-    max_grasp_attempts=2
+    max_grasp_attempts=3
     try:
         contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(
             backend,normalized_seating_target,bundle.motion.preopen_q6,-.059600220867817,
