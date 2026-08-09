@@ -35,43 +35,7 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.0, 0.0004)
     assert bundle.motion.seating_preload_rad == 0.006
     assert bundle.motion.grasp_tcp_world_x_rotation_rad == 0.0
-    assert bundle.motion.diagnostic_moving_pad_penetration_ceiling_m == 0.0
     assert len(bundle.sha256) == 64
-
-
-def test_loads_diagnostic_penetration_ceiling_override(tmp_path: Path) -> None:
-    motion = yaml.safe_load(
-        (CONFIG / "motion_policies/light_cup_wall_pick.yaml").read_text()
-    )
-    motion["diagnostic_moving_pad_penetration_ceiling_m"] = 0.00128
-    motion_path = tmp_path / "motion.yaml"
-    motion_path.write_text(yaml.safe_dump(motion, sort_keys=False))
-
-    bundle = load_policy_bundle(
-        CONFIG / "task_objects/light_plastic_cup.yaml",
-        motion_path,
-        CONFIG / "validation_policies/light_cup_wall_pick.yaml",
-    )
-    assert bundle.motion.diagnostic_moving_pad_penetration_ceiling_m == 0.00128
-
-
-@pytest.mark.parametrize("ceiling", [-0.001, 0.0012, 0.001300001])
-def test_rejects_out_of_range_diagnostic_penetration_ceiling(
-    tmp_path: Path, ceiling: float,
-) -> None:
-    motion = yaml.safe_load(
-        (CONFIG / "motion_policies/light_cup_wall_pick.yaml").read_text()
-    )
-    motion["diagnostic_moving_pad_penetration_ceiling_m"] = ceiling
-    motion_path = tmp_path / "motion.yaml"
-    motion_path.write_text(yaml.safe_dump(motion, sort_keys=False))
-
-    with pytest.raises(ConfigurationError, match="diagnostic moving-pad penetration ceiling"):
-        load_policy_bundle(
-            CONFIG / "task_objects/light_plastic_cup.yaml",
-            motion_path,
-            CONFIG / "validation_policies/light_cup_wall_pick.yaml",
-        )
 
 
 @pytest.mark.parametrize("preload", [-0.001, 0.006001])

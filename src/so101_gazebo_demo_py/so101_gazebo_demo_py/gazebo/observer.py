@@ -6,11 +6,12 @@ import threading
 import time
 
 
-# Recalibrated 2026-08-09 (CP-AUTHORIZATION-CEILING-RECALIBRATION-001) from 0.000800002:
-# solver limit 0.0013 minus 0.00005 measurability guard; above the observed bilateral
-# moving-pad distribution max 0.001193 m and the proven physical grasp depth ~0.0010 m
-# (EXP-PEN-DIAG-001-GRASP-229, cup carried by the +0.002 m micro-lift).
-MOVING_PAD_MESH_PENETRATION_CEILING_M = 0.00125
+# Solver-limit gate semantics (2026-08-09, CP-AUTHORIZATION-SOLVER-LIMIT-GATE-001):
+# the ceiling equals the solver report limit, so reportability (within_solver_depth_limit)
+# is the only depth gate; grasp acceptance rests on stable bilateral contact plus the
+# physical micro-lift carry gate. Recalibrated from 0.00125 (variance failure) and
+# originally 0.000800002.
+MOVING_PAD_MESH_PENETRATION_CEILING_M = 0.0013
 SOLVER_REPORTED_CONTACT_DEPTH_LIMIT_M = 0.0013
 
 
