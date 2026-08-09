@@ -47,6 +47,7 @@ confirmed_conclusions:
   - EXP-082 lowered the release TCP by 4.637 mm but increased pre-open table penetration to about 1.143 mm and still rolled 11.621 mm in negative x, ending 5.882 mm beyond the x boundary; release height is not the controlling variable.
   - EXP-083 fast descent produced an immediate endpoint cup tilt of only 0.0294 rad, but during the retained 2 s gripper-opening command the last still-closed telemetry reached 0.2175 rad/table contact and the cup later rolled 9.732 mm in positive x; the next boundary is opening duration.
   - EXP-084's 1 s full-range opening still displaced the cup 10.379 mm in negative y and ended 19.074 mm beyond the lower y boundary; opening duration alone does not control the pad-sweep impulse.
+  - EXP-092 did not exercise the three-attempt budget: the initial bounded seating normalization lost moving-pad contact while fixed-pad depth was 0.73929 mm, so it stopped safely before micro-lift or carry.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -65,8 +66,65 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-092-IMPLEMENTED-295
-next_experiment: EXP-092
+latest_checkpoint: CP-PRE-EXP-093-297
+next_experiment: EXP-093
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-093-297
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-093
+status: PREREGISTERED
+prior_experiment: EXP-092
+hypothesis: EXP-092 failed before reaching its isolated variable because one reset produced fixed-only seating; an exact RESET_WORLD repeat can exercise the already-tested three-attempt policy without changing any parameter or safety bound
+single_variable: none; exact repeat of EXP-092
+lifecycle: RESET_WORLD
+prediction:
+  - bounded seating reaches bilateral contact inside the unchanged target and hard ceiling
+  - up to three deterministic grasps are available under the unchanged 1 mm immediate and held lateral-drift gates
+  - if carry reaches release, the prewarmed RETREAT path is exercised and its q6-to-arm-motion interval is measured
+  - authoritative final outcome passes
+unchanged:
+  - all source, installed assets, parameters, motion targets, attachment semantics and safety/final contracts from EXP-092
+preconditions:
+  - clean worktree at implementation commit 70c6dbe plus ledger-only commits
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-092-296
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_BEFORE_GRASP_ATTEMPTS
+experiment_id: EXP-092
+execution_head: 5933296
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp092/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000021017675000851524
+physical_seating:
+  phase: POST_SEATING_PHYSICAL_STABILITY
+  failure: bilateral stability timeout
+  q6_contact: -0.04760736599564552
+  seating_target_q6: -0.05360736599564552
+  fixed_pad_depth_m: 0.000739291834179312
+  moving_pad_depth_m: null
+  gazebo_attachment_state: detached
+three_attempt_policy_evaluation: NOT_REACHED
+interpretation:
+  - the unchanged seating safety gate stopped before micro-lift because bilateral contact was absent
+  - this run provides no evidence for or against the isolated three-attempt policy
+  - repeat the exact candidate once after a proved RESET_WORLD rather than changing another variable
+evidence_sha256:
+  reset_proof: 8fd9889c630914efbb14365f4503cadd25d028707eae78a2ae0e1e5110660500
+  execute_log: 04a7b73c3fff3869b03793ed9484fef6c217cd95c791f3cbacaeab40b50b41d5
+  physical_failure: c58f91c641efdb7b326a10da5f09ac6f6d913bf163d226d1fb9f0da89b2a3b7c
+  telemetry: 0743eb1a0486fc215d567b88f6ad39c9411f0a96e00ded5bbbbc0fd19b3f4f2e
+  bounded_video: b992716711d880aba9903fa14560f47779a4a882e14ee27f5a4b6231e8d38d94
+  final_screenshot: 36e15c14d729890e00ebc8d627b7537549f12601df2e50cab8682f9f02793e7c
+decision: exact-repeat the unchanged candidate as EXP-093
+counts_toward_success_streak: false
 ```
 
 ```yaml
