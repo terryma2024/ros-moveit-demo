@@ -6236,6 +6236,60 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-040-112
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_CONTROLLER_ABORT
+experiment_id: EXP-040
+execution_commit: 6d34412
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-040
+failure:
+  stage: DESCEND_TO_PLACE
+  controller_error_code: -4
+  controller_error: path tolerance violation
+  release_strategy_reached: false
+interpretation: unchanged pre-candidate motion aborted; no evidence for immediate release retreat
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-040-113
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-040/reset-after-descend-controller-abort
+proof:
+  cup_spawn_pose_error_m: 0.0000016674758268445798
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-041-114
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-041
+purpose: retry unchanged immediate-release-retreat candidate after pre-candidate controller abort
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 6d34412
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-040/reset-after-descend-controller-abort/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-041
+candidate:
+  changed_since_EXP_040: false
+  intermediate_release_wait: none
+  immediate_radial_separation_m: 0.015
+  immediate_vertical_retreat_m: 0.060
+prediction: obtain authoritative final outcome for the unchanged candidate
+acceptance: unchanged authoritative final physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-039-107
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
