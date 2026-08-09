@@ -28,7 +28,7 @@
       "destination": "config/motion_policies/light_cup_wall_pick.yaml",
       "source_dirty": true,
       "source_sha256": "4ba7b35c315615a73238276ea511306bb98e2b4f30bddf0134f3183a6ef1ad4e",
-      "destination_sha256": "8f11467ac14fb3c814b7c4a81161af66a7911c7bec32827a0985156bf75078b9"
+      "destination_sha256": "19f0dd93551c815d96a3f4cbf0b0054081833328898c5bc82827c11736fcbb4b"
     },
     {
       "source": "src/so101_gazebo_demo/config/moveit.rviz",
