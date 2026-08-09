@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: f944124
+current_commit: 8d7913e
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -29,6 +29,7 @@ confirmed_conclusions:
   - EXP-070 repeated the 3.0 transverse-friction candidate after a proved RESET_WORLD and reproduced the same fixed-only contact failure (0.000796725 m, no moving-pad contact); this configuration is rejected before carry/place.
   - EXP-071 with transverse friction 2.0 restored bilateral grasp and improved MOVE_ABOVE_PLACE tilt to 0.10775 rad, but worsened raised-descend/pre-open tilt to 0.23007/0.34605 rad, exceeded the 0.001 m target penetration at 0.00104337 m, and ended in world-Z MoveIt error 99999; it is rejected.
   - EXP-072's nominal MOVE_ABOVE_PLACE scaling 0.15 was operationally identical to 0.10 because waypoint_step_seconds rounds both to 1 s/waypoint. One boundary release-alignment correction amplified tilt from 0.19564 to 0.34147 rad, and the cup rolled 25.38 mm in x while the gripper opened, ending outside the target region.
+  - EXP-073 validly deferred an 8.5665 mm XY residual, executed no release-alignment correction, completed fixed-joint retreat without MoveIt planning failure, and ended upright/stable/supported/gripper-free only 0.8735 mm beyond the final y boundary.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -40,10 +41,64 @@ disproven_routes:
 open_hypotheses:
   - With the rejected friction candidates restored to 1.2, the next useful boundary is the motion/alignment interval in which tilt grows between MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and OPEN_GRIPPER; target compensation should not be used to mask the tilt source.
   - A release-alignment correction triggered by an approximately 8.37 mm XY error can amplify pre-open tilt; relaxing the intermediate correction trigger while retaining the final target region is the next outcome-first candidate.
+  - EXP-073 retains gripper contact throughout its 1.495 s pre-retreat observation after the 5 s release command; shortening only the final release opening is the next outcome-first candidate.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-073-IMPLEMENTED-225
-next_experiment: EXP-073
+latest_checkpoint: CP-RESULT-EXP-073-226
+next_experiment: EXP-074
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-073-226
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_ALIGNMENT_DEFERRED_NEAR_MISS
+experiment_id: EXP-073
+execution_commit: 8d7913e
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp073/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000007800581260612816
+release_alignment:
+  observed_xy_error_m: 0.00856652233099201
+  discrimination_band_m: [0.006, 0.010]
+  attempts: 0
+  causal_result: VALIDLY_DEFERRED
+physical_grasp:
+  status: PROVED
+  post_seating_moving_pad_penetration_m: 0.00023916781356092542
+  micro_lift_world_z_m: 0.0020284950733184814
+phase_comparison_same_analysis:
+  move_above_place_endpoint_tilt_rad: 0.1257758232496026
+  exp072_move_above_place_endpoint_tilt_rad: 0.16769256578856845
+  strict_pre_open_tilt_rad: 0.2109757467885281
+  exp072_strict_pre_open_tilt_rad: 0.34147366616229774
+  table_contact_samples_raised_endpoint_to_open: 0
+pre_retreat:
+  success: false
+  failure_code: FINAL_GRIPPER_CONTACT
+  duration_s: 1.495222477242
+  object_xyz_m: [-0.07372330874204636, -0.26030227541923523, 0.17208772897720337]
+  upright_tilt_rad: 0.22396050576185544
+post_retreat:
+  success: false
+  failure_code: FINAL_OUT_OF_REGION
+  object_xyz_m: [-0.0781744122505188, -0.25587350130081177, 0.16500000655651093]
+  y_outside_target_region_m: 0.00087350130081177
+  upright_tilt_rad: 0.000001006242216595104
+  max_linear_speed_m_s: 0.000015026000850049963
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+evidence:
+  final_outcome: /tmp/so101-py-qualification/exp073/run/final-outcome-failure.json
+  phase_analysis_sha256: 39d18f8914f04121debe1d0d7da8a78d34972125450939ecb55e68039a2da9d1
+  telemetry_sha256: 1a43e3108ccaa9e77d996ad3a74e1ecec70bdec7d2b585470ba67be7cc147b6e
+  bounded_video_sha256: 9bdbcf238a26eb38f1b64e66cd6040b484a353e8d4d109b60db6ee102feaefec
+decision: retain the 0.010 m intermediate tolerance; next isolate final release opening duration without changing release target compensation
+counts_toward_success_streak: false
 ```
 
 ```yaml
