@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 1b4ce0d
+current_commit: 453109c
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -23,17 +23,117 @@ confirmed_conclusions:
   - EXP-064 jointly changed the cup to 0.010 kg and raised cup/pad limiting friction to 2.0; MOVE_ABOVE_PLACE end tilt improved from 0.15114 to 0.09895 rad and q6 range from 0.00738 to 0.000168 rad, but DESCEND_TO_PLACE later reached 0.77106 rad tilt.
   - EXP-065 restored 0.020 kg while retaining limiting friction 2.0; MOVE_ABOVE_PLACE regressed to 0.26479 rad end tilt and 0.01068 rad q6 range, while DESCEND_TO_PLACE improved relative to EXP-064 but still ended at 0.44172 rad. The material profile is not an end-to-end candidate.
   - EXP-066 retained one Planning Scene client and reduced the MOVE-to-DESCEND non-motion interval from the EXP-063 baseline 2.89 s to 2.13 s; it missed the 1.5 s prediction but limited dwell tilt growth to 0.01735 rad and improved DESCEND_TO_PLACE end tilt to 0.22522 rad.
+  - EXP-067 increased only DESCEND_TO_PLACE scaling to 0.05, reduced descent from 8.73 to 5.82 s and completed the formerly blocked release/retreat chain. The final cup was upright, motionless, supported and gripper-free, but y=-0.244315 m missed the target-region upper bound by 0.000685 m.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Retaining EXP-066 client reuse while increasing only DESCEND_TO_PLACE velocity/acceleration scaling from 0.03 to 0.05 should reduce the observed 8.73 s gravity-exposure interval without changing targets or safety bounds.
+  - Retaining EXP-067 and shifting only release-alignment y compensation by approximately -0.006 m should counter the observed +0.011805 m retreat displacement and move the final cup from y=-0.244315 m toward the -0.250 m region center.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-067-IMPLEMENTED-209
-next_experiment: EXP-067
+latest_checkpoint: CP-RESULT-EXP-067-210
+next_experiment: EXP-068
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-067-210
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_END_TO_END_NEAR_SUCCESS_WITH_SCOPED_SPEED_GATE_FAILURE
+experiment_id: EXP-067
+execution_commit: 453109c
+lifecycle: RESET_WORLD
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 224
+  gz_partition: so101_py_qual_exp066
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp067/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.000001105334150710041
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.00023824947129469365
+  continuation_max_moving_pad_penetration_m: 0.00023931136820465326
+  micro_lift_world_z_m: 0.0018970668315887451
+  lateral_drift_m: 0.0001973831894427593
+move_above_place:
+  duration_s: 4.924238268751651
+  end_tilt_rad: 0.15198719896736473
+  q6_position_range_rad: 0.007377456873655319
+  table_contact_samples: 0
+post_move_shadow_dwell:
+  duration_s: 1.2598354159854352
+  start_tilt_rad: 0.15198719896736473
+  end_tilt_rad: 0.1283058987374097
+  max_tilt_rad: 0.16749741375248403
+  q6_position_range_rad: 0.008268177509307861
+  table_contact_samples: 0
+descend_to_place:
+  duration_s: 5.8161251791752875
+  baseline_exp066_duration_s: 8.730801976751536
+  start_tilt_rad: 0.12955634531079085
+  end_tilt_rad: 0.31699548943637
+  max_tilt_rad: 0.33059732892200167
+  q6_position_range_rad: 0.006699848920106888
+  table_contact_samples: 43
+  end_bottom_clearance_m: -0.0004960076818764092
+release_open_q6_reached:
+  cup_tilt_rad: 0.2600081818146819
+  bottom_clearance_m: -0.00004616257108253086
+  table_contact: true
+prediction_evaluation:
+  physical_grasp_contract: PASS
+  descend_duration_at_most_6_3_s: PASS_AT_5_81613
+  descend_end_tilt_at_most_0_20_rad: FAIL_AT_0_31700
+  no_table_contact_through_descend: FAIL
+  release_q6_tilt_at_most_0_35_rad: PASS_AT_0_26001
+  no_table_contact_at_release_q6: FAIL
+planning_scene_shadow_gate_durations_s:
+  LIFT: 0.6439057341776788
+  MOVE_ABOVE_PLACE: 0.007027717772871256
+  DESCEND_TO_PLACE: 0.015449337661266327
+final_outcome:
+  status: FAILED_FINAL_OUT_OF_REGION
+  xyz_m: [-0.07760580629110336, -0.2443149834871292, 0.16499999165534973]
+  upright_tilt_rad: 0.0000002606638622959845
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0
+  table_supported: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+  y_region_upper_bound_m: -0.245
+  y_outside_distance_m: 0.0006850165128707841
+release_and_retreat:
+  release_start_xyz_m: [-0.07862579822540283, -0.25766053795814514, 0.18228384852409363]
+  pre_retreat_final_xyz_m: [-0.07839782536029816, -0.25611966848373413, 0.17372891306877136]
+  retreat_translation_of_cup_m: [0.0007920190691947937, 0.01180468499660492, -0.00872892141342163]
+evidence:
+  execute_log: /tmp/so101-py-qualification/exp067/run/execute.log
+  physical_gate: /tmp/so101-py-qualification/exp067/run/physical-gate.json
+  final_outcome_failure: /tmp/so101-py-qualification/exp067/run/final-outcome-failure.json
+  telemetry: /tmp/so101-py-qualification/exp067/run/diagnostic/samples.jsonl
+  telemetry_sha256: e861e940d62acdd5511515f5d1d09abbfcdaa0d811d31c8a2f08cc158b56bd0e
+  bounded_video: /tmp/so101-py-qualification/exp067/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 0363a4ff6363ec1351006949ab3405420a00971c23bd99ad891a5f46451ae038
+visual_observation:
+  - The contact sheet shows the cup rolling into table contact during the faster descent, then becoming upright as the gripper opens and remaining upright after the arm retreats.
+  - The final visual state agrees with the final epoch: upright, table-supported and clear of the gripper.
+interpretation:
+  - EXP-067 fails its scoped pre-release tilt/contact prediction and therefore cannot count as a successful experiment or qualification run.
+  - Under the user-approved outcome-first strategy, it is nevertheless the strongest end-to-end candidate because the final state misses only one positional bound by 0.685 mm while every other authoritative final condition passes.
+decision: KEEP_AS_OUTCOME_FIRST_CANDIDATE; next change only release y pre-compensation; do not alter speed, z, q6, safety bounds or material profile
+counts_toward_success_streak: false
+next_experiment: EXP-068 release-alignment y compensation -0.005 -> -0.011 m
 ```
 
 ```yaml
