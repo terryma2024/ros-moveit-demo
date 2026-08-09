@@ -4686,3 +4686,33 @@ provenance:
   bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
 next: commit locally, preregister one physical candidate with 0.004 preload and y-shifted place family, then classify final x before changing preload
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-011
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: retaining the EXP-010 0.004 seating preload while translating the place ladder 0.012 m toward negative y will move the stable final y from about -0.234 m into the frozen target interval; final x may remain outside and will be classified before any preload change
+execute_commit: 54f0389f76adcf2aae2c3f1e23d667cf35156eb4
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+motion_policy_sha256: 16cbbe82d0f46fc0012c10613fab06188aa448d7edf6732a1749a33f70df612b
+validation_policy_sha256: d31fd15fffc8c52129584a81c392d333702e1462488db13af30ef5dcbbf178a2
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-011
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-010/reset-after-failure/reset-world.json
+strategy:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  seating_preload_rad: 0.004
+  place_ladder_tcp_translation_m: [0.0, -0.012, 0.0]
+  waypoint_generation: MoveGroup plan_only with 0.15 rad TCP orientation tolerance; execution uses frozen joint waypoints
+  retreat: exact reverse of shifted vertical descent
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained
+  intermediate_validation: outcome-first cup state and arm stability
+  final_acceptance: frozen position, uprightness, and stability region
+next_on_valid_success: freeze the strategy and run two independent RESET_WORLD confirmations
+next_on_valid_failure: use final x/y displacement to select one preload-only candidate while retaining the shifted place family
+```
