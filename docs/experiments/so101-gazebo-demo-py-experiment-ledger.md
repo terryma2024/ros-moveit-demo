@@ -5396,3 +5396,54 @@ strategy:
 next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
 next_on_valid_failure: use only physical cup/arm/final outcome evidence for the next single change
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-019
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  failure_phase: POST_SEATING_PHYSICAL_STABILITY
+  fixed_finger_contact: true
+  moving_jaw_contact: false
+  fixed_pad_depth_m: 0.0007330019725486636
+  gazebo_attachment_state: detached
+diagnosis: the configured preload can occasionally lose the moving-jaw contact before micro-lift; bilateral physical hold is an outcome condition and requires a bounded reclose strategy, not penetration targeting
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-019
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-019-044
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-019/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.00000046505970241548987
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-BOUNDED-BILATERAL-RECLOSE-045
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy:
+  initial_action: configured preload then six consecutive bilateral observations
+  retry_trigger: bilateral stability failure only
+  retry_sequence: preopen gripper, then reclose 0.001 rad beyond the initial seating target per retry
+  maximum_retries: 4
+  q6_lower_bound: unchanged safe floor
+  penetration: telemetry except unchanged hard ceiling
+  success_evidence: six consecutive bilateral samples plus actual observed q6
+  gazebo_attachment: forbidden
+tests:
+  red: live-path source contract found no bounded contact-missing retry call
+  focused_green: 49 passed
+  package_pytest: 166 passed, 2 skipped
+  colcon_test: 168 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit locally and preregister one full-path candidate with no other parameter changes
+```

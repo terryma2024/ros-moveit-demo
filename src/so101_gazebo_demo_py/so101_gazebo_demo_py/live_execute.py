@@ -708,7 +708,11 @@ def run_live_execute(
     q6_contact=_current_joint_position("6")
     seating_target=seating_preload_target(q6_contact,-.059600220867817,bundle.motion.seating_preload_rad)
     try:
-        seated_contact=seat_and_stabilize_physical_grasp(backend,seating_target)
+        backend.move_gripper(seating_target)
+        seated_contact=stabilize_with_contact_missing_retries(
+            backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,
+        )
+        seating_target=_current_joint_position("6")
     except Exception as error:
         (evidence_directory/"physical-failure.json").write_text(json.dumps({
             "status":"FAILED","phase":"POST_SEATING_PHYSICAL_STABILITY",
