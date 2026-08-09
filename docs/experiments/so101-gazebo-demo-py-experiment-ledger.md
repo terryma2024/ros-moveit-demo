@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 74a02e7
+current_commit: 0436ffd
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -33,6 +33,7 @@ confirmed_conclusions:
   - EXP-075 exact-repeat search success exercised the 2 s final opening, reduced release-to-q6>=0.74 from EXP-073's 6.758 s to 2.763 s, and ended at [-0.079112, -0.245103, 0.165000] m upright/stable/supported/gripper-free; however its y margin was only 0.103 mm and fixed-pad contact persisted throughout opening.
   - EXP-076 passed the physical grasp gate but failed exactly at the new post-detach radial separation plan with MoveIt error 99999; the command never executed, leaving the open gripper in fixed/moving-pad contact with the table-supported tilted cup.
   - EXP-077 kept the MoveIt shadow attached and shortened the radial target to 0.004 m, but the same MoveIt error 99999 occurred before any arm-joint motion; therefore the contact-adjacent release pose itself, not only detach ordering or separation distance, blocks a newly planned Cartesian separation.
+  - EXP-078 reached OPEN_GRIPPER but stochastic place alignment selected the unchanged aligned-path 10 mm radial plus 60 mm world-Z release retreat; the radial move changed arm joints, then world-Z failed with error 99999 before the new fast fixed RETREAT variable was exercised.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -50,8 +51,75 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-078-RUNNING-244
-next_experiment: EXP-078
+latest_checkpoint: CP-PRE-EXP-079-246
+next_experiment: EXP-079
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-079-246
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-079
+status: PLANNED
+prior_experiment: EXP-078
+hypothesis: EXP-078 failed in the unchanged stochastic place-alignment release branch before the explicit fast fixed RETREAT was reached, so one configuration-identical RESET_WORLD repeat can exercise and evaluate the 1 s per waypoint retreat without introducing another variable
+single_variable: NONE; exact repeat of implementation 068eb89 and every installed policy/material/runtime value
+lifecycle: RESET_WORLD
+prediction:
+  - reset and physical-grasp gates pass
+  - place alignment is either not required or validly deferred under the unchanged 0.010 m intermediate tolerance
+  - no-alignment fixed RETREAT executes at 1 s per waypoint
+  - authoritative final outcome succeeds with post-retreat XY displacement below 0.005 m and at least 0.001 m y margin
+preconditions:
+  - no source, policy, material, controller, collision, physics or validation changes after EXP-078
+  - prove a fresh RESET_WORLD on the sole so101-py-qual stack
+  - no second Gazebo/MoveIt stack or execute client
+failure_criteria:
+  - valid grasp/motion/release/final-outcome failure
+invalid_criteria:
+  - provenance/reset mismatch, duplicate stack/client, missing telemetry/video or any configuration change
+decision: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-078-245
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_ACTIVE_VARIABLE_NOT_REACHED
+experiment_id: EXP-078
+execution_head: 0436ffd
+implementation_commit: 068eb89
+lifecycle: RESET_WORLD
+command_exit_code: 1
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp078/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.000000461453626484928
+physical_grasp:
+  status: PROVED
+  max_moving_pad_penetration_m: 0.00023929889721330255
+  post_seating_moving_pad_penetration_m: 0.00023872038582339883
+  micro_lift_world_z_m: 0.001950591802597046
+  lateral_drift_m: 0.0001715655364375827
+release_boundary:
+  final_open_gripper_completed: true
+  place_alignment_branch_selected: true
+  evidence: final arm joints [0.3450148404, 0.4310812652, 0.1213666275, 1.0420650244, 0.0059509063] differ materially from the fixed RETREAT logical start and prove the aligned-path radial command executed
+  failure: subsequent aligned-path 0.060 m world-Z MoveGroup plan failed with error 99999
+  fast_fixed_retreat_executed: false
+last_observed_physical_state:
+  object_xyz_m: [-0.0856391116976738, -0.2926636338233948, 0.17890529334545135]
+  object_quaternion_xyzw: [0.20871293194357574, 0.397630375426192, 0.24266059793980968, 0.8599097755421686]
+  cup_table_contact: true
+  moving_pad_contact: true
+evidence:
+  execute_log_sha256: bb0cea163e21e976447ef41cfe08879a0b68e0f918af78767b3cb57e2bd823e6
+  physical_gate_sha256: f3f260dc6a1eb6b2fd2177e4c57a0a31943c8964377d9b8ed0d206e54eab08c0
+  telemetry_sha256: d94c8d5186c916ea47f152763961fdad968092e355891141985d5883ed2d4f7a
+  bounded_video_sha256: eeb30c33d74dc2b37fbe014a712d118c1aece25fa90542616b842d114629622b
+  final_screenshot_sha256: 85dce601a95a35cd8086618a924968a2d68a352ab845fdd0719dcad3133dd181
+decision: retain implementation 068eb89 and run one exact repeat as EXP-079; do not attribute this failure to RETREAT speed because that command was never called
+counts_toward_success_streak: false
+next_experiment: EXP-079
 ```
 
 ```yaml
