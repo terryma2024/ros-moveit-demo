@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 4714bb0
+current_commit: f714e30
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -53,8 +53,36 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-080-252
+latest_checkpoint: CP-EXP-080-IMPLEMENTED-253
 next_experiment: EXP-080
+```
+
+```yaml
+checkpoint_id: CP-EXP-080-IMPLEMENTED-253
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-080
+planning_commit: 5eb9042
+implementation_commit: f714e30
+single_variable: closed-loop stable bilateral penetration normalization into [0.0001, 0.001] m using at most four 0.001 rad q6 adjustments before micro-lift
+red:
+  collection: failed because stabilize_to_target_penetration did not exist
+green:
+  focused: 50 passed
+  full_pytest: 200 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 202 tests, 0 errors, 0 failures, 2 skipped
+behavior:
+  - stable depth above 0.001 m opens q6 by 0.001 rad before rechecking
+  - missing bilateral contact or depth below 0.0001 m preopens, then closes q6 by 0.001 rad before rechecking
+  - stable depth inside [0.0001, 0.001] m returns the actual normalized target and adjustment count
+  - any observed depth above the unchanged 0.0013 m hard ceiling is rethrown immediately and cannot enter recovery
+  - normalized target q6 is reused by bounded micro-lift retries and recorded in physical-gate telemetry
+unchanged:
+  - requested seating preload 0.006 rad, arm/release paths and fast fixed RETREAT
+  - physics/material/controller/collision values and final outcome contract
+next_command: prove RESET_WORLD on the sole full-fast-01 stack, then record one bounded EXP-080 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
