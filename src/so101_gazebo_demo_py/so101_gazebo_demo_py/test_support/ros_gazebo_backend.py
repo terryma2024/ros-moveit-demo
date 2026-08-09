@@ -148,6 +148,20 @@ def closest_pose_pair(object_samples, tcp_samples):
     return {"object": object_sample, "tcp": tcp_sample}
 
 
+def contact_pairs_from_message(message) -> tuple[ContactPair, ...]:
+    pairs=[]
+    for contact in message.contacts:
+        first=contact.collision1.name; second=contact.collision2.name
+        if "plastic_cup::" in first:
+            object_collision,finger_collision=first,second
+        elif "plastic_cup::" in second:
+            object_collision,finger_collision=second,first
+        else:
+            continue
+        pairs.append(ContactPair(object_collision,finger_collision,tuple(contact.depths)))
+    return tuple(pairs)
+
+
 def _command(arguments: list[str], timeout_s: float = 40.0, *, check: bool = True) -> str:
     result = subprocess.run(arguments, capture_output=True, text=True, timeout=timeout_s)
     if check and result.returncode != 0:
@@ -155,6 +169,86 @@ def _command(arguments: list[str], timeout_s: float = 40.0, *, check: bool = Tru
             f"command failed ({result.returncode}): {' '.join(arguments)}\n{result.stdout}\n{result.stderr}"
         )
     return result.stdout + result.stderr
+
+
+class RosGazeboFinalObserver:
+    """Persistent combined pose/contact observer for a bounded final outcome epoch."""
+    def __init__(self, max_pair_age_s: float) -> None:
+        from gz.msgs10.pose_v_pb2 import Pose_V
+        from gz.transport13 import Node as GazeboNode
+        import rclpy
+        from ros_gz_interfaces.msg import Contacts
+        from tf2_ros import Buffer, TransformListener
+
+        self._rclpy=rclpy; self._max_pair_age_s=max_pair_age_s
+        rclpy.init()
+        self._node=rclpy.create_node("so101_live_final_outcome_observer")
+        self._object_samples=deque(maxlen=64); self._tcp_samples=deque(maxlen=64)
+        self._contacts=[]; self._contact_message_received=False
+        self._buffer=Buffer(); self._listener=TransformListener(self._buffer,self._node)
+        self._gazebo_node=GazeboNode(); self._pose_topic="/world/so101_pick_place/pose/info"
+        def receive_object(message):
+            selected=select_gazebo_pose(message,"plastic_cup")
+            if selected is not None: self._object_samples.append(selected)
+        if not self._gazebo_node.subscribe(Pose_V,self._pose_topic,receive_object):
+            self.close(); raise RuntimeError("cannot subscribe to Gazebo pose info")
+        def receive_contacts(message):
+            self._contact_message_received=True
+            self._contacts.extend(contact_pairs_from_message(message))
+        self._contact_subscription=self._node.create_subscription(
+            Contacts,"/task_object/contacts",receive_contacts,100,
+        )
+        self._closed=False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _type, _value, _traceback) -> None:
+        self.close()
+
+    def observe(self) -> tuple[PoseSample, tuple[ContactPair, ...]]:
+        from rclpy.duration import Duration
+        self._object_samples.clear(); self._tcp_samples.clear(); self._contacts.clear()
+        self._contact_message_received=False
+        deadline=time.monotonic()+1.0
+        while time.monotonic() < deadline:
+            self._rclpy.spin_once(self._node,timeout_sec=0.02)
+            try:
+                transform=self._buffer.lookup_transform(
+                    "world","so101_tcp",self._rclpy.time.Time(),
+                    timeout=Duration(seconds=0.005),
+                )
+                translation=transform.transform.translation; rotation=transform.transform.rotation
+                stamp=transform.header.stamp
+                tcp_sample=((
+                    float(translation.x),float(translation.y),float(translation.z),
+                    float(rotation.x),float(rotation.y),float(rotation.z),float(rotation.w),
+                ),float(stamp.sec)+float(stamp.nanosec)*1e-9)
+                if not self._tcp_samples or self._tcp_samples[-1][1] != tcp_sample[1]:
+                    self._tcp_samples.append(tcp_sample)
+            except Exception:
+                pass
+            observed=closest_pose_pair(self._object_samples,self._tcp_samples)
+            if pose_pair_ready(observed,self._max_pair_age_s) and self._contact_message_received:
+                object_pose,object_stamp=observed["object"]
+                tcp_pose,tcp_stamp=observed["tcp"]
+                return PoseSample(
+                    object_pose[:3],tcp_pose[:3],object_pose[3:],tcp_pose[3:],
+                    abs(object_stamp-tcp_stamp),
+                ),tuple(self._contacts)
+        raise RuntimeError("fresh combined final pose/contact observation unavailable")
+
+    def close(self) -> None:
+        if getattr(self,"_closed",False): return
+        self._closed=True
+        if hasattr(self,"_gazebo_node"):
+            close_gazebo_subscription(self._gazebo_node,self._pose_topic)
+        if hasattr(self,"_node"):
+            if hasattr(self,"_contact_subscription"):
+                self._node.destroy_subscription(self._contact_subscription)
+            self._listener=None
+            self._node.destroy_node()
+        if hasattr(self,"_rclpy") and self._rclpy.ok(): self._rclpy.shutdown()
 
 
 class RosGazeboLiveBackend:
@@ -222,17 +316,7 @@ class RosGazeboLiveBackend:
         observed: list[ContactPair] = []
 
         def receive(message: Contacts) -> None:
-            additions = []
-            for contact in message.contacts:
-                first = contact.collision1.name
-                second = contact.collision2.name
-                if "plastic_cup::" in first:
-                    object_collision, finger_collision = first, second
-                elif "plastic_cup::" in second:
-                    object_collision, finger_collision = second, first
-                else:
-                    continue
-                additions.append(ContactPair(object_collision, finger_collision, tuple(contact.depths)))
+            additions = contact_pairs_from_message(message)
             with lock:
                 observed.extend(additions)
         subscription = node.create_subscription(Contacts, "/task_object/contacts", receive, 100)
@@ -339,6 +423,9 @@ class RosGazeboLiveBackend:
         if '"detached"' in output:
             return "detached"
         raise RuntimeError(f"invalid durable attachment state:\n{output}")
+
+    def final_observer(self) -> RosGazeboFinalObserver:
+        return RosGazeboFinalObserver(self.max_pair_age_s)
 
     def solver_stable(self) -> bool:
         sample = self.sample()

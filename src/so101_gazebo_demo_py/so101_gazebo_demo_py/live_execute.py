@@ -71,6 +71,49 @@ def arm_tcp_stable_between(
     )
 
 
+def collect_final_outcome_epoch(
+    observer, outcome_policy, *, gazebo_detached: bool, scene_membership: dict,
+    monotonic=time.monotonic, wait=time.sleep,
+) -> CollectedFinalOutcome:
+    """Collect one final epoch through a single persistent pose/contact observer."""
+    release_epoch_id=str(uuid.uuid4()); sample_sequence=0; latest_sample=[None]
+    previous_tcp=[None]; previous_observed_at=[None]
+    def observe_final():
+        nonlocal sample_sequence
+        observed,contacts=observer.observe(); latest_sample[0]=observed; sample_sequence+=1
+        support=evaluate_support_contact(
+            contacts, outcome_policy.intended_support_collision,
+            outcome_policy.minimum_support_contact_depth_m,
+        )
+        now=monotonic()
+        tcp_pose=(*observed.tcp_xyz,*observed.tcp_xyzw)
+        controller_healthy=(
+            all(math.isfinite(value) for value in tcp_pose)
+            if previous_tcp[0] is None
+            else arm_tcp_stable_between(
+                previous_tcp[0],tcp_pose,
+                elapsed_s=now-previous_observed_at[0],
+                max_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
+                max_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
+            )
+        )
+        previous_tcp[0]=tcp_pose; previous_observed_at[0]=now
+        moveit_detached=(
+            "plastic_cup" in scene_membership["world_objects"]
+            and "plastic_cup" not in scene_membership["attached_objects"]
+        )
+        return FinalPlacementSample(
+            release_epoch_id, sample_sequence, now, now,
+            (*observed.object_xyz,*observed.object_xyzw), support.supported,
+            any(pair.finger_collision != outcome_policy.intended_support_collision for pair in contacts),
+            gazebo_detached, moveit_detached, controller_healthy, True, True,
+        )
+    result=ReleaseSettleExecutor(
+        outcome_policy,observe_final,monotonic,wait,lambda:False,
+    ).run(release_epoch_id,0)
+    return CollectedFinalOutcome(release_epoch_id,result,latest_sample[0])
+
+
 def evaluate_continuation(
     *, before, after,
     commanded_object_delta_m: tuple[float, float, float],
@@ -656,44 +699,13 @@ def run_live_execute(
     outcome_policy=bundle.validation.physical_outcome
     scene_membership=[detached_scene]
     def collect_final_epoch():
-        release_epoch_id=str(uuid.uuid4()); sample_sequence=0; latest_sample=[backend.sample()]
-        previous_tcp=[None]; previous_observed_at=[None]
-        def observe_final():
-            nonlocal sample_sequence
-            observed=backend.sample(); latest_sample[0]=observed; sample_sequence+=1
-            contacts=backend.contacts()
-            support=evaluate_support_contact(
-                contacts, outcome_policy.intended_support_collision,
-                outcome_policy.minimum_support_contact_depth_m,
+        gazebo_detached=backend.attachment_state() == "detached"
+        with backend.final_observer() as final_observer:
+            return collect_final_outcome_epoch(
+                final_observer,outcome_policy,
+                gazebo_detached=gazebo_detached,
+                scene_membership=scene_membership[0],
             )
-            now=time.monotonic()
-            tcp_pose=(*observed.tcp_xyz,*observed.tcp_xyzw)
-            controller_healthy=(
-                all(math.isfinite(value) for value in tcp_pose)
-                if previous_tcp[0] is None
-                else arm_tcp_stable_between(
-                    previous_tcp[0],tcp_pose,
-                    elapsed_s=now-previous_observed_at[0],
-                    max_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
-                    max_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
-                )
-            )
-            previous_tcp[0]=tcp_pose; previous_observed_at[0]=now
-            moveit_detached=(
-                "plastic_cup" in scene_membership[0]["world_objects"]
-                and "plastic_cup" not in scene_membership[0]["attached_objects"]
-            )
-            return FinalPlacementSample(
-                release_epoch_id, sample_sequence, now, now,
-                (*observed.object_xyz,*observed.object_xyzw), support.supported,
-                any(pair.finger_collision != outcome_policy.intended_support_collision for pair in contacts),
-                backend.attachment_state() == "detached", moveit_detached,
-                controller_healthy, True, True,
-            )
-        result=ReleaseSettleExecutor(
-            outcome_policy, observe_final, time.monotonic, time.sleep, lambda: False,
-        ).run(release_epoch_id,0)
-        return CollectedFinalOutcome(release_epoch_id,result,latest_sample[0])
     synchronized_scene=[detached_scene]
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
