@@ -6057,3 +6057,28 @@ tests:
   package_pytest: 173 passed, 2 skipped
 next: commit locally, preregister a fresh RESET_WORLD trial
 ```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-027-064
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-027
+purpose: execute same-run XY alignment with pre-release Z treated as a broad plausibility bound while preserving final outcome authority
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 2748812
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-026/reset-after-pre-release-height-gate/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-027
+candidate:
+  same_run_xy_alignment: true
+  attempts: 2
+  xy_tolerance_m: 0.003
+  max_axis_correction_m: 0.030
+  pre_release_height_plausibility_m: 0.030
+prediction: the candidate reaches correction execution or release; only the unchanged authoritative post-RETREAT outcome determines physical success
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
