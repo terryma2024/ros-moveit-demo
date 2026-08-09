@@ -4313,3 +4313,28 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: commit the observer fix, preregister an unchanged physical rerun, and obtain an authoritative post-RETREAT result
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-008
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: the unchanged strategy will complete physical release and the reusable fresh contact snapshot will allow both pre- and post-RETREAT epochs to return an authoritative final placement classification
+execute_commit: a74a73c6edcfbe46a6a90695d3e3c6bd85b6ae29
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: 27c8efb8a955eacecaa99158177d4074096bd36f25c8b7dead2126b71081d1e0
+motion_policy_sha256: 044850ccce09f7e74f9cc613194e1d3db18c32a9659332e2dc1589370f254a31
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-008
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-007/reset-after-invalid/reset-world.json
+strategy:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  seating_preload_rad: 0.002
+  dynamic_moveit_shadow_sync: enabled
+  final_contact_snapshot_reuse_s: 1.0
+  final_acceptance_thresholds: unchanged
+next_on_valid_success: freeze and run two independent RESET_WORLD confirmations
+next_on_valid_failure: adjust only the final placement motion family using the returned final margins
+```
