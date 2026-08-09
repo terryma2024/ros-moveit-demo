@@ -5764,3 +5764,26 @@ provenance:
   bundle_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
 next: commit locally and run one preregistered RESET_WORLD search candidate
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-024
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: shortening only the loaded MOVE_ABOVE_PLACE traverse from about 25 to 10 seconds will reduce carry-induced cup tilt and allow the unchanged placement and vertical retreat to produce an authoritative in-region outcome
+execute_commit: f585c20
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-024
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-023/reset-after-final-failure/reset-world.json
+strategy:
+  move_above_place_velocity_and_acceleration_scaling: 0.05
+  motion_waypoints_grasp_release_and_retreat: unchanged
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained and dynamically resynchronized
+  final_acceptance: frozen
+next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
+next_on_valid_failure: compare carry-stage tilt with EXP-023 before selecting one strategy-family adjustment
+```
