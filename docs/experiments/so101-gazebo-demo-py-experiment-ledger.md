@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 01f45bf
+current_commit: 9b1089a
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -42,6 +42,7 @@ confirmed_conclusions:
   - QUAL-FULL-FAST-01 clean-stack run failed before OPEN_GRIPPER: post-seating moving-pad penetration was 1.06393 mm versus EXP-079's 0.23831 mm, and the cup reached [-0.073652, -0.290274, 0.179158] m tilted/table-contacting at DESCEND_TO_PLACE, requiring a 36.075 mm y correction beyond the retained 30 mm safety bound.
   - EXP-080 with penetration normalization completed authoritative final success at [-0.081599, -0.247043, 0.165000] m; this reset naturally produced 0.23845 mm seating penetration and required zero adjustments, so clean-stack qualification must still exercise environmental variability.
   - QUAL-FULL-NORM-01 exercised one bounded q6 normalization adjustment and reached a safe 0.33421 mm seating penetration, but after OPEN_GRIPPER the cup rolled about 56 mm in y during the stationary pre-retreat outcome epoch, remained caught on the gripper, and was lifted by the subsequent fixed retreat.
+  - EXP-081 removed the no-alignment stationary pre-retreat wait, retained the Planning Scene shadow through the fixed retreat, and achieved authoritative success at [-0.081771, -0.247192, 0.165000] m with a 2.192 mm minimum XY boundary margin, no gripper contact and no pre-retreat epoch.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -60,8 +61,86 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-081-IMPLEMENTED-260
-next_experiment: EXP-081
+latest_checkpoint: CP-QUAL-FULL-IMM-PLAN-262
+next_experiment: QUAL-FULL-IMM-01
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-IMM-PLAN-262
+recorded_at: 2026-08-10 Asia/Shanghai
+status: QUALIFICATION_PLANNED
+candidate:
+  implementation_commit: 01f45bf
+  frozen_result_commit: 9b1089a
+  penetration_target_interval_m: [0.0001, 0.001]
+  penetration_hard_ceiling_m: 0.0013
+  final_open_gripper_duration_s: 2
+  no_alignment_retreat_velocity_scaling: 0.10
+  no_alignment_release_order: OPEN_GRIPPER, immediate fixed RETREAT with shadow attached, detach/sync, authoritative final epoch
+qualification_order:
+  - five consecutive FULL_RESTART successes, each on a new ROS domain and Gazebo partition
+  - then five consecutive RESET_WORLD successes on the fifth clean stack
+experiment_cap: EXP-100
+failure_contract: any valid failure resets the streak and returns to bounded search; if EXP-100 is reached without five consecutive successes, freeze the most recent valid-success parameter set and stop
+next_run: QUAL-FULL-IMM-01
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-081-261
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FINAL_SUCCESS_CANDIDATE_FROZEN
+experiment_id: EXP-081
+execution_head: 9b1089a
+implementation_commit: 01f45bf
+lifecycle: RESET_WORLD
+command_exit_code: 0
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp081/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000006759395725196319
+physical_grasp:
+  requested_target_q6: -0.05348154431581497
+  normalized_target_q6: -0.05348154431581497
+  adjustments: 0
+  actual_q6: -0.05285150557756424
+  post_seating_moving_pad_penetration_m: 0.000238057691603899
+  micro_lift_world_z_m: 0.0021327435970306396
+  lateral_drift_m: 0.000264624077978425
+release:
+  place_alignment_attempts: 0
+  pre_retreat_outcome: null
+  moveit_shadow_attached_during_retreat: true
+  final_moveit_shadow_state: world_only
+final:
+  success: true
+  object_xyz_m: [-0.08177115023136139, -0.2471921592950821, 0.16499999165534973]
+  minimum_xy_boundary_margin_m: 0.0021921592950821
+  upright_tilt_rad: 0.00000016792755826688794
+  sample_count: 5
+  duration_s: 0.263525784016
+  max_linear_speed_m_s: 0.0
+  max_angular_speed_rad_s: 0.0
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+evidence:
+  execute_log_sha256: 208484c57d702a9c1f0f2aa5b3a11af856fb6f0029646f3953ec37a8a9746cdb
+  physical_gate_sha256: bbc631f36e4f5439e7f2d0b5969902c1e044fb73711a3dcedc56fa23f6f9e243
+  live_summary_sha256: f3208567aa23347674af02e45719270000a893826159e740471c30d7e12c40db
+  telemetry_sha256: 9f6db804583a0f03137162f49859266b6d1017156e9eb66cc4818361f1a32542
+  bounded_video_sha256: 23a51c845a40dec26e644a31f6cc4e232cd7b70ecc0665ee694f30cac51b5608
+  final_screenshot_sha256: 42eb7c5957519c7504743142a77327b681d9893d7a5d140dd5e56fdda7a68fbb
+prediction_evaluation:
+  no_stationary_pre_retreat_epoch: PASS
+  shadow_attached_through_fixed_retreat: PASS
+  gripper_clear_after_retreat: PASS
+  authoritative_final_outcome: PASS
+decision: freeze implementation 01f45bf and begin clean-stack qualification
+counts_toward_success_streak: false
+reason_not_counted: RESET_WORLD search confirmation run
 ```
 
 ```yaml
