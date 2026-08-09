@@ -289,7 +289,7 @@ def test_calibration_candidate_stops_after_first_cup_outcome_failure() -> None:
         def move_gripper(self, value):
             calls.append(("gripper", value))
 
-    with pytest.raises(RuntimeError, match="CUP_INTERMEDIATE_POSITION"):
+    with pytest.raises(RuntimeError, match="CUP_INSUFFICIENT_LIFT"):
         run_bounded_physical_grasp_attempts(
             Backend(), -0.053, 0.465, -0.0596, max_attempts=1,
             execute=lambda delta: calls.append(("move", delta)) or (3, 0.2),

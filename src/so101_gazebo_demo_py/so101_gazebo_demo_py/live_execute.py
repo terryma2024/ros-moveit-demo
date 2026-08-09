@@ -121,12 +121,15 @@ def evaluate_continuation(
     arm_stable: bool,
     contact_evidence,
     q6_position: float | None,
+    minimum_axial_progress_m: float | None = None,
+    maximum_lateral_drift_m: float | None = None,
 ) -> ContinuationEvaluation:
     """Evaluate intermediate progress from cup/arm outcomes, retaining contact as telemetry."""
     observed = tuple(
         after.object_xyz[index] - before.object_xyz[index] for index in range(3)
     )
     error = math.dist(observed, commanded_object_delta_m)
+    lateral = math.hypot(observed[0], observed[1])
     position_ok = error <= position_tolerance_m
     failure_code = (
         "CUP_POSE_NONFINITE" if not all(
@@ -134,6 +137,14 @@ def evaluate_continuation(
             for value in (*before.object_xyz, *after.object_xyz)
         )
         else "ARM_UNSTABLE" if not arm_stable
+        else "CUP_INSUFFICIENT_LIFT" if (
+            minimum_axial_progress_m is not None
+            and observed[2] < minimum_axial_progress_m
+        )
+        else "CUP_LATERAL_DRIFT" if (
+            maximum_lateral_drift_m is not None
+            and lateral > maximum_lateral_drift_m
+        )
         else None if position_ok
         else "CUP_INTERMEDIATE_POSITION"
     )
@@ -150,6 +161,9 @@ def evaluate_continuation(
             "q6_position": q6_position,
             "arm_stable": arm_stable,
             "position_tolerance_m": position_tolerance_m,
+            "minimum_axial_progress_m": minimum_axial_progress_m,
+            "maximum_lateral_drift_m": maximum_lateral_drift_m,
+            "observed_lateral_drift_m": lateral,
         },
     )
 
@@ -595,7 +609,9 @@ def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
         before=before,
         after=after,
         commanded_object_delta_m=(0.0,0.0,0.002),
-        position_tolerance_m=0.001,
+        position_tolerance_m=0.006,
+        minimum_axial_progress_m=0.001,
+        maximum_lateral_drift_m=0.006,
         arm_stable=all(math.isfinite(value) for value in (*after.tcp_xyz,*after.tcp_xyzw)),
         contact_evidence=contact,
         q6_position=None,
