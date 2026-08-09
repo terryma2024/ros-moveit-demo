@@ -6306,6 +6306,62 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-045-130
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_MOVEIT_EXECUTION_ABORT
+experiment_id: EXP-045
+execution_commit: a65206c
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-045
+observed:
+  physical_grasp_gate: PROVED
+  cup_world_z_delta_m: 0.0021845102310180664
+  lateral_drift_m: 0.00021494088327107162
+failure:
+  stage: post-grasp dynamic MoveIt action before final release evidence
+  moveit_error_code: -4
+  authoritative_final_outcome: unavailable
+interpretation: execution-layer abort provides no evidence for or against the XYZ release target
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-045-131
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-045/reset-after-moveit-execution-abort
+proof:
+  cup_spawn_pose_error_m: 0.0000005469844442792343
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-046-132
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-046
+purpose: retry unchanged coobserved XYZ-alignment candidate after an execution-layer abort
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: a65206c
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-045/reset-after-moveit-execution-abort/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-046
+candidate:
+  changed_since_EXP_045: false
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  immediate_radial_separation_m: 0.010
+prediction: complete dynamic actions and obtain authoritative final outcome
+acceptance: unchanged authoritative final physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-043-122
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
