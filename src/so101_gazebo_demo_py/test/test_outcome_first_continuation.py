@@ -435,21 +435,33 @@ def test_place_alignment_defers_exp051_bounded_residual_to_final_outcome() -> No
     assert telemetry == ()
 
 
-def test_place_alignment_defers_exp072_bounded_residual_to_final_outcome() -> None:
+def test_place_alignment_corrects_exp072_residual_above_six_mm() -> None:
     class Backend:
+        def __init__(self) -> None:
+            self.samples = iter((
+                sample(-0.08084, -0.26100, 0.18603),
+                sample(-0.075, -0.255, 0.179),
+            ))
+
         def sample(self):
-            return sample(-0.08084, -0.26100, 0.18603)
+            return next(self.samples)
+
+    commands = []
+    def execute(delta, orientation_tolerance):
+        commands.append((delta, orientation_tolerance))
+        return 3, (0.1, 0.2, 0.3, 0.4, 0.5)
 
     aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
         Backend(), (-0.075, -0.255, 0.179),
-        execute=lambda *_args: pytest.fail(
-            "bounded EXP-072 residual must defer to the physical final outcome"
-        ),
+        execute=execute,
     )
 
-    assert aligned.object_xyz == pytest.approx((-0.08084, -0.26100, 0.18603))
-    assert reverse_waypoints == ()
-    assert telemetry == ()
+    assert aligned.object_xyz == pytest.approx((-0.075, -0.255, 0.179))
+    assert commands == [
+        (pytest.approx((0.00584, 0.006, -0.00703)), 0.15),
+    ]
+    assert reverse_waypoints == ((0.1, 0.2, 0.3, 0.4, 0.5),)
+    assert len(telemetry) == 1
 
 
 def test_same_run_place_alignment_defers_pre_release_tilt_to_final_outcome() -> None:
