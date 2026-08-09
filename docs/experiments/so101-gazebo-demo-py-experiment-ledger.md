@@ -5219,3 +5219,26 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: commit locally and run a preregistered VERIFY_PHYSICAL_GRASP-only check before another full path
 ```
+
+```yaml
+diagnostic_id: DIAG-ONE-SIDED-CONTROL-LIVE-039
+lifecycle: PLANNED_PHYSICAL_CHECKPOINT
+recorded_at: 2026-08-09 Asia/Shanghai
+purpose: prove the one-sided controller never opens for safe-high telemetry and the physical micro-lift satisfies cup/arm outcome limits
+execute_commit: 72b9c9406e7001618e5fb18892017c6c4fab75dd
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+mode: execute --stop-after VERIFY_PHYSICAL_GRASP
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-017-grasp-only
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-016/reset-after-failure/reset-world.json
+acceptance:
+  command_exit: 0
+  physical_gate_status: PROVED
+  q6_adjustments: close-only or none
+  cup_micro_lift_continuation: true
+  gazebo_attachment_state: detached
+next_on_valid: RESET_WORLD and run same frozen strategy full path
+next_on_invalid: inspect persisted seating history and cup displacement; do not enter carry
+```
