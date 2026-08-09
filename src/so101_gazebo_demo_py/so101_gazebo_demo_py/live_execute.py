@@ -522,6 +522,12 @@ def _stable_bilateral(backend: RosGazeboLiveBackend, required: int = 6):
     raise RuntimeError(f"bilateral stability timeout: {last}")
 
 
+def seat_and_stabilize_physical_grasp(backend, seating_target: float):
+    """Apply the preload, then require stable physical contact before shadow attach."""
+    backend.move_gripper(seating_target)
+    return _stable_bilateral(backend)
+
+
 def stabilize_with_contact_missing_retries(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float
 ):
@@ -685,7 +691,7 @@ def run_live_execute(
         except RuntimeError: pass
     q6_contact=_current_joint_position("6")
     seating_target=seating_preload_target(q6_contact,-.059600220867817,bundle.motion.seating_preload_rad)
-    backend.move_gripper(seating_target)
+    seated_contact=seat_and_stabilize_physical_grasp(backend,seating_target)
     pre_probe=backend.sample()
     shadow_pose=(*pre_probe.object_xyz,*pre_probe.object_xyzw)
     attached_scene=_apply_scene("attach",shadow_pose)
@@ -702,7 +708,7 @@ def run_live_execute(
         (evidence_directory/"physical-failure.json").write_text(json.dumps(failure_evidence,indent=2))
         raise
     lift,lateral,micro_points,micro_start_z,before,after,continuation=physical
-    gate={"status":"PROVED","gate_basis":"CUP_AND_ARM_OUTCOME","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"moving_pad_penetration_ceiling_m":MOVING_PAD_MESH_PENETRATION_CEILING_M,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target,"continuation":asdict(continuation)}
+    gate={"status":"PROVED","gate_basis":"CUP_AND_ARM_OUTCOME","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"post_seating_bilateral":seated_contact.bilateral,"post_seating_max_moving_pad_penetration_m":seated_contact.max_moving_pad_penetration_m,"moving_pad_penetration_ceiling_m":MOVING_PAD_MESH_PENETRATION_CEILING_M,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target,"continuation":asdict(continuation)}
     (evidence_directory/"physical-gate.json").write_text(json.dumps(gate,indent=2))
     if stop_after == "VERIFY_PHYSICAL_GRASP":
         result={"status":"CHECKPOINT_COMPLETE","current_state":stop_after,"state_trace":list(TRACE[:9]),"exit_code":0,"physical":gate,"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}

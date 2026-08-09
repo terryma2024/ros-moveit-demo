@@ -4936,3 +4936,66 @@ strategy:
 next_on_valid_success: freeze this strategy; run two independent RESET_WORLD confirmations without parameter changes
 next_on_valid_failure: classify physical release versus final region; do not relax final acceptance
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-013
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_OUT_OF_REGION
+physical_grasp:
+  cup_world_z_delta_m: 0.0019301027059555054
+  lateral_drift_m: 0.00013118916000211578
+  bilateral_contact: true
+  moving_pad_depth_m: 0.0003696089843288064
+pre_retreat:
+  cup_xyz_m: [-0.10389651358127594, -0.25491389632225037, 0.16617071628570557]
+  upright_tilt_rad: 0.03017791251666995
+post_retreat:
+  cup_xyz_m: [-0.10390361398458481, -0.2564937174320221, 0.16499994695186615]
+  upright_tilt_rad: 0.0000014095584857924517
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0
+diagnosis: clean release and stable support prove the q1 path itself executed, but the 23 mm final-x difference from EXP-011 is far larger than the 1.5 mm FK endpoint shift and correlates with a low/variable grasp depth; grasp-relative-pose stochasticity dominates fixed place-target calibration
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-013
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-013-031
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-013/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000008250213164731815
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-POST-SEATING-PHYSICAL-STABILITY-032
+recorded_at: 2026-08-09 Asia/Shanghai
+root_cause_evidence: preload command previously proceeded immediately to Planning Scene attach and micro-lift; the existing consecutive-contact stability helper was called only before preload
+implementation:
+  place_path: restored exactly to EXP-011
+  preload_rad: retained at 0.004
+  new_sequence: command preload, require 6 consecutive bilateral physical-contact observations, enforce the unchanged 0.0013 m hard penetration ceiling on every observation, then attach only in the MoveIt Planning Scene and run physical micro-lift
+  gazebo_attachment: still forbidden
+  final_acceptance: unchanged
+tests:
+  red: new contract could not import the missing post-seating stabilization helper
+  focused_green: 43 passed
+  package_pytest: 162 passed, 2 skipped
+  colcon_test: 164 tests, 0 errors, 0 failures, 2 skipped
+  live_plan_only: MOVE_ABOVE_PLACE 80; DESCEND_TO_PLACE 51; RETREAT 51; execute trajectory count 0
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance:
+  motion_policy_sha256: 16cbbe82d0f46fc0012c10613fab06188aa448d7edf6732a1749a33f70df612b
+  validation_policy_sha256: d31fd15fffc8c52129584a81c392d333702e1462488db13af30ef5dcbbf178a2
+  bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+next: commit locally, preregister candidate 014 as EXP-011 plus post-seating stabilization, then execute one RESET_WORLD search trial
+```

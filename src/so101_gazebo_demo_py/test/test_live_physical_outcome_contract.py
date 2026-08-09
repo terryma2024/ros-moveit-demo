@@ -7,6 +7,7 @@ from so101_gazebo_demo_py.live_execute import (
     _stable_bilateral, carry_with_shadow_gates, compose_pose,
     plan_waypoint_sequence, relative_pose, rotated_grasp_pose,
     run_bounded_physical_grasp_attempts, shadow_divergence_healthy,
+    seat_and_stabilize_physical_grasp,
     synchronize_planning_shadow,
     translated_grasp_pose,
 )
@@ -305,3 +306,34 @@ def test_stable_bilateral_fails_immediately_on_moving_pad_hard_ceiling() -> None
 
     with pytest.raises(RuntimeError, match="moving-pad penetration ceiling exceeded"):
         _stable_bilateral(backend)
+
+
+def test_seating_preload_waits_for_stable_bilateral_contact() -> None:
+    calls = []
+    contacts = (
+        ContactPair(
+            "plastic_cup::body::wall_near",
+            "fixed_fingertip_pad_collision_001",
+            (0.0004,),
+        ),
+        ContactPair(
+            "plastic_cup::body::wall_near",
+            "moving_fingertip_pad_collision_001",
+            (0.0008,),
+        ),
+    )
+
+    class Backend:
+        def move_gripper(self, target):
+            calls.append(("gripper", target))
+
+        def contacts(self):
+            calls.append("contacts")
+            return contacts
+
+    result = seat_and_stabilize_physical_grasp(Backend(), -0.0515)
+
+    assert result.bilateral
+    assert result.max_moving_pad_penetration_m == pytest.approx(0.0008)
+    assert calls[0] == ("gripper", -0.0515)
+    assert calls.count("contacts") == 6
