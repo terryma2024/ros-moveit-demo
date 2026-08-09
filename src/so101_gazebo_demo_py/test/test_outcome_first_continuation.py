@@ -184,7 +184,7 @@ def test_micro_lift_continues_when_penetration_telemetry_exceeds_old_gate() -> N
     assert result[0] == pytest.approx(0.002)
 
 
-def test_micro_lift_allows_submillimeter_progress_within_outcome_tolerance() -> None:
+def test_micro_lift_allows_detectable_positive_progress_within_outcome_tolerance() -> None:
     class Backend:
         def __init__(self) -> None:
             self.sample_count = 0
@@ -193,7 +193,7 @@ def test_micro_lift_allows_submillimeter_progress_within_outcome_tolerance() -> 
             self.sample_count += 1
             if self.sample_count == 1:
                 return sample(0.0, 0.0, 0.165)
-            return sample(0.0, 0.00357, 0.165861)
+            return sample(0.0, 0.000556, 0.165408)
 
         def contacts(self):
             return ()
@@ -202,8 +202,8 @@ def test_micro_lift_allows_submillimeter_progress_within_outcome_tolerance() -> 
         Backend(), execute=lambda delta: (3, 0.200),
     )
 
-    assert result[0] == pytest.approx(0.000861)
-    assert result[1] == pytest.approx(0.00357)
+    assert result[0] == pytest.approx(0.000408)
+    assert result[1] == pytest.approx(0.000556)
 
 
 def test_full_grasp_attempt_reaches_cup_result_gate_without_bilateral_contact() -> None:
