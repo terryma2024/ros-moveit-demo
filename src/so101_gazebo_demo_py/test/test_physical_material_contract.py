@@ -15,7 +15,7 @@ def test_light_cup_uses_20g_baseline_friction_profile() -> None:
     pads = object_config["fingertip_pads"]
     assert pads["friction_coefficient"] == 1.2
     assert pads["contact_material"]["axial_friction_coefficient"] == 3.0
-    assert pads["contact_material"]["transverse_friction_coefficient"] == 3.0
+    assert pads["contact_material"]["transverse_friction_coefficient"] == 1.2
 
     world = ET.parse(PACKAGE / "worlds/so101_pick_place.sdf").getroot()
     cup = world.find(".//model[@name='plastic_cup']/link")
@@ -43,6 +43,6 @@ def test_light_cup_uses_20g_baseline_friction_profile() -> None:
     assert len(pad_collisions) == 15
     for collision in pad_collisions:
         assert float(collision.findtext("surface/friction/ode/mu")) == 3.0
-        assert float(collision.findtext("surface/friction/ode/mu2")) == 3.0
+        assert float(collision.findtext("surface/friction/ode/mu2")) == 1.2
         assert float(collision.findtext("surface/friction/bullet/friction")) == 3.0
-        assert float(collision.findtext("surface/friction/bullet/friction2")) == 3.0
+        assert float(collision.findtext("surface/friction/bullet/friction2")) == 1.2
