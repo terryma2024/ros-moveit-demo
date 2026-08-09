@@ -6290,6 +6290,56 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-041-115
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_INTERMEDIATE_LIFT_GATE
+experiment_id: EXP-041
+execution_commit: 6d34412
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-041
+observed:
+  cup_world_z_delta_m: 0.00040875375270843506
+  lateral_drift_m: 0.0005557321224658637
+  previous_minimum_axial_progress_m: 0.0005
+  combined_position_error_within_0_006_m: true
+  arm_stable: true
+failure: CUP_INSUFFICIENT_LIFT
+interpretation: repeatedly tuning a precise intermediate progress value conflicts with final-outcome authority; the cup motion is clearly positive and far above micrometer-scale reset error
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-041-116
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-041/reset-after-lift-progress-floor
+proof:
+  cup_spawn_pose_error_m: 0.0000007732436962027712
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-DETECTABLE-POSITIVE-LIFT-117
+recorded_at: 2026-08-09 Asia/Shanghai
+change:
+  minimum_axial_progress_m: 0.0001
+  semantics: detectable positive physical cup following, not a precision placement assertion
+retained_checks:
+  - combined commanded-delta error at most 0.006 m
+  - lateral drift at most 0.006 m
+  - finite and stable arm pose
+  - unchanged penetration ceiling and final physical acceptance
+tests:
+  red: 0.408 mm positive following was rejected by the 0.5 mm floor
+  focused_green: 1 passed
+  package_pytest: 179 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-039-107
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
