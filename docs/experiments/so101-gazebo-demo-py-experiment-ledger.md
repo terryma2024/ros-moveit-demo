@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 84dcbd9
+current_commit: a64f89d
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -27,18 +27,79 @@ confirmed_conclusions:
   - EXP-068 was superseded before implementation after the user identified the final y displacement as a downstream effect of cup tilt during placement/release, not a MOVE_TO_PLACE target bias; release y compensation remains -0.005 m.
   - EXP-069 first FULL_RESTART run with fingertip transverse friction 3.0 was a valid grasp failure before lift: fixed-pad contact reached 0.000796263 m, but moving-pad contact never formed, so no carry/descent tilt comparison was possible.
   - EXP-070 repeated the 3.0 transverse-friction candidate after a proved RESET_WORLD and reproduced the same fixed-only contact failure (0.000796725 m, no moving-pad contact); this configuration is rejected before carry/place.
+  - EXP-071 with transverse friction 2.0 restored bilateral grasp and improved MOVE_ABOVE_PLACE tilt to 0.10775 rad, but worsened raised-descend/pre-open tilt to 0.23007/0.34605 rad, exceeded the 0.001 m target penetration at 0.00104337 m, and ended in world-Z MoveIt error 99999; it is rejected.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
   - Matching fingertip transverse friction to axial friction at 3.0; EXP-069 and EXP-070 both failed bilateral grasp because the fixed pad engaged while the moving pad never contacted.
+  - Raising fingertip transverse friction to 2.0 as an intermediate candidate; EXP-071 improved horizontal carry but amplified descent/release tilt and missed the target penetration interval.
 open_hypotheses:
-  - Matching fingertip-pad transverse friction to the existing 3.0 axial friction may reduce cup roll during carry/descent and therefore reduce the downstream placement/release displacement without changing the motion target.
+  - With the rejected friction candidates restored to 1.2, the next useful boundary is the motion/alignment interval in which tilt grows between MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and OPEN_GRIPPER; target compensation should not be used to mask the tilt source.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-071-IMPLEMENTED-218
-next_experiment: EXP-071
+latest_checkpoint: CP-RESULT-EXP-071-219
+next_experiment: NONE_PENDING_NEXT_MOTION_HYPOTHESIS
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-071-219
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_CARRY_IMPROVEMENT_DESCENT_REGRESSION_CONFIGURATION_REJECTED
+experiment_id: EXP-071
+execution_commit: a64f89d
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 226
+  gz_partition: so101_py_qual_exp071
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp071/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000006765478408503426
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.001043372554704547
+  continuation_max_moving_pad_penetration_m: 0.0010438794270157814
+  micro_lift_world_z_m: 0.0019619911909103394
+  lateral_drift_m: 0.00021088124061879358
+  target_penetration_range_m: [0.0001, 0.001]
+  hard_penetration_ceiling_m: 0.0013
+phase_comparison_same_analysis:
+  lift_endpoint_tilt_rad: 0.004254585410750697
+  move_above_place_endpoint_tilt_rad: 0.10775144616910268
+  exp067_move_above_place_endpoint_tilt_rad: 0.1544798591752257
+  raised_descend_endpoint_tilt_rad: 0.23007275838693259
+  exp067_raised_descend_endpoint_tilt_rad: 0.07090987465514398
+  strict_pre_open_tilt_rad: 0.34605080890706574
+  exp067_strict_pre_open_tilt_rad: 0.07090987465514398
+  table_contact_samples_raised_endpoint_to_open: 0
+runtime_failure:
+  status: LIVE_EXECUTE_FAILED
+  error: world-Z MoveGroup planning failed 99999
+  authoritative_final_outcome: NOT_REACHED
+evidence:
+  physical_gate: /tmp/so101-py-qualification/exp071/run/physical-gate.json
+  phase_analysis: /tmp/so101-py-qualification/exp071/run/diagnostic/exp071-analysis.json
+  phase_analysis_sha256: 19ed81c480b85d8bf80add5e61c25aede697c8fc6ac8b5ba712a53245722143c
+  telemetry: /tmp/so101-py-qualification/exp071/run/diagnostic/samples.jsonl
+  telemetry_sha256: 40f7716bc5390d3b86723f432fee3ba87e3da7cc7b8d15b075879336602bdae0
+  bounded_video: /tmp/so101-py-qualification/exp071/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: bd932b724b1391f405fcfa0241b195d530df7183c93e3f0f3fb2291c5bfa5f9e
+visual_observation:
+  - The bounded Gazebo video shows a successful physical lift and carry, followed by visible cup lean during the place/release portion; no final successful placement is established.
+interpretation:
+  - Transverse friction 2.0 trades lower horizontal-carry tilt for worse descent/release tilt and excess target penetration, so it does not address the user's observed placement mechanism.
+decision: REVERT_TO_1_2_BASELINE
+counts_toward_success_streak: false
+next_experiment: NONE_PENDING_NEXT_MOTION_HYPOTHESIS
 ```
 
 ```yaml
