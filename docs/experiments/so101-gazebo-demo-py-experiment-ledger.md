@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 5452a3ebea4b560af0146652752bc5328642d63a
+current_commit: aca248982bcadf572ad0446bafbee98127a322ad
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -28,8 +28,52 @@ open_hypotheses:
   - Passing the already-configured LIFT velocity scaling 0.10 to the direct FollowJointTrajectory backend will reduce the current 15-second five-waypoint lift to about 5 seconds and prevent time-dependent cup/q6 roll before MOVE_ABOVE_PLACE.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-062-194
+latest_checkpoint: CP-PRE-EXP-063-195
 next_experiment: EXP-063
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-063-195
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-063
+status: PREREGISTERED
+prior_experiment: EXP-062
+hypothesis: the legacy LIFT velocity override creates excessive gravitational dwell and stochastic q6/cup rolling before the horizontal carry begins
+prediction:
+  - passing the configured velocity_scaling 0.10 reduces the five-waypoint LIFT trajectory from approximately 15 s plus boundary overhead to <= 7 s measured from first lift motion to horizontal-carry start
+  - cup tilt at LIFT end is <= 0.10 rad and q6 position range during LIFT is <= 0.005 rad
+  - cup tilt at MOVE_ABOVE_PLACE end is <= 0.20 rad
+  - physical grasp and all unchanged safety/controller bounds pass without pre-open table contact
+single_variable: carry_with_shadow_gates passes policy.velocity_scaling to LIFT instead of the legacy None override
+lifecycle: RESET_WORLD
+preconditions:
+  - existing sole so101-py-qual stack is RESET_WORLD proved and uses the rebuilt implementation commit
+  - persistent carry observer from EXP-062 remains active
+  - bounded 50 Hz telemetry and 5 fps half-resolution H.264 are active
+success_criteria:
+  - LIFT duration, end tilt and q6 range meet the prediction
+  - MOVE_ABOVE_PLACE end tilt meets the prediction and all motion/controller gates succeed through DESCEND_TO_PLACE
+failure_criteria:
+  - LIFT controller/path abort, duration >7 s, lift-end tilt >0.10 rad, q6 range >0.005 rad, move-end tilt >0.20 rad, or an earlier hard safety failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, missing telemetry/video, stale installed asset or disk pressure
+scope:
+  - conclusion ends at the carry/pre-open boundary
+  - known EXP-061 detach-before-planned-retreat behavior remains unchanged and a repeated later release failure does not invalidate the speed result
+unchanged:
+  - configured LIFT velocity_scaling remains 0.10; only its live use changes
+  - all other speeds, targets, orientations, q6 targets and release ordering
+  - cup mass 0.020 kg, physics, geometry, inertia, friction, controller/gains, collision and safety bounds
+  - Gazebo physically detached and MoveIt shadow attached during carry
+provenance:
+  planning_commit: aca248982bcadf572ad0446bafbee98127a322ad
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  ros_domain_id: 221
+  gz_partition: so101_py_qual_full_01
+commands:
+  - command: pytest RED, one-line live velocity propagation, focused/full pytest, colcon build/test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
+    exit_code: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
