@@ -139,6 +139,34 @@ def test_micro_lift_rejects_a_cup_that_drops_during_the_hold() -> None:
         )
 
 
+def test_micro_lift_rejects_held_lateral_drift_above_one_mm() -> None:
+    samples = iter((
+        SimpleNamespace(
+            object_xyz=(0.0, 0.0, 0.0),
+            tcp_xyz=(0.0, 0.0, 0.2),
+            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        ),
+        SimpleNamespace(
+            object_xyz=(0.0005, 0.0, 0.002),
+            tcp_xyz=(0.0, 0.0, 0.202),
+            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        ),
+        SimpleNamespace(
+            object_xyz=(0.0011, 0.0, 0.002),
+            tcp_xyz=(0.0, 0.0, 0.202),
+            tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        ),
+    ))
+    backend = SimpleNamespace(sample=lambda: next(samples), contacts=lambda: ())
+
+    with pytest.raises(RuntimeError, match="hold failed CUP_LATERAL_DRIFT"):
+        verify_physical_micro_lift(
+            backend,
+            lambda _delta: (3, 0.2),
+            sleep=lambda _seconds: None,
+        )
+
+
 def test_contact_probe_finishes_on_first_fresh_nonempty_message() -> None:
     assert not contact_probe_complete(())
     assert contact_probe_complete((object(),))
