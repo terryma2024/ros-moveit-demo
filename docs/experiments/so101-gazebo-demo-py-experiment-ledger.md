@@ -6235,6 +6235,63 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-032-084
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_STALE_POSE_PAIR
+experiment_id: EXP-032
+execution_commit: 628f196
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-032
+failure:
+  stage: pre-release alignment observation
+  object_source_time_s: 13821.729
+  tcp_source_time_s: 13820.383
+  source_skew_s: 1.346
+  dynamic_retreat_reached: false
+interpretation: freshness and pair-consistency safety correctly prevented use of mismatched world and arm states; this run provides no retreat evidence
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-032-085
+recorded_at: 2026-08-09 Asia/Shanghai
+first_attempt:
+  status: RESET_WORLD_FAILED
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-032/reset-after-stale-pose-pair
+  error: deque mutated during iteration
+retry:
+  status: RESET_WORLD_PROVED
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-032/reset-after-stale-pose-pair-retry
+  cup_spawn_pose_error_m: 0.0000006770555435202472
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-033-086
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-033
+purpose: retry the unchanged vertical-retreat candidate after a stale pose-pair invalid run
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 628f196
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-032/reset-after-stale-pose-pair-retry/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-033
+candidate:
+  changed_since_EXP_032: false
+  corrected_pose_retreat: world Z +0.060 m
+prediction: obtain valid pre/post-retreat outcome evidence without relaxing freshness or final conditions
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-028-068
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
