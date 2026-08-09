@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 510685a
+current_commit: 24f0863
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -65,8 +65,32 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-086-277
+latest_checkpoint: CP-EXP-086-IMPLEMENTED-278
 next_experiment: EXP-086
+```
+
+```yaml
+checkpoint_id: CP-EXP-086-IMPLEMENTED-278
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-086
+planning_commit: 9730ea8
+implementation_commit: 24f0863
+single_variable: penetration normalization policy now targets 0.75-1.0 mm using 0.25 mrad q6 adjustments
+red:
+  focused: collection error because the three EXP-086 policy constants did not yet exist
+green:
+  focused: 15 passed
+  full_pytest: 203 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 205 tests, 0 errors, 0 failures, 2 skipped
+safety:
+  approved_target_interval_m: [0.0001, 0.001]
+  active_target_interval_m: [0.00075, 0.001]
+  hard_ceiling_m: 0.0013
+  hard_ceiling_behavior: unchanged and non-recoverable
+next_command: RESET_WORLD on domain 231, then one bounded EXP-086 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
