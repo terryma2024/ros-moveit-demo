@@ -303,6 +303,9 @@ def test_every_carry_motion_is_preceded_by_shadow_gate() -> None:
 
     carry_with_shadow_gates(Backend(), policies, lambda name: calls.append(("gate", name)))
     assert calls[::2] == [("gate", name) for name in policies]
+    assert calls[1::2] == [
+        ("move", index, 0.1) for index in range(len(policies))
+    ]
 
 
 def test_live_carry_reuses_one_persistent_observer_for_all_shadow_gates() -> None:

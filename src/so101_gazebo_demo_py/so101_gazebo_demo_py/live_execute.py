@@ -219,7 +219,7 @@ def carry_with_shadow_gates(backend, policies, shadow_gate):
         shadow_gate(name)
         backend.move_arm(
             policy.waypoints,
-            policy.velocity_scaling if name != "LIFT" else None,
+            policy.velocity_scaling,
         )
 
 
