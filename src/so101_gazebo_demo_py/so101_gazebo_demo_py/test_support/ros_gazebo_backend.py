@@ -226,7 +226,7 @@ class RosGazeboFinalObserver:
     def observe(self) -> tuple[PoseSample, tuple[ContactPair, ...]]:
         from rclpy.duration import Duration
         self._object_samples.clear(); self._tcp_samples.clear()
-        deadline=time.monotonic()+1.0
+        deadline=time.monotonic()+3.0
         while time.monotonic() < deadline:
             self._rclpy.spin_once(self._node,timeout_sec=0.02)
             try:

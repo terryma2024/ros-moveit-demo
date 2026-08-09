@@ -5473,3 +5473,57 @@ strategy:
 next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
 next_on_valid_failure: classify the authoritative cup/arm outcome without relaxing final bounds
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-020
+lifecycle: INVALID_OBSERVER_FAILURE
+result:
+  execute_rc: 1
+  physical_gate_status: PROVED
+  cup_world_z_delta_m: 0.0019164234399795532
+  lateral_drift_m: 0.00021877855388288233
+  failure: fresh combined final pose/contact observation unavailable
+interpretation: grasp, carry, and release executed, but no authoritative final result exists because each final epoch rebuilt its observer and the one-second evidence window expired; this run counts neither success nor final-region failure
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-020
+counts_toward_search: false
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-020-046
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED_AFTER_RETRY
+first_attempt:
+  status: RESET_WORLD_FAILED
+  error: Gazebo set_pose service timed out
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-020/reset-after-observer-failure
+retry_1:
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-020/reset-after-observer-failure/retry-1
+  cup_spawn_pose_error_m: 0.0000005342686406184915
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+stack_action: none; reused the same live stack and service after read-only health confirmation
+```
+
+```yaml
+checkpoint_id: CP-PERSISTENT-FINAL-OBSERVER-047
+recorded_at: 2026-08-09 Asia/Shanghai
+revision:
+  observer_lifetime: one RosGazeboFinalObserver spans pre-retreat epoch, RETREAT, and post-retreat epoch
+  pose_and_tcp_buffers: cleared for each sample as before
+  contact_snapshot: retained across epochs and replaced by every incoming message including empty contacts
+  evidence_wait_timeout_s: 3.0
+  pose_pair_source_age_limit_s: unchanged 0.10
+  contact_snapshot_age_limit_s: unchanged 1.0
+  final_acceptance: unchanged
+tests:
+  red: source contract found observer construction after collect_final_epoch definition and one-second deadline
+  focused_green: 34 passed
+  package_pytest: 167 passed, 2 skipped
+  colcon_test: 169 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit locally and rerun the unchanged full strategy for an authoritative final outcome
+```
