@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: db0b623
+current_commit: a6d6a6a
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -21,17 +21,104 @@ confirmed_conclusions:
   - EXP-061 proved that detaching the Planning Scene shadow before a planned retreat is not viable: the radial move executed but the subsequent 60 mm world-Z plan failed with MoveIt error 99999, while the already-tilted cup fell onto its side.
   - EXP-063 activated the configured LIFT velocity scaling and reduced the measured lift boundary from 14.9-18.6 s to 8.53 s; LIFT ended at 0.00804 rad tilt with q6 range 0.00315 rad, and MOVE_ABOVE_PLACE ended at 0.15396 rad tilt.
   - EXP-064 jointly changed the cup to 0.010 kg and raised cup/pad limiting friction to 2.0; MOVE_ABOVE_PLACE end tilt improved from 0.15114 to 0.09895 rad and q6 range from 0.00738 to 0.000168 rad, but DESCEND_TO_PLACE later reached 0.77106 rad tilt.
+  - EXP-065 restored 0.020 kg while retaining limiting friction 2.0; MOVE_ABOVE_PLACE regressed to 0.26479 rad end tilt and 0.01068 rad q6 range, while DESCEND_TO_PLACE improved relative to EXP-064 but still ended at 0.44172 rad. The material profile is not an end-to-end candidate.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Restoring 0.020 kg while retaining the 2.0 limiting friction profile can distinguish whether the EXP-064 downstream DESCEND_TO_PLACE regression is caused primarily by the lighter mass while preserving the horizontal-carry gain.
+  - The 0.020 kg / limiting-friction-1.2 baseline remains the best observed end-to-end material profile among EXP-063/064/065; the next useful variable is reducing non-motion dwell and/or shortening motion exposure while preserving all outcome and hard-safety bounds.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-065-IMPLEMENTED-202
-next_experiment: EXP-065
+latest_checkpoint: CP-RESULT-EXP-065-203
+next_experiment: EXP-066
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-065-203
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FAILURE_WITH_PARTIAL_DESCENT_RECOVERY
+experiment_id: EXP-065
+execution_commit: a6d6a6a
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 223
+  gz_partition: so101_py_qual_exp065
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+reset_proof: /tmp/so101-py-qualification/exp065/reset/reset-world.json
+reset:
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.0000016180251719013332
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.0006575480801984668
+  continuation_max_moving_pad_penetration_m: 0.0011323945363983512
+  micro_lift_world_z_m: 0.0008944272994995117
+  lateral_drift_m: 0.0002916269812201699
+move_above_place_comparison:
+  exp063_20g_friction_1_2:
+    end_tilt_rad: 0.15114010255559407
+    q6_position_range_rad: 0.0073810480535030365
+  exp064_10g_friction_2_0:
+    end_tilt_rad: 0.09895493546195651
+    q6_position_range_rad: 0.00016843527555465698
+  exp065_20g_friction_2_0:
+    duration_s: 4.9010958148911595
+    start_tilt_rad: 0.03742025089392026
+    end_tilt_rad: 0.2647932299482232
+    max_tilt_rad: 0.2647932299482232
+    q6_position_range_rad: 0.010677531361579895
+    table_contact_samples: 0
+post_move_shadow_dwell:
+  duration_s: 3.2846589949913323
+  tilt_start_rad: 0.2647932299482232
+  tilt_end_rad: 0.3064549919981344
+  tilt_growth_rad: 0.04166176204991118
+  q6_position_range_rad: 0.0007382109761238098
+  table_contact_samples: 0
+descend_to_place:
+  duration_s: 8.685368056874722
+  start_tilt_rad: 0.3064549919981344
+  end_tilt_rad: 0.4417202074056439
+  max_tilt_rad: 0.4417202074056439
+  q6_position_range_rad: 0.01431836187839508
+  table_contact_samples: 0
+  end_bottom_clearance_m: 0.006315154038369658
+open_gripper_end_tilt_rad: 0.6290276701761391
+prediction_evaluation:
+  physical_grasp_contract: PASS
+  move_end_tilt_at_most_0_11_rad: FAIL_AT_0_26479
+  move_q6_range_at_most_0_002_rad: FAIL_AT_0_01068
+  descend_end_tilt_at_most_0_35_rad: FAIL_AT_0_44172
+  no_table_contact_through_descend: PASS
+later_known_failure:
+  code: MOVEIT_WORLD_Z_PLAN_FAILED
+  moveit_error_code: 99999
+evidence:
+  execute_log: /tmp/so101-py-qualification/exp065/run/execute.log
+  physical_gate: /tmp/so101-py-qualification/exp065/run/physical-gate.json
+  telemetry: /tmp/so101-py-qualification/exp065/run/diagnostic/samples.jsonl
+  telemetry_sha256: 4fd1b0f05d139d4b678aa503726ac334964e496c6a6f7de673009b7590a1d1d2
+  bounded_video: /tmp/so101-py-qualification/exp065/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 2895642b48e6dd73b1425ad750245e6bb580259188a99b4cbaaf59b990d46186
+visual_observation:
+  - The inspected 5-second Gazebo contact sheet shows the cup progressively rolling during the carried and lowered portion of the trajectory; it does not contact the table before release.
+  - The video observation agrees with telemetry and does not support a table-contact explanation for this run's pre-release instability.
+interpretation:
+  - Restoring 0.020 kg partially recovers descent stability relative to EXP-064, but the same high-friction profile does not preserve EXP-064's horizontal-carry gain.
+  - In this stochastic FULL_RESTART sample, neither 0.010 kg/friction-2.0 nor 0.020 kg/friction-2.0 outperforms the original 0.020 kg/friction-1.2 profile end to end.
+  - The comparison does not isolate a deterministic causal mechanism; it is sufficient to reject this material profile as the next qualification candidate.
+decision: ABANDON_AS_END_TO_END_CANDIDATE; restore 0.020 kg/friction-1.2 baseline and test a single timing/latency variable next
+counts_toward_success_streak: false
+next_experiment: EXP-066 restore the best observed material baseline, then preregister one shortened instability-exposure variable
 ```
 
 ```yaml
