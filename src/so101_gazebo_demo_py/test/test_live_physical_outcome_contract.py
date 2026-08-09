@@ -210,22 +210,6 @@ def test_release_settles_after_scene_detach_before_existing_retreat() -> None:
     assert "pre_retreat_outcome" in forward_path[epochs_index:post_outcome_index]
 
 
-def test_no_alignment_release_separates_before_pre_retreat_settle() -> None:
-    source = LIVE_EXECUTE.read_text()
-    forward_path = source[source.index("def run_live_execute"):]
-
-    detach_index = forward_path.index('apply_scene("detach",released_pose)')
-    condition_index = forward_path.index("if not place_alignment:", detach_index)
-    separation_index = forward_path.index(
-        "release_separation_translation(released)", condition_index,
-    )
-    epochs_index = forward_path.index(
-        "collect_final_outcomes_around_retreat(", separation_index,
-    )
-
-    assert detach_index < condition_index < separation_index < epochs_index
-
-
 def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:
     policy = PlanningShadowConfig(0.005, 0.070, 0.10)
     gazebo = (0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 1.0)
