@@ -26,7 +26,7 @@ def test_final_release_shortens_only_the_explicit_release_command() -> None:
     assert gripper_motion_duration_seconds(-0.053) == 8
     assert gripper_motion_duration_seconds(0.465) == 5
     assert gripper_motion_duration_seconds(0.75) == 5
-    assert gripper_motion_duration_seconds(0.75, final_release=True) == 2
+    assert gripper_motion_duration_seconds(0.75, final_release=True) == 1
 
     live_execute = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
     assert (
