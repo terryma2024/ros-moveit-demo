@@ -195,6 +195,7 @@ class RosGazeboFinalObserver:
         from gz.msgs10.pose_v_pb2 import Pose_V
         from gz.transport13 import Node as GazeboNode
         import rclpy
+        from rclpy.executors import SingleThreadedExecutor
         from ros_gz_interfaces.msg import Contacts
         from tf2_ros import Buffer, TransformListener
 
@@ -204,6 +205,8 @@ class RosGazeboFinalObserver:
         self._node=rclpy.create_node(
             "so101_live_final_outcome_observer",context=self._context,
         )
+        self._executor=SingleThreadedExecutor(context=self._context)
+        self._executor.add_node(self._node)
         self._object_samples=deque(maxlen=64); self._tcp_samples=deque(maxlen=64)
         self._contacts=ContactSnapshot()
         self._buffer=Buffer(); self._listener=TransformListener(self._buffer,self._node)
@@ -231,7 +234,7 @@ class RosGazeboFinalObserver:
         self._object_samples.clear(); self._tcp_samples.clear()
         deadline=time.monotonic()+3.0
         while time.monotonic() < deadline:
-            self._rclpy.spin_once(self._node,timeout_sec=0.02)
+            self._executor.spin_once(timeout_sec=0.02)
             try:
                 transform=self._buffer.lookup_transform(
                     "world","so101_tcp",self._rclpy.time.Time(),
@@ -269,6 +272,9 @@ class RosGazeboFinalObserver:
             if hasattr(self,"_contact_subscription"):
                 self._node.destroy_subscription(self._contact_subscription)
             self._listener=None
+            if hasattr(self,"_executor"):
+                self._executor.remove_node(self._node)
+                self._executor.shutdown()
             self._node.destroy_node()
         if hasattr(self,"_context") and self._context.ok(): self._context.shutdown()
 
