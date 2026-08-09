@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 5ac546a
+current_commit: f2a846f
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -32,6 +32,7 @@ confirmed_conclusions:
   - EXP-073 validly deferred an 8.5665 mm XY residual, executed no release-alignment correction, completed fixed-joint retreat without MoveIt planning failure, and ended upright/stable/supported/gripper-free only 0.8735 mm beyond the final y boundary.
   - EXP-075 exact-repeat search success exercised the 2 s final opening, reduced release-to-q6>=0.74 from EXP-073's 6.758 s to 2.763 s, and ended at [-0.079112, -0.245103, 0.165000] m upright/stable/supported/gripper-free; however its y margin was only 0.103 mm and fixed-pad contact persisted throughout opening.
   - EXP-076 passed the physical grasp gate but failed exactly at the new post-detach radial separation plan with MoveIt error 99999; the command never executed, leaving the open gripper in fixed/moving-pad contact with the table-supported tilted cup.
+  - EXP-077 kept the MoveIt shadow attached and shortened the radial target to 0.004 m, but the same MoveIt error 99999 occurred before any arm-joint motion; therefore the contact-adjacent release pose itself, not only detach ordering or separation distance, blocks a newly planned Cartesian separation.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -41,15 +42,70 @@ disproven_routes:
   - Raising fingertip transverse friction to 2.0 as an intermediate candidate; EXP-071 improved horizontal carry but amplified descent/release tilt and missed the target penetration interval.
   - Treating MOVE_ABOVE_PLACE scaling 0.15 as a real speed increase with the current integer-second adapter; it produces the same 1 s/waypoint schedule as 0.10.
   - Planning a release-separation translation after detaching the MoveIt Planning Scene shadow at the contact-adjacent release state; EXP-076 reproduced the MoveIt error 99999 boundary already seen in EXP-061.
+  - Planning a new Cartesian release-separation translation at the contact-adjacent release state even while the MoveIt shadow remains attached and the target is only 0.004 m; EXP-077 produced zero measurable arm-joint progress before error 99999.
 open_hypotheses:
   - With the rejected friction candidates restored to 1.2, the next useful boundary is the motion/alignment interval in which tilt grows between MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and OPEN_GRIPPER; target compensation should not be used to mask the tilt source.
   - A release-alignment correction triggered by an approximately 8.37 mm XY error can amplify pre-open tilt; relaxing the intermediate correction trigger while retaining the final target region is the next outcome-first candidate.
   - EXP-075 proves that a 2 s final opening can succeed, but it did not reduce peak opening tilt and retained fixed-pad contact through q6>=0.74; the next release-boundary candidate should explicitly separate the open gripper from the fixed pad before the existing retreat without changing y compensation.
-  - A short radial separation planned while the MoveIt Planning Scene shadow is still attached may remain collision-plannable and break sub-millimetre pad contact; the shadow must be detached and resynchronized only after that physical separation.
+  - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-077-RUNNING-240
-next_experiment: EXP-077
+latest_checkpoint: CP-RESULT-EXP-077-241
+next_experiment: EXP-078
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-077-241
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE
+experiment_id: EXP-077
+execution_head: f2a846f
+implementation_commit: 1393a9e
+lifecycle: RESET_WORLD
+command_exit_code: 1
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp077/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000009396767270812786
+physical_grasp:
+  status: PROVED
+  max_moving_pad_penetration_m: 0.00023900865926407278
+  post_seating_moving_pad_penetration_m: 0.0002385259431321174
+  micro_lift_world_z_m: 0.002054169774055481
+  lateral_drift_m: 0.00031295915739885965
+release_boundary:
+  final_open_gripper_completed: true
+  first_q6_ge_0_74_object_xyz_m: [-0.06504030525684357, -0.2646922469139099, 0.17665836215019226]
+  attempted_change: execute 0.004 m radial separation while the MoveIt Planning Scene shadow remains attached
+  result: planning failed before the radial command executed
+  error: "world-Z MoveGroup planning failed: 99999"
+  planner_wait_after_q6_ge_0_74_s: 31.066210681106895
+  arm_joint_delta_after_q6_ge_0_74_rad: [0.0, 0.00000005960464477539063, 0.000000022351741790771484, 0.00000011920928955078125, -0.000000007450580596923828]
+last_observed_physical_state:
+  object_xyz_m: [-0.06498324871063232, -0.2647585868835449, 0.17671561241149902]
+  object_quaternion_xyzw: [0.042124121010761045, 0.1871810428587112, -0.13052007046351247, 0.9727041393578247]
+  cup_table_contact: true
+  fixed_pad_contact: true
+  moving_pad_contact: false
+  visual_result: tilted table-supported cup with the fully open gripper still at the release pose
+evidence:
+  execute_log: /tmp/so101-py-qualification/exp077/run/execute.log
+  execute_log_sha256: 664cf95150370bfb298c93f0480fe0d918101e61768f9992e4c4f30c4256ffe0
+  physical_gate: /tmp/so101-py-qualification/exp077/run/physical-gate.json
+  physical_gate_sha256: d9af2979d52714d71b6b5a3e13827c0b9cb0aa7c8723cd952df89ffaaec85ade
+  telemetry: /tmp/so101-py-qualification/exp077/run/diagnostic/samples.jsonl
+  telemetry_sha256: a4a00536ba288c6fe85c00780260a9a4b79a75c68b8ac67a4ce9ce9dce19b113
+  bounded_video: /tmp/so101-py-qualification/exp077/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 4ccd7425b27f71a97fd72a08dbc4e8f28f1d70cf72ce0941ee9a2d56211535be
+  final_screenshot: /tmp/so101-py-qualification/exp077/run/diagnostic/gazebo-final.png
+  final_screenshot_sha256: dab28af353cecdf7a521b98d32398c7bcbc908b04f8c041f5e0fd8612279ac75
+interpretation:
+  - the variable was reached after successful physical grasp and final opening, so the failure is valid
+  - effectively zero arm-joint delta over the 31.1 s planner wait proves the 0.004 m separation never began
+  - retaining the attached collision shadow did not make a newly planned Cartesian motion feasible at this contact-adjacent release state
+decision: REJECT and revert implementation 1393a9e; do not retry a MoveGroup-planned post-open separation at this release pose
+counts_toward_success_streak: false
+next_experiment: EXP-078
 ```
 
 ```yaml
