@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 0835de93e058300ab6ac53d94a43ea197b28a25a
+current_commit: 8919525
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -29,8 +29,37 @@ open_hypotheses:
   - The user-authorized joint profile of 0.010 kg cup mass and higher cup/pad friction will reduce gravity-driven rolling through MOVE_ABOVE_PLACE relative to EXP-063; the two effects cannot be separately attributed in this experiment.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-064-198
+latest_checkpoint: CP-EXP-064-IMPLEMENTED-199
 next_experiment: EXP-064
+```
+
+```yaml
+checkpoint_id: CP-EXP-064-IMPLEMENTED-199
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-064
+implementation_commit: 8919525
+joint_profile:
+  cup_mass_kg: 0.010
+  cup_inertia_kg_m2: {ixx: 0.00001475, iyy: 0.00001475, izz: 0.0000160}
+  cup_wall_friction: {mu: 2.0, mu2: 2.0}
+  fingertip_pad_friction: {axial: 3.0, transverse: 2.0}
+red:
+  targeted: 1 expected failure; object policy still reported 0.020 kg before the implementation
+green:
+  targeted: 1 passed
+  full_pytest: 193 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 195 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  object_config_source_install_sha256: e1f51b025af1eaf22d7230c6a865da1387bcee38e44496336de88b2c991ddb1d
+  world_source_install_sha256: 3ccc663709b2c2a000f5c9c1ec0f04d9314e216f00d0daaf63f8e9f4efaff058
+  prepared_model_source_install_sha256: 98af297a2ede5b225c1f2d0d9b5acd8adb1fecd3e393533ca2ae89a07879006e
+  installed_cup_wall_count_with_mu2_2_0: 12
+  installed_pad_collision_count_with_mu2_2_0: 15
+unchanged: all motion/validation policies, targets, speeds, q6, controller/gains, geometry, collision and attachment semantics
+next_command: stop only the owned so101-py-qual stack, launch one FULL_RESTART stack with ROS_DOMAIN_ID 222 and GZ_PARTITION so101_py_qual_exp064, then reset proof plus bounded telemetry/H.264 and one execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
