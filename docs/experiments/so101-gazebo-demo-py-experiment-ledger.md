@@ -7706,3 +7706,60 @@ prediction: if an alignment command partially aborts with a stable arm, the rema
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-050-149
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_EMPTY_POSE_PROBE
+experiment_id: EXP-050
+execution_commit: fceb82c
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-050
+observed:
+  physical_gate: PROVED
+  alignment_motion_reached: true
+failure:
+  object_sample: null
+  tcp_sample: null
+  probe_window_s: 3.0
+  authoritative_final_outcome: unavailable
+interpretation: this is the second independent all-empty transient subscription after EXP-046; it does not evaluate the third feedback budget or physical release
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-050-150
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-050-reset
+proof:
+  cup_spawn_pose_error_m: 0.000000829000095531681
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-BOUND-POSE-PROBE-RETRY-151
+recorded_at: 2026-08-09 Asia/Shanghai
+change: apply a backend-wide maximum of two independent subscriptions for a transient empty Gazebo/TCP pose pair
+scope:
+  - initial observation and grasp validation
+  - carrying and Planning Scene shadow synchronization
+  - place alignment and controller-abort recovery
+  - release/retreat sampling and solver checks
+behavior:
+  - retry only the exact fresh-pose-pair-unavailable RuntimeError
+  - use a new ROS/Gazebo subscription attempt with full cleanup each time
+  - return immediately on the first fresh pair
+  - preserve the original failure after two empty attempts
+unchanged:
+  - 3.0 s deadline per subscription attempt
+  - 0.10 s pose-pair age ceiling and co-observation semantics
+  - motion, physics, geometry, controller and final outcome policies
+tests:
+  red: focused contract could not import the absent retry boundary
+  package_pytest: 187 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```

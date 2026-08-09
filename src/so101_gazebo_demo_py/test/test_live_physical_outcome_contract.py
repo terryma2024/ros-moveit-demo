@@ -16,7 +16,8 @@ from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
     close_gazebo_subscription, closest_pose_pair, coobserved_tcp_sample,
     parse_model_pose, parse_tf_pose,
-    pose_pair_ready, select_gazebo_pose, select_stamped_transform,
+    pose_pair_ready, sample_pose_pair_with_retry,
+    select_gazebo_pose, select_stamped_transform,
 )
 
 
@@ -100,6 +101,39 @@ def test_final_epoch_uses_one_observer_with_bounded_evidence_wait() -> None:
     assert "self._context.shutdown()" in backend_source
     assert "pose_pair_ready(observed,self._max_pair_age_s)" in backend_source
     assert "self._contacts.fresh(time.monotonic(),1.0)" in backend_source
+
+
+def test_transient_empty_pose_pair_retries_one_fresh_subscription() -> None:
+    expected = SimpleNamespace(object_xyz=(0.0, 0.0, 0.165))
+    attempts = []
+
+    def sample_once():
+        attempts.append(len(attempts) + 1)
+        if len(attempts) == 1:
+            raise RuntimeError(
+                "fresh Gazebo/TCP pose pair unavailable: "
+                "{'object': None, 'tcp': None}"
+            )
+        return expected
+
+    assert sample_pose_pair_with_retry(sample_once) is expected
+    assert attempts == [1, 2]
+
+
+def test_pose_pair_retry_remains_bounded_after_two_empty_subscriptions() -> None:
+    attempts = []
+
+    def sample_once():
+        attempts.append(len(attempts) + 1)
+        raise RuntimeError(
+            "fresh Gazebo/TCP pose pair unavailable: "
+            "{'object': None, 'tcp': None}"
+        )
+
+    with pytest.raises(RuntimeError, match="fresh Gazebo/TCP pose pair unavailable"):
+        sample_pose_pair_with_retry(sample_once)
+
+    assert attempts == [1, 2]
 
 
 def test_moveit_shadow_attach_requires_authoritative_gazebo_pose() -> None:
