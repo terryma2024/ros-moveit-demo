@@ -156,7 +156,7 @@ def test_live_run_reuses_one_isolated_planning_scene_client() -> None:
     assert "with PlanningSceneShadowClient() as scene_client:" in forward_path
     assert "apply_scene=scene_client.apply" in forward_path
     assert "apply_scene(\"attach\",shadow_pose)" in source
-    assert "apply_scene(\"detach\",separated_pose)" in source
+    assert "apply_scene(\"detach\",released_pose)" in source
     assert "_apply_scene(" not in forward_path
 
 
@@ -194,7 +194,7 @@ def test_release_settles_after_scene_detach_before_existing_retreat() -> None:
     release_index = forward_path.index(
         "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
     )
-    detach_index = forward_path.index('apply_scene("detach",separated_pose)', release_index)
+    detach_index = forward_path.index('apply_scene("detach",released_pose)', release_index)
     epochs_index = forward_path.index(
         "collect_final_outcomes_around_retreat(", detach_index,
     )
@@ -208,35 +208,6 @@ def test_release_settles_after_scene_detach_before_existing_retreat() -> None:
         detach_index:epochs_index
     ]
     assert "pre_retreat_outcome" in forward_path[epochs_index:post_outcome_index]
-
-
-def test_no_alignment_release_separation_stays_attached_until_detach() -> None:
-    source = LIVE_EXECUTE.read_text()
-    forward_path = source[source.index("def run_live_execute"):]
-
-    release_index = forward_path.index(
-        "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
-    )
-    no_alignment_index = forward_path.index("if not place_alignment:", release_index)
-    translation_index = forward_path.index(
-        "release_separation_translation(released, distance_m=0.004)",
-        no_alignment_index,
-    )
-    execute_index = forward_path.index(
-        "_moveit_world_translation_execute(", translation_index,
-    )
-    sample_index = forward_path.index("separated=backend.sample()", execute_index)
-    shadow_gate_index = forward_path.index(
-        'gate_shadow("RELEASE_SEPARATION", observe_pose=lambda:separated)',
-        sample_index,
-    )
-    detach_index = forward_path.index(
-        'apply_scene("detach",separated_pose)', shadow_gate_index,
-    )
-
-    assert release_index < no_alignment_index < translation_index
-    assert translation_index < execute_index < sample_index
-    assert sample_index < shadow_gate_index < detach_index
 
 
 def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:
