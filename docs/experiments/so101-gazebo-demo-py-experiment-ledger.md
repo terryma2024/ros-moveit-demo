@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: cf54648
+current_commit: ba6b97e
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -52,8 +52,46 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-079-248
+latest_checkpoint: CP-QUAL-FULL-FAST-PLAN-249
 next_experiment: QUAL-FULL-FAST-01
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-FAST-PLAN-249
+recorded_at: 2026-08-10 Asia/Shanghai
+status: QUALIFICATION_PLANNED
+candidate:
+  implementation_commit: 068eb89
+  frozen_result_commit: ba6b97e
+  final_open_gripper_duration_s: 2
+  no_alignment_retreat_velocity_scaling: 0.10
+  cup_mass_kg: 0.020
+  cup_friction: 1.2
+  fingertip_axial_friction: 3.0
+  fingertip_transverse_friction: 1.2
+  release_y_compensation_m: -0.005
+qualification_order:
+  - five consecutive FULL_RESTART successes, stopping immediately on any valid failure
+  - from a clean proven stack after FULL_RESTART 05, five consecutive RESET_WORLD successes, stopping immediately on any valid failure
+full_restart_contract:
+  - terminate only Gazebo/MoveIt processes owned by tmux session so101-py-qual
+  - recreate Gazebo GUI and MoveIt from the frozen worktree install for every counted run
+  - use a fresh ROS_DOMAIN_ID and GZ_PARTITION for each counted run
+  - prove RESET_WORLD after stack readiness and before execute
+  - record bounded contact telemetry, GUI video, live summary, physical gate and final screenshot
+success_contract:
+  - physical grasp gate passes with Gazebo attachment_state detached
+  - full state machine reaches DONE
+  - authoritative final outcome is in-region, upright, stable, table-supported, free of gripper contact, Gazebo detached, MoveIt detached and controller healthy
+failure_contract:
+  - any valid grasp/motion/release/final-outcome failure resets the FULL_RESTART streak to zero and returns to search
+invalid_contract:
+  - duplicate stack/client, stale install, missing lifecycle provenance, reset failure or missing bounded evidence does not count and must be corrected before retry
+next_run:
+  id: QUAL-FULL-FAST-01
+  ros_domain_id: 228
+  gz_partition: so101_py_full_fast_01
+counts_toward_success_streak: false
 ```
 
 ```yaml
