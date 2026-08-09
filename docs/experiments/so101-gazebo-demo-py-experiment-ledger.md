@@ -44,8 +44,44 @@ open_hypotheses:
   - EXP-073 retains gripper contact throughout its 1.495 s pre-retreat observation after the 5 s release command; shortening only the final release opening is the next outcome-first candidate.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-074-IMPLEMENTED-228
+latest_checkpoint: CP-EXP-074-RUNNING-229
 next_experiment: EXP-074
+```
+
+```yaml
+checkpoint_id: CP-EXP-074-RUNNING-229
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RUNNING
+experiment_id: EXP-074
+implementation_commit: b69ce39
+lifecycle: RESET_WORLD
+provenance:
+  source_worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  runtime_package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  ros_domain_id: 227
+  gz_partition: so101_py_qual_baseline_restored
+stack:
+  tmux_session: so101-py-qual
+  gazebo_servers: 1
+  move_group_processes: 1
+  active_execute_clients_before_run: 0
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp074/reset/reset-world.json
+  command_exit_code: 0
+  cup_spawn_pose_error_m: 0.0000007472734037531541
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+evidence_contract:
+  telemetry: /tmp/so101-py-qualification/exp074/run/diagnostic/samples.jsonl
+  bounded_video: /tmp/so101-py-qualification/exp074/run/diagnostic/gazebo-gui.mp4
+  execute_log: /tmp/so101-py-qualification/exp074/run/execute.log
+next_command: start the bounded recorder and Gazebo video in their existing so101-py-qual panes, then run one execute in the existing experiment pane
+counts_toward_success_streak: false
 ```
 
 ```yaml
