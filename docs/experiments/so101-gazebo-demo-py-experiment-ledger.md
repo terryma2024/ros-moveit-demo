@@ -7681,3 +7681,28 @@ tests:
   package_pytest: 185 passed, 2 skipped
 next: commit locally, then preregister one RESET_WORLD trial
 ```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-050-148
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-050
+purpose: validate one extra cup-feedback correction after a partially executed second alignment command
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: fceb82c
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-049-reset-retry1/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-050
+candidate:
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  maximum_alignment_commands: 3
+  pre_release_z_convergence_tolerance_m: 0.006
+  immediate_radial_separation_m: 0.010
+  changed_motion_parameters_since_EXP_049: false
+prediction: if an alignment command partially aborts with a stable arm, the remaining third command uses the measured cup pose and reaches physical release; final success remains outcome-only
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
