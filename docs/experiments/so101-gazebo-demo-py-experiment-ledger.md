@@ -4258,3 +4258,58 @@ strategy:
 next_on_valid_success: freeze the physical strategy and inspect final margins before two RESET_WORLD confirmations
 next_on_valid_failure: choose only the motion family causally linked to the first failed outcome
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-007
+lifecycle: INVALID_CODE
+result:
+  execute_rc: 1
+  reached: release and the first final-outcome epoch
+  reported_error: fresh combined final pose/contact observation unavailable
+root_cause: the persistent observer cleared its contact snapshot before every pose sample and required a new contact-topic message each time; the frozen two-second epoch therefore could not collect five samples at the contact publisher cadence
+post_failure_readback:
+  cup_xyz_m: [-0.1088976338505745, -0.26793551445007324, 0.16499964892864227]
+  cup_xyzw: [-0.00000042247559817243275, 0.00000029591055153586735, -0.45725746386122273, 0.8893343625465435]
+  q6_rad: 0.7500013113021851
+  gazebo_attachment_state: detached
+  contact_count: 1
+  interpretation: physical release completed and the cup was stable/upright on the table, but no authoritative final evaluation was produced
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-007
+counts_toward_search_or_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-007-015
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-007/reset-after-invalid
+proof:
+  cup_spawn_pose_error_m: 0.0000006752546157036912
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-REUSABLE-FINAL-CONTACT-SNAPSHOT-016
+recorded_at: 2026-08-09 Asia/Shanghai
+fix:
+  contact_snapshot: each new contact message replaces the prior complete snapshot, including a valid empty tuple
+  reuse_window_s: 1.0
+  pose_sampling: Gazebo cup and TF TCP samples remain newly collected for every final sample
+  stale_behavior: a contact snapshot older than one second cannot be used
+  no_accumulation: old finger/support contacts are not extended into later snapshots
+unchanged_final_contract:
+  consecutive_samples: 5
+  settle_timeout_s: 2.0
+  support/contact/position/upright/stability/arm thresholds: unchanged
+tests:
+  red: ContactSnapshot was absent
+  focused_green: 7 passed
+  package_pytest: 160 passed, 2 skipped
+  colcon_test: 162 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit the observer fix, preregister an unchanged physical rerun, and obtain an authoritative post-RETREAT result
+```

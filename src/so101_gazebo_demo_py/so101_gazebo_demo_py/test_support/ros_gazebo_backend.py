@@ -162,6 +162,24 @@ def contact_pairs_from_message(message) -> tuple[ContactPair, ...]:
     return tuple(pairs)
 
 
+class ContactSnapshot:
+    """Latest contact-topic state with bounded receipt-time reuse."""
+    def __init__(self) -> None:
+        self.pairs: tuple[ContactPair, ...] = ()
+        self.received_at_s: float | None = None
+
+    def replace(self, message, received_at_s: float) -> None:
+        self.pairs=contact_pairs_from_message(message)
+        self.received_at_s=float(received_at_s)
+
+    def fresh(self, now_s: float, max_age_s: float) -> bool:
+        return (
+            self.received_at_s is not None
+            and math.isfinite(self.received_at_s)
+            and 0.0 <= now_s-self.received_at_s <= max_age_s
+        )
+
+
 def _command(arguments: list[str], timeout_s: float = 40.0, *, check: bool = True) -> str:
     result = subprocess.run(arguments, capture_output=True, text=True, timeout=timeout_s)
     if check and result.returncode != 0:
@@ -184,7 +202,7 @@ class RosGazeboFinalObserver:
         rclpy.init()
         self._node=rclpy.create_node("so101_live_final_outcome_observer")
         self._object_samples=deque(maxlen=64); self._tcp_samples=deque(maxlen=64)
-        self._contacts=[]; self._contact_message_received=False
+        self._contacts=ContactSnapshot()
         self._buffer=Buffer(); self._listener=TransformListener(self._buffer,self._node)
         self._gazebo_node=GazeboNode(); self._pose_topic="/world/so101_pick_place/pose/info"
         def receive_object(message):
@@ -193,8 +211,7 @@ class RosGazeboFinalObserver:
         if not self._gazebo_node.subscribe(Pose_V,self._pose_topic,receive_object):
             self.close(); raise RuntimeError("cannot subscribe to Gazebo pose info")
         def receive_contacts(message):
-            self._contact_message_received=True
-            self._contacts.extend(contact_pairs_from_message(message))
+            self._contacts.replace(message,time.monotonic())
         self._contact_subscription=self._node.create_subscription(
             Contacts,"/task_object/contacts",receive_contacts,100,
         )
@@ -208,8 +225,7 @@ class RosGazeboFinalObserver:
 
     def observe(self) -> tuple[PoseSample, tuple[ContactPair, ...]]:
         from rclpy.duration import Duration
-        self._object_samples.clear(); self._tcp_samples.clear(); self._contacts.clear()
-        self._contact_message_received=False
+        self._object_samples.clear(); self._tcp_samples.clear()
         deadline=time.monotonic()+1.0
         while time.monotonic() < deadline:
             self._rclpy.spin_once(self._node,timeout_sec=0.02)
@@ -229,13 +245,16 @@ class RosGazeboFinalObserver:
             except Exception:
                 pass
             observed=closest_pose_pair(self._object_samples,self._tcp_samples)
-            if pose_pair_ready(observed,self._max_pair_age_s) and self._contact_message_received:
+            if (
+                pose_pair_ready(observed,self._max_pair_age_s)
+                and self._contacts.fresh(time.monotonic(),1.0)
+            ):
                 object_pose,object_stamp=observed["object"]
                 tcp_pose,tcp_stamp=observed["tcp"]
                 return PoseSample(
                     object_pose[:3],tcp_pose[:3],object_pose[3:],tcp_pose[3:],
                     abs(object_stamp-tcp_stamp),
-                ),tuple(self._contacts)
+                ),self._contacts.pairs
         raise RuntimeError("fresh combined final pose/contact observation unavailable")
 
     def close(self) -> None:
