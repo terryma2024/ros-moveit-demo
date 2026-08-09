@@ -5321,3 +5321,52 @@ strategy:
 next_on_valid_success: freeze strategy and run two independent RESET_WORLD confirmations
 next_on_valid_failure: use authoritative post-retreat result only; intermediate telemetry does not redefine final success
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-018
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  failure_phase: POST_SEATING_PENETRATION_CONTROL
+  initial_depth_m: 0.0003699783410411328
+  final_depth_m: 0.00016619398957118392
+  q6_targets: [-0.051481935471296314, -0.051981935471296314, -0.052481935471296315, -0.052981935471296315, -0.053481935471296316, -0.053981935471296316, -0.05448193547129632]
+diagnosis: increasingly negative q6 monotonically reduced the reported moving-pad depth in this physical contact geometry; penetration is not a monotonic grasp-quality control variable and must not gate or steer the live path
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-018
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-018-042
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-018/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000007781472872535931
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PENETRATION-TELEMETRY-ONLY-043
+recorded_at: 2026-08-09 Asia/Shanghai
+live_sequence:
+  - command the configured 0.004 rad seating preload once
+  - require six consecutive physical bilateral-contact samples
+  - fail immediately only if moving-pad penetration exceeds the unchanged 0.0013 m hard ceiling
+  - record depth as telemetry without q6 correction
+  - attach only the MoveIt Planning Scene shadow
+  - run physical micro-lift and continue on cup z/lateral outcome plus arm stability
+removed: all penetration target-band q6 adjustments from the production live path
+tests:
+  red: source contract found tune_seating_penetration in run_live_execute
+  focused_green: 38 passed
+  package_pytest: 166 passed, 2 skipped
+  colcon_test: 168 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit locally and preregister one full-path candidate under the outcome-first contract
+```
