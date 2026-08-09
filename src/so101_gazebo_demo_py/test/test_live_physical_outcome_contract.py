@@ -234,6 +234,28 @@ def test_fresh_physical_slip_resynchronizes_moveit_shadow() -> None:
     ) == pytest.approx((*observed.object_xyz, *observed.object_xyzw))
 
 
+def test_shadow_gate_can_reuse_a_persistent_pose_observer() -> None:
+    observed = SimpleNamespace(
+        object_xyz=(0.0, 0.0, 0.2),
+        object_xyzw=(0.0, 0.0, 0.0, 1.0),
+        tcp_xyz=(0.0, 0.0, 0.3),
+        tcp_xyzw=(0.0, 0.0, 0.0, 1.0),
+        pose_pair_age_s=0.01,
+    )
+    calls = []
+
+    check, _ = synchronize_planning_shadow(
+        SimpleNamespace(sample=lambda: pytest.fail("one-shot observer recreated")),
+        (0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 1.0),
+        PlanningShadowConfig(0.005, 0.070, 0.10),
+        apply_scene=lambda *_: pytest.fail("healthy shadow must not resync"),
+        observe_pose=lambda: calls.append("persistent") or observed,
+    )
+
+    assert calls == ["persistent"]
+    assert check["healthy_before_sync"] is True
+
+
 def test_stale_physical_pose_cannot_resynchronize_moveit_shadow() -> None:
     observed = SimpleNamespace(
         object_xyz=(0.010, 0.0, 0.2),
@@ -281,6 +303,20 @@ def test_every_carry_motion_is_preceded_by_shadow_gate() -> None:
 
     carry_with_shadow_gates(Backend(), policies, lambda name: calls.append(("gate", name)))
     assert calls[::2] == [("gate", name) for name in policies]
+
+
+def test_live_carry_reuses_one_persistent_observer_for_all_shadow_gates() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+    carry_start = forward_path.index("with backend.final_observer() as carry_observer:")
+    carry_end = forward_path.index("target_place_xyz=", carry_start)
+    carry_path = forward_path[carry_start:carry_end]
+
+    assert carry_path.count("carry_observer.observe()[0]") == 1
+    assert "carry_with_shadow_gates(" in carry_path
+    assert carry_path.index("carry_observer.observe()[0]") < carry_path.index(
+        "carry_with_shadow_gates("
+    )
 
 
 def test_tcp_pose_parser_requires_translation_and_quaternion() -> None:
