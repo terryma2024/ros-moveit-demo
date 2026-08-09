@@ -434,6 +434,23 @@ def test_place_alignment_defers_exp051_bounded_residual_to_final_outcome() -> No
     assert telemetry == ()
 
 
+def test_place_alignment_defers_exp072_bounded_residual_to_final_outcome() -> None:
+    class Backend:
+        def sample(self):
+            return sample(-0.08084, -0.26100, 0.18603)
+
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.075, -0.255, 0.179),
+        execute=lambda *_args: pytest.fail(
+            "bounded EXP-072 residual must defer to the physical final outcome"
+        ),
+    )
+
+    assert aligned.object_xyz == pytest.approx((-0.08084, -0.26100, 0.18603))
+    assert reverse_waypoints == ()
+    assert telemetry == ()
+
+
 def test_same_run_place_alignment_defers_pre_release_tilt_to_final_outcome() -> None:
     class Backend:
         def sample(self):
@@ -491,6 +508,7 @@ def test_same_run_place_alignment_allows_small_intermediate_progress() -> None:
     aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
         Backend(), (-0.080, -0.250, 0.165),
         execute=lambda *_args: (12, (0.39, 0.49, 0.11, 1.0, 0.002)),
+        xy_tolerance_m=0.006,
     )
 
     assert aligned.object_xyz == pytest.approx((-0.081, -0.250, 0.165))
@@ -558,6 +576,7 @@ def test_same_run_place_alignment_does_not_recover_unstable_arm_after_abort() ->
                 "Failure(code='MOVEIT_EXECUTION_FAILED', "
                 "message='MoveIt execution error -4')"
             )),
+            xy_tolerance_m=0.006,
             wait=lambda _seconds: None,
             monotonic=lambda: next(times),
         )
