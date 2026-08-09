@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 79c4d35d287ec37ceea73c781b542d4f1b775654
+current_commit: 92c8d11f63493c5c45074d6beae7c4eb2c0df68b
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -3933,7 +3933,8 @@ planned_candidate:
   unchanged: grasp target, q6 preload/retry, orientation, physics, geometry, mass, friction, controller/gains, collision model, three-attempt XY alignment bound, release separation, final outcome contract, and Gazebo-detached/MoveIt-shadow semantics
 provenance:
   planning_base_commit: 79c4d35d287ec37ceea73c781b542d4f1b775654
-  source_commit: PENDING_TDD_IMPLEMENTATION
+  source_commit: 92c8d11f63493c5c45074d6beae7c4eb2c0df68b
+  policy_sha256: 8387b82e8762aec76c2fe799854e6a553fd8d2d0c1d9978938cc049c5a943449
   install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
   runtime_executable: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py/lib/so101_gazebo_demo_py/pick_place_state_machine
   ros_domain_id: 214
@@ -8306,4 +8307,30 @@ candidate:
 prediction: repeat valid final success on the reset GUI stack
 acceptance: unchanged authoritative physical outcome contract
 counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-EXP-057-IMPLEMENTED-174
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-057
+implementation_commit: 92c8d11f63493c5c45074d6beae7c4eb2c0df68b
+single_variable: pre-open release approach height
+red:
+  command: pytest test_policy_config::test_loads_strict_typed_policy_bundle test_outcome_first_continuation::test_release_alignment_target_preserves_ten_mm_pre_open_clearance
+  result: 2 failed for old DESCEND_TO_PLACE endpoint and old 0.169 m held-cup target
+green:
+  targeted: 2 passed
+  related: 48 passed
+  full_pytest: 189 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 191 tests, 0 errors, 0 failures, 2 skipped
+  dry_run: DONE with 19 transitions
+installed_provenance:
+  package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  runtime_mtime: 2026-08-09T17:19:16.846633859+08:00
+  motion_policy_source_install_sha256: 72c4bc008c303b8710a3ef70da5138946ee45b126d210bc2eff0b02de6e8cb2d
+  validation_policy_source_install_sha256: f702e030ad64d10326640e51e5cb0e8b7e8388cc790f66b557baf127bada3ff2
+  policy_sha256: 8387b82e8762aec76c2fe799854e6a553fd8d2d0c1d9978938cc049c5a943449
+next_command: RESET_WORLD on so101-py-gui-214, then start bounded telemetry/H.264 and execute EXP-057
 ```
