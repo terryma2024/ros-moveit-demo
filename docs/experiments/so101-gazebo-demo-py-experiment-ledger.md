@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 2113c47
+current_commit: cf54648
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -34,6 +34,7 @@ confirmed_conclusions:
   - EXP-076 passed the physical grasp gate but failed exactly at the new post-detach radial separation plan with MoveIt error 99999; the command never executed, leaving the open gripper in fixed/moving-pad contact with the table-supported tilted cup.
   - EXP-077 kept the MoveIt shadow attached and shortened the radial target to 0.004 m, but the same MoveIt error 99999 occurred before any arm-joint motion; therefore the contact-adjacent release pose itself, not only detach ordering or separation distance, blocks a newly planned Cartesian separation.
   - EXP-078 reached OPEN_GRIPPER but stochastic place alignment selected the unchanged aligned-path 10 mm radial plus 60 mm world-Z release retreat; the radial move changed arm joints, then world-Z failed with error 99999 before the new fast fixed RETREAT variable was exercised.
+  - EXP-079 exact repeat exercised the fast fixed RETREAT in 2.908 s and achieved authoritative final success at [-0.080489, -0.250643, 0.165000] m, with at least 4.357 mm margin to every XY boundary, upright/stable/supported/gripper-free and Gazebo/MoveIt detached.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -51,8 +52,71 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-079-RUNNING-247
-next_experiment: EXP-079
+latest_checkpoint: CP-RESULT-EXP-079-248
+next_experiment: QUAL-FULL-FAST-01
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-079-248
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FINAL_SUCCESS_CANDIDATE_FROZEN
+experiment_id: EXP-079
+execution_head: cf54648
+implementation_commit: 068eb89
+lifecycle: RESET_WORLD
+command_exit_code: 0
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp079/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000007190244982841014
+physical_grasp:
+  status: PROVED
+  max_moving_pad_penetration_m: 0.00023860223882365972
+  post_seating_moving_pad_penetration_m: 0.00023831393627915531
+  micro_lift_world_z_m: 0.002150237560272217
+  lateral_drift_m: 0.0002777712722126106
+release:
+  place_alignment_attempts: 0
+  post_open_movegroup_separation: false
+  measured_fixed_retreat_motion_s: 2.9075706358999014
+  expected_fixed_retreat_motion_s: 3.0
+  release_open_object_xyz_m: [-0.07827384769916534, -0.25654980540275574, 0.17339526116847992]
+  retreat_motion_start_object_xyz_m: [-0.07850167900323868, -0.2556808590888977, 0.17287889122962952]
+  retreat_motion_end_object_xyz_m: [-0.08048874139785767, -0.2506425380706787, 0.16500000655651093]
+  retreat_xy_displacement_m: 0.005416
+  displacement_prediction_below_0_005_m: FAIL_BY_0_000416
+final:
+  success: true
+  object_xyz_m: [-0.08048874139785767, -0.2506425380706787, 0.16500000655651093]
+  x_margin_to_min_boundary_m: 0.00451125860214233
+  x_margin_to_max_boundary_m: 0.00548874139785767
+  y_margin_to_min_boundary_m: 0.0043574619293213
+  y_margin_to_max_boundary_m: 0.0056425380706787
+  upright_tilt_rad: 0.0000008860867468904847
+  sample_count: 5
+  duration_s: 0.287135994062
+  max_linear_speed_m_s: 0.0
+  max_angular_speed_rad_s: 0.0
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+evidence:
+  live_summary_sha256: daea01279371ce00fa5cff7f5e0e1c2366e47ab350fe0f21ac736c6c28a7974b
+  physical_gate_sha256: 680c1cc7337a70b7bb64d6970d219cc50ff2e6c90aca03b884d36b7c43920933
+  telemetry_sha256: 158d588ba5829b515e781049637d7099aeb1296ea8c4852e26a6170b4b7b3e03
+  bounded_video_sha256: 64a2dae2625651a86325080ec24344f693cb7ec78fbc1a6a46bfc6bd7267dd14
+  final_screenshot_sha256: fcee53b2417e54610d6b6338d543a6e194573082b2ceec388e1965515d45c54f
+prediction_evaluation:
+  fixed_retreat_completed_without_movegroup: PASS
+  retreat_duration_near_3_s: PASS
+  retreat_xy_displacement_below_0_005_m: FAIL
+  authoritative_final_outcome: PASS_WITH_AT_LEAST_4_357_MM_XY_MARGIN
+decision: freeze implementation 068eb89 for clean-stack qualification; the intermediate displacement prediction missed by 0.416 mm but the authoritative final physical outcome has multi-millimetre margin on every XY boundary
+counts_toward_success_streak: false
+reason_not_counted: search confirmation run; qualification begins from a fresh stack launched from the frozen result commit
+next_experiment: QUAL-FULL-FAST-01
 ```
 
 ```yaml
