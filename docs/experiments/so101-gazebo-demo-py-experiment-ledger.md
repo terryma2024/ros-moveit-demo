@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: aca248982bcadf572ad0446bafbee98127a322ad
+current_commit: 96707ba970ec97c64475d835c9682882ce144b7c
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -28,7 +28,7 @@ open_hypotheses:
   - Passing the already-configured LIFT velocity scaling 0.10 to the direct FollowJointTrajectory backend will reduce the current 15-second five-waypoint lift to about 5 seconds and prevent time-dependent cup/q6 roll before MOVE_ABOVE_PLACE.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-063-195
+latest_checkpoint: CP-EXP-063-IMPLEMENTED-196
 next_experiment: EXP-063
 ```
 
@@ -73,6 +73,28 @@ provenance:
 commands:
   - command: pytest RED, one-line live velocity propagation, focused/full pytest, colcon build/test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
     exit_code: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-EXP-063-IMPLEMENTED-196
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-063
+implementation_commit: 96707ba970ec97c64475d835c9682882ce144b7c
+single_variable: LIFT now receives its existing policy.velocity_scaling 0.10
+change: remove the live name != LIFT override that passed None and selected the legacy three-second waypoint duration
+red:
+  targeted: 1 expected failure; LIFT backend call received None while the other carry states received 0.10
+green:
+  targeted: 1 passed with all three carry moves receiving their configured velocity
+  full_pytest: 192 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 194 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  source_build_live_execute_sha256: f6bb4f9c68c08709673e9ea5666a79038f5286333a243fa8b2fb465381c8a2fa
+unchanged: all configuration files, targets, q6 values, other speeds, physics, controller/gains, mass, geometry, friction, collision and validation bounds
+next_command: RESET_WORLD on so101-py-qual, then bounded telemetry/H.264 and one EXP-063 execute
 counts_toward_success_streak: false
 ```
 
