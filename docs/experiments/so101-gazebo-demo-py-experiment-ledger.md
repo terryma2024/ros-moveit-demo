@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 167a275
+current_commit: 539103c
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -71,8 +71,30 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-098-309
+latest_checkpoint: CP-EXP-098-IMPLEMENTED-310
 next_experiment: EXP-098
+```
+
+```yaml
+checkpoint_id: CP-EXP-098-IMPLEMENTED-310
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-098
+planning_commit: 61a0b86
+implementation_commit: 539103c
+single_variable: intermediate no-correction XY envelope expands 5 mm per axis around the unchanged final target box
+red:
+  focused: 1 failed, 36 passed; the live path had not applied the 5 mm settle margin
+green:
+  focused: 68 passed
+  full_pytest: 207 passed, 2 skipped
+  colcon: 209 tests, 0 errors, 0 failures, 2 skipped
+unchanged:
+  - exact final target box and all authoritative terminal conditions
+  - 6 mm compensated-point alignment path outside the new intermediate envelope
+  - every correction, grasp, motion, release, physics and hard safety bound
+decision: run exactly one bounded RESET_WORLD EXP-098 on the sole domain 231 stack
+counts_toward_success_streak: false
 ```
 
 ```yaml
