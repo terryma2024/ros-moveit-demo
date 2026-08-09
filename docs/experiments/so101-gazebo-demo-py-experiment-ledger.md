@@ -5447,3 +5447,29 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: commit locally and preregister one full-path candidate with no other parameter changes
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-020
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: bounded bilateral-contact reclose will recover the intermittent moving-jaw loss, after which the relaxed cup/arm micro-lift gate and dynamic shadow synchronization can carry the physical grasp to strict final validation
+execute_commit: a41a912c032ce5b7d2bfbac332c56ed3b6529344
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-020
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-019/reset-after-failure/reset-world.json
+strategy:
+  seating_preload_rad: 0.004
+  bilateral_contact_retries: at most 4 reclose actions, 0.001 rad increments
+  penetration: telemetry only below hard ceiling
+  micro_lift: minimum +0.001 m z, maximum 0.006 m lateral, arm stable
+  place_family: EXP-011
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained and dynamically resynchronized
+  final_acceptance: frozen
+next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
+next_on_valid_failure: classify the authoritative cup/arm outcome without relaxing final bounds
+```
