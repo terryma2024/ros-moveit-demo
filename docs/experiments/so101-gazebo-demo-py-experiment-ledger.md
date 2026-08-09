@@ -65,8 +65,69 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-089-286
-next_experiment: EXP-089
+latest_checkpoint: CP-PRE-EXP-090-288
+next_experiment: EXP-090
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-090-288
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-090
+status: PREREGISTERED
+prior_experiment: EXP-089
+hypothesis: EXP-089's 3.886 mm held MICRO_LIFT lateral drift identified an off-center grasp that the 6 mm gate admitted and that later loaded DESCEND_TO_PLACE into a path-tolerance abort; tightening only this cup-outcome bound to 1 mm will reject the bad grasp and activate the existing single regrasp attempt
+single_variable: MICRO_LIFT immediate and one-second held maximum cup lateral drift changes from 0.006 m to 0.001 m
+lifecycle: RESET_WORLD
+prediction:
+  - an EXP-089-like first grasp fails with CUP_LATERAL_DRIFT before carry
+  - the existing bounded regrasp path produces a selected grasp with <=1 mm held lateral drift
+  - DESCEND_TO_PLACE completes without controller error -4
+  - retained 6 mm feedback alignment plus unified fixed RETREAT reaches a passing authoritative final outcome
+unchanged:
+  - position tolerance and 0.1 mm minimum axial progress, penetration policy/ceiling, sustained 1 s hold, one regrasp budget, cup mass/materials, motion/release targets, compensation, q6=0.465038, alignment/retreat strategy, physics/controllers/collision settings and every final/hard safety bound
+preconditions:
+  - TDD, full pytest, colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-089-287
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_BEFORE_PLACE_ALIGNMENT
+experiment_id: EXP-089
+execution_head: 660de19
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp089/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000016949374271854009
+physical_grasp:
+  normalized_target_q6: -0.05358525267243385
+  post_seating_moving_pad_depth_m: 0.0009817378595471382
+  held_moving_pad_depth_m: 0.0009475459228269756
+  held_micro_lift_world_z_m: 0.0022211670875549316
+  held_lateral_drift_m: 0.0038862983830130105
+  attempts: 1
+failure:
+  phase: DESCEND_TO_PLACE
+  controller_error_code: -4
+  controller_error: Aborted due to path tolerance violation
+  failed_trajectory_waypoints: 3
+  final_waypoint: [0.38963370513, 0.442941344113, 0.112383097091, 1.025984047022, 0.001939334047]
+release_and_final_evaluation: NOT_REACHED
+interpretation:
+  - EXP-089 did not reproduce FINAL_STALE_EVIDENCE because the carry/place motion failed earlier
+  - its 3.886 mm held lateral drift is 17-22 times the 0.176-0.221 mm drift in EXP-087/088 and is the earliest actionable cup-outcome boundary
+evidence_sha256:
+  reset_proof: 2413a19d9ec0918f231bc53e4f4750430a226a0aa1eba5fcd463ce63d6e0997b
+  execute_log: fb92f8085075cef83b0d1e60015ebf24ca5c42e313716db2da55374824f58f62
+  physical_gate: 10b4abd095a8cf327c8a32fd22d1749e1dc82f35f42dbd74ba5b8e8f6dd24ecc
+  telemetry: 3f0bb7f4805d7d596406c1434320966c3e89def720e85e25eb143e6a5fa96146
+  bounded_video: 28170ec2fc7b747e02aca3cc82bff29bf6d7516238f5e31ef475b11084ec8888
+  final_screenshot: 143030e62bb24695dedcc8b37e37684f650ec7d2a6e543ee983ed53edbd430c7
+decision: retain all EXP-088 motion/release improvements and tighten only the cup lateral-drift grasp outcome in EXP-090
+counts_toward_success_streak: false
 ```
 
 ```yaml
