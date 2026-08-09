@@ -54,6 +54,7 @@ confirmed_conclusions:
   - EXP-096 did not reach its region-aware alignment variable: three bounded grasp attempts ended with negative micro-lift and loss of fixed-pad contact, so it stopped safely before carry.
   - EXP-097 reached release with a strong first grasp, but the exact final-region shortcut did not trigger: one 13.45 mm compensated-point correction ended 3.09 mm from that point (outside the final box), amplified release tilt, and the cup rolled to [-0.100238,-0.274534] m.
   - EXP-098 did not reach its expanded no-correction envelope: bounded seating normalization ended fixed-pad-only, so it stopped safely before micro-lift or carry.
+  - EXP-099 frozen EXP-081 implementation passed its physical gate but failed after OPEN_GRIPPER at the legacy world-Z MoveGroup plan with error 99999; it does not supersede EXP-081 as the frozen valid-success evidence.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -72,8 +73,73 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-099-FROZEN-313
-next_experiment: EXP-099
+latest_checkpoint: CP-PRE-EXP-100-315
+next_experiment: EXP-100
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-100-315
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-100
+status: PREREGISTERED_FINAL_CAP_RUN
+prior_experiment: EXP-099
+terminal_policy: this is the final allowed experiment; no source or parameter change is permitted, and work stops afterward regardless of result
+frozen_success:
+  experiment_id: EXP-081
+  implementation_commit: 01f45bf
+  freeze_commit: 576e03a
+single_variable: none; exact clean FULL_RESTART repeat of the frozen EXP-081 implementation
+lifecycle: FULL_RESTART
+prediction:
+  - strong physical grasp and no-alignment immediate fixed RETREAT reproduce EXP-081
+  - authoritative final outcome passes
+post_run_required_actions:
+  - record EXP-100 result and cap decision
+  - retain 576e03a frozen executable tree even if EXP-100 fails
+  - final test/audit, commit, push branch, merge to local main workspace and push merged target as authorized
+preconditions:
+  - clean FULL_RESTART with exactly one Gazebo/MoveIt stack
+  - reset proof and bounded telemetry/video
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-099-314
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_MOTION_FAILURE_AFTER_RELEASE
+experiment_id: EXP-099
+execution_head: 5eab02e
+frozen_implementation: 01f45bf via freeze commit 576e03a
+lifecycle: FULL_RESTART
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp099/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000017203942945738474
+physical_gate:
+  status: PROVED
+  attempts: 1
+  lift_m: 0.0008655339479446411
+  lateral_drift_m: 0.0013554881495776918
+  bilateral: true
+  moving_pad_depth_m: 0.0002646623470354825
+  gazebo_attachment_state: detached
+failure:
+  phase: post OPEN_GRIPPER retreat planning
+  code: world-Z MoveGroup planning failed 99999
+  command_exit_code: 1
+interpretation:
+  - the frozen implementation did not reproduce its success on EXP-099
+  - this failed/unverified run cannot replace EXP-081 as the latest valid-success parameter evidence
+  - run one final exact clean FULL_RESTART EXP-100, then stop unconditionally
+evidence_sha256:
+  reset_proof: 428ac719575c66066b11bda360b7c7a78ac2e74d755d74de859821a3e2163eb1
+  execute_log: a71977af8f99db313993a0d43c0ddd6684d2d359ca233981bd527847be97b634
+  physical_gate: 1297f7ae79ac4fdb5ca8294ed0125db18009f03bdcfe9385a2a33d581499f35d
+  telemetry: 65aa3689993622d2ed5b79672a472bd78f22fb6f50804362d161232bbea45cd1
+  bounded_video: 086f4592c8aa1fcd21d907d88ab63f3fe75f25c37fe13c38b34ef6578060f8f7
+  final_screenshot: e9e0f4b13a83fb5cfad1f294c2762fb690cfd9ec41025ec5d3baaf3da10731d3
+decision: retain frozen implementation and run final EXP-100 without changes
+counts_toward_success_streak: false
 ```
 
 ```yaml
