@@ -7,8 +7,12 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: e6d5f3e
+current_commit: 40a0a2c
 evidence_root: /tmp/so101-py-qualification/
+terminal_policy:
+  experiment_cap: EXP-100
+  on_cap_without_five_streak: freeze the most recent valid-success parameter set, stop experiments, audit, commit, push, and merge to the local main workspace
+  never_freeze: an unverified or failed EXP-100 parameter set
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
   - EXP-056 directly observed pre-OPEN_GRIPPER plastic_cup::body::wall_near contact with the table; cup tilt reached 1.1679 rad near the would-be release boundary.
@@ -37,6 +41,7 @@ confirmed_conclusions:
   - EXP-079 exact repeat exercised the fast fixed RETREAT in 2.908 s and achieved authoritative final success at [-0.080489, -0.250643, 0.165000] m, with at least 4.357 mm margin to every XY boundary, upright/stable/supported/gripper-free and Gazebo/MoveIt detached.
   - QUAL-FULL-FAST-01 clean-stack run failed before OPEN_GRIPPER: post-seating moving-pad penetration was 1.06393 mm versus EXP-079's 0.23831 mm, and the cup reached [-0.073652, -0.290274, 0.179158] m tilted/table-contacting at DESCEND_TO_PLACE, requiring a 36.075 mm y correction beyond the retained 30 mm safety bound.
   - EXP-080 with penetration normalization completed authoritative final success at [-0.081599, -0.247043, 0.165000] m; this reset naturally produced 0.23845 mm seating penetration and required zero adjustments, so clean-stack qualification must still exercise environmental variability.
+  - QUAL-FULL-NORM-01 exercised one bounded q6 normalization adjustment and reached a safe 0.33421 mm seating penetration, but after OPEN_GRIPPER the cup rolled about 56 mm in y during the stationary pre-retreat outcome epoch, remained caught on the gripper, and was lifted by the subsequent fixed retreat.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -54,8 +59,95 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-QUAL-FULL-NORM-01-RUNNING-257
-next_experiment: QUAL-FULL-NORM-01
+  - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
+latest_checkpoint: CP-PRE-EXP-081-259
+next_experiment: EXP-081
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-081-259
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-081
+status: PREREGISTERED
+prior_experiment: QUAL-FULL-NORM-01
+hypothesis: on a no-alignment release path, the stationary pre-retreat outcome wait gives the opened but still contact-adjacent cup enough time to roll into a fingertip and become hooked; executing the known fixed retreat immediately while the MoveIt shadow stays attached will physically clear the gripper before detaching and validating the final placement
+single_variable: no-alignment release ordering changes from OPEN_GRIPPER, detach MoveIt shadow, stationary pre-retreat epoch, fixed RETREAT to OPEN_GRIPPER, immediate fixed RETREAT with shadow attached, detach/sync MoveIt at the fresh Gazebo pose, then one authoritative post-retreat epoch
+lifecycle: RESET_WORLD
+prediction:
+  - the same normalized physical grasp and all unchanged hard safety bounds pass
+  - when no place-alignment correction is selected, no stationary pre-retreat epoch is collected
+  - the fixed retreat begins immediately after the final gripper-open command and finishes before MoveIt shadow detach
+  - after detach/sync, the cup is supported, upright, stable, in-region, Gazebo/MoveIt detached, gripper-free and controller healthy
+preconditions:
+  - retain implementation f714e30 including closed-loop penetration normalization, 2 s final opening and 0.10 fixed-retreat scaling
+  - reuse only tmux stack so101-py-qual, ROS_DOMAIN_ID 229 and GZ_PARTITION so101_py_full_norm_01
+  - focused/full pytest and colcon build/test must pass before runtime
+  - RESET_WORLD proof must pass and no duplicate stack or execute client may exist
+unchanged:
+  - aligned release path and its planned separation behavior
+  - Gazebo remains physically detached throughout
+  - MoveIt Planning Scene shadow attach is retained through carry and no-alignment retreat
+  - all grasp/motion targets, release y compensation -0.005 m, physics engine, geometry, 0.020 kg mass, friction, controllers/gains, collision model, penetration bounds and final outcome contract
+success_criteria:
+  - authoritative post-retreat outcome passes every existing final physical-result gate
+failure_criteria:
+  - any valid grasp/motion/release/final-outcome failure; return to search with streak zero
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-NORM-01-FAIL-258
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_STREAK_RESET
+qualification_run: QUAL-FULL-NORM-01
+execution_commit: 40a0a2c
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 229
+  gz_partition: so101_py_full_norm_01
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/full-norm-01/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.000002365925194593787
+physical_grasp:
+  requested_target_q6: -0.0535614369
+  normalized_target_q6: -0.0525614369
+  adjustments: 1
+  actual_q6: -0.0520849079
+  post_seating_moving_pad_penetration_m: 0.00033421046
+  max_moving_pad_penetration_m: 0.0003333279
+  micro_lift_world_z_m: 0.00218457
+  lateral_drift_m: 0.000137285
+release:
+  place_alignment_attempts: 0
+  release_start_xyz_m: [-0.0784680, -0.2641965, 0.1855896]
+  pre_retreat_final_xyz_m: [-0.0689262, -0.3199439, 0.1824973]
+  stationary_epoch_duration_s: 1.745
+  observed_y_displacement_m: -0.0557474
+  post_retreat_final_xyz_m: [-0.0795971, -0.3252614, 0.2335285]
+final:
+  success: false
+  failure_code: FINAL_GRIPPER_CONTACT
+  upright_tilt_rad: 0.8028
+  support_contact: false
+  gripper_contact: true
+  gazebo_detached: true
+  moveit_detached: true
+evidence:
+  execute_log_sha256: e0c7e9ea8c7bcd6da39cedbb00cb6e0b3f4efda5c0c9183ee36b0afc0a5ad06b
+  physical_gate_sha256: b3c164a70e7495b23b5a2218961a62e4bc6ffd7b64ea6cf9a23dabfca7ff363a
+  failure_json_sha256: 9906199cc86872a7deab78ef71250cd5c25bc0407bc766ac94c44acb6a917cf0
+  telemetry_sha256: a44d6f3bd07a1070df4120f1b9899231d04b73acbc387e72ed680168b8ab7a4e
+  bounded_video_sha256: ff8ba2fcfb22d6dc66547387138ed5b25506cdb76e5b9ebb5c50e2f95444cf89
+  final_screenshot_sha256: b9af2e19652fb729b1a41b828d09a5f1c514746aa38028b0abc1b888c142a048
+interpretation:
+  - penetration normalization worked on a clean stack and is retained
+  - the cup moved into the gripper during the stationary pre-retreat wait, before fixed retreat began
+  - the subsequent fast retreat carried the hooked cup upward; this is an ordering failure rather than an engine, grasp-depth or final-region tolerance failure
+decision: reset FULL_RESTART streak to zero and return to one RESET_WORLD search experiment
+next_experiment: EXP-081
+counts_toward_success_streak: false
 ```
 
 ```yaml
