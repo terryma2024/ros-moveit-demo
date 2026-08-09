@@ -3592,3 +3592,67 @@ gz_partition: so101_py_qual2c_202
 evidence_root: /tmp/so101-py-qual2-grasp-3-202
 note: all domain ids <= 232 (FastDDS max); 200/201/202 previously unused
 ```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-1-200
+lifecycle: RUNNING
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+ros_domain_id: 200
+gz_partition: so101_py_qual2c_200
+tmux_session: so101-py-qual2-grasp-1-200
+evidence_root: /tmp/so101-py-qual2-grasp-1-200
+preflight:
+  attachment_preflight: initial_attachment_observed=true, defensive_detach_readback=true
+  controllers/sdf/arm-constraints: runner-checked
+```
+
+```yaml
+experiment_id: EXP-QUAL2-GRASP-1-200
+lifecycle: VALID_FAILURE
+recorded_at: 2026-08-09 Asia/Shanghai
+fingerprint: CP-QUALIFICATION-FINGERPRINT-002 (commit 6cd8c7d, bundle 060228e8)
+ros_domain_id: 200
+gz_partition: so101_py_qual2c_200
+tmux_session: so101-py-qual2-grasp-1-200 (stopped after run)
+evidence_root: /tmp/so101-py-qual2-grasp-1-200
+exit_code: 1
+failure:
+  boundary: bilateral stability wait after seating preload (before micro-lift)
+  symptom: bilateral stability timeout - moving_jaw contact ABSENT; fixed pad contact present
+    at 0.000682 m; within_solver_depth_limit false because moving depth is None
+  evidence: physical-failure.json (initial_contact moving_jaw false, q6_contact -0.047607619,
+    q6_final -0.053605225, pose_pair_age_s 0.007, cup pose captured, gazebo attachment detached)
+  classification: VALID physical failure on an uncontaminated stack - this run's bite geometry
+    left the moving pad without wall contact (nominal interference is only 0.00004 m, so
+    contact/no-contact sits inside run-to-run sub-0.1 mm pose variance)
+cleanup: exact owned PIDs; no partition processes remain; preserved intact
+```
+
+```yaml
+checkpoint_id: CP-QUALIFICATION-ENDED-002
+recorded_at: 2026-08-09 Asia/Shanghai
+rule: any VALID failure ends qualification and returns to the user
+result: qualification ended at run 1 of 3 under solver-limit gate semantics
+three_run_physical_pattern_at_anchor:
+  - EXP-PEN-DIAG-001-GRASP-229: bilateral, cup carried (depth ~0.0010 m)
+  - EXP-QUAL-GRASP-1-231: bilateral, moving depth above 0.00125 m at seating abort
+  - EXP-QUAL2-GRASP-1-200: moving-jaw contact absent entirely
+interpretation: |
+  The anchor bite sits on the contact/no-contact margin itself (nominal interference
+  0.00004 m versus sub-0.1 mm run-to-run pose variance), not merely on a depth margin.
+  Gate semantics changes cannot fix a run where the moving pad never touches. The binding
+  constraint is now unambiguously the physical grasp geometry variance: the same frozen
+  target produces carried, over-depth, and no-contact outcomes across independent runs.
+  Robustness requires either a model-level lever (pad gap/geometry/friction/gripper gains -
+  currently frozen) or a grasp-contract change (adaptive close-until-bilateral-contact with
+  bounded retries - reclose machinery exists but is capped at max_attempts=1 by policy).
+decision_options_for_user:
+  - authorize bounded adaptive reclose (raise max_attempts / use the existing
+    stabilize_with_contact_missing_retries path) so a no-contact bite reseats within the run
+  - unfreeze one model-level lever to widen the contact margin (pad gap, wall thickness,
+    friction, gripper gains)
+  - stop here: diagnostic carry success documented; qualification not achieved
+state: resting at commit 6cd8c7d fingerprint (bundle 060228e8); EXP-QUAL2-GRASP-2-201 and
+  EXP-QUAL2-GRASP-3-202 NOT_RUN; awaiting user decision
+```
