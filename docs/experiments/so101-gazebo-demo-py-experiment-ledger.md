@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: afdd1b74c3c25b4efa2cca05e054e8b523913f3a
+current_commit: 056a082992477396322f328f5cfbf6ccb3f414ab
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -22,7 +22,7 @@ disproven_routes:
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
   - Returning to the 0.03 descent baseline and increasing q6 seating preload from 0.004 to the configured safe maximum 0.006 rad will raise normal force enough to reduce gravity-driven cup roll while observed penetration remains below 0.001 m.
-latest_checkpoint: CP-PRE-EXP-059-179
+latest_checkpoint: CP-EXP-059-IMPLEMENTED-180
 next_experiment: EXP-059
 ```
 
@@ -8587,5 +8587,29 @@ provenance:
 commands:
   - command: pytest RED after expectation changes, minimal policy edits, full pytest/build/colcon test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
     exit_code: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-EXP-059-IMPLEMENTED-180
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-059
+implementation_commit: 056a082992477396322f328f5cfbf6ccb3f414ab
+candidate:
+  seating_preload_rad: 0.006
+  descend_to_place_velocity_scaling: 0.03
+red:
+  targeted: 2 failed; policy still exposed preload 0.004 and rejected EXP-058 velocity 0.01
+green:
+  targeted: 3 passed including provenance
+  full_pytest: 189 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 191 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  motion_policy_source_install_sha256: 03f948fae2d92e69080661f0cccdd8dee330e922a58229c4ca314d914a4384a5
+  validation_policy_source_install_sha256: f702e030ad64d10326640e51e5cb0e8b7e8388cc790f66b557baf127bada3ff2
+  policy_sha256: eeba45be3b7fdfa6c4aba55ec1b6ecacb3f8293ab98d83447e89edde969282eb
+next_command: RESET_WORLD on so101-py-gui-214, then bounded telemetry/H.264 and one EXP-059 execute
 counts_toward_success_streak: false
 ```
