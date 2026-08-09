@@ -4233,3 +4233,28 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: commit the dynamic shadow synchronization, preregister an unchanged physical-motion rerun, and evaluate the next result boundary
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-007
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: the unchanged direct-close/0.002-preload physical strategy will again carry the cup, while dynamic MoveIt shadow synchronization will allow DESCEND_TO_PLACE and expose the authoritative release/retreat outcome
+execute_commit: 64eb10e92c89099043ce46ec9c52ab3a6d85f24d
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: 27c8efb8a955eacecaa99158177d4074096bd36f25c8b7dead2126b71081d1e0
+motion_policy_sha256: 044850ccce09f7e74f9cc613194e1d3db18c32a9659332e2dc1589370f254a31
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-007
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-006/reset-after-failure/reset-world.json
+strategy:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  seating_preload_rad: 0.002
+  grasp_tcp_world_x_rotation_rad: 0.0
+  dynamic_moveit_shadow_sync: enabled for fresh finite physical observations
+  all physical and final thresholds: unchanged
+next_on_valid_success: freeze the physical strategy and inspect final margins before two RESET_WORLD confirmations
+next_on_valid_failure: choose only the motion family causally linked to the first failed outcome
+```
