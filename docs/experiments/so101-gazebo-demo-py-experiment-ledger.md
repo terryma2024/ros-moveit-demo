@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: d864eab
+current_commit: 6cfb4e5
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -63,8 +63,33 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-083-268
+latest_checkpoint: CP-EXP-083-IMPLEMENTED-269
 next_experiment: EXP-083
+```
+
+```yaml
+checkpoint_id: CP-EXP-083-IMPLEMENTED-269
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-083
+planning_commit: 87a47bf
+implementation_commit: 6cfb4e5
+baseline_restore:
+  raised_endpoint_restored: [0.389633705130, 0.442941344113, 0.112383097091, 1.025984047022, 0.001939334047]
+  raised_tcp_endpoint_world_m: [-0.070949029516, -0.246134804010, 0.216737403936]
+single_variable: DESCEND_TO_PLACE velocity/acceleration scaling 0.05/0.05 to 0.10/0.10
+red:
+  focused: 2 failed because the lower target and 0.05 descent scaling were still active
+green:
+  focused: 33 passed
+  full_pytest: 202 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 204 tests, 0 errors, 0 failures, 2 skipped
+provenance:
+  motion_policy_sha256: 130284b1f04ac57bcf0f46475f3c2f3762befc2d667bf108c576205888f271f3
+  validation_policy_sha256: f702e030ad64d10326640e51e5cb0e8b7e8388cc790f66b557baf127bada3ff2
+next_command: RESET_WORLD on the sole domain 231 stack, then one bounded EXP-083 runtime with descent-duration/tilt/contact telemetry
+counts_toward_success_streak: false
 ```
 
 ```yaml
