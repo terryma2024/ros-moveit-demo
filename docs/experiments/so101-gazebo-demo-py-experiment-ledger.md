@@ -6362,6 +6362,59 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-046-133
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_EMPTY_POSE_PROBE
+experiment_id: EXP-046
+execution_commit: a65206c
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-046
+failure:
+  object_sample: null
+  tcp_sample: null
+  probe_window_s: 3.0
+  authoritative_final_outcome: unavailable
+interpretation: one transient probe subscription received neither source; this does not evaluate XYZ alignment or release physics
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-046-134
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-046/reset-after-empty-pose-probe
+proof:
+  cup_spawn_pose_error_m: 0.0000006506825453448347
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-047-135
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-047
+purpose: retry unchanged XYZ-alignment candidate after one empty transient probe
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: a65206c
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-046/reset-after-empty-pose-probe/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-047
+candidate:
+  changed_since_EXP_046: false
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  immediate_radial_separation_m: 0.010
+prediction: obtain complete dynamic and authoritative final evidence; a repeated empty probe will trigger bounded probe retry implementation
+acceptance: unchanged authoritative final physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-043-122
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
