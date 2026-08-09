@@ -24,4 +24,4 @@ def test_profile_binds_public_names_and_configured_gripper_values() -> None:
     assert profile.attach_topic != profile.detach_topic
     assert profile.preopen_q6 == 0.465038
     assert profile.grasp_close_q6 == -0.047608632840292
-    assert profile.release_q6 == 0.75
+    assert profile.release_q6 == 0.465038
