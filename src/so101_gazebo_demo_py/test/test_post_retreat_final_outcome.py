@@ -106,9 +106,19 @@ def test_retreat_is_between_independent_pre_and_post_outcome_epochs() -> None:
 
 def test_post_retreat_failure_is_persisted_before_it_is_raised() -> None:
     source = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
-    final_path = source[source.index("final_outcome=collect_final_outcome_epoch"):]
+    final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
 
     assert '"final-outcome-failure.json"' in final_path
     assert final_path.index('"final-outcome-failure.json"') < final_path.index(
         "post-retreat final physical outcome failed"
     )
+
+
+def test_live_failure_evidence_persists_both_release_epochs() -> None:
+    source = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
+    final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
+
+    assert '"pre_retreat_outcome":outcome_payload(' in final_path
+    assert '"post_retreat_outcome":outcome_payload(' in final_path
+    assert '"pre_retreat_final_sample":final_sample_payload(' in final_path
+    assert '"post_retreat_final_sample":final_sample_payload(' in final_path
