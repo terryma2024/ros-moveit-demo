@@ -129,7 +129,7 @@ states:
     endpoint_position: [-0.072885185, -0.235515275, 0.262755728]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
-    path_direction: [0.2612, 0.8633, -0.4319]
+    path_direction: [0.0, 0.0, 1.0]
     position_tolerance_m: 0.005
     axis_tolerance_rad: 0.08726646259971647
     max_lateral_deviation_m: 0.005
