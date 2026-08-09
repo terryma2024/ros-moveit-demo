@@ -51,6 +51,7 @@ confirmed_conclusions:
   - EXP-093 reached all three grasp attempts and the last held probe retained 0.806 mm lift, bilateral pad contact and a finite arm, but its 1.024 mm lateral drift exceeded the 1 mm intermediate gate by 0.024 mm; this is an outcome-gate boundary rather than a final-placement result.
   - EXP-094 accepted a weak first grasp at 0.745 mm persistent lift and 1.770 mm drift, then the cup diverged during carry/place and remained hooked on the moving pad after release; the prewarmed RETREAT itself was exercised and reduced q6>=0.40-to-arm-motion to 60.6 ms.
   - EXP-095 clean FULL_RESTART restored a first-attempt strong grasp (1.852 mm persistent lift, 0.182 mm drift), but a second release-alignment correction ran even though the first correction had already put cup XY inside the final region; the final cup was upright/stable/supported/free but rolled to [-0.101764,-0.269317] m.
+  - EXP-096 did not reach its region-aware alignment variable: three bounded grasp attempts ended with negative micro-lift and loss of fixed-pad contact, so it stopped safely before carry.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -69,8 +70,66 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-096-IMPLEMENTED-305
-next_experiment: EXP-096
+latest_checkpoint: CP-PRE-EXP-097-307
+next_experiment: EXP-097
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-097-307
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-097
+status: PREREGISTERED
+prior_experiment: EXP-096
+hypothesis: EXP-096 failed before the isolated alignment variable; one exact RESET_WORLD repeat can obtain a valid strong grasp on the still-fresh stack and exercise region-aware convergence without changing any source, parameter or bound
+single_variable: none; exact repeat of EXP-096
+lifecycle: RESET_WORLD
+prediction:
+  - first-attempt micro-lift returns to the strong regime near 2 mm with sub-millimeter drift
+  - alignment stops after the first correction that enters the final XY box
+  - authoritative final outcome passes
+unchanged:
+  - source and installed assets at 167a275
+  - every grasp/motion/release/alignment parameter, physics/material, attachment semantic and safety/final contract
+preconditions:
+  - RESET_WORLD proof on the sole fresh domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-096-306
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_BEFORE_CARRY
+experiment_id: EXP-096
+execution_head: eadf1fc
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp096/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.000004059089462595223
+physical_grasp:
+  attempts: 3
+  failure: physical micro-lift failed CUP_INSUFFICIENT_LIFT
+  final_lift_m: -0.0024643242359161377
+  final_lateral_drift_m: 0.0011301558066895727
+  normalized_target_q6: -0.052573376446962354
+  post_seating_moving_pad_depth_m: 0.0009757158113643527
+  latest_fixed_pad_contact: false
+  latest_moving_pad_depth_m: 0.0010457572061568499
+  gazebo_attachment_state: detached
+region_alignment_evaluation: NOT_REACHED
+interpretation:
+  - the unchanged physical outcome gate stopped a dropped cup before carry
+  - this run provides no evidence for or against the EXP-096 region convergence change
+  - exact-repeat once as EXP-097; do not add a second variable
+evidence_sha256:
+  reset_proof: 6ab04dad4d34ab650cbdb2681b26fb1aa548c1ec2a7116b01006fe63f91950f0
+  execute_log: 8e2489ca0a93ac5fac66b6c21b8a2ae71be4b009b25ff8ee92b16fd1fa2d1747
+  physical_failure: ae4ca161ed171b06c9fe47a3887cc42bdcc93be87b476d8a42729a78bd332a8f
+  telemetry: 1f384645bb628b388155c8f5b13a9cf752c3494552c079663e97004c72712bff
+  bounded_video: e0fbae84fc8d27eeb05f21dd24cc6ec809b2bd3c2794c46ec3875d89937ac50e
+  final_screenshot: 1dcad5a8b21c176b76e28742d6bb0508f53a70b6d1639e56850bac7d0d1ea3a2
+decision: exact-repeat the unchanged EXP-096 candidate as EXP-097
+counts_toward_success_streak: false
 ```
 
 ```yaml
