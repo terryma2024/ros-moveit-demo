@@ -47,14 +47,14 @@ arm_controller:
     constraints:
       goal_time: 1.0
       # Gazebo carrying trials observed transient arm tracking errors up to
-      # 6.922 mrad.  The path tolerance covers that load disturbance without
+      # 10.287 mrad.  The path tolerance covers that load disturbance without
       # weakening the 2 mrad controller goal or the tighter state-specific
       # endpoint postconditions (0.25 mrad at contact-critical boundaries).
-      "1": {trajectory: 0.0080, goal: 0.002}
-      "2": {trajectory: 0.0080, goal: 0.002}
-      "3": {trajectory: 0.0080, goal: 0.002}
-      "4": {trajectory: 0.0080, goal: 0.002}
-      "5": {trajectory: 0.0080, goal: 0.002}
+      "1": {trajectory: 0.0120, goal: 0.002}
+      "2": {trajectory: 0.0120, goal: 0.002}
+      "3": {trajectory: 0.0120, goal: 0.002}
+      "4": {trajectory: 0.0120, goal: 0.002}
+      "5": {trajectory: 0.0120, goal: 0.002}
 
 gripper_controller:
   ros__parameters:

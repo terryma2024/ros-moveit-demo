@@ -1,6 +1,6 @@
 """Fresh single-process live execute orchestration used by the public CLI."""
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import json
 import math
 import os
@@ -18,6 +18,97 @@ from .test_support.ros_gazebo_backend import RosGazeboLiveBackend
 
 
 TRACE=("IDLE","PREPARE_OPEN_GRIPPER","MOVE_ABOVE_OBJECT","DESCEND","CLOSE_GRIPPER","WAIT_GRASP_STABLE","MICRO_LIFT","WAIT_MICRO_LIFT_STABLE","VERIFY_PHYSICAL_GRASP","ATTACH_MOVEIT","LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE","DETACH_MOVEIT","OPEN_GRIPPER","WAIT_RELEASE_SETTLE","VALIDATE_FINAL_PLACEMENT","SYNC_WORLD_OBJECT","RETREAT","DONE")
+
+
+@dataclass(frozen=True, slots=True)
+class ContinuationEvaluation:
+    can_continue: bool
+    failure_code: str | None
+    observed_object_delta_m: tuple[float, float, float]
+    position_error_m: float
+    telemetry: dict[str, float | bool | None]
+
+
+@dataclass(frozen=True, slots=True)
+class FinalOutcomeEpochs:
+    pre_retreat: object
+    post_retreat: object
+
+
+@dataclass(frozen=True, slots=True)
+class CollectedFinalOutcome:
+    epoch_id: str
+    result: object
+    final_sample: object
+
+    @property
+    def evaluation(self):
+        return self.result.evaluation
+
+
+def collect_final_outcomes_around_retreat(*, collect_epoch, retreat) -> FinalOutcomeEpochs:
+    """Collect independent outcome epochs with RETREAT strictly between them."""
+    pre_retreat=collect_epoch()
+    retreat(pre_retreat)
+    post_retreat=collect_epoch()
+    return FinalOutcomeEpochs(pre_retreat,post_retreat)
+
+
+def arm_tcp_stable_between(
+    previous_pose, current_pose, *, elapsed_s: float,
+    max_linear_speed_m_s: float, max_angular_speed_rad_s: float,
+) -> bool:
+    """Evaluate arm stability from observed TCP motion, not commanded joint targets."""
+    values=(*previous_pose,*current_pose,elapsed_s)
+    if elapsed_s <= 0.0 or not all(math.isfinite(value) for value in values):
+        return False
+    linear_speed=math.dist(previous_pose[:3],current_pose[:3])/elapsed_s
+    dot=abs(sum(a*b for a,b in zip(previous_pose[3:],current_pose[3:])))
+    angular_speed=2.0*math.acos(max(-1.0,min(1.0,dot)))/elapsed_s
+    return (
+        linear_speed <= max_linear_speed_m_s
+        and angular_speed <= max_angular_speed_rad_s
+    )
+
+
+def evaluate_continuation(
+    *, before, after,
+    commanded_object_delta_m: tuple[float, float, float],
+    position_tolerance_m: float,
+    arm_stable: bool,
+    contact_evidence,
+    q6_position: float | None,
+) -> ContinuationEvaluation:
+    """Evaluate intermediate progress from cup/arm outcomes, retaining contact as telemetry."""
+    observed = tuple(
+        after.object_xyz[index] - before.object_xyz[index] for index in range(3)
+    )
+    error = math.dist(observed, commanded_object_delta_m)
+    position_ok = error <= position_tolerance_m
+    failure_code = (
+        "CUP_POSE_NONFINITE" if not all(
+            math.isfinite(value)
+            for value in (*before.object_xyz, *after.object_xyz)
+        )
+        else "ARM_UNSTABLE" if not arm_stable
+        else None if position_ok
+        else "CUP_INTERMEDIATE_POSITION"
+    )
+    return ContinuationEvaluation(
+        can_continue=failure_code is None,
+        failure_code=failure_code,
+        observed_object_delta_m=observed,
+        position_error_m=error,
+        telemetry={
+            "bilateral_contact": contact_evidence.bilateral,
+            "max_moving_pad_penetration_m": (
+                contact_evidence.max_moving_pad_penetration_m
+            ),
+            "q6_position": q6_position,
+            "arm_stable": arm_stable,
+            "position_tolerance_m": position_tolerance_m,
+        },
+    )
 
 
 def _quaternion_multiply(first, second):
@@ -89,11 +180,6 @@ def plan_waypoint_sequence(planner, names, start, waypoints) -> int:
             raise RuntimeError("MoveIt returned an empty waypoint plan")
         total+=points; current=target
     return total
-
-
-def attachment_safe_contact(evidence) -> bool:
-    depth=evidence.max_moving_pad_penetration_m
-    return evidence.bilateral and depth is not None and depth <= MOVING_PAD_MESH_PENETRATION_CEILING_M
 
 
 def shadow_divergence_healthy(gazebo_pose, shadow_pose, pair_age_s, policy) -> bool:
@@ -380,21 +466,34 @@ def stabilize_with_contact_missing_retries(
 
 
 def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
-    """Execute the 2 mm probe, wait for stable contact, then verify object motion."""
+    """Execute the 2 mm probe and gate continuation on the cup/arm result."""
     before=backend.sample()
     micro_points,micro_start_z=execute(.002)
-    _stable_bilateral(backend)
+    contact=evaluate_bilateral_contact(backend.contacts())
     after=backend.sample()
     lift=after.object_xyz[2]-before.object_xyz[2]
     lateral=math.dist(after.object_xyz[:2],before.object_xyz[:2])
-    if lift < .002 or lateral > .001:
-        raise RuntimeError(f"physical micro-lift failed lift={lift} lateral={lateral}")
-    return lift,lateral,micro_points,micro_start_z,before,after
+    continuation=evaluate_continuation(
+        before=before,
+        after=after,
+        commanded_object_delta_m=(0.0,0.0,0.002),
+        position_tolerance_m=0.001,
+        arm_stable=all(math.isfinite(value) for value in (*after.tcp_xyz,*after.tcp_xyzw)),
+        contact_evidence=contact,
+        q6_position=None,
+    )
+    if not continuation.can_continue:
+        raise RuntimeError(
+            f"physical micro-lift failed {continuation.failure_code} "
+            f"lift={lift} lateral={lateral}"
+        )
+    return lift,lateral,micro_points,micro_start_z,before,after,continuation
 
 
 def run_bounded_physical_grasp_attempts(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
     max_attempts: int = 1,
+    execute=_moveit_world_z_execute,
 ):
     """Run a pre-registered number of complete physical attempts."""
     if max_attempts < 1:
@@ -411,9 +510,9 @@ def run_bounded_physical_grasp_attempts(
             _moveit_world_z_execute(0.0,local_x_m=-.0002)
             backend.move_gripper(target)
         try:
-            contact=_stable_bilateral(backend)
+            contact=evaluate_bilateral_contact(backend.contacts())
             lifted=True
-            result=verify_physical_micro_lift(backend)
+            result=verify_physical_micro_lift(backend,execute=execute)
             return contact,result,attempt+1,target
         except RuntimeError as error:
             last_error=error
@@ -524,18 +623,8 @@ def run_live_execute(
             failure_evidence["evidence_capture_error"]=str(capture_error)
         (evidence_directory/"physical-failure.json").write_text(json.dumps(failure_evidence,indent=2))
         raise
-    lift,lateral,micro_points,micro_start_z,before,after=physical
-    if not attachment_safe_contact(contact) and final_grasp_target < seating_target:
-        backend.move_gripper(seating_target)
-        contact=_stable_bilateral(backend)
-        after=backend.sample()
-        lift=after.object_xyz[2]-before.object_xyz[2]
-        lateral=math.dist(after.object_xyz[:2],before.object_xyz[:2])
-    if not attachment_safe_contact(contact):
-        raise RuntimeError(f"moving-pad attachment ceiling exceeded: {contact.max_moving_pad_penetration_m}")
-    if lift < .002 or lateral > .001:
-        raise RuntimeError(f"physical gate changed after retraction lift={lift} lateral={lateral}")
-    gate={"status":"PROVED","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"moving_pad_penetration_ceiling_m":MOVING_PAD_MESH_PENETRATION_CEILING_M,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target}
+    lift,lateral,micro_points,micro_start_z,before,after,continuation=physical
+    gate={"status":"PROVED","gate_basis":"CUP_AND_ARM_OUTCOME","attachment_state":backend.attachment_state(),"bilateral":contact.bilateral,"max_moving_pad_penetration_m":contact.max_moving_pad_penetration_m,"moving_pad_penetration_ceiling_m":MOVING_PAD_MESH_PENETRATION_CEILING_M,"cup_world_z_delta_m":lift,"lateral_drift_m":lateral,"micro_lift_command_m":.002,"attempts":physical_attempts,"final_grasp_target_q6":final_grasp_target,"continuation":asdict(continuation)}
     (evidence_directory/"physical-gate.json").write_text(json.dumps(gate,indent=2))
     if stop_after == "VERIFY_PHYSICAL_GRASP":
         result={"status":"CHECKPOINT_COMPLETE","current_state":stop_after,"state_trace":list(TRACE[:9]),"exit_code":0,"physical":gate,"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
@@ -564,31 +653,64 @@ def run_live_execute(
     placed=backend.sample()
     pose=(*placed.object_xyz,*placed.object_xyzw); detached_scene=_apply_scene("detach",pose)
     backend.move_gripper(bundle.motion.release_q6)
-    release_epoch_id=str(uuid.uuid4()); sample_sequence=0; latest_sample=[placed]
     outcome_policy=bundle.validation.physical_outcome
-    def observe_final():
-        nonlocal sample_sequence
-        observed=backend.sample(); latest_sample[0]=observed; sample_sequence+=1
-        contacts=backend.contacts()
-        support=evaluate_support_contact(
-            contacts, outcome_policy.intended_support_collision,
-            outcome_policy.minimum_support_contact_depth_m,
-        )
-        now=time.monotonic()
-        return FinalPlacementSample(
-            release_epoch_id, sample_sequence, now, now,
-            (*observed.object_xyz,*observed.object_xyzw), support.supported,
-            any(pair.finger_collision != outcome_policy.intended_support_collision for pair in contacts),
-            backend.attachment_state() == "detached", True, True, True, True,
-        )
-    settle=ReleaseSettleExecutor(
-        outcome_policy, observe_final, time.monotonic, time.sleep, lambda: False,
-    ).run(release_epoch_id,0)
+    scene_membership=[detached_scene]
+    def collect_final_epoch():
+        release_epoch_id=str(uuid.uuid4()); sample_sequence=0; latest_sample=[backend.sample()]
+        previous_tcp=[None]; previous_observed_at=[None]
+        def observe_final():
+            nonlocal sample_sequence
+            observed=backend.sample(); latest_sample[0]=observed; sample_sequence+=1
+            contacts=backend.contacts()
+            support=evaluate_support_contact(
+                contacts, outcome_policy.intended_support_collision,
+                outcome_policy.minimum_support_contact_depth_m,
+            )
+            now=time.monotonic()
+            tcp_pose=(*observed.tcp_xyz,*observed.tcp_xyzw)
+            controller_healthy=(
+                all(math.isfinite(value) for value in tcp_pose)
+                if previous_tcp[0] is None
+                else arm_tcp_stable_between(
+                    previous_tcp[0],tcp_pose,
+                    elapsed_s=now-previous_observed_at[0],
+                    max_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
+                    max_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
+                )
+            )
+            previous_tcp[0]=tcp_pose; previous_observed_at[0]=now
+            moveit_detached=(
+                "plastic_cup" in scene_membership[0]["world_objects"]
+                and "plastic_cup" not in scene_membership[0]["attached_objects"]
+            )
+            return FinalPlacementSample(
+                release_epoch_id, sample_sequence, now, now,
+                (*observed.object_xyz,*observed.object_xyzw), support.supported,
+                any(pair.finger_collision != outcome_policy.intended_support_collision for pair in contacts),
+                backend.attachment_state() == "detached", moveit_detached,
+                controller_healthy, True, True,
+            )
+        result=ReleaseSettleExecutor(
+            outcome_policy, observe_final, time.monotonic, time.sleep, lambda: False,
+        ).run(release_epoch_id,0)
+        return CollectedFinalOutcome(release_epoch_id,result,latest_sample[0])
+    synchronized_scene=[detached_scene]
+    state=next(state for state in bundle.motion.states if state.value=="RETREAT")
+    retreat_policy=bundle.motion.states[state]
+    def retreat_after_pre_outcome(pre_retreat):
+        pre_pose=(*pre_retreat.final_sample.object_xyz,*pre_retreat.final_sample.object_xyzw)
+        synchronized_scene[0]=_apply_scene("detach",pre_pose)
+        scene_membership[0]=synchronized_scene[0]
+        backend.move_arm(retreat_policy.waypoints)
+    outcomes=collect_final_outcomes_around_retreat(
+        collect_epoch=collect_final_epoch,
+        retreat=retreat_after_pre_outcome,
+    )
+    settle=outcomes.post_retreat.result
     if not settle.evaluation.success:
-        raise RuntimeError(f"final physical outcome failed: {settle.evaluation.failure_code}")
-    final=latest_sample[0]
-    final_pose=(*final.object_xyz,*final.object_xyzw)
-    synchronized_scene=_apply_scene("detach",final_pose)
-    state=next(state for state in bundle.motion.states if state.value=="RETREAT"); retreat=bundle.motion.states[state]; backend.move_arm(retreat.waypoints)
-    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene,"synchronized_scene":synchronized_scene,"shadow_checks":shadow_checks},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"final_outcome":{"success":settle.evaluation.success,"failure_code":settle.evaluation.failure_code,"sample_count":settle.evaluation.sample_count,"duration_s":settle.evaluation.duration_s,"max_linear_speed_m_s":settle.evaluation.max_linear_speed_m_s,"max_angular_speed_rad_s":settle.evaluation.max_angular_speed_rad_s,"metrics":dict(settle.evaluation.metrics),"telemetry":[sample.as_dict() for sample in settle.evaluation.telemetry]},"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
+        raise RuntimeError(f"post-retreat final physical outcome failed: {settle.evaluation.failure_code}")
+    final=outcomes.post_retreat.final_sample
+    def outcome_payload(evaluation):
+        return {"success":evaluation.success,"failure_code":evaluation.failure_code,"sample_count":evaluation.sample_count,"duration_s":evaluation.duration_s,"max_linear_speed_m_s":evaluation.max_linear_speed_m_s,"max_angular_speed_rad_s":evaluation.max_angular_speed_rad_s,"metrics":dict(evaluation.metrics),"telemetry":[sample.as_dict() for sample in evaluation.telemetry]}
+    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene,"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),"final_outcome":outcome_payload(outcomes.post_retreat.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
     path=evidence_directory/"live-summary.json"; path.write_text(json.dumps(summary,indent=2)); return summary

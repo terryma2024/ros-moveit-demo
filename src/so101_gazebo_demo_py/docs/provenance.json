@@ -1,6 +1,6 @@
 {
-  "reference_head": "71a87165b3e752169a2990f62a07569e4720be9f",
-  "reference_branch": "codex/refactor-optimization-r3",
+  "reference_head": "05dff7a18e466c01486441dd90c21fcd44d4d8cd",
+  "reference_branch": "main",
   "files": [
     {
       "source": "src/so101_gazebo_demo/config/initial_positions.yaml",
@@ -27,8 +27,8 @@
       "source": "src/so101_gazebo_demo/config/motion_policies/light_cup_wall_pick.yaml",
       "destination": "config/motion_policies/light_cup_wall_pick.yaml",
       "source_dirty": true,
-      "source_sha256": "0e903d128aa06c3ca7b9d9fa154a693f8d5ed53f2add42f1aa6e06ade9936734",
-      "destination_sha256": "0e903d128aa06c3ca7b9d9fa154a693f8d5ed53f2add42f1aa6e06ade9936734"
+      "source_sha256": "4ba7b35c315615a73238276ea511306bb98e2b4f30bddf0134f3183a6ef1ad4e",
+      "destination_sha256": "a2fa54e5b980b8d5329586cd1e454476649c4254d7607436bf3102af0efec1ad"
     },
     {
       "source": "src/so101_gazebo_demo/config/moveit.rviz",
@@ -69,22 +69,22 @@
       "source": "src/so101_gazebo_demo/config/so101_controllers.yaml",
       "destination": "config/so101_controllers.yaml",
       "source_dirty": false,
-      "source_sha256": "cd5e5245e6667ab351c2cd4e7a2b8bce5b7ad7ae2d027e6c433529326def7235",
-      "destination_sha256": "cd5e5245e6667ab351c2cd4e7a2b8bce5b7ad7ae2d027e6c433529326def7235"
+      "source_sha256": "32b2ff5e4f4040566811cfe1d930fdd31f122a92b03e8e760cd55a410b3287a0",
+      "destination_sha256": "32b2ff5e4f4040566811cfe1d930fdd31f122a92b03e8e760cd55a410b3287a0"
     },
     {
       "source": "src/so101_gazebo_demo/config/task_objects/light_plastic_cup.yaml",
       "destination": "config/task_objects/light_plastic_cup.yaml",
       "source_dirty": true,
-      "source_sha256": "1d4ec361cb5f22ddc67546fdb6f9c371c809b69b4c9725ea940a124e2afbfa47",
-      "destination_sha256": "1d4ec361cb5f22ddc67546fdb6f9c371c809b69b4c9725ea940a124e2afbfa47"
+      "source_sha256": "da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe",
+      "destination_sha256": "da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe"
     },
     {
       "source": "src/so101_gazebo_demo/config/validation_policies/light_cup_wall_pick.yaml",
       "destination": "config/validation_policies/light_cup_wall_pick.yaml",
       "source_dirty": true,
-      "source_sha256": "a8489411b1460dd24dc9b728f691fb42ca67fab47943624e5166a3ab9646f8e4",
-      "destination_sha256": "a8489411b1460dd24dc9b728f691fb42ca67fab47943624e5166a3ab9646f8e4"
+      "source_sha256": "89d04c6075f7c4464c053ba65b276199adb18f2cb0e0d3b2854a8ff66eea03ad",
+      "destination_sha256": "f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2"
     },
     {
       "source": "src/so101_gazebo_demo/meshes/so101/base_motor_holder_so101_v1.stl",

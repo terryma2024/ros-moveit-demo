@@ -41,8 +41,9 @@ def waypoint_step_seconds(point_count: int, velocity_scaling: float | None = Non
 
 
 def gripper_result_acceptable(output: str, bilateral: bool) -> bool:
+    del bilateral
     return "status: SUCCEEDED" in output or (
-        bilateral and "error_code: -5" in output and "status: ABORTED" in output
+        "error_code: -5" in output and "status: ABORTED" in output
     )
 
 
@@ -185,17 +186,7 @@ class RosGazeboLiveBackend:
             "ros2", "action", "send_goal", "/gripper_controller/follow_joint_trajectory",
             "control_msgs/action/FollowJointTrajectory", json.dumps(goal),
         ], timeout_s=duration + 20.0)
-        safe_bilateral=False
-        if "error_code: -5" in output:
-            from ..gazebo.observer import (
-                evaluate_bilateral_contact, MOVING_PAD_MESH_PENETRATION_CEILING_M,
-            )
-            evidence=evaluate_bilateral_contact(self.contacts())
-            safe_bilateral=(
-                evidence.bilateral and evidence.max_moving_pad_penetration_m is not None
-                and evidence.max_moving_pad_penetration_m <= MOVING_PAD_MESH_PENETRATION_CEILING_M
-            )
-        if not gripper_result_acceptable(output,safe_bilateral):
+        if not gripper_result_acceptable(output, bilateral=False):
             raise RuntimeError(f"gripper trajectory did not succeed:\n{output}")
 
     def contacts(self) -> tuple[ContactPair, ...]:

@@ -3656,3 +3656,76 @@ decision_options_for_user:
 state: resting at commit 6cd8c7d fingerprint (bundle 060228e8); EXP-QUAL2-GRASP-2-201 and
   EXP-QUAL2-GRASP-3-202 NOT_RUN; awaiting user decision
 ```
+
+```yaml
+checkpoint_id: CP-OUTCOME-FIRST-STRATEGY-001
+recorded_at: 2026-08-09 Asia/Shanghai
+authorization:
+  user_directive: current Codex takes over the main strategy task; tmux kimi receives no further search or validation work
+  contract_commit: 0f574ce
+  validation_model: intermediate continuation by cup/arm result variables; strict task success only from a fresh post-RETREAT final outcome epoch
+  physics: Gazebo contact physics owns cup motion; forward Gazebo attach forbidden; MoveIt Planning Scene attach/detach retained only as collision-planning shadow
+  qualification: find one complete outcome-first path with RESET_WORLD, then frozen FULL_RESTART x5 followed by frozen RESET_WORLD x5
+branch: codex/so101-gazebo-demo-py
+head: 0f574ce
+working_tree_audit:
+  modified:
+    - src/so101_gazebo_demo_py/config/so101_controllers.yaml
+    - src/so101_gazebo_demo_py/config/task_objects/light_plastic_cup.yaml
+    - src/so101_gazebo_demo_py/config/validation_policies/light_cup_wall_pick.yaml
+    - src/so101_gazebo_demo_py/docs/provenance.json
+    - src/so101_gazebo_demo_py/test/test_provenance.py
+  untracked:
+    - src/so101_gazebo_demo_py/test/test_main_strategy_parity.py
+  classification: preserved main/refactor parity import plus Python-only physical-outcome extension; no path may be cleaned or overwritten before focused verification
+  important_divergence: validation policy intentionally extends main reference with schema_version 2 physical_outcome; provenance destination hash is currently stale and must be corrected before a provenance commit
+  standard_controller_note: dirty so101_controllers.yaml has 0.012 trajectory tolerance, but the physical experiment runner must continue to prove it loads so101_controllers_physical_outcome.yaml with the separately frozen physical-outcome controller contract
+dirty_sha256:
+  so101_controllers_yaml: 32b2ff5e4f4040566811cfe1d930fdd31f122a92b03e8e760cd55a410b3287a0
+  light_plastic_cup_yaml: da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe
+  validation_policy_yaml: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+  provenance_json: e18a9167b38dd8cb5f609f4f7ba09a8170c112bf499c3e43553011b6eeb0d9d7
+  test_provenance_py: 8baaa9248135a457c4367a6d6e2ca9f38a755960c1304f040599a459a9c9159d
+  test_main_strategy_parity_py: b3fc65e21c44a9a6c2519bfb09f79fbfba4f084e521e5989d25268082a7df339
+runtime_provenance:
+  installed_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  live_execute_source_sha256: 07c594392ea903bebe53b7c41f21c74b8f455d1c95310e55aeae53b58b213b12
+  active_owned_stack: none
+process_ownership:
+  preserved:
+    - PID 3272995 gz sim server
+    - PID 652055 unrelated clang-tidy
+    - tmux codex
+    - tmux codex-cua
+    - tmux kimi (idle; no further work assigned)
+  cleanup_performed: none
+next: Task 2 TDD for outcome-first continuation; no Gazebo/MoveIt launch before code tests and installed provenance pass
+```
+
+```yaml
+checkpoint_id: CP-OUTCOME-FIRST-IMPLEMENTATION-002
+recorded_at: 2026-08-09 Asia/Shanghai
+scope:
+  - intermediate continuation gates on observed cup displacement and arm/TCP health
+  - bilateral contact, q6 position, and measured penetration remain telemetry and do not independently reject a candidate
+  - final success is evaluated only from a fresh epoch collected after RETREAT
+  - final arm stability is derived from observed TCP linear/angular speed
+  - Gazebo forward attach remains forbidden; MoveIt attach/detach remains the planning collision shadow
+tests:
+  tdd: each new continuation, post-RETREAT epoch, arm-stability, contact-stop, and provenance assertion was observed failing before its implementation fix
+  focused: 10 passed for outcome-first continuation and post-RETREAT outcome tests
+  package: 150 passed, 2 skipped
+  build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+  overlay_root_cause: the earlier 5 package/launch failures reproduced only when AMENT_PREFIX_PATH contained /opt/ros/jazzy; sourcing the worktree install made the isolated failing test pass
+provenance:
+  package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  destination_hash_contract: test_provenance.py now recomputes every destination hash
+  corrected_destination_hashes:
+    motion_policy: a2fa54e5b980b8d5329586cd1e454476649c4254d7607436bf3102af0efec1ad
+    validation_policy: f0153e5154a24b1beadfbb87067063843671b7bf6f1999abc77a5a06d9594ab2
+runtime:
+  live_stack_started: false
+  kimi_assigned: false
+  preserved_processes: PID 3272995 gz sim server; PID 652055 unrelated clang-tidy; tmux codex/codex-cua/kimi
+next: commit the tested implementation checkpoint, then start one owned isolated stack for RESET_WORLD full-path search
+```
