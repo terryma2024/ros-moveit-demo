@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: b5d5fd8
+current_commit: 58f83db
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -28,6 +28,7 @@ confirmed_conclusions:
   - EXP-069 first FULL_RESTART run with fingertip transverse friction 3.0 was a valid grasp failure before lift: fixed-pad contact reached 0.000796263 m, but moving-pad contact never formed, so no carry/descent tilt comparison was possible.
   - EXP-070 repeated the 3.0 transverse-friction candidate after a proved RESET_WORLD and reproduced the same fixed-only contact failure (0.000796725 m, no moving-pad contact); this configuration is rejected before carry/place.
   - EXP-071 with transverse friction 2.0 restored bilateral grasp and improved MOVE_ABOVE_PLACE tilt to 0.10775 rad, but worsened raised-descend/pre-open tilt to 0.23007/0.34605 rad, exceeded the 0.001 m target penetration at 0.00104337 m, and ended in world-Z MoveIt error 99999; it is rejected.
+  - EXP-072's nominal MOVE_ABOVE_PLACE scaling 0.15 was operationally identical to 0.10 because waypoint_step_seconds rounds both to 1 s/waypoint. One boundary release-alignment correction amplified tilt from 0.19564 to 0.34147 rad, and the cup rolled 25.38 mm in x while the gripper opened, ending outside the target region.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -35,12 +36,73 @@ disproven_routes:
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
   - Matching fingertip transverse friction to axial friction at 3.0; EXP-069 and EXP-070 both failed bilateral grasp because the fixed pad engaged while the moving pad never contacted.
   - Raising fingertip transverse friction to 2.0 as an intermediate candidate; EXP-071 improved horizontal carry but amplified descent/release tilt and missed the target penetration interval.
+  - Treating MOVE_ABOVE_PLACE scaling 0.15 as a real speed increase with the current integer-second adapter; it produces the same 1 s/waypoint schedule as 0.10.
 open_hypotheses:
   - With the rejected friction candidates restored to 1.2, the next useful boundary is the motion/alignment interval in which tilt grows between MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and OPEN_GRIPPER; target compensation should not be used to mask the tilt source.
+  - A release-alignment correction triggered by an approximately 8.37 mm XY error can amplify pre-open tilt; relaxing the intermediate correction trigger while retaining the final target region is the next outcome-first candidate.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-072-IMPLEMENTED-222
-next_experiment: EXP-072
+latest_checkpoint: CP-RESULT-EXP-072-223
+next_experiment: EXP-073
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-072-223
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_SPEED_HYPOTHESIS_AND_VALID_END_TO_END_FAILURE
+experiment_id: EXP-072
+execution_commit: 58f83db
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp072/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.000002064833965448484
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+speed_hypothesis:
+  configured_scaling: 0.15
+  effective_step_s: 1
+  baseline_0_10_effective_step_s: 1
+  conclusion: INVALID because the integer-second adapter produced no distinct commanded timing
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.00023887281713541597
+  micro_lift_world_z_m: 0.0019978582859039307
+  lateral_drift_m: 0.0003135586962719538
+phase_comparison_same_analysis:
+  move_above_place_duration_s: 6.956369213
+  exp067_move_above_place_duration_s: 7.833085049
+  move_above_place_endpoint_tilt_rad: 0.16769256578856845
+  exp067_move_above_place_endpoint_tilt_rad: 0.1544798591752257
+  raised_descend_endpoint_tilt_rad: 0.19564381769674502
+  exp067_raised_descend_endpoint_tilt_rad: 0.07090987465514398
+  strict_pre_open_tilt_rad: 0.34147366616229774
+  exp067_strict_pre_open_tilt_rad: 0.07090987465514398
+  table_contact_samples_raised_endpoint_to_open: 0
+release:
+  place_alignment_attempts: 1
+  approximate_trigger_xy_error_m: 0.00837
+  final_object_xyz_m: [-0.10057245194911957, -0.25711339712142944, 0.16500000655651093]
+  final_upright_tilt_rad: 0.0000009989336587247292
+  final_table_contact: true
+  final_gripper_contact: false
+  x_outside_target_region_m: 0.01557245194911957
+runtime_failure:
+  status: LIVE_EXECUTE_FAILED
+  error: world-Z MoveGroup planning failed 99999
+  authoritative_final_outcome: NOT_REACHED
+evidence:
+  physical_gate: /tmp/so101-py-qualification/exp072/run/physical-gate.json
+  phase_analysis: /tmp/so101-py-qualification/exp072/run/diagnostic/exp072-analysis.json
+  phase_analysis_sha256: 158ad225e8b11ee5f15c98dfa4948500d27f6d3c2ffaf55fe75abc26ec67be9c
+  telemetry_sha256: 77a5ee4313ccdca5ebb17e4a2fa6971aefd7ba815810d03a24becb4fac5535c1
+  bounded_video_sha256: 545fd75bbbd0cbbefb185cbcdaba73ec3e50ddc869a608c77a3473b41cfbb661
+decision: restore MOVE_ABOVE_PLACE scaling 0.10; do not treat EXP-072 as speed evidence; next isolate the intermediate release-alignment trigger without changing the final region
+counts_toward_success_streak: false
 ```
 
 ```yaml
