@@ -30,8 +30,56 @@ open_hypotheses:
   - Restoring 0.020 kg while retaining the 2.0 limiting friction profile can distinguish whether the EXP-064 downstream DESCEND_TO_PLACE regression is caused primarily by the lighter mass while preserving the horizontal-carry gain.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-064-200
+latest_checkpoint: CP-PRE-EXP-065-201
 next_experiment: EXP-065
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-065-201
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-065
+status: PLANNED
+prior_experiment: EXP-064
+hypothesis: restoring the cup from 0.010 to 0.020 kg while retaining the EXP-064 friction profile preserves the horizontal-carry friction benefit and removes the lighter cup's downstream DESCEND_TO_PLACE sensitivity
+prediction:
+  - physical grasp passes the unchanged bilateral-contact, penetration, micro-lift, lateral-drift and arm-stability bounds
+  - MOVE_ABOVE_PLACE end tilt remains <= 0.11 rad, q6 range remains <= 0.002 rad and no table contact occurs
+  - DESCEND_TO_PLACE end tilt improves from EXP-064 0.77106 rad to <= 0.35 rad without table contact
+  - the known later release-order MoveIt failure remains diagnostic and does not invalidate the carry/descent comparison
+single_variable: cup mass 0.010 -> 0.020 kg with inertia scaled back to the 0.020 kg profile; cup/pad friction remains 2.0/2.0 transverse and 3.0 axial
+lifecycle: FULL_RESTART
+preconditions:
+  - build and install the restored 0.020 kg mass/inertia before Gazebo starts because RESET_WORLD does not reload SDF inertia
+  - stop only the owned so101-py-qual stack and start exactly one replacement GUI stack
+  - prove initial cup pose, Gazebo detach, MoveIt world-only membership, no finger contact and finite TCP
+  - bounded 50 Hz telemetry and 5 fps half-resolution H.264 are active
+success_criteria:
+  - all prediction bounds pass through DESCEND_TO_PLACE
+failure_criteria:
+  - physical grasp/controller failure, unchanged hard safety violation, MOVE endpoint instability, DESCEND endpoint tilt > 0.35 rad or table contact before the descent endpoint
+invalid_criteria:
+  - source/install/runtime asset mismatch, stale Gazebo world, duplicate stack/client, missing reset proof, telemetry or video, or disk pressure
+changed:
+  cup_mass_kg: 0.020
+  cup_inertia_kg_m2: {ixx: 0.0000295, iyy: 0.0000295, izz: 0.0000320}
+unchanged:
+  - cup wall friction {mu: 2.0, mu2: 2.0}
+  - fingertip friction {axial: 3.0, transverse: 2.0}
+  - all motion targets, speeds, q6 targets, orientation and release ordering
+  - physics engine, geometry, contact stiffness/damping, controller/gains and collision model
+  - penetration ceiling, preferred target range and all arm/final outcome safety bounds
+  - Gazebo remains physically detached and MoveIt Planning Scene shadow attach remains active during carry
+provenance:
+  planning_commit: 1bd9c460b0278d23727b6ca5fe84345e477a971a
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py/lib/so101_gazebo_demo_py/pick_place_state_machine
+  ros_domain_id: 223
+  gz_partition: so101_py_qual_exp065
+commands:
+  - command: RED mass-contract test, minimal mass/inertia edit, focused/full pytest, colcon build/test, FULL_RESTART, reset proof, bounded telemetry/H.264, one GUI execute
+    exit_code: PENDING
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
