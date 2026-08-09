@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 58f83db
+current_commit: e7af4f2
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -42,8 +42,44 @@ open_hypotheses:
   - A release-alignment correction triggered by an approximately 8.37 mm XY error can amplify pre-open tilt; relaxing the intermediate correction trigger while retaining the final target region is the next outcome-first candidate.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-072-223
+latest_checkpoint: CP-PRE-EXP-073-224
 next_experiment: EXP-073
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-073-224
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-073
+status: PLANNED
+prior_experiment: EXP-072
+hypothesis: deferring a bounded 6-10 mm held-cup XY residual to the authoritative physical outcome avoids a release-alignment motion that can amplify tilt before OPEN_GRIPPER
+single_variable: default intermediate release-alignment XY trigger tolerance changes from 0.006 m to 0.010 m
+lifecycle: RESET_WORLD
+evidence_basis:
+  - EXP-072 triggered one release-alignment correction at approximately 0.00837 m XY error
+  - EXP-072 tilt grew from 0.19564 rad at the raised descent endpoint to 0.34147 rad immediately before opening after that correction
+  - the cup then rolled outside the unchanged final region while the gripper opened
+prediction:
+  - an EXP-072-like 0.00837 m residual executes no release-alignment correction
+  - physical grasp and all unchanged hard safety gates pass
+  - strict pre-open tilt does not show the same correction-driven amplification
+  - authoritative final placement remains the sole acceptance of the bounded deferred residual
+preconditions:
+  - baseline MOVE_ABOVE_PLACE scaling 0.10 is restored in source and installed policy
+  - focused/full pytest and colcon build/test pass
+  - prove RESET_WORLD on the sole so101-py-qual GUI stack immediately before one execute
+unchanged:
+  - final target region min [-0.085, -0.255] and max [-0.075, -0.245]
+  - release target and settling compensation including y -0.005 m
+  - all motion waypoints, orientations, velocity/acceleration scalings and q6 targets
+  - cup mass 0.020 kg, cup friction 1.2, fingertip axial/transverse friction 3.0/1.2
+  - max 0.030 m axis/plausibility correction bounds, penetration bounds, physical-outcome contract, controller/collision configuration, Gazebo-detached semantics and MoveIt Planning Scene shadow attach
+failure_criteria:
+  - grasp, hard-safety/controller, motion or authoritative final-outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, stale install, missing telemetry/video or the observed pre-alignment residual falls outside the 0.006-0.010 m discrimination band
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
