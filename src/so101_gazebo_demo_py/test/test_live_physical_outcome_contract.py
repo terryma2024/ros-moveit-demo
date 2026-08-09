@@ -121,12 +121,18 @@ def test_same_run_place_alignment_precedes_release_and_uses_vertical_retreat() -
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
 
-    assert forward_path.index("align_cup_for_release(") < forward_path.index(
-        'detached_scene=_apply_scene("detach"'
-    )
     retreat_path = forward_path[forward_path.index("def retreat_after_pre_outcome"):]
     assert "reversed(place_reverse_waypoints)" not in retreat_path
     assert "_moveit_world_z_execute(" in retreat_path
+    assert forward_path.index("align_cup_for_release(") < forward_path.index(
+        "backend.move_gripper(bundle.motion.release_q6)"
+    )
+    assert forward_path.index("backend.move_gripper(bundle.motion.release_q6)") < (
+        forward_path.index("_moveit_world_z_execute(", forward_path.index("def retreat_after_pre_outcome"))
+    )
+    assert retreat_path.index("_moveit_world_z_execute(") < retreat_path.index(
+        '_apply_scene("detach"'
+    )
 
 
 def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:
