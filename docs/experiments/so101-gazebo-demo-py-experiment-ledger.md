@@ -5087,3 +5087,27 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: commit locally, preregister a VERIFY_PHYSICAL_GRASP-only diagnostic, and require real target-band convergence before a full-path trial
 ```
+
+```yaml
+diagnostic_id: DIAG-PENETRATION-CONTROL-LIVE-035
+lifecycle: PLANNED_PHYSICAL_CHECKPOINT
+recorded_at: 2026-08-09 Asia/Shanghai
+purpose: prove real post-seating penetration converges into [0.0006, 0.0010] m and the cup passes physical MICRO_LIFT before spending a full placement trial
+execute_commit: cb5d5e99022fb2c38914ca7f537a77300f590266
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+mode: execute --stop-after VERIFY_PHYSICAL_GRASP
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-015-grasp-only
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-014/reset-after-failure/reset-world.json
+acceptance:
+  command_exit: 0
+  physical_gate_status: PROVED
+  post_seating_depth_m: [0.0006, 0.0010]
+  micro_lift_cup_delta_z_m: outcome tolerance around 0.002
+  gazebo_attachment_state: detached
+next_on_valid: RESET_WORLD, then preregister one full-path candidate with the same frozen parameters
+next_on_invalid: persist physical-failure evidence and adjust only the bounded controller, not the place path or final acceptance
+```
