@@ -535,7 +535,7 @@ def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
 
 def run_bounded_physical_grasp_attempts(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
-    max_attempts: int = 1,
+    max_attempts: int = 3,
     execute=_moveit_world_z_execute,
 ):
     """Run a pre-registered number of complete physical attempts."""
@@ -547,10 +547,10 @@ def run_bounded_physical_grasp_attempts(
         target=seating_target
         if attempt:
             if lifted:
-                _moveit_world_z_execute(-.002)
+                execute(-.002)
                 lifted=False
             backend.move_gripper(preopen_q6)
-            _moveit_world_z_execute(0.0,local_x_m=-.0002)
+            execute(0.0,local_x_m=-.0002)
             backend.move_gripper(target)
         try:
             contact=evaluate_bilateral_contact(backend.contacts())
@@ -655,7 +655,7 @@ def run_live_execute(
     seating_target=seating_preload_target(q6_contact,-.059600220867817,bundle.motion.seating_preload_rad)
     backend.move_gripper(seating_target)
     try:
-        contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,max_attempts=1)
+        contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817)
     except Exception as error:
         failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"attempts":1}
         try:

@@ -8,6 +8,17 @@ from pathlib import Path
 import time
 
 
+def bundle_reset_inputs(bundle, initial_positions) -> dict[str, object]:
+    """Map the validated policy bundle to the live reset boundary."""
+    return {
+        "object_id":bundle.object.object_id,
+        "parking_pose":bundle.object.reset_parking_pose.values,
+        "spawn_pose":bundle.object.spawn_pose.values,
+        "home_arm":tuple(float(initial_positions[str(index)]) for index in range(1,6)),
+        "home_gripper":float(initial_positions["6"]),
+    }
+
+
 def reset_live_world(
     backend, transport, apply_scene, *, object_id: str,
     parking_pose: tuple[float, ...], spawn_pose: tuple[float, ...],
@@ -85,14 +96,11 @@ def main(argv=None):
             share/"config/validation_policies/light_cup_wall_pick.yaml",
         )
         initial=yaml.safe_load((share/"config/initial_positions.yaml").read_text())["initial_positions"]
+        reset_inputs=bundle_reset_inputs(bundle,initial)
         evidence=reset_live_world(
             RosGazeboLiveBackend(bundle.validation.physical_outcome.planning_shadow.max_pair_age_s),
             GazeboTransport(), _apply_scene,
-            object_id=bundle.task_object.object_id,
-            parking_pose=bundle.task_object.reset_parking_pose.values,
-            spawn_pose=bundle.task_object.spawn_pose.values,
-            home_arm=tuple(float(initial[str(index)]) for index in range(1,6)),
-            home_gripper=float(initial["6"]), timeout_s=options.timeout,
+            **reset_inputs, timeout_s=options.timeout,
         )
         evidence_dir=Path(os.environ.get("SO101_PY_EVIDENCE_DIR","/tmp/so101-py-runtime"))
         evidence_dir.mkdir(parents=True,exist_ok=True)

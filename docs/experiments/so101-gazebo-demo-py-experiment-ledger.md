@@ -3822,3 +3822,80 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: rerun the unchanged motion policy on a new FULL_RESTART fingerprint to obtain an authoritative final outcome before any motion-target change
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-002
+lifecycle: PLANNED_FULL_RESTART_UNCHANGED_STRATEGY
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: with persistent final sampling and no motion-policy change, the run will produce an authoritative post-RETREAT result; based on EXP-001 readback, expected classification is FINAL_OUT_OF_REGION on y while remaining upright/stable/detached/supported
+commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 060228e848e0beba00aaba6f25b9a4a3ccf4216096398c258bbc21648d6fb67a
+motion_policy_sha256: a2fa54e5b980b8d5329586cd1e454476649c4254d7607436bf3102af0efec1ad
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203
+command_boundary: complete execute path through authoritative post-RETREAT final outcome
+strategy_change_from_previous: none; observer implementation only
+counts_toward_search_or_streak: only if environment valid and final outcome is authoritative
+```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-002
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  failure_boundary: MICRO_LIFT cup outcome continuation
+  failure_code: CUP_INTERMEDIATE_POSITION
+  cup_world_z_delta_m: -0.0015547126531600952
+  cup_lateral_drift_m: 0.0015223325745771508
+  initial_contact: bilateral; fixed_depth_m=0.000606761546805501; moving_depth_m=0.0005013637710362673
+  post_failure_contact: fixed only; fixed_depth_m=0.0013253887882456183; moving absent
+  q6_contact: -0.04441947489976883
+  seating_target_q6: -0.05041947489976883
+  q6_final: -0.04582831263542175
+  gazebo_attachment_state: detached
+interpretation: contact/penetration telemetry did not reject the candidate; the cup physically failed to follow the +0.002 m command, so the result-based continuation gate correctly stopped the path
+evidence_root: /tmp/so101-py-outcome-search-203
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-WORLD-LIVE-PROOF-005
+recorded_at: 2026-08-09 Asia/Shanghai
+first_attempt:
+  status: INVALID_CODE
+  error: PolicyBundle field was incorrectly referenced as task_object instead of object
+  action_side_effects_before_failure: none
+fix:
+  tdd: real PolicyBundle to reset-input mapping test failed before bundle_reset_inputs and passed after
+second_attempt:
+  status: RESET_WORLD_PROVED
+  evidence_root: /tmp/so101-py-outcome-search-203/reset-after-failure-2
+  cup_spawn_pose_error_m: 0.0000016949374271854009
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+qualification_note: the successful second attempt is valid RESET_WORLD proof but is not itself a pick-place success
+```
+
+```yaml
+checkpoint_id: CP-BOUNDED-OUTCOME-RESEAT-006
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change: default complete grasp attempt budget raised from 1 to 3; on a failed cup-motion outcome each retry lowers the probe, opens the gripper, shifts local X by -0.0002 m, recloses to the same bounded seating target, and re-evaluates cup motion
+safety:
+  q6_safe_lower: unchanged
+  seating_target: unchanged within each candidate
+  physics_geometry_material_controller_collision: unchanged
+  contact_penetration_q6: telemetry only
+  success_requirement: cup must still follow the commanded MICRO_LIFT and the final post-RETREAT gate remains frozen
+tests:
+  tdd: third-attempt success test failed with the old single-attempt default and passed after the bounded reseat implementation
+  focused: 32 passed
+  package: 155 passed, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit the reset wiring and bounded reseat strategy, then execute one RESET_WORLD candidate in the already-proved stack
+```
