@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 24f0863
+current_commit: 60e810b
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -65,8 +65,35 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-087-280
+latest_checkpoint: CP-EXP-087-IMPLEMENTED-281
 next_experiment: EXP-087
+```
+
+```yaml
+checkpoint_id: CP-EXP-087-IMPLEMENTED-281
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-087
+planning_commit: ed15e4e
+implementation_commit: 60e810b
+single_variable: require the 2 mm MICRO_LIFT cup-position outcome to persist for 1.0 s before carry continuation
+baseline_restoration:
+  - removed the rejected EXP-086 upper-band/fine-step penetration overrides
+  - restored the retained 0.1-1.0 mm target and 1.0 mrad adjustment behavior
+red:
+  focused: 2 failed, 13 passed because verify_physical_micro_lift had no hold/sleep contract
+  full_followup: one stale three-attempt fixture lacked the third held-position sample
+green:
+  focused: 45 passed
+  full_pytest: 203 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 205 tests, 0 errors, 0 failures, 2 skipped
+runtime_behavior:
+  - live hold remains 1.0 s
+  - a failed held cup outcome activates the pre-existing bounded regrasp attempt
+  - tests may inject zero hold time without changing live defaults
+next_command: RESET_WORLD on domain 231, then one bounded EXP-087 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
