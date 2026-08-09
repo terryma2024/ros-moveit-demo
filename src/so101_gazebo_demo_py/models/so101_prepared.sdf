@@ -501,7 +501,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/collision/fixed_finger_contact/fixed_finger_contact_convex_000.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="gripper_fixed_joint_lump__fixed_finger_contact_convex_001_collision_1">
         <pose>5.5511199999999995e-17 -0.00021821399999999999 0.00094970600000000003 -3.1415899999999999 -5.5511199999999995e-17 -9.1791200000000215e-24</pose>
         <geometry>
@@ -564,7 +564,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/fixed/fingertip_pad_collision_000.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="gripper_fixed_joint_lump__fixed_fingertip_pad_collision_001_collision_8">
         <pose>5.5511199999999995e-17 -0.00021821399999999999 0.00094970600000000003 -3.1415899999999999 -5.5511199999999995e-17 -9.1791200000000215e-24</pose>
         <geometry>
@@ -573,7 +573,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/fixed/fingertip_pad_collision_001.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="gripper_fixed_joint_lump__fixed_fingertip_pad_collision_002_collision_9">
         <pose>5.5511199999999995e-17 -0.00021821399999999999 0.00094970600000000003 -3.1415899999999999 -5.5511199999999995e-17 -9.1791200000000215e-24</pose>
         <geometry>
@@ -582,7 +582,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/fixed/fingertip_pad_collision_002.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="gripper_fixed_joint_lump__fixed_fingertip_pad_collision_003_collision_10">
         <pose>5.5511199999999995e-17 -0.00021821399999999999 0.00094970600000000003 -3.1415899999999999 -5.5511199999999995e-17 -9.1791200000000215e-24</pose>
         <geometry>
@@ -591,7 +591,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/fixed/fingertip_pad_collision_003.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="gripper_fixed_joint_lump__fixed_fingertip_pad_collision_004_collision_11">
         <pose>5.5511199999999995e-17 -0.00021821399999999999 0.00094970600000000003 -3.1415899999999999 -5.5511199999999995e-17 -9.1791200000000215e-24</pose>
         <geometry>
@@ -600,7 +600,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/fixed/fingertip_pad_collision_004.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="gripper_fixed_joint_lump__fixed_fingertip_pad_collision_005_collision_12">
         <pose>5.5511199999999995e-17 -0.00021821399999999999 0.00094970600000000003 -3.1415899999999999 -5.5511199999999995e-17 -9.1791200000000215e-24</pose>
         <geometry>
@@ -609,7 +609,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/fixed/fingertip_pad_collision_005.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="gripper_fixed_joint_lump__fixed_fingertip_pad_collision_006_collision_13">
         <pose>5.5511199999999995e-17 -0.00021821399999999999 0.00094970600000000003 -3.1415899999999999 -5.5511199999999995e-17 -9.1791200000000215e-24</pose>
         <geometry>
@@ -618,7 +618,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/fixed/fingertip_pad_collision_006.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 0 1</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <visual name="gripper_visual">
         <pose>0.0077000000000000002 0.0001 -0.023400000000000001 -1.5708 -5.5511199999999773e-17 -1.3821300000000001e-14</pose>
         <geometry>
@@ -699,7 +699,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/collision/moving_jaw_contact/moving_jaw_contact_convex_000.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="jaw_fixed_joint_lump__moving_jaw_contact_convex_001_collision_1">
         <pose>-5.5511199999999995e-17 0.00040000000000000002 0.0189 9.5314500000000005e-17 -4.6609300000000001e-24 0</pose>
         <geometry>
@@ -771,7 +771,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/moving/fingertip_pad_collision_000.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="jaw_fixed_joint_lump__moving_fingertip_pad_collision_001_collision_9">
         <pose>-5.5511199999999995e-17 0.00040000000000000002 0.0189 9.5314500000000005e-17 -4.6609300000000001e-24 0</pose>
         <geometry>
@@ -780,7 +780,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/moving/fingertip_pad_collision_001.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="jaw_fixed_joint_lump__moving_fingertip_pad_collision_002_collision_10">
         <pose>-5.5511199999999995e-17 0.00040000000000000002 0.0189 9.5314500000000005e-17 -4.6609300000000001e-24 0</pose>
         <geometry>
@@ -789,7 +789,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/moving/fingertip_pad_collision_002.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="jaw_fixed_joint_lump__moving_fingertip_pad_collision_003_collision_11">
         <pose>-5.5511199999999995e-17 0.00040000000000000002 0.0189 9.5314500000000005e-17 -4.6609300000000001e-24 0</pose>
         <geometry>
@@ -798,7 +798,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/moving/fingertip_pad_collision_003.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="jaw_fixed_joint_lump__moving_fingertip_pad_collision_004_collision_12">
         <pose>-5.5511199999999995e-17 0.00040000000000000002 0.0189 9.5314500000000005e-17 -4.6609300000000001e-24 0</pose>
         <geometry>
@@ -807,7 +807,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/moving/fingertip_pad_collision_004.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <collision name="jaw_fixed_joint_lump__moving_fingertip_pad_collision_005_collision_13">
         <pose>-5.5511199999999995e-17 0.00040000000000000002 0.0189 9.5314500000000005e-17 -4.6609300000000001e-24 0</pose>
         <geometry>
@@ -816,7 +816,7 @@
             <uri>model://so101_gazebo_demo_py/meshes/so101/generated/moving/fingertip_pad_collision_005.stl</uri>
           </mesh>
         </geometry>
-      <surface><friction><ode><mu>3.0</mu><mu2>1.2</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
+      <surface><friction><ode><mu>3.0</mu><mu2>3.0</mu2><fdir1>0 1 0</fdir1></ode><bullet><friction>3.0</friction><friction2>3.0</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode><bullet><kp>1000000.0</kp><kd>100.0</kd></bullet></contact></surface></collision>
       <visual name="jaw_visual">
         <pose>-5.5511199999999995e-17 0.00040000000000000002 0.0189 9.5314500000000005e-17 -4.6609300000000001e-24 0</pose>
         <geometry>

@@ -77,7 +77,7 @@
       "destination": "config/task_objects/light_plastic_cup.yaml",
       "source_dirty": true,
       "source_sha256": "da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe",
-      "destination_sha256": "da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe"
+      "destination_sha256": "29f2816801baf03a8d51ba5b3df35df8b6818231e90e01f9ae9d40805569f247"
     },
     {
       "source": "src/so101_gazebo_demo/config/validation_policies/light_cup_wall_pick.yaml",
@@ -903,7 +903,7 @@
       "destination": "models/so101_prepared.sdf",
       "source_dirty": false,
       "source_sha256": "3bfabfd83deab4ba314047e1750bac570d83b6c14319e1dc7f3da14488f0d90e",
-      "destination_sha256": "37fed193f539ba9e53314c6be12f4e577b9c4e4f04a5f7cc3255d0445ccb086f"
+      "destination_sha256": "4fafe47ef0069e19144cbcba708199265da135851f4d75e2d2657e1be01ab3d7"
     },
     {
       "source": "src/so101_gazebo_demo/worlds/so101_pick_place.sdf",
