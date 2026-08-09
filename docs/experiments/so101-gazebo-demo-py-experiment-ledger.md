@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: f191bd03e5e2a8c2dbccb2d9174f68f060209571
+current_commit: 9a78a033670c4ae8dfe08638faab1ece65696fbc
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -27,8 +27,53 @@ disproven_routes:
 open_hypotheses:
   - Reusing a persistent combined Gazebo/TF observer for carry shadow gates will remove most of the 4.1-4.4 second pre-descent observation dwell while preserving the same divergence/resynchronization safety check.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-061-191
+latest_checkpoint: CP-PRE-EXP-062-192
 next_experiment: EXP-062
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-062-192
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-062
+status: PREREGISTERED
+prior_experiment: EXP-061
+hypothesis: recreating a one-shot ROS/Gazebo/TF pose observer and Planning Scene resynchronization between MOVE_ABOVE_PLACE and DESCEND_TO_PLACE creates a fixed multi-second hold in which the physically detached 20 g cup rolls inside the grasp
+prediction:
+  - one persistent combined pose observer reused across the three carry shadow gates reduces the post-MOVE_ABOVE_PLACE pre-descent interval from 4.1-4.4 s to <= 1.0 s
+  - cup tilt growth during that interval is <= 0.03 rad
+  - DESCEND_TO_PLACE begins with cup tilt <= 0.18 rad and reaches its endpoint without table contact or controller failure
+  - all Planning Scene divergence checks and required resynchronizations remain active and recorded
+single_variable: reuse one persistent Gazebo/TF observer across LIFT, MOVE_ABOVE_PLACE and DESCEND_TO_PLACE shadow gates instead of recreating the observer for each gate
+lifecycle: RESET_WORLD
+preconditions:
+  - reset the existing sole so101-py-qual stack and prove cup pose, Gazebo detach, MoveIt world-only, no finger contact and finite TCP
+  - source/build/install provenance must match the implementation commit
+  - bounded 50 Hz telemetry and 5 fps half-resolution H.264 must be active
+success_criteria:
+  - physical grasp gate and all unchanged penetration/controller bounds pass
+  - post-move pre-descent interval and tilt growth meet the prediction
+  - the safety-equivalent shadow checks run at all three state boundaries
+failure_criteria:
+  - observer lacks fresh pose/contact evidence, shadow check is skipped, dwell remains >1.0 s, interval tilt growth >0.03 rad, or an earlier motion/safety failure occurs
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, missing telemetry/video, stale installed asset or disk pressure
+scope:
+  - this experiment ends its conclusion at the DESCEND_TO_PLACE/pre-open carry boundary
+  - the known EXP-061 detach-before-planned-retreat sequence remains unchanged and any repeated later release failure is recorded but does not invalidate the carry-boundary result
+unchanged:
+  - cup mass 0.020 kg, inertia, physics engine, geometry, friction, controller/gains and collision model
+  - seating_preload_rad 0.006, MOVE_ABOVE_PLACE velocity scaling 0.10 and all targets/orientations
+  - all penetration, shadow-divergence and final physical-outcome bounds
+  - Gazebo physically detached and MoveIt shadow attached during carry
+provenance:
+  planning_commit: 9a78a033670c4ae8dfe08638faab1ece65696fbc
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  ros_domain_id: 221
+  gz_partition: so101_py_qual_full_01
+commands:
+  - command: pytest RED, minimal persistent-observer edit, focused/full pytest, colcon build/test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
+    exit_code: PENDING
+counts_toward_success_streak: false
 ```
 
 ## Historical evidence imported before ledger activation
