@@ -4828,3 +4828,82 @@ strategy:
 next_on_valid_success: freeze the strategy and run two independent RESET_WORLD confirmation trials before any qualification campaign
 next_on_valid_failure: classify the complete physical outcome; do not relax final boundaries
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-012
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_GRIPPER_CONTACT
+physical_grasp:
+  cup_world_z_delta_m: 0.002153173089027405
+  lateral_drift_m: 0.0002502074573187107
+  bilateral_contact: true
+  moving_pad_depth_m: 0.00030216414597816765
+pre_retreat:
+  cup_xyz_m: [-0.08100070059299469, -0.2990204691886902, 0.1861230432987213]
+  upright_tilt_rad: 1.655603023423644
+post_retreat:
+  cup_xyz_m: [-0.08809828758239746, -0.2864617109298706, 0.23646242916584015]
+  upright_tilt_rad: 1.8081659049773329
+  maximum_linear_speed_m_s: 0.00022971245115690757
+  maximum_angular_speed_rad_s: 0.013313791122343177
+diagnosis: cup remained in gripper contact after OPEN_GRIPPER and was carried upward by RETREAT; the interpolated q2-q5/orientation branch changed release geometry and is invalid despite successful plan-only checks
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-012
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-012-029
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-012/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000006022099063119129
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+next: restore EXP-011 q2-q5 and release geometry; evaluate one q1-only negative delta that predicts positive-y correction while retaining final-x margin
+```
+
+```yaml
+diagnostic_id: DIAG-Q1-ONLY-PLACE-MARGIN-030
+lifecycle: VALID_PLAN_ONLY
+recorded_at: 2026-08-09 Asia/Shanghai
+purpose: preserve EXP-011 release geometry while adding final-y margin through base rotation only
+initial_sign_hypothesis:
+  q1_delta_rad: -0.007
+  status: REJECTED_BY_FK
+  observed_above_y_m: -0.24830944753098982
+  reason: sign moved y farther negative; no policy file or physical action used this branch
+selected_change:
+  q1_delta_rad: 0.007
+  q2_q5: exactly restored from EXP-011
+  preload_rad: 0.004 unchanged
+  above_fk_xyz_m: [-0.07439996521940065, -0.2469987639931155, 0.2626673483042332]
+  descend_fk_xyz_m: [-0.07164572705298926, -0.24401960155703706, 0.20746488831186902]
+prediction_from_exp_011:
+  final_x_m: approximately -0.0821, inside frozen interval
+  final_y_m: approximately -0.2546, inside frozen interval with about 0.4 mm lower-bound margin
+  release_geometry: q2-q5 unchanged, avoiding EXP-012 cup wedging
+explicit_ladder_plans:
+  MOVE_ABOVE_PLACE: 80
+  DESCEND_TO_PLACE: 51
+  RETREAT: 51
+execute_trajectory_count: 0
+tests:
+  red: strict typed policy test observed the discarded interpolated branch
+  focused_green: 19 passed
+  package_pytest: 161 passed, 2 skipped
+  colcon_test: 163 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance:
+  motion_policy_sha256: eede4ce9fb5e4e9b0511ec172dcfa548900958ea6a195fa8aa48203c8fcf0f8b
+  validation_policy_sha256: c6395b5267c92ac33cc32c3fde16983b9a1c508a73f652723db61c84f5ca369b
+  bundle_sha256: 67518c7ec42d116ac83216593c8838b585da2667e7fb31a6bfb1381d6d0e9c94
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-012/q1-plus-007-plan-only
+next: commit locally, preregister candidate 013, and run one RESET_WORLD search trial
+```
