@@ -5550,3 +5550,50 @@ strategy:
 next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
 next_on_valid_failure: classify authoritative final metrics; do not change observer or acceptance without new evidence
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-021
+lifecycle: INVALID_RUNTIME_CONTEXT
+result:
+  execute_rc: 1
+  failure: Context.init() must only be called once
+  phase: pre-retreat Planning Scene synchronization while persistent final observer owned the default rclpy context
+interpretation: physical release was reached but no authoritative post-retreat result exists; this is a runtime context ownership bug, not a placement failure
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-021
+counts_toward_search: false
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-021-048
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-021/reset-after-context-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000016474949855664817
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-ISOLATED-FINAL-OBSERVER-CONTEXT-049
+recorded_at: 2026-08-09 Asia/Shanghai
+revision:
+  final_observer_context: dedicated rclpy.Context
+  observer_node: created explicitly in the dedicated context
+  observer_shutdown: shuts down only its dedicated context
+  default_context: remains available for request-scoped MoveIt scene synchronization during RETREAT
+  persistent_contact_snapshot: retained
+  evidence_wait_timeout_s: 3.0
+  source_freshness_and_final_acceptance: unchanged
+tests:
+  red: observer contract found no dedicated context ownership/shutdown
+  focused_green: 34 passed
+  package_pytest: 167 passed, 2 skipped
+  colcon_test: 169 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit locally and rerun the unchanged full physical strategy
+```
