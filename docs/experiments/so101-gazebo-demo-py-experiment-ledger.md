@@ -4144,3 +4144,29 @@ build: colcon build --packages-select so101_gazebo_demo_py --symlink-install suc
 provenance: motion policy destination sha256 updated to 044850ccce09f7e74f9cc613194e1d3db18c32a9659332e2dc1589370f254a31
 next: commit locally, preregister the zero-correction candidate, then run from the proven reset state
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-006
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: removing the post-contact +0.0004 m correction will let DESCEND proceed directly to close; the pre-probe Planning Scene shadow will then permit MICRO_LIFT planning while Gazebo physics determines whether the cup follows
+execute_commit: 5e0f70cdac16ac18a71ed92f2040d7733dcb0b96
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: 27c8efb8a955eacecaa99158177d4074096bd36f25c8b7dead2126b71081d1e0
+motion_policy_sha256: 044850ccce09f7e74f9cc613194e1d3db18c32a9659332e2dc1589370f254a31
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-006
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-005/reset-after-invalid/reset-world.json
+strategy:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  seating_preload_rad: 0.002
+  grasp_tcp_world_x_rotation_rad: 0.0
+  max_complete_grasp_attempts_per_execute: 1
+  gazebo_forward_attach: forbidden
+  moveit_shadow_attach: after physical close/seating and before MICRO_LIFT planning
+next_on_valid_success: classify final placement and freeze or adjust only the placement family
+next_on_valid_failure: choose one causally related grasp/motion family from the first result boundary
+```
