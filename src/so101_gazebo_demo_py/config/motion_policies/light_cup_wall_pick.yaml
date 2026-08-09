@@ -9,7 +9,7 @@ gripper_actions:
   preopen_q6: 0.465038000
   grasp_close_q6: -0.047608632840292
   seating_preload_rad: 0.006
-  release_q6: 0.465038
+  release_q6: 0.750
 states:
   MOVE_ABOVE_OBJECT:
     logical_start: [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -77,8 +77,8 @@ states:
     require_waypoint_ladder: true
     require_axial_path_validation: true
     gripper_q6: -0.047608632840292
-    velocity_scaling: 0.10
-    acceleration_scaling: 0.10
+    velocity_scaling: 0.05
+    acceleration_scaling: 0.05
   RETREAT:
     logical_start: [0.389633705130, 0.442941344113, 0.112383097091, 1.025984047022, 0.001939334047]
     waypoints:
@@ -87,7 +87,7 @@ states:
       - [0.394374618045, 0.210717795147, 0.109628805069, 1.174687840559, 0.001586862580]
     require_waypoint_ladder: true
     require_axial_path_validation: false
-    gripper_q6: 0.465038000
+    gripper_q6: 0.750000000
     velocity_scaling: 0.10
     acceleration_scaling: 0.03
   RECOVER_LIFT_TO_SAFE_HEIGHT:

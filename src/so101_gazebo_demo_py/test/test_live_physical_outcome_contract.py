@@ -94,7 +94,7 @@ def test_final_epoch_uses_one_observer_with_bounded_evidence_wait() -> None:
         live_path.index("return collect_final_outcome_epoch(")
     )
     assert live_path.index("return collect_final_outcome_epoch(") < (
-        live_path.index("outcomes=collect_final_outcome_after_immediate_retreat(")
+        live_path.index("outcomes=collect_final_outcomes_around_retreat(")
     )
     backend_source = ROS_GAZEBO_BACKEND.read_text()
     assert "deadline=time.monotonic()+3.0" in backend_source
@@ -160,8 +160,8 @@ def test_live_run_reuses_one_isolated_planning_scene_client() -> None:
     assert "with PlanningSceneShadowClient() as scene_client:" in forward_path
     assert "apply_scene=scene_client.apply" in forward_path
     assert "apply_scene(\"attach\",shadow_pose)" in source
-    assert 'apply_scene("detach",retreated_pose)' in source
-    assert "detach_and_sync(released)" not in source
+    assert "detach_and_sync(released)" in source
+    assert 'apply_scene("detach",observed_pose)' in source
     assert "_apply_scene(" not in forward_path
 
 
@@ -185,78 +185,61 @@ def test_live_path_retries_one_failed_micro_lift_at_requested_preload() -> None:
         ))
     ]
 
-    assert "max_grasp_attempts=3" in forward_path
+    assert "max_grasp_attempts=2" in forward_path
     assert "max_attempts=max_grasp_attempts" in grasp_call
     assert "seating_actual_q6=_current_joint_position(\"6\")" in forward_path
     assert "seating_target=_current_joint_position(\"6\")" not in forward_path
     assert '"actual_q6":seating_actual_q6' in forward_path
 
 
-def test_every_release_path_retreats_before_scene_detach_and_settle() -> None:
+def test_no_alignment_release_retreats_before_scene_detach_and_settle() -> None:
     source = LIVE_EXECUTE.read_text()
-    forward_path = source[source.index("def _run_live_execute_with_scene"):]
+    forward_path = source[source.index("def run_live_execute"):]
 
     release_index = forward_path.index(
         "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
     )
-    retreat_definition = forward_path.index("def immediate_retreat():", release_index)
+    no_alignment_index = forward_path.index("if not place_alignment:", release_index)
     immediate_index = forward_path.index(
-        "collect_final_outcome_after_immediate_retreat(", retreat_definition,
+        "collect_final_outcome_after_immediate_retreat(", no_alignment_index,
     )
     detach_index = forward_path.index(
-        'apply_scene("detach",retreated_pose)', retreat_definition,
+        'apply_scene("detach",retreated_pose)', no_alignment_index,
     )
 
     assert forward_path.index("align_cup_for_release(") < release_index
-    assert release_index < retreat_definition < immediate_index
-    assert forward_path.index("execute_retreat(", retreat_definition) < detach_index
+    assert release_index < no_alignment_index < immediate_index
+    assert forward_path.index("backend.move_arm(", no_alignment_index) < detach_index
     assert detach_index < immediate_index
-    assert "if not place_alignment:" not in forward_path
-    assert "detach_and_sync(released)" not in forward_path
     assert "return FinalOutcomeEpochs(None,collect_epoch())" in source
 
 
-def test_live_alignment_uses_six_mm_tolerance_and_fixed_retreat() -> None:
+def test_alignment_release_retains_independent_pre_retreat_epoch() -> None:
     source = LIVE_EXECUTE.read_text()
-    forward_path = source[source.index("def _run_live_execute_with_scene"):]
-
-    alignment_start = forward_path.index(
-        "placed,_place_reverse_waypoints,place_alignment="
+    forward_path = source[source.index("def run_live_execute"):]
+    aligned_index = forward_path.index(
+        "else:\n        detach_and_sync(released)",
+        forward_path.index("if not place_alignment:"),
     )
-    alignment_call = forward_path[
-        alignment_start:
-        forward_path.index(
-            "backend.move_gripper(bundle.motion.release_q6", alignment_start,
-        )
-    ]
-    assert "xy_tolerance_m=0.006" in alignment_call
-    assert "acceptable_xy_bounds=(" in alignment_call
-    assert "release_alignment_settle_margin_m=0.005" in forward_path
-    assert "outcome_policy.final_target_min_xy_m[0]-" in alignment_call
-    assert "outcome_policy.final_target_max_xy_m[1]+" in alignment_call
-    assert "release_alignment_settle_margin_m" in alignment_call
-    assert "collect_final_outcome_after_immediate_retreat(" in forward_path
-    assert "collect_final_outcomes_around_retreat(" not in forward_path
+    detach_index = forward_path.index("detach_and_sync(released)", aligned_index)
+    epochs_index = forward_path.index(
+        "collect_final_outcomes_around_retreat(", detach_index,
+    )
+
+    assert aligned_index < detach_index < epochs_index
 
 
-def test_retreat_uses_preheated_client_and_explicit_fast_policy_scaling() -> None:
+def test_no_alignment_retreat_uses_explicit_fast_policy_scaling() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
     retreat = MOTION_POLICY.read_text().split("  RETREAT:", 1)[1].split(
         "  RECOVER_LIFT_TO_SAFE_HEIGHT:", 1,
     )[0]
 
-    assert "with PrewarmedArmTrajectoryExecutor() as retreat_executor:" in forward_path
-    assert forward_path.index("with PrewarmedArmTrajectoryExecutor()") < (
-        forward_path.index("_run_live_execute_with_scene(")
-    )
     assert (
-        "execute_retreat(retreat_policy.waypoints, "
-        "retreat_policy.velocity_scaling)"
+        "backend.move_arm(retreat_policy.waypoints, "
+        "velocity_scaling=retreat_policy.velocity_scaling)"
     ) in forward_path
-    assert "backend.move_arm(retreat_policy.waypoints" not in forward_path
-    assert 'ActionClient(self._node,FollowJointTrajectory,"/arm_controller/follow_joint_trajectory")' in source
-    assert "wait_for_server(timeout_sec=10.0)" in source
     assert "velocity_scaling: 0.10" in retreat
 
 

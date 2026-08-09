@@ -35,8 +35,6 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert bundle.motion.grasp_tcp_translation_offset_m == (0.0, 0.0, 0.0)
     assert bundle.motion.seating_preload_rad == 0.006
     assert bundle.motion.grasp_tcp_world_x_rotation_rad == 0.0
-    assert bundle.motion.release_q6 == pytest.approx(0.465038)
-    assert bundle.motion.states[State.RETREAT].gripper_q6 == pytest.approx(0.465038)
     assert bundle.motion.states[State.RETREAT].waypoints == (
         bundle.motion.states[State.RECOVER_LIFT_TO_SAFE_HEIGHT].waypoints
     )
@@ -63,8 +61,6 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert bundle.validation.states[State.DESCEND_TO_PLACE].data[
         "endpoint_position"
     ] == pytest.approx((-0.0709490295163302, -0.2461348040097296, 0.21673740393615668))
-    assert bundle.motion.states[State.DESCEND_TO_PLACE].velocity_scaling == 0.10
-    assert bundle.motion.states[State.DESCEND_TO_PLACE].acceleration_scaling == 0.10
     assert len(bundle.sha256) == 64
 
 

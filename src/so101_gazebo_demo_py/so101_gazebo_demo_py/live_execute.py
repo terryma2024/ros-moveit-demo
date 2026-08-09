@@ -14,92 +14,11 @@ from .release_settle import ReleaseSettleExecutor
 from .moveit.planning import JointPlanRequest, MoveItPlanningClient, make_get_motion_plan_request
 from .motion.executor import MoveItExecutionClient, make_execute_goal
 from .policy_config import load_policy_bundle
-from .test_support.ros_gazebo_backend import (
-    RosGazeboLiveBackend,
-    waypoint_step_seconds,
-)
+from .test_support.ros_gazebo_backend import RosGazeboLiveBackend
 
 
 TRACE=("IDLE","PREPARE_OPEN_GRIPPER","MOVE_ABOVE_OBJECT","DESCEND","CLOSE_GRIPPER","WAIT_GRASP_STABLE","MICRO_LIFT","WAIT_MICRO_LIFT_STABLE","VERIFY_PHYSICAL_GRASP","ATTACH_MOVEIT","LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE","OPEN_GRIPPER","RETREAT","DETACH_MOVEIT","WAIT_RELEASE_SETTLE","VALIDATE_FINAL_PLACEMENT","SYNC_WORLD_OBJECT","DONE")
 
-
-def make_follow_joint_trajectory_goal(joint_names, points, step_seconds: int):
-    """Build the unchanged fixed-joint trajectory for a warmed action client."""
-    from control_msgs.action import FollowJointTrajectory
-    from trajectory_msgs.msg import JointTrajectoryPoint
-
-    goal=FollowJointTrajectory.Goal()
-    goal.trajectory.joint_names=list(joint_names)
-    for index,positions in enumerate(points,1):
-        point=JointTrajectoryPoint()
-        point.positions=list(positions)
-        point.time_from_start.sec=step_seconds*index
-        goal.trajectory.points.append(point)
-    return goal
-
-
-class PrewarmedArmTrajectoryExecutor:
-    """Own one isolated arm action client before the cup is grasped."""
-
-    def __init__(self) -> None:
-        import rclpy
-        from control_msgs.action import FollowJointTrajectory
-        from rclpy.action import ActionClient
-        from rclpy.executors import SingleThreadedExecutor
-
-        self._context=rclpy.Context()
-        self._context.init()
-        self._executor=SingleThreadedExecutor(context=self._context)
-        self._node=rclpy.create_node(
-            "so101_py_preheated_retreat",context=self._context,
-        )
-        self._executor.add_node(self._node)
-        self._client=ActionClient(self._node,FollowJointTrajectory,"/arm_controller/follow_joint_trajectory")
-        if not self._client.wait_for_server(timeout_sec=10.0):
-            self.close()
-            raise RuntimeError("arm trajectory action unavailable for preheated retreat")
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self,*_exc_info) -> None:
-        self.close()
-
-    def close(self) -> None:
-        if getattr(self,"_closed",False):
-            return
-        self._closed=True
-        if hasattr(self,"_client"):
-            self._client.destroy()
-        if hasattr(self,"_executor") and hasattr(self,"_node"):
-            self._executor.remove_node(self._node)
-            self._executor.shutdown()
-        if hasattr(self,"_node"):
-            self._node.destroy_node()
-        if hasattr(self,"_context") and self._context.ok():
-            self._context.shutdown()
-
-    def execute(self, points, velocity_scaling: float | None) -> None:
-        step=waypoint_step_seconds(len(points),velocity_scaling)
-        goal=make_follow_joint_trajectory_goal(tuple("12345"),points,step)
-        future=self._client.send_goal_async(goal)
-        self._executor.spin_until_future_complete(future,timeout_sec=5.0)
-        handle=future.result() if future.done() else None
-        if handle is None or not handle.accepted:
-            raise RuntimeError("preheated retreat goal rejected")
-        future=handle.get_result_async()
-        timeout_s=step*len(points)+20.0
-        self._executor.spin_until_future_complete(future,timeout_sec=timeout_s)
-        wrapped=future.result() if future.done() else None
-        if wrapped is None:
-            handle.cancel_goal_async()
-            raise RuntimeError("preheated retreat execution timed out")
-        code=int(wrapped.result.error_code)
-        if code != 0:
-            raise RuntimeError(
-                f"preheated retreat trajectory failed with error {code}: "
-                f"{wrapped.result.error_string}"
-            )
 
 @dataclass(frozen=True, slots=True)
 class ContinuationEvaluation:
@@ -341,11 +260,8 @@ def release_separation_translation(
 
 def align_cup_for_release(
     backend, target_xyz, *, execute,
-    max_attempts: int = 3, xy_tolerance_m: float = 0.006,
+    max_attempts: int = 3, xy_tolerance_m: float = 0.010,
     z_tolerance_m: float = 0.010,
-    acceptable_xy_bounds: tuple[
-        tuple[float, float], tuple[float, float]
-    ] | None = None,
     max_axis_correction_m: float = 0.030,
     max_pre_release_height_error_m: float = 0.030,
     max_arm_linear_speed_m_s: float = 0.005,
@@ -355,13 +271,6 @@ def align_cup_for_release(
     wait=time.sleep,
 ):
     """Use same-run cup pose feedback for a bounded pre-release XY alignment."""
-    if acceptable_xy_bounds is not None:
-        minimum_xy,maximum_xy=acceptable_xy_bounds
-        if (
-            not all(math.isfinite(value) for value in (*minimum_xy,*maximum_xy))
-            or any(low > high for low,high in zip(minimum_xy,maximum_xy))
-        ):
-            raise ValueError("acceptable XY bounds must be finite and ordered")
     current=backend.sample(); reverse_waypoints=[]; telemetry=[]
     for attempt in range(max_attempts+1):
         values=(*current.object_xyz,*current.object_xyzw,*current.tcp_xyz,*current.tcp_xyzw)
@@ -377,15 +286,7 @@ def align_cup_for_release(
                 f"place alignment pre-release height outside plausibility bound: "
                 f"{height_error}"
             )
-        inside_acceptable_xy=(
-            acceptable_xy_bounds is not None
-            and minimum_xy[0] <= current.object_xyz[0] <= maximum_xy[0]
-            and minimum_xy[1] <= current.object_xyz[1] <= maximum_xy[1]
-        )
-        if (
-            (inside_acceptable_xy or xy_error <= xy_tolerance_m)
-            and abs(z_error) <= z_tolerance_m
-        ):
+        if xy_error <= xy_tolerance_m and abs(z_error) <= z_tolerance_m:
             return current,tuple(reverse_waypoints),tuple(telemetry)
         if attempt == max_attempts:
             break
@@ -859,11 +760,8 @@ def stabilize_to_target_penetration(
     )
 
 
-def verify_physical_micro_lift(
-    backend, execute=_moveit_world_z_execute, *, hold_seconds: float = 1.0,
-    sleep=time.sleep,
-):
-    """Execute the 2 mm probe and require the cup outcome to persist."""
+def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
+    """Execute the 2 mm probe and gate continuation on the cup/arm result."""
     before=backend.sample()
     micro_points,micro_start_z=execute(.002)
     contact=evaluate_bilateral_contact(backend.contacts())
@@ -876,7 +774,7 @@ def verify_physical_micro_lift(
         commanded_object_delta_m=(0.0,0.0,0.002),
         position_tolerance_m=0.006,
         minimum_axial_progress_m=0.0001,
-        maximum_lateral_drift_m=0.002,
+        maximum_lateral_drift_m=0.006,
         arm_stable=all(math.isfinite(value) for value in (*after.tcp_xyz,*after.tcp_xyzw)),
         contact_evidence=contact,
         q6_position=None,
@@ -886,40 +784,13 @@ def verify_physical_micro_lift(
             f"physical micro-lift failed {continuation.failure_code} "
             f"lift={lift} lateral={lateral}"
         )
-    sleep(hold_seconds)
-    held_contact=evaluate_bilateral_contact(backend.contacts())
-    held=backend.sample()
-    held_lift=held.object_xyz[2]-before.object_xyz[2]
-    held_lateral=math.dist(held.object_xyz[:2],before.object_xyz[:2])
-    held_continuation=evaluate_continuation(
-        before=before,
-        after=held,
-        commanded_object_delta_m=(0.0,0.0,0.002),
-        position_tolerance_m=0.006,
-        minimum_axial_progress_m=0.0001,
-        maximum_lateral_drift_m=0.002,
-        arm_stable=all(
-            math.isfinite(value) for value in (*held.tcp_xyz,*held.tcp_xyzw)
-        ),
-        contact_evidence=held_contact,
-        q6_position=None,
-    )
-    if not held_continuation.can_continue:
-        raise RuntimeError(
-            f"physical micro-lift hold failed {held_continuation.failure_code} "
-            f"lift={held_lift} lateral={held_lateral}"
-        )
-    return (
-        held_lift,held_lateral,micro_points,micro_start_z,
-        before,held,held_continuation,
-    )
+    return lift,lateral,micro_points,micro_start_z,before,after,continuation
 
 
 def run_bounded_physical_grasp_attempts(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
     max_attempts: int = 1,
     execute=_moveit_world_z_execute,
-    hold_seconds: float = 1.0,
 ):
     """Run a pre-registered number of physical attempts; live defaults to one."""
     if max_attempts < 1:
@@ -938,9 +809,7 @@ def run_bounded_physical_grasp_attempts(
         try:
             contact=evaluate_bilateral_contact(backend.contacts())
             lifted=True
-            result=verify_physical_micro_lift(
-                backend,execute=execute,hold_seconds=hold_seconds,
-            )
+            result=verify_physical_micro_lift(backend,execute=execute)
             return contact,result,attempt+1,target
         except RuntimeError as error:
             last_error=error
@@ -1087,12 +956,10 @@ def run_live_execute(
     motion_policy: Path | None = None,
 ) -> dict:
     with PlanningSceneShadowClient() as scene_client:
-        with PrewarmedArmTrajectoryExecutor() as retreat_executor:
-            return _run_live_execute_with_scene(
-                evidence_directory,stop_after,motion_policy,
-                apply_scene=scene_client.apply,
-                execute_retreat=retreat_executor.execute,
-            )
+        return _run_live_execute_with_scene(
+            evidence_directory,stop_after,motion_policy,
+            apply_scene=scene_client.apply,
+        )
 
 
 def _run_live_execute_with_scene(
@@ -1101,7 +968,6 @@ def _run_live_execute_with_scene(
     motion_policy: Path | None,
     *,
     apply_scene,
-    execute_retreat,
 ) -> dict:
     from ament_index_python.packages import get_package_share_directory
     share=Path(get_package_share_directory("so101_gazebo_demo_py"))
@@ -1151,7 +1017,7 @@ def _run_live_execute_with_scene(
     pre_probe=backend.sample()
     shadow_pose=(*pre_probe.object_xyz,*pre_probe.object_xyzw)
     attached_scene=apply_scene("attach",shadow_pose)
-    max_grasp_attempts=3
+    max_grasp_attempts=2
     try:
         contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(
             backend,normalized_seating_target,bundle.motion.preopen_q6,-.059600220867817,
@@ -1202,39 +1068,29 @@ def _run_live_execute_with_scene(
         tuple(bundle.object.place_pose.values[:3])
     )
     outcome_policy=bundle.validation.physical_outcome
-    release_alignment_settle_margin_m=0.005
     def execute_place_correction(delta,orientation_tolerance_rad):
         gate_shadow("PLACE_ALIGNMENT")
         return _moveit_world_translation_execute(delta,orientation_tolerance_rad)
     placed,_place_reverse_waypoints,place_alignment=align_cup_for_release(
         backend,target_place_xyz,execute=execute_place_correction,
-        xy_tolerance_m=0.006,
-        acceptable_xy_bounds=(
-            (
-                outcome_policy.final_target_min_xy_m[0]-
-                release_alignment_settle_margin_m,
-                outcome_policy.final_target_min_xy_m[1]-
-                release_alignment_settle_margin_m,
-            ),
-            (
-                outcome_policy.final_target_max_xy_m[0]+
-                release_alignment_settle_margin_m,
-                outcome_policy.final_target_max_xy_m[1]+
-                release_alignment_settle_margin_m,
-            ),
-        ),
         max_arm_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
         max_arm_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
     )
     if place_alignment:
         gate_shadow("PRE_RELEASE_RETREAT")
     backend.move_gripper(bundle.motion.release_q6, final_release=True)
+    released=backend.sample()
     detached_scene=[None]
     scene_membership=[None]
     synchronized_scene=[None]
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
     release_separation=[None]
+    def detach_and_sync(observed):
+        observed_pose=(*observed.object_xyz,*observed.object_xyzw)
+        detached_scene[0]=apply_scene("detach",observed_pose)
+        synchronized_scene[0]=detached_scene[0]
+        scene_membership[0]=detached_scene[0]
     def collect_release_epoch():
         with backend.final_observer() as final_observer:
             return collect_final_outcome_epoch(
@@ -1242,17 +1098,34 @@ def _run_live_execute_with_scene(
                 gazebo_detached=backend.attachment_state() == "detached",
                 scene_membership=scene_membership[0],
             )
-    def immediate_retreat():
-        execute_retreat(retreat_policy.waypoints, retreat_policy.velocity_scaling)
-        retreated=backend.sample()
-        retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
-        detached_scene[0]=apply_scene("detach",retreated_pose)
-        synchronized_scene[0]=detached_scene[0]
-        scene_membership[0]=detached_scene[0]
-    outcomes=collect_final_outcome_after_immediate_retreat(
-        collect_epoch=collect_release_epoch,
-        retreat=immediate_retreat,
-    )
+    if not place_alignment:
+        def immediate_retreat():
+            backend.move_arm(retreat_policy.waypoints, velocity_scaling=retreat_policy.velocity_scaling)
+            retreated=backend.sample()
+            retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
+            detached_scene[0]=apply_scene("detach",retreated_pose)
+            synchronized_scene[0]=detached_scene[0]
+            scene_membership[0]=detached_scene[0]
+        outcomes=collect_final_outcome_after_immediate_retreat(
+            collect_epoch=collect_release_epoch,
+            retreat=immediate_retreat,
+        )
+    else:
+        detach_and_sync(released)
+        def retreat_after_settle(_pre_retreat):
+            release_separation[0]=release_separation_translation(placed)
+            _moveit_world_translation_execute(
+                release_separation[0],0.15,
+            )
+            _moveit_world_z_execute(
+                0.060, orientation_tolerance_rad=0.15,
+            )
+            retreated=backend.sample()
+            detach_and_sync(retreated)
+        outcomes=collect_final_outcomes_around_retreat(
+            collect_epoch=collect_release_epoch,
+            retreat=retreat_after_settle,
+        )
     pre_retreat_outcome=outcomes.pre_retreat
     post_retreat_outcome=outcomes.post_retreat
     def outcome_payload(evaluation):

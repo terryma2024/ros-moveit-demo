@@ -126,9 +126,7 @@ def test_immediate_retreat_collects_only_post_retreat_outcome() -> None:
 
 def test_post_retreat_failure_is_persisted_before_it_is_raised() -> None:
     source = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
-    final_path = source[
-        source.index("outcomes=collect_final_outcome_after_immediate_retreat"):
-    ]
+    final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
 
     assert '"final-outcome-failure.json"' in final_path
     assert final_path.index('"final-outcome-failure.json"') < final_path.index(
@@ -136,11 +134,9 @@ def test_post_retreat_failure_is_persisted_before_it_is_raised() -> None:
     )
 
 
-def test_live_failure_evidence_persists_post_retreat_epoch_and_null_pre_epoch() -> None:
+def test_live_failure_evidence_persists_both_release_epochs() -> None:
     source = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
-    final_path = source[
-        source.index("outcomes=collect_final_outcome_after_immediate_retreat"):
-    ]
+    final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
 
     assert '"pre_retreat_outcome":collected_outcome_payload(' in final_path
     assert '"post_retreat_outcome":outcome_payload(' in final_path

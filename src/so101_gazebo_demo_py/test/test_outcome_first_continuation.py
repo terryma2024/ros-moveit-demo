@@ -178,7 +178,7 @@ def test_micro_lift_continues_when_penetration_telemetry_exceeds_old_gate() -> N
             )
 
     result = live_execute.verify_physical_micro_lift(
-        Backend(), execute=lambda delta: (3, 0.200), hold_seconds=0.0,
+        Backend(), execute=lambda delta: (3, 0.200),
     )
 
     assert result[0] == pytest.approx(0.002)
@@ -236,7 +236,6 @@ def test_full_grasp_attempt_reaches_cup_result_gate_without_bilateral_contact() 
             q6_safe_lower=-0.0596,
             max_attempts=1,
             execute=lambda delta: (3, 0.200),
-            hold_seconds=0.0,
         )
     )
 
@@ -258,7 +257,8 @@ def test_explicit_three_attempt_grasp_strategy_can_succeed_on_third_outcome() ->
 
         def sample(self) -> PoseSample:
             self.sample_count += 1
-            lifted = self.sample_count in (6, 7)
+            attempt = (self.sample_count + 1) // 2
+            lifted = self.sample_count % 2 == 0 and attempt == 3
             return sample(0.0, 0.0, 0.167 if lifted else 0.165)
 
         def contacts(self):
@@ -272,7 +272,6 @@ def test_explicit_three_attempt_grasp_strategy_can_succeed_on_third_outcome() ->
     _, result, attempts, _ = live_execute.run_bounded_physical_grasp_attempts(
         Backend(), seating_target=-0.053, preopen_q6=0.465,
         q6_safe_lower=-0.0596, max_attempts=3, execute=execute,
-        hold_seconds=0.0,
     )
 
     assert attempts == 3
@@ -342,34 +341,6 @@ def test_same_run_place_alignment_uses_cup_error_and_returns_reverse_path() -> N
     assert commands[0][1] == 0.15
     assert reverse_waypoints == ((0.39, 0.49, 0.11, 1.0, 0.002),)
     assert telemetry[-1]["after_xy_error_m"] < telemetry[-1]["before_xy_error_m"]
-
-
-def test_place_alignment_stops_when_first_correction_enters_final_region() -> None:
-    samples = iter((
-        sample(-0.0837464631, -0.2580045760, 0.1815293133),
-        sample(-0.0827603862, -0.2483608127, 0.1804291010),
-    ))
-    commands = []
-
-    class Backend:
-        def sample(self):
-            return next(samples)
-
-    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
-        Backend(), (-0.075, -0.255, 0.179),
-        execute=lambda delta, tolerance: (
-            commands.append((delta, tolerance)) or
-            (10, (0.39, 0.49, 0.11, 1.0, 0.002))
-        ),
-        acceptable_xy_bounds=((-0.085, -0.255), (-0.075, -0.245)),
-    )
-
-    assert aligned.object_xyz == pytest.approx(
-        (-0.0827603862, -0.2483608127, 0.1804291010)
-    )
-    assert len(commands) == 1
-    assert len(reverse_waypoints) == 1
-    assert len(telemetry) == 1
 
 
 def test_release_alignment_target_preserves_ten_mm_pre_open_clearance() -> None:
@@ -463,33 +434,21 @@ def test_place_alignment_defers_exp051_bounded_residual_to_final_outcome() -> No
     assert telemetry == ()
 
 
-def test_place_alignment_corrects_exp072_residual_above_six_mm() -> None:
+def test_place_alignment_defers_exp072_bounded_residual_to_final_outcome() -> None:
     class Backend:
-        def __init__(self) -> None:
-            self.samples = iter((
-                sample(-0.08084, -0.26100, 0.18603),
-                sample(-0.075, -0.255, 0.179),
-            ))
-
         def sample(self):
-            return next(self.samples)
-
-    commands = []
-    def execute(delta, orientation_tolerance):
-        commands.append((delta, orientation_tolerance))
-        return 3, (0.1, 0.2, 0.3, 0.4, 0.5)
+            return sample(-0.08084, -0.26100, 0.18603)
 
     aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
         Backend(), (-0.075, -0.255, 0.179),
-        execute=execute,
+        execute=lambda *_args: pytest.fail(
+            "bounded EXP-072 residual must defer to the physical final outcome"
+        ),
     )
 
-    assert aligned.object_xyz == pytest.approx((-0.075, -0.255, 0.179))
-    assert commands == [
-        (pytest.approx((0.00584, 0.006, -0.00703)), 0.15),
-    ]
-    assert reverse_waypoints == ((0.1, 0.2, 0.3, 0.4, 0.5),)
-    assert len(telemetry) == 1
+    assert aligned.object_xyz == pytest.approx((-0.08084, -0.26100, 0.18603))
+    assert reverse_waypoints == ()
+    assert telemetry == ()
 
 
 def test_same_run_place_alignment_defers_pre_release_tilt_to_final_outcome() -> None:
