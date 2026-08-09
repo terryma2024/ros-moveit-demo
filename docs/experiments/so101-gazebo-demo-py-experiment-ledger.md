@@ -5242,3 +5242,58 @@ acceptance:
 next_on_valid: RESET_WORLD and run same frozen strategy full path
 next_on_invalid: inspect persisted seating history and cup displacement; do not enter carry
 ```
+
+```yaml
+diagnostic_id: DIAG-ONE-SIDED-CONTROL-LIVE-039
+lifecycle: VALID_PHYSICAL_FAILURE_UNDER_OLD_GATE
+result:
+  execute_rc: 1
+  failure_code: CUP_INTERMEDIATE_POSITION
+  seating_adjustments:
+    - target_q6: -0.05159002104401589
+      depth_m: 0.0011300782207399607
+      above_preferred_max: true
+  q6_opened_for_high_telemetry: false
+  cup_world_z_delta_m: 0.0014898478984832764
+  lateral_drift_m: 0.0038448859155150645
+  arm_stable: true
+  gazebo_attachment_state: detached
+interpretation: one-sided control behaved as designed and retained q6; the remaining failure was solely the legacy 1 mm three-dimensional micro-lift error gate, not loss of physical grasp or safety
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-017-grasp-only
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-DIAG-039-040
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-017-grasp-only/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000007277366220903569
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-OUTCOME-FIRST-MICRO-LIFT-GATE-041
+recorded_at: 2026-08-09 Asia/Shanghai
+revision:
+  minimum_cup_world_z_progress_m: 0.001
+  maximum_lateral_cup_drift_m: 0.006
+  combined_position_error_tolerance_m: 0.006
+  arm_stability: required
+  finite_cup_pose: required
+  contact_and_safe_penetration: telemetry except unchanged 0.0013 m hard ceiling
+  planning_shadow: resynchronized from fresh physical cup pose before every carry motion
+  final_acceptance: unchanged
+new_failure_codes: [CUP_INSUFFICIENT_LIFT, CUP_LATERAL_DRIFT]
+tests:
+  red: continuation evaluator did not accept axial/lateral outcome bounds
+  focused_green: 39 passed
+  package_pytest: 167 passed, 2 skipped
+  colcon_test: 169 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit locally and preregister one full-path candidate; do not repeat the grasp-only diagnostic because its physical evidence already falls inside the revised contract
+```

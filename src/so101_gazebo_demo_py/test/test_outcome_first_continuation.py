@@ -73,6 +73,56 @@ def test_cup_target_miss_blocks_continuation() -> None:
     assert result.failure_code == "CUP_INTERMEDIATE_POSITION"
 
 
+def test_relaxed_micro_lift_accepts_bounded_physical_slip() -> None:
+    result = live_execute.evaluate_continuation(
+        before=sample(0.0, 0.0, 0.165),
+        after=sample(0.0, 0.003845, 0.16649),
+        commanded_object_delta_m=(0.0, 0.0, 0.002),
+        position_tolerance_m=0.006,
+        minimum_axial_progress_m=0.001,
+        maximum_lateral_drift_m=0.006,
+        arm_stable=True,
+        contact_evidence=contact(bilateral=True, depth=0.0011),
+        q6_position=-0.052,
+    )
+
+    assert result.can_continue
+
+
+def test_relaxed_micro_lift_still_requires_positive_cup_lift() -> None:
+    result = live_execute.evaluate_continuation(
+        before=sample(0.0, 0.0, 0.165),
+        after=sample(0.0, 0.0, 0.1655),
+        commanded_object_delta_m=(0.0, 0.0, 0.002),
+        position_tolerance_m=0.006,
+        minimum_axial_progress_m=0.001,
+        maximum_lateral_drift_m=0.006,
+        arm_stable=True,
+        contact_evidence=contact(bilateral=True, depth=0.0011),
+        q6_position=-0.052,
+    )
+
+    assert not result.can_continue
+    assert result.failure_code == "CUP_INSUFFICIENT_LIFT"
+
+
+def test_relaxed_micro_lift_still_bounds_lateral_cup_motion() -> None:
+    result = live_execute.evaluate_continuation(
+        before=sample(0.0, 0.0, 0.165),
+        after=sample(0.0, 0.0061, 0.1665),
+        commanded_object_delta_m=(0.0, 0.0, 0.002),
+        position_tolerance_m=0.0065,
+        minimum_axial_progress_m=0.001,
+        maximum_lateral_drift_m=0.006,
+        arm_stable=True,
+        contact_evidence=contact(bilateral=True, depth=0.0011),
+        q6_position=-0.052,
+    )
+
+    assert not result.can_continue
+    assert result.failure_code == "CUP_LATERAL_DRIFT"
+
+
 def test_unstable_arm_blocks_continuation() -> None:
     result = live_execute.evaluate_continuation(
         before=sample(0.0, 0.0, 0.165),
