@@ -5370,3 +5370,29 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: commit locally and preregister one full-path candidate under the outcome-first contract
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-019
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: removing non-monotonic penetration steering will preserve the physical grasp while the revised micro-lift cup/arm gate and dynamic shadow resynchronization carry the observed slip through to strict final placement validation
+execute_commit: 434f10513a9232df539f8f256ee4396d2a23e558
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-019
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-018/reset-after-failure/reset-world.json
+strategy:
+  seating_preload_rad: 0.004 once
+  post_seating_bilateral_samples: 6
+  penetration: telemetry only below 0.0013 m hard ceiling
+  micro_lift: minimum +0.001 m z, maximum 0.006 m lateral, arm stable
+  place_family: EXP-011
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained and dynamically resynchronized
+  final_acceptance: frozen
+next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
+next_on_valid_failure: use only physical cup/arm/final outcome evidence for the next single change
+```
