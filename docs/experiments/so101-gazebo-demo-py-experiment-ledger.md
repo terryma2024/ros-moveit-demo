@@ -45,8 +45,43 @@ open_hypotheses:
   - EXP-075 proves that a 2 s final opening can succeed, but it did not reduce peak opening tilt and retained fixed-pad contact through q6>=0.74; the next release-boundary candidate should explicitly separate the open gripper from the fixed pad before the existing retreat without changing y compensation.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-075-233
+latest_checkpoint: CP-PRE-EXP-076-234
 next_experiment: EXP-076
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-076-234
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-076
+status: PLANNED
+prior_experiment: EXP-075
+hypothesis: on the no-alignment path, fixed-pad contact persisting after q6>=0.74 couples the existing fixed-joint retreat into an 11.010 mm positive-y cup displacement; an immediate bounded radial TCP separation after opening and MoveIt detach will break that contact before settle and retreat
+single_variable: when place_alignment is empty, execute the existing 0.010 m radial release-separation translation immediately after OPEN_GRIPPER and MoveIt detach, before the pre-retreat settle epoch and existing fixed-joint RETREAT
+lifecycle: RESET_WORLD
+evidence_basis:
+  - EXP-075 fixed-pad contact fraction remained 1.0 through q6>=0.74
+  - EXP-075 pre-retreat y was -0.256112 m and post-retreat y was -0.245103 m, a +0.011010 m displacement
+  - EXP-075 pre-retreat failed only FINAL_GRIPPER_CONTACT while the post-retreat outcome was otherwise authoritative success
+  - the same bounded radial translation helper already has a 0.030 m safety ceiling and prior live planning evidence
+prediction:
+  - the new radial translation plans and executes before the pre-retreat epoch
+  - pre-retreat gripper_contact becomes false and table support remains true
+  - subsequent fixed-joint retreat adds less than 0.002 m cup XY displacement
+  - authoritative final outcome remains in-region, upright, stable, supported and controller healthy with at least 0.001 m y-boundary margin
+preconditions:
+  - retain EXP-075 final OPEN_GRIPPER duration 2 s and all other motion/material/controller/collision/physics parameters
+  - focused/full pytest and colcon build/test pass after the minimal implementation
+  - prove RESET_WORLD on the sole so101-py-qual GUI stack immediately before one execute
+unchanged:
+  - release target and settling compensation including y -0.005 m
+  - 0.010 m intermediate release-alignment tolerance and its aligned-path retreat behavior
+  - final target region, physical-outcome contract, penetration ceiling, Gazebo-detached semantics and MoveIt Planning Scene shadow attach
+failure_criteria:
+  - radial planning/execution failure, grasp/motion/controller failure or authoritative final-outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, stale install, missing telemetry/video or any additional active variable
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
