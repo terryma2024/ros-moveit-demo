@@ -1,11 +1,41 @@
 """Live RESET_WORLD command with observable postcondition proof."""
 
 import argparse
+from dataclasses import dataclass
 import json
 import math
 import os
 from pathlib import Path
 import time
+
+
+@dataclass(frozen=True)
+class LiveDependencies:
+    yaml: object
+    get_package_share_directory: object
+    transport_type: object
+    scene_client_type: object
+    load_policy_bundle: object
+    backend_type: object
+
+
+def load_live_dependencies() -> LiveDependencies:
+    """Load the ROS/Gazebo boundary used by the executable reset path."""
+    import yaml
+    from ament_index_python.packages import get_package_share_directory
+    from ..gazebo.transport import GazeboTransport
+    from ..live_execute import PlanningSceneShadowClient
+    from ..policy_config import load_policy_bundle
+    from ..test_support.ros_gazebo_backend import RosGazeboLiveBackend
+
+    return LiveDependencies(
+        yaml=yaml,
+        get_package_share_directory=get_package_share_directory,
+        transport_type=GazeboTransport,
+        scene_client_type=PlanningSceneShadowClient,
+        load_policy_bundle=load_policy_bundle,
+        backend_type=RosGazeboLiveBackend,
+    )
 
 
 def bundle_reset_inputs(bundle, initial_positions) -> dict[str, object]:
@@ -82,26 +112,26 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=10.0)
     options=parser.parse_args(argv)
     try:
-        import yaml
-        from ament_index_python.packages import get_package_share_directory
-        from ..gazebo.transport import GazeboTransport
-        from ..live_execute import _apply_scene
-        from ..policy_config import load_policy_bundle
-        from ..test_support.ros_gazebo_backend import RosGazeboLiveBackend
+        dependencies=load_live_dependencies()
 
-        share=Path(get_package_share_directory("so101_gazebo_demo_py"))
-        bundle=load_policy_bundle(
+        share=Path(dependencies.get_package_share_directory("so101_gazebo_demo_py"))
+        bundle=dependencies.load_policy_bundle(
             share/"config/task_objects/light_plastic_cup.yaml",
             share/"config/motion_policies/light_cup_wall_pick.yaml",
             share/"config/validation_policies/light_cup_wall_pick.yaml",
         )
-        initial=yaml.safe_load((share/"config/initial_positions.yaml").read_text())["initial_positions"]
+        initial=dependencies.yaml.safe_load(
+            (share/"config/initial_positions.yaml").read_text()
+        )["initial_positions"]
         reset_inputs=bundle_reset_inputs(bundle,initial)
-        evidence=reset_live_world(
-            RosGazeboLiveBackend(bundle.validation.physical_outcome.planning_shadow.max_pair_age_s),
-            GazeboTransport(), _apply_scene,
-            **reset_inputs, timeout_s=options.timeout,
-        )
+        with dependencies.scene_client_type() as scene_client:
+            evidence=reset_live_world(
+                dependencies.backend_type(
+                    bundle.validation.physical_outcome.planning_shadow.max_pair_age_s
+                ),
+                dependencies.transport_type(),scene_client.apply,
+                **reset_inputs,timeout_s=options.timeout,
+            )
         evidence_dir=Path(os.environ.get("SO101_PY_EVIDENCE_DIR","/tmp/so101-py-runtime"))
         evidence_dir.mkdir(parents=True,exist_ok=True)
         (evidence_dir/"reset-world.json").write_text(json.dumps(evidence,indent=2))
