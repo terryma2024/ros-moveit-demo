@@ -417,6 +417,23 @@ def test_same_run_place_alignment_defers_six_mm_release_height_error_to_final_ou
     assert telemetry == ()
 
 
+def test_place_alignment_defers_exp051_bounded_residual_to_final_outcome() -> None:
+    class Backend:
+        def sample(self):
+            return sample(-0.0770146, -0.2588453, 0.1779294)
+
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.075, -0.255, 0.169),
+        execute=lambda *_args: pytest.fail(
+            "bounded held-cup residual must defer to release physics"
+        ),
+    )
+
+    assert aligned.object_xyz == pytest.approx((-0.0770146, -0.2588453, 0.1779294))
+    assert reverse_waypoints == ()
+    assert telemetry == ()
+
+
 def test_same_run_place_alignment_defers_pre_release_tilt_to_final_outcome() -> None:
     class Backend:
         def sample(self):
@@ -506,6 +523,7 @@ def test_same_run_place_alignment_recovers_one_controller_abort_from_observed_ou
     times = iter((10.0, 10.25))
     aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
         Backend(), (-0.080, -0.250, 0.169), execute=execute,
+        xy_tolerance_m=0.003,
         wait=lambda _seconds: None,
         monotonic=lambda: next(times),
     )
@@ -571,6 +589,7 @@ def test_same_run_place_alignment_uses_third_feedback_attempt_after_second_abort
     times = iter((10.0, 10.25))
     aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
         Backend(), (-0.080, -0.250, 0.169), execute=execute,
+        xy_tolerance_m=0.003,
         wait=lambda _seconds: None,
         monotonic=lambda: next(times),
     )

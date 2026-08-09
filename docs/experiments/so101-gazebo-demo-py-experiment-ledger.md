@@ -7788,3 +7788,59 @@ prediction: transient pose loss no longer discards the candidate after one empty
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-051-153
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_INTERMEDIATE_ALIGNMENT_GATE
+experiment_id: EXP-051
+execution_commit: 1c004e3
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-051
+observed:
+  physical_gate: PROVED
+  pose_probe_retry_failure: false
+  alignment_commands_consumed: 3
+  controller_aborts_reobserved_stable: 2
+  held_cup_xyz_m: [-0.07701458781957626, -0.2588452994823456, 0.17792943120002747]
+  held_target_xy_error_m: 0.004341
+  held_target_z_error_m: 0.008929
+  physical_release_reached: false
+failure: the remaining pre-release XY 0.003 m and Z 0.006 m precision gates rejected the finite stable held-cup result
+interpretation: backend probe retry worked; this run still cannot evaluate release physics or the final outcome because of non-authoritative held-target precision
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-051-154
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-051-reset
+proof:
+  cup_spawn_pose_error_m: 0.000001688581941248309
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-DEFER-BOUNDED-HELD-RESIDUAL-155
+recorded_at: 2026-08-09 Asia/Shanghai
+change:
+  pre_release_xy_convergence_tolerance_m: 0.006
+  pre_release_z_convergence_tolerance_m: 0.010
+basis: EXP-051 ended with finite cup/TCP poses and a stable arm at 0.004341 m XY and 0.008929 m Z held-target residual after exhausting the bounded feedback budget
+role: these tolerances decide only whether to proceed to physical release; they do not count as final success
+unchanged:
+  - broad pre-release Z plausibility 0.030 m
+  - maximum three commands and 0.030 m per-axis command bound
+  - post-abort arm stability checks and pose freshness
+  - final target region [x -0.085..-0.075, y -0.255..-0.245, z 0.155..0.175]
+  - final upright, stability, support, detach and no-gripper-contact conditions
+  - all frozen simulation and controller parameters
+tests:
+  red: the recorded EXP-051 held pose requested a fourth action instead of proceeding to release physics
+  package_pytest: 188 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD physical release trial
+```
