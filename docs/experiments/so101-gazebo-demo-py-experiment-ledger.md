@@ -52,6 +52,7 @@ confirmed_conclusions:
   - EXP-094 accepted a weak first grasp at 0.745 mm persistent lift and 1.770 mm drift, then the cup diverged during carry/place and remained hooked on the moving pad after release; the prewarmed RETREAT itself was exercised and reduced q6>=0.40-to-arm-motion to 60.6 ms.
   - EXP-095 clean FULL_RESTART restored a first-attempt strong grasp (1.852 mm persistent lift, 0.182 mm drift), but a second release-alignment correction ran even though the first correction had already put cup XY inside the final region; the final cup was upright/stable/supported/free but rolled to [-0.101764,-0.269317] m.
   - EXP-096 did not reach its region-aware alignment variable: three bounded grasp attempts ended with negative micro-lift and loss of fixed-pad contact, so it stopped safely before carry.
+  - EXP-097 reached release with a strong first grasp, but the exact final-region shortcut did not trigger: one 13.45 mm compensated-point correction ended 3.09 mm from that point (outside the final box), amplified release tilt, and the cup rolled to [-0.100238,-0.274534] m.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -70,8 +71,81 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-097-307
-next_experiment: EXP-097
+latest_checkpoint: CP-PRE-EXP-098-309
+next_experiment: EXP-098
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-098-309
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-098
+status: PREREGISTERED
+prior_experiment: EXP-097
+hypothesis: a held cup only 3.44 mm outside x and 0.42 mm outside y should be allowed to settle physically instead of receiving a contact-loaded alignment correction; expanding only the intermediate no-correction envelope by 5 mm per axis around the unchanged final region avoids the observed tilt amplification while the final region remains strict
+single_variable: alignment no-correction XY envelope changes from the exact final box to that box expanded by 0.005 m per axis
+lifecycle: RESET_WORLD
+prediction:
+  - an EXP-097-like pre-alignment pose [-0.08844,-0.25542] m is accepted without any place-alignment motion
+  - release-start tilt is materially lower than EXP-097's approximately 0.52 rad
+  - immediate prewarmed RETREAT clears the fingers and the cup settles inside the unchanged final box
+  - authoritative final outcome passes
+unchanged:
+  - compensated release target and 6 mm point tolerance remain available outside the expanded no-correction envelope
+  - all correction safety bounds, grasp/motion/release parameters, physics/materials and attachment semantics
+  - authoritative final region and upright/stability/support/free/detach/controller contract
+preconditions:
+  - TDD, focused/full pytest and colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-097-308
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-097
+execution_head: 57ece60
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp097/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.000000668604662390292
+physical_gate:
+  status: PROVED
+  attempts: 1
+  persistent_lift_m: 0.001957997679710388
+  lateral_drift_m: 0.00022196490291597195
+  moving_pad_depth_m: 0.00024009001208469272
+  gazebo_attachment_state: detached
+place_alignment:
+  attempts: 1
+  before_xyz: [-0.08843857795000076, -0.25541892647743225, 0.18081192672252655]
+  before_compensated_target_error_m: 0.013445106050594787
+  after_xyz: [-0.07309865206480026, -0.25743216276168823, 0.18149001896381378]
+  after_compensated_target_error_m: 0.0030871572149845563
+  after_inside_final_xy_region: false
+  convergence_reason: compensated_point_tolerance
+release:
+  release_start_xyzw: [0.045845900574118914, 0.25208330096545045, -0.1487566527424157, 0.9551039850209365]
+final:
+  failure_code: FINAL_OUT_OF_REGION
+  final_object_xyz: [-0.1002383604645729, -0.2745336592197418, 0.16499999165534973]
+  final_upright_tilt_rad: 0.00000027717762049642705
+  stable_supported_free_detached_controller_healthy: true
+interpretation:
+  - the region-aware code behaved correctly, but this run converged through the retained 6 mm compensated-point path after one correction
+  - the correction transformed a small pre-alignment boundary miss into a high-tilt release and a 27.14 mm x / 17.10 mm y roll
+  - allow a 5 mm intermediate settle margin outside the final box to prefer physical settling over contact-loaded correction; do not alter final acceptance
+evidence_sha256:
+  reset_proof: 4ce2a039649d6970d0333d73ad8347a28eb6119f9b128de8defb258a995e804a
+  execute_log: 0f84eadee2fe8aa6b2a367fa74d0819e3e5509c7da33d46da7f3a3c92f14444c
+  physical_gate: b723aebf1f67c33c9571354a354f8200532ba1258ce44e4c1983af7892db3592
+  final_failure: 1ac782a453fe20156f35e0eea5fd88d42520015152a49f82c8b23a3d352d4178
+  telemetry: c752dbe6e3228156b1cc54aeaacdef663741ed9ce628842dd1759ec4b53203da
+  bounded_video: dc31959cbfdb5cda915dff92c1f12f75dc2724b759fe7c2cee77db525de31a89
+  final_screenshot: 408c6c49687b65025177e448659ea85d4bed00a8ea9365b0550d03831e963dbf
+decision: expand only the intermediate no-correction envelope by 5 mm per axis in EXP-098
+counts_toward_success_streak: false
 ```
 
 ```yaml
