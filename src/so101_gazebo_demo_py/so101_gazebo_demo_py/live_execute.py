@@ -259,7 +259,7 @@ def release_separation_translation(
 
 def align_cup_for_release(
     backend, target_xyz, *, execute,
-    max_attempts: int = 3, xy_tolerance_m: float = 0.010,
+    max_attempts: int = 3, xy_tolerance_m: float = 0.006,
     z_tolerance_m: float = 0.010,
     max_axis_correction_m: float = 0.030,
     max_pre_release_height_error_m: float = 0.030,
@@ -1104,24 +1104,19 @@ def _run_live_execute_with_scene(
         return _moveit_world_translation_execute(delta,orientation_tolerance_rad)
     placed,_place_reverse_waypoints,place_alignment=align_cup_for_release(
         backend,target_place_xyz,execute=execute_place_correction,
+        xy_tolerance_m=0.006,
         max_arm_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
         max_arm_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
     )
     if place_alignment:
         gate_shadow("PRE_RELEASE_RETREAT")
     backend.move_gripper(bundle.motion.release_q6, final_release=True)
-    released=backend.sample()
     detached_scene=[None]
     scene_membership=[None]
     synchronized_scene=[None]
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
     release_separation=[None]
-    def detach_and_sync(observed):
-        observed_pose=(*observed.object_xyz,*observed.object_xyzw)
-        detached_scene[0]=apply_scene("detach",observed_pose)
-        synchronized_scene[0]=detached_scene[0]
-        scene_membership[0]=detached_scene[0]
     def collect_release_epoch():
         with backend.final_observer() as final_observer:
             return collect_final_outcome_epoch(
@@ -1129,34 +1124,17 @@ def _run_live_execute_with_scene(
                 gazebo_detached=backend.attachment_state() == "detached",
                 scene_membership=scene_membership[0],
             )
-    if not place_alignment:
-        def immediate_retreat():
-            backend.move_arm(retreat_policy.waypoints, velocity_scaling=retreat_policy.velocity_scaling)
-            retreated=backend.sample()
-            retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
-            detached_scene[0]=apply_scene("detach",retreated_pose)
-            synchronized_scene[0]=detached_scene[0]
-            scene_membership[0]=detached_scene[0]
-        outcomes=collect_final_outcome_after_immediate_retreat(
-            collect_epoch=collect_release_epoch,
-            retreat=immediate_retreat,
-        )
-    else:
-        detach_and_sync(released)
-        def retreat_after_settle(_pre_retreat):
-            release_separation[0]=release_separation_translation(placed)
-            _moveit_world_translation_execute(
-                release_separation[0],0.15,
-            )
-            _moveit_world_z_execute(
-                0.060, orientation_tolerance_rad=0.15,
-            )
-            retreated=backend.sample()
-            detach_and_sync(retreated)
-        outcomes=collect_final_outcomes_around_retreat(
-            collect_epoch=collect_release_epoch,
-            retreat=retreat_after_settle,
-        )
+    def immediate_retreat():
+        backend.move_arm(retreat_policy.waypoints, velocity_scaling=retreat_policy.velocity_scaling)
+        retreated=backend.sample()
+        retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
+        detached_scene[0]=apply_scene("detach",retreated_pose)
+        synchronized_scene[0]=detached_scene[0]
+        scene_membership[0]=detached_scene[0]
+    outcomes=collect_final_outcome_after_immediate_retreat(
+        collect_epoch=collect_release_epoch,
+        retreat=immediate_retreat,
+    )
     pre_retreat_outcome=outcomes.pre_retreat
     post_retreat_outcome=outcomes.post_retreat
     def outcome_payload(evaluation):
