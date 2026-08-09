@@ -6208,3 +6208,25 @@ tests:
   package_pytest: 175 passed, 2 skipped
 next: commit locally, then preregister one RESET_WORLD trial
 ```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-029-072
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-029
+purpose: validate controlled-settling compensation on top of same-run cup-pose alignment
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 2a1e990
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-028/reset-after-final-out-of-region/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-029
+candidate:
+  alignment_target_offset_m: [0.0050, 0.0055, 0.0]
+  same_run_xy_feedback: true
+prediction: stable post-RETREAT cup pose falls inside the unchanged final region with upright/support/detached/no-contact conditions satisfied
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
