@@ -4539,3 +4539,28 @@ build: colcon build --packages-select so101_gazebo_demo_py --symlink-install suc
 provenance: motion policy sha256 1cc0b215542e213be6bcca516e80d38d1642e24cebc03bef491d98569585f616; recomputation test passed
 next: commit locally, preregister and execute the 0.004 candidate
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-010
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: midpoint 0.004 seating preload will reduce carry/release tilt versus EXP-009 while retaining a successful physical MICRO_LIFT, so vertical RETREAT will leave the cup inside the frozen final XY/upright region
+execute_commit: 75659c88fb7084eb648d7b81e5fc51356006040e
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: 6099c5f793d1051ee7a3e24bfd8e384595ab391dfd9337dd1586811a3494a7b6
+motion_policy_sha256: 1cc0b215542e213be6bcca516e80d38d1642e24cebc03bef491d98569585f616
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-010
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-009/reset-after-failure/reset-world.json
+strategy:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  seating_preload_rad: 0.004
+  place_endpoint: unchanged
+  retreat: vertical reverse-descent
+  final_acceptance: frozen
+next_on_valid_success: freeze and run two independent RESET_WORLD confirmations
+next_on_valid_failure: compare persisted pre/post tilt and displacement to EXP-009 before selecting the next single motion family
+```
