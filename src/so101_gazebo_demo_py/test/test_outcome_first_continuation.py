@@ -174,6 +174,40 @@ def test_full_grasp_attempt_reaches_cup_result_gate_without_bilateral_contact() 
     assert final_target == -0.053
 
 
+def test_default_grasp_strategy_reseats_twice_before_succeeding_on_third_outcome() -> None:
+    class Backend:
+        def __init__(self) -> None:
+            self.sample_count = 0
+            self.gripper_targets = []
+
+        def move_gripper(self, target: float) -> None:
+            self.gripper_targets.append(target)
+
+        def sample(self) -> PoseSample:
+            self.sample_count += 1
+            attempt = (self.sample_count + 1) // 2
+            lifted = self.sample_count % 2 == 0 and attempt == 3
+            return sample(0.0, 0.0, 0.167 if lifted else 0.165)
+
+        def contacts(self):
+            return ()
+
+    execute_calls = []
+    def execute(delta: float, local_x_m: float = 0.0):
+        execute_calls.append((delta, local_x_m))
+        return 3, 0.2
+
+    _, result, attempts, _ = live_execute.run_bounded_physical_grasp_attempts(
+        Backend(), seating_target=-0.053, preopen_q6=0.465,
+        q6_safe_lower=-0.0596, execute=execute,
+    )
+
+    assert attempts == 3
+    assert result[0] == pytest.approx(0.002)
+    assert execute_calls.count((-0.002, 0.0)) == 2
+    assert execute_calls.count((0.0, -0.0002)) == 2
+
+
 def test_contact_stopped_gripper_result_defers_to_cup_outcome_gate() -> None:
     output = "error_code: -5\nGoal finished with status: ABORTED"
 

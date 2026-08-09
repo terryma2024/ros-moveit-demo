@@ -1,8 +1,30 @@
-from types import SimpleNamespace
+from pathlib import Path
 
-from so101_gazebo_demo_py.cli.reset_so101_world import reset_live_world
+import yaml
+
+from so101_gazebo_demo_py.cli.reset_so101_world import bundle_reset_inputs, reset_live_world
+from so101_gazebo_demo_py.policy_config import load_policy_bundle
 from so101_gazebo_demo_py.test_support.live_attachment import PoseSample
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import make_set_pose_request
+
+
+PACKAGE = Path(__file__).parents[1]
+
+
+def test_real_policy_bundle_maps_to_reset_inputs() -> None:
+    bundle = load_policy_bundle(
+        PACKAGE / "config/task_objects/light_plastic_cup.yaml",
+        PACKAGE / "config/motion_policies/light_cup_wall_pick.yaml",
+        PACKAGE / "config/validation_policies/light_cup_wall_pick.yaml",
+    )
+    initial = yaml.safe_load((PACKAGE / "config/initial_positions.yaml").read_text())["initial_positions"]
+
+    inputs = bundle_reset_inputs(bundle, initial)
+
+    assert inputs["object_id"] == "plastic_cup"
+    assert inputs["spawn_pose"] == (0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)
+    assert inputs["home_arm"] == (0.0, 0.0, 0.0, 0.0, 0.0)
+    assert inputs["home_gripper"] == 0.0
 
 
 def test_set_pose_request_contains_full_world_pose() -> None:
