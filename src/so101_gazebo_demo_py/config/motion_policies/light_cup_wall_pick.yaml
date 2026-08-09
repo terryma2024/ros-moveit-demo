@@ -5,10 +5,6 @@ arm_joints: ["1", "2", "3", "4", "5"]
 approach_outside_clearance_m: 0.001
 grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
 grasp_tcp_world_x_rotation_rad: 0.0
-# User-authorized diagnostic override (2026-08-08, CP-AUTHORIZATION-PENETRATION-DIAGNOSTIC-001):
-# 0.0 keeps the recalibrated 0.00125 m moving-pad ceiling; enabled values are bounded
-# to (0.00125, 0.0013] m and never qualify a grasp.
-diagnostic_moving_pad_penetration_ceiling_m: 0.0
 gripper_actions:
   preopen_q6: 0.465038000
   grasp_close_q6: -0.047608632840292
