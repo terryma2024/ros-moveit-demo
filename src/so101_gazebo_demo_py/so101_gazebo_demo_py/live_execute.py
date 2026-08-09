@@ -19,6 +19,10 @@ from .test_support.ros_gazebo_backend import RosGazeboLiveBackend
 
 TRACE=("IDLE","PREPARE_OPEN_GRIPPER","MOVE_ABOVE_OBJECT","DESCEND","CLOSE_GRIPPER","WAIT_GRASP_STABLE","MICRO_LIFT","WAIT_MICRO_LIFT_STABLE","VERIFY_PHYSICAL_GRASP","ATTACH_MOVEIT","LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE","OPEN_GRIPPER","RETREAT","DETACH_MOVEIT","WAIT_RELEASE_SETTLE","VALIDATE_FINAL_PLACEMENT","SYNC_WORLD_OBJECT","DONE")
 
+TARGET_SEATING_PENETRATION_MIN_M = 0.00075
+TARGET_SEATING_PENETRATION_MAX_M = 0.001
+TARGET_SEATING_Q6_ADJUSTMENT_RAD = 0.00025
+
 
 @dataclass(frozen=True, slots=True)
 class ContinuationEvaluation:
@@ -996,6 +1000,9 @@ def _run_live_execute_with_scene(
         backend.move_gripper(seating_target)
         seated_contact,normalized_seating_target,seating_adjustments=stabilize_to_target_penetration(
             backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,
+            minimum_penetration_m=TARGET_SEATING_PENETRATION_MIN_M,
+            maximum_penetration_m=TARGET_SEATING_PENETRATION_MAX_M,
+            adjustment_rad=TARGET_SEATING_Q6_ADJUSTMENT_RAD,
         )
         seating_actual_q6=_current_joint_position("6")
     except Exception as error:
