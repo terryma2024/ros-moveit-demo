@@ -36,11 +36,14 @@ def test_live_forward_path_never_commands_gazebo_attachment() -> None:
     assert '"physical-failure.json"' in source
 
 
-def test_live_path_does_not_gate_on_penetration_target() -> None:
+def test_live_path_normalizes_approved_penetration_target_before_carry() -> None:
     source = LIVE_EXECUTE.read_text()
     live_path = source[source.index("def run_live_execute") :]
     assert "tune_seating_penetration(" not in live_path
-    assert "stabilize_with_contact_missing_retries(" in live_path
+    assert "stabilize_to_target_penetration(" in live_path
+    assert "minimum_penetration_m: float = 0.0001" in source
+    assert "maximum_penetration_m: float = 0.001" in source
+    assert '"normalized_target_q6":normalized_seating_target' in live_path
     assert "moving-pad penetration ceiling exceeded" in source
 
 

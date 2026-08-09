@@ -703,22 +703,53 @@ def seat_and_stabilize_physical_grasp(backend, seating_target: float):
     return _stable_bilateral(backend)
 
 
-def stabilize_with_contact_missing_retries(
-    backend, seating_target: float, preopen_q6: float, q6_safe_lower: float
+def stabilize_to_target_penetration(
+    backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
+    minimum_penetration_m: float = 0.0001,
+    maximum_penetration_m: float = 0.001,
+    adjustment_rad: float = 0.001,
+    max_adjustments: int = 4,
 ):
-    """Apply at most four 1 mrad contact-missing retries after the first attempt."""
+    """Bound q6 adjustments until stable bilateral penetration is in range."""
+    if not 0.0 < minimum_penetration_m <= maximum_penetration_m:
+        raise ValueError("invalid target penetration interval")
+    if adjustment_rad <= 0.0 or max_adjustments < 0:
+        raise ValueError("invalid penetration adjustment policy")
+    target=seating_target
     last_error=None
-    for retry in range(5):
+    for adjustment in range(max_adjustments+1):
         try:
-            return _stable_bilateral(backend)
+            contact=_stable_bilateral(backend)
         except RuntimeError as error:
+            if "penetration ceiling exceeded" in str(error):
+                raise
             last_error=error
-            if retry == 4:
-                break
+            depth=None
+        else:
+            depth=contact.max_moving_pad_penetration_m
+            if (
+                depth is not None
+                and minimum_penetration_m <= depth <= maximum_penetration_m
+            ):
+                return contact,target,adjustment
+        if adjustment == max_adjustments:
+            break
+        if depth is not None and depth > maximum_penetration_m:
+            next_target=min(preopen_q6,target+adjustment_rad)
+        else:
             backend.move_gripper(preopen_q6)
-            retry_target=max(q6_safe_lower,seating_target-.001*(retry+1))
-            backend.move_gripper(retry_target)
-    raise last_error
+            next_target=max(q6_safe_lower,target-adjustment_rad)
+        if next_target == target:
+            break
+        target=next_target
+        backend.move_gripper(target)
+    detail=(
+        str(last_error) if last_error is not None
+        else f"depth={depth} target_q6={target}"
+    )
+    raise RuntimeError(
+        "target penetration not reached within bounded adjustments: " + detail
+    )
 
 
 def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
@@ -955,7 +986,7 @@ def _run_live_execute_with_scene(
     seating_target=seating_preload_target(q6_contact,-.059600220867817,bundle.motion.seating_preload_rad)
     try:
         backend.move_gripper(seating_target)
-        seated_contact=stabilize_with_contact_missing_retries(
+        seated_contact,normalized_seating_target,seating_adjustments=stabilize_to_target_penetration(
             backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,
         )
         seating_actual_q6=_current_joint_position("6")
@@ -968,7 +999,9 @@ def _run_live_execute_with_scene(
         },indent=2))
         raise
     seating_telemetry={
-        "target_q6":seating_target,
+        "requested_target_q6":seating_target,
+        "normalized_target_q6":normalized_seating_target,
+        "adjustments":seating_adjustments,
         "actual_q6":seating_actual_q6,
         "bilateral":seated_contact.bilateral,
         "moving_pad_depth_m":seated_contact.max_moving_pad_penetration_m,
@@ -979,7 +1012,7 @@ def _run_live_execute_with_scene(
     max_grasp_attempts=2
     try:
         contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(
-            backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,
+            backend,normalized_seating_target,bundle.motion.preopen_q6,-.059600220867817,
             max_attempts=max_grasp_attempts,
         )
     except Exception as error:
