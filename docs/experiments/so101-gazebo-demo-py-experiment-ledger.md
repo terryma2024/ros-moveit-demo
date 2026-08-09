@@ -44,8 +44,35 @@ open_hypotheses:
   - EXP-073 retains gripper contact throughout its 1.495 s pre-retreat observation after the 5 s release command; shortening only the final release opening is the next outcome-first candidate.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-075-231
+latest_checkpoint: CP-EXP-075-RUNNING-232
 next_experiment: EXP-075
+```
+
+```yaml
+checkpoint_id: CP-EXP-075-RUNNING-232
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RUNNING
+experiment_id: EXP-075
+implementation_commit: b69ce39
+single_variable: NONE; exact EXP-074 repeat
+lifecycle: RESET_WORLD
+provenance:
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  runtime_package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  ros_domain_id: 227
+  gz_partition: so101_py_qual_baseline_restored
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp075/reset/reset-world.json
+  command_exit_code: 0
+  cup_spawn_pose_error_m: 0.0000023999225223771447
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+next_command: record one bounded execute with the unchanged EXP-074 implementation
+counts_toward_success_streak: false
 ```
 
 ```yaml
