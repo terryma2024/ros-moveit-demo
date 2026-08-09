@@ -4798,3 +4798,33 @@ provenance:
 evidence_root: /tmp/so101-py-outcome-search-203/candidate-011/y-shift-minus-011-plan-only/interpolated-branch
 next: commit the isolated place-family change, preregister candidate 012, and run one RESET_WORLD search trial with preload 0.004 unchanged
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-012
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: moving the validated place ladder only 0.001 m back toward positive y will preserve EXP-011 final x, z, uprightness, and stability while moving final y off the lower boundary and into the frozen target interval
+execute_commit: 4e2750476cddd3dea33ac173f447378f6269ac3a
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: 279f9a3f63f6553cc058d666d6925723c8f79b8246df70702922bebcc60b7bd9
+motion_policy_sha256: 0aa295b7ebc338e4414a104a5f8b0cd273d43440f6525c9ccea9beb6a3c6c36d
+validation_policy_sha256: 8fdeab424f143cc9c2b72e406e5d8c83fc55d40ccca5a316f77b69ca393a03f5
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-012
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-011/reset-after-failure/reset-world.json
+strategy:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  seating_preload_rad: 0.004
+  place_ladder_nominal_translation_m: [0.0, -0.011, 0.0]
+  endpoint_branch: interpolated same-orientation joint branch
+  retreat: exact reverse of shifted vertical descent
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained
+  intermediate_validation: outcome-first cup state and arm stability
+  final_acceptance: frozen position, uprightness, and stability region
+next_on_valid_success: freeze the strategy and run two independent RESET_WORLD confirmation trials before any qualification campaign
+next_on_valid_failure: classify the complete physical outcome; do not relax final boundaries
+```
