@@ -79,6 +79,18 @@ def parse_tf_pose(output: str) -> tuple[float, ...]:
     return pose
 
 
+def make_set_pose_request(entity_name: str, pose_xyz_xyzw: tuple[float, ...]) -> str:
+    """Build the Gazebo set_pose protobuf text for one world entity."""
+    if len(pose_xyz_xyzw) != 7 or not all(math.isfinite(value) for value in pose_xyz_xyzw):
+        raise ValueError("set_pose requires one finite xyz+xyzw pose")
+    x, y, z, qx, qy, qz, qw = pose_xyz_xyzw
+    return (
+        f'name: "{entity_name}" '
+        f'position {{ x: {x} y: {y} z: {z} }} '
+        f'orientation {{ x: {qx} y: {qy} z: {qz} w: {qw} }}'
+    )
+
+
 def select_stamped_transform(transforms, child_frame_id: str):
     for item in reversed(tuple(transforms)):
         if item.child_frame_id != child_frame_id:
@@ -188,6 +200,17 @@ class RosGazeboLiveBackend:
         ], timeout_s=duration + 20.0)
         if not gripper_result_acceptable(output, bilateral=False):
             raise RuntimeError(f"gripper trajectory did not succeed:\n{output}")
+
+    def set_object_pose(self, pose_xyz_xyzw: tuple[float, ...]) -> None:
+        output = _command([
+            "gz", "service", "-s", "/world/so101_pick_place/set_pose",
+            "--reqtype", "gz.msgs.Pose", "--reptype", "gz.msgs.Boolean",
+            "--timeout", "5000", "--req",
+            make_set_pose_request("plastic_cup", pose_xyz_xyzw),
+        ], timeout_s=10.0)
+        if "data: true" not in output:
+            raise RuntimeError(f"Gazebo set_pose did not succeed:\n{output}")
+        self._arm_moved_since_sample = True
 
     def contacts(self) -> tuple[ContactPair, ...]:
         import rclpy
