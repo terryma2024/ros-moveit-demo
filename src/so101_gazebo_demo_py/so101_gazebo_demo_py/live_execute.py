@@ -17,7 +17,7 @@ from .policy_config import load_policy_bundle
 from .test_support.ros_gazebo_backend import RosGazeboLiveBackend
 
 
-TRACE=("IDLE","PREPARE_OPEN_GRIPPER","MOVE_ABOVE_OBJECT","DESCEND","CLOSE_GRIPPER","WAIT_GRASP_STABLE","MICRO_LIFT","WAIT_MICRO_LIFT_STABLE","VERIFY_PHYSICAL_GRASP","ATTACH_MOVEIT","LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE","DETACH_MOVEIT","OPEN_GRIPPER","WAIT_RELEASE_SETTLE","VALIDATE_FINAL_PLACEMENT","SYNC_WORLD_OBJECT","RETREAT","DONE")
+TRACE=("IDLE","PREPARE_OPEN_GRIPPER","MOVE_ABOVE_OBJECT","DESCEND","CLOSE_GRIPPER","WAIT_GRASP_STABLE","MICRO_LIFT","WAIT_MICRO_LIFT_STABLE","VERIFY_PHYSICAL_GRASP","ATTACH_MOVEIT","LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE","OPEN_GRIPPER","RETREAT","DETACH_MOVEIT","WAIT_RELEASE_SETTLE","VALIDATE_FINAL_PLACEMENT","SYNC_WORLD_OBJECT","DONE")
 
 
 @dataclass(frozen=True, slots=True)
@@ -891,40 +891,28 @@ def run_live_execute(
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
     release_separation=[None]
-    def retreat_after_pre_outcome(pre_retreat):
-        if place_alignment:
-            release_separation[0]=release_separation_translation(
-                pre_retreat.final_sample,
-            )
-            _moveit_world_translation_execute(
-                release_separation[0],0.15,
-            )
-            _moveit_world_z_execute(
-                0.060, orientation_tolerance_rad=0.15,
-            )
-            lifted_release=backend.sample()
-            release_pose=(*lifted_release.object_xyz,*lifted_release.object_xyzw)
-            detached_scene[0]=_apply_scene("detach",release_pose)
-            synchronized_scene[0]=detached_scene[0]
-            scene_membership[0]=detached_scene[0]
-        else:
-            pre_pose=(*pre_retreat.final_sample.object_xyz,*pre_retreat.final_sample.object_xyzw)
-            synchronized_scene[0]=_apply_scene("detach",pre_pose)
-            detached_scene[0]=synchronized_scene[0]
-            scene_membership[0]=synchronized_scene[0]
-            backend.move_arm(retreat_policy.waypoints)
-    with backend.final_observer() as final_observer:
-        def collect_final_epoch():
-            gazebo_detached=backend.attachment_state() == "detached"
-            return collect_final_outcome_epoch(
-                final_observer,outcome_policy,
-                gazebo_detached=gazebo_detached,
-                scene_membership=scene_membership[0],
-            )
-        outcomes=collect_final_outcomes_around_retreat(
-            collect_epoch=collect_final_epoch,
-            retreat=retreat_after_pre_outcome,
+    if place_alignment:
+        release_separation[0]=release_separation_translation(placed)
+        _moveit_world_translation_execute(
+            release_separation[0],0.15,
         )
+        _moveit_world_z_execute(
+            0.060, orientation_tolerance_rad=0.15,
+        )
+        lifted_release=backend.sample()
+        release_pose=(*lifted_release.object_xyz,*lifted_release.object_xyzw)
+        detached_scene[0]=_apply_scene("detach",release_pose)
+        synchronized_scene[0]=detached_scene[0]
+        scene_membership[0]=detached_scene[0]
+    else:
+        backend.move_arm(retreat_policy.waypoints)
+    with backend.final_observer() as final_observer:
+        final_outcome=collect_final_outcome_epoch(
+            final_observer,outcome_policy,
+            gazebo_detached=backend.attachment_state() == "detached",
+            scene_membership=scene_membership[0],
+        )
+    outcomes=FinalOutcomeEpochs(None,final_outcome)
     def outcome_payload(evaluation):
         return {"success":evaluation.success,"failure_code":evaluation.failure_code,"sample_count":evaluation.sample_count,"duration_s":evaluation.duration_s,"max_linear_speed_m_s":evaluation.max_linear_speed_m_s,"max_angular_speed_rad_s":evaluation.max_angular_speed_rad_s,"metrics":dict(evaluation.metrics),"telemetry":[sample.as_dict() for sample in evaluation.telemetry]}
     def final_sample_payload(sample):
@@ -941,9 +929,10 @@ def run_live_execute(
     if not settle.evaluation.success:
         failure={
             "status":"VALID_FAILURE",
-            "pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),
+            "pre_retreat_outcome":None,
             "post_retreat_outcome":outcome_payload(outcomes.post_retreat.evaluation),
-            "pre_retreat_final_sample":final_sample_payload(outcomes.pre_retreat.final_sample),
+            "pre_retreat_final_sample":None,
+            "release_start_sample":final_sample_payload(placed),
             "post_retreat_final_sample":final_sample_payload(outcomes.post_retreat.final_sample),
             "gazebo_attachment_state":backend.attachment_state(),
             "planning_scene":synchronized_scene[0],
@@ -956,5 +945,5 @@ def run_live_execute(
         )
         raise RuntimeError(f"post-retreat final physical outcome failed: {settle.evaluation.failure_code}")
     final=outcomes.post_retreat.final_sample
-    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene[0],"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment,"release_separation_m":release_separation[0]},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":outcome_payload(outcomes.pre_retreat.evaluation),"final_outcome":outcome_payload(outcomes.post_retreat.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
+    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene[0],"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment,"release_separation_m":release_separation[0]},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":None,"release_start_sample":final_sample_payload(placed),"final_outcome":outcome_payload(outcomes.post_retreat.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
     path=evidence_directory/"live-summary.json"; path.write_text(json.dumps(summary,indent=2)); return summary
