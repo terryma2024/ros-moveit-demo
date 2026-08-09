@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 203c50b57cbe29d62c4b41a8f1aa9ddad00b659b
+current_commit: 8f002bb364e628c4c8b90813c5232a3b5023d68b
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -19,8 +19,8 @@ disproven_routes:
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
 open_hypotheses:
-  - Reducing only DESCEND_TO_PLACE velocity and acceleration scaling from 0.03 to 0.01 will reduce inertial slip and preserve a recoverable held-cup attitude at the already safe raised endpoint.
-latest_checkpoint: CP-RESULT-EXP-057-175
+  - Reducing only the live-effective DESCEND_TO_PLACE velocity scaling from 0.03 to 0.01 will reduce inertial slip and preserve a recoverable held-cup attitude at the already safe raised endpoint.
+latest_checkpoint: CP-PRE-EXP-058-176
 next_experiment: EXP-058
 ```
 
@@ -8407,6 +8407,50 @@ interpretation:
   - Tilt still increased by 0.52158 rad during DESCEND_TO_PLACE without table contact, so table contact was an aggravating factor rather than the sole cause.
   - Three bounded 3D alignment translations then oscillated the held cup and began release at 1.34662 rad tilt; the retreat retained gripper contact and did not produce a supported final cup.
 first_bad_boundary: DESCEND_TO_PLACE held-cup dynamics
-decision: keep the raised endpoint as the safety baseline; next change only DESCEND_TO_PLACE velocity and acceleration scaling from 0.03 to 0.01
+decision: keep the raised endpoint as the safety baseline; next change only the live-effective DESCEND_TO_PLACE velocity scaling from 0.03 to 0.01
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-058-176
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-058
+status: PREREGISTERED
+prior_experiment: EXP-057
+hypothesis: the contact-free 0.52158 rad tilt increase during DESCEND_TO_PLACE is driven primarily by inertial slip under the direct FollowJointTrajectory timing; tripling waypoint duration will preserve a recoverable held-cup attitude
+prediction:
+  - cup tilt at the raised DESCEND_TO_PLACE endpoint and strict pre-open boundary is below 0.35 rad
+  - cup/table contact remains absent and bottom collision clearance remains positive before OPEN_GRIPPER
+  - place alignment reaches the existing position tolerance without increasing its three-command budget
+  - final authoritative physical outcome either succeeds or exposes a later result boundary
+single_variable: DESCEND_TO_PLACE velocity_scaling from 0.03 to 0.01
+why_acceleration_is_unchanged: the live backend sends direct FollowJointTrajectory timestamps derived only from velocity_scaling; acceleration_scaling is not consumed by this execution path, so changing it would not be a live experimental variable
+lifecycle: RESET_WORLD
+preconditions:
+  - reuse only tmux stack so101-py-gui-214 with ROS_DOMAIN_ID 214 and GZ_PARTITION so101_py_gui_214
+  - reset proof must show cup pose error <= 0.001 m, Gazebo detached, MoveIt world-only, no finger contact, and finite arm TCP
+  - no second Gazebo or MoveIt stack and no execute client
+success_criteria:
+  - cup tilt at strict pre-open boundary <= 0.35 rad
+  - no fresh cup/table contact and positive cup-bottom clearance before OPEN_GRIPPER
+  - authoritative final physical-outcome success preferred; a later valid boundary failure advances the search
+failure_criteria:
+  - pre-open tilt > 0.35 rad, table contact, physical grasp failure, motion/controller failure, or final outcome valid failure
+invalid_criteria:
+  - provenance mismatch, stale installed asset, missing bounded telemetry/video, duplicate stack/client, reset failure, or disk pressure
+planned_candidate:
+  descend_to_place_velocity_scaling: 0.01
+  waypoint_step_seconds: 10
+  descend_waypoint_count: 3
+  nominal_descend_duration_s: 30
+  unchanged: raised descent endpoint, held-cup target, all other state speeds, acceleration scaling, grasp target, q6 preload/retry, orientation, physics, geometry, mass, friction, controller/gains, collision model, three-attempt alignment bound, release separation, final outcome contract, and Gazebo-detached/MoveIt-shadow semantics
+provenance:
+  planning_commit: 8f002bb364e628c4c8b90813c5232a3b5023d68b
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  ros_domain_id: 214
+  gz_partition: so101_py_gui_214
+commands:
+  - command: pytest RED after expectation change, minimal policy change, full pytest/build/colcon test, RESET_WORLD, bounded 50 Hz telemetry plus 5 fps half-resolution H.264, one GUI execute
+    exit_code: PENDING
 counts_toward_success_streak: false
 ```
