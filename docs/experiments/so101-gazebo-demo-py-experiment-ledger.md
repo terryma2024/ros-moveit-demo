@@ -4065,3 +4065,29 @@ unchanged:
   - no forward Gazebo attach
 next: commit the shadow-timing fix, preregister the same motion candidate under a new experiment ID, then rerun from the proven reset state
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-005
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: with the Planning Scene shadow attached before the first carrying plan, MoveIt will execute MICRO_LIFT while Gazebo remains detached; the unchanged 0.002 seating candidate will then yield an authoritative cup-motion continuation result
+execute_commit: e8888c6ff18f63ad0482c3f58087290519b0e623
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack; rebuilt symlink overlay is used by the execute process; never qualification evidence
+bundle_sha256: 93f2696be126c5dac091c3dff78321b66c55972c319593b3b19fb3f7094f9457
+motion_policy_sha256: 72e58bbe6c1617b7d1bb0685fc586e8193a9ea35cdd1d652eccce08f2fd10a24
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-005
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-004/reset-after-invalid/reset-world.json
+strategy:
+  max_complete_grasp_attempts_per_execute: 1
+  seating_preload_rad: 0.002
+  gazebo_forward_attach: forbidden
+  moveit_shadow_attach: before MICRO_LIFT planning
+  all remaining motion targets: unchanged
+next_on_valid_success: classify the frozen post-RETREAT final margins
+next_on_valid_failure: choose the next motion family from the first physical result boundary
+next_on_invalid: debug the implementation/environment and do not consume another motion candidate
+```
