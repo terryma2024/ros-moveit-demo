@@ -28,7 +28,7 @@
       "destination": "config/motion_policies/light_cup_wall_pick.yaml",
       "source_dirty": true,
       "source_sha256": "4ba7b35c315615a73238276ea511306bb98e2b4f30bddf0134f3183a6ef1ad4e",
-      "destination_sha256": "1cc0b215542e213be6bcca516e80d38d1642e24cebc03bef491d98569585f616"
+      "destination_sha256": "16cbbe82d0f46fc0012c10613fab06188aa448d7edf6732a1749a33f70df612b"
     },
     {
       "source": "src/so101_gazebo_demo/config/moveit.rviz",
@@ -84,7 +84,7 @@
       "destination": "config/validation_policies/light_cup_wall_pick.yaml",
       "source_dirty": true,
       "source_sha256": "89d04c6075f7c4464c053ba65b276199adb18f2cb0e0d3b2854a8ff66eea03ad",
-      "destination_sha256": "a4795169631be86de501b100ecec52d52ac0e96ef3fc72a2d37770127f7a2937"
+      "destination_sha256": "d31fd15fffc8c52129584a81c392d333702e1462488db13af30ef5dcbbf178a2"
     },
     {
       "source": "src/so101_gazebo_demo/meshes/so101/base_motor_holder_so101_v1.stl",
