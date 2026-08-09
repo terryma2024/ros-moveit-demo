@@ -6236,6 +6236,57 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-039-108
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_INTERMEDIATE_LIFT_GATE
+experiment_id: EXP-039
+execution_commit: 59fac4b
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-039
+observed:
+  cup_world_z_delta_m: 0.0008613318204879761
+  lateral_drift_m: 0.0035707720093395286
+  previous_minimum_axial_progress_m: 0.001
+  combined_position_error_within_0_006_m: true
+  arm_stable: true
+failure: CUP_INSUFFICIENT_LIFT
+interpretation: a 0.139 mm miss against the old intermediate progress threshold prevented final-outcome observation despite bounded cup motion and stable arm evidence
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-039-109
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-039/reset-after-insufficient-lift-gate
+proof:
+  cup_spawn_pose_error_m: 0.0000017776154129202049
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-RELAX-MICRO-LIFT-PROGRESS-110
+recorded_at: 2026-08-09 Asia/Shanghai
+change:
+  minimum_axial_progress_m: 0.0005
+  previous_m: 0.001
+retained_checks:
+  - commanded-delta position error at most 0.006 m
+  - lateral cup drift at most 0.006 m
+  - finite and stable arm pose
+  - cup must still show positive physical lift above 0.5 mm
+  - penetration hard ceiling and final physical outcome unchanged
+tests:
+  red: observed 0.861 mm lift was rejected
+  focused_green: 1 passed
+  package_pytest: 179 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-037-100
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
