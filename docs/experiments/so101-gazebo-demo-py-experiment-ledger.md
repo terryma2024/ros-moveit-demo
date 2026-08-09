@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: a767447
+current_commit: 167a275
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -69,8 +69,30 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-096-304
+latest_checkpoint: CP-EXP-096-IMPLEMENTED-305
 next_experiment: EXP-096
+```
+
+```yaml
+checkpoint_id: CP-EXP-096-IMPLEMENTED-305
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-096
+planning_commit: 3ae661c
+implementation_commit: 167a275
+single_variable: alignment convergence now accepts observed held-cup XY inside the unchanged final region with the existing Z tolerance
+red:
+  focused: 2 failed, 66 passed; the prior function rejected the region parameter and the live call did not pass final-region bounds
+green:
+  focused: 68 passed
+  full_pytest: 207 passed, 2 skipped
+  colcon: 209 tests, 0 errors, 0 failures, 2 skipped
+unchanged:
+  - compensated-point convergence path and existing XY/Z tolerances
+  - all correction commands, correction limits and alignment attempt cap
+  - grasp, motion, release, prewarmed RETREAT, physics and final/hard safety contracts
+decision: run exactly one bounded RESET_WORLD EXP-096 on the fresh sole domain 231 stack
+counts_toward_success_streak: false
 ```
 
 ```yaml
