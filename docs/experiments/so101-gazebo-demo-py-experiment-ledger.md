@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 419017b
+current_commit: 068eb89
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -50,8 +50,38 @@ open_hypotheses:
   - The already-qualified fixed RETREAT joint ladder bypasses the contact-adjacent MoveGroup planning boundary; reducing its execution duration is the next way to shorten pad-drag time without changing its known-safe geometric path.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-078-242
+latest_checkpoint: CP-EXP-078-IMPLEMENTED-243
 next_experiment: EXP-078
+```
+
+```yaml
+checkpoint_id: CP-EXP-078-IMPLEMENTED-243
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-078
+planning_commit: 0b2f138
+implementation_commit: 068eb89
+single_variable: explicit no-alignment RETREAT velocity_scaling 0.10, changing the unchanged three-waypoint controller schedule from 4 s to 1 s per waypoint
+red:
+  targeted: 1 failed, 35 deselected
+  observed: runtime did not pass a RETREAT velocity scaling and policy remained 0.03
+green:
+  focused: 36 passed
+  full_pytest: 198 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 200 tests, 0 errors, 0 failures, 2 skipped
+provenance:
+  destination_policy_sha256: 0656cf02ba194d415eb5aea4183591ced584519c74a3990007e17bd6566dff31
+implementation:
+  - RETREAT joint waypoints are byte-for-byte unchanged
+  - no post-open MoveGroup Cartesian command is present
+  - the existing fixed controller call now receives retreat_policy.velocity_scaling
+  - only RETREAT policy scaling changed from 0.03 to 0.10
+unchanged:
+  - pre-retreat 2 s bounded outcome epoch and post-retreat authoritative epoch
+  - EXP-074/075 2 s final opening and all other motion/material/controller/collision/physics/validation values
+next_command: prove RESET_WORLD on ROS_DOMAIN_ID 227 / GZ_PARTITION so101_py_qual_baseline_restored, then record one bounded EXP-078 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
