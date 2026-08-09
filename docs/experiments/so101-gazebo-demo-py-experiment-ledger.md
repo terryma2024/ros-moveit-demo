@@ -3862,6 +3862,29 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-EXP-055-DIAGNOSTIC-SCOPE-167
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED_ADDENDUM
+experiment_id: EXP-055
+trigger: user visually observed possible cup/table contact and cup/arm oscillation during DESCEND_TO_PLACE before OPEN_GRIPPER
+scope_change: preserve the unchanged candidate and GUI stack, but classify this run as a release-boundary contact diagnostic instead of a plain reproducibility check
+measurements:
+  - continuously timestamp cup pose, joint positions/velocities, and all plastic-cup contact pairs
+  - infer the OPEN_GRIPPER onset from the second increasing q6 transition after the physical close
+  - inspect the final sample strictly before that onset for cup/table contact and maximum reported depth
+  - calculate the cup-bottom collision clearance above the table top at z=0.120 m
+  - calculate pre-open cup and arm motion over a short window
+  - capture GUI frames throughout the final descent and release boundary
+hypothesis: the cup bottom is already in Gazebo contact with table::table_top::collision before OPEN_GRIPPER, causing the observed oscillation
+decision_rule:
+  confirmed: fresh pre-open contact pairs contain plastic_cup and table::table_top::collision
+  rejected: no such pair and positive collision clearance throughout the pre-open window
+  inconclusive: missing/stale contact or pose/joint telemetry at the release boundary
+motion_parameters_changed: false
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-RESULT-EXP-048-140
 recorded_at: 2026-08-09 Asia/Shanghai
 status: INVALID_INTERMEDIATE_HEIGHT_GATE
@@ -8069,4 +8092,46 @@ visual_evidence:
 interpretation: first complete GUI-observed physical-outcome success for the current candidate; Planning Scene attach was retained during carry and removed after physical release, while Gazebo remained detached
 counts_toward_success_streak: false
 reason_not_counted: search/GUI confirmation run; final qualification requires a clean stack launched from the frozen final commit
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-054-165
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-gui-214/reset-after-exp054
+proof:
+  cup_spawn_pose_error_m: 0.0000008325947510562049
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-055-166
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-055
+purpose: immediate RESET_WORLD reproducibility check of the first successful physical-outcome candidate
+execution:
+  stack: so101-py-gui-214
+  ros_domain_id: 214
+  gz_partition: so101_py_gui_214
+  execution_commit: 3774797
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-gui-214/reset-after-exp054/reset-world.json
+  evidence_root: /tmp/so101-py-gui-214/candidate-055
+candidate:
+  changed_since_EXP_054: false
+  physical_grasp_attempts: 2
+  retry_local_x_m: -0.0002
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  pre_release_xy_convergence_tolerance_m: 0.006
+  pre_release_z_convergence_tolerance_m: 0.010
+  maximum_alignment_commands: 3
+  immediate_radial_separation_m: 0.010
+prediction: repeat valid final success on the reset GUI stack
+acceptance: unchanged authoritative physical outcome contract
+counts_toward_success_streak: false
 ```
