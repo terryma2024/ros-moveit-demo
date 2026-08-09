@@ -385,17 +385,39 @@ def test_same_run_place_alignment_fails_closed_outside_translation_bound() -> No
         )
 
 
-def test_same_run_place_alignment_fails_when_cup_does_not_converge() -> None:
+def test_same_run_place_alignment_allows_small_intermediate_progress() -> None:
     samples = iter((
-        sample(-0.097, -0.256, 0.165),
-        sample(-0.0968, -0.2559, 0.165),
+        sample(-0.089, -0.250, 0.165),
+        sample(-0.0885, -0.250, 0.165),
+        sample(-0.081, -0.250, 0.165),
     ))
 
     class Backend:
         def sample(self):
             return next(samples)
 
-    with pytest.raises(RuntimeError, match="did not reduce cup error"):
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.080, -0.250, 0.165),
+        execute=lambda *_args: (12, (0.39, 0.49, 0.11, 1.0, 0.002)),
+    )
+
+    assert aligned.object_xyz == pytest.approx((-0.081, -0.250, 0.165))
+    assert len(reverse_waypoints) == 2
+    assert len(telemetry) == 2
+
+
+def test_same_run_place_alignment_fails_after_attempt_budget() -> None:
+    samples = iter((
+        sample(-0.097, -0.256, 0.165),
+        sample(-0.0968, -0.2559, 0.165),
+        sample(-0.0966, -0.2558, 0.165),
+    ))
+
+    class Backend:
+        def sample(self):
+            return next(samples)
+
+    with pytest.raises(RuntimeError, match="did not converge within 2 attempts"):
         live_execute.align_cup_for_release(
             Backend(), (-0.080, -0.250, 0.165),
             execute=lambda *_args: (12, (0.39, 0.49, 0.11, 1.0, 0.002)),

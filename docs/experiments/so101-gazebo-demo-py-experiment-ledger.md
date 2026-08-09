@@ -6283,3 +6283,51 @@ prediction: reach the feedback alignment and authoritative final outcome; the fi
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-030-076
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_INTERMEDIATE_PROGRESS_GATE
+experiment_id: EXP-030
+execution_commit: 2a1e990
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-030
+observed:
+  before_alignment_error_m: 0.009019040768094521
+  after_first_correction_error_m: 0.008577105364906034
+  improvement_m: 0.000441935403188487
+  release_reached: false
+failure: per-attempt improvement was below the temporary 0.001 m precision gate
+interpretation: the bounded controller still had one attempt remaining; rejecting before exhausting the attempt budget conflicts with outcome-first intermediate validation
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-030-077
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-030/reset-after-intermediate-progress-gate
+proof:
+  cup_spawn_pose_error_m: 0.0000007005988015868798
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-DEFER-ALIGNMENT-PROGRESS-078
+recorded_at: 2026-08-09 Asia/Shanghai
+change: remove the per-attempt 0.001 m improvement gate
+retained_checks:
+  - maximum two correction attempts
+  - final alignment error at most 0.003 m before release
+  - maximum 0.030 m correction per axis per attempt
+  - finite cup and TCP poses and broad Z plausibility
+  - unchanged authoritative final physical outcome
+tests:
+  red: 2 tests failed because small progress stopped before attempt two
+  focused_green: 2 passed
+  package_pytest: 176 passed, 2 skipped
+next: commit locally, then preregister a fresh RESET_WORLD trial
+```
