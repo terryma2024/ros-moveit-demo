@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: a0f831d
+current_commit: b69ce39
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -44,8 +44,38 @@ open_hypotheses:
   - EXP-073 retains gripper contact throughout its 1.495 s pre-retreat observation after the 5 s release command; shortening only the final release opening is the next outcome-first candidate.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-073-226
+latest_checkpoint: CP-EXP-074-IMPLEMENTED-228
 next_experiment: EXP-074
+```
+
+```yaml
+checkpoint_id: CP-EXP-074-IMPLEMENTED-228
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-074
+planning_commit: c2550f3
+implementation_commit: b69ce39
+single_variable: final OPEN_GRIPPER command duration 5 s -> 2 s
+red:
+  command: PYTHONNOUSERSITE=1 python3 -m pytest -q test_main_strategy_parity.py
+  exit_code: 2
+  evidence: /tmp/so101-py-qualification/exp074-red.log
+  observed: ImportError because gripper_motion_duration_seconds did not exist
+green:
+  focused: 12 passed
+  full_pytest: 197 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 199 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  install_mode: symlink-install egg-link to source tree
+  ros_gazebo_backend_sha256: 477d8513de506da92f22be7bf8a56aa99a626cb9ce804133bba46d9f50d6f769
+  live_execute_sha256: 6ff2afd00a4989d6f408fa4485260063b8f487668e264f941ced948a3e908b3a
+unchanged:
+  - ordinary positive-q6 commands remain 5 s and negative-q6 commands remain 8 s
+  - all motion, material, controller, collision, physics and validation contracts from CP-PRE-EXP-074-227
+next_command: prove RESET_WORLD on ROS_DOMAIN_ID 227 / GZ_PARTITION so101_py_qual_baseline_restored, then record one bounded EXP-074 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
