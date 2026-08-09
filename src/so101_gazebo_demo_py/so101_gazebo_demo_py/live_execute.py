@@ -871,7 +871,7 @@ def run_live_execute(
         seated_contact=stabilize_with_contact_missing_retries(
             backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,
         )
-        seating_target=_current_joint_position("6")
+        seating_actual_q6=_current_joint_position("6")
     except Exception as error:
         (evidence_directory/"physical-failure.json").write_text(json.dumps({
             "status":"FAILED","phase":"POST_SEATING_PHYSICAL_STABILITY",
@@ -882,16 +882,21 @@ def run_live_execute(
         raise
     seating_telemetry={
         "target_q6":seating_target,
+        "actual_q6":seating_actual_q6,
         "bilateral":seated_contact.bilateral,
         "moving_pad_depth_m":seated_contact.max_moving_pad_penetration_m,
     }
     pre_probe=backend.sample()
     shadow_pose=(*pre_probe.object_xyz,*pre_probe.object_xyzw)
     attached_scene=_apply_scene("attach",shadow_pose)
+    max_grasp_attempts=2
     try:
-        contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(backend,seating_target,bundle.motion.preopen_q6,-.059600220867817)
+        contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(
+            backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,
+            max_attempts=max_grasp_attempts,
+        )
     except Exception as error:
-        failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"seating_telemetry":seating_telemetry,"post_seating_contact":asdict(seated_contact),"attempts":1,"planning_scene":attached_scene}
+        failure_evidence={"status":"FAILED","error":str(error),"initial_contact":asdict(initial_contact),"q6_contact":q6_contact,"seating_target_q6":seating_target,"seating_telemetry":seating_telemetry,"post_seating_contact":asdict(seated_contact),"attempts":max_grasp_attempts,"planning_scene":attached_scene}
         try:
             latest_contact=evaluate_bilateral_contact(backend.contacts())
             latest_pose=backend.sample()
