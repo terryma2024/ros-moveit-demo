@@ -159,6 +159,21 @@ def coobserved_tcp_sample(tcp_pose, tf_source_stamp, object_samples):
     return tcp_pose,observed_stamp
 
 
+def sample_pose_pair_with_retry(sample_once, *, attempts: int = 2):
+    """Retry only a transient empty pose-pair subscription, with a fixed bound."""
+    if attempts < 1:
+        raise ValueError("pose-pair sample attempts must be positive")
+    last_error = None
+    for _ in range(attempts):
+        try:
+            return sample_once()
+        except RuntimeError as error:
+            if "fresh Gazebo/TCP pose pair unavailable" not in str(error):
+                raise
+            last_error = error
+    raise last_error
+
+
 def contact_pairs_from_message(message) -> tuple[ContactPair, ...]:
     pairs=[]
     for contact in message.contacts:
@@ -396,6 +411,9 @@ class RosGazeboLiveBackend:
         raise RuntimeError(f"durable Gazebo attachment state did not converge to {requested}")
 
     def sample(self) -> PoseSample:
+        return sample_pose_pair_with_retry(self._sample_once)
+
+    def _sample_once(self) -> PoseSample:
         from gz.msgs10.pose_v_pb2 import Pose_V
         from gz.transport13 import Node as GazeboNode
         import rclpy
