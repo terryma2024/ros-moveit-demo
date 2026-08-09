@@ -2,25 +2,24 @@
 
 ```yaml
 task_id: so101-gazebo-demo-py
-goal: Complete standalone Python rewrite with physical pre-attach micro-lift and headless/GUI acceptance.
-success_contract: Fresh execute reaches DONE with unchanged main-workspace contact materials and grasp policy; 2 mm pre-attach object lift; separate Gazebo and MoveIt attach/detach; controller/joint/TF, final pose, and visual proof.
+goal: Find a Gazebo-physics-owned SO-101 pick-place strategy that places the cup stably and upright inside the target region, then qualify five consecutive FULL_RESTART and five consecutive RESET_WORLD successes.
+success_contract: Gazebo remains physically detached throughout; MoveIt Planning Scene attach is retained as a collision shadow; intermediate cup/arm outcome gates stay bounded; authoritative final placement is in-region, upright, stable, table-supported, detached, free of gripper contact, and arm/controller healthy.
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 68b0fc6051eb57eb618d62bcaa21674594571d2a
-evidence_root: /tmp/so101-py-g7LydYCB/
+current_commit: 79c4d35d287ec37ceea73c781b542d4f1b775654
+evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
-  - Built-in DetachableJoint attach/detach works after bilateral contact; earlier Task 8 run attached before micro-lift and therefore did not prove the approved pre-attach micro-lift gate.
-  - With the current Python live sequence, contact-missing retries can establish bilateral contact within the unchanged 4 mrad cumulative tightening cap.
-  - With fixed 6 mrad seating preload, the detached object lifted only 0.000003 m versus the required 0.002 m in historical run task15-e2e-7.
+  - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
+  - EXP-056 directly observed pre-OPEN_GRIPPER plastic_cup::body::wall_near contact with the table; cup tilt reached 1.1679 rad near the would-be release boundary.
+  - EXP-056 phase profiling localizes the first large tilt increase to DESCEND_TO_PLACE: 0.1956 rad at MOVE_ABOVE_PLACE versus 1.2459 rad and table contact at the descent endpoint.
 disproven_routes:
-  - Treating post-attachment object following as proof of the pre-attachment physical micro-lift gate.
-  - Adding the already-approved fixed 6 mrad preload to the Python sequence without first matching main-workspace command ordering and observation windows.
+  - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
+  - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
 open_hypotheses:
-  - Python live orchestration differs from main-workspace grasp sequencing or stable-window timing despite matching policy values.
-  - Prepared SDF/controller/runtime assets differ from the current main workspace even though copied provenance was correct at the earlier reference commit.
-latest_checkpoint: CP-002
-next_experiment: EXP-007
+  - Raising the static DESCEND_TO_PLACE endpoint and held-cup release target by about 0.010 m will prevent pre-open table contact, preserve the roughly 0.20 rad carried tilt, and allow release physics to settle the cup upright in-region.
+latest_checkpoint: CP-PRE-EXP-057-173
+next_experiment: EXP-057
 ```
 
 ## Historical evidence imported before ledger activation
@@ -3881,6 +3880,74 @@ decision_rule:
   rejected: no such pair and positive collision clearance throughout the pre-open window
   inconclusive: missing/stale contact or pose/joint telemetry at the release boundary
 motion_parameters_changed: false
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-ROOT-CAUSE-DESCEND-172
+recorded_at: 2026-08-09 Asia/Shanghai
+status: ROOT_CAUSE_BOUNDARY_CONFIRMED
+source_experiment: EXP-056
+evidence:
+  telemetry: /tmp/so101-py-gui-214/candidate-056/diagnostic/samples.jsonl
+  phase_profile: /tmp/so101-py-gui-214/candidate-056/diagnostic/carry-phase-profile.json
+phase_profile:
+  grasp_descend_endpoint: {cup_tilt_rad: 0.00019783469043399614, table_contact: true, note: cup still starts on table}
+  lift_endpoint: {cup_tilt_rad: 0.07887766134777596, bottom_clearance_m: 0.05768100739787693, table_contact: false}
+  move_above_place_endpoint: {cup_tilt_rad: 0.19556928655941266, bottom_clearance_m: 0.0585829163093837, table_contact: false}
+  descend_to_place_endpoint: {cup_tilt_rad: 1.2459251189965326, bottom_clearance_m: -0.00043720354186466137, table_contact: true}
+observed: cup tilt increased by 1.05036 rad during DESCEND_TO_PLACE while the cup wall reached the table; grasp, lift, and horizontal carry did not produce the large failure attitude
+first_bad_boundary: DESCEND_TO_PLACE
+root_cause: the fixed descent endpoint and subsequent center-Z alignment assume an effectively upright cup and provide no pre-open collision clearance for a physically carried tilted cup, allowing table contact to pivot and roll it before release
+next_experiment: EXP-057
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-057-173
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-057
+status: PLANNED
+prior_experiment: EXP-056
+hypothesis: increasing the pre-open release approach height by about 0.010 m prevents cup-wall/table contact during DESCEND_TO_PLACE and preserves a recoverable carried attitude through physical release
+prediction: at the new descent endpoint the cup has no fresh table contact, bottom clearance is positive, tilt remains below 0.35 rad, OPEN_GRIPPER occurs, and the authoritative final outcome either succeeds or exposes the next result boundary
+single_variable: pre-open release approach height; use the midpoint joint target between old DESCEND_TO_PLACE waypoints 2 and 3 and raise held-cup release target Z from 0.169 m to 0.179 m
+lifecycle: RESET_WORLD
+preconditions:
+  - reuse only tmux stack so101-py-gui-214 with ROS_DOMAIN_ID 214 and GZ_PARTITION so101_py_gui_214
+  - reset proof must show cup pose error <= 0.001 m, Gazebo detached, MoveIt world-only, no finger contact, and finite arm TCP
+  - no second Gazebo or MoveIt stack and no execute client
+success_criteria:
+  - fresh cup/table contact absent at the pre-open boundary and bottom collision clearance positive
+  - cup tilt at pre-open boundary <= 0.35 rad
+  - final authoritative physical-outcome success preferred; a later valid result failure still advances the search boundary
+failure_criteria:
+  - pre-open table contact or tilt > 0.35 rad
+  - physical grasp, MoveIt execution, controller, Planning Scene, or final outcome valid failure
+invalid_criteria:
+  - provenance mismatch, stale installed asset, missing telemetry/video, duplicate stack/client, reset failure, or disk pressure
+planned_candidate:
+  descend_to_place_final_joints: [0.3896337051295, 0.442941344113, 0.1123830970905, 1.0259840470215, 0.0019393340465]
+  fk_tcp_xyz_m: [-0.0709490295163302, -0.2461348040097296, 0.21673740393615668]
+  tcp_z_increase_from_EXP_056_m: 0.00927251973434113
+  held_cup_release_target_xyz_m: [-0.075, -0.255, 0.179]
+  unchanged: grasp target, q6 preload/retry, orientation, physics, geometry, mass, friction, controller/gains, collision model, three-attempt XY alignment bound, release separation, final outcome contract, and Gazebo-detached/MoveIt-shadow semantics
+provenance:
+  planning_base_commit: 79c4d35d287ec37ceea73c781b542d4f1b775654
+  source_commit: PENDING_TDD_IMPLEMENTATION
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py/lib/so101_gazebo_demo_py/pick_place_state_machine
+  ros_domain_id: 214
+  gz_partition: so101_py_gui_214
+commands:
+  - command: pytest RED then minimal implementation, package tests/build, RESET_WORLD, instrumented GUI execute
+    exit_code: PENDING
+observed: []
+inferred: []
+conclusion: PENDING
+evidence:
+  - /tmp/so101-py-gui-214/candidate-057
+decision: PENDING
+next_experiment: PENDING
 counts_toward_success_streak: false
 ```
 
