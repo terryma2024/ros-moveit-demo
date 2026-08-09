@@ -6212,6 +6212,29 @@ next: commit locally, then preregister one RESET_WORLD trial
 ```
 
 ```yaml
+checkpoint_id: CP-PRE-EXP-043-122
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-043
+purpose: validate reduced radial impulse and negative-Y held-cup target compensation
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: de12216
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-042/reset-after-final-out-of-region/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-043
+candidate:
+  alignment_target_xyz_m: [-0.075, -0.255, 0.165]
+  immediate_radial_separation_m: 0.010
+  immediate_vertical_retreat_m: 0.060
+prediction: final cup settles inside the unchanged XY region while remaining upright, supported, stable, detached and free of gripper contact
+acceptance: unchanged authoritative final physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-042-118
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
