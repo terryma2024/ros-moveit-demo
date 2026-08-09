@@ -225,7 +225,7 @@ def carry_with_shadow_gates(backend, policies, shadow_gate):
 
 def release_alignment_target(
     place_xyz: tuple[float, float, float],
-    settling_compensation_m: tuple[float, float, float] = (0.0050, -0.0050, 0.0),
+    settling_compensation_m: tuple[float, float, float] = (0.0050, -0.0050, 0.0040),
 ) -> tuple[float, float, float]:
     """Offset the held-cup target to compensate measured release/retreat drift."""
     return tuple(
@@ -253,6 +253,7 @@ def release_separation_translation(
 def align_cup_for_release(
     backend, target_xyz, *, execute,
     max_attempts: int = 2, xy_tolerance_m: float = 0.003,
+    z_tolerance_m: float = 0.002,
     max_axis_correction_m: float = 0.030,
     max_pre_release_height_error_m: float = 0.030,
 ):
@@ -265,21 +266,25 @@ def align_cup_for_release(
         height_error=abs(current.object_xyz[2]-target_xyz[2])
         x_error=target_xyz[0]-current.object_xyz[0]
         y_error=target_xyz[1]-current.object_xyz[1]
+        z_error=target_xyz[2]-current.object_xyz[2]
         xy_error=math.hypot(x_error,y_error)
         if height_error > max_pre_release_height_error_m:
             raise RuntimeError(
                 f"place alignment pre-release height outside plausibility bound: "
                 f"{height_error}"
             )
-        if xy_error <= xy_tolerance_m:
+        if xy_error <= xy_tolerance_m and abs(z_error) <= z_tolerance_m:
             return current,tuple(reverse_waypoints),tuple(telemetry)
         if attempt == max_attempts:
             break
-        if abs(x_error) > max_axis_correction_m or abs(y_error) > max_axis_correction_m:
+        if any(
+            abs(error) > max_axis_correction_m
+            for error in (x_error,y_error,z_error)
+        ):
             raise RuntimeError(
-                f"place alignment correction exceeds bound: {(x_error,y_error)}"
+                f"place alignment correction exceeds bound: {(x_error,y_error,z_error)}"
             )
-        delta=(x_error,y_error,0.0)
+        delta=(x_error,y_error,z_error)
         points,start_positions=execute(delta,0.15)
         after=backend.sample()
         after_error=math.hypot(
