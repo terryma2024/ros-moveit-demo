@@ -48,6 +48,7 @@ confirmed_conclusions:
   - EXP-083 fast descent produced an immediate endpoint cup tilt of only 0.0294 rad, but during the retained 2 s gripper-opening command the last still-closed telemetry reached 0.2175 rad/table contact and the cup later rolled 9.732 mm in positive x; the next boundary is opening duration.
   - EXP-084's 1 s full-range opening still displaced the cup 10.379 mm in negative y and ended 19.074 mm beyond the lower y boundary; opening duration alone does not control the pad-sweep impulse.
   - EXP-092 did not exercise the three-attempt budget: the initial bounded seating normalization lost moving-pad contact while fixed-pad depth was 0.73929 mm, so it stopped safely before micro-lift or carry.
+  - EXP-093 reached all three grasp attempts and the last held probe retained 0.806 mm lift, bilateral pad contact and a finite arm, but its 1.024 mm lateral drift exceeded the 1 mm intermediate gate by 0.024 mm; this is an outcome-gate boundary rather than a final-placement result.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -66,8 +67,74 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-093-297
-next_experiment: EXP-093
+latest_checkpoint: CP-PRE-EXP-094-299
+next_experiment: EXP-094
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-094-299
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-094
+status: PREREGISTERED
+prior_experiment: EXP-093
+hypothesis: the 1 mm lateral micro-lift gate is unnecessarily strict for the outcome-first task contract; accepting at most 2 mm while still requiring positive persistent lift, finite/stable arm state and the unchanged 6 mm pose-error envelope will allow a physically retained cup to continue to the authoritative placement test
+single_variable: immediate and held micro-lift maximum_lateral_drift_m change from 0.001 to 0.002
+lifecycle: RESET_WORLD
+prediction:
+  - a grasp with lateral drift in (1,2] mm and at least 0.1 mm persistent lift can continue instead of forcing repeated cup-disturbing regrasp
+  - drift above 2 mm, insufficient persistent lift or unstable/nonfinite arm state still stops before carry
+  - the first accepted grasp proceeds through carry and exercises the prewarmed RETREAT
+  - authoritative final outcome passes without changing its region, upright, stability, support, detach, contact or controller criteria
+unchanged:
+  - three-attempt cap, grasp/retry geometry, target penetration range and 1.3 mm moving-pad hard ceiling
+  - cup mass/materials, all arm/gripper motion targets and timings, release/alignment behavior and prewarmed RETREAT
+  - Gazebo physical-detach and MoveIt shadow-attach semantics
+  - 6 mm intermediate commanded-pose error envelope, 0.1 mm persistent-lift minimum and every final/hard safety contract
+preconditions:
+  - TDD, focused/full pytest and colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-093-298
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_INTERMEDIATE_OUTCOME_GATE_FAILURE
+experiment_id: EXP-093
+execution_head: 98c3003
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp093/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000009148480538845815
+physical_seating:
+  normalized_target_q6: -0.05560623723268509
+  adjustments: 2
+  moving_pad_depth_m: 0.000998181407339871
+  bilateral: true
+physical_grasp:
+  attempts: 3
+  failure: physical micro-lift hold failed CUP_LATERAL_DRIFT
+  held_lift_m: 0.0008059293031692505
+  held_lateral_drift_m: 0.0010237421822052366
+  latest_fixed_pad_depth_m: 0.0013900066260248423
+  latest_moving_pad_depth_m: 0.000694001151714474
+  latest_bilateral: true
+  gazebo_attachment_state: detached
+prewarmed_retreat_evaluation: NOT_REACHED
+interpretation:
+  - the cup remained physically lifted, bilaterally held and the arm pose finite, but exceeded the 1 mm intermediate result bound by 0.024 mm
+  - repeated regrasp materially displaced the cup, so forcing more retries is less aligned with the final physical-placement objective than a bounded 2 mm continuation envelope
+  - the moving-pad hard ceiling remains satisfied; fixed-pad depth is retained as telemetry under the previously authorized solver-limit semantics
+evidence_sha256:
+  reset_proof: 45fc98159981c41099cfb2d33007df089152f4109f0748b46d3335cd606a6219
+  execute_log: dbdc693711a9db33fd43ef327de4509d52872c92b4845fac10ad0c49b92ee3a7
+  physical_failure: 505091fe57c95b8a46c99a951083bdee00a462a7b65f41d95ad0369606600e63
+  telemetry: 59401261de14300a8c3b84cf279e7e64865ea267bb354267b18945fc29400ded
+  bounded_video: 107de18e0b8c4cb549556021269132c450c5113aaa5dc278735d944bf41e1f4f
+  final_screenshot: 2e71d0a63acb0a76bcb9f5921f0301e366bcf01cc81b4c0a0e7b6ad761566a89
+decision: relax only the intermediate lateral outcome envelope to 2 mm in EXP-094; retain all final and hard safety bounds
+counts_toward_success_streak: false
 ```
 
 ```yaml
