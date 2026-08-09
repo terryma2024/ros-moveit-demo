@@ -95,7 +95,7 @@ states:
       location: PREFIX_UNTIL_AXIAL_CLEARANCE
       max_axial_clearance_m: 0.012
   MOVE_ABOVE_PLACE:
-    endpoint_position: [-0.055939044679, -0.241504753807, 0.262710507013]
+    endpoint_position: [-0.072885185472, -0.247515275321, 0.262755728105]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, -1.0]
@@ -109,7 +109,7 @@ states:
     allowed_touch_pairs: []
     temporal_contact: null
   DESCEND_TO_PLACE:
-    endpoint_position: [-0.052925117296, -0.238732105185, 0.207618438598]
+    endpoint_position: [-0.070033364558, -0.244824467851, 0.207660671600]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, -1.0]
@@ -126,7 +126,7 @@ states:
       location: LAST_ONLY
       max_axial_clearance_m: 0.0
   RETREAT:
-    endpoint_position: [-0.055939044679, -0.241504753807, 0.262710507013]
+    endpoint_position: [-0.072885185472, -0.247515275321, 0.262755728105]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, 1.0]
@@ -143,7 +143,7 @@ states:
       location: PREFIX_UNTIL_AXIAL_CLEARANCE
       max_axial_clearance_m: 0.0044
   RECOVER_LIFT_TO_SAFE_HEIGHT:
-    endpoint_position: [-0.055939044679, -0.241504753807, 0.262710507013]
+    endpoint_position: [-0.072885185472, -0.247515275321, 0.262755728105]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, 1.0]
