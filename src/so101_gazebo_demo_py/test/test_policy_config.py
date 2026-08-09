@@ -41,6 +41,20 @@ def test_loads_strict_typed_policy_bundle() -> None:
     assert bundle.validation.states[State.RETREAT].data["path_direction"] == [
         0.0, 0.0, 1.0,
     ]
+    assert bundle.motion.states[State.MOVE_ABOVE_PLACE].waypoints[-1] == pytest.approx((
+        0.3943746180447702,
+        0.21071779514748898,
+        0.10962880506920697,
+        1.1746878405589727,
+        0.0015868625800031938,
+    ))
+    assert bundle.motion.states[State.DESCEND_TO_PLACE].waypoints[-1] == pytest.approx((
+        0.38868552221451447,
+        0.4893848545063948,
+        0.1129339554949517,
+        0.9962432883136614,
+        0.002009828339982921,
+    ))
     assert len(bundle.sha256) == 64
 
 

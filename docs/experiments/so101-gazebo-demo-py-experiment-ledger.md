@@ -4644,3 +4644,45 @@ gz_partition: so101_py_outcome_search_203
 evidence_root: /tmp/so101-py-outcome-search-203/candidate-010/y-shifted-place-plan-025
 acceptance: both shifted above and descend pose goals return nonempty collision-checked plans
 ```
+
+```yaml
+diagnostic_id: DIAG-Y-SHIFTED-PLACE-TARGETS-025
+lifecycle: VALID_PLAN_ONLY
+result:
+  execute_trajectory_count: 0
+  requested_tcp_translation_m: [0.0, -0.012, 0.0]
+  tcp_orientation_tolerance_rad: 0.15
+  shifted_above_plan_points: 14
+  shifted_descend_plan_points: 29
+  shifted_above_joints: [0.3943746180447702, 0.21071779514748898, 0.10962880506920697, 1.1746878405589727, 0.0015868625800031938]
+  shifted_descend_joints: [0.38868552221451447, 0.4893848545063948, 0.1129339554949517, 0.9962432883136614, 0.002009828339982921]
+  explicit_ladder_plans:
+    MOVE_ABOVE_PLACE: 80
+    DESCEND_TO_PLACE: 51
+    RETREAT: 51
+diagnostic_script_first_attempt: INVALID_CODE import path only; no service request or physical side effect; corrected before the successful explicit ladder validation
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-010/y-shifted-place-plan-025
+```
+
+```yaml
+checkpoint_id: CP-Y-SHIFTED-PLACE-LADDER-026
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  family: MOVE_ABOVE_PLACE / DESCEND_TO_PLACE / RETREAT joint targets
+  target_translation_m: [0.0, -0.012, 0.0]
+  generation: MoveGroup plan_only endpoints with 0.15 rad TCP orientation freedom, joint-space interpolation ladders, and exact reverse descent for RETREAT
+  seating_preload_rad: retained at 0.004
+validation_updates: shifted endpoint positions and unchanged -Z descend / +Z retreat directions
+tests:
+  red: policy still exposed old place endpoints
+  focused_green: 23 passed
+  package_pytest: 161 passed, 2 skipped
+  colcon_test: 163 tests, 0 errors, 0 failures, 2 skipped
+  live_plan_only: MOVE_ABOVE_PLACE 80 points; DESCEND_TO_PLACE 51; RETREAT 51; no execution
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance:
+  motion_policy_sha256: 16cbbe82d0f46fc0012c10613fab06188aa448d7edf6732a1749a33f70df612b
+  validation_policy_sha256: d31fd15fffc8c52129584a81c392d333702e1462488db13af30ef5dcbbf178a2
+  bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+next: commit locally, preregister one physical candidate with 0.004 preload and y-shifted place family, then classify final x before changing preload
+```
