@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 96707ba970ec97c64475d835c9682882ce144b7c
+current_commit: 0835de93e058300ab6ac53d94a43ea197b28a25a
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -19,17 +19,118 @@ confirmed_conclusions:
   - EXP-060 combined the retained 0.006 preload with MOVE_ABOVE_PLACE velocity scaling 0.10 and achieved an authoritative physical-outcome success at [-0.08451, -0.25333, 0.16500] m.
   - QUAL-FULL-01 was a valid clean FULL_RESTART failure: the release-start pose was inside the target region, but immediate RETREAT displaced the otherwise upright, supported and stable cup 0.000059242 m beyond the y boundary.
   - EXP-061 proved that detaching the Planning Scene shadow before a planned retreat is not viable: the radial move executed but the subsequent 60 mm world-Z plan failed with MoveIt error 99999, while the already-tilted cup fell onto its side.
+  - EXP-063 activated the configured LIFT velocity scaling and reduced the measured lift boundary from 14.9-18.6 s to 8.53 s; LIFT ended at 0.00804 rad tilt with q6 range 0.00315 rad, and MOVE_ABOVE_PLACE ended at 0.15396 rad tilt.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Passing the already-configured LIFT velocity scaling 0.10 to the direct FollowJointTrajectory backend will reduce the current 15-second five-waypoint lift to about 5 seconds and prevent time-dependent cup/q6 roll before MOVE_ABOVE_PLACE.
+  - The user-authorized joint profile of 0.010 kg cup mass and higher cup/pad friction will reduce gravity-driven rolling through MOVE_ABOVE_PLACE relative to EXP-063; the two effects cannot be separately attributed in this experiment.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-063-IMPLEMENTED-196
-next_experiment: EXP-063
+latest_checkpoint: CP-PRE-EXP-064-198
+next_experiment: EXP-064
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-063-197
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_PARTIAL_SUCCESS
+experiment_id: EXP-063
+execution_commit: 0835de93e058300ab6ac53d94a43ea197b28a25a
+lifecycle: RESET_WORLD
+reset_proof: /tmp/so101-py-qualification/exp063/reset/reset-world.json
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.00023850427533034235
+  micro_lift_world_z_m: 0.0022215843200683594
+  lateral_drift_m: 0.0001614701220070255
+phase_profile:
+  lift_duration_s: 8.53157
+  lift_end_tilt_rad: 0.00803653
+  lift_q6_position_range_rad: 0.00314947
+  move_above_place_end_tilt_rad: 0.1539558221
+  post_move_pre_descend_duration_s: 2.8856706279
+  post_move_pre_descend_tilt_start_rad: 0.1539558221
+  post_move_pre_descend_tilt_end_rad: 0.233425
+  post_move_pre_descend_tilt_growth_rad: 0.07946918
+  post_move_pre_descend_q6_position_range_rad: 0.02124746
+  descend_to_place_end_tilt_rad: 0.318026
+  last_closed_pre_open_tilt_rad: 0.318870
+  open_gripper_end_tilt_rad: 0.525220
+prediction_evaluation:
+  lift_duration_at_most_7_seconds: FAIL_BUT_IMPROVED
+  lift_end_tilt_at_most_0_10_rad: PASS
+  lift_q6_range_at_most_0_005_rad: PASS
+  move_end_tilt_at_most_0_20_rad: PASS
+later_known_failure:
+  code: MOVEIT_WORLD_Z_PLAN_FAILED
+  moveit_error_code: 99999
+  reason_not_primary: known unchanged EXP-061 release boundary occurred after the scoped carry measurement
+evidence:
+  physical_gate: /tmp/so101-py-qualification/exp063/run/physical-gate.json
+  telemetry: /tmp/so101-py-qualification/exp063/run/diagnostic/samples.jsonl
+  telemetry_sha256: e1d6ac060656ab89b7cea84b2fdb0f4c7e897d314bd5c107c689cf76d7c6f745
+  bounded_video: /tmp/so101-py-qualification/exp063/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 77a29629a908204e5c9ea06a73a331afd143790fc67f843e32c4785f27a63117
+interpretation:
+  - Passing the existing LIFT speed materially reduced gravitational dwell and produced a stable LIFT endpoint, so the faster LIFT is retained.
+  - The remaining first unstable boundary is the 2.89 s post-MOVE_ABOVE_PLACE shadow-resynchronization interval, where tilt grew 0.0795 rad and q6 ranged 0.0212 rad.
+decision: KEEP faster LIFT; EXP-064 follows the user's requested joint mass/friction intervention before the planned scene-latency optimization.
+counts_toward_success_streak: false
+next_experiment: EXP-064
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-064-198
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-064
+status: PLANNED
+prior_experiment: EXP-063
+hypothesis: jointly halving cup mass and raising the limiting cup/pad friction coefficients reduces gravity-driven slip and roll through MOVE_ABOVE_PLACE despite the unchanged carry and shadow-gate timing
+prediction:
+  - physical grasp passes the unchanged penetration, bilateral-contact, micro-lift, lateral-drift and arm-stability bounds
+  - LIFT end tilt remains <= 0.10 rad with q6 range <= 0.005 rad
+  - MOVE_ABOVE_PLACE end tilt improves from EXP-063 0.15396 rad to <= 0.10 rad
+  - no cup/table contact occurs before or at the MOVE_ABOVE_PLACE endpoint
+  - the known post-MOVE shadow dwell and later release-order behavior remain diagnostic only and do not invalidate the scoped carry comparison
+single_variable: user-authorized joint profile: cup mass 0.020 -> 0.010 kg and friction profile cup/isotropic 1.2 -> 2.0 plus pad transverse 1.2 -> 2.0, with pad axial retained at 3.0
+attribution_limit: this two-change experiment can establish only the combined effect; it cannot attribute improvement or regression separately to mass or friction
+lifecycle: FULL_RESTART
+preconditions:
+  - build and install the 0.010 kg/high-friction assets before starting Gazebo because RESET_WORLD does not reload SDF mass, inertia or friction
+  - stop only the existing owned so101-py-qual stack and start exactly one replacement GUI stack
+  - prove initial cup pose, Gazebo detach, MoveIt world-only membership, no finger contact and finite TCP
+  - bounded 50 Hz telemetry and 5 fps half-resolution H.264 are active
+success_criteria:
+  - all prediction bounds pass through MOVE_ABOVE_PLACE
+failure_criteria:
+  - physical grasp/controller failure, unchanged hard safety violation, LIFT instability, MOVE_ABOVE_PLACE endpoint tilt > 0.10 rad or pre-end table contact
+invalid_criteria:
+  - source/install/runtime asset mismatch, stale Gazebo world, duplicate stack/client, missing reset proof, telemetry or video, or disk pressure
+changed:
+  cup_mass_kg: 0.010
+  cup_inertia_kg_m2: {ixx: 0.00001475, iyy: 0.00001475, izz: 0.0000160}
+  cup_wall_friction: {mu: 2.0, mu2: 2.0}
+  fingertip_pad_friction: {axial: 3.0, transverse: 2.0}
+unchanged:
+  - all motion targets, speeds, q6 targets, orientation and release ordering
+  - physics engine, geometry, contact stiffness/damping, controller/gains and collision model
+  - penetration ceiling, preferred target range and all arm/final outcome safety bounds
+  - Gazebo remains physically detached and MoveIt Planning Scene shadow attach remains active during carry
+provenance:
+  planning_commit: 0835de93e058300ab6ac53d94a43ea197b28a25a
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py/lib/so101_gazebo_demo_py/pick_place_state_machine
+  ros_domain_id: 222
+  gz_partition: so101_py_qual_exp064
+commands:
+  - command: RED material-contract test, minimal asset/config edit, focused/full pytest, colcon build/test, FULL_RESTART, reset proof, bounded telemetry/H.264, one GUI execute
+    exit_code: PENDING
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
