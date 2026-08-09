@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 82739e6
+current_commit: 8af5be6
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -31,8 +31,34 @@ open_hypotheses:
   - The 0.020 kg / limiting-friction-1.2 baseline remains the best observed end-to-end material profile among EXP-063/064/065; the next useful variable is reducing non-motion dwell and/or shortening motion exposure while preserving all outcome and hard-safety bounds.
   - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-066-204
+latest_checkpoint: CP-EXP-066-IMPLEMENTED-205
 next_experiment: EXP-066
+```
+
+```yaml
+checkpoint_id: CP-EXP-066-IMPLEMENTED-205
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-066
+implementation_commit: 8af5be6
+single_variable: one isolated process-scoped Planning Scene Apply/Get client replaces per-transaction ROS context/node/client construction
+red:
+  targeted: 1 expected failure; PlanningSceneShadowClient was absent
+green:
+  targeted: 1 passed
+  full_pytest: 194 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 196 tests, 0 errors, 0 failures, 2 skipped
+runtime_smoke:
+  domain: 223
+  partition: so101_py_qual_exp065
+  result: persistent client discovered both services and closed its isolated context/executor cleanly without changing Planning Scene membership
+preserved_semantics:
+  - every attach/resynchronize/detach still calls ApplyPlanningScene and then GetPlanningScene
+  - all shadow gates, divergence/age thresholds and scene-membership assertions remain unchanged
+  - Gazebo remains physically detached and no physical attachment API exists in the forward path
+next_command: stop only the owned so101-py-qual stack, launch one FULL_RESTART stack with a fresh domain/partition, prove reset state, then run bounded telemetry/H.264 plus one execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
