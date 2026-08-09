@@ -65,8 +65,83 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-EXP-087-IMPLEMENTED-281
-next_experiment: EXP-087
+latest_checkpoint: CP-PRE-EXP-088-283
+next_experiment: EXP-088
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-088-283
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-088
+status: PREREGISTERED
+prior_experiment: EXP-087
+hypothesis: the sustained grasp now completes the chain, but a release-start XY error of 8.41 mm was deferred by the 10 mm alignment tolerance and the cup finished far outside the box; triggering bounded cup-feedback correction above 6 mm while using the proven immediate fixed RETREAT for corrected and uncorrected paths will improve release position without reintroducing the known Cartesian retreat planning failure
+single_strategy_variable: activate tighter outcome-feedback place alignment and unify its post-open retreat with the existing fixed-joint shadow-attached immediate RETREAT
+lifecycle: RESET_WORLD
+implementation_scope:
+  - align_cup_for_release live XY tolerance 0.010 m to 0.006 m
+  - after OPEN_GRIPPER, every path retains the MoveIt shadow through the same fixed RETREAT, then detaches/synchronizes and collects only the authoritative post-retreat epoch
+  - remove the corrected-path detach-first radial plus world-Z retreat from live orchestration; keep its pure helper only if tests still document it
+prediction:
+  - EXP-087-like 8.41 mm release error triggers at least one bounded correction
+  - corrected release-start XY lies within 6 mm of the unchanged compensated target [-0.075, -0.255] m
+  - no MoveIt error 99999 occurs after opening because no new Cartesian retreat is planned
+  - authoritative final outcome is in-region, upright, stable, table-supported, gripper-free and detached
+unchanged:
+  - sustained 1 s MICRO_LIFT gate, penetration policy/ceiling, cup mass/materials, compensation [0.005,-0.005,0.014], all arm/gripper targets, fast raised descent, release q6=0.465038, physics/controllers/collision settings and every final/hard safety bound
+preconditions:
+  - TDD, full pytest, colcon build/test
+  - RESET_WORLD proof on the sole domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-087-282
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FAILURE_AFTER_COMPLETE_CHAIN
+experiment_id: EXP-087
+execution_head: e0e338a
+lifecycle: RESET_WORLD
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp087/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000009421080514078115
+physical_grasp:
+  normalized_target_q6: -0.05348177900910377
+  adjustments: 0
+  moving_pad_depth_m: 0.0002385400584898889
+  held_micro_lift_world_z_m: 0.0020993053913116455
+  held_lateral_drift_m: 0.00022111552831673476
+  attempts: 1
+release:
+  place_alignment_attempts: 0
+  release_start_xyz_m: [-0.0772215723991394, -0.26311439275741577, 0.18646228313446045]
+  final_xyz_m: [-0.07127431035041809, -0.27039018273353577, 0.16499972343444824]
+  release_to_final_delta_xy_m: [0.0059472620487213135, -0.007275789976119995]
+final:
+  failure_code: FINAL_UNSUPPORTED
+  x_out_of_region_m: 0.00372568964958191
+  y_out_of_region_m: 0.01539018273353577
+  upright_tilt_rad: 0.0000008852092468905229
+  stable: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+support_diagnosis:
+  - authoritative observer rejected support because solver depth was below its -0.1 micrometre threshold
+  - independent recorder repeatedly observed plastic_cup wall_near versus table contact at about -0.276 micrometres and z=0.1649997 m
+  - support validation remains unchanged because the independent out-of-region failure is decisive
+evidence_sha256:
+  reset_proof: 6c00b5e87abfacc1b5baffc88fd10e130a4242442a400508684f117ff718fe71
+  execute_log: 32d2a17d0462b2f303e0ad1fb4d19b3f5cb9593488e2fdb10546b36e706e045c
+  physical_gate: c602229b07865f26d4d46c5288ee2ce41e815f1eb3f4ab75de808a7a420bac71
+  failure_json: 6ccde05879e3bb8c2d9b39ca350406d784defbc8d88ae7d36b8ad56ae1b0dccd
+  telemetry: a68305e3c2b3107f9cdcccbe9f27433f9cb6a889cc5e4fdc0eb996c6e8305291
+  bounded_video: 462997baca316bf538afc950ed08a4abf0c4afe4bdda1451d53ab225e19f4713
+  final_screenshot: 855659ff89f4cd2bee582fe1aeeab4ff56444c29f300407f556e0059c1ff5c57
+decision: retain the sustained MICRO_LIFT gate; correct bounded release-start error and use the fixed RETREAT for every alignment outcome in EXP-088
+counts_toward_success_streak: false
 ```
 
 ```yaml
