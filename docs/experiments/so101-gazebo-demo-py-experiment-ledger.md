@@ -5787,3 +5787,92 @@ strategy:
 next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
 next_on_valid_failure: compare carry-stage tilt with EXP-023 before selecting one strategy-family adjustment
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-024
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_OUT_OF_REGION
+physical_grasp:
+  cup_world_z_delta_m: 0.0022234171628952026
+  lateral_drift_m: 0.0004777119313622195
+  moving_pad_depth_m: 0.0010935039026662707
+carry_orientation:
+  before_lift_tilt_rad: 0.07308500922178615
+  before_move_above_place_tilt_rad: 0.0927608675139999
+  after_move_above_place_tilt_rad: 0.17711836998363403
+post_retreat:
+  cup_xyz_m: [-0.09698376804590225, -0.25565534830093384, 0.16499963402748108]
+  upright_tilt_rad: 0.0000013657952723506836
+  support_contact: true
+  gripper_contact: false
+  stable: true
+interpretation: faster carry reduced traverse-induced tilt versus EXP-023 and produced a clean, upright, stationary release; remaining error is an outcome-aligned place offset of about +0.017 m x and +0.006 m y to target center
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-024
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-024-054
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-024/reset-after-final-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000007186569160406146
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+diagnostic_id: DIAG-OUTCOME-SHIFTED-PLACE-TARGETS-055
+lifecycle: VALID_PLAN_ONLY
+recorded_at: 2026-08-09 Asia/Shanghai
+requested_tcp_translation_m: [0.017, 0.006, 0.0]
+tcp_orientation_tolerance_rad: 0.15
+execute_trajectory_count: 0
+result:
+  shifted_above_plan_points: 14
+  shifted_descend_plan_points: 29
+  shifted_above_joints: [0.33766385962327056, 0.17724947394884782, 0.14292961371503782, 1.2324930637814682, 0.006601037589360288]
+  shifted_descend_joints: [0.3292666578514545, 0.46113457949885034, 0.15219243452768055, 1.0422639566196779, 0.007142848813031092]
+  above_actual_tcp_xyz_m: [-0.05593904467885644, -0.24150475380667194, 0.2627105070130852]
+  descend_actual_tcp_xyz_m: [-0.052925117296194285, -0.23873210518524995, 0.20761843859755355]
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-024/outcome-shift-plan-only
+next: generate interpolation ladders and validate every segment plan-only before physical execution
+```
+
+```yaml
+checkpoint_id: CP-OUTCOME-SHIFTED-PLACE-LADDER-056
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  family: MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and reverse RETREAT joint targets
+  requested_tcp_translation_from_exp024_path_m: [0.017, 0.006, 0.0]
+  generation: relaxed-orientation MoveGroup IK endpoints followed by 5-step carry and 3-step descend interpolation; RETREAT and RECOVER_LIFT reverse the same descend ladder
+  faster_carry_timing: retained at 0.05
+frozen:
+  - grasp, preload, contact retry and global penetration safety upper bound
+  - release action and final outcome bounds
+  - physics, geometry, mass/friction, controllers/gains and collision
+  - Gazebo attachment forbidden; MoveIt Planning Scene attach retained
+tests:
+  red: typed policy expected the new IK endpoints while the prior path remained loaded
+  focused_green: 34 passed
+  plan_only:
+    MOVE_ABOVE_PLACE: 75 planned points
+    DESCEND_TO_PLACE: 51 planned points
+    RETREAT: 51 planned points
+    execute_trajectory_count: 0
+  package_pytest: 167 passed, 2 skipped
+  colcon_test: 169 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded before plan-only validation
+provenance:
+  motion_policy_sha256: f18fd5f703dbb9bf3cfca73179810260ae8650f5a3ad12e98a0cfdedefd9bf5f
+  validation_policy_sha256: 3e04ed3e566b38f8ba98e0a44a6e19a689e622c8c5bf091255f7cdd58a8d1971
+  bundle_sha256: 5a5e15452b6f9da79f7a9c7bc0c23b497635cd0d01b98b1c7ab51bbb2518547c
+next: commit locally before preregistration and physical execution
+```
