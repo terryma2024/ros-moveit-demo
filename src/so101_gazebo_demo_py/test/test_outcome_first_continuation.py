@@ -464,6 +464,70 @@ def test_same_run_place_alignment_allows_small_intermediate_progress() -> None:
     assert len(telemetry) == 2
 
 
+def test_same_run_place_alignment_recovers_one_controller_abort_from_observed_outcome() -> None:
+    samples = iter((
+        sample(-0.089, -0.250, 0.169),
+        sample(-0.086, -0.250, 0.169),
+        sample(-0.086, -0.250, 0.169),
+        sample(-0.081, -0.250, 0.169),
+    ))
+    commands = []
+
+    class Backend:
+        def sample(self):
+            return next(samples)
+
+    def execute(delta, _orientation_tolerance_rad):
+        commands.append(delta)
+        if len(commands) == 1:
+            raise RuntimeError(
+                "Failure(code='MOVEIT_EXECUTION_FAILED', "
+                "message='MoveIt execution error -4')"
+            )
+        return 12, (0.39, 0.49, 0.11, 1.0, 0.002)
+
+    times = iter((10.0, 10.25))
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.080, -0.250, 0.169), execute=execute,
+        wait=lambda _seconds: None,
+        monotonic=lambda: next(times),
+    )
+
+    assert aligned.object_xyz == pytest.approx((-0.081, -0.250, 0.169))
+    assert len(commands) == 2
+    assert len(reverse_waypoints) == 1
+    assert telemetry[0]["execution_recovered"] is True
+    assert telemetry[0]["arm_stable"] is True
+
+
+def test_same_run_place_alignment_does_not_recover_unstable_arm_after_abort() -> None:
+    moving_tcp = PoseSample(
+        object_xyz=(-0.086, -0.250, 0.169),
+        tcp_xyz=(0.030, -0.263, 0.369),
+    )
+    samples = iter((
+        sample(-0.089, -0.250, 0.169),
+        sample(-0.086, -0.250, 0.169),
+        moving_tcp,
+    ))
+
+    class Backend:
+        def sample(self):
+            return next(samples)
+
+    times = iter((10.0, 10.25))
+    with pytest.raises(RuntimeError, match="arm remained unstable"):
+        live_execute.align_cup_for_release(
+            Backend(), (-0.080, -0.250, 0.169),
+            execute=lambda *_args: (_ for _ in ()).throw(RuntimeError(
+                "Failure(code='MOVEIT_EXECUTION_FAILED', "
+                "message='MoveIt execution error -4')"
+            )),
+            wait=lambda _seconds: None,
+            monotonic=lambda: next(times),
+        )
+
+
 def test_same_run_place_alignment_fails_after_attempt_budget() -> None:
     samples = iter((
         sample(-0.097, -0.256, 0.165),

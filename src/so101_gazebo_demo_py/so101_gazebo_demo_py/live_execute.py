@@ -256,6 +256,11 @@ def align_cup_for_release(
     z_tolerance_m: float = 0.002,
     max_axis_correction_m: float = 0.030,
     max_pre_release_height_error_m: float = 0.030,
+    max_arm_linear_speed_m_s: float = 0.005,
+    max_arm_angular_speed_rad_s: float = 0.05,
+    recovery_settle_s: float = 0.25,
+    monotonic=time.monotonic,
+    wait=time.sleep,
 ):
     """Use same-run cup pose feedback for a bounded pre-release XY alignment."""
     current=backend.sample(); reverse_waypoints=[]; telemetry=[]
@@ -285,7 +290,53 @@ def align_cup_for_release(
                 f"place alignment correction exceeds bound: {(x_error,y_error,z_error)}"
             )
         delta=(x_error,y_error,z_error)
-        points,start_positions=execute(delta,0.15)
+        try:
+            points,start_positions=execute(delta,0.15)
+        except RuntimeError as error:
+            message=str(error)
+            recoverable=(
+                "MOVEIT_EXECUTION_FAILED" in message
+                and "MoveIt execution error -4" in message
+            )
+            if not recoverable:
+                raise
+            first_after_abort=backend.sample()
+            first_observed_at=monotonic()
+            wait(recovery_settle_s)
+            after=backend.sample()
+            second_observed_at=monotonic()
+            arm_stable=arm_tcp_stable_between(
+                (*first_after_abort.tcp_xyz,*first_after_abort.tcp_xyzw),
+                (*after.tcp_xyz,*after.tcp_xyzw),
+                elapsed_s=max(
+                    recovery_settle_s,
+                    second_observed_at-first_observed_at,
+                ),
+                max_linear_speed_m_s=max_arm_linear_speed_m_s,
+                max_angular_speed_rad_s=max_arm_angular_speed_rad_s,
+            )
+            after_error=math.hypot(
+                target_xyz[0]-after.object_xyz[0],
+                target_xyz[1]-after.object_xyz[1],
+            )
+            telemetry.append({
+                "attempt":attempt+1,
+                "commanded_translation_m":delta,
+                "planned_points":None,
+                "before_object_xyz":current.object_xyz,
+                "after_object_xyz":after.object_xyz,
+                "before_xy_error_m":xy_error,
+                "after_xy_error_m":after_error,
+                "execution_recovered":True,
+                "execution_error":message,
+                "arm_stable":arm_stable,
+            })
+            if not arm_stable:
+                raise RuntimeError(
+                    "place alignment arm remained unstable after execution abort"
+                ) from error
+            current=after
+            continue
         after=backend.sample()
         after_error=math.hypot(
             target_xyz[0]-after.object_xyz[0],
@@ -299,6 +350,7 @@ def align_cup_for_release(
             "after_object_xyz":after.object_xyz,
             "before_xy_error_m":xy_error,
             "after_xy_error_m":after_error,
+            "execution_recovered":False,
         })
         reverse_waypoints.append(tuple(start_positions)); current=after
     raise RuntimeError(
@@ -874,11 +926,14 @@ def run_live_execute(
     target_place_xyz=release_alignment_target(
         tuple(bundle.object.place_pose.values[:3])
     )
+    outcome_policy=bundle.validation.physical_outcome
     def execute_place_correction(delta,orientation_tolerance_rad):
         gate_shadow("PLACE_ALIGNMENT")
         return _moveit_world_translation_execute(delta,orientation_tolerance_rad)
     placed,_place_reverse_waypoints,place_alignment=align_cup_for_release(
         backend,target_place_xyz,execute=execute_place_correction,
+        max_arm_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
+        max_arm_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
     )
     if place_alignment:
         gate_shadow("PRE_RELEASE_RETREAT")
@@ -892,7 +947,6 @@ def run_live_execute(
         scene_membership=[detached_scene[0]]
         synchronized_scene=[detached_scene[0]]
     backend.move_gripper(bundle.motion.release_q6)
-    outcome_policy=bundle.validation.physical_outcome
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
     release_separation=[None]
