@@ -3729,3 +3729,24 @@ runtime:
   preserved_processes: PID 3272995 gz sim server; PID 652055 unrelated clang-tidy; tmux codex/codex-cua/kimi
 next: commit the tested implementation checkpoint, then start one owned isolated stack for RESET_WORLD full-path search
 ```
+
+```yaml
+checkpoint_id: CP-RESET-WORLD-LIVE-CONTRACT-003
+recorded_at: 2026-08-09 Asia/Shanghai
+trigger: installed reset_so101_world executable was audited before live search and found to be a parse-and-return-zero stub
+change:
+  - publish Gazebo detach and require detached readback
+  - park the cup before homing the robot
+  - restore MoveIt world membership at parking and spawn poses
+  - home arm and gripper through measured-state trajectory controllers
+  - respawn the cup through Gazebo set_pose
+  - prove cup pose error <= 0.001 m, Gazebo detached, MoveIt world membership, no finger contact, and finite TCP
+tests:
+  focused: 12 passed
+  package_pytest: 152 passed, 2 skipped
+  colcon_test: 154 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+lifecycle_rule: the former stub is invalid evidence and no historical invocation of it may count as RESET_WORLD
+runtime_started: false
+next: commit reset implementation, pre-register the first full-path candidate, then launch exactly one owned isolated stack
+```
