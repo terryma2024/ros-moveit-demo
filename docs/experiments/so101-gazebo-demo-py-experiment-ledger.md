@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 8af5be6
+current_commit: af32262
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -22,17 +22,114 @@ confirmed_conclusions:
   - EXP-063 activated the configured LIFT velocity scaling and reduced the measured lift boundary from 14.9-18.6 s to 8.53 s; LIFT ended at 0.00804 rad tilt with q6 range 0.00315 rad, and MOVE_ABOVE_PLACE ended at 0.15396 rad tilt.
   - EXP-064 jointly changed the cup to 0.010 kg and raised cup/pad limiting friction to 2.0; MOVE_ABOVE_PLACE end tilt improved from 0.15114 to 0.09895 rad and q6 range from 0.00738 to 0.000168 rad, but DESCEND_TO_PLACE later reached 0.77106 rad tilt.
   - EXP-065 restored 0.020 kg while retaining limiting friction 2.0; MOVE_ABOVE_PLACE regressed to 0.26479 rad end tilt and 0.01068 rad q6 range, while DESCEND_TO_PLACE improved relative to EXP-064 but still ended at 0.44172 rad. The material profile is not an end-to-end candidate.
+  - EXP-066 retained one Planning Scene client and reduced the MOVE-to-DESCEND non-motion interval from the EXP-063 baseline 2.89 s to 2.13 s; it missed the 1.5 s prediction but limited dwell tilt growth to 0.01735 rad and improved DESCEND_TO_PLACE end tilt to 0.22522 rad.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - The 0.020 kg / limiting-friction-1.2 baseline remains the best observed end-to-end material profile among EXP-063/064/065; the next useful variable is reducing non-motion dwell and/or shortening motion exposure while preserving all outcome and hard-safety bounds.
-  - Persistent combined Gazebo/TF observation reduces part of the shadow-gate dwell, but Planning Scene resynchronization still leaves a multi-second interval when divergence is detected.
+  - Retaining EXP-066 client reuse while increasing only DESCEND_TO_PLACE velocity/acceleration scaling from 0.03 to 0.05 should reduce the observed 8.73 s gravity-exposure interval without changing targets or safety bounds.
+  - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-066-IMPLEMENTED-205
-next_experiment: EXP-066
+latest_checkpoint: CP-RESULT-EXP-066-207
+next_experiment: EXP-067
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-066-207
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_PARTIAL_SUCCESS_PREDICTION_MISSED
+experiment_id: EXP-066
+execution_commit: af32262
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 224
+  gz_partition: so101_py_qual_exp066
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+reset_preflight:
+  first_attempt:
+    status: FAILED_BEFORE_PHYSICAL_EXECUTION
+    error: reset CLI retained a removed _apply_scene import
+    root_cause: incomplete API migration outside the forward execute path
+  regression_fix:
+    commit: af32262
+    red: reset runtime-dependency test failed because load_live_dependencies was absent
+    green: focused 39 passed; full pytest 195 passed, 2 skipped; colcon 197 tests, 0 errors, 0 failures, 2 skipped
+  retry:
+    status: RESET_WORLD_PROVED
+    proof: /tmp/so101-py-qualification/exp066/reset/reset-world.json
+    cup_spawn_pose_error_m: 0.0000007266208512031101
+    gazebo_attachment_state: detached
+    moveit_world_objects: [plastic_cup]
+    moveit_attached_objects: []
+    finger_contact: false
+    arm_tcp_finite: true
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.0002376051852479577
+  continuation_max_moving_pad_penetration_m: 0.00023836319451220334
+  micro_lift_world_z_m: 0.00221078097820282
+  lateral_drift_m: 0.00020286271434117985
+lift:
+  duration_s: 8.398748781066388
+  start_tilt_rad: 0.0471166162147104
+  end_tilt_rad: 0.006939647633469721
+  q6_position_range_rad: 0.00041387975215911865
+  table_contact_samples: 0
+move_above_place:
+  duration_s: 4.933132614009082
+  start_tilt_rad: 0.007737462643744762
+  end_tilt_rad: 0.12237673674094357
+  q6_position_range_rad: 0.00041623786091804504
+  table_contact_samples: 0
+post_move_shadow_dwell:
+  duration_s: 2.13003884581849
+  baseline_exp063_duration_s: 2.89
+  start_tilt_rad: 0.12237673674094357
+  end_tilt_rad: 0.13972638100217127
+  tilt_growth_rad: 0.017349644261227704
+  q6_position_range_rad: 0.0000759810209274292
+  table_contact_samples: 0
+descend_to_place:
+  duration_s: 8.730801976751536
+  start_tilt_rad: 0.13971637993954622
+  end_tilt_rad: 0.22522253073302573
+  max_tilt_rad: 0.22522253073302573
+  q6_position_range_rad: 0.003082960844039917
+  table_contact_samples: 0
+  end_bottom_clearance_m: 0.014056307505240145
+release_open_q6_reached:
+  cup_tilt_rad: 0.4140838231945468
+  bottom_clearance_m: 0.012127019494801744
+  table_contact: false
+prediction_evaluation:
+  automated_and_lifecycle_contracts: PASS_AFTER_SCOPED_RESET_FIX
+  physical_grasp_contract: PASS
+  post_move_non_motion_interval_at_most_1_5_s: FAIL_AT_2_13004
+  dwell_tilt_growth_at_most_0_04_rad: PASS_AT_0_01735
+  no_table_contact_through_descend: PASS
+later_known_failure:
+  code: MOVEIT_WORLD_Z_PLAN_FAILED
+  moveit_error_code: 99999
+evidence:
+  execute_log: /tmp/so101-py-qualification/exp066/run/execute.log
+  physical_gate: /tmp/so101-py-qualification/exp066/run/physical-gate.json
+  telemetry: /tmp/so101-py-qualification/exp066/run/diagnostic/samples.jsonl
+  telemetry_sha256: e69aa18ddaa7c5943beb5811005e23640329c67b87b53ffad1adad7ffc7a8249
+  bounded_video: /tmp/so101-py-qualification/exp066/run/diagnostic/gazebo-gui.mp4
+  bounded_video_sha256: 5ce012ad9c00a7d9048a4d1e6e3bb471b4a34428a3b1a55df35cff19f35c4f82
+visual_observation:
+  - The inspected 5-second contact sheet agrees with telemetry: the cup stays visibly near upright through lift and horizontal carry, then rolls progressively during descent and release.
+  - No cup/table contact is visible or measured through the DESCEND_TO_PLACE endpoint.
+interpretation:
+  - Reusing the Planning Scene client removes a measurable portion of idle exposure and produces the best observed descent/open tilt among EXP-063/064/065/066, but does not meet the preregistered 1.5 s latency target.
+  - The implementation is retained because it preserves all scene readbacks and safety gates while improving both latency and downstream physical outcomes in this sample.
+decision: KEEP_CLIENT_REUSE; do not count as success; next isolate a modest DESCEND_TO_PLACE speed increase
+counts_toward_success_streak: false
+next_experiment: EXP-067 retain EXP-066 and change only DESCEND_TO_PLACE velocity/acceleration scaling from 0.03 to 0.05
 ```
 
 ```yaml
