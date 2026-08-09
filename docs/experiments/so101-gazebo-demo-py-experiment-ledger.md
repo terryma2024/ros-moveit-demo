@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: b0a3524
+current_commit: 959d48c
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -39,8 +39,43 @@ open_hypotheses:
   - With the rejected friction candidates restored to 1.2, the next useful boundary is the motion/alignment interval in which tilt grows between MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and OPEN_GRIPPER; target compensation should not be used to mask the tilt source.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESTORE-BASELINE-220
-next_experiment: NONE_PENDING_NEXT_MOTION_HYPOTHESIS
+latest_checkpoint: CP-PRE-EXP-072-221
+next_experiment: EXP-072
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-072-221
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-072
+status: PLANNED
+prior_experiment: EXP-071
+hypothesis: shortening only the loaded horizontal-carry duration reduces the late MOVE_ABOVE_PLACE cup roll without changing grasp materials, descent dynamics or the release target
+single_variable: MOVE_ABOVE_PLACE velocity_scaling changes from 0.10 to 0.15; its waypoints and acceleration scaling remain unchanged
+lifecycle: RESET_WORLD
+evidence_basis:
+  - EXP-067 required no place-alignment correction, so no post-DESCEND Z motion caused its pre-open tilt
+  - EXP-067 Planning Scene synchronization before DESCEND_TO_PLACE took only 0.015449 s
+  - same-method EXP-067 MOVE_ABOVE_PLACE endpoint tilt was 0.154480 rad before the later place/release chain
+prediction:
+  - physical grasp and unchanged hard safety gates pass
+  - MOVE_ABOVE_PLACE endpoint tilt is below the EXP-067 same-method reference 0.154480 rad
+  - MOVE_ABOVE_PLACE duration is shorter than the 0.10-scaling baseline
+  - downstream DESCEND_TO_PLACE and authoritative final outcome remain diagnostic acceptance boundaries
+preconditions:
+  - reuse only the proved baseline-restored so101-py-qual GUI stack on ROS_DOMAIN_ID 227 and GZ_PARTITION so101_py_qual_baseline_restored
+  - prove RESET_WORLD immediately before execute; no second Gazebo/MoveIt stack or execute client
+  - focused/full pytest and colcon build/test pass with source/install policy parity
+unchanged:
+  - release target and settling compensation including y -0.005 m
+  - DESCEND_TO_PLACE velocity/acceleration scaling 0.05/0.05 and every motion waypoint/orientation
+  - cup mass 0.020 kg, cup friction 1.2, fingertip axial/transverse friction 3.0/1.2
+  - physics engine, geometry, inertia, controller/gains, collision model, penetration bounds, physical-outcome contract, Gazebo-detached semantics and MoveIt Planning Scene shadow attach
+failure_criteria:
+  - grasp, hard-safety/controller, motion or authoritative final-outcome failure
+invalid_criteria:
+  - reset/provenance mismatch, duplicate stack/client, stale installed policy, missing telemetry/video or disk pressure
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
