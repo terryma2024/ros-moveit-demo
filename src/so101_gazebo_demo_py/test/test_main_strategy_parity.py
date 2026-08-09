@@ -37,7 +37,7 @@ def test_policy_matches_main_seated_grasp_strategy() -> None:
     assert "CLOSE_GRIPPER" not in motion["states"]
     assert "CLOSE_GRIPPER" not in validation["states"]
     assert motion["states"]["LIFT"]["logical_start"] == seated
-    assert motion["states"]["MOVE_ABOVE_PLACE"]["velocity_scaling"] == 0.02
+    assert motion["states"]["MOVE_ABOVE_PLACE"]["velocity_scaling"] == 0.05
     assert motion["states"]["DESCEND_TO_PLACE"]["velocity_scaling"] == 0.03
     constraints = controllers["arm_controller"]["ros__parameters"]["constraints"]
     assert {constraints[str(index)]["trajectory"] for index in range(1, 6)} == {0.008}
@@ -113,6 +113,7 @@ def test_micro_lift_move_group_goal_uses_main_pose_tolerances() -> None:
 def test_carrying_waypoint_timing_applies_policy_velocity_scaling() -> None:
     assert waypoint_step_seconds(5, 0.03) == 3
     assert waypoint_step_seconds(5, 0.02) == 5
+    assert waypoint_step_seconds(5, 0.05) == 2
     assert waypoint_step_seconds(5, 0.10) == 1
 
 
