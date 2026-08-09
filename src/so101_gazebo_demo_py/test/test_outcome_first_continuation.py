@@ -321,6 +321,33 @@ def test_same_run_place_alignment_uses_cup_error_and_returns_reverse_path() -> N
     assert telemetry[-1]["after_xy_error_m"] < telemetry[-1]["before_xy_error_m"]
 
 
+def test_same_run_place_alignment_allows_pre_release_drop_height() -> None:
+    class Backend:
+        def sample(self):
+            return sample(-0.081, -0.251, 0.1757)
+
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.080, -0.250, 0.165),
+        execute=lambda *_args: pytest.fail("already-aligned cup must not move"),
+    )
+
+    assert aligned.object_xyz == pytest.approx((-0.081, -0.251, 0.1757))
+    assert reverse_waypoints == ()
+    assert telemetry == ()
+
+
+def test_same_run_place_alignment_rejects_implausible_pre_release_height() -> None:
+    class Backend:
+        def sample(self):
+            return sample(-0.081, -0.251, 0.1951)
+
+    with pytest.raises(RuntimeError, match="pre-release height outside plausibility"):
+        live_execute.align_cup_for_release(
+            Backend(), (-0.080, -0.250, 0.165),
+            execute=lambda *_args: pytest.fail("implausible pose must not move"),
+        )
+
+
 def test_same_run_place_alignment_fails_closed_outside_translation_bound() -> None:
     class Backend:
         def sample(self):

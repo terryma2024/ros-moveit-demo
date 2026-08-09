@@ -227,6 +227,7 @@ def align_cup_for_release(
     backend, target_xyz, *, execute,
     max_attempts: int = 2, xy_tolerance_m: float = 0.003,
     max_axis_correction_m: float = 0.030,
+    max_pre_release_height_error_m: float = 0.030,
 ):
     """Use same-run cup pose feedback for a bounded pre-release XY alignment."""
     current=backend.sample(); reverse_waypoints=[]; telemetry=[]
@@ -238,9 +239,10 @@ def align_cup_for_release(
         x_error=target_xyz[0]-current.object_xyz[0]
         y_error=target_xyz[1]-current.object_xyz[1]
         xy_error=math.hypot(x_error,y_error)
-        if height_error > 0.010:
+        if height_error > max_pre_release_height_error_m:
             raise RuntimeError(
-                f"place alignment support height outside bound: {height_error}"
+                f"place alignment pre-release height outside plausibility bound: "
+                f"{height_error}"
             )
         x,y,_,w=current.object_xyzw
         upright=math.acos(max(-1.0,min(1.0,1.0-2.0*(x*x+y*y))))
