@@ -237,6 +237,38 @@ def shadow_divergence_healthy(gazebo_pose, shadow_pose, pair_age_s, policy) -> b
     return position <= policy.max_position_divergence_m and orientation <= policy.max_orientation_divergence_rad
 
 
+def synchronize_planning_shadow(backend, object_in_tcp, policy, apply_scene):
+    """Refresh a slipped attached-object shadow from fresh Gazebo truth."""
+    observed=backend.sample()
+    gazebo_pose=(*observed.object_xyz,*observed.object_xyzw)
+    tcp_pose=(*observed.tcp_xyz,*observed.tcp_xyzw)
+    if (
+        observed.pose_pair_age_s < 0.0
+        or observed.pose_pair_age_s > policy.max_pair_age_s
+    ):
+        raise RuntimeError("planning shadow evidence stale")
+    if not all(math.isfinite(value) for value in (*gazebo_pose,*tcp_pose)):
+        raise RuntimeError("planning shadow evidence non-finite")
+    expected=compose_pose(tcp_pose,object_in_tcp)
+    healthy=shadow_divergence_healthy(
+        gazebo_pose,expected,observed.pose_pair_age_s,policy,
+    )
+    check={
+        "gazebo_pose":gazebo_pose,
+        "shadow_pose":expected,
+        "pair_age_s":observed.pose_pair_age_s,
+        "healthy_before_sync":healthy,
+        "resynchronized":False,
+    }
+    if not healthy:
+        scene=apply_scene("attach",gazebo_pose)
+        if "plastic_cup" not in scene["attached_objects"]:
+            raise RuntimeError("planning shadow resynchronization failed")
+        object_in_tcp=relative_pose(tcp_pose,gazebo_pose)
+        check.update({"resynchronized":True,"planning_scene":scene})
+    return check,object_in_tcp
+
+
 def seating_preload_target(q6_contact: float, q6_safe_lower: float, preload_rad: float = 0.006) -> float:
     """Return the configured seating preload without exceeding the q6 floor."""
     return max(q6_safe_lower, q6_contact - preload_rad)
@@ -680,16 +712,13 @@ def run_live_execute(
     object_in_tcp=relative_pose((*after.tcp_xyz,*after.tcp_xyzw),shadow_pose)
     shadow_checks=[]
     def gate_shadow(name):
-        observed=backend.sample()
-        gazebo_pose=(*observed.object_xyz,*observed.object_xyzw)
-        expected=compose_pose((*observed.tcp_xyz,*observed.tcp_xyzw),object_in_tcp)
-        healthy=shadow_divergence_healthy(
-            gazebo_pose,expected,observed.pose_pair_age_s,
+        nonlocal object_in_tcp
+        check,object_in_tcp=synchronize_planning_shadow(
+            backend,object_in_tcp,
             bundle.validation.physical_outcome.planning_shadow,
+            _apply_scene,
         )
-        shadow_checks.append({"state":name,"gazebo_pose":gazebo_pose,"shadow_pose":expected,"pair_age_s":observed.pose_pair_age_s,"healthy":healthy})
-        if not healthy:
-            raise RuntimeError(f"planning shadow divergence before {name}")
+        shadow_checks.append({"state":name,**check})
     carry_policies={}
     for name in ("LIFT","MOVE_ABOVE_PLACE","DESCEND_TO_PLACE"):
         state=next(state for state in bundle.motion.states if state.value==name)

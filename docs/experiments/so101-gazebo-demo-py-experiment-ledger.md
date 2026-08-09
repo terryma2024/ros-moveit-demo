@@ -4170,3 +4170,66 @@ strategy:
 next_on_valid_success: classify final placement and freeze or adjust only the placement family
 next_on_valid_failure: choose one causally related grasp/motion family from the first result boundary
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-006
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  passed_boundaries: [DESCEND, CLOSE, MICRO_LIFT, LIFT, MOVE_ABOVE_PLACE]
+  failure_boundary: planning shadow divergence before DESCEND_TO_PLACE
+physical_grasp:
+  cup_world_z_delta_m: 0.0018304437398910522
+  commanded_micro_lift_m: 0.002
+  position_error_m: 0.00022149112409282977
+  lateral_drift_m: 0.0001425096232181257
+  bilateral_contact: true
+  moving_pad_depth_m: 0.0004711989895440638
+  gazebo_attachment_state: detached
+post_failure_readback:
+  cup_xyz_m: [-0.08316444605588913, -0.24098831415176392, 0.21896584331989288]
+  tcp_xyz_m: [-0.07287721759245652, -0.23549664376151255, 0.2627483625735164]
+  bilateral_contact: true
+  q6_rad: -0.047229472547769547
+  planning_scene: {world_objects: [], attached_objects: [plastic_cup]}
+interpretation: direct close plus 0.002 preload physically carried the cup to the place-above region, but a fixed attached-object transform no longer matched the slipped/tilted cup closely enough to plan DESCEND_TO_PLACE
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-006
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-006-013
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-006/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000009339546798441435
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-DYNAMIC-PLANNING-SHADOW-014
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change: before each carry motion, compare the fixed attached shadow with the latest authoritative Gazebo cup/TCP pair; when fresh finite physical slip exceeds the frozen divergence limits, update the MoveIt attached-object pose and its cup-in-TCP reference before planning
+fail_closed:
+  - stale pose pairs are rejected and never applied to Planning Scene
+  - non-finite cup or TCP poses are rejected
+  - failed attached membership readback is rejected
+unchanged:
+  - the divergence thresholds themselves
+  - Gazebo remains detached and is never commanded to attach
+  - physics, geometry, material, controller/gains and collision rules
+  - physical cup continuation and final outcome gates
+tests:
+  red: synchronize_planning_shadow was absent
+  focused_green: 33 passed
+  package_pytest: 159 passed, 2 skipped
+  colcon_test: 161 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit the dynamic shadow synchronization, preregister an unchanged physical-motion rerun, and evaluate the next result boundary
+```
