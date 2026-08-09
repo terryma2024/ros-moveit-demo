@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 1b76d9e
+current_commit: 510685a
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -65,8 +65,34 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-085-274
+latest_checkpoint: CP-EXP-085-IMPLEMENTED-275
 next_experiment: EXP-085
+```
+
+```yaml
+checkpoint_id: CP-EXP-085-IMPLEMENTED-275
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-085
+planning_commit: 1fdf740
+implementation_commit: 510685a
+single_variable: final release q6 and RETREAT gripper metadata change from 0.750 to the proven preopen-clearance value 0.465038
+red:
+  focused: 1 failed, 18 passed because release_q6 was still 0.750
+green:
+  focused: 33 passed
+  full_pytest: 202 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 204 tests, 0 errors, 0 failures, 2 skipped
+provenance:
+  motion_policy_sha256: 3f1be3796de6246418c56ee384c14c522393491302943cbd04357bf4d72afd97
+  validation_policy_sha256: f702e030ad64d10326640e51e5cb0e8b7e8388cc790f66b557baf127bada3ff2
+unchanged_behavior:
+  - final-release duration remains 1 s
+  - fast raised DESCEND_TO_PLACE and the immediate fixed-joint RETREAT remain unchanged
+  - Gazebo stays physically detached and the MoveIt Planning Scene shadow remains attached through retreat
+next_command: RESET_WORLD on the sole domain 231 stack, then one bounded EXP-085 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
