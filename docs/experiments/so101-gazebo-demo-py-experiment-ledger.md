@@ -5027,3 +5027,63 @@ strategy:
 next_on_valid_success: freeze the strategy and run two RESET_WORLD confirmations without changes
 next_on_valid_failure: compare post-seating versus micro-lift penetration and final physical pose before selecting the next single control change
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-014
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_GRIPPER_CONTACT
+physical_grasp:
+  post_seating_depth_m: 0.00036560650914907455
+  micro_lift_depth_m: 0.0003656535118352622
+  cup_world_z_delta_m: 0.0021862536668777466
+  lateral_drift_m: 0.00014153098389471387
+post_retreat:
+  cup_xyz_m: [-0.11043859273195267, -0.2657349705696106, 0.1602337509393692]
+  upright_tilt_rad: 1.570796979214629
+diagnosis: six stable samples proved the low penetration was persistent rather than transient; passive waiting cannot normalize grasp-relative pose, so a bounded penetration controller is required
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-014
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-014-033
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-014/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000017704435163329736
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-BOUNDED-PENETRATION-CONTROLLER-034
+recorded_at: 2026-08-09 Asia/Shanghai
+control_contract:
+  target_band_m: [0.0006, 0.0010]
+  approved_search_domain_m: [0.0001, 0.0010]
+  hard_ceiling_m: 0.0013
+  initial_step_rad: 0.0005
+  maximum_adjustments: 6
+  low_depth_action: close q6 by one step
+  high_depth_action: open q6 by one step
+  direction_reversal: halve step
+  q6_bounds: [safe_lower_floor, physical_contact_position]
+  completion: six consecutive bilateral samples at the current q6 and final depth inside target band
+  failure: nonfinite/missing depth, hard ceiling, contact instability, q6 bound, or adjustment budget
+sequence: physical close -> initial preload -> bounded depth control -> MoveIt Planning Scene attach -> physical micro-lift; Gazebo attach remains forbidden
+tests:
+  red: controller symbol absent
+  fixture_correction: initial fake contacts lacked the real plastic-cup collision naming and correctly failed bilateral classification; fixed test evidence names without changing production logic
+  focused_green: 26 passed
+  package_pytest: 164 passed, 2 skipped
+  colcon_test: 166 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit locally, preregister a VERIFY_PHYSICAL_GRASP-only diagnostic, and require real target-band convergence before a full-path trial
+```
