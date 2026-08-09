@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: c2ea38b1dc45b81e52d73f6b8749db9e894086a9
+current_commit: 6569c3fbefb9d133c1b55bbdb6919879c329ba69
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -25,7 +25,7 @@ open_hypotheses:
   - Increasing only MOVE_ABOVE_PLACE velocity scaling from 0.05 to 0.10 will halve the longest tilt-producing horizontal carry dwell and reduce pre-open tilt while preserving the improved 0.006 preload grasp.
   - If the post-open boundary still fails, detaching the MoveIt shadow at physical OPEN_GRIPPER and collecting one bounded physical settle epoch before retreat will prevent the gripper from throwing the released cup.
   - If release sequencing alone is insufficient, the user has authorized an isolated cup-mass candidate down to 0.020 kg.
-latest_checkpoint: CP-PRE-EXP-060-182
+latest_checkpoint: CP-EXP-060-IMPLEMENTED-183
 next_experiment: EXP-060
 ```
 
@@ -8631,6 +8631,7 @@ evidence:
   telemetry: /tmp/so101-py-gui-214/candidate-059/diagnostic/samples.jsonl
   analysis: /tmp/so101-py-gui-214/candidate-059/diagnostic/exp059-analysis.json
   bounded_video: /tmp/so101-py-gui-214/candidate-059/diagnostic/gazebo-gui.mp4
+  user_observed_post_open_frame: /tmp/so101-py-gui-214/candidate-059/diagnostic/user-observed-post-open.png
 reset:
   status: RESET_WORLD_PROVED
   cup_spawn_pose_error_m: 0.0000008058289823486353
@@ -8730,5 +8731,27 @@ provenance:
 commands:
   - command: pytest RED, minimal motion-policy edit, full pytest/build/colcon test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
     exit_code: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-EXP-060-IMPLEMENTED-183
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-060
+implementation_commit: 6569c3fbefb9d133c1b55bbdb6919879c329ba69
+single_variable: MOVE_ABOVE_PLACE velocity_scaling from 0.05 to 0.10
+red:
+  targeted: 1 failed; policy still exposed 0.05
+green:
+  targeted: 2 passed including provenance
+  full_pytest: 189 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 191 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  motion_policy_source_install_sha256: 8f11467ac14fb3c814b7c4a81161af66a7911c7bec32827a0985156bf75078b9
+  validation_policy_source_install_sha256: f702e030ad64d10326640e51e5cb0e8b7e8388cc790f66b557baf127bada3ff2
+  policy_sha256: bc0c1e8b87192b0ad44341569e747f9f8cf49b37253c778895088689433856f7
+next_command: RESET_WORLD on so101-py-gui-214, then bounded telemetry/H.264 and one EXP-060 execute
 counts_toward_success_streak: false
 ```
