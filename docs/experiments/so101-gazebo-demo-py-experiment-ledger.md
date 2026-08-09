@@ -4506,3 +4506,36 @@ gz_partition: so101_py_outcome_search_203
 evidence_root: /tmp/so101-py-outcome-search-203/candidate-009/shifted-place-plan-021
 acceptance: shifted above and descend targets both produce nonempty collision-checked plans
 ```
+
+```yaml
+diagnostic_id: DIAG-SHIFTED-PLACE-TARGETS-021
+lifecycle: INVALID_UNREACHABLE
+result:
+  execute_trajectory_count: 0
+  requested_tcp_translation_m: [0.010, -0.007, 0.0]
+  moveit_error: GOAL_STATE_INVALID / Unable to sample any valid states for goal tree
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-009/shifted-place-plan-021
+conclusion: even the minimum-margin whole-path XY shift is not reachable with the frozen TCP orientation/collision model; reject XY hard-shift calibration
+```
+
+```yaml
+checkpoint_id: CP-MIDPOINT-SEATING-PRELOAD-022
+recorded_at: 2026-08-09 Asia/Shanghai
+candidate_change:
+  family: grasp seating motion target
+  seating_preload_rad: {from: 0.002, to: 0.004}
+causal_basis: EXP-009 pre-retreat cup remained in gripper contact at 0.2496 rad tilt and then shifted 10.9 mm while dropping; prior 0.006 evidence was intermittently too aggressive, so test the deterministic midpoint for improved carry orientation/release
+frozen:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  vertical_retreat: retained
+  place endpoint and all final thresholds: unchanged
+  q6 safety floor and physical/geometry/material/controller/collision rules: unchanged
+tests:
+  red: typed policy bundle still loaded 0.002
+  policy_green: 19 passed
+  package_pytest: 161 passed, 2 skipped
+  colcon_test: 163 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance: motion policy sha256 1cc0b215542e213be6bcca516e80d38d1642e24cebc03bef491d98569585f616; recomputation test passed
+next: commit locally, preregister and execute the 0.004 candidate
+```
