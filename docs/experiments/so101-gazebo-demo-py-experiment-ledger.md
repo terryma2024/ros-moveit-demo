@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: af32262
+current_commit: fa28e93
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -32,8 +32,42 @@ open_hypotheses:
   - Retaining EXP-066 client reuse while increasing only DESCEND_TO_PLACE velocity/acceleration scaling from 0.03 to 0.05 should reduce the observed 8.73 s gravity-exposure interval without changing targets or safety bounds.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-066-207
+latest_checkpoint: CP-PRE-EXP-067-208
 next_experiment: EXP-067
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-067-208
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-067
+status: PLANNED
+prior_experiment: EXP-066
+hypothesis: a modest DESCEND_TO_PLACE speed increase reduces gravity-exposure time enough to limit held-cup roll before release while preserving the same endpoint, contact clearance and hard arm/outcome bounds
+single_variable: DESCEND_TO_PLACE velocity_scaling and acceleration_scaling change together from the matched 0.03 profile to the matched 0.05 profile; no other state changes
+lifecycle: RESET_WORLD
+prediction:
+  - physical grasp passes the unchanged bilateral-contact, penetration, micro-lift, lateral-drift and arm-stability bounds
+  - DESCEND_TO_PLACE duration decreases from EXP-066 8.73 s to <= 6.3 s
+  - DESCEND_TO_PLACE end tilt is <= 0.20 rad with no table contact
+  - cup tilt when release q6 first reaches 0.74 is <= 0.35 rad with no table contact
+  - the known later world-Z MoveIt failure remains diagnostic and does not invalidate the scoped descent/release comparison
+preconditions:
+  - RED policy-contract test proves the source still exposes 0.03 for DESCEND_TO_PLACE
+  - focused/full pytest and colcon build/test pass; source and install policy hashes match
+  - the sole domain-224/so101_py_qual_exp066 GUI stack remains healthy and no execute/recorder/video process remains
+  - RESET_WORLD re-proves initial cup pose, Gazebo detach, MoveIt world-only membership, no finger contact and finite TCP
+  - bounded 50 Hz telemetry and 5 fps half-resolution H.264 are active before one execute
+unchanged:
+  - all joint waypoints, target poses, q6 commands and every other state's velocity/acceleration scaling
+  - all physical-outcome, arm-stability, penetration-ceiling, shadow-divergence and final-placement thresholds
+  - physics engine, 0.020 kg mass, friction 1.2/3.0, geometry, contact material, controller/gains and collision model
+  - Gazebo remains physically detached; MoveIt Planning Scene attach remains the collision shadow through carry and release
+failure_criteria:
+  - any hard-safety/controller failure, DESCEND duration > 6.3 s, DESCEND endpoint tilt > 0.20 rad, release-q6 tilt > 0.35 rad or table contact through either boundary
+invalid_criteria:
+  - source/install mismatch, duplicate stack/client, missing reset proof, telemetry/video or disk pressure
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
