@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 453109c
+current_commit: 4e74a1a
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -33,8 +33,40 @@ open_hypotheses:
   - Retaining EXP-067 and shifting only release-alignment y compensation by approximately -0.006 m should counter the observed +0.011805 m retreat displacement and move the final cup from y=-0.244315 m toward the -0.250 m region center.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-RESULT-EXP-067-210
+latest_checkpoint: CP-PRE-EXP-068-211
 next_experiment: EXP-068
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-068-211
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-068
+status: PLANNED_NOT_IMPLEMENTED
+prior_experiment: EXP-067
+hypothesis: shifting only the release-alignment target 0.006 m farther in negative world Y compensates the measured +0.011805 m cup displacement during release/retreat and moves the final y from -0.244315 m toward the -0.250 m region center
+single_variable: release_alignment_target default settling_compensation_m.y changes from -0.005 to -0.011 m
+lifecycle: RESET_WORLD
+prediction:
+  - physical grasp and arm/controller hard-safety contracts pass unchanged
+  - post-retreat final x is within [-0.085, -0.075] m and y is within [-0.255, -0.245] m, preferably y within [-0.252, -0.248] m
+  - final cup is upright <= 0.0872665 rad, stable <= 0.001 m/s and <= 0.05 rad/s, table-supported, Gazebo detached, MoveIt detached and free of gripper contact
+  - pre-release tilt/contact remain diagnostic under the approved outcome-first strategy; they fail the run only if they trigger an existing catastrophic cup/arm/controller safety bound or prevent the authoritative final outcome
+preconditions:
+  - RED test proves the current release target still uses -0.005 m y compensation
+  - focused/full pytest and colcon build/test pass with source/install parity
+  - the sole domain-224 GUI stack remains healthy; no execute/recorder/video process remains
+  - RESET_WORLD re-proves initial pose, detach, world-only scene membership, no finger contact and finite TCP
+  - bounded telemetry/H.264 start before one execute
+unchanged:
+  - all joint waypoints, DESCEND_TO_PLACE 0.05 speed profile, z/x compensation, q6 commands and client reuse
+  - all authoritative final-outcome thresholds and every hard arm/cup/controller safety bound
+  - physics engine, mass/friction, geometry, contact material, controller/gains, collision and attachment semantics
+failure_criteria:
+  - any hard-safety/controller failure or any authoritative post-retreat final-outcome failure
+invalid_criteria:
+  - source/install mismatch, duplicate stack/client, missing reset proof, telemetry/video or disk pressure
+decision: PENDING
+counts_toward_success_streak: false
 ```
 
 ```yaml
