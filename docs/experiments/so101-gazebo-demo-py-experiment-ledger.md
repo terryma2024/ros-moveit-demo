@@ -5111,3 +5111,59 @@ acceptance:
 next_on_valid: RESET_WORLD, then preregister one full-path candidate with the same frozen parameters
 next_on_invalid: persist physical-failure evidence and adjust only the bounded controller, not the place path or final acceptance
 ```
+
+```yaml
+diagnostic_id: DIAG-PENETRATION-CONTROL-LIVE-035
+lifecycle: VALID_PHYSICAL_CHECKPOINT
+result:
+  execute_rc: 0
+  status: CHECKPOINT_COMPLETE
+  post_seating_depth_m: 0.0006516959401778877
+  seating_adjustments: 0
+  micro_lift_depth_m: 0.0011951517080888152
+  cup_world_z_delta_m: 0.0014688819646835327
+  lateral_drift_m: 0.00033422630465806003
+  continuation_position_error_m: 0.0006275297524132275
+  gazebo_attachment_state: detached
+interpretation: the controller reached its approved pre-lift target band and the cup/arm outcome passed; depth growth during physical lift stayed below the unchanged 0.0013 m hard ceiling and remains telemetry rather than an intermediate rejection
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-015-grasp-only
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-DIAG-035-036
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-015-grasp-only/reset-after-checkpoint
+proof:
+  cup_spawn_pose_error_m: 0.000001677281351318692
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-016
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: the physically proven bounded seating controller plus the restored EXP-011 place/release path will reduce grasp-relative-pose variance enough for a stable final placement inside the frozen region
+execute_commit: cb5d5e99022fb2c38914ca7f537a77300f590266
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-016
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-015-grasp-only/reset-after-checkpoint/reset-world.json
+strategy:
+  seating_penetration_target_band_m: [0.0006, 0.0010]
+  moving_pad_penetration_hard_ceiling_m: 0.0013
+  place_family: EXP-011
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained
+  intermediate_validation: cup/arm outcome constraints; contact/depth telemetry unless hard ceiling
+  final_acceptance: frozen position, uprightness, and stability region
+next_on_valid_success: freeze strategy and run two independent RESET_WORLD confirmations
+next_on_valid_failure: classify release and final pose; do not change more than one control family
+```
