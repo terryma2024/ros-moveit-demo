@@ -23,6 +23,7 @@ from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
 
 PACKAGE = Path(__file__).parents[1]
 LIVE_EXECUTE = PACKAGE / "so101_gazebo_demo_py/live_execute.py"
+MOTION_POLICY = PACKAGE / "config/motion_policies/light_cup_wall_pick.yaml"
 LIVE_CLI = PACKAGE / "so101_gazebo_demo_py/cli/pick_place_state_machine.py"
 ROS_GAZEBO_BACKEND = PACKAGE / "so101_gazebo_demo_py/test_support/ros_gazebo_backend.py"
 
@@ -208,6 +209,20 @@ def test_release_settles_after_scene_detach_before_existing_retreat() -> None:
         detach_index:epochs_index
     ]
     assert "pre_retreat_outcome" in forward_path[epochs_index:post_outcome_index]
+
+
+def test_no_alignment_retreat_uses_explicit_fast_policy_scaling() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+    retreat = MOTION_POLICY.read_text().split("  RETREAT:", 1)[1].split(
+        "  RECOVER_LIFT_TO_SAFE_HEIGHT:", 1,
+    )[0]
+
+    assert (
+        "backend.move_arm(retreat_policy.waypoints, "
+        "velocity_scaling=retreat_policy.velocity_scaling)"
+    ) in forward_path
+    assert "velocity_scaling: 0.10" in retreat
 
 
 def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:
