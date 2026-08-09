@@ -4617,3 +4617,30 @@ gz_partition: so101_py_outcome_search_203
 evidence_root: /tmp/so101-py-outcome-search-203/candidate-010/y-shifted-place-plan-024
 acceptance: both targets return nonempty collision-checked plans; otherwise retain the existing place path and choose a different release-control family
 ```
+
+```yaml
+diagnostic_id: DIAG-Y-SHIFTED-PLACE-TARGETS-024
+lifecycle: INVALID_UNREACHABLE
+result:
+  execute_trajectory_count: 0
+  requested_tcp_translation_m: [0.0, -0.012, 0.0]
+  tcp_orientation_tolerance_rad: 0.005
+  moveit_error: GOAL_STATE_INVALID
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-010/y-shifted-place-plan-024
+conclusion: the five-DOF chain cannot preserve the existing TCP orientation while making the requested lateral correction
+```
+
+```yaml
+diagnostic_id: DIAG-Y-SHIFTED-PLACE-TARGETS-025
+lifecycle: PLANNED_PLAN_ONLY
+recorded_at: 2026-08-09 Asia/Shanghai
+purpose: test the same y-only correction with bounded TCP orientation freedom appropriate to a five-DOF arm
+requested_tcp_translation_m: [0.0, -0.012, 0.0]
+tcp_orientation_tolerance_rad: 0.15
+final_cup_upright_tolerance_rad: unchanged at 0.08726646259971647
+mode: MoveGroup plan_only; no ExecuteTrajectory
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-010/y-shifted-place-plan-025
+acceptance: both shifted above and descend pose goals return nonempty collision-checked plans
+```
