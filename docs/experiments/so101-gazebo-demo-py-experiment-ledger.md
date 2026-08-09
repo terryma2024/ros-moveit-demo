@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 05007b6a440d99c9958ac7c88a54fe02c59a602d
+current_commit: 02c37788579eba2ee46c3bf484b0e5306ea1ffe6
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -25,7 +25,7 @@ disproven_routes:
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
   - Detaching the MoveIt shadow immediately after physical OPEN_GRIPPER, collecting a bounded physical settle epoch while the arm remains stationary, and only then retreating will prevent the already-20 g cup from being displaced out of region.
-latest_checkpoint: CP-PRE-EXP-061-188
+latest_checkpoint: CP-EXP-061-IMPLEMENTED-189
 next_experiment: EXP-061
 ```
 
@@ -3864,6 +3864,45 @@ result:
 interpretation: contact/penetration telemetry did not reject the candidate; the cup physically failed to follow the +0.002 m command, so the result-based continuation gate correctly stopped the path
 evidence_root: /tmp/so101-py-outcome-search-203
 counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-EXP-061-IMPLEMENTED-189
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-061
+implementation_commit: 02c37788579eba2ee46c3bf484b0e5306ea1ffe6
+single_variable: release ordering only
+implemented_sequence:
+  - physically OPEN_GRIPPER
+  - sample the fresh Gazebo cup pose and detach the MoveIt shadow to a world object
+  - collect one bounded physical settle epoch with the arm stationary
+  - execute the unchanged retreat path
+  - resynchronize the MoveIt world object from the fresh Gazebo pose
+  - collect an independent authoritative post-retreat epoch
+acceptance_semantics:
+  - the pre-retreat epoch is retained as diagnostic evidence of the physical release boundary
+  - the independent post-retreat epoch remains authoritative, consistent with outcome-first validation
+  - retreat still executes after a failed diagnostic pre-retreat epoch so the arm is not stranded at the cup
+unchanged:
+  - cup mass remains 0.020 kg in source and installed SDF
+  - seating preload, faster MOVE_ABOVE_PLACE, DESCEND_TO_PLACE speed, targets and orientations
+  - physics, geometry, inertia, friction, controller/gains, collision model and penetration bounds
+  - Gazebo physical detachment and MoveIt shadow-attach-during-carry semantics
+red:
+  targeted: 3 expected failures because the live path lacked detach-before-settle, two independent epochs and dual-epoch failure persistence
+green:
+  targeted: 6 passed
+  full_pytest: 190 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 192 tests, 0 errors, 0 failures, 2 skipped
+test_environment_note: one preliminary full-pytest invocation replaced the sourced ROS PYTHONPATH and failed collection for ament_index_python/launch; rerunning with the sourced Jazzy and worktree overlay passed
+installed_provenance:
+  package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  imported_live_execute: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/build/so101_gazebo_demo_py/so101_gazebo_demo_py/live_execute.py
+  source_build_live_execute_sha256: eb5689c35eddebbba564a8ab8069c5ca5438398a6243edac19f150b7cd3d3b8d
+next_command: prove RESET_WORLD on so101-py-qual, start bounded telemetry/H.264, then execute EXP-061 once
 counts_toward_success_streak: false
 ```
 
