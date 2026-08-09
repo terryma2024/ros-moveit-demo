@@ -5167,3 +5167,55 @@ strategy:
 next_on_valid_success: freeze strategy and run two independent RESET_WORLD confirmations
 next_on_valid_failure: classify release and final pose; do not change more than one control family
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-016
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: CUP_INTERMEDIATE_POSITION
+  cup_world_z_delta_m: 0.0016389787197113037
+  lateral_drift_m: 0.004771869160688415
+  initial_contact_depth_m: 0.0005518827820196748
+  controller_final_target_q6: -0.051046330839395526
+  latest_moving_pad_depth_m: 0.0011518176179379225
+diagnosis: the two-sided controller opened q6 by 0.0005 rad for safe high penetration telemetry, producing a loose grasp and 4.77 mm micro-lift lateral slip; the run correctly stopped before carry
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-016
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-016-037
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-016/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000015864806647141819
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-ONE-SIDED-PENETRATION-CONTROL-038
+recorded_at: 2026-08-09 Asia/Shanghai
+revision:
+  control_goal: prevent under-seated loose grasps
+  low_depth: close q6 by 0.0005 rad until depth >= 0.0006 m or budget/floor failure
+  safe_high_depth: record above_preferred_max telemetry and retain q6; never open
+  hard_ceiling: unchanged 0.0013 m immediate failure
+  preferred_max_m: 0.0010 telemetry only
+  maximum_adjustments: 6
+  final_and_micro_lift_validation: unchanged outcome-based cup position and arm stability
+failure_evidence: now includes full seating_adjustments and post_seating_contact
+tests:
+  red: safe-high contract exposed repeated q6 opening/nonconvergence
+  focused_green: 26 passed
+  package_pytest: 164 passed, 2 skipped
+  colcon_test: 166 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+next: commit locally and run a preregistered VERIFY_PHYSICAL_GRASP-only check before another full path
+```
