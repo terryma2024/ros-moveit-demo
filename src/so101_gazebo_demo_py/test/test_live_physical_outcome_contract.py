@@ -291,6 +291,29 @@ def test_closest_pose_pair_retains_cross_source_history() -> None:
     }
 
 
+def test_closest_pose_pair_snapshots_under_shared_callback_lock() -> None:
+    class Lock:
+        def __init__(self):
+            self.entries = 0
+
+        def __enter__(self):
+            self.entries += 1
+
+        def __exit__(self, *_args):
+            return False
+
+    lock = Lock()
+    pair = closest_pose_pair(
+        [((1.0,) * 7, 10.0)],
+        [((2.0,) * 7, 10.01)],
+        lock=lock,
+    )
+
+    assert lock.entries == 1
+    assert pair["object"][1] == 10.0
+    assert pair["tcp"][1] == 10.01
+
+
 def test_plan_only_validates_every_waypoint_as_a_contiguous_sequence() -> None:
     requests = []
     class Planner:

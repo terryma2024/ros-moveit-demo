@@ -6292,6 +6292,49 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-033-087
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_OBSERVER_RACE
+experiment_id: EXP-033
+execution_commit: 628f196
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-033
+observed:
+  physical_grasp_gate: PROVED
+  cup_world_z_delta_m: 0.0021624863147735596
+  lateral_drift_m: 0.00007220896075586892
+  failure: deque mutated during iteration
+  dynamic_retreat_evidence: unavailable
+root_cause: Gazebo transport callback appended pose samples while the execution thread iterated the same deque to form closest object/TCP timestamp pairs
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-LOCK-POSE-PAIR-HISTORY-088
+recorded_at: 2026-08-09 Asia/Shanghai
+fix:
+  - use one shared lock for each callback-owned object/TCP history pair
+  - snapshot both histories under that lock before closest-pair search
+  - apply the same contract to transient probes and the persistent final observer
+unchanged:
+  - max pose-pair age and all source timestamp freshness requirements
+  - physical strategy and final acceptance
+tests:
+  red: closest-pair API rejected a shared callback lock
+  focused_green: 2 passed
+  package_pytest: 177 passed, 2 skipped
+reset_proof:
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-033/reset-after-deque-race-fix
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.0000017124208679909236
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+next: commit locally, then preregister the unchanged vertical-retreat candidate
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-028-068
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
