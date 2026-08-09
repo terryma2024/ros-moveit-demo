@@ -1202,6 +1202,7 @@ def _run_live_execute_with_scene(
         tuple(bundle.object.place_pose.values[:3])
     )
     outcome_policy=bundle.validation.physical_outcome
+    release_alignment_settle_margin_m=0.005
     def execute_place_correction(delta,orientation_tolerance_rad):
         gate_shadow("PLACE_ALIGNMENT")
         return _moveit_world_translation_execute(delta,orientation_tolerance_rad)
@@ -1209,8 +1210,18 @@ def _run_live_execute_with_scene(
         backend,target_place_xyz,execute=execute_place_correction,
         xy_tolerance_m=0.006,
         acceptable_xy_bounds=(
-            outcome_policy.final_target_min_xy_m,
-            outcome_policy.final_target_max_xy_m,
+            (
+                outcome_policy.final_target_min_xy_m[0]-
+                release_alignment_settle_margin_m,
+                outcome_policy.final_target_min_xy_m[1]-
+                release_alignment_settle_margin_m,
+            ),
+            (
+                outcome_policy.final_target_max_xy_m[0]+
+                release_alignment_settle_margin_m,
+                outcome_policy.final_target_max_xy_m[1]+
+                release_alignment_settle_margin_m,
+            ),
         ),
         max_arm_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
         max_arm_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
