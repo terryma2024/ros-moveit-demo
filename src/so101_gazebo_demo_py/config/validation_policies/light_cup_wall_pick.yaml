@@ -109,7 +109,7 @@ states:
     allowed_touch_pairs: []
     temporal_contact: null
   DESCEND_TO_PLACE:
-    endpoint_position: [-0.070542706840, -0.245447268426, 0.212100282108]
+    endpoint_position: [-0.070949029516, -0.246134804010, 0.216737403936]
     local_approach_axis: [0.0, 0.0, -1.0]
     target_approach_axis: [0.0, 0.0, -1.0]
     path_direction: [0.0, 0.0, -1.0]
