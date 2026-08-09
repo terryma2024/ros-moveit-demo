@@ -6149,3 +6149,62 @@ prediction: correction executes within bounds and the run reaches physical relea
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-028-069
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-028
+execution_commit: 3a94c21
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-028
+alignment:
+  before_xy_error_m: 0.0071332546369918095
+  after_xy_error_m: 0.0012857243139268709
+  aligned_object_xy_m: [-0.08122880756855011, -0.2503783106803894]
+final:
+  failure_code: FINAL_OUT_OF_REGION
+  object_xyz_m: [-0.08630973100662231, -0.2560197114944458, 0.16499997675418854]
+  x_below_region_m: 0.00130973100662231
+  y_below_region_m: 0.0010197114944458
+  upright_tilt_rad: 0.00008355883241766324
+  max_linear_speed_m_s: 0.0004590544567311509
+  max_angular_speed_rad_s: 0.010292245495292233
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+interpretation: the feedback controller worked and all final physical conditions except XY passed; controlled release/retreat shifted the cup about -5.08 mm X and -5.64 mm Y from the aligned held pose
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-028-070
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-028/reset-after-final-out-of-region
+proof:
+  cup_spawn_pose_error_m: 0.0000017239915186961637
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-COMPENSATE-CONTROLLED-SETTLING-071
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  alignment_target_offset_m: [0.0050, 0.0055, 0.0]
+  basis: EXP-028 measured drift from feedback-aligned held pose to stable post-RETREAT pose
+  distinction_from_rejected_EXP_025: compensation is applied to a same-run feedback-controlled pre-release cup pose, not blindly to a fixed joint ladder under variable grasp-relative pose
+unchanged:
+  - final target region and all final physical acceptance conditions
+  - same-run correction tolerance, attempts and per-axis limit
+  - all frozen physics, geometry, material, controller and collision settings
+tests:
+  red: compensation target function absent
+  focused_green: 7 passed
+  package_pytest: 175 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```

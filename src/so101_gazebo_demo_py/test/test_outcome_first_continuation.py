@@ -321,6 +321,12 @@ def test_same_run_place_alignment_uses_cup_error_and_returns_reverse_path() -> N
     assert telemetry[-1]["after_xy_error_m"] < telemetry[-1]["before_xy_error_m"]
 
 
+def test_release_alignment_target_compensates_observed_settling_drift() -> None:
+    assert live_execute.release_alignment_target(
+        (-0.080, -0.250, 0.165)
+    ) == pytest.approx((-0.075, -0.2445, 0.165))
+
+
 def test_same_run_place_alignment_allows_pre_release_drop_height() -> None:
     class Backend:
         def sample(self):
