@@ -7,19 +7,21 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 92c8d11f63493c5c45074d6beae7c4eb2c0df68b
+current_commit: 203c50b57cbe29d62c4b41a8f1aa9ddad00b659b
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
   - EXP-056 directly observed pre-OPEN_GRIPPER plastic_cup::body::wall_near contact with the table; cup tilt reached 1.1679 rad near the would-be release boundary.
   - EXP-056 phase profiling localizes the first large tilt increase to DESCEND_TO_PLACE: 0.1956 rad at MOVE_ABOVE_PLACE versus 1.2459 rad and table contact at the descent endpoint.
+  - EXP-057 raised the approach enough to eliminate every cup/table contact sample from the raised descent endpoint through OPEN_GRIPPER, but cup tilt still grew from 0.3765 rad to 0.8981 rad during DESCEND_TO_PLACE.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
+  - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
 open_hypotheses:
-  - Raising the static DESCEND_TO_PLACE endpoint and held-cup release target by about 0.010 m will prevent pre-open table contact, preserve the roughly 0.20 rad carried tilt, and allow release physics to settle the cup upright in-region.
-latest_checkpoint: CP-PRE-EXP-057-173
-next_experiment: EXP-057
+  - Reducing only DESCEND_TO_PLACE velocity and acceleration scaling from 0.03 to 0.01 will reduce inertial slip and preserve a recoverable held-cup attitude at the already safe raised endpoint.
+latest_checkpoint: CP-RESULT-EXP-057-175
+next_experiment: EXP-058
 ```
 
 ## Historical evidence imported before ledger activation
@@ -8333,4 +8335,78 @@ installed_provenance:
   validation_policy_source_install_sha256: f702e030ad64d10326640e51e5cb0e8b7e8388cc790f66b557baf127bada3ff2
   policy_sha256: 8387b82e8762aec76c2fe799854e6a553fd8d2d0c1d9978938cc049c5a943449
 next_command: RESET_WORLD on so101-py-gui-214, then start bounded telemetry/H.264 and execute EXP-057
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-057-175
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FAILURE
+experiment_id: EXP-057
+execution_commit: 203c50b
+reset_proof: /tmp/so101-py-gui-214/candidate-057/reset-before-execute/reset-world.json
+evidence:
+  execution_log: /tmp/so101-py-gui-214/candidate-057/execute.log
+  physical_gate: /tmp/so101-py-gui-214/candidate-057/physical-gate.json
+  final_outcome: /tmp/so101-py-gui-214/candidate-057/final-outcome-failure.json
+  telemetry: /tmp/so101-py-gui-214/candidate-057/diagnostic/samples.jsonl
+  analysis: /tmp/so101-py-gui-214/candidate-057/diagnostic/exp057-analysis.json
+  bounded_video: /tmp/so101-py-gui-214/candidate-057/diagnostic/gazebo-gui.mp4
+  release_window_video: /tmp/so101-py-gui-214/candidate-057/diagnostic/release-window.mp4
+  visual_frames:
+    move_above_place: /tmp/so101-py-gui-214/candidate-057/diagnostic/above-place.png
+    raised_descend: /tmp/so101-py-gui-214/candidate-057/diagnostic/raised-descend.png
+    pre_open: /tmp/so101-py-gui-214/candidate-057/diagnostic/pre-open.png
+    post_retreat: /tmp/so101-py-gui-214/candidate-057/diagnostic/post-retreat.png
+reset:
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.0000006674158237227039
+  gazebo_attachment_state: detached
+  moveit_attached_objects: []
+  finger_contact: false
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  micro_lift_world_z_m: 0.0019411444664001465
+  lateral_drift_m: 0.0002892723100985043
+  gazebo_attachment_used: false
+phase_profile:
+  grasp_descend_endpoint: {cup_tilt_rad: 0.00007027898999852368}
+  lift_endpoint: {cup_tilt_rad: 0.041422929822772146, bottom_clearance_m: 0.058055384392620896, table_contact: false}
+  move_above_place_endpoint: {cup_tilt_rad: 0.3764971290043859, bottom_clearance_m: 0.056039195445447, table_contact: false}
+  raised_descend_endpoint: {cup_tilt_rad: 0.8980782412800309, bottom_clearance_m: 0.023081256567995118, table_contact: false}
+pre_open:
+  cup_xyz_m: [-0.09537617862224579, -0.2549617886543274, 0.2025870531797409]
+  cup_tilt_rad: 0.9164526730410562
+  bottom_clearance_m: 0.023460412650368717
+  table_contact_samples_from_raised_endpoint: 0
+  half_second_table_contact_fraction: 0.0
+  cup_speed_m_s: {median: 0.0015323918994787668, maximum: 0.003240690053705202}
+  arm_joint_speed_rad_s: {median: 0.000005788856587387509, maximum: 0.0010665265514981296}
+place_alignment:
+  attempts: 3
+  release_start_xyz_m: [-0.0730377659, -0.2567648888, 0.1761787385]
+  release_start_tilt_rad: 1.3466224619681246
+  release_start_tilt_deg: 77.15578366828976
+final:
+  failure_code: FINAL_GRIPPER_CONTACT
+  object_xyz_m: [-0.060598328709602356, -0.28222256898880005, 0.2085740715265274]
+  upright_tilt_rad: 0.874877175389567
+  max_linear_speed_m_s: 0.06040502700152975
+  max_angular_speed_rad_s: 1.386414764917064
+  support_contact: false
+  gripper_contact: true
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+prediction_evaluation:
+  eliminate_pre_open_table_contact: PASS
+  preserve_tilt_below_0_35_rad: FAIL
+  authoritative_final_outcome: FAIL
+interpretation:
+  - Raising the endpoint fixed the observed pre-open table collision and remains a useful safety improvement.
+  - Tilt still increased by 0.52158 rad during DESCEND_TO_PLACE without table contact, so table contact was an aggravating factor rather than the sole cause.
+  - Three bounded 3D alignment translations then oscillated the held cup and began release at 1.34662 rad tilt; the retreat retained gripper contact and did not produce a supported final cup.
+first_bad_boundary: DESCEND_TO_PLACE held-cup dynamics
+decision: keep the raised endpoint as the safety baseline; next change only DESCEND_TO_PLACE velocity and acceleration scaling from 0.03 to 0.01
+counts_toward_success_streak: false
 ```
