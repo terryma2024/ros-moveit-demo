@@ -281,10 +281,6 @@ def align_cup_for_release(
             "before_xy_error_m":xy_error,
             "after_xy_error_m":after_error,
         })
-        if after_error > xy_error-0.001:
-            raise RuntimeError(
-                f"place alignment did not reduce cup error: {xy_error} -> {after_error}"
-            )
         reverse_waypoints.append(tuple(start_positions)); current=after
     raise RuntimeError(
         f"place alignment did not converge within {max_attempts} attempts: "
