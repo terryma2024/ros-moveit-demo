@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 02c37788579eba2ee46c3bf484b0e5306ea1ffe6
+current_commit: 74e8c3162db10471a16a0b3fc5d28b9354c36f62
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -25,7 +25,7 @@ disproven_routes:
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
   - Detaching the MoveIt shadow immediately after physical OPEN_GRIPPER, collecting a bounded physical settle epoch while the arm remains stationary, and only then retreating will prevent the already-20 g cup from being displaced out of region.
-latest_checkpoint: CP-EXP-061-IMPLEMENTED-189
+latest_checkpoint: CP-FULL-01-VIDEO-ANALYSIS-190
 next_experiment: EXP-061
 ```
 
@@ -3865,6 +3865,45 @@ interpretation: contact/penetration telemetry did not reject the candidate; the 
 evidence_root: /tmp/so101-py-outcome-search-203
 counts_toward_search: true
 counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-FULL-01-VIDEO-ANALYSIS-190
+recorded_at: 2026-08-09 Asia/Shanghai
+status: READ_ONLY_VIDEO_AND_TELEMETRY_ANALYSIS
+source_run: QUAL-FULL-01
+user_observation: cup repeatedly begins shaking near the end of MOVE_ABOVE_PLACE
+evidence:
+  user_screen_recording_2x: /tmp/so101-py-qualification/full-01/run/diagnostic/user-screen-2x.mp4
+  user_screen_sha256: c1ee2d1e0dcd66aeb2d41a59b999544f2ac4f706e85551dd66a114569220a281
+  telemetry: /tmp/so101-py-qualification/full-01/run/diagnostic/samples.jsonl
+timebase: the supplied video is 2x, so one playback second represents approximately two execution seconds
+move_above_place_motion:
+  duration_s: 4.962651489768177
+  cup_tilt_start_rad: 0.0034299796687473423
+  cup_tilt_end_rad: 0.12709713376058468
+  cup_tilt_end_deg: 7.282129352691191
+post_move_pre_descend_interval:
+  duration_s: 4.095914188306779
+  cup_tilt_start_rad: 0.12709713376058468
+  cup_tilt_end_rad: 0.28167557717831304
+  cup_tilt_end_deg: 16.138821764228826
+  cup_xyz_delta_m: [0.015490099787712097, 0.002739846706390381, -0.01013953983783722]
+  arm_joint_position_ranges_rad: {1: 0.00004401803016662598, 2: 0.0020767152309417725, 3: 0.00012876838445663452, 4: 0.0019991397857666016, 5: 0.00017518294043838978}
+  q6_position_range_rad: 0.019439123570919037
+code_boundary:
+  - carry_with_shadow_gates invokes shadow_gate for DESCEND_TO_PLACE after MOVE_ABOVE_PLACE completes and before the next arm trajectory begins
+  - synchronize_planning_shadow calls backend.sample, whose one-shot observer creates ROS/Gazebo/TF subscribers with a three-second deadline and bounded retry
+  - QUAL-FULL-01 recorded DESCEND_TO_PLACE shadow divergence and a Planning Scene resynchronization at this boundary
+interpretation:
+  - OBSERVED the cup roll/slip accelerates during the end of MOVE_ABOVE_PLACE and the following pre-descent interval while arm 1-5 motion remains much smaller than cup and q6 motion
+  - INFERRED the visible shaking is primarily contact rolling/slip plus q6 closed-loop correction, not whole-arm oscillation
+  - INFERRED the blocking shadow observation/resynchronization is the dominant fixed dwell after the faster carry; increasing only velocity scaling cannot remove it
+decision:
+  - keep MOVE_ABOVE_PLACE velocity scaling 0.10 and all controller/gain/physics/safety bounds unchanged
+  - run already-preregistered EXP-061 release-order verification first
+  - before consecutive qualification, test one separate implementation change that preserves the shadow gate but reuses a low-latency persistent pose observer
+next_experiment: EXP-061
 ```
 
 ```yaml
