@@ -6235,6 +6235,62 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-043-123
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-043
+execution_commit: de12216
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-043
+alignment:
+  final_error_m: 0.0021525893817084234
+  release_start_xyz_m: [-0.07714905589818954, -0.2551232874393463, 0.1806182563304901]
+release:
+  separation_xy_m: [0.009242834617251387, 0.0038170680159173745]
+final:
+  failure_code: FINAL_UNSUPPORTED
+  object_xyz_m: [-0.10625570267438889, -0.29400959610939026, 0.15999899804592133]
+  upright_tilt_rad: 1.5707740403734953
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+interpretation: the reduced separation still released a cup whose center was 15.6 mm above support height and already tilted; the drop toppled and displaced it, so pre-release Z must be feedback-controlled
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-043-124
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-043/reset-after-tipped-final
+proof:
+  cup_spawn_pose_error_m: 0.0000007713248818448862
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-XYZ-PRE-RELEASE-ALIGNMENT-125
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  z_target_basis: stable cup center 0.165 m plus 0.004 m release clearance
+  z_tolerance_m: 0.002
+  correction: command bounded XYZ translation from same-run authoritative cup error
+  attempts: 2
+  per_axis_max_m: 0.030
+rationale: reduce physical drop energy before opening while preserving a small clearance and the unchanged final Z acceptance
+tests:
+  red: release target lacked Z clearance and aligned XY caused an early return despite 11 mm Z error
+  focused_green: 3 passed
+  initial_full_gate: 1 tilt-deferral fixture required an aligned Z value
+  package_pytest: 180 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-042-118
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
