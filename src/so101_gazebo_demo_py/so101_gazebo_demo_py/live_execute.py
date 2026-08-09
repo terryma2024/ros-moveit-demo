@@ -777,38 +777,109 @@ def run_bounded_physical_grasp_attempts(
     raise last_error
 
 
-def _apply_scene(operation: str, object_pose: tuple[float,...] | None = None) -> dict:
-    import rclpy
-    from geometry_msgs.msg import Pose
-    from moveit_msgs.msg import AttachedCollisionObject, CollisionObject, PlanningScene, PlanningSceneComponents
-    from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
-    from shape_msgs.msg import SolidPrimitive
-    rclpy.init(); node=rclpy.create_node(f"so101_py_scene_{operation}")
-    apply_client=node.create_client(ApplyPlanningScene,"/apply_planning_scene")
-    get_client=node.create_client(GetPlanningScene,"/get_planning_scene")
-    if not apply_client.wait_for_service(timeout_sec=10.) or not get_client.wait_for_service(timeout_sec=10.): raise RuntimeError("planning scene services unavailable")
-    scene=PlanningScene(); scene.is_diff=True; scene.robot_state.is_diff=True
-    if operation == "attach":
-        if object_pose is None:
-            raise ValueError("MoveIt shadow attach requires the latest Gazebo object pose")
-        attached=AttachedCollisionObject(); attached.link_name="gripper"; attached.touch_links=["gripper","jaw"]
-        attached.object.id="plastic_cup"; attached.object.header.frame_id="world"; attached.object.operation=CollisionObject.ADD
-        primitive=SolidPrimitive(type=SolidPrimitive.CYLINDER,dimensions=[.08,.036]); attached.object.primitives=[primitive]
-        pose=Pose(); pose.position.x,pose.position.y,pose.position.z=object_pose[:3]; pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w=object_pose[3:]
-        attached.object.primitive_poses=[pose]
-        scene.robot_state.attached_collision_objects=[attached]
-    elif operation == "detach":
-        remove=AttachedCollisionObject(); remove.object.id="plastic_cup"; remove.object.operation=CollisionObject.REMOVE; scene.robot_state.attached_collision_objects=[remove]
-        world=CollisionObject(); world.id="plastic_cup"; world.header.frame_id="world"; world.operation=CollisionObject.ADD
-        world.primitives=[SolidPrimitive(type=SolidPrimitive.CYLINDER,dimensions=[.08,.036])]
-        pose=Pose(); pose.position.x,pose.position.y,pose.position.z=object_pose[:3]; pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w=object_pose[3:]
-        world.primitive_poses=[pose]; scene.world.collision_objects=[world]
-    request=ApplyPlanningScene.Request(scene=scene); future=apply_client.call_async(request); rclpy.spin_until_future_complete(node,future,timeout_sec=10.)
-    if not future.done() or not future.result().success: raise RuntimeError("ApplyPlanningScene failed")
-    query=GetPlanningScene.Request(); query.components.components=PlanningSceneComponents.WORLD_OBJECT_NAMES|PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
-    future=get_client.call_async(query); rclpy.spin_until_future_complete(node,future,timeout_sec=10.); observed=future.result().scene
-    result={"world_objects":[item.id for item in observed.world.collision_objects],"attached_objects":[item.object.id for item in observed.robot_state.attached_collision_objects]}
-    node.destroy_node(); rclpy.shutdown(); return result
+class PlanningSceneShadowClient:
+    """Reuse one isolated ROS context while preserving apply-plus-readback semantics."""
+
+    def __init__(self) -> None:
+        import rclpy
+        from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
+        from rclpy.executors import SingleThreadedExecutor
+
+        self._context=rclpy.Context()
+        self._context.init()
+        self._executor=SingleThreadedExecutor(context=self._context)
+        self._node=rclpy.create_node("so101_py_scene",context=self._context)
+        self._executor.add_node(self._node)
+        self._apply_client=self._node.create_client(
+            ApplyPlanningScene,"/apply_planning_scene",
+        )
+        self._get_client=self._node.create_client(
+            GetPlanningScene,"/get_planning_scene",
+        )
+        if (
+            not self._apply_client.wait_for_service(timeout_sec=10.)
+            or not self._get_client.wait_for_service(timeout_sec=10.)
+        ):
+            self.close()
+            raise RuntimeError("planning scene services unavailable")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc_info) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if getattr(self,"_closed",False):
+            return
+        self._closed=True
+        if hasattr(self,"_executor") and hasattr(self,"_node"):
+            self._executor.remove_node(self._node)
+            self._executor.shutdown()
+        if hasattr(self,"_node"):
+            self._node.destroy_node()
+        if hasattr(self,"_context") and self._context.ok():
+            self._context.shutdown()
+
+    def _wait(self, future, *, timeout_s: float, failure: str):
+        self._executor.spin_until_future_complete(future,timeout_sec=timeout_s)
+        if not future.done() or future.result() is None:
+            raise RuntimeError(failure)
+        return future.result()
+
+    def apply(
+        self, operation: str, object_pose: tuple[float,...] | None = None,
+    ) -> dict:
+        from geometry_msgs.msg import Pose
+        from moveit_msgs.msg import (
+            AttachedCollisionObject, CollisionObject, PlanningScene,
+            PlanningSceneComponents,
+        )
+        from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
+        from shape_msgs.msg import SolidPrimitive
+        scene=PlanningScene(); scene.is_diff=True; scene.robot_state.is_diff=True
+        if operation == "attach":
+            if object_pose is None:
+                raise ValueError("MoveIt shadow attach requires the latest Gazebo object pose")
+            attached=AttachedCollisionObject(); attached.link_name="gripper"; attached.touch_links=["gripper","jaw"]
+            attached.object.id="plastic_cup"; attached.object.header.frame_id="world"; attached.object.operation=CollisionObject.ADD
+            primitive=SolidPrimitive(type=SolidPrimitive.CYLINDER,dimensions=[.08,.036]); attached.object.primitives=[primitive]
+            pose=Pose(); pose.position.x,pose.position.y,pose.position.z=object_pose[:3]; pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w=object_pose[3:]
+            attached.object.primitive_poses=[pose]
+            scene.robot_state.attached_collision_objects=[attached]
+        elif operation == "detach":
+            if object_pose is None:
+                raise ValueError("MoveIt shadow detach requires the latest Gazebo object pose")
+            remove=AttachedCollisionObject(); remove.object.id="plastic_cup"; remove.object.operation=CollisionObject.REMOVE; scene.robot_state.attached_collision_objects=[remove]
+            world=CollisionObject(); world.id="plastic_cup"; world.header.frame_id="world"; world.operation=CollisionObject.ADD
+            world.primitives=[SolidPrimitive(type=SolidPrimitive.CYLINDER,dimensions=[.08,.036])]
+            pose=Pose(); pose.position.x,pose.position.y,pose.position.z=object_pose[:3]; pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w=object_pose[3:]
+            world.primitive_poses=[pose]; scene.world.collision_objects=[world]
+        else:
+            raise ValueError(f"unsupported Planning Scene operation: {operation}")
+        request=ApplyPlanningScene.Request(scene=scene)
+        applied=self._wait(
+            self._apply_client.call_async(request),timeout_s=10.,
+            failure="ApplyPlanningScene timed out",
+        )
+        if not applied.success:
+            raise RuntimeError("ApplyPlanningScene failed")
+        query=GetPlanningScene.Request()
+        query.components.components=(
+            PlanningSceneComponents.WORLD_OBJECT_NAMES
+            | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
+        )
+        observed=self._wait(
+            self._get_client.call_async(query),timeout_s=10.,
+            failure="GetPlanningScene timed out",
+        ).scene
+        return {
+            "world_objects":[item.id for item in observed.world.collision_objects],
+            "attached_objects":[
+                item.object.id
+                for item in observed.robot_state.attached_collision_objects
+            ],
+        }
 
 
 def run_live_plan_only(
@@ -844,6 +915,20 @@ def run_live_execute(
     evidence_directory: Path,
     stop_after: str | None = None,
     motion_policy: Path | None = None,
+) -> dict:
+    with PlanningSceneShadowClient() as scene_client:
+        return _run_live_execute_with_scene(
+            evidence_directory,stop_after,motion_policy,
+            apply_scene=scene_client.apply,
+        )
+
+
+def _run_live_execute_with_scene(
+    evidence_directory: Path,
+    stop_after: str | None,
+    motion_policy: Path | None,
+    *,
+    apply_scene,
 ) -> dict:
     from ament_index_python.packages import get_package_share_directory
     share=Path(get_package_share_directory("so101_gazebo_demo_py"))
@@ -890,7 +975,7 @@ def run_live_execute(
     }
     pre_probe=backend.sample()
     shadow_pose=(*pre_probe.object_xyz,*pre_probe.object_xyzw)
-    attached_scene=_apply_scene("attach",shadow_pose)
+    attached_scene=apply_scene("attach",shadow_pose)
     max_grasp_attempts=2
     try:
         contact,physical,physical_attempts,final_grasp_target=run_bounded_physical_grasp_attempts(
@@ -923,7 +1008,7 @@ def run_live_execute(
         check,object_in_tcp=synchronize_planning_shadow(
             backend,object_in_tcp,
             bundle.validation.physical_outcome.planning_shadow,
-            _apply_scene,
+            apply_scene,
             observe_pose=observe_pose,
         )
         check["observation_duration_s"]=time.monotonic()-started
@@ -956,7 +1041,7 @@ def run_live_execute(
     backend.move_gripper(bundle.motion.release_q6)
     released=backend.sample()
     released_pose=(*released.object_xyz,*released.object_xyzw)
-    detached_scene[0]=_apply_scene("detach",released_pose)
+    detached_scene[0]=apply_scene("detach",released_pose)
     scene_membership=[detached_scene[0]]
     synchronized_scene=[detached_scene[0]]
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
@@ -982,7 +1067,7 @@ def run_live_execute(
             backend.move_arm(retreat_policy.waypoints)
         retreated=backend.sample()
         retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
-        detached_scene[0]=_apply_scene("detach",retreated_pose)
+        detached_scene[0]=apply_scene("detach",retreated_pose)
         synchronized_scene[0]=detached_scene[0]
         scene_membership[0]=detached_scene[0]
     outcomes=collect_final_outcomes_around_retreat(
