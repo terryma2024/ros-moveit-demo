@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 421cf0b
+current_commit: df43497
 evidence_root: /tmp/so101-py-qualification/
 terminal_policy:
   experiment_cap: EXP-100
@@ -62,8 +62,35 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-082-265
+latest_checkpoint: CP-EXP-082-IMPLEMENTED-266
 next_experiment: EXP-082
+```
+
+```yaml
+checkpoint_id: CP-EXP-082-IMPLEMENTED-266
+recorded_at: 2026-08-10 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-082
+planning_commit: 4365e59
+implementation_commit: df43497
+single_variable: lower final DESCEND_TO_PLACE target to the exact midpoint joint state and update matching RETREAT/recovery logical start plus FK-derived validation endpoint
+kinematics:
+  fk_service: /compute_fk
+  fk_link: so101_tcp
+  endpoint_world_m: [-0.07054270683954042, -0.24544726842649361, 0.21210028210795123]
+  tcp_z_reduction_m: 0.00463712182820545
+red:
+  focused: 1 failed because the policy still exposed the raised endpoint
+green:
+  focused: 63 passed
+  full_pytest: 202 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 204 tests, 0 errors, 0 failures, 2 skipped
+provenance:
+  motion_policy_sha256: 5dfe2e597e4ede12b19518eea6f13c3bd38cdaff20ebdf8a3c7ab06b971bd00f
+  validation_policy_sha256: fe2b95180339f73130df6d0167fe2996d3454d034a15521b88a1ec55476d01f3
+next_command: prove RESET_WORLD on the sole domain 231 stack, then record one bounded EXP-082 execute with pre-open table-contact telemetry
+counts_toward_success_streak: false
 ```
 
 ```yaml
