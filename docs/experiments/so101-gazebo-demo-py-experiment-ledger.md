@@ -7,8 +7,8 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: f6380f105e629799170e171d06f5399e14b09894
-evidence_root: /tmp/so101-py-gui-214/
+current_commit: b34b93c29ba68ff9922e68c5f670aa6a860a56aa
+evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
   - EXP-056 directly observed pre-OPEN_GRIPPER plastic_cup::body::wall_near contact with the table; cup tilt reached 1.1679 rad near the would-be release boundary.
@@ -17,16 +17,17 @@ confirmed_conclusions:
   - EXP-058 slowed DESCEND_TO_PLACE to 10 seconds per waypoint; tilt exceeded 0.70 rad while still 44.2 mm clear of the table and reached 1.0774 rad at waypoint 1, proving that longer gravitational dwell worsens held-cup roll.
   - EXP-059 stronger preload reduced strict pre-open tilt to 0.3302 rad with 12.6 mm clearance and zero table-contact samples, moving the first bad boundary to the immediate post-open retreat.
   - EXP-060 combined the retained 0.006 preload with MOVE_ABOVE_PLACE velocity scaling 0.10 and achieved an authoritative physical-outcome success at [-0.08451, -0.25333, 0.16500] m.
+  - QUAL-FULL-01 was a valid clean FULL_RESTART failure: the release-start pose was inside the target region, but immediate RETREAT displaced the otherwise upright, supported and stable cup 0.000059242 m beyond the y boundary.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - The EXP-060 candidate is ready for clean-environment consecutive qualification without changing cup mass or release sequencing.
-  - A 0.020 kg cup and settle-before-retreat remain authorized fallback branches only if qualification exposes a repeatable failure.
-latest_checkpoint: CP-RESULT-EXP-060-184
-next_experiment: QUAL-FULL-01
+  - Reducing only cup mass to 0.020 kg may reduce release disturbance enough to keep the final cup inside the target region while preserving the EXP-060 strategy.
+  - If the 0.020 kg mass-only trial still fails after OPEN_GRIPPER, detach the MoveIt shadow immediately, collect a bounded physical settle epoch while the arm remains stationary, and only then retreat.
+latest_checkpoint: CP-ENABLE-20G-186
+next_experiment: EXP-061
 ```
 
 ## Historical evidence imported before ledger activation
@@ -8812,4 +8813,83 @@ prediction_evaluation:
 decision: freeze this candidate; do not apply the authorized 0.020 kg mass or release-order fallback unless a qualification failure provides new evidence
 counts_toward_success_streak: false
 reason_not_counted: search confirmation run; qualification begins from a fresh stack launched from the frozen result commit
+```
+
+```yaml
+checkpoint_id: CP-QUAL-FULL-01-FAIL-185
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FAILURE_STREAK_RESET
+qualification_run: QUAL-FULL-01
+execution_commit: b34b93c29ba68ff9922e68c5f670aa6a860a56aa
+lifecycle: FULL_RESTART
+stack:
+  tmux_session: so101-py-qual
+  ros_domain_id: 221
+  gz_partition: so101_py_qual_full_01
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+reset_proof: /tmp/so101-py-qualification/full-01/reset/reset-world.json
+evidence:
+  final_outcome: /tmp/so101-py-qualification/full-01/run/final-outcome-failure.json
+reset:
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.0000007264165578522614
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+release_start:
+  object_xyz_m: [-0.07615400105714798, -0.2529289126396179, 0.1734188348054886]
+  target_xy_region_result: PASS
+  place_alignment_commands: 0
+release_sequence:
+  - OPEN_GRIPPER
+  - immediate fixed RETREAT because no place-alignment correction was required
+  - collect only the post-retreat physical-outcome epoch
+final:
+  success: false
+  failure_code: FINAL_OUT_OF_REGION
+  object_xyz_m: [-0.08051805943250656, -0.24494075775146484, 0.16499994695186615]
+  y_boundary_m: -0.245
+  y_out_of_region_m: 0.00005924224853516
+  upright_tilt_rad: 0.0000010740212859090123
+  sample_count: 27
+  duration_s: 1.762477220967
+  max_linear_speed_m_s: 0.0
+  max_angular_speed_rad_s: 0.0056197116340062775
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+environment_note:
+  - The prior GUI search stack had left exact orphan Gazebo PIDs 1949037 and 1949038; they were identified and terminated before qualification execution.
+  - The qualification ROS domain and Gazebo partition were isolated, and only the qualification stack remained during the counted run.
+interpretation:
+  - The released cup began inside the required XY region and ended upright, table-supported, detached and stationary.
+  - The only failed authoritative result was a 59 micrometre y-region miss after immediate arm retreat, so the first bad boundary is release ordering rather than grasp, carry speed, cup mass, support, tilt or controller stability.
+decision: stop the qualification batch at streak 0; return to one RESET_WORLD search experiment
+next_experiment: EXP-061
+```
+
+```yaml
+checkpoint_id: CP-ENABLE-20G-186
+recorded_at: 2026-08-09 Asia/Shanghai
+status: USER_AUTHORIZED_ACTIVE_VARIABLE
+authorization: enable cup mass 0.020 kg now
+experiment_order:
+  - EXP-061 changes only cup mass to 0.020 kg relative to the frozen EXP-060 candidate and retains its faster MOVE_ABOVE_PLACE motion.
+  - Settle-before-retreat is deferred to EXP-062 only if the mass-only trial remains a valid post-open failure.
+reason: preserve one-variable attribution while honoring the requested 20 g candidate
+unchanged:
+  - seating_preload_rad 0.006
+  - MOVE_ABOVE_PLACE velocity_scaling 0.10
+  - DESCEND_TO_PLACE velocity_scaling 0.03
+  - all motion targets and orientations
+  - existing release ordering
+  - physics engine, geometry, friction, controller/gains and collision model
+  - global penetration ceiling and target penetration range
+  - Gazebo physically detached and MoveIt Planning Scene shadow attach semantics
+  - authoritative final physical-outcome contract
+next_experiment: EXP-061
 ```
