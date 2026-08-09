@@ -6335,6 +6335,29 @@ next: commit locally, then preregister the unchanged vertical-retreat candidate
 ```
 
 ```yaml
+checkpoint_id: CP-PRE-EXP-034-089
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-034
+purpose: obtain valid vertical-retreat evidence with callback-safe pose history snapshots
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 35b5f76
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-033/reset-after-deque-race-fix/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-034
+candidate:
+  same_as_EXP_032_EXP_033: true
+  corrected_pose_retreat: world Z +0.060 m
+  observer_pose_history_lock: enabled
+prediction: produce valid post-retreat evidence and show substantially lower XY displacement across retreat than EXP-031
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-028-068
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
