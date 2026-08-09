@@ -6236,6 +6236,52 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-044-127
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_STATIC_TF_SOURCE_STAMP
+experiment_id: EXP-044
+execution_commit: b144a82
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-044
+observed_before_failure:
+  cup_xyz_m: [-0.07538843899965286, -0.2563915252685547, 0.17351025342941284]
+  object_source_time_s: 17612.565
+  tcp_last_change_time_s: 17611.716
+  apparent_skew_s: 0.849
+failure: static TF header timestamp stopped advancing after arm motion while Gazebo pose time continued
+interpretation: the probe conflated TF last-change time with observation freshness; the finite latest TF and Gazebo pose were read in the same live probe cycle
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-COOBSERVED-STATIC-TF-STAMP-128
+recorded_at: 2026-08-09 Asia/Shanghai
+fix:
+  - pair the latest finite TCP transform with the Gazebo object stamp received in the same locked observation cycle
+  - retain the 0.10 s pair-age bound over co-observed receipt cycles
+  - retain controller-success and final observed arm-stability requirements
+  - keep the original TF header as fallback when no object sample exists
+tests:
+  red: coobserved_tcp_sample was absent
+  focused_green: 1 passed
+  package_pytest: 181 passed, 2 skipped
+reset:
+  first_attempt:
+    status: RESET_WORLD_FAILED
+    evidence_root: /tmp/so101-py-outcome-search-203/candidate-044/reset-after-coobserved-stamp-fix
+    error: Gazebo set_pose service timed out
+  retry:
+    status: RESET_WORLD_PROVED
+    evidence_root: /tmp/so101-py-outcome-search-203/candidate-044/reset-after-coobserved-stamp-fix-retry
+    cup_spawn_pose_error_m: 0.0000007781030566914557
+    gazebo_attachment_state: detached
+    moveit_world_objects: [plastic_cup]
+    moveit_attached_objects: []
+    finger_contact: false
+    arm_tcp_finite: true
+next: commit locally, then preregister the unchanged XYZ-alignment candidate
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-043-122
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED

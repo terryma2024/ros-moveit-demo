@@ -153,6 +153,12 @@ def closest_pose_pair(object_samples, tcp_samples, *, lock=None):
     return {"object": object_sample, "tcp": tcp_sample}
 
 
+def coobserved_tcp_sample(tcp_pose, tf_source_stamp, object_samples):
+    """Stamp a static latest TF at the Gazebo pose co-observed in this cycle."""
+    observed_stamp=object_samples[-1][1] if object_samples else tf_source_stamp
+    return tcp_pose,observed_stamp
+
+
 def contact_pairs_from_message(message) -> tuple[ContactPair, ...]:
     pairs=[]
     for contact in message.contacts:
@@ -250,11 +256,15 @@ class RosGazeboFinalObserver:
                 )
                 translation=transform.transform.translation; rotation=transform.transform.rotation
                 stamp=transform.header.stamp
-                tcp_sample=((
+                tcp_pose=(
                     float(translation.x),float(translation.y),float(translation.z),
                     float(rotation.x),float(rotation.y),float(rotation.z),float(rotation.w),
-                ),float(stamp.sec)+float(stamp.nanosec)*1e-9)
+                )
+                tf_source_stamp=float(stamp.sec)+float(stamp.nanosec)*1e-9
                 with self._sample_lock:
+                    tcp_sample=coobserved_tcp_sample(
+                        tcp_pose,tf_source_stamp,self._object_samples,
+                    )
                     if not self._tcp_samples or self._tcp_samples[-1][1] != tcp_sample[1]:
                         self._tcp_samples.append(tcp_sample)
             except Exception:
@@ -429,15 +439,16 @@ class RosGazeboLiveBackend:
                     translation = transform.transform.translation
                     rotation = transform.transform.rotation
                     stamp = transform.header.stamp
-                    tcp_sample = (
-                        (
-                            float(translation.x), float(translation.y), float(translation.z),
-                            float(rotation.x), float(rotation.y),
-                            float(rotation.z), float(rotation.w),
-                        ),
-                        float(stamp.sec) + float(stamp.nanosec) * 1e-9,
+                    tcp_pose = (
+                        float(translation.x), float(translation.y), float(translation.z),
+                        float(rotation.x), float(rotation.y),
+                        float(rotation.z), float(rotation.w),
                     )
+                    tf_source_stamp = float(stamp.sec) + float(stamp.nanosec) * 1e-9
                     with sample_lock:
+                        tcp_sample = coobserved_tcp_sample(
+                            tcp_pose, tf_source_stamp, object_samples,
+                        )
                         if not tcp_samples or tcp_samples[-1][1] != tcp_sample[1]:
                             tcp_samples.append(tcp_sample)
                 except Exception:

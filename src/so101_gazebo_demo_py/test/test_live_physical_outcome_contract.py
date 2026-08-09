@@ -14,7 +14,8 @@ from so101_gazebo_demo_py.live_execute import (
 from so101_gazebo_demo_py.gazebo.observer import ContactPair
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
-    close_gazebo_subscription, closest_pose_pair, parse_model_pose, parse_tf_pose,
+    close_gazebo_subscription, closest_pose_pair, coobserved_tcp_sample,
+    parse_model_pose, parse_tf_pose,
     pose_pair_ready, select_gazebo_pose, select_stamped_transform,
 )
 
@@ -317,6 +318,16 @@ def test_closest_pose_pair_snapshots_under_shared_callback_lock() -> None:
     assert lock.entries == 1
     assert pair["object"][1] == 10.0
     assert pair["tcp"][1] == 10.01
+
+
+def test_static_tf_is_stamped_at_the_coobserved_gazebo_pose() -> None:
+    tcp_pose = (2.0,) * 7
+    object_samples = [((1.0,) * 7, 10.2)]
+
+    assert coobserved_tcp_sample(tcp_pose, 9.7, object_samples) == (
+        tcp_pose, 10.2,
+    )
+    assert coobserved_tcp_sample(tcp_pose, 9.7, ()) == (tcp_pose, 9.7)
 
 
 def test_plan_only_validates_every_waypoint_as_a_contiguous_sequence() -> None:
