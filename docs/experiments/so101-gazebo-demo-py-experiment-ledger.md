@@ -6282,6 +6282,30 @@ next: commit locally, then preregister the unchanged XYZ-alignment candidate
 ```
 
 ```yaml
+checkpoint_id: CP-PRE-EXP-045-129
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-045
+purpose: retry unchanged XYZ pre-release alignment with co-observed static TF pairing
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: a65206c
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-044/reset-after-coobserved-stamp-fix-retry/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-045
+candidate:
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  immediate_radial_separation_m: 0.010
+  immediate_vertical_retreat_m: 0.060
+  coobserved_static_tf_pairing: true
+prediction: complete XYZ alignment and obtain authoritative final physical outcome without static-TF false stale failure
+acceptance: unchanged authoritative final physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-043-122
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
