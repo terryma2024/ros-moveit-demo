@@ -1038,7 +1038,7 @@ def _run_live_execute_with_scene(
     if place_alignment:
         gate_shadow("PRE_RELEASE_RETREAT")
     detached_scene=[None]
-    backend.move_gripper(bundle.motion.release_q6)
+    backend.move_gripper(bundle.motion.release_q6, final_release=True)
     released=backend.sample()
     released_pose=(*released.object_xyz,*released.object_xyzw)
     detached_scene[0]=apply_scene("detach",released_pose)

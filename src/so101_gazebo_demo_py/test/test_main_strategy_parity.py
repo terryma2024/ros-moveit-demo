@@ -13,11 +13,25 @@ from so101_gazebo_demo_py.live_execute import (
     local_x_world_delta,
 )
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import contact_probe_complete
+from so101_gazebo_demo_py.test_support.ros_gazebo_backend import gripper_motion_duration_seconds
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import waypoint_step_seconds
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import gripper_result_acceptable
 
 
 PACKAGE = Path(__file__).parents[1]
+
+
+def test_final_release_shortens_only_the_explicit_release_command() -> None:
+    assert gripper_motion_duration_seconds(-0.053) == 8
+    assert gripper_motion_duration_seconds(0.465) == 5
+    assert gripper_motion_duration_seconds(0.75) == 5
+    assert gripper_motion_duration_seconds(0.75, final_release=True) == 2
+
+    live_execute = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
+    assert (
+        "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
+        in live_execute
+    )
 
 
 def test_policy_matches_main_seated_grasp_strategy() -> None:
