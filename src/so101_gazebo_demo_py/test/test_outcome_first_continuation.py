@@ -344,6 +344,34 @@ def test_same_run_place_alignment_uses_cup_error_and_returns_reverse_path() -> N
     assert telemetry[-1]["after_xy_error_m"] < telemetry[-1]["before_xy_error_m"]
 
 
+def test_place_alignment_stops_when_first_correction_enters_final_region() -> None:
+    samples = iter((
+        sample(-0.0837464631, -0.2580045760, 0.1815293133),
+        sample(-0.0827603862, -0.2483608127, 0.1804291010),
+    ))
+    commands = []
+
+    class Backend:
+        def sample(self):
+            return next(samples)
+
+    aligned, reverse_waypoints, telemetry = live_execute.align_cup_for_release(
+        Backend(), (-0.075, -0.255, 0.179),
+        execute=lambda delta, tolerance: (
+            commands.append((delta, tolerance)) or
+            (10, (0.39, 0.49, 0.11, 1.0, 0.002))
+        ),
+        acceptable_xy_bounds=((-0.085, -0.255), (-0.075, -0.245)),
+    )
+
+    assert aligned.object_xyz == pytest.approx(
+        (-0.0827603862, -0.2483608127, 0.1804291010)
+    )
+    assert len(commands) == 1
+    assert len(reverse_waypoints) == 1
+    assert len(telemetry) == 1
+
+
 def test_release_alignment_target_preserves_ten_mm_pre_open_clearance() -> None:
     assert live_execute.release_alignment_target(
         (-0.080, -0.250, 0.165)
