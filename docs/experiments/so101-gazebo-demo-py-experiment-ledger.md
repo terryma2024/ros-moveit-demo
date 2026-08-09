@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 1393a9e
+current_commit: 5ac546a
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -48,8 +48,39 @@ open_hypotheses:
   - A short radial separation planned while the MoveIt Planning Scene shadow is still attached may remain collision-plannable and break sub-millimetre pad contact; the shadow must be detached and resynchronized only after that physical separation.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-077-IMPLEMENTED-239
+latest_checkpoint: CP-EXP-077-RUNNING-240
 next_experiment: EXP-077
+```
+
+```yaml
+checkpoint_id: CP-EXP-077-RUNNING-240
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RUNNING
+experiment_id: EXP-077
+implementation_commit: 1393a9e
+lifecycle: RESET_WORLD
+provenance:
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  runtime_package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  ros_domain_id: 227
+  gz_partition: so101_py_qual_baseline_restored
+stack:
+  tmux_session: so101-py-qual
+  gazebo_servers: 1
+  move_group_processes: 1
+  active_execute_clients_before_run: 0
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp077/reset/reset-world.json
+  command_exit_code: 0
+  cup_spawn_pose_error_m: 0.0000009396767270812786
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+next_command: start bounded telemetry/video and one EXP-077 execute on the existing stack
+counts_toward_success_streak: false
 ```
 
 ```yaml
