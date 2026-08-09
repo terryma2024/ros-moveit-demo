@@ -7608,3 +7608,76 @@ prediction: a bounded held-cup height residual proceeds to release, then the unc
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-049-144
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_ALIGNMENT_BUDGET_EXHAUSTED
+experiment_id: EXP-049
+execution_commit: 05fc3a3
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-049
+observed:
+  physical_gate: PROVED
+  first_alignment_command: succeeded
+  second_alignment_command: controller_aborted_after_partial_motion
+  post_abort_arm_stable: true
+  post_abort_cup_xyz_m: [-0.063808873295784, -0.26350557804107666, 0.173511803150177]
+failure:
+  controller_error_code: -4
+  joint: 1
+  position_error_rad: 0.008015
+  frozen_position_tolerance_rad: 0.008000
+  alignment_attempt_budget: 2
+  remaining_feedback_attempts: 0
+  physical_release_reached: false
+interpretation: bounded recovery correctly reobserved a stable arm and the partially moved cup, but the two-command budget left no action to correct the new measured pose
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-049-145
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_TRANSIENT_FAILURE
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-049-reset
+failure: Gazebo set_pose service call timed out
+read_only_health_check:
+  unique_domain_203_stack_alive: true
+  set_pose_service_present: true
+  second_stack_started: false
+interpretation: no strategy experiment was started from this unproved state
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-049-146
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-049-reset-retry1
+proof:
+  cup_spawn_pose_error_m: 0.0000006527318229072132
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-ALLOW-THIRD-ALIGNMENT-FEEDBACK-147
+recorded_at: 2026-08-09 Asia/Shanghai
+change: increase the bounded place-alignment command budget from two to three
+basis: EXP-049 second command aborted after partial physical motion; a fresh stable cup/TCP observation existed but the old budget prevented one final feedback correction
+behavior:
+  - every successful or aborted command consumes one attempt
+  - a controller -4 is recoverable only after the existing two-sample arm stability check
+  - at most one additional command can follow the EXP-049 pattern
+unchanged:
+  - maximum 0.030 m correction per axis per command
+  - XY tolerance 0.003 m, pre-release Z tolerance 0.006 m and broad Z plausibility 0.030 m
+  - controller gains and tolerances
+  - all frozen physics, geometry, material and collision settings
+  - authoritative final physical outcome contract
+tests:
+  red: the second-abort scenario exhausted two attempts before using the new cup observation
+  package_pytest: 185 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
