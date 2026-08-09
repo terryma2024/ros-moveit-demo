@@ -6236,6 +6236,60 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-037-101
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_STALE_POSE_PAIR
+experiment_id: EXP-037
+execution_commit: 4d64c5e
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-037
+failure:
+  object_source_time_s: 15439.613
+  tcp_source_time_s: 15439.401
+  source_skew_s: 0.212
+  maximum_allowed_s: 0.10
+  authoritative_final_outcome: unavailable
+interpretation: source-time consistency failed and remains a frozen safety boundary; the run does not evaluate radial release separation
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-037-102
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-037/reset-after-stale-pose-pair
+proof:
+  cup_spawn_pose_error_m: 0.0000016625795496737882
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-038-103
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-038
+purpose: retry the unchanged radial-release candidate after one stale pose-pair invalid run
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 4d64c5e
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-037/reset-after-stale-pose-pair/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-038
+candidate:
+  changed_since_EXP_037: false
+  radial_release_separation_m: 0.015
+  vertical_retreat_m: 0.060
+prediction: obtain valid final physical evidence without changing the 0.10 s pose-pair boundary
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-036-096
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
