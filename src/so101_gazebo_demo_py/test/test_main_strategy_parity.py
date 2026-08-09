@@ -37,7 +37,7 @@ def test_policy_matches_main_seated_grasp_strategy() -> None:
     assert "CLOSE_GRIPPER" not in motion["states"]
     assert "CLOSE_GRIPPER" not in validation["states"]
     assert motion["states"]["LIFT"]["logical_start"] == seated
-    assert motion["states"]["MOVE_ABOVE_PLACE"]["velocity_scaling"] == 0.10
+    assert motion["states"]["MOVE_ABOVE_PLACE"]["velocity_scaling"] == 0.15
     assert motion["states"]["DESCEND_TO_PLACE"]["velocity_scaling"] == 0.05
     assert motion["states"]["DESCEND_TO_PLACE"]["acceleration_scaling"] == 0.05
     constraints = controllers["arm_controller"]["ros__parameters"]["constraints"]

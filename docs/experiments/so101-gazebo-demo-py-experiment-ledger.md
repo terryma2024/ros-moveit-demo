@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 959d48c
+current_commit: b5d5fd8
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -39,8 +39,28 @@ open_hypotheses:
   - With the rejected friction candidates restored to 1.2, the next useful boundary is the motion/alignment interval in which tilt grows between MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and OPEN_GRIPPER; target compensation should not be used to mask the tilt source.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-072-221
+latest_checkpoint: CP-EXP-072-IMPLEMENTED-222
 next_experiment: EXP-072
+```
+
+```yaml
+checkpoint_id: CP-EXP-072-IMPLEMENTED-222
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-072
+planning_commit: b5d5fd8
+single_variable: MOVE_ABOVE_PLACE velocity_scaling 0.10 -> 0.15
+red: focused policy-contract test failed at actual 0.10 != expected 0.15
+green:
+  focused: 1 passed
+  full_pytest: 195 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 197 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  motion_policy_source_install_sha256: ec06ce438450fc793af5b5cc9279399c1b908901dd5e7186d350b69b844f82ca
+unchanged: all preregistered targets, DESCEND_TO_PLACE scaling, physical materials, mass, safety and final-outcome contracts, controller/collision configuration and attachment semantics
+next_command: prove RESET_WORLD on the sole baseline-restored GUI stack, record bounded telemetry/video and run one EXP-072 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
