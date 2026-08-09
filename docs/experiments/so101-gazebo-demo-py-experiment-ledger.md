@@ -6082,3 +6082,47 @@ prediction: the candidate reaches correction execution or release; only the unch
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-027-065
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_PRE_RELEASE_GATE
+experiment_id: EXP-027
+execution_commit: 2748812
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-027
+observed:
+  failure: place alignment cup tilt outside bound
+  pre_release_cup_tilt_rad: 0.4523766998587263
+interpretation: this was an intermediate held-cup attitude before physical release, not the authoritative gravity-settled final attitude; the 0.35 rad precision gate prevented outcome observation
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-027-066
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-027/reset-after-pre-release-tilt-gate
+proof:
+  cup_spawn_pose_error_m: 0.0000016332951249655477
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-DEFER-PRE-RELEASE-TILT-067
+recorded_at: 2026-08-09 Asia/Shanghai
+change: remove the intermediate pre-release cup-tilt precision gate from place alignment
+retained_checks:
+  - all cup and TCP pose components finite
+  - broad pre-release Z plausibility
+  - bounded XY correction and convergence
+  - unchanged authoritative final upright, stable, support, position, detached and no-contact outcome
+tests:
+  red: 0.4524 rad pre-release tilt was rejected
+  focused_green: 6 passed
+  package_pytest: 174 passed, 2 skipped
+next: commit locally, then preregister a fresh RESET_WORLD trial
+```

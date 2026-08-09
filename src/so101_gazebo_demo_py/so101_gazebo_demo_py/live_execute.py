@@ -244,10 +244,6 @@ def align_cup_for_release(
                 f"place alignment pre-release height outside plausibility bound: "
                 f"{height_error}"
             )
-        x,y,_,w=current.object_xyzw
-        upright=math.acos(max(-1.0,min(1.0,1.0-2.0*(x*x+y*y))))
-        if upright > 0.35:
-            raise RuntimeError(f"place alignment cup tilt outside bound: {upright}")
         if xy_error <= xy_tolerance_m:
             return current,tuple(reverse_waypoints),tuple(telemetry)
         if attempt == max_attempts:
