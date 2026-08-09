@@ -3984,3 +3984,31 @@ build: colcon build --packages-select so101_gazebo_demo_py --symlink-install suc
 provenance: destination motion policy sha256 updated to 72e58bbe6c1617b7d1bb0685fc586e8193a9ea35cdd1d652eccce08f2fd10a24 and recomputation test passed
 next: commit locally, preregister EXP-004, then execute it in the sole existing domain-203 stack
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-004
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: reducing only the added seating closure from 0.006 to 0.002 rad will preserve the initially observed bilateral contact and let the cup follow the +0.002 m MICRO_LIFT; if it does, the uninterrupted physical path proceeds to authoritative post-RETREAT evaluation
+execute_commit: 714adb838d0c7a91d3d65f77acb521f6e6510049
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: the sole domain-203 stack remains from the earlier launch; new execution loads rebuilt Python and motion policy from the symlink overlay; search evidence only and never qualification evidence
+bundle_sha256: 93f2696be126c5dac091c3dff78321b66c55972c319593b3b19fb3f7094f9457
+motion_policy_sha256: 72e58bbe6c1617b7d1bb0685fc586e8193a9ea35cdd1d652eccce08f2fd10a24
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-004
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-003/reset-after-invalid/reset-world.json
+strategy:
+  max_complete_grasp_attempts_per_execute: 1
+  seating_preload_rad: 0.002
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0004]
+  grasp_tcp_world_x_rotation_rad: 0.0
+  final_motion_targets: unchanged
+authoritative_gates:
+  intermediate: observed cup motion plus finite/stable arm state
+  final: frozen post-RETREAT position/upright/support/stability/detach/world-membership/arm-stability outcome
+next_on_success: preserve this grasp family and classify final placement margin before changing any placement target
+next_on_valid_failure: use the first failed result boundary to choose one new causal motion-target family, then RESET_WORLD before execution
+```
