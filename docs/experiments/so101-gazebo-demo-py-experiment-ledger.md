@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: e7af4f2
+current_commit: f944124
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -42,8 +42,27 @@ open_hypotheses:
   - A release-alignment correction triggered by an approximately 8.37 mm XY error can amplify pre-open tilt; relaxing the intermediate correction trigger while retaining the final target region is the next outcome-first candidate.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-073-224
+latest_checkpoint: CP-EXP-073-IMPLEMENTED-225
 next_experiment: EXP-073
+```
+
+```yaml
+checkpoint_id: CP-EXP-073-IMPLEMENTED-225
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-073
+planning_commit: f944124
+single_variable: default intermediate release-alignment XY tolerance 0.006 m -> 0.010 m
+red: EXP-072 residual regression test executed the forbidden alignment correction and failed
+green:
+  focused: 2 passed
+  full_pytest: 196 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 198 tests, 0 errors, 0 failures, 2 skipped
+test_scope_note: legacy correction/recovery mechanism tests explicitly retain 0.006 m to exercise those paths; only the live default changes
+unchanged: final target region, release target/compensation, all motion/material/q6/controller/collision/safety/attachment contracts and maximum alignment plausibility bounds
+next_command: prove RESET_WORLD on the sole GUI stack, then record one bounded EXP-073 execute
+counts_toward_success_streak: false
 ```
 
 ```yaml
