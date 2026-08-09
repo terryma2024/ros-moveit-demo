@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 0e05116891d44388becffd850d668e5a88eb54a4
+current_commit: c2ea38b1dc45b81e52d73f6b8749db9e894086a9
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -25,7 +25,7 @@ open_hypotheses:
   - Increasing only MOVE_ABOVE_PLACE velocity scaling from 0.05 to 0.10 will halve the longest tilt-producing horizontal carry dwell and reduce pre-open tilt while preserving the improved 0.006 preload grasp.
   - If the post-open boundary still fails, detaching the MoveIt shadow at physical OPEN_GRIPPER and collecting one bounded physical settle epoch before retreat will prevent the gripper from throwing the released cup.
   - If release sequencing alone is insufficient, the user has authorized an isolated cup-mass candidate down to 0.020 kg.
-latest_checkpoint: CP-RESULT-EXP-059-181
+latest_checkpoint: CP-PRE-EXP-060-182
 next_experiment: EXP-060
 ```
 
@@ -8688,5 +8688,47 @@ user_authorizations_after_run:
   - an isolated future cup-mass candidate may reduce mass to 0.020 kg
   - an appropriate pre-release motion speed increase should be tested because the observed system starts stable and degrades over time
 decision: keep 0.006 preload; next test only MOVE_ABOVE_PLACE velocity_scaling 0.10, then repair settle-before-retreat if the post-open defect persists
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-060-182
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-060
+status: PREREGISTERED
+prior_experiment: EXP-059
+hypothesis: the dominant pre-release tilt growth is time-dependent rolling under gravity, so halving only MOVE_ABOVE_PLACE waypoint dwell will reduce carry-end and pre-open tilt without destabilizing the arm
+prediction:
+  - MOVE_ABOVE_PLACE duration falls from nominal 10 s to 5 s
+  - cup tilt at MOVE_ABOVE_PLACE endpoint is below 0.15 rad and strict pre-open tilt is below 0.25 rad
+  - observed moving-pad penetration remains within [0.0001, 0.001] m
+  - no cup/table contact occurs before OPEN_GRIPPER
+  - final authoritative outcome may succeed; if the same post-open throw persists, settle-before-retreat becomes the next implementation change
+single_variable: MOVE_ABOVE_PLACE velocity_scaling from 0.05 to 0.10
+lifecycle: RESET_WORLD
+preconditions:
+  - reuse only tmux stack so101-py-gui-214 with ROS_DOMAIN_ID 214 and GZ_PARTITION so101_py_gui_214
+  - reset proof must show cup pose error <= 0.001 m, Gazebo detached, MoveIt world-only, no finger contact, and finite arm TCP
+  - no second Gazebo or MoveIt stack and no execute client
+success_criteria:
+  - arm trajectory succeeds and pre-open physical state satisfies the prediction
+  - authoritative final outcome is in-region, upright, stable, supported, detached, free of gripper contact, and arm/controller healthy
+failure_criteria:
+  - controller/path abort, approved penetration range violation, pre-open table contact, or final outcome valid failure
+invalid_criteria:
+  - provenance mismatch, stale installed asset, missing bounded telemetry/video, duplicate stack/client, reset failure, or disk pressure
+candidate:
+  seating_preload_rad: 0.006
+  move_above_place_velocity_scaling: 0.10
+  descend_to_place_velocity_scaling: 0.03
+  unchanged: all motion targets, all other state speeds, acceleration scaling, grasp pose/orientation, cup mass, physics, geometry, friction, controller/gains, collision model, release order, alignment bound, final outcome contract, and Gazebo-detached/MoveIt-shadow semantics
+provenance:
+  planning_commit: c2ea38b1dc45b81e52d73f6b8749db9e894086a9
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  ros_domain_id: 214
+  gz_partition: so101_py_gui_214
+commands:
+  - command: pytest RED, minimal motion-policy edit, full pytest/build/colcon test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
+    exit_code: PENDING
 counts_toward_success_streak: false
 ```
