@@ -4425,3 +4425,57 @@ strategy:
 next_on_valid_success: freeze and run two independent RESET_WORLD confirmations
 next_on_valid_failure: use persisted pre/post displacement to adjust only placement or retreat, never final tolerances
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-009
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_OUT_OF_REGION
+pre_retreat:
+  failure_code: FINAL_GRIPPER_CONTACT
+  cup_xyz_m: [-0.08249559253454208, -0.24550357460975647, 0.17272955179214478]
+  upright_tilt_rad: 0.24961198954571875
+post_retreat:
+  cup_xyz_m: [-0.0933949202299118, -0.2396932989358902, 0.16499991714954376]
+  upright_tilt_rad: 0.00001108500175555788
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0
+  gazebo_attachment_state: detached
+  moveit_world_membership: true
+pre_to_post_delta_m: [-0.01089932769536972, 0.00581027567386627, -0.00772963464260102]
+interpretation: vertical RETREAT prevents the catastrophic sweep and leaves a stable upright cup, but the repeatable release/drop displacement places it outside the frozen XY box
+evidence:
+  root: /tmp/so101-py-outcome-search-203/candidate-009
+  final_failure: /tmp/so101-py-outcome-search-203/candidate-009/final-outcome-failure.json
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-009-019
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-009/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000016778094788836903
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+diagnostic_id: DIAG-SHIFTED-PLACE-TARGETS-020
+lifecycle: PLANNED_PLAN_ONLY
+recorded_at: 2026-08-09 Asia/Shanghai
+purpose: solve collision-checked joint targets for translating the complete MOVE_ABOVE_PLACE / DESCEND_TO_PLACE / RETREAT family so the expected post-drop cup center moves to the frozen target center
+requested_tcp_translation_m: [0.0133949202299118, -0.0103067010641098, 0.0]
+derivation: frozen target center [-0.080, -0.250] minus EXP-009 post-retreat cup XY [-0.0933949202299118, -0.2396932989358902]
+mode: MoveGroup plan_only with explicit start state and unchanged TCP orientation; no ExecuteTrajectory and no physical state change
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-009/shifted-place-plan
+acceptance: both shifted above-place and descend-place pose goals return SUCCESS and nonempty planned trajectories; generated joint targets are then subjected to config tests and full plan-only validation before any execute
+```
