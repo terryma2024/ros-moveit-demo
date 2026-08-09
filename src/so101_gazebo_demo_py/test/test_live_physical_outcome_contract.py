@@ -10,6 +10,7 @@ from so101_gazebo_demo_py.live_execute import (
     seat_and_stabilize_physical_grasp,
     synchronize_planning_shadow,
     translated_grasp_pose,
+    tune_seating_penetration,
 )
 from so101_gazebo_demo_py.gazebo.observer import ContactPair
 from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
@@ -337,3 +338,56 @@ def test_seating_preload_waits_for_stable_bilateral_contact() -> None:
     assert result.max_moving_pad_penetration_m == pytest.approx(0.0008)
     assert calls[0] == ("gripper", -0.0515)
     assert calls.count("contacts") == 6
+
+
+def test_penetration_controller_closes_until_target_band() -> None:
+    class Backend:
+        def __init__(self):
+            self.target = None
+            self.commands = []
+
+        def move_gripper(self, target):
+            self.target = target
+            self.commands.append(target)
+
+        def contacts(self):
+            depth = 0.0003 + max(0.0, -0.0515 - self.target) * 0.8
+            return (
+                ContactPair("plastic_cup::body::wall_near", "fixed_fingertip_pad_collision_001", (0.0004,)),
+                ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (depth,)),
+            )
+
+    backend = Backend()
+    target, contact, history = tune_seating_penetration(
+        backend, -0.0515, q6_contact=-0.0475, q6_safe_lower=-0.0596
+    )
+
+    assert target == pytest.approx(-0.0520)
+    assert 0.0006 <= contact.max_moving_pad_penetration_m <= 0.001
+    assert [item["target_q6"] for item in history] == pytest.approx(
+        [-0.0515, -0.0520]
+    )
+
+
+def test_penetration_controller_opens_when_above_target_band() -> None:
+    class Backend:
+        def __init__(self):
+            self.target = None
+
+        def move_gripper(self, target):
+            self.target = target
+
+        def contacts(self):
+            depth = 0.0011 if self.target <= -0.0515 else 0.0009
+            return (
+                ContactPair("plastic_cup::body::wall_near", "fixed_fingertip_pad_collision_001", (0.0004,)),
+                ContactPair("plastic_cup::body::wall_near", "moving_fingertip_pad_collision_001", (depth,)),
+            )
+
+    target, contact, history = tune_seating_penetration(
+        Backend(), -0.0515, q6_contact=-0.0475, q6_safe_lower=-0.0596
+    )
+
+    assert target == pytest.approx(-0.0510)
+    assert contact.max_moving_pad_penetration_m == pytest.approx(0.0009)
+    assert len(history) == 2
