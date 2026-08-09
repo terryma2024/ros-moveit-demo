@@ -8015,3 +8015,58 @@ prediction: the GUI run either passes the cup-result micro-lift and reaches fina
 acceptance: unchanged micro-lift cup-result gate followed by unchanged authoritative post-RETREAT final outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-GUI-EXECUTOR-LAUNCH-CORRECTION-163
+recorded_at: 2026-08-09 Asia/Shanghai
+status: LAUNCH_CORRECTED_BEFORE_EXPERIMENT
+observed:
+  first_window_attempt: evidence_dir expanded empty; process interrupted immediately
+  second_window_attempt: zsh sourced bash overlay incorrectly; package not found and no executor started
+recovery:
+  reset_proof: /tmp/so101-py-gui-214/reset-after-invalid-launch/reset-world.json
+  reset_status: RESET_WORLD_PROVED
+  gazebo_attachment_state: detached
+  moveit_attached_objects: []
+  final_launch_shell: clean bash with ROS prefixes cleared before sourcing Jazzy and the worktree overlay
+interpretation: neither malformed launch counts as an experiment; EXP-054 begins only at confirmed executor PID 1961721 with the correct evidence root
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-054-164
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FINAL_SUCCESS
+experiment_id: EXP-054
+execution_commit: 3774797
+evidence_root: /tmp/so101-py-gui-214/candidate-054
+physical_grasp:
+  attempts: 1
+  micro_lift_world_z_m: 0.0012289583683013916
+  lateral_drift_m: 0.004195225834557097
+  gazebo_attachment_used: false
+place_alignment:
+  attempts: 1
+  release_start_xyz_m: [-0.07533765584230423, -0.25314390659332275, 0.17236016690731049]
+  after_xy_error_m: 0.0018865561751914366
+  release_separation_m: [0.008846085308073808, 0.0046633437276573046, 0.0]
+final:
+  object_xyz_m: [-0.07831922173500061, -0.24906986951828003, 0.16500000655651093]
+  upright_tilt_rad: 0.00000032646808475564034
+  sample_count: 5
+  max_linear_speed_m_s: 0.00001879479435440347
+  max_angular_speed_rad_s: 0.0
+  support_contact: true
+  gripper_contact: false
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+  success: true
+visual_evidence:
+  before: /tmp/so101-py-gui-214/gazebo-before-exp053.png
+  grasp: /tmp/so101-py-gui-214/gazebo-exp054-mid.png
+  carry: /tmp/so101-py-gui-214/gazebo-exp054-carry.png
+  final: /tmp/so101-py-gui-214/gazebo-exp054-final.png
+interpretation: first complete GUI-observed physical-outcome success for the current candidate; Planning Scene attach was retained during carry and removed after physical release, while Gazebo remained detached
+counts_toward_success_streak: false
+reason_not_counted: search/GUI confirmation run; final qualification requires a clean stack launched from the frozen final commit
+```
