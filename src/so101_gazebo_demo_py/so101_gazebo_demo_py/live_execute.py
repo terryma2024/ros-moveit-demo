@@ -54,6 +54,14 @@ def collect_final_outcomes_around_retreat(*, collect_epoch, retreat) -> FinalOut
     return FinalOutcomeEpochs(pre_retreat,post_retreat)
 
 
+def collect_final_outcome_after_immediate_retreat(
+    *, collect_epoch, retreat,
+) -> FinalOutcomeEpochs:
+    """Retreat first, then collect the sole authoritative physical outcome."""
+    retreat()
+    return FinalOutcomeEpochs(None,collect_epoch())
+
+
 def arm_tcp_stable_between(
     previous_pose, current_pose, *, elapsed_s: float,
     max_linear_speed_m_s: float, max_angular_speed_rad_s: float,
@@ -1070,16 +1078,19 @@ def _run_live_execute_with_scene(
     )
     if place_alignment:
         gate_shadow("PRE_RELEASE_RETREAT")
-    detached_scene=[None]
     backend.move_gripper(bundle.motion.release_q6, final_release=True)
     released=backend.sample()
-    released_pose=(*released.object_xyz,*released.object_xyzw)
-    detached_scene[0]=apply_scene("detach",released_pose)
-    scene_membership=[detached_scene[0]]
-    synchronized_scene=[detached_scene[0]]
+    detached_scene=[None]
+    scene_membership=[None]
+    synchronized_scene=[None]
     state=next(state for state in bundle.motion.states if state.value=="RETREAT")
     retreat_policy=bundle.motion.states[state]
     release_separation=[None]
+    def detach_and_sync(observed):
+        observed_pose=(*observed.object_xyz,*observed.object_xyzw)
+        detached_scene[0]=apply_scene("detach",observed_pose)
+        synchronized_scene[0]=detached_scene[0]
+        scene_membership[0]=detached_scene[0]
     def collect_release_epoch():
         with backend.final_observer() as final_observer:
             return collect_final_outcome_epoch(
@@ -1087,8 +1098,21 @@ def _run_live_execute_with_scene(
                 gazebo_detached=backend.attachment_state() == "detached",
                 scene_membership=scene_membership[0],
             )
-    def retreat_after_settle(_pre_retreat):
-        if place_alignment:
+    if not place_alignment:
+        def immediate_retreat():
+            backend.move_arm(retreat_policy.waypoints, velocity_scaling=retreat_policy.velocity_scaling)
+            retreated=backend.sample()
+            retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
+            detached_scene[0]=apply_scene("detach",retreated_pose)
+            synchronized_scene[0]=detached_scene[0]
+            scene_membership[0]=detached_scene[0]
+        outcomes=collect_final_outcome_after_immediate_retreat(
+            collect_epoch=collect_release_epoch,
+            retreat=immediate_retreat,
+        )
+    else:
+        detach_and_sync(released)
+        def retreat_after_settle(_pre_retreat):
             release_separation[0]=release_separation_translation(placed)
             _moveit_world_translation_execute(
                 release_separation[0],0.15,
@@ -1096,17 +1120,12 @@ def _run_live_execute_with_scene(
             _moveit_world_z_execute(
                 0.060, orientation_tolerance_rad=0.15,
             )
-        else:
-            backend.move_arm(retreat_policy.waypoints, velocity_scaling=retreat_policy.velocity_scaling)
-        retreated=backend.sample()
-        retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
-        detached_scene[0]=apply_scene("detach",retreated_pose)
-        synchronized_scene[0]=detached_scene[0]
-        scene_membership[0]=detached_scene[0]
-    outcomes=collect_final_outcomes_around_retreat(
-        collect_epoch=collect_release_epoch,
-        retreat=retreat_after_settle,
-    )
+            retreated=backend.sample()
+            detach_and_sync(retreated)
+        outcomes=collect_final_outcomes_around_retreat(
+            collect_epoch=collect_release_epoch,
+            retreat=retreat_after_settle,
+        )
     pre_retreat_outcome=outcomes.pre_retreat
     post_retreat_outcome=outcomes.post_retreat
     def outcome_payload(evaluation):
@@ -1121,13 +1140,17 @@ def _run_live_execute_with_scene(
             "tcp_xyzw":[*sample.tcp_xyzw],
             "pose_pair_age_s":sample.pose_pair_age_s,
         }
+    def collected_outcome_payload(collected):
+        return None if collected is None else outcome_payload(collected.evaluation)
+    def collected_final_sample_payload(collected):
+        return None if collected is None else final_sample_payload(collected.final_sample)
     settle=outcomes.post_retreat.result
     if not settle.evaluation.success:
         failure={
             "status":"VALID_FAILURE",
-            "pre_retreat_outcome":outcome_payload(pre_retreat_outcome.evaluation),
+            "pre_retreat_outcome":collected_outcome_payload(pre_retreat_outcome),
             "post_retreat_outcome":outcome_payload(post_retreat_outcome.evaluation),
-            "pre_retreat_final_sample":final_sample_payload(pre_retreat_outcome.final_sample),
+            "pre_retreat_final_sample":collected_final_sample_payload(pre_retreat_outcome),
             "release_start_sample":final_sample_payload(placed),
             "post_retreat_final_sample":final_sample_payload(outcomes.post_retreat.final_sample),
             "gazebo_attachment_state":backend.attachment_state(),
@@ -1141,5 +1164,5 @@ def _run_live_execute_with_scene(
         )
         raise RuntimeError(f"post-retreat final physical outcome failed: {settle.evaluation.failure_code}")
     final=outcomes.post_retreat.final_sample
-    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene[0],"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment,"release_separation_m":release_separation[0]},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":outcome_payload(pre_retreat_outcome.evaluation),"pre_retreat_final_sample":final_sample_payload(pre_retreat_outcome.final_sample),"release_start_sample":final_sample_payload(placed),"final_outcome":outcome_payload(post_retreat_outcome.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
+    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene[0],"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment,"release_separation_m":release_separation[0]},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":collected_outcome_payload(pre_retreat_outcome),"pre_retreat_final_sample":collected_final_sample_payload(pre_retreat_outcome),"release_start_sample":final_sample_payload(placed),"final_outcome":outcome_payload(post_retreat_outcome.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
     path=evidence_directory/"live-summary.json"; path.write_text(json.dumps(summary,indent=2)); return summary

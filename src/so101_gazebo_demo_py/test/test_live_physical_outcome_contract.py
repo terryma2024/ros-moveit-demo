@@ -160,7 +160,8 @@ def test_live_run_reuses_one_isolated_planning_scene_client() -> None:
     assert "with PlanningSceneShadowClient() as scene_client:" in forward_path
     assert "apply_scene=scene_client.apply" in forward_path
     assert "apply_scene(\"attach\",shadow_pose)" in source
-    assert "apply_scene(\"detach\",released_pose)" in source
+    assert "detach_and_sync(released)" in source
+    assert 'apply_scene("detach",observed_pose)' in source
     assert "_apply_scene(" not in forward_path
 
 
@@ -191,27 +192,41 @@ def test_live_path_retries_one_failed_micro_lift_at_requested_preload() -> None:
     assert '"actual_q6":seating_actual_q6' in forward_path
 
 
-def test_release_settles_after_scene_detach_before_existing_retreat() -> None:
+def test_no_alignment_release_retreats_before_scene_detach_and_settle() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
 
     release_index = forward_path.index(
         "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
     )
-    detach_index = forward_path.index('apply_scene("detach",released_pose)', release_index)
-    epochs_index = forward_path.index(
-        "collect_final_outcomes_around_retreat(", detach_index,
+    no_alignment_index = forward_path.index("if not place_alignment:", release_index)
+    immediate_index = forward_path.index(
+        "collect_final_outcome_after_immediate_retreat(", no_alignment_index,
     )
-    post_outcome_index = forward_path.index(
-        "settle=outcomes.post_retreat.result", epochs_index,
+    detach_index = forward_path.index(
+        'apply_scene("detach",retreated_pose)', no_alignment_index,
     )
 
     assert forward_path.index("align_cup_for_release(") < release_index
-    assert release_index < detach_index < epochs_index < post_outcome_index
-    assert "with backend.final_observer() as final_observer:" in forward_path[
-        detach_index:epochs_index
-    ]
-    assert "pre_retreat_outcome" in forward_path[epochs_index:post_outcome_index]
+    assert release_index < no_alignment_index < immediate_index
+    assert forward_path.index("backend.move_arm(", no_alignment_index) < detach_index
+    assert detach_index < immediate_index
+    assert "return FinalOutcomeEpochs(None,collect_epoch())" in source
+
+
+def test_alignment_release_retains_independent_pre_retreat_epoch() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+    aligned_index = forward_path.index(
+        "else:\n        detach_and_sync(released)",
+        forward_path.index("if not place_alignment:"),
+    )
+    detach_index = forward_path.index("detach_and_sync(released)", aligned_index)
+    epochs_index = forward_path.index(
+        "collect_final_outcomes_around_retreat(", detach_index,
+    )
+
+    assert aligned_index < detach_index < epochs_index
 
 
 def test_no_alignment_retreat_uses_explicit_fast_policy_scaling() -> None:
