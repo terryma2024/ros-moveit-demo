@@ -104,6 +104,26 @@ def test_retreat_is_between_independent_pre_and_post_outcome_epochs() -> None:
     ]
 
 
+def test_immediate_retreat_collects_only_post_retreat_outcome() -> None:
+    events: list[str] = []
+
+    def retreat() -> None:
+        events.append("retreat")
+
+    def collect_epoch():
+        events.append("collect:post-retreat-epoch")
+        return SimpleNamespace(epoch_id="post-retreat-epoch")
+
+    result = live_execute.collect_final_outcome_after_immediate_retreat(
+        collect_epoch=collect_epoch,
+        retreat=retreat,
+    )
+
+    assert result.pre_retreat is None
+    assert result.post_retreat.epoch_id == "post-retreat-epoch"
+    assert events == ["retreat", "collect:post-retreat-epoch"]
+
+
 def test_post_retreat_failure_is_persisted_before_it_is_raised() -> None:
     source = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
     final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
@@ -118,7 +138,7 @@ def test_live_failure_evidence_persists_both_release_epochs() -> None:
     source = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
     final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
 
-    assert '"pre_retreat_outcome":outcome_payload(' in final_path
+    assert '"pre_retreat_outcome":collected_outcome_payload(' in final_path
     assert '"post_retreat_outcome":outcome_payload(' in final_path
-    assert '"pre_retreat_final_sample":final_sample_payload(' in final_path
+    assert '"pre_retreat_final_sample":collected_final_sample_payload(' in final_path
     assert '"post_retreat_final_sample":final_sample_payload(' in final_path
