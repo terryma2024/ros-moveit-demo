@@ -44,8 +44,76 @@ open_hypotheses:
   - EXP-073 retains gripper contact throughout its 1.495 s pre-retreat observation after the 5 s release command; shortening only the final release opening is the next outcome-first candidate.
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-EXP-074-RUNNING-229
-next_experiment: EXP-074
+latest_checkpoint: CP-PRE-EXP-075-231
+next_experiment: EXP-075
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-075-231
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-075
+status: PLANNED
+prior_experiment: EXP-074
+hypothesis: EXP-074 failed in the unchanged stochastic place-alignment boundary before the final release command, so one fixed-configuration RESET_WORLD repeat can reach and discriminate the 2 s final OPEN_GRIPPER behavior without adding another variable
+single_variable: NONE; exact repeat of the EXP-074 implementation and policy
+lifecycle: RESET_WORLD
+prediction:
+  - reset and physical-grasp gates pass under the same implementation commit b69ce39
+  - place alignment converges or is validly deferred under the unchanged 0.010 m tolerance
+  - the final 2 s OPEN_GRIPPER command is actually issued and can be compared with EXP-073
+  - if the same pre-release alignment failure recurs, stop repeating and return to the earlier place boundary
+preconditions:
+  - no source, policy, material, controller, collision, physics or validation changes after EXP-074
+  - prove a fresh RESET_WORLD on the sole so101-py-qual stack
+  - no second Gazebo/MoveIt stack or execute client
+success_criteria:
+  - final release is exercised and the authoritative final physical outcome succeeds
+failure_criteria:
+  - valid grasp, motion, release or final-outcome failure
+invalid_criteria:
+  - provenance/reset mismatch, duplicate stack/client, missing telemetry/video or any configuration change
+decision: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-074-230
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_PRE_RELEASE_FAILURE_NO_DISCRIMINATION
+experiment_id: EXP-074
+execution_head: 4032d8a
+implementation_commit: b69ce39
+lifecycle: RESET_WORLD
+command_exit_code: 1
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp074/reset/reset-world.json
+physical_grasp:
+  status: PROVED
+  max_moving_pad_penetration_m: 0.0010699965059757233
+  hard_penetration_ceiling_m: 0.0013
+  micro_lift_world_z_m: 0.0034828782081604004
+  lateral_drift_m: 0.0005055404253724472
+first_bad_boundary:
+  state: PLACE_ALIGNMENT
+  failure: place alignment did not converge within 3 attempts
+  reported_object_xyz_m: [-0.08635754138231277, -0.2628394663333893, 0.1867254674434662]
+release_discrimination:
+  final_open_gripper_executed: false
+  final_observed_q6: -0.05460381135344505
+  conclusion: the 2 s release-duration hypothesis was neither supported nor rejected
+post_failure_observation:
+  object_xyz_m: [-0.06947818398475647, -0.2772241532802582, 0.166848286986351]
+  upright_tilt_rad: 0.047653438067309074
+  contacts: [moving_fingertip_pad, table]
+  visual: cup upright on the table while the gripper remains closed at the failed pre-release boundary
+evidence:
+  execute_log: /tmp/so101-py-qualification/exp074/run/execute.log
+  telemetry_sha256: 8714042fc72f98e47358463e5e35bcac4e5bf888e6627f25c19405bd9016575d
+  bounded_video_sha256: b0a72171a51c2d20d00b0267fddef210d4d155342fa0c6739428d53ed84e24cb
+  final_screenshot_sha256: 244dddbbeeb94e9a7345dfd7b0aa888058eb2c829bc1f523a0f794c1ea93ccd3
+decision: REPEAT once as EXP-075 with identical configuration because the active variable was never reached
+counts_toward_success_streak: false
 ```
 
 ```yaml
