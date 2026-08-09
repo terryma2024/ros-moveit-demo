@@ -2,13 +2,21 @@ from pathlib import Path
 
 import yaml
 
+from so101_gazebo_demo_py.cli import reset_so101_world as reset_cli
 from so101_gazebo_demo_py.cli.reset_so101_world import bundle_reset_inputs, reset_live_world
+from so101_gazebo_demo_py.live_execute import PlanningSceneShadowClient
 from so101_gazebo_demo_py.policy_config import load_policy_bundle
 from so101_gazebo_demo_py.test_support.live_attachment import PoseSample
 from so101_gazebo_demo_py.test_support.ros_gazebo_backend import make_set_pose_request
 
 
 PACKAGE = Path(__file__).parents[1]
+
+
+def test_reset_cli_loads_the_current_planning_scene_client() -> None:
+    dependencies = reset_cli.load_live_dependencies()
+
+    assert dependencies.scene_client_type is PlanningSceneShadowClient
 
 
 def test_real_policy_bundle_maps_to_reset_inputs() -> None:
