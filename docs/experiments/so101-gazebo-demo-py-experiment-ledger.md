@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 9a78a033670c4ae8dfe08638faab1ece65696fbc
+current_commit: 8666ba93093ea56d08a98c7e8bb7ca185f77d15c
 evidence_root: /tmp/so101-py-qualification/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -27,7 +27,7 @@ disproven_routes:
 open_hypotheses:
   - Reusing a persistent combined Gazebo/TF observer for carry shadow gates will remove most of the 4.1-4.4 second pre-descent observation dwell while preserving the same divergence/resynchronization safety check.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
-latest_checkpoint: CP-PRE-EXP-062-192
+latest_checkpoint: CP-EXP-062-IMPLEMENTED-193
 next_experiment: EXP-062
 ```
 
@@ -73,6 +73,36 @@ provenance:
 commands:
   - command: pytest RED, minimal persistent-observer edit, focused/full pytest, colcon build/test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
     exit_code: PENDING
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-EXP-062-IMPLEMENTED-193
+recorded_at: 2026-08-09 Asia/Shanghai
+status: IMPLEMENTED_AND_AUTOMATED_TESTED
+experiment_id: EXP-062
+implementation_commit: 8666ba93093ea56d08a98c7e8bb7ca185f77d15c
+single_variable: persistent observer lifetime across carry shadow gates
+implementation:
+  - synchronize_planning_shadow accepts an injected fresh-pose source while retaining the one-shot fallback for non-carry calls
+  - one RosGazeboFinalObserver context is reused across LIFT, MOVE_ABOVE_PLACE and DESCEND_TO_PLACE pre-motion shadow gates
+  - each gate still evaluates pair age, finite poses, position/orientation divergence and applies Planning Scene resynchronization when required
+  - each shadow check records observation_duration_s for runtime verification
+unchanged:
+  - cup mass 0.020 kg, all motion targets/speeds/orientations and q6 targets
+  - controller/gains, physics, geometry, inertia, friction, collision and safety bounds
+  - the known EXP-061 release-order behavior remains unchanged for this boundary experiment
+red:
+  targeted: 2 expected failures because synchronize_planning_shadow rejected observe_pose and live carry lacked one persistent observer scope
+green:
+  targeted: 4 passed
+  full_pytest: 192 passed, 2 skipped
+  colcon_build: 1 package finished
+  colcon_test: 194 tests, 0 errors, 0 failures, 2 skipped
+installed_provenance:
+  package_prefix: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install/so101_gazebo_demo_py
+  source_build_live_execute_sha256: 08160ccef4fdd044d1e296011b7e61f807bb74686554dcda9183c43ea351640a
+next_command: RESET_WORLD on so101-py-qual, then bounded telemetry/H.264 and one EXP-062 execute
 counts_toward_success_streak: false
 ```
 
