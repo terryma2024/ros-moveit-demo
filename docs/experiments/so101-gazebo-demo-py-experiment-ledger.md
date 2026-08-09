@@ -7,7 +7,7 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: ffaa35d27f4ba7ffe5438a06ddc40d2f0173f0b9
+current_commit: afdd1b74c3c25b4efa2cca05e054e8b523913f3a
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
@@ -22,7 +22,7 @@ disproven_routes:
   - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
   - Returning to the 0.03 descent baseline and increasing q6 seating preload from 0.004 to the configured safe maximum 0.006 rad will raise normal force enough to reduce gravity-driven cup roll while observed penetration remains below 0.001 m.
-latest_checkpoint: CP-RESULT-EXP-058-178
+latest_checkpoint: CP-PRE-EXP-059-179
 next_experiment: EXP-059
 ```
 
@@ -8543,5 +8543,49 @@ interpretation:
   - Table contact remained a later aggravating event and caused enough disturbance for the arm controller to abort on path tolerance.
   - The relevant next control is grasp normal force/contact robustness, not further slowing; the rejected speed is reverted before the next trial.
 decision: return DESCEND_TO_PLACE velocity_scaling to 0.03 and test only seating_preload_rad 0.006 relative to the EXP-057 raised-endpoint baseline
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-059-179
+recorded_at: 2026-08-09 Asia/Shanghai
+experiment_id: EXP-059
+status: PREREGISTERED
+prior_experiment: EXP-058
+experimental_baseline: EXP-057 raised-endpoint candidate; EXP-058 slow velocity is rejected and reverted
+hypothesis: increasing q6 seating preload from 0.004 to 0.006 rad increases bilateral normal force enough to reduce gravity-driven cup roll during carry and descent while remaining inside the approved target-penetration range
+prediction:
+  - post-seating and post-micro-lift moving-pad penetration remains within [0.0001, 0.001] m
+  - cup tilt at MOVE_ABOVE_PLACE remains below 0.35 rad and at the raised DESCEND_TO_PLACE endpoint remains below 0.50 rad
+  - no cup/table contact occurs before OPEN_GRIPPER
+  - final authoritative physical outcome either succeeds or exposes a later result boundary
+single_variable_relative_to_EXP_057: seating_preload_rad from 0.004 to 0.006
+reverted_rejected_variable: DESCEND_TO_PLACE velocity_scaling from EXP-058 0.01 back to baseline 0.03
+lifecycle: RESET_WORLD
+preconditions:
+  - reuse only tmux stack so101-py-gui-214 with ROS_DOMAIN_ID 214 and GZ_PARTITION so101_py_gui_214
+  - reset proof must show cup pose error <= 0.001 m, Gazebo detached, MoveIt world-only, no finger contact, and finite arm TCP
+  - no second Gazebo or MoveIt stack and no execute client
+success_criteria:
+  - observed target penetration is within [0.0001, 0.001] m
+  - cup remains free of table contact through OPEN_GRIPPER
+  - authoritative final outcome is in-region, upright, stable, supported, detached, free of gripper contact, and arm/controller healthy
+failure_criteria:
+  - penetration outside the approved target range, pre-open table contact, physical grasp/motion/controller failure, or final outcome valid failure
+invalid_criteria:
+  - provenance mismatch, stale installed asset, missing bounded telemetry/video, duplicate stack/client, reset failure, or disk pressure
+planned_candidate:
+  seating_preload_rad: 0.006
+  descend_to_place_velocity_scaling: 0.03
+  held_cup_release_target_xyz_m: [-0.075, -0.255, 0.179]
+  unchanged: all motion targets, all other state speeds, acceleration scaling, grasp pose/orientation, physics, geometry, mass, friction, controller/gains, collision model, alignment bound, release separation, final outcome contract, and Gazebo-detached/MoveIt-shadow semantics
+provenance:
+  planning_commit: afdd1b74c3c25b4efa2cca05e054e8b523913f3a
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py/install
+  ros_domain_id: 214
+  gz_partition: so101_py_gui_214
+commands:
+  - command: pytest RED after expectation changes, minimal policy edits, full pytest/build/colcon test, RESET_WORLD, bounded telemetry/H.264, one GUI execute
+    exit_code: PENDING
 counts_toward_success_streak: false
 ```
