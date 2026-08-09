@@ -6212,6 +6212,30 @@ next: commit locally, then preregister one RESET_WORLD trial
 ```
 
 ```yaml
+checkpoint_id: CP-PRE-EXP-044-126
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-044
+purpose: validate bounded XYZ cup alignment near support before immediate physical release
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: b144a82
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-043/reset-after-tipped-final/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-044
+candidate:
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  xyz_alignment_tolerance_m: [0.003, 0.003, 0.002]
+  immediate_radial_separation_m: 0.010
+  immediate_vertical_retreat_m: 0.060
+prediction: lower release height reduces tipping and final cup satisfies support/upright/contact conditions near the unchanged target region
+acceptance: unchanged authoritative final physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-043-122
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
