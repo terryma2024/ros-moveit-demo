@@ -6358,6 +6358,58 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-034-090
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_CARRY_FAILURE
+experiment_id: EXP-034
+execution_commit: 35b5f76
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-034
+failure:
+  stage: pre-release alignment bound
+  requested_correction_xy_m: [-0.01733966991305351, 0.11872805285453797]
+  per_axis_safety_limit_m: 0.030
+  dynamic_retreat_reached: false
+interpretation: the cup was physically lost far from the placement neighborhood during carry; the correction ceiling correctly blocked a large recovery sweep, while the observer race did not recur
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-034-091
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-034/reset-after-lost-carry
+proof:
+  cup_spawn_pose_error_m: 0.0000016822354427512257
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-035-092
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-035
+purpose: retry the unchanged dynamic vertical retreat candidate after a bounded carry-loss failure
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 35b5f76
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-034/reset-after-lost-carry/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-035
+candidate:
+  changed_since_EXP_034: false
+  corrected_pose_retreat: world Z +0.060 m
+prediction: if physical carry remains within correction bounds, obtain authoritative post-retreat evidence for the dynamic retreat
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-028-068
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
