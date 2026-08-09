@@ -5597,3 +5597,26 @@ tests:
 build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
 next: commit locally and rerun the unchanged full physical strategy
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-022
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: unchanged physical motion with a persistent observer on its own rclpy context will complete RETREAT and produce one authoritative post-retreat outcome
+execute_commit: c6a7134
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-022
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-021/reset-after-context-failure/reset-world.json
+strategy:
+  motion_and_grasp: identical to EXP-020 and EXP-021
+  final_observer: persistent across both epochs, dedicated rclpy context, 3 second bounded evidence wait
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained and dynamically resynchronized
+  final_acceptance: frozen
+next_on_valid_success: freeze strategy and run two RESET_WORLD confirmations
+next_on_valid_failure: classify authoritative final cup and arm metrics; change at most one strategy family
+```
