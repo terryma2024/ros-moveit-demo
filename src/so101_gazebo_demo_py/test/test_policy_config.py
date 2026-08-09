@@ -42,19 +42,25 @@ def test_loads_strict_typed_policy_bundle() -> None:
         0.0, 0.0, 1.0,
     ]
     assert bundle.motion.states[State.MOVE_ABOVE_PLACE].waypoints[-1] == pytest.approx((
-        0.3943746180447702,
-        0.21071779514748898,
-        0.10962880506920697,
-        1.1746878405589727,
-        0.0015868625800031938,
+        0.39605349936733336,
+        0.20811109174700002,
+        0.11216949915749999,
+        1.1793226274016666,
+        0.0014322254539999998,
     ))
     assert bundle.motion.states[State.DESCEND_TO_PLACE].waypoints[-1] == pytest.approx((
-        0.38868552221451447,
-        0.4893848545063948,
-        0.1129339554949517,
-        0.9962432883136614,
-        0.002009828339982921,
+        0.3902880767431667,
+        0.4786634968135,
+        0.13135032910475003,
+        0.9840056686529166,
+        0.001886270923083333,
     ))
+    assert bundle.validation.states[State.MOVE_ABOVE_PLACE].data[
+        "endpoint_position"
+    ] == pytest.approx((-0.0728540412968976, -0.2466491907831009, 0.26266213748863515))
+    assert bundle.validation.states[State.DESCEND_TO_PLACE].data[
+        "endpoint_position"
+    ] == pytest.approx((-0.07014007387726474, -0.24375048527937768, 0.20749669383910732))
     assert len(bundle.sha256) == 64
 
 

@@ -4716,3 +4716,85 @@ strategy:
 next_on_valid_success: freeze the strategy and run two independent RESET_WORLD confirmations
 next_on_valid_failure: use final x/y displacement to select one preload-only candidate while retaining the shifted place family
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-011
+lifecycle: VALID_FAILURE
+result:
+  execute_rc: 1
+  authoritative_failure_code: FINAL_OUT_OF_REGION
+physical_grasp:
+  cup_world_z_delta_m: 0.0019564032554626465
+  lateral_drift_m: 0.00020028909916231164
+  bilateral_contact: true
+  moving_pad_depth_m: 0.0011493433266878128
+pre_retreat:
+  cup_xyz_m: [-0.07658261060714722, -0.25831544399261475, 0.16877683997154236]
+  upright_tilt_rad: 0.12019378008867962
+post_retreat:
+  cup_xyz_m: [-0.08060461282730103, -0.25507646799087524, 0.16500000655651093]
+  upright_tilt_rad: 0.00000025331974029541084
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0038883837213462774
+pre_to_post_delta_m: [-0.004022002220153809, 0.003238976001739502, -0.003776833415031433]
+frozen_region_check:
+  x: PASS
+  y: FAIL_LOW_BY_0.00007646799087524_M
+  z: PASS
+  upright: PASS
+  stable: PASS
+conclusion: the y-shifted place family corrected both final x and y without changing preload; only a 0.076 mm lower-y boundary miss remains, so retain the full grasp/release strategy and move the place ladder 0.001 m back toward positive y for margin
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-011
+counts_toward_search: true
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-011-027
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-011/reset-after-failure
+proof:
+  cup_spawn_pose_error_m: 0.00000060284526108575
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+next: plan-only validate a -0.011 m y-shifted place ladder; do not alter preload or any frozen physical/safety boundary
+```
+
+```yaml
+diagnostic_id: DIAG-Y-SHIFT-MINUS-011-028
+lifecycle: VALID_PLAN_ONLY
+recorded_at: 2026-08-09 Asia/Shanghai
+purpose: add positive-y margin after EXP-011 missed the frozen lower-y bound by only 0.076 mm
+requested_place_translation_m: [0.0, -0.011, 0.0]
+alternate_ik_branch:
+  status: REJECTED_BY_EXPERIMENT_ISOLATION
+  reason: direct relaxed-orientation IK returned q5 about -0.036 rad and would change endpoint orientation in addition to y
+selected_branch:
+  construction: 11/12 interpolation from the original place endpoints to the already validated -0.012 m endpoints
+  rationale: remain on the same joint/orientation branch while changing only the place-family y target
+  above_joints: [0.39605349936733336, 0.20811109174700002, 0.11216949915749999, 1.1793226274016666, 0.0014322254539999998]
+  descend_joints: [0.3902880767431667, 0.4786634968135, 0.13135032910475003, 0.9840056686529166, 0.001886270923083333]
+  above_fk_xyz_m: [-0.0728540412968976, -0.2466491907831009, 0.26266213748863515]
+  descend_fk_xyz_m: [-0.07014007387726474, -0.24375048527937768, 0.20749669383910732]
+  explicit_ladder_plans:
+    MOVE_ABOVE_PLACE: 80
+    DESCEND_TO_PLACE: 51
+    RETREAT: 51
+  execute_trajectory_count: 0
+tests:
+  red: strict typed policy test observed the prior -0.012 m endpoints
+  focused_green: 19 passed
+  package_pytest: 161 passed, 2 skipped
+  colcon_test: 163 tests, 0 errors, 0 failures, 2 skipped
+build: colcon build --packages-select so101_gazebo_demo_py --symlink-install succeeded
+provenance:
+  motion_policy_sha256: 0aa295b7ebc338e4414a104a5f8b0cd273d43440f6525c9ccea9beb6a3c6c36d
+  validation_policy_sha256: 8fdeab424f143cc9c2b72e406e5d8c83fc55d40ccca5a316f77b69ca393a03f5
+  bundle_sha256: 279f9a3f63f6553cc058d666d6925723c8f79b8246df70702922bebcc60b7bd9
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-011/y-shift-minus-011-plan-only/interpolated-branch
+next: commit the isolated place-family change, preregister candidate 012, and run one RESET_WORLD search trial with preload 0.004 unchanged
+```
