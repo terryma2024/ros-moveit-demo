@@ -87,7 +87,10 @@ def test_final_epoch_uses_one_observer_with_bounded_evidence_wait() -> None:
     live_path = live_source[live_source.index("def run_live_execute") :]
     assert live_path.count("with backend.final_observer() as final_observer:") == 1
     assert live_path.index("with backend.final_observer() as final_observer:") < (
-        live_path.index("final_outcome=collect_final_outcome_epoch(")
+        live_path.index("return collect_final_outcome_epoch(")
+    )
+    assert live_path.index("return collect_final_outcome_epoch(") < (
+        live_path.index("outcomes=collect_final_outcomes_around_retreat(")
     )
     backend_source = ROS_GAZEBO_BACKEND.read_text()
     assert "deadline=time.monotonic()+3.0" in backend_source
@@ -170,20 +173,25 @@ def test_live_path_retries_one_failed_micro_lift_at_requested_preload() -> None:
     assert '"actual_q6":seating_actual_q6' in forward_path
 
 
-def test_same_run_place_alignment_precedes_release_and_uses_vertical_retreat() -> None:
+def test_release_settles_after_scene_detach_before_existing_retreat() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
 
     release_index = forward_path.index("backend.move_gripper(bundle.motion.release_q6)")
-    separation_index = forward_path.index("_moveit_world_translation_execute(", release_index)
-    vertical_index = forward_path.index("_moveit_world_z_execute(", separation_index)
-    detach_index = forward_path.index('_apply_scene("detach"', vertical_index)
-    final_observer_index = forward_path.index("collect_final_outcome_epoch(", detach_index)
+    detach_index = forward_path.index('_apply_scene("detach",released_pose)', release_index)
+    epochs_index = forward_path.index(
+        "collect_final_outcomes_around_retreat(", detach_index,
+    )
+    post_outcome_index = forward_path.index(
+        "settle=outcomes.post_retreat.result", epochs_index,
+    )
 
     assert forward_path.index("align_cup_for_release(") < release_index
-    assert release_index < separation_index < vertical_index < detach_index
-    assert detach_index < final_observer_index
-    assert "collect_final_outcomes_around_retreat(" not in forward_path
+    assert release_index < detach_index < epochs_index < post_outcome_index
+    assert "with backend.final_observer() as final_observer:" in forward_path[
+        detach_index:epochs_index
+    ]
+    assert "pre_retreat_outcome" in forward_path[epochs_index:post_outcome_index]
 
 
 def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:
