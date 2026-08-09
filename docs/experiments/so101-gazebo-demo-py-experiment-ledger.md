@@ -4999,3 +4999,31 @@ provenance:
   bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
 next: commit locally, preregister candidate 014 as EXP-011 plus post-seating stabilization, then execute one RESET_WORLD search trial
 ```
+
+```yaml
+experiment_id: EXP-OUTCOME-SEARCH-014
+lifecycle: PLANNED_RESET_WORLD_SEARCH
+recorded_at: 2026-08-09 Asia/Shanghai
+prediction: waiting for six consecutive bilateral contacts after the unchanged 0.004 rad preload will reduce grasp-relative-pose variance; with the restored EXP-011 place/release path, the cup should release stably inside or close enough to the frozen final region to classify the remaining placement bias
+execute_commit: ec8d03609bd6450a91193493620b11a678eb4245
+stack_launch_commit: cd50b6156d90fb2757995c990c9e8b4174673f3a
+stack_asset_note: sole domain-203 search stack with rebuilt symlink overlay; search evidence only
+bundle_sha256: 9ff786d518a474e89c71e71544e14cd5d00af83457384567b4c54331feac0c35
+ros_domain_id: 203
+gz_partition: so101_py_outcome_search_203
+tmux_session: so101-py-outcome-search-203
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-014
+reset_proof: /tmp/so101-py-outcome-search-203/candidate-013/reset-after-failure/reset-world.json
+strategy:
+  grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
+  seating_preload_rad: 0.004
+  post_seating_stable_bilateral_samples: 6
+  moving_pad_penetration_hard_ceiling_m: 0.0013
+  place_family: restored EXP-011 y-shifted path and vertical reverse retreat
+  gazebo_attachment: forbidden
+  moveit_planning_scene_attach: retained after physical stability proof
+  intermediate_validation: outcome-first cup state and arm stability
+  final_acceptance: frozen position, uprightness, and stability region
+next_on_valid_success: freeze the strategy and run two RESET_WORLD confirmations without changes
+next_on_valid_failure: compare post-seating versus micro-lift penetration and final physical pose before selecting the next single control change
+```
