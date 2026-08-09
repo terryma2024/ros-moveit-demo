@@ -7958,3 +7958,60 @@ prediction: if the first physical micro-lift loses the cup, the single regrasp o
 acceptance: unchanged micro-lift cup-result gate followed by unchanged authoritative post-RETREAT final outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-GUI-STACK-SWITCH-161
+recorded_at: 2026-08-09 Asia/Shanghai
+status: GUI_STACK_READY
+requested_action: stop every ROS, MoveIt, Gazebo and ROS-workspace build process, then launch one GUI experiment stack
+cleanup:
+  removed_stack: so101-py-outcome-search-203
+  removed_orphan_gz_pid: 3272995
+  residual_ros_gz_build_processes_after_cleanup: 0
+  preserved_sessions: [codex, codex-cua, kimi]
+new_stack:
+  tmux_session: so101-py-gui-214
+  ros_domain_id: 214
+  gz_partition: so101_py_gui_214
+  gazebo_gui_process_present: true
+  moveit_ready: true
+reset_proof: /tmp/so101-py-gui-214/initial-reset/reset-world.json
+reset:
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.0000006421554924746272
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+visual_proof: /tmp/so101-py-gui-214/gazebo-before-exp053.png
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-054-162
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-054
+purpose: GUI-observable retry of the EXP-053 candidate on the newly proved clean stack
+execution:
+  stack: so101-py-gui-214
+  ros_domain_id: 214
+  gz_partition: so101_py_gui_214
+  execution_commit: 3774797
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-gui-214/initial-reset/reset-world.json
+  evidence_root: /tmp/so101-py-gui-214/candidate-054
+candidate:
+  changed_since_EXP_053: false
+  physical_grasp_attempts: 2
+  retry_local_x_m: -0.0002
+  retry_seating_target: original_requested_preload
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  pre_release_xy_convergence_tolerance_m: 0.006
+  pre_release_z_convergence_tolerance_m: 0.010
+  maximum_alignment_commands: 3
+  immediate_radial_separation_m: 0.010
+prediction: the GUI run either passes the cup-result micro-lift and reaches final physical release evidence, or records a bounded two-attempt physical grasp failure
+acceptance: unchanged micro-lift cup-result gate followed by unchanged authoritative post-RETREAT final outcome contract
+counts_toward_success_streak: false
+```
