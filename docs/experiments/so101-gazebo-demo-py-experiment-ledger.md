@@ -7584,3 +7584,27 @@ tests:
   package_pytest: 176 passed, 2 skipped
 next: commit locally, then preregister a fresh RESET_WORLD trial
 ```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-049-143
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-049
+purpose: exercise physical release and authoritative final validation after deferring the EXP-048 bounded Z residual
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 05fc3a3
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-048-reset/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-049
+candidate:
+  held_cup_target_xyz_m: [-0.075, -0.255, 0.169]
+  pre_release_z_convergence_tolerance_m: 0.006
+  immediate_radial_separation_m: 0.010
+  changed_motion_parameters_since_EXP_048: false
+prediction: a bounded held-cup height residual proceeds to release, then the unchanged post-RETREAT contract determines success or a physical failure
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
