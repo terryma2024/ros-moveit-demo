@@ -153,6 +153,23 @@ def test_moveit_shadow_attach_precedes_physical_micro_lift_planning() -> None:
     assert ".set_attached(" not in forward_path
 
 
+def test_live_path_retries_one_failed_micro_lift_at_requested_preload() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+    grasp_call = forward_path[
+        forward_path.index("run_bounded_physical_grasp_attempts("):
+        forward_path.index("except Exception as error:", forward_path.index(
+            "run_bounded_physical_grasp_attempts("
+        ))
+    ]
+
+    assert "max_grasp_attempts=2" in forward_path
+    assert "max_attempts=max_grasp_attempts" in grasp_call
+    assert "seating_actual_q6=_current_joint_position(\"6\")" in forward_path
+    assert "seating_target=_current_joint_position(\"6\")" not in forward_path
+    assert '"actual_q6":seating_actual_q6' in forward_path
+
+
 def test_same_run_place_alignment_precedes_release_and_uses_vertical_retreat() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]

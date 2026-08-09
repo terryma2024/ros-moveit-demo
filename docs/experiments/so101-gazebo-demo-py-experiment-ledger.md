@@ -7870,3 +7870,63 @@ prediction: a finite stable held-cup result within the widened non-authoritative
 acceptance: unchanged authoritative post-RETREAT physical outcome contract
 counts_toward_success_streak: false
 ```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-052-157
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_PHYSICAL_GRASP_FAILURE
+experiment_id: EXP-052
+execution_commit: af56599
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-052
+observed:
+  requested_seating_q6: -0.04968448728322983
+  actual_q6_after_controller_abort: -0.0459887720644474
+  post_seating_bilateral_contact: true
+  micro_lift_command_m: 0.002
+  cup_world_z_delta_m: -0.00737801194190979
+  cup_lateral_delta_m: 0.003177738773743948
+  latest_moving_pad_penetration_m: 0.0002940025879070163
+failure:
+  code: CUP_INSUFFICIENT_LIFT
+  physical_grasp_attempts: 1
+  release_reached: false
+interpretation: the cup physically fell while the arm micro-lifted; this cup-result failure must not be relaxed, and the live one-attempt call prevented the existing bounded regrasp path from running
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-052-158
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-052-reset
+proof:
+  cup_spawn_pose_error_m: 0.0000016743151139001225
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-ENABLE-ONE-PHYSICAL-REGRASP-159
+recorded_at: 2026-08-09 Asia/Shanghai
+change: live execution now permits exactly one physical regrasp after a failed cup-result micro-lift
+behavior:
+  - lower the TCP by the probe distance before retry
+  - physically open the gripper, shift local X by -0.0002 m, and reclose
+  - reclose to the originally requested seating preload rather than the shallower post-abort q6 observation
+  - run the same cup-position and arm-stability micro-lift gate again
+  - stop after two total physical grasp attempts
+telemetry:
+  - preserve requested seating q6 separately from actual post-command q6
+  - report the configured two-attempt budget on terminal failure
+unchanged:
+  - q6 safe lower bound and global penetration ceiling
+  - no Gazebo attach; MoveIt Planning Scene shadow attach retained
+  - physics, geometry, material, controller and final outcome policies
+tests:
+  red: live source used one attempt and overwrote requested preload with post-abort q6
+  package_pytest: 189 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
