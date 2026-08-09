@@ -6212,6 +6212,30 @@ next: commit locally, then preregister one RESET_WORLD trial
 ```
 
 ```yaml
+checkpoint_id: CP-PRE-EXP-039-107
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-039
+purpose: test immediate radial separation and vertical retreat with no outcome-changing intermediate wait
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 59fac4b
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-038/reset-after-unsupported-final/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-039
+candidate:
+  intermediate_release_wait: removed
+  immediate_radial_separation_m: 0.015
+  immediate_vertical_retreat_m: 0.060
+  authoritative_epochs: final post-retreat only
+prediction: cup displacement from aligned release pose is reduced and final gripper contact remains false
+acceptance: unchanged authoritative final physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-037-100
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
