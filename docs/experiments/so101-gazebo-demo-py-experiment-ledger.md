@@ -50,6 +50,7 @@ confirmed_conclusions:
   - EXP-092 did not exercise the three-attempt budget: the initial bounded seating normalization lost moving-pad contact while fixed-pad depth was 0.73929 mm, so it stopped safely before micro-lift or carry.
   - EXP-093 reached all three grasp attempts and the last held probe retained 0.806 mm lift, bilateral pad contact and a finite arm, but its 1.024 mm lateral drift exceeded the 1 mm intermediate gate by 0.024 mm; this is an outcome-gate boundary rather than a final-placement result.
   - EXP-094 accepted a weak first grasp at 0.745 mm persistent lift and 1.770 mm drift, then the cup diverged during carry/place and remained hooked on the moving pad after release; the prewarmed RETREAT itself was exercised and reduced q6>=0.40-to-arm-motion to 60.6 ms.
+  - EXP-095 clean FULL_RESTART restored a first-attempt strong grasp (1.852 mm persistent lift, 0.182 mm drift), but a second release-alignment correction ran even though the first correction had already put cup XY inside the final region; the final cup was upright/stable/supported/free but rolled to [-0.101764,-0.269317] m.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
@@ -68,8 +69,89 @@ open_hypotheses:
   - The remaining roughly 2.13 s MOVE-to-DESCEND idle interval may be dominated by per-motion ros2 action CLI discovery rather than Planning Scene service discovery; a persistent arm action client remains a later isolated optimization candidate.
   - After carry stabilization, release settling must keep the Planning Scene shadow attached through planned retreat and detach/sync only after physical separation, because world-only detachment at the contact-adjacent start state blocks MoveIt planning.
   - QUAL-FULL-NORM-01 moves the first bad boundary to the stationary pre-retreat wait: on a no-alignment path, immediate fixed retreat while retaining the Planning Scene shadow should clear the fingers before the cup can roll and hook.
-latest_checkpoint: CP-PRE-EXP-095-302
-next_experiment: EXP-095
+latest_checkpoint: CP-PRE-EXP-096-304
+next_experiment: EXP-096
+```
+
+```yaml
+checkpoint_id: CP-PRE-EXP-096-304
+recorded_at: 2026-08-10 Asia/Shanghai
+experiment_id: EXP-096
+status: PREREGISTERED
+prior_experiment: EXP-095
+hypothesis: release alignment should stop as soon as the observed held-cup XY is already inside the authoritative final target region and the existing Z tolerance passes; continuing toward the compensated point center adds a second contact-loaded correction that can amplify tilt and roll without improving the task outcome
+single_variable: alignment convergence accepts final-region XY membership in addition to the existing 6 mm compensated-point tolerance
+lifecycle: RESET_WORLD on the fresh EXP-095 stack
+prediction:
+  - if the first correction puts cup XY within x [-0.085,-0.075] and y [-0.255,-0.245] with existing Z tolerance, no second correction executes
+  - the release-start tilt and height are no worse than EXP-095 after its second correction
+  - the prewarmed RETREAT clears the open gripper in about 0.1 s without hooking
+  - authoritative final outcome passes
+unchanged:
+  - compensated release target, y compensation -0.005 m, all correction commands and attempt/correction safety bounds
+  - physical grasp gates, mass/materials, motion/release timing, prewarmed RETREAT and attachment semantics
+  - final target region, upright/stability/support/free/detach/controller contract and every hard safety limit
+preconditions:
+  - TDD, focused/full pytest and colcon build/test
+  - RESET_WORLD proof on the sole fresh domain 231 stack
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-095-303
+recorded_at: 2026-08-10 Asia/Shanghai
+status: VALID_FINAL_FAILURE
+experiment_id: EXP-095
+execution_head: ca76670
+lifecycle: FULL_RESTART
+stack_provenance:
+  gazebo_roots: 1
+  moveit_roots: 1
+  ros_domain_id: 231
+  gz_partition: so101_py_full_imm_02
+reset:
+  status: RESET_WORLD_PROVED
+  proof: /tmp/so101-py-qualification/exp095/reset/reset-world.json
+  cup_spawn_pose_error_m: 0.0000007017314255465215
+physical_gate:
+  status: PROVED
+  attempts: 1
+  persistent_lift_m: 0.0018519163131713867
+  lateral_drift_m: 0.00018169266319067618
+  bilateral: true
+  moving_pad_depth_m: 0.00024064892204478383
+  gazebo_attachment_state: detached
+place_alignment:
+  attempts: 2
+  first_after_xyz: [-0.08276038616895676, -0.24836081266403198, 0.1804291009902954]
+  first_after_inside_final_xy_region: true
+  first_after_compensated_target_error_m: 0.010212854741619188
+  second_after_release_start_xyz: [-0.07917916774749756, -0.25589749217033386, 0.18509331345558167]
+  release_start_xyzw: [0.013044227866557187, 0.23353865459339665, -0.3251154421049931, 0.9162911690001768]
+final:
+  failure_code: FINAL_OUT_OF_REGION
+  final_object_xyz: [-0.10176412761211395, -0.26931682229042053, 0.16500000655651093]
+  final_upright_tilt_rad: 0.0000000745058059692383
+  support_contact: true
+  gripper_contact: false
+  stable: true
+  gazebo_detached: true
+  moveit_detached: true
+  controller_healthy: true
+interpretation:
+  - FULL_RESTART restored the strong-grasp regime, so retain the current physical grasp parameters
+  - the first alignment result already satisfied the authoritative final XY box and existing height tolerance, yet center-distance logic forced a second correction
+  - the second correction is the next isolated, outcome-first boundary; stop inside-region rather than altering the final target or y compensation
+evidence_sha256:
+  reset_proof: f6f9019e6a208237130706c3cd6c1e5e1c35aa5f2d8cc9267c64272ade1aa4e0
+  execute_log: dc4011d1061d85c7d0f5e844352fc5305626fe8e0082500c691a74a194e62ebb
+  physical_gate: d7f1e9bf300f32abcd747c0dae8cb1c0d598178501977063753071f04e370155
+  final_failure: 40a8e3115a5bca38dbe794e89549a607a534a168d6bce8d8829b6090890d7df2
+  telemetry: 0a0feb8958fe684abad80531971632851aa520ed6605a615d7a5611f73ec1a5f
+  bounded_video: 7ded9377f91b1fb7173694188aaa7c61834a24cc41a970a6a7c282e1e8560a23
+  final_screenshot: 08d18b9ef169badb81d051eee4ba28258abadb3860a2aecb6c6386e2f276b363
+decision: stop redundant alignment once the held cup is already inside the unchanged final XY region; run EXP-096
+counts_toward_success_streak: false
 ```
 
 ```yaml
