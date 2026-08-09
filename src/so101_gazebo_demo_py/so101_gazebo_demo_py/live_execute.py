@@ -223,6 +223,19 @@ def carry_with_shadow_gates(backend, policies, shadow_gate):
         )
 
 
+def release_alignment_target(
+    place_xyz: tuple[float, float, float],
+    settling_compensation_m: tuple[float, float, float] = (0.0050, 0.0055, 0.0),
+) -> tuple[float, float, float]:
+    """Offset the held-cup target to compensate measured release/retreat drift."""
+    return tuple(
+        value + compensation
+        for value, compensation in zip(
+            place_xyz, settling_compensation_m, strict=True,
+        )
+    )
+
+
 def align_cup_for_release(
     backend, target_xyz, *, execute,
     max_attempts: int = 2, xy_tolerance_m: float = 0.003,
@@ -843,7 +856,9 @@ def run_live_execute(
         state=next(state for state in bundle.motion.states if state.value==name)
         carry_policies[name]=bundle.motion.states[state]
     carry_with_shadow_gates(backend,carry_policies,gate_shadow)
-    target_place_xyz=tuple(bundle.object.place_pose.values[:3])
+    target_place_xyz=release_alignment_target(
+        tuple(bundle.object.place_pose.values[:3])
+    )
     def execute_place_correction(delta,orientation_tolerance_rad):
         gate_shadow("PLACE_ALIGNMENT")
         return _moveit_world_translation_execute(delta,orientation_tolerance_rad)
