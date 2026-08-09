@@ -6410,6 +6410,53 @@ counts_toward_success_streak: false
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-035-093
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_RETREAT_PLAN
+experiment_id: EXP-035
+execution_commit: 35b5f76
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-035
+failure:
+  stage: post-release dynamic vertical retreat planning
+  moveit_error_code: 99999
+  authoritative_post_retreat_outcome: unavailable
+interpretation: Planning Scene had already detached the cup into world while the physical gripper still contacted it, making the retreat planning start state invalid
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-035-094
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-035/reset-after-retreat-plan-failure
+proof:
+  cup_spawn_pose_error_m: 0.0000006752546157036912
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-RETAIN-SCENE-ATTACH-THROUGH-RETREAT-095
+recorded_at: 2026-08-09 Asia/Shanghai
+strategy_change:
+  gazebo: remains detached and physically released immediately after gripper opening
+  planning_scene: retain attached cup shadow through dynamic vertical retreat planning and execution
+  after_vertical_retreat: sample authoritative Gazebo cup pose, detach Planning Scene object and restore it to world before final epoch
+rationale: plan the arm-away motion without introducing a world-object/gripper collision at the start state; final MoveIt-detached acceptance remains mandatory
+unchanged:
+  - no Gazebo virtual attachment
+  - collision configuration and all final physical acceptance bounds
+tests:
+  red: detach occurred before dynamic retreat planning
+  focused_green: 1 passed
+  package_pytest: 177 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-028-068
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
