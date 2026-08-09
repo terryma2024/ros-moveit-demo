@@ -7,21 +7,23 @@ success_contract: Gazebo remains physically detached throughout; MoveIt Planning
 worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
 branch: codex/so101-gazebo-demo-py
 base_commit: 90c6c11
-current_commit: 99773bf92b8c1fb08e1ddd3d195def1d06ed90a9
+current_commit: ffaa35d27f4ba7ffe5438a06ddc40d2f0173f0b9
 evidence_root: /tmp/so101-py-gui-214/
 confirmed_conclusions:
   - EXP-054 is the first GUI-observed physical-outcome success with no Gazebo attach; it does not count toward qualification.
   - EXP-056 directly observed pre-OPEN_GRIPPER plastic_cup::body::wall_near contact with the table; cup tilt reached 1.1679 rad near the would-be release boundary.
   - EXP-056 phase profiling localizes the first large tilt increase to DESCEND_TO_PLACE: 0.1956 rad at MOVE_ABOVE_PLACE versus 1.2459 rad and table contact at the descent endpoint.
   - EXP-057 raised the approach enough to eliminate every cup/table contact sample from the raised descent endpoint through OPEN_GRIPPER, but cup tilt still grew from 0.3765 rad to 0.8981 rad during DESCEND_TO_PLACE.
+  - EXP-058 slowed DESCEND_TO_PLACE to 10 seconds per waypoint; tilt exceeded 0.70 rad while still 44.2 mm clear of the table and reached 1.0774 rad at waypoint 1, proving that longer gravitational dwell worsens held-cup roll.
 disproven_routes:
   - Treating EXP-055 as behavior evidence; its XWD recorder exhausted /tmp and made the run invalid.
   - Treating grasp or horizontal carry as the first source of the EXP-056 67-degree release tilt; the cup remained at 0.0789 rad after LIFT and 0.1956 rad after MOVE_ABOVE_PLACE.
   - Treating table contact as the sole cause of descent tilt amplification; EXP-057 reached 0.8981 rad tilt with 23.1 mm bottom clearance and no fresh table contact.
+  - Slowing DESCEND_TO_PLACE from 0.03 to 0.01; EXP-058 increased tilt before table contact and eventually caused a path-tolerance abort after contact.
 open_hypotheses:
-  - Reducing only the live-effective DESCEND_TO_PLACE velocity scaling from 0.03 to 0.01 will reduce inertial slip and preserve a recoverable held-cup attitude at the already safe raised endpoint.
-latest_checkpoint: CP-EXP-058-IMPLEMENTED-177
-next_experiment: EXP-058
+  - Returning to the 0.03 descent baseline and increasing q6 seating preload from 0.004 to the configured safe maximum 0.006 rad will raise normal force enough to reduce gravity-driven cup roll while observed penetration remains below 0.001 m.
+latest_checkpoint: CP-RESULT-EXP-058-178
+next_experiment: EXP-059
 ```
 
 ## Historical evidence imported before ledger activation
@@ -8482,5 +8484,64 @@ installed_provenance:
   validation_policy_source_install_sha256: f702e030ad64d10326640e51e5cb0e8b7e8388cc790f66b557baf127bada3ff2
   policy_sha256: 637587bf8ae54239a7573af9e3ce9e90f9faf1514c22a444fa31e2404ad2dd26
 next_command: prove RESET_WORLD on so101-py-gui-214, start bounded telemetry/H.264, then execute EXP-058 once
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESULT-EXP-058-178
+recorded_at: 2026-08-09 Asia/Shanghai
+status: VALID_FAILURE
+experiment_id: EXP-058
+execution_commit: ffaa35d27f4ba7ffe5438a06ddc40d2f0173f0b9
+reset_proof: /tmp/so101-py-gui-214/candidate-058/reset-before-execute/reset-world.json
+evidence:
+  execution_log: /tmp/so101-py-gui-214/candidate-058/execute.log
+  physical_gate: /tmp/so101-py-gui-214/candidate-058/physical-gate.json
+  telemetry: /tmp/so101-py-gui-214/candidate-058/diagnostic/samples.jsonl
+  analysis: /tmp/so101-py-gui-214/candidate-058/diagnostic/exp058-analysis.json
+  bounded_video: /tmp/so101-py-gui-214/candidate-058/diagnostic/gazebo-gui.mp4
+  descent_window_video: /tmp/so101-py-gui-214/candidate-058/diagnostic/descent-window.mp4
+  visual_frames:
+    move_above_place: /tmp/so101-py-gui-214/candidate-058/diagnostic/move-above-place.png
+    descend_waypoint_1: /tmp/so101-py-gui-214/candidate-058/diagnostic/descend-waypoint-1.png
+    first_table_contact: /tmp/so101-py-gui-214/candidate-058/diagnostic/first-table-contact.png
+reset:
+  status: RESET_WORLD_PROVED
+  cup_spawn_pose_error_m: 0.0000006179003981091918
+  gazebo_attachment_state: detached
+  moveit_attached_objects: []
+  finger_contact: false
+physical_grasp:
+  status: PROVED
+  attempts: 1
+  post_seating_moving_pad_penetration_m: 0.0003694451879709959
+  micro_lift_world_z_m: 0.0020955651998519897
+  lateral_drift_m: 0.00031369223809241657
+  gazebo_attachment_used: false
+phase_profile:
+  lift_endpoint: {cup_tilt_rad: 0.038727866991642955, bottom_clearance_m: 0.05820298954835851, table_contact: false}
+  move_above_place_endpoint: {cup_tilt_rad: 0.3183387670640721, bottom_clearance_m: 0.05501190032252376, table_contact: false}
+  descend_waypoint_1: {cup_tilt_rad: 1.0773916992412145, bottom_clearance_m: 0.04877629463956068, table_contact: false, q6: -0.050346121191978455}
+  descend_waypoint_2: {cup_tilt_rad: 0.9588402916957971, bottom_clearance_m: 0.0265151183018702, table_contact: false, q6: -0.015400742180645466}
+thresholds:
+  first_tilt_ge_0_35: {wall_s: 2592532.34182922, cup_tilt_rad: 0.35337949815640757, bottom_clearance_m: 0.05270081222349762, table_contact: false}
+  first_tilt_ge_0_70: {wall_s: 2592538.109357829, cup_tilt_rad: 0.7011453457505822, bottom_clearance_m: 0.044245733769377155, table_contact: false}
+  first_fresh_table_contact: {wall_s: 2592555.847484741, cup_tilt_rad: 0.9839272647770835, bottom_clearance_m: -0.00023547189150029124}
+failure:
+  boundary: DESCEND_TO_PLACE direct FollowJointTrajectory
+  code: ARM_TRAJECTORY_ABORTED
+  controller_error_code: -4
+  controller_error_string: Aborted due to path tolerance violation
+  final_waypoint_arm_max_error_rad: 0.029190993637688734
+  maximum_observed_cup_tilt_rad: 1.598181005239127
+prediction_evaluation:
+  preserve_tilt_below_0_35_rad: FAIL
+  keep_table_clearance_until_open: FAIL
+  reach_open_gripper: FAIL
+interpretation:
+  - Slowing the descent increased the time available for gravity-driven rolling or slip inside the bilateral grasp; large tilt occurred many seconds before table contact.
+  - Table contact remained a later aggravating event and caused enough disturbance for the arm controller to abort on path tolerance.
+  - The relevant next control is grasp normal force/contact robustness, not further slowing; the rejected speed is reverted before the next trial.
+decision: return DESCEND_TO_PLACE velocity_scaling to 0.03 and test only seating_preload_rad 0.006 relative to the EXP-057 raised-endpoint baseline
 counts_toward_success_streak: false
 ```
