@@ -6212,6 +6212,30 @@ next: commit locally, then preregister one RESET_WORLD trial
 ```
 
 ```yaml
+checkpoint_id: CP-PRE-EXP-037-100
+recorded_at: 2026-08-09 Asia/Shanghai
+status: PREREGISTERED
+experiment_id: EXP-037
+purpose: test same-run radial gripper disengagement followed by vertical retreat
+execution:
+  stack: so101-py-outcome-search-203
+  ros_domain_id: 203
+  gz_partition: so101_py_outcome_search_203
+  execution_commit: 4d64c5e
+  policy_sha256: 20e1908a2028e40721f4a421918c1604c97413f50574812ade1296e79ec07cac
+  reset_proof: /tmp/so101-py-outcome-search-203/candidate-036/reset-after-cup-lifted-on-retreat/reset-world.json
+  evidence_root: /tmp/so101-py-outcome-search-203/candidate-037
+candidate:
+  radial_release_separation_m: 0.015
+  radial_direction: observed cup center to TCP in XY
+  vertical_retreat_m: 0.060
+  planning_scene_attach_through_both_motions: true
+prediction: cup remains on support without final gripper contact while arm separates and Planning Scene returns the cup to world
+acceptance: unchanged authoritative post-RETREAT physical outcome contract
+counts_toward_success_streak: false
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-036-096
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
