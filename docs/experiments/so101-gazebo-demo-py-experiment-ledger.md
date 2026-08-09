@@ -6128,6 +6128,65 @@ next: commit locally, then preregister a fresh RESET_WORLD trial
 ```
 
 ```yaml
+checkpoint_id: CP-RESULT-EXP-047-136
+recorded_at: 2026-08-09 Asia/Shanghai
+status: INVALID_CONTROLLER_ABORT
+experiment_id: EXP-047
+execution_commit: a65206c
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-047
+observed:
+  physical_gate: PROVED
+  physical_gate_attempts: 1
+  cup_world_z_delta_m: 0.00207383930683136
+  lateral_drift_m: 0.00029473788006615135
+failure:
+  stage: PLACE_ALIGNMENT_FIRST_CORRECTION
+  controller_error_code: -4
+  joint: 1
+  position_error_rad: 0.008026
+  frozen_position_tolerance_rad: 0.008000
+  authoritative_final_outcome: unavailable
+interpretation: physical grasp and all carry states passed; the first feedback correction stopped 0.000026 rad beyond the frozen controller tolerance, before physical release
+counts_toward_success_streak: false
+```
+
+```yaml
+checkpoint_id: CP-RESET-AFTER-EXP-047-137
+recorded_at: 2026-08-09 Asia/Shanghai
+status: RESET_WORLD_PROVED
+evidence_root: /tmp/so101-py-outcome-search-203/candidate-047-reset
+proof:
+  cup_spawn_pose_error_m: 0.0000015305936478860413
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+```
+
+```yaml
+checkpoint_id: CP-RECOVER-ALIGNMENT-ABORT-138
+recorded_at: 2026-08-09 Asia/Shanghai
+change: treat one MoveIt execution -4 during bounded feedback alignment as an observable intermediate outcome
+behavior:
+  - consume the failed command as one of the existing two alignment attempts
+  - sample the cup and TCP twice after a 0.25 s minimum settling interval
+  - continue only when both poses are finite, the TCP satisfies the existing physical-outcome stability limits, and the remaining cup correction stays within the existing per-axis bound
+  - preserve all recovery telemetry, including the execution error and post-abort cup pose
+unchanged:
+  - controller gains and controller/path tolerances
+  - maximum two alignment attempts
+  - maximum 0.030 m correction per axis
+  - all physics, geometry, mass, friction and collision settings
+  - authoritative post-RETREAT final physical outcome contract
+tests:
+  red: 2 focused tests failed before the recovery behavior existed
+  focused_green: 2 passed
+  package_pytest: 183 passed, 2 skipped
+next: commit locally, then preregister one RESET_WORLD trial of the unchanged XYZ target
+```
+
+```yaml
 checkpoint_id: CP-PRE-EXP-031-079
 recorded_at: 2026-08-09 Asia/Shanghai
 status: PREREGISTERED
