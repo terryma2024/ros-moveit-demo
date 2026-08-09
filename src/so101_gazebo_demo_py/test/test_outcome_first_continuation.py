@@ -174,7 +174,7 @@ def test_full_grasp_attempt_reaches_cup_result_gate_without_bilateral_contact() 
     assert final_target == -0.053
 
 
-def test_default_grasp_strategy_reseats_twice_before_succeeding_on_third_outcome() -> None:
+def test_explicit_three_attempt_grasp_strategy_can_succeed_on_third_outcome() -> None:
     class Backend:
         def __init__(self) -> None:
             self.sample_count = 0
@@ -199,13 +199,44 @@ def test_default_grasp_strategy_reseats_twice_before_succeeding_on_third_outcome
 
     _, result, attempts, _ = live_execute.run_bounded_physical_grasp_attempts(
         Backend(), seating_target=-0.053, preopen_q6=0.465,
-        q6_safe_lower=-0.0596, execute=execute,
+        q6_safe_lower=-0.0596, max_attempts=3, execute=execute,
     )
 
     assert attempts == 3
     assert result[0] == pytest.approx(0.002)
     assert execute_calls.count((-0.002, 0.0)) == 2
     assert execute_calls.count((0.0, -0.0002)) == 2
+
+
+def test_default_grasp_strategy_stops_after_one_failed_outcome() -> None:
+    class Backend:
+        def __init__(self) -> None:
+            self.sample_count = 0
+
+        def move_gripper(self, target: float) -> None:
+            del target
+
+        def sample(self) -> PoseSample:
+            self.sample_count += 1
+            attempt = (self.sample_count + 1) // 2
+            lifted = self.sample_count % 2 == 0 and attempt == 3
+            return sample(0.0, 0.0, 0.167 if lifted else 0.165)
+
+        def contacts(self):
+            return ()
+
+    backend = Backend()
+
+    with pytest.raises(RuntimeError, match="physical micro-lift failed"):
+        live_execute.run_bounded_physical_grasp_attempts(
+            backend,
+            seating_target=-0.053,
+            preopen_q6=0.465,
+            q6_safe_lower=-0.0596,
+            execute=lambda delta, local_x_m=0.0: (3, 0.2),
+        )
+
+    assert backend.sample_count == 2
 
 
 def test_contact_stopped_gripper_result_defers_to_cup_outcome_gate() -> None:
