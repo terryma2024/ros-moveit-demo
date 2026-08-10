@@ -74,7 +74,7 @@ elif [[ "$1" == action && "$2" == send_goal ]]; then
     status="${FAKE_ARM_STATUS:-SUCCEEDED}"
   fi
   printf 'Goal accepted\nGoal finished with status: %s\n' "${status}"
-elif [[ "$1" == run && "$2" == panda_gazebo_demo &&
+elif [[ "$1" == run && "$2" == panda_gazebo_demo_cpp &&
   "$3" == reset_moveit_world ]]
 then
   if [[ "${FAKE_MOVEIT_RESET_STATUS:-SUCCEEDED}" != SUCCEEDED ]]; then
@@ -121,7 +121,7 @@ run_reset attached >/dev/null
 
 grep -Fq 'gz topic -t /panda/detach_coke' "${command_log}" ||
   fail 'Gazebo detach command was not published'
-grep -Fq 'ros2 run panda_gazebo_demo reset_moveit_world' "${command_log}" ||
+grep -Fq 'ros2 run panda_gazebo_demo_cpp reset_moveit_world' "${command_log}" ||
   fail 'MoveIt reset helper was not invoked'
 
 mapfile -t goal_commands < <(grep '^action send_goal' "${ros2_command_log}")
@@ -138,7 +138,7 @@ mapfile -t goal_commands < <(grep '^action send_goal' "${ros2_command_log}")
 
 detach_line="$(grep -n 'gz topic -t /panda/detach_coke' "${command_log}" | head -1 | cut -d: -f1)"
 pose_line="$(grep -n 'gz service -s /world/pick_place_world/set_pose' "${command_log}" | head -1 | cut -d: -f1)"
-moveit_line="$(grep -n 'ros2 run panda_gazebo_demo reset_moveit_world$' \
+moveit_line="$(grep -n 'ros2 run panda_gazebo_demo_cpp reset_moveit_world$' \
   "${command_log}" | head -1 | cut -d: -f1)"
 open_line="$(grep -En 'ros2 action send_goal.*position: 0\.04,' "${command_log}" | head -1 | cut -d: -f1)"
 arm_line="$(grep -n 'ros2 action send_goal.*/panda_arm_controller' "${command_log}" | head -1 | cut -d: -f1)"
@@ -154,7 +154,7 @@ if run_reset attached false >/dev/null 2>&1; then
   fail 'reset succeeded without Gazebo detach convergence'
 fi
 if grep -Eq 'set_pose|action send_goal' "${command_log}" || \
-    grep -Eq '^ros2 run panda_gazebo_demo reset_moveit_world$' "${command_log}"
+    grep -Eq '^ros2 run panda_gazebo_demo_cpp reset_moveit_world$' "${command_log}"
 then
   fail 'detach failure allowed later side effects'
 fi

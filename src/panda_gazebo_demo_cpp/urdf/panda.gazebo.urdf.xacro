@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
     <xacro:arg name="initial_positions_file"
-        default="$(find panda_gazebo_demo)/config/initial_positions.yaml" />
+        default="$(find panda_gazebo_demo_cpp)/config/initial_positions.yaml" />
     <xacro:arg name="ros2_control_hardware_type" default="gazebo" />
     <xacro:arg
         name="controllers_file"
-        default="$(find panda_gazebo_demo)/config/controllers.yaml" />
+        default="$(find panda_gazebo_demo_cpp)/config/controllers.yaml" />
 
     <!-- Import panda urdf file -->
     <xacro:include filename="panda.description.urdf.xacro" />

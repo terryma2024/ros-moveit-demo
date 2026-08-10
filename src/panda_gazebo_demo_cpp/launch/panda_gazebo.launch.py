@@ -28,7 +28,7 @@ def gz_ros2_control_system_plugin_path(existing_path):
 
 
 def generate_launch_description():
-    package_share = FindPackageShare('panda_gazebo_demo')
+    package_share = FindPackageShare('panda_gazebo_demo_cpp')
     headless = LaunchConfiguration('headless')
     run_state_machine = LaunchConfiguration('run_state_machine')
     controller_manager_timeout = LaunchConfiguration('controller_manager_timeout')
@@ -274,13 +274,13 @@ def generate_launch_description():
     )
 
     moveit_world_setup_node = Node(
-        package='panda_gazebo_demo',
+        package='panda_gazebo_demo_cpp',
         executable='reset_moveit_world',
         output='screen',
     )
 
     attachment_state_relay = Node(
-        package='panda_gazebo_demo',
+        package='panda_gazebo_demo_cpp',
         executable='gazebo_attachment_state_relay',
         output='screen',
         parameters=[
@@ -295,7 +295,7 @@ def generate_launch_description():
     )
 
     pick_place_state_machine = Node(
-        package='panda_gazebo_demo',
+        package='panda_gazebo_demo_cpp',
         executable='pick_place_state_machine',
         output='screen',
         condition=IfCondition(run_state_machine),

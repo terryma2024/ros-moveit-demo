@@ -52,6 +52,17 @@ def test_plan_only_state_is_public_and_forwarded():
     assert 'docs/pick-place-launch-parameters.md' in declared['plan_only_state'].description
 
 
+def test_launch_uses_renamed_ros_package_identity():
+    source = PANDA_LAUNCH.read_text(encoding='utf-8')
+
+    assert "FindPackageShare('panda_gazebo_demo_cpp')" in source
+    assert source.count("package='panda_gazebo_demo_cpp'") == 3
+    assert not re.search(
+        r'(?<![A-Za-z0-9_])panda_gazebo_demo(?![A-Za-z0-9_])',
+        source,
+    )
+
+
 def test_controller_manager_uses_sim_time_for_joint_state_timestamps():
     config = yaml.safe_load(CONTROLLERS_CONFIG.read_text())
 
