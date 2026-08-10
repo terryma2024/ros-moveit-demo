@@ -6,9 +6,9 @@ const environment = {
   ROS_AUTOMATIC_DISCOVERY_RANGE: "SUBNET", AMENT_PREFIX_PATH: "/data/work/ws_moveit/install:/opt/ros/jazzy",
   COLCON_PREFIX_PATH: "/data/work/ws_moveit/install", GZ_PARTITION: "so101_teleop_live_final",
   GZ_CONFIG_PATH: "/opt/ros/jazzy/opt/gz:".repeat(20), GZ_SIM_RESOURCE_PATH: "/opt/ros/jazzy/share",
-  GZ_SIM_SYSTEM_PLUGIN_PATH: "/data/work/ws_moveit/install/so101_gazebo_demo/lib:/opt/ros/jazzy/lib",
-  PYTHONPATH: "/data/work/ws_moveit/install/so101_gazebo_demo/lib/python3.12/site-packages",
-  LD_LIBRARY_PATH: "/data/work/ws_moveit/install/so101_gazebo_demo/lib:/opt/ros/jazzy/lib",
+  GZ_SIM_SYSTEM_PLUGIN_PATH: "/data/work/ws_moveit/install/so101_gazebo_demo_cpp/lib:/opt/ros/jazzy/lib",
+  PYTHONPATH: "/data/work/ws_moveit/install/so101_gazebo_demo_cpp/lib/python3.12/site-packages",
+  LD_LIBRARY_PATH: "/data/work/ws_moveit/install/so101_gazebo_demo_cpp/lib:/opt/ros/jazzy/lib",
 };
 const snapshot = { mode: "READY", revision: 9, simulation_session_id: "e2e-session", environment, joints: Object.fromEntries(["1", "2", "3", "4", "5", "6"].map((name) => [name, { position_rad: 0, velocity_rad_s: 0, lower_limit_rad: hardLimits[name][0], upper_limit_rad: hardLimits[name][1] }])), tcp: { frame_id: "world", tcp_frame: "so101_tcp", x_m: 0.1, y_m: 0.2, z_m: 0.3, roll_rad: 0, pitch_rad: 0, yaw_rad: 0 }, moveit_collisions: [], gazebo_contacts: [] };
 

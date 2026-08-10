@@ -18,7 +18,7 @@ def generate_launch_description():
         default_value="0.1899186",
         description="SO-101 base height above world ground in metres",
     )
-    package_share = Path(get_package_share_directory("so101_gazebo_demo"))
+    package_share = Path(get_package_share_directory("so101_gazebo_demo_cpp"))
     object_config_arg = DeclareLaunchArgument(
         name="object_config",
         default_value=str(
@@ -36,7 +36,7 @@ def generate_launch_description():
     rviz_config_path = package_share / "config" / "moveit.rviz"
 
     moveit_config = (
-        MoveItConfigsBuilder("so101", package_name="so101_gazebo_demo")
+        MoveItConfigsBuilder("so101", package_name="so101_gazebo_demo_cpp")
         .robot_description(
             file_path=str(so101_urdf_path),
             mappings={

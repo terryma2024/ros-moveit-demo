@@ -526,7 +526,7 @@ def prove_runtime_attachment_ready_has_no_delayed_initializer_detach():
     with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as log:
         launch = subprocess.Popen(
             [
-                'ros2', 'launch', 'so101_gazebo_demo',
+                'ros2', 'launch', 'so101_gazebo_demo_cpp',
                 'so101_gazebo.launch.py', 'headless:=true',
             ],
             stdout=log,
@@ -608,7 +608,7 @@ def test_runtime_joint_and_detachable_joint_observation_smoke():
     with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as log:
         launch = subprocess.Popen(
             [
-                'ros2', 'launch', 'so101_gazebo_demo',
+                'ros2', 'launch', 'so101_gazebo_demo_cpp',
                 'so101_gazebo.launch.py', 'headless:=true',
             ],
             stdout=log,

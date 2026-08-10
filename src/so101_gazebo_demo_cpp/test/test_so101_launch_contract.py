@@ -250,7 +250,7 @@ def test_pick_place_runtime_launch_is_safe_by_default_and_wires_all_cli_gates():
     context = LaunchContext()
     context.launch_configurations.update(arguments)
     runtime = runtime_factory.execute(context)[0]
-    assert runtime.node_package == 'so101_gazebo_demo'
+    assert runtime.node_package == 'so101_gazebo_demo_cpp'
     assert runtime.node_executable == 'pick_place_state_machine'
     source = PICK_PLACE_LAUNCH.read_text()
     assert '--mode' in source
@@ -328,7 +328,7 @@ def test_moveit_uses_canonical_base_height_and_same_package_resources():
     assert moveit_default == '0.1899186'
 
     launch_source = MOVEIT_LAUNCH.read_text()
-    assert 'package_name="so101_gazebo_demo"' in launch_source
+    assert 'package_name="so101_gazebo_demo_cpp"' in launch_source
     assert 'lerobot_' not in launch_source
 
 
@@ -606,7 +606,7 @@ def test_spawn_waits_for_attachment_relay_transport_subscription():
         handler
         for handler in handlers
         if any(
-            is_node(action, 'so101_gazebo_demo', 'gazebo_attachment_state_relay')
+            is_node(action, 'so101_gazebo_demo_cpp', 'gazebo_attachment_state_relay')
             for action in actions_on_success(handler)
         )
     ]
@@ -614,7 +614,7 @@ def test_spawn_waits_for_attachment_relay_transport_subscription():
     relay = next(
         action
         for action in actions_on_success(relay_starters[0])
-        if is_node(action, 'so101_gazebo_demo', 'gazebo_attachment_state_relay')
+        if is_node(action, 'so101_gazebo_demo_cpp', 'gazebo_attachment_state_relay')
     )
     relay_parameters = {
         ''.join(part.text for part in key): ''.join(part.text for part in value)

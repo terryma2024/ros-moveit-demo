@@ -125,7 +125,7 @@ def main() -> None:
     if args.runs <= 0 or args.timeout <= 0 or args.piece_count <= 0:
         raise ValueError('runs, timeout, and piece count must be positive')
     command = [
-        'ros2', 'launch', 'so101_gazebo_demo', 'so101_gazebo.launch.py',
+        'ros2', 'launch', 'so101_gazebo_demo_cpp', 'so101_gazebo.launch.py',
         'headless:=true',
     ]
     durations = measure_runs(

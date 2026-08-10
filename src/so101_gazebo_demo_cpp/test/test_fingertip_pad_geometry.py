@@ -15,7 +15,7 @@ from pathlib import Path
 import subprocess
 import xml.etree.ElementTree as ET
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 import numpy as np
 import pytest
 from scipy.optimize import least_squares
@@ -30,7 +30,7 @@ CALCULATOR_PATH = PACKAGE_DIR / 'scripts' / 'gripper_preopen_calc.py'
 WORLD_PATH = PACKAGE_DIR / 'worlds' / 'so101_pick_place.sdf'
 MOTION_PATH = PACKAGE_DIR / 'config' / 'motion_policies' / 'light_cup_wall_pick.yaml'
 VALIDATION_PATH = PACKAGE_DIR / 'config' / 'validation_policies' / 'light_cup_wall_pick.yaml'
-BUILD_ASSET_ROOT = PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo' / 'fingertip_pad_assets'
+BUILD_ASSET_ROOT = Path(get_package_prefix('so101_gazebo_demo_cpp')).parents[1] / 'build' / 'so101_gazebo_demo_cpp' / 'fingertip_pad_assets'
 
 
 MOVING_POINTS = (
@@ -290,7 +290,7 @@ def _fk(calculator, joints, positions):
 
 
 def _mesh_path(filename):
-    prefix = 'package://so101_gazebo_demo/'
+    prefix = 'package://so101_gazebo_demo_cpp/'
     assert filename.startswith(prefix)
     source = PACKAGE_DIR / filename[len(prefix):]
     if '/generated/' not in filename:
@@ -559,7 +559,7 @@ def test_generated_pad_meshes_are_one_logical_native_only_pad_per_finger(tmp_pat
 def test_installed_native_pad_collision_assets_match_the_generated_build_assets():
     """A live package must not silently fall back to legacy fingertip collisions."""
     installed = (
-        Path(get_package_share_directory('so101_gazebo_demo'))
+        Path(get_package_share_directory('so101_gazebo_demo_cpp'))
         / 'meshes' / 'so101' / 'generated'
     )
     for side, count in (('fixed', 7), ('moving', 6)):

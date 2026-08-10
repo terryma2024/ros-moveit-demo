@@ -178,7 +178,7 @@ def attachment_bridge_node():
 
 
 def generate_launch_description():
-    package_share = get_package_share_directory("so101_gazebo_demo")
+    package_share = get_package_share_directory("so101_gazebo_demo_cpp")
 
     model_arg = DeclareLaunchArgument(name="model", default_value=os.path.join(
                                         package_share, "urdf", "so101.urdf.xacro"
@@ -301,7 +301,7 @@ def generate_launch_description():
     ) = controller_spawner_nodes()
     gz_ros2_bridge = attachment_bridge_node()
     attachment_state_relay = Node(
-        package="so101_gazebo_demo",
+        package="so101_gazebo_demo_cpp",
         executable="gazebo_attachment_state_relay",
         output="screen",
         parameters=[{"ready_topic": attachment_relay_ready_topic}],

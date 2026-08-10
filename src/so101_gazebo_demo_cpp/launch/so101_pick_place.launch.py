@@ -52,7 +52,7 @@ def _runtime_node(context):
     }
     return [
         Node(
-            package="so101_gazebo_demo",
+            package="so101_gazebo_demo_cpp",
             executable="pick_place_state_machine",
             output="screen",
             arguments=_runtime_arguments(values),
@@ -61,7 +61,7 @@ def _runtime_node(context):
 
 
 def generate_launch_description():
-    package_share = get_package_share_directory("so101_gazebo_demo")
+    package_share = get_package_share_directory("so101_gazebo_demo_cpp")
     run_mode = LaunchConfiguration("run_mode")
     start_simulation = LaunchConfiguration("start_simulation")
     headless = LaunchConfiguration("headless")

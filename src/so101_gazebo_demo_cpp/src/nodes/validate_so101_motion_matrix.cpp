@@ -497,7 +497,7 @@ std::string rawSampleDetails(const spp::MotionPlanArtifact & artifact,
 int main(int argc, char ** argv)
 {
   const std::filesystem::path share =
-    ament_index_cpp::get_package_share_directory("so101_gazebo_demo");
+    ament_index_cpp::get_package_share_directory("so101_gazebo_demo_cpp");
   const auto loaded = spp::loadPolicyBundle(
     {(share / "config/task_objects/light_plastic_cup.yaml").string(),
      (share / "config/motion_policies/light_cup_wall_pick.yaml").string(),

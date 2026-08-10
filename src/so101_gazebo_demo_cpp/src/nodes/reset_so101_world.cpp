@@ -34,7 +34,7 @@ int main(int argc, char * argv[])
   auto node = std::make_shared<rclcpp::Node>("reset_so101_world", node_options);
   pick_place::NodeSpinner spinner(node);
   const std::filesystem::path share =
-    ament_index_cpp::get_package_share_directory("so101_gazebo_demo");
+    ament_index_cpp::get_package_share_directory("so101_gazebo_demo_cpp");
   const pick_place::PolicyPaths policy_paths{
     node->declare_parameter<std::string>(
       "object_config", (share / "config/task_objects/light_plastic_cup.yaml").string()),

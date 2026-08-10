@@ -15,7 +15,7 @@ def generate_launch_description():
     base_height_arg = DeclareLaunchArgument(
         name="base_height", default_value="0.1899186"
     )
-    package_share = Path(get_package_share_directory("so101_gazebo_demo"))
+    package_share = Path(get_package_share_directory("so101_gazebo_demo_cpp"))
     object_config_arg = DeclareLaunchArgument(
         name="object_config",
         default_value=str(
@@ -23,7 +23,7 @@ def generate_launch_description():
         ),
     )
     moveit_config = (
-        MoveItConfigsBuilder("so101", package_name="so101_gazebo_demo")
+        MoveItConfigsBuilder("so101", package_name="so101_gazebo_demo_cpp")
         .robot_description(
             file_path=str(package_share / "urdf" / "so101.urdf.xacro"),
             mappings={
