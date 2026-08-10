@@ -150,7 +150,7 @@ The included simulation additionally exposes the installed model/world,
 Fresh Panda target:
 
 ```bash
-ros2 launch panda_gazebo_demo panda_gazebo.launch.py run_state_machine:=true mode:=plan_only plan_only_state:=MOVE_ABOVE_OBJECT simulation_session_id:=panda-plan-1
+ros2 launch panda_gazebo_demo_cpp panda_gazebo.launch.py run_state_machine:=true mode:=plan_only plan_only_state:=MOVE_ABOVE_OBJECT simulation_session_id:=panda-plan-1
 ```
 
 Fresh SO-101 target:
@@ -163,13 +163,13 @@ ros2 launch so101_gazebo_demo_cpp so101_pick_place.launch.py start_simulation:=t
 predecessors physically execute before only `LIFT` is withheld.
 
 ```bash
-ros2 launch panda_gazebo_demo panda_gazebo.launch.py run_state_machine:=true mode:=plan_only plan_only_state:=LIFT simulation_session_id:=panda-lift-1
+ros2 launch panda_gazebo_demo_cpp panda_gazebo.launch.py run_state_machine:=true mode:=plan_only plan_only_state:=LIFT simulation_session_id:=panda-lift-1
 ```
 
 Resume a forward target with exactly the same checkpoint, session, and target:
 
 ```bash
-ros2 launch panda_gazebo_demo panda_gazebo.launch.py run_state_machine:=true mode:=plan_only plan_only_state:=LIFT resume:=true checkpoint_path:=/tmp/panda_pick_place_checkpoint.json simulation_session_id:=panda-lift-1
+ros2 launch panda_gazebo_demo_cpp panda_gazebo.launch.py run_state_machine:=true mode:=plan_only plan_only_state:=LIFT resume:=true checkpoint_path:=/tmp/panda_pick_place_checkpoint.json simulation_session_id:=panda-lift-1
 ```
 
 After a successful deep target plan, either resume in `execute` mode to finish
@@ -191,7 +191,7 @@ assume plan-only restored the initial world.
 ## Provenance and live evidence
 
 ```bash
-ros2 pkg prefix panda_gazebo_demo
+ros2 pkg prefix panda_gazebo_demo_cpp
 ros2 pkg prefix so101_gazebo_demo_cpp
 command -v ros2
 printf '%s\n' "$AMENT_PREFIX_PATH"
