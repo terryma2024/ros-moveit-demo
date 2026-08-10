@@ -5,6 +5,7 @@ readonly expected_version="ruff 0.15.20"
 package_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 readonly package_root
 readonly config="$package_root/ruff.toml"
+cd "$package_root"
 
 command -v ruff >/dev/null 2>&1 || {
   printf 'Ruff gate failed: ruff is not installed\n' >&2

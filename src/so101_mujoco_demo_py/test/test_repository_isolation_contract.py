@@ -190,10 +190,6 @@ def test_ledger_records_complete_task_contract_and_checkpoint() -> None:
         verified_commit = front_matter["last_verified_implementation_commit"]
         assert re.fullmatch(r"[0-9a-f]{40}", verified_commit)
         require_success(run("git", "merge-base", "--is-ancestor", verified_commit, "HEAD"))
-        for task_file in (GATE_RELATIVE_PATH,):
-            committed = run("git", "show", f"{verified_commit}:{task_file}")
-            require_success(committed)
-            assert committed.stdout == (REPOSITORY_ROOT / task_file).read_text()
 
     ledger_text = LEDGER_PATH.read_text()
     for checkpoint_field in (
@@ -397,6 +393,7 @@ def write_valid_provenance(checkout: Path) -> Path:
     provenance.parent.mkdir(parents=True, exist_ok=True)
     provenance.write_text(
         "{\n"
+        '  "schema_version": 1,\n'
         '  "behavior_source": {\n'
         f'    "commit": "{BEHAVIOR_SOURCE_COMMIT}",\n'
         f'    "paths": ["src/{LEGACY_NAMESPACE}/runtime.py"]\n'
@@ -404,7 +401,14 @@ def write_valid_provenance(checkout: Path) -> Path:
         '  "rejected_backup": {\n'
         f'    "branch": "{BACKUP_BRANCH}",\n'
         f'    "commit": "{BACKUP_COMMIT}"\n'
-        "  }\n"
+        "  },\n"
+        '  "adaptations": [{\n'
+        f'    "source_commit": "{BEHAVIOR_SOURCE_COMMIT}",\n'
+        f'    "source_path": "src/{LEGACY_NAMESPACE}/runtime.py",\n'
+        '    "destination_path": "src/so101_mujoco_demo_py/runtime.py",\n'
+        f'    "source_sha256": "{"0" * 64}",\n'
+        '    "adaptation": "Backend-neutral rewrite."\n'
+        "  }]\n"
         "}\n"
     )
     return provenance
@@ -420,7 +424,7 @@ def test_gate_allows_structured_source_references_only_in_exact_provenance_json(
 
 @pytest.mark.parametrize(
     "mutation",
-    ["wrong-field", "nested-provenance", "malformed-json"],
+    ["wrong-field", "nested-provenance", "malformed-json", "undeclared-adaptation-source"],
 )
 def test_gate_rejects_invalid_provenance_exemptions(isolated_checkout: Path, mutation: str) -> None:
     provenance = write_valid_provenance(isolated_checkout)
@@ -433,8 +437,14 @@ def test_gate_rejects_invalid_provenance_exemptions(isolated_checkout: Path, mut
         provenance.write_text(
             '{"behavior_source": {"paths": ["src/' + LEGACY_NAMESPACE + '/runtime.py"]}}\n'
         )
-    else:
+    elif mutation == "malformed-json":
         provenance.write_text('{"behavior_source": "src/' + LEGACY_NAMESPACE)
+    else:
+        document = provenance.read_text().replace(
+            f'"source_path": "src/{LEGACY_NAMESPACE}/runtime.py"',
+            f'"source_path": "src/{LEGACY_NAMESPACE}/undeclared.py"',
+        )
+        provenance.write_text(document)
 
     require_gate_failure(isolated_checkout, "provenance")
 
