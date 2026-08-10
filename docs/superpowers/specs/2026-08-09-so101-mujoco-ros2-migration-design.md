@@ -493,11 +493,14 @@ ContactSample[] other_object_contacts
 
 - `init` 时解析 task-object body 和受监控 geom 名称，任一名称不存在即启动失败；
 - `on_reset()` 不读取或修改 MuJoCo state，只对 atomic generation 执行一次 increment；每次成功 `ResetWorld` 必须恰好触发一次，非法 keyframe 和失败 reset 必须触发零次；
+- pinned 0.0.3 plugin base 额外提供默认 no-op `on_pause(bool paused)`。每次成功的 `SetPause` 请求（包括目标状态已满足的幂等请求）必须对每个 plugin 恰好调用一次，失败请求调用零次；evidence plugin 的实现只把该权威值写入 atomic bool；
 - `update` 中只读 `mjModel`/`mjData`，先读取同一步的 object world pose/twist，再筛选与 task object、两侧 fingertip、table 有关的 contact；
 - `signed_distance_m` 来自 MuJoCo contact distance；
 - `normal_force_n` 由 `mj_contactForce` 的 contact-frame normal 分量得到；
 - 每个 publish tick 都发消息，包括零 contact；pose/twist 与 contacts 必须来自同一个 `mjData` step；
 - reset 后第一条可接受消息必须携带新 `reset_epoch`，消费者不得把旧 epoch 的缓存消息用于 reset postcondition；
+- pending reset generation 必须绕过普通 publish-period throttle，使 reset 后第一次 `update()` 即消费 generation；该例外不得改变无 pending reset 时的正常发布节奏；
+- `paused` 只来自 `on_pause(bool)` 保存的 atomic 权威状态，并与 object pose/twist/contact 一起由同一次 `update()` snapshot 发布；禁止再以 simulation time 是否变化推断 pause；
 - 删除以 simulation time decrease 或 pose jump 推断 epoch 的路径；time 仍可连续，幂等 reset 仍必须产生一个且仅一个新 epoch；
 - 左右指尖分类使用启动时解析并冻结的 geom id，不使用运行时字符串模糊匹配；
 - 使用非阻塞 realtime publisher，最大样本数固定为 128；溢出时 `truncated=true`，业务硬门拒绝该样本；
