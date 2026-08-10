@@ -75,7 +75,7 @@ def test_probe_times_out_with_observable_missing_evidence(tmp_path):
     env = os.environ.copy()
     env.update(
         {
-            'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp',
+            'RMW_IMPLEMENTATION': 'rmw_fastrtps_cpp',
             'ROS_DOMAIN_ID': '104',
             'ROS_LOG_DIR': str(tmp_path / 'ros-logs'),
         }
@@ -108,13 +108,13 @@ def test_probe_observes_real_ros_actions_controllers_joint_state_and_scene(tmp_p
     env = os.environ.copy()
     env.update(
         {
-            'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp',
+            'RMW_IMPLEMENTATION': 'rmw_fastrtps_cpp',
             'ROS_DOMAIN_ID': '105',
             'ROS_LOG_DIR': str(tmp_path / 'ros-logs'),
             'PROVIDER_READY': str(provider_ready),
         }
     )
-    provider_source = r'''
+    provider_source = r"""
 import os
 from pathlib import Path
 import rclpy
@@ -183,7 +183,7 @@ try:
 finally:
     node.destroy_node()
     rclpy.try_shutdown()
-'''
+"""
     provider = subprocess.Popen(
         [sys.executable, '-c', provider_source],
         env=env,
