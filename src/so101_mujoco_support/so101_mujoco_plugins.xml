@@ -1,0 +1,7 @@
+<library path="so101_simulation_evidence_plugin">
+  <class name="so101_mujoco_support/SimulationEvidencePlugin"
+         type="so101_mujoco_support::SimulationEvidencePlugin"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>Publishes read-only, same-step SO-101 object and contact evidence.</description>
+  </class>
+</library>
