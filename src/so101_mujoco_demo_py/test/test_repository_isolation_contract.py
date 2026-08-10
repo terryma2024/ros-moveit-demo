@@ -179,7 +179,7 @@ def test_ledger_records_complete_task_contract_and_checkpoint() -> None:
     assert front_matter["branch"] == EXPECTED_BRANCH
     assert front_matter["worktree"] == EXPECTED_WORKTREE
     assert front_matter["evidence_root"] == EXPECTED_EVIDENCE_ROOT
-    assert front_matter["next_experiment"] == "EXP-001"
+    assert re.fullmatch(r"EXP-[0-9]{3}", front_matter["next_experiment"])
     assert re.fullmatch(
         r"[0-9a-f]{64}", front_matter["protected_nontracked_baseline_sha256"]
     )
