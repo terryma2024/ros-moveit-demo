@@ -64,6 +64,7 @@ Static reference checks will therefore use an explicit historical allowlist rath
 - `docs/experiments/`;
 - `docs/handoffs/`;
 - pre-migration files under `docs/superpowers/plans/` and `docs/superpowers/specs/`.
+- `src/so101_gazebo_demo_py/docs/provenance.json`, whose source paths and hashes record the Python package's original asset-copy provenance.
 
 The new design and implementation-plan documents may mention the old name only when describing the migration contract.
 
