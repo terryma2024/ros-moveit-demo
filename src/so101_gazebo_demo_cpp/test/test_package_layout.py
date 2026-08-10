@@ -47,8 +47,14 @@ def _destinations(block):
 
 def test_single_package_has_expected_identity():
     package = ET.parse(PACKAGE_DIR / 'package.xml').getroot()
-    assert package.findtext('name') == 'so101_gazebo_demo'
+    cmake = (PACKAGE_DIR / 'CMakeLists.txt').read_text(encoding='utf-8')
+
+    assert PACKAGE_DIR.name == 'so101_gazebo_demo_cpp'
+    assert package.findtext('name') == 'so101_gazebo_demo_cpp'
+    assert 'project(so101_gazebo_demo_cpp)' in cmake
     assert not list(PACKAGE_DIR.glob('*/package.xml'))
+    assert (PACKAGE_DIR / 'include' / 'so101_gazebo_demo').is_dir()
+    assert not (PACKAGE_DIR / 'include' / 'so101_gazebo_demo_cpp').exists()
 
 
 def test_package_records_verified_source_provenance():

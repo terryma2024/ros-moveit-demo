@@ -2,20 +2,27 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
+CONSUMER_NAMES = ("panda_gazebo_demo", "so101_gazebo_demo_cpp")
+
+
+def _consumer_paths(root: Path) -> tuple[Path, ...]:
+    return tuple(root.parent / name for name in CONSUMER_NAMES)
+
+
 def test_common_package_exports_quality_gate_and_both_consumers_depend_on_it():
     root = Path(__file__).parents[1]
     cmake = (root / "CMakeLists.txt").read_text()
     package = ET.parse(root / "package.xml").getroot()
     assert package.findtext("name") == "pick_place_common"
     assert 'CONFIG_EXTRAS "cmake/pick_place_common-extras.cmake"' in cmake
-    for consumer in (root.parent / "panda_gazebo_demo", root.parent / "so101_gazebo_demo"):
+    for consumer in _consumer_paths(root):
         assert "<depend>pick_place_common</depend>" in (consumer / "package.xml").read_text()
         assert "pick_place_common_add_cpp_quality_gate(" in (consumer / "CMakeLists.txt").read_text()
 
 
 def test_robot_consumers_compile_only_the_shared_common_algorithms():
     root = Path(__file__).parents[1]
-    consumers = (root.parent / "panda_gazebo_demo", root.parent / "so101_gazebo_demo")
+    consumers = _consumer_paths(root)
     forbidden_sources = (
         "src/pick_place/runner.cpp",
         "src/pick_place/domain_types.cpp",
