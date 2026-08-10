@@ -1,5 +1,6 @@
 """Bounded, cancellable collection for an active physical release epoch."""
 
+import math
 from dataclasses import dataclass
 from typing import Callable
 
@@ -9,7 +10,7 @@ from .physical_outcome import (
     PhysicalOutcomePolicy,
     evaluate_final_placement,
 )
-from .simulation.protocols import WorldObserver
+from .simulation.protocols import ReceiptTimedWorldObserver
 from .simulation.types import ContactEvidence, SimulationEvidence
 
 
@@ -72,12 +73,14 @@ class ReleaseSettleExecutor:
     def __init__(
         self,
         policy: PhysicalOutcomePolicy,
-        observer: WorldObserver,
+        observer: ReceiptTimedWorldObserver,
         corroborate: Callable[[], OutcomeCorroboration],
         monotonic: Callable[[], float],
         wait: Callable[[float], None],
         cancelled: Callable[[], bool],
     ) -> None:
+        if not isinstance(observer, ReceiptTimedWorldObserver):
+            raise TypeError("release settle requires receipt-timed simulation evidence")
         self._policy = policy
         self._observer = observer
         self._corroborate = corroborate
@@ -102,18 +105,24 @@ class ReleaseSettleExecutor:
         while self._monotonic() - start <= self._policy.settle_timeout_s:
             if self._cancelled():
                 return ReleaseSettleResult("CANCELLED", tuple(samples), evaluation)
-            evidence = self._observer.snapshot()
+            received = self._observer.snapshot_with_receipt()
             observed_monotonic_s = self._monotonic()
-            if release_reset_epoch is None:
+            observation_age_s = observed_monotonic_s - received.received_monotonic_s
+            fresh = (
+                math.isfinite(observation_age_s)
+                and 0.0 <= observation_age_s <= self._policy.max_observation_age_s
+            )
+            evidence = received.evidence
+            if fresh and release_reset_epoch is None:
                 release_reset_epoch = evidence.reset_epoch
-            if evidence.reset_epoch == release_reset_epoch:
+            if fresh and evidence.reset_epoch == release_reset_epoch:
                 samples.append(
                     sample_from_simulation_evidence(
                         evidence,
                         self._policy,
                         release_epoch_id,
                         self._corroborate(),
-                        observed_monotonic_s,
+                        received.received_monotonic_s,
                     )
                 )
             if len(samples) > self._policy.max_telemetry_samples:

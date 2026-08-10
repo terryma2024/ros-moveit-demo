@@ -141,6 +141,20 @@ class SimulationEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class ReceivedSimulationEvidence:
+    """Atomic evidence paired with its local callback-acceptance clock value."""
+
+    evidence: SimulationEvidence
+    received_monotonic_s: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.evidence, SimulationEvidence):
+            raise TypeError("evidence must be SimulationEvidence")
+        if not math.isfinite(self.received_monotonic_s) or self.received_monotonic_s < 0.0:
+            raise ValueError("received_monotonic_s must be finite and non-negative")
+
+
+@dataclass(frozen=True, slots=True)
 class ResetReceipt:
     old_epoch: int
     new_epoch: int

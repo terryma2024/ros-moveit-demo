@@ -6,10 +6,15 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from so101_mujoco_demo_py.simulation.protocols import WorldObserver, WorldReset
+from so101_mujoco_demo_py.simulation.protocols import (
+    ReceiptTimedWorldObserver,
+    WorldObserver,
+    WorldReset,
+)
 from so101_mujoco_demo_py.simulation.types import (
     ContactEvidence,
     ObjectState,
+    ReceivedSimulationEvidence,
     ResetReceipt,
     SimulationEvidence,
 )
@@ -150,6 +155,17 @@ def test_reset_receipt_proves_epoch_transition_and_session() -> None:
         ResetReceipt(3, 5, "home", 0, "session-a")
 
 
+def test_received_evidence_adds_an_immutable_local_receipt_without_mutating_atomic_schema() -> None:
+    received = ReceivedSimulationEvidence(evidence(), 10.0)
+    assert received.evidence == evidence()
+    assert received.received_monotonic_s == 10.0
+    with pytest.raises(FrozenInstanceError):
+        received.received_monotonic_s = 11.0
+
+
 def test_protocol_calls_have_no_freshness_or_session_callsite_arguments() -> None:
     assert tuple(inspect.signature(WorldObserver.snapshot).parameters) == ("self",)
+    assert tuple(inspect.signature(ReceiptTimedWorldObserver.snapshot_with_receipt).parameters) == (
+        "self",
+    )
     assert tuple(inspect.signature(WorldReset.reset).parameters) == ("self", "keyframe")
