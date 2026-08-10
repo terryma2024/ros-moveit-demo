@@ -19,7 +19,9 @@ pytestmark = pytest.mark.skipif(
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = PACKAGE_DIR / 'scripts' / 'generate_fingertip_convex_collision.py'
-BUILD_ASSET_ROOT = PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo' / 'fingertip_pad_assets'
+BUILD_ASSET_ROOT = (
+    PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo_cpp' / 'fingertip_pad_assets'
+)
 
 
 def load_module():

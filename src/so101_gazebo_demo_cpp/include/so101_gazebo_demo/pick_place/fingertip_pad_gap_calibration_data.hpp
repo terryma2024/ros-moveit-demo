@@ -8,12 +8,12 @@
 
 namespace so101_gazebo_demo::pick_place::fingertip_pad_calibration
 {
-inline constexpr std::string_view kInputFingerprint{"f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8"};
+inline constexpr std::string_view kInputFingerprint{"b2366fcc60cd2c08611f2bd4a17850eba0be13f002e2bde3b431e9866062d320"};
 inline constexpr std::string_view kFixedVisualMeshSha256{"0c707b10ba8fe5918431a3d42a764266440ac8fbe37a8e1e66496f288c4d3781"};
 inline constexpr std::string_view kMovingVisualMeshSha256{"f33f0818f86177fbe2e12faf10c08b6eb48d8f39cd6b66c2e900268f0161995a"};
 inline constexpr std::string_view kFixedCollisionMeshSha256{"87ea76422b76c73b1a6adaa8f203926818c8c797fbd4b6bd1f3dee4088210002"};
 inline constexpr std::string_view kMovingCollisionMeshSha256{"933226bf378e66c179ec0eb62308deda1c70621e338537fa14322f0a5fbaad23"};
-inline constexpr std::string_view kUrdfSha256{"5320337a4f2ac0dd36d2ec9582fcc2d164ba797f3bf35451b807fd1fdcf678eb"};
+inline constexpr std::string_view kUrdfSha256{"28be2c5bcb28ec7db975313e469eeb2e3040a0708227af5b6f318ffbf213b0fd"};
 inline constexpr double kSafeFloorQ6{-0.059600220867817};
 inline constexpr double kGraspQ6{-0.047608632840292};
 inline constexpr double kPreopenQ6{0.465038000000000};

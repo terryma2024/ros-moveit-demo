@@ -62,7 +62,7 @@ struct SO101Profile
   double preopen_width{fingertip_pad_calibration::kPreopenGapM};
   double contact_width{fingertip_pad_calibration::kGraspGapM};
   std::string fingertip_pad_calibration_fingerprint{
-    "f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8"};
+    "b2366fcc60cd2c08611f2bd4a17850eba0be13f002e2bde3b431e9866062d320"};
   double grasp_section_depth{0.020};
   std::string gripper_geometry_model_version{"so101-gripper-d20-mesh-v1"};
   std::string gripper_geometry_model_fingerprint{

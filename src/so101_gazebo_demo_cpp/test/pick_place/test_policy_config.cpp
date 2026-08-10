@@ -104,7 +104,7 @@ fingertip_pads:
   safe_lower_q6: -0.059600220867817
   safe_gap_m: 0.001
   grasp_gap_m: 0.001960000000000000
-  calibration_fingerprint: f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8
+  calibration_fingerprint: b2366fcc60cd2c08611f2bd4a17850eba0be13f002e2bde3b431e9866062d320
   friction_coefficient: 1.2
   contact_material:
     axial_friction_coefficient: 3.0
@@ -483,7 +483,7 @@ TEST(PolicyConfig, LoadsNativeFingertipPadConfiguration)
   EXPECT_DOUBLE_EQ(0.465038, result.bundle->motion.gripper_actions.preopen_q6);
   EXPECT_DOUBLE_EQ(0.001, result.bundle->validation.runtime.q6_position_tolerance_rad);
   EXPECT_DOUBLE_EQ(0.00125, result.bundle->validation.runtime.q6_contact_stop_tolerance_rad);
-  EXPECT_EQ("f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8",
+  EXPECT_EQ("b2366fcc60cd2c08611f2bd4a17850eba0be13f002e2bde3b431e9866062d320",
             pads.calibration_fingerprint);
 }
 
@@ -494,7 +494,7 @@ TEST(PolicyConfig, RejectsNativePadCalibrationFingerprintMismatchAtRuntimeProfil
     fixture.objectPath(),
     replaceOnce(
       PolicyFixture::nativeFingertipPadObjectYaml(),
-      "calibration_fingerprint: f46a6e0c1f6f5999311076e377a40df87f410415abad6714559e491f2eba8db8",
+      "calibration_fingerprint: b2366fcc60cd2c08611f2bd4a17850eba0be13f002e2bde3b431e9866062d320",
       "calibration_fingerprint: wrong-pad-model"));
   PolicyFixture::write(fixture.motionPath(), PolicyFixture::nativeFingertipPadMotionYaml());
   PolicyFixture::write(fixture.validationPath(), PolicyFixture::nativeFingertipPadValidationYaml());

@@ -27,7 +27,7 @@ class RetryExpectation:
 
 def run_state_machine(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["ros2", "run", "so101_gazebo_demo", "pick_place_state_machine", *args],
+        ["ros2", "run", "so101_gazebo_demo_cpp", "pick_place_state_machine", *args],
         check=False,
         text=True,
         capture_output=True,
