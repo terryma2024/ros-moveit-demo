@@ -20,7 +20,7 @@ def test_reset_world_waits_for_late_gazebo_service_discovery(tmp_path):
 
     _write_executable(
         bin_dir / 'gz',
-        f'''#!/usr/bin/env bash
+        f"""#!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == service && "$2" == -l ]]; then
   count=0
@@ -43,11 +43,11 @@ elif [[ "$1" == model ]]; then
 else
   exit 2
 fi
-''',
+""",
     )
     _write_executable(
         bin_dir / 'ros2',
-        '''#!/usr/bin/env bash
+        """#!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == action && "$2" == list ]]; then
   printf '%s\n' /panda_arm_controller/follow_joint_trajectory /panda_hand_controller/gripper_cmd
@@ -58,7 +58,7 @@ elif [[ "$1" == run ]]; then
 else
   exit 2
 fi
-''',
+""",
     )
 
     env = os.environ.copy()
