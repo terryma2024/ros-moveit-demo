@@ -91,8 +91,16 @@ def main() -> int:
         Path(lock["prefix"])
         / "include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
     )
-    if "virtual void on_reset() {}" not in header.read_text(encoding="utf-8"):
+    header_source = header.read_text(encoding="utf-8")
+    if "virtual void on_reset() {}" not in header_source:
         fail("installed plugin base does not contain the qualified reset hook")
+    if "virtual void on_pause(bool paused)" not in header_source:
+        fail("installed plugin base does not contain the authoritative pause hook")
+    if (
+        "virtual void on_state_snapshot(const mjModel* model, const mjData* data, bool paused)"
+        not in header_source
+    ):
+        fail("installed plugin base does not contain the authoritative state snapshot hook")
 
     required_files = lock.get("required_files", {})
     if not required_files:
