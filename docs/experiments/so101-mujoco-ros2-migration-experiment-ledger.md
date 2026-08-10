@@ -10,9 +10,9 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: ad8f87717aa092eb023d0bc9090a06f64134abdd
+last_verified_implementation_commit: 263818aabc5a6be09db8baaa137eb18668081d42
 ledger_commit_pending: false
-task_status: TASK_8_COMPLETE
+task_status: TASK_9_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -22,8 +22,8 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-011
-next_experiment: EXP-009
+latest_checkpoint: CP-013
+next_experiment: EXP-013
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -266,6 +266,108 @@ evidence_path: /tmp/so101-debug-mujoco-migration/task8-runtime/
 owned_processes: tmux session so101-mujoco-task8; launch PID 3774884; robot_state_publisher PID 3774929; ros2_control_node PID 3774930; one-shot spawner PIDs 3774931, 3774932, and 3774933. All stopped and verified absent.
 result: VALID. All three controllers were active; /joint_states contained joints 1 through 6; /clock published; atomic evidence session id was task8-20260810-81 with finite cup pose/twist, table contact, and truncated=false. Domain 81 contained no nodes after stopping the owned session. Evidence hashes: launch 07470fb7..., controllers 7a77a1a3..., joint states 40200621..., clock af647d99..., atomic evidence 8c68190a..., process tree d21a697e..., empty post-stop nodes e3b0c442....
 next_command: Run complete Task 8 package tests and isolation gates, then create the scoped implementation commit.
+```
+
+## Experiment EXP-009
+
+```yaml
+experiment_id: EXP-009
+status: INVALID
+hypothesis: MujocoWorldObserver consumes consecutive real atomic plugin messages in an isolated domain while enforcing its configured session and freshness contract.
+independent_variable: Run test_observer_live_contract.py against a task-owned headless launch with session task9-20260810-82 in ROS_DOMAIN_ID 82.
+controlled_variables: Task 8 launch/config/model; no commands, MoveIt, workflow, or hardware; unrelated sessions/processes preserved; observer max_age_s=0.5.
+acceptance_criteria: Live pytest receives two consecutive accepted immutable evidence values with exact session id, increasing publisher sequence, nondecreasing step, cup identity, complete contact arrays, and truncated=false; only recorded task-owned processes are stopped afterward.
+evidence_path: /tmp/so101-debug-mujoco-migration/task9-runtime/
+owned_processes: tmux session so101-mujoco-task9; launch PID 3790065; robot_state_publisher PID 3790107; ros2_control_node PID 3790108; all stopped and verified absent.
+result: INVALID. The isolated plugin launched and published its topic, but test_observer_live_contract received no accepted snapshot in 10 seconds (first=None, second=None). Live test evidence SHA-256 is e106c67b5f00ab7190a1dd02d673712174172f98ba22fd01ffc598d931f163a2; launch log 63ca0175...; process tree 78a7530f.... No diagnostic run was performed after the critical gate failure.
+next_command: NONE
+```
+
+## Checkpoint CP-012
+
+```yaml
+checkpoint_id: CP-012
+last_valid_experiment: EXP-008
+current_hypothesis: The observer unit contract is correct, but the first live subscriber run either receives no callback or rejects every callback before storing latest evidence.
+working_tree_status: Dirty Task 9 observer, unit/live tests, package dependency, and this checkpoint are intentionally preserved; no files are staged.
+owned_processes: NONE; Task 9 tmux and PIDs 3790065, 3790107, and 3790108 were stopped and verified absent.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - Synthetic observer RED then GREEN passed 7 unit tests for conversion, immutable output, wrong-session/truncated/missing-side rejection, ordering, freshness, and rejection diagnostics.
+  - Ruff passed and both independent packages built successfully before the isolated live test.
+  - EXP-009 is INVALID because no live snapshot was accepted within 10 seconds; the test provides no evidence yet distinguishing discovery/QoS from conversion rejection.
+disproven_routes:
+  - Unit conversion and ordering tests alone are insufficient to claim the observer consumes real plugin output.
+open_risks:
+  - The live callback may not execute, or every real message may violate a conversion/ordering invariant; exact cause is intentionally unresolved after the critical gate failure.
+next_command: NONE
+```
+
+## Checkpoint CP-013
+
+```yaml
+checkpoint_id: CP-013
+last_valid_experiment: EXP-012
+current_hypothesis: The proven observer stream can be correlated transactionally with pause, named reset, and exact step services.
+working_tree_status: Clean at Task 9 implementation commit 263818aabc5a6be09db8baaa137eb18668081d42; this ledger-only checkpoint update is pending its scoped commit.
+owned_processes: NONE; all Task 9 diagnostic/repeat tmux sessions and recorded descendants were stopped and verified absent.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - MujocoWorldObserver converts one atomic ROS message into immutable backend-neutral evidence and rejects wrong sessions, truncation, missing arrays, stale receipts, publisher-sequence regression, step regression, same-step unpaused evidence, and reset-epoch skips.
+  - Callback rejection diagnostics expose count and last reason without replacing the latest accepted snapshot.
+  - EXP-012 is VALID: five of five fresh launch/domain/subscriber runs passed with exact sessions, increasing sequences, nondecreasing steps, complete contact arrays, clean owned-PID shutdown, and empty post-stop domains.
+  - Package colcon reported 87 passed and one explicitly opt-in live skip; the skipped live case was separately executed successfully five times. Ruff, isolation, and protected-tree gates passed.
+disproven_routes:
+  - The first EXP-009 timeout did not represent a persistent observer defect; five valid fresh runs could not reproduce it.
+  - Shell nounset is incompatible with the ROS setup scripts used by the repeat harness, and daemon-backed node lists are not authoritative for post-stop isolation checks.
+open_risks:
+  - Pause/reset/step service responses are not yet correlated to observer epoch/step evidence or exposed as ResetReceipt.
+next_command: Start Task 10 RED tests for transactional pause/reset/step.
+```
+
+## Experiment EXP-010
+
+```yaml
+experiment_id: EXP-010
+status: INVALID
+hypothesis: Real plugin callbacks are arriving, but every message is rejected by one observable observer invariant before latest evidence is stored.
+independent_variable: Add rejection count/last-reason to the unchanged live test failure and rerun once against session task9-diag-20260810-83 in ROS_DOMAIN_ID 83.
+controlled_variables: Exact Task 9 observer logic and Task 8 launch/model/plugin; no command, MoveIt, workflow, hardware, threshold change, or QoS change; task-owned tmux only.
+acceptance_criteria: Failure output distinguishes zero callbacks (rejected_count=0) from systematic rejection (rejected_count>0 with exact reason), enabling one root-cause boundary without changing acceptance behavior.
+evidence_path: /tmp/so101-debug-mujoco-migration/task9-diagnostic/
+owned_processes: tmux session so101-mujoco-task9-diag and descendants, to be recorded and stopped.
+result: INVALID because the hypothesized systematic rejection did not reproduce: the unchanged observer live test passed in 0.42 seconds with no rejection failure. Evidence SHA-256 is 791acbb2840ecff621592488f8e65512e312896e3865560d4000495c22ef5d13; all task-owned processes were stopped.
+next_command: NONE
+```
+
+## Experiment EXP-011
+
+```yaml
+experiment_id: EXP-011
+status: INVALID
+hypothesis: The live observer contract is repeatable across five fresh simulator/subscriber discovery boundaries and the EXP-009 timeout was a nonpersistent first-run anomaly.
+independent_variable: Five fresh launches and live pytest processes with unique domains 84 through 88 and exact session ids task9-repeat-1 through task9-repeat-5.
+controlled_variables: Exact observer, live test, Task 8 launch/model/plugin, 10-second timeout, no commands/MoveIt/workflow/hardware; each task-owned tmux and descendants stopped before the next run.
+acceptance_criteria: Five of five fresh runs pass; each post-stop domain is empty; no task-owned PID remains; rejection diagnostics remain available on any failure.
+evidence_path: /tmp/so101-debug-mujoco-migration/task9-repeat/
+owned_processes: Per-run tmux sessions so101-mujoco-task9-r1 through r5 and their recorded descendants.
+result: INVALID before observer execution. Harness nounset caused ROS setup to omit the installed so101_mujoco_support Python package, producing collection ModuleNotFoundError; daemon-backed node listing then reported stale names although all recorded PIDs were absent and --no-daemon showed domain 84 empty.
+next_command: NONE
+```
+
+## Experiment EXP-012
+
+```yaml
+experiment_id: EXP-012
+status: VALID
+hypothesis: The live observer contract passes across five fresh simulator/subscriber discovery boundaries when the ROS environment and cleanup probes are valid.
+independent_variable: Five fresh launches/live pytest processes with unique domains 89 through 93 and session ids task9-repeat-valid-1 through task9-repeat-valid-5.
+controlled_variables: Exact observer/live test/Task 8 stack; no shell nounset; cleanup uses recorded PIDs and ros2 node list --no-daemon; no product source changes, commands, MoveIt, workflow, or hardware.
+acceptance_criteria: Five of five live tests pass; each recorded launch PID disappears; each domain is empty via --no-daemon after stop; no unrelated session/process is changed.
+evidence_path: /tmp/so101-debug-mujoco-migration/task9-repeat-valid/
+owned_processes: Per-run tmux sessions so101-mujoco-task9-v1 through v5 and recorded descendants.
+result: VALID. Five of five fresh live observer tests passed in domains 89 through 93; every recorded launch/child PID disappeared and every post-stop --no-daemon node list was empty. Live-test SHA-256 values are 3a650440..., c9bcb144..., 4237eb8d..., 718af798..., and 261e0cc6....
+next_command: Run full package, Ruff, isolation, and protected-tree gates and create the scoped Task 9 commit.
 ```
 
 ## Checkpoint CP-RUFF-001
