@@ -1,0 +1,23 @@
+diff --git a/mujoco_ros2_control/src/mujoco_system_interface.cpp b/mujoco_ros2_control/src/mujoco_system_interface.cpp
+index a0d5f27..eba5e2a 100644
+--- a/mujoco_ros2_control/src/mujoco_system_interface.cpp
++++ b/mujoco_ros2_control/src/mujoco_system_interface.cpp
+@@ -2727,0 +2728,5 @@ void MujocoSystemInterface::reset_simulation_state(bool fill_initial_state)
++
++  for (const auto& plugin : plugin_instances_)
++  {
++    plugin->on_reset();
++  }
+diff --git a/mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp b/mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp
+index ce86666..7820363 100644
+--- a/mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp
++++ b/mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp
+@@ -59,0 +60,8 @@ public:
++  /**
++   * @brief Notify the plugin after a successful central simulation reset.
++   *
++   * The default implementation preserves source compatibility for plugins
++   * that do not need reset notification.
++   */
++  virtual void on_reset() {}
++

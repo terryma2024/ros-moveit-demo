@@ -22,25 +22,18 @@ def load_probe():
     return module
 
 
-def test_lock_pins_exact_apt_release_and_source_fallback() -> None:
+def test_lock_pins_exact_reset_qualified_provider() -> None:
     lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
-    assert lock == {
-        "schema_version": 1,
-        "provider": "apt",
-        "release": "0.0.3",
-        "prefix": "/opt/ros/jazzy",
-        "fallback": {
-            "tag": "0.0.3",
-            "commit": PINNED_COMMIT,
-            "prefix": "/data/work/ws_mujoco_ros2_control_003/install",
-        },
-        "required_files": {
-            "/opt/ros/jazzy/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp": "0eb99bec603f187ad43a57149a846d86c3866fe13f9e59828a17741d3b1bd181",
-            "/opt/ros/jazzy/share/mujoco_ros2_control_plugins/cmake/export_mujoco_ros2_control_pluginsExport.cmake": "f8a748c2845ecb535895a2df81c633fbf17aa61df244c7495df833ea1aa9587d",
-            "/opt/ros/jazzy/share/mujoco_ros2_control_msgs/srv/ResetWorld.srv": "daa0e9fc5cc21a4c6f6a04d7e77f9010c762d97ba0756f62b38da49b3f37f644",
-            "/opt/ros/jazzy/share/mujoco_ros2_control/package.xml": "e9cfedd0d7a8bb3795a4e9287ca9ebcd9c9cc4dc74beaa42be906a49f54ef826",
-        },
+    assert lock["schema_version"] == 2
+    assert lock["provider"] == "patched_source"
+    assert lock["release"] == "0.0.3"
+    assert lock["prefix"] == "/data/work/ws_mujoco_ros2_control_003/install"
+    assert lock["upstream"] == {
+        "url": "https://github.com/ros-controls/mujoco_ros2_control",
+        "tag": "0.0.3",
+        "commit": PINNED_COMMIT,
     }
+    assert len(lock["required_files"]) == 4
 
 
 @pytest.mark.parametrize("floating", ["main", "master", "latest", "HEAD"])
@@ -55,9 +48,9 @@ def test_validator_rejects_wrong_release_prefix_or_commit() -> None:
     for path, value in (
         (("release",), "0.0.4"),
         (("prefix",), "/tmp/wrong"),
-        (("fallback", "commit"), "deadbeef"),
+        (("upstream", "commit"), "deadbeef"),
     ):
-        changed = {**valid, "fallback": dict(valid["fallback"])}
+        changed = {**valid, "upstream": dict(valid["upstream"])}
         if len(path) == 1:
             changed[path[0]] = value
         else:
@@ -74,16 +67,13 @@ def test_live_probe_reports_exact_packages_interfaces_and_hashes() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     report = json.loads(result.stdout)
-    assert report["provider"] == "apt"
+    assert report["provider"] == "patched_source"
     assert report["release"] == "0.0.3"
     assert report["prefixes"] == {
-        name: "/opt/ros/jazzy"
-        for name in (
-            "mujoco_vendor",
-            "mujoco_ros2_control",
-            "mujoco_ros2_control_msgs",
-            "mujoco_ros2_control_plugins",
-        )
+        "mujoco_vendor": "/opt/ros/jazzy",
+        "mujoco_ros2_control": "/data/work/ws_mujoco_ros2_control_003/install",
+        "mujoco_ros2_control_msgs": "/data/work/ws_mujoco_ros2_control_003/install",
+        "mujoco_ros2_control_plugins": "/data/work/ws_mujoco_ros2_control_003/install",
     }
     assert set(report["interface_sha256"]) == {
         "mujoco_ros2_control_msgs/srv/ResetWorld",
