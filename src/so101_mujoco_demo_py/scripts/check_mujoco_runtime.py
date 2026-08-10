@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed probe for the pinned MuJoCo ROS 2 binary provider."""
+"""Fail-closed interface probe for the pinned reset-qualified provider."""
 
 from __future__ import annotations
 
@@ -32,21 +32,34 @@ def validate_lock(lock: object) -> list[str]:
     if not isinstance(lock, dict):
         return ["lock must be a mapping"]
     errors: list[str] = []
-    expected = {"schema_version": 1, "provider": "apt", "release": "0.0.3", "prefix": APT_PREFIX}
+    overlay = "/data/work/ws_mujoco_ros2_control_003/install"
+    expected = {
+        "schema_version": 2,
+        "provider": "patched_source",
+        "release": "0.0.3",
+        "prefix": overlay,
+    }
     for key, value in expected.items():
         if lock.get(key) != value:
             errors.append(f"{key} must be {value}")
-    fallback = lock.get("fallback")
-    if not isinstance(fallback, dict):
-        errors.append("fallback must be a mapping")
+    upstream = lock.get("upstream")
+    if not isinstance(upstream, dict):
+        errors.append("upstream must be a mapping")
     else:
         for key, value in {
+            "url": "https://github.com/ros-controls/mujoco_ros2_control",
             "tag": "0.0.3",
             "commit": PINNED_COMMIT,
-            "prefix": "/data/work/ws_mujoco_ros2_control_003/install",
         }.items():
-            if fallback.get(key) != value:
-                errors.append(f"fallback {key} must be {value}")
+            if upstream.get(key) != value:
+                errors.append(f"upstream {key} must be {value}")
+    if lock.get("package_prefixes") != {
+        "mujoco_vendor": APT_PREFIX,
+        "mujoco_ros2_control": overlay,
+        "mujoco_ros2_control_msgs": overlay,
+        "mujoco_ros2_control_plugins": overlay,
+    }:
+        errors.append("package_prefixes must match the reset-qualified overlay mapping")
     files = lock.get("required_files")
     if not isinstance(files, dict) or not files:
         errors.append("required_files must contain sha256 pins")
@@ -83,8 +96,9 @@ def probe(lock: dict) -> dict[str, object]:
     for package, debian_package in PACKAGES.items():
         prefixes[package] = run(["ros2", "pkg", "prefix", package], environment)
         versions[package] = run(["dpkg-query", "-W", "-f=${Version}", debian_package])
-        if prefixes[package] != APT_PREFIX:
-            errors.append(f"{package} prefix must be {APT_PREFIX}")
+        expected_prefix = lock.get("package_prefixes", {}).get(package)
+        if prefixes[package] != expected_prefix:
+            errors.append(f"{package} prefix must be {expected_prefix}")
     if not versions.get("mujoco_ros2_control", "").startswith("0.0.3-"):
         errors.append("mujoco_ros2_control apt version must start with 0.0.3-")
     for interface, expected in INTERFACES.items():

@@ -94,19 +94,35 @@ TEST_F(AtomicEvidenceTest, ZeroContactSnapshotIsAtomicAndFinite)
   EXPECT_TRUE(std::isfinite(message.object_pose_world.position.z));
 }
 
-TEST_F(AtomicEvidenceTest, OrdersStepsSequencesAndResetEpoch)
+TEST_F(AtomicEvidenceTest, ResetGenerationIsTheOnlyEpochAuthority)
 {
   mj_forward(model_.get(), data_.get());
-  const auto first = builder_.build(model_.get(), data_.get(), false, state_);
+  const auto first = builder_.build(model_.get(), data_.get(), false, state_, 0);
   data_->time = .001;
-  const auto second = builder_.build(model_.get(), data_.get(), false, state_);
+  const auto second = builder_.build(model_.get(), data_.get(), false, state_, 0);
   data_->time = 0.0;
-  const auto reset = builder_.build(model_.get(), data_.get(), false, state_);
+  const auto time_decrease = builder_.build(model_.get(), data_.get(), false, state_, 0);
+  const auto reset = builder_.build(model_.get(), data_.get(), false, state_, 1);
   EXPECT_EQ(second.publisher_sequence, first.publisher_sequence + 1);
   EXPECT_EQ(second.simulation_step, first.simulation_step + 1);
+  EXPECT_EQ(time_decrease.reset_epoch, first.reset_epoch);
+  EXPECT_EQ(time_decrease.simulation_step, second.simulation_step);
   EXPECT_EQ(reset.reset_epoch, first.reset_epoch + 1);
   EXPECT_EQ(reset.simulation_step, 0U);
   EXPECT_EQ(reset.simulation_session_id, first.simulation_session_id);
+  EXPECT_EQ(reset.publisher_sequence, time_decrease.publisher_sequence + 1);
+}
+
+TEST_F(AtomicEvidenceTest, ConsumesAllResetGenerationIncrementsWithoutLoss)
+{
+  mj_forward(model_.get(), data_.get());
+  const auto first = builder_.build(model_.get(), data_.get(), false, state_, 0);
+  const auto reset_twice = builder_.build(model_.get(), data_.get(), false, state_, 2);
+  const auto unchanged = builder_.build(model_.get(), data_.get(), false, state_, 2);
+  EXPECT_EQ(reset_twice.reset_epoch, first.reset_epoch + 2);
+  EXPECT_EQ(reset_twice.simulation_step, 0U);
+  EXPECT_EQ(unchanged.reset_epoch, reset_twice.reset_epoch);
+  EXPECT_EQ(unchanged.simulation_step, reset_twice.simulation_step);
 }
 
 TEST_F(AtomicEvidenceTest, ClassifiesLeftRightAndOtherContactsWithIdsAndAggregates)
