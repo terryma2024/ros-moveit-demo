@@ -10,7 +10,7 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: e6489ee2949caf435fe028fbe7f65d30a371b5fb
+last_verified_implementation_commit: 9c7889accfdb0eb253a2c9ef1b795b56fe680dad
 ledger_commit_pending: false
 task_status: TASK_1_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
@@ -22,7 +22,7 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-003
+latest_checkpoint: CP-004
 next_experiment: EXP-001
 ---
 
@@ -50,6 +50,27 @@ disproven_routes:
 open_risks:
   - No MuJoCo runtime experiment has run yet.
 next_command: Define EXP-001 before the first runtime-affecting migration experiment.
+```
+
+## Checkpoint CP-004
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: NONE
+current_hypothesis: The pinned MuJoCo ROS 2 dependency can satisfy the required binary interface without a source fallback.
+working_tree_status: Clean at Task 2 implementation commit 9c7889accfdb0eb253a2c9ef1b795b56fe680dad; this ledger-only checkpoint update is pending its scoped commit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no session or process was stopped.
+confirmed_conclusions:
+  - The independent ament_python package is commit 9c7889accfdb0eb253a2c9ef1b795b56fe680dad.
+  - Package identity tests passed 5 of 5, the combined isolation suite passed 36 of 36, and the package-only colcon build completed successfully.
+  - The installed resource marker and package manifest exist under the new package prefix, with no dependency on the protected package.
+  - The protected tracked diff and protected status remained empty before and after the Task 2 implementation commit.
+disproven_routes:
+  - Running pytest with its cache provider inside implementation scope is incompatible with the fail-closed isolation scanner because generated node identifiers can contain rejected provenance strings.
+open_risks:
+  - No MuJoCo dependency interface or runtime behavior has been proven yet.
+next_command: Start Task 3 with the apt mujoco_ros2_control 0.0.3 binary probe and define EXP-001 before any runtime-affecting experiment.
 ```
 
 ## Checkpoint CP-002
