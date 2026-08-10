@@ -39,3 +39,10 @@ def test_readme_allows_only_the_explicit_source_workspace_provenance():
     readme_without_provenance = readme.replace(source_workspace, '')
     offenders = [value for value in FORBIDDEN if value in readme_without_provenance]
     assert not offenders, offenders
+
+
+def test_compiled_workspace_sampler_uses_current_ros_package_identity():
+    source = (PACKAGE_DIR / 'src/nodes/sample_so101_workspace.cpp').read_text()
+
+    assert 'get_package_prefix("so101_gazebo_demo_cpp")' in source
+    assert 'get_package_prefix("so101_gazebo_demo")' not in source
