@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 import runpy
 import xml.etree.ElementTree as ET
-
+from pathlib import Path
 from unittest.mock import patch
-
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "so101_mujoco_demo_py"
@@ -59,18 +57,14 @@ def test_resource_marker_and_python_namespace_exist() -> None:
 
 def test_setup_installs_resource_marker_and_package_manifest() -> None:
     data_files = dict(setup_arguments()["data_files"])
-    assert data_files["share/ament_index/resource_index/packages"] == [
-        f"resource/{PACKAGE_NAME}"
-    ]
+    assert data_files["share/ament_index/resource_index/packages"] == [f"resource/{PACKAGE_NAME}"]
     assert data_files[f"share/{PACKAGE_NAME}"] == ["package.xml"]
 
 
 def test_console_entry_point_preserves_ros_facing_executable_name() -> None:
     entry_points = ast.literal_eval(keyword(setup_call(), "entry_points"))
     assert entry_points == {
-        "console_scripts": [
-            "pick_place_state_machine = so101_mujoco_demo_py.cli:main"
-        ]
+        "console_scripts": ["pick_place_state_machine = so101_mujoco_demo_py.cli:main"]
     }
 
 
