@@ -1,0 +1,12 @@
+/**:
+  ros__parameters:
+    mujoco_plugins:
+      simulation_evidence:
+        type: so101_mujoco_support/SimulationEvidencePlugin
+    object_body: cup
+    left_fingertip_geom: fixed_fingertip_collision
+    right_fingertip_geom: moving_fingertip_collision
+    other_contact_geoms: [table_collision]
+    max_contacts: 128
+    publish_rate: 100.0
+    topic: /so101/simulation/evidence

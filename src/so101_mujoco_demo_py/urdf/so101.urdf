@@ -599,7 +599,8 @@
     <!-- ros2_control MuJoCo -->
     <hardware>
       <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
-      <param name="mujoco_model">1000 4 20 24 27 30 44 46 100 114 126 992 1000find so101_mujoco_demo_py)/mjcf/scene.xml</param>
+      <param name="mujoco_model">@SO101_MUJOCO_SCENE@</param>
+      <param name="headless">@SO101_MUJOCO_HEADLESS@</param>
     </hardware>
     <joint name="1">
       <command_interface name="position">
