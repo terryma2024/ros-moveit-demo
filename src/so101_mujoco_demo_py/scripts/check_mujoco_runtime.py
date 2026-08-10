@@ -7,12 +7,11 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import yaml
-
 
 PINNED_COMMIT = "35ba8174b62d9560093614f981a3d4b978a96036"
 APT_PREFIX = "/opt/ros/jazzy"
@@ -41,7 +40,11 @@ def validate_lock(lock: object) -> list[str]:
     if not isinstance(fallback, dict):
         errors.append("fallback must be a mapping")
     else:
-        for key, value in {"tag": "0.0.3", "commit": PINNED_COMMIT, "prefix": "/data/work/ws_mujoco_ros2_control_003/install"}.items():
+        for key, value in {
+            "tag": "0.0.3",
+            "commit": PINNED_COMMIT,
+            "prefix": "/data/work/ws_mujoco_ros2_control_003/install",
+        }.items():
             if fallback.get(key) != value:
                 errors.append(f"fallback {key} must be {value}")
     files = lock.get("required_files")
@@ -61,7 +64,9 @@ def ros_environment() -> dict[str, str]:
     environment = dict(os.environ)
     paths = [item for item in environment.get("PYTHONPATH", "").split(os.pathsep) if item]
     for prefix in environment.get("AMENT_PREFIX_PATH", APT_PREFIX).split(os.pathsep):
-        candidate = f"{prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+        candidate = (
+            f"{prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+        )
         if candidate not in paths:
             paths.append(candidate)
     environment["PYTHONPATH"] = os.pathsep.join(paths)
@@ -92,7 +97,14 @@ def probe(lock: dict) -> dict[str, object]:
         observed = hashlib.sha256(Path(filename).read_bytes()).hexdigest()
         if observed != expected_hash:
             errors.append(f"required file hash mismatch: {filename}")
-    return {"provider": lock.get("provider"), "release": lock.get("release"), "prefixes": prefixes, "package_versions": versions, "interface_sha256": hashes, "validation_errors": errors}
+    return {
+        "provider": lock.get("provider"),
+        "release": lock.get("release"),
+        "prefixes": prefixes,
+        "package_versions": versions,
+        "interface_sha256": hashes,
+        "validation_errors": errors,
+    }
 
 
 def main() -> int:

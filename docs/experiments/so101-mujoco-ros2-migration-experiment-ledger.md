@@ -22,7 +22,7 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-006
+latest_checkpoint: CP-RUFF-001
 next_experiment: EXP-002
 ---
 
@@ -50,6 +50,29 @@ disproven_routes:
 open_risks:
   - No MuJoCo runtime experiment has run yet.
 next_command: Define EXP-001 before the first runtime-affecting migration experiment.
+```
+
+## Checkpoint CP-RUFF-001
+
+```yaml
+checkpoint_id: CP-RUFF-001
+last_valid_experiment: EXP-001
+current_hypothesis: The main migration can resume with every new-package Python change guarded by the executable Ruff gate.
+working_tree_status: Ruff gate, behavior tests, fixed configuration, mechanical lint/format changes, and this checkpoint are pending one isolated commit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no session or process was stopped.
+confirmed_conclusions:
+  - Ruff 0.15.20 and rules E4, E7, E9, F, and I are explicitly pinned; the gate executes both check and format --check over only the independent MuJoCo Python package targets.
+  - Strict RED produced 2 failures because the executable gate and configuration were absent; behavior GREEN passed 2 of 2.
+  - The first real audit covered 8 Python files and found 6 I001 import-order findings across 6 files; format check identified 4 files requiring formatting and 4 already formatted.
+  - Mechanical repair applied 6 import-order fixes and formatted 4 files without intended behavior change.
+  - The package-level colcon test executed 47 pytest cases including a real Ruff pass and a disposable-copy F821 rejection; test-result reported zero errors, failures, or skips.
+  - Complete pre-fix evidence is ruff-before-{files,check,statistics,format}.txt under the evidence root with SHA-256 values 2610d669..., 40e62557..., 6df5bb43..., and f1eff9fb... respectively.
+disproven_routes:
+  - A configuration-only or grep-only lint declaration is insufficient; pytest executes the gate and proves both Ruff subcommands and scope.
+open_risks:
+  - Future environments must provide exactly Ruff 0.15.20 or the gate intentionally fails closed.
+next_command: Run final package tests, real Ruff gate, isolation and protected-tree gates, then commit the isolated Ruff change and resume Task 5.
 ```
 
 ## Checkpoint CP-006

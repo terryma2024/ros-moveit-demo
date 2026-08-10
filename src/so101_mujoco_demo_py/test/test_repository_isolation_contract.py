@@ -2,22 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import os
-from pathlib import Path
 import re
 import shutil
 import stat
 import subprocess
+from pathlib import Path
 
 import pytest
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-GATE_RELATIVE_PATH = Path(
-    "src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh"
-)
-LEDGER_RELATIVE_PATH = Path(
-    "docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md"
-)
+GATE_RELATIVE_PATH = Path("src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh")
+LEDGER_RELATIVE_PATH = Path("docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md")
 GATE_PATH = REPOSITORY_ROOT / GATE_RELATIVE_PATH
 LEDGER_PATH = REPOSITORY_ROOT / LEDGER_RELATIVE_PATH
 IMPLEMENTATION_ROOT = Path("src/so101_mujoco_demo_py")
@@ -49,9 +44,7 @@ def require_success(result: subprocess.CompletedProcess[str]) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def require_gate_failure(
-    checkout: Path, expected_message: str
-) -> subprocess.CompletedProcess[str]:
+def require_gate_failure(checkout: Path, expected_message: str) -> subprocess.CompletedProcess[str]:
     result = run(checkout / GATE_RELATIVE_PATH, cwd=checkout)
     assert result.returncode != 0, result.stdout + result.stderr
     assert expected_message in result.stderr
@@ -78,24 +71,16 @@ def append_git_exclude(checkout: Path, pattern: str) -> None:
 
 
 def protected_nontracked_manifest_sha256(checkout: Path) -> str:
-    tracked_result = run(
-        "git", "ls-files", "-z", "--", PROTECTED_TREE, cwd=checkout
-    )
+    tracked_result = run("git", "ls-files", "-z", "--", PROTECTED_TREE, cwd=checkout)
     require_success(tracked_result)
     tracked = {entry for entry in tracked_result.stdout.split("\0") if entry}
     records: list[str] = []
     protected_root = checkout / PROTECTED_TREE
 
-    for current_root, directory_names, file_names in os.walk(
-        protected_root, followlinks=False
-    ):
+    for current_root, directory_names, file_names in os.walk(protected_root, followlinks=False):
         current = Path(current_root)
-        symlink_directories = [
-            name for name in directory_names if (current / name).is_symlink()
-        ]
-        directory_names[:] = [
-            name for name in directory_names if name not in symlink_directories
-        ]
+        symlink_directories = [name for name in directory_names if (current / name).is_symlink()]
+        directory_names[:] = [name for name in directory_names if name not in symlink_directories]
         for name in sorted(file_names + symlink_directories):
             candidate = current / name
             relative = candidate.relative_to(checkout).as_posix()
@@ -180,9 +165,7 @@ def test_ledger_records_complete_task_contract_and_checkpoint() -> None:
     assert front_matter["worktree"] == EXPECTED_WORKTREE
     assert front_matter["evidence_root"] == EXPECTED_EVIDENCE_ROOT
     assert re.fullmatch(r"EXP-[0-9]{3}", front_matter["next_experiment"])
-    assert re.fullmatch(
-        r"[0-9a-f]{64}", front_matter["protected_nontracked_baseline_sha256"]
-    )
+    assert re.fullmatch(r"[0-9a-f]{64}", front_matter["protected_nontracked_baseline_sha256"])
 
     physics_contract = front_matter["strict_physics_contract"].lower()
     for required_phrase in (
@@ -304,9 +287,7 @@ def test_gate_allows_snapshotted_ignored_protected_content_but_rejects_additions
     require_success(run(isolated_checkout / GATE_RELATIVE_PATH, cwd=isolated_checkout))
 
     (existing.parent / "new.bin").write_bytes(b"post-task generated file\n")
-    require_gate_failure(
-        isolated_checkout, "protected nontracked filesystem differs from baseline"
-    )
+    require_gate_failure(isolated_checkout, "protected nontracked filesystem differs from baseline")
 
 
 def test_gate_rejects_an_ignored_protected_symlink(isolated_checkout: Path) -> None:
@@ -315,9 +296,7 @@ def test_gate_rejects_an_ignored_protected_symlink(isolated_checkout: Path) -> N
     target.write_text("target\n")
     (isolated_checkout / PROTECTED_TREE / "generated-link").symlink_to(target)
 
-    require_gate_failure(
-        isolated_checkout, "protected nontracked filesystem differs from baseline"
-    )
+    require_gate_failure(isolated_checkout, "protected nontracked filesystem differs from baseline")
 
 
 @pytest.mark.parametrize(
@@ -388,9 +367,7 @@ def test_gate_scans_hidden_and_ignored_implementation_sources(
     dependency_file.parent.mkdir(parents=True, exist_ok=True)
     dependency_file.write_text(f"PACKAGE = {LEGACY_NAMESPACE!r}\n")
     if ignored:
-        append_git_exclude(
-            isolated_checkout, f"/{dependency_file.relative_to(isolated_checkout)}"
-        )
+        append_git_exclude(isolated_checkout, f"/{dependency_file.relative_to(isolated_checkout)}")
 
     require_gate_failure(isolated_checkout, "legacy Gazebo Python dependency")
 
@@ -445,22 +422,16 @@ def test_gate_allows_structured_source_references_only_in_exact_provenance_json(
     "mutation",
     ["wrong-field", "nested-provenance", "malformed-json"],
 )
-def test_gate_rejects_invalid_provenance_exemptions(
-    isolated_checkout: Path, mutation: str
-) -> None:
+def test_gate_rejects_invalid_provenance_exemptions(isolated_checkout: Path, mutation: str) -> None:
     provenance = write_valid_provenance(isolated_checkout)
     if mutation == "wrong-field":
-        provenance.write_text(
-            '{"runtime_fallback": "src/' + LEGACY_NAMESPACE + '/runtime.py"}\n'
-        )
+        provenance.write_text('{"runtime_fallback": "src/' + LEGACY_NAMESPACE + '/runtime.py"}\n')
     elif mutation == "nested-provenance":
         provenance.unlink()
         provenance = provenance.parent / "archive/provenance.json"
         provenance.parent.mkdir()
         provenance.write_text(
-            '{"behavior_source": {"paths": ["src/'
-            + LEGACY_NAMESPACE
-            + '/runtime.py"]}}\n'
+            '{"behavior_source": {"paths": ["src/' + LEGACY_NAMESPACE + '/runtime.py"]}}\n'
         )
     else:
         provenance.write_text('{"behavior_source": "src/' + LEGACY_NAMESPACE)
