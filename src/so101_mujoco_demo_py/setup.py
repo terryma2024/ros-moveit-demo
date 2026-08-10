@@ -1,6 +1,5 @@
 from setuptools import find_packages, setup
 
-
 package_name = "so101_mujoco_demo_py"
 
 
@@ -22,9 +21,5 @@ setup(
     description="Independent Python SO-101 MuJoCo pick-place demonstration.",
     license="Apache-2.0",
     tests_require=["pytest"],
-    entry_points={
-        "console_scripts": [
-            "pick_place_state_machine = so101_mujoco_demo_py.cli:main"
-        ]
-    },
+    entry_points={"console_scripts": ["pick_place_state_machine = so101_mujoco_demo_py.cli:main"]},
 )
