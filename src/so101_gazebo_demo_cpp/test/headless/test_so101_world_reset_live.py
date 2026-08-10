@@ -57,7 +57,7 @@ def wait_for(description, predicate, timeout=45):
 
 def moveit_state(environment):
     output = run(
-        ["ros2", "run", "so101_gazebo_demo", "so101_moveit_scene", "observe"],
+        ["ros2", "run", "so101_gazebo_demo_cpp", "so101_moveit_scene", "observe"],
         environment,
         timeout=15,
     )
@@ -215,14 +215,14 @@ def main():
                 (
                     "gazebo",
                     [
-                        "ros2", "launch", "so101_gazebo_demo", "so101_gazebo.launch.py",
+                        "ros2", "launch", "so101_gazebo_demo_cpp", "so101_gazebo.launch.py",
                         "headless:=true",
                     ],
                 ),
                 (
                     "moveit",
                     [
-                        "ros2", "launch", "so101_gazebo_demo",
+                        "ros2", "launch", "so101_gazebo_demo_cpp",
                         "so101_move_group_headless.launch.py",
                     ],
                 ),
@@ -270,7 +270,7 @@ def main():
 
             for name, seed_gazebo, seed_moveit in SCENARIOS:
                 run(
-                    ["ros2", "run", "so101_gazebo_demo", "reset_so101_world"],
+                    ["ros2", "run", "so101_gazebo_demo_cpp", "reset_so101_world"],
                     environment,
                     timeout=25,
                 )
@@ -294,7 +294,13 @@ def main():
                     )
                 if seed_moveit:
                     output = run(
-                        ["ros2", "run", "so101_gazebo_demo", "so101_moveit_scene", "attach"],
+                        [
+                            "ros2",
+                            "run",
+                            "so101_gazebo_demo_cpp",
+                            "so101_moveit_scene",
+                            "attach",
+                        ],
                         environment,
                         timeout=20,
                     )
@@ -313,7 +319,7 @@ def main():
                 )
 
                 reset_output = run(
-                    ["ros2", "run", "so101_gazebo_demo", "reset_so101_world"],
+                    ["ros2", "run", "so101_gazebo_demo_cpp", "reset_so101_world"],
                     environment,
                     timeout=25,
                 )

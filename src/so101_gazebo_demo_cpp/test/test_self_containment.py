@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
@@ -46,3 +47,25 @@ def test_compiled_workspace_sampler_uses_current_ros_package_identity():
 
     assert 'get_package_prefix("so101_gazebo_demo_cpp")' in source
     assert 'get_package_prefix("so101_gazebo_demo")' not in source
+
+
+def test_active_python_helpers_do_not_invoke_or_resolve_the_old_ros_package():
+    obsolete_patterns = (
+        re.compile(
+            r"/\s*['\"](?:build|lib)['\"]\s*/\s*['\"]so101_gazebo_demo['\"]\s*/"
+        ),
+        re.compile(
+            r"['\"]ros2['\"]\s*,\s*['\"](?:run|launch)['\"]\s*,\s*"
+            r"['\"]so101_gazebo_demo['\"]"
+        ),
+    )
+    offenders = []
+    for path in PACKAGE_DIR.rglob('*.py'):
+        if path == Path(__file__):
+            continue
+        text = path.read_text(errors='ignore')
+        for pattern in obsolete_patterns:
+            if pattern.search(text):
+                offenders.append((str(path.relative_to(PACKAGE_DIR)), pattern.pattern))
+
+    assert not offenders, offenders

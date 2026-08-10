@@ -69,7 +69,7 @@ async def lease(service):
 
 def test_package_cli_preserves_cpp_owner_failure_diagnostics(monkeypatch, tmp_path):
     prefix = tmp_path / "prefix"
-    executable = prefix / "lib" / "so101_gazebo_demo" / "pick_place_state_machine"
+    executable = prefix / "lib" / "so101_gazebo_demo_cpp" / "pick_place_state_machine"
     executable.parent.mkdir(parents=True)
     executable.touch()
     diagnostic_dir = tmp_path / "diagnostics"
