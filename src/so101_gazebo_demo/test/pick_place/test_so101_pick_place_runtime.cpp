@@ -613,6 +613,9 @@ TEST(SO101PhysicalGraspStabilizer, PreservesTheFixedPreloadAndStableWindow)
   bilateral.gazebo_task_object_fixed_finger_contact = true;
   bilateral.gazebo_task_object_moving_jaw_contact = true;
   bilateral.gazebo_task_object_gripper_max_depth = 0.001;
+  const auto & profile = spp::SO101Profile::canonical();
+  const double measured_contact_q6 = profile.q6_contact - 0.002;
+  bilateral.joint_positions[profile.gripper_joint] = measured_contact_q6;
   observer->snapshot = bilateral;
   observer->samples.assign(12, bilateral);
   spp::SO101PhysicalGraspStabilizer stabilizer(observer, evidence, gripper);
@@ -622,11 +625,80 @@ TEST(SO101PhysicalGraspStabilizer, PreservesTheFixedPreloadAndStableWindow)
   EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
     << (result.failure ? result.failure->code : "");
   ASSERT_EQ(gripper->targets.size(), 1U);
-  const auto & profile = spp::SO101Profile::canonical();
   EXPECT_DOUBLE_EQ(
     gripper->targets.front(),
-    std::max(profile.q6_safe_lower, profile.q6_contact - profile.q6_regrasp_squeeze_offset));
+    std::max(profile.q6_safe_lower, measured_contact_q6 - profile.q6_regrasp_squeeze_offset));
   EXPECT_EQ(observer->next_sample, 12U);
+}
+
+TEST(SO101PhysicalGraspStabilizer, NormalizesExcessPenetrationBeforeSavingEvidence)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto evidence = std::make_shared<MemoryPhysicalEvidenceStore>();
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  const auto & profile = spp::SO101Profile::canonical();
+  const double preload_target =
+    std::max(profile.q6_safe_lower, profile.q6_contact - profile.q6_regrasp_squeeze_offset);
+  auto contact_window = observer->snapshot;
+  contact_window.gazebo_task_object_fixed_finger_contact = true;
+  contact_window.gazebo_task_object_moving_jaw_contact = true;
+  contact_window.gazebo_task_object_gripper_max_depth = 0.0008;
+  contact_window.joint_positions[profile.gripper_joint] = profile.q6_contact;
+  auto acceptable = contact_window;
+  acceptable.joint_positions[profile.gripper_joint] = preload_target + 0.001;
+  auto too_deep = acceptable;
+  too_deep.gazebo_task_object_gripper_max_depth = 0.0011;
+  too_deep.joint_positions[profile.gripper_joint] = preload_target;
+  observer->samples.assign(6, contact_window);
+  observer->samples.push_back(too_deep);
+  observer->samples.insert(observer->samples.end(), 6, acceptable);
+  spp::SO101PhysicalGraspStabilizer stabilizer(observer, evidence, gripper);
+
+  const auto result = stabilizer.captureBeforeLift();
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  ASSERT_EQ(gripper->targets.size(), 2U);
+  EXPECT_DOUBLE_EQ(gripper->targets[0], preload_target);
+  EXPECT_DOUBLE_EQ(gripper->targets[1], preload_target + 0.001);
+}
+
+TEST(SO101PhysicalGraspStabilizer, NormalizesShallowPenetrationBeforeSavingEvidence)
+{
+  auto dependencies = completeDependencies();
+  auto observer = std::dynamic_pointer_cast<FakePhysicalObserver>(dependencies.physical_observer);
+  auto evidence = std::make_shared<MemoryPhysicalEvidenceStore>();
+  auto gripper = std::dynamic_pointer_cast<FakeGripper>(dependencies.gripper);
+  ASSERT_TRUE(observer);
+  ASSERT_TRUE(gripper);
+  const auto & profile = spp::SO101Profile::canonical();
+  const double preload_target =
+    std::max(profile.q6_safe_lower, profile.q6_contact - profile.q6_regrasp_squeeze_offset);
+  auto contact_window = observer->snapshot;
+  contact_window.gazebo_task_object_fixed_finger_contact = true;
+  contact_window.gazebo_task_object_moving_jaw_contact = true;
+  contact_window.gazebo_task_object_gripper_max_depth = 0.0005;
+  contact_window.joint_positions[profile.gripper_joint] = profile.q6_contact;
+  auto acceptable = contact_window;
+  acceptable.joint_positions[profile.gripper_joint] = preload_target - 0.001;
+  auto too_shallow = acceptable;
+  too_shallow.gazebo_task_object_gripper_max_depth = 0.00005;
+  too_shallow.joint_positions[profile.gripper_joint] = preload_target;
+  observer->samples.assign(6, contact_window);
+  observer->samples.push_back(too_shallow);
+  observer->samples.insert(observer->samples.end(), 6, acceptable);
+  spp::SO101PhysicalGraspStabilizer stabilizer(observer, evidence, gripper);
+
+  const auto result = stabilizer.captureBeforeLift();
+
+  EXPECT_EQ(result.status, spp::ActionStatus::SUCCEEDED)
+    << (result.failure ? result.failure->code : "");
+  ASSERT_EQ(gripper->targets.size(), 2U);
+  EXPECT_DOUBLE_EQ(gripper->targets[0], preload_target);
+  EXPECT_DOUBLE_EQ(gripper->targets[1], preload_target - 0.001);
 }
 
 TEST(SO101PickPlaceRuntime, StableGraspImmediatelyCorrectsOneUnilateralSample)

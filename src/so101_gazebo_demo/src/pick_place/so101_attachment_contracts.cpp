@@ -442,10 +442,11 @@ public:
   {
     ValidationResult result{true, {}, {}};
     requireObserved(result, before, profile_);
-    const auto gripper_target =
-      key_.from == State::DETACH_GAZEBO || key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
-        ? SO101GripperTarget::FULL_OPEN
-        : SO101GripperTarget::CONTACT;
+    const auto gripper_target = key_.from == State::DETACH_GAZEBO ||
+                                    key_.from == State::DETACH_MOVEIT ||
+                                    key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
+                                  ? SO101GripperTarget::FULL_OPEN
+                                  : SO101GripperTarget::CONTACT;
     if (key_.from == State::ATTACH_GAZEBO)
       requireAttachPreloadQ6(result, before, profile_);
     else if (key_.from == State::ATTACH_MOVEIT)
@@ -485,10 +486,11 @@ public:
           "The attachment or scene action did not report success");
     }
     requireObserved(result, after, profile_);
-    const auto gripper_target =
-      key_.from == State::DETACH_GAZEBO || key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
-        ? SO101GripperTarget::FULL_OPEN
-        : SO101GripperTarget::CONTACT;
+    const auto gripper_target = key_.from == State::DETACH_GAZEBO ||
+                                    key_.from == State::DETACH_MOVEIT ||
+                                    key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
+                                  ? SO101GripperTarget::FULL_OPEN
+                                  : SO101GripperTarget::CONTACT;
     if (key_.from == State::ATTACH_MOVEIT)
       requireCarryQ6Telemetry(result, after, profile_);
     else
@@ -568,8 +570,8 @@ constexpr std::array<TransitionKey, 8> kAttachmentTransitions{{
   {State::ATTACH_GAZEBO, State::ATTACH_MOVEIT},
   {State::ATTACH_MOVEIT, State::LIFT},
   {State::DETACH_GAZEBO, State::DETACH_MOVEIT},
-  {State::DETACH_MOVEIT, State::OPEN_GRIPPER},
-  {State::SYNC_WORLD_OBJECT, State::RETREAT},
+  {State::DETACH_MOVEIT, State::WAIT_RELEASE_SETTLE},
+  {State::SYNC_WORLD_OBJECT, State::DONE},
   {State::RECOVER_DETACH_GAZEBO, State::RECOVER_DETACH_MOVEIT},
   {State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT},
   {State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT},

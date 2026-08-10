@@ -1536,3 +1536,53 @@ handoff:
   first_action: audit existing dirty Task 15 work and append design/plan/ledger migration documentation
 old_reset_world_ledger: ZERO_DIFF
 ```
+
+## CP-PHYSICAL-007：rebase main and synchronize frozen Python EXP081 into C++
+
+```yaml
+checkpoint_id: CP-PHYSICAL-007
+recorded_at: 2026-08-10 Asia/Shanghai
+worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
+branch: codex/so101-physical-outcome-validation
+rebase:
+  base: main@d300e7a
+  preserved_checkpoint_before_rebase: 7d26d43
+  rewritten_checkpoint_after_rebase: ae02a10
+  conflicts: NONE
+strategy_provenance:
+  source_worktree: /data/work/ws_moveit/.worktrees/so101-gazebo-demo-py
+  frozen_python_implementation: 01f45bf
+  freeze_commit: 576e03a
+  source_branch_head_observed: e3cc308
+synchronized_behavior:
+  - exact EXP081 MOVE_ABOVE_PLACE, DESCEND_TO_PLACE and RETREAT joint waypoints
+  - EXP081 velocity/acceleration scaling and release q6 0.750
+  - release sequence DESCEND_TO_PLACE -> OPEN_GRIPPER -> RETREAT -> DETACH_MOVEIT -> WAIT_RELEASE_SETTLE -> VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> DONE
+  - MoveIt Planning Scene shadow remains attached through physical open and retreat; Gazebo physical attach remains forbidden
+  - default MICRO_LIFT validation uses cup displacement and arm stability outcomes; contact and orientation remain telemetry unless an explicit stricter policy is supplied
+  - maximum two physical-grasp attempts
+  - target penetration interval [0.0001, 0.001] m with at most four deterministic 0.001-rad q6 adjustments
+safety_boundaries:
+  global_penetration_hard_ceiling_m: 0.0013
+  physics_geometry_mass_friction_controller_gains: UNCHANGED
+  final_physical_outcome_region_and_stability_limits: UNCHANGED
+tdd:
+  expected_red:
+    - release transition order
+    - outcome-first MICRO_LIFT gates
+    - two-attempt retry limit
+    - shallow/deep penetration normalization
+  green:
+    focused_ctest: 5/5 passed
+    package_ctest: 83/83 passed
+    cpp_quality_gate: passed
+build:
+  command: colcon build --base-paths src/so101_gazebo_demo --packages-select so101_gazebo_demo --cmake-args -DBUILD_TESTING=ON
+  result: passed
+runtime_validation:
+  gazebo_moveit_started: false
+  physical_pick_place_run: NOT_RUN_AT_THIS_CHECKPOINT
+  reason: source synchronization and offline regression only; do not claim live physical success from unit/config tests
+owned_processes: NONE
+decision: READY_FOR_SEPARATE_CLEAN_LIVE_GAZEBO_QUALIFICATION
+```

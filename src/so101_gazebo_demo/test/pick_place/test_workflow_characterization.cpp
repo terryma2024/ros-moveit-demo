@@ -36,12 +36,12 @@ TEST(SO101WorkflowCharacterization, DefaultDryRunTraceAndExtendedStatesRemainSta
                                         pp::State::LIFT,
                                         pp::State::MOVE_ABOVE_PLACE,
                                         pp::State::DESCEND_TO_PLACE,
-                                        pp::State::DETACH_MOVEIT,
                                         pp::State::OPEN_GRIPPER,
+                                        pp::State::RETREAT,
+                                        pp::State::DETACH_MOVEIT,
                                         pp::State::WAIT_RELEASE_SETTLE,
                                         pp::State::VALIDATE_FINAL_PLACEMENT,
                                         pp::State::SYNC_WORLD_OBJECT,
-                                        pp::State::RETREAT,
                                         pp::State::DONE};
   EXPECT_EQ(expected, result.state_trace);
   EXPECT_EQ("MICRO_LIFT", std::string(pp::toString(pp::State::MICRO_LIFT)));

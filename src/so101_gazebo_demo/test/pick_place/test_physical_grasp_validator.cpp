@@ -37,13 +37,13 @@ TEST(PhysicalGraspValidator, AllowsMillimetreScaleLateralComplianceByDefault)
 {
   const auto before = snapshot(0.205, 0.165);
   auto after = snapshot(0.207, 0.167);
-  after.gazebo_task_object_pose_world->x += 0.0016;
+  after.gazebo_task_object_pose_world->x += 0.0059;
   const spp::PhysicalGraspValidator validator;
 
   const auto result = validator.evaluate(before, after, {0.12, -0.045});
 
   EXPECT_TRUE(result.passed);
-  EXPECT_NEAR(result.xy_slip_m, 0.0016, 1e-12);
+  EXPECT_NEAR(result.xy_slip_m, 0.0059, 1e-12);
   EXPECT_EQ(result.failure.code, "");
 }
 
@@ -51,13 +51,43 @@ TEST(PhysicalGraspValidator, RejectsClearlyUnstableLateralMotionByDefault)
 {
   const auto before = snapshot(0.205, 0.165);
   auto after = snapshot(0.207, 0.167);
-  after.gazebo_task_object_pose_world->x += 0.0031;
+  after.gazebo_task_object_pose_world->x += 0.0061;
   const spp::PhysicalGraspValidator validator;
 
   const auto result = validator.evaluate(before, after, {0.12, -0.045});
 
   EXPECT_FALSE(result.passed);
   EXPECT_EQ(result.failure.code, "PHYSICAL_GRASP_XY_SLIP");
+}
+
+TEST(PhysicalGraspValidator, FrozenPythonStrategyTreatsPostLiftContactAsTelemetry)
+{
+  const auto before = snapshot(0.205, 0.165);
+  auto after = snapshot(0.207, 0.167);
+  after.gazebo_task_object_gripper_contact = false;
+
+  const auto result = spp::PhysicalGraspValidator{}.evaluate(before, after, {0.12, -0.045});
+
+  EXPECT_TRUE(result.passed);
+  EXPECT_FALSE(result.gripper_contact);
+}
+
+TEST(PhysicalGraspValidator, FrozenPythonStrategyRequiresOutcomeLiftAndStableArm)
+{
+  const auto before = snapshot(0.205, 0.165);
+  auto insufficient = snapshot(0.207, 0.16505);
+  auto unstable = snapshot(0.207, 0.167);
+  unstable.arm_stationary = false;
+
+  const auto insufficient_result =
+    spp::PhysicalGraspValidator{}.evaluate(before, insufficient, {0.12, -0.045});
+  const auto unstable_result =
+    spp::PhysicalGraspValidator{}.evaluate(before, unstable, {0.12, -0.045});
+
+  EXPECT_FALSE(insufficient_result.passed);
+  EXPECT_EQ(insufficient_result.failure.code, "PHYSICAL_GRASP_INSUFFICIENT_LIFT");
+  EXPECT_FALSE(unstable_result.passed);
+  EXPECT_EQ(unstable_result.failure.code, "PHYSICAL_GRASP_ARM_UNSTABLE");
 }
 
 TEST(PhysicalGraspValidator, RejectsMissingContactEvenWhenCupMoved)

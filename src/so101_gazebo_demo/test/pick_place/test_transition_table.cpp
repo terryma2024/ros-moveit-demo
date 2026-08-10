@@ -62,22 +62,28 @@ TEST(TransitionTable, StableContactRequiresPhysicalValidationBeforeAttachment)
                                                  pick_place::ActionStatus::SUCCEEDED));
 }
 
-TEST(TransitionTable, PlacementDetachesShadowBeforePhysicalReleaseAndFinalValidation)
+TEST(TransitionTable, FrozenPythonStrategyRetreatsBeforeDetachingShadowAndFinalValidation)
 {
-  EXPECT_EQ(pick_place::State::DETACH_MOVEIT,
+  EXPECT_EQ(pick_place::State::OPEN_GRIPPER,
             pick_place::TransitionTable::resolve(pick_place::State::DESCEND_TO_PLACE,
                                                  pick_place::ActionStatus::SUCCEEDED));
-  EXPECT_EQ(pick_place::State::OPEN_GRIPPER,
-            pick_place::TransitionTable::resolve(pick_place::State::DETACH_MOVEIT,
+  EXPECT_EQ(pick_place::State::RETREAT,
+            pick_place::TransitionTable::resolve(pick_place::State::OPEN_GRIPPER,
+                                                 pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::DETACH_MOVEIT,
+            pick_place::TransitionTable::resolve(pick_place::State::RETREAT,
                                                  pick_place::ActionStatus::SUCCEEDED));
   EXPECT_EQ(pick_place::State::WAIT_RELEASE_SETTLE,
-            pick_place::TransitionTable::resolve(pick_place::State::OPEN_GRIPPER,
+            pick_place::TransitionTable::resolve(pick_place::State::DETACH_MOVEIT,
                                                  pick_place::ActionStatus::SUCCEEDED));
   EXPECT_EQ(pick_place::State::VALIDATE_FINAL_PLACEMENT,
             pick_place::TransitionTable::resolve(pick_place::State::WAIT_RELEASE_SETTLE,
                                                  pick_place::ActionStatus::SUCCEEDED));
   EXPECT_EQ(pick_place::State::SYNC_WORLD_OBJECT,
             pick_place::TransitionTable::resolve(pick_place::State::VALIDATE_FINAL_PLACEMENT,
+                                                 pick_place::ActionStatus::SUCCEEDED));
+  EXPECT_EQ(pick_place::State::DONE,
+            pick_place::TransitionTable::resolve(pick_place::State::SYNC_WORLD_OBJECT,
                                                  pick_place::ActionStatus::SUCCEEDED));
 }
 
