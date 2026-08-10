@@ -42,6 +42,7 @@ def sample_from_simulation_evidence(
     policy: PhysicalOutcomePolicy,
     release_epoch_id: str,
     corroboration: OutcomeCorroboration,
+    observed_monotonic_s: float,
 ) -> FinalPlacementSample:
     """Convert Task 5 atomic evidence without importing a simulator-specific message."""
     support_contact = any(
@@ -55,9 +56,7 @@ def sample_from_simulation_evidence(
         release_epoch_id=release_epoch_id,
         receipt_sequence=evidence.publisher_sequence,
         source_timestamp_s=evidence.simulation_time_s,
-        # WorldObserver already applies the configured freshness deadline. Keeping
-        # this value in simulation-time coordinates avoids mixing ROS and wall clocks.
-        observed_monotonic_s=evidence.simulation_time_s,
+        observed_monotonic_s=observed_monotonic_s,
         pose_xyz_xyzw=object_state.position_world + object_state.orientation_xyzw,
         support_contact=support_contact,
         gripper_contact=gripper_contact,
@@ -104,6 +103,7 @@ class ReleaseSettleExecutor:
             if self._cancelled():
                 return ReleaseSettleResult("CANCELLED", tuple(samples), evaluation)
             evidence = self._observer.snapshot()
+            observed_monotonic_s = self._monotonic()
             if release_reset_epoch is None:
                 release_reset_epoch = evidence.reset_epoch
             if evidence.reset_epoch == release_reset_epoch:
@@ -113,6 +113,7 @@ class ReleaseSettleExecutor:
                         self._policy,
                         release_epoch_id,
                         self._corroborate(),
+                        observed_monotonic_s,
                     )
                 )
             if len(samples) > self._policy.max_telemetry_samples:
