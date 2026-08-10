@@ -13,6 +13,7 @@ setup(
             [f"resource/{package_name}"],
         ),
         (f"share/{package_name}", ["package.xml"]),
+        (f"share/{package_name}/docs", ["docs/provenance.json"]),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
