@@ -10,9 +10,9 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: 91c482bd609f7240d5f8547c968363135524bb4f
-ledger_commit_pending: true
-task_status: TASK_1_FIX_IMPLEMENTATION_PENDING_COMMIT
+last_verified_implementation_commit: e6489ee2949caf435fe028fbe7f65d30a371b5fb
+ledger_commit_pending: false
+task_status: TASK_1_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -22,7 +22,7 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-002
+latest_checkpoint: CP-003
 next_experiment: EXP-001
 ---
 
@@ -72,4 +72,24 @@ disproven_routes:
 open_risks:
   - The review fix implementation commit is not known until the scoped commit is created.
 next_command: Run GREEN and all pre-commit gates, then create the scoped Task 1 review-fix commit.
+```
+
+## Checkpoint CP-003
+
+```yaml
+checkpoint_id: CP-003
+last_valid_experiment: NONE
+current_hypothesis: NONE
+working_tree_status: Clean at implementation commit e6489ee2949caf435fe028fbe7f65d30a371b5fb; this ledger-only checkpoint update is pending its scoped commit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no session or process was stopped.
+confirmed_conclusions:
+  - The fail-closed isolation implementation is commit e6489ee2949caf435fe028fbe7f65d30a371b5fb.
+  - Review GREEN produced 31 passes, and the implementation commit passed its immediate isolation, protected-diff, protected-status, and clean-worktree gates.
+  - The protected nontracked baseline remains 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f.
+disproven_routes:
+  - Case-sensitive text search, broad provenance exclusion, ordinary-status-only protection, and whole-repository backup scanning are not sufficient isolation gates.
+open_risks:
+  - No Task 1 repository-isolation risk remains; runtime migration experiments have not started.
+next_command: Define EXP-001 before the first runtime-affecting migration experiment.
 ```
