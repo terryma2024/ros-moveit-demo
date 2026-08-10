@@ -30,7 +30,6 @@
 - Modify: `src/pick_place_common/test/test_package_contract.py`
 - Modify after rename: `src/so101_gazebo_demo_cpp/package.xml`
 - Modify after rename: `src/so101_gazebo_demo_cpp/CMakeLists.txt`
-- Create after rename: `src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py`
 
 ### Runtime package/resource identity
 
@@ -209,111 +208,44 @@ git commit -m 'refactor(so101): rename C++ ROS package core'
 ### Task 2: Migrate runtime resource lookups and protect the Python boundary
 
 **Files:**
-- Create: `src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py`
-- Modify: `src/so101_gazebo_demo_cpp/CMakeLists.txt`
 - Modify: runtime/package-identity files listed under “Runtime package/resource identity”.
-- Modify: five Python independence files listed under “Python-package independence boundary”.
+- Modify: Python independence and provenance tests listed under “Python-package independence boundary”.
 - Preserve: `src/so101_gazebo_demo_py/docs/provenance.json`
 
 **Interfaces:**
 - Consumes: ROS package `so101_gazebo_demo_cpp` from Task 1.
 - Produces: all runtime package-share/resource lookups use the new identity; the independent Python implementation rejects dependencies on the renamed C++ package.
 
-- [ ] **Step 1: Add a focused runtime-identity contract**
+- [ ] **Step 1: Change existing behavior contracts to expect the renamed package**
 
-Create `src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py`:
+Before changing runtime production files:
 
-```python
-from pathlib import Path
-import re
+- update `test_so101_launch_contract.py` expectations from the old ROS package argument/share lookup to `so101_gazebo_demo_cpp`;
+- update `test_prepare_simulation_model.py` fixtures to use `model://so101_gazebo_demo_cpp/`;
+- update `test_fingertip_pad_geometry.py` expected mesh prefix to `package://so101_gazebo_demo_cpp/`;
+- update the five Python independence tests so their external C++ dependency fixture is `so101_gazebo_demo_cpp`;
+- leave `test_provenance.py` unchanged for the RED run: Task 1's real directory rename must make its legacy source-path existence assertion fail.
 
+The break caught by these tests is observable: launch/resource resolution still requests a package that no longer exists, or the Python package stops detecting a dependency on the current C++ package.
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-CPP_PACKAGE = WORKSPACE_ROOT / 'src' / 'so101_gazebo_demo_cpp'
-PY_PACKAGE = WORKSPACE_ROOT / 'src' / 'so101_gazebo_demo_py'
-LEGACY = 'so101_gazebo_demo'
-CURRENT = 'so101_gazebo_demo_cpp'
-
-RUNTIME_ROOTS = (
-    CPP_PACKAGE / 'CMakeLists.txt',
-    CPP_PACKAGE / 'package.xml',
-    CPP_PACKAGE / 'launch',
-    CPP_PACKAGE / 'scripts',
-    CPP_PACKAGE / 'so101_teleop',
-    CPP_PACKAGE / 'src',
-    CPP_PACKAGE / 'urdf',
-    CPP_PACKAGE / 'web' / 'e2e',
-)
-
-FORBIDDEN_PATTERNS = (
-    re.compile(r'<name>so101_gazebo_demo</name>'),
-    re.compile(r'project\(so101_gazebo_demo\)'),
-    re.compile(r'get_package_share_directory\(["\']so101_gazebo_demo["\']\)'),
-    re.compile(r'package\s*=\s*["\']so101_gazebo_demo["\']'),
-    re.compile(r'(?:package|model)://so101_gazebo_demo/'),
-    re.compile(r'/install/so101_gazebo_demo(?:/|\b)'),
-)
-
-
-def _files(root: Path):
-    if root.is_file():
-        yield root
-        return
-    for path in root.rglob('*'):
-        if path.is_file() and '.git' not in path.parts:
-            yield path
-
-
-def test_active_cpp_runtime_uses_new_ros_package_identity():
-    offenders = []
-    for root in RUNTIME_ROOTS:
-        for path in _files(root):
-            text = path.read_text(errors='ignore')
-            for pattern in FORBIDDEN_PATTERNS:
-                if pattern.search(text):
-                    offenders.append((str(path.relative_to(WORKSPACE_ROOT)), pattern.pattern))
-    assert not offenders, offenders
-
-
-def test_cpp_public_namespace_and_include_tree_stay_unchanged():
-    assert (CPP_PACKAGE / 'include' / LEGACY).is_dir()
-    assert not (CPP_PACKAGE / 'include' / CURRENT).exists()
-    headers_and_sources = list((CPP_PACKAGE / 'include').rglob('*.[hH]pp'))
-    headers_and_sources += list((CPP_PACKAGE / 'src').rglob('*.cpp'))
-    assert not any(
-        f'namespace {CURRENT}' in path.read_text(errors='ignore')
-        or f'{CURRENT}::' in path.read_text(errors='ignore')
-        for path in headers_and_sources
-    )
-
-
-def test_python_provenance_remains_historical_and_independence_targets_current_cpp_package():
-    provenance = PY_PACKAGE / 'docs' / 'provenance.json'
-    assert 'src/so101_gazebo_demo/' in provenance.read_text(encoding='utf-8')
-    independence = (PY_PACKAGE / 'test' / 'test_package_independence.py').read_text()
-    assert CURRENT in independence
-```
-
-Register it in `src/so101_gazebo_demo_cpp/CMakeLists.txt` next to `test_package_layout`:
-
-```cmake
-ament_add_pytest_test(
-  test_package_rename_contract
-  test/test_package_rename_contract.py
-)
-```
-
-- [ ] **Step 2: Run the new runtime contract and verify RED**
+- [ ] **Step 2: Run the changed behavior tests and verify RED**
 
 Run:
 
 ```zsh
 cd /data/work/ws_moveit
 PYTHONNOUSERSITE=1 python3 -m pytest -q \
-  src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py
+  src/so101_gazebo_demo_cpp/test/test_so101_launch_contract.py \
+  src/so101_gazebo_demo_cpp/test/test_prepare_simulation_model.py \
+  src/so101_gazebo_demo_cpp/test/test_fingertip_pad_geometry.py \
+  src/so101_gazebo_demo_py/test/test_asset_closure.py \
+  src/so101_gazebo_demo_py/test/test_installed_independence.py \
+  src/so101_gazebo_demo_py/test/test_launch_contract.py \
+  src/so101_gazebo_demo_py/test/test_package_independence.py \
+  src/so101_gazebo_demo_py/test/test_provenance.py
 ```
 
-Expected: FAIL with offenders containing old package-share lookups/resource URIs and because the Python independence test still names only the old C++ package.
+Expected: FAIL on new package/resource expectations while production launch, URDF, model preparation, and Python dependency detection still use the old C++ package identity. `test_provenance.py` must also fail because its recorded legacy paths no longer exist after Task 1.
 
 - [ ] **Step 3: Change only true ROS package/resource identities**
 
@@ -342,7 +274,7 @@ def _live_source_path(recorded_source: str) -> Path:
     return PACKAGE.parents[1] / source
 ```
 
-Replace `(PACKAGE.parents[1] / entry["source"]).is_file()` with `_live_source_path(entry["source"]).is_file()`.
+Replace `(PACKAGE.parents[1] / entry["source"]).is_file()` with `_live_source_path(entry["source"]).is_file()` after the RED run.
 
 - [ ] **Step 4: Run focused runtime/resource tests and verify GREEN**
 
@@ -351,7 +283,6 @@ Run:
 ```zsh
 cd /data/work/ws_moveit
 PYTHONNOUSERSITE=1 python3 -m pytest -q \
-  src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py \
   src/so101_gazebo_demo_cpp/test/test_prepare_simulation_model.py \
   src/so101_gazebo_demo_cpp/test/test_fingertip_pad_geometry.py \
   src/so101_gazebo_demo_cpp/test/test_so101_launch_contract.py \
@@ -396,68 +327,30 @@ git commit -m 'refactor(so101): migrate C++ package runtime identity'
 
 **Files:**
 - Modify: all files listed under “Current documentation and tooling”.
-- Modify: `src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py`
 - Preserve unchanged: `docs/experiments/**`, `docs/handoffs/**`, pre-migration `docs/superpowers/plans/**`, pre-migration `docs/superpowers/specs/**`, and `src/so101_gazebo_demo_py/docs/provenance.json`.
 
 **Interfaces:**
 - Consumes: current runtime identity from Task 2.
 - Produces: current operator instructions use only `so101_gazebo_demo_cpp`; historical commands and hashes remain intact.
 
-- [ ] **Step 1: Extend the contract with an explicit current-document list**
-
-Append to `test_package_rename_contract.py`:
-
-```python
-CURRENT_OPERATOR_FILES = (
-    WORKSPACE_ROOT / '.agents/skills/gazebo-video-debug/SKILL.md',
-    WORKSPACE_ROOT / '.agents/skills/so101-dev/SKILL.md',
-    WORKSPACE_ROOT / '.agents/skills/so101-dev/references/ai-station-access.md',
-    WORKSPACE_ROOT / '.agents/skills/so101-dev/references/debug-evidence.md',
-    WORKSPACE_ROOT / '.agents/skills/so101-dev/references/so101-system-map.md',
-    WORKSPACE_ROOT / '.agents/skills/so101-dev/references/test-and-acceptance.md',
-    WORKSPACE_ROOT / '.idea/.name',
-    WORKSPACE_ROOT / '.idea/misc.xml',
-    WORKSPACE_ROOT / 'docs/pick-place-architecture.md',
-    WORKSPACE_ROOT / 'docs/pick-place-launch-parameters.md',
-    WORKSPACE_ROOT / 'src/pick_place_common/README.md',
-    CPP_PACKAGE / 'README.md',
-    CPP_PACKAGE / 'docs/so101-teleop-web-ui.md',
-    CPP_PACKAGE / 'docs/so101-workspace-sampler.md',
-)
-
-
-def test_current_operator_docs_use_cpp_ros_package_identity():
-    forbidden = (
-        re.compile(r'(?<![A-Za-z0-9_])src/so101_gazebo_demo(?:/|\b)'),
-        re.compile(r'(?<![A-Za-z0-9_])install/so101_gazebo_demo(?:/|\b)'),
-        re.compile(r'ros2\s+(?:run|launch|pkg\s+(?:prefix|executables))\s+so101_gazebo_demo\b'),
-        re.compile(r'--packages-(?:select|up-to)[^\n]*\bso101_gazebo_demo\b'),
-        re.compile(r'^so101_gazebo_demo$'),
-        re.compile(r'^so101_gazebo_demo\s+[─|]'),
-    )
-    offenders = []
-    for path in CURRENT_OPERATOR_FILES:
-        for line_number, line in enumerate(path.read_text(errors='ignore').splitlines(), 1):
-            if any(pattern.search(line) for pattern in forbidden):
-                offenders.append((str(path.relative_to(WORKSPACE_ROOT)), line_number, line))
-    assert not offenders, offenders
-```
-
-- [ ] **Step 2: Run the documentation contract and verify RED**
+- [ ] **Step 1: Capture the current-document audit before editing**
 
 Run:
 
 ```zsh
 cd /data/work/ws_moveit
-PYTHONNOUSERSITE=1 python3 -m pytest -q \
-  src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py::test_current_operator_docs_use_cpp_ros_package_identity
+git grep -n -P '(?<![A-Za-z0-9_])so101_gazebo_demo(?![A-Za-z0-9_])' -- \
+  .agents .idea docs/pick-place-architecture.md docs/pick-place-launch-parameters.md \
+  src/pick_place_common/README.md \
+  src/so101_gazebo_demo_cpp/README.md src/so101_gazebo_demo_cpp/docs \
+  | tee /tmp/so101-package-rename-current-docs-before.log
 ```
 
-Expected: FAIL listing current Skills, IDE config, architecture/launch docs, and package operator guides that still use the old path/package identity.
+Expected: output lists current operational instructions that still use the old package/path identity. This is an audit baseline, not a persistent prose test.
 
-- [ ] **Step 3: Update current operator documentation only**
+- [ ] **Step 2: Update current operator documentation only**
 
-In the files listed by `CURRENT_OPERATOR_FILES`:
+In the files listed under “Current documentation and tooling”:
 
 - change source/install paths to `src/so101_gazebo_demo_cpp` and `install/so101_gazebo_demo_cpp`;
 - change `ros2 run`, `ros2 launch`, `ros2 pkg`, and `colcon --packages-*` arguments to `so101_gazebo_demo_cpp`;
@@ -466,19 +359,24 @@ In the files listed by `CURRENT_OPERATOR_FILES`:
 
 Do not run replacement commands over any historical directory.
 
-- [ ] **Step 4: Run the documentation contract and verify GREEN**
+- [ ] **Step 3: Verify current operational references migrated**
 
 Run:
 
 ```zsh
 cd /data/work/ws_moveit
-PYTHONNOUSERSITE=1 python3 -m pytest -q \
-  src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py
+git grep -n -E \
+  'src/so101_gazebo_demo(/|$)|install/so101_gazebo_demo(/|$)|ros2 (run|launch) so101_gazebo_demo( |$)|ros2 pkg (prefix|executables) so101_gazebo_demo( |$)|packages-(select|up-to).*so101_gazebo_demo( |$)' \
+  -- .agents .idea docs/pick-place-architecture.md docs/pick-place-launch-parameters.md \
+  src/pick_place_common/README.md \
+  src/so101_gazebo_demo_cpp/README.md src/so101_gazebo_demo_cpp/docs \
+  > /tmp/so101-package-rename-current-docs-after.log || true
+test ! -s /tmp/so101-package-rename-current-docs-after.log
 ```
 
-Expected: all rename-contract tests PASS.
+Expected: the after-audit file is empty. C++ namespace/include references are not part of the package/path audit and remain unchanged.
 
-- [ ] **Step 5: Prove historical evidence was not rewritten**
+- [ ] **Step 4: Prove historical evidence was not rewritten**
 
 Run:
 
@@ -492,7 +390,7 @@ git diff --exit-code 65b384ad46c3dbc6b164f84cf409026c5058a527 -- \
 
 Expected: exit 0 with no diff. For `docs/superpowers/plans` and `docs/superpowers/specs`, inspect `git diff --name-status` and allow only this migration's dated plan/spec documents.
 
-- [ ] **Step 6: Commit current documentation and its contract**
+- [ ] **Step 5: Commit current documentation**
 
 ```zsh
 cd /data/work/ws_moveit
@@ -503,8 +401,7 @@ git add -- \
   docs/pick-place-architecture.md docs/pick-place-launch-parameters.md \
   src/pick_place_common/README.md \
   src/so101_gazebo_demo_cpp/README.md \
-  src/so101_gazebo_demo_cpp/docs \
-  src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py
+  src/so101_gazebo_demo_cpp/docs
 git diff --cached --check
 git commit -m 'docs(so101): use C++ ROS package identity'
 ```
@@ -728,7 +625,9 @@ Run:
 cd /data/work/ws_moveit
 RENAME_EVIDENCE_ROOT=$(cat /tmp/so101-package-rename-latest)
 PYTHONNOUSERSITE=1 python3 -m pytest -q \
-  src/so101_gazebo_demo_cpp/test/test_package_rename_contract.py
+  src/so101_gazebo_demo_cpp/test/test_package_layout.py \
+  src/pick_place_common/test/test_package_contract.py \
+  src/so101_gazebo_demo_py/test/test_provenance.py
 git diff --check
 git status --short --branch
 git log -5 --oneline
