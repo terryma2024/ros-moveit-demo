@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package_root="$(cd "${script_dir}/../.." && pwd)"
 workspace_root="$(cd "${package_root}/../.." && pwd)"
-log_root="${workspace_root}/build/panda_gazebo_demo/test_logs"
+log_root="${workspace_root}/build/panda_gazebo_demo_cpp/test_logs"
 runs=1
 label="e2e"
 
@@ -172,7 +172,7 @@ fi
 
 printf 'ROS_DOMAIN_ID=%s\nGZ_PARTITION=%s\n' \
   "${ROS_DOMAIN_ID}" "${GZ_PARTITION}" >"${run_root}/environment.txt"
-start_new_session ros2 launch panda_gazebo_demo panda_gazebo.launch.py \
+start_new_session ros2 launch panda_gazebo_demo_cpp panda_gazebo.launch.py \
   headless:=true run_state_machine:=false >"${run_root}/launch.log" 2>&1 &
 launch_pid=$!
 python3 "${script_dir}/readiness_probe.py" --timeout 420 \
@@ -223,7 +223,7 @@ for ((run = 1; run <= runs; ++run)); do
     >"${run_root}/run_${run}_reset_planning_scene.txt" 2>&1
 
   session="${label}-${ROS_DOMAIN_ID}-$$-${run}-$(date +%s%N)"
-  if ! timeout 180 ros2 run panda_gazebo_demo pick_place_state_machine \
+  if ! timeout 180 ros2 run panda_gazebo_demo_cpp pick_place_state_machine \
       --ros-args -p mode:=execute \
       -p simulation_session_id:="${session}" \
       -p checkpoint_path:="${checkpoint}" >"${run_log}" 2>&1; then

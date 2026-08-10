@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package_root="$(cd "${script_dir}/../.." && pwd)"
 workspace_root="$(cd "${package_root}/../.." && pwd)"
-log_root="${workspace_root}/build/panda_gazebo_demo/test_logs"
+log_root="${workspace_root}/build/panda_gazebo_demo_cpp/test_logs"
 
 unset COLCON_CURRENT_PREFIX
 set +u
@@ -155,7 +155,7 @@ run_machine() {
   local checkpoint="$2"
   local session="$3"
   shift 3
-  timeout 180 ros2 run panda_gazebo_demo pick_place_state_machine \
+  timeout 180 ros2 run panda_gazebo_demo_cpp pick_place_state_machine \
     --ros-args "$@" -p simulation_session_id:="${session}" \
     -p checkpoint_path:="${checkpoint}" >"${log_file}" 2>&1
 }
@@ -270,7 +270,7 @@ fi
 
 printf 'ROS_DOMAIN_ID=%s\nGZ_PARTITION=%s\n' \
   "${ROS_DOMAIN_ID}" "${GZ_PARTITION}" >"${run_root}/environment.txt"
-setsid ros2 launch panda_gazebo_demo panda_gazebo.launch.py \
+setsid ros2 launch panda_gazebo_demo_cpp panda_gazebo.launch.py \
   headless:=true run_state_machine:=false >"${run_root}/launch.log" 2>&1 &
 launch_pid=$!
 
