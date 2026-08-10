@@ -1148,3 +1148,105 @@ GREEN command: the same focused test, followed by clean build/source/prefix and 
 
 If IK cannot preserve y/z/orientation and all existing path/collision contracts, record a plan-only valid failure;
 do not compensate by changing a second scalar or any ceiling.
+
+## Approved execution addendum: release-stage orientation telemetry and GUI qualification (2026-08-10)
+
+This addendum implements Design §18 and supersedes the earlier detach-before-open ordering. It changes only
+release-phase validation semantics; the EXP081 motion targets and every listed physics/controller/safety value
+remain fixed.
+
+### Task 17: Make release-stage orientation telemetry-only while preserving final pose validation
+
+**Files:**
+- Modify: `src/so101_gazebo_demo/include/so101_gazebo_demo/pick_place/so101_motion_planner.hpp`
+- Modify: `src/so101_gazebo_demo/src/pick_place/so101_motion_planner.cpp`
+- Modify: `src/so101_gazebo_demo/include/so101_gazebo_demo/pick_place/so101_attachment_contracts.hpp`
+- Modify: `src/so101_gazebo_demo/src/pick_place/so101_attachment_contracts.cpp`
+- Modify: `src/so101_gazebo_demo/src/pick_place/so101_joint_motion_adapter.cpp`
+- Modify: `src/so101_gazebo_demo/src/pick_place/pick_place_runtime.cpp`
+- Test: `src/so101_gazebo_demo/test/pick_place/test_so101_motion_planner.cpp`
+- Test: `src/so101_gazebo_demo/test/pick_place/test_so101_joint_motion_adapter.cpp`
+- Test: `src/so101_gazebo_demo/test/pick_place/test_so101_attachment_contracts.cpp`
+- Test: `src/so101_gazebo_demo/test/pick_place/test_so101_pick_place_runtime.cpp`
+- Verify existing: `src/so101_gazebo_demo/test/pick_place/test_final_placement_evaluator.cpp`
+- Update: `docs/experiments/so101-physical-outcome-validation-experiment-ledger.md`
+
+**Interfaces:**
+- Produces: `usesAttachedPlanningShadow(State) noexcept` and
+  `enforcesPlanningShadowOrientation(State) noexcept`.
+- Changes: `evaluatePlanningShadowDivergence` accepts state and always evaluates position while making
+  orientation failure state-aware.
+- Preserves: final `max_upright_tilt_rad` evaluation and every non-orientation safety gate.
+
+- [ ] **Step 1: Write RED behavior tests**
+
+Add tests with hand-derived fixtures:
+
+```cpp
+TEST(SO101JointMotionAdapter, ReleaseDescentAllowsShadowTiltButStillRejectsPositionDivergence);
+TEST(SO101JointMotionAdapter, LiftStillRejectsTheSameShadowTilt);
+TEST(SO101MotionPlanner, RetreatUsesAttachedPlanningShadowAfterPhysicalRelease);
+TEST(SO101AttachmentContracts, ReleaseStageShadowOrientationIsTelemetryOnly);
+TEST(SO101PickPlaceRuntime, RetreatAllowsReleasedCupToRemainOnSupportWhileShadowStaysAttached);
+```
+
+The production mutation caught by these tests is treating all attached-shadow states as physical carrying with
+one global orientation predicate.
+
+- [ ] **Step 2: Run RED and record the expected failures**
+
+```bash
+source /opt/ros/jazzy/setup.zsh
+colcon build --base-paths src/so101_gazebo_demo --packages-select so101_gazebo_demo --cmake-args -DBUILD_TESTING=ON
+ctest --test-dir build/so101_gazebo_demo -R 'test_so101_(motion_planner|joint_motion_adapter|attachment_contracts|pick_place_runtime)' --output-on-failure
+```
+
+Expected: release-descent angle and retreat attached-shadow assertions fail against `b021d5a`; the LIFT and
+position controls remain GREEN.
+
+- [ ] **Step 3: Implement the minimal state-aware semantics**
+
+Implement exact state behavior:
+
+```cpp
+usesAttachedPlanningShadow(LIFT | MOVE_ABOVE_PLACE | DESCEND_TO_PLACE |
+                           RECOVER_* carrying states | RETREAT) == true;
+enforcesPlanningShadowOrientation(DESCEND_TO_PLACE | RETREAT) == false;
+```
+
+Use the first predicate for MoveIt attached scene/path validation. Use the second only for the orientation
+failure branch; continue recording orientation metrics. In `MotionContract`, make RETREAT object motion
+telemetry-only because Gazebo physics owns the released cup; do not reuse that exception for other detached
+motions.
+
+- [ ] **Step 4: Run focused GREEN, package tests and build provenance checks**
+
+```bash
+ctest --test-dir build/so101_gazebo_demo -R 'test_so101_(motion_planner|joint_motion_adapter|attachment_contracts|pick_place_runtime)|test_final_placement_evaluator' --output-on-failure
+ctest --test-dir build/so101_gazebo_demo --output-on-failure
+source /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install/setup.zsh
+ros2 pkg prefix so101_gazebo_demo
+sha256sum build/so101_gazebo_demo/pick_place_state_machine install/so101_gazebo_demo/lib/so101_gazebo_demo/pick_place_state_machine
+```
+
+Expected: all package tests pass, final tipped-cup rejection remains GREEN, and build/install executable hashes
+match.
+
+- [ ] **Step 5: Run one GUI FULL_RESTART qualification**
+
+Pre-register a unique experiment, verify empty domain/partition and no existing stack, then create one tmux-held
+GUI process after sourcing `~/gui-env.zsh`, Jazzy and this worktree overlay. Launch with `run_mode:=execute`,
+`start_simulation:=true`, `headless:=false`, unique `simulation_session_id`, checkpoint and diagnostics paths.
+Capture a fresh baseline and terminal screenshot with `scripts/capture-ai-station.sh`; freeze Gazebo pose,
+attachment topic, MoveIt scene, controller and joint evidence before stopping only the owned tmux process tree.
+
+- [ ] **Step 6: Record the result and commit the scoped change**
+
+Update the experiment from `PLANNED -> RUNNING -> VALID|INVALID`, add a checkpoint, run `git diff --check`,
+stage only Design §18, this plan addendum, scoped source/tests and the physical-outcome ledger, then commit:
+
+```bash
+git commit -m "fix(so101): validate cup pose after physical release"
+```
+
+Do not push, merge, run a second experiment, or claim five-run acceptance in this task.

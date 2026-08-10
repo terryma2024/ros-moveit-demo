@@ -7,12 +7,13 @@ success_contract: 同一提交和已校准策略下五次连续 VALID execute，
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
 branch: codex/so101-physical-outcome-validation
 base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
-current_commit: eacdff2
-evidence_root: /tmp/so101-debug-physical-outcome-xZlFSI
+current_commit: b021d5a
+evidence_root: /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE
 confirmed_conclusions:
   - Task 13 branch-tree build、三包测试、dry-run trace 与 uncalibrated plan-only fail-closed gate 已验证（VER-PHYSICAL-001）
   - 用户已批准 Bullet compound-owner support + live-calibrated bounded-negative-depth noise 下限（APR-PHYSICAL-001）
   - compound-owner support 与 bounded-negative-depth policy regression 已按 RED→GREEN 验证（TDD-PHYSICAL-001）
+  - C++ 同步 EXP081 后的首次 FULL_RESTART 在 DESCEND_TO_PLACE 后被原有 planning-shadow orientation hard gate 有效拒绝（HEADLESS-PHYSICAL-018）
 disproven_routes:
   - 0.75 mm seat
   - independent CLOSE seat motion
@@ -20,10 +21,10 @@ disproven_routes:
   - safety-gate relaxation
   - unregistered fixed-port retry fixture
 open_hypotheses:
-  - 每个 CALIBRATION_REQUIRED 字段的 live calibration 值
-  - minimum_support_contact_depth_m 与其他 physical-outcome threshold 的有效 live calibration
-latest_checkpoint: CP-PHYSICAL-006
-next_experiment: CAL-PHYSICAL-003
+  - EXP081 在 C++ 运行时下降末端产生 0.103202253316 rad planning-shadow axial tilt divergence 的首因
+  - 该 intermediate orientation gate 是否仍属于最终 physical-outcome 策略要求保留的硬安全边界
+latest_checkpoint: CP-PHYSICAL-008
+next_experiment: TDD-PHYSICAL-002
 ```
 
 ## VER-PHYSICAL-001：Task 13 自动验证
@@ -1585,4 +1586,147 @@ runtime_validation:
   reason: source synchronization and offline regression only; do not claim live physical success from unit/config tests
 owned_processes: NONE
 decision: READY_FOR_SEPARATE_CLEAN_LIVE_GAZEBO_QUALIFICATION
+```
+
+## HEADLESS-PHYSICAL-018：同步 EXP081 后的干净单次抓取放置验证
+
+```yaml
+experiment_id: HEADLESS-PHYSICAL-018
+status: VALID
+prior_experiment: HEADLESS-PHYSICAL-017
+hypothesis: 同步 Python EXP081 的抓取、搬运、下降和释放策略后，C++ 运行时可在不放宽任何硬安全边界的情况下完成一次物理结果导向的端到端抓取放置
+prediction: workflow 到达 DONE；杯子依赖 Gazebo 物理完成搬运与释放；MoveIt shadow 在 OPEN_GRIPPER 和 RETREAT 后才 detach；最终杯体处于目标容忍范围且稳定
+single_variable: C++ runtime 使用已同步的 frozen Python EXP081 strategy；相对旧 C++ HEADLESS-PHYSICAL-017 不改变 physics、geometry、mass、friction、controller、gains 或硬安全上限
+lifecycle: FULL_RESTART
+preconditions:
+  - source HEAD b021d5a 且 worktree 在启动前除本 PLANNED 账本条目外无其他改动
+  - install overlay、installed policy 与 source/build hashes 一致
+  - ROS_DOMAIN_ID 223 无既有 node
+  - GZ_PARTITION so101-physical-outcome-headless-018-20260810 无既有 topic
+  - ai-station 无另一套 Gazebo、MoveIt 或 pick_place_state_machine
+success_criteria:
+  - 完整 trace 到 DONE，进程无业务失败
+  - Gazebo task object 未使用 virtual attach，最终稳定 pose 满足现有 final-outcome policy
+  - MoveIt Planning Scene 最终 attached 集合不含 plastic_cup，world 集合包含同步后的 plastic_cup
+  - arm/gripper controllers active，关节反馈与最终稳定性门通过
+  - 所有既有 collision、penetration、shadow divergence 与 recovery 硬边界保持不变并通过
+failure_criteria:
+  - 任一有效 workflow、controller、physics、Planning Scene 或 final-outcome gate 失败
+invalid_criteria:
+  - source/install/policy provenance 不一致
+  - domain/partition、初态、进程或证据被其他 stack 污染
+  - launch 未进入 execute 或证据未在清理前冻结
+provenance:
+  source_commit: b021d5a
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install/so101_gazebo_demo/lib/so101_gazebo_demo/pick_place_state_machine
+  runtime_sha256: 0caec2fe23fa56c7fa09c9a635e302810239f527b0533e526f9fef99d0c18d41
+  source_policy_manifest_sha256: b0ef81661e6f855c9f7ead41270f4c0a166a688f00911ff75adcfb0517f80bdd
+  runtime_policy_bundle_sha256: bfdb5ffdb2379b7a3a906869867b8422f8ee2af63efbad4813b919f735090ea2
+  ros_domain_id: 223
+  gz_partition: so101-physical-outcome-headless-018-20260810
+commands:
+  - command: ros2 launch so101_gazebo_demo so101_pick_place.launch.py run_mode:=execute start_simulation:=true headless:=true simulation_session_id:=headless-018-20260810 checkpoint_path:=/tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/checkpoint.json planning_diagnostics_dir:=/tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/planning
+    exit_code: 1
+    note: pick_place_state_machine child exited 1；launch parent was interrupted only after evidence freeze and therefore did not emit launch.exit
+evidence_root: /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE
+cleanup_ownership: only the tmux session so101-physical-cpp-test-018, its launch process tree, and ROS_DOMAIN_ID 223 daemon if created
+acceptance_counting: single clean qualification only；not a five-consecutive success claim
+safety_disposition: freeze evidence before cleanup；do not reset or open unsupported held object after a hard-gate failure
+started_at: 2026-08-10T11:28:36+08:00
+ended_at: 2026-08-10T11:32:09+08:00
+observed:
+  - trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> ERROR
+  - original_failure: PLANNING_SHADOW_DIVERGENCE
+  - reported_failure_after_recovery: UNSAFE_RECOVERY_OBSERVATION
+  - failed_state: DESCEND_TO_PLACE
+  - planning_shadow_position_divergence_m: 0.000323127093308
+  - planning_shadow_position_limit_m: 0.005
+  - planning_shadow_axial_tilt_divergence_rad: 0.103202253316
+  - planning_shadow_orientation_limit_rad: 0.070
+  - arm_stationary_after_cancel: true
+  - cancel_succeeded: true
+  - gazebo_task_object_attached: false
+  - moveit_task_object_attached: true
+  - gripper_open: false
+  - gazebo_live_pose_xyz_m: [-0.088646, -0.261159, 0.227449]
+  - gazebo_live_pose_rpy_rad: [-0.071009, 0.164225, -0.527523]
+  - controllers_active: [arm_controller, gripper_controller, joint_state_broadcaster]
+  - final_outcome_evaluator_reached: false
+  - visual_evidence: NOT_CAPTURED_HEADLESS
+evidence:
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/source-head.txt
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/frozen-launch.log
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/failure-gazebo-attachment.txt
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/failure-joint-states.txt
+  - /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE/failure-evidence.sha256
+conclusion: 本轮环境与 provenance 有效，但单次抓取放置失败；EXP081 同步策略通过抓取、微抬升、搬运和 MOVE_ABOVE_PLACE，下降后杯体 orientation shadow divergence 超过未放宽的 0.070 rad 硬门，系统在 OPEN_GRIPPER 前安全停止
+decision: STOP_AFTER_ONE_REQUESTED_RUN_AND_REPORT
+next_experiment: NONE_PENDING_USER_DIRECTION
+```
+
+## CP-PHYSICAL-008：首次 C++ EXP081 live run 已冻结并清理
+
+```yaml
+checkpoint_id: CP-PHYSICAL-008
+recorded_at: 2026-08-10T11:32:09+08:00
+last_valid_experiment: HEADLESS-PHYSICAL-018
+current_hypothesis: DESCEND_TO_PLACE 的杯体轴向倾斜增长触发保留的 planning-shadow orientation hard gate
+working_tree_status: docs/experiments/so101-physical-outcome-validation-experiment-ledger.md modified only
+owned_processes: NONE
+preserved_processes: NONE
+confirmed_conclusions:
+  - source、build、installed executable 与 source/install policy hashes 一致
+  - ROS_DOMAIN_ID 223 和专用 GZ_PARTITION 启动前为空，清理后再次为空
+  - Gazebo physical attachment 全程保持 detached；MoveIt planning shadow 在失败点仍 attached
+  - 三个 controller 均 active，轨迹执行成功后由 post-motion hard gate 拒绝继续
+  - 没有进入 OPEN_GRIPPER、RETREAT、DETACH_MOVEIT 或 final-outcome evaluator
+open_risks:
+  - 本轮为 headless，无 GUI screenshot，不提供视觉验收
+  - 尚未区分倾斜来自下降轨迹动态、抓持载荷偏心，还是 C++ shadow 参考姿态语义
+next_command: NONE_PENDING_USER_DIRECTION
+```
+
+## AUTH-RELEASE-001：释放阶段角度遥测与 GUI 复验授权
+
+```yaml
+authorization_id: AUTH-RELEASE-001
+approved_at: 2026-08-10 Asia/Shanghai
+observed_source: HEADLESS-PHYSICAL-018
+approved_behavior:
+  - LIFT 与 MOVE_ABOVE_PLACE 继续硬门控 planning-shadow position 和 orientation
+  - DESCEND_TO_PLACE 与 RETREAT 保留 position、安全和 evidence hard gates；orientation 仅记录 telemetry
+  - RETREAT 期间 MoveIt shadow 保持 attached，Gazebo 杯体由物理仿真独立运动
+  - 释放、retreat 和 MoveIt detach 后，以 final target region、support、upright tilt 和 stability 决定结果
+  - 自动回归通过后执行一次唯一 GUI FULL_RESTART 实验
+unchanged:
+  - physics engine、geometry、mass、friction、controller/gains 和 EXP081 motion target
+  - collision、penetration、position divergence、freshness、finite 和 controller safety gates
+  - final max_upright_tilt_rad 0.08726646259971647
+publication_scope: commit permitted after regression and one GUI result；no push or merge
+```
+
+## TDD-PHYSICAL-002：release-stage state-aware shadow validation
+
+```yaml
+experiment_id: TDD-PHYSICAL-002
+status: PLANNED
+prior_experiment: HEADLESS-PHYSICAL-018
+hypothesis: 当前失败来自 carrying、planning-shadow membership 与 orientation enforcement 共用一个全局 predicate；拆分状态语义即可允许物理释放，同时保持搬运与最终姿态门控
+prediction: 新回归先在 b021d5a 行为上失败；最小实现后 DESCEND_TO_PLACE/RETREAT angle telemetry 通过、同状态 position 超限仍失败、LIFT angle 超限仍失败、final tipped cup 仍失败
+single_variable: release-stage orientation enforcement only
+success_criteria:
+  - focused tests RED for the intended missing behavior
+  - focused and package CTest GREEN after minimal implementation
+  - no production policy threshold or motion target changes
+failure_criteria:
+  - test cannot isolate state semantics or any unchanged safety regression fails
+invalid_criteria:
+  - build/install provenance mismatch or unrelated source changes enter the diff
+decision: PENDING
+next_experiment: GUI-PHYSICAL-019_AFTER_GREEN
 ```

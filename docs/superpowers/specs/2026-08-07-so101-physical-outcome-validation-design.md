@@ -610,3 +610,42 @@ cup/TCP pose、tilt/orientation drift、q6 feedback/velocity 与 shadow divergen
 不扩大到禁止层。入选候选至少三次独立 `FULL_RESTART` qualification，任一 valid failure 退回本层。
 只有冻结 commit/policy 的 full suite、dry-run、plan-only、headless、GUI 与连续五次最终物理结果
 `VALID_SUCCESS` 全部成立后，才允许 push/merge。
+
+## 18. 2026-08-10 经用户批准的释放阶段角度遥测 addendum
+
+### 18.1 问题边界
+
+`HEADLESS-PHYSICAL-018` 在进入 `DESCEND_TO_PLACE`、下降轨迹执行前触发
+`PLANNING_SHADOW_DIVERGENCE`。位置 divergence 为 `0.000323127093308 m`，低于保留的
+`0.005 m` 上限；杯体轴向角度 divergence 为 `0.103202253316 rad`，超过旧的 `0.070 rad`
+中间门限。该门限阻止了物理释放，因此不能观察释放后由桌面支撑、重力、摩擦和夹爪撤离共同决定
+的最终杯体结果。
+
+### 18.2 批准语义
+
+- `LIFT` 与 `MOVE_ABOVE_PLACE` 继续把 planning-shadow position 和 orientation divergence 作为
+  hard gate，防止搬运阶段明显失稳。
+- `DESCEND_TO_PLACE` 与 `RETREAT` 保留 finite、freshness、MoveIt attached membership、Gazebo
+  forward-attachment forbidden、position divergence、碰撞、penetration、controller 和 arm stability
+  hard gates；orientation divergence 继续记录 metric，但不阻止下降、开爪或撤离。
+- `RETREAT` 是“物理已释放、planning shadow 尚 attached”的独立语义：Gazebo 杯体不再被要求跟随
+  TCP，MoveIt attached object 仍参与 retreat collision planning；`RETREAT` 成功后才执行
+  `DETACH_MOVEIT`。
+- 当前正向顺序固定为
+  `DESCEND_TO_PLACE -> OPEN_GRIPPER -> RETREAT -> DETACH_MOVEIT -> WAIT_RELEASE_SETTLE ->
+  VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> DONE`。本节替代此前“OPEN_GRIPPER 前 detach
+  MoveIt”的旧表述。
+- 释放阶段的 angle telemetry 不等于忽略最终姿态。post-release evaluator 继续要求 target region、
+  intended support contact、support height、`max_upright_tilt_rad`、linear/angular stability、无 gripper
+  contact、Gazebo detached 和 MoveIt detached；当前 production upright limit 保持
+  `0.08726646259971647 rad`。
+- physics engine、geometry、mass、friction、controller/gains、motion target、position divergence、
+  penetration 和 collision ceiling 均不因本修订改变。
+
+### 18.3 验证
+
+自动回归必须证明：同一超角度样本在 `LIFT` 仍失败，在 `DESCEND_TO_PLACE`/`RETREAT` 仅产生
+telemetry；同一超位置样本在释放阶段仍失败；retreat 使用 attached MoveIt shadow 规划但不要求
+Gazebo 杯体随 TCP 移动；最终 tipped cup 仍由 `FINAL_PLACEMENT_TIPPED` 拒绝。完成 focused 与包级
+GREEN 后，以唯一 GUI `FULL_RESTART` 栈执行一次，冻结日志、Gazebo pose、MoveIt membership、
+controller/joint evidence 和本轮新截图。
