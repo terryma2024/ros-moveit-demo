@@ -30,10 +30,10 @@
 ```bash
 cd /data/work/ws_moveit
 source /opt/ros/jazzy/setup.zsh
-colcon build --packages-select so101_gazebo_demo --symlink-install
+colcon build --packages-select so101_gazebo_demo_cpp --symlink-install
 source install/setup.zsh
 PYTHONNOUSERSITE=1 colcon test \
-  --packages-select so101_gazebo_demo \
+  --packages-select so101_gazebo_demo_cpp \
   --event-handlers console_direct+
 colcon test-result --verbose
 ```
@@ -43,9 +43,9 @@ colcon test-result --verbose
 验证运行产物：
 
 ```bash
-ros2 pkg prefix so101_gazebo_demo
-ros2 pkg executables so101_gazebo_demo
-stat install/so101_gazebo_demo/lib/so101_gazebo_demo/pick_place_state_machine
+ros2 pkg prefix so101_gazebo_demo_cpp
+ros2 pkg executables so101_gazebo_demo_cpp
+stat install/so101_gazebo_demo_cpp/lib/so101_gazebo_demo_cpp/pick_place_state_machine
 ```
 
 定向测试先行，包级测试随后。精确测试名从当前 `CMakeLists.txt`、`colcon test-result --all` 或 build 目录发现，不从旧记录猜。
@@ -64,10 +64,10 @@ stat install/so101_gazebo_demo/lib/so101_gazebo_demo/pick_place_state_machine
 常用入口需先 `--show-args` 复核当前版本：
 
 ```bash
-ros2 launch so101_gazebo_demo so101_pick_place.launch.py --show-args
-ros2 launch so101_gazebo_demo so101_pick_place.launch.py \
+ros2 launch so101_gazebo_demo_cpp so101_pick_place.launch.py --show-args
+ros2 launch so101_gazebo_demo_cpp so101_pick_place.launch.py \
   run_mode:=dry_run start_simulation:=false
-ros2 launch so101_gazebo_demo so101_pick_place.launch.py \
+ros2 launch so101_gazebo_demo_cpp so101_pick_place.launch.py \
   run_mode:=plan_only start_simulation:=true headless:=true \
   simulation_session_id:=<unique-id>
 ```
@@ -91,7 +91,7 @@ execute 调试时先用 `stop_after:=<STATE>` 将动作缩到首个失败边界�
 ## 视觉验收
 
 1. 运行本轮 build 对应的 GUI stack。
-2. 在加载 `~/gui-env.zsh` 和正确 ROS overlay 的 tmux shell 中运行 `ros2 run so101_gazebo_demo tile_ai_station_guis.py`，要求 `LAYOUT_OK`：RViz 左、Gazebo 右，各约占工作区 50%。
+2. 在加载 `~/gui-env.zsh` 和正确 ROS overlay 的 tmux shell 中运行 `ros2 run so101_gazebo_demo_cpp tile_ai_station_guis.py`，要求 `LAYOUT_OK`：RViz 左、Gazebo 右，各约占工作区 50%。
 3. 运行 `<repo-root>/scripts/capture-ai-station.sh` 保存 baseline screenshot，并实际检查新的 `desktop.png` 已呈现左右分屏、无遮挡且两侧场景可辨认。
 4. 使用 CUA 时按 `snapshot -> action -> fresh snapshot`；调整窗口内部视角后再次确认分屏没有被破坏。
 5. 完成本轮动作后再次运行 `<repo-root>/scripts/capture-ai-station.sh`。

@@ -89,7 +89,7 @@ ros2 topic echo /coke/contacts --once
 Planning Scene 可使用已安装的观察 CLI：
 
 ```bash
-ros2 run so101_gazebo_demo so101_moveit_scene observe
+ros2 run so101_gazebo_demo_cpp so101_moveit_scene observe
 ```
 
 命令或 topic 不存在时，先从 installed launch/config 和 `ros2 topic list -t` / `gz topic -l` 重新发现，不把缺少命令当成业务根因。

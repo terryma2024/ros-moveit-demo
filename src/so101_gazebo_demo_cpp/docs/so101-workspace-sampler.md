@@ -8,21 +8,21 @@ start or query move_group, Gazebo, controllers, RViz, or a live Planning Scene.
 Run the quick profile:
 
 ```bash
-ros2 launch so101_gazebo_demo so101_workspace_sample.launch.py \
+ros2 launch so101_gazebo_demo_cpp so101_workspace_sample.launch.py \
   output_dir:=/tmp/so101-workspace-quick profile:=quick
 ```
 
 Run the default 30-minute full profile:
 
 ```bash
-ros2 launch so101_gazebo_demo so101_workspace_sample.launch.py \
+ros2 launch so101_gazebo_demo_cpp so101_workspace_sample.launch.py \
   output_dir:=/tmp/so101-workspace-full profile:=full
 ```
 
 Resume an interrupted run or append another equal budget window after `budget_exhausted`:
 
 ```bash
-ros2 launch so101_gazebo_demo so101_workspace_sample.launch.py \
+ros2 launch so101_gazebo_demo_cpp so101_workspace_sample.launch.py \
   output_dir:=/tmp/so101-workspace-full profile:=full resume:=true
 ```
 

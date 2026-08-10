@@ -156,7 +156,7 @@ ros2 launch panda_gazebo_demo panda_gazebo.launch.py run_state_machine:=true mod
 Fresh SO-101 target:
 
 ```bash
-ros2 launch so101_gazebo_demo so101_pick_place.launch.py start_simulation:=true run_mode:=plan_only plan_only_state:=MOVE_ABOVE_OBJECT simulation_session_id:=so101-plan-1
+ros2 launch so101_gazebo_demo_cpp so101_pick_place.launch.py start_simulation:=true run_mode:=plan_only plan_only_state:=MOVE_ABOVE_OBJECT simulation_session_id:=so101-plan-1
 ```
 
 `LIFT` is a deep target: opening, approach, descent, grasp, and attachment
@@ -192,7 +192,7 @@ assume plan-only restored the initial world.
 
 ```bash
 ros2 pkg prefix panda_gazebo_demo
-ros2 pkg prefix so101_gazebo_demo
+ros2 pkg prefix so101_gazebo_demo_cpp
 command -v ros2
 printf '%s\n' "$AMENT_PREFIX_PATH"
 ps -eo pid,ppid,lstart,args | rg 'gz sim|move_group|controller_manager|pick_place'

@@ -3,7 +3,7 @@
 The offline TCP 6D workspace sampler is documented in
 [docs/so101-workspace-sampler.md](docs/so101-workspace-sampler.md).
 
-`so101_gazebo_demo` is the self-contained SO-101 description, Gazebo, controller,
+`so101_gazebo_demo_cpp` is the self-contained SO-101 description, Gazebo, controller,
 MoveIt, and geometry-tool package used by `/data/work/ws_moveit`.
 
 Its pick-place workflow engine comes from `pick_place_common`. This package
@@ -37,10 +37,10 @@ Start a fresh shell that has not sourced the original SO-101 workspace:
 ```bash
 cd /data/work/ws_moveit
 source /opt/ros/jazzy/setup.zsh
-rosdep check --from-paths src/so101_gazebo_demo --ignore-src
-colcon build --packages-up-to so101_gazebo_demo --cmake-clean-cache
+rosdep check --from-paths src/so101_gazebo_demo_cpp --ignore-src
+colcon build --packages-up-to so101_gazebo_demo_cpp --cmake-clean-cache
 source install/setup.zsh
-PYTHONNOUSERSITE=1 colcon test --packages-select so101_gazebo_demo --event-handlers console_direct+
+PYTHONNOUSERSITE=1 colcon test --packages-select so101_gazebo_demo_cpp --event-handlers console_direct+
 colcon test-result --verbose
 ```
 
@@ -50,10 +50,10 @@ After sourcing `/opt/ros/jazzy/setup.zsh` and this workspace's
 `install/setup.zsh`, the four public launch entry points are:
 
 ```bash
-ros2 launch so101_gazebo_demo so101_display.launch.py
-ros2 launch so101_gazebo_demo so101_controller.launch.py
-ros2 launch so101_gazebo_demo so101_gazebo.launch.py
-ros2 launch so101_gazebo_demo so101_moveit.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_display.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_controller.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_gazebo.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_moveit.launch.py
 ```
 
 The display launch provides URDF/RViz inspection. The controller launch starts
@@ -67,7 +67,7 @@ The installed calculator derives the 20 mm-depth Coke pre-open and contact
 angles directly from the package's binary STL triangles:
 
 ```bash
-PYTHONNOUSERSITE=1 ros2 run so101_gazebo_demo gripper_preopen_calc.py
+PYTHONNOUSERSITE=1 ros2 run so101_gazebo_demo_cpp gripper_preopen_calc.py
 ```
 
 ## GUI tiling on ai-station
@@ -79,7 +79,7 @@ GNOME display environment and place RViz on the left and Gazebo on the right:
 source ~/gui-env.zsh
 source /opt/ros/jazzy/setup.zsh
 source /data/work/ws_moveit/install/setup.zsh
-ros2 run so101_gazebo_demo tile_ai_station_guis.py
+ros2 run so101_gazebo_demo_cpp tile_ai_station_guis.py
 ```
 
 ## Provenance
@@ -119,7 +119,7 @@ source install/setup.zsh
 export ROS_DOMAIN_ID=<existing-simulation-domain>
 export GZ_PARTITION=<existing-gazebo-partition>
 command -v bun && bun --version
-ros2 launch so101_gazebo_demo so101_teleop.launch.py \
+ros2 launch so101_gazebo_demo_cpp so101_teleop.launch.py \
   bind_address:=127.0.0.1 \
   simulation_session_id:=<new-session-id>
 ```
