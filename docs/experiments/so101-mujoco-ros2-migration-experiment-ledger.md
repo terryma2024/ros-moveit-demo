@@ -22,8 +22,8 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-004
-next_experiment: EXP-001
+latest_checkpoint: CP-005
+next_experiment: EXP-002
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -71,6 +71,40 @@ disproven_routes:
 open_risks:
   - No MuJoCo dependency interface or runtime behavior has been proven yet.
 next_command: Start Task 3 with the apt mujoco_ros2_control 0.0.3 binary probe and define EXP-001 before any runtime-affecting experiment.
+```
+
+## Experiment EXP-001
+
+```yaml
+experiment_id: EXP-001
+status: VALID
+hypothesis: The installed apt mujoco_ros2_control 0.0.3 provider exactly satisfies the pinned package, prefix, file-hash, and service-interface contract.
+independent_variable: Read-only execution of the dependency probe against the apt provider.
+controlled_variables: ROS Jazzy underlay /opt/ros/jazzy; no overlay; no simulator; no ROS graph mutation; no hardware.
+acceptance_criteria: Probe exit 0; all four prefixes equal /opt/ros/jazzy; control version starts 0.0.3-; exact ResetWorld, SetPause, and StepSimulation definitions; all pinned file SHA-256 values match.
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-001-dependency-probe.json
+owned_processes: NONE
+result: Probe exit 0; all required prefixes, versions, interfaces, and pinned file hashes matched. Evidence SHA-256 is 8c2b83d7821f79e618c3ffaf5c6ead133853434367a28bf28d41e6ef978ab104.
+next_command: NONE
+```
+
+## Checkpoint CP-005
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-001
+current_hypothesis: Atomic evidence can be implemented against the proven apt 0.0.3 plugin API.
+working_tree_status: Task 3 dependency lock, probe, contract tests, package dependencies, and this checkpoint are pending their single scoped commit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no session or process was stopped.
+confirmed_conclusions:
+  - The apt provider is release 0.0.3 at /opt/ros/jazzy and no source fallback is required.
+  - EXP-001 is VALID with exact versions, prefixes, service definitions, and file hashes recorded under the evidence root.
+disproven_routes:
+  - Floating main and unpinned source dependency resolution remain forbidden.
+open_risks:
+  - The Task 4 atomic evidence plugin has not yet been compiled against the proven API.
+next_command: Run final Task 3 tests, package build, isolation gates, and create the scoped dependency commit.
 ```
 
 ## Checkpoint CP-002
