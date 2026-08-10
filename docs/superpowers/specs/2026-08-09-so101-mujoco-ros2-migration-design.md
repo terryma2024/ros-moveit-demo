@@ -4,6 +4,8 @@
 
 **Atomic schema 裁决：** 2026-08-10 用户批准扩展 schema；以 §10.1 的 session/reset/step/左右指尖原子证据字段为准
 
+**Snapshot-hook architecture amendment：** 2026-08-10 用户已批准 dedicated post-pause state snapshot hook；CP-036/EXP-030 是修订依据。Task 10 reset 资格路径不得再用 `StepSimulation(1)` 唤醒证据，必须按 §10.2 与 §12 使用成功/幂等 `SetPause(true)` 在 `sim_mutex_` 下取得权威只读 snapshot。
+
 **设计基线：** `codex/so101-gazebo-demo-py` @ `8d7913e7f552a40ee627d65be8b873ac16748bc9`
 
 **实现 main 基线：** `d300e7a41fb274d6d7e120699b7040666ea61904`
@@ -82,7 +84,7 @@ Task 10 的 live 证据确认 apt 0.0.3 的 `ResetWorld` 保留 simulation time�
 5. 不覆盖 `/opt/ros/jazzy`，不从 floating `main` 构建，不把 `/data/work/so_arm_ws` 或其他 checkout 当作运行依赖；
 6. 若实施时出现更新的稳定 tag，仍不得自动升级，必须先做设计/API delta review 和新的用户裁决。
 
-最小 upstream patch 只有一个职责：为 reset 成功建立插件可观察的权威事件。插件基类新增带默认空实现的 virtual `on_reset()`，保持现有第三方 plugin 源码兼容；hook 调用位于 central `reset_simulation_state` 内全部 state/interface 更新之后的成功尾部，对每个已初始化 plugin 恰好调用一次。非法 keyframe 在进入 central reset 前返回失败，因此不得调用任何 plugin 的 `on_reset()`。
+最小 upstream patch 只扩展 reset/pause 证据生命周期。插件基类新增默认空实现的 `virtual void on_reset()`、`virtual void on_pause(bool paused)` 与 `virtual void on_state_snapshot(const mjModel * model, const mjData * data, bool paused)`，保持普通第三方 plugin 源码兼容。central `reset_simulation_state` 成功尾部对每个 initialized plugin 恰好调用一次 `on_reset()`；非法 keyframe 调用零次。每次成功 `SetPause(paused=true)`（包括已经 paused 的幂等请求）在 `on_pause(true)` 之后、持有 `sim_mutex_` 且传入 authoritative `mj_data_` 时，对每个 initialized plugin 恰好调用一次 `on_state_snapshot(model, data, true)`；`pause=false` 或失败请求调用零次 snapshot hook。
 
 ## 3. 目标与非目标
 
@@ -436,7 +438,7 @@ URDF 中的 simulation hardware 配置为：
 
 这里存在必须显式处理的版本差异：Jazzy 在线文档和未发布 `main` 已经描述/实现 `FreeJointStatePublisherPlugin` 和 `set_free_joint_state`，但最新稳定 tag 0.0.3（`35ba8174b62d9560093614f981a3d4b978a96036`）中没有对应 message/service。稳定 0.0.3 只有 `ResetWorld`、`SetPause`、`StepSimulation`，但已有自定义 plugin base。
 
-因此本设计固定使用稳定 0.0.3 commit `35ba8174b62d9560093614f981a3d4b978a96036` 加上述最小 reset hook patch 的隔离 source overlay，不从 main 追未发布功能；新增只读 `so101_mujoco_support/SimulationEvidencePlugin`，在同一个 simulation step 中发布 task-object pose/twist 与 contact，避免跨 topic 拼接时间不一致的证据。apt binary 不包含该 hook，不能通过 reset qualification。
+因此本设计固定使用稳定 0.0.3 commit `35ba8174b62d9560093614f981a3d4b978a96036` 加上述最小 reset/pause/snapshot hook patch 的隔离 source overlay，不从 main 追未发布功能；新增只读 `so101_mujoco_support/SimulationEvidencePlugin`，在同一个锁定 physics snapshot 中发布 task-object pose/twist 与 contact，避免跨 topic 拼接时间不一致的证据。apt binary 不包含这些 qualification hooks，不能通过 reset qualification。
 
 ### 10.1 消息
 
@@ -483,7 +485,7 @@ ContactSample[] other_object_contacts
 
 - `header.stamp` 是与该 `mjData` snapshot 对应的 MuJoCo simulation time，`header.frame_id` 固定为 `world`；
 - `publisher_sequence` 在同一 publisher 生命周期内严格单调递增；`simulation_step` 是当前 world epoch 内的 step id，reset 后允许从零重新开始；
-- `reset_epoch` 的唯一权威来源是 patched runtime 在成功 central reset 后调用的 `on_reset()`。evidence plugin 的 `on_reset()` 只对 atomic reset generation 加一；`update()` 读取 observed generation；若它不同于 consumed generation，则把 `reset_epoch` 和 consumed generation 都设为 observed generation，并把 `simulation_step` 归零。这样即使 update 之间发生多次 reset 也不会丢失 generation 计数。time decrease、pose jump、keyframe 名称或 Python 侧计数均不得作为 epoch 权威；
+- `reset_epoch` 的唯一权威来源是 patched runtime 在成功 central reset 后调用的 `on_reset()`。evidence plugin 的 `on_reset()` 只对 atomic reset generation 加一。普通 `update()` 在 generation pending 且 `authoritative_paused=false` 时不得消费 generation，也不得发布携带新 epoch 的 running 消息；pending generation 保留到 `on_state_snapshot(..., true)` 成功取得 publisher lock 后，由共享 builder 消费并发布 `reset_epoch=old+1`、`simulation_step=0`、`paused=true`。time decrease、pose jump、keyframe 名称或 Python 侧计数均不得作为 epoch 权威；
 - `simulation_session_id` 从 launch 注入并在进程生命周期内不可变；消费方使用 `(simulation_session_id, reset_epoch, simulation_step)` 拒绝跨会话、跨 reset 或倒序证据；
 - `left_fingertip_contacts` 与 `right_fingertip_contacts` 只包含 task object 与对应指尖 geom 的接触，`other_object_contacts` 保存 task object 与 table 或其他受监控 geom 的接触；每个样本同时保留 MuJoCo 数字 ID 和稳定名称；
 - `minimum_signed_distance_m` 与 `maximum_normal_force_n` 对消息内全部 task-object contact 聚合；零 contact 时 `has_contact=false`、三个数组为空、两个聚合值均为 `0.0`；
@@ -494,13 +496,17 @@ ContactSample[] other_object_contacts
 - `init` 时解析 task-object body 和受监控 geom 名称，任一名称不存在即启动失败；
 - `on_reset()` 不读取或修改 MuJoCo state，只对 atomic generation 执行一次 increment；每次成功 `ResetWorld` 必须恰好触发一次，非法 keyframe 和失败 reset 必须触发零次；
 - pinned 0.0.3 plugin base 额外提供默认 no-op `on_pause(bool paused)`。每次成功的 `SetPause` 请求（包括目标状态已满足的幂等请求）必须对每个 plugin 恰好调用一次，失败请求调用零次；evidence plugin 的实现只把该权威值写入 atomic bool；
+- pinned base 还提供向后源码兼容的默认 no-op `virtual void on_state_snapshot(const mjModel * model, const mjData * data, bool paused)`；参数只读，普通第三方 plugin 无需修改；
+- 每次成功 `SetPause(paused=true)`，包括已经 paused 的幂等请求，必须在 `on_pause(true)` 之后、`sim_mutex_` 保护下，对每个 initialized plugin 恰好调用一次 `on_state_snapshot(model_, mj_data_, true)`；`pause=false` 与失败请求调用零次 snapshot hook；
+- snapshot hook 不是普通 `update()`：set-pause 路径不得调用所有 plugin 的 `update()`，不得推进 physics，也不得写 `qpos`、`qvel`、`ctrl`、`xfrc` 或 constraint；传入 authoritative `mj_data_` 使 pose、twist、contact 来自同一锁定 snapshot；
 - `update` 中只读 `mjModel`/`mjData`，先读取同一步的 object world pose/twist，再筛选与 task object、两侧 fingertip、table 有关的 contact；
 - `signed_distance_m` 来自 MuJoCo contact distance；
 - `normal_force_n` 由 `mj_contactForce` 的 contact-frame normal 分量得到；
 - 每个 publish tick 都发消息，包括零 contact；pose/twist 与 contacts 必须来自同一个 `mjData` step；
-- reset 后第一条可接受消息必须携带新 `reset_epoch`，消费者不得把旧 epoch 的缓存消息用于 reset postcondition；
-- pending reset generation 必须绕过普通 publish-period throttle，使 reset 后第一次 `update()` 即消费 generation；该例外不得改变无 pending reset 时的正常发布节奏；
-- `paused` 只来自 `on_pause(bool)` 保存的 atomic 权威状态，并与 object pose/twist/contact 一起由同一次 `update()` snapshot 发布；禁止再以 simulation time 是否变化推断 pause；
+- reset 后第一条可接受消息必须由成功的 paused snapshot hook 携带新 `reset_epoch`、`simulation_step=0`、`paused=true`；消费者不得把旧 epoch 或 running epoch 消息用于 reset postcondition；
+- `on_state_snapshot(..., true)` 与普通 `update()` 使用同一个 publish helper。只有成功取得 publisher lock 后 builder 才消费 pending generation；锁竞争时 generation 保持 pending，Python 只可因 typed `EvidenceStale` 在原 10 s deadline 内重发幂等 `SetPause(true)`；
+- 无 pending reset 时普通 `update()` 的发布节奏不变；snapshot hook 不调用普通 `update()`，也不改变 plugin force buffer；
+- `paused` 只来自 `on_pause(bool)` 保存的 atomic 权威状态；普通周期消息由同一次 `update()` snapshot 发布，reset qualification 消息由同一次 `on_state_snapshot(..., true)` 锁定 snapshot 发布。两条路径都必须使 paused、object pose/twist/contact 属于同一 snapshot；禁止再以 simulation time 是否变化推断 pause；
 - 删除以 simulation time decrease 或 pose jump 推断 epoch 的路径；time 仍可连续，幂等 reset 仍必须产生一个且仅一个新 epoch；
 - 左右指尖分类使用启动时解析并冻结的 geom id，不使用运行时字符串模糊匹配；
 - 使用非阻塞 realtime publisher，最大样本数固定为 128；溢出时 `truncated=true`，业务硬门拒绝该样本；
@@ -541,29 +547,33 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 ### 12.1 reset 顺序
 
-每次 `RESET_WORLD` 执行：
+Task 10 reset-qualified transaction 执行：
 
 1. 停止新的 trajectory goal，等待已有 action 结束或 cancel 结果；
 2. deactivate `arm_controller` 与 `gripper_controller`；
 3. 调用 `set_pause(paused=true)`；
-4. 调用 `reset_world(keyframe="home")`；
-5. `home` keyframe 必须同时恢复 robot qpos/qvel/ctrl 与 `plastic_cup` free-joint pose/velocity；该 pose 由自动测试证明与 task-object config 一致；
-6. 在 pause 状态调用 `step_simulation(steps=250)` 让接触收敛；
-7. 恢复 MoveIt Planning Scene 为 world-only object；
-8. activate controllers；
-9. 调用 `set_pause(paused=false)`；
-10. 从新的原子 simulation evidence 证明 reset postcondition。
+4. 调用 `reset_world(keyframe="task_start")`；
+5. `task_start` keyframe 必须同时恢复 robot qpos/qvel/ctrl 与 `plastic_cup` free-joint pose/velocity；该 pose 由自动测试证明与 task-object config 一致；
+6. bounded resume：调用 `set_pause(paused=false)`，只给 controller state/interface 恢复所需的既有有界运行窗口；
+7. strict activate `arm_controller` 与 `gripper_controller`；
+8. 调用 `set_pause(paused=true)`；成功或幂等 pause true 在 `sim_mutex_` 下触发 dedicated state snapshot hook；
+9. 从该 hook 发布的 `step=0, paused=true` atomic object evidence，以及独立且 fresh 的 `/joint_states` 与 controller state，证明 reset postcondition；
+10. 恢复 MoveIt Planning Scene 为 world-only object。
+
+资格路径不得调用 `StepSimulation(1)` 或其他 paused stepping 来“唤醒证据”；snapshot hook 本身不推进 physics。若 publisher lock 竞争导致 typed `EvidenceStale`，只允许在同一个原 10 s deadline 内重发幂等 `set_pause(paused=true)`，不得重做 reset、增加 step、延长 timeout 或放宽阈值。
 
 0.0.3 路径不实现 task-object mutation service。任务状态进入 `DESCEND` 后到最终结果 epoch 结束前，除 actuator command 外不得存在任何对 object qpos/qvel/body pose/constraint 的写入。
 
 ### 12.2 reset postcondition
 
-- 6 个 joint 与 home 的最大误差 `<= 0.001 rad`；
-- cup 初始位置误差 `<= 0.001 m`，姿态误差 `<= 0.5 deg`；
+- Task 10 qualification：6 个 joint 各自与 `task_start` 的误差 `<= 0.002 rad`，来自独立 fresh `/joint_states`，不是 atomic evidence message 字段；
+- Task 10 qualification：cup 初始位置误差 `<= 0.003 m`，来自 paused step-zero atomic snapshot；
+- final-release 阶段仍要求 cup 位置误差 `<= 0.001 m`、姿态误差 `<= 0.5 deg`；该更严格门属于后续最终发布 postcondition，不被 Task 10 qualification 阈值覆盖或放宽；
 - cup linear speed `<= 0.001 m/s`，angular speed `<= 0.01 rad/s`；
 - 只有预期 table support contact，无 gripper contact；
 - Planning Scene 包含 world object，attached set 不含该 object；
-- simulation service、controller、joint state、atomic simulation evidence 均新鲜；
+- simulation session/epoch/sequence 正确，新 epoch 精确 `old+1`，atomic evidence 为 `simulation_step=0` 且 `paused=true`；controller state 与六关节反馈独立新鲜、controllers active，不能拼入或宣称与 atomic tuple 同一消息边界；
+- 连续两次 `task_start` reset 每次 epoch 精确 `+1`；非法 keyframe epoch 不变；成功与失败最终均 paused；
 - 任一不满足则 reset 失败，不进入 execute。
 
 ### 12.3 恢复
@@ -616,9 +626,9 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 - 加入 table/cup/keyframe/actuator；
 - 通过 compile 与 URDF ↔ MJCF 几何一致性门槛。
 
-### P3：状态、接触与 deterministic reset
+### P3：状态、接触与 dedicated post-pause deterministic reset
 
-- 从官方稳定 0.0.3 commit 重放最小 reset hook patch，构建并验证隔离 dependency overlay；
+- 从官方稳定 0.0.3 commit 重放最小 reset/pause/state-snapshot hook patch，构建并验证隔离 dependency overlay；
 - 只读 atomic simulation evidence plugin；
 - Python observer/reset adapter；
 - reset postcondition 与服务调用边界测试。
@@ -660,7 +670,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 | MuJoCo pose | cup pose/twist 来自 fresh atomic simulation evidence，不来自 command 或 Planning Scene |
 | Contact | contact snapshot 非 stale、非 truncated；geom pair、distance、force 可解释 |
 | Physical grasp | 无 simulator constraint；微抬时 cup 实际随动；禁碰为空 |
-| Reset | controllers 先 deactivate；服务顺序正确；postcondition 全部满足 |
+| Reset | running strict deactivate → pause → ResetWorld → bounded resume → strict activate → re-pause snapshot；无 StepSimulation qualification call；epoch 精确 +1、step0/paused atomic object evidence、独立 fresh joints/controllers、failure paused 与 invalid-keyframe epoch unchanged 全部满足 |
 | Final outcome | in-region、upright、stable、table-supported、detached、无 gripper contact、controller healthy |
 | Runtime stability | 固定 commit/policy，连续 5 次 FULL_RESTART + 连续 5 次 RESET_WORLD，分别计数 |
 | Visual | 本轮新 MuJoCo/RViz 截图，机械臂、杯子、夹爪和 Planning Scene 与数值证据一致 |
@@ -673,6 +683,9 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 |---|---|
 | URDF/MJCF 关节轴或零位不一致 | 在任何物理调参前执行 home + 10 poses 自动 transform 对比 |
 | controller reset 后 snap 回旧 command | reset 前 deactivate controllers，reset 后从新 state 激活 |
+| reset generation 在 activate 的 running update 被提前消费 | pending generation 且 authoritative_paused=false 时禁止消费；只由成功 paused snapshot hook 在 publisher lock 成功后消费 |
+| re-pause 时 realtime publisher lock 竞争 | generation 保持 pending；Python 只因 typed `EvidenceStale` 在原 deadline 内重发幂等 pause true |
+| 为唤醒证据推进 paused physics 导致 joint drift | Task 10 qualification 删除 `StepSimulation(1)`；dedicated snapshot hook 在 `sim_mutex_` 下只读发布且不推进 physics |
 | contact publisher 在实时线程阻塞 | fixed capacity + non-blocking realtime publisher + truncated hard failure |
 | 把 message silence 当 no-contact | 每 tick 显式空 snapshot，freshness/sequence 双门槛 |
 | Gazebo 参数机械复制导致错误物理 | 只迁移语义，MuJoCo 参数重新实验标定 |
@@ -683,7 +696,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 | 新实现再次渗入 Gazebo package | 每个 task 提交前执行 kickoff tree/status 双门；失败立即停止，不允许例外路径 |
 | 复制行为代码造成 provenance 丢失 | 新 package `docs/provenance.json` 记录源 commit/path、目标 path 与 SHA-256，测试只运行新 namespace |
 | 依赖版本升级导致接口漂移 | 固定稳定 tag/commit；记录 apt underlay probe 与强制 pinned patched source overlay provenance；更新 tag 先做 delta review |
-| reset 保持 simulation time 导致 epoch 不可观察 | reset-qualified runtime 强制使用 pinned patched overlay；central reset 成功后调用默认兼容的 plugin `on_reset()`，atomic generation 是唯一 epoch 权威 |
+| reset 保持 simulation time 导致 epoch 不可观察 | reset-qualified runtime 强制使用 pinned patched overlay；central reset 成功后产生 generation，成功/幂等 re-pause 的 snapshot hook 在锁定 authoritative data 上发布并消费，atomic generation 是唯一 epoch 权威 |
 
 ## 17. 实施停止条件
 
@@ -691,7 +704,8 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 - `mujoco_ros2_control` 实际接口与本 spec 固定接口不一致；
 - pinned patch 不能从干净 `35ba8174b62d9560093614f981a3d4b978a96036` checkout 重放；或三个 `mujoco_ros2_control*` package 未解析到 `/data/work/ws_mujoco_ros2_control_003/install`；或 `mujoco_vendor` 未解析到 `/opt/ros/jazzy`；
-- 成功 reset 的 `on_reset()` 调用次数不是每 plugin 恰好一次，非法 keyframe 触发 hook，或 evidence epoch 仍依赖 time decrease/pose jump；
+- 成功 reset 的 `on_reset()` 调用次数不是每 plugin 恰好一次，非法 keyframe 触发 hook，成功/幂等 pause true 的 snapshot 次数不是每 initialized plugin 恰好一次，pause false/失败请求触发 snapshot，snapshot 不在 `sim_mutex_` 下使用 authoritative `mj_data_`，或 evidence epoch 仍依赖 time decrease/pose jump；
+- generic update 被 set-pause 路径调用、snapshot hook 推进/写入 physics state、running update 消费 pending generation，或 publisher contention 丢失 pending generation；
 - MJCF 与 URDF 几何门槛不通过；
 - contact plugin 需要修改 MuJoCo state 才能提供证据；
 - 只能通过 weld、teleport、禁碰或放宽最终结果阈值才能完成 pick-place；

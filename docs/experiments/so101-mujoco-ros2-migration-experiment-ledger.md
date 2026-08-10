@@ -22,8 +22,8 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-013
-next_experiment: EXP-013
+latest_checkpoint: CP-037
+next_experiment: NONE
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -50,6 +50,55 @@ disproven_routes:
 open_risks:
   - No MuJoCo runtime experiment has run yet.
 next_command: Define EXP-001 before the first runtime-affecting migration experiment.
+```
+
+## Checkpoint CP-037
+
+```yaml
+checkpoint_id: CP-037
+last_valid_experiment: EXP-024
+current_hypothesis: The user-approved dedicated post-pause state snapshot hook can publish the pending reset generation as an authoritative step-zero paused object snapshot without advancing physics or conflating asynchronous joint feedback with atomic evidence.
+working_tree_status:
+  head: e0838b0b8d76ee17620a998931fa57718b0b284d
+  staged_paths: NONE
+  preserved_dirty_paths:
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md
+    - src/so101_mujoco_demo_py/config/dependency-lock.yaml
+    - src/so101_mujoco_demo_py/package.xml
+    - src/so101_mujoco_demo_py/patches/mujoco_ros2_control-0.0.3-reset-hook.patch
+    - src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py
+    - src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/observer.py
+    - src/so101_mujoco_demo_py/test/test_mujoco_observer.py
+    - src/so101_mujoco_demo_py/test/test_reset_qualified_dependency.py
+    - src/so101_mujoco_support/include/so101_mujoco_support/simulation_evidence_plugin.hpp
+    - src/so101_mujoco_support/src/simulation_evidence_plugin.cpp
+    - src/so101_mujoco_support/test/test_simulation_evidence_plugin.cpp
+    - src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/client.py
+    - src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py
+    - src/so101_mujoco_demo_py/test/test_mujoco_reset.py
+    - src/so101_mujoco_demo_py/test/test_reset_live_contract.py
+  documentation_only_additions_this_checkpoint:
+    - docs/superpowers/specs/2026-08-09-so101-mujoco-ros2-migration-design.md
+    - docs/superpowers/plans/2026-08-09-so101-mujoco-ros2-migration.md
+owned_processes: NONE
+preserved_processes: The Mac orchestrator independently observed codex, kimi, and so101-py-qual running on the same ai-station with `tmux list-sessions`; all three were preserved, and none was started, stopped, signaled, or cleaned during this documentation-only amendment. Remote sandbox visibility does not override that host-level observation.
+approval_correction:
+  - The user approved a source-compatible default no-op on_state_snapshot(const mjModel *, const mjData *, bool paused) hook in pinned upstream 0.0.3, dispatched once per initialized plugin under sim_mutex_ after every successful or idempotent SetPause(true), and never for pause false or failed requests.
+  - Snapshot dispatch uses authoritative mj_data_, is read-only, is not generic update(), does not advance physics, and does not write qpos/qvel/ctrl/xfrc/constraint.
+  - A running update must retain pending reset generation. Only successful publisher-lock acquisition in on_state_snapshot(..., true) consumes it and publishes old+1, step zero, paused true; contention retains it for a typed-EvidenceStale-driven idempotent re-pause retry inside the unchanged 10 s deadline.
+  - The Task 10 transaction is running strict deactivate -> pause -> ResetWorld(task_start) -> bounded resume -> strict activate -> re-pause snapshot -> atomic object plus independent joint/controller verification. It no longer calls StepSimulation(1).
+confirmed_conclusions:
+  - CP-036/EXP-030 establishes the need for the dedicated hook: generation was consumed during activate as paused=false, and paused stepping did not create the required authoritative paused snapshot.
+  - Atomic evidence contains object pose/twist/contact from one locked physics snapshot. Joint positions remain nearest/fresh asynchronous /joint_states controller feedback and are never represented as an atomic message field or same-boundary correlation.
+  - Task 10 thresholds remain object position error <=0.003 m and each of six independent joint errors <=0.002 rad, with the original 10 s deadline. Stricter final-release postconditions remain separate and unchanged.
+disproven_routes:
+  - StepSimulation(1) must not be used to wake Task 10 reset evidence; it advances physics and EXP-030 showed it does not supply the missing paused atomic publication.
+  - SetPause must not invoke every plugin's generic update(), and running update must not consume a pending reset generation.
+open_risks:
+  - The pinned upstream callback currently has no snapshot hook; sim_mutex_ placement, success/idempotent call counts, failure-path exclusion, and authoritative mj_data_ must first be proven by RED contracts.
+  - Realtime publisher contention must demonstrably preserve generation and permit only typed EvidenceStale idempotent re-pause retry within the unchanged deadline.
+  - No Task 10A/10B implementation, build, package test, or EXP-031 runtime qualification is authorized by this documentation-only checkpoint.
+next_command: Review the CP-037 spec/plan documentation diff; after explicit implementation handoff, begin Task 10A Step 1 RED tests.
 ```
 
 ## Checkpoint CP-007
@@ -115,6 +164,107 @@ open_risks:
   - EXP-002 was not entered as PLANNED before the first headless execution; the run is diagnostic evidence only and cannot be promoted to VALID.
   - The failed speed may be contact/integration residual or an indexing defect; neither has been isolated.
 next_command: NONE
+```
+
+## Experiment EXP-024
+
+```yaml
+experiment_id: EXP-024
+status: VALID
+prior_experiment: EXP-023
+hypothesis: The frozen transaction's joint failure first appears either during the resume/activate window, during paused bounded stepping, or only in a stale joint-state cache; boundary-correlated callback counts and positions can distinguish these without changing production behavior.
+prediction: Continuous observer/joint executors around one unchanged task_start transaction identify the first service boundary where joints 2/3/4 exceed 0.002 rad and show whether joint callback count advances after re-pause/step. If count is unchanged, the verification sample is stale; if it advances and error first crosses at a specific running boundary, that boundary owns the physical drift.
+single_variable: Diagnostic measurement only: continuous background subscription capture with before/after snapshots at each existing service call. Model, overlay, transaction order, service timeout, 20-step count, reset thresholds, controllers, and initial state remain identical to EXP-023.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD d93bba347c2dbd5794c223a9e88f976286a736a8 plus the same eight dirty Task 10 paths and installed two-package build.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; exact lock/provenance pass.
+  - Fresh task-owned ROS_DOMAIN_ID 106 and session exp024-joint-boundary-domain106; no MoveIt, GUI, workflow motion, or hardware.
+success_criteria:
+  - Every service boundary records monotonic time, result, controller/joint callback counts, six finite joint positions, and fresh atomic epoch/step/paused/object state when available.
+  - The record distinguishes resume/activate drift, paused-step drift, and stale-cache explanations at the first divergent boundary.
+failure_criteria:
+  - The unchanged transaction still fails, but complete boundary evidence identifies where and whether the measured joints are fresh; this is a valid diagnostic failure.
+invalid_criteria:
+  - Missing boundary record, stale build/prefix, domain contamination, source-order mismatch, background executor failure, or incomplete task-owned cleanup.
+provenance:
+  source_commit: d93bba347c2dbd5794c223a9e88f976286a736a8 plus preserved eight Task 10 paths
+  dependency_overlay: /data/work/ws_mujoco_ros2_control_003/install
+  project_install: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 106
+  gz_partition: NONE
+  evidence_path: /tmp/so101-debug-mujoco-migration/exp-024/
+commands:
+  - command: Fresh headless stack plus /tmp/so101-debug-mujoco-migration/exp-024/joint_boundary_diagnostic.py
+    exit_code: 0
+observed:
+  - Immediately after controller activation, joint callback count was 80 and maximum absolute joint position was 0.00006532658933886562 rad.
+  - Immediately before paused StepSimulation(20), callback count remained 80 and the joint state remained within 0.000066 rad of zero.
+  - Immediately after StepSimulation(20), joint callback count advanced from 80 to 84, evidence callback count advanced from 76 to 80, reset_epoch advanced from 0 to 1, and simulation_step was 3.
+  - The fresh post-step joint state was [-0.00004523, 0.0127050914, 0.0144914167, 0.00273654045, 0.00000349, -0.00004194] rad; maximum absolute error was 0.0144914167 rad.
+  - Controllers were active at the final sample; the task-owned stack was fully reaped and domain 106 was empty after cleanup.
+inferred:
+  - The stale-joint-cache hypothesis is disproven because both joint and evidence callback counts advanced across the failing boundary.
+  - The resume/activate running window is not the first divergence because its fresh joint sample remains below 0.002 rad.
+  - The first measured divergence is the paused bounded step of 20 physics steps, which advances the plant farther than the active controllers correct while paused.
+conclusion: VALID diagnostic evidence localizes the unchanged transaction's joint-convergence failure to StepSimulation(20), not reset, resume/activate, or stale sampling.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-024/boundary-events.json (sha256 2bab6f76f94de2a9f60153ab60b1cf383e088dde8ac555d0830f7d5e89148680)
+  - /tmp/so101-debug-mujoco-migration/exp-024/diagnostic.log (sha256 a95793ac6697e2551139d22f2888a29c52bb03831faa7070b4223e7f504747e2)
+  - /tmp/so101-debug-mujoco-migration/exp-024/launch.log (sha256 e63be4502e75e7c5dee93b06eb0c5b7aff2078fd1492a63a7ff9992689fe44cc)
+decision: KEEP the frozen transaction order and thresholds; test the package's canonical five-step default as the single variable.
+next_experiment: EXP-025
+```
+
+## Experiment EXP-025
+
+```yaml
+experiment_id: EXP-025
+status: INVALID
+prior_experiment: EXP-024
+hypothesis: The stale live-test override of 20 paused physics steps, rather than the canonical production default of five, causes the post-reset joint divergence.
+prediction: With the same build, model, transaction order, controllers, thresholds, and diagnostic capture, changing only step_count from 20 to 5 produces a new reset epoch and fresh finite evidence while all six joints remain within 0.002 rad.
+single_variable: step_count changes from 20 to 5; all other runtime inputs and assertions remain unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD d93bba347c2dbd5794c223a9e88f976286a736a8 plus the same eight dirty Task 10 paths and installed two-package build.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; exact lock/provenance pass.
+  - Fresh task-owned ROS_DOMAIN_ID 107 and session exp025-step5-domain107; no MoveIt, GUI, workflow motion, or hardware.
+success_criteria:
+  - The transaction returns a receipt with reset_epoch incremented exactly once and fresh finite atomic evidence.
+  - Every fresh joint position is within 0.002 rad of zero after StepSimulation(5), controllers are active, and cleanup leaves domain 107 empty.
+failure_criteria:
+  - Fresh post-step evidence arrives but any joint exceeds 0.002 rad, or the unchanged transaction fails another typed physical postcondition.
+invalid_criteria:
+  - Missing boundary record, stale build/prefix, domain contamination, source-order mismatch, background executor failure, or incomplete task-owned cleanup.
+provenance:
+  source_commit: d93bba347c2dbd5794c223a9e88f976286a736a8 plus preserved eight Task 10 paths
+  dependency_overlay: /data/work/ws_mujoco_ros2_control_003/install
+  project_install: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 107
+  gz_partition: NONE
+  evidence_path: /tmp/so101-debug-mujoco-migration/exp-025/
+commands:
+  - command: Fresh headless stack plus /tmp/so101-debug-mujoco-migration/exp-025/joint_boundary_diagnostic.py
+    exit_code: 0 (diagnostic completed; recorded reset outcome was failure)
+observed:
+  - After activation and before StepSimulation(5), the fresh joint maximum absolute error was 0.0003906908945067322 rad.
+  - After StepSimulation(5), joint and evidence callback counts advanced, reset_epoch advanced from 0 to 1, and the fresh joint maximum absolute error was 0.002323864095551104 rad; joint 3 exceeded the frozen 0.002 rad gate.
+  - The post-step object position was [0.27000180200395496, -0.00000000504245058, 0.07988525679531384] m and all recorded joint/object values were finite.
+  - No later atomic evidence arrived while paused; the client exhausted the original deadline retrying typed EvidenceStale and returned ResetFailed.
+  - Controllers remained active. The task-owned pane 4117905 and child stack were stopped/reaped, domain 107 was empty after cleanup, and unrelated tmux sessions remained.
+inferred:
+  - Reducing the step count materially reduces the joint divergence but does not satisfy the unchanged 0.002 rad hard gate, so the five-step hypothesis is disproven.
+  - The lack of a post-step paused evidence publication is an independent evidence-authority boundary; further step-count tuning would conflate variables and guess at physics.
+conclusion: INVALID for Task 10 qualification: one joint remains 0.000323864095551104 rad outside tolerance and the original deadline ends with typed EvidenceStale.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-025/boundary-events.json (sha256 80e8a2c4ef148d22a07a947a07179867385cf9116e6de8ac5889e13697222c00)
+  - /tmp/so101-debug-mujoco-migration/exp-025/diagnostic.log (sha256 5208b93c569fc5bfbde96fb795da665e28970ce83c8a70e1205a6e9dbd5ba158)
+  - /tmp/so101-debug-mujoco-migration/exp-025/launch.log (sha256 7ca273ea1369f804b25fe591051023c62801d7e9f003aba51200a767f82b656d)
+decision: STOP; do not tune step count, tolerance, deadline, transaction order, or pause inference without a newly approved evidence-layer hypothesis.
+next_experiment: NONE
 ```
 
 ## Checkpoint CP-010
@@ -370,6 +520,474 @@ result: VALID. Five of five fresh live observer tests passed in domains 89 throu
 next_command: Run full package, Ruff, isolation, and protected-tree gates and create the scoped Task 9 commit.
 ```
 
+## Experiment EXP-013
+
+```yaml
+experiment_id: EXP-013
+status: INVALID
+hypothesis: Two consecutive transactional task_start resets produce sequential atomic epochs, converged zero joint state, and converged cup pose while remaining paused.
+independent_variable: Run test_reset_live_contract.py once against session task10-reset-20260810-94 in isolated ROS_DOMAIN_ID 94; the test performs exactly two reset transactions with 20 bounded physics steps each.
+controlled_variables: Pinned apt 0.0.3 pause/reset/step services; strict arm/gripper controller switching; observer max age 0.5 s; joint tolerance 0.002 rad; object tolerance 0.003 m; no MoveIt/workflow/hardware or object state writes.
+acceptance_criteria: Live pytest passes; receipts correlate old->new epochs twice; final epoch equals second receipt; simulation_step>0; six joints converge to zero within 0.002 rad; cup converges to task_start within 0.003 m; failure leaves paused; owned processes stop cleanly.
+evidence_path: /tmp/so101-debug-mujoco-migration/task10-runtime/
+owned_processes: tmux session so101-mujoco-task10; launch PID 3814980 and recorded descendants; all stopped and verified absent.
+result: INVALID on the first transaction. Pause succeeded, then strict controller deactivation timed out after 5 seconds because the paused simulation clock did not advance the controller-manager switch cycle. Reset was not called. Failure handling left the world paused. Live-test SHA-256 is 9a2ed86f8728954af9a2fbb72a725c09fc8553cd1ff087c671ac87fc5b8b45da; launch ac60e8fc...; process tree 8ab4066d....
+next_command: NONE
+```
+
+## Checkpoint CP-014
+
+```yaml
+checkpoint_id: CP-014
+last_valid_experiment: EXP-012
+current_hypothesis: A controller lifecycle switch requested after pausing cannot complete until an explicit paused simulation step advances the controller-manager update loop.
+working_tree_status: Dirty Task 10 client/reset/unit/live tests, package dependencies, and this checkpoint are intentionally preserved; no files are staged.
+owned_processes: NONE; Task 10 tmux, launch PID 3814980, and recorded descendants were stopped and verified absent; domain 94 is empty via --no-daemon.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - Transaction unit RED/GREEN passes 8 tests for ordering, service/controller failure, timeout, epoch mismatch, joint convergence, sequential receipts, and failure-paused behavior.
+  - The concrete client uses only pinned apt 0.0.3 pause/reset/step services plus standard Jazzy controller-manager switch/list and joint states.
+  - EXP-013 is INVALID at the exact first bad boundary: pause succeeded and strict deactivate timed out before reset; no reset receipt or physical convergence was claimed.
+disproven_routes:
+  - A synchronous strict controller switch immediately after pause cannot complete without advancing the paused controller-manager cycle.
+open_risks:
+  - The correct atomic ordering for pause, lifecycle switch, and explicit stepping must be proven without allowing controllers to snap the reset state or weakening failure-paused behavior.
+next_command: NONE
+```
+
+## Experiment EXP-014
+
+```yaml
+experiment_id: EXP-014
+status: INVALID
+hypothesis: A pending strict controller switch completes deterministically if exactly one pinned StepSimulation step advances the paused controller-manager cycle, allowing the original pause->deactivate->reset->activate->bounded-step transaction to remain intact.
+independent_variable: Modify only MujocoRosClient.switch_controllers to issue one StepSimulation{steps:1} when the strict switch future remains pending after initial spinning.
+controlled_variables: Exact Task 10 reset coordinator, two-cycle live test, session/task_start keyframe, 20 bounded post-reset steps, tolerances, controller list, model, domain isolation, failure-paused behavior, no MoveIt/workflow/hardware or state writes.
+acceptance_criteria: Eight unit transaction tests remain green; two live resets pass with sequential epochs, zero-joint convergence, cup pose convergence, world paused; switch and one-step responses both succeed; owned cleanup is complete.
+evidence_path: /tmp/so101-debug-mujoco-migration/task10-runtime-fix1/
+owned_processes: tmux session so101-mujoco-task10-fix1 and descendants, to be recorded and stopped.
+result: INVALID at the same first transaction boundary. After pause, strict deactivate remained pending; concurrently issuing exactly one StepSimulation step did not complete the switch within 5 seconds. Reset was not called and failure handling left the world paused. Evidence SHA-256: live test be50f86a..., launch 046d2ec4..., process tree 9a0fec3c....
+next_command: NONE
+```
+
+## Checkpoint CP-015
+
+```yaml
+checkpoint_id: CP-015
+last_valid_experiment: EXP-012
+current_hypothesis: Controller-manager lifecycle switching while the controller manager uses paused ROS time requires a different proven coordination boundary than one concurrent physics step.
+working_tree_status: Dirty Task 10 client/reset/unit/live work and ledger are intentionally preserved; no files are staged.
+owned_processes: NONE; Task 10 fix1 tmux, launch PID 3818423, and recorded descendants were stopped and verified absent; domain 95 is empty via --no-daemon.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - Unit, Ruff, and build gates remained green after the one-step pending-switch handshake.
+  - EXP-014 is INVALID because strict deactivate still timed out before reset; no receipt, epoch advance, joint convergence, or object convergence was claimed.
+disproven_routes:
+  - One concurrent paused StepSimulation step is insufficient to complete the strict controller switch in this controller-manager/sim-time configuration.
+open_risks:
+  - Whether a bounded multi-step handshake, temporary controller-manager wall-time trigger, or a different transaction ordering is compatible with the approved pause-first interface remains unproven.
+next_command: NONE
+```
+
+## Experiment EXP-015
+
+```yaml
+experiment_id: EXP-015
+status: INVALID
+hypothesis: The strict switch transition succeeds after pause, but the Python switch service future is not a reliable completion signal; polling authoritative list_controllers states can prove completion without extra physics steps.
+independent_variable: Replace the pending-future/one-step handshake with bounded polling for exact inactive/active states after sending the same strict switch request.
+controlled_variables: Pause-first transaction, strict switch request, reset/step services, controller names, two-cycle live test, tolerances, model, no commands/MoveIt/workflow/hardware or object writes.
+acceptance_criteria: Unit/Ruff/build green; launch log and list_controllers agree on each transition; two live resets yield sequential receipts and joint/object convergence; no extra pre-reset physics step is injected; cleanup complete.
+evidence_path: /tmp/so101-debug-mujoco-migration/task10-runtime-fix2/
+owned_processes: tmux session so101-mujoco-task10-fix2 and descendants, to be recorded and stopped.
+result: INVALID before any reset transaction. The live test accepted no atomic evidence during its 10-second readiness loop, reproducing the intermittent EXP-009 discovery/callback boundary. No pause, switch, reset, or step was requested, so state-polling switch completion remains untested. Evidence SHA-256: live test dc18c6c8..., launch 43a881d8..., process tree a4fa64fe....
+next_command: NONE
+```
+
+## Checkpoint CP-016
+
+```yaml
+checkpoint_id: CP-016
+last_valid_experiment: EXP-012
+current_hypothesis: Intermittent late subscriber discovery or callback delivery can prevent the reset live test from receiving its first best-effort SensorDataQoS atomic sample even while the publisher topic is discoverable.
+working_tree_status: Dirty Task 10 work and ledger are intentionally preserved; no files are staged.
+owned_processes: NONE; Task 10 fix2 tmux, launch PID 3822243, and recorded descendants were stopped and verified absent; domain 96 is empty via --no-daemon.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - EXP-014 log proves strict deactivate actually completed server-side in about 108 ms despite the unresolved Python service future, motivating exact controller-state polling.
+  - Unit/Ruff/build gates remained green after replacing future completion with authoritative controller state polling.
+  - EXP-015 is INVALID before reset because no observer sample was accepted in 10 seconds; no switch/reset behavior from the fix2 client was exercised or claimed.
+disproven_routes:
+  - Topic discovery alone is insufficient readiness proof for a best-effort atomic subscriber; an accepted observer snapshot is required.
+open_risks:
+  - The intermittent first-sample failure requires a deterministic subscription/readiness boundary before reset transactions can be qualified.
+  - The state-polling switch implementation still lacks live reset evidence because EXP-015 never reached it.
+next_command: NONE
+```
+
+## Experiment EXP-016
+
+```yaml
+experiment_id: EXP-016
+status: INVALID
+hypothesis: The intermittent readiness failure can be localized by distinguishing matched publisher count, raw callback count, and conversion rejection count without changing QoS or timeout.
+independent_variable: Add observer callback_count diagnostics and include callback_count, rejected_count, last_rejection, and node.count_publishers in reset-live readiness failure.
+controlled_variables: Exact Task 10 state-polling client/reset transaction, SensorDataQoS, 10-second readiness, two reset cycles, model/config/tolerances, isolated fresh domain, no command/MoveIt/workflow/hardware.
+acceptance_criteria: Unit diagnostics test RED->GREEN; one live run either passes both resets or fails with publisher/callback/rejection counts that identify the first boundary; owned cleanup complete.
+evidence_path: /tmp/so101-debug-mujoco-migration/task10-runtime-diag/
+owned_processes: tmux session so101-mujoco-task10-diag and descendants, to be recorded and stopped.
+result: INVALID before reset. At the 10-second readiness deadline the node graph reported exactly one publisher, while observer callback_count=0, rejected_count=0, and last_rejection was empty. No pause/switch/reset/step was called. Evidence SHA-256: live test 8be08bc3..., launch 3fc75a64..., process tree b00f9379....
+next_command: NONE
+```
+
+## Checkpoint CP-017
+
+```yaml
+checkpoint_id: CP-017
+last_valid_experiment: EXP-012
+current_hypothesis: The intermittent readiness failure occurs below observer conversion: graph discovery sees one publisher but the best-effort subscription receives zero callbacks, implicating endpoint QoS/data publication or DDS delivery.
+working_tree_status: Dirty Task 10 work and ledger are intentionally preserved; no files are staged.
+owned_processes: NONE; Task 10 diagnostic tmux, launch PID 3826113, and recorded descendants were stopped and verified absent; domain 97 is empty via --no-daemon.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - Observer callback_count diagnostics passed RED->GREEN with all 15 observer/reset unit tests, Ruff, and build gates green.
+  - EXP-016 observed publishers=1, callbacks=0, rejected=0 at timeout, excluding message conversion/session/order rejection as the first boundary.
+  - No reset transaction was attempted, so the authoritative controller-state polling implementation remains live-unverified.
+disproven_routes:
+  - Extending conversion diagnostics cannot explain the failure because no callback reached conversion.
+open_risks:
+  - Publisher offered QoS and actual publication continuity must be captured together with subscriber requested QoS in the next controlled run.
+  - A background simulator thread stack trace appeared in EXP-015 and may correlate with publication stopping, but causality is unproven.
+next_command: NONE
+```
+
+## Experiment EXP-017
+
+```yaml
+experiment_id: EXP-017
+status: INVALID
+hypothesis: MujocoRosClient's continuously ready 100 Hz joint-state callback starves the atomic evidence callback because progress invokes only one rclpy spin_once per iteration.
+independent_variable: Add read-only joint_callback_count diagnostics; capture topic info --verbose and direct evidence --once before running the unchanged reset readiness loop.
+controlled_variables: Exact SensorDataQoS on both subscriptions, 10-second timeout, state-polling reset client, simulator/config/session, no transaction requests before readiness, no MoveIt/workflow/hardware.
+acceptance_criteria: Direct evidence echo proves publisher data exists; topic QoS is compatible; reset readiness failure or success reports joint/evidence callback counts sufficient to confirm or reject starvation.
+evidence_path: /tmp/so101-debug-mujoco-migration/task10-callback-diag/
+owned_processes: tmux session so101-mujoco-task10-callback-diag and descendants, to be recorded and stopped.
+result: INVALID during the first reset transaction. Offered QoS was BEST_EFFORT/VOLATILE and direct evidence echo succeeded; reset readiness then passed. Pause and server-side strict deactivate began, but the client timed out waiting for list_controllers while the switch request was pending. Evidence SHA-256: live acaf8e81..., launch 184b7726..., QoS f034669d..., direct evidence 41aea283..., process tree 0ef91589....
+next_command: NONE
+```
+
+## Checkpoint CP-018
+
+```yaml
+checkpoint_id: CP-018
+last_valid_experiment: EXP-012
+current_hypothesis: Sharing one rclpy node between high-rate joint/evidence subscriptions and synchronous service futures causes response starvation; list_controllers also cannot run while the controller-manager switch callback remains pending in its callback group.
+working_tree_status: Dirty Task 10 work and ledger are intentionally preserved; no files are staged.
+owned_processes: NONE; Task 10 callback diagnostic tmux, launch PID 3829377, and recorded descendants were stopped and verified absent; domain 98 is empty via --no-daemon.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - The plugin publisher offers BEST_EFFORT/VOLATILE QoS and continuously published valid atomic data; direct evidence echo succeeded with exact session and finite state.
+  - Reset readiness passed in EXP-017, excluding a persistent publisher/QoS incompatibility.
+  - The first transaction failed when list_controllers response timed out during a pending strict switch; no reset was called.
+disproven_routes:
+  - Polling list_controllers from the same client while the switch service callback is pending cannot serve as the completion boundary.
+  - Extending readiness timeout or changing evidence QoS is unsupported by EXP-017 because direct evidence and readiness both succeeded.
+open_risks:
+  - A dedicated service-only node/executor must prove switch service future completion without subscription starvation before the transaction can continue.
+next_command: NONE
+```
+
+## Experiment EXP-018
+
+```yaml
+experiment_id: EXP-018
+status: INVALID
+hypothesis: Separating observer, joint-state, and service clients onto three rclpy nodes removes subscription starvation and allows strict switch futures/list verification to complete deterministically.
+independent_variable: MujocoRosClient takes distinct service_node and joint_state_node; live test uses a third observer_node and explicitly advances observer/joint nodes only during evidence convergence.
+controlled_variables: Same services, strict state-polling transaction, QoS, timeout, two task_start resets, tolerances, model/config/session, no commands/MoveIt/workflow/hardware.
+acceptance_criteria: Node-separation behavior test RED->GREEN; all existing units/Ruff/build green; live readiness accepts evidence; two resets return sequential receipts with zero joints/cup convergence; cleanup complete.
+evidence_path: /tmp/so101-debug-mujoco-migration/task10-runtime-node-isolation/
+owned_processes: tmux session so101-mujoco-task10-node-isolation and descendants, to be recorded and stopped.
+result: INVALID. Readiness passed, but the first strict deactivate request timed out before reset_world. The dedicated service node did not remove the failure. Server log reports `Switch controller timed out after 5 seconds!`; no reset receipt exists and the run cannot count. The exact owned session and descendants were stopped, and ROS_DOMAIN_ID 99 was empty afterward.
+next_command: NONE
+```
+
+## Checkpoint CP-019
+
+```yaml
+checkpoint_id: CP-019
+last_valid_experiment: EXP-012
+current_hypothesis: The controller-manager strict switch cannot complete while the MuJoCo simulation is paused; node-level response starvation is no longer sufficient to explain the server-side timeout.
+working_tree_status: Dirty Task 10 implementation and ledger preserved exactly; no files staged. Paths: docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md, src/so101_mujoco_demo_py/package.xml, src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/observer.py, src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/client.py, src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py, src/so101_mujoco_demo_py/test/test_mujoco_observer.py, src/so101_mujoco_demo_py/test/test_mujoco_reset.py, src/so101_mujoco_demo_py/test/test_reset_live_contract.py.
+owned_processes: NONE; task-owned tmux so101-mujoco-task10-node-isolation, pane 3838745, launch 3838818, and recorded descendants were stopped; ROS_DOMAIN_ID 99 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - Three-node unit contract is GREEN (16 passed, one opt-in live skip), and package colcon test executed 98 tests with 96 passed, zero failures, and two opt-in skips.
+  - The colcon JUnit contains both real Ruff integration tests: the actual package gate passes and an injected F821 makes the copied real gate fail; Ruff 0.15.20 direct gate passes check and format --check.
+  - EXP-018 readiness and ROS service provenance passed, but the first strict deactivate timed out before reset_world; controller-manager itself logged a five-second switch timeout.
+disproven_routes:
+  - Splitting observer, service, and joint subscriptions across three nodes is not sufficient to make the paused strict controller switch complete.
+open_risks:
+  - Transaction ordering pause-before-deactivate may prevent controller-manager from receiving update cycles required to finish switching; this is a hypothesis only and requires revised-plan/user direction before another runtime attempt.
+  - Task 10 has no atomic commit because its mandatory live two-reset gate failed.
+next_command: NONE
+```
+
+## Experiment EXP-019
+
+```yaml
+experiment_id: EXP-019
+status: VALID
+prior_experiment: EXP-018
+hypothesis: With use_sim_time, pausing MuJoCo stops /clock and blocks the controller-manager control loop before its next update/manage_switch cycle, so strict deactivate succeeds while running but times out while paused.
+prediction: A fresh running stack returns strict deactivate ok=true well below five seconds and controllers become inactive while evidence step/sequence advances; an otherwise identical fresh paused stack returns ok=false at approximately five seconds, controllers remain active, and evidence step/sequence does not advance during the switch.
+single_variable: paused state at the instant of the identical strict deactivate request; A=false and B=true.
+lifecycle: FULL_RESTART
+preconditions:
+  - Same HEAD 01ef1e11f7f3568ad326e2a8dc67f9f59dd17db8, installed overlay, launch arguments, controller set, strictness, activate_asap, and five-second request timeout for both arms.
+  - A and B each use a fresh task-owned headless stack and unique ROS domain/session; no reset service, motion command, MoveIt workflow, GUI, or hardware action is permitted.
+success_criteria:
+  - A returns ok=true and list_controllers shows arm_controller and gripper_controller inactive.
+  - B returns ok=false only after the server-side five-second timeout and list_controllers still shows both controllers active.
+  - /clock or atomic evidence proves progression during A and halted step/sequence during B; overlay/PID/log provenance and exact cleanup are complete.
+failure_criteria:
+  - A does not succeed reliably, B succeeds, or controller/evidence facts do not show the predicted divergence; pause-blocking is then not confirmed.
+invalid_criteria:
+  - Stack readiness/provenance failure, non-identical switch request/configuration, reset invocation, cross-domain contamination, or incomplete owned-process cleanup.
+provenance:
+  source_commit: 01ef1e11f7f3568ad326e2a8dc67f9f59dd17db8 plus the eight preserved dirty Task 10 paths
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /opt/ros/jazzy/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: A=100, B=101
+  gz_partition: NONE (MuJoCo only)
+commands:
+  - command: Fresh-stack A/B strict deactivate diagnostic; exact commands captured under /tmp/so101-debug-mujoco-migration/exp-019-ab/
+    exit_code: 0
+observed:
+  - A running: strict deactivate returned ok=true in 0.003255506 s; arm_controller and gripper_controller changed active to inactive; evidence step 1007 to 1057, sequence 1008 to 1058, and clock 11.102 s to 11.610 s continued advancing.
+  - B paused: set_pause(true) returned success in 0.000627837 s; identical strict deactivate returned ok=false in 5.001467380 s; both controllers remained active; evidence step/sequence stayed 957/957 and clock stayed 10.608 s through the switch.
+  - B server log records Simulation paused followed by Switch controller timed out after 5 seconds; no reset service was called. Both exact task-owned stacks were stopped and domains 100/101 were empty afterward.
+inferred:
+  - CONFIRMED: pause blocks the simulation-clock-driven controller-manager update/manage_switch completion point in this 0.0.3 integration.
+conclusion: A succeeded and B timed out under the frozen single-variable design, confirming pause-first is architecturally invalid for strict switching.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-019-ab/controller-switch-source.txt
+  - /tmp/so101-debug-mujoco-migration/exp-019-ab/controller-loop-source.txt
+  - /tmp/so101-debug-mujoco-migration/exp-019-ab/mujoco-003-relevant.txt
+  - /tmp/so101-debug-mujoco-migration/exp-019-ab/hashes.txt
+decision: KEEP
+next_experiment: EXP-020
+```
+
+## Experiment EXP-020
+
+```yaml
+experiment_id: EXP-020
+status: INVALID
+prior_experiment: EXP-019
+hypothesis: A bounded deactivate-running/pause/reset/resume-activate/re-pause sequence completes both controller switches while limiting uncontrolled physics to the two measured switch windows and preserving deterministic reset convergence.
+prediction: A transaction-order contract first fails against pause-first; after the minimal ordering change, two live resets return sequential epochs, both controllers are active only after re-pause, final six-joint and cup states converge, and atomic evidence bounds pose/twist/step changes across each uncommanded window.
+single_variable: Transaction ordering required by the confirmed pause/update dependency; service types, keyframe, step count, tolerances, model, controllers, and failure-paused guarantee remain unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - EXP-019 is VALID and proves strict switch requires a running simulation-clock control loop.
+  - RED contract requires deactivate before first pause and requires resume/activate/re-pause before bounded stepping.
+  - Production ordering may be exercised only in a fresh task-owned headless stack; no MoveIt command, reset teleport outside the pinned service, GUI, or hardware.
+success_criteria:
+  - RED fails only because production still uses pause-first; minimal GREEN passes all reset units and Ruff.
+  - Live evidence records controller states, switch/resume timing, joint/object pose and twist around each bounded running window, sequential reset epochs, and final paused convergence for two cycles.
+  - No uncontrolled-window displacement or velocity violates the existing reset tolerances; any physical-state ambiguity stops the experiment without commit.
+failure_criteria:
+  - Either switch times out, re-pause fails, epoch/state convergence fails, or atomic physical evidence cannot bound the running windows.
+invalid_criteria:
+  - Stale install, non-fresh stack/domain, missing pre/post atomic evidence, unrelated process contamination, or incomplete owned cleanup.
+provenance:
+  source_commit: 01ef1e11f7f3568ad326e2a8dc67f9f59dd17db8 plus preserved Task 10 dirty paths
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /opt/ros/jazzy/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 102
+  gz_partition: NONE (MuJoCo only)
+commands:
+  - command: Transaction-order RED, minimal GREEN, then one fresh-stack two-cycle live reset contract with expanded atomic diagnostics.
+    exit_code: 1
+observed:
+  - RED failed only on pause-first ordering; minimal ordering GREEN passed 16 focused tests with one opt-in live skip, Ruff 0.15.20, and the two-package build.
+  - Live server completed deactivate, pause, task_start reset, resume, activate, re-pause, and bounded step without a switch timeout; activation completed before re-pause.
+  - The client then rejected its cached atomic frame as 0.506 s old before calling progress, so no complete pre/post physical-event JSON was emitted and the run is invalid by its preregistered evidence criterion.
+inferred:
+  - The bounded ordering removes the confirmed switch deadlock, but the observer convergence loop must advance subscriptions before its first post-service snapshot.
+conclusion: INVALID due missing complete atomic evidence, not a controller-switch product failure.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-020-reset-order/
+decision: REPEAT only after a RED/GREEN progress-before-snapshot regression.
+next_experiment: EXP-021
+```
+
+## Checkpoint CP-020
+
+```yaml
+checkpoint_id: CP-020
+last_valid_experiment: EXP-019
+current_hypothesis: Advancing observer and joint subscriptions once before the first post-service snapshot will preserve the strict 0.5 s freshness gate and expose the new reset epoch without changing physics or timeouts.
+working_tree_status: The same eight Task 10 paths remain dirty and unstaged; no protected or unrelated path is modified.
+owned_processes: NONE; so101-mujoco-exp020 pane 3952486, launch 3952540, and recorded descendants were stopped; ROS_DOMAIN_ID 102 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-019 confirmed pause-first blocks controller-manager switch completion.
+  - EXP-020 server logs show the bounded running-window ordering completes both strict switches and reset/step services.
+disproven_routes:
+  - Reading the cached snapshot before advancing subscriptions is incompatible with a strict freshness boundary after a multi-service reset sequence.
+open_risks:
+  - Complete atomic pose/twist/joint evidence for both bounded windows is still missing; no production commit is allowed.
+next_command: Add and run a RED unit contract requiring progress before the first post-service snapshot.
+```
+
+## Experiment EXP-021
+
+```yaml
+experiment_id: EXP-021
+status: INVALID
+prior_experiment: EXP-020
+hypothesis: A single progress call before each convergence snapshot fixes only evidence delivery ordering; the bounded switch sequence will then produce complete two-cycle atomic physical evidence within unchanged tolerances.
+prediction: A unit observer that becomes fresh only after progress fails before the fix and passes after it; a fresh domain 103 live run returns two sequential receipts and four bounded-window snapshots with converged object/joint state.
+single_variable: progress-before-snapshot in the convergence loop; transaction ordering, freshness 0.5 s, timeouts, tolerances, model, services, and diagnostics remain frozen from EXP-020.
+lifecycle: FULL_RESTART
+preconditions:
+  - RED/GREEN focused tests and Ruff pass before runtime.
+  - Fresh task-owned domain 103/session and exact rebuilt overlay provenance; no reset outside the transaction and no motion/MoveIt/hardware.
+success_criteria:
+  - Two reset receipts have sequential epochs; four pause-window records contain finite atomic pose/twist and six joints within existing 0.003 m/0.002 rad reset tolerances.
+  - Both controller switches succeed, final controllers are active, world remains paused, cleanup is exact, and package/Ruff/isolation gates pass.
+failure_criteria:
+  - Any stale/session/epoch/controller/joint/object failure, switch timeout, missing window evidence, or tolerance violation.
+invalid_criteria:
+  - Provenance/readiness contamination, incomplete evidence, or incomplete owned cleanup.
+provenance:
+  source_commit: 01ef1e11f7f3568ad326e2a8dc67f9f59dd17db8 plus preserved Task 10 dirty paths
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /opt/ros/jazzy/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 103
+  gz_partition: NONE (MuJoCo only)
+commands:
+  - command: Focused RED/GREEN then unchanged expanded live reset contract.
+    exit_code: 1
+observed:
+  - Progress-before-snapshot RED failed at the intended stale-read boundary; minimal GREEN passed 17 focused tests with one opt-in live skip, Ruff 0.15.20, and the two-package build.
+  - Fresh live services again completed both strict switches, reset, pause transitions, and step, but one spin consumed only an old queued frame; snapshot remained exactly 0.500 s stale and aborted before complete event JSON.
+inferred:
+  - Typed EvidenceStale is transient during bounded convergence and must be retried within the existing deadline; all other evidence failures remain terminal.
+conclusion: INVALID because complete physical evidence is still missing; the switch/order hypothesis remains supported by server logs.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-021-progress-first/
+decision: REPEAT only after a typed-stale retry RED/GREEN.
+next_experiment: EXP-022
+```
+
+## Checkpoint CP-021
+
+```yaml
+checkpoint_id: CP-021
+last_valid_experiment: EXP-019
+current_hypothesis: Retrying only typed EvidenceStale inside the existing convergence deadline will drain queued frames without weakening freshness or physical assertions.
+working_tree_status: The same eight Task 10 paths remain dirty and unstaged; protected tree remains untouched.
+owned_processes: NONE; so101-mujoco-exp021 pane 3958262, launch 3958319, and recorded descendants were stopped; ROS_DOMAIN_ID 103 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-019 confirms the pause/update switch dependency.
+  - EXP-020 and EXP-021 independently show both switches and the bounded reset service sequence complete with the new ordering.
+disproven_routes:
+  - A single subscription spin does not guarantee the newest queued atomic frame is delivered.
+open_risks:
+  - Full physical-window evidence remains unavailable; no Task 10 commit is permitted.
+next_command: Add a typed stale-then-fresh RED and implement bounded retry without changing max_age or timeout.
+```
+
+## Experiment EXP-022
+
+```yaml
+experiment_id: EXP-022
+status: INVALID
+prior_experiment: EXP-021
+hypothesis: Bounded retry of only EvidenceStale drains queued messages and yields complete atomic evidence for the already-proven service ordering.
+prediction: Stale-then-fresh unit RED fails before the fix and passes after it; fresh domain 104 yields two reset receipts and four finite physical-window records within unchanged tolerances.
+single_variable: Catch and retry EvidenceStale inside the existing convergence deadline; no timeout, freshness, service ordering, model, tolerance, or diagnostic change.
+lifecycle: FULL_RESTART
+preconditions:
+  - Focused RED/GREEN, Ruff, and rebuilt overlay pass before runtime.
+  - Fresh task-owned domain 104/session; no MoveIt/motion/GUI/hardware and exact cleanup.
+success_criteria:
+  - Two sequential epochs, four pause-window atomic pose/twist/joint records, active controllers, final paused state, and existing tolerances all pass.
+failure_criteria:
+  - Any non-stale evidence error, deadline, switch, epoch, joint, pose, missing record, or finite-value failure.
+invalid_criteria:
+  - Provenance/readiness contamination, incomplete diagnostics, or incomplete cleanup.
+provenance:
+  source_commit: 01ef1e11f7f3568ad326e2a8dc67f9f59dd17db8 plus preserved Task 10 dirty paths
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /opt/ros/jazzy/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 104
+  gz_partition: NONE (MuJoCo only)
+commands:
+  - command: Typed stale retry RED/GREEN and unchanged two-cycle live contract.
+    exit_code: 1
+observed:
+  - Typed-stale RED failed at the intended boundary; minimal GREEN passed 18 focused tests with one opt-in live skip, Ruff 0.15.20, and the two-package build.
+  - Fresh live services completed both strict switches, reset, pause transitions, and 20 steps, but no evidence with reset_epoch incremented; the unchanged 10 s deadline expired.
+  - Pinned MuJoCo 0.0.3 reset_simulation_state saves and restores mj_data_->time, while the Task 4 plugin increments reset_epoch only when data->time decreases. The direct ResetWorld service therefore cannot produce the planned epoch transition.
+inferred:
+  - CONFIRMED architectural incompatibility: reset epoch has no observable authoritative trigger across the pinned direct service/plugin boundary.
+conclusion: INVALID for Task 10 qualification; continuing with retry/executor changes cannot satisfy the atomic reset contract.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-022-stale-retry/
+decision: ABANDON retry-based fixes and require architecture/spec resolution.
+next_experiment: NONE
+```
+
+## Checkpoint CP-022
+
+```yaml
+checkpoint_id: CP-022
+last_valid_experiment: EXP-019
+current_hypothesis: NONE; direct 0.0.3 ResetWorld plus time-decrease-only plugin epoch detection is structurally incapable of satisfying the approved atomic reset epoch contract.
+working_tree_status: Eight Task 10 paths remain dirty and unstaged: docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md; src/so101_mujoco_demo_py/package.xml; src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/observer.py; src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/client.py; src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py; src/so101_mujoco_demo_py/test/test_mujoco_observer.py; src/so101_mujoco_demo_py/test/test_mujoco_reset.py; src/so101_mujoco_demo_py/test/test_reset_live_contract.py.
+owned_processes: NONE; so101-mujoco-exp022 pane 3963214, launch 3963281, and recorded descendants were stopped; ROS_DOMAIN_ID 104 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-019 proves pause blocks controller-manager switch completion; bounded running windows remove that switch deadlock.
+  - Pinned 0.0.3 reset preserves simulation time, while the evidence plugin's only reset trigger is a time decrease; no epoch increment can result from the direct service.
+  - Three resumed live attempts completed the reordered services but could not produce qualifying atomic epoch evidence; no physical-success or Task 10 completion claim is valid.
+disproven_routes:
+  - More executor separation, progress-before-read, typed-stale retry, or timeout changes cannot create an absent reset epoch source.
+open_risks:
+  - Spec/plan must choose an auditable reset epoch authority, such as a project-owned reset proxy/event integrated with the evidence publisher; inferring from pose jumps is not reliable for idempotent resets.
+  - The bounded deactivate/resume/activate ordering has server evidence but lacks complete atomic pose/twist window qualification and remains uncommitted.
+next_command: NONE
+```
+
+## Checkpoint CP-023
+
+```yaml
+checkpoint_id: CP-023
+last_valid_experiment: EXP-019
+current_hypothesis: NONE; CP-022's reset-epoch authority conflict remains unresolved.
+working_tree_status: The exact same eight Task 10 paths remain dirty and unstaged; no source, spec, plan, or protected Gazebo path changed during this continuation.
+owned_processes: NONE; ROS domains 100 through 104 remain empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no process or session was stopped.
+confirmed_conclusions:
+  - The authoritative spec and plan have not changed since commit 45c6efc and still do not define an epoch source compatible with ResetWorld preserving simulation time.
+disproven_routes:
+  - NONE beyond CP-022.
+open_risks:
+  - Choosing a reset proxy/event or another epoch authority is an architecture change requiring explicit spec/plan approval.
+next_command: NONE
+```
+```
+```
+```
+```
+```
+```
+
 ## Checkpoint CP-RUFF-001
 
 ```yaml
@@ -391,6 +1009,543 @@ disproven_routes:
 open_risks:
   - Future environments must provide exactly Ruff 0.15.20 or the gate intentionally fails closed.
 next_command: Run final package tests, real Ruff gate, isolation and protected-tree gates, then commit the isolated Ruff change and resume Task 5.
+```
+
+## Checkpoint CP-024
+
+```yaml
+checkpoint_id: CP-024
+last_valid_experiment: EXP-019
+current_hypothesis: The pinned reset hook overlay supplies the missing authoritative epoch event; the already-verified bounded transaction order can now satisfy the full atomic reset contract.
+working_tree_status: The original eight Task 10 paths remain present and unstaged. Task 10A adds only the dependency lock, replayable patch/build/provenance tools, dependency contract test, and three support-plugin generation paths; no protected Gazebo path changed.
+owned_processes: NONE; the overlay build and tests completed without leaving a task-owned process or tmux session.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Official upstream tag 0.0.3 and commit 35ba8174b62d9560093614f981a3d4b978a96036 were fetched from https://github.com/ros-controls/mujoco_ros2_control into the isolated dependency workspace.
+  - The exact zero-context minimal patch SHA-256 is 367cf5e3eab641412e234a3b1db86922b5573704932e950f98d9ca394056ea9f; the checkout diff with the same zero-context serialization has the same hash.
+  - Upstream build and tests passed 114 tests with zero errors, failures, or skips. The three upstream packages resolve to /data/work/ws_mujoco_ros2_control_003/install and mujoco_vendor resolves to /opt/ros/jazzy.
+  - Project clean-cache rebuild resolves the patched plugin header from the dependency overlay. Generation-focused GTest passes 6 tests and proves time decrease is not an epoch authority and multiple generation increments are not collapsed.
+disproven_routes:
+  - A previously configured project CMake cache retained the apt include path despite correct shell source order; reset qualification requires clean reconfiguration when changing provider prefix.
+open_risks:
+  - The upstream hook's live exactly-once behavior and the complete two-cycle physical-window contract remain unqualified until EXP-023.
+next_command: Complete Task 10A gates and dependency-hook commit, then preregister EXP-023 before launching a fresh isolated stack.
+```
+
+## Experiment EXP-023
+
+```yaml
+experiment_id: EXP-023
+status: INVALID
+prior_experiment: EXP-022
+hypothesis: The pinned reset-qualified 0.0.3 hook makes each successful central ResetWorld observable exactly once, allowing the already-verified bounded transaction order to produce two complete deterministic reset receipts and atomic physical-window evidence.
+prediction: Two task_start transactions on one fresh stack produce epochs N->N+1 and N+1->N+2; exactly four pause:true events carry finite atomic object pose/twist and six joint positions within 0.003 m and 0.002 rad; controllers are active and the world is paused after each success. An invalid keyframe produces no epoch change and every failure path ends paused.
+single_variable: Runtime dependency changes from apt-only 0.0.3 to the exact pinned 0.0.3 commit plus approved reset hook patch; transaction order, timeouts, freshness, step count, model, controllers, and tolerances remain frozen from EXP-022.
+lifecycle: FULL_RESTART
+preconditions:
+  - Task 10A commit d93bba347c2dbd5794c223a9e88f976286a736a8 and patch SHA-256 367cf5e3eab641412e234a3b1db86922b5573704932e950f98d9ca394056ea9f pass upstream, project, provenance, Ruff, isolation, and protected-tree gates.
+  - Source order is /opt/ros/jazzy then /data/work/ws_mujoco_ros2_control_003/install then project install; all package prefixes and installed hashes match dependency-lock.yaml.
+  - ROS_DOMAIN_ID 105 is empty before launch; session is task-owned and unique; no MoveIt, GUI, motion workflow, or hardware.
+success_criteria:
+  - Two receipts each increment epoch exactly one and form a contiguous sequence.
+  - Four pause-window records have finite object position, linear/angular velocity and six joints; object error is at most 0.003 m and each joint error at most 0.002 rad.
+  - Both controllers are active after verification; final world is paused; invalid-keyframe/failure checks leave paused and do not increment epoch.
+failure_criteria:
+  - Any switch/service timeout, epoch delta other than one, missing/nonfinite record, tolerance failure, inactive controller, non-paused final/failure state, or invalid keyframe epoch change.
+invalid_criteria:
+  - Prefix/hash/session/domain mismatch, stale build, cross-domain contamination, incomplete owned-process cleanup, or missing raw logs.
+provenance:
+  source_commit: d93bba347c2dbd5794c223a9e88f976286a736a8 plus the preserved eight Task 10 paths
+  dependency_checkout: /data/work/ws_mujoco_ros2_control_003/src/mujoco_ros2_control at 35ba8174b62d9560093614f981a3d4b978a96036 plus exact approved patch
+  dependency_overlay: /data/work/ws_mujoco_ros2_control_003/install
+  project_install: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  ros_domain_id: 105
+  simulation_session_id: exp023-reset-qualified-domain105
+  evidence_path: /tmp/so101-debug-mujoco-migration/exp-023/
+owned_processes: Task-owned tmux session so101-mujoco-exp023, pane PID 4086219, launch PID 4086310, robot_state_publisher PID 4086317, and ros2_control_node PID 4086319 were recorded, stopped, reaped, and verified absent; domain 105 is empty after cleanup.
+observed:
+  - The first task_start transaction completed strict deactivate while running, pause, successful ResetWorld, resume, strict activate, re-pause, and bounded step. Server logs show both controller switches succeeded and reset returned success.
+  - The reset hook produced the expected new epoch and the transaction reached physical verification, but it failed the unchanged six-joint 0.002 rad convergence gate before a first receipt was returned.
+  - Post-failure list_controllers showed joint_state_broadcaster, arm_controller, and gripper_controller active. The failure-finally pause prevented a live evidence echo while paused; the captured joint state was [-0.0000492087, 0.0139146102, 0.0158319298, 0.0029935284, 0.0000038187, -0.0000460467] rad, exceeding tolerance on joints 2, 3, and 4.
+  - Because the first receipt failed, the second reset, four-record qualification, and invalid-keyframe check were not executed and cannot be claimed.
+inferred:
+  - The approved hook resolves the absent epoch trigger, but EXP-023 does not qualify Task 10 because post-reset controller/joint convergence is physically outside the frozen threshold.
+conclusion: INVALID at the joint convergence hard gate; no Task 10 production commit is allowed and no tolerance/order patch is justified without a new evidence-layer experiment.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-023/live-reset-contract.log
+  - /tmp/so101-debug-mujoco-migration/exp-023/server-tail-after-failure.txt
+  - /tmp/so101-debug-mujoco-migration/exp-023/joints-after-failure.yaml
+  - /tmp/so101-debug-mujoco-migration/exp-023/controllers-after-failure.txt
+  - /tmp/so101-debug-mujoco-migration/exp-023/process-tree-after-failure.txt
+  - /tmp/so101-debug-mujoco-migration/exp-023/evidence-sha256.txt
+decision: STOP; preserve dirty Task 10 work and request revised experiment direction.
+next_command: NONE
+```
+
+## Checkpoint CP-025
+
+```yaml
+checkpoint_id: CP-025
+last_valid_experiment: EXP-019
+current_hypothesis: NONE; reset epoch authority is now observable, but the first reset fails the unchanged joint convergence hard gate.
+working_tree_status: Task 10A is committed at d93bba347c2dbd5794c223a9e88f976286a736a8. The eight Task 10 paths remain dirty and unstaged, including the paused-start RED/GREEN and expanded live assertions; no protected Gazebo path changed.
+owned_processes: NONE; so101-mujoco-exp023 and recorded PIDs 4086219, 4086310, 4086317, 4086319 were stopped/reaped, and ROS_DOMAIN_ID 105 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - The reset-qualified overlay passes its build, upstream 114-test suite, exact provenance/hash gate, project build/tests, Ruff, isolation, and protected-tree gates.
+  - The patched central reset creates an observable epoch transition and reaches atomic postcondition verification.
+  - EXP-023 fails the frozen 0.002 rad joint gate on joints 2, 3, and 4 after the first reset despite active controllers and successful service ordering.
+disproven_routes:
+  - The missing epoch trigger is no longer the first Task 10 boundary.
+  - A successful ResetWorld response, successful controller activation, and new epoch are insufficient to claim deterministic reset when joint state is outside tolerance.
+open_risks:
+  - The cause and time evolution of the 0.0139/0.0158/0.0030 rad residual joint errors are not yet characterized; changing tolerance, step count, deadline, controller commands, or transaction order would be guessing.
+next_command: NONE
+```
+
+## Checkpoint CP-026
+
+```yaml
+checkpoint_id: CP-026
+last_valid_experiment: EXP-024
+current_hypothesis: The live-test-only 20-step override causes the first post-reset joint divergence; the canonical five-step default should establish the new epoch without exceeding 0.002 rad.
+working_tree_status: Exact eight Task 10 paths remain dirty and unstaged on HEAD d93bba347c2dbd5794c223a9e88f976286a736a8; no protected Gazebo path changed.
+owned_processes: NONE; exp024-joint-boundary-domain106 and recorded PIDs 4103494, 4103700, 4103728, and 4103729 were stopped/reaped, and ROS_DOMAIN_ID 106 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-024 is VALID diagnostic evidence: controller activation ends within 0.000066 rad of home, while paused StepSimulation(20) produces a fresh 0.0144914167 rad maximum joint error.
+  - Joint and evidence callbacks advance across the step boundary, disproving stale verification data.
+  - The approved plan requires a bounded step but does not require 20; production already defaults to five while the live contract alone overrides it to 20.
+disproven_routes:
+  - Resume/activate is not the first joint divergence boundary.
+  - Increasing joint tolerance or changing the frozen transaction order is unsupported by current evidence.
+open_risks:
+  - Five steps may be insufficient to publish the first authoritative reset epoch, or may still exceed the joint tolerance; EXP-025 must decide this before any source change.
+  - Evidence pause-state authority after manual stepping remains unresolved and is not part of the EXP-025 single variable.
+next_command: Execute preregistered EXP-025 on fresh ROS_DOMAIN_ID 107 with only step_count changed from 20 to 5.
+```
+
+## Checkpoint CP-027
+
+```yaml
+checkpoint_id: CP-027
+last_valid_experiment: EXP-024
+current_hypothesis: NONE; the preregistered five-step A/B failed both the frozen joint gate and the paused-evidence freshness requirement.
+working_tree_status: Exact eight Task 10 paths remain dirty and unstaged on HEAD d93bba347c2dbd5794c223a9e88f976286a736a8; no protected Gazebo path changed and the index remains untouched.
+owned_processes: NONE; so101-mujoco-exp025 pane 4117905 and its recorded child stack were stopped/reaped, and ROS_DOMAIN_ID 107 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-025 changes only step_count from 20 to 5 under the same qualified overlays, model, transaction, thresholds, controllers, and fresh-stack lifecycle.
+  - Five steps advance the authoritative epoch and reduce maximum joint error from EXP-024's 0.0144914167 rad to 0.002323864095551104 rad, but joint 3 still violates 0.002 rad.
+  - No subsequent paused evidence is published, so the original deadline ends in typed EvidenceStale despite active controllers and finite object/joint samples.
+disproven_routes:
+  - Replacing the live-test 20-step override with the production five-step default is not sufficient to qualify Task 10.
+  - Further step-count tuning is not supported because it would combine physical convergence with the unresolved pause-state/evidence-publication boundary.
+open_risks:
+  - Atomic evidence does not currently publish an authoritative paused state after manual stepping; the last fresh message reports paused false and then becomes stale.
+  - The minimum bounded step that both exposes the new reset generation and preserves the 0.002 rad joint gate has not been established and must not be guessed.
+next_command: NONE
+```
+
+## Checkpoint CP-028
+
+```yaml
+checkpoint_id: CP-028
+last_valid_experiment: EXP-024
+current_hypothesis: The joint violation and paused-evidence failure are separate boundaries: unrealistically weak kp=1 position actuators permit gravity drift, while the plugin has no authoritative pause-state input.
+working_tree_status: Exact eight Task 10 paths remain dirty and unstaged on HEAD d93bba347c2dbd5794c223a9e88f976286a736a8; this ledger-only diagnostic checkpoint is the only new worktree edit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - The 0.0.3 physics loop executes paused pending steps and advances /clock; controller_manager read/update/write runs at 500 Hz from simulation time.
+  - The evidence plugin is invoked only from hardware read(), infers paused from equality with its prior publish time, and receives neither sim_->run nor SetPause state.
+  - A manual paused step advances data->time, so the only post-step evidence is necessarily labeled paused=false; after stepping stops, /clock stops and no later plugin update can publish paused=true.
+  - The production MJCF declares kp=1 for all six position actuators; at exact home, zero position error produces no actuator torque to balance gravity.
+disproven_routes:
+  - Executor retries or a longer EvidenceStale timeout cannot create a paused update after simulation time stops.
+  - The current time-equality heuristic cannot provide authoritative pause state for StepSimulation snapshots.
+open_risks:
+  - Adding authoritative pause state requires an explicit runtime-to-plugin signal not present in the approved on_reset-only base hook; this architecture must be revised before Task 10 can qualify.
+  - The contribution of kp=1 to the five-step joint error is strongly indicated but not yet isolated in an offline same-model A/B.
+next_command: Execute preregistered offline EXP-026; do not modify production MJCF or runtime APIs.
+```
+
+## Experiment EXP-026
+
+```yaml
+experiment_id: EXP-026
+status: INVALID
+prior_experiment: EXP-025
+hypothesis: The production MJCF's kp=1 position-actuator stiffness is sufficient to explain the five-step home drift under gravity.
+prediction: From the exact task_start keyframe with identical model state and zero control targets, the current kp=1 model exceeds 0.002 rad within five steps, while a diagnostic-only uniform kp=50 copy remains within 0.002 rad.
+single_variable: Uniform position actuator kp changes from 1 to 50 in an evidence-directory copy; geometry, inertial, timestep, keyframe, ctrl, solver, and step count remain identical.
+lifecycle: OFFLINE_MODEL_AB
+preconditions:
+  - Load the exact installed/project MJCF and assets corresponding to HEAD d93bba347c2dbd5794c223a9e88f976286a736a8 plus preserved dirty Task 10 paths.
+  - Write all copied/modified diagnostic assets and results only below /tmp/so101-debug-mujoco-migration/exp-026/.
+success_criteria:
+  - Both models compile and produce finite five-step qpos/qvel traces from task_start.
+  - A exceeds 0.002 rad and B remains within 0.002 rad, isolating actuator kp as a causal model parameter.
+failure_criteria:
+  - Both variants exceed the threshold or changing kp does not materially reduce the same joint errors.
+invalid_criteria:
+  - Any non-kp XML difference, different initial keyframe/control, missing asset, nonfinite state, or production-tree write.
+provenance:
+  source_commit: d93bba347c2dbd5794c223a9e88f976286a736a8 plus preserved eight Task 10 paths
+  source_mjcf: src/so101_mujoco_demo_py/mjcf/so101.xml
+  evidence_path: /tmp/so101-debug-mujoco-migration/exp-026/
+commands:
+  - command: Offline exact-model A/B diagnostic
+    exit_code: 0
+observed:
+  - Both exact scene copies compiled and produced finite qpos/qvel through five 0.002 s steps from the task_start keyframe with zero controls.
+  - A with kp=1 reached maximum absolute joint error 0.0009733845952399659 rad at step five.
+  - B with uniform kp=50 reached 0.0009534146652874344 rad at step five, only about two percent lower; both remained below 0.002 rad.
+  - The exact A/B file diff contains only the six declared kp values, and A hashes match the production MJCF inputs.
+inferred:
+  - Uniform stiffness 1 to 50 is not the causal explanation for the runtime five-step violation.
+  - EXP-025 begins its explicit five-step service after activation has already advanced the reset model to approximately the direct model's third-step state; its final 0.002323864 rad corresponds to more accumulated physics than the preregistered zero-state five-step A/B.
+conclusion: INVALID hypothesis: kp=1 does not explain the discrepancy, and changing production actuator stiffness is unsupported.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-026/a-result.json (sha256 ed61b889a836922dfec648e74e6e84ee4e1c11b413178c9ff920f5171b8f472f)
+  - /tmp/so101-debug-mujoco-migration/exp-026/b-result.json (sha256 55c23673020415ecef1961e1ebb41d91bad4e4643bf81b8752eb8de6e2f2827c)
+  - /tmp/so101-debug-mujoco-migration/exp-026/model-diff.patch (sha256 cebc24ca013643a69679c3def356122b30f06ba049848d023ef6218faa968444)
+  - /tmp/so101-debug-mujoco-migration/exp-026/offline_kp_ab.cpp (sha256 67ae3cffd058a5f161c015921d305368c74ccaaea78c23c3062778cebe02d3a3)
+decision: DROP actuator-stiffness patch route; retain the independently proven pause-authority architecture gap and stop before proposing a new physical experiment.
+next_experiment: NONE
+```
+
+## Checkpoint CP-029
+
+```yaml
+checkpoint_id: CP-029
+last_valid_experiment: EXP-024
+current_hypothesis: NONE; actuator stiffness was disproven, while authoritative pause-state publication remains an implementation-interface gap requiring architecture approval.
+working_tree_status: Exact eight Task 10 paths remain dirty and unstaged on HEAD d93bba347c2dbd5794c223a9e88f976286a736a8; only this ledger records the new read-only diagnosis and offline experiment.
+owned_processes: NONE; EXP-026 was offline and launched no ROS, tmux, simulator, MoveIt, GUI, or hardware process.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Exact-model five-step drift from task_start is 0.0009733845952399659 rad at kp=1, below the frozen 0.002 rad gate.
+  - Uniform kp=50 changes that result only to 0.0009534146652874344 rad, disproving stiffness as the runtime discrepancy's cause.
+  - EXP-025's explicit five-step phase starts after activation has already advanced the model to about the direct trace's third-step state, so total post-reset physics advancement—not five steps from zero—explains the larger observed error.
+  - The pause field remains structurally non-authoritative: the base plugin API exposes only model/data during update and the approved on_reset hook, while SetPause state exists only as sim_->run in the system interface.
+disproven_routes:
+  - Raising position-actuator kp is unsupported and must not be committed.
+  - Timeout/executor changes cannot produce a paused snapshot after /clock and controller updates stop.
+open_risks:
+  - Task 10's mandatory four paused atomic records cannot be proven without an explicit authoritative pause signal reaching the evidence plugin.
+  - Any change to the approved upstream hook beyond on_reset is an architecture change and requires user/orchestrator approval before implementation.
+  - A new physical A/B must isolate the uncommanded activation-window physics advancement before altering step count or transaction order.
+next_command: NONE
+```
+
+## Checkpoint CP-030
+
+```yaml
+checkpoint_id: CP-030
+last_valid_experiment: EXP-024
+current_hypothesis: A minimal runtime pause notification plus reset-generation priority over the evidence rate gate can make one paused step produce authoritative epoch evidence while staying within the frozen joint threshold.
+working_tree_status: Exact eight Task 10 paths remain dirty and unstaged on HEAD d93bba347c2dbd5794c223a9e88f976286a736a8; only ledger checkpoints were added during this architecture audit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - The plugin currently checks its 0.01 s publish period before loading/consuming reset_generation, so a 0.002 s paused step cannot expose the new epoch even though update() runs.
+  - EXP-026's exact-model trace proves total post-reset step four has maximum joint error 0.0006500513951707087 rad, whereas EXP-025's effective total step eight is outside tolerance.
+  - Therefore a one-step bounded service after the observed three-step activation window has evidence-backed joint margin, but it requires reset generation to bypass the ordinary publish-rate gate.
+  - The approved on_reset-only base API still cannot make paused authoritative; a separate runtime-to-plugin pause signal is unavoidable.
+proposed_contract_pending_approval:
+  - Add default no-op virtual on_pause(bool paused) to the pinned 0.0.3 plugin base.
+  - On every successful SetPause request, including idempotent requests, call each plugin exactly once with the authoritative requested state; failed service paths call zero times.
+  - SimulationEvidencePlugin::on_pause performs only an atomic bool store; update() loads that value into the same locked mjData snapshot message and deletes time-equality inference.
+  - A pending reset generation bypasses only the evidence publish-period throttle, so the first update after reset consumes the generation; normal publish cadence remains fixed.
+  - Set the Task 10 bounded step count to one, retain the original deadline and typed-EvidenceStale-only retry, and change no physics threshold or transaction ordering.
+required_red_tests:
+  - Disposable upstream patch replay proves default-compatible on_pause signature and exactly-once success/idempotent notification with zero failed-path notification.
+  - Support plugin test proves on_pause true/false is reflected by update independent of simulation-time movement and that pending generation publishes before 0.01 s.
+  - Python transaction test proves one bounded step and preserves running deactivate -> pause -> ResetWorld -> resume -> activate -> re-pause -> step -> atomic verify.
+  - Fresh live two-reset qualification proves consecutive epochs, four finite paused records, joints <=0.002 rad, object <=0.003 m, controllers active, final/failure paused, and invalid keyframe zero epoch change.
+open_risks:
+  - This expands the user-approved upstream patch API beyond on_reset and cannot be implemented without explicit architecture approval.
+  - EXP-026 is offline support for the one-step prediction; live behavior remains unproven until a preregistered fresh-domain experiment.
+next_command: NONE
+```
+
+## Checkpoint CP-031
+
+```yaml
+checkpoint_id: CP-031
+last_valid_experiment: EXP-024
+current_hypothesis: The approved on_pause hook, pending-generation priority, and one-step bounded transaction jointly satisfy authoritative paused evidence and the unchanged reset physical gates.
+working_tree_status: Task 10 implementation remains deliberately dirty and unstaged on HEAD e0838b0b8d76ee17620a998931fa57718b0b284d; the protected Gazebo tree remains untouched.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - User approved the CP-030 architecture and spec/plan commit e0838b0b8d76ee17620a998931fa57718b0b284d records it independently.
+  - Overlay RED failed for absent on_pause; GREEN patch replay tests pass 10/10, upstream tests pass 114/114, and the installed patch/provenance SHA is 19d4d8adc45858cd441c1ce5f2887063fe3b17b08d94e67c400a6c9effe6380b.
+  - Support RED failed to compile without on_pause; GREEN integration passes seven tests and proves authoritative pause plus reset-generation publication at 0.001 s while ordinary messages remain rate limited.
+  - Python RED failed for step five and accepting non-paused new-epoch evidence; GREEN focused reset tests pass 13/13 with exactly one step and paused postcondition.
+  - The first two-package test run has only the expected stale-ledger next_experiment failure: support 7 passed; Python 109 passed, 1 failed, 2 opt-in skipped.
+open_risks:
+  - Four pause-window records and two consecutive live reset cycles remain unproven until EXP-027.
+  - An in-flight control update must publish the first pause window; the post-step generation-priority update must publish the second.
+next_command: Run the corrected package gate, then execute preregistered EXP-027 only if all static/provenance/isolation preconditions pass.
+```
+
+## Experiment EXP-027
+
+```yaml
+experiment_id: EXP-027
+status: INVALID
+prior_experiment: EXP-026
+hypothesis: The approved authoritative pause hook, pending-reset publication priority, and one-step bounded transaction make two consecutive task_start resets deterministic without relaxing any physical threshold.
+prediction: Both resets increment epoch exactly once and return within the original deadline; four finite pause-window atomic records report paused=true; object error is <=0.003 m, every joint error <=0.002 rad, controllers remain active, final state is paused, and an invalid keyframe leaves epoch unchanged with failure paused.
+single_variable: Approved CP-030 implementation replaces time-derived pause with on_pause authority, prioritizes pending reset generation, and changes bounded step count from five to one; transaction order, timeout, model, controllers, and thresholds are unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD e0838b0b8d76ee17620a998931fa57718b0b284d plus preserved Task 10 dirty implementation and freshly built two-package overlay.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; exact lock/provenance and package gates pass.
+  - Fresh task-owned ROS_DOMAIN_ID 109 and session exp027-authoritative-pause-domain109; no MoveIt, GUI, workflow motion, or hardware.
+success_criteria:
+  - Two receipts form consecutive epoch pairs with each increment exactly one and simulation_step > 0.
+  - Exactly four pause-window records are finite and authoritative paused=true.
+  - Object position error <=0.003 m, all six joints <=0.002 rad, controllers active, and final state paused.
+  - Invalid keyframe produces ResetFailed, leaves epoch unchanged, and leaves authoritative state paused.
+failure_criteria:
+  - Any frozen postcondition, service order, deadline, epoch, pause, controller, joint, object, or invalid-keyframe assertion fails with complete evidence.
+invalid_criteria:
+  - Stale build/prefix, contaminated domain, missing record, source-order mismatch, executor failure, or incomplete task-owned cleanup.
+provenance:
+  source_commit: e0838b0b8d76ee17620a998931fa57718b0b284d plus preserved Task 10 dirty paths
+  upstream_commit: 35ba8174b62d9560093614f981a3d4b978a96036
+  patch_sha256: 19d4d8adc45858cd441c1ce5f2887063fe3b17b08d94e67c400a6c9effe6380b
+  dependency_overlay: /data/work/ws_mujoco_ros2_control_003/install
+  project_install: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  ros_domain_id: 109
+  gz_partition: NONE
+  evidence_path: /tmp/so101-debug-mujoco-migration/exp-027/
+commands:
+  - command: SO101_MUJOCO_RESET_LIVE_TEST=1 package live contract against fresh headless stack
+    exit_code: 1
+observed:
+  - The first reset completed strict deactivate, pause, successful task_start ResetWorld, resume, strict activate, re-pause, and StepSimulation(1); server-side service ordering contains no timeout or failure.
+  - The transaction did not raise the immediate non-paused, session, epoch-ahead, controller, joint, or object failures; it exhausted the unchanged 10 s deadline while paused at the legacy current.simulation_step > 0 gate.
+  - No first receipt was returned; therefore the second reset, four-record qualification, and invalid-keyframe checks did not execute and cannot be claimed.
+  - Task-owned pane 4167162 and children were stopped/reaped; ROS_DOMAIN_ID 109 was empty after cleanup and unrelated sessions remained.
+inferred:
+  - The installed builder resets simulation_step to zero when it consumes a generation, and the one-step service provides no later update; correlated source and service evidence therefore predicts the only new-epoch observation is authoritative step zero, but EXP-027 did not print the message and cannot promote that prediction to a direct observation.
+  - The next diagnostic must print the post-step atomic key/paused/object/joint state before changing the Python gate.
+  - Adding more steps to manufacture a positive counter would recreate the disproven joint-drift route and is not justified.
+conclusion: INVALID for Task 10 qualification because the Python postcondition rejected the schema-authoritative reset step zero and timed out before any receipt.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-027/live-reset-contract.log (sha256 3e72bacc667323ad05a83a26fa643fe769122bfe174a8abe8d181eb41ed16dc2)
+  - /tmp/so101-debug-mujoco-migration/exp-027/launch.log (sha256 64d7ae5005a5d2deba85e5942245334b12d20f15642375bf2b613b194c108fb2)
+  - /tmp/so101-debug-mujoco-migration/exp-027/provenance.json (sha256 b6de0ad2088f540c2465ad98a3145eaba997080d849d2a023eaecdd7239eac03)
+  - /tmp/so101-debug-mujoco-migration/exp-027/runtime-hashes.txt (sha256 833da975dc64fd317e6afdfd7f900f01aa36a37f80ad0f01d3f7e7ff9fac46bb)
+decision: STOP; preserve the one-step physical route and request/record explicit acceptance of reset-generation step zero before changing the Python postcondition.
+next_experiment: NONE
+```
+
+## Checkpoint CP-032
+
+```yaml
+checkpoint_id: CP-032
+last_valid_experiment: EXP-024
+current_hypothesis: The one-step transaction publishes only the schema-authoritative new-epoch step-zero snapshot, which the legacy Python >0 gate ignores; direct atomic-key capture is required before changing that gate.
+working_tree_status: Approved overlay/support/Task 10 changes remain dirty and unstaged on HEAD e0838b0b8d76ee17620a998931fa57718b0b284d; no protected Gazebo path changed.
+owned_processes: NONE; so101-mujoco-exp027 pane 4167162 and children were stopped/reaped, and ROS_DOMAIN_ID 109 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-027 completes the exact one-step service transaction through re-pause and fails only by exhausting the Python postcondition deadline before a first receipt.
+  - The frozen builder contract assigns simulation_step zero on generation consumption; with only one paused step there is no subsequent clock/update to increment it.
+  - Raising the step count is rejected because prior evidence proves accumulated post-reset physics crosses the unchanged joint threshold.
+disproven_routes:
+  - The approved on_pause overlay does not reproduce the earlier controller switch timeout.
+  - More timeout cannot change the atomic key after the paused clock stops.
+open_risks:
+  - EXP-027 did not serialize its last atomic message, so step-zero/paused/new-epoch correlation remains a source-backed prediction rather than direct black-box evidence.
+  - Four pause-window records, two receipts, invalid keyframe, and full Task 10 qualification remain incomplete.
+next_command: NONE
+```
+
+## Checkpoint CP-033
+
+```yaml
+checkpoint_id: CP-033
+last_valid_experiment: EXP-024
+current_hypothesis: The one-step transaction produces a fresh authoritative tuple (session, new_epoch, step=0, paused=true) with physical state inside unchanged gates; direct black-box capture can confirm or reject it without changing production.
+working_tree_status: Approved overlay/support/Task 10 changes remain dirty and unstaged on HEAD e0838b0b8d76ee17620a998931fa57718b0b284d; no protected Gazebo path changed.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-027 failed before a receipt because the legacy Python gate requires simulation_step > 0 after a builder-defined step-zero generation observation.
+  - The exact service order and one-step operation complete without controller-switch or service timeout.
+open_risks:
+  - The post-step atomic tuple and physical values were not serialized by EXP-027 and must be observed directly before changing the gate.
+next_command: Execute preregistered EXP-028 on fresh domain 110 without invoking MujocoResetClient.
+```
+
+## Experiment EXP-028
+
+```yaml
+experiment_id: EXP-028
+status: INVALID
+prior_experiment: EXP-027
+hypothesis: One successful paused StepSimulation(1) after the approved reset transaction publishes exactly the new reset epoch at simulation_step zero with authoritative paused=true and physical state inside the unchanged gates.
+prediction: Direct boundary capture shows reset_epoch old+1, simulation_step=0, paused=true, finite object/joint state, object error <=0.003 m, every joint <=0.002 rad, and active controllers immediately after step one.
+single_variable: Measurement only: replace MujocoResetClient postcondition loop with direct service calls and serialized observer samples; build, model, order, one-step count, controllers, timeout, and thresholds are unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD e0838b0b8d76ee17620a998931fa57718b0b284d plus preserved approved dirty Task 10 implementation and freshly built overlays.
+  - Source order /opt/ros/jazzy -> dependency overlay -> project install and exact patch/provenance pass.
+  - Fresh task-owned ROS_DOMAIN_ID 110 and session exp028-step-zero-domain110; no MoveIt, GUI, workflow motion, or hardware.
+success_criteria:
+  - Every service returns true in the frozen order and the post-step callback is fresh.
+  - The direct post-step tuple is new_epoch, step zero, paused true; object/joints are finite and inside unchanged thresholds; controllers are active.
+failure_criteria:
+  - Direct evidence contradicts any predicted key, pause, physical, controller, or service property.
+invalid_criteria:
+  - Stale build/prefix, contaminated domain, missing callback, executor failure, or incomplete task-owned cleanup.
+provenance:
+  source_commit: e0838b0b8d76ee17620a998931fa57718b0b284d plus approved dirty Task 10 paths
+  upstream_commit: 35ba8174b62d9560093614f981a3d4b978a96036
+  patch_sha256: 19d4d8adc45858cd441c1ce5f2887063fe3b17b08d94e67c400a6c9effe6380b
+  ros_domain_id: 110
+  evidence_path: /tmp/so101-debug-mujoco-migration/exp-028/
+commands:
+  - command: Fresh stack plus manual one-step boundary capture
+    exit_code: 1
+observed:
+  - Strict deactivate, pre-reset pause, task_start reset, resume, strict activate, re-pause, and StepSimulation(1) all returned success in the frozen order.
+  - The observer received no new-epoch callback within two seconds after the successful one-step service and the diagnostic raised new-epoch post-step callback timeout.
+  - Because no post-step atomic record existed, no step, pause, object, joint, or controller success property can be claimed from this run.
+  - Task-owned pane 2823 and its child stack were stopped/reaped; domain 110 was empty after cleanup and unrelated sessions remained.
+inferred:
+  - One clock increment is insufficient to guarantee that the controller-manager read loop invokes the plugin after reset; pending-generation rate bypass cannot publish without an update invocation.
+  - EXP-027's timeout was absence of a new-epoch callback, not rejection of an observed step-zero record.
+conclusion: INVALID hypothesis: StepSimulation(1) does not provide the required post-reset atomic observation.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-028/manual-capture.log (sha256 80b46bff4b120428757ab787765e85c3a458960dd35f2f8c2f82c2f96fe7f1bd)
+  - /tmp/so101-debug-mujoco-migration/exp-028/launch.log (sha256 c3b526cf585451e3eda98a8da688a5b1a5d98abbce80d09f264aba4fe9fd81c1)
+  - /tmp/so101-debug-mujoco-migration/exp-028/provenance.json (sha256 b6de0ad2088f540c2465ad98a3145eaba997080d849d2a023eaecdd7239eac03)
+  - /tmp/so101-debug-mujoco-migration/exp-028/process-tree.txt (sha256 fce89ad63b8667a54d95b2e449c8c3c5f0753b2bf5fce9f79fc0b129d8b79320)
+decision: STOP; do not change the Python step-zero gate. A new experiment must isolate the minimum clock advancement that invokes one post-reset control/plugin update while retaining the joint threshold.
+next_experiment: NONE
+```
+
+## Checkpoint CP-034
+
+```yaml
+checkpoint_id: CP-034
+last_valid_experiment: EXP-024
+current_hypothesis: NONE; one paused step does not wake a post-reset controller/plugin update, while prior evidence bounds five paused steps outside the joint gate.
+working_tree_status: Approved overlay/support/Task 10 changes remain dirty and unstaged on HEAD e0838b0b8d76ee17620a998931fa57718b0b284d; no protected Gazebo path changed.
+owned_processes: NONE; so101-mujoco-exp028 pane 2823 and child stack were stopped/reaped, and ROS_DOMAIN_ID 110 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-028 directly proves a successful StepSimulation(1) produces no observable new-epoch callback within two seconds.
+  - Pending-generation priority works when update() is invoked, as proven by the support integration test, but cannot itself wake controller_manager.
+  - Accepting simulation_step zero in Python would not fix the observed runtime because no new-epoch message exists after one step.
+disproven_routes:
+  - The EXP-027 timeout must not be fixed by weakening current.simulation_step > 0.
+  - One-step bounded reset cannot qualify Task 10 with the current 0.0.3 clock/controller scheduling boundary.
+open_risks:
+  - The minimum paused step count that wakes exactly one post-reset update is between two and five; it must be measured rather than guessed.
+  - The corresponding accumulated joint error must remain <=0.002 rad and pause evidence must be authoritative.
+next_command: NONE
+```
+
+## Checkpoint CP-035
+
+```yaml
+checkpoint_id: CP-035
+last_valid_experiment: EXP-024
+current_hypothesis: A subscriber active before the transaction can determine whether the one-step reset publishes a new-epoch step-zero paused message before, during, or after the explicit step boundary.
+working_tree_status: All fifteen approved Task 10 dirty paths are preserved and unstaged on HEAD e0838b0b8d76ee17620a998931fa57718b0b284d; no production source is changed for this diagnostic.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - User approved the CP-032 recommended black-box route and explicitly requires pre-subscription plus serialization of every atomic message around one existing transaction.
+  - EXP-028 is already terminal INVALID and cannot be reused without falsifying the append-only ledger; EXP-030 is its follow-up and repairs the EXP-028 instrumentation blind spot by pre-subscribing and persisting the complete callback stream across every service boundary.
+open_risks:
+  - The new generation may be published during resume/activate before the prior diagnostic begins its post-step wait, or no post-reset publication may occur at all.
+next_command: Execute preregistered EXP-030 on fresh ROS_DOMAIN_ID 111; modify no production code, step count, deadline, or threshold.
+```
+
+## Experiment EXP-030
+
+```yaml
+experiment_id: EXP-030
+status: INVALID
+prior_experiment: EXP-028
+supersedes_correction: EXP-030 corrects, but does not rewrite, EXP-028's unsupported inference that no new-epoch callback existed or that reset generation was unconsumed. EXP-028 is measurement INVALID because its exception path did not persist boundary events and it required a post-StepSimulation callback-count increase even when the new epoch could already have appeared during resume or activate.
+hypothesis: Pre-subscribing and serializing every atomic message reveals exactly one new reset epoch with simulation_step zero and authoritative paused=true during the existing one-step transaction.
+prediction: The complete callback stream contains exactly one epoch transition old->old+1; its first message has simulation_step=0 and paused=true with finite atomic object pose/twist and object error <=0.003 m, while the nearest asynchronous `/joint_states` sample has six finite joints inside 0.002 rad and independent controller feedback reports active controllers.
+single_variable: Measurement coverage only: a raw atomic subscriber and joint recorder are running before the unchanged existing task_start transaction and serialize every callback before/after reset; production, one-step count, 10 s deadline, transaction order, model, controllers, and thresholds are unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD e0838b0b8d76ee17620a998931fa57718b0b284d plus exactly fifteen preserved Task 10 dirty paths and freshly built qualified overlays.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; exact prefix/header/runtime/patch provenance passes.
+  - Fresh task-owned ROS_DOMAIN_ID 111 and session exp030-presubscribed-domain111; no MoveIt, GUI, workflow motion, hardware, or unrelated cleanup.
+success_criteria:
+  - The raw subscriber starts before transaction entry and records every publisher sequence with session, epoch, step, paused, atomic object pose/twist, the nearest asynchronous `/joint_states` sample, and boundary label; the joint sample is not represented as part of or correlated with the atomic message.
+  - New epoch appears exactly once, first new-epoch record is step zero and paused true, all physical values are finite and inside unchanged gates, and controllers are active.
+failure_criteria:
+  - No new epoch, more than one increment, nonzero first step, paused false, invalid/missing physical/controller state, or unchanged transaction failure inconsistent with the prediction.
+invalid_criteria:
+  - Subscriber not ready before transaction, stale build/prefix, contaminated domain, dropped/duplicate publisher sequence, executor failure, or incomplete task-owned cleanup.
+provenance:
+  source_commit: e0838b0b8d76ee17620a998931fa57718b0b284d plus fifteen preserved Task 10 paths
+  upstream_commit: 35ba8174b62d9560093614f981a3d4b978a96036
+  patch_sha256: 19d4d8adc45858cd441c1ce5f2887063fe3b17b08d94e67c400a6c9effe6380b
+  ros_domain_id: 111
+  evidence_path: /tmp/so101-debug-mujoco-migration/exp-030/
+commands:
+  - command: Pre-subscribed raw evidence recorder plus existing MujocoResetClient.reset(task_start)
+    exit_code: 1
+observed:
+  - The raw subscriber was receiving before transaction entry and recorded eight strictly increasing publisher sequences 1193 through 1200 without a duplicate or reversal.
+  - Exactly one new-epoch record appeared: publisher_sequence 1200, session exp030-presubscribed-domain111, reset_epoch 1 from old epoch 0, simulation_step 0, boundary during:activate, and paused=false.
+  - That record's object pose was exactly [0.27, 0.0, 0.08] with identity orientation and zero linear/angular twist, all finite and inside the 0.003 m gate.
+  - The `joint_positions` stored beside that record are the nearest asynchronous `/joint_states` sample, not a field of the atomic evidence message and not correlated to the same service boundary. That independent sample was still pre-reset [0.0013423323, 1.0616174434, 0.3767800378, 0.0833674276, 0.0000935846, -0.0021920242] rad and cannot qualify a converged atomic joint record.
+  - Re-pause and StepSimulation(1) returned success but produced no later atomic message. Independent final controller feedback reported active controllers and joints [-0.0000006392, 0.0001658372, 0.0001956669, 0.0000360990, 0.0000000458, -0.0000005113] rad, within 0.002, but it is not correlated with any same-boundary paused atomic record.
+  - MujocoResetClient exhausted the unchanged deadline; task-owned pane 12149 and children were stopped/reaped and domain 111 was empty after cleanup.
+inferred:
+  - Pending generation is consumed during the running activation window before re-pause, so the sole new-epoch step-zero record correctly reports authoritative paused=false.
+  - One paused step is insufficient to cause another plugin publish; physical/controller convergence alone cannot substitute for the missing paused atomic record.
+conclusion: INVALID because the user-mandated black-box prerequisite paused=true with valid atomic object state and independently qualified joint/controller feedback is false.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-030/all-atomic-evidence.json (sha256 984f6b1e16b1d64ec0715f2a61a24fdc42a03883d501965849fde21c3058e34f)
+  - /tmp/so101-debug-mujoco-migration/exp-030/pre-subscribed-capture.log (sha256 cbf918ef30190683458340dffa2513c0d7850cda1282fe70f82d6aea008691db)
+  - /tmp/so101-debug-mujoco-migration/exp-030/launch.log (sha256 2216293f24d5ecd501fcd5223a7741011adac2c759eed4408b5c38be1ec46348)
+  - /tmp/so101-debug-mujoco-migration/exp-030/provenance.json (sha256 b6de0ad2088f540c2465ad98a3145eaba997080d849d2a023eaecdd7239eac03)
+  - /tmp/so101-debug-mujoco-migration/exp-030/runtime-hashes.txt (sha256 1e0994ea61424277d7e3f21a70366c1a395df8503c859d6459c8c9166c3d1b0e)
+  - /tmp/so101-debug-mujoco-migration/exp-030/domain-after-domain111-node-list-no-daemon.txt (empty; sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+decision: STOP as explicitly required; do not add the step-zero ResetReceipt test or modify reset.py because the iff prerequisite did not hold.
+next_experiment: NONE
+```
+
+## Checkpoint CP-036
+
+```yaml
+checkpoint_id: CP-036
+last_valid_experiment: EXP-024
+current_hypothesis: NONE; the approved iff prerequisite is directly false because the only new-epoch step-zero message is published during activate with paused=false and no later paused atomic record exists after one step.
+working_tree_status: All fifteen Task 10 dirty paths remain preserved and unstaged on HEAD e0838b0b8d76ee17620a998931fa57718b0b284d; no production change followed the failed black-box prerequisite.
+owned_processes: NONE; so101-mujoco-exp030 pane 12149 and child stack were stopped/reaped, and ROS_DOMAIN_ID 111 is empty.
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual remain; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Pre-subscription captured the complete relevant stream and proves exactly one epoch increment, first step zero, but paused=false during activate.
+  - Re-pause plus one explicit step produces no further atomic publication. Independent final controller feedback reports active controllers and joints within 0.000196 rad, but is not an atomic field and is not correlated to the paused evidence boundary.
+  - The object state in the new-epoch message is exact and finite. The adjacent `joint_positions` value is only the nearest asynchronous `/joint_states` sample, is pre-reset, and cannot qualify a same-boundary atomic physical gate.
+  - EXP-030 supersedes only the interpretation of EXP-028, preserving its historical record: EXP-028's exception path omitted persisted boundary events and its forced post-step callback-delta wait missed the new epoch already published during activate. EXP-028 is therefore measurement INVALID and cannot support its former inferred claims that no new-epoch callback existed or generation was unconsumed.
+  - The prior `domain-after.txt` was produced through the ROS 2 daemon and listed nodes cached from the default domain; it is a daemon artifact, not domain-111 cleanup evidence. A fresh `ROS_DOMAIN_ID=111 ros2 node list --no-daemon` produced the empty `domain-after-domain111-node-list-no-daemon.txt` with sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, directly verifying domain 111 empty without stopping any additional process.
+disproven_routes:
+  - The user-approved condition for accepting step-zero ResetReceipt is not satisfied, so test_mujoco_reset.py and reset.py must remain unchanged by this route.
+  - Plan/action/service success, converged final joints, or a step-zero epoch alone cannot establish authoritative paused atomic success.
+open_risks:
+  - The approved one-step CP-030 transaction cannot publish a post-re-pause atomic message under the current controller/plugin scheduling boundary.
+  - Any next route would require new user direction because increasing steps, changing order, or adding another runtime publication hook is outside the explicit iff authorization.
+next_command: NONE
 ```
 
 ## Checkpoint CP-006

@@ -4,7 +4,7 @@
 
 **Goal:** 在不修改 `src/so101_gazebo_demo_py/**` 的前提下，新建独立 ROS 2 Python package `so101_mujoco_demo_py` 与最小 C++ 支持 package `so101_mujoco_support`，用 MuJoCo + `mujoco_ros2_control` 实现 SO-101 pick-place 的 ROS 2 / MoveIt 2 / 纯物理抓取链路。
 
-**Architecture:** `so101_mujoco_demo_py` 从第一笔实现提交起就是独立 `ament_python` package。它拥有自己的 MJCF、launch、配置、domain/workflow、MoveIt adapter、MuJoCo observer/reset、可重放 upstream patch/build/provenance 工具和测试；`so101_mujoco_support` 提供来自同一 simulation step 的原子 pose/twist/contact/reset-generation 证据。reset-qualified runtime 强制从官方稳定 0.0.3 commit 加最小 reset hook patch 构建到隔离 dependency overlay；Gazebo package 只作为历史行为来源，不能成为 build、test、runtime 或 installed-asset 依赖。
+**Architecture:** `so101_mujoco_demo_py` 从第一笔实现提交起就是独立 `ament_python` package。它拥有自己的 MJCF、launch、配置、domain/workflow、MoveIt adapter、MuJoCo observer/reset、可重放 upstream patch/build/provenance 工具和测试；`so101_mujoco_support` 提供来自同一锁定 MuJoCo snapshot 的原子 pose/twist/contact/reset-generation 证据。reset-qualified runtime 强制从官方稳定 0.0.3 commit 加最小 reset/pause/state-snapshot hook patch 构建到隔离 dependency overlay；成功/幂等 re-pause 在 `sim_mutex_` 下发布 step-zero paused snapshot，不通过 StepSimulation 推进 physics；Gazebo package 只作为历史行为来源，不能成为 build、test、runtime 或 installed-asset 依赖。
 
 **Tech Stack:** Ubuntu 24.04、ROS 2 Jazzy、Python 3.12、`ament_python`、`ament_cmake`、`rclpy`、MoveIt 2、`ros2_control`、`mujoco_vendor 0.0.8`、`mujoco_ros2_control 0.0.3`、MuJoCo 3.x、MJCF、`pluginlib`、`realtime_tools`、`pytest`、GTest、`launch_testing`。
 
@@ -14,8 +14,11 @@
 - Reset-qualified runtime must come from `/data/work/ws_mujoco_ros2_control_003/install`; apt 0.0.3 remains underlay only and `/opt/ros/jazzy` is never overwritten.
 - Source order is exactly `/opt/ros/jazzy/setup.zsh` → dependency overlay `setup.zsh` → project `install/setup.zsh`.
 - The repository owns a minimal replayable patch and build/provenance scripts under `src/so101_mujoco_demo_py/**`; it does not vendor or runtime-load an upstream checkout.
-- The patch adds a default no-op virtual `on_reset()` to the plugin base and calls it once per initialized plugin only after a successful central reset. Invalid keyframes call it zero times.
-- Evidence `reset_epoch` comes only from an atomic reset generation incremented by `on_reset()` and consumed by `update()`; time decrease and pose jump are forbidden epoch authorities.
+- The patch adds source-compatible default no-op virtuals `on_reset()`, `on_pause(bool paused)`, and `on_state_snapshot(const mjModel * model, const mjData * data, bool paused)`; ordinary third-party plugins require no changes.
+- A successful central reset calls `on_reset()` once per initialized plugin; an invalid keyframe calls it zero times. Every successful or idempotent `SetPause(true)` calls `on_pause(true)` and then exactly one `on_state_snapshot(model_, mj_data_, true)` per initialized plugin while `sim_mutex_` is held; pause false and failed requests call zero snapshot hooks.
+- The snapshot hook is read-only and is not generic `update()`: it must not advance physics or write qpos/qvel/ctrl/xfrc/constraint. Atomic evidence contains object pose/twist/contact only; `/joint_states` remains independent asynchronous controller feedback.
+- Evidence `reset_epoch` comes only from the atomic generation incremented by `on_reset()`. A running `update()` must not consume a pending generation; only a successful paused snapshot publication consumes it as `old+1`, `simulation_step=0`, `paused=true`. Publisher contention retains the pending generation.
+- Task 10 keeps the original 10 s deadline, object tolerance `0.003 m`, and per-joint tolerance `0.002 rad`. Only typed `EvidenceStale` permits retrying idempotent `SetPause(true)` within that same deadline. Task 10 qualification never calls `StepSimulation(1)`.
 
 ## Frozen References and Working Boundary
 
@@ -169,7 +172,7 @@ src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh
 - Create: `src/so101_mujoco_support/src/simulation_evidence_plugin.cpp`
 - Create: `src/so101_mujoco_support/test/test_simulation_evidence_plugin.cpp`
 
-**Interfaces:** `ContactSample` contains `body1_id`, `geom1_id`, `body1`, `geom1`, `body2_id`, `geom2_id`, `body2`, `geom2`, world position/normal, `signed_distance_m`, and `normal_force_n`. `SimulationEvidence` contains `header` (simulation time and `world` frame), `publisher_sequence`, `simulation_step`, `reset_epoch`, `simulation_session_id`, `paused`, `object_body_id`, `object_body`, object pose/twist, `has_contact`, `minimum_signed_distance_m`, `maximum_normal_force_n`, `truncated`, and separate `left_fingertip_contacts`, `right_fingertip_contacts`, `other_object_contacts` arrays. One publish call must use one locked MuJoCo snapshot; `(simulation_session_id, reset_epoch, simulation_step)` is the consumer ordering key. `SimulationEvidencePlugin::on_reset()` atomically increments a generation and does nothing else; when `update()` sees a new generation it assigns both consumed generation and authoritative `reset_epoch` to that observed value and resets step to zero. A pending generation bypasses only the ordinary publish-period throttle so the first post-reset `update()` publishes it. The pinned base also exposes default no-op `on_pause(bool paused)`; each successful, including idempotent, `SetPause` call notifies every plugin exactly once, and the evidence plugin stores only an atomic authoritative pause value. Time decrease, pose jump, and time-equality pause inference are forbidden; `publisher_sequence` remains monotonic across reset.
+**Interfaces:** `ContactSample` contains `body1_id`, `geom1_id`, `body1`, `geom1`, `body2_id`, `geom2_id`, `body2`, `geom2`, world position/normal, `signed_distance_m`, and `normal_force_n`. `SimulationEvidence` contains `header` (simulation time and `world` frame), `publisher_sequence`, `simulation_step`, `reset_epoch`, `simulation_session_id`, `paused`, `object_body_id`, `object_body`, object pose/twist, `has_contact`, `minimum_signed_distance_m`, `maximum_normal_force_n`, `truncated`, and separate `left_fingertip_contacts`, `right_fingertip_contacts`, `other_object_contacts` arrays. One publish call uses one locked MuJoCo snapshot; `(simulation_session_id, reset_epoch, simulation_step)` is the consumer ordering key. `SimulationEvidencePlugin::on_reset()` atomically increments generation and does nothing else. Under the later Task 10A amendment, ordinary running `update()` retains pending generation and the dedicated paused snapshot path consumes it only after publisher-lock success as `old+1/step0/paused=true`; no-pending ordinary publication cadence stays unchanged. Time decrease, pose jump, and time-equality pause inference are forbidden; `publisher_sequence` remains monotonic across reset.
 
 - [ ] Write GTest RED cases for same-step atomicity, numeric/name id agreement, side classification, force sign, zero-contact aggregates/empty arrays, session immutability, exactly-once generation consumption, idempotent same-time reset epoch change, monotonic publisher sequence, and monotonic step id within one epoch; reject time-decrease and pose-jump authority.
 - [ ] Create the standalone `ament_cmake` messages/plugin package. The plugin is read-only except for its publisher state; it never changes qpos/qvel or creates equality constraints.
@@ -269,43 +272,239 @@ colcon test-result --verbose
 
 ---
 
-### Task 10A: Build the Reset-Qualified Dependency Overlay
+### Task 10A: Build the Reset/Pause/State-Snapshot Qualified Dependency Overlay
 
 **Files:**
-- Create: `src/so101_mujoco_demo_py/patches/mujoco_ros2_control-0.0.3-reset-hook.patch`
-- Create: `src/so101_mujoco_demo_py/scripts/{build_reset_qualified_overlay.sh,check_reset_qualified_runtime.py}`
-- Create: `src/so101_mujoco_demo_py/test/test_reset_qualified_dependency.py`
-- Update: `src/so101_mujoco_demo_py/config/dependency-lock.yaml`
-- Update: `src/so101_mujoco_support/include/so101_mujoco_support/simulation_evidence_plugin.hpp`
-- Update: `src/so101_mujoco_support/src/simulation_evidence_plugin.cpp`
-- Update: `src/so101_mujoco_support/test/test_simulation_evidence_plugin.cpp`
-- Update: migration ledger
+- Modify: `src/so101_mujoco_demo_py/patches/mujoco_ros2_control-0.0.3-reset-hook.patch`
+- Verify unchanged replay entry point: `src/so101_mujoco_demo_py/scripts/build_reset_qualified_overlay.sh`
+- Modify: `src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py`
+- Modify: `src/so101_mujoco_demo_py/test/test_reset_qualified_dependency.py`
+- Modify: `src/so101_mujoco_demo_py/config/dependency-lock.yaml`
+- Modify: `src/so101_mujoco_support/include/so101_mujoco_support/simulation_evidence_plugin.hpp`
+- Modify: `src/so101_mujoco_support/src/simulation_evidence_plugin.cpp`
+- Modify: `src/so101_mujoco_support/test/test_simulation_evidence_plugin.cpp`
+- Modify: `docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md`
 
-**Interfaces:** The build script uses the dedicated source checkout `/data/work/ws_mujoco_ros2_control_003/src/mujoco_ros2_control`. If absent it clones only the official repository and checks out exact commit `35ba8174b62d9560093614f981a3d4b978a96036`; if present it verifies remote URL, HEAD, clean status, and patch state and fails closed instead of resetting or cleaning. It applies the exact versioned patch and installs only to `/data/work/ws_mujoco_ros2_control_003/install`. The patch adds default no-op `virtual void on_reset() {}` and invokes it at the successful tail of central `reset_simulation_state`, after all state/interface updates, once for every initialized plugin; invalid keyframes return before entering central reset and invoke zero hooks. The runtime checker requires `mujoco_ros2_control`, `mujoco_ros2_control_msgs`, and `mujoco_ros2_control_plugins` to resolve to the dependency overlay, `mujoco_vendor` to resolve to `/opt/ros/jazzy`, the project packages to resolve to project install, the base header to contain the hook, executable/library hashes to match the lock, and upstream commit/tag plus patch SHA-256 to match exactly.
+**Interfaces:** The build script uses `/data/work/ws_mujoco_ros2_control_003/src/mujoco_ros2_control`, verifies official URL/tag/commit/clean-or-exact-patch state, and installs only to `/data/work/ws_mujoco_ros2_control_003/install`. The base API is exactly `virtual void on_reset() {}`, `virtual void on_pause(bool paused)`, and `virtual void on_state_snapshot(const mjModel * model, const mjData * data, bool paused) {}`. A successful central reset invokes `on_reset()` once per initialized plugin; invalid keyframes invoke zero. Every successful/idempotent `SetPause(true)` invokes `on_pause(true)` followed by exactly one `on_state_snapshot(model_, mj_data_, true)` per initialized plugin under `sim_mutex_`; pause false and failed requests invoke zero snapshots. Snapshot dispatch never calls generic `update()`, advances physics, or writes qpos/qvel/ctrl/xfrc/constraint. `SimulationEvidencePlugin::on_state_snapshot()` uses the shared publish helper; only publisher-lock success consumes pending generation and publishes `old+1/step0/paused=true`. Running update and publisher contention retain pending generation.
 
-- [ ] Write RED tests that require the exact upstream URL/tag/commit, overlay prefix, patch SHA-256, source order, exact four-prefix mapping, default-compatible `on_reset()` and `on_pause(bool)` hook signatures, exactly-once reset success, zero-call invalid-keyframe reset, exactly-once successful/idempotent pause notification, zero-call failed pause notification, generation consumption without lost increments, and pending-generation priority over the ordinary publish throttle. Tests must apply the patch to a disposable clean checkout and must reject floating refs or `/opt/ros/jazzy` installation targets.
-- [ ] Run RED; expected failures are absent patch/build/checker artifacts and missing `on_reset()` in the apt header.
-- [ ] Create the minimal patch and replay scripts. Do not copy upstream source into this repository and do not use `/data/work/so_arm_ws` as an input.
-- [ ] Run `src/so101_mujoco_demo_py/scripts/build_reset_qualified_overlay.sh`; it must source `/opt/ros/jazzy/setup.zsh`, build the three pinned upstream packages with `colcon build --merge-install --install-base /data/work/ws_mujoco_ros2_control_003/install`, and run their upstream tests. Then source `/opt/ros/jazzy/setup.zsh`, `/data/work/ws_mujoco_ros2_control_003/install/setup.zsh`, and project `install/setup.zsh` in that order and run `python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py` to record URL/tag/commit/patch/header/runtime hashes and the exact four-prefix mapping. Save raw logs under `/tmp/so101-debug-mujoco-migration/`.
-- [ ] Rebuild `so101_mujoco_support` and `so101_mujoco_demo_py` after sourcing dependency overlay, run focused/package/Ruff/isolation/protected-tree gates, and commit only dependency-hook artifacts plus the required support-plugin generation change as `build(so101_mujoco): qualify reset dependency hook`.
+- [ ] **Step 1: Extend dependency RED contracts.** Modify `test_reset_qualified_dependency.py` so a disposable clean `35ba8174...` checkout requires the exact default-compatible snapshot signature, `sim_mutex_`-guarded authoritative `mj_data_`, successful/idempotent pause-true exactly-once dispatch after `on_pause(true)`, and zero snapshot dispatch for pause false or failed requests. Assert the patched pause callback contains neither `plugin->update` nor writes matching `qpos|qvel|ctrl|xfrc|constraint`.
+
+- [ ] **Step 2: Extend support-plugin RED contracts.** Modify `test_simulation_evidence_plugin.cpp` to prove: running `update()` cannot consume pending generation; paused snapshot lock success consumes it once and publishes `reset_epoch=old+1`, `simulation_step=0`, `paused=true`; publisher-lock contention leaves the generation pending for a later idempotent snapshot; no-pending update preserves its existing rate; snapshot leaves the force buffer and MuJoCo state byte-for-byte unchanged.
+
+- [ ] **Step 3: Run focused RED before implementation.** Run:
+
+```bash
+source /opt/ros/jazzy/setup.zsh
+source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh
+PYTHONPATH=src/so101_mujoco_demo_py python3 -m pytest -q src/so101_mujoco_demo_py/test/test_reset_qualified_dependency.py
+colcon build --base-paths src --packages-select so101_mujoco_support --symlink-install
+colcon test --base-paths src --packages-select so101_mujoco_support --ctest-args -R test_simulation_evidence_plugin --output-on-failure
+```
+
+Expected: dependency tests fail because `on_state_snapshot` and its `sim_mutex_` dispatch are absent; support tests fail because running `update()` currently consumes pending generation and no snapshot publish path exists. Save complete output under `/tmp/so101-debug-mujoco-migration/task10a-snapshot-hook-red/`.
+
+- [ ] **Step 4: Implement the minimal upstream patch.** Modify only `mujoco_ros2_control-0.0.3-reset-hook.patch`, `dependency-lock.yaml`, and `check_reset_qualified_runtime.py`: add the exact default no-op snapshot virtual; invoke it only in successful/idempotent pause-true paths after `on_pause(true)` while `sim_mutex_` protects authoritative `mj_data_`; extend header/runtime/patch SHA validation. Keep the existing pinned build script and source order; do not copy upstream source into the repository or reset/clean an existing checkout.
+
+- [ ] **Step 5: Implement the minimal shared publisher boundary.** In the support header/cpp, add `on_state_snapshot(const mjModel *, const mjData *, bool) override` and one private `try_publish_snapshot(...)` helper used by ordinary update and snapshot. Gate generation consumption on `authoritative_paused=true` and successful realtime publisher lock; preserve pending generation otherwise. Do not modify the message schema or force-buffer ownership.
+
+- [ ] **Step 6: Run focused GREEN.** Repeat the exact Step 3 commands. Expected: all dependency replay contracts and support snapshot/generation tests pass; inspect test output for zero skipped snapshot cases.
+
+- [ ] **Step 7: Rebuild and qualify the pinned overlay.** Run:
+
+```bash
+src/so101_mujoco_demo_py/scripts/build_reset_qualified_overlay.sh
+source /opt/ros/jazzy/setup.zsh
+source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh
+colcon build --base-paths src --packages-select so101_mujoco_support so101_mujoco_demo_py --symlink-install
+source install/setup.zsh
+python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py --lock src/so101_mujoco_demo_py/config/dependency-lock.yaml
+colcon test --base-paths src --packages-select so101_mujoco_support so101_mujoco_demo_py --event-handlers console_direct+
+colcon test-result --verbose
+src/so101_mujoco_demo_py/scripts/check_ruff.sh
+src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh
+git diff --quiet d300e7a41fb274d6d7e120699b7040666ea61904 -- src/so101_gazebo_demo_py
+test -z "$(git status --short -- src/so101_gazebo_demo_py)"
+```
+
+Expected: upstream tests, both package suites, Ruff, exact overlay URL/tag/commit/patch/header/runtime provenance, dependency isolation, and both Gazebo gates pass.
+
+- [ ] **Step 8: Commit only Task 10A scope.** Stage exactly the patch, lock, checker, support header/cpp/test, and Task 10A ledger checkpoint; verify `git diff --cached --check` and both Gazebo gates, then commit `build(so101_mujoco): qualify pause snapshot dependency hook`. Do not push.
 
 ---
 
-### Task 10B: Implement Transactional Pause/Reset/Step
+### Task 10B: Implement Transactional Pause/Reset/Snapshot
 
 **Files:**
 - Create: `src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/{client.py,reset.py}`
 - Create: `src/so101_mujoco_demo_py/test/{test_mujoco_reset.py,test_reset_live_contract.py}`
-- Update: launch/config and ledger
+- Modify: `src/so101_mujoco_demo_py/package.xml`
+- Modify: `docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md`
 
-**Interfaces:** `MujocoResetClient.reset("task_start")` performs running strict deactivate → pause → keyframe `ResetWorld` → bounded resume → strict activate → re-pause → exactly one bounded simulation step → atomic evidence verification and returns `ResetReceipt(old_epoch, new_epoch, keyframe, simulation_step, simulation_session_id)`. The one-step value is fixed by CP-030 evidence and is not a threshold relaxation. Within the original deadline it may retry only typed `EvidenceStale`; every other evidence/controller/session/epoch/pose failure is terminal. Failure leaves the world paused with an explicit error.
+**Interfaces:** `MujocoResetClient.reset("task_start")` performs running strict deactivate → pause → `ResetWorld(task_start)` → bounded resume → strict activate → re-pause, whose successful/idempotent `SetPause(true)` triggers the snapshot hook → verify `old+1/step0/paused=true` atomic object evidence plus independent fresh `/joint_states` and controller feedback. It never calls StepSimulation. Within the original 10 s deadline only typed `EvidenceStale` may cause another idempotent `pause(True)`; session/epoch/sequence/object/controller/joint failures are terminal. Object error remains `<=0.003 m`, each joint remains `<=0.002 rad`; joints are not atomic message fields. Every success or failure returns/leaves the world paused, and invalid keyframes do not change epoch.
 
-- [ ] Preserve the existing Task 10 dirty work. Complete RED tests for the exact service order, timeout, typed-stale-only retry, epoch mismatch, controller failure, invalid keyframe, failure-paused behavior, and two idempotent reset calls.
-- [ ] Implement only against interfaces proven by Task 10A; do not invent APIs from newer `main`.
-- [ ] Before runtime, preregister EXP-023 with prior EXP-022 and a confirmed-empty ROS domain 105 or higher. Source `/opt/ros/jazzy` → dependency overlay → project install and record PID, prefix, commit, patch, binary/header, MJCF and config provenance.
-- [ ] Execute two live `task_start` reset cycles. Require each epoch to increment exactly once; record four finite pause-window atomic snapshots; require object error ≤ `0.003 m`, each of six joints ≤ `0.002 rad`, controllers active, final paused state, and failure paths paused. Invalid keyframe must leave epoch unchanged.
-- [ ] Run upstream/package tests, real Ruff gate, `colcon test`, two-package build, dependency-overlay provenance/isolation, and both protected Gazebo tree gates.
-- [ ] Commit only Task 10 Python/test/metadata/ledger paths as `feat(so101_mujoco): add deterministic world reset`. Do not push.
+- [ ] **Step 1: Write Python RED service-order tests.** In `test_mujoco_reset.py`, assert the exact call list `switch(deactivate)`, `pause(true)`, `reset_world(task_start)`, `pause(false)`, `switch(activate)`, `pause(true)` followed by evidence/controller/joint verification; assert no `step` call and no `StepSimulation` client construction in the qualification path.
+
+- [ ] **Step 2: Write RED retry and evidence tests.** Require only `EvidenceStale` to trigger idempotent `pause(true)` retry inside the same deadline. Require exact session, `reset_epoch=old+1`, monotonic publisher sequence, `simulation_step=0`, `paused=true`, finite atomic object pose/twist/contact, independent fresh six-joint feedback, active controllers, object error `<=0.003 m`, and each joint error `<=0.002 rad`. Add terminal cases for future/wrong epoch, session mismatch, non-stale observer error, stale joint feedback, inactive controller, object/joint threshold failure, invalid keyframe epoch change, and failure-not-paused.
+
+- [ ] **Step 3: Write RED repeated-reset tests.** Two idempotent `reset("task_start")` calls must return sequential receipts with epochs `n+1` and `n+2`, both `simulation_step=0`, and must each finish paused. An invalid-keyframe call between or after them must fail paused and leave the observed epoch unchanged.
+
+- [ ] **Step 4: Run Python RED.** Run:
+
+```bash
+source /opt/ros/jazzy/setup.zsh
+source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh
+PYTHONPATH=src/so101_mujoco_demo_py python3 -m pytest -q src/so101_mujoco_demo_py/test/test_mujoco_reset.py src/so101_mujoco_demo_py/test/test_reset_live_contract.py
+```
+
+Expected: focused failures show the current StepSimulation call, missing typed-stale re-pause retry, and acceptance logic that does not require the dedicated step-zero paused snapshot. Save complete output under `/tmp/so101-debug-mujoco-migration/task10b-transaction-red/`.
+
+- [ ] **Step 5: Implement minimal transaction changes.** Modify only `mujoco/reset.py`, `mujoco/client.py` if removing the qualification-only StepSimulation facade is necessary, the two reset tests, package metadata required by those imports, and the ledger. Delete the step call from `reset()`; after re-pause accept only exact expected-epoch step-zero paused atomic evidence. On typed `EvidenceStale`, call idempotent `pause(True)` and retry within the existing deadline; every other exception enters the existing failure-paused path. Validate freshness of `/joint_states` independently through callback count/timestamp captured after reset.
+
+- [ ] **Step 6: Run focused GREEN and non-live package tests.** Repeat Step 4, then run:
+
+```bash
+PYTHONPATH=src/so101_mujoco_demo_py python3 -m pytest -q src/so101_mujoco_demo_py/test -m 'not live'
+src/so101_mujoco_demo_py/scripts/check_ruff.sh
+colcon build --base-paths src --packages-select so101_mujoco_support so101_mujoco_demo_py --symlink-install
+source install/setup.zsh
+python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py --lock src/so101_mujoco_demo_py/config/dependency-lock.yaml
+colcon test --base-paths src --packages-select so101_mujoco_support so101_mujoco_demo_py --event-handlers console_direct+
+colcon test-result --verbose
+```
+
+Expected: focused and non-live suites pass, Ruff check and format check pass, the reset unit trace contains no step service, both packages rebuild/test against the qualified overlay, and URL/tag/commit/patch/header/runtime prefix provenance passes before EXP-031 is registered.
+
+- [ ] **Step 7: Pre-register EXP-031 only after GREEN/build/provenance pass.** Append `EXP-031` with `prior_experiment: EXP-030`, `status: PLANNED`, `lifecycle: FULL_RESTART`, exact HEAD plus dirty scope, source order, overlay URL/tag/commit/patch/header/runtime hashes, fresh confirmed-empty `ROS_DOMAIN_ID` integer `>=112`, owned session/PIDs, and evidence path `/tmp/so101-debug-mujoco-migration/exp-031/`. Do not reuse domains 105–111.
+
+- [ ] **Step 8: Run EXP-031 live qualification.** Execute two `task_start` resets and one invalid-keyframe failure. Require each successful reset to increment epoch exactly once, return `simulation_step=0`, publish finite `paused=true` atomic object pose/twist/contact with object error `<=0.003 m`, obtain independent fresh six-joint feedback with each error `<=0.002 rad`, keep controllers active, and end paused. Invalid keyframe must leave epoch unchanged and fail paused. If provenance, readiness, evidence completeness, or cleanup is invalid, mark EXP-031 `INVALID`. If those prerequisites and the evidence contract are valid but a live reset assertion fails, mark EXP-031 `VALID` with behavioral failure, include it in the failure denominator, and stop. If every assertion passes, mark EXP-031 `VALID` with behavioral success. Persist exact commands/exits/hashes and never change step/timeout/threshold/order in response to either failure class.
+
+```bash
+setopt PIPE_FAIL
+run_exp031() {
+mkdir -p /tmp/so101-debug-mujoco-migration/exp-031
+source /opt/ros/jazzy/setup.zsh
+source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh
+source install/setup.zsh
+evidence_dir=/tmp/so101-debug-mujoco-migration/exp-031
+session_name=so101-mujoco-exp031
+launch_rc=125
+readiness_rc=125
+pytest_rc=125
+kill_rc=125
+domain_cleanup_rc=125
+hash_rc=125
+
+ROS_DOMAIN_ID=112 ros2 node list --no-daemon | tee "$evidence_dir/domain-before-no-daemon.txt"
+domain_before_rc=$?
+
+if (( domain_before_rc == 0 )) && [[ ! -s "$evidence_dir/domain-before-no-daemon.txt" ]]; then
+  tmux new-session -d -s "$session_name" "zsh -lc 'setopt PIPE_FAIL; cd /data/work/ws_moveit/.worktrees/so101-mujoco-ros2; source /opt/ros/jazzy/setup.zsh; source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh; source install/setup.zsh; ROS_DOMAIN_ID=112 ros2 launch so101_mujoco_demo_py so101_mujoco.launch.py start_simulation:=true headless:=true run_mode:=dry_run simulation_session_id:=exp031-snapshot-domain112 |& tee /tmp/so101-debug-mujoco-migration/exp-031/launch.log'"
+  launch_rc=$?
+else
+  launch_rc=64
+fi
+
+if (( launch_rc == 0 )); then
+  tmux list-panes -t "$session_name" -F '#{pane_pid}' > "$evidence_dir/pane-pid.txt"
+  pane_pid=$(<"$evidence_dir/pane-pid.txt")
+  ps -o pid,ppid,lstart,cmd -p "$pane_pid" > "$evidence_dir/pane-owner-before-test.txt"
+  pstree -ap "$pane_pid" > "$evidence_dir/process-tree-before-test.txt"
+
+  timeout 45 zsh -lc '
+    setopt PIPE_FAIL
+    source /opt/ros/jazzy/setup.zsh
+    source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh
+    source /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh
+    export ROS_DOMAIN_ID=112
+    until ros2 service list | rg -x "/mujoco_ros2_control_node/(set_pause|reset_world)" | sort | diff -u <(print -l /mujoco_ros2_control_node/reset_world /mujoco_ros2_control_node/set_pause | sort) -; do sleep 0.25; done
+    while true; do
+      ros2 control list_controllers | tee /tmp/so101-debug-mujoco-migration/exp-031/controllers-readiness.txt
+      active_count=0
+      for controller_name in arm_controller gripper_controller joint_state_broadcaster; do
+        rg -q "^${controller_name}\\s+.*\\sactive$" /tmp/so101-debug-mujoco-migration/exp-031/controllers-readiness.txt && (( active_count += 1 ))
+      done
+      (( active_count == 3 )) && break
+      sleep 0.25
+    done
+    ros2 topic info -v /so101/simulation/evidence | tee /tmp/so101-debug-mujoco-migration/exp-031/evidence-topic-readiness.txt
+    rg -q "Publisher count: [1-9]" /tmp/so101-debug-mujoco-migration/exp-031/evidence-topic-readiness.txt
+    timeout 10 ros2 topic echo /so101/simulation/evidence --once > /tmp/so101-debug-mujoco-migration/exp-031/evidence-subscriber-readiness.yaml
+    test -s /tmp/so101-debug-mujoco-migration/exp-031/evidence-subscriber-readiness.yaml
+  ' |& tee "$evidence_dir/readiness.log"
+  readiness_rc=$?
+else
+  readiness_rc=64
+fi
+
+if (( readiness_rc == 0 )); then
+  ROS_DOMAIN_ID=112 SO101_MUJOCO_RESET_LIVE_TEST=1 SO101_MUJOCO_SESSION_ID=exp031-snapshot-domain112 \
+    python3 -m pytest -q -s src/so101_mujoco_demo_py/test/test_reset_live_contract.py \
+    |& tee "$evidence_dir/live-reset-contract.log"
+  pytest_rc=$?
+fi
+
+print -r -- "$pytest_rc" > "$evidence_dir/pytest-exit-code.txt"
+tmux capture-pane -p -t "$session_name" -S -200 > "$evidence_dir/launch-tail-before-cleanup.txt" 2>&1 || true
+tail -200 "$evidence_dir/launch.log" > "$evidence_dir/launch-log-tail-before-cleanup.txt" 2>&1 || true
+if [[ -n "${pane_pid:-}" ]]; then
+  ps -o pid,ppid,lstart,cmd -p "$pane_pid" > "$evidence_dir/pane-owner-after-test.txt" 2>&1 || true
+  pstree -ap "$pane_pid" > "$evidence_dir/process-tree-after-test.txt" 2>&1 || true
+fi
+
+if tmux has-session -t "$session_name" 2>/dev/null; then
+  tmux kill-session -t "$session_name"
+  kill_rc=$?
+else
+  kill_rc=0
+fi
+
+timeout 20 zsh -lc '
+  source /opt/ros/jazzy/setup.zsh
+  export ROS_DOMAIN_ID=112
+  while [[ -n "$(ros2 node list --no-daemon)" ]]; do sleep 0.25; done
+  ros2 node list --no-daemon
+' > "$evidence_dir/domain-after-no-daemon.txt"
+domain_cleanup_rc=$?
+test ! -s "$evidence_dir/domain-after-no-daemon.txt" || domain_cleanup_rc=1
+
+hash_inputs=()
+for evidence_file in \
+  "$evidence_dir/launch.log" \
+  "$evidence_dir/readiness.log" \
+  "$evidence_dir/live-reset-contract.log" \
+  "$evidence_dir/process-tree-before-test.txt" \
+  "$evidence_dir/process-tree-after-test.txt" \
+  "$evidence_dir/launch-tail-before-cleanup.txt" \
+  "$evidence_dir/launch-log-tail-before-cleanup.txt" \
+  "$evidence_dir/domain-after-no-daemon.txt"; do
+  [[ -f "$evidence_file" ]] && hash_inputs+=("$evidence_file")
+done
+if (( ${#hash_inputs} > 0 )); then
+  sha256sum "${hash_inputs[@]}" | tee "$evidence_dir/evidence-sha256.txt"
+  hash_rc=$?
+else
+  : > "$evidence_dir/evidence-sha256.txt"
+  hash_rc=0
+fi
+print -r -- "domain_before_rc=$domain_before_rc launch_rc=$launch_rc readiness_rc=$readiness_rc pytest_rc=$pytest_rc kill_rc=$kill_rc domain_cleanup_rc=$domain_cleanup_rc hash_rc=$hash_rc" \
+  | tee "$evidence_dir/exit-codes.txt"
+
+if (( domain_before_rc != 0 || launch_rc != 0 || readiness_rc != 0 || kill_rc != 0 || domain_cleanup_rc != 0 || hash_rc != 0 )); then
+  return 64
+fi
+if (( pytest_rc != 0 )); then
+  return "$pytest_rc"
+fi
+return 0
+}
+run_exp031
+```
+
+Expected: zsh `PIPE_FAIL` preserves every launch/readiness/pytest pipeline failure instead of accepting `tee` success. The first no-daemon node list is empty; pane PID plus before/after `ps` and `pstree` bind ownership to only `so101-mujoco-exp031`. The bounded readiness loop does not exit until both MuJoCo services exist, the unique active-controller count is exactly three for `arm_controller`, `gripper_controller`, and `joint_state_broadcaster`, an evidence publisher exists, and a one-message evidence subscription succeeds. Regardless of pytest outcome, its exact exit code, process tree, and launch tail are saved before only the named task-owned tmux session is stopped; the final bounded domain-112 no-daemon list must be empty. The hash list includes only evidence files that actually exist, and `hash_rc` is recorded, so an earlier skipped phase cannot create a secondary missing-file failure. Provenance/readiness/evidence-completeness/hash/cleanup pollution makes EXP-031 `INVALID`. With those contracts valid, pytest success is a `VALID` behavioral success and pytest assertion failure is a `VALID` behavioral failure that enters the failure denominator and stops further work. Never use `pkill`.
+
+- [ ] **Step 9: Run final Task 10 gates.** Run the exact Task 10A Step 7 build/provenance/package/Ruff/isolation/Gazebo commands again, plus `git diff --check`. Expected: all pass with no owned runtime remaining and unrelated sessions preserved.
+
+- [ ] **Step 10: Commit only Task 10B scope.** Stage exactly `mujoco/client.py`, `mujoco/reset.py`, `test_mujoco_reset.py`, `test_reset_live_contract.py`, directly required package metadata, and the ledger; verify the index allowlist and Gazebo gates, then commit `feat(so101_mujoco): add transactional pause reset snapshot`. Do not push.
 
 ---
 
