@@ -1,3 +1,4 @@
+from ament_index_python.packages import get_package_prefix
 import importlib.util
 import math
 import os
@@ -61,7 +62,7 @@ def test_configured_q6_orders_the_native_fingertip_pad_commands():
     )
     calibration = load_calculator_module().calculate_fingertip_pad_gap_calibration(
         PACKAGE_DIR / 'config/task_objects/light_plastic_cup.yaml',
-        PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo' / 'fingertip_pad_assets',
+        Path(get_package_prefix('so101_gazebo_demo_cpp')).parents[1] / 'build' / 'so101_gazebo_demo_cpp' / 'fingertip_pad_assets',
         URDF_PATH,
     )
     pads = object_policy['fingertip_pads']

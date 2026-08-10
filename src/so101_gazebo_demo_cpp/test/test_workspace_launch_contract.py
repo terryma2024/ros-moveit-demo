@@ -21,7 +21,7 @@ def test_workspace_launch_starts_only_the_offline_sampler():
     description = load_launch_description(WORKSPACE_SAMPLE_LAUNCH)
     nodes = [entity for entity in description.entities if isinstance(entity, Node)]
     assert len(nodes) == 1
-    assert nodes[0].node_package == 'so101_gazebo_demo'
+    assert nodes[0].node_package == 'so101_gazebo_demo_cpp'
     assert nodes[0].node_executable == 'sample_so101_workspace'
     source = WORKSPACE_SAMPLE_LAUNCH.read_text()
     assert 'moveit_ros_move_group' not in source
