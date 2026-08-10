@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(panda_gazebo_demo)
+project(panda_gazebo_demo_cpp)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -190,6 +190,7 @@ pick_place_common_add_cpp_quality_gate(
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_package_layout test/test_package_layout.py)
   ament_add_pytest_test(test_source_manifest test/test_source_manifest.py)
   ament_add_pytest_test(test_panda_launch_contract test/test_panda_launch_contract.py)
   ament_add_pytest_test(test_readiness_probe test/test_readiness_probe.py)

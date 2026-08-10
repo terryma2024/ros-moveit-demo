@@ -2,7 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
-CONSUMER_NAMES = ("panda_gazebo_demo", "so101_gazebo_demo_cpp")
+CONSUMER_NAMES = ("panda_gazebo_demo_cpp", "so101_gazebo_demo_cpp")
 
 
 def _consumer_paths(root: Path) -> tuple[Path, ...]:
