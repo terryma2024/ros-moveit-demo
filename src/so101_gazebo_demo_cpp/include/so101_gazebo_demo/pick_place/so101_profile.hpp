@@ -66,7 +66,7 @@ struct SO101Profile
   double grasp_section_depth{0.020};
   std::string gripper_geometry_model_version{"so101-gripper-d20-mesh-v1"};
   std::string gripper_geometry_model_fingerprint{
-    "20494b75a582e30723af0addaf1aaa234f55e539a83f33a24a91f71ef6a27a53"};
+    "7c848527a6b93c916d82b5e2902b9eed9ce457333c249d30cb2757815c22f247"};
   // Preopen and native-pad grasp use the configured position tolerance.  The
   // release endpoint gets a separate settling allowance below.
   double q6_tolerance{0.001};

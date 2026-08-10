@@ -117,7 +117,10 @@ def test_gripper_trajectory_success_requires_mesh_bounded_joint6_convergence():
     calculator = load_preopen_calculator_module()
     calibration = calculator.calculate_fingertip_pad_gap_calibration(
         CONFIG_DIR / 'task_objects' / 'light_plastic_cup.yaml',
-        PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo' / 'fingertip_pad_assets',
+        PACKAGE_DIR.parents[1]
+        / 'build'
+        / 'so101_gazebo_demo_cpp'
+        / 'fingertip_pad_assets',
         PACKAGE_DIR / 'urdf' / 'so101_base.xacro',
     )
     contact_limit = load_yaml('validation_policies/light_cup_wall_pick.yaml')[
@@ -406,7 +409,10 @@ def test_srdf_group_and_named_state_contract():
     calculator = load_preopen_calculator_module()
     calibration = calculator.calculate_fingertip_pad_gap_calibration(
         PACKAGE_DIR / 'config/task_objects/light_plastic_cup.yaml',
-        PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo' / 'fingertip_pad_assets',
+        PACKAGE_DIR.parents[1]
+        / 'build'
+        / 'so101_gazebo_demo_cpp'
+        / 'fingertip_pad_assets',
         PACKAGE_DIR / 'urdf' / 'so101_base.xacro',
     )
     assert states[('gripper', 'contact')] == {
