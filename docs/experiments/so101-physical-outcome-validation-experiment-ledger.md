@@ -7,13 +7,14 @@ success_contract: 同一提交和已校准策略下五次连续 VALID execute，
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation
 branch: codex/so101-physical-outcome-validation
 base_commit: 05dff7a18e466c01486441dd90c21fcd44d4d8cd
-current_commit: b021d5a
-evidence_root: /tmp/so101-debug-physical-outcome-cpp-018-6vJVGE
+current_commit: a4545472365df0939dacb63516bd253b43f0fa0f
+evidence_root: /tmp/so101-debug-physical-cpp-gui-020-RMtiZW
 confirmed_conclusions:
   - Task 13 branch-tree build、三包测试、dry-run trace 与 uncalibrated plan-only fail-closed gate 已验证（VER-PHYSICAL-001）
   - 用户已批准 Bullet compound-owner support + live-calibrated bounded-negative-depth noise 下限（APR-PHYSICAL-001）
   - compound-owner support 与 bounded-negative-depth policy regression 已按 RED→GREEN 验证（TDD-PHYSICAL-001）
   - C++ 同步 EXP081 后的首次 FULL_RESTART 在 DESCEND_TO_PLACE 后被原有 planning-shadow orientation hard gate 有效拒绝（HEADLESS-PHYSICAL-018）
+  - commit a454547 已移除 pick-place 正常/恢复路径的 Gazebo attach/detach 命令并保留 MoveIt planning shadow；完整包测试 83/83 通过
 disproven_routes:
   - 0.75 mm seat
   - independent CLOSE seat motion
@@ -23,8 +24,10 @@ disproven_routes:
 open_hypotheses:
   - EXP081 在 C++ 运行时下降末端产生 0.103202253316 rad planning-shadow axial tilt divergence 的首因
   - 该 intermediate orientation gate 是否仍属于最终 physical-outcome 策略要求保留的硬安全边界
-latest_checkpoint: CP-PHYSICAL-008
-next_experiment: TDD-PHYSICAL-002
+  - 是否应按最终 physical-outcome 策略移除或降级 OPEN_GRIPPER 的 pre-release XY envelope
+  - launch startup readiness 的 transient DetachableJoint attach/detach probe 是否也应取消
+latest_checkpoint: CP-PHYSICAL-009
+next_experiment: NONE_PENDING_USER_DIRECTION
 ```
 
 ## VER-PHYSICAL-001：Task 13 自动验证
@@ -1944,4 +1947,107 @@ conclusion: C++ 的行为性差异已对齐 Python EXP081；preload 由同一冻
 runtime_validation: NOT_RUN；本轮不声称 Gazebo GUI、真实释放或最终放置成功
 decision: KEEP_AND_COMMIT_NO_PUSH
 next_experiment: GUI-PHYSICAL-020_REQUIRES_SEPARATE_APPROVAL
+```
+
+## GUI-PHYSICAL-020：取消 pick-place Gazebo attach/detach 后的干净单次实验
+
+```yaml
+experiment_id: GUI-PHYSICAL-020
+status: VALID
+prior_experiment: TDD-PHYSICAL-004
+hypothesis: pick-place 正常与恢复路径完全移除 Gazebo attach/detach 命令、同时保留 MoveIt planning shadow 后，杯体可仅靠 Gazebo 物理接触完成抓取、搬运和释放，并由最终结果门禁判定
+prediction: workflow 不出现 ATTACH_GAZEBO、DETACH_GAZEBO 或 RECOVER_DETACH_GAZEBO；Gazebo attachment 全程为 detached；MoveIt shadow 从 ATTACH_MOVEIT 保持到 OPEN_GRIPPER 与 RETREAT 后再解除；流程到达 final placement evaluator
+single_variable: 当前未提交的 C++ physical-outcome attachment/state-gate alignment diff；motion、physics、geometry、mass、friction、controller/gains 与数值安全边界固定
+lifecycle: FULL_RESTART
+preconditions:
+  - ai-station 无既有 Gazebo、MoveIt、RViz、controller 或 pick_place_state_machine 进程
+  - ROS_DOMAIN_ID 225 启动前为空
+  - GZ_PARTITION so101-physical-outcome-gui-020-73098478-39b0-47e1-96d2-913d14f3350a 启动前为空
+  - source、diff、build/install executable 与 package prefix provenance 已冻结
+success_criteria:
+  - trace reaches DONE
+  - final evaluator passes target region、support、upright tilt、linear/angular stability and no gripper contact
+  - Gazebo cup remains physically detached throughout；MoveIt shadow detaches only after RETREAT
+  - controllers remain active and final Gazebo/MoveIt evidence agrees with a fresh GUI screenshot
+failure_criteria:
+  - any valid workflow、physics、controller、planning-scene or final-outcome gate fails
+invalid_criteria:
+  - duplicate stack、wrong overlay/binary、dirty diff drift、GUI unavailable、stale evidence or cleanup contamination
+provenance:
+  source_commit: 809b0170aa5c7693846076a015922aaed7ce87c9
+  source_diff_sha256_excluding_ledger: cda3322e698271c16bad93386c3ced25ff63ad87d6b566788ba3ab602f68d1f6
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/build/so101_gazebo_demo/pick_place_state_machine
+  runtime_sha256: 7f36eae42e4881682f678b822f7deab9350e49154acdd5061a673c246f48736e
+  ros_domain_id: 225
+  gz_partition: so101-physical-outcome-gui-020-73098478-39b0-47e1-96d2-913d14f3350a
+commands:
+  - command: ros2 launch so101_gazebo_demo so101_pick_place.launch.py run_mode:=execute start_simulation:=true headless:=false simulation_session_id:=gui-physical-020-20260810 checkpoint_path:=/tmp/so101-debug-physical-cpp-gui-020-RMtiZW/checkpoint.json planning_diagnostics_dir:=/tmp/so101-debug-physical-cpp-gui-020-RMtiZW/planning
+    exit_code: NOT_CAPTURED_CONTROLLED_SIGINT_AFTER_EVIDENCE_FREEZE
+    child_result: pick_place_state_machine reached terminal ERROR and the child process finished cleanly before launch-parent cleanup
+evidence_root: /tmp/so101-debug-physical-cpp-gui-020-RMtiZW
+cleanup_ownership: only tmux session so101-physical-cpp-gui-020 and PIDs launched by this experiment
+started_at: 2026-08-10T16:14:56+08:00
+ended_at: 2026-08-10T16:20:35+08:00
+observed:
+  - trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> OPEN_GRIPPER -> ERROR
+  - first_bad_boundary: OPEN_GRIPPER precondition
+  - failure: TASK_OBJECT_RELEASE_ENVELOPE_INVALID
+  - gripper_command_executed: false
+  - gazebo_task_object_pose_xyz_m: [-0.07499535381793976, -0.2554853856563568, 0.1754540503025055]
+  - gazebo_task_object_xy_error_m: 0.007425357850
+  - configured_place_detach_xy_tolerance_m: 0.006
+  - gazebo_task_object_z_error_m: 0.010454050303
+  - configured_place_pre_detach_height_tolerance_m: 0.012
+  - gazebo_task_object_upright_tilt_rad: 0.358389396792
+  - final_max_upright_tilt_rad: 0.08726646259971647
+  - gazebo_task_object_stationary: true
+  - gazebo_task_object_intended_support_contact: true
+  - gazebo_task_object_attached_at_failure: false
+  - moveit_task_object_attached_at_failure: true
+  - q6_rad_at_failure: -0.0508846752345562
+  - controllers_active: [arm_controller, gripper_controller, joint_state_broadcaster]
+  - final_outcome_evaluator_reached: false
+  - visual: failure screenshot shows the cup visibly tilted under the still-closed gripper near the place target
+  - startup_readiness_probe: DetachableJoint emitted attached then detached before the ROS bridge/controllers and before the workflow trace; the forward workflow itself contained no Gazebo attach/detach state
+  - cleanup: owned tmux and all owned Gazebo/MoveIt/controller/state-machine PIDs exited；ROS_DOMAIN_ID 225 and the dedicated GZ_PARTITION are empty
+inferred:
+  - the attachment alignment is no longer the first blocking boundary；the remaining pre-release XY envelope rejected the run by about 1.425 mm before physical opening
+  - the 20.53 degree pre-release tilt suggests final upright validation would likely fail if opened unchanged, but release was not executed so the final physical outcome is unobserved
+conclusion: 本次干净 FULL_RESTART 是有效失败；抓取、微抬升、搬运和下降完成，MoveIt shadow 正确保留且 Gazebo 在 workflow 失败点 detached，但 OPEN_GRIPPER 仍由中间位置 envelope 门禁提前阻断，尚未实际释放或验证最终放置结果
+evidence:
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/launch.log
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/checkpoint.json
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/baseline-desktop.png
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/failure-desktop.png
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/failure-controllers.txt
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/failure-joint-states.txt
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/failure-world-pose.txt
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-cpp-gui-020-RMtiZW/failure-evidence.sha256
+decision: STOP_AFTER_ONE_REQUESTED_RUN_AND_REPORT
+next_experiment: NONE_PENDING_USER_DIRECTION
+```
+
+## CP-PHYSICAL-009：GUI-PHYSICAL-020 已冻结并清理
+
+```yaml
+checkpoint_id: CP-PHYSICAL-009
+recorded_at: 2026-08-10T16:20:35+08:00
+last_valid_experiment: GUI-PHYSICAL-020
+current_hypothesis: OPEN_GRIPPER 的 pre-release XY envelope 属于与最终 physical-outcome 策略冲突的中间结果门禁，但杯体在释放前已存在显著倾斜，仍需由真实释放后的最终 evaluator 区分
+working_tree_status: 19 个既有 C++/test/README alignment 修改，加本 ledger 修改；未提交、未推送
+owned_processes: NONE
+preserved_processes: tmux codex、kimi、so101-py-qual 未触碰
+confirmed_conclusions:
+  - source commit、非 ledger diff hash、build/install executable hash 与 package prefix provenance 一致
+  - 当前 forward workflow trace 不含 ATTACH_GAZEBO、DETACH_GAZEBO 或 RECOVER_DETACH_GAZEBO
+  - launch startup readiness 仍在 workflow 前触发一次 transient Gazebo attached -> detached；不能把整个 launch lifecycle 描述为从未 attach
+  - workflow 失败点 Gazebo detached、MoveIt shadow attached、三个 controller active、arm/q6 近静止
+  - failure screenshot 与数值 pose 一致，杯体在 OPEN_GRIPPER 前约倾斜 20.53 度
+open_risks:
+  - release command 和 final placement evaluator 均未执行，最终物理效果未知
+  - 是否移除或降级 OPEN_GRIPPER 的 pre-release XY envelope 需要用户批准；不得本轮自动修改
+  - startup readiness 的 transient DetachableJoint probe 是否也要取消尚未纳入本轮修改
+next_command: NONE_PENDING_USER_DIRECTION
 ```
