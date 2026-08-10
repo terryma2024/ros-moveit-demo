@@ -274,6 +274,8 @@ def validate_provenance(payload: bytes) -> None:
         fail(f"invalid provenance JSON: {error}")
     if not isinstance(document, dict):
         fail("invalid provenance structure: top level must be an object")
+    if document.get("schema_version") != 1:
+        fail("invalid provenance schema version")
 
     behavior_source = document.get("behavior_source")
     rejected_backup = document.get("rejected_backup")
@@ -293,13 +295,54 @@ def validate_provenance(payload: bytes) -> None:
     if rejected_backup.get("commit") != backup_commit:
         fail("invalid provenance rejected backup commit")
 
+    adaptations = document.get("adaptations")
+    expected_adaptation_fields = {
+        "source_commit",
+        "source_path",
+        "destination_path",
+        "source_sha256",
+        "adaptation",
+    }
+    if not isinstance(adaptations, list) or not adaptations:
+        fail("invalid provenance adaptations")
+    adaptation_source_paths: list[str] = []
+    for index, adaptation in enumerate(adaptations):
+        if not isinstance(adaptation, dict) or set(adaptation) != expected_adaptation_fields:
+            fail(f"invalid provenance adaptation fields at index {index}")
+        if adaptation["source_commit"] != behavior_source_commit:
+            fail(f"invalid provenance adaptation source commit at index {index}")
+        source_path = adaptation["source_path"]
+        if source_path not in source_paths:
+            fail(f"undeclared provenance adaptation source at index {index}")
+        destination_path = adaptation["destination_path"]
+        if not isinstance(destination_path, str) or not destination_path.startswith(
+            "src/so101_mujoco_demo_py/"
+        ):
+            fail(f"invalid provenance adaptation destination at index {index}")
+        if not re.fullmatch(r"[0-9a-f]{64}", adaptation["source_sha256"]):
+            fail(f"invalid provenance adaptation source hash at index {index}")
+        if not isinstance(adaptation["adaptation"], str) or not adaptation["adaptation"].strip():
+            fail(f"invalid provenance adaptation text at index {index}")
+        adaptation_source_paths.append(source_path)
+    if set(adaptation_source_paths) != set(source_paths):
+        fail("provenance behavior paths and adaptation sources differ")
+
     for path, value in json_string_positions(document):
         lowered = value.lower()
         legacy_allowed = (
-            len(path) == 3
-            and path[0] == "behavior_source"
-            and path[1] == "paths"
-            and isinstance(path[2], int)
+            (
+                len(path) == 3
+                and path[0] == "behavior_source"
+                and path[1] == "paths"
+                and isinstance(path[2], int)
+            )
+            or (
+                len(path) == 3
+                and path[0] == "adaptations"
+                and isinstance(path[1], int)
+                and path[2] == "source_path"
+                and value in source_paths
+            )
         )
         backup_allowed = path in {
             ("rejected_backup", "branch"),
