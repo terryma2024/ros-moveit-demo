@@ -48,6 +48,39 @@
       "src/so101_gazebo_demo_py/meshes/so101/wrist_roll_pitch_so101_v2.stl",
       "src/so101_gazebo_demo_py/so101_gazebo_demo_py/gazebo/reset.py",
       "src/so101_gazebo_demo_py/so101_gazebo_demo_py/grasp/evidence_store.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/domain.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/workflow.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/runner.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/checkpoint.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/physical_outcome.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/release_settle.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/__init__.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/evidence.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/executor.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/gripper.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/planner.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/moveit/__init__.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/moveit/planning.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/moveit/robot_state.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/moveit/scene.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/recovery/__init__.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/recovery/coordinator.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/recovery/policy.py",
+      "src/so101_gazebo_demo_py/config/motion_policies/light_cup_wall_pick.yaml",
+      "src/so101_gazebo_demo_py/test/test_domain.py",
+      "src/so101_gazebo_demo_py/test/test_workflow.py",
+      "src/so101_gazebo_demo_py/test/test_runner.py",
+      "src/so101_gazebo_demo_py/test/test_motion_validation.py",
+      "src/so101_gazebo_demo_py/test/test_moveit_planning.py",
+      "src/so101_gazebo_demo_py/test/test_moveit_scene.py",
+      "src/so101_gazebo_demo_py/test/test_physical_outcome.py",
+      "src/so101_gazebo_demo_py/test/test_release_settle.py",
+      "src/so101_gazebo_demo_py/test/test_recovery.py",
+      "src/so101_gazebo_demo_py/test/test_pick_place_cli.py",
+      "src/so101_gazebo_demo_py/test/test_main_strategy_parity.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/cli/pick_place_state_machine.py",
+      "src/so101_gazebo_demo_py/setup.py",
+      "src/so101_gazebo_demo_py/package.xml",
       "src/so101_gazebo_demo_py/urdf/so101.urdf.xacro",
       "src/so101_gazebo_demo_py/urdf/so101_base.xacro",
       "src/so101_gazebo_demo_py/urdf/so101_gazebo.xacro",
@@ -413,6 +446,237 @@
       "destination_path": "src/so101_mujoco_demo_py/mjcf/assets/wrist_roll_pitch_so101_v2.stl",
       "source_sha256": "6c7ec5525b4d8b9e397a30ab4bb0037156a5d5f38a4adf2c7d943d6c56eda5ae",
       "adaptation": "Copied byte-for-byte into the independent package with a collision-side prefix only where source basenames overlap."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/domain.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/domain.py",
+      "source_sha256": "5248016e5f14609ba6c907035c05dd23568dccbc64b8c50eef7fc383d5c9895f",
+      "adaptation": "Preserved public workflow enums, immutable result records, run modes, and failure-code categories in the independent namespace."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/workflow.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/workflow.py",
+      "source_sha256": "cd926a23e3b15e5c504ce4d08071512aa144af1657f257dae23c09e2c78ec9ad",
+      "adaptation": "Preserved the validated state-transition table while keeping simulator constraints out of the positive path."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/runner.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/runner.py",
+      "source_sha256": "a3275f7ee90681f86453defb9db484c41d8d65688a1160d2edde7f124e51bc1d",
+      "adaptation": "Preserved deterministic transitions and checkpoint boundaries with a backend-neutral checkpoint protocol."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/checkpoint.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/runner.py",
+      "source_sha256": "fe1f6e55731c69365079b85fddee6835ea606c3ad31a1f185dc063af54fb19c7",
+      "adaptation": "Retained atomic JSON checkpoint persistence in runner.py while migrating the expected backend fields to simulator-neutral naming."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/physical_outcome.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/physical_outcome.py",
+      "source_sha256": "3ec3bf214bc09fcf3b199102c549f41f46e714b89dff7b31c0e99a79e5c5b227",
+      "adaptation": "Preserved the final placement result schema and failure precedence while using simulator-neutral detach evidence."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/release_settle.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/release_settle.py",
+      "source_sha256": "9f153433c1433db50b7b4f9cbc1c922607988cb149f4e119d490f9491a90143e",
+      "adaptation": "Preserved bounded cancellable release sampling with no simulator-specific binding."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/__init__.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/motion/__init__.py",
+      "source_sha256": "aaa7df7745b06818092745a7131e9e29b9d94f714a60f5cf1c4b6aabc94ea341",
+      "adaptation": "Recreated the ROS-free motion package boundary in the independent namespace."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/evidence.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/motion/evidence.py",
+      "source_sha256": "0a3ed748fdb761614ceb1b47f8e00eac11f50271f57ccd17ced520ff14160a7a",
+      "adaptation": "Preserved immutable joint and TCP planning evidence."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/executor.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/motion/executor.py",
+      "source_sha256": "00f2bffe8232c084224722bc14643a2ab445bffd20f61848617bd61107aac95d",
+      "adaptation": "Preserved request-scoped ExecuteTrajectory action semantics and lazy ROS message construction."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/gripper.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/motion/gripper.py",
+      "source_sha256": "8b1ea81ba5e6b775e92d4dc1b6f8feb9a0d0e1b2456a1466aaba4474700c5864",
+      "adaptation": "Preserved the joint-6 FollowJointTrajectory adapter and stable failure codes."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/motion/planner.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/motion/planner.py",
+      "source_sha256": "0b2b82ef16b7e35f18067231a753c5cbec10b8bed46a8fe2d494e94de9610dc3",
+      "adaptation": "Preserved trajectory validation and planning composition using local immutable policy inputs."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/moveit/__init__.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/moveit/__init__.py",
+      "source_sha256": "a7e01e50771b9a2cbeeb146a4d0f65aa32bee3ebb24e38d65f9e654a60b64c10",
+      "adaptation": "Recreated the direct MoveIt boundary in the independent namespace."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/moveit/planning.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/moveit/planning.py",
+      "source_sha256": "b18e8a615945c6d7e72bc4dc5292dd34c00f3145c6ecb8f2224e430f1cc0e0ec",
+      "adaptation": "Preserved GetMotionPlan service semantics, planning group arm, and stable failure codes."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/moveit/robot_state.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/moveit/robot_state.py",
+      "source_sha256": "ee138a75c2d2b12fe7789a198c9ebf88065fb4eddd685fb3f20a44882f167108",
+      "adaptation": "Preserved bounded joint and so101_tcp observation without a simulator backend dependency."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/moveit/scene.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/moveit/scene.py",
+      "source_sha256": "455984490f8b5ad5824c52263675fe4a4830e71fbab83be31403bb2153862a52",
+      "adaptation": "Preserved convergent Planning Scene collision-shadow membership without changing MuJoCo physics."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/recovery/__init__.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/recovery/__init__.py",
+      "source_sha256": "e29b8d69d8b6198f52b3fef48f36cfe7717186a52cd5c30a1046ffcf988da656",
+      "adaptation": "Recreated the recovery package boundary in the independent namespace."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/recovery/coordinator.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/recovery/coordinator.py",
+      "source_sha256": "346f7d306cf79d879206aede765809f6d08c11feac10800f046f8ccfb6dd6df3",
+      "adaptation": "Preserved ordered fail-closed recovery action execution."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/recovery/policy.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/recovery/policy.py",
+      "source_sha256": "fa8dce0aa98980dd0e3b231b3ad314d6abbb2e5125ccf7bb12070480b95f67f3",
+      "adaptation": "Preserved evidence-driven recovery selection with simulator-neutral constrained-state naming."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/config/motion_policies/light_cup_wall_pick.yaml",
+      "destination_path": "src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml",
+      "source_sha256": "19f0dd93551c815d96a3f4cbf0b0054081833328898c5bc82827c11736fcbb4b",
+      "adaptation": "Preserved approved joint-space targets and gripper commands while naming all six public joints explicitly."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_domain.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_workflow_domain.py",
+      "source_sha256": "2ef70e72ae54adf3aba5fb20b010b7b1095d8678f02c87bfc26090c6d596a5e3",
+      "adaptation": "Ported public enum and immutable result characterization to the independent namespace."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_workflow.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_workflow_transitions.py",
+      "source_sha256": "3b3ceaaa518205fde437bf2a178cc5a069f425000773d1dc7b698e937956add4",
+      "adaptation": "Ported transition and collision-shadow ordering characterization to the independent namespace."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_runner.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_workflow_runner.py",
+      "source_sha256": "062331d49f0eb37a55c891c7ee58e0ff62f13686851558ea3705bb8b4f60e65f",
+      "adaptation": "Ported state-runner and checkpoint-transition characterization with an in-memory checkpoint sink."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_motion_validation.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_motion_validation.py",
+      "source_sha256": "ce7f661cfb7ec98afce119626cf0384027f21216e54c73305e64640f35be5a36",
+      "adaptation": "Ported ROS-free trajectory validation characterization to the independent namespace."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_moveit_planning.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_moveit_boundary.py",
+      "source_sha256": "d1b06260a9b39c2215b28ed189e05c9b60b2130752db8ec31a934dbc8717d9e7",
+      "adaptation": "Ported service/action failure semantics and request ownership characterization."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_moveit_scene.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_moveit_scene_shadow.py",
+      "source_sha256": "ab673b3831b644d2969800abbd9e84cd18139ef68ac47bbe88ccef9c508bbb61",
+      "adaptation": "Ported collision-shadow convergence characterization and added proof that no simulator method is invoked."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_physical_outcome.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_physical_outcome.py",
+      "source_sha256": "9da989ca50387f5b70d006d72f4aabb1c51912dc5f3e8d07a4701d5069f1fb48",
+      "adaptation": "Ported final result schema, freshness, and failure-precedence characterization with simulator-neutral fields."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_release_settle.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_release_settle.py",
+      "source_sha256": "60df4c7c6ea3305a6b6e9478a09bf0633e54fffa41da8d63960ef28876f9d202",
+      "adaptation": "Ported bounded release collection characterization to the independent namespace."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_recovery.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_recovery_policy.py",
+      "source_sha256": "c2a88487f739c27127511116d7e722f62545d754cca7a58e1b3d062c2f596cb5",
+      "adaptation": "Ported recovery path characterization using backend-neutral expected-world evidence."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_pick_place_cli.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_pick_place_cli.py",
+      "source_sha256": "8ed9db1661a1688e3e19e2b1eb321688f1a01efd54a25094928bd510a11ba95c",
+      "adaptation": "Ported dry-run output and exit-code characterization while making unimplemented live modes fail closed."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_main_strategy_parity.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_motion_policy_contract.py",
+      "source_sha256": "8a368cf11f2b16065f49b7d6de5dcfa9869e3fb99caee29bdfa40e04f255b92d",
+      "adaptation": "Ported approved motion endpoints, scaling, public joint names, arm group, and TCP contract without backend assertions."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/cli/pick_place_state_machine.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/cli.py",
+      "source_sha256": "927662c853253a2c68842efe740041491f4f3aee2a46f23dbbe4422d130b6ff5",
+      "adaptation": "Preserved ROS-free dry-run argument and result semantics; live composition remains deferred to Task 12."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/setup.py",
+      "destination_path": "src/so101_mujoco_demo_py/setup.py",
+      "source_sha256": "cacc9dc28c0d60febdca978c598eb38876b3159f1276f57af47e4dd9cfe25823",
+      "adaptation": "Kept the executable name and package-data installation while retaining the independent package identity."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/package.xml",
+      "destination_path": "src/so101_mujoco_demo_py/package.xml",
+      "source_sha256": "c884eedeea7669d55725cce277023941520c818641309bf2f23d9a7076bb2282",
+      "adaptation": "Selected only MoveIt and trajectory message dependencies; all legacy simulator dependencies remain excluded."
     }
   ]
 }

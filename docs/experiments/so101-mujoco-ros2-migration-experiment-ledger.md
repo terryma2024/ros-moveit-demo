@@ -10,9 +10,9 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: 263818aabc5a6be09db8baaa137eb18668081d42
+last_verified_implementation_commit: c9ab83d0a94311a10db824841c9a36aa44e89c49
 ledger_commit_pending: false
-task_status: TASK_9_COMPLETE
+task_status: TASK_11_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -22,7 +22,7 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-046
+latest_checkpoint: CP-047
 next_experiment: EXP-035
 ---
 
@@ -1971,4 +1971,31 @@ disproven_routes:
 open_risks:
   - No Task 1 repository-isolation risk remains; runtime migration experiments have not started.
 next_command: Define EXP-001 before the first runtime-affecting migration experiment.
+```
+
+## Checkpoint CP-047
+
+```yaml
+checkpoint_id: CP-047
+last_valid_experiment: EXP-034
+current_hypothesis: NONE; Task 11 is fully qualified at its ROS-free boundary and no runtime experiment was authorized or required.
+working_tree_status: HEAD c9ab83d0a94311a10db824841c9a36aa44e89c49; only the exact Task 11 workflow, motion, MoveIt, recovery, physical-outcome, policy, characterization-test, provenance, package metadata, CLI, and this ledger checkpoint paths are staged or dirty pending the scoped commit.
+owned_processes: NONE; Task 11 started no ROS, MuJoCo, MoveIt, Gazebo, GUI, tmux, or hardware process.
+preserved_processes: codex, kimi, and so101-py-qual remain untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Every adapted behavior/config/metadata/test source was inspected individually from 8d7913e7f552a40ee627d65be8b873ac16748bc9 with git show and recorded in docs/provenance.json before implementation adaptation.
+  - Characterization RED failed only because the new domain and physical-outcome modules did not exist; nine collection errors were preserved at /tmp/so101-debug-mujoco-migration/task-11/red-missing-modules.log with SHA-256 02f4597d7e6b41748a5443bad00f254a879cd920e75f823d47cfc4aed154eea7.
+  - Final ROS-free pytest reports 160 passed and two opt-in live skips; review-driven RED/GREEN covers schema-v5 expected-world fields, safe v4 conversion, real resume/current-world validation, publisher-sequence/reset-epoch release correlation, offline plan_only, and direct Task 5 observer/reset bindings.
+  - The two-package build passed, the two-package test run passed, and colcon test-result reports 412 tests, zero errors, zero failures, and four skips across retained aggregate results.
+  - Schema v5 writes only backend-neutral expected-world fields; execute checkpoints require an injected expected-world provider, safe detached/unknown v4 checkpoints convert on read, and constrained, backend/session/policy/current-world mismatches or active release epochs fail closed for resume.
+  - Release and recovery evidence consumes Task 5 SimulationEvidence through WorldObserver, release markers use the same publisher-sequence/reset-epoch domain as settle samples, and controlled recovery reset consumes WorldReset; no simulator-specific message or service type enters the business layer.
+  - Ruff check/format, exact provenance validation, migration isolation, diff check, and protected Gazebo tracked/status gates pass.
+  - The local origin/main ref is 32 commits behind HEAD and 91 commits ahead of HEAD; it was recorded only, with no fetch, rebase, merge, push, or branch mutation.
+disproven_routes:
+  - An unsourced ament shell cannot collect the package tests; the mandated overlay order resolves the package from the worktree build symlink.
+  - Pytest cache under the implementation root is rejected by the isolation scanner; Task 11 test cache and ROS logs were redirected to the evidence root.
+open_risks:
+  - Live execute composition remains intentionally fail-closed with LIVE_RUNTIME_NOT_IMPLEMENTED until Task 12; ROS-free plan_only remains available and characterized.
+  - Sandbox DDS socket creation emits transport warnings in the support GTest, but all nine support tests pass and no runtime graph is started.
+next_command: Stage the exact Task 11 allowlist, verify the index and gates, commit feat(so101_mujoco): port pick place workflow, and do not push.
 ```
