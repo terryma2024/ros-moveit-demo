@@ -1,22 +1,29 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
 #include <memory>
 #include <string>
+#include <thread>
 #include <type_traits>
+#include <vector>
 
 #include <mujoco/mujoco.h>
 
+#define private public
 #include "so101_mujoco_support/simulation_evidence_plugin.hpp"
+#undef private
 
 namespace
 {
 using so101_mujoco_support::EvidenceBuilder;
 using so101_mujoco_support::EvidenceState;
+using so101_mujoco_support::SimulationEvidencePlugin;
+using so101_mujoco_support::msg::SimulationEvidence;
 
 struct ModelDeleter
 {
@@ -173,6 +180,202 @@ TEST_F(AtomicEvidenceTest, MarksPausedAndTruncatesBoundedContacts)
   EXPECT_TRUE(paused.paused);
   EXPECT_EQ(paused.publisher_sequence, 1U);
   EXPECT_EQ(paused.simulation_step, running.simulation_step);
+}
+
+TEST_F(AtomicEvidenceTest, PluginPublishesAuthoritativePausedResetOnlyFromSnapshotHook)
+{
+  if (!rclcpp::ok())
+    rclcpp::init(0, nullptr);
+  const auto topic = "/test/so101/authoritative_pause";
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+    rclcpp::Parameter("object_body", "cup"),
+    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+    rclcpp::Parameter("simulation_session_id", "pause-test"),
+    rclcpp::Parameter("publish_rate", 100.0),
+    rclcpp::Parameter("topic", topic),
+  });
+  auto plugin_node = std::make_shared<rclcpp::Node>("authoritative_pause_plugin", options);
+  auto observer_node = std::make_shared<rclcpp::Node>("authoritative_pause_observer");
+  std::vector<SimulationEvidence> messages;
+  const auto subscription = observer_node->create_subscription<SimulationEvidence>(
+    topic, rclcpp::SensorDataQoS(),
+    [&messages](const SimulationEvidence & message) { messages.push_back(message); });
+  (void)subscription;
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node, model_.get(), data_.get()));
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(plugin_node);
+  executor.add_node(observer_node);
+
+  const auto spin_until = [&executor, &messages](std::size_t expected) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (messages.size() < expected && std::chrono::steady_clock::now() < deadline) {
+      executor.spin_some();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  };
+
+  plugin.on_pause(false);
+  plugin.update(model_.get(), data_.get());
+  spin_until(1);
+  ASSERT_EQ(messages.size(), 1U);
+  EXPECT_FALSE(messages.back().paused);
+  EXPECT_EQ(messages.back().reset_epoch, 0U);
+
+  plugin.on_pause(true);
+  plugin.on_reset();
+  data_->time = 0.001;
+  plugin.update(model_.get(), data_.get());
+  executor.spin_some();
+  ASSERT_EQ(messages.size(), 1U) << "running update must retain pending reset generation";
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+  spin_until(2);
+  ASSERT_EQ(messages.size(), 2U) << "paused snapshot must bypass the ordinary rate gate";
+  EXPECT_TRUE(messages.back().paused);
+  EXPECT_EQ(messages.back().reset_epoch, 1U);
+  EXPECT_EQ(messages.back().simulation_step, 0U);
+
+  plugin.on_pause(false);
+  data_->time = 0.002;
+  plugin.update(model_.get(), data_.get());
+  executor.spin_some();
+  EXPECT_EQ(messages.size(), 2U) << "ordinary updates remain rate limited";
+
+  data_->time = 0.02;
+  plugin.update(model_.get(), data_.get());
+  spin_until(3);
+  ASSERT_EQ(messages.size(), 3U);
+  EXPECT_FALSE(messages.back().paused);
+  plugin.cleanup();
+  executor.remove_node(observer_node);
+  executor.remove_node(plugin_node);
+  rclcpp::shutdown();
+}
+
+TEST_F(AtomicEvidenceTest,
+       RunningUpdateRetainsPendingGenerationUntilPausedSnapshotPublishesStepZero)
+{
+  if (!rclcpp::ok())
+    rclcpp::init(0, nullptr);
+  const auto topic = "/test/so101/pending_until_snapshot";
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+    rclcpp::Parameter("object_body", "cup"),
+    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+    rclcpp::Parameter("simulation_session_id", "snapshot-test"),
+    rclcpp::Parameter("publish_rate", 100.0),
+    rclcpp::Parameter("topic", topic),
+  });
+  auto plugin_node = std::make_shared<rclcpp::Node>("pending_snapshot_plugin", options);
+  auto observer_node = std::make_shared<rclcpp::Node>("pending_snapshot_observer");
+  std::vector<SimulationEvidence> messages;
+  const auto subscription = observer_node->create_subscription<SimulationEvidence>(
+    topic, rclcpp::SensorDataQoS(),
+    [&messages](const SimulationEvidence & message) { messages.push_back(message); });
+  (void)subscription;
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node, model_.get(), data_.get()));
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(plugin_node);
+  executor.add_node(observer_node);
+  const auto spin_until = [&executor, &messages](std::size_t expected) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (messages.size() < expected && std::chrono::steady_clock::now() < deadline) {
+      executor.spin_some();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  };
+
+  plugin.on_pause(false);
+  plugin.update(model_.get(), data_.get());
+  spin_until(1);
+  ASSERT_EQ(messages.size(), 1U);
+  plugin.on_reset();
+  data_->time = 0.001;
+  plugin.update(model_.get(), data_.get());
+  executor.spin_some();
+  EXPECT_EQ(messages.size(), 1U) << "running update must not expose or consume pending epoch";
+
+  const std::vector<mjtNum> qpos(data_->qpos, data_->qpos + model_->nq);
+  const std::vector<mjtNum> qvel(data_->qvel, data_->qvel + model_->nv);
+  const std::vector<mjtNum> ctrl(data_->ctrl, data_->ctrl + model_->nu);
+  const std::vector<mjtNum> xfrc(data_->xfrc_applied, data_->xfrc_applied + 6 * model_->nbody);
+  plugin.on_pause(true);
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+  spin_until(2);
+  ASSERT_EQ(messages.size(), 2U);
+  EXPECT_EQ(messages.back().reset_epoch, 1U);
+  EXPECT_EQ(messages.back().simulation_step, 0U);
+  EXPECT_TRUE(messages.back().paused);
+  EXPECT_EQ(std::vector<mjtNum>(data_->qpos, data_->qpos + model_->nq), qpos);
+  EXPECT_EQ(std::vector<mjtNum>(data_->qvel, data_->qvel + model_->nv), qvel);
+  EXPECT_EQ(std::vector<mjtNum>(data_->ctrl, data_->ctrl + model_->nu), ctrl);
+  EXPECT_EQ(std::vector<mjtNum>(data_->xfrc_applied, data_->xfrc_applied + 6 * model_->nbody),
+            xfrc);
+
+  plugin.cleanup();
+  executor.remove_node(observer_node);
+  executor.remove_node(plugin_node);
+  rclcpp::shutdown();
+}
+
+TEST_F(AtomicEvidenceTest, SnapshotPublisherContentionKeepsGenerationPendingForIdempotentRetry)
+{
+  if (!rclcpp::ok())
+    rclcpp::init(0, nullptr);
+  const auto topic = "/test/so101/snapshot_contention";
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+    rclcpp::Parameter("object_body", "cup"),
+    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+    rclcpp::Parameter("simulation_session_id", "contention-test"),
+    rclcpp::Parameter("publish_rate", 100.0),
+    rclcpp::Parameter("topic", topic),
+  });
+  auto plugin_node = std::make_shared<rclcpp::Node>("snapshot_contention_plugin", options);
+  auto observer_node = std::make_shared<rclcpp::Node>("snapshot_contention_observer");
+  std::vector<SimulationEvidence> messages;
+  const auto subscription = observer_node->create_subscription<SimulationEvidence>(
+    topic, rclcpp::SensorDataQoS(),
+    [&messages](const SimulationEvidence & message) { messages.push_back(message); });
+  (void)subscription;
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node, model_.get(), data_.get()));
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(plugin_node);
+  executor.add_node(observer_node);
+
+  plugin.on_reset();
+  plugin.on_pause(true);
+  ASSERT_TRUE(plugin.realtime_publisher_->trylock());
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+  plugin.realtime_publisher_->unlock();
+  executor.spin_some();
+  EXPECT_TRUE(messages.empty()) << "contended snapshot must not publish or consume generation";
+
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (messages.empty() && std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  ASSERT_EQ(messages.size(), 1U);
+  EXPECT_EQ(messages.back().reset_epoch, 1U);
+  EXPECT_EQ(messages.back().simulation_step, 0U);
+  EXPECT_TRUE(messages.back().paused);
+
+  data_->time = 0.001;
+  plugin.update(model_.get(), data_.get());
+  executor.spin_some();
+  EXPECT_EQ(messages.size(), 1U) << "no-pending ordinary update must keep the existing cadence";
+  plugin.cleanup();
+  executor.remove_node(observer_node);
+  executor.remove_node(plugin_node);
+  rclcpp::shutdown();
 }
 
 TEST_F(AtomicEvidenceTest, SeparatesOtherObjectContactAndHonorsGlobalBound)

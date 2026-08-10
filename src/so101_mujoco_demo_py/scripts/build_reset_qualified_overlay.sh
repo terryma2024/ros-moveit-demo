@@ -22,6 +22,7 @@ fi
 [[ "$(git -C "${source_dir}" remote get-url origin)" == "${upstream_url}" ]]
 [[ "$(git -C "${source_dir}" rev-parse HEAD)" == "${upstream_commit}" ]]
 git -C "${source_dir}" tag --points-at HEAD | grep -Fxq "0.0.3"
+already_applied=false
 [[ -z "$(git -C "${source_dir}" status --short --untracked-files=all)" ]] || {
   if git -C "${source_dir}" status --short --untracked-files=all | grep -q '^??'; then
     echo "dependency checkout contains untracked files" >&2
@@ -34,18 +35,15 @@ git -C "${source_dir}" tag --points-at HEAD | grep -Fxq "0.0.3"
     echo "dependency checkout has changes other than the exact approved patch" >&2
     exit 1
   }
+  already_applied=true
 }
 
-if git -C "${source_dir}" apply --unidiff-zero --check "${patch_file}" 2>/dev/null; then
+if [[ "${already_applied}" == false ]] &&
+  git -C "${source_dir}" apply --unidiff-zero --check "${patch_file}" 2>/dev/null; then
   git -C "${source_dir}" apply --unidiff-zero "${patch_file}"
-else
-  diff_file="$(mktemp)"
-  trap 'rm -f "${diff_file}"' EXIT
-  git -C "${source_dir}" diff HEAD --binary --unified=0 >"${diff_file}"
-  cmp --silent "${patch_file}" "${diff_file}" || {
-    echo "approved patch is neither applicable nor already applied exactly" >&2
-    exit 1
-  }
+elif [[ "${already_applied}" == false ]]; then
+  echo "approved patch is not applicable to the clean pinned checkout" >&2
+  exit 1
 fi
 
 colcon --log-base "${dependency_root}/log" build \

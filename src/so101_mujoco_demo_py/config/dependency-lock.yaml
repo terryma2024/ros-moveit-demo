@@ -9,7 +9,7 @@ source_checkout: /data/work/ws_mujoco_ros2_control_003/src/mujoco_ros2_control
 prefix: /data/work/ws_mujoco_ros2_control_003/install
 patch:
   path: patches/mujoco_ros2_control-0.0.3-reset-hook.patch
-  sha256: 367cf5e3eab641412e234a3b1db86922b5573704932e950f98d9ca394056ea9f
+  sha256: fd2869212d40809dca70f4cc971f93215a64812900cc992817305a33dfcf971e
 source_order:
   - /opt/ros/jazzy
   - /data/work/ws_mujoco_ros2_control_003/install
@@ -23,7 +23,7 @@ project_package_prefixes:
   so101_mujoco_support: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_support
   so101_mujoco_demo_py: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py
 required_files:
-  /data/work/ws_mujoco_ros2_control_003/install/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 6d581bc671ea6ab8cccaeaa38b91b8542eb73c4072f21f09b9b2ca3d40e1e5aa
-  /data/work/ws_mujoco_ros2_control_003/install/lib/libmujoco_ros2_control_plugins.so: c0e4a803a265ee6ad61db9d1217c0fd2ebf64504b44241c78063d3847516fef3
-  /data/work/ws_mujoco_ros2_control_003/install/lib/libmujoco_ros2_control.so: 16d59801a61ce5971b2e43c4230bc4a74a5765153ca40aa6140ace492f1208d2
+  /data/work/ws_mujoco_ros2_control_003/install/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 688337291e7e1d340daf9ffe36fe8c6ed72f085f1ddf302215e5a4a8a35386dc
+  /data/work/ws_mujoco_ros2_control_003/install/lib/libmujoco_ros2_control_plugins.so: 8042fe00bb42d52aeea8d9b53bc0030e81e00e344595009242884cd0d939f701
+  /data/work/ws_mujoco_ros2_control_003/install/lib/libmujoco_ros2_control.so: cff515efd2701f2f9e52e0bc5d9cc61a6793797fec6ee5fc7b04ae33436dd019
   /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node: 81fc00e192b572f0ffe866522b384d508a6db561afa647b6f82eb91bf2dd2e3b

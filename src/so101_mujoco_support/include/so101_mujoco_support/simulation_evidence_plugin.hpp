@@ -34,7 +34,7 @@ public:
   bool configure(const mjModel * model, const std::string & object_body,
                  const std::string & left_geom, const std::string & right_geom,
                  const std::vector<std::string> & other_geoms, std::size_t max_contacts);
-  msg::SimulationEvidence build(const mjModel * model, mjData * data, bool paused,
+  msg::SimulationEvidence build(const mjModel * model, const mjData * data, bool paused,
                                 EvidenceState & state, uint64_t reset_generation = 0) const;
 
 private:
@@ -57,10 +57,14 @@ public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel * model, mjData * data) override;
   void update(const mjModel * model, mjData * data) override;
   void on_reset() override;
+  void on_pause(bool paused) override;
+  void on_state_snapshot(const mjModel * model, const mjData * data, bool paused) override;
   void cleanup() override;
 
 private:
   using Evidence = msg::SimulationEvidence;
+  void try_publish_snapshot(const mjModel * model, const mjData * data, bool paused,
+                            uint64_t reset_generation);
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<Evidence>::SharedPtr publisher_;
   std::unique_ptr<realtime_tools::RealtimePublisher<Evidence>> realtime_publisher_;
@@ -70,6 +74,7 @@ private:
   double last_publish_time_s_{0.0};
   bool published_{false};
   std::atomic<uint64_t> reset_generation_{0};
+  std::atomic<bool> authoritative_paused_{false};
 };
 }  // namespace so101_mujoco_support
 #endif
