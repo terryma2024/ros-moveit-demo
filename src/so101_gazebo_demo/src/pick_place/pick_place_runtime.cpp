@@ -793,8 +793,6 @@ missingDependencyFailure(const SO101PickPlaceRuntimeDependencies & dependencies)
     missing.emplace_back("gripper");
   if (!dependencies.moveit_scene)
     missing.emplace_back("moveit_scene");
-  if (!dependencies.recovery_gazebo_detach)
-    missing.emplace_back("recovery_gazebo_detach");
   if (!dependencies.motion_policy)
     missing.emplace_back("motion_policy");
   if (!dependencies.motion)
@@ -995,9 +993,9 @@ SO101PickPlaceRuntimeRegistries
 makeSO101PickPlaceRuntimeRegistries(const SO101PickPlaceRuntimeDependencies & dependencies,
                                     const SO101PickPlaceRuntimeConfig & config)
 {
-  SO101Task3RuntimeDependencies task3_dependencies{
-    dependencies.gripper, dependencies.moveit_scene, dependencies.recovery_gazebo_detach,
-    dependencies.gripper_observer, dependencies.final_placement_evidence};
+  SO101Task3RuntimeDependencies task3_dependencies{dependencies.gripper, dependencies.moveit_scene,
+                                                   dependencies.gripper_observer,
+                                                   dependencies.final_placement_evidence};
   task3_dependencies.gripper_observer = dependencies.physical_observer;
   const auto & task3_config = static_cast<const SO101Task3RuntimeConfig &>(config);
   auto task3 = makeSO101Task3Runtime(task3_dependencies, task3_config);

@@ -30,21 +30,6 @@ public:
   pick_place::ActionResult result{pick_place::ActionStatus::SUCCEEDED, std::nullopt};
 };
 
-class FakeExecutor final : public pick_place::IStateExecutor
-{
-public:
-  pick_place::ActionResult execute(const pick_place::ExecutionContext &) override
-  {
-    ++calls;
-    return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
-  }
-  pick_place::ActionResult cancel() override
-  {
-    return {pick_place::ActionStatus::SUCCEEDED, std::nullopt};
-  }
-  int calls{0};
-};
-
 class FakeScene final : public pick_place::ISO101MoveItSceneAdapter
 {
 public:
@@ -103,8 +88,7 @@ public:
 
 pick_place::SO101Task3RuntimeDependencies dependencies()
 {
-  auto recovery_gazebo_detach = std::make_shared<FakeExecutor>();
-  return {std::make_shared<FakeGripper>(), std::make_shared<FakeScene>(), recovery_gazebo_detach};
+  return {std::make_shared<FakeGripper>(), std::make_shared<FakeScene>()};
 }
 
 }  // namespace
@@ -117,7 +101,6 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
          pick_place::State::CLOSE_GRIPPER,
          pick_place::State::OPEN_GRIPPER,
          pick_place::State::RECOVER_OPEN_GRIPPER,
-         pick_place::State::RECOVER_DETACH_GAZEBO,
          pick_place::State::ATTACH_MOVEIT,
          pick_place::State::DETACH_MOVEIT,
          pick_place::State::SYNC_WORLD_OBJECT,
@@ -126,6 +109,7 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
        }) {
     EXPECT_NE(nullptr, runtime.actions.findExecutor(state)) << pick_place::toString(state);
   }
+  EXPECT_EQ(nullptr, runtime.actions.findExecutor(pick_place::State::RECOVER_DETACH_GAZEBO));
   for (const auto state : {
          pick_place::State::MOVE_ABOVE_OBJECT,
          pick_place::State::DESCEND,
@@ -146,11 +130,10 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
          pick_place::TransitionKey{pick_place::State::PREPARE_OPEN_GRIPPER,
                                    pick_place::State::MOVE_ABOVE_OBJECT},
          {pick_place::State::CLOSE_GRIPPER, pick_place::State::WAIT_GRASP_STABLE},
-         {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::State::RECOVER_DETACH_GAZEBO},
+         {pick_place::State::RECOVER_OPEN_GRIPPER, pick_place::State::RECOVER_DETACH_MOVEIT},
          {pick_place::State::ATTACH_MOVEIT, pick_place::State::LIFT},
          {pick_place::State::DETACH_MOVEIT, pick_place::State::WAIT_RELEASE_SETTLE},
          {pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::DONE},
-         {pick_place::State::RECOVER_DETACH_GAZEBO, pick_place::State::RECOVER_DETACH_MOVEIT},
          {pick_place::State::RECOVER_DETACH_MOVEIT, pick_place::State::RECOVER_SYNC_WORLD_OBJECT},
          {pick_place::State::RECOVER_SYNC_WORLD_OBJECT, pick_place::State::RECOVER_RETREAT},
        }) {

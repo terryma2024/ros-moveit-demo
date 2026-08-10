@@ -85,7 +85,7 @@ TEST(SO101WorkflowCharacterization, AttachMoveItFailureContractRemainsStable)
   EXPECT_EQ(pp::State::ERROR, result.current_state);
   ASSERT_TRUE(result.failure);
   EXPECT_EQ("DRY_RUN_FAILURE_INJECTED", result.failure->code);
-  EXPECT_EQ(15U, result.transition_count);
+  EXPECT_EQ(14U, result.transition_count);
   const std::vector<pp::State> expected{pp::State::IDLE,
                                         pp::State::PREPARE_OPEN_GRIPPER,
                                         pp::State::MOVE_ABOVE_OBJECT,
@@ -97,7 +97,6 @@ TEST(SO101WorkflowCharacterization, AttachMoveItFailureContractRemainsStable)
                                         pp::State::VERIFY_PHYSICAL_GRASP,
                                         pp::State::ATTACH_MOVEIT,
                                         pp::State::RECOVER_OPEN_GRIPPER,
-                                        pp::State::RECOVER_DETACH_GAZEBO,
                                         pp::State::RECOVER_DETACH_MOVEIT,
                                         pp::State::RECOVER_SYNC_WORLD_OBJECT,
                                         pp::State::RECOVER_RETREAT,

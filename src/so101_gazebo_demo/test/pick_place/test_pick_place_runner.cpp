@@ -1021,7 +1021,6 @@ TEST(PureRunnerIntegration, NormalAndFailureRunsExposeExactForwardAndRecoveryTra
                                     State::ATTACH_MOVEIT,
                                     State::LIFT,
                                     State::RECOVER_OPEN_GRIPPER,
-                                    State::RECOVER_DETACH_GAZEBO,
                                     State::RECOVER_DETACH_MOVEIT,
                                     State::RECOVER_SYNC_WORLD_OBJECT,
                                     State::RECOVER_RETREAT,

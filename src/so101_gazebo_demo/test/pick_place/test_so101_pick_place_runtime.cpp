@@ -40,21 +40,6 @@ public:
   std::vector<double> targets;
 };
 
-class FakeExecutor final : public spp::IStateExecutor
-{
-public:
-  spp::ActionResult execute(const spp::ExecutionContext &) override
-  {
-    ++calls;
-    return {spp::ActionStatus::SUCCEEDED, std::nullopt};
-  }
-  spp::ActionResult cancel() override
-  {
-    return {spp::ActionStatus::SUCCEEDED, std::nullopt};
-  }
-  int calls{0};
-};
-
 class FakeMicroLift final : public spp::IWorldZMicroLift
 {
 public:
@@ -356,7 +341,6 @@ spp::SO101PickPlaceRuntimeDependencies completeDependencies()
   spp::SO101PickPlaceRuntimeDependencies dependencies;
   dependencies.gripper = std::make_shared<FakeGripper>();
   dependencies.moveit_scene = std::make_shared<FakeScene>();
-  dependencies.recovery_gazebo_detach = std::make_shared<FakeExecutor>();
   dependencies.motion_policy = configuredPolicy();
   dependencies.motion = std::make_shared<RecordingMotion>();
   dependencies.micro_lift = std::make_shared<FakeMicroLift>();
@@ -505,7 +489,7 @@ TEST(SO101PickPlaceRuntime, RegistersEveryConcreteActionValidatorAndContractExac
   EXPECT_EQ(runtime.actions.findExecutor(spp::State::DETACH_GAZEBO), nullptr);
   EXPECT_NE(runtime.actions.findExecutor(spp::State::WAIT_RELEASE_SETTLE), nullptr);
   EXPECT_NE(runtime.actions.findExecutor(spp::State::VALIDATE_FINAL_PLACEMENT), nullptr);
-  EXPECT_NE(runtime.actions.findExecutor(spp::State::RECOVER_DETACH_GAZEBO), nullptr);
+  EXPECT_EQ(runtime.actions.findExecutor(spp::State::RECOVER_DETACH_GAZEBO), nullptr);
 }
 
 TEST(SO101PickPlaceRuntime, MarksPersistedPhysicalSamplesFreshBeforeValidation)

@@ -179,7 +179,8 @@ RecoveryRoute SO101RecoveryPolicy::select(State failed_state, const Failure & or
     return {State::RECOVER_OPEN_GRIPPER, std::nullopt};
   }
   if (gazebo_attached) {
-    return {State::RECOVER_DETACH_GAZEBO, std::nullopt};
+    return holdForOperator(original_failure,
+                           "Unexpected Gazebo attachment requires operator inspection");
   }
   if (moveit_attached) {
     return {State::RECOVER_DETACH_MOVEIT, std::nullopt};

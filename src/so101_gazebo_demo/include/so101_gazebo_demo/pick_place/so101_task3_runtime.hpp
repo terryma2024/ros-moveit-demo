@@ -17,7 +17,6 @@ struct SO101Task3RuntimeDependencies
 {
   std::shared_ptr<ISO101GripperCommand> gripper;
   std::shared_ptr<IMoveItSceneAdapter> moveit_scene;
-  std::shared_ptr<IStateExecutor> recovery_gazebo_detach;
   std::shared_ptr<IWorldObserver> gripper_observer;
   std::shared_ptr<IFinalPlacementEvidenceStore> final_placement_evidence;
 };

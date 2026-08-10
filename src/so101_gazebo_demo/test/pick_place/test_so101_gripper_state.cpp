@@ -192,7 +192,7 @@ TEST(SO101GripperStateExecutor, StagedOpenAcceptsAbortOnlyAfterObservedPhysicalC
                                                  {}}};
   auto observer = std::make_shared<FakeWorldObserver>();
   observer->world = snapshot(profile.q6_full_open - 0.006, 0.0);
-  setAttached(observer->world);
+  setMoveItShadowAttached(observer->world);
   pick_place::SO101GripperStateExecutor executor(
     command, {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false},
     profile, observer);
@@ -202,6 +202,32 @@ TEST(SO101GripperStateExecutor, StagedOpenAcceptsAbortOnlyAfterObservedPhysicalC
 
   EXPECT_EQ(result.status, pick_place::ActionStatus::SUCCEEDED);
   EXPECT_EQ(observer->calls, 3);
+}
+
+TEST(SO101GripperStateExecutor, StagedOpenRejectsAbortConvergenceWithGazeboAttachment)
+{
+  auto profile = pick_place::SO101Profile::canonical();
+  profile.release_stages_q6 = {profile.q6_full_open};
+  auto command = std::make_shared<FakeGripperCommand>();
+  command->command_result = {pick_place::ActionStatus::FAILED,
+                             pick_place::Failure{pick_place::FailureCategory::GRIPPER,
+                                                 "GRIPPER_ACTION_ABORTED",
+                                                 "controller aborted after reaching target",
+                                                 {}}};
+  auto observer = std::make_shared<FakeWorldObserver>();
+  observer->world = snapshot(profile.q6_full_open, 0.0);
+  setAttached(observer->world);
+  pick_place::SO101GripperStateExecutor executor(
+    command, {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false},
+    profile, observer);
+
+  const auto result =
+    executor.execute(context(pick_place::State::OPEN_GRIPPER, snapshot(profile.q6_contact)));
+
+  EXPECT_EQ(result.status, pick_place::ActionStatus::FAILED);
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "GRIPPER_ACTION_ABORTED");
+  EXPECT_EQ(observer->calls, 40);
 }
 
 TEST(SO101GripperStateExecutor, StagedOpenWaitsForDelayedAbortConvergence)
@@ -218,8 +244,8 @@ TEST(SO101GripperStateExecutor, StagedOpenWaitsForDelayedAbortConvergence)
   auto observer = std::make_shared<DelayedSettlingWorldObserver>();
   observer->moving = snapshot(release_stage - 0.005443, 0.02);
   observer->settled = snapshot(release_stage + 0.000107, -0.00001095);
-  setAttached(observer->moving);
-  setAttached(observer->settled);
+  setMoveItShadowAttached(observer->moving);
+  setMoveItShadowAttached(observer->settled);
   observer->settle_after_calls = 25;
   pick_place::SO101GripperStateExecutor executor(
     command, {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false},
@@ -246,8 +272,8 @@ TEST(SO101GripperStateExecutor, StagedOpenDelayedAbortConvergenceRemainsBounded)
   auto observer = std::make_shared<DelayedSettlingWorldObserver>();
   observer->moving = snapshot(release_stage - 0.005443, 0.02);
   observer->settled = snapshot(release_stage + 0.000107, 0.0);
-  setAttached(observer->moving);
-  setAttached(observer->settled);
+  setMoveItShadowAttached(observer->moving);
+  setMoveItShadowAttached(observer->settled);
   observer->settle_after_calls = 41;
   pick_place::SO101GripperStateExecutor executor(
     command, {pick_place::State::OPEN_GRIPPER, pick_place::SO101GripperTarget::FULL_OPEN, false},

@@ -6,7 +6,6 @@
 #include <cmath>
 #include <limits>
 #include <set>
-#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -28,8 +27,7 @@ bool sameKey(TransitionKey first, TransitionKey second)
 
 bool isRecovery(TransitionKey key)
 {
-  return key.from == State::RECOVER_DETACH_GAZEBO || key.from == State::RECOVER_DETACH_MOVEIT ||
-         key.from == State::RECOVER_SYNC_WORLD_OBJECT;
+  return key.from == State::RECOVER_DETACH_MOVEIT || key.from == State::RECOVER_SYNC_WORLD_OBJECT;
 }
 
 void add(ValidationResult & result, FailureCategory category, std::string code, std::string message)
@@ -143,32 +141,6 @@ void requireCarryQ6Telemetry(ValidationResult & result, const WorldSnapshot & sn
   }
 }
 
-void requireAttachPreloadQ6(ValidationResult & result, const WorldSnapshot & snapshot,
-                            const SO101Profile & profile)
-{
-  const auto position = snapshot.joint_positions.find(profile.gripper_joint);
-  const auto velocity = snapshot.joint_velocities.find(profile.gripper_joint);
-  const double lower = profile.q6_contact - profile.q6_regrasp_squeeze_offset;
-  const double upper = profile.q6_contact + profile.contact_q6_stop_tolerance;
-  if (position == snapshot.joint_positions.end() || velocity == snapshot.joint_velocities.end() ||
-      !std::isfinite(position->second) || !std::isfinite(velocity->second)) {
-    add(result, FailureCategory::OBSERVATION, "ATTACH_PRELOAD_Q6_EVIDENCE_REQUIRED",
-        "Gazebo attach requires finite gripper position and velocity evidence");
-    return;
-  }
-  result.metrics["attach_preload_q6"] = position->second;
-  result.metrics["attach_preload_q6_lower"] = lower;
-  result.metrics["attach_preload_q6_upper"] = upper;
-  if (position->second < lower - 1e-12 || position->second > upper + 1e-12) {
-    add(result, FailureCategory::GRIPPER, "ATTACH_PRELOAD_Q6_OUT_OF_BOUNDS",
-        "Gazebo attach precondition exceeds the configured bounded preload interval");
-  }
-  if (std::abs(velocity->second) > profile.q6_velocity_tolerance) {
-    add(result, FailureCategory::GRIPPER, "Q6_NOT_STATIONARY",
-        "Joint 6 velocity exceeds the stop threshold");
-  }
-}
-
 void requireBilateralFingerContact(ValidationResult & result, const WorldSnapshot & snapshot,
                                    const SO101Profile & profile)
 {
@@ -178,12 +150,12 @@ void requireBilateralFingerContact(ValidationResult & result, const WorldSnapsho
   result.metrics["gazebo_task_object_moving_jaw_contact"] = moving ? 1.0 : 0.0;
   if (!fixed || !moving) {
     add(result, FailureCategory::PRECONDITION, "BILATERAL_GRIPPER_CONTACT_REQUIRED",
-        "Gazebo attach requires independent TaskObject contact on the fixed finger and moving jaw");
+        "Planning shadow attach requires independent TaskObject contact on both fingers");
   }
   if (!snapshot.gazebo_task_object_gripper_max_depth ||
       !std::isfinite(*snapshot.gazebo_task_object_gripper_max_depth)) {
     add(result, FailureCategory::OBSERVATION, "CONTACT_PENETRATION_EVIDENCE_REQUIRED",
-        "Gazebo attach requires a finite maximum TaskObject-finger penetration depth");
+        "Planning shadow attach requires finite TaskObject-finger penetration evidence");
   } else {
     result.metrics["gazebo_task_object_gripper_solver_reported_max_depth"] =
       *snapshot.gazebo_task_object_gripper_max_depth;
@@ -323,13 +295,13 @@ void requireNoTaskObjectJump(ValidationResult & result, const WorldSnapshot & be
 
 bool requiresStableSupport(TransitionKey key)
 {
-  return key.from == State::DETACH_GAZEBO || key.from == State::DETACH_MOVEIT ||
-         key.from == State::SYNC_WORLD_OBJECT || isRecovery(key);
+  return key.from == State::DETACH_MOVEIT || key.from == State::SYNC_WORLD_OBJECT ||
+         isRecovery(key);
 }
 
 void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot & before,
                                 const WorldSnapshot & after, TransitionKey key,
-                                const SO101Profile & profile, bool validating_precondition = false)
+                                const SO101Profile & profile)
 {
   if (!before.gazebo_task_object_pose_world || !after.gazebo_task_object_pose_world)
     return;
@@ -357,13 +329,10 @@ void requireExpectedSupportPose(ValidationResult & result, const WorldSnapshot &
     result.metrics[std::string("task_object_support_") + phase + "_height_error"] = height_error;
     result.metrics[std::string("task_object_support_") + phase + "_tilt_error_rad"] = tilt;
     const bool planning_shadow_detach = key.from == State::DETACH_MOVEIT;
-    const bool detaching = key.from == State::DETACH_GAZEBO || planning_shadow_detach;
+    const bool detaching = planning_shadow_detach;
     const double xy_tolerance =
       detaching ? profile.place_detach_xy_tolerance : profile.place_support_xy_tolerance;
-    const bool before_physical_detach =
-      key.from == State::DETACH_GAZEBO &&
-      (validating_precondition || std::string_view(phase) == "before");
-    const double height_tolerance = before_physical_detach || planning_shadow_detach
+    const double height_tolerance = planning_shadow_detach
                                       ? profile.place_pre_detach_height_tolerance
                                       : profile.place_support_height_tolerance;
     return std::isfinite(xy_error) && std::isfinite(height_error) && std::isfinite(tilt) &&
@@ -443,31 +412,22 @@ public:
   {
     ValidationResult result{true, {}, {}};
     requireObserved(result, before, profile_);
-    const auto gripper_target = key_.from == State::DETACH_GAZEBO ||
-                                    key_.from == State::DETACH_MOVEIT ||
-                                    key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
-                                  ? SO101GripperTarget::FULL_OPEN
-                                  : SO101GripperTarget::CONTACT;
-    if (key_.from == State::ATTACH_GAZEBO)
-      requireAttachPreloadQ6(result, before, profile_);
-    else if (key_.from == State::ATTACH_MOVEIT)
+    const auto gripper_target =
+      key_.from == State::DETACH_MOVEIT || key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
+        ? SO101GripperTarget::FULL_OPEN
+        : SO101GripperTarget::CONTACT;
+    if (key_.from == State::ATTACH_MOVEIT)
       requireCarryQ6Telemetry(result, before, profile_);
     else
       requireQ6(result, before, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
-      requireExpectedSupportPose(result, before, before, key_, profile_, true);
+      requireExpectedSupportPose(result, before, before, key_, profile_);
     }
-    if (key_.from == State::ATTACH_GAZEBO) {
-      requireBilateralFingerContact(result, before, profile_);
-      requireSameWallSurfaceContact(result, before, object_, grasp_contact_);
-      requireAttachments(result, before, false, false);
-    } else if (key_.from == State::ATTACH_MOVEIT) {
+    if (key_.from == State::ATTACH_MOVEIT) {
       requireAttachments(result, before, false, false);
       requireBilateralFingerContact(result, before, profile_);
       requireSameWallSurfaceContact(result, before, object_, grasp_contact_);
       requireDetachedMoveItWorld(result, before, profile_);
-    } else if (key_.from == State::DETACH_GAZEBO) {
-      requireAttachments(result, before, true, true);
     } else if (key_.from == State::DETACH_MOVEIT) {
       requireAttachments(result, before, false, true);
     } else if (key_.from == State::SYNC_WORLD_OBJECT) {
@@ -487,28 +447,23 @@ public:
           "The attachment or scene action did not report success");
     }
     requireObserved(result, after, profile_);
-    const auto gripper_target = key_.from == State::DETACH_GAZEBO ||
-                                    key_.from == State::DETACH_MOVEIT ||
-                                    key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
-                                  ? SO101GripperTarget::FULL_OPEN
-                                  : SO101GripperTarget::CONTACT;
+    const auto gripper_target =
+      key_.from == State::DETACH_MOVEIT || key_.from == State::SYNC_WORLD_OBJECT || isRecovery(key_)
+        ? SO101GripperTarget::FULL_OPEN
+        : SO101GripperTarget::CONTACT;
     if (key_.from == State::ATTACH_MOVEIT)
       requireCarryQ6Telemetry(result, after, profile_);
     else
       requireQ6(result, after, gripper_target, profile_);
     if (requiresStableSupport(key_)) {
-      // Removing the physical attachment intentionally lets the cup settle
-      // onto the table.  Bound both endpoints by the place support envelope;
-      // retain the no-jump invariant for recovery and post-release scene sync.
+      // Bound both endpoints by the place support envelope and retain the
+      // no-jump invariant for recovery and post-release scene sync.
       if (isRecovery(key_) || key_.from == State::SYNC_WORLD_OBJECT) {
         requireNoTaskObjectJump(result, before, after, profile_);
       }
       requireExpectedSupportPose(result, before, after, key_, profile_);
     }
-    if (key_.from == State::ATTACH_GAZEBO) {
-      requireAttachments(result, after, true, false);
-      requireNoTaskObjectJump(result, before, after, profile_);
-    } else if (key_.from == State::ATTACH_MOVEIT) {
+    if (key_.from == State::ATTACH_MOVEIT) {
       requireAttachments(result, after, false, true);
       std::optional<Pose3d> expected_relative;
       const auto derived = derivePlanningShadowPose(before);
@@ -516,11 +471,6 @@ public:
         expected_relative = std::get<Pose3d>(derived);
       requireExactMoveItAttachment(result, after, profile_, expected_relative);
       requireNoTaskObjectJump(result, before, after, profile_);
-    } else if (key_.from == State::DETACH_GAZEBO || key_.from == State::RECOVER_DETACH_GAZEBO) {
-      const bool moveit = key_.from == State::DETACH_GAZEBO ? true
-                                                            : after.moveit_task_object_attached &&
-                                                                *after.moveit_task_object_attached;
-      requireAttachments(result, after, false, moveit);
     } else if (key_.from == State::DETACH_MOVEIT || key_.from == State::RECOVER_DETACH_MOVEIT) {
       requireAttachments(result, after, false, false);
       requireDetachedMoveItWorld(result, after, profile_);
@@ -567,13 +517,10 @@ private:
   GraspContactValidationConfig grasp_contact_;
 };
 
-constexpr std::array<TransitionKey, 8> kAttachmentTransitions{{
-  {State::ATTACH_GAZEBO, State::ATTACH_MOVEIT},
+constexpr std::array<TransitionKey, 5> kAttachmentTransitions{{
   {State::ATTACH_MOVEIT, State::LIFT},
-  {State::DETACH_GAZEBO, State::DETACH_MOVEIT},
   {State::DETACH_MOVEIT, State::WAIT_RELEASE_SETTLE},
   {State::SYNC_WORLD_OBJECT, State::DONE},
-  {State::RECOVER_DETACH_GAZEBO, State::RECOVER_DETACH_MOVEIT},
   {State::RECOVER_DETACH_MOVEIT, State::RECOVER_SYNC_WORLD_OBJECT},
   {State::RECOVER_SYNC_WORLD_OBJECT, State::RECOVER_RETREAT},
 }};

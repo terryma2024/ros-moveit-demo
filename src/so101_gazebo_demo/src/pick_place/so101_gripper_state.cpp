@@ -286,7 +286,7 @@ ActionResult SO101GripperStateExecutor::execute(const ExecutionContext & context
         const auto velocity = observed.snapshot->joint_velocities.find(profile_.gripper_joint);
         const bool physically_reached =
           observed.snapshot->fresh && observed.snapshot->gazebo_task_object_attached &&
-          *observed.snapshot->gazebo_task_object_attached &&
+          !*observed.snapshot->gazebo_task_object_attached &&
           observed.snapshot->moveit_task_object_attached &&
           *observed.snapshot->moveit_task_object_attached &&
           position != observed.snapshot->joint_positions.end() &&

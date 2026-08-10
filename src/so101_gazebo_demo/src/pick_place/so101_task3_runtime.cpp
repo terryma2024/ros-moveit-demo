@@ -39,14 +39,6 @@ void registerGripper(SO101Task3Runtime & runtime,
   }
 }
 
-void registerGazebo(SO101Task3Runtime & runtime, const SO101Task3RuntimeDependencies & dependencies)
-{
-  if (dependencies.recovery_gazebo_detach) {
-    runtime.actions.registerExecutor(State::RECOVER_DETACH_GAZEBO,
-                                     dependencies.recovery_gazebo_detach);
-  }
-}
-
 void registerMoveItScene(SO101Task3Runtime & runtime,
                          const SO101Task3RuntimeDependencies & dependencies,
                          const SO101Task3RuntimeConfig & config)
@@ -110,7 +102,6 @@ SO101Task3Runtime makeSO101Task3Runtime(const SO101Task3RuntimeDependencies & de
 {
   SO101Task3Runtime runtime;
   registerGripper(runtime, dependencies, config.profile);
-  registerGazebo(runtime, dependencies);
   registerMoveItScene(runtime, dependencies, config);
   registerSO101AttachmentContracts(runtime.contracts, config.profile, config.object,
                                    config.grasp_contact);
