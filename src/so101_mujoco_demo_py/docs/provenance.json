@@ -58,6 +58,18 @@
     "branch": "codex/so101-mujoco-ros2-pre-isolation-20260810",
     "commit": "3add34f8390b78a1f4a13ff49aefb2dc87638245"
   },
+  "independent_artifacts": [
+    {
+      "path": "mjcf/scene.xml",
+      "origin": "independent MuJoCo task scene",
+      "calibration_status": "UNCALIBRATED"
+    },
+    {
+      "path": "config/task_scene.yaml",
+      "origin": "independent MuJoCo task inputs",
+      "calibration_status": "UNCALIBRATED"
+    }
+  ],
   "adaptations": [
     {
       "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
