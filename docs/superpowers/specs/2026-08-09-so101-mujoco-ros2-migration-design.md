@@ -2,6 +2,8 @@
 
 **状态：** 2026-08-10 用户已批准；允许按配套实施计划执行
 
+**Atomic schema 裁决：** 2026-08-10 用户批准扩展 schema；以 §10.1 的 session/reset/step/左右指尖原子证据字段为准
+
 **设计基线：** `codex/so101-gazebo-demo-py` @ `8d7913e7f552a40ee627d65be8b873ac16748bc9`
 
 **实现 main 基线：** `d300e7a41fb274d6d7e120699b7040666ea61904`
@@ -210,7 +212,7 @@ src/so101_mujoco_demo_py/
     workflow.py
     runner.py
     simulation/
-      evidence.py
+      types.py
       protocols.py
     mujoco/
       client.py
@@ -261,53 +263,82 @@ test -z "$(git status --short -- src/so101_gazebo_demo_py)"
 
 ### 7.1 证据类型
 
-`simulation/evidence.py` 负责与引擎无关的值对象：
+`simulation/types.py` 负责与引擎无关的值对象：
 
 ```python
 @dataclass(frozen=True, slots=True)
-class ContactPointEvidence:
+class ContactEvidence:
+    body1_id: int
+    geom1_id: int
+    body1: str
+    geom1: str
+    body2_id: int
+    geom2_id: int
+    body2: str
+    geom2: str
+    side: Literal["left_fingertip", "right_fingertip", "other"]
+    position_world: tuple[float, float, float]
+    normal_world: tuple[float, float, float]
     signed_distance_m: float
-    penetration_m: float
     normal_force_n: float
 
 @dataclass(frozen=True, slots=True)
-class ContactPair:
-    object_collision: str
-    other_collision: str
-    points: tuple[ContactPointEvidence, ...]
+class ObjectState:
+    body_id: int
+    body_name: str
+    pose_world: tuple[float, float, float, float, float, float, float]
+    twist_world: tuple[float, float, float, float, float, float]
 
 @dataclass(frozen=True, slots=True)
-class SimulationObservation:
+class SimulationEvidence:
     source_timestamp_s: float
-    receipt_sequence: int
-    object_pose_world: tuple[float, float, float, float, float, float, float]
-    object_twist_world: tuple[float, float, float, float, float, float]
-    contacts: tuple[ContactPair, ...]
+    publisher_sequence: int
+    simulation_step: int
+    reset_epoch: int
+    simulation_session_id: str
+    paused: bool
+    object_state: ObjectState
+    has_contact: bool
+    minimum_signed_distance_m: float
+    maximum_normal_force_n: float
+    truncated: bool
+    left_fingertip_contacts: tuple[ContactEvidence, ...]
+    right_fingertip_contacts: tuple[ContactEvidence, ...]
+    other_object_contacts: tuple[ContactEvidence, ...]
+
+@dataclass(frozen=True, slots=True)
+class ResetReceipt:
+    old_epoch: int
+    new_epoch: int
+    keyframe: str
+    simulation_step: int
+    simulation_session_id: str
 ```
 
 约束：
 
 - 所有数值必须有限；
-- `penetration_m` 是非负几何量；MuJoCo 使用原生 signed distance 并令 `penetration_m=max(0, -signed_distance_m)`；
+- MuJoCo 原生 signed distance 保持原符号；业务层需要 penetration 时使用 `max(0, -signed_distance_m)` 派生，不在证据对象中保存第二份数值；
 - `normal_force_n` 必须有限且非负；新 package 不实现 Gazebo 的 nullable-force 兼容 adapter；
 - quaternion 采用 ROS 顺序 `x, y, z, w`，MJCF 的 `w, x, y, z` 只允许在 adapter 边界转换；
 - `source_timestamp_s` 使用 simulation time；
-- `receipt_sequence` 单调递增；
+- `publisher_sequence` 单调递增；同一 `reset_epoch` 内 `simulation_step` 单调不减；
+- `simulation_session_id`、`reset_epoch` 与 `simulation_step` 的组合必须与 ROS message 完全一致；
 - 空 contact snapshot 必须作为显式消息发布，不能把“没收到消息”解释成“没有接触”。
 
 ### 7.2 协议
 
 ```python
-class SimulationObserver(Protocol):
-    def observe(self, *, freshness_s: float) -> SimulationObservation:
+class WorldObserver(Protocol):
+    def snapshot(self) -> SimulationEvidence:
         raise NotImplementedError
 
-class SimulationResetter(Protocol):
-    def reset_and_prove(self, request: ResetRequest) -> ResetEvidence:
+class WorldReset(Protocol):
+    def reset(self, keyframe: str) -> ResetReceipt:
         raise NotImplementedError
 ```
 
-新 package 的业务层只依赖这两个协议，不导入 Gazebo message/service 类型；MuJoCo message/service 类型只允许出现在 `so101_mujoco_demo_py.mujoco` adapter 边界。
+freshness timeout 与期望的 `simulation_session_id` 在 observer 构造时注入。新 package 的业务层只依赖这两个协议，不导入 Gazebo message/service 类型；MuJoCo message/service 类型只允许出现在 `so101_mujoco_demo_py.mujoco` adapter 边界。
 
 ### 7.3 命名迁移
 
@@ -408,7 +439,13 @@ URDF 中的 simulation hardware 配置为：
 `ContactSample.msg`：
 
 ```text
+int32 body1_id
+int32 geom1_id
+string body1
 string geom1
+int32 body2_id
+int32 geom2_id
+string body2
 string geom2
 geometry_msgs/Point position_world
 geometry_msgs/Vector3 normal_world
@@ -420,13 +457,32 @@ float64 normal_force_n
 
 ```text
 std_msgs/Header header
-uint64 sequence
+uint64 publisher_sequence
+uint64 simulation_step
+uint64 reset_epoch
+string simulation_session_id
+bool paused
+int32 object_body_id
 string object_body
 geometry_msgs/Pose object_pose_world
 geometry_msgs/Twist object_twist_world
+bool has_contact
+float64 minimum_signed_distance_m
+float64 maximum_normal_force_n
 bool truncated
-ContactSample[] contacts
+ContactSample[] left_fingertip_contacts
+ContactSample[] right_fingertip_contacts
+ContactSample[] other_object_contacts
 ```
+
+字段语义固定如下：
+
+- `header.stamp` 是与该 `mjData` snapshot 对应的 MuJoCo simulation time，`header.frame_id` 固定为 `world`；
+- `publisher_sequence` 在同一 publisher 生命周期内严格单调递增；`simulation_step` 是当前 world epoch 内的 step id，reset 后允许从零重新开始；
+- `reset_epoch` 每次成功完成 `reset_world` 后递增，`simulation_session_id` 从 launch 注入并在进程生命周期内不可变；消费方使用 `(simulation_session_id, reset_epoch, simulation_step)` 拒绝跨会话、跨 reset 或倒序证据；
+- `left_fingertip_contacts` 与 `right_fingertip_contacts` 只包含 task object 与对应指尖 geom 的接触，`other_object_contacts` 保存 task object 与 table 或其他受监控 geom 的接触；每个样本同时保留 MuJoCo 数字 ID 和稳定名称；
+- `minimum_signed_distance_m` 与 `maximum_normal_force_n` 对消息内全部 task-object contact 聚合；零 contact 时 `has_contact=false`、三个数组为空、两个聚合值均为 `0.0`；
+- `paused`、object pose/twist、聚合值和三个 contact 数组必须来自同一次锁定的 `mjData` snapshot。
 
 ### 10.2 行为
 
@@ -435,6 +491,8 @@ ContactSample[] contacts
 - `signed_distance_m` 来自 MuJoCo contact distance；
 - `normal_force_n` 由 `mj_contactForce` 的 contact-frame normal 分量得到；
 - 每个 publish tick 都发消息，包括零 contact；pose/twist 与 contacts 必须来自同一个 `mjData` step；
+- reset 后第一条可接受消息必须携带新 `reset_epoch`，消费者不得把旧 epoch 的缓存消息用于 reset postcondition；
+- 左右指尖分类使用启动时解析并冻结的 geom id，不使用运行时字符串模糊匹配；
 - 使用非阻塞 realtime publisher，最大样本数固定为 128；溢出时 `truncated=true`，业务硬门拒绝该样本；
 - 插件不得修改 `qpos`、`qvel`、`ctrl`、constraint、body pose 或 contact 参数。
 
