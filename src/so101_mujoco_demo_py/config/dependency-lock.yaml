@@ -1,0 +1,13 @@
+schema_version: 1
+provider: apt
+release: 0.0.3
+prefix: /opt/ros/jazzy
+fallback:
+  tag: 0.0.3
+  commit: 35ba8174b62d9560093614f981a3d4b978a96036
+  prefix: /data/work/ws_mujoco_ros2_control_003/install
+required_files:
+  /opt/ros/jazzy/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 0eb99bec603f187ad43a57149a846d86c3866fe13f9e59828a17741d3b1bd181
+  /opt/ros/jazzy/share/mujoco_ros2_control_plugins/cmake/export_mujoco_ros2_control_pluginsExport.cmake: f8a748c2845ecb535895a2df81c633fbf17aa61df244c7495df833ea1aa9587d
+  /opt/ros/jazzy/share/mujoco_ros2_control_msgs/srv/ResetWorld.srv: daa0e9fc5cc21a4c6f6a04d7e77f9010c762d97ba0756f62b38da49b3f37f644
+  /opt/ros/jazzy/share/mujoco_ros2_control/package.xml: e9cfedd0d7a8bb3795a4e9287ca9ebcd9c9cc4dc74beaa42be906a49f54ef826

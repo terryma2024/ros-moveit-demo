@@ -8,6 +8,12 @@
 
   <buildtool_depend>ament_python</buildtool_depend>
 
+  <depend>mujoco_ros2_control</depend>
+  <depend>mujoco_ros2_control_msgs</depend>
+  <depend>mujoco_ros2_control_plugins</depend>
+  <depend>mujoco_vendor</depend>
+  <exec_depend>python3-yaml</exec_depend>
+
   <test_depend>ament_pytest</test_depend>
   <test_depend>python3-pytest</test_depend>
 
