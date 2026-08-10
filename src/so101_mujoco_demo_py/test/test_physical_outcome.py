@@ -67,6 +67,42 @@ def test_accepts_five_stable_post_release_samples_with_preserved_schema() -> Non
     assert result.max_angular_speed_rad_s == 0.0
 
 
+def test_sample_preserves_frozen_gazebo_detached_wire_schema() -> None:
+    payload = sample(0).as_dict()
+    assert tuple(payload) == (
+        "release_epoch_id",
+        "receipt_sequence",
+        "source_timestamp_s",
+        "observed_monotonic_s",
+        "pose_xyz_xyzw",
+        "support_contact",
+        "gripper_contact",
+        "gazebo_detached",
+        "moveit_detached",
+        "controller_healthy",
+        "safety_healthy",
+        "shadow_divergence_healthy",
+    )
+    assert payload["gazebo_detached"] is True
+    assert "simulator_detached" not in payload
+    restored = FinalPlacementSample(**payload)
+    assert restored.gazebo_detached is True
+    assert restored.simulator_detached is True
+
+
+def test_distinct_simulation_and_receipt_clock_epochs_are_valid() -> None:
+    samples = tuple(
+        FinalPlacementSample(
+            **{
+                **sample(index).as_dict(),
+                "observed_monotonic_s": 1000.0 + index * 0.05,
+            }
+        )
+        for index in range(5)
+    )
+    assert evaluate_final_placement(samples, policy(), "release-2", 100).success
+
+
 def test_rejects_stale_epoch_and_nonfinite_timestamp() -> None:
     samples = (sample(0, epoch="release-1"),) + tuple(sample(index) for index in range(4))
     assert evaluate_final_placement(samples, policy(), "release-2", 100).failure_code == (

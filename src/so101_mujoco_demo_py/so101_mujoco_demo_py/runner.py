@@ -97,25 +97,22 @@ def _resume_failure(code: str, message: str) -> Failure:
 def _validate_resume_world(
     expected: ExpectedWorldState,
     evidence: SimulationEvidence,
+    observed_world: ExpectedWorldState | None,
     *,
     position_tolerance_m: float,
     orientation_tolerance_rad: float,
     stationary_velocity_tolerance: float,
+    joint_tolerance_rad: float,
 ) -> Failure | None:
     expected_pose = expected.simulator_task_object_pose_world
     observed = evidence.object_state
     if expected_pose is not None:
-        position_error = math.dist(expected_pose[:3], observed.position_world)
-        expected_q = expected_pose[3:]
-        observed_q = observed.orientation_xyzw
-        expected_norm = math.sqrt(sum(value * value for value in expected_q))
-        observed_norm = math.sqrt(sum(value * value for value in observed_q))
-        quaternion_dot = abs(
-            sum(first * second for first, second in zip(expected_q, observed_q))
-            / (expected_norm * observed_norm)
-        )
-        orientation_error = 2.0 * math.acos(max(-1.0, min(1.0, quaternion_dot)))
-        if position_error > position_tolerance_m or orientation_error > orientation_tolerance_rad:
+        if not _poses_match(
+            expected_pose,
+            observed.position_world + observed.orientation_xyzw,
+            position_tolerance_m,
+            orientation_tolerance_rad,
+        ):
             return _resume_failure(
                 "RESUME_WORLD_MISMATCH",
                 "task-object pose does not match checkpoint",
@@ -140,7 +137,87 @@ def _validate_resume_world(
             "RESUME_WORLD_MISMATCH",
             "gripper contact does not match checkpoint",
         )
+    if observed_world is None:
+        return None
+    if not _poses_match(
+        expected.tcp_pose_world,
+        observed_world.tcp_pose_world,
+        position_tolerance_m,
+        orientation_tolerance_rad,
+    ):
+        return _resume_failure("RESUME_WORLD_MISMATCH", "TCP pose does not match checkpoint")
+    if expected.gripper_open != observed_world.gripper_open:
+        return _resume_failure(
+            "RESUME_WORLD_MISMATCH",
+            "gripper state does not match checkpoint",
+        )
+    for joint, expected_position in expected.joint_positions.items():
+        observed_position = observed_world.joint_positions.get(joint)
+        if (
+            observed_position is None
+            or abs(expected_position - observed_position) > joint_tolerance_rad
+        ):
+            return _resume_failure(
+                "RESUME_WORLD_MISMATCH",
+                f"joint {joint} does not match checkpoint",
+            )
+    for object_name, expected_object_pose in expected.moveit_world_object_poses.items():
+        observed_object_pose = observed_world.moveit_world_object_poses.get(object_name)
+        if observed_object_pose is None or not _poses_match(
+            expected_object_pose,
+            observed_object_pose,
+            position_tolerance_m,
+            orientation_tolerance_rad,
+        ):
+            return _resume_failure(
+                "RESUME_WORLD_MISMATCH",
+                f"MoveIt world object {object_name} does not match checkpoint",
+            )
+    if (
+        expected.moveit_task_object_attached is not None
+        and expected.moveit_task_object_attached != observed_world.moveit_task_object_attached
+    ):
+        return _resume_failure(
+            "RESUME_WORLD_MISMATCH",
+            "MoveIt attachment does not match checkpoint",
+        )
+    if (
+        expected.task_object_supported is not None
+        and expected.task_object_supported != observed_world.task_object_supported
+    ):
+        return _resume_failure(
+            "RESUME_WORLD_MISMATCH",
+            "task-object support does not match checkpoint",
+        )
+    if not set(expected.required_world_objects).issubset(observed_world.moveit_world_object_poses):
+        return _resume_failure(
+            "RESUME_WORLD_MISMATCH",
+            "required MoveIt world objects are missing",
+        )
     return None
+
+
+def _poses_match(
+    expected: Pose,
+    observed: Pose,
+    position_tolerance_m: float,
+    orientation_tolerance_rad: float,
+) -> bool:
+    expected_q = expected[3:]
+    observed_q = observed[3:]
+    expected_norm = math.sqrt(sum(value * value for value in expected_q))
+    observed_norm = math.sqrt(sum(value * value for value in observed_q))
+    if expected_norm == 0.0 or observed_norm == 0.0:
+        return False
+    quaternion_dot = abs(
+        sum(first * second for first, second in zip(expected_q, observed_q))
+        / (expected_norm * observed_norm)
+    )
+    orientation_error = 2.0 * math.acos(max(-1.0, min(1.0, quaternion_dot)))
+    return (
+        math.dist(expected[:3], observed[:3]) <= position_tolerance_m
+        and orientation_error <= orientation_tolerance_rad
+    )
 
 
 def _finite(value: Any) -> float:
@@ -333,7 +410,6 @@ class FileCheckpointStore:
                 constrained = _optional_bool(expected_document["gazebo_task_object_attached"])
                 if constrained is True:
                     raise ValueError("v4 Gazebo-constrained object cannot be migrated")
-                constrained = False
                 simulator_pose = expected_document["gazebo_task_object_pose_world"]
                 simulator_stationary = expected_document["gazebo_task_object_stationary"]
             else:
@@ -415,9 +491,11 @@ class StateMachineRunner:
         policy_bundle_sha256: str = "",
         world_observer: WorldObserver | None = None,
         expected_world_provider: Callable[[ExecutionContext], ExpectedWorldState] | None = None,
+        observed_world_provider: Callable[[], ExpectedWorldState] | None = None,
         resume_position_tolerance_m: float = 0.003,
         resume_orientation_tolerance_rad: float = 0.07,
         resume_stationary_velocity_tolerance: float = 0.001,
+        resume_joint_tolerance_rad: float = 0.002,
     ) -> None:
         self.actions = dict(actions)
         self.checkpoint_store = checkpoint_store
@@ -425,9 +503,11 @@ class StateMachineRunner:
         self.policy_bundle_sha256 = policy_bundle_sha256
         self.world_observer = world_observer
         self.expected_world_provider = expected_world_provider
+        self.observed_world_provider = observed_world_provider
         self.resume_position_tolerance_m = resume_position_tolerance_m
         self.resume_orientation_tolerance_rad = resume_orientation_tolerance_rad
         self.resume_stationary_velocity_tolerance = resume_stationary_velocity_tolerance
+        self.resume_joint_tolerance_rad = resume_joint_tolerance_rad
         self.release_epoch_id: str | None = None
         self.release_marker_sequence: int | None = None
         self.release_reset_epoch: int | None = None
@@ -622,13 +702,47 @@ class StateMachineRunner:
                     checkpoint.sequence,
                     FailureCategory.RESUME_VALIDATION,
                 )
-            if checkpoint.expected.simulator_task_object_constrained is not False:
+            if checkpoint.expected.simulator_task_object_constrained is None:
+                return self._error(
+                    "RESUME_SIMULATOR_CONSTRAINT_UNKNOWN",
+                    [checkpoint.last_completed_state],
+                    checkpoint.sequence,
+                    FailureCategory.RESUME_VALIDATION,
+                )
+            if checkpoint.expected.simulator_task_object_constrained is True:
                 return self._error(
                     "RESUME_SIMULATOR_CONSTRAINT_PRESENT",
                     [checkpoint.last_completed_state],
                     checkpoint.sequence,
                     FailureCategory.RESUME_VALIDATION,
                 )
+            observed_world: ExpectedWorldState | None = None
+            if request.mode is RunMode.EXECUTE:
+                if self.observed_world_provider is None:
+                    return self._error(
+                        "RESUME_OBSERVATION_REQUIRED",
+                        [checkpoint.last_completed_state],
+                        checkpoint.sequence,
+                        FailureCategory.RESUME_VALIDATION,
+                    )
+                try:
+                    observed_world = self.observed_world_provider()
+                except Exception as error:
+                    return RunResult(
+                        RunStatus.ERROR,
+                        checkpoint.last_completed_state,
+                        None,
+                        _resume_failure("RESUME_OBSERVATION_FAILED", str(error)),
+                        checkpoint.sequence,
+                        (checkpoint.last_completed_state,),
+                    )
+                if not isinstance(observed_world, ExpectedWorldState):
+                    return self._error(
+                        "RESUME_OBSERVATION_FAILED",
+                        [checkpoint.last_completed_state],
+                        checkpoint.sequence,
+                        FailureCategory.RESUME_VALIDATION,
+                    )
             if self.world_observer is None:
                 if request.mode is not RunMode.DRY_RUN:
                     return self._error(
@@ -659,9 +773,11 @@ class StateMachineRunner:
                 world_failure = _validate_resume_world(
                     checkpoint.expected,
                     evidence,
+                    observed_world,
                     position_tolerance_m=self.resume_position_tolerance_m,
                     orientation_tolerance_rad=self.resume_orientation_tolerance_rad,
                     stationary_velocity_tolerance=(self.resume_stationary_velocity_tolerance),
+                    joint_tolerance_rad=self.resume_joint_tolerance_rad,
                 )
                 if world_failure is not None:
                     return RunResult(
