@@ -8,7 +8,7 @@ package_root = Path(__file__).resolve().parent
 
 def installed_model_assets() -> list[tuple[str, list[str]]]:
     entries: list[tuple[str, list[str]]] = []
-    for directory in ("config", "mjcf", "urdf"):
+    for directory in ("config", "launch", "mjcf", "urdf"):
         for path in sorted((package_root / directory).rglob("*")):
             if path.is_file() and "__pycache__" not in path.parts:
                 relative = path.relative_to(package_root)
