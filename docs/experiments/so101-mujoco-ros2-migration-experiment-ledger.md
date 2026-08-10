@@ -10,9 +10,9 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: 1f73813ae79665562692158400ac2a62b8269e5b
+last_verified_implementation_commit: 583ef2fdaf1053cd5a66b90b8c56f7decb14f4b7
 ledger_commit_pending: false
-task_status: TASK_6_COMPLETE
+task_status: TASK_7_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -22,8 +22,8 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-008
-next_experiment: EXP-002
+latest_checkpoint: CP-010
+next_experiment: EXP-008
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -94,6 +94,140 @@ disproven_routes:
 open_risks:
   - The task object, table, deterministic reset keyframes, and collision-free scene feasibility are not yet implemented or verified.
 next_command: Start Task 7 with RED tests for the independent task scene and deterministic keyframes.
+```
+
+## Checkpoint CP-009
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-001
+current_hypothesis: The initial uncalibrated MuJoCo contact inputs do not yet prove a stationary free cup over the required ten-second headless run.
+working_tree_status: Dirty Task 7 RED/GREEN work is intentionally preserved and uncommitted; no files are staged.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, so101-py-qual, and so101-physical-cpp-gui-019; no session or process was stopped.
+confirmed_conclusions:
+  - The independent scene compiles, contains a fixed table and free-joint cup, and reaches 10.000000000000009 simulated seconds with a finite 26-element time/qpos/qvel state.
+  - The structural no-hidden-grasp tests pass: no equality, weld, adhesion, mocap body, cup actuator, or production object qpos/qvel write path is present.
+  - The stationary-cup gate fails: displacement from 2 to 10 seconds is 4.034323607231733e-05 m and final translational speed is 0.009015012052262135 m/s, both above the provisional 1.0e-05 limits.
+disproven_routes:
+  - The first uncalibrated table/cup contact inputs cannot be accepted as stationary without a controlled diagnosis.
+open_risks:
+  - EXP-002 was not entered as PLANNED before the first headless execution; the run is diagnostic evidence only and cannot be promoted to VALID.
+  - The failed speed may be contact/integration residual or an indexing defect; neither has been isolated.
+next_command: NONE
+```
+
+## Checkpoint CP-010
+
+```yaml
+checkpoint_id: CP-010
+last_valid_experiment: EXP-007
+current_hypothesis: The deterministic independent scene is ready for the pinned mujoco_ros2_control system and controller wiring.
+working_tree_status: Clean at Task 7 implementation commit 583ef2fdaf1053cd5a66b90b8c56f7decb14f4b7; this ledger-only checkpoint update is pending its scoped commit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no session or process was stopped.
+confirmed_conclusions:
+  - The independent scene compiles with a fixed table, rigid free-joint cup, stable names, lights/camera, inherited home keyframe, and task_start keyframe.
+  - Structural tests reject equality, weld, adhesion, mocap following, hidden cup actuators, and production object qpos/qvel write paths.
+  - EXP-007 is VALID: ten simulated seconds remained finite; 2-to-10-second cup displacement was 4.4468415042278435e-06 m, final-two-second envelope was 9.676037340306193e-06 m, and net speed was 2.380545878240552e-06 m/s.
+  - Passive cup damping 1.0 and all friction/damping values are explicitly UNCALIBRATED MuJoCo inputs, not migrated Gazebo/Bullet values; instantaneous solver qvel remains reported and cannot prove later atomic twist success.
+  - Package-level colcon test passed 74 tests before the final provenance test addition; the final focused scene/provenance set passed 8 tests, and Ruff, isolation, install-layout, and protected-tree gates passed.
+disproven_routes:
+  - Final-frame qvel alone is not a reliable stationary-pose metric for the contact solver; position displacement, sampled envelope, and net finite-difference speed remain required together.
+  - Passive damping 0.01 and 0.1 did not satisfy the full predeclared stationarity gate.
+open_risks:
+  - No ROS graph, controller manager, or atomic support-plugin publication has run against the task scene.
+next_command: Start Task 8 RED tests for pinned mujoco_ros2_control, controllers, and minimal launch.
+```
+
+## Experiment EXP-002
+
+```yaml
+experiment_id: EXP-002
+status: INVALID
+hypothesis: The initial independent scene remains finite and stationary for ten simulated seconds.
+independent_variable: First uncalibrated MuJoCo table/cup contact inputs in the dirty Task 7 scene.
+controlled_variables: Headless MuJoCo vendor library; timestep 0.002 s; no ROS graph; no controller launch; no hardware; no object state writes.
+acceptance_criteria: Finite state through ten seconds; fixed table; cup displacement and final translational speed each no greater than 1.0e-05 in their declared units.
+evidence_path: Console result associated with CP-009; RED artifact /tmp/so101-debug-mujoco-migration/task7-red.txt records the preceding missing-scene boundary.
+owned_processes: NONE
+result: INVALID because cup displacement was 4.034323607231733e-05 m and final translational speed was 0.009015012052262135 m/s; additionally, PLANNED was not recorded before execution.
+next_command: NONE
+```
+
+## Experiment EXP-003
+
+```yaml
+experiment_id: EXP-003
+status: INVALID
+hypothesis: The failed cup-speed gate is explained by a vertical contact/integration residual rather than horizontal drift or an incorrect qvel slice.
+independent_variable: Read-only capture of the complete free-joint cup position and velocity components at settle and at ten seconds using the existing scene and timestep.
+controlled_variables: Exact dirty Task 7 scene; timestep 0.002 s; same initial keyframe/default state; MuJoCo vendor library; no ROS graph; no controller launch; no hardware; no source-state mutation after start.
+acceptance_criteria: State layout is 1 time + 13 qpos + 12 qvel; cup quaternion remains finite and normalized; reported cup translational components identify whether the residual is vertical; cup horizontal displacement remains no greater than 1.0e-05 m.
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-003-contact-residual.json
+owned_processes: NONE
+result: INVALID. State layout was correct and quaternion norm was 1.0, but the residual was not vertical: horizontal displacement was 4.0322194457956205e-05 m and final linear velocity was [-0.007257727062271137, 0.005347353961549931, -4.0568484134831707e-05] m/s. Evidence SHA-256 is 09a041b52afd0cc18eeb66572c1aa15f17199c40b4c40db7057ab29e85b3a339.
+next_command: NONE
+```
+
+## Experiment EXP-004
+
+```yaml
+experiment_id: EXP-004
+status: INVALID
+hypothesis: A small explicitly uncalibrated passive damping value on the cup free joint allows contact motion to decay below the unchanged stationary gate by ten seconds without constraining or actuating the object.
+independent_variable: cup_free_joint_damping = 0.01 N-s per generalized velocity unit.
+controlled_variables: Exact EXP-003 scene and checker; unchanged timestep, table/cup friction, initial pose, 10-second duration, and 1.0e-05 displacement/speed limits; no equality, weld, adhesion, mocap, actuator, teleport, or object state write.
+acceptance_criteria: All structural gates pass; finite state; cup displacement from 2 to 10 seconds no greater than 1.0e-05 m; final translational speed no greater than 1.0e-05 m/s.
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-004-passive-damping.json
+owned_processes: NONE
+result: INVALID. Structural tests passed, but displacement was 1.5165012719267708e-05 m and final speed was 0.0004656655362538531 m/s. Evidence SHA-256 is b4959e6270cbcd41b7fae792d56391d0009cbfdcbc9d1d4f4bf1bad72df98a77.
+next_command: NONE
+```
+
+## Experiment EXP-005
+
+```yaml
+experiment_id: EXP-005
+status: INVALID
+hypothesis: Increasing only the explicitly uncalibrated passive cup free-joint damping to 0.1 allows contact motion to decay below the unchanged stationary gate by ten seconds.
+independent_variable: cup_free_joint_damping = 0.1 N-s per generalized velocity unit.
+controlled_variables: Exact EXP-004 scene and checker; unchanged timestep, friction, pose, duration, and 1.0e-05 limits; no hidden constraint, actuator, teleport, or object state write.
+acceptance_criteria: Structural gates pass; finite state; displacement from 2 to 10 seconds and final translational speed each no greater than 1.0e-05 in declared units.
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-005-passive-damping.json
+owned_processes: NONE
+result: INVALID. Position displacement passed at 1.8224771852428455e-06 m, but instantaneous final translational qvel was 0.0006198185333119207 m/s. Evidence SHA-256 is 9be96d419449c8c95c1e435de34f70f4df90a8578c096f2da6d2cdb0294d38fe.
+next_command: NONE
+```
+
+## Experiment EXP-006
+
+```yaml
+experiment_id: EXP-006
+status: INVALID
+hypothesis: The nonzero final cup qvel is a contact-solver residual that does not represent macroscopic cup motion over the final two seconds.
+independent_variable: Add read-only 100 Hz position sampling over simulated seconds 8 through 10 and compare pose envelope/net finite-difference speed with final qvel.
+controlled_variables: Exact EXP-005 model and all physical parameters; checker remains read-only; existing pass/fail thresholds remain unchanged during diagnosis.
+acceptance_criteria: Finite sampled states; final-two-second translation envelope and net finite-difference speed are reported; evidence establishes whether they are below 1.0e-05 m and 1.0e-05 m/s while instantaneous qvel is not.
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-006-stationarity-metrics.json
+owned_processes: NONE
+result: INVALID. Net final-two-second speed was 2.3202913980782535e-06 m/s, but the 201-sample translation envelope was 1.920915022571309e-05 m, above the unchanged 1.0e-05 m gate. Evidence SHA-256 is 36d9396f6abba8c865e66b1fd7b8d7f64c537ff25ffe51e3af7f6597ebb25d5b.
+next_command: NONE
+```
+
+## Experiment EXP-007
+
+```yaml
+experiment_id: EXP-007
+status: VALID
+hypothesis: Increasing only passive cup free-joint damping from 0.1 to 1.0 suppresses the measured final-two-second pose envelope below 1.0e-05 m.
+independent_variable: cup_free_joint_damping = 1.0 N-s per generalized velocity unit.
+controlled_variables: Exact EXP-006 scene/checker and all other physics inputs; unchanged structural and stationarity limits; no hidden grasp mechanism or object state write.
+acceptance_criteria: Structural gates pass; finite state; 2-to-10-second displacement, final-two-second translation envelope, and final-two-second net speed are all no greater than 1.0e-05 in declared units.
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-007-passive-damping.json
+owned_processes: NONE
+result: VALID. Structural gates passed; 2-to-10-second displacement was 4.4468415042278435e-06 m, final-two-second envelope was 9.676037340306193e-06 m, and net speed was 2.380545878240552e-06 m/s. Instantaneous qvel remains reported as a solver residual and is not used to claim later atomic twist success. Evidence SHA-256 is feaf3cd7895fcace7bc5dfad5765e0bd7f007859bfe02cbc901584a031a5aee4.
+next_command: Run the full Task 7 package, Ruff, isolation, and protected-tree gates.
 ```
 
 ## Checkpoint CP-RUFF-001
