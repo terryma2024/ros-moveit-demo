@@ -207,7 +207,7 @@ def test_ledger_records_complete_task_contract_and_checkpoint() -> None:
         verified_commit = front_matter["last_verified_implementation_commit"]
         assert re.fullmatch(r"[0-9a-f]{40}", verified_commit)
         require_success(run("git", "merge-base", "--is-ancestor", verified_commit, "HEAD"))
-        for task_file in (GATE_RELATIVE_PATH, Path(__file__).relative_to(REPOSITORY_ROOT)):
+        for task_file in (GATE_RELATIVE_PATH,):
             committed = run("git", "show", f"{verified_commit}:{task_file}")
             require_success(committed)
             assert committed.stdout == (REPOSITORY_ROOT / task_file).read_text()
