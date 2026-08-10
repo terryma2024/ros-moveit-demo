@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "behavior_source": {
+    "commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+    "paths": [
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/grasp/evidence_store.py",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/gazebo/reset.py"
+    ]
+  },
+  "rejected_backup": {
+    "branch": "codex/so101-mujoco-ros2-pre-isolation-20260810",
+    "commit": "3add34f8390b78a1f4a13ff49aefb2dc87638245"
+  },
+  "adaptations": [
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/grasp/evidence_store.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/simulation/types.py",
+      "source_sha256": "8cc00115383209261ee9ff6bf02809ac2b413d868a524561318a958f70140c48",
+      "adaptation": "Retained immutable evidence-value semantics while replacing retry sidecar fields with the approved atomic MuJoCo schema."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/gazebo/reset.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/simulation/protocols.py",
+      "source_sha256": "1a303d634c28b8e0ea289f79d16517e65b3229dc209a3b07a33319a770376a48",
+      "adaptation": "Replaced the backend-specific reset coordinator with structural observer and keyframe-reset protocols whose proof is ResetReceipt."
+    }
+  ]
+}
