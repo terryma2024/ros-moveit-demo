@@ -1,6 +1,8 @@
 import json
 from dataclasses import dataclass
 
+import pytest
+
 from so101_mujoco_demo_py.domain import (
     ActionResult,
     ActionStatus,
@@ -247,11 +249,12 @@ def test_safe_v4_checkpoint_converts_to_v5_backend_neutral_fields(tmp_path) -> N
     path.write_text(json.dumps(document), encoding="utf-8")
     checkpoint, failure = FileCheckpointStore(path).load()
     assert failure is None
-    assert checkpoint.expected.simulator_task_object_constrained is False
+    assert checkpoint.expected.simulator_task_object_constrained is None
     resumed = runner(FileCheckpointStore(path))[0].run(
         RunRequest(resume=True, stop_after=State.CLOSE_GRIPPER)
     )
-    assert resumed.status is RunStatus.CHECKPOINT_COMPLETE
+    assert resumed.status is RunStatus.ERROR
+    assert resumed.failure.code == "RESUME_SIMULATOR_CONSTRAINT_UNKNOWN"
 
 
 def test_v4_checkpoint_rejects_constraint_and_active_release_epoch(tmp_path) -> None:
@@ -359,8 +362,141 @@ def test_live_resume_compares_checkpoint_expected_pose_to_task5_evidence(tmp_pat
     machine, _ = runner(store)
     machine.session_id = "session-a"
     machine.world_observer = Observer(world_evidence(position=(0.02, -0.28, 0.165)))
+    machine.observed_world_provider = lambda: ExpectedWorldState()
     mismatch = machine.run(RunRequest(mode=RunMode.EXECUTE, resume=True))
     assert mismatch.failure.code == "RESUME_WORLD_MISMATCH"
+
+
+@pytest.mark.parametrize(
+    ("change", "value"),
+    (
+        ("tcp_pose_world", (0.2, 0.0, 0.3, 0.0, 0.0, 0.0, 1.0)),
+        ("gripper_open", False),
+        ("joint_positions", {"1": 0.1, "2": 9.0}),
+        (
+            "moveit_world_object_poses",
+            {"plastic_cup": (0.5, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)},
+        ),
+        ("moveit_task_object_attached", True),
+        ("task_object_supported", False),
+        ("required_world_object_membership", None),
+    ),
+)
+def test_execute_resume_rejects_each_contradictory_world_fact(
+    tmp_path, change: str, value: object
+) -> None:
+    store = FileCheckpointStore(tmp_path / "checkpoint.json")
+    expected = ExpectedWorldState(
+        tcp_pose_world=(0.1, 0.0, 0.3, 0.0, 0.0, 0.0, 1.0),
+        gripper_open=True,
+        joint_positions={"1": 0.1, "2": 0.2},
+        moveit_world_object_poses={"plastic_cup": (0.0, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)},
+        moveit_task_object_attached=False,
+        simulator_task_object_pose_world=(
+            0.0,
+            -0.28,
+            0.165,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        ),
+        simulator_task_object_stationary=True,
+        task_object_supported=True,
+        gripper_task_object_contact=False,
+        required_world_objects=("plastic_cup", "table", "pedestal"),
+    )
+    checkpoint = WorkflowCheckpoint(
+        run_id="run-1",
+        sequence=4,
+        source_mode=RunMode.EXECUTE,
+        phase=CheckpointPhase.FORWARD,
+        last_completed_state=State.DESCEND,
+        failed_state=None,
+        original_failure=None,
+        next_state=State.CLOSE_GRIPPER,
+        expected=expected,
+        policy_bundle_sha256="a" * 64,
+        simulation_session_id="session-a",
+        resumable=True,
+    )
+    assert store.commit(checkpoint) is None
+    observed_values = {
+        "tcp_pose_world": (0.1, 0.0, 0.3, 0.0, 0.0, 0.0, 1.0),
+        "gripper_open": True,
+        "joint_positions": {"1": 0.1, "2": 0.2},
+        "moveit_world_object_poses": {
+            "plastic_cup": (0.0, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0),
+            "table": (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            "pedestal": (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+        },
+        "moveit_task_object_attached": False,
+        "task_object_supported": True,
+        "required_world_objects": ("plastic_cup", "table", "pedestal"),
+    }
+    if change == "required_world_object_membership":
+        observed_values["moveit_world_object_poses"].pop("pedestal")
+    else:
+        observed_values[change] = value
+    observed = ExpectedWorldState(**observed_values)
+    machine, _ = runner(store)
+    machine.session_id = "session-a"
+    machine.world_observer = Observer(world_evidence())
+    machine.observed_world_provider = lambda: observed
+    mismatch = machine.run(RunRequest(mode=RunMode.EXECUTE, resume=True))
+    assert mismatch.failure.code == "RESUME_WORLD_MISMATCH"
+
+
+def test_execute_resume_requires_and_accepts_complete_current_world_observation(tmp_path) -> None:
+    store = FileCheckpointStore(tmp_path / "checkpoint.json")
+    expected = ExpectedWorldState(
+        tcp_pose_world=(0.1, 0.0, 0.3, 0.0, 0.0, 0.0, 1.0),
+        gripper_open=True,
+        joint_positions={"1": 0.1},
+        moveit_world_object_poses={"plastic_cup": (0.0, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)},
+        moveit_task_object_attached=False,
+        simulator_task_object_pose_world=(0.0, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0),
+        task_object_supported=True,
+        required_world_objects=("plastic_cup", "table"),
+    )
+    checkpoint = WorkflowCheckpoint(
+        run_id="run-1",
+        sequence=4,
+        source_mode=RunMode.EXECUTE,
+        phase=CheckpointPhase.FORWARD,
+        last_completed_state=State.DESCEND,
+        failed_state=None,
+        original_failure=None,
+        next_state=State.CLOSE_GRIPPER,
+        expected=expected,
+        policy_bundle_sha256="a" * 64,
+        simulation_session_id="session-a",
+        resumable=True,
+    )
+    assert store.commit(checkpoint) is None
+    machine, _ = runner(store)
+    machine.session_id = "session-a"
+    machine.world_observer = Observer(world_evidence())
+    missing = machine.run(RunRequest(mode=RunMode.EXECUTE, resume=True))
+    assert missing.failure.code == "RESUME_OBSERVATION_REQUIRED"
+
+    observed = ExpectedWorldState(
+        tcp_pose_world=expected.tcp_pose_world,
+        gripper_open=expected.gripper_open,
+        joint_positions=expected.joint_positions,
+        moveit_world_object_poses={
+            **expected.moveit_world_object_poses,
+            "table": (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+        },
+        moveit_task_object_attached=expected.moveit_task_object_attached,
+        task_object_supported=expected.task_object_supported,
+    )
+    machine.observed_world_provider = lambda: observed
+    machine.expected_world_provider = lambda _context: expected
+    resumed = machine.run(
+        RunRequest(mode=RunMode.EXECUTE, resume=True, stop_after=State.CLOSE_GRIPPER)
+    )
+    assert resumed.status is RunStatus.CHECKPOINT_COMPLETE
 
 
 def test_execute_checkpoint_uses_injected_expected_world_provider(tmp_path) -> None:
@@ -397,6 +533,7 @@ def test_execute_checkpoint_uses_injected_expected_world_provider(tmp_path) -> N
     resumed, _ = runner(store)
     resumed.session_id = "session-a"
     resumed.world_observer = Observer(world_evidence(position=(99.0, 99.0, 99.0)))
+    resumed.observed_world_provider = lambda: ExpectedWorldState()
     mismatch = resumed.run(RunRequest(mode=RunMode.EXECUTE, resume=True))
     assert mismatch.failure.code == "RESUME_WORLD_MISMATCH"
 

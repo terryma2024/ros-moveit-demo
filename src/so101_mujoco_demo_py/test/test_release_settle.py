@@ -90,6 +90,23 @@ def test_release_settle_collects_only_active_epoch_until_success() -> None:
     assert observer.calls == 5
 
 
+def test_release_settle_records_true_receipt_monotonic_separate_from_sim_time() -> None:
+    observer = Observer(evidence(index) for index in range(5))
+    now = [1000.0]
+    executor = ReleaseSettleExecutor(
+        policy(),
+        observer,
+        corroboration,
+        lambda: now[0],
+        lambda duration: now.__setitem__(0, now[0] + duration),
+        lambda: False,
+    )
+    result = executor.run("release-2", 100)
+    assert result.status == "SUCCEEDED"
+    assert result.samples[0].source_timestamp_s == 10.0
+    assert result.samples[0].observed_monotonic_s == 1000.0
+
+
 def test_release_settle_cancellation_preserves_samples() -> None:
     observer = Observer((evidence(0), evidence(1)))
     calls = [0]

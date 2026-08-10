@@ -1,7 +1,7 @@
 """ROS-free deterministic evaluation of a post-release physical outcome."""
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping
 
@@ -37,7 +37,10 @@ class PhysicalOutcomePolicy:
     planning_shadow: PlanningShadowPolicy
 
 
-@dataclass(frozen=True, slots=True)
+_MISSING = object()
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class FinalPlacementSample:
     release_epoch_id: str
     receipt_sequence: int
@@ -46,14 +49,77 @@ class FinalPlacementSample:
     pose_xyz_xyzw: Pose
     support_contact: bool
     gripper_contact: bool
-    simulator_detached: bool
+    # Compatibility spelling is part of the frozen final-result schema. It does
+    # not imply a Gazebo transport or runtime dependency.
+    gazebo_detached: bool
     moveit_detached: bool
     controller_healthy: bool
     safety_healthy: bool
     shadow_divergence_healthy: bool
 
+    def __init__(
+        self,
+        release_epoch_id: str,
+        receipt_sequence: int,
+        source_timestamp_s: float,
+        observed_monotonic_s: float,
+        pose_xyz_xyzw: Pose,
+        support_contact: bool,
+        gripper_contact: bool,
+        simulator_detached: bool | object = _MISSING,
+        moveit_detached: bool | object = _MISSING,
+        controller_healthy: bool | object = _MISSING,
+        safety_healthy: bool | object = _MISSING,
+        shadow_divergence_healthy: bool | object = _MISSING,
+        *,
+        gazebo_detached: bool | object = _MISSING,
+    ) -> None:
+        """Accept the neutral name while retaining the frozen v4 wire spelling."""
+        detached = simulator_detached
+        if detached is _MISSING:
+            detached = gazebo_detached
+        required = (
+            detached,
+            moveit_detached,
+            controller_healthy,
+            safety_healthy,
+            shadow_divergence_healthy,
+        )
+        if any(value is _MISSING for value in required):
+            raise TypeError("missing required final-placement sample field")
+        object.__setattr__(self, "release_epoch_id", release_epoch_id)
+        object.__setattr__(self, "receipt_sequence", receipt_sequence)
+        object.__setattr__(self, "source_timestamp_s", source_timestamp_s)
+        object.__setattr__(self, "observed_monotonic_s", observed_monotonic_s)
+        object.__setattr__(self, "pose_xyz_xyzw", pose_xyz_xyzw)
+        object.__setattr__(self, "support_contact", support_contact)
+        object.__setattr__(self, "gripper_contact", gripper_contact)
+        object.__setattr__(self, "gazebo_detached", detached)
+        object.__setattr__(self, "moveit_detached", moveit_detached)
+        object.__setattr__(self, "controller_healthy", controller_healthy)
+        object.__setattr__(self, "safety_healthy", safety_healthy)
+        object.__setattr__(self, "shadow_divergence_healthy", shadow_divergence_healthy)
+
+    @property
+    def simulator_detached(self) -> bool:
+        """Expose backend-neutral business semantics over the frozen field name."""
+        return self.gazebo_detached
+
     def as_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {
+            "release_epoch_id": self.release_epoch_id,
+            "receipt_sequence": self.receipt_sequence,
+            "source_timestamp_s": self.source_timestamp_s,
+            "observed_monotonic_s": self.observed_monotonic_s,
+            "pose_xyz_xyzw": self.pose_xyz_xyzw,
+            "support_contact": self.support_contact,
+            "gripper_contact": self.gripper_contact,
+            "gazebo_detached": self.gazebo_detached,
+            "moveit_detached": self.moveit_detached,
+            "controller_healthy": self.controller_healthy,
+            "safety_healthy": self.safety_healthy,
+            "shadow_divergence_healthy": self.shadow_divergence_healthy,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +134,7 @@ class FinalPlacementResult:
     telemetry: tuple[FinalPlacementSample, ...]
 
 
-def _finite_sample(sample: FinalPlacementSample, maximum_age_s: float) -> bool:
+def _finite_sample(sample: FinalPlacementSample) -> bool:
     numeric = (
         sample.source_timestamp_s,
         sample.observed_monotonic_s,
@@ -78,7 +144,8 @@ def _finite_sample(sample: FinalPlacementSample, maximum_age_s: float) -> bool:
         bool(sample.release_epoch_id)
         and sample.receipt_sequence >= 0
         and all(math.isfinite(value) for value in numeric)
-        and 0.0 <= sample.observed_monotonic_s - sample.source_timestamp_s <= maximum_age_s
+        and sample.source_timestamp_s >= 0.0
+        and sample.observed_monotonic_s >= 0.0
     )
 
 
@@ -107,9 +174,10 @@ def evaluate_final_placement(
         and sample.receipt_sequence > release_marker_sequence
     )
     telemetry = eligible[-policy.max_telemetry_samples :]
-    finite = all(_finite_sample(sample, policy.max_observation_age_s) for sample in eligible)
+    finite = all(_finite_sample(sample) for sample in eligible)
     monotonic = all(
         later.source_timestamp_s > earlier.source_timestamp_s
+        and later.observed_monotonic_s > earlier.observed_monotonic_s
         and later.receipt_sequence > earlier.receipt_sequence
         for earlier, later in zip(eligible, eligible[1:])
     )

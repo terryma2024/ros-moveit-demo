@@ -10,7 +10,7 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: c9ab83d0a94311a10db824841c9a36aa44e89c49
+last_verified_implementation_commit: 90e1411fc8c5bd3caf4bc1a97c21e5f6bdc919c8
 ledger_commit_pending: false
 task_status: TASK_11_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
@@ -22,7 +22,7 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-047
+latest_checkpoint: CP-048
 next_experiment: EXP-035
 ---
 
@@ -1998,4 +1998,31 @@ open_risks:
   - Live execute composition remains intentionally fail-closed with LIVE_RUNTIME_NOT_IMPLEMENTED until Task 12; ROS-free plan_only remains available and characterized.
   - Sandbox DDS socket creation emits transport warnings in the support GTest, but all nine support tests pass and no runtime graph is started.
 next_command: Stage the exact Task 11 allowlist, verify the index and gates, commit feat(so101_mujoco): port pick place workflow, and do not push.
+```
+
+## Checkpoint CP-048
+
+```yaml
+checkpoint_id: CP-048
+last_valid_experiment: EXP-034
+current_hypothesis: NONE; Task 11 review fix round 1 is qualified at the ROS-free boundary and required no runtime experiment.
+working_tree_status: HEAD 90e1411fc8c5bd3caf4bc1a97c21e5f6bdc919c8; only the three Task 11 production modules, their three characterization-test modules, and this ledger checkpoint are dirty pending the scoped review-fix commit.
+owned_processes: NONE; no ROS graph, MuJoCo, MoveIt, Gazebo, GUI, tmux, or hardware process was started.
+preserved_processes: codex, kimi, and so101-py-qual remain untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Frozen source 8d7913e7f552a40ee627d65be8b873ac16748bc9 and the Task 11 brief require preserving the final-result schema. FinalPlacementSample therefore retains the compatibility gazebo_detached dataclass/wire field while backend-neutral business code uses simulator_detached; no Gazebo transport, message, service, or runtime dependency was introduced.
+  - Schema-v4 gazebo_task_object_attached null is readable as an unknown constraint but cannot prove the physical workflow unconstrained. Resume now refuses it with RESUME_SIMULATOR_CONSTRAINT_UNKNOWN; true remains incompatible, false remains the only resumable conversion, and an active release epoch remains non-resumable.
+  - Execute resume now requires a current-world provider and validates checkpoint TCP pose, gripper state, joint positions, MoveIt world-object poses, MoveIt attachment, task-object support, and required-world-object membership in addition to Task 5 simulator pose, stationarity, contact, session, backend, policy, and constraint evidence.
+  - Release-settle samples retain simulation_time_s as source_timestamp_s and capture the true post-snapshot monotonic receipt time separately. Freshness remains enforced by the configured WorldObserver contract; the evaluator validates each clock independently and never subtracts different clock epochs.
+  - Review RED produced the expected 11 failures and 19 controls passed; evidence is /tmp/so101-debug-mujoco-migration/task-11-fix1/review-red.log with SHA-256 57596e45ffd919e9323ca19e5f10abb9f8d2220ff24a7da0af1e5bfa4d52477c.
+  - Focused GREEN passed 31 tests; full non-live Task 11 passed 171 with two live skips. The two-package build and test passed, and aggregate colcon test-result reports 423 tests, zero errors, zero failures, and four skips.
+  - Ruff check/format, provenance tests, migration isolation, diff check, and protected Gazebo tracked/status gates pass. Evidence logs are rooted at /tmp/so101-debug-mujoco-migration/task-11-fix1/.
+  - The local origin/main ref is 33 commits behind HEAD and 91 commits ahead of HEAD; it was recorded only, with no fetch, rebase, merge, push, or branch mutation.
+disproven_routes:
+  - Coercing a schema-v4 unknown attachment fact to false is not a safe compatibility conversion because it invents evidence needed for physical resume.
+  - Subtracting simulation time from wall monotonic time is not a valid observation-age calculation because those values have independent epochs.
+open_risks:
+  - Live execute composition remains intentionally fail-closed with LIVE_RUNTIME_NOT_IMPLEMENTED until Task 12; ROS-free plan_only remains available and characterized.
+  - Sandbox DDS socket creation emits transport warnings in the support GTest, but all nine support tests pass and no runtime graph is started.
+next_command: Stage the exact Task 11 review-fix allowlist, verify the index and gates, commit the scoped fix, and do not push.
 ```
