@@ -91,21 +91,24 @@ TEST(SO101RecoveryPolicy, CurrentQ6AndAttachmentFactsChooseMinimalSafeReleaseRou
   markPhysicallyHeld(held_with_shadow, true);
   EXPECT_FALSE(
     policy.select(pick_place::State::ATTACH_MOVEIT, failure, held_with_shadow).next_state);
-  EXPECT_EQ(
-    pick_place::State::RECOVER_DETACH_GAZEBO,
-    policy
-      .select(pick_place::State::ATTACH_MOVEIT, failure, observed(true, true, profile.q6_full_open))
-      .next_state);
-  EXPECT_EQ(pick_place::State::RECOVER_DETACH_GAZEBO,
-            policy
-              .select(pick_place::State::ATTACH_MOVEIT, failure,
-                      observed(true, false, profile.q6_full_open))
-              .next_state);
   EXPECT_EQ(pick_place::State::RECOVER_DETACH_MOVEIT,
             policy
               .select(pick_place::State::ATTACH_MOVEIT, failure,
                       observed(false, true, profile.q6_full_open))
               .next_state);
+}
+
+TEST(SO101RecoveryPolicy, UnexpectedGazeboAttachmentHoldsForOperatorWithoutDetachCommand)
+{
+  const auto & profile = pick_place::SO101Profile::canonical();
+  pick_place::SO101RecoveryPolicy policy(profile);
+  const auto route = policy.select(pick_place::State::ATTACH_MOVEIT, originalFailure(),
+                                   observed(true, false, profile.q6_full_open));
+
+  EXPECT_FALSE(route.next_state);
+  ASSERT_TRUE(route.failure);
+  EXPECT_EQ("ORIGINAL", route.failure->code);
+  EXPECT_DOUBLE_EQ(1.0, route.failure->metrics.at("recovery_disposition_hold_for_operator"));
 }
 
 TEST(SO101RecoveryPolicy, DetachedFactsChooseOpenSyncOrRetreat)
@@ -141,7 +144,7 @@ TEST(SO101RecoveryPolicy, SameCurrentWorldIgnoresFailedStateAndHistoricalFlags)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   pick_place::SO101RecoveryPolicy policy(profile);
-  const auto current = observed(true, false, profile.q6_full_open);
+  const auto current = observed(false, true, profile.q6_full_open);
   const auto first = policy.select(pick_place::State::CLOSE_GRIPPER, originalFailure(), current);
   auto different_history = originalFailure();
   different_history.metrics["gazebo_was_attached"] = 0.0;
@@ -149,7 +152,7 @@ TEST(SO101RecoveryPolicy, SameCurrentWorldIgnoresFailedStateAndHistoricalFlags)
   const auto second =
     policy.select(pick_place::State::MOVE_ABOVE_PLACE, different_history, current);
   EXPECT_EQ(first.next_state, second.next_state);
-  EXPECT_EQ(pick_place::State::RECOVER_DETACH_GAZEBO, second.next_state);
+  EXPECT_EQ(pick_place::State::RECOVER_DETACH_MOVEIT, second.next_state);
 }
 
 TEST(SO101RecoveryPolicy, AttachedTaskObjectAwayFromKnownSupportFailsClosedUntilMotionPolicyExists)
@@ -216,15 +219,19 @@ TEST(SO101RecoveryPolicy, PostReleaseFailurePreservesEvidenceWithoutMotion)
   EXPECT_EQ("ORIGINAL", route.failure->code);
 }
 
-TEST(SO101RecoveryPolicy, StaleGazeboJointStillSelectsDefensiveDetachDuringReset)
+TEST(SO101RecoveryPolicy, StaleGazeboJointStopsForOperatorWithoutDetachCommand)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   pick_place::SO101RecoveryPolicy policy(profile);
   auto stale_joint = observed(true, false, profile.q6_full_open);
   stale_joint.gazebo_task_object_gripper_contact = false;
 
-  EXPECT_EQ(pick_place::State::RECOVER_DETACH_GAZEBO,
-            policy.select(pick_place::State::IDLE, originalFailure(), stale_joint).next_state);
+  const auto route = policy.select(pick_place::State::IDLE, originalFailure(), stale_joint);
+
+  EXPECT_FALSE(route.next_state);
+  ASSERT_TRUE(route.failure);
+  EXPECT_EQ("ORIGINAL", route.failure->code);
+  EXPECT_DOUBLE_EQ(1.0, route.failure->metrics.at("recovery_disposition_hold_for_operator"));
 }
 
 TEST(SO101RecoveryPolicy, SkipsRetreatOnlyForAnUnexecutedPlanValidationTargetAtSafeHome)

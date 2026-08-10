@@ -169,11 +169,12 @@ Gazebo physics owns cup motion throughout the normal forward workflow. MoveIt at
 collision-planning shadow created from the latest authoritative Gazebo pose after physical-grasp
 validation. The normal forward workflow never calls `ATTACH_GAZEBO` or `DETACH_GAZEBO`.
 
-Release order is `DETACH_MOVEIT -> OPEN_GRIPPER -> WAIT_RELEASE_SETTLE ->
-VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> RETREAT -> DONE`. A failed final outcome freezes
-the observed evidence before any reset. A physically held unsupported cup is held for operator
-intervention and is never opened automatically. Reset remains a separate transaction and retains
-defensive Gazebo detach for a stale historical joint.
+Release order is `OPEN_GRIPPER -> RETREAT -> DETACH_MOVEIT -> WAIT_RELEASE_SETTLE ->
+VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT -> DONE`. A failed final outcome freezes the observed
+evidence before any reset. A physically held unsupported cup is held for operator intervention and
+is never opened automatically. Unexpected Gazebo attachment also stops for operator inspection;
+reset remains a separate transaction and may issue a defensive Gazebo detach to establish canonical
+state.
 
 Physical-outcome policy is schema 2 and must not run while any required threshold remains
 `CALIBRATION_REQUIRED`. Acceptance requires five consecutive final physical successes with hard

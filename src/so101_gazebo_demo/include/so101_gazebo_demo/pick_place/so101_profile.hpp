@@ -79,27 +79,22 @@ struct SO101Profile
   double grasp_contact_min_height_above_center{0.015};
   double grasp_contact_top_edge_clearance{0.006};
   double q6_velocity_tolerance{0.01};
-  // Gazebo's detachable joint settles the thin-walled cup by about 4.1 mm
-  // while bilateral pad contact remains intact.  Keep a 5 mm carrying bound;
-  // attachment, contact depth, and final support pose are checked separately.
+  // Preserve a 5 mm bound for physical cup motion while bilateral pad contact
+  // remains intact; contact depth and final support pose are checked separately.
   double task_object_position_drift_tolerance{0.005};
-  // Release support is evaluated before the Gazebo attachment is removed.
-  // The constrained cup can sit slightly high and can freely yaw because its
-  // body is rotationally symmetric; lateral error and tilt remain bounded.
+  // Release support is evaluated while the MoveIt collision-planning shadow
+  // remains attached. The physical cup can sit slightly high and can freely
+  // yaw because its body is rotationally symmetric.
   double place_support_xy_tolerance{0.005};
   double place_detach_xy_tolerance{0.006};
   double place_pre_detach_height_tolerance{0.012};
   double place_support_height_tolerance{0.010};
   double place_support_tilt_tolerance_rad{0.08726646259971647};
-  // Live Gazebo attachment settling reaches about 0.066 rad while preserving
-  // the bounded relative position and bilateral grasp.  Keep a bounded
-  // 0.070 rad tilt envelope (4.01 deg) for carry validation; axial self-spin is ignored
-  // because the TaskObject is cylindrical.
+  // Keep a bounded 0.070 rad tilt envelope (4.01 deg) for physical carry
+  // validation; axial self-spin is ignored because the TaskObject is cylindrical.
   double task_object_orientation_drift_tolerance_rad{0.070};
-  // The detachable joint can accumulate small tilt offsets over several
-  // carrying motions even when each motion remains inside the tighter drift
-  // bound above.  Bound absolute calibration tilt separately so cumulative
-  // solver settling is not mistaken for a lost grasp.
+  // Bound absolute planning-shadow calibration tilt separately so accumulated
+  // physical drift is not mistaken for a lost grasp.
   double task_object_attachment_orientation_tolerance_rad{0.08726646259971647};
   double post_attach_hold_settle_seconds{2.0};
   std::string attach_topic{"/so101/attach_object"};

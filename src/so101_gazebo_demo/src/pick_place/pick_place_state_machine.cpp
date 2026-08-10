@@ -13,7 +13,6 @@
 #include "so101_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "so101_gazebo_demo/pick_place/file_checkpoint_store.hpp"
 #include "so101_gazebo_demo/pick_place/follow_joint_trajectory_gripper_adapter.hpp"
-#include "so101_gazebo_demo/pick_place/gazebo_attachment_executor.hpp"
 #include "so101_gazebo_demo/pick_place/gazebo_world_observer.hpp"
 #include "so101_gazebo_demo/pick_place/moveit_joint_planning_boundary.hpp"
 #include "so101_gazebo_demo/pick_place/moveit_scene_adapter.hpp"
@@ -223,10 +222,6 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
         }
       }
 
-      auto recovery_gazebo_detach = std::make_shared<spp::GazeboAttachmentExecutor>(
-        spp::State::RECOVER_DETACH_GAZEBO, false, profile.attach_topic, profile.detach_topic,
-        profile.attachment_event_topic, 3.0, 0.05, true);
-
       auto moveit_observer = std::make_shared<spp::SO101MoveItWorldObserver>(boundary, profile);
       auto observer = std::make_shared<spp::GazeboWorldObserver>(
         *moveit_observer, profile.gazebo_world, profile.task_object_id,
@@ -259,7 +254,6 @@ int runProduction(const CliOptions & options, const spp::LoadedPolicyBundle & bu
       auto final_evidence = std::make_shared<spp::InMemoryFinalPlacementEvidenceStore>();
       dependencies.gripper = gripper;
       dependencies.moveit_scene = scene;
-      dependencies.recovery_gazebo_detach = recovery_gazebo_detach;
       dependencies.motion_policy = policy;
       dependencies.motion = motion;
       dependencies.micro_lift = boundary;
