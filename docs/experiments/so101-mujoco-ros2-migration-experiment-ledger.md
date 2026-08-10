@@ -10,7 +10,7 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: 9c7889accfdb0eb253a2c9ef1b795b56fe680dad
+last_verified_implementation_commit: 6d598b8340b50925c217e5a9a088ab600156099a
 ledger_commit_pending: false
 task_status: TASK_1_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
@@ -22,7 +22,7 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-005
+latest_checkpoint: CP-006
 next_experiment: EXP-002
 ---
 
@@ -50,6 +50,27 @@ disproven_routes:
 open_risks:
   - No MuJoCo runtime experiment has run yet.
 next_command: Define EXP-001 before the first runtime-affecting migration experiment.
+```
+
+## Checkpoint CP-006
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-001
+current_hypothesis: The independent Python contracts can faithfully represent the expanded atomic ROS message without backend leakage.
+working_tree_status: Clean at Task 4 implementation commit 6d598b8340b50925c217e5a9a088ab600156099a; this ledger-only checkpoint update is pending its scoped commit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no session or process was stopped.
+confirmed_conclusions:
+  - The independent support package publishes session, reset epoch, simulation step, publisher sequence, pause, object state, aggregate contact metrics, and separate left/right/other contact arrays.
+  - Model-backed GTest passed 5 of 5; aggregate colcon results contain 246 tests, zero errors, zero failures, and two pre-existing skips.
+  - Message interface and pluginlib export were verified from the installed Task 4 overlay.
+  - Static read-only scan found no qpos/qvel writes, reset/set calls, equality, weld, adhesion, or mocap operations in the plugin implementation.
+disproven_routes:
+  - Incrementing simulation_step on a paused same-time publication is invalid; the builder now holds step constant while publisher_sequence advances.
+open_risks:
+  - Live simulator publication and reset service correlation remain unproven until the launch/runtime tasks.
+next_command: Start Task 5 RED tests for immutable backend-neutral Python evidence and provenance.
 ```
 
 ## Checkpoint CP-004
