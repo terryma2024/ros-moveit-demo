@@ -1,10 +1,12 @@
 # SO-101 + MuJoCo + ROS 2 迁移设计
 
-**状态：** 已按 2026-08-10 package 隔离决策修订，等待用户书面审阅
+**状态：** 2026-08-10 用户已批准；允许按配套实施计划执行
 
 **设计基线：** `codex/so101-gazebo-demo-py` @ `8d7913e7f552a40ee627d65be8b873ac16748bc9`
 
-**实现 kickoff：** `8464038e7cc13f638e2e336c625ed6677fa7db22`
+**实现 main 基线：** `d300e7a41fb274d6d7e120699b7040666ea61904`
+
+**历史 kickoff（仅审计）：** `8464038e7cc13f638e2e336c625ed6677fa7db22`
 
 **目标平台：** ai-station，Ubuntu 24.04，ROS 2 Jazzy
 
@@ -21,7 +23,7 @@
 - 机器人和任务场景使用仓库内受版本控制的 MJCF；URDF 继续作为 MoveIt、TF 与语义模型的来源。两者通过自动几何一致性测试约束，而不是运行时临时转换。
 - 抓取主链保持纯物理：不使用 weld/equality 约束，不把物体 teleport 当作搬运，不把 Planning Scene attachment 当成物理抓取成功。
 - 从第一步创建独立 `ament_python` package `src/so101_mujoco_demo_py/`；backend-neutral domain、workflow、MoveIt adapter 和物理结果语义只迁入这个新 package，不在 `so101_gazebo_demo_py` 内建立中间层。
-- `src/so101_gazebo_demo_py/**` 是只读行为基线，正式迁移分支必须始终与 kickoff `8464038` 中该目录字节级一致；新 package 不导入、不依赖、不读取其 installed assets。
+- `src/so101_gazebo_demo_py/**` 是只读行为基线，正式迁移分支必须始终与本次 rebase 的 main 基线 `d300e7a` 中该目录字节级一致；新 package 不导入、不依赖、不读取其 installed assets。
 - MuJoCo 接触数值必须重新标定。Gazebo 的 penetration/depth 数值不跨引擎复用，但“真实双侧接触、微抬后杯子实际随动、无禁碰、最终稳定放置”的断言语义保持不变。
 
 ## 2. 背景与当前证据
@@ -52,7 +54,7 @@
 
 初版设计曾要求先在 `so101_gazebo_demo_py` 内建立 backend-neutral 层，最后再改名。该路线已被用户明确否决。修正后的边界是：
 
-- 正式分支从 kickoff `8464038` 严格重建；`src/so101_gazebo_demo_py/**` 从第一项任务到最终验收均不得变化。
+- 正式分支先从历史 kickoff `8464038` 严格重建，再将独立 package spec 单独重放到 `main@d300e7a`；`src/so101_gazebo_demo_py/**` 从第一项任务到最终验收均不得变化。
 - 旧路线的 committed/dirty 状态已保存到 ai-station 备份分支 `codex/so101-mujoco-ros2-pre-isolation-20260810` @ `3add34f8390b78a1f4a13ff49aefb2dc87638245`，只用于审计和选择性重写，不允许整体 cherry-pick 回正式分支。
 - Python 实现、测试、配置、launch、MJCF 和 package metadata 全部新建在 `src/so101_mujoco_demo_py/**`。
 - C++ message/plugin/parity 支持继续独立位于 `src/so101_mujoco_support/**`。
@@ -87,7 +89,7 @@
 5. 建立来自同一 MuJoCo simulation step 的物体 pose、twist、contact distance、contact force 和 reset 证据链。
 6. 在 headless 与 GUI 两种模式下完成分层验收，并分别完成连续 5 次完整重启和连续 5 次世界重置成功。
 7. 从第一项实现任务起 package 即独立，不在 build、test 或 runtime 中依赖 `so101_gazebo_demo_py`、Gazebo binary 或原 package 的 installed assets。
-8. 在每个 task 和最终验收中证明 `git diff --quiet 8464038 -- src/so101_gazebo_demo_py`。
+8. 在每个 task 和最终验收中证明 `git diff --quiet d300e7a -- src/so101_gazebo_demo_py`。
 
 ### 3.2 非目标
 
@@ -249,7 +251,7 @@ src/so101_mujoco_support/
 `src/so101_gazebo_demo_py/**` 在正式分支上是不可写基线。每个 task 提交前和最终验收必须运行：
 
 ```bash
-git diff --quiet 8464038e7cc13f638e2e336c625ed6677fa7db22 -- src/so101_gazebo_demo_py
+git diff --quiet d300e7a41fb274d6d7e120699b7040666ea61904 -- src/so101_gazebo_demo_py
 test -z "$(git status --short -- src/so101_gazebo_demo_py)"
 ```
 
@@ -528,7 +530,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 - 冻结 source commit、installed package、policy fingerprint 和现有资格验证状态；
 - 严格重建正式分支并保存旧路线到独立备份分支；
-- 建立 `git diff --quiet 8464038 -- src/so101_gazebo_demo_py` 零差异门；
+- 建立 `git diff --quiet d300e7a -- src/so101_gazebo_demo_py` 零差异门；
 - 建立独立 MuJoCo 迁移账本；
 - 不把后续 Gazebo 实验结果静默混入迁移基线。
 
@@ -580,7 +582,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 | 层 | 必须证明 |
 |---|---|
-| Package isolation | `src/so101_gazebo_demo_py/**` 相对 `8464038` 零差异；新 package metadata/import/resource/runtime 不依赖旧 package |
+| Package isolation | `src/so101_gazebo_demo_py/**` 相对 `d300e7a` 零差异；新 package metadata/import/resource/runtime 不依赖旧 package |
 | Provenance | source commit、MJCF SHA-256、installed prefix、MuJoCo/package 版本、PID/cmdline、ROS domain/service prefix 一致 |
 | Model | MJCF compile；home + 10 poses 几何门槛；joint limit/direction/q6 语义一致 |
 | ROS graph | 单套 control node；`/clock`、controller、service/action、topic 类型正确 |
