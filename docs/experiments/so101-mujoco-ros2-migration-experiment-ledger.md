@@ -12,7 +12,7 @@ worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
 last_verified_implementation_commit: 263818aabc5a6be09db8baaa137eb18668081d42
 ledger_commit_pending: false
-task_status: TASK_9_COMPLETE
+task_status: TASK_10A_COMPLETE_PENDING_COMMIT
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -22,8 +22,8 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-037
-next_experiment: NONE
+latest_checkpoint: CP-039
+next_experiment: EXP-031
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -50,6 +50,55 @@ disproven_routes:
 open_risks:
   - No MuJoCo runtime experiment has run yet.
 next_command: Define EXP-001 before the first runtime-affecting migration experiment.
+```
+
+## Checkpoint CP-038
+
+```yaml
+checkpoint_id: CP-038
+last_valid_experiment: EXP-024
+current_hypothesis: The pinned patch behavior is GREEN, but the overlay replay entry point is not idempotent for an already-applied zero-context patch and must be corrected before qualification can continue.
+working_tree_status: HEAD 2346284e8cb9a6f32c9f676f078569da2adf26e0; index empty; fourteen preserved Task 10 implementation paths plus this ledger are dirty. The isolated dependency checkout contains only the three approved patched upstream paths, but the failed replay duplicated insertions in its plugin-base header and upstream test; its core source was restored to the intended content. No reset, clean, stash, commit, or push was performed.
+owned_processes: NONE; the failed build command exited and no MuJoCo or ROS stack was launched.
+preserved_processes: Host evidence continues to identify codex, kimi, and so101-py-qual as running and preserved; sandbox tmux visibility is unavailable and must not override the host evidence. No unrelated process or session was stopped.
+confirmed_conclusions:
+  - The approved documentation amendment is committed as 2346284e8cb9a6f32c9f676f078569da2adf26e0.
+  - Executable RED was established before production changes: the pinned upstream test failed to compile because the snapshot virtual was absent, and support failed to compile because the plugin override was absent.
+  - Focused GREEN passed for dependency replay contracts 10/10, upstream pause/snapshot behavior 2/2, and support atomic evidence 9/9.
+  - The intended pinned checkout diff and repository patch matched SHA-256 fd2869212d40809dca70f4cc971f93215a64812900cc992817305a33dfcf971e before overlay qualification.
+  - The overlay build then failed because build_reset_qualified_overlay.sh attempted to apply an already-applied --unidiff-zero patch again; duplicate virtual declarations are the decisive compiler boundary. Raw log SHA-256 is 084589ede9a7d9d667711d4937f8c5e2f26ff05f7223a875ebe2e87a7a49e384.
+  - Gazebo protected-tree diff and status gates both remain zero; the main worktree index remains empty.
+disproven_routes:
+  - `git apply --unidiff-zero --check` cannot be used to distinguish a clean checkout from an already-applied insertion-only patch because it can accept a second insertion.
+  - The failed overlay build cannot qualify runtime provenance or justify continuing to Task 10B.
+open_risks:
+  - The isolated dependency header and upstream test still contain only this turn's duplicate insertions and must be restored to exactly one approved copy without reset or clean.
+  - The build script requires a behavior-tested already-applied branch before overlay qualification is rerun.
+next_command: NONE; obtain explicit approval to remove only the duplicate copies created by the failed replay and add an executable idempotent-replay regression before changing build_reset_qualified_overlay.sh.
+```
+
+## Checkpoint CP-039
+
+```yaml
+checkpoint_id: CP-039
+last_valid_experiment: EXP-024
+current_hypothesis: The dedicated post-pause snapshot hook is reset-qualified and Task 10B can now consume only its paused step-zero evidence boundary.
+working_tree_status: HEAD 2346284e8cb9a6f32c9f676f078569da2adf26e0; Task 10A's patch, lock, build/check scripts, dependency test, support header/cpp/test, and this ledger are ready for one scoped commit. Pre-existing package/observer/reset paths remain unstaged for Task 10B.
+owned_processes: NONE; only builds and tests ran, and no MuJoCo ROS stack or tmux session was started.
+preserved_processes: Host evidence continues to identify codex, kimi, and so101-py-qual as running and preserved; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Explicit user authorization restored exactly the three pinned checkout paths to one approved copy; checkout diff SHA-256 is fd2869212d40809dca70f4cc971f93215a64812900cc992817305a33dfcf971e.
+  - Replay idempotence RED failed with duplicate diff SHA 32af4dfa...; GREEN passed after the build script distinguished an exact already-applied diff before attempting zero-context apply. RED log SHA-256 5a909558f8667bf7ac74cb265100d9b78452156e97f33569b809d69279bf9b3d; GREEN log SHA-256 774fa5fd1a962d190b3b9cef91c898268681218542619fcd34cdec6ddb403a12.
+  - Pinned upstream build and tests passed 116 tests with zero failures/skips; overlay log SHA-256 1a6dc1e8020df323843eb53af42308fe1860e81574734fa0805da1094b257d95.
+  - Runtime provenance verified URL, tag 0.0.3, commit 35ba8174b62d9560093614f981a3d4b978a96036, patch SHA, overlay-first prefixes, exact header, and runtime hashes; evidence SHA-256 b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1.
+  - Support snapshot tests pass 9/9, both project package tests report 363 tests, zero errors/failures, and four opt-in skips; aggregate result SHA-256 8f845b322ee9dcd34f180636fcfd9beb2a29f3fc8464b5db130edcda86bdfe5c.
+  - Ruff, clang-format dry-run, dependency isolation, diff-check, and both Gazebo protected-tree gates pass.
+disproven_routes:
+  - Reapplying an insertion-only zero-context patch after exact-diff recognition is unsafe and is now regression-tested.
+  - Running update cannot publish or consume a pending reset generation; publisher contention cannot consume it either.
+open_risks:
+  - Task 10B transactional Python behavior and EXP-031 live qualification remain unverified.
+next_command: Create the scoped Task 10A commit, then begin Task 10B RED tests without running EXP-031 until all offline gates pass.
 ```
 
 ## Checkpoint CP-037

@@ -1,5 +1,5 @@
 diff --git a/mujoco_ros2_control/src/mujoco_system_interface.cpp b/mujoco_ros2_control/src/mujoco_system_interface.cpp
-index a0d5f27..eba5e2a 100644
+index a0d5f27..2a8bcd5 100644
 --- a/mujoco_ros2_control/src/mujoco_system_interface.cpp
 +++ b/mujoco_ros2_control/src/mujoco_system_interface.cpp
 @@ -2727,0 +2728,5 @@ void MujocoSystemInterface::reset_simulation_state(bool fill_initial_state)
@@ -8,11 +8,185 @@ index a0d5f27..eba5e2a 100644
 +  {
 +    plugin->on_reset();
 +  }
+@@ -2763,0 +2769,9 @@ void MujocoSystemInterface::set_pause_callback(
++  if (sim_ == nullptr || sim_mutex_ == nullptr || mj_model_ == nullptr || mj_data_ == nullptr)
++  {
++    response->success = false;
++    response->message = "Simulation state is unavailable; pause request rejected.";
++    RCLCPP_ERROR(get_logger(), "%s", response->message.c_str());
++    return;
++  }
++
++  const std::unique_lock<std::recursive_mutex> lock(*sim_mutex_);
+@@ -2764,0 +2779 @@ void MujocoSystemInterface::set_pause_callback(
++
+@@ -2766,0 +2782,8 @@ void MujocoSystemInterface::set_pause_callback(
++    for (const auto& plugin : plugin_instances_)
++    {
++      plugin->on_pause(request->paused);
++      if (request->paused)
++      {
++        plugin->on_state_snapshot(mj_model_, mj_data_, true);
++      }
++    }
+@@ -2795,0 +2819,8 @@ void MujocoSystemInterface::set_pause_callback(
++  for (const auto& plugin : plugin_instances_)
++  {
++    plugin->on_pause(request->paused);
++    if (request->paused)
++    {
++      plugin->on_state_snapshot(mj_model_, mj_data_, true);
++    }
++  }
+diff --git a/mujoco_ros2_control/tests/test_headless_init.cpp b/mujoco_ros2_control/tests/test_headless_init.cpp
+index 351deed..63286a6 100644
+--- a/mujoco_ros2_control/tests/test_headless_init.cpp
++++ b/mujoco_ros2_control/tests/test_headless_init.cpp
+@@ -19,0 +20 @@
++#include <atomic>
+@@ -21,0 +23 @@
++#include <future>
+@@ -22,0 +25 @@
++#include <vector>
+@@ -25,0 +29 @@
++#define private public
+@@ -26,0 +31,3 @@
++#undef private
++#include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
++#include <mujoco_ros2_control_msgs/srv/set_pause.hpp>
+@@ -30,0 +38,39 @@
++class SnapshotCountingPlugin
++  : public mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase
++{
++public:
++  bool init(rclcpp::Node::SharedPtr, const mjModel*, mjData*) override { return true; }
++  void update(const mjModel*, mjData*) override { ++update_calls; }
++  void cleanup() override {}
++  void on_pause(bool paused) override
++  {
++    pause_values.push_back(paused);
++  }
++  void on_state_snapshot(const mjModel* model, const mjData* data, bool paused) override
++  {
++    ++snapshot_calls;
++    snapshot_model = model;
++    snapshot_data = data;
++    snapshot_paused = paused;
++    bool competitor_acquired = false;
++    std::thread competitor([this, &competitor_acquired]() {
++      competitor_acquired = mutex->try_lock();
++      if (competitor_acquired)
++      {
++        mutex->unlock();
++      }
++    });
++    competitor.join();
++    snapshot_mutex_was_held = !competitor_acquired;
++  }
++
++  std::recursive_mutex* mutex{ nullptr };
++  int update_calls{ 0 };
++  int snapshot_calls{ 0 };
++  std::vector<bool> pause_values;
++  const mjModel* snapshot_model{ nullptr };
++  const mjData* snapshot_data{ nullptr };
++  bool snapshot_paused{ false };
++  bool snapshot_mutex_was_held{ false };
++};
++
+@@ -156,0 +203,87 @@ TEST_F(HeadlessInitTest, HeadlessInitialization)
++TEST_F(HeadlessInitTest, PauseTrueSnapshotUsesAuthoritativeDataUnderMutexWithoutGenericUpdateOrPhysicsWrites)
++{
++#if ROS_DISTRO_HUMBLE
++  ASSERT_EQ(interface_->on_init(hardware_info_), hardware_interface::CallbackReturn::SUCCESS);
++#else
++  hardware_interface::HardwareComponentInterfaceParams params;
++  params.hardware_info = hardware_info_;
++  ASSERT_EQ(interface_->on_init(params), hardware_interface::CallbackReturn::SUCCESS);
++#endif
++  mjModel* model_copy = nullptr;
++  mjData* data_copy = nullptr;
++  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
++  while ((model_copy == nullptr || data_copy == nullptr) && std::chrono::steady_clock::now() < deadline)
++  {
++    interface_->get_model(model_copy);
++    interface_->get_data(data_copy);
++    std::this_thread::sleep_for(std::chrono::milliseconds(10));
++  }
++  mj_deleteData(data_copy);
++  mj_deleteModel(model_copy);
++  mjModel* model = interface_->mj_model_;
++  mjData* data = interface_->mj_data_;
++  ASSERT_NE(model, nullptr);
++  ASSERT_NE(data, nullptr);
++  auto plugin = std::make_shared<SnapshotCountingPlugin>();
++  plugin->mutex = interface_->sim_mutex_;
++  interface_->plugin_instances_ = { plugin };
++  const std::vector<mjtNum> qpos(data->qpos, data->qpos + model->nq);
++  const std::vector<mjtNum> qvel(data->qvel, data->qvel + model->nv);
++  const std::vector<mjtNum> ctrl(data->ctrl, data->ctrl + model->nu);
++  const std::vector<mjtNum> xfrc(data->xfrc_applied, data->xfrc_applied + 6 * model->nbody);
++
++  auto request = std::make_shared<mujoco_ros2_control_msgs::srv::SetPause::Request>();
++  request->paused = true;
++  auto response = std::make_shared<mujoco_ros2_control_msgs::srv::SetPause::Response>();
++  interface_->set_pause_callback(request, response);
++  ASSERT_TRUE(response->success);
++  EXPECT_EQ(plugin->pause_values, std::vector<bool>({ true }));
++  EXPECT_EQ(plugin->snapshot_calls, 1);
++  EXPECT_EQ(plugin->update_calls, 0);
++  EXPECT_EQ(plugin->snapshot_model, model);
++  EXPECT_EQ(plugin->snapshot_data, data);
++  EXPECT_TRUE(plugin->snapshot_paused);
++  EXPECT_TRUE(plugin->snapshot_mutex_was_held);
++  EXPECT_EQ(std::vector<mjtNum>(data->qpos, data->qpos + model->nq), qpos);
++  EXPECT_EQ(std::vector<mjtNum>(data->qvel, data->qvel + model->nv), qvel);
++  EXPECT_EQ(std::vector<mjtNum>(data->ctrl, data->ctrl + model->nu), ctrl);
++  EXPECT_EQ(std::vector<mjtNum>(data->xfrc_applied, data->xfrc_applied + 6 * model->nbody), xfrc);
++
++  interface_->set_pause_callback(request, response);
++  ASSERT_TRUE(response->success);
++  EXPECT_EQ(plugin->pause_values, std::vector<bool>({ true, true }));
++  EXPECT_EQ(plugin->snapshot_calls, 2) << "idempotent pause true must emit exactly one new snapshot";
++  EXPECT_EQ(plugin->update_calls, 0);
++
++  request->paused = false;
++  interface_->set_pause_callback(request, response);
++  ASSERT_TRUE(response->success);
++  EXPECT_EQ(plugin->pause_values, std::vector<bool>({ true, true, false }));
++  EXPECT_EQ(plugin->snapshot_calls, 2) << "pause false must not emit a state snapshot";
++}
++
++TEST_F(HeadlessInitTest, PauseFailureWithMissingAuthoritativeDataCallsNoPluginHooks)
++{
++#if ROS_DISTRO_HUMBLE
++  ASSERT_EQ(interface_->on_init(hardware_info_), hardware_interface::CallbackReturn::SUCCESS);
++#else
++  hardware_interface::HardwareComponentInterfaceParams params;
++  params.hardware_info = hardware_info_;
++  ASSERT_EQ(interface_->on_init(params), hardware_interface::CallbackReturn::SUCCESS);
++#endif
++  auto plugin = std::make_shared<SnapshotCountingPlugin>();
++  plugin->mutex = interface_->sim_mutex_;
++  interface_->plugin_instances_ = { plugin };
++  mjData* authoritative_data = interface_->mj_data_;
++  interface_->mj_data_ = nullptr;
++  auto request = std::make_shared<mujoco_ros2_control_msgs::srv::SetPause::Request>();
++  request->paused = true;
++  auto response = std::make_shared<mujoco_ros2_control_msgs::srv::SetPause::Response>();
++  interface_->set_pause_callback(request, response);
++  interface_->mj_data_ = authoritative_data;
++  EXPECT_FALSE(response->success);
++  EXPECT_TRUE(plugin->pause_values.empty());
++  EXPECT_EQ(plugin->snapshot_calls, 0);
++  EXPECT_EQ(plugin->update_calls, 0);
++}
++
 diff --git a/mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp b/mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp
-index ce86666..7820363 100644
+index ce86666..e786f10 100644
 --- a/mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp
 +++ b/mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp
-@@ -59,0 +60,8 @@ public:
+@@ -59,0 +60,28 @@ public:
 +  /**
 +   * @brief Notify the plugin after a successful central simulation reset.
 +   *
@@ -20,4 +194,24 @@ index ce86666..7820363 100644
 +   * that do not need reset notification.
 +   */
 +  virtual void on_reset() {}
++
++  /**
++   * @brief Notify the plugin of the authoritative simulation pause state.
++   *
++   * The default implementation preserves source compatibility.
++   */
++  virtual void on_pause(bool paused) { (void)paused; }
++
++  /**
++   * @brief Publish a read-only snapshot of authoritative simulation state.
++   *
++   * The default implementation preserves source compatibility for plugins
++   * that do not need pause-boundary snapshots.
++   */
++  virtual void on_state_snapshot(const mjModel* model, const mjData* data, bool paused)
++  {
++    (void)model;
++    (void)data;
++    (void)paused;
++  }
 +
