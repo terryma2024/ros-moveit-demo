@@ -5,7 +5,7 @@
 
 #include "so101_gazebo_demo/pick_place/common_resume_validator.hpp"
 #include "so101_gazebo_demo/pick_place/runner.hpp"
-#include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/so101_non_motion_runtime.hpp"
 
 namespace pick_place = so101_gazebo_demo::pick_place;
 
@@ -86,16 +86,16 @@ public:
   }
 };
 
-pick_place::SO101Task3RuntimeDependencies dependencies()
+pick_place::SO101NonMotionRuntimeDependencies dependencies()
 {
   return {std::make_shared<FakeGripper>(), std::make_shared<FakeScene>()};
 }
 
 }  // namespace
 
-TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsState)
+TEST(SO101NonMotionRuntime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsState)
 {
-  const auto runtime = pick_place::makeSO101Task3Runtime(dependencies());
+  const auto runtime = pick_place::makeSO101NonMotionRuntime(dependencies());
   for (const auto state : {
          pick_place::State::PREPARE_OPEN_GRIPPER,
          pick_place::State::CLOSE_GRIPPER,
@@ -142,9 +142,9 @@ TEST(SO101Task3Runtime, RegistersEveryNonMotionExecutorAndContractExactlyAtItsSt
   ASSERT_NE(nullptr, runtime.recovery_policy);
 }
 
-TEST(SO101Task3Runtime, WholeExecuteGraphFailsClosedBeforeObservationWithoutTask4Motion)
+TEST(SO101NonMotionRuntime, WholeExecuteGraphFailsClosedBeforeObservationWithoutMotionExecutors)
 {
-  const auto runtime = pick_place::makeSO101Task3Runtime(dependencies());
+  const auto runtime = pick_place::makeSO101NonMotionRuntime(dependencies());
   NeverObserved observer;
   FakeCheckpointStore checkpoint;
   pick_place::CommonResumeValidator resume("config", "session");

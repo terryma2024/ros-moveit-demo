@@ -50,7 +50,7 @@ ros2 launch so101_gazebo_demo_cpp so101_pick_place.launch.py
 
 - `src/so101_gazebo_demo_cpp/src/pick_place/domain_types.cpp`
 - `src/so101_gazebo_demo_cpp/src/pick_place/transition_table.cpp`
-- `src/so101_gazebo_demo_cpp/src/pick_place/so101_task3_runtime.cpp`
+- `src/so101_gazebo_demo_cpp/src/pick_place/so101_non_motion_runtime.cpp`
 - `src/so101_gazebo_demo_cpp/src/pick_place/pick_place_state_machine.cpp`
 - `src/so101_gazebo_demo_cpp/launch/so101_pick_place.launch.py`
 

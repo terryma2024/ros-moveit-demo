@@ -7,7 +7,7 @@
 #include "so101_gazebo_demo/pick_place/plan_validation.hpp"
 #include "so101_gazebo_demo/pick_place/so101_fixed_motion_targets.hpp"
 #include "so101_gazebo_demo/pick_place/so101_joint_motion_adapter.hpp"
-#include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/so101_non_motion_runtime.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_validator.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_evidence_store.hpp"
 #include "so101_gazebo_demo/pick_place/final_placement_evidence_store.hpp"
@@ -43,7 +43,7 @@ private:
   SO101WorldObservationConfig config_;
 };
 
-struct SO101PickPlaceRuntimeDependencies : SO101Task3RuntimeDependencies
+struct SO101PickPlaceRuntimeDependencies : SO101NonMotionRuntimeDependencies
 {
   std::shared_ptr<const SO101ConfiguredMotionTargetPolicy> motion_policy;
   std::shared_ptr<IMoveItJointMotionAdapter> motion;
@@ -53,7 +53,7 @@ struct SO101PickPlaceRuntimeDependencies : SO101Task3RuntimeDependencies
   std::shared_ptr<IFinalPlacementEvidenceStore> final_placement_evidence;
 };
 
-struct SO101PickPlaceRuntimeConfig : SO101Task3RuntimeConfig
+struct SO101PickPlaceRuntimeConfig : SO101NonMotionRuntimeConfig
 {
   PhysicalGraspRetryConfig physical_grasp_retry;
   PhysicalOutcomePolicyConfig physical_outcome;

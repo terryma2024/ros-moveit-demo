@@ -993,15 +993,15 @@ SO101PickPlaceRuntimeRegistries
 makeSO101PickPlaceRuntimeRegistries(const SO101PickPlaceRuntimeDependencies & dependencies,
                                     const SO101PickPlaceRuntimeConfig & config)
 {
-  SO101Task3RuntimeDependencies task3_dependencies{dependencies.gripper, dependencies.moveit_scene,
-                                                   dependencies.gripper_observer,
-                                                   dependencies.final_placement_evidence};
-  task3_dependencies.gripper_observer = dependencies.physical_observer;
-  const auto & task3_config = static_cast<const SO101Task3RuntimeConfig &>(config);
-  auto task3 = makeSO101Task3Runtime(task3_dependencies, task3_config);
+  SO101NonMotionRuntimeDependencies non_motion_dependencies{
+    dependencies.gripper, dependencies.moveit_scene, dependencies.gripper_observer,
+    dependencies.final_placement_evidence};
+  non_motion_dependencies.gripper_observer = dependencies.physical_observer;
+  const auto & non_motion_config = static_cast<const SO101NonMotionRuntimeConfig &>(config);
+  auto non_motion = makeSO101NonMotionRuntime(non_motion_dependencies, non_motion_config);
   SO101PickPlaceRuntimeRegistries runtime{
-    std::move(task3.actions),         {},    std::move(task3.contracts),
-    std::move(task3.recovery_policy), false, std::nullopt};
+    std::move(non_motion.actions),         {},    std::move(non_motion.contracts),
+    std::move(non_motion.recovery_policy), false, std::nullopt};
   runtime.configuration_failure = missingDependencyFailure(dependencies);
   if (!dependencies.motion_policy || !dependencies.motion)
     return runtime;
