@@ -899,3 +899,45 @@ TEST(SO101FixedMotionTargets, DescendIntermediateWaypointRetreatsFromWallNear)
   EXPECT_TRUE(has_retreat) << "DESCEND lacks an intermediate waypoint that retreats at least "
                            << (min_retreat_m * 1000) << " mm from wall_near";
 }
+
+TEST(SO101FixedMotionTargets, GraspTcpXCandidateMovesTowardCupCenterOnly)
+{
+  if (!rclcpp::ok())
+    rclcpp::init(0, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("so101_grasp_tcp_x_candidate_contract");
+  robot_model_loader::RobotModelLoader::Options options(readFile(SO101_TEST_URDF),
+                                                        readFile(SO101_TEST_SRDF));
+  options.load_kinematics_solvers = false;
+  robot_model_loader::RobotModelLoader loader(node, options);
+  const auto & model = loader.getModel();
+  ASSERT_TRUE(model);
+
+  const auto profile = configuredProfile();
+  const auto policy = configuredPolicy();
+  const auto descend = policy.spec(spp::State::DESCEND);
+  ASSERT_TRUE(descend);
+  ASSERT_FALSE(descend->target.joint_waypoints.empty());
+
+  moveit::core::RobotState baseline(model);
+  baseline.setToDefaultValues();
+  baseline.setVariablePositions(
+    profile.arm_joints,
+    {-0.000206491845, 0.472194274096, 0.214652624195, 0.854922375695, 0.000576703465});
+  baseline.setVariablePosition(profile.gripper_joint, profile.q6_preopen);
+  baseline.update();
+
+  moveit::core::RobotState candidate(model);
+  candidate.setToDefaultValues();
+  candidate.setVariablePositions(profile.arm_joints, descend->target.joint_waypoints.back());
+  candidate.setVariablePosition(profile.gripper_joint, profile.q6_preopen);
+  candidate.update();
+
+  const auto & baseline_tcp = baseline.getGlobalLinkTransform(profile.tcp_link);
+  const auto & candidate_tcp = candidate.getGlobalLinkTransform(profile.tcp_link);
+  EXPECT_NEAR(candidate_tcp.translation().x(), 0.020000000, 1e-6);
+  EXPECT_NEAR(candidate_tcp.translation().y(), baseline_tcp.translation().y(), 1e-6);
+  EXPECT_NEAR(candidate_tcp.translation().z(), baseline_tcp.translation().z(), 1e-6);
+  EXPECT_NEAR(Eigen::Quaterniond(candidate_tcp.rotation())
+                .angularDistance(Eigen::Quaterniond(baseline_tcp.rotation())),
+              0.0, 1e-6);
+}
