@@ -1,0 +1,17 @@
+std_msgs/Header header
+uint64 publisher_sequence
+uint64 simulation_step
+uint64 reset_epoch
+string simulation_session_id
+bool paused
+int32 object_body_id
+string object_body
+geometry_msgs/Pose object_pose_world
+geometry_msgs/Twist object_twist_world
+bool has_contact
+float64 minimum_signed_distance_m
+float64 maximum_normal_force_n
+bool truncated
+ContactSample[] left_fingertip_contacts
+ContactSample[] right_fingertip_contacts
+ContactSample[] other_object_contacts

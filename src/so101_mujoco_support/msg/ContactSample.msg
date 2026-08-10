@@ -1,0 +1,12 @@
+int32 body1_id
+int32 geom1_id
+string body1
+string geom1
+int32 body2_id
+int32 geom2_id
+string body2
+string geom2
+geometry_msgs/Point position_world
+geometry_msgs/Vector3 normal_world
+float64 signed_distance_m
+float64 normal_force_n
