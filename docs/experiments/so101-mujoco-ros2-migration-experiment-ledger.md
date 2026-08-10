@@ -10,7 +10,7 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: 6d598b8340b50925c217e5a9a088ab600156099a
+last_verified_implementation_commit: 9b951ced787c418364a8304b0160ecdf2a5ba73c
 ledger_commit_pending: false
 task_status: TASK_1_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
@@ -22,7 +22,7 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-RUFF-001
+latest_checkpoint: CP-007
 next_experiment: EXP-002
 ---
 
@@ -50,6 +50,28 @@ disproven_routes:
 open_risks:
   - No MuJoCo runtime experiment has run yet.
 next_command: Define EXP-001 before the first runtime-affecting migration experiment.
+```
+
+## Checkpoint CP-007
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-001
+current_hypothesis: The independent MJCF can preserve the repository robot's six-joint kinematics and stable evidence names.
+working_tree_status: Clean at Task 5 implementation commit 9b951ced787c418364a8304b0160ecdf2a5ba73c; this ledger-only checkpoint update is pending its scoped commit.
+owned_processes: NONE
+preserved_processes: Existing tmux sessions codex, kimi, and so101-py-qual; no session or process was stopped.
+confirmed_conclusions:
+  - Immutable ObjectState, ContactEvidence, SimulationEvidence, and ResetReceipt types implement the expanded atomic schema and ordering key.
+  - WorldObserver.snapshot and WorldReset.reset expose no call-site freshness or session overrides.
+  - Provenance entries resolve only against behavior source commit 8d7913e7f552a40ee627d65be8b873ac16748bc9 with verified source hashes and new-package destinations.
+  - Package-level colcon test passed 63 tests with zero errors, failures, or skips; Ruff, isolation, install-layout, and protected-tree gates passed.
+disproven_routes:
+  - Provenance source paths cannot be restricted to behavior_source.paths alone; exact adaptation source_path fields are required and now validated against the declared set.
+  - Ruff invocation cannot inherit caller cwd because import classification changes; the executable gate now fixes cwd to the package root.
+open_risks:
+  - No MJCF has compiled or passed URDF parity yet.
+next_command: Start Task 6 with MJCF compile and model-parity RED tests.
 ```
 
 ## Checkpoint CP-RUFF-001
