@@ -1,6 +1,6 @@
-from so101_gazebo_demo_py.checkpoint import ExpectedWorldState
-from so101_gazebo_demo_py.domain import State
-from so101_gazebo_demo_py.recovery.policy import RecoveryPolicy
+from so101_gazebo_demo.checkpoint import ExpectedWorldState
+from so101_gazebo_demo.domain import State
+from so101_gazebo_demo.recovery.policy import RecoveryPolicy
 
 
 def test_recovery_skips_unobserved_side_effects() -> None:

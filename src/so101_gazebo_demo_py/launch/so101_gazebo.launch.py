@@ -10,7 +10,7 @@ from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-from so101_gazebo_demo_py.gazebo.model_asset import materialize_prepared_model
+from so101_gazebo_demo.gazebo.model_asset import materialize_prepared_model
 
 
 def _gazebo(headless: bool):

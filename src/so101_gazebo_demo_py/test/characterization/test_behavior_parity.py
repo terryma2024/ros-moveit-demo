@@ -1,8 +1,8 @@
 from pathlib import Path
 import yaml
 
-from so101_gazebo_demo_py.domain import State
-from so101_gazebo_demo_py.workflow import SO101_WORKFLOW
+from so101_gazebo_demo.domain import State
+from so101_gazebo_demo.workflow import SO101_WORKFLOW
 from .run_behavior_matrix import run_behavior
 
 

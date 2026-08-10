@@ -3,7 +3,7 @@ import math
 import pytest
 from types import SimpleNamespace
 
-from so101_gazebo_demo_py.live_execute import (
+from so101_gazebo_demo.live_execute import (
     _stable_bilateral, carry_with_shadow_gates, compose_pose,
     plan_waypoint_sequence, relative_pose, rotated_grasp_pose,
     run_bounded_physical_grasp_attempts, shadow_divergence_healthy,
@@ -11,9 +11,9 @@ from so101_gazebo_demo_py.live_execute import (
     synchronize_planning_shadow,
     translated_grasp_pose,
 )
-from so101_gazebo_demo_py.gazebo.observer import ContactPair
-from so101_gazebo_demo_py.policy_config import PlanningShadowConfig
-from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
+from so101_gazebo_demo.gazebo.observer import ContactPair
+from so101_gazebo_demo.policy_config import PlanningShadowConfig
+from so101_gazebo_demo.test_support.ros_gazebo_backend import (
     close_gazebo_subscription, closest_pose_pair, coobserved_tcp_sample,
     parse_model_pose, parse_tf_pose,
     pose_pair_ready, sample_pose_pair_with_retry,
@@ -22,10 +22,10 @@ from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
 
 
 PACKAGE = Path(__file__).parents[1]
-LIVE_EXECUTE = PACKAGE / "so101_gazebo_demo_py/live_execute.py"
+LIVE_EXECUTE = PACKAGE / "src/live_execute.py"
 MOTION_POLICY = PACKAGE / "config/motion_policies/light_cup_wall_pick.yaml"
-LIVE_CLI = PACKAGE / "so101_gazebo_demo_py/cli/pick_place_state_machine.py"
-ROS_GAZEBO_BACKEND = PACKAGE / "so101_gazebo_demo_py/test_support/ros_gazebo_backend.py"
+LIVE_CLI = PACKAGE / "src/cli/pick_place_state_machine.py"
+ROS_GAZEBO_BACKEND = PACKAGE / "src/test_support/ros_gazebo_backend.py"
 
 
 def test_live_forward_path_never_commands_gazebo_attachment() -> None:

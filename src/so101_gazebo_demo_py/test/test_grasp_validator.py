@@ -1,8 +1,8 @@
 from dataclasses import replace
 
-from so101_gazebo_demo_py.domain import ActionStatus
-from so101_gazebo_demo_py.grasp.stabilizer import GraspSample, StabilizedGraspEvidence
-from so101_gazebo_demo_py.grasp.validator import PhysicalGraspValidator, PhysicalGraspValidationPolicy
+from so101_gazebo_demo.domain import ActionStatus
+from so101_gazebo_demo.grasp.stabilizer import GraspSample, StabilizedGraspEvidence
+from so101_gazebo_demo.grasp.validator import PhysicalGraspValidator, PhysicalGraspValidationPolicy
 
 
 def evidence(z=.2, **changes):

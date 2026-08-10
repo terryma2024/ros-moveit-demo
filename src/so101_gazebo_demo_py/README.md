@@ -2,6 +2,9 @@
 
 `so101_gazebo_demo_py` is a standalone, simulation-only ROS 2 Jazzy rewrite of the SO-101 Gazebo pick-place demo. It owns its Python runtime, launch files, robot/world assets, policy files, Gazebo attachment transport, and MoveIt interfaces. It does not use the original C++ package or `pick_place_common` at runtime.
 
+The ROS package name is `so101_gazebo_demo_py`; its Python import package is
+`so101_gazebo_demo`.
+
 Build and source:
 
 ```bash

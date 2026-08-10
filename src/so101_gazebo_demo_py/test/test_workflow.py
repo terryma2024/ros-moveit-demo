@@ -1,5 +1,5 @@
-from so101_gazebo_demo_py.domain import ActionStatus, State
-from so101_gazebo_demo_py.workflow import SO101_WORKFLOW, resolve_transition
+from so101_gazebo_demo.domain import ActionStatus, State
+from so101_gazebo_demo.workflow import SO101_WORKFLOW, resolve_transition
 
 
 EXPECTED_TRANSITIONS = {

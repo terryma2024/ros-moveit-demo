@@ -1,6 +1,6 @@
-from so101_gazebo_demo_py.domain import ActionResult, ActionStatus, RunMode, RunRequest, State
-from so101_gazebo_demo_py.runner import ExecutionContext
-from so101_gazebo_demo_py.runtime import RuntimeDependencies, build_runtime
+from so101_gazebo_demo.domain import ActionResult, ActionStatus, RunMode, RunRequest, State
+from so101_gazebo_demo.runner import ExecutionContext
+from so101_gazebo_demo.runtime import RuntimeDependencies, build_runtime
 
 
 def dependencies(calls):

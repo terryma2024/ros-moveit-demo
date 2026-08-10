@@ -1,6 +1,6 @@
-from so101_gazebo_demo_py.domain import ActionResult, ActionStatus, Failure, FailureCategory
-from so101_gazebo_demo_py.grasp.evidence_store import PhysicalGraspEvidence, RetryPhase
-from so101_gazebo_demo_py.grasp.retry import PhysicalGraspRetryCoordinator
+from so101_gazebo_demo.domain import ActionResult, ActionStatus, Failure, FailureCategory
+from so101_gazebo_demo.grasp.evidence_store import PhysicalGraspEvidence, RetryPhase
+from so101_gazebo_demo.grasp.retry import PhysicalGraspRetryCoordinator
 
 
 class Store:

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from so101_gazebo_demo_py.domain import ActionStatus, FailureCategory
-from so101_gazebo_demo_py.moveit.planning import JointPlanRequest, MoveItPlanningClient
-from so101_gazebo_demo_py.motion.executor import MoveItExecutionClient
+from so101_gazebo_demo.domain import ActionStatus, FailureCategory
+from so101_gazebo_demo.moveit.planning import JointPlanRequest, MoveItPlanningClient
+from so101_gazebo_demo.motion.executor import MoveItExecutionClient
 
 
 @dataclass

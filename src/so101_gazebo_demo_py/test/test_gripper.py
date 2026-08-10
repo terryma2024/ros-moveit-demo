@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from so101_gazebo_demo_py.domain import ActionStatus
-from so101_gazebo_demo_py.motion.gripper import GripperClient
+from so101_gazebo_demo.domain import ActionStatus
+from so101_gazebo_demo.motion.gripper import GripperClient
 
 
 class Future:

@@ -2,10 +2,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_gazebo_demo_py import live_execute
-from so101_gazebo_demo_py.gazebo.observer import ContactPair
-from so101_gazebo_demo_py.test_support.live_attachment import PoseSample
-from so101_gazebo_demo_py.test_support.ros_gazebo_backend import (
+from so101_gazebo_demo import live_execute
+from so101_gazebo_demo.gazebo.observer import ContactPair
+from so101_gazebo_demo.test_support.live_attachment import PoseSample
+from so101_gazebo_demo.test_support.ros_gazebo_backend import (
     gripper_result_acceptable,
 )
 

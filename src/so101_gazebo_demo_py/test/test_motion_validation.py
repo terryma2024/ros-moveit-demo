@@ -1,8 +1,8 @@
 from types import MappingProxyType
 
-from so101_gazebo_demo_py.domain import State
-from so101_gazebo_demo_py.motion.evidence import RobotStateEvidence
-from so101_gazebo_demo_py.motion.planner import (
+from so101_gazebo_demo.domain import State
+from so101_gazebo_demo.motion.evidence import RobotStateEvidence
+from so101_gazebo_demo.motion.planner import (
     Trajectory,
     TrajectoryPoint,
     ValidationRules,

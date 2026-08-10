@@ -1,5 +1,5 @@
-from so101_gazebo_demo_py.domain import ActionResult, ActionStatus
-from so101_gazebo_demo_py.gazebo.reset import WorldResetCoordinator
+from so101_gazebo_demo.domain import ActionResult, ActionStatus
+from so101_gazebo_demo.gazebo.reset import WorldResetCoordinator
 
 
 def test_reset_orders_detach_pose_scene_arm_gripper_then_proof() -> None:

@@ -5,7 +5,7 @@ from launch import LaunchContext, LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
-from so101_gazebo_demo_py.gazebo.model_asset import materialize_prepared_model
+from so101_gazebo_demo.gazebo.model_asset import materialize_prepared_model
 
 
 PACKAGE = Path(__file__).parents[1]
