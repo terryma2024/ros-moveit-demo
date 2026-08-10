@@ -10,7 +10,7 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: 90e1411fc8c5bd3caf4bc1a97c21e5f6bdc919c8
+last_verified_implementation_commit: f2827f825ddf15e8d346e44be5f8fe464986d2e4
 ledger_commit_pending: false
 task_status: TASK_11_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
@@ -22,7 +22,7 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-048
+latest_checkpoint: CP-049
 next_experiment: EXP-035
 ---
 
@@ -2025,4 +2025,33 @@ open_risks:
   - Live execute composition remains intentionally fail-closed with LIVE_RUNTIME_NOT_IMPLEMENTED until Task 12; ROS-free plan_only remains available and characterized.
   - Sandbox DDS socket creation emits transport warnings in the support GTest, but all nine support tests pass and no runtime graph is started.
 next_command: Stage the exact Task 11 review-fix allowlist, verify the index and gates, commit the scoped fix, and do not push.
+```
+
+## Checkpoint CP-049
+
+```yaml
+checkpoint_id: CP-049
+last_valid_experiment: EXP-034
+current_hypothesis: NONE; Task 11 review fix round 2 is qualified at the ROS-free boundary and required no runtime experiment.
+working_tree_status: HEAD f2827f825ddf15e8d346e44be5f8fe464986d2e4; the receipt-timed observer adapter, release freshness enforcement, immutable wrapper/protocol exports, three characterization-test modules, and this ledger checkpoint are dirty pending the scoped review-fix commit.
+owned_processes: NONE; no ROS graph, MuJoCo, MoveIt, Gazebo, GUI, tmux, or hardware process was started.
+preserved_processes: codex, kimi, and so101-py-qual remain untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - MujocoWorldObserver already stored the monotonic time at which an atomic callback was accepted, but its public snapshot discarded that value. The additive snapshot_with_receipt API now exposes it through a separate immutable ReceivedSimulationEvidence wrapper while the original SimulationEvidence schema and WorldObserver.snapshot contract remain unchanged.
+  - The ROS callback captures its receipt monotonic value before message conversion, so conversion latency cannot make cached evidence appear younger.
+  - ReleaseSettleExecutor requires the additive ReceiptTimedWorldObserver protocol and independently enforces PhysicalOutcomePolicy.max_observation_age_s. A cache accepted by a looser observer threshold is excluded from physical-outcome samples when older than the physical policy; fresh receipts remain successful.
+  - Joint state is not added to SimulationEvidence or the receipt wrapper, so Task 5 atomic simulator evidence and non-atomic robot-state boundaries remain separated.
+  - Review RED produced two behavior failures: the concrete observer could not expose callback receipt time, and four stale cached samples were retained. Evidence is /tmp/so101-debug-mujoco-migration/task-11-fix2/review-red.log with SHA-256 fc9facf1164e303c003414cddf32bca82d36dfa2a991cfa4f197b36a11580f42.
+  - Callback-entry RED proved the pre-fix timestamp was captured only after conversion; evidence is /tmp/so101-debug-mujoco-migration/task-11-fix2/callback-red.log with SHA-256 0192f5820514d3fdb3797e7b4b5d5808a7269dc27a4b8c8a10070522042e774b.
+  - Focused GREEN passed 34 tests; full non-live Task 11 passed 175 with two live skips. The two-package build and test passed, and aggregate colcon test-result reports 427 tests, zero errors, zero failures, and four skips.
+  - Ruff check/format, provenance tests, migration isolation, diff check, and protected Gazebo tracked/status gates pass.
+  - The local origin/main ref is 34 commits behind HEAD and 102 commits ahead of HEAD; its external drift was recorded only, with no fetch, rebase, merge, push, or branch mutation by this task.
+disproven_routes:
+  - Timestamping after snapshot completion does not represent callback receipt age and can make arbitrarily old cached evidence appear fresh.
+  - Reusing the observer's configured freshness threshold is insufficient because the physical-outcome policy may intentionally be stricter.
+  - Adding receipt metadata or joint state to SimulationEvidence is unnecessary; a separate immutable receipt wrapper preserves the frozen atomic evidence schema.
+open_risks:
+  - Live execute composition remains intentionally fail-closed with LIVE_RUNTIME_NOT_IMPLEMENTED until Task 12; ROS-free plan_only remains available and characterized.
+  - Sandbox DDS socket creation emits transport warnings in the support GTest, but all nine support tests pass and no runtime graph is started.
+next_command: Stage the exact Task 11 review-fix round 2 allowlist, verify the index and gates, commit the scoped fix, and do not push.
 ```
