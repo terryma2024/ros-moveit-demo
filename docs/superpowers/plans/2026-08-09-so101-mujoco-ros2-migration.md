@@ -96,9 +96,10 @@ src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh
 - Create: `src/so101_mujoco_demo_py/setup.cfg`
 - Create: `src/so101_mujoco_demo_py/resource/so101_mujoco_demo_py`
 - Create: `src/so101_mujoco_demo_py/so101_mujoco_demo_py/__init__.py`
+- Create: `src/so101_mujoco_demo_py/so101_mujoco_demo_py/cli.py`
 - Create: `src/so101_mujoco_demo_py/test/test_package_identity.py`
 
-**Interfaces:** Package name and Python namespace are both exactly `so101_mujoco_demo_py`; console entry point is `so101_mujoco_pick_place = so101_mujoco_demo_py.cli:main`. There is no dependency on either Gazebo package.
+**Interfaces:** Package name and Python namespace are both exactly `so101_mujoco_demo_py`; console entry point is `pick_place_state_machine = so101_mujoco_demo_py.cli:main`, preserving the existing ROS-facing executable name under the new package identity. There is no dependency on either Gazebo package.
 
 - [ ] Add RED tests for package name, resource marker, entry point, installed share layout, and absence of `gazebo`, `gz_`, `ros_gz`, or `so101_gazebo_demo_py` from metadata/imports.
 - [ ] Run RED with `pytest` and `colcon list`; expected failure is missing package metadata.
@@ -159,9 +160,9 @@ src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh
 - Create: `src/so101_mujoco_support/src/simulation_evidence_plugin.cpp`
 - Create: `src/so101_mujoco_support/test/test_simulation_evidence_plugin.cpp`
 
-**Interfaces:** `SimulationEvidence` contains one simulation step id/time, reset epoch, object pose/twist, left/right fingertip `ContactSample[]`, minimum signed contact distance, normal force, body/geom ids, paused state, and session id. One publish call must use one locked MuJoCo snapshot.
+**Interfaces:** `ContactSample` contains `body1_id`, `geom1_id`, `body1`, `geom1`, `body2_id`, `geom2_id`, `body2`, `geom2`, world position/normal, `signed_distance_m`, and `normal_force_n`. `SimulationEvidence` contains `header` (simulation time and `world` frame), `publisher_sequence`, `simulation_step`, `reset_epoch`, `simulation_session_id`, `paused`, `object_body_id`, `object_body`, object pose/twist, `has_contact`, `minimum_signed_distance_m`, `maximum_normal_force_n`, `truncated`, and separate `left_fingertip_contacts`, `right_fingertip_contacts`, `other_object_contacts` arrays. One publish call must use one locked MuJoCo snapshot; `(simulation_session_id, reset_epoch, simulation_step)` is the consumer ordering key.
 
-- [ ] Write GTest RED cases for same-step atomicity, side classification, force sign, no-contact empty arrays, reset epoch change, and monotonic step id.
+- [ ] Write GTest RED cases for same-step atomicity, numeric/name id agreement, side classification, force sign, zero-contact aggregates/empty arrays, session immutability, reset epoch change, monotonic publisher sequence, and monotonic step id within one epoch.
 - [ ] Create the standalone `ament_cmake` messages/plugin package. The plugin is read-only except for its publisher state; it never changes qpos/qvel or creates equality constraints.
 - [ ] Build and test only the support package:
 
@@ -184,7 +185,7 @@ colcon test-result --verbose
 - Create: `src/so101_mujoco_demo_py/test/{test_simulation_types.py,test_provenance_contract.py}`
 - Update: `src/so101_mujoco_demo_py/setup.py`
 
-**Interfaces:** Define immutable `ObjectState`, `ContactEvidence`, `SimulationEvidence`, `ResetReceipt`; protocols `WorldObserver.snapshot() -> SimulationEvidence` and `WorldReset.reset(keyframe: str) -> ResetReceipt`. No type may expose Gazebo messages.
+**Interfaces:** Define immutable `ObjectState`, `ContactEvidence`, `SimulationEvidence`, `ResetReceipt`; protocols `WorldObserver.snapshot() -> SimulationEvidence` and `WorldReset.reset(keyframe: str) -> ResetReceipt`. `SimulationEvidence` carries the same ordering/session/contact fields fixed in spec §10.1; `ResetReceipt` carries `old_epoch`, `new_epoch`, `keyframe`, `simulation_step`, and `simulation_session_id`. Freshness timeout and expected session id are constructor configuration, not call-site parameters. No type may expose Gazebo messages.
 
 - [ ] Add RED tests for type validation, same-step evidence, reset epoch ordering, and provenance entries `{source_commit, source_path, destination_path, source_sha256, adaptation}`.
 - [ ] Implement the minimal dataclasses/protocols and provenance validator. Initially provenance contains only files actually adapted from `8d7913e`; do not claim copied files that do not exist.
@@ -266,7 +267,7 @@ colcon test-result --verbose
 - Create: `src/so101_mujoco_demo_py/test/{test_mujoco_reset.py,test_reset_live_contract.py}`
 - Update: launch/config and ledger
 
-**Interfaces:** `MujocoResetClient.reset("task_start")` performs pause → keyframe reset → controller reactivation/state convergence → bounded step → evidence verification and returns `ResetReceipt(old_epoch, new_epoch, keyframe, step_id)`. Failure leaves the world paused with an explicit error.
+**Interfaces:** `MujocoResetClient.reset("task_start")` performs pause → keyframe reset → controller reactivation/state convergence → bounded step → evidence verification and returns `ResetReceipt(old_epoch, new_epoch, keyframe, simulation_step, simulation_session_id)`. Failure leaves the world paused with an explicit error.
 
 - [ ] Write RED unit tests for call ordering, timeout, epoch mismatch, controller failure, and idempotence.
 - [ ] Implement against only interfaces proven in Task 3; do not invent newer `main` APIs.
