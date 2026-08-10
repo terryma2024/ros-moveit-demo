@@ -1,0 +1,81 @@
+<mujoco model="so101_robot">
+  <compiler angle="radian" coordinate="local" autolimits="false" balanceinertia="false"
+            inertiafromgeom="false"/>
+  <default>
+    <joint damping="0.05" armature="0.01"/>
+    <default class="robot_collision">
+      <geom contype="1" conaffinity="1" group="3" rgba="0.25 0.55 0.85 0.25"/>
+    </default>
+  </default>
+  <worldbody>
+    <body name="base" pos="0 0 0.1899186">
+      <inertial pos="0.020739 0.00204287 0.065966" mass="0.147"
+                fullinertia="0.000136117 0.000114686 0.000130364 4.59787e-07 9.75275e-08 -4.97151e-06"/>
+      <geom name="base_collision" class="robot_collision" type="box"
+            pos="0.0208 0.0180 0.055" size="0.055 0.065 0.055"/>
+      <body name="shoulder" pos="0.0207909 -0.0230745 0.0948817"
+            quat="9.38183945395178e-07 -0.707105482510614 -0.707108079858851 9.38187391970433e-07">
+        <joint name="1" type="hinge" axis="0 0 1" limited="true" range="-1.91986 1.91986"/>
+        <inertial pos="-0.0307604 -1.66727e-05 -0.0252713" mass="0.100006"
+                  fullinertia="8.3759e-05 8.10403e-05 2.39783e-05 7.55525e-08 -1.16342e-06 1.54663e-07"/>
+        <geom name="shoulder_collision" class="robot_collision" type="capsule"
+              fromto="0 0 0 -0.0303992 -0.0182778 -0.0542" size="0.032"/>
+        <body name="upper_arm" pos="-0.0303992 -0.0182778 -0.0542"
+              quat="0.499998163397448 -0.499999999996627 -0.499999999996627 -0.500001836602552">
+          <joint name="2" type="hinge" axis="0 0 1" limited="true" range="-1.74533 1.74533"/>
+          <inertial pos="-0.0898471 -0.00838224 0.0184089" mass="0.103"
+                    fullinertia="4.08002e-05 0.000147318 0.000142487 -1.97819e-05 -4.03016e-08 8.97326e-09"/>
+          <geom name="upper_arm_collision" class="robot_collision" type="capsule"
+                fromto="0 0 0 -0.11257 -0.028 0" size="0.024"/>
+          <body name="lower_arm" pos="-0.11257 -0.028 2.46331e-16"
+                quat="0.707105482511236 -6.37848076863978e-16 -2.30607077595038e-16 0.707108079859474">
+            <joint name="3" type="hinge" axis="0 0 1" limited="true" range="-1.74533 1.5708"/>
+            <inertial pos="-0.0980701 0.00324376 0.0182831" mass="0.104"
+                      fullinertia="2.87438e-05 0.000159844 0.00014529 7.41152e-06 1.26409e-06 -4.90188e-08"/>
+            <geom name="lower_arm_collision" class="robot_collision" type="capsule"
+                  fromto="0 0 0 -0.1349 0.0052 0" size="0.023"/>
+            <body name="wrist" pos="-0.1349 0.0052 1.65232e-16"
+                  quat="0.707105482511236 2.16006600949999e-15 -1.36196268773409e-16 -0.707108079859474">
+              <joint name="4" type="hinge" axis="0 0 1" limited="true" range="-1.65806 1.65806"/>
+              <inertial pos="-0.000103312 -0.0386143 0.0281156" mass="0.079"
+                        fullinertia="3.68263e-05 2.5391e-05 2.1e-05 1.7893e-08 -5.28128e-08 3.6412e-06"/>
+              <geom name="wrist_collision" class="robot_collision" type="capsule"
+                    fromto="0 0 0 0 -0.0611 0.0181" size="0.025"/>
+              <body name="gripper" pos="0 -0.0611 0.0181"
+                    quat="9.050176421647e-07 9.71353573374498e-07 0.707108079858806 0.707105482510657">
+                <joint name="5" type="hinge" axis="0 0 1" limited="true" range="-2.79253 2.79253"/>
+                <inertial pos="0.000213627 0.000245138 -0.025187" mass="0.087"
+                          fullinertia="2.75087e-05 4.33657e-05 3.45059e-05 -3.35241e-07 -5.7352e-06 -5.17847e-08"/>
+                <geom name="gripper_collision" class="robot_collision" type="box"
+                      pos="0.0077 0.0001 -0.0234" size="0.026 0.022 0.032"/>
+                <geom name="fixed_fingertip_collision" class="robot_collision" type="box"
+                      pos="0 -0.043 0.0189" size="0.012 0.028 0.010"/>
+                <site name="so101_tcp" pos="0.0214 0 -0.083949" quat="1 0 0 0" size="0.003"/>
+                <body name="jaw" pos="0.0202 0.0188 -0.0234"
+                      quat="0.707105482511236 0.707108079859474 -4.92037996991591e-15 -4.88400903784375e-15">
+                  <joint name="6" type="hinge" axis="0 0 1" limited="true"
+                         range="-0.059600220867817 1.74533"/>
+                  <inertial pos="-0.00157495 -0.0300244 0.0192755" mass="0.012"
+                            fullinertia="6.61427e-06 1.89032e-06 5.28738e-06 -3.19807e-07 -5.90717e-09 -1.09945e-07"/>
+                  <geom name="moving_fingertip_collision" class="robot_collision" type="box"
+                        pos="0 -0.030 0.0189" size="0.012 0.026 0.010"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="1" joint="1" kp="1" ctrllimited="true" ctrlrange="-1.91986 1.91986"/>
+    <position name="2" joint="2" kp="1" ctrllimited="true" ctrlrange="-1.74533 1.74533"/>
+    <position name="3" joint="3" kp="1" ctrllimited="true" ctrlrange="-1.74533 1.5708"/>
+    <position name="4" joint="4" kp="1" ctrllimited="true" ctrlrange="-1.65806 1.65806"/>
+    <position name="5" joint="5" kp="1" ctrllimited="true" ctrlrange="-2.79253 2.79253"/>
+    <position name="6" joint="6" kp="1" ctrllimited="true" ctrlrange="-0.059600220867817 1.74533"/>
+  </actuator>
+  <keyframe>
+    <key name="home" qpos="0 0 0 0 0 0" ctrl="0 0 0 0 0 0"/>
+  </keyframe>
+</mujoco>
