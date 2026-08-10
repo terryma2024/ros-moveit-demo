@@ -21,9 +21,9 @@ struct CalibrationSample
 inline constexpr std::string_view kModelVersion{"so101-gripper-d20-mesh-v1"};
 inline constexpr std::string_view kFixedMeshSha256{"4b17b410a12d64ec39554abc3e8054d8a97384b2dc4a8d95a5ecb2a93670f5f4"};
 inline constexpr std::string_view kMovingMeshSha256{"785a9dded2f474bc1d869e0d3dae398a3dcd9c0c345640040472210d2861fa9d"};
-inline constexpr std::string_view kUrdfSha256{"5320337a4f2ac0dd36d2ec9582fcc2d164ba797f3bf35451b807fd1fdcf678eb"};
+inline constexpr std::string_view kUrdfSha256{"28be2c5bcb28ec7db975313e469eeb2e3040a0708227af5b6f318ffbf213b0fd"};
 inline constexpr std::string_view kConstantsSha256{"763d5a46650007c53f9962bdcb8975774b46de554005c41251c848cec190dcc2"};
-inline constexpr std::string_view kModelFingerprint{"20494b75a582e30723af0addaf1aaa234f55e539a83f33a24a91f71ef6a27a53"};
+inline constexpr std::string_view kModelFingerprint{"7c848527a6b93c916d82b5e2902b9eed9ce457333c249d30cb2757815c22f247"};
 inline constexpr double kGraspDepth{0.020000000000};
 inline constexpr double kTaskObjectDiameter{0.066000000000};
 inline constexpr std::array<CalibrationSample, 240> kSamples{{
