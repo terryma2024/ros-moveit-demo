@@ -62,6 +62,8 @@ public:
 };
 
 [[nodiscard]] bool isCarryingMotionState(State state) noexcept;
+[[nodiscard]] bool usesAttachedPlanningShadow(State state) noexcept;
+[[nodiscard]] bool enforcesPlanningShadowOrientation(State state) noexcept;
 
 class SO101MotionPlanner final : public IStatePlanner
 {

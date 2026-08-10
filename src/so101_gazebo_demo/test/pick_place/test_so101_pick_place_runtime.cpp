@@ -446,6 +446,20 @@ spp::WorldSnapshot detachedMotionWorld(const spp::SO101FixedMotionSpec & spec,
   return world;
 }
 
+spp::WorldSnapshot retreatPlanningShadowWorld(const spp::SO101FixedMotionSpec & spec,
+                                              const spp::SO101Profile & profile)
+{
+  auto world = detachedMotionWorld(spec, profile);
+  world.moveit_world_object_poses.erase(profile.task_object_id);
+  world.moveit_task_object_attached = true;
+  world.moveit_task_object_attached_link = profile.moveit_attach_link;
+  world.moveit_task_object_touch_links =
+    std::set<std::string>(profile.moveit_touch_links.begin(), profile.moveit_touch_links.end());
+  world.moveit_task_object_attached_relative_pose = profile.calibrated_grasp_relative_pose;
+  world.moveit_gripper_pose_world = world.tcp_pose_world;
+  return world;
+}
+
 spp::WorldSnapshot transferStartWorld(const spp::SO101FixedMotionSpec & spec,
                                       const spp::SO101Profile & profile)
 {
@@ -1134,7 +1148,7 @@ TEST(SO101MotionContract, FullOpenMotionUsesJointOnlySemantics)
   const auto contract = spp::makeSO101MotionContract(*spec, profile);
   ASSERT_TRUE(contract);
 
-  const auto result = contract->validatePrecondition(detachedMotionWorld(*spec, profile));
+  const auto result = contract->validatePrecondition(retreatPlanningShadowWorld(*spec, profile));
 
   EXPECT_TRUE(result.ok) << (result.failures.empty() ? "" : result.failures.front().code);
 }
@@ -1271,7 +1285,7 @@ TEST(SO101MotionContract, CarryRetainsContactQ6AndRelativeDriftAsTelemetry)
 
 TEST(SO101MotionContract, ContactCriticalDescentsRejectSucceededActionsOutsideArmEndpointContract)
 {
-  const auto & profile = spp::SO101Profile::canonical();
+  const auto profile = configuredProfile();
   for (const auto state : {spp::State::DESCEND, spp::State::RECOVER_DESCEND_TO_PICK}) {
     const auto spec = configuredPolicy()->spec(state);
     ASSERT_TRUE(spec) << spp::toString(state);
@@ -1406,27 +1420,30 @@ TEST(SO101MotionContract, ContactCriticalDescentsAcceptLiveEndpointInsideDerived
   }
 }
 
-TEST(SO101MotionContract, RetreatProvesDetachedTaskObjectStayedFixedWhileArmLeft)
+TEST(SO101MotionContract, RetreatKeepsMoveItShadowAttachedAndDefersCupOutcome)
 {
-  const auto & profile = spp::SO101Profile::canonical();
+  const auto profile = configuredProfile();
   const auto spec = configuredPolicy()->spec(spp::State::RETREAT);
   ASSERT_TRUE(spec);
   const auto contract = spp::makeSO101MotionContract(*spec, profile);
-  auto before = detachedMotionWorld(*spec, profile);
+  auto before = retreatPlanningShadowWorld(*spec, profile);
   auto after = before;
   after.gazebo_task_object_pose_world->x += profile.task_object_position_drift_tolerance * 2.0;
-  after.moveit_world_object_poses[profile.task_object_id] = *after.gazebo_task_object_pose_world;
 
+  const auto precondition = contract->validatePrecondition(before);
   const auto result =
     contract->validate(before, after, {spp::ActionStatus::SUCCEEDED, std::nullopt});
 
-  EXPECT_FALSE(result.ok);
-  EXPECT_NE(std::find_if(result.failures.begin(), result.failures.end(),
-                         [](const auto & failure) {
-                           return failure.category == spp::FailureCategory::POSTCONDITION &&
-                                  failure.code == "DETACHED_TASK_OBJECT_DRIFT";
-                         }),
-            result.failures.end());
+  EXPECT_TRUE(precondition.ok) << (precondition.failures.empty()
+                                     ? ""
+                                     : precondition.failures.front().code);
+  EXPECT_TRUE(result.ok) << (result.failures.empty() ? "" : result.failures.front().code);
+  EXPECT_EQ(
+    std::find_if(result.failures.begin(), result.failures.end(),
+                 [](const auto & failure) { return failure.code == "DETACHED_TASK_OBJECT_DRIFT"; }),
+    result.failures.end());
+  EXPECT_GT(result.metrics.at("task_object_position_drift"),
+            profile.task_object_position_drift_tolerance);
 }
 
 TEST(SO101MotionContract, RetreatAcceptsSupportedCylindricalYaw)
@@ -1436,14 +1453,17 @@ TEST(SO101MotionContract, RetreatAcceptsSupportedCylindricalYaw)
     const auto spec = configuredPolicy()->spec(state);
     ASSERT_TRUE(spec);
     const auto contract = spp::makeSO101MotionContract(*spec, profile);
-    auto before = detachedMotionWorld(*spec, profile);
+    auto before = state == spp::State::RETREAT ? retreatPlanningShadowWorld(*spec, profile)
+                                               : detachedMotionWorld(*spec, profile);
     const double half_yaw = 0.5 * 0.5;
     before.gazebo_task_object_pose_world->qx = 0.0;
     before.gazebo_task_object_pose_world->qy = 0.0;
     before.gazebo_task_object_pose_world->qz = std::sin(half_yaw);
     before.gazebo_task_object_pose_world->qw = std::cos(half_yaw);
-    before.moveit_world_object_poses[profile.task_object_id] =
-      *before.gazebo_task_object_pose_world;
+    if (state != spp::State::RETREAT) {
+      before.moveit_world_object_poses[profile.task_object_id] =
+        *before.gazebo_task_object_pose_world;
+    }
     const auto after = before;
 
     const auto result =

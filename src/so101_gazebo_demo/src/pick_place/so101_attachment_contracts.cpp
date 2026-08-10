@@ -12,6 +12,7 @@
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
+#include "so101_gazebo_demo/pick_place/so101_motion_planner.hpp"
 
 namespace so101_gazebo_demo::pick_place
 {
@@ -608,7 +609,8 @@ std::variant<Pose3d, Failure> derivePlanningShadowPose(const WorldSnapshot & sna
 }
 
 ValidationResult evaluatePlanningShadowDivergence(const WorldSnapshot & snapshot,
-                                                  const PhysicalOutcomePolicyConfig & policy)
+                                                  const PhysicalOutcomePolicyConfig & policy,
+                                                  State state)
 {
   ValidationResult result{true, {}, {}};
   const auto fail = [&result](std::string message) {
@@ -657,6 +659,8 @@ ValidationResult evaluatePlanningShadowDivergence(const WorldSnapshot & snapshot
       orientationDistance(*snapshot.gazebo_task_object_pose_world, *shadow_world);
     result.metrics["planning_shadow_position_divergence_m"] = position;
     result.metrics["planning_shadow_orientation_divergence_rad"] = orientation;
+    const bool orientation_enforced = enforcesPlanningShadowOrientation(state);
+    result.metrics["planning_shadow_orientation_enforced"] = orientation_enforced ? 1.0 : 0.0;
     const auto reaches_limit = [](double value, double limit) {
       const double tolerance =
         std::numeric_limits<double>::epsilon() * 8.0 * std::max({1.0, value, limit});
@@ -664,7 +668,8 @@ ValidationResult evaluatePlanningShadowDivergence(const WorldSnapshot & snapshot
     };
     if (!std::isfinite(position) || !std::isfinite(orientation) ||
         reaches_limit(position, *policy.planning_shadow.max_position_divergence_m) ||
-        reaches_limit(orientation, *policy.planning_shadow.max_orientation_divergence_rad)) {
+        (orientation_enforced &&
+         reaches_limit(orientation, *policy.planning_shadow.max_orientation_divergence_rad))) {
       fail("MoveIt collision shadow diverged beyond its strict calibrated planning bound");
     }
   }

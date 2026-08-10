@@ -1714,7 +1714,7 @@ publication_scope: commit permitted after regression and one GUI result；no pus
 
 ```yaml
 experiment_id: TDD-PHYSICAL-002
-status: PLANNED
+status: VALID
 prior_experiment: HEADLESS-PHYSICAL-018
 hypothesis: 当前失败来自 carrying、planning-shadow membership 与 orientation enforcement 共用一个全局 predicate；拆分状态语义即可允许物理释放，同时保持搬运与最终姿态门控
 prediction: 新回归先在 b021d5a 行为上失败；最小实现后 DESCEND_TO_PLACE/RETREAT angle telemetry 通过、同状态 position 超限仍失败、LIFT angle 超限仍失败、final tipped cup 仍失败
@@ -1727,6 +1727,32 @@ failure_criteria:
   - test cannot isolate state semantics or any unchanged safety regression fails
 invalid_criteria:
   - build/install provenance mismatch or unrelated source changes enter the diff
-decision: PENDING
-next_experiment: GUI-PHYSICAL-019_AFTER_GREEN
+red_evidence:
+  - SO101MotionPlanner.RetreatKeepsPlanningShadowAttachedUntilDetach failed because RETREAT still sent carrying=false
+  - SO101JointMotionAdapter.ReleaseDescentAllowsShadowTiltBeforePlanning failed with PLANNING_SHADOW_DIVERGENCE and zero planning calls
+  - state-aware evaluator test failed to compile because the old API accepted no State argument
+invalid_attempts:
+  - one ctest invocation overlapped an unfinished build and lacked the sourced ROS Python environment, producing ModuleNotFoundError for ament_cmake_test；not counted as RED or GREEN
+  - one filtered gtest shell invocation left the wildcard unquoted and was rejected by zsh before the test binary ran；not counted
+implementation:
+  - separate physical carrying from MoveIt planning-shadow membership
+  - keep the MoveIt shadow attached through RETREAT and detach it only after retreat
+  - make finite orientation divergence telemetry-only for DESCEND_TO_PLACE and RETREAT
+  - keep position divergence, freshness, pair age, attachment facts, collision, penetration, q6 and arm-stability gates hard
+  - keep LIFT and MOVE_ABOVE_PLACE orientation enforcement hard
+  - defer released-cup drift and pose judgment to the final placement evaluator
+green_evidence:
+  focused:
+    - test_so101_attachment_contracts: 33/33 passed
+    - test_so101_pick_place_runtime: 36/36 passed
+    - test_so101_motion_planner: 5/5 passed
+    - test_so101_joint_motion_adapter: 22/22 passed
+    - test_final_placement_evaluator: 10/10 passed, including FINAL_PLACEMENT_TIPPED control
+  cpp_quality_gate: passed with warnings-as-errors and clang-format gate
+  package_ctest: 83/83 passed, 0 failed, 289.60 s
+unchanged_verified:
+  - physics engine、geometry、mass、friction、controller/gains and EXP081 motion targets
+  - all configured numeric safety thresholds including position divergence and final upright tilt
+decision: GREEN_READY_FOR_ONE_GUI_FULL_RESTART
+next_experiment: GUI-PHYSICAL-019
 ```

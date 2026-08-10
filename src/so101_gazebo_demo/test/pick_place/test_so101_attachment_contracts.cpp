@@ -679,8 +679,8 @@ TEST(SO101AttachmentContracts, NormalForwardCarryRequiresGazeboDetached)
   auto snapshot = world(true, true);
   snapshot.moveit_task_object_attached_relative_pose = snapshot.gazebo_task_object_pose_world;
 
-  const auto result =
-    pick_place::evaluatePlanningShadowDivergence(snapshot, physicalOutcomePolicy());
+  const auto result = pick_place::evaluatePlanningShadowDivergence(
+    snapshot, physicalOutcomePolicy(), pick_place::State::LIFT);
 
   EXPECT_FALSE(result.ok);
   EXPECT_NE(std::string::npos, failureCodes(result).find("GAZEBO_FORWARD_ATTACHMENT_FORBIDDEN"));
@@ -738,8 +738,8 @@ TEST(SO101AttachmentContracts, ShadowDivergenceWithinLimitIsTelemetry)
   snapshot.moveit_task_object_attached_relative_pose = snapshot.gazebo_task_object_pose_world;
   snapshot.moveit_task_object_attached_relative_pose->x += 0.005;
 
-  const auto result =
-    pick_place::evaluatePlanningShadowDivergence(snapshot, physicalOutcomePolicy());
+  const auto result = pick_place::evaluatePlanningShadowDivergence(
+    snapshot, physicalOutcomePolicy(), pick_place::State::LIFT);
 
   EXPECT_TRUE(result.ok) << failureCodes(result);
   EXPECT_DOUBLE_EQ(0.005, result.metrics.at("planning_shadow_position_divergence_m"));
@@ -751,11 +751,43 @@ TEST(SO101AttachmentContracts, ShadowDivergenceAtLimitFailsPlanningValidity)
   snapshot.moveit_task_object_attached_relative_pose = snapshot.gazebo_task_object_pose_world;
   snapshot.moveit_task_object_attached_relative_pose->x += 0.01;
 
-  const auto result =
-    pick_place::evaluatePlanningShadowDivergence(snapshot, physicalOutcomePolicy());
+  const auto result = pick_place::evaluatePlanningShadowDivergence(
+    snapshot, physicalOutcomePolicy(), pick_place::State::LIFT);
 
   EXPECT_FALSE(result.ok);
   EXPECT_NE(std::string::npos, failureCodes(result).find("PLANNING_SHADOW_DIVERGENCE"));
+}
+
+TEST(SO101AttachmentContracts, ReleaseStatesTreatFiniteShadowTiltAsTelemetryOnly)
+{
+  auto snapshot = world(false, true);
+  snapshot.moveit_task_object_attached_relative_pose = snapshot.gazebo_task_object_pose_world;
+  const double half_tilt = 0.1;
+  snapshot.moveit_task_object_attached_relative_pose->qx = std::sin(half_tilt);
+  snapshot.moveit_task_object_attached_relative_pose->qy = 0.0;
+  snapshot.moveit_task_object_attached_relative_pose->qz = 0.0;
+  snapshot.moveit_task_object_attached_relative_pose->qw = std::cos(half_tilt);
+
+  const auto descend = pick_place::evaluatePlanningShadowDivergence(
+    snapshot, physicalOutcomePolicy(), pick_place::State::DESCEND_TO_PLACE);
+  const auto retreat = pick_place::evaluatePlanningShadowDivergence(
+    snapshot, physicalOutcomePolicy(), pick_place::State::RETREAT);
+  const auto lift = pick_place::evaluatePlanningShadowDivergence(snapshot, physicalOutcomePolicy(),
+                                                                 pick_place::State::LIFT);
+
+  EXPECT_TRUE(descend.ok) << failureCodes(descend);
+  EXPECT_TRUE(retreat.ok) << failureCodes(retreat);
+  EXPECT_FALSE(lift.ok);
+  EXPECT_GT(descend.metrics.at("planning_shadow_orientation_divergence_rad"), 0.1);
+  EXPECT_DOUBLE_EQ(0.0, descend.metrics.at("planning_shadow_orientation_enforced"));
+  EXPECT_DOUBLE_EQ(1.0, lift.metrics.at("planning_shadow_orientation_enforced"));
+
+  snapshot.moveit_task_object_attached_relative_pose->x +=
+    *physicalOutcomePolicy().planning_shadow.max_position_divergence_m;
+  const auto position_diverged = pick_place::evaluatePlanningShadowDivergence(
+    snapshot, physicalOutcomePolicy(), pick_place::State::DESCEND_TO_PLACE);
+  EXPECT_FALSE(position_diverged.ok);
+  EXPECT_NE(std::string::npos, failureCodes(position_diverged).find("PLANNING_SHADOW_DIVERGENCE"));
 }
 
 TEST(SO101AttachmentContracts, FinalSyncUsesFrozenFinalGazeboPose)

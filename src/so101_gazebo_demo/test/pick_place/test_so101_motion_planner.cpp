@@ -95,6 +95,22 @@ TEST(SO101MotionPlanner, PreservesLadderAndCarryingSemantics)
   EXPECT_FALSE(adapter->seen->temporal_contact_policy.has_value());
 }
 
+TEST(SO101MotionPlanner, RetreatKeepsPlanningShadowAttachedUntilDetach)
+{
+  auto policy = std::make_shared<FakePolicy>();
+  policy->result.target =
+    spp::JointMotionTarget{{"1", "2", "3", "4", "5"}, {{0, 0, 0, 0, 0}}, false};
+  auto adapter = std::make_shared<FakeAdapter>();
+  adapter->result = {{spp::ActionStatus::SUCCEEDED, std::nullopt},
+                     std::make_shared<spp::MotionPlanArtifact>()};
+  spp::SO101MotionPlanner planner(policy, adapter);
+
+  planner.plan(spp::State::RETREAT, spp::State::DETACH_MOVEIT, observation());
+
+  ASSERT_TRUE(adapter->seen);
+  EXPECT_TRUE(adapter->seen->carrying);
+}
+
 TEST(SO101MotionPlanner, KeepsPreopenDescendCollisionFreeInMoveIt)
 {
   auto policy = std::make_shared<FakePolicy>();
