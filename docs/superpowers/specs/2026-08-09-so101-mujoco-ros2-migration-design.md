@@ -21,7 +21,7 @@
 本迁移采用“保留 ROS 2 / MoveIt 2 / Python 任务层，只替换仿真后端”的方案：
 
 - ROS 2 Jazzy、`ros2_control`、现有 JointTrajectoryController、MoveIt 2 服务/action、TF、Planning Scene、Python 状态机与最终物理结果判据继续使用。
-- Gazebo Harmonic、`gz_ros2_control`、`ros_gz_bridge`、Gazebo pose/contact topic 和 Gazebo reset/transport 适配器替换为 MuJoCo、官方 `mujoco_ros2_control` 0.0.3、MuJoCo reset/step 服务与项目自有的只读原子仿真证据插件。
+- Gazebo Harmonic、`gz_ros2_control`、`ros_gz_bridge`、Gazebo pose/contact topic 和 Gazebo reset/transport 适配器替换为 MuJoCo、固定官方 `mujoco_ros2_control` 0.0.3 commit 加最小可审计 reset hook patch 的隔离 overlay、MuJoCo reset/step 服务与项目自有的只读原子仿真证据插件。
 - 机器人和任务场景使用仓库内受版本控制的 MJCF；URDF 继续作为 MoveIt、TF 与语义模型的来源。两者通过自动几何一致性测试约束，而不是运行时临时转换。
 - 抓取主链保持纯物理：不使用 weld/equality 约束，不把物体 teleport 当作搬运，不把 Planning Scene attachment 当成物理抓取成功。
 - 从第一步创建独立 `ament_python` package `src/so101_mujoco_demo_py/`；backend-neutral domain、workflow、MoveIt adapter 和物理结果语义只迁入这个新 package，不在 `so101_gazebo_demo_py` 内建立中间层。
@@ -73,12 +73,16 @@
 
 用户已授权后续实施时升级 ai-station 版本，或从 GitHub 最新稳定版构建；本文仍不执行安装或构建。2026-08-09 核对到的最新稳定 tag 仍是 `0.0.3`（commit `35ba8174b62d9560093614f981a3d4b978a96036`），没有更新的 GitHub release/tag。`main` 虽然包含更新接口，但仍声明 0.0.3 且没有稳定 tag，因此属于未发布快照，不进入默认依赖链。
 
-依赖选择顺序固定为：
+Task 10 的 live 证据确认 apt 0.0.3 的 `ResetWorld` 保留 simulation time，而原 evidence plugin 只能从 time decrease 推断 reset；两者无法产生权威 `reset_epoch`。因此 reset-qualified runtime 的依赖选择已由用户裁决为：
 
-1. 优先使用 ROS apt 的 0.0.3 binary；
-2. 若 binary 缺少构建自有 plugin 所需的 headers/CMake export，或 package test 证明 binary 组合不可用，则从上述稳定 tag/commit 构建到独立 overlay `/data/work/ws_mujoco_ros2_control_003/install`；
-3. 不覆盖 `/opt/ros/jazzy`，不从 floating `main` 构建；
-4. 若实施时出现更新的稳定 tag，先做设计/API delta review，再决定是否升级。
+1. apt 0.0.3 只作为 underlay 和未涉及 reset 资格门的历史探测结果，不再是 reset-qualified runtime；
+2. 必须从官方上游 <https://github.com/ros-controls/mujoco_ros2_control> 的稳定 tag `0.0.3`、精确 commit `35ba8174b62d9560093614f981a3d4b978a96036` 构建最小 patched source overlay 到 `/data/work/ws_mujoco_ros2_control_003/install`；
+3. patch、build 脚本和 provenance 验证器保存在 `src/so101_mujoco_demo_py/**`，必须能从精确 commit checkout 重放，并固定 upstream URL、commit、patch SHA-256、构建命令和四个 MuJoCo package prefix；专用 source checkout 若已存在则必须验证 remote、HEAD、clean status 和 patch state 并 fail closed，不得用 reset/clean 覆盖现场；
+4. shell/source 顺序固定为 `/opt/ros/jazzy/setup.zsh` → `/data/work/ws_mujoco_ros2_control_003/install/setup.zsh` → project `install/setup.zsh`。`mujoco_ros2_control`、`mujoco_ros2_control_msgs`、`mujoco_ros2_control_plugins` 必须解析到 dependency overlay，`mujoco_vendor` 必须解析到 `/opt/ros/jazzy` underlay，项目两包必须解析到 project install；
+5. 不覆盖 `/opt/ros/jazzy`，不从 floating `main` 构建，不把 `/data/work/so_arm_ws` 或其他 checkout 当作运行依赖；
+6. 若实施时出现更新的稳定 tag，仍不得自动升级，必须先做设计/API delta review 和新的用户裁决。
+
+最小 upstream patch 只有一个职责：为 reset 成功建立插件可观察的权威事件。插件基类新增带默认空实现的 virtual `on_reset()`，保持现有第三方 plugin 源码兼容；hook 调用位于 central `reset_simulation_state` 内全部 state/interface 更新之后的成功尾部，对每个已初始化 plugin 恰好调用一次。非法 keyframe 在进入 central reset 前返回失败，因此不得调用任何 plugin 的 `on_reset()`。
 
 ## 3. 目标与非目标
 
@@ -432,7 +436,7 @@ URDF 中的 simulation hardware 配置为：
 
 这里存在必须显式处理的版本差异：Jazzy 在线文档和未发布 `main` 已经描述/实现 `FreeJointStatePublisherPlugin` 和 `set_free_joint_state`，但最新稳定 tag 0.0.3（`35ba8174b62d9560093614f981a3d4b978a96036`）中没有对应 message/service。稳定 0.0.3 只有 `ResetWorld`、`SetPause`、`StepSimulation`，但已有自定义 plugin base。
 
-因此本设计固定使用稳定 0.0.3（apt binary 优先，固定 tag 的隔离 source overlay 作为 fallback），不从 main 追未发布功能；新增只读 `so101_mujoco_support/SimulationEvidencePlugin`，在同一个 simulation step 中发布 task-object pose/twist 与 contact，避免跨 topic 拼接时间不一致的证据。
+因此本设计固定使用稳定 0.0.3 commit `35ba8174b62d9560093614f981a3d4b978a96036` 加上述最小 reset hook patch 的隔离 source overlay，不从 main 追未发布功能；新增只读 `so101_mujoco_support/SimulationEvidencePlugin`，在同一个 simulation step 中发布 task-object pose/twist 与 contact，避免跨 topic 拼接时间不一致的证据。apt binary 不包含该 hook，不能通过 reset qualification。
 
 ### 10.1 消息
 
@@ -479,7 +483,8 @@ ContactSample[] other_object_contacts
 
 - `header.stamp` 是与该 `mjData` snapshot 对应的 MuJoCo simulation time，`header.frame_id` 固定为 `world`；
 - `publisher_sequence` 在同一 publisher 生命周期内严格单调递增；`simulation_step` 是当前 world epoch 内的 step id，reset 后允许从零重新开始；
-- `reset_epoch` 每次成功完成 `reset_world` 后递增，`simulation_session_id` 从 launch 注入并在进程生命周期内不可变；消费方使用 `(simulation_session_id, reset_epoch, simulation_step)` 拒绝跨会话、跨 reset 或倒序证据；
+- `reset_epoch` 的唯一权威来源是 patched runtime 在成功 central reset 后调用的 `on_reset()`。evidence plugin 的 `on_reset()` 只对 atomic reset generation 加一；`update()` 读取 observed generation；若它不同于 consumed generation，则把 `reset_epoch` 和 consumed generation 都设为 observed generation，并把 `simulation_step` 归零。这样即使 update 之间发生多次 reset 也不会丢失 generation 计数。time decrease、pose jump、keyframe 名称或 Python 侧计数均不得作为 epoch 权威；
+- `simulation_session_id` 从 launch 注入并在进程生命周期内不可变；消费方使用 `(simulation_session_id, reset_epoch, simulation_step)` 拒绝跨会话、跨 reset 或倒序证据；
 - `left_fingertip_contacts` 与 `right_fingertip_contacts` 只包含 task object 与对应指尖 geom 的接触，`other_object_contacts` 保存 task object 与 table 或其他受监控 geom 的接触；每个样本同时保留 MuJoCo 数字 ID 和稳定名称；
 - `minimum_signed_distance_m` 与 `maximum_normal_force_n` 对消息内全部 task-object contact 聚合；零 contact 时 `has_contact=false`、三个数组为空、两个聚合值均为 `0.0`；
 - `paused`、object pose/twist、聚合值和三个 contact 数组必须来自同一次锁定的 `mjData` snapshot。
@@ -487,11 +492,13 @@ ContactSample[] other_object_contacts
 ### 10.2 行为
 
 - `init` 时解析 task-object body 和受监控 geom 名称，任一名称不存在即启动失败；
+- `on_reset()` 不读取或修改 MuJoCo state，只对 atomic generation 执行一次 increment；每次成功 `ResetWorld` 必须恰好触发一次，非法 keyframe 和失败 reset 必须触发零次；
 - `update` 中只读 `mjModel`/`mjData`，先读取同一步的 object world pose/twist，再筛选与 task object、两侧 fingertip、table 有关的 contact；
 - `signed_distance_m` 来自 MuJoCo contact distance；
 - `normal_force_n` 由 `mj_contactForce` 的 contact-frame normal 分量得到；
 - 每个 publish tick 都发消息，包括零 contact；pose/twist 与 contacts 必须来自同一个 `mjData` step；
 - reset 后第一条可接受消息必须携带新 `reset_epoch`，消费者不得把旧 epoch 的缓存消息用于 reset postcondition；
+- 删除以 simulation time decrease 或 pose jump 推断 epoch 的路径；time 仍可连续，幂等 reset 仍必须产生一个且仅一个新 epoch；
 - 左右指尖分类使用启动时解析并冻结的 geom id，不使用运行时字符串模糊匹配；
 - 使用非阻塞 realtime publisher，最大样本数固定为 128；溢出时 `truncated=true`，业务硬门拒绝该样本；
 - 插件不得修改 `qpos`、`qvel`、`ctrl`、constraint、body pose 或 contact 参数。
@@ -608,6 +615,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 ### P3：状态、接触与 deterministic reset
 
+- 从官方稳定 0.0.3 commit 重放最小 reset hook patch，构建并验证隔离 dependency overlay；
 - 只读 atomic simulation evidence plugin；
 - Python observer/reset adapter；
 - reset postcondition 与服务调用边界测试。
@@ -641,7 +649,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 | 层 | 必须证明 |
 |---|---|
 | Package isolation | `src/so101_gazebo_demo_py/**` 相对 `d300e7a` 零差异；新 package metadata/import/resource/runtime 不依赖旧 package |
-| Provenance | source commit、MJCF SHA-256、installed prefix、MuJoCo/package 版本、PID/cmdline、ROS domain/service prefix 一致 |
+| Provenance | upstream URL/tag/commit、patch SHA-256、build script、三个 dependency-overlay package prefix、`mujoco_vendor` underlay prefix、project prefix、source 顺序、MJCF SHA-256、PID/cmdline、ROS domain/service prefix 一致 |
 | Model | MJCF compile；home + 10 poses 几何门槛；joint limit/direction/q6 语义一致 |
 | ROS graph | 单套 control node；`/clock`、controller、service/action、topic 类型正确 |
 | Controller | arm/gripper trajectory result 成功；joint feedback 到达目标且无 limit violation |
@@ -671,13 +679,16 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 | 迁移与当前 Gazebo worker 冲突 | 独立 worktree/branch，不复用或清理现有 tmux/process |
 | 新实现再次渗入 Gazebo package | 每个 task 提交前执行 kickoff tree/status 双门；失败立即停止，不允许例外路径 |
 | 复制行为代码造成 provenance 丢失 | 新 package `docs/provenance.json` 记录源 commit/path、目标 path 与 SHA-256，测试只运行新 namespace |
-| 依赖版本升级导致接口漂移 | 固定稳定 tag/commit；apt binary 与 source fallback 都写入 preflight/provenance；更新 tag 先做 delta review |
+| 依赖版本升级导致接口漂移 | 固定稳定 tag/commit；记录 apt underlay probe 与强制 pinned patched source overlay provenance；更新 tag 先做 delta review |
+| reset 保持 simulation time 导致 epoch 不可观察 | reset-qualified runtime 强制使用 pinned patched overlay；central reset 成功后调用默认兼容的 plugin `on_reset()`，atomic generation 是唯一 epoch 权威 |
 
 ## 17. 实施停止条件
 
 出现任一条件必须停止并报告，不得继续调参或绕过：
 
 - `mujoco_ros2_control` 实际接口与本 spec 固定接口不一致；
+- pinned patch 不能从干净 `35ba8174b62d9560093614f981a3d4b978a96036` checkout 重放；或三个 `mujoco_ros2_control*` package 未解析到 `/data/work/ws_mujoco_ros2_control_003/install`；或 `mujoco_vendor` 未解析到 `/opt/ros/jazzy`；
+- 成功 reset 的 `on_reset()` 调用次数不是每 plugin 恰好一次，非法 keyframe 触发 hook，或 evidence epoch 仍依赖 time decrease/pose jump；
 - MJCF 与 URDF 几何门槛不通过；
 - contact plugin 需要修改 MuJoCo state 才能提供证据；
 - 只能通过 weld、teleport、禁碰或放宽最终结果阈值才能完成 pick-place；
