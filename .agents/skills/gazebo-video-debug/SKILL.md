@@ -11,7 +11,7 @@ description: Use when recording a Gazebo window as pick-place evidence, diagnosi
 
 ## 工具与证据目录
 
-所有工具以安装产物调用,一律使用 `ros2 run so101_gazebo_demo <tool>`:
+所有工具以安装产物调用,一律使用 `ros2 run so101_gazebo_demo_cpp <tool>`:
 
 - `tile_ai_station_guis.py --maximize gazebo`(无参数调用仍保持左右分屏)
 - `gazebo_camera_pose.py compute --config <yaml> --preset <left-front|right-front|left-rear|right-rear> --json <path>` 与 `apply --world <sdf> --pose-json <path>`

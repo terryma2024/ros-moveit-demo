@@ -60,7 +60,7 @@ cd /data/work/ws_moveit
 source install/setup.zsh
 ```
 
-不要在 zsh 里改用 `setup.bash`。每次 build 后重新 source。使用 `ros2 pkg prefix so101_gazebo_demo` 验证当前 overlay。
+不要在 zsh 里改用 `setup.bash`。每次 build 后重新 source。使用 `ros2 pkg prefix so101_gazebo_demo_cpp` 验证当前 overlay。
 
 ## GUI 进程
 
@@ -94,7 +94,7 @@ ldconfig -p | rg 'libX11\.so'
 source ~/gui-env.zsh
 source /opt/ros/jazzy/setup.zsh
 source /data/work/ws_moveit/install/setup.zsh
-ros2 run so101_gazebo_demo tile_ai_station_guis.py
+ros2 run so101_gazebo_demo_cpp tile_ai_station_guis.py
 ```
 
 该工具读取当前 EWMH work area，取消两个窗口的最大化状态，将 RViz 放在左侧 50%、Gazebo 放在右侧 50%；屏幕宽度为奇数时多出的 1 px 分给右侧。它等待目标窗口最多 30 秒，并在移动后回读两侧窗口几何。

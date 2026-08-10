@@ -36,7 +36,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 
 ## Web 工具链
 
-- `src/so101_gazebo_demo/web` 统一使用 Bun 安装依赖、运行 scripts 和调用一次性 CLI；以 `bun.lock` 为锁文件，不用 npm/npx 或 `package-lock.json`。
+- `src/so101_gazebo_demo_cpp/web` 统一使用 Bun 安装依赖、运行 scripts 和调用一次性 CLI；以 `bun.lock` 为锁文件，不用 npm/npx 或 `package-lock.json`。
 - 每个新 shell 先记录 `command -v bun` 和 `bun --version`。项目预构建、本地测试和 shadcn CLI 也必须经 Bun 运行；不得回退使用系统 Node 18。
 
 ## 闭环

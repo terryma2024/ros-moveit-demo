@@ -3,7 +3,7 @@
   <component name="CMakePythonSetting">
     <option name="pythonIntegrationState" value="YES" />
   </component>
-  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/src/so101_gazebo_demo">
+  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/src/so101_gazebo_demo_cpp">
     <contentRoot DIR="$PROJECT_DIR$" />
   </component>
 </project>

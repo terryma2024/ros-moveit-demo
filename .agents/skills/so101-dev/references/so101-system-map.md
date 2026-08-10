@@ -16,10 +16,10 @@ README 可能落后于正在修改的实现。开始调试时重新检查 live c
 | 层 | 常用位置 | 注意 |
 |---|---|---|
 | 本地总仓 | `<repo-root>` | `moveit-demo` 是独立子模块，根仓 status 不展示其内部全部差异 |
-| 本地实现 | `<repo-root>/moveit-demo/src/so101_gazebo_demo` | 修改前运行 `git -C moveit-demo status --short` |
+| 本地实现 | `<repo-root>/moveit-demo/src/so101_gazebo_demo_cpp` | 修改前运行 `git -C moveit-demo status --short` |
 | ai-station 工作区 | `/data/work/ws_moveit` | 与本地 checkout 不一定同 commit、同 dirty state |
-| ai-station package source | `/data/work/ws_moveit/src/so101_gazebo_demo` | 以 live `git status`、`rev-parse` 为准 |
-| ai-station install | `/data/work/ws_moveit/install/so101_gazebo_demo` | `ros2 run/launch` 通常从这里取产物 |
+| ai-station package source | `/data/work/ws_moveit/src/so101_gazebo_demo_cpp` | 以 live `git status`、`rev-parse` 为准 |
+| ai-station install | `/data/work/ws_moveit/install/so101_gazebo_demo_cpp` | `ros2 run/launch` 通常从这里取产物 |
 
 根仓和子模块都可能有用户未提交工作。不要自动同步、reset、checkout、stash、clean 或覆盖 remote 文件。
 
@@ -28,14 +28,14 @@ README 可能落后于正在修改的实现。开始调试时重新检查 live c
 常见 public launch：
 
 ```bash
-ros2 launch so101_gazebo_demo so101_display.launch.py
-ros2 launch so101_gazebo_demo so101_controller.launch.py
-ros2 launch so101_gazebo_demo so101_gazebo.launch.py
-ros2 launch so101_gazebo_demo so101_moveit.launch.py
-ros2 launch so101_gazebo_demo so101_pick_place.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_display.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_controller.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_gazebo.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_moveit.launch.py
+ros2 launch so101_gazebo_demo_cpp so101_pick_place.launch.py
 ```
 
-`so101_pick_place.launch.py` 的当前源码默认 `run_mode:=dry_run`、`start_simulation:=false`。执行前总是运行 `ros2 launch so101_gazebo_demo so101_pick_place.launch.py --show-args` 或打开 installed launch 文件确认当前参数。
+`so101_pick_place.launch.py` 的当前源码默认 `run_mode:=dry_run`、`start_simulation:=false`。执行前总是运行 `ros2 launch so101_gazebo_demo_cpp so101_pick_place.launch.py --show-args` 或打开 installed launch 文件确认当前参数。
 
 调试时优先使用：
 
@@ -48,11 +48,11 @@ ros2 launch so101_gazebo_demo so101_pick_place.launch.py
 
 状态名、转移和运行模式以这些文件为准：
 
-- `src/so101_gazebo_demo/src/pick_place/domain_types.cpp`
-- `src/so101_gazebo_demo/src/pick_place/transition_table.cpp`
-- `src/so101_gazebo_demo/src/pick_place/so101_task3_runtime.cpp`
-- `src/so101_gazebo_demo/src/pick_place/pick_place_state_machine.cpp`
-- `src/so101_gazebo_demo/launch/so101_pick_place.launch.py`
+- `src/so101_gazebo_demo_cpp/src/pick_place/domain_types.cpp`
+- `src/so101_gazebo_demo_cpp/src/pick_place/transition_table.cpp`
+- `src/so101_gazebo_demo_cpp/src/pick_place/so101_task3_runtime.cpp`
+- `src/so101_gazebo_demo_cpp/src/pick_place/pick_place_state_machine.cpp`
+- `src/so101_gazebo_demo_cpp/launch/so101_pick_place.launch.py`
 
 ## 系统边界
 
@@ -72,11 +72,11 @@ ros2 launch so101_gazebo_demo so101_pick_place.launch.py
 `ros2 run` 不执行 source tree 中的 `.cpp`，而是执行当前 overlay 的 installed executable。出现“改了代码行为不变”时依次检查：
 
 ```bash
-ros2 pkg prefix so101_gazebo_demo
-ros2 pkg executables so101_gazebo_demo
+ros2 pkg prefix so101_gazebo_demo_cpp
+ros2 pkg executables so101_gazebo_demo_cpp
 type -a ros2
 printenv AMENT_PREFIX_PATH | tr ':' '\n'
-stat /data/work/ws_moveit/install/so101_gazebo_demo/lib/so101_gazebo_demo/pick_place_state_machine
+stat /data/work/ws_moveit/install/so101_gazebo_demo_cpp/lib/so101_gazebo_demo_cpp/pick_place_state_machine
 ```
 
 然后重新 build、source，并在 installed share 目录检查 launch/config 是否已更新。IDE 的 compile_commands 或无报错索引只证明编辑环境，不证明安装与运行。
