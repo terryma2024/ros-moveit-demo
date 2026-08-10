@@ -1,6 +1,6 @@
-from so101_gazebo_demo_py.domain import ActionStatus
-from so101_gazebo_demo_py.moveit.scene import MoveItSceneClient, SceneObservation
-from so101_gazebo_demo_py.policy_config import Pose3D
+from so101_gazebo_demo.domain import ActionStatus
+from so101_gazebo_demo.moveit.scene import MoveItSceneClient, SceneObservation
+from so101_gazebo_demo.policy_config import Pose3D
 
 
 class Backend:

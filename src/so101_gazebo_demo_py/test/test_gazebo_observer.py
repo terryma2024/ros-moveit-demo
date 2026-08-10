@@ -1,13 +1,13 @@
 import math
 from types import SimpleNamespace
 
-from so101_gazebo_demo_py.gazebo.observer import (
+from so101_gazebo_demo.gazebo.observer import (
     ContactPair,
     SourceEvidence,
     WorldObservation,
     evaluate_support_contact,
 )
-from so101_gazebo_demo_py.test_support.ros_gazebo_backend import ContactSnapshot
+from so101_gazebo_demo.test_support.ros_gazebo_backend import ContactSnapshot
 
 
 def test_empty_contact_message_is_a_reusable_fresh_snapshot() -> None:

@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 
-from so101_gazebo_demo_py.domain import (
+from so101_gazebo_demo.domain import (
     ActionResult, ActionStatus, Failure, FailureCategory, RunMode, RunRequest, RunStatus, State,
 )
-from so101_gazebo_demo_py.runner import ExecutionContext, StateMachineRunner
-from so101_gazebo_demo_py.checkpoint import FileCheckpointStore
-from so101_gazebo_demo_py.workflow import SO101_WORKFLOW
+from so101_gazebo_demo.runner import ExecutionContext, StateMachineRunner
+from so101_gazebo_demo.checkpoint import FileCheckpointStore
+from so101_gazebo_demo.workflow import SO101_WORKFLOW
 
 
 @dataclass

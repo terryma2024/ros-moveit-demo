@@ -24,7 +24,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 test "$ready" = true
-python3 -c 'from so101_gazebo_demo_py.gazebo.transport import GazeboTransport; assert GazeboTransport().publish_empty("/so101/detach_object")'
+python3 -c 'from so101_gazebo_demo.gazebo.transport import GazeboTransport; assert GazeboTransport().publish_empty("/so101/detach_object")'
 detached=false
 for _ in $(seq 1 20); do
   attachment_state="$(timeout 2 gz topic -e -t /so101/object_attached -n 1 2>/dev/null || true)"

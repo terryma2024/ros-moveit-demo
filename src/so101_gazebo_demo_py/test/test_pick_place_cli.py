@@ -4,17 +4,13 @@ import subprocess
 import sys
 from types import SimpleNamespace
 
-from so101_gazebo_demo_py.cli import pick_place_state_machine
-
-
-PACKAGE = Path(__file__).parents[1]
+from so101_gazebo_demo.cli import pick_place_state_machine
 
 
 def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(PACKAGE)
     return subprocess.run(
-        [sys.executable, "-m", "so101_gazebo_demo_py.cli.pick_place_state_machine", *arguments],
+        [sys.executable, "-m", "so101_gazebo_demo.cli.pick_place_state_machine", *arguments],
         text=True, capture_output=True, env=environment, check=False,
     )
 
@@ -40,7 +36,7 @@ def test_live_execute_propagates_stop_after(monkeypatch, capsys, tmp_path) -> No
     observed = {}
     monkeypatch.setenv("SO101_PY_EVIDENCE_DIR", str(tmp_path))
     monkeypatch.setattr(
-        "so101_gazebo_demo_py.live_execute.run_live_execute",
+        "so101_gazebo_demo.live_execute.run_live_execute",
         lambda evidence, stop_after=None, motion_policy=None: observed.update(
             evidence=evidence, stop_after=stop_after, motion_policy=motion_policy,
         ) or {
@@ -60,7 +56,7 @@ def test_explicit_live_plan_only_uses_real_planner(monkeypatch, capsys, tmp_path
     monkeypatch.setenv("SO101_PY_EVIDENCE_DIR", str(tmp_path))
     calls = []
     monkeypatch.setattr(
-        "so101_gazebo_demo_py.live_execute.run_live_plan_only",
+        "so101_gazebo_demo.live_execute.run_live_plan_only",
         lambda evidence, state, motion_policy=None: calls.append(
             (evidence, state, motion_policy)
         ) or {

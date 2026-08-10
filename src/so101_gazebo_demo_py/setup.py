@@ -4,6 +4,7 @@ from setuptools import find_packages, setup
 
 
 package_name = "so101_gazebo_demo_py"
+python_package = "so101_gazebo_demo"
 
 
 def installed_assets() -> list[tuple[str, list[str]]]:
@@ -19,7 +20,9 @@ def installed_assets() -> list[tuple[str, list[str]]]:
 setup(
     name=package_name,
     version="0.1.0",
-    packages=find_packages(exclude=("test",)),
+    packages=[python_package]
+    + [f"{python_package}.{subpackage}" for subpackage in find_packages(where="src")],
+    package_dir={python_package: "src"},
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
@@ -35,10 +38,10 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "pick_place_state_machine = so101_gazebo_demo_py.cli.pick_place_state_machine:main",
-            "gazebo_attachment_state_relay = so101_gazebo_demo_py.cli.gazebo_attachment_state_relay:main",
-            "reset_so101_world = so101_gazebo_demo_py.cli.reset_so101_world:main",
-            "so101_moveit_scene = so101_gazebo_demo_py.cli.so101_moveit_scene:main",
+            "pick_place_state_machine = so101_gazebo_demo.cli.pick_place_state_machine:main",
+            "gazebo_attachment_state_relay = so101_gazebo_demo.cli.gazebo_attachment_state_relay:main",
+            "reset_so101_world = so101_gazebo_demo.cli.reset_so101_world:main",
+            "so101_moveit_scene = so101_gazebo_demo.cli.so101_moveit_scene:main",
         ]
     },
 )

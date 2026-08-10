@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from so101_gazebo_demo_py.grasp.evidence_store import (
+from so101_gazebo_demo.grasp.evidence_store import (
     FilePhysicalGraspEvidenceStore, PhysicalGraspEvidence, RetryPhase,
 )
 

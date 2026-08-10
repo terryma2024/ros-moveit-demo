@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from so101_gazebo_demo_py.live_execute import (
+from so101_gazebo_demo.live_execute import (
     make_world_z_target,
     make_pose_move_group_goal,
     seating_preload_target,
@@ -13,10 +13,10 @@ from so101_gazebo_demo_py.live_execute import (
     stabilize_to_target_penetration,
     local_x_world_delta,
 )
-from so101_gazebo_demo_py.test_support.ros_gazebo_backend import contact_probe_complete
-from so101_gazebo_demo_py.test_support.ros_gazebo_backend import gripper_motion_duration_seconds
-from so101_gazebo_demo_py.test_support.ros_gazebo_backend import waypoint_step_seconds
-from so101_gazebo_demo_py.test_support.ros_gazebo_backend import gripper_result_acceptable
+from so101_gazebo_demo.test_support.ros_gazebo_backend import contact_probe_complete
+from so101_gazebo_demo.test_support.ros_gazebo_backend import gripper_motion_duration_seconds
+from so101_gazebo_demo.test_support.ros_gazebo_backend import waypoint_step_seconds
+from so101_gazebo_demo.test_support.ros_gazebo_backend import gripper_result_acceptable
 
 
 PACKAGE = Path(__file__).parents[1]
@@ -28,7 +28,7 @@ def test_final_release_shortens_only_the_explicit_release_command() -> None:
     assert gripper_motion_duration_seconds(0.75) == 5
     assert gripper_motion_duration_seconds(0.75, final_release=True) == 2
 
-    live_execute = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
+    live_execute = (PACKAGE / "src/live_execute.py").read_text()
     assert (
         "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
         in live_execute
@@ -139,7 +139,7 @@ def test_target_penetration_closes_after_missing_contact(monkeypatch) -> None:
     stable = SimpleNamespace(max_moving_pad_penetration_m=0.0004)
     attempts = iter([RuntimeError("missing"), RuntimeError("missing"), stable])
     monkeypatch.setattr(
-        "so101_gazebo_demo_py.live_execute._stable_bilateral",
+        "so101_gazebo_demo.live_execute._stable_bilateral",
         lambda _backend: (_ for _ in ()).throw(value)
         if isinstance((value := next(attempts)), Exception) else value,
     )
@@ -161,7 +161,7 @@ def test_target_penetration_opens_one_milliradian_when_too_deep(monkeypatch) -> 
         SimpleNamespace(max_moving_pad_penetration_m=0.000620),
     ])
     monkeypatch.setattr(
-        "so101_gazebo_demo_py.live_execute._stable_bilateral",
+        "so101_gazebo_demo.live_execute._stable_bilateral",
         lambda _backend: next(contacts),
     )
 
@@ -177,7 +177,7 @@ def test_target_penetration_opens_one_milliradian_when_too_deep(monkeypatch) -> 
 
 def test_target_penetration_never_recovers_through_hard_ceiling(monkeypatch) -> None:
     monkeypatch.setattr(
-        "so101_gazebo_demo_py.live_execute._stable_bilateral",
+        "so101_gazebo_demo.live_execute._stable_bilateral",
         lambda _backend: (_ for _ in ()).throw(
             RuntimeError("moving-pad penetration ceiling exceeded: 0.00131")
         ),

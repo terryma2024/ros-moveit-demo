@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from so101_gazebo_demo_py.domain import (
+from so101_gazebo_demo.domain import (
     ActionResult,
     ActionStatus,
     Failure,

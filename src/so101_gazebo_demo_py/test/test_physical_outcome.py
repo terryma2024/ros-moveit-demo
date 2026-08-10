@@ -1,10 +1,10 @@
 import math
 
-from so101_gazebo_demo_py.physical_outcome import (
+from so101_gazebo_demo.physical_outcome import (
     FinalPlacementSample,
     evaluate_final_placement,
 )
-from so101_gazebo_demo_py.policy_config import PhysicalOutcomeConfig, PlanningShadowConfig
+from so101_gazebo_demo.policy_config import PhysicalOutcomeConfig, PlanningShadowConfig
 
 
 def policy() -> PhysicalOutcomeConfig:

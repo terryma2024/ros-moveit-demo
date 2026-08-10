@@ -8,7 +8,7 @@ import pytest
     reason="set SO101_PY_RUN_LIVE_ATTACHMENT=1 inside the isolated Task 8 stack",
 )
 def test_live_attachment_evidence_contract() -> None:
-    from so101_gazebo_demo_py.test_support.live_attachment import run_live_gate
+    from so101_gazebo_demo.test_support.live_attachment import run_live_gate
 
     evidence = run_live_gate()
     assert evidence.bilateral_contact_before_attach

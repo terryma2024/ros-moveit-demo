@@ -1,6 +1,6 @@
 import stat
 
-from so101_gazebo_demo_py.diagnostics import PlanningDiagnostics
+from so101_gazebo_demo.diagnostics import PlanningDiagnostics
 
 
 def test_diagnostics_are_private_and_only_written_for_failure(tmp_path) -> None:

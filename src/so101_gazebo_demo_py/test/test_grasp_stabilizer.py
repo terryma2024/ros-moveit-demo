@@ -1,4 +1,4 @@
-from so101_gazebo_demo_py.grasp.stabilizer import GraspSample, PhysicalGraspStabilizer
+from so101_gazebo_demo.grasp.stabilizer import GraspSample, PhysicalGraspStabilizer
 
 
 def sample(session="s", fingerprint="f"):

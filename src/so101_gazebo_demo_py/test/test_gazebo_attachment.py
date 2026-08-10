@@ -3,17 +3,17 @@ import threading
 
 import pytest
 
-from so101_gazebo_demo_py.domain import ActionStatus, FailureCategory
-from so101_gazebo_demo_py.gazebo.attachment import (
+from so101_gazebo_demo.domain import ActionStatus, FailureCategory
+from so101_gazebo_demo.gazebo.attachment import (
     AttachmentStateReducer, GazeboAttachmentClient,
 )
-from so101_gazebo_demo_py.gazebo.observer import (
+from so101_gazebo_demo.gazebo.observer import (
     ContactPair, MOVING_PAD_MESH_PENETRATION_CEILING_M, evaluate_bilateral_contact,
 )
-from so101_gazebo_demo_py.test_support.live_attachment import (
+from so101_gazebo_demo.test_support.live_attachment import (
     LiveAttachmentGate, PoseSample,
 )
-from so101_gazebo_demo_py.gazebo.transport import wait_for_connections
+from so101_gazebo_demo.gazebo.transport import wait_for_connections
 
 
 @dataclass

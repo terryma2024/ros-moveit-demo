@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from so101_gazebo_demo_py.policy_config import load_policy_bundle
-from so101_gazebo_demo_py.profile import SO101Profile
+from so101_gazebo_demo.policy_config import load_policy_bundle
+from so101_gazebo_demo.profile import SO101Profile
 
 
 CONFIG = Path(__file__).parents[1] / "config"

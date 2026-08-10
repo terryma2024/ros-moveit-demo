@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from so101_gazebo_demo_py.domain import State
-from so101_gazebo_demo_py.policy_config import ConfigurationError, load_policy_bundle
+from so101_gazebo_demo.domain import State
+from so101_gazebo_demo.policy_config import ConfigurationError, load_policy_bundle
 
 
 CONFIG = Path(__file__).parents[1] / "config"

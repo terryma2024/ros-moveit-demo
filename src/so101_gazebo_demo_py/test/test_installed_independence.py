@@ -15,7 +15,7 @@ def test_installed_package_is_self_contained() -> None:
     binaries=prefix/"lib/so101_gazebo_demo_py"
     assert EXECUTABLES <= {path.name for path in binaries.iterdir()}
     forbidden=("get_package_share_directory(\"so101_gazebo_demo_cpp\")","ros2 run so101_gazebo_demo_cpp ","libso101_attachment_collision_system.so","package://so101_gazebo_demo_cpp/")
-    for root in (share,prefix/"lib/python3.12/site-packages/so101_gazebo_demo_py"):
+    for root in (share,prefix/"lib/python3.12/site-packages/so101_gazebo_demo"):
         for path in root.rglob("*"):
             if path.is_file() and path.suffix not in (".pyc",".stl",".dae") and "provenance.json" not in path.name:
                 text=path.read_text(errors="ignore")

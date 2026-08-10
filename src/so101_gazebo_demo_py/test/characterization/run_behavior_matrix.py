@@ -5,7 +5,7 @@ import sys
 
 
 def run_behavior(arguments: list[str]) -> dict:
-    completed=subprocess.run([sys.executable,"-m","so101_gazebo_demo_py.cli.pick_place_state_machine",*arguments],text=True,capture_output=True,check=False)
+    completed=subprocess.run([sys.executable,"-m","so101_gazebo_demo.cli.pick_place_state_machine",*arguments],text=True,capture_output=True,check=False)
     fields={}
     for line in completed.stdout.splitlines():
         if "=" in line:

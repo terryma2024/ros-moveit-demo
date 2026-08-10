@@ -1,7 +1,7 @@
 from collections import deque
 
-from so101_gazebo_demo_py.physical_outcome import FinalPlacementSample
-from so101_gazebo_demo_py.release_settle import ReleaseSettleExecutor
+from so101_gazebo_demo.physical_outcome import FinalPlacementSample
+from so101_gazebo_demo.release_settle import ReleaseSettleExecutor
 from test_physical_outcome import policy, sample
 
 

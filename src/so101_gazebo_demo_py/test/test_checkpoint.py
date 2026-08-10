@@ -3,10 +3,10 @@ import os
 from pathlib import Path
 import stat
 
-from so101_gazebo_demo_py.checkpoint import (
+from so101_gazebo_demo.checkpoint import (
     Checkpoint, CheckpointPhase, ExpectedWorldState, FileCheckpointStore,
 )
-from so101_gazebo_demo_py.domain import Failure, FailureCategory, RunMode, State
+from so101_gazebo_demo.domain import Failure, FailureCategory, RunMode, State
 
 
 def checkpoint(sequence: int = 4) -> Checkpoint:

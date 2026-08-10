@@ -2,12 +2,12 @@ from pathlib import Path
 
 import yaml
 
-from so101_gazebo_demo_py.cli import reset_so101_world as reset_cli
-from so101_gazebo_demo_py.cli.reset_so101_world import bundle_reset_inputs, reset_live_world
-from so101_gazebo_demo_py.live_execute import PlanningSceneShadowClient
-from so101_gazebo_demo_py.policy_config import load_policy_bundle
-from so101_gazebo_demo_py.test_support.live_attachment import PoseSample
-from so101_gazebo_demo_py.test_support.ros_gazebo_backend import make_set_pose_request
+from so101_gazebo_demo.cli import reset_so101_world as reset_cli
+from so101_gazebo_demo.cli.reset_so101_world import bundle_reset_inputs, reset_live_world
+from so101_gazebo_demo.live_execute import PlanningSceneShadowClient
+from so101_gazebo_demo.policy_config import load_policy_bundle
+from so101_gazebo_demo.test_support.live_attachment import PoseSample
+from so101_gazebo_demo.test_support.ros_gazebo_backend import make_set_pose_request
 
 
 PACKAGE = Path(__file__).parents[1]

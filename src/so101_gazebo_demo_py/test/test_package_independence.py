@@ -11,6 +11,16 @@ def test_package_name_and_build_type() -> None:
     assert root.find("./export/build_type").text == "ament_python"
 
 
+def test_python_package_uses_flat_src_layout_and_public_import_name() -> None:
+    assert (PACKAGE / "src" / "__init__.py").is_file()
+    assert not (PACKAGE / "so101_gazebo_demo_py").exists()
+
+    setup_text = (PACKAGE / "setup.py").read_text()
+    assert 'package_name = "so101_gazebo_demo_py"' in setup_text
+    assert 'python_package = "so101_gazebo_demo"' in setup_text
+    assert 'package_dir={python_package: "src"}' in setup_text
+
+
 def test_forbidden_runtime_dependencies_absent() -> None:
     text = "\n".join(
         path.read_text(errors="ignore")

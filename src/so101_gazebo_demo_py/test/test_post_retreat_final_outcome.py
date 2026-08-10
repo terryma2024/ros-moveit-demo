@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 from pathlib import Path
 
-from so101_gazebo_demo_py import live_execute
-from so101_gazebo_demo_py.gazebo.observer import ContactPair
-from so101_gazebo_demo_py.policy_config import load_policy_bundle
-from so101_gazebo_demo_py.test_support.live_attachment import PoseSample
+from so101_gazebo_demo import live_execute
+from so101_gazebo_demo.gazebo.observer import ContactPair
+from so101_gazebo_demo.policy_config import load_policy_bundle
+from so101_gazebo_demo.test_support.live_attachment import PoseSample
 
 
 PACKAGE = Path(__file__).parents[1]
@@ -125,7 +125,7 @@ def test_immediate_retreat_collects_only_post_retreat_outcome() -> None:
 
 
 def test_post_retreat_failure_is_persisted_before_it_is_raised() -> None:
-    source = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
+    source = (PACKAGE / "src/live_execute.py").read_text()
     final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
 
     assert '"final-outcome-failure.json"' in final_path
@@ -135,7 +135,7 @@ def test_post_retreat_failure_is_persisted_before_it_is_raised() -> None:
 
 
 def test_live_failure_evidence_persists_both_release_epochs() -> None:
-    source = (PACKAGE / "so101_gazebo_demo_py/live_execute.py").read_text()
+    source = (PACKAGE / "src/live_execute.py").read_text()
     final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
 
     assert '"pre_retreat_outcome":collected_outcome_payload(' in final_path
