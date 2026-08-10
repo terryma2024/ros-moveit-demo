@@ -468,7 +468,7 @@ class RosTelemetryWorker:
     def package_cli(self, executable: str, arguments: list[str], timeout_s: float = 45.0) -> str:
         """Run an installed C++ owner; Python only transports its checkpoint result."""
         from ament_index_python.packages import get_package_prefix
-        path=Path(get_package_prefix("so101_gazebo_demo")) / "lib" / "so101_gazebo_demo" / executable
+        path=Path(get_package_prefix("so101_gazebo_demo_cpp")) / "lib" / "so101_gazebo_demo_cpp" / executable
         result=subprocess.run([str(path), *arguments], text=True, capture_output=True, timeout=timeout_s, check=False)
         if result.returncode:
             # Keep the public fail-closed error code stable, but preserve the

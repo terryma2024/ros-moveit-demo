@@ -60,7 +60,7 @@ def _fingertip_sdf(fixed_manifest, moving_manifest):
 def _native_pad_collisions():
     return ''.join(
         f'''<collision name="gripper_fixed_joint_lump__{side}_fingertip_pad_collision_{index:03d}_collision_{index}">
-          <geometry><mesh><uri>model://so101_gazebo_demo/meshes/so101/generated/{asset_side}/fingertip_pad_collision_{index:03d}.stl</uri></mesh></geometry>
+          <geometry><mesh><uri>model://so101_gazebo_demo_cpp/meshes/so101/generated/{asset_side}/fingertip_pad_collision_{index:03d}.stl</uri></mesh></geometry>
         </collision>'''
         for side, asset_side, count in (('fixed', 'fixed', 7), ('moving', 'moving', 6))
         for index in range(count)
@@ -527,7 +527,7 @@ endsolid body
     module.prepare_simulation_model(
         model, output, base_height='0.19', manifest_paths=[]
     )
-    cache_root = cache_home / 'so101_gazebo_demo' / 'prepared_sdf'
+    cache_root = cache_home / 'so101_gazebo_demo_cpp' / 'prepared_sdf'
     first_entries = sorted(cache_root.iterdir())
     assert len(first_entries) == 1
     audit = json.loads((first_entries[0] / 'dependencies.json').read_text())

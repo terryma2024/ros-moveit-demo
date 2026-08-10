@@ -43,7 +43,7 @@ def _source_directory(explicit: str) -> Path | None:
 
 def _installed_bundle() -> Path:
     from ament_index_python.packages import get_package_share_directory
-    return Path(get_package_share_directory("so101_gazebo_demo")) / "web"
+    return Path(get_package_share_directory("so101_gazebo_demo_cpp")) / "web"
 
 
 def _as_bool(value: str) -> bool:
@@ -67,11 +67,11 @@ def launch_setup(context):
     except Exception as error:
         raise RuntimeError(
             f"SO-101 Teleop Web preflight failed: {error}. "
-            "Provide web_source_dir:=/path/to/so101_gazebo_demo/web or a valid installed bundle."
+            "Provide web_source_dir:=/path/to/so101_gazebo_demo_cpp/web or a valid installed bundle."
         ) from error
 
     return [Node(
-        package="so101_gazebo_demo",
+        package="so101_gazebo_demo_cpp",
         executable="so101_teleop_server.py",
         output="screen",
         additional_env={

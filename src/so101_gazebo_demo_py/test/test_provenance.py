@@ -5,6 +5,12 @@ from pathlib import Path
 
 PACKAGE = Path(__file__).parents[1]
 
+def _live_source_path(recorded_source: str) -> Path:
+    source = Path(recorded_source)
+    if source.parts[:2] == ("src", "so101_gazebo_demo"):
+        source = Path("src", "so101_gazebo_demo_cpp", *source.parts[2:])
+    return PACKAGE.parents[1] / source
+
 
 def test_provenance_has_exact_reference_and_hashes() -> None:
     payload = json.loads((PACKAGE / "docs/provenance.json").read_text())
@@ -18,7 +24,7 @@ def test_provenance_has_exact_reference_and_hashes() -> None:
         }
         assert len(entry["source_sha256"]) == 64
         assert len(entry["destination_sha256"]) == 64
-        assert (PACKAGE.parents[1] / entry["source"]).is_file()
+        assert _live_source_path(entry["source"]).is_file()
         destination = PACKAGE / entry["destination"]
         assert destination.is_file()
         assert hashlib.sha256(destination.read_bytes()).hexdigest() == entry["destination_sha256"]

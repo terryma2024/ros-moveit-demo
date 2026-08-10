@@ -10,7 +10,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
-    package_share = get_package_share_directory("so101_gazebo_demo")
+    package_share = get_package_share_directory("so101_gazebo_demo_cpp")
 
     model_arg = DeclareLaunchArgument(
         name="model",

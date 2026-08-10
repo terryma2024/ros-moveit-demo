@@ -51,7 +51,7 @@ def test_gazebo_spawn_uses_calibrated_collision_model() -> None:
     assert 'optimization="convex_hull"' in prepared
     assert "@SO101_PACKAGE_SHARE@/config/so101_controllers.yaml" in prepared
     assert "model://so101_gazebo_demo_py/" in prepared
-    assert "model://so101_gazebo_demo/" not in prepared
+    assert "model://so101_gazebo_demo_cpp/" not in prepared
     assert "libso101_attachment_collision_system.so" not in prepared
 
 
@@ -79,6 +79,6 @@ def test_controller_launch_names_all_public_controllers() -> None:
 def test_launches_use_only_new_package_assets() -> None:
     for name in LAUNCH_NAMES:
         text = (PACKAGE / "launch" / name).read_text()
-        assert 'get_package_share_directory("so101_gazebo_demo")' not in text
-        assert 'package_name="so101_gazebo_demo"' not in text
+        assert 'get_package_share_directory("so101_gazebo_demo_cpp")' not in text
+        assert 'package_name="so101_gazebo_demo_cpp"' not in text
         assert "libso101_attachment_collision_system.so" not in text

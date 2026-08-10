@@ -21,7 +21,7 @@ def installed_web_assets() -> Path:
             raise RuntimeError(f"Invalid SO101_TELEOP_WEB_ROOT: {error}") from error
     try:
         from ament_index_python.packages import get_package_share_directory
-        root = Path(get_package_share_directory("so101_gazebo_demo")) / "web"
+        root = Path(get_package_share_directory("so101_gazebo_demo_cpp")) / "web"
     except Exception:
         root = Path(__file__).resolve().parents[1] / "web" / "dist"
     try:
@@ -39,7 +39,7 @@ def main() -> None:
     camera_config = os.environ.get("SO101_CAMERA_VIEWS")
     if camera_config is None:
         from ament_index_python.packages import get_package_share_directory
-        camera_config = str(Path(get_package_share_directory("so101_gazebo_demo")) / "config" / "camera_views.yaml")
+        camera_config = str(Path(get_package_share_directory("so101_gazebo_demo_cpp")) / "config" / "camera_views.yaml")
     camera = CameraController(load_camera_presets(camera_config))
     captures = Path(os.environ.get("SO101_TELEOP_CAPTURE_DIR", "/tmp/so101-teleop-captures"))
     uvicorn.run(

@@ -268,8 +268,8 @@ def model_cache_key(
 def _cache_root():
     xdg = os.environ.get('XDG_CACHE_HOME')
     if xdg:
-        return Path(xdg) / 'so101_gazebo_demo' / 'prepared_sdf'
-    return Path.home() / '.cache' / 'so101_gazebo_demo' / 'prepared_sdf'
+        return Path(xdg) / 'so101_gazebo_demo_cpp' / 'prepared_sdf'
+    return Path.home() / '.cache' / 'so101_gazebo_demo_cpp' / 'prepared_sdf'
 
 
 def _cached_sdf(cache_key):
@@ -325,11 +325,11 @@ def _mesh_dependency_paths(expanded_urdf, xacro_path):
         uri = mesh.attrib.get('filename') or mesh.attrib.get('url')
         if not uri:
             continue
-        if uri.startswith('package://so101_gazebo_demo/'):
-            relative = uri.removeprefix('package://so101_gazebo_demo/')
+        if uri.startswith('package://so101_gazebo_demo_cpp/'):
+            relative = uri.removeprefix('package://so101_gazebo_demo_cpp/')
             path = package_root / relative
             if not path.exists():
-                path = Path(get_package_share_directory('so101_gazebo_demo')) / relative
+                path = Path(get_package_share_directory('so101_gazebo_demo_cpp')) / relative
         elif uri.startswith('file://'):
             path = Path(uri.removeprefix('file://'))
         elif '://' not in uri:

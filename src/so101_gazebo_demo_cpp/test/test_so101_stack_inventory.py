@@ -31,8 +31,8 @@ read_process = MODULE.read_process
         ('/opt/ros/jazzy/lib/moveit_ros_move_group/move_group', 'moveit'),
         ('pick_place_state_machine --ros-args', 'pick_place'),
         (
-            'python3 /home/user/ws/install/so101_gazebo_demo/lib/'
-            'so101_gazebo_demo/pick_place_state_machine --ros-args',
+            'python3 /home/user/ws/install/so101_gazebo_demo_cpp/lib/'
+            'so101_gazebo_demo_cpp/pick_place_state_machine --ros-args',
             'pick_place',
         ),
         ('/opt/ros/jazzy/lib/rviz2/rviz2 -d moveit.rviz', 'rviz'),

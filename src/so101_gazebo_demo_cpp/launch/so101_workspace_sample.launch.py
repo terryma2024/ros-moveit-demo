@@ -10,7 +10,7 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
-    package_share = Path(get_package_share_directory('so101_gazebo_demo'))
+    package_share = Path(get_package_share_directory('so101_gazebo_demo_cpp'))
     arguments = [
         DeclareLaunchArgument('output_dir', description='Required absolute artifact directory'),
         DeclareLaunchArgument('profile', default_value='full'),
@@ -31,7 +31,7 @@ def generate_launch_description():
         ),
     ]
     moveit_config = (
-        MoveItConfigsBuilder('so101', package_name='so101_gazebo_demo')
+        MoveItConfigsBuilder('so101', package_name='so101_gazebo_demo_cpp')
         .robot_description(
             file_path=str(package_share / 'urdf' / 'so101.urdf.xacro'),
             mappings={
@@ -43,7 +43,7 @@ def generate_launch_description():
         .to_moveit_configs()
     )
     sampler = Node(
-        package='so101_gazebo_demo',
+        package='so101_gazebo_demo_cpp',
         executable='sample_so101_workspace',
         output='screen',
         parameters=[

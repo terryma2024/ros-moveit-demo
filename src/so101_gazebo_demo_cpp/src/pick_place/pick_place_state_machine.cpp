@@ -42,7 +42,7 @@ struct CliOptions
 spp::PolicyPaths installedPolicyPaths()
 {
   const std::filesystem::path share =
-    ament_index_cpp::get_package_share_directory("so101_gazebo_demo");
+    ament_index_cpp::get_package_share_directory("so101_gazebo_demo_cpp");
   return {(share / "config/task_objects/light_plastic_cup.yaml").string(),
           (share / "config/motion_policies/light_cup_wall_pick.yaml").string(),
           (share / "config/validation_policies/light_cup_wall_pick.yaml").string()};

@@ -28,7 +28,7 @@ def test_required_runtime_assets_are_package_local() -> None:
 
 def test_text_assets_have_no_forbidden_runtime_reference() -> None:
     forbidden = (
-        "package://so101_gazebo_demo/",
+        "package://so101_gazebo_demo_cpp/",
         "libso101_attachment_collision_system.so",
         "/data/work",
     )

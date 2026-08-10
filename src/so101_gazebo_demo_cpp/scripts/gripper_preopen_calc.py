@@ -33,7 +33,7 @@ import yaml
 def default_mesh_dir() -> Path:
     """Return the installed package's SO-101 mesh directory."""
     return (
-        Path(get_package_share_directory('so101_gazebo_demo'))
+        Path(get_package_share_directory('so101_gazebo_demo_cpp'))
         / 'meshes'
         / 'so101'
     )
@@ -42,7 +42,7 @@ def default_mesh_dir() -> Path:
 def default_urdf_path() -> Path:
     """Return the installed package's geometry-bearing xacro."""
     return (
-        Path(get_package_share_directory('so101_gazebo_demo'))
+        Path(get_package_share_directory('so101_gazebo_demo_cpp'))
         / 'urdf'
         / 'so101_base.xacro'
     )

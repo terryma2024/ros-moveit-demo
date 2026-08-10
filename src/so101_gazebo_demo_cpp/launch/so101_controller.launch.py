@@ -23,7 +23,7 @@ def generate_launch_description():
             [
                 "xacro ",
                 os.path.join(
-                    get_package_share_directory("so101_gazebo_demo"),
+                    get_package_share_directory("so101_gazebo_demo_cpp"),
                     "urdf",
                     "so101.urdf.xacro",
                 ),
@@ -46,7 +46,7 @@ def generate_launch_description():
             {"robot_description": robot_description,
              "use_sim_time": is_sim},
             os.path.join(
-                get_package_share_directory("so101_gazebo_demo"),
+                get_package_share_directory("so101_gazebo_demo_cpp"),
                 "config",
                 "so101_controllers.yaml",
             ),
