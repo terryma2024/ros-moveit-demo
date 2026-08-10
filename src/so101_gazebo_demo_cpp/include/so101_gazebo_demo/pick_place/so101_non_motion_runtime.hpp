@@ -13,7 +13,7 @@
 namespace so101_gazebo_demo::pick_place
 {
 
-struct SO101Task3RuntimeDependencies
+struct SO101NonMotionRuntimeDependencies
 {
   std::shared_ptr<ISO101GripperCommand> gripper;
   std::shared_ptr<IMoveItSceneAdapter> moveit_scene;
@@ -21,7 +21,7 @@ struct SO101Task3RuntimeDependencies
   std::shared_ptr<IFinalPlacementEvidenceStore> final_placement_evidence;
 };
 
-struct SO101Task3RuntimeConfig
+struct SO101NonMotionRuntimeConfig
 {
   SO101Profile profile{SO101Profile::canonical()};
   TaskObjectConfig object;
@@ -30,15 +30,15 @@ struct SO101Task3RuntimeConfig
   double state_poll_interval_seconds{0.05};
 };
 
-struct SO101Task3Runtime
+struct SO101NonMotionRuntime
 {
   StateActionRegistry actions;
   TransitionContractRegistry contracts;
   std::shared_ptr<const IRecoveryPolicy> recovery_policy;
 };
 
-[[nodiscard]] SO101Task3Runtime
-makeSO101Task3Runtime(const SO101Task3RuntimeDependencies & dependencies,
-                      SO101Task3RuntimeConfig config = {});
+[[nodiscard]] SO101NonMotionRuntime
+makeSO101NonMotionRuntime(const SO101NonMotionRuntimeDependencies & dependencies,
+                          SO101NonMotionRuntimeConfig config = {});
 
 }  // namespace so101_gazebo_demo::pick_place

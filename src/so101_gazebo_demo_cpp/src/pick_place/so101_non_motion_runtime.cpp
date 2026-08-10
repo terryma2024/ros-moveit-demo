@@ -1,4 +1,4 @@
-#include "so101_gazebo_demo/pick_place/so101_task3_runtime.hpp"
+#include "so101_gazebo_demo/pick_place/so101_non_motion_runtime.hpp"
 #include "so101_gazebo_demo/pick_place/so101_moveit_scene_policy.hpp"
 
 #include <algorithm>
@@ -17,8 +17,8 @@ namespace so101_gazebo_demo::pick_place
 namespace
 {
 
-void registerGripper(SO101Task3Runtime & runtime,
-                     const SO101Task3RuntimeDependencies & dependencies,
+void registerGripper(SO101NonMotionRuntime & runtime,
+                     const SO101NonMotionRuntimeDependencies & dependencies,
                      const SO101Profile & profile)
 {
   const std::array<SO101GripperStateConfig, 4> configs{{
@@ -39,9 +39,9 @@ void registerGripper(SO101Task3Runtime & runtime,
   }
 }
 
-void registerMoveItScene(SO101Task3Runtime & runtime,
-                         const SO101Task3RuntimeDependencies & dependencies,
-                         const SO101Task3RuntimeConfig & config)
+void registerMoveItScene(SO101NonMotionRuntime & runtime,
+                         const SO101NonMotionRuntimeDependencies & dependencies,
+                         const SO101NonMotionRuntimeConfig & config)
 {
   if (!dependencies.moveit_scene) {
     return;
@@ -97,10 +97,11 @@ void registerMoveItScene(SO101Task3Runtime & runtime,
 
 }  // namespace
 
-SO101Task3Runtime makeSO101Task3Runtime(const SO101Task3RuntimeDependencies & dependencies,
-                                        SO101Task3RuntimeConfig config)
+SO101NonMotionRuntime
+makeSO101NonMotionRuntime(const SO101NonMotionRuntimeDependencies & dependencies,
+                          SO101NonMotionRuntimeConfig config)
 {
-  SO101Task3Runtime runtime;
+  SO101NonMotionRuntime runtime;
   registerGripper(runtime, dependencies, config.profile);
   registerMoveItScene(runtime, dependencies, config);
   registerSO101AttachmentContracts(runtime.contracts, config.profile, config.object,

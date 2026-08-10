@@ -125,7 +125,7 @@ add_library(so101_pick_place_runtime
   src/pick_place/support_pose.cpp
   src/pick_place/so101_attachment_contracts.cpp
   src/pick_place/so101_recovery_policy.cpp
-  src/pick_place/so101_task3_runtime.cpp
+  src/pick_place/so101_non_motion_runtime.cpp
   src/pick_place/pick_place_runtime.cpp
   src/pick_place/so101_motion_validation.cpp
   src/pick_place/so101_motion_evidence_builder.cpp
@@ -280,8 +280,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_so101_pick_place_runtime so101_pick_place_runtime)
   target_compile_definitions(test_so101_pick_place_runtime PRIVATE
     SO101_TEST_POLICY_CONFIG_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/config")
-  ament_add_gtest(test_so101_task3_runtime test/pick_place/test_so101_task3_runtime.cpp)
-  target_link_libraries(test_so101_task3_runtime so101_pick_place_runtime)
+  ament_add_gtest(test_so101_non_motion_runtime test/pick_place/test_so101_non_motion_runtime.cpp)
+  target_link_libraries(test_so101_non_motion_runtime so101_pick_place_runtime)
   ament_add_gtest(test_so101_motion_validation
     test/pick_place/test_so101_motion_validation.cpp)
   target_link_libraries(test_so101_motion_validation so101_pick_place_runtime)
