@@ -8,6 +8,8 @@
 
   <buildtool_depend>ament_python</buildtool_depend>
 
+  <depend>builtin_interfaces</depend>
+  <depend>control_msgs</depend>
   <depend>mujoco_ros2_control</depend>
   <depend>mujoco_ros2_control_msgs</depend>
   <depend>mujoco_ros2_control_plugins</depend>
@@ -18,10 +20,12 @@
   <depend>joint_trajectory_controller</depend>
   <depend>launch</depend>
   <depend>launch_ros</depend>
+  <depend>moveit_msgs</depend>
   <depend>robot_state_publisher</depend>
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>so101_mujoco_support</depend>
+  <depend>trajectory_msgs</depend>
   <exec_depend>python3-yaml</exec_depend>
 
   <test_depend>ament_pytest</test_depend>
