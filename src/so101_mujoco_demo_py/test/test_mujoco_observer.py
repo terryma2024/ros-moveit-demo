@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import so101_mujoco_demo_py.mujoco.observer as observer_module
 from so101_mujoco_demo_py.mujoco.observer import (
     EvidenceRejected,
     EvidenceStale,
@@ -65,6 +66,29 @@ def test_observer_maps_one_atomic_message_to_immutable_evidence() -> None:
     assert evidence.left_fingertip_contacts == ()
     with pytest.raises(AttributeError):
         evidence.simulation_step = 2
+
+
+def test_observer_exposes_the_exact_accepted_callback_receipt_time() -> None:
+    now = [10.0]
+    target = observer(now)
+    target.accept(message(), received_at_s=9.85)
+    received = target.snapshot_with_receipt()
+    assert received.evidence.simulation_time_s == 2.5
+    assert received.received_monotonic_s == 9.85
+
+
+def test_callback_receipt_is_captured_before_message_conversion(monkeypatch) -> None:
+    now = [10.0]
+    target = observer(now)
+    original_convert = observer_module.convert_message
+
+    def delayed_convert(item):
+        now[0] = 10.15
+        return original_convert(item)
+
+    monkeypatch.setattr(observer_module, "convert_message", delayed_convert)
+    target._callback(message())
+    assert target.snapshot_with_receipt().received_monotonic_s == 10.0
 
 
 @pytest.mark.parametrize(

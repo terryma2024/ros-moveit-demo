@@ -14,6 +14,7 @@ from so101_mujoco_support.msg import SimulationEvidence as RosSimulationEvidence
 from so101_mujoco_demo_py.simulation.types import (
     ContactEvidence,
     ObjectState,
+    ReceivedSimulationEvidence,
     SimulationEvidence,
 )
 
@@ -118,10 +119,11 @@ class MujocoWorldObserver:
         )
 
     def _callback(self, message: RosSimulationEvidence) -> None:
+        received_at_s = self._monotonic()
         with self._lock:
             self._callback_count += 1
         try:
-            self.accept(message)
+            self.accept(message, received_at_s=received_at_s)
         except EvidenceRejected as error:
             with self._lock:
                 self._rejected_count += 1
@@ -151,8 +153,8 @@ class MujocoWorldObserver:
         if evidence.truncated:
             raise EvidenceRejected("truncated atomic evidence")
         receipt = self._monotonic() if received_at_s is None else received_at_s
-        if not math.isfinite(receipt):
-            raise EvidenceRejected("receipt time must be finite")
+        if not math.isfinite(receipt) or receipt < 0.0:
+            raise EvidenceRejected("receipt time must be finite and non-negative")
         with self._lock:
             previous = self._latest
             if previous is not None:
@@ -173,13 +175,16 @@ class MujocoWorldObserver:
             self._received_at_s = receipt
 
     def snapshot(self) -> SimulationEvidence:
-        now = self._monotonic()
+        return self.snapshot_with_receipt().evidence
+
+    def snapshot_with_receipt(self) -> ReceivedSimulationEvidence:
         with self._lock:
             evidence = self._latest
             received_at_s = self._received_at_s
         if evidence is None or received_at_s is None:
             raise EvidenceStale("no atomic evidence has been accepted")
+        now = self._monotonic()
         age = now - received_at_s
         if not math.isfinite(age) or age < 0.0 or age > self._max_age_s:
             raise EvidenceStale(f"atomic evidence age {age:.3f}s exceeds {self._max_age_s:.3f}s")
-        return evidence
+        return ReceivedSimulationEvidence(evidence, received_at_s)
