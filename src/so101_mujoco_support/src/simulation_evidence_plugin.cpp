@@ -86,15 +86,17 @@ bool EvidenceBuilder::object_geom(int geom_id) const
 }
 
 msg::SimulationEvidence EvidenceBuilder::build(const mjModel * model, mjData * data, bool paused,
-                                               EvidenceState & state) const
+                                               EvidenceState & state,
+                                               uint64_t reset_generation) const
 {
   msg::SimulationEvidence output;
   if (model == nullptr || data == nullptr || object_body_id_ < 0 || !std::isfinite(data->time)) {
     output.truncated = true;
     return output;
   }
-  if (state.initialized && data->time < state.previous_time) {
-    ++state.reset_epoch;
+  if (reset_generation != state.consumed_reset_generation) {
+    state.consumed_reset_generation = reset_generation;
+    state.reset_epoch = reset_generation;
     state.simulation_step = 0;
   } else if (state.initialized && data->time > state.previous_time) {
     ++state.simulation_step;
@@ -235,13 +237,19 @@ void SimulationEvidencePlugin::update(const mjModel * model, mjData * data)
   if (!realtime_publisher_->trylock())
     return;
   try {
-    realtime_publisher_->msg_ = builder_.build(model, data, paused, state_);
+    realtime_publisher_->msg_ =
+      builder_.build(model, data, paused, state_, reset_generation_.load(std::memory_order_acquire));
     realtime_publisher_->unlockAndPublish();
     last_publish_time_s_ = data->time;
     published_ = true;
   } catch (...) {
     realtime_publisher_->unlock();
   }
+}
+
+void SimulationEvidencePlugin::on_reset()
+{
+  reset_generation_.fetch_add(1, std::memory_order_release);
 }
 
 void SimulationEvidencePlugin::cleanup()
@@ -253,6 +261,7 @@ void SimulationEvidencePlugin::cleanup()
   publish_period_s_ = 0.01;
   last_publish_time_s_ = 0.0;
   published_ = false;
+  reset_generation_.store(0, std::memory_order_release);
 }
 }  // namespace so101_mujoco_support
 

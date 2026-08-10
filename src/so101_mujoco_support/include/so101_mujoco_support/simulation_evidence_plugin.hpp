@@ -1,6 +1,7 @@
 #ifndef SO101_MUJOCO_SUPPORT__SIMULATION_EVIDENCE_PLUGIN_HPP_
 #define SO101_MUJOCO_SUPPORT__SIMULATION_EVIDENCE_PLUGIN_HPP_
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -22,6 +23,7 @@ struct EvidenceState
   uint64_t publisher_sequence{0};
   uint64_t simulation_step{0};
   uint64_t reset_epoch{0};
+  uint64_t consumed_reset_generation{0};
   double previous_time{0.0};
   bool initialized{false};
 };
@@ -33,7 +35,7 @@ public:
                  const std::string & left_geom, const std::string & right_geom,
                  const std::vector<std::string> & other_geoms, std::size_t max_contacts);
   msg::SimulationEvidence build(const mjModel * model, mjData * data, bool paused,
-                                EvidenceState & state) const;
+                                EvidenceState & state, uint64_t reset_generation = 0) const;
 
 private:
   bool object_geom(int geom_id) const;
@@ -54,6 +56,7 @@ class SimulationEvidencePlugin final
 public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel * model, mjData * data) override;
   void update(const mjModel * model, mjData * data) override;
+  void on_reset() override;
   void cleanup() override;
 
 private:
@@ -66,6 +69,7 @@ private:
   double publish_period_s_{0.01};
   double last_publish_time_s_{0.0};
   bool published_{false};
+  std::atomic<uint64_t> reset_generation_{0};
 };
 }  // namespace so101_mujoco_support
 #endif

@@ -1,13 +1,29 @@
-schema_version: 1
-provider: apt
+schema_version: 2
+provider: patched_source
 release: 0.0.3
-prefix: /opt/ros/jazzy
-fallback:
+upstream:
+  url: https://github.com/ros-controls/mujoco_ros2_control
   tag: 0.0.3
   commit: 35ba8174b62d9560093614f981a3d4b978a96036
-  prefix: /data/work/ws_mujoco_ros2_control_003/install
+source_checkout: /data/work/ws_mujoco_ros2_control_003/src/mujoco_ros2_control
+prefix: /data/work/ws_mujoco_ros2_control_003/install
+patch:
+  path: patches/mujoco_ros2_control-0.0.3-reset-hook.patch
+  sha256: 367cf5e3eab641412e234a3b1db86922b5573704932e950f98d9ca394056ea9f
+source_order:
+  - /opt/ros/jazzy
+  - /data/work/ws_mujoco_ros2_control_003/install
+  - project_install
+package_prefixes:
+  mujoco_ros2_control: /data/work/ws_mujoco_ros2_control_003/install
+  mujoco_ros2_control_msgs: /data/work/ws_mujoco_ros2_control_003/install
+  mujoco_ros2_control_plugins: /data/work/ws_mujoco_ros2_control_003/install
+  mujoco_vendor: /opt/ros/jazzy
+project_package_prefixes:
+  so101_mujoco_support: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_support
+  so101_mujoco_demo_py: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py
 required_files:
-  /opt/ros/jazzy/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 0eb99bec603f187ad43a57149a846d86c3866fe13f9e59828a17741d3b1bd181
-  /opt/ros/jazzy/share/mujoco_ros2_control_plugins/cmake/export_mujoco_ros2_control_pluginsExport.cmake: f8a748c2845ecb535895a2df81c633fbf17aa61df244c7495df833ea1aa9587d
-  /opt/ros/jazzy/share/mujoco_ros2_control_msgs/srv/ResetWorld.srv: daa0e9fc5cc21a4c6f6a04d7e77f9010c762d97ba0756f62b38da49b3f37f644
-  /opt/ros/jazzy/share/mujoco_ros2_control/package.xml: e9cfedd0d7a8bb3795a4e9287ca9ebcd9c9cc4dc74beaa42be906a49f54ef826
+  /data/work/ws_mujoco_ros2_control_003/install/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 6d581bc671ea6ab8cccaeaa38b91b8542eb73c4072f21f09b9b2ca3d40e1e5aa
+  /data/work/ws_mujoco_ros2_control_003/install/lib/libmujoco_ros2_control_plugins.so: c0e4a803a265ee6ad61db9d1217c0fd2ebf64504b44241c78063d3847516fef3
+  /data/work/ws_mujoco_ros2_control_003/install/lib/libmujoco_ros2_control.so: 16d59801a61ce5971b2e43c4230bc4a74a5765153ca40aa6140ace492f1208d2
+  /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node: 81fc00e192b572f0ffe866522b384d508a6db561afa647b6f82eb91bf2dd2e3b
