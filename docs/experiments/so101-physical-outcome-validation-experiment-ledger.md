@@ -1830,3 +1830,59 @@ conclusion: 释放阶段 orientation gate 修订生效，流程首次进入 OPEN
 decision: STOP_AFTER_ONE_AUTHORIZED_GUI_RUN_AND_REPORT
 next_experiment: TDD-PHYSICAL-003_REVISE_OPEN_GRIPPER_ATTACHMENT_CONTRACT_REQUIRES_APPROVAL
 ```
+
+## TDD-PHYSICAL-003：OPEN_GRIPPER 保留 MoveIt planning shadow
+
+```yaml
+experiment_id: TDD-PHYSICAL-003
+status: VALID
+prior_experiment: GUI-PHYSICAL-019
+hypothesis: OPEN_GRIPPER 被旧的 PREPARE/CLOSE attachment 分组错误地要求 MoveIt detached；单独定义释放阶段的 attachment contract 即可解除该阻塞
+prediction: 真实 gripper transition contract 的新测试会先以 GRIPPER_ATTACHMENT_STATE_INVALID 失败；仅修改 OPEN_GRIPPER 分支后，Gazebo detached + 精确 MoveIt shadow attached 的 pre/postcondition 通过
+single_variable: OPEN_GRIPPER attachment membership semantics
+lifecycle: OFFLINE_TDD
+source_commit: ff0270c63c148d5d330a3769cc3c8a3093642886
+evidence_root: /tmp/so101-debug-tdd-physical-003-8Xln1hmW
+success_criteria:
+  - focused tests 在生产代码未修改时因 GRIPPER_ATTACHMENT_STATE_INVALID 精确 RED
+  - 最小分支修订后 focused 与 package CTest GREEN
+  - OPEN_GRIPPER 仍要求 Gazebo detached 与精确 MoveIt attached metadata
+failure_criteria:
+  - RED 原因不是 attachment membership，或任何既有安全/回归测试失败
+invalid_criteria:
+  - 并发 build/test、脏 worktree、overlay/source provenance 不一致或无关改动进入 diff
+unchanged:
+  - release envelope、q6 target/stationarity、arm stationarity、collision、penetration and freshness hard gates
+  - physics engine、geometry、mass、friction、controller/gains and motion targets
+  - RETREAT 后才 DETACH_MOVEIT；final target region、support、upright tilt and stability determine outcome
+invalid_attempts:
+  - 首次 RED build 在测试执行前被 clang-format gate 拒绝；仅格式化新增测试后重跑，不计为 RED/GREEN
+red_evidence:
+  - OpenPreconditionAcceptsGazeboDetachedMoveItShadowAttached failed with GRIPPER_ATTACHMENT_STATE_INVALID
+  - OpenPostconditionAcceptsGazeboDetachedMoveItShadowAttached failed with GRIPPER_ATTACHMENT_STATE_INVALID
+  - 2/2 focused tests failed at the intended legacy attachment branch
+implementation:
+  - PREPARE_OPEN_GRIPPER 与 CLOSE_GRIPPER 继续要求 Gazebo detached + exact MoveIt detached
+  - OPEN_GRIPPER 单独要求 Gazebo detached + exact MoveIt attached planning shadow
+  - 未修改 executor、release envelope、q6、arm stationarity、policy threshold 或 motion target
+green_evidence:
+  focused_open_contracts: 4/4 passed；包含两个 shadow-through-open 正例和两个 safety control 反例
+  complete_gripper_suite: 22/22 passed
+  cpp_quality_gate: clang-tidy warnings-as-errors and clang-format passed
+  colcon_build: 1 package passed
+  package_ctest: 83/83 passed, 0 failed, 296.43 s
+  colcon_test_result: 940 tests, 0 errors, 0 failures, 0 skipped
+  installed_overlay: /data/work/ws_moveit/.worktrees/so101-physical-outcome-validation/install/so101_gazebo_demo
+  runtime_build_install_sha256: bf4ddc29604800748cc6f8ec5190e92508247bd2d2e62cddd83e374f5447ba38
+evidence:
+  - /tmp/so101-debug-tdd-physical-003-8Xln1hmW/red-focused.log
+  - /tmp/so101-debug-tdd-physical-003-8Xln1hmW/green-focused.log
+  - /tmp/so101-debug-tdd-physical-003-8Xln1hmW/green-gripper-suite.log
+  - /tmp/so101-debug-tdd-physical-003-8Xln1hmW/green-build.log
+  - /tmp/so101-debug-tdd-physical-003-8Xln1hmW/colcon-build.log
+  - /tmp/so101-debug-tdd-physical-003-8Xln1hmW/colcon-test.log
+conclusion: 根因与预测一致；最小状态分支修订消除了 OPEN_GRIPPER 前的 planning-shadow membership 冲突，同时保留 exact shadow facts、Gazebo detached 和全部既有硬门
+runtime_validation: NOT_RUN；本 TDD 不声称真实释放或最终放置成功
+decision: KEEP_AND_COMMIT_NO_PUSH
+next_experiment: GUI-PHYSICAL-020_REQUIRES_SEPARATE_APPROVAL
+```

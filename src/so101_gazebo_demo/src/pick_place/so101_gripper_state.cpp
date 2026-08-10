@@ -101,9 +101,10 @@ void requireAttachmentEvidence(ValidationResult & result, const WorldSnapshot & 
              profile.task_object_attachment_orientation_tolerance_rad;
   };
   bool valid = false;
-  if (config.state == State::PREPARE_OPEN_GRIPPER || config.state == State::CLOSE_GRIPPER ||
-      config.state == State::OPEN_GRIPPER) {
+  if (config.state == State::PREPARE_OPEN_GRIPPER || config.state == State::CLOSE_GRIPPER) {
     valid = !*world.gazebo_task_object_attached && exact_moveit_detached();
+  } else if (config.state == State::OPEN_GRIPPER) {
+    valid = !*world.gazebo_task_object_attached && exact_moveit_attached();
   } else {
     valid = *world.moveit_task_object_attached ? exact_moveit_attached() : exact_moveit_detached();
   }
