@@ -186,7 +186,7 @@ def test_ledger_records_complete_task_contract_and_checkpoint() -> None:
         assert task_status == "TASK_1_FIX_IMPLEMENTATION_PENDING_COMMIT"
     else:
         assert pending == "false"
-        assert task_status == "TASK_1_COMPLETE"
+        assert re.fullmatch(r"TASK_[1-9][0-9]*_COMPLETE", task_status)
         verified_commit = front_matter["last_verified_implementation_commit"]
         assert re.fullmatch(r"[0-9a-f]{40}", verified_commit)
         require_success(run("git", "merge-base", "--is-ancestor", verified_commit, "HEAD"))
