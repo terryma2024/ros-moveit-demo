@@ -110,7 +110,7 @@ int execute(const std::shared_ptr<rclcpp::Node> & node)
     ws::sha256(scene.dump()),
     ws::configSha256(config),
     ws::sha256(readFile(executablePath())),
-    ament_index_cpp::get_package_prefix("so101_gazebo_demo")};
+    ament_index_cpp::get_package_prefix("so101_gazebo_demo_cpp")};
   ws::WorkspaceArtifactWriter writer(output, config.position_voxel_size_m);
   ws::WorkspaceCheckpointStore checkpoint_store(output, provenance);
   ws::WorkspaceSampler sampler(
