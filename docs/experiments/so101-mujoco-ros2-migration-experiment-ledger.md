@@ -12,7 +12,7 @@ worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
 last_verified_implementation_commit: 263818aabc5a6be09db8baaa137eb18668081d42
 ledger_commit_pending: false
-task_status: TASK_10A_COMPLETE_PENDING_COMMIT
+task_status: TASK_9_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -22,8 +22,8 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-039
-next_experiment: EXP-031
+latest_checkpoint: CP-046
+next_experiment: EXP-035
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -99,6 +99,264 @@ disproven_routes:
 open_risks:
   - Task 10B transactional Python behavior and EXP-031 live qualification remain unverified.
 next_command: Create the scoped Task 10A commit, then begin Task 10B RED tests without running EXP-031 until all offline gates pass.
+```
+
+## Experiment EXP-031
+
+```yaml
+experiment_id: EXP-031
+prior_experiment: EXP-030
+status: VALID
+lifecycle: FULL_RESTART
+hypothesis: The qualified dedicated post-pause snapshot hook lets two task_start transactions each return exactly one new paused step-zero epoch while independent fresh joint/controller feedback meets the unchanged reset tolerances, and an invalid keyframe changes no epoch and leaves the world paused.
+independent_variable: Execute the approved Transactional Pause/Reset/Snapshot path against the qualified pinned overlay; no StepSimulation call is permitted.
+controlled_variables: Simulation only; HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab plus eight unstaged Task 10B paths; ROS_DOMAIN_ID 112; session exp031-snapshot-domain112; source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; upstream https://github.com/ros-controls/mujoco_ros2_control tag 0.0.3 commit 35ba8174b62d9560093614f981a3d4b978a96036; patch SHA-256 fd2869212d40809dca70f4cc971f93215a64812900cc992817305a33dfcf971e; installed header SHA-256 688337291e7e1d340daf9ffe36fe8c6ed72f085f1ddf302215e5a4a8a35386dc; runtime hashes are pinned in dependency-lock.yaml and verified by check_reset_qualified_runtime.py.
+acceptance_criteria: Domain 112 starts and ends empty with no daemon; readiness proves both MuJoCo services, exactly three named active controllers, and an evidence publisher/subscriber; two task_start receipts each increment epoch exactly once with simulation_step=0 and paused=true atomic finite object pose/twist/contact; object error <=0.003 m; each of six independently sampled fresh joints <=0.002 rad; controllers active; final paused; invalid keyframe leaves epoch unchanged and fails paused; provenance, ownership, logs, exit codes, hashes, and cleanup are complete.
+invalid_criteria: Provenance mismatch, nonempty initial domain, readiness failure, incomplete/corrupt evidence, unbound process ownership, hash failure, or polluted cleanup makes the measurement INVALID. With those prerequisites valid, any reset assertion failure is a VALID behavioral failure and stops further work.
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-031/
+domain_id: 112
+domain_preregister_no_daemon_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+owned_processes: Reserved task-owned tmux session so101-mujoco-exp031; not started at PLANNED registration.
+preserved_processes: codex, kimi, and so101-py-qual observed running and preserved; no unrelated process/session may be stopped.
+result: Behavioral failure. Provenance, empty-domain, launch, readiness, ownership, evidence hashing, task-session cleanup, and final no-daemon cleanup were valid. The first task_start transaction reached the expected new-epoch step-zero paused evidence branch but failed the independent fresh six-joint convergence gate; pytest exit 1. The second reset and invalid-keyframe case did not run because the valid product failure is a mandatory stop.
+next_command: NONE
+```
+
+## Checkpoint CP-040
+
+```yaml
+checkpoint_id: CP-040
+last_valid_experiment: EXP-031
+current_hypothesis: NONE; EXP-031 is a VALID controlled experiment with a Task 10B behavioral failure at independent joint convergence, so thresholds/order/timeout and production code must not be changed without new authorization.
+working_tree_status: HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab; index empty; exactly eight Task 10B paths remain unstaged (ledger, package.xml, observer.py, test_mujoco_observer.py, new client.py/reset.py/test_mujoco_reset.py/test_reset_live_contract.py). No Task 10B commit was created.
+owned_processes: NONE; so101-mujoco-exp031 was the only task-owned tmux session and was stopped successfully. ROS_DOMAIN_ID 112 is empty by both driver cleanup and post-verification no-daemon checks.
+preserved_processes: codex, kimi, and so101-py-qual were observed before the run and preserved; no unrelated session/process was stopped.
+confirmed_conclusions:
+  - EXP-031 prerequisites were valid: domain_before_rc=0, launch_rc=0, readiness_rc=0, kill_rc=0, domain_cleanup_rc=0, and hash_rc=0. Exactly three named controllers became active, both MuJoCo services were present, and the evidence publisher plus one-message subscription were ready.
+  - pytest_rc=1 is therefore a VALID behavioral failure, not an INVALID measurement. Driver exit is 1 and enters the failure denominator.
+  - Control flow reached the exact expected epoch, publisher-sequence advance, simulation_step=0, and paused=true checks before failing `joint convergence failed`; the failure is independent controller feedback, not an atomic joint field. The test did not persist an exact failing joint vector, so no numeric diagnosis or threshold inference is authorized.
+  - Failure handling issued pause(true), the live test finally path issued pause(true), only the named task session was killed, and domain 112 ended empty. Final domain file SHA-256 is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+  - Evidence hashes: launch 8025db75657c41c004217d7be3882ae2da13e9c04a40830a9ecb9d2481c0c4d8; readiness 9db5899089debddfbc9db936b6f82a86c6297a7417d59782d58f8f45ea64e96c; live pytest 6a400b7dd5b3d549b8f3a354e7db7a05f8a24a5e0e4bfaba1e565bc3885a9a9c; driver f1b31eb456b24d4f37be0c0298b0d249e6ebc79a8253f6f449400e9df4046391; exit-codes 0a22d06b564fadffcb4a1518ac67ded04e83155cf418c7e0abd0cc2726fc685a.
+  - Gazebo protected-tree diff/status gates remain zero and the repository index is empty.
+disproven_routes:
+  - Offline GREEN and a qualified snapshot hook do not establish Task 10 reset success without independent fresh joint convergence.
+  - This valid failure cannot be relabeled INVALID merely because the exact failing joint vector was not emitted; the controlled assertion itself failed after valid prerequisites. It also cannot justify changing the 0.002 rad threshold, transaction order, or 10 s deadline.
+open_risks:
+  - Whether the failure was stale independent feedback or a genuine >0.002 rad joint error is not distinguished by persisted evidence.
+  - The second task_start reset, invalid-keyframe epoch stability, and full four-pause-window series remain unexecuted because the first valid behavioral failure required an immediate stop.
+next_command: NONE; await orchestrator review and explicit new architecture/diagnostic authorization.
+```
+
+## Experiment EXP-032
+
+```yaml
+experiment_id: EXP-032
+prior_experiment: EXP-031
+status: VALID
+lifecycle: FULL_RESTART
+hypothesis: The first EXP-031 joint failure is caused by callback-count freshness accepting a queued or otherwise non-post-reset joint sample; a boundary-correlated trace will distinguish that case from a genuinely post-reset joint vector outside the unchanged 0.002 rad gate.
+independent_variable: Diagnostic observation only. Record every joint callback message stamp, receive time, callback count, six-joint vector, and reset/pause/controller boundary while executing one unchanged task_start transaction.
+controlled_variables: Simulation only; HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab plus the same eight unstaged Task 10B paths; source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; upstream and qualified patch unchanged; ROS_DOMAIN_ID 113; session exp032-joint-freshness-domain113; reset order, 10 s deadline, object tolerance 0.003 m, and per-joint tolerance 0.002 rad unchanged; no StepSimulation.
+success_criteria: A complete trace binds the reset return callback-count baseline and every later joint sample to message stamp, receive time, exact vector, and transaction boundary, while preserving valid launch/readiness/provenance/ownership/cleanup evidence. The trace must distinguish pre-reset queued feedback from genuinely post-reset feedback and report the exact maximum joint error.
+invalid_criteria: Nonempty initial domain, readiness/provenance failure, missing boundary or joint trace, unbound ownership, incomplete cleanup, or missing evidence hash.
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-032/
+domain_id: 113
+owned_processes: Reserved task-owned tmux session so101-mujoco-exp032; not started at PLANNED registration.
+preserved_processes: codex, kimi, and so101-py-qual must remain untouched.
+result: The diagnostic validly reproduced the first-reset failure and disproved the queued-callback acceptance hypothesis. ResetWorld returned at callback count 6, and no callback occurred afterward through resume, activate, re-pause, or the convergence check. The reported vector was therefore the pre-reset message at simulation stamp 6.317999999 s, with max absolute error 1.0973360446 rad. Resume-to-re-pause lasted about 3.57 ms, shorter than the configured 100 Hz joint-state period of 10 ms, so the transaction could not obtain independent post-reset feedback before pausing.
+evidence:
+  - joint_boundary_trace_sha256: 5111d2d95d024ab89c8c196e07e67fa8fd18d06ffc48d3be485d58bccea77551
+  - launch_sha256: 4906039c7c621956cec5aa22fb904969bd2d55eebdf81693bc9c96bf6b56d8fa
+  - readiness_sha256: 861ac6cc06dd0e14bca1214c1f457d10d06fabb6a089150789e1d57e1dd59492
+  - diagnostic_sha256: 4d52cbb3f7d483aeac26475bfbd441b04b61e97dedaf40044dd6ab43db6936c8
+  - domain_after_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+exit_codes: domain_before_rc=0 launch_rc=0 readiness_rc=0 diagnostic_rc=0 kill_rc=0 domain_cleanup_rc=0 hash_rc=0
+next_command: Add a RED contract that bounded resume must receive at least one post-reset joint callback before the authoritative re-pause snapshot.
+```
+
+## Checkpoint CP-041
+
+```yaml
+checkpoint_id: CP-041
+last_valid_experiment: EXP-031
+current_hypothesis: Callback execution count alone may misclassify queued joint feedback as post-reset fresh; EXP-032 will test this without changing transaction behavior.
+working_tree_status: HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab; index empty; the same eight Task 10B paths are unstaged, with only this ledger registration added.
+owned_processes: NONE
+preserved_processes: codex, kimi, and so101-py-qual remain running and must not be stopped.
+confirmed_conclusions:
+  - EXP-031 remains a VALID behavioral failure at independent joint convergence.
+  - The existing evidence does not contain the failing joint vector and cannot distinguish stale feedback from physical error.
+  - Source inspection shows the joint subscriber is spun outside the synchronous service calls and freshness is currently only callback_count > count captured after ResetWorld returns.
+open_risks:
+  - A callback executed after reset can still carry a message published before reset.
+  - A genuinely post-reset sample may instead exceed the unchanged tolerance; only the correlated trace may decide.
+next_command: Execute EXP-032 on fresh confirmed-empty ROS_DOMAIN_ID 113 with no production change.
+```
+
+## Checkpoint CP-042
+
+```yaml
+checkpoint_id: CP-042
+last_valid_experiment: EXP-032
+current_hypothesis: The Task 10B failure is caused by re-pausing before one 100 Hz post-reset joint sample can arrive; waiting within the existing bounded-resume phase for callback_count to advance should provide fresh independent feedback without changing service order, thresholds, or the 10 s transaction deadline.
+working_tree_status: HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab; index empty; the same eight Task 10B paths are unstaged, with EXP-032 results added only to the ledger.
+owned_processes: NONE; so101-mujoco-exp032 was stopped and ROS_DOMAIN_ID 113 is empty.
+preserved_processes: codex, kimi, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - EXP-032 is VALID: all launch, readiness, diagnostic, ownership, hash, and cleanup gates passed.
+  - No post-reset joint callback occurred. Callback count was 6 at ResetWorld return and remained 6 at convergence evaluation.
+  - The failure vector was the last pre-reset sample at stamp 6.317999999 s: [0.0008834752, 1.0973360446, 0.4145440286, 0.0868216906, 0.0001103944, 0.0008648286] rad.
+  - Resume-to-re-pause was about 3.57 ms, below the 10 ms publication period configured by the 100 Hz joint-state broadcaster.
+  - The per-joint 0.002 rad threshold was never applied to a fresh post-reset vector, so EXP-031 does not prove a physical reset miss.
+disproven_routes:
+  - The observed failure was not a queued callback incorrectly accepted as fresh; there was no callback-count advance at all.
+  - Changing the 0.002 rad threshold cannot fix absence of feedback and remains forbidden.
+next_command: Establish a focused RED service-boundary test requiring fresh callback arrival during bounded resume before re-pause, then implement the minimum wait under the original deadline.
+```
+
+## Experiment EXP-033
+
+```yaml
+experiment_id: EXP-033
+prior_experiment: EXP-032
+status: VALID
+lifecycle: FULL_RESTART
+hypothesis: Waiting inside the existing bounded-resume phase until one post-reset joint callback arrives lets the unchanged transaction re-pause on authoritative step-zero atomic evidence and independently verify all six joints within 0.002 rad for two resets, while invalid keyframe failure remains paused with no epoch change.
+independent_variable: The minimum Task 10B code change waits for joint_callback_count to advance after ResetWorld and controller activation before re-pause; no service is added, removed, or reordered.
+controlled_variables: Simulation only; HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab plus the same eight unstaged Task 10B paths; source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; qualified upstream URL/tag/commit/patch/runtime unchanged; ROS_DOMAIN_ID 114; session exp033-bounded-resume-domain114; 10 s transaction deadline; object tolerance 0.003 m; per-joint tolerance 0.002 rad; no StepSimulation, hardware, GUI, MoveIt, or workflow motion.
+acceptance_criteria: Domain 114 starts and ends empty with no daemon; launch/readiness proves both MuJoCo services, exactly three named active controllers, and evidence publication; two task_start receipts increment epochs sequentially by one with simulation_step=0 and paused=true finite atomic object evidence; each has independent post-reset six-joint feedback within 0.002 rad and active controllers; invalid keyframe changes no epoch and leaves paused; ownership, logs, exits, hashes, and cleanup are complete.
+invalid_criteria: Provenance mismatch, nonempty initial domain, readiness failure, missing evidence, unbound ownership, hash failure, or polluted cleanup. With valid prerequisites, any reset assertion failure is a VALID behavioral failure and stops further work.
+prequalification:
+  focused_reset_tests: 18 passed; sha256 729498e5bb74791c449bd81daae53960afaea75639e4957a5f7dd233cc52234e
+  non_live_tests: 116 passed and 2 skipped; sha256 3a71be37eca9908f2b3fa3525bdfa1126bd9dae5e19ad36160f16d491e02f12d
+  ruff: lint and format passed with pinned 0.15.20; sha256 f63e6c4d2361553eeaa610cd347061625231482c4967f50df631e7af3254a879
+  aggregate: 368 tests, zero failures, four skips; sha256 713e33e96081d8569f1e53fa1aab4addb54e7e12a6fe490fe1c779f27f573dcc
+  runtime_provenance_sha256: b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-033/
+domain_id: 114
+domain_preregister_no_daemon_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+owned_processes: Reserved task-owned tmux session so101-mujoco-exp033; not started at PLANNED registration.
+preserved_processes: codex, kimi, and so101-py-qual observed and must remain untouched.
+result: Behavioral success. Two task_start transactions returned sequential epochs 0->1 and 1->2 with simulation_step=0, authoritative paused=true atomic snapshots, finite object state within 0.003 m, active controllers, and independent post-reset joint vectors within 0.002 rad. The two post-reset maximum joint errors were approximately 0.000650087 rad and 0.000195667 rad. The invalid keyframe left epoch 2 unchanged and failed paused. All environment, readiness, ownership, pytest, hash, and cleanup exits were zero.
+evidence:
+  - launch_sha256: 432efd6ff7f0edaf938b92ae454794d62456beaa5cfa6930bb6bf7b15ffbdfe2
+  - live_reset_contract_sha256: da19e389cf42928d24a7933c3fb78cc7313a212031b9eebf9144347f03d33dcc
+  - controllers_readiness_sha256: ffb97138b19ea06a4a856c713c3987ef61218efd82b6cbda47eef9837da177cc
+  - evidence_topic_readiness_sha256: 93ffd4380a1d3802c5b29091366f5ae99edec8f4701daf2a44969aed1698d817
+  - evidence_subscriber_readiness_sha256: 50c4869e7db6d2208ba0e27aeb81d6bfc63576bfbd7ac0d0919b0464dbaf5b3a
+  - exit_codes_sha256: 2264f485e5ba95fec6367ef74346dba711e53881a49d9113a1fbbc732c27d467
+  - domain_after_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+exit_codes: domain_before_rc=0 launch_rc=0 readiness_rc=0 pytest_rc=0 kill_rc=0 domain_cleanup_rc=0 hash_rc=0
+next_command: Run the final Task 10 qualification gates and create the scoped Task 10B commit.
+```
+
+## Checkpoint CP-043
+
+```yaml
+checkpoint_id: CP-043
+last_valid_experiment: EXP-032
+current_hypothesis: The bounded-resume freshness wait fixes the measured absence of post-reset joint feedback without changing transaction order or acceptance thresholds; EXP-033 will qualify the full two-reset and invalid-keyframe contract.
+working_tree_status: HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab; index empty; exactly eight Task 10B paths remain unstaged; protected Gazebo diff/status gates are zero.
+owned_processes: NONE; ROS_DOMAIN_ID 114 is confirmed empty and so101-mujoco-exp033 is reserved but not started.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched.
+confirmed_conclusions:
+  - The focused RED failed at joint convergence before a post-reset callback; the minimum bounded-resume wait made it GREEN.
+  - Focused reset tests pass 18/18, non-live tests pass 116 with two live skips, Ruff passes, rebuild/provenance pass, and aggregate package tests report 368 tests with zero failures and four skips.
+  - No StepSimulation call exists in the reset qualification path.
+next_command: Execute EXP-033 on fresh ROS_DOMAIN_ID 114, then classify it strictly as INVALID environment/evidence or VALID behavioral success/failure.
+```
+
+## Checkpoint CP-044
+
+```yaml
+checkpoint_id: CP-044
+last_valid_experiment: EXP-033
+current_hypothesis: NONE; Task 10B's transactional reset contract is live-qualified after fixing the bounded-resume feedback boundary.
+working_tree_status: HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab; index empty; exactly eight Task 10B paths remain unstaged pending final gates and one scoped commit; protected Gazebo diff/status gates remain zero.
+owned_processes: NONE; so101-mujoco-exp033 was stopped and ROS_DOMAIN_ID 114 is empty.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched.
+confirmed_conclusions:
+  - EXP-033 is a VALID behavioral success with every prerequisite and cleanup exit zero.
+  - Reset receipts were 0->1 and 1->2, both step zero and paused; invalid keyframe preserved epoch 2 and left the world paused.
+  - First and second post-reset joint vectors had maximum absolute errors about 0.000650087 rad and 0.000195667 rad, respectively, below the unchanged 0.002 rad gate.
+  - Final independent joints after the invalid-keyframe path remained within the gate, with maximum absolute value about 0.001810608 rad.
+  - The accepted fix changes only timing inside bounded resume: it waits for one post-reset joint callback under the original deadline, then re-pauses. Service order, 10 s deadline, thresholds, snapshot semantics, and no-StepSimulation boundary are unchanged.
+disproven_routes:
+  - EXP-031 did not demonstrate physical reset failure; it failed because no post-reset joint feedback arrived before re-pause.
+  - Pre-reset safety-pause joint state is not a reset result and must not be evaluated against the post-reset joint target.
+next_command: Run final Task 10A Step 7 and Task 10B Step 9 gates, then commit only the eight Task 10B paths.
+```
+
+## Experiment EXP-034
+
+```yaml
+experiment_id: EXP-034
+prior_experiment: EXP-033
+status: VALID
+lifecycle: FULL_RESTART
+hypothesis: Rejecting incomplete or nonfinite joint messages before advancing the freshness counter preserves the successful EXP-033 reset behavior while closing the stale-vector acceptance gap.
+independent_variable: The joint callback now advances freshness and replaces cached positions only after all named joints 1 through 6 are present and finite.
+controlled_variables: Simulation only; HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab plus the same eight unstaged Task 10B paths; qualified overlays unchanged; ROS_DOMAIN_ID 115; session exp034-valid-joint-domain115; transaction order, 10 s deadline, 0.003 m object tolerance, 0.002 rad joint tolerance, and no-StepSimulation rule unchanged.
+acceptance_criteria: Repeat the complete EXP-033 two-reset and invalid-keyframe contract with valid environment/readiness/ownership/hash/cleanup evidence; both post-reset joint samples must remain complete, finite, fresh, and within threshold.
+invalid_criteria: Provenance mismatch, nonempty initial domain, readiness failure, incomplete evidence, unbound ownership, hash failure, or polluted cleanup. With valid prerequisites, any product assertion failure is a VALID behavioral failure.
+prequalification:
+  joint_validity_red: Expected callback-count assertion failed; sha256 5dd506eaac48d12a9817c47968ef96832a1424944cbde0acbc5a7f494f432a32
+  reset_green: 19 passed; sha256 ee4eff9889e1af5d58afcf5b1c9bcf2256a62d5353c3298747e6b8add680dd05
+  non_live: 117 passed and 2 skipped; sha256 0344df57e80ac2466a8c7fba37592fd830d94e1d2018ba68ac61b49548a86554
+  ruff: passed; sha256 f63e6c4d2361553eeaa610cd347061625231482c4967f50df631e7af3254a879
+  aggregate: 369 tests, zero failures, four skips; sha256 d5ce6e3f5b0496eccabef5097ada8c27aa8582819a7555e4b7422c750a35b87f
+  provenance_sha256: b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1
+evidence_path: /tmp/so101-debug-mujoco-migration/exp-034/
+domain_id: 115
+domain_preregister_no_daemon_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+owned_processes: Reserved task-owned tmux session so101-mujoco-exp034; not started at PLANNED registration.
+preserved_processes: codex, kimi, and so101-py-qual remain untouched.
+result: Behavioral success. The exact current source repeated sequential reset epochs 0->1 and 1->2 with step-zero authoritative paused snapshots, complete finite post-reset joint feedback, active controllers, and object/joint thresholds unchanged. The two post-reset maximum joint errors were approximately 0.000650087 rad and 0.000390691 rad. Invalid keyframe preserved epoch 2 and left the world paused. All environment, readiness, pytest, ownership, hash, and cleanup exits were zero.
+evidence:
+  - launch_sha256: ab8d8432f8a554d35260d541dd00c724fd73ef4f20cfe7122c43851c4fd650fb
+  - live_reset_contract_sha256: 3e54ae368e16c03e14ca68ea18ea65eee5a0f24063d806acc6c9765d59154cad
+  - controllers_readiness_sha256: 7a77a1a30f36e653f8069ae0f3dbf8d9becc0126d605ad632dec60a4edc4006e
+  - evidence_topic_readiness_sha256: 86581877ae770a83490e38412744ed88d0656782fd5b9831944f7c6730e06e6f
+  - evidence_subscriber_readiness_sha256: b655173e77fef5f270bddbb4cee0514bd21328ae8a6b8b1d4bce68b7ba25ac16
+  - exit_codes_sha256: 2264f485e5ba95fec6367ef74346dba711e53881a49d9113a1fbbc732c27d467
+  - domain_after_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+exit_codes: domain_before_rc=0 launch_rc=0 readiness_rc=0 pytest_rc=0 kill_rc=0 domain_cleanup_rc=0 hash_rc=0
+next_command: Run final ledger-aware gates, then create and push the scoped Task 10B commit.
+```
+
+## Checkpoint CP-045
+
+```yaml
+checkpoint_id: CP-045
+last_valid_experiment: EXP-033
+current_hypothesis: Valid-only callback accounting closes the freshness loophole without changing the live reset outcome; EXP-034 will prove the exact current source.
+working_tree_status: HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab; index empty; exactly eight Task 10B paths remain unstaged; Gazebo gates remain zero.
+owned_processes: NONE; ROS_DOMAIN_ID 115 is confirmed empty and so101-mujoco-exp034 is reserved but not started.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched.
+confirmed_conclusions:
+  - RED proved an incomplete one-joint message incorrectly advanced the old freshness counter.
+  - GREEN accepts only complete finite six-joint feedback; 19 focused reset tests, 117 non-live tests, Ruff, build, provenance, 369 aggregate tests, isolation, and Gazebo gates pass.
+next_command: Execute EXP-034, then rerun final lightweight gates and create the scoped Task 10B commit.
+```
+
+## Checkpoint CP-046
+
+```yaml
+checkpoint_id: CP-046
+last_valid_experiment: EXP-034
+current_hypothesis: NONE; Task 10B is implementation- and runtime-qualified on the exact current source.
+working_tree_status: HEAD 79644714c9d551d5134496f8f5c7eef17b31e5ab; index empty; exactly eight Task 10B paths remain unstaged pending final ledger-aware gates and the scoped commit; protected Gazebo gates remain zero.
+owned_processes: NONE; so101-mujoco-exp034 was stopped and ROS_DOMAIN_ID 115 is empty.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched.
+confirmed_conclusions:
+  - The root cause of EXP-031 was absence of any post-reset joint callback during a 3.57 ms resume window, shorter than the 100 Hz feedback period.
+  - The minimum fix waits for one valid complete finite post-reset joint message within the original deadline before re-pause; it does not change service order, thresholds, snapshot semantics, or call StepSimulation.
+  - EXP-033 qualified the bounded-resume fix, and EXP-034 qualified the final valid-only joint freshness implementation.
+  - Final pre-live gates report 19 focused reset tests, 117 non-live tests with two live skips, Ruff pass, exact overlay provenance, 369 aggregate tests with zero failures and four skips, isolation pass, and protected Gazebo zero diff/status.
+  - EXP-034 reports two successful reset epochs, post-reset maximum joint errors about 0.000650087 and 0.000390691 rad, valid step-zero paused atomic evidence, and invalid-keyframe epoch stability/final pause.
+open_risks:
+  - The invalid-keyframe failure contract does not require the independently drifting joints to remain inside the successful-reset threshold after failure; only epoch stability and final pause are asserted there.
+next_command: Run final ledger-aware non-live/Ruff/isolation/diff/Gazebo/domain gates, then stage exactly eight Task 10B paths, commit, and push the branch.
 ```
 
 ## Checkpoint CP-037
