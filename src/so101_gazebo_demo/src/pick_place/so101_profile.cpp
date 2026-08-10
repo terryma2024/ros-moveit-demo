@@ -36,6 +36,7 @@ SO101Profile SO101Profile::configured(const TaskObjectConfig & object,
   profile.q6_preopen = motion.gripper_actions.preopen_q6;
   profile.q6_close = motion.gripper_actions.grasp_close_q6;
   profile.q6_contact = motion.gripper_actions.grasp_close_q6;
+  profile.q6_regrasp_squeeze_offset = motion.gripper_actions.seating_preload_rad;
   profile.q6_full_open = motion.gripper_actions.release_q6;
   profile.release_stages_q6 = {0.209, 0.506, profile.q6_full_open};
   profile.q6_geometric_side_contact = object.fingertip_pads.geometry_reference_q6;

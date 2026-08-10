@@ -6,6 +6,7 @@ approach_outside_clearance_m: 0.001
 gripper_actions:
   preopen_q6: 0.465038000
   grasp_close_q6: -0.047608632840292
+  seating_preload_rad: 0.006
   release_q6: 0.750
 states:
   MOVE_ABOVE_OBJECT:
@@ -99,7 +100,7 @@ states:
     velocity_scaling: 0.10
     acceleration_scaling: 0.10
   RECOVER_MOVE_ABOVE_PICK:
-    logical_start: [0.414521193913, 0.179437354347, 0.140117134131, 1.230305282671, -0.000268782932]
+    logical_start: [0.394374618045, 0.210717795147, 0.109628805069, 1.174687840559, 0.001586862580]
     waypoints:
       - [-0.000282114209, 0.200965792445, 0.129655454807, 1.240181404713, -0.000289555209]
     require_waypoint_ladder: false

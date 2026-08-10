@@ -118,6 +118,7 @@ struct MotionPolicyConfig
     // Temporary source-compatibility alias while runtime consumers migrate to
     // grasp_close_q6. It is never read from YAML.
     double close_q6{0.0};
+    double seating_preload_rad{0.0};
     double release_q6{0.0};
   };
 
