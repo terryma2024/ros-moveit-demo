@@ -17,6 +17,11 @@
 
 namespace spp = so101_gazebo_demo::pick_place;
 
+TEST(PhysicalGraspRetryConfig, FrozenPythonStrategyAllowsAtMostTwoAttempts)
+{
+  EXPECT_EQ(spp::PhysicalGraspRetryConfig{}.max_attempts, 2U);
+}
+
 namespace
 {
 spp::WorldSnapshot safeWorld()
@@ -342,45 +347,37 @@ TEST(PhysicalGraspRetryCoordinator, ContactPresentReusesCurrentRecloseTarget)
   EXPECT_DOUBLE_EQ(harness.gripper->targets[1], harness.profile.q6_contact);
 }
 
-TEST(PhysicalGraspRetryCoordinator, SuccessOnAttemptsTwoThroughFiveStopsImmediately)
+TEST(PhysicalGraspRetryCoordinator, SuccessOnSecondAttemptStopsImmediately)
 {
-  for (std::size_t successful_attempt = 2; successful_attempt <= 5; ++successful_attempt) {
-    RetryHarness harness(false, true);
-    harness.motion->cup_follows.assign(successful_attempt - 1, false);
-    harness.motion->cup_follows.back() = true;
-    harness.motion->contacts.assign(successful_attempt - 1, true);
-    const auto result = harness.coordinator->verifyOrRetry();
-    ASSERT_EQ(result.status, spp::ActionStatus::SUCCEEDED) << successful_attempt;
-    EXPECT_EQ(harness.motion->lift_calls, successful_attempt - 1) << successful_attempt;
-    EXPECT_EQ(harness.motion->descend_targets.size(), successful_attempt - 1) << successful_attempt;
-    EXPECT_EQ(harness.gripper->targets.size(), 3 * (successful_attempt - 1)) << successful_attempt;
-    const auto preload =
-      std::max(harness.profile.q6_safe_lower,
-               harness.profile.q6_contact - harness.profile.q6_regrasp_squeeze_offset);
-    for (std::size_t retry = 0; retry + 1 < successful_attempt; ++retry)
-      EXPECT_DOUBLE_EQ(harness.gripper->targets[retry * 3 + 2], preload);
-  }
+  RetryHarness harness(false, true);
+  harness.motion->cup_follows = {true};
+  harness.motion->contacts = {true};
+  const auto result = harness.coordinator->verifyOrRetry();
+  ASSERT_EQ(result.status, spp::ActionStatus::SUCCEEDED);
+  EXPECT_EQ(harness.motion->lift_calls, 1U);
+  EXPECT_EQ(harness.motion->descend_targets.size(), 1U);
+  ASSERT_EQ(harness.gripper->targets.size(), 3U);
+  const auto preload =
+    std::max(harness.profile.q6_safe_lower,
+             harness.profile.q6_contact - harness.profile.q6_regrasp_squeeze_offset);
+  EXPECT_DOUBLE_EQ(harness.gripper->targets[2], preload);
 }
 
-TEST(PhysicalGraspRetryCoordinator, MixedContactExhaustionHasFourRetriesAndNoSixthSideEffect)
+TEST(PhysicalGraspRetryCoordinator, FrozenStrategyExhaustsAfterOneRetry)
 {
   RetryHarness harness(false, false);
-  harness.motion->cup_follows = {false, false, false, false};
-  harness.motion->contacts = {true, false, true, false};
+  harness.motion->cup_follows = {false};
+  harness.motion->contacts = {true};
   const auto result = harness.coordinator->verifyOrRetry();
   ASSERT_EQ(result.status, spp::ActionStatus::FAILED);
   ASSERT_TRUE(result.failure);
-  EXPECT_EQ(result.failure->code, "PHYSICAL_GRASP_CONTACT_MISSING");
-  EXPECT_EQ(result.failure->message, "Cup/gripper contact is required");
-  EXPECT_EQ(harness.motion->lift_calls, 4U);
-  EXPECT_EQ(harness.motion->descend_targets.size(), 4U);
-  ASSERT_EQ(harness.gripper->targets.size(), 12U);
+  EXPECT_EQ(result.failure->code, "PHYSICAL_GRASP_INSUFFICIENT_LIFT");
+  EXPECT_EQ(harness.motion->lift_calls, 1U);
+  EXPECT_EQ(harness.motion->descend_targets.size(), 1U);
+  ASSERT_EQ(harness.gripper->targets.size(), 3U);
   EXPECT_DOUBLE_EQ(harness.gripper->targets[1], harness.profile.q6_contact - 0.001);
-  EXPECT_DOUBLE_EQ(harness.gripper->targets[4], harness.profile.q6_contact - 0.001);
-  EXPECT_DOUBLE_EQ(harness.gripper->targets[7], harness.profile.q6_contact - 0.002);
-  EXPECT_DOUBLE_EQ(harness.gripper->targets[10], harness.profile.q6_contact - 0.002);
-  EXPECT_EQ(result.failure->metrics.at("physical_grasp_attempts"), 5.0);
-  EXPECT_EQ(result.failure->metrics.at("physical_grasp_retries"), 4.0);
+  EXPECT_EQ(result.failure->metrics.at("physical_grasp_attempts"), 2.0);
+  EXPECT_EQ(result.failure->metrics.at("physical_grasp_retries"), 1.0);
   EXPECT_EQ(result.failure->metrics.at("retry_exhausted"), 1.0);
 }
 
@@ -506,19 +503,16 @@ TEST(PhysicalGraspRetryCoordinator, CancellationBetweenEveryCoordinatorCallDispa
 TEST(PhysicalGraspRetry, ContactHistoryControlsOnlyCumulativeRecloseTarget)
 {
   const auto & profile = spp::SO101Profile::canonical();
-  spp::PhysicalGraspRetryProgress progress{1, 0, profile.q6_contact};
-  const bool contacts[] = {false, true, false, true};
-  const double offsets[] = {-0.001, -0.001, -0.002, -0.002};
-  for (std::size_t index = 0; index < 4; ++index) {
+  for (const bool contact : {false, true}) {
+    const spp::PhysicalGraspRetryProgress progress{1, 0, profile.q6_contact};
     const auto decision = spp::decidePhysicalGraspRetry(
       {}, profile, progress,
-      failed(contacts[index] ? "PHYSICAL_GRASP_FOLLOW_RATIO" : "PHYSICAL_GRASP_CONTACT_MISSING",
-             contacts[index]),
+      failed(contact ? "PHYSICAL_GRASP_INSUFFICIENT_LIFT" : "PHYSICAL_GRASP_CONTACT_MISSING",
+             contact),
       safeWorld());
-    ASSERT_TRUE(decision.retry) << index << ":"
-                                << (decision.rejection ? decision.rejection->code : "no rejection");
-    EXPECT_DOUBLE_EQ(profile.q6_contact + offsets[index], decision.next.current_reclose_target_q6);
-    progress = decision.next;
+    ASSERT_TRUE(decision.retry) << (decision.rejection ? decision.rejection->code : "no rejection");
+    EXPECT_DOUBLE_EQ(profile.q6_contact + (contact ? 0.0 : -0.001),
+                     decision.next.current_reclose_target_q6);
   }
 }
 
@@ -528,7 +522,7 @@ TEST(PhysicalGraspRetry, RejectsExhaustionAndUnsafeFacts)
   auto world = safeWorld();
   auto result = failed("PHYSICAL_GRASP_TABLE_CLEARANCE");
   EXPECT_FALSE(
-    spp::decidePhysicalGraspRetry({}, profile, {5, 0, profile.q6_contact}, result, world).retry);
+    spp::decidePhysicalGraspRetry({}, profile, {2, 0, profile.q6_contact}, result, world).retry);
   result.tcp_z_delta_m = 0.0;
   EXPECT_FALSE(
     spp::decidePhysicalGraspRetry({}, profile, {1, 0, profile.q6_contact}, result, world).retry);

@@ -20,6 +20,7 @@ Failure failure(std::string code, std::string message, const PhysicalGraspResult
            {"cup_follow_ratio", result.cup_follow_ratio},
            {"xy_slip_m", result.xy_slip_m},
            {"orientation_change_rad", result.orientation_change_rad},
+           {"position_error_m", result.position_error_m},
            {"gripper_contact", result.gripper_contact ? 1.0 : 0.0}}};
 }
 }  // namespace
@@ -49,9 +50,22 @@ PhysicalGraspResult PhysicalGraspValidator::evaluate(const WorldSnapshot & befor
   result.cup_follow_ratio =
     std::abs(result.tcp_z_delta_m) <= 1e-12 ? 0.0 : result.cup_z_delta_m / result.tcp_z_delta_m;
   result.xy_slip_m = std::hypot(cup_after.x - cup_before.x, cup_after.y - cup_before.y);
+  const double z_tracking_error = result.cup_z_delta_m - result.tcp_z_delta_m;
+  result.position_error_m = std::hypot(result.xy_slip_m, z_tracking_error);
   result.orientation_change_rad = orientationDistance(cup_before, cup_after);
   result.gripper_contact = after.gazebo_task_object_gripper_contact.value_or(false);
-  if (thresholds_.require_gripper_contact && !result.gripper_contact) {
+  if (thresholds_.require_arm_stable && (!before.arm_stationary || !after.arm_stationary)) {
+    result.failure =
+      failure("PHYSICAL_GRASP_ARM_UNSTABLE", "Arm must be stable around the micro lift", result);
+  } else if (result.cup_z_delta_m < thresholds_.minimum_axial_progress_m) {
+    result.failure = failure("PHYSICAL_GRASP_INSUFFICIENT_LIFT",
+                             "Cup did not make the minimum upward progress", result);
+  } else if (result.xy_slip_m > thresholds_.max_xy_slip_m) {
+    result.failure = failure("PHYSICAL_GRASP_XY_SLIP", "Cup XY slip exceeds threshold", result);
+  } else if (result.position_error_m > thresholds_.maximum_position_error_m) {
+    result.failure = failure("PHYSICAL_GRASP_POSITION_ERROR",
+                             "Cup did not follow the commanded micro-lift displacement", result);
+  } else if (thresholds_.require_gripper_contact && !result.gripper_contact) {
     result.failure =
       failure("PHYSICAL_GRASP_CONTACT_MISSING", "Cup/gripper contact is required", result);
   } else if (result.table_clearance_m <= thresholds_.min_table_clearance_m) {
@@ -60,8 +74,6 @@ PhysicalGraspResult PhysicalGraspValidator::evaluate(const WorldSnapshot & befor
   } else if (result.cup_follow_ratio < thresholds_.min_cup_follow_ratio) {
     result.failure =
       failure("PHYSICAL_GRASP_FOLLOW_RATIO", "Cup did not follow the micro lift", result);
-  } else if (result.xy_slip_m > thresholds_.max_xy_slip_m) {
-    result.failure = failure("PHYSICAL_GRASP_XY_SLIP", "Cup XY slip exceeds threshold", result);
   } else if (result.orientation_change_rad > thresholds_.max_orientation_change_rad) {
     result.failure =
       failure("PHYSICAL_GRASP_ORIENTATION", "Cup orientation changed too far", result);

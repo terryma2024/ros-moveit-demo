@@ -159,8 +159,8 @@ TEST(SO101AttachmentContracts, RegistersEveryForwardAndRecoveryAttachmentBoundar
          key(pick_place::State::ATTACH_GAZEBO, pick_place::State::ATTACH_MOVEIT),
          key(pick_place::State::ATTACH_MOVEIT, pick_place::State::LIFT),
          key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT),
-         key(pick_place::State::DETACH_MOVEIT, pick_place::State::OPEN_GRIPPER),
-         key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT),
+         key(pick_place::State::DETACH_MOVEIT, pick_place::State::WAIT_RELEASE_SETTLE),
+         key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::DONE),
          key(pick_place::State::RECOVER_DETACH_GAZEBO, pick_place::State::RECOVER_DETACH_MOVEIT),
          key(pick_place::State::RECOVER_DETACH_MOVEIT,
              pick_place::State::RECOVER_SYNC_WORLD_OBJECT),
@@ -419,7 +419,7 @@ TEST(SO101AttachmentContracts, GazeboAttachRejectsCanTopEdgeContact)
   EXPECT_FALSE(result.ok);
 }
 
-TEST(SO101AttachmentContracts, ForwardDetachOrderUsesCurrentDualWorldFacts)
+TEST(SO101AttachmentContracts, PostRetreatDetachUsesCurrentDualWorldFacts)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   const auto gazebo_contract = attachmentContract(
@@ -438,11 +438,11 @@ TEST(SO101AttachmentContracts, ForwardDetachOrderUsesCurrentDualWorldFacts)
   EXPECT_FALSE(gazebo_contract->validate(before, after_gazebo, succeeded()).ok);
 
   const auto moveit_contract = attachmentContract(
-    key(pick_place::State::DETACH_MOVEIT, pick_place::State::OPEN_GRIPPER), profile);
+    key(pick_place::State::DETACH_MOVEIT, pick_place::State::WAIT_RELEASE_SETTLE), profile);
   before = world(false, true);
   auto after_moveit = world(false, false);
-  before.joint_positions[profile.gripper_joint] = profile.q6_contact;
-  after_moveit.joint_positions[profile.gripper_joint] = profile.q6_contact;
+  before.joint_positions[profile.gripper_joint] = profile.q6_full_open;
+  after_moveit.joint_positions[profile.gripper_joint] = profile.q6_full_open;
   setTaskObjectPose(before, profile.place_task_object_pose);
   setTaskObjectPose(after_moveit, profile.place_task_object_pose);
   EXPECT_TRUE(moveit_contract->validate(before, after_moveit, succeeded()).ok);
@@ -454,9 +454,11 @@ TEST(SO101AttachmentContracts, MoveItDetachUsesSafeReleaseEnvelopeWithoutFinalTi
 {
   const auto & profile = pick_place::SO101Profile::canonical();
   const auto contract = attachmentContract(
-    key(pick_place::State::DETACH_MOVEIT, pick_place::State::OPEN_GRIPPER), profile);
+    key(pick_place::State::DETACH_MOVEIT, pick_place::State::WAIT_RELEASE_SETTLE), profile);
   auto before = world(false, true);
   auto after = world(false, false);
+  before.joint_positions[profile.gripper_joint] = profile.q6_full_open;
+  after.joint_positions[profile.gripper_joint] = profile.q6_full_open;
   const pick_place::Pose3d live_release_pose{
     -0.07489179074764252, -0.25029996037483215, 0.17534954845905304, -0.04800073703704309,
     -0.12080902111287307, -0.20319523606076123, 0.9704704082464405};
@@ -474,8 +476,8 @@ TEST(SO101AttachmentContracts, MoveItDetachUsesSafeReleaseEnvelopeWithoutFinalTi
 TEST(SO101AttachmentContracts, SyncComparesIndependentGazeboAndMoveItSixDegreePoses)
 {
   const auto & profile = pick_place::SO101Profile::canonical();
-  const auto contract = attachmentContract(
-    key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT), profile);
+  const auto contract =
+    attachmentContract(key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::DONE), profile);
   auto before = world(false, false);
   auto after = world(false, false);
   before.joint_positions[profile.gripper_joint] = profile.q6_full_open;
@@ -530,9 +532,9 @@ TEST(SO101AttachmentContracts, DetachAllowsBoundedSettlingWhileSyncAndRecoveryRe
   std::vector<Case> cases{
     {key(pick_place::State::DETACH_GAZEBO, pick_place::State::DETACH_MOVEIT), world(true, true),
      world(false, true), profile.place_task_object_pose},
-    {key(pick_place::State::DETACH_MOVEIT, pick_place::State::OPEN_GRIPPER), world(false, true),
-     world(false, false), profile.place_task_object_pose},
-    {key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT), world(false, false),
+    {key(pick_place::State::DETACH_MOVEIT, pick_place::State::WAIT_RELEASE_SETTLE),
+     world(false, true), world(false, false), profile.place_task_object_pose},
+    {key(pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::DONE), world(false, false),
      world(false, false), profile.place_task_object_pose},
     {key(pick_place::State::RECOVER_DETACH_GAZEBO, pick_place::State::RECOVER_DETACH_MOVEIT),
      world(false, false), world(false, false), profile.task_object_pose},
@@ -543,6 +545,7 @@ TEST(SO101AttachmentContracts, DetachAllowsBoundedSettlingWhileSyncAndRecoveryRe
   };
   for (auto & test_case : cases) {
     const bool released = test_case.transition.from == pick_place::State::DETACH_GAZEBO ||
+                          test_case.transition.from == pick_place::State::DETACH_MOVEIT ||
                           test_case.transition.from == pick_place::State::SYNC_WORLD_OBJECT ||
                           test_case.transition.from == pick_place::State::RECOVER_DETACH_GAZEBO ||
                           test_case.transition.from == pick_place::State::RECOVER_DETACH_MOVEIT ||
@@ -771,7 +774,7 @@ TEST(SO101AttachmentContracts, FinalSyncUsesFrozenFinalGazeboPose)
 
   const auto prepared = policy.prepare(
     pick_place_common::ros_adapters::MoveItSceneOperation::SYNC,
-    {pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::RETREAT, snapshot, nullptr});
+    {pick_place::State::SYNC_WORLD_OBJECT, pick_place::State::DONE, snapshot, nullptr});
 
   ASSERT_FALSE(prepared.failure);
   ASSERT_TRUE(prepared.task_object_pose);

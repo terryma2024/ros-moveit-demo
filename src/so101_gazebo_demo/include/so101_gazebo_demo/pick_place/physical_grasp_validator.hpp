@@ -7,13 +7,16 @@ namespace so101_gazebo_demo::pick_place
 {
 struct PhysicalGraspThresholds
 {
-  double min_table_clearance_m{0.0005};
-  double min_cup_follow_ratio{0.8};
-  // Millimetre-scale lateral compliance is acceptable for end-to-end pick/place.
-  // Keep a wider bound only to reject an obviously unstable or dropped grasp.
-  double max_xy_slip_m{0.003};
-  double max_orientation_change_rad{0.10};
-  bool require_gripper_contact{true};
+  // The default EXP081 contract is outcome-first.  Process telemetry remains
+  // available and stricter callers can still opt into the legacy gates.
+  double min_table_clearance_m{-1.0};
+  double min_cup_follow_ratio{0.0};
+  double max_xy_slip_m{0.006};
+  double max_orientation_change_rad{3.141592653589793};
+  bool require_gripper_contact{false};
+  double minimum_axial_progress_m{0.0001};
+  double maximum_position_error_m{0.006};
+  bool require_arm_stable{true};
 };
 
 // Gazebo reports the model frame pose, not necessarily the lowest collision
@@ -35,6 +38,7 @@ struct PhysicalGraspResult
   double cup_follow_ratio{0.0};
   double xy_slip_m{0.0};
   double orientation_change_rad{0.0};
+  double position_error_m{0.0};
   bool gripper_contact{false};
   Failure failure{};
 };

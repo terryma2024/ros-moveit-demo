@@ -2,11 +2,19 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <thread>
 #include <utility>
 
 namespace so101_gazebo_demo::pick_place
 {
+namespace
+{
+constexpr double kMinimumTargetPenetrationM = 0.0001;
+constexpr double kMaximumTargetPenetrationM = 0.001;
+constexpr double kNormalizationStepQ6 = 0.001;
+constexpr int kMaximumNormalizationAdjustments = 4;
+}  // namespace
 
 SO101PhysicalGraspStabilizer::SO101PhysicalGraspStabilizer(
   std::shared_ptr<IWorldObserver> observer, std::shared_ptr<IPhysicalGraspEvidenceStore> evidence,
@@ -44,6 +52,15 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
                                 "Physical-grasp stability capture was cancelled",
                                 {}}};
   };
+  const auto preloadTarget = [this](const WorldSnapshot & snapshot) {
+    const auto position = snapshot.joint_positions.find(profile_.gripper_joint);
+    const double measured_contact_q6 =
+      position != snapshot.joint_positions.end() && std::isfinite(position->second)
+        ? position->second
+        : profile_.q6_contact;
+    return std::max(profile_.q6_safe_lower,
+                    measured_contact_q6 - profile_.q6_regrasp_squeeze_offset);
+  };
   if (!observer_ || !evidence_) {
     return {ActionStatus::FAILED,
             Failure{FailureCategory::CONFIGURATION,
@@ -58,6 +75,9 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
   int consecutive_unilateral = 0;
   int samples_in_phase = 0;
   bool regrasp_attempted = false;
+  int normalization_adjustments = 0;
+  double last_gripper_target =
+    std::max(profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
   while (samples_in_phase < max_samples_per_phase) {
     ++samples_in_phase;
     if (auto stopped = cancelled())
@@ -93,6 +113,50 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
       snapshot.gazebo_task_object_gripper_max_depth &&
       *snapshot.gazebo_task_object_gripper_max_depth <= profile_.max_gripper_contact_depth;
     if (!before_lift || bilateral) {
+      if (before_lift && regrasp_attempted && snapshot.gazebo_task_object_gripper_max_depth) {
+        const double depth = *snapshot.gazebo_task_object_gripper_max_depth;
+        if (depth < kMinimumTargetPenetrationM || depth > kMaximumTargetPenetrationM) {
+          if (normalization_adjustments >= kMaximumNormalizationAdjustments) {
+            return {ActionStatus::FAILED,
+                    Failure{FailureCategory::POSTCONDITION,
+                            "PHYSICAL_GRASP_PENETRATION_NORMALIZATION_EXHAUSTED",
+                            "Grasp penetration did not enter the target interval after four "
+                            "bounded adjustments",
+                            {{"actual_penetration_m", depth},
+                             {"target_min_penetration_m", kMinimumTargetPenetrationM},
+                             {"target_max_penetration_m", kMaximumTargetPenetrationM},
+                             {"hard_max_penetration_m", profile_.max_gripper_contact_depth}}}};
+          }
+          if (!gripper_) {
+            return {ActionStatus::FAILED,
+                    Failure{FailureCategory::CONFIGURATION,
+                            "PHYSICAL_REGRASP_COMMAND_MISSING",
+                            "Penetration normalization requires the production gripper command",
+                            {}}};
+          }
+          const auto position = snapshot.joint_positions.find(profile_.gripper_joint);
+          const double current =
+            position != snapshot.joint_positions.end() ? position->second : last_gripper_target;
+          const double requested = depth > kMaximumTargetPenetrationM
+                                     ? current + kNormalizationStepQ6
+                                     : current - kNormalizationStepQ6;
+          const double target =
+            std::clamp(requested, profile_.q6_safe_lower, profile_.q6_full_open);
+          if (auto stopped = cancelled())
+            return *stopped;
+          const auto adjusted = gripper_->command(target);
+          const bool contact_abort = adjusted.status == ActionStatus::FAILED && adjusted.failure &&
+                                     adjusted.failure->code == "GRIPPER_ACTION_ABORTED";
+          if (adjusted.status != ActionStatus::SUCCEEDED && !contact_abort)
+            return adjusted;
+          ++normalization_adjustments;
+          last_gripper_target = target;
+          consecutive = 0;
+          last.reset();
+          samples_in_phase = 0;
+          continue;
+        }
+      }
       ++consecutive;
       consecutive_unilateral = 0;
       last = snapshot;
@@ -107,14 +171,14 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
                             "Bilateral contact retry requires the production gripper command",
                             {}}};
           }
-          const double retry_target = std::max(
-            profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
+          const double retry_target = preloadTarget(snapshot);
           const auto retry = gripper_->command(retry_target);
           const bool contact_abort = retry.status == ActionStatus::FAILED && retry.failure &&
                                      retry.failure->code == "GRIPPER_ACTION_ABORTED";
           if (retry.status != ActionStatus::SUCCEEDED && !contact_abort)
             return retry;
           regrasp_attempted = true;
+          last_gripper_target = retry_target;
           consecutive = 0;
           last.reset();
           samples_in_phase = 0;
@@ -133,8 +197,7 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
                           "Bilateral contact retry requires the production gripper command",
                           {}}};
         }
-        const double retry_target = std::max(
-          profile_.q6_safe_lower, profile_.q6_contact - profile_.q6_regrasp_squeeze_offset);
+        const double retry_target = preloadTarget(snapshot);
         if (auto stopped = cancelled())
           return *stopped;
         const auto retry = gripper_->command(retry_target);
@@ -143,6 +206,7 @@ ActionResult SO101PhysicalGraspStabilizer::capture(bool before_lift)
         if (retry.status != ActionStatus::SUCCEEDED && !contact_abort)
           return retry;
         regrasp_attempted = true;
+        last_gripper_target = retry_target;
         samples_in_phase = 0;
       }
     }

@@ -16,7 +16,7 @@ class SO101PhysicalGraspStabilizer;
 
 struct PhysicalGraspRetryConfig
 {
-  std::size_t max_attempts{5};
+  std::size_t max_attempts{2};
   double contact_missing_tighten_step_q6{0.001};
   double max_tighten_q6{0.004};
 };

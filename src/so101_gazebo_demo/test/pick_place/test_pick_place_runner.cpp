@@ -536,12 +536,12 @@ std::vector<State> normalTrace()
           State::LIFT,
           State::MOVE_ABOVE_PLACE,
           State::DESCEND_TO_PLACE,
-          State::DETACH_MOVEIT,
           State::OPEN_GRIPPER,
+          State::RETREAT,
+          State::DETACH_MOVEIT,
           State::WAIT_RELEASE_SETTLE,
           State::VALIDATE_FINAL_PLACEMENT,
           State::SYNC_WORLD_OBJECT,
-          State::RETREAT,
           State::DONE};
 }
 

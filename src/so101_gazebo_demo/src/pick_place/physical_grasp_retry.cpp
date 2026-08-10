@@ -29,9 +29,9 @@ PhysicalGraspRetryDecision decidePhysicalGraspRetry(const PhysicalGraspRetryConf
                                                     const WorldSnapshot & after)
 {
   PhysicalGraspRetryDecision decision{false, current, std::nullopt};
-  if (config.max_attempts != 5 || config.contact_missing_tighten_step_q6 != 0.001 ||
-      config.max_tighten_q6 != 0.004 || current.attempt_index == 0 ||
-      current.attempt_index > config.max_attempts ||
+  if (config.max_attempts == 0 || config.max_attempts > 2 ||
+      config.contact_missing_tighten_step_q6 <= 0.0 || config.max_tighten_q6 < 0.0 ||
+      current.attempt_index == 0 || current.attempt_index > config.max_attempts ||
       current.contact_missing_count >= config.max_attempts ||
       !std::isfinite(current.current_reclose_target_q6)) {
     decision.rejection = rejection("PHYSICAL_GRASP_RETRY_CONFIG_INVALID",
@@ -41,7 +41,9 @@ PhysicalGraspRetryDecision decidePhysicalGraspRetry(const PhysicalGraspRetryConf
   if (physical_result.passed || current.attempt_index >= config.max_attempts)
     return decision;
 
-  const bool retryable_code = physical_result.failure.code == "PHYSICAL_GRASP_TABLE_CLEARANCE" ||
+  const bool retryable_code = physical_result.failure.code == "PHYSICAL_GRASP_INSUFFICIENT_LIFT" ||
+                              physical_result.failure.code == "PHYSICAL_GRASP_POSITION_ERROR" ||
+                              physical_result.failure.code == "PHYSICAL_GRASP_TABLE_CLEARANCE" ||
                               physical_result.failure.code == "PHYSICAL_GRASP_FOLLOW_RATIO" ||
                               physical_result.failure.code == "PHYSICAL_GRASP_CONTACT_MISSING";
   const bool detached =
@@ -123,6 +125,11 @@ WorldSnapshot sampleWorld(const PhysicalGraspSample & sample)
 {
   WorldSnapshot world;
   world.fresh = true;
+  // Persisted samples are only produced after the stabilizer has observed a
+  // stationary arm/cup window; the compact evidence record does not duplicate
+  // that boolean.
+  world.arm_stationary = true;
+  world.gazebo_task_object_stationary = true;
   world.tcp_pose_world = sample.tcp_pose_world;
   world.gazebo_task_object_pose_world = sample.task_object_pose_world;
   world.gazebo_task_object_gripper_contact = sample.gripper_contact;
@@ -224,8 +231,9 @@ ActionResult PhysicalGraspRetryCoordinator::verifyOrRetry()
     }
     if (record.retry.progress.attempt_index >= self.config.max_attempts) {
       auto failure = physical.failure;
-      failure.metrics["physical_grasp_attempts"] = 5.0;
-      failure.metrics["physical_grasp_retries"] = 4.0;
+      failure.metrics["physical_grasp_attempts"] = static_cast<double>(self.config.max_attempts);
+      failure.metrics["physical_grasp_retries"] =
+        static_cast<double>(self.config.max_attempts - 1U);
       failure.metrics["contact_missing_count"] =
         static_cast<double>(record.retry.progress.contact_missing_count);
       failure.metrics["final_reclose_target_q6"] = record.retry.progress.current_reclose_target_q6;

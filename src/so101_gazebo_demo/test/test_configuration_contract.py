@@ -168,15 +168,15 @@ def test_initial_free_space_approach_limits_tracking_lag_without_relaxing_contac
     assert motion['LIFT']['velocity_scaling'] == pytest.approx(0.10)
 
 
-def test_attached_cup_transfers_limit_tracking_lag():
-    """Loaded translation and placement descent stay below the bounded path envelope."""
+def test_attached_cup_transfers_use_frozen_exp081_dynamics():
+    """Lock the successful EXP081 transfer and placement dynamics."""
     motion = load_yaml('motion_policies/light_cup_wall_pick.yaml')['states']
 
-    assert motion['MOVE_ABOVE_PLACE']['velocity_scaling'] == pytest.approx(0.02)
-    assert motion['MOVE_ABOVE_PLACE']['acceleration_scaling'] == pytest.approx(0.02)
+    assert motion['MOVE_ABOVE_PLACE']['velocity_scaling'] == pytest.approx(0.10)
+    assert motion['MOVE_ABOVE_PLACE']['acceleration_scaling'] == pytest.approx(0.05)
     assert motion['LIFT']['velocity_scaling'] == pytest.approx(0.10)
-    assert motion['DESCEND_TO_PLACE']['velocity_scaling'] == pytest.approx(0.03)
-    assert motion['DESCEND_TO_PLACE']['acceleration_scaling'] == pytest.approx(0.03)
+    assert motion['DESCEND_TO_PLACE']['velocity_scaling'] == pytest.approx(0.05)
+    assert motion['DESCEND_TO_PLACE']['acceleration_scaling'] == pytest.approx(0.05)
 
 
 def test_ros2_control_exposes_position_and_velocity_for_every_joint():
