@@ -12,6 +12,13 @@
   <depend>mujoco_ros2_control_msgs</depend>
   <depend>mujoco_ros2_control_plugins</depend>
   <depend>mujoco_vendor</depend>
+  <depend>controller_manager</depend>
+  <depend>joint_state_broadcaster</depend>
+  <depend>joint_trajectory_controller</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>so101_mujoco_support</depend>
   <exec_depend>python3-yaml</exec_depend>
 
   <test_depend>ament_pytest</test_depend>
