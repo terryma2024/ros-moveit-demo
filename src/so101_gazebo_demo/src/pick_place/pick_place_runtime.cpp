@@ -15,6 +15,7 @@
 
 #include "so101_gazebo_demo/pick_place/so101_gripper_validation.hpp"
 #include "so101_gazebo_demo/pick_place/so101_gripper_state.hpp"
+#include "so101_gazebo_demo/pick_place/so101_motion_planner.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_stabilizer.hpp"
 #include "so101_gazebo_demo/pick_place/physical_grasp_retry.hpp"
 #include "so101_gazebo_demo/pick_place/release_settle_executor.hpp"
@@ -228,7 +229,7 @@ void requireMotionEnvironment(ValidationResult & result, const WorldSnapshot & s
   }
   const std::set<std::string> expected_touch_links(profile.moveit_touch_links.begin(),
                                                    profile.moveit_touch_links.end());
-  if (carrying(state)) {
+  if (usesAttachedPlanningShadow(state)) {
     result.metrics["gazebo_task_object_stationary_telemetry"] =
       *snapshot.gazebo_task_object_stationary ? 1.0 : 0.0;
     if (*snapshot.gazebo_task_object_attached || !*snapshot.moveit_task_object_attached ||
@@ -240,7 +241,7 @@ void requireMotionEnvironment(ValidationResult & result, const WorldSnapshot & s
         !snapshot.moveit_gripper_pose_world) {
       addFailure(result, FailureCategory::WORLD_INCONSISTENCY,
                  "CARRYING_ATTACHMENT_EVIDENCE_INVALID",
-                 "Carrying requires exact independent Gazebo and MoveIt attachment facts");
+                 "Planning-shadow motion requires exact independent Gazebo and MoveIt facts");
     }
     return;
   }
@@ -356,8 +357,8 @@ public:
               {}};
     }
     auto result = delegate_.validate(state, before, artifact);
-    if (carrying(state))
-      merge(result, evaluatePlanningShadowDivergence(before, physical_outcome_));
+    if (usesAttachedPlanningShadow(state))
+      merge(result, evaluatePlanningShadowDivergence(before, physical_outcome_, state));
     const auto * motion = dynamic_cast<const MotionPlanArtifact *>(&artifact);
     if (!motion)
       return result;
@@ -376,17 +377,25 @@ public:
         break;
       }
     }
-    if (carrying(state) && before.gazebo_task_object_pose_world &&
+    if (usesAttachedPlanningShadow(state) && before.gazebo_task_object_pose_world &&
         isFinitePose(before.tcp_pose_world)) {
       const auto expected_relative =
         relativePose(before.tcp_pose_world, *before.gazebo_task_object_pose_world)
           .value_or(invalidPose());
       for (const auto & sample : motion->samples) {
-        if (!sample.attached_task_object_pose_world ||
-            !withinSO101AttachmentModelTolerance(
-              relativePose(sample.tcp_pose, *sample.attached_task_object_pose_world)
-                .value_or(invalidPose()),
-              expected_relative, profile_)) {
+        const auto sample_relative =
+          sample.attached_task_object_pose_world
+            ? relativePose(sample.tcp_pose, *sample.attached_task_object_pose_world)
+            : std::nullopt;
+        const bool position_matches = sample_relative && isFinitePose(*sample_relative) &&
+                                      positionDistance(*sample_relative, expected_relative) <=
+                                        profile_.task_object_position_drift_tolerance;
+        const bool orientation_matches =
+          sample_relative && isFinitePose(*sample_relative) &&
+          (!enforcesPlanningShadowOrientation(state) ||
+           axialTiltDistance(*sample_relative, expected_relative) <=
+             profile_.task_object_attachment_orientation_tolerance_rad);
+        if (!position_matches || !orientation_matches) {
           addFailure(
             result, FailureCategory::PLAN_VALIDATION, "ATTACHED_TASK_OBJECT_RELATIVE_PATH_MISMATCH",
             "Every carrying sample must preserve the observed TCP-TaskObject relative pose");
@@ -502,7 +511,7 @@ public:
       if (carrying(spec_.state)) {
         result.metrics["task_object_follow_tilt_error_rad"] = task_object_tilt;
       }
-      if (!carrying(spec_.state) &&
+      if (!carrying(spec_.state) && spec_.state != State::RETREAT &&
           (task_object_position > profile_.task_object_position_drift_tolerance ||
            task_object_orientation > profile_.task_object_orientation_drift_tolerance_rad)) {
         addFailure(result, FailureCategory::POSTCONDITION, "DETACHED_TASK_OBJECT_DRIFT",

@@ -72,13 +72,14 @@ bool posesMatch(const Pose3d & first, const Pose3d & second, const SO101Profile 
          orientationDistance(first, second) <= profile.task_object_orientation_drift_tolerance_rad;
 }
 
-bool posesMatchCylindricalCarry(const Pose3d & first, const Pose3d & second,
-                                const SO101Profile & profile)
+bool posesMatchPlanningShadow(const Pose3d & first, const Pose3d & second, State state,
+                              const SO101Profile & profile)
 {
   return isFinitePose(first) && isFinitePose(second) &&
          positionDistance(first, second) <= profile.task_object_position_drift_tolerance &&
-         axialTiltDistance(first, second) <=
-           profile.task_object_attachment_orientation_tolerance_rad;
+         (!enforcesPlanningShadowOrientation(state) ||
+          axialTiltDistance(first, second) <=
+            profile.task_object_attachment_orientation_tolerance_rad);
 }
 
 const Pose3d & expectedDetachedTaskObjectPose(State state, const SO101Profile & profile)
@@ -106,8 +107,8 @@ bool validScene(const MotionPlanningSceneFacts & facts, const WorldSnapshot & ob
     const auto expected_task_object =
       composePose(*facts.current_gripper_pose_world, *facts.attached_relative_pose);
     return expected_task_object &&
-           posesMatchCylindricalCarry(*observed.gazebo_task_object_pose_world,
-                                      *expected_task_object, profile) &&
+           posesMatchPlanningShadow(*observed.gazebo_task_object_pose_world, *expected_task_object,
+                                    state, profile) &&
            *facts.attached_link == profile.moveit_attach_link &&
            facts.touch_links == std::set<std::string>(profile.moveit_touch_links.begin(),
                                                       profile.moveit_touch_links.end());
@@ -220,8 +221,8 @@ PlanResult ProfiledJointMotionAdapter::plan(const JointMotionRequest & request,
     const auto shadow_world =
       composePose(*scene->current_gripper_pose_world, *scene->attached_relative_pose);
     if (shadow_world &&
-        !posesMatchCylindricalCarry(*observation.snapshot->gazebo_task_object_pose_world,
-                                    *shadow_world, profile_)) {
+        !posesMatchPlanningShadow(*observation.snapshot->gazebo_task_object_pose_world,
+                                  *shadow_world, request.state, profile_)) {
       auto result = fail(FailureCategory::MOVEIT_SCENE, "PLANNING_SHADOW_DIVERGENCE",
                          "Physical TaskObject diverged beyond the planning-shadow bounds");
       result.action.failure->metrics["planning_shadow_position_divergence_m"] =

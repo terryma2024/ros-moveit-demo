@@ -20,6 +20,16 @@ bool isCarryingMotionState(State state) noexcept
   }
 }
 
+bool usesAttachedPlanningShadow(State state) noexcept
+{
+  return isCarryingMotionState(state) || state == State::RETREAT;
+}
+
+bool enforcesPlanningShadowOrientation(State state) noexcept
+{
+  return state != State::DESCEND_TO_PLACE && state != State::RETREAT;
+}
+
 SO101MotionPlanner::SO101MotionPlanner(std::shared_ptr<const IJointMotionTargetPolicy> policy,
                                        std::shared_ptr<IMoveItJointMotionAdapter> adapter,
                                        SO101Profile profile) :
@@ -53,7 +63,7 @@ PlanResult SO101MotionPlanner::plan(State state, State next_state,
                              target.joint_names,
                              target.joint_waypoints,
                              target.ladder,
-                             isCarryingMotionState(state),
+                             usesAttachedPlanningShadow(state),
                              {},
                              target.gripper_position,
                              target.temporal_contact_policy,

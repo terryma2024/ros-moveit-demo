@@ -585,6 +585,28 @@ TEST(SO101JointMotionAdapter, RejectsBadAttachedRelativeTiltBeforePlanning)
   EXPECT_EQ(boundary->plan_calls, 0);
 }
 
+TEST(SO101JointMotionAdapter, ReleaseDescentAllowsShadowTiltBeforePlanning)
+{
+  auto boundary = std::make_shared<FakeBoundary>();
+  boundary->scene = carryingScene();
+  boundary->scene.attached_relative_pose->qx = std::sin(0.10);
+  boundary->scene.attached_relative_pose->qy = 0.0;
+  boundary->scene.attached_relative_pose->qz = 0.0;
+  boundary->scene.attached_relative_pose->qw = std::cos(0.10);
+  auto request = goalRequest();
+  request.state = spp::State::DESCEND_TO_PLACE;
+  request.next_state = spp::State::OPEN_GRIPPER;
+  request.carrying = true;
+  request.gripper_position = 0.662818811;
+  spp::ProfiledJointMotionAdapter adapter(boundary, boundary);
+
+  const auto result = adapter.plan(request, carryingObservation());
+
+  EXPECT_EQ(result.action.status, spp::ActionStatus::SUCCEEDED)
+    << (result.action.failure ? result.action.failure->code : "");
+  EXPECT_EQ(boundary->plan_calls, 1);
+}
+
 TEST(SO101JointMotionAdapter, RejectsMissingSixDegreeSceneFactsBeforePlanning)
 {
   for (const int mutation : {0, 1, 2, 3, 4}) {

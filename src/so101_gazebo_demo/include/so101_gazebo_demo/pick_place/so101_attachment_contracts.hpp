@@ -15,7 +15,7 @@ derivePlanningShadowPose(const WorldSnapshot & snapshot);
 
 [[nodiscard]] ValidationResult
 evaluatePlanningShadowDivergence(const WorldSnapshot & snapshot,
-                                 const PhysicalOutcomePolicyConfig & policy);
+                                 const PhysicalOutcomePolicyConfig & policy, State state);
 
 [[nodiscard]] std::shared_ptr<const TransitionContractRegistry::ITransitionContract>
 makeSO101AttachmentContract(TransitionKey key, const SO101Profile & profile,
