@@ -1756,3 +1756,77 @@ unchanged_verified:
 decision: GREEN_READY_FOR_ONE_GUI_FULL_RESTART
 next_experiment: GUI-PHYSICAL-019
 ```
+
+## GUI-PHYSICAL-019：释放阶段角度遥测后的唯一 GUI FULL_RESTART
+
+```yaml
+experiment_id: GUI-PHYSICAL-019
+status: VALID
+prior_experiment: TDD-PHYSICAL-002
+hypothesis: 释放阶段不再用杯体角度阻断后，流程会进入 OPEN_GRIPPER 和 RETREAT，并由释放后的物理杯体位姿与稳定性决定最终结果
+prediction: GUI 中可观察 DESCEND_TO_PLACE、OPEN_GRIPPER 与 RETREAT；若杯体最终位于目标范围、受桌面支撑、姿态正确且稳定则到 DONE，否则由 final-outcome evaluator 给出结果性失败
+single_variable: DESCEND_TO_PLACE/RETREAT planning-shadow orientation 从 hard gate 改为 telemetry；其余代码、参数与安全边界固定在 1fab1b9
+lifecycle: FULL_RESTART
+source_commit: 1fab1b974eab0ee53841cbbebb96c093f3582b76
+runtime_sha256: 765fb670464df9c3b12e8377a94991fc93db8b67a4aef22a38a9257d9d3ff2ae
+ros_domain_id: 224
+gz_partition: so101-physical-outcome-gui-019-20260810
+evidence_root: /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51
+owned_tmux: so101-physical-cpp-gui-019
+preflight:
+  worktree_clean: true
+  source_build_install_executable_hash_match: true
+  ros_domain_empty: true
+  gz_partition_empty: true
+  conflicting_gazebo_moveit_stack: false
+success_criteria:
+  - trace reaches DONE
+  - final evaluator passes target region、support、upright tilt、linear/angular stability and no gripper contact
+  - Gazebo cup remains physically simulated and MoveIt shadow detaches only after RETREAT
+failure_criteria:
+  - any valid workflow、physics、controller、planning-scene or final-outcome gate fails
+invalid_criteria:
+  - GUI did not start in the logged-in session, environment provenance drifts, or another stack contaminates domain/partition
+started_at: 2026-08-10T12:09:53+08:00
+ended_at: 2026-08-10T12:14:15+08:00
+observed:
+  - trace: IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> OPEN_GRIPPER -> ERROR
+  - last_completed_state: DESCEND_TO_PLACE
+  - failed_state: OPEN_GRIPPER
+  - failure: GRIPPER_ATTACHMENT_STATE_INVALID
+  - failure_message: Attachment facts do not match the gripper state's safety boundary
+  - gripper_command_executed: false
+  - gazebo_task_object_attached: false
+  - moveit_task_object_attached: true
+  - gripper_q6_rad: -0.053007591515779495
+  - cup_pose_xyz_m: [-0.075779, -0.261946, 0.183066]
+  - cup_pose_rpy_rad: [-0.012957, -0.057601, -0.388582]
+  - controllers_active: [arm_controller, gripper_controller, joint_state_broadcaster]
+  - final_outcome_evaluator_reached: false
+  - gui_visible: true
+root_cause:
+  - OPEN_GRIPPER precondition in so101_gripper_state.cpp still requires Gazebo detached plus exact MoveIt detached facts
+  - approved release sequence intentionally keeps the MoveIt planning shadow attached through OPEN_GRIPPER and RETREAT
+  - therefore the legacy gripper-state attachment contract rejects the new sequence before any release command
+evidence:
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/source-head.txt
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/runtime-hashes.txt
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/frozen-launch.log
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/frozen-checkpoint.json
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/failure-controllers.txt
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/failure-joint-states.txt
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/failure-gazebo-attachment.txt
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/failure-moveit-scene.txt
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/failure-pose.txt
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/baseline-desktop.png
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/failure-desktop.png
+  - /tmp/so101-debug-physical-outcome-cpp-gui-019-NQmZ51/failure-evidence.sha256
+cleanup:
+  owned_tmux_stopped: true
+  owned_orphan_gz_pids_terminated: [3719951, 3719952]
+  ros_domain_empty_after_cleanup: true
+  gz_partition_empty_after_cleanup: true
+conclusion: 释放阶段 orientation gate 修订生效，流程首次进入 OPEN_GRIPPER；但 legacy gripper attachment-state contract 与已批准的 MoveIt shadow-through-retreat 时序冲突，导致释放命令前安全停止。本轮未观察到释放后杯体物理效果，不能判定最终放置结果
+decision: STOP_AFTER_ONE_AUTHORIZED_GUI_RUN_AND_REPORT
+next_experiment: TDD-PHYSICAL-003_REVISE_OPEN_GRIPPER_ATTACHMENT_CONTRACT_REQUIRES_APPROVAL
+```
