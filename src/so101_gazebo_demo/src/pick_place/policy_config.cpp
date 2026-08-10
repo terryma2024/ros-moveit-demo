@@ -448,12 +448,21 @@ MotionPolicyConfig parseMotion(const YAML::Node & root)
     throw PolicyError("POLICY_INVALID_VALUE", "approach_outside_clearance_m must not exceed 10 mm");
   }
   const auto gripper = requireField(root, "gripper_actions", "motion policy");
-  rejectUnknownFields(gripper, {"preopen_q6", "grasp_close_q6", "release_q6"}, "gripper_actions");
+  rejectUnknownFields(gripper,
+                      {"preopen_q6", "grasp_close_q6", "seating_preload_rad", "release_q6"},
+                      "gripper_actions");
   result.gripper_actions.preopen_q6 = parseFinite(
     requireField(gripper, "preopen_q6", "gripper_actions"), "gripper_actions.preopen_q6");
   result.gripper_actions.grasp_close_q6 = parseFinite(
     requireField(gripper, "grasp_close_q6", "gripper_actions"), "gripper_actions.grasp_close_q6");
   result.gripper_actions.close_q6 = result.gripper_actions.grasp_close_q6;
+  result.gripper_actions.seating_preload_rad =
+    parseNonNegative(requireField(gripper, "seating_preload_rad", "gripper_actions"),
+                     "gripper_actions.seating_preload_rad");
+  if (result.gripper_actions.seating_preload_rad > 0.006) {
+    throw PolicyError("POLICY_INVALID_VALUE",
+                      "gripper_actions.seating_preload_rad must be within [0.0, 0.006] rad");
+  }
   result.gripper_actions.release_q6 = parseFinite(
     requireField(gripper, "release_q6", "gripper_actions"), "gripper_actions.release_q6");
   if (!(result.gripper_actions.grasp_close_q6 < result.gripper_actions.preopen_q6 &&

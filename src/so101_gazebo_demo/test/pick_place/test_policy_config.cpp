@@ -138,6 +138,7 @@ approach_outside_clearance_m: 0.001
 gripper_actions:
   preopen_q6: 0.465038
   grasp_close_q6: -0.047608632840292
+  seating_preload_rad: 0.006
   release_q6: 1.70
 states:
 )";
@@ -548,6 +549,32 @@ TEST(PolicyConfig, ConfiguresRuntimeGripperTargetsAndTolerancesFromYaml)
   EXPECT_DOUBLE_EQ(0.00125, profile.contact_q6_stop_tolerance);
   EXPECT_DOUBLE_EQ(0.01, profile.q6_velocity_tolerance);
   EXPECT_NEAR(0.001960000000000, profile.contact_width, 1e-12);
+}
+
+TEST(PolicyConfig, ConfiguresSeatingPreloadFromMotionYaml)
+{
+  PolicyFixture fixture("seating_preload");
+  PolicyFixture::write(fixture.motionPath(),
+                       replaceOnce(PolicyFixture::validMotionYaml(), "seating_preload_rad: 0.006",
+                                   "seating_preload_rad: 0.004"));
+  const auto result = spp::loadPolicyBundle(fixture.paths());
+  ASSERT_TRUE(result.bundle) << (result.failure ? result.failure->code : "");
+
+  const auto profile = spp::SO101Profile::configured(result.bundle->object, result.bundle->motion,
+                                                     result.bundle->validation);
+
+  EXPECT_DOUBLE_EQ(0.004, profile.q6_regrasp_squeeze_offset);
+}
+
+TEST(PolicyConfig, RejectsSeatingPreloadOutsidePythonStrategyBounds)
+{
+  for (const auto value : {"-0.001", "0.006001"}) {
+    PolicyFixture fixture(std::string("seating_preload_bound_") + value);
+    PolicyFixture::write(fixture.motionPath(),
+                         replaceOnce(PolicyFixture::validMotionYaml(), "seating_preload_rad: 0.006",
+                                     std::string("seating_preload_rad: ") + value));
+    expectFailure(fixture.paths(), "POLICY_INVALID_VALUE");
+  }
 }
 
 TEST(PolicyConfig, ConfiguresAttachmentRelativePoseFromObjectYaml)

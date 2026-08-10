@@ -1886,3 +1886,62 @@ runtime_validation: NOT_RUN；本 TDD 不声称真实释放或最终放置成功
 decision: KEEP_AND_COMMIT_NO_PUSH
 next_experiment: GUI-PHYSICAL-020_REQUIRES_SEPARATE_APPROVAL
 ```
+
+## TDD-PHYSICAL-004：对齐 Python EXP081 的 preload 与恢复运动边界
+
+```yaml
+experiment_id: TDD-PHYSICAL-004
+status: VALID
+prior_experiment: TDD-PHYSICAL-003
+hypothesis: C++ 已对齐 Python EXP081 的主动作与释放顺序，但 seating preload 仍来自 C++ 默认常量，且 RECOVER_MOVE_ABOVE_PICK 起点未接续 RECOVER_LIFT_TO_SAFE_HEIGHT 终点；将两项改为同一冻结策略来源可消除静默漂移与恢复跳变
+prediction:
+  - 当前 parser 会拒绝 Python 的 seating_preload_rad 字段
+  - 当前恢复连续性测试会因 logical_start 与上一状态终点不一致而失败
+single_variable: Python EXP081 frozen motion-policy source parity
+lifecycle: OFFLINE_TDD
+source_commit: 725d341
+evidence_root: /tmp/so101-debug-align-py-cpp-zraVwOHc
+success_criteria:
+  - focused tests 对 preload schema 与恢复连续性分别精确 RED
+  - C++ 从 motion policy 读取 [0.0, 0.006] rad seating preload，并将其绑定到真实 stabilizer profile
+  - RECOVER_MOVE_ABOVE_PICK.logical_start 等于 RECOVER_LIFT_TO_SAFE_HEIGHT 最终 waypoint
+  - focused、package CTest 与 colcon test-result 全部 GREEN
+failure_criteria:
+  - RED 原因不是策略字段缺失或恢复起点漂移，或任何既有回归测试失败
+invalid_criteria:
+  - 并发 ROS/build 污染、脏 worktree、overlay/source provenance 不一致或无关改动进入 diff
+unchanged:
+  - physics engine、geometry、mass、friction、controller/gains and collision model
+  - penetration target interval [0.0001, 0.001] m and global hard ceiling
+  - two-attempt physical grasp, MoveIt planning shadow, release envelope and final outcome gates
+invalid_attempts:
+  - 首次全包 build 在编译和测试前被 clang-format gate 拒绝；只机械格式化新增 C++ 行后原样重跑，不计为功能 RED/GREEN
+red_evidence:
+  - PolicyConfig.LoadsValidBundleWithCanonicalPathsAndContentDigests 因 seating_preload_rad 被识别为 POLICY_UNKNOWN_FIELD 失败
+  - ConfiguresSeatingPreloadFromMotionYaml 与 RejectsSeatingPreloadOutsidePythonStrategyBounds 共 2/2 精确失败，分别证明 schema/consumer 缺失和边界错误码不一致
+  - test_pick_motion_policy_preserves_state_continuity 显示 RECOVER_MOVE_ABOVE_PICK 的 5 个关节起点均未接续上一状态，最大绝对差 0.055617442112 rad
+implementation:
+  - MotionPolicyConfig.GripperActions 新增 seating_preload_rad，parser 要求字段并保持 Python [0.0, 0.006] rad 边界
+  - SO101Profile::configured 将策略 preload 绑定到真实 q6_regrasp_squeeze_offset，stabilizer 不再仅依赖 C++ 默认常量
+  - RECOVER_MOVE_ABOVE_PICK.logical_start 对齐 Python EXP081 与 RECOVER_LIFT_TO_SAFE_HEIGHT 最终 waypoint
+  - Python 中两个值为零的 grasp TCP candidate 字段不改变当前动作，C++ 未引入无消费者占位字段
+green_evidence:
+  focused_policy_tests: 3/3 passed
+  focused_recovery_continuity: 1/1 passed
+  cpp_quality_gate: clang-tidy warnings-as-errors and clang-format passed
+  colcon_build: 1 package passed
+  package_ctest: 83/83 passed, 0 failed, 307.62 s
+  colcon_test_result: 1316 tests, 0 errors, 0 failures, 82 skipped
+  installed_policy_sha256: 9f75ed0338095d1bb581f04fe67fc00f4485388e375fb99ad62333e4483c9103
+  runtime_build_install_sha256: 6b22fe2c96dd6b5286a3f48d8e18c4ebadded6e24b2ebdae180b912fb56b6a83
+  runtime_library_build_install_sha256: c9e1aa702a0a3f840a28d8a4fb7fb50438c8132d469423d66dde727258947bb3
+evidence:
+  - /tmp/so101-debug-align-py-cpp-zraVwOHc/colcon-build.log
+  - /tmp/so101-debug-align-py-cpp-zraVwOHc/colcon-build-green.log
+  - /tmp/so101-debug-align-py-cpp-zraVwOHc/colcon-test.log
+  - /tmp/so101-debug-align-py-cpp-zraVwOHc/colcon-test-result.log
+conclusion: C++ 的行为性差异已对齐 Python EXP081；preload 由同一冻结策略驱动，恢复运动边界连续，且全部既有安全门和回归测试保持通过
+runtime_validation: NOT_RUN；本轮不声称 Gazebo GUI、真实释放或最终放置成功
+decision: KEEP_AND_COMMIT_NO_PUSH
+next_experiment: GUI-PHYSICAL-020_REQUIRES_SEPARATE_APPROVAL
+```

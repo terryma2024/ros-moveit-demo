@@ -1126,6 +1126,9 @@ def test_pick_motion_policy_preserves_state_continuity():
     assert motion['states']['DESCEND']['logical_start'] == pytest.approx(above_last)
     assert motion['states']['LIFT']['logical_start'] == pytest.approx(descend_last)
     assert motion['states']['LIFT']['waypoints'][-1] == pytest.approx(above_last)
+    assert motion['states']['RECOVER_LIFT_TO_SAFE_HEIGHT']['waypoints'][-1] == pytest.approx(
+        motion['states']['RECOVER_MOVE_ABOVE_PICK']['logical_start']
+    )
     assert motion['states']['RECOVER_MOVE_ABOVE_PICK']['waypoints'][-1] == pytest.approx(
         above_last
     )
