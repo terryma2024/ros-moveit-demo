@@ -110,6 +110,7 @@ class MujocoWorldObserver:
         self._lock = threading.Lock()
         self._latest: SimulationEvidence | None = None
         self._received_at_s: float | None = None
+        self._callback_count = 0
         self._rejected_count = 0
         self._last_rejection = ""
         self._subscription = node.create_subscription(
@@ -117,12 +118,19 @@ class MujocoWorldObserver:
         )
 
     def _callback(self, message: RosSimulationEvidence) -> None:
+        with self._lock:
+            self._callback_count += 1
         try:
             self.accept(message)
         except EvidenceRejected as error:
             with self._lock:
                 self._rejected_count += 1
                 self._last_rejection = str(error)
+
+    @property
+    def callback_count(self) -> int:
+        with self._lock:
+            return self._callback_count
 
     @property
     def rejected_count(self) -> int:

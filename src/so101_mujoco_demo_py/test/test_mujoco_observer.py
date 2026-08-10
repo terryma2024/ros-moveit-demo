@@ -114,6 +114,7 @@ def test_callback_rejection_is_diagnostic_and_does_not_replace_latest() -> None:
     target = observer(now)
     target.accept(message(step=1, sequence=1), received_at_s=10.0)
     target._callback(message(session="wrong", step=2, sequence=2))
+    assert target.callback_count == 1
     assert target.rejected_count == 1
     assert "session mismatch" in target.last_rejection
     assert target.snapshot().simulation_step == 1
