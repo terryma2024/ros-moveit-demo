@@ -28,10 +28,10 @@ Build and test both consumers from the workspace root:
 
 ```bash
 source /opt/ros/jazzy/setup.zsh
-colcon build --packages-up-to panda_gazebo_demo so101_gazebo_demo_cpp --symlink-install
+colcon build --packages-up-to panda_gazebo_demo_cpp so101_gazebo_demo_cpp --symlink-install
 source install/setup.zsh
 PYTHONNOUSERSITE=1 colcon test \
-  --packages-select pick_place_common panda_gazebo_demo so101_gazebo_demo_cpp
+  --packages-select pick_place_common panda_gazebo_demo_cpp so101_gazebo_demo_cpp
 colcon test-result --verbose
 ```
 

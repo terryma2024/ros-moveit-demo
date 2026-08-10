@@ -3,12 +3,17 @@
 The dependency direction is one-way:
 
 ```text
-panda_gazebo_demo ─┐
-                   ├─> pick_place_common::ros_adapters ─> pick_place_common::core
+panda_gazebo_demo_cpp ─┐
+                       ├─> pick_place_common::ros_adapters ─> pick_place_common::core
 so101_gazebo_demo_cpp ─┘
 ```
 
 Current ROS 2 package identity is so101_gazebo_demo_cpp. The C++ namespace and include path remain so101_gazebo_demo. Dated historical experiments, handoffs, and provenance retain the legacy package name verbatim and are not current runtime commands.
+
+Current Panda ROS 2 package identity is `panda_gazebo_demo_cpp`; its existing
+C++ namespace and include path remain unchanged. Dated Panda experiments,
+handoffs, plans, and specifications preserve their legacy commands and paths as
+historical evidence rather than current runtime instructions.
 
 `pick_place_common::core` owns the robot-independent domain model, workflow
 interface, runner, state-action and transition contracts, plan validation,
@@ -76,11 +81,11 @@ The full automated gate is:
 
 ```bash
 source /opt/ros/jazzy/setup.zsh
-colcon build --packages-up-to panda_gazebo_demo so101_gazebo_demo_cpp \
+colcon build --packages-up-to panda_gazebo_demo_cpp so101_gazebo_demo_cpp \
   --symlink-install --cmake-clean-cache
 source install/setup.zsh
 PYTHONNOUSERSITE=1 colcon test \
-  --packages-select pick_place_common panda_gazebo_demo so101_gazebo_demo_cpp \
+  --packages-select pick_place_common panda_gazebo_demo_cpp so101_gazebo_demo_cpp \
   --event-handlers console_direct+
 colcon test-result --verbose
 ```

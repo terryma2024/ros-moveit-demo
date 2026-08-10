@@ -18,33 +18,33 @@ installed entry point; use the state-machine and documented launch controls.
 Build and source the workspace before running the headless checks:
 
 ```bash
-colcon build --packages-up-to panda_gazebo_demo --symlink-install
+colcon build --packages-up-to panda_gazebo_demo_cpp --symlink-install
 source install/setup.bash
 ```
 
 Run one complete workflow, or the required three consecutive acceptance runs:
 
 ```bash
-src/panda_gazebo_demo/test/headless/run_pick_place_e2e.sh --runs 1 --label smoke
-src/panda_gazebo_demo/test/headless/run_pick_place_e2e.sh --runs 3 --label acceptance
+src/panda_gazebo_demo_cpp/test/headless/run_pick_place_e2e.sh --runs 1 --label smoke
+src/panda_gazebo_demo_cpp/test/headless/run_pick_place_e2e.sh --runs 3 --label acceptance
 ```
 
 Run all three attachment-fact recovery scenarios:
 
 ```bash
-src/panda_gazebo_demo/test/headless/run_recovery_scenarios.sh
+src/panda_gazebo_demo_cpp/test/headless/run_recovery_scenarios.sh
 ```
 
 Run the cross-process run-to-plan-only/resume matrix for the exact six approved
 forward motion targets:
 
 ```bash
-src/panda_gazebo_demo/test/headless/run_plan_only_resume_matrix.sh
+src/panda_gazebo_demo_cpp/test/headless/run_plan_only_resume_matrix.sh
 ```
 
 The scripts create an isolated `ROS_DOMAIN_ID` and `GZ_PARTITION`, own a launch
 process group, and terminate only that group. Evidence is retained under
-`build/panda_gazebo_demo/test_logs/`. A successful normal run requires the
+`build/panda_gazebo_demo_cpp/test_logs/`. A successful normal run requires the
 ordered forward workflow to reach `DONE`, every motion plan to carry complete
 trajectory evidence, the final gripper to be open, both Gazebo and MoveIt to be
 detached, and the Gazebo and MoveIt Coke poses to agree near
