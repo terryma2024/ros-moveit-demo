@@ -29,7 +29,7 @@ open_hypotheses:
   - H-R0: requiring and, when necessary, boundedly reacquiring bilateral pad contact immediately before OPEN_GRIPPER prevents the moving-pad sweep observed in PHY5-B0-001 without changing the target region or penetration ceilings.
   - H-G1: the current 0.0001 m target-penetration lower bound accepts a bilateral but torsionally weak grasp; raising only that lower bound to 0.0008 m while preserving the 0.0010 m target maximum and 0.0013 m hard ceiling reduces in-gripper rotation during carry.
   - H-G2: when a bilateral contact is present but shallower than 0.8 mm, direct bounded 1 mrad tightening preserves contact topology better than fully opening and regrasping before every tightening step.
-latest_checkpoint: CP-V2-PREOPEN-TILT-DOC-C10-M1-M8-061
+latest_checkpoint: CP-V2-PREOPEN-TILT-DOC-M9-M15-LOW-062
 next_experiment: PHY5-G13-XY-ONLY-ALIGNMENT
 ```
 
@@ -3106,6 +3106,29 @@ document_changes:
   - reclassify C10 as low direct physical causality, high control/modeling gap, and medium indirect planning influence
   - retain only M1 through M8 in the drop-strategy matrix
   - remove T5 and T6 because they depended on out-of-scope M9 through M11 routes
+preserved_processes:
+  - SO-101 physical stack in tmux so101-phy5-v2-r0, ROS_DOMAIN_ID 189, GZ_PARTITION so101_phy5_v2_r0_001
+  - separately owned MuJoCo MoveIt process in ROS_DOMAIN_ID 138; no conflict and no action taken
+working_tree_status: expected documentation-only changes in the matrix document and experiment ledger
+qualification_status: NOT_STARTED
+next_experiment: PHY5-G13-XY-ONLY-ALIGNMENT
+next_command: preregister PHY5-G13-XY-ONLY-ALIGNMENT and add its RED test before changing runtime behavior
+```
+
+```yaml
+checkpoint_id: CP-V2-PREOPEN-TILT-DOC-M9-M15-LOW-062
+recorded_at: 2026-08-11 Asia/Shanghai
+last_valid_experiment: PHY5-G12-CONTROLLED-RELEASE-RETREAT-RUNTIME-001
+source_commit: f58fc5eea02274cd697a1c2d819da1c0132e50e6
+current_state: unchanged RESET_WORLD_PROVED state from CP-V2-PREOPEN-TILT-MATRIX-RESET-PROVED-060
+runtime_action: NONE
+document: docs/experiments/so101-pre-open-tilt-root-cause-and-drop-strategy-matrix.md
+document_sha256: b40ab3faa0082c29581cb65c809e18995f55baae36eadb8ade90ec8c0d6f5458
+document_changes:
+  - retain M1 through M8 as the current executable experiment scope
+  - restore M9 through M15 in the complete drop-strategy matrix
+  - classify every M9 through M15 route as low expected effectiveness
+  - explicitly exclude M9 through M15 from the current follow-up experiments
 preserved_processes:
   - SO-101 physical stack in tmux so101-phy5-v2-r0, ROS_DOMAIN_ID 189, GZ_PARTITION so101_phy5_v2_r0_001
   - separately owned MuJoCo MoveIt process in ROS_DOMAIN_ID 138; no conflict and no action taken
