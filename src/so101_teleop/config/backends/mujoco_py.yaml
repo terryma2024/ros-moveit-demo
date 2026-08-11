@@ -1,0 +1,21 @@
+backend: mujoco_py
+owner_package: so101_mujoco_demo_py
+probe:
+  package: so101_mujoco_demo_py
+  executable: pick_place_state_machine
+  timeout_s: 10
+  fixed_args: []
+  scene_style: null
+capabilities:
+  backend_probe: true
+  workflow_execute: false
+  workflow_start: false
+  workflow_run: false
+  workflow_resume: false
+  reset_world: false
+  scene_operations: false
+  physical_observation: false
+  manual_joint_execute: false
+  manual_tcp_execute: false
+  camera_presets: false
+operations: {}
