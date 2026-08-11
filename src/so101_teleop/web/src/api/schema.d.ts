@@ -372,6 +372,8 @@ export interface components {
             workflow_run: boolean;
             /** Workflow Start */
             workflow_start: boolean;
+            /** Workflow Stop */
+            workflow_stop: boolean;
         };
         /** CollisionPair */
         CollisionPair: {

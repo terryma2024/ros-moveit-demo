@@ -42,7 +42,7 @@ def test_capabilities_route_exports_a_typed_backend_contract(tmp_path):
     capabilities = schema["components"]["schemas"]["BackendCapabilityMap"]
     assert set(capabilities["required"]) == {
         "backend_probe", "workflow_execute", "workflow_start", "workflow_run",
-        "workflow_resume", "reset_world", "scene_operations",
+        "workflow_resume", "workflow_stop", "reset_world", "scene_operations",
         "physical_observation", "manual_joint_execute", "manual_tcp_execute",
         "camera_presets",
     }

@@ -9,6 +9,7 @@ makes controller/MoveIt unavailability a fail-closed API result.
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import math
 import os
@@ -37,10 +38,6 @@ from std_msgs.msg import Empty, String
 from tf2_ros import Buffer, TransformListener
 from tf2_msgs.msg import TFMessage
 from ros_gz_interfaces.msg import Contacts
-from gz.transport13 import Node as GzTransportNode
-from gz.msgs10.pose_v_pb2 import Pose_V
-from gz.msgs10.stringmsg_pb2 import StringMsg
-
 from .api import create_app, validate_bind_address
 from .backends.protocol import (
     BackendEnvelope,
@@ -70,6 +67,20 @@ TELEOP_ENVIRONMENT_KEYS = (
     "GZ_PARTITION", "GZ_CONFIG_PATH", "GZ_SIM_RESOURCE_PATH",
     "GZ_SIM_SYSTEM_PLUGIN_PATH", "PYTHONPATH", "LD_LIBRARY_PATH",
 )
+
+
+def load_gazebo_bindings(import_module=importlib.import_module):
+    """Load optional Gazebo bindings only for a physical-observation backend."""
+    try:
+        transport = import_module("gz.transport13")
+        pose_messages = import_module("gz.msgs10.pose_v_pb2")
+        string_messages = import_module("gz.msgs10.stringmsg_pb2")
+    except ImportError as error:
+        raise RuntimeError(
+            "GAZEBO_PYTHON_BINDINGS_MISSING: install Ubuntu packages "
+            "python3-gz-transport13 and python3-gz-msgs10 matching Gazebo Harmonic"
+        ) from error
+    return transport.Node, pose_messages.Pose_V, string_messages.StringMsg
 
 
 def read_teleop_environment(environment: Mapping[str, str]) -> dict[str, str]:
@@ -158,9 +169,15 @@ class RosTelemetryWorker:
             threading.Thread(target=self._executor.spin, name="so101-rclpy", daemon=True),
             threading.Thread(target=self._state_validity_sampler, name="so101-state-validity", daemon=True),
         ]
-        self._gazebo_transport = GzTransportNode()
-        self._gazebo_transport.subscribe(Pose_V, "/world/so101_pick_place/pose/info", self._on_gazebo_pose_v)
-        self._gazebo_transport.subscribe(StringMsg, "/so101/object_attached", self._on_gazebo_attachment_state)
+        if self._backend is not None and self._backend.capabilities().physical_observation:
+            gazebo_node, pose_type, string_type = load_gazebo_bindings()
+            self._gazebo_transport = gazebo_node()
+            self._gazebo_transport.subscribe(
+                pose_type, "/world/so101_pick_place/pose/info", self._on_gazebo_pose_v
+            )
+            self._gazebo_transport.subscribe(
+                string_type, "/so101/object_attached", self._on_gazebo_attachment_state
+            )
         self._threads.append(
             threading.Thread(target=self._scene_observer_sampler, name="so101-scene-observer", daemon=True)
         )
@@ -201,7 +218,7 @@ class RosTelemetryWorker:
         """The bridge is diagnostic only: Pose_V may lose all entity names."""
         return
 
-    def _on_gazebo_pose_v(self, message: Pose_V) -> None:
+    def _on_gazebo_pose_v(self, message) -> None:
         """Gazebo Pose_V carries the authoritative entity identity and world pose."""
         for pose in message.pose:
             if pose.name != "plastic_cup":
@@ -215,7 +232,7 @@ class RosTelemetryWorker:
                 self._object_stamp = time.time()
             return
 
-    def _on_gazebo_attachment_state(self, message: StringMsg) -> None:
+    def _on_gazebo_attachment_state(self, message) -> None:
         """Durable Gazebo relay state is the authority for initial detached evidence."""
         if message.data in ("attached", "detached"):
             with self._lock:
@@ -592,7 +609,7 @@ class TeleopService:
                 "resume": "workflow_resume",
                 "force-continue": "workflow_resume",
                 "reset": "workflow_resume",
-                "stop": "workflow_resume",
+                "stop": "workflow_stop",
             }.get(operation)
         return {
             "simulation_reset": "reset_world",
@@ -639,7 +656,7 @@ class TeleopService:
     async def command(self, name: str, body: dict):
         command_id=body.get("command_id", "")
         if not command_id: return self._result(body, False, "COMMAND_ID_REQUIRED", "command_id is required")
-        if name == "execute" and not (
+        if name in ("execute", "cancel") and not (
             self._backend.capabilities().manual_joint_execute
             or self._backend.capabilities().manual_tcp_execute
         ):
@@ -764,7 +781,8 @@ class TeleopService:
                         self._workflow.pop(run_id, None); return self._result(body,True,"OK","workflow checkpoint invalidated")
                     if operation == "force-continue":
                         if body.get("operator_confirmation") != "FORCE CONTINUE": return self._result(body,False,"OVERRIDE_NOT_ALLOWED","physical validation confirmation required")
-                    if operation == "stop": return self._result(body,True,"OK","workflow is checkpoint-controlled; no transition was requested")
+                    if operation == "stop":
+                        return self._backend_unavailable(body, "workflow_stop")
                     envelope = await asyncio.to_thread(
                         self._backend.run_workflow,
                         WorkflowRequest(operation, session_id, checkpoint),

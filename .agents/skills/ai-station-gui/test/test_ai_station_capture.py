@@ -98,6 +98,39 @@ def test_each_capture_uses_a_fresh_unique_directory(tmp_path):
     assert Path(first["desktop"]).parent != Path(second["desktop"]).parent
 
 
+def test_capture_failure_restores_original_window_before_closing_manager(monkeypatch, tmp_path):
+    managers = []
+
+    def factory(display_name):
+        manager = FakeWindowManager(display_name)
+        managers.append(manager)
+        return manager
+
+    monkeypatch.setattr(MODULE, "active_window_id", lambda: 99)
+
+    with pytest.raises(RuntimeError, match="capture failed"):
+        MODULE.capture_session(
+            tmp_path,
+            environment_loader=lambda: {"DISPLAY": ":1"},
+            window_loader=lambda: [{
+                "id": 42,
+                "description": "rviz",
+                "width": 800,
+                "height": 600,
+                "x": 0,
+                "y": 0,
+            }],
+            desktop_grabber=fake_desktop_png,
+            window_grabber=lambda *_args: (_ for _ in ()).throw(
+                RuntimeError("capture failed")
+            ),
+            manager_factory=factory,
+        )
+
+    assert managers[0].activated == [99]
+    assert managers[0].closed is True
+
+
 def test_tab_test_skips_without_ghostty_and_sends_no_key(tmp_path):
     managers = []
 

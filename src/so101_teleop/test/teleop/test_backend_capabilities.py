@@ -13,6 +13,7 @@ PACKAGE = Path(__file__).resolve().parents[2]
 class Worker:
     def __init__(self):
         self._plans = {}
+        self.cancel_calls = 0
         self._snapshot = TelemetrySnapshot(
             mode=ServerMode.READY,
             simulation_session_id="sim-a",
@@ -26,6 +27,9 @@ class Worker:
         self._plans.clear()
         self._snapshot.simulation_session_id = "sim-reset"
         return "sim-reset"
+
+    def cancel(self):
+        self.cancel_calls += 1
 
 
 class FakeAdapter:
@@ -93,6 +97,48 @@ def test_unsupported_workflow_fails_before_run_or_checkpoint():
     assert result.code == "BACKEND_CAPABILITY_UNAVAILABLE"
     assert service._workflow == {}
     assert adapter.calls == []
+
+
+def test_workflow_stop_fails_closed_without_an_explicit_backend_capability():
+    adapter = FakeAdapter("gazebo_cpp")
+    service = TeleopService(Worker(), backend=adapter)
+    lease_id = asyncio.run(lease(service))
+    started = asyncio.run(service.command("workflow_start", {
+        "command_id": "start",
+        "lease_id": lease_id,
+        "session_id": "sim-a",
+    }))
+    workflow_before = dict(service._workflow)
+
+    result = asyncio.run(service.command("workflow_stop", {
+        "command_id": "stop",
+        "lease_id": lease_id,
+        "session_id": "sim-a",
+        "run_id": started.data["workflow"]["run_id"],
+    }))
+
+    assert result.succeeded is False
+    assert result.code == "BACKEND_CAPABILITY_UNAVAILABLE"
+    assert result.layers["capability"] == "workflow_stop"
+    assert service._workflow == workflow_before
+    assert len(adapter.calls) == 1
+
+
+def test_probe_only_backend_rejects_cancel_before_touching_the_worker():
+    adapter = FakeAdapter("mujoco_py")
+    worker = Worker()
+    service = TeleopService(worker, backend=adapter)
+    lease_id = asyncio.run(lease(service))
+
+    result = asyncio.run(service.command("cancel", {
+        "command_id": "cancel",
+        "lease_id": lease_id,
+        "session_id": "sim-a",
+    }))
+
+    assert result.succeeded is False
+    assert result.code == "BACKEND_CAPABILITY_UNAVAILABLE"
+    assert worker.cancel_calls == 0
 
 
 def test_unsupported_reset_preserves_control_plane_state():

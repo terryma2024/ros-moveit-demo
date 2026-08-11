@@ -408,11 +408,13 @@ def capture_session(
             paths["ghostty_after_restore"] = str(restored)
             tab_result = "completed"
 
-        if manager is not None and original_window:
-            manager.activate_window(original_window)
     finally:
         if manager is not None:
-            manager.close()
+            try:
+                if original_window:
+                    manager.activate_window(original_window)
+            finally:
+                manager.close()
 
     return {
         "captured_at": captured_at,

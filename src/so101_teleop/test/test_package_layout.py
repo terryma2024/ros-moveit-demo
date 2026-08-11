@@ -57,6 +57,17 @@ def test_gui_diagnostics_are_installed_by_the_teleop_owner():
     assert {"ffmpeg", "libx11-6", "x11-utils"} <= dependencies
 
 
+def test_runtime_message_dependencies_are_declared_by_the_teleop_owner():
+    package = ET.parse(PACKAGE / "package.xml").getroot()
+    dependencies = {
+        element.text
+        for tag in ("depend", "exec_depend")
+        for element in package.findall(tag)
+    }
+
+    assert "trajectory_msgs" in dependencies
+
+
 def test_cpp_operator_docs_route_gui_tiling_to_the_teleop_owner():
     readme = (CPP / "README.md").read_text()
 

@@ -24,6 +24,7 @@ class BackendCapabilities:
     workflow_start: bool
     workflow_run: bool
     workflow_resume: bool
+    workflow_stop: bool
     reset_world: bool
     scene_operations: bool
     physical_observation: bool

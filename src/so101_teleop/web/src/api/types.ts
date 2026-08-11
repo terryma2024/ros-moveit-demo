@@ -45,6 +45,7 @@ export type BackendCapabilityMap = {
   workflow_start: boolean;
   workflow_run: boolean;
   workflow_resume: boolean;
+  workflow_stop: boolean;
   reset_world: boolean;
   scene_operations: boolean;
   physical_observation: boolean;

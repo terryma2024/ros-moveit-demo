@@ -17,7 +17,7 @@ const gazeboCapabilities = {
   owner_executable: "pick_place_state_machine",
   capabilities: {
     backend_probe: true, workflow_execute: true, workflow_start: true,
-    workflow_run: true, workflow_resume: true, reset_world: true,
+    workflow_run: true, workflow_resume: true, workflow_stop: false, reset_world: true,
     scene_operations: true, physical_observation: true,
     manual_joint_execute: true, manual_tcp_execute: true, camera_presets: true,
   },
