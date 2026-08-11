@@ -2,21 +2,23 @@
 task_id: so101-teleop-extraction
 goal: Extract Teleop and GUI tooling into independently owned packages and validate explicit backend adapters without disturbing active robot stacks.
 success_contract: Standalone so101_teleop and ai-station-gui owners pass package, Web, adapter, capture, installed-overlay, and approved live backend evidence gates; parent repository retains no duplicate capture implementation.
-worktree: /data/work/ws_moveit/.worktrees/so101-teleop-extraction
-branch: codex/so101-teleop-extraction
+worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/so101-teleop-review-fixes
+branch: codex/so101-teleop-review-fixes
 base_commit: c6982116d79c834de60b21d9e324a449a569a9c9
-current_commit: bb99f90ee08706f9988d2c17c229ab89c227e951
-evidence_root: /tmp/so101-debug-teleop-extraction-20260811/
+current_commit: c76fa90fe200477e8749bc59781136fd672b6eb3
+evidence_root: /tmp/so101-debug-teleop-review-fixes-20260811/
 confirmed_conclusions:
   - Approved design keeps robot workflow and physics ownership in each backend module; Teleop owns only the control plane (SPEC-2026-08-11).
   - Active physical-five-success and MuJoCo GUI stacks are preserved and are not implementation test fixtures (CP-001).
   - Gazebo Python scene CLI lacks Teleop scene-repair upsert, so scene_operations must remain false initially (CP-001).
+  - Unsupported workflow Stop and probe-only cancel now fail before checkpoint or worker mutation; all current profiles expose workflow_stop false (CP-006).
+  - Optional-window capture attempts to restore the original active window even when capture raises (CP-006).
 disproven_routes:
   - FULL_RESTART is not an authorized lifecycle for later validation; use RESET_WORLD where reset is required (prior user decision).
 open_hypotheses:
-  - Gazebo C++ and Gazebo Python installed owner envelopes can preserve the existing Teleop workflow/session semantics through fixed CLI profiles.
-  - Full desktop capture remains valid when RViz and Ghostty are both absent.
-latest_checkpoint: CP-004
+  - Gazebo Python owner/controller remains blocked by the independently observed 0.008001 versus 0.008000 rad path-tolerance abort (EXP-006).
+  - The parent robot_demo_001 migration must remove its duplicate capture entry and advance the moveit-demo gitlink (CP-006).
+latest_checkpoint: CP-006
 next_experiment: NONE
 ---
 
@@ -119,7 +121,11 @@ next_command: Write RED tests for frozen backend profiles, fixed backend IDs, st
 
 ```yaml
 experiment_id: EXP-001
-status: COMPLETE
+status: VALID
+correction:
+  at: 2026-08-11T20:05:00+08:00
+  prior_status: COMPLETE
+  reason: Normalize the legacy execution marker to the ledger state machine after review; all preconditions and evidence gates held.
 hypothesis: The extracted Teleop owner and the unchanged C++ robot owner pass their installed package suites together without observing or modifying the preserved live stacks.
 source_commit: e5ac41a28c3f59b71d43fb759d40aa5c2ab5601d
 branch: codex/so101-teleop-extraction
@@ -151,7 +157,11 @@ next_command: Commit the Task 10 ownership boundary and proceed to the ai-statio
 
 ```yaml
 experiment_id: EXP-002
-status: COMPLETE
+status: VALID
+correction:
+  at: 2026-08-11T20:05:00+08:00
+  prior_status: COMPLETE
+  reason: Normalize the legacy execution marker to the ledger state machine after review; the desktop and focus-restoration evidence gates held.
 hypothesis: The project-local ai-station-gui fallback captures a fresh nonempty desktop and exits zero even when RViz or Ghostty is naturally absent, without using SSH or taking over the existing codex-cua session.
 source_commit: bb99f90ee08706f9988d2c17c229ab89c227e951
 branch: codex/so101-teleop-extraction
@@ -190,14 +200,19 @@ next_command: Run the official Skill validator and final static/unit checks, the
 
 ```yaml
 experiment_id: EXP-003
-status: COMPLETE
+status: VALID
+correction:
+  at: 2026-08-11T20:05:00+08:00
+  prior_status: COMPLETE
+  prior_lifecycle: ISOLATED
+  reason: Normalize status and name the dedicated diagnostic stack lifecycle explicitly; this run is not part of a RESET_WORLD stability batch.
 hypothesis: The installed Teleop launch fails before binding a server for an invalid backend or an absent selected owner executable, while a resolvable MuJoCo owner starts probe-only and reports no live runtime features.
 source_commit: 7db054c7168f967a197d913ff2fd2981643a07b6
 branch: codex/so101-teleop-extraction
 overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
 installed_owner: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/so101_teleop
 runtime_executable: ros2 launch so101_teleop so101_teleop.launch.py
-lifecycle: ISOLATED
+lifecycle: ISOLATED_STACK
 isolation:
   ros_domain_id: 221
   gz_partition: so101_teleop_exp003_20260811
@@ -229,13 +244,18 @@ next_command: Plan EXP-004 for a dedicated Gazebo C++ stack, Teleop connection, 
 
 ```yaml
 experiment_id: EXP-004
-status: COMPLETE
+status: VALID
+correction:
+  at: 2026-08-11T20:05:00+08:00
+  prior_status: COMPLETE
+  prior_lifecycle: ISOLATED
+  reason: Normalize status and dedicated diagnostic lifecycle; the single-step evidence gates held and this run is not a RESET_WORLD qualification sample.
 hypothesis: Teleop from the current installed overlay connects to a newly owned Gazebo C++ stack, reports its fixed C++ owner and live READY provenance, and dispatches one Start/single-step boundary whose checkpoint and physical effects are independently observable.
 source_commit: 7db054c7168f967a197d913ff2fd2981643a07b6
 branch: codex/so101-teleop-extraction
 overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
 backend: gazebo_cpp
-lifecycle: ISOLATED
+lifecycle: ISOLATED_STACK
 isolation:
   ros_domain_id: 222
   gz_partition: so101_teleop_exp004_cpp_20260811
@@ -278,14 +298,19 @@ next_command: Commit the lifecycle correction and current ledger, then plan the 
 
 ```yaml
 experiment_id: EXP-005
-status: COMPLETE
+status: INVALID
+correction:
+  at: 2026-08-11T20:05:00+08:00
+  prior_status: COMPLETE
+  prior_lifecycle: ISOLATED
+  reason: The owned Gazebo process ended mid-command and the planned visual gate was unavailable, so the run cannot support a product-behavior conclusion.
 hypothesis: Teleop from commit dd97ff1 connects to a separately owned Gazebo Python stack, selects only so101_gazebo_demo_py with its fixed --live-runtime adapter argument, and completes one Start/single-step boundary with independent runtime evidence.
 source_commit: dd97ff1
 branch: codex/so101-teleop-extraction
 owner_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh
 teleop_overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
 backend: gazebo_py
-lifecycle: ISOLATED
+lifecycle: ISOLATED_STACK
 isolation:
   ros_domain_id: 223
   gz_partition: so101_teleop_exp005_py_20260811
@@ -326,14 +351,19 @@ next_command: Plan one isolated retry with new IDs and task-owned tmux sessions 
 
 ```yaml
 experiment_id: EXP-006
-status: COMPLETE
+status: VALID
+correction:
+  at: 2026-08-11T20:05:00+08:00
+  prior_status: COMPLETE
+  prior_lifecycle: ISOLATED
+  reason: Normalize status and dedicated diagnostic lifecycle; the run produced complete negative controller and visual evidence without process pollution.
 hypothesis: Keeping each Python stack component in a task-owned tmux session prevents the unexplained EXP-005 foreground Gazebo SIGINT, allowing the same single Start/--step request to complete and be captured visually without altering owner code.
 source_commit: dd97ff1
 branch: codex/so101-teleop-extraction
 owner_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh
 teleop_overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
 backend: gazebo_py
-lifecycle: ISOLATED
+lifecycle: ISOLATED_STACK
 isolation:
   ros_domain_id: 224
   gz_partition: so101_teleop_exp006_py_20260811
@@ -399,4 +429,38 @@ confirmed_conclusions:
   - Gazebo Python routing and fail-closed propagation are proven, but live single-step success remains disproven by the independently observed joint-2 path-tolerance abort at 0.008001 versus 0.008000 rad.
 open_boundary: The separate Mac robot_demo_001 owner migration must fetch the published feature commit, remove duplicate root capture code, update current root references, and advance the moveit-demo gitlink in its own branch/worktree.
 next_command: Commit CP-005, push codex/so101-teleop-extraction to origin without force, and verify the remote branch SHA with git ls-remote.
+```
+
+## CP-006 — Review fixes and installed-package verification
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-006
+source_commit: c76fa90fe200477e8749bc59781136fd672b6eb3
+branch: codex/so101-teleop-review-fixes
+working_tree_status: only this ledger normalization and checkpoint are dirty
+owned_processes: NONE active; /tmp/so101-teleop-review-fixes-ai contains only completed build/test artifacts
+preserved_processes: codex, codex-cua, codex-teleop, kimi, so101-mujoco-gui, so101-phy5-v2-r0, and so101-py-qual tmux sessions and their stacks
+confirmed_conclusions:
+  - Workflow Stop previously returned OK without invoking an owner or changing state; the RED regression reproduced that false success.
+  - Probe-only MuJoCo cancel previously reached the worker and returned OK; the RED regression reproduced that capability bypass.
+  - Optional-window capture exceptions previously skipped original-focus restoration; the RED regression reproduced the missing activation.
+  - Gazebo Python bindings were imported at module import time and trajectory_msgs was undeclared; RED tests reproduced both dependency defects.
+  - Current profiles now expose workflow_stop false, Stop fails closed without state mutation, cancel requires at least one manual execution capability, Gazebo bindings load only for physical observation, and the capture finally path restores focus.
+verification:
+  - Focused RED tests failed at the expected old boundaries, then all focused GREEN tests passed.
+  - Source-level Python suites passed 129 tests; ai-station-gui passed 19 tests and both modified Skills passed quick_validate.py.
+  - Web Vitest passed 45 tests, TypeScript/Vite production build passed, and Playwright passed 9 tests after correcting PATH so its configured Bun web server could start.
+  - Fresh ai-station colcon build and all 24 so101_teleop CTest entries passed; colcon test-result reported 235 tests, 0 errors, 0 failures, and 0 skipped.
+  - Installed provenance resolved /tmp/so101-teleop-review-fixes-ai/install/so101_teleop and the expected four executables.
+ledger_corrections:
+  - EXP-001 through EXP-006 legacy COMPLETE markers were normalized with appended correction metadata; EXP-005 is INVALID because its Gazebo process ended mid-command and the planned visual gate was unavailable.
+  - Dedicated diagnostic stacks are recorded as ISOLATED_STACK and remain separate from RESET_WORLD qualification runs.
+cleanup_audit:
+  - No robot, workflow, reset, GUI-control, or Gazebo command was run for CP-006.
+  - No pre-existing tmux session or process was stopped. The stale pytest processes owned by codex-teleop were intentionally preserved.
+open_risks:
+  - No new live GUI capture was needed or performed; the corrected exception path is unit-verified, while EXP-002 retains the prior successful live capture evidence.
+  - Parent robot_demo_001 still requires its separate old-entry deletion, documentation migration, and submodule gitlink update.
+next_command: Commit and publish this ledger, then complete the parent repository migration in its own worktree.
 ```
