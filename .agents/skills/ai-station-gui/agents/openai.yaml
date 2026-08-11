@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Station GUI"
+  short_description: "Capture and control the ai-station desktop safely"
+  default_prompt: "Use $ai-station-gui to capture fresh ai-station desktop evidence and assess GUI control availability."
