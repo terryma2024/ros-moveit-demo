@@ -29,10 +29,9 @@ def test_final_release_shortens_only_the_explicit_release_command() -> None:
     assert gripper_motion_duration_seconds(0.75, final_release=True) == 2
 
     live_execute = (PACKAGE / "src/live_execute.py").read_text()
-    assert (
-        "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
-        in live_execute
-    )
+    assert "def open_gripper_from_bilateral_release(" in live_execute
+    assert "backend.move_gripper(release_q6,final_release=True)" in live_execute
+    assert "release_q6=bundle.motion.release_q6" in live_execute
 
 
 def test_policy_matches_main_seated_grasp_strategy() -> None:
@@ -52,8 +51,11 @@ def test_policy_matches_main_seated_grasp_strategy() -> None:
     assert "CLOSE_GRIPPER" not in motion["states"]
     assert "CLOSE_GRIPPER" not in validation["states"]
     assert motion["states"]["LIFT"]["logical_start"] == seated
-    assert motion["states"]["MOVE_ABOVE_PLACE"]["velocity_scaling"] == 0.10
-    assert motion["states"]["DESCEND_TO_PLACE"]["velocity_scaling"] == 0.05
+    # G8 changes only the carrying velocity profile: the lateral transfer gets
+    # two seconds per waypoint and the final descent gets three.
+    assert motion["states"]["MOVE_ABOVE_PLACE"]["velocity_scaling"] == 0.05
+    assert motion["states"]["MOVE_ABOVE_PLACE"]["acceleration_scaling"] == 0.05
+    assert motion["states"]["DESCEND_TO_PLACE"]["velocity_scaling"] == 0.03
     assert motion["states"]["DESCEND_TO_PLACE"]["acceleration_scaling"] == 0.05
     constraints = controllers["arm_controller"]["ros__parameters"]["constraints"]
     assert {constraints[str(index)]["trajectory"] for index in range(1, 6)} == {0.008}
@@ -126,6 +128,29 @@ def test_micro_lift_move_group_goal_uses_main_pose_tolerances() -> None:
     assert orientation.absolute_z_axis_tolerance == 0.005
 
 
+def test_world_z_retreat_goal_can_relax_only_pitch_tolerance() -> None:
+    goal = make_pose_move_group_goal(
+        ("1", "2", "3", "4", "5", "6"),
+        (0.0, 0.1, 0.2, 0.3, 0.4, 0.75),
+        (0.02, -0.26, 0.237, 0.0, 0.0, 0.0, 1.0),
+        orientation_tolerances_rad=(0.005, 0.060, 0.005),
+    )
+
+    orientation = goal.request.goal_constraints[0].orientation_constraints[0]
+    assert orientation.absolute_x_axis_tolerance == 0.005
+    assert orientation.absolute_y_axis_tolerance == 0.060
+    assert orientation.absolute_z_axis_tolerance == 0.005
+
+
+def test_controlled_release_retreat_uses_selective_pitch_tolerance() -> None:
+    live_execute = (PACKAGE / "src/live_execute.py").read_text()
+
+    assert "preflight_controlled_release_retreat(" in live_execute
+    assert "execute_controlled_release_retreat(" in live_execute
+    assert "orientation_tolerances_rad=(0.005,0.060,0.005)" in live_execute
+    assert "execute_trajectory=False" in live_execute
+
+
 def test_carrying_waypoint_timing_applies_policy_velocity_scaling() -> None:
     assert waypoint_step_seconds(3, 0.01) == 10
     assert waypoint_step_seconds(5, 0.03) == 3
@@ -136,7 +161,7 @@ def test_carrying_waypoint_timing_applies_policy_velocity_scaling() -> None:
 
 def test_target_penetration_closes_after_missing_contact(monkeypatch) -> None:
     targets = []
-    stable = SimpleNamespace(max_moving_pad_penetration_m=0.0004)
+    stable = SimpleNamespace(max_moving_pad_penetration_m=0.00085)
     attempts = iter([RuntimeError("missing"), RuntimeError("missing"), stable])
     monkeypatch.setattr(
         "so101_gazebo_demo.live_execute._stable_bilateral",
@@ -154,11 +179,55 @@ def test_target_penetration_closes_after_missing_contact(monkeypatch) -> None:
     assert targets == [0.465, -0.054, 0.465, -0.055]
 
 
+def test_default_target_penetration_tightens_weak_bilateral_without_preopen(
+    monkeypatch,
+) -> None:
+    targets = []
+    contacts = iter([
+        SimpleNamespace(max_moving_pad_penetration_m=0.0002),
+        SimpleNamespace(max_moving_pad_penetration_m=0.00085),
+    ])
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute._stable_bilateral",
+        lambda _backend: next(contacts),
+    )
+
+    contact, target, adjustments = stabilize_to_target_penetration(
+        SimpleNamespace(move_gripper=targets.append), -0.053, 0.465, -0.0596
+    )
+
+    assert contact.max_moving_pad_penetration_m == 0.00085
+    assert target == -0.054
+    assert adjustments == 1
+    assert targets == [-0.054]
+
+
+def test_target_penetration_accepts_observed_safe_bilateral_depth_without_adjustment(
+    monkeypatch,
+) -> None:
+    targets = []
+    stable = SimpleNamespace(max_moving_pad_penetration_m=0.0005053721251897514)
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute._stable_bilateral",
+        lambda _backend: stable,
+    )
+
+    contact, target, adjustments = stabilize_to_target_penetration(
+        SimpleNamespace(move_gripper=targets.append), -0.04957078364491462,
+        0.465, -0.0596,
+    )
+
+    assert contact is stable
+    assert target == -0.04957078364491462
+    assert adjustments == 0
+    assert targets == []
+
+
 def test_target_penetration_opens_one_milliradian_when_too_deep(monkeypatch) -> None:
     targets = []
     contacts = iter([
-        SimpleNamespace(max_moving_pad_penetration_m=0.001064),
-        SimpleNamespace(max_moving_pad_penetration_m=0.000620),
+        SimpleNamespace(max_moving_pad_penetration_m=0.001164),
+        SimpleNamespace(max_moving_pad_penetration_m=0.000850),
     ])
     monkeypatch.setattr(
         "so101_gazebo_demo.live_execute._stable_bilateral",
@@ -169,7 +238,7 @@ def test_target_penetration_opens_one_milliradian_when_too_deep(monkeypatch) -> 
         SimpleNamespace(move_gripper=targets.append), -0.0536, 0.465, -0.0596
     )
 
-    assert contact.max_moving_pad_penetration_m == 0.000620
+    assert contact.max_moving_pad_penetration_m == 0.000850
     assert target == -0.0526
     assert adjustments == 1
     assert targets == [-0.0526]
@@ -188,6 +257,121 @@ def test_target_penetration_never_recovers_through_hard_ceiling(monkeypatch) -> 
             SimpleNamespace(move_gripper=lambda _target: None),
             -0.053, 0.465, -0.0596,
         )
+
+
+def test_target_penetration_exhaustion_can_continue_with_final_evidence(
+    monkeypatch,
+) -> None:
+    targets = []
+    final_contact = SimpleNamespace(
+        bilateral=False,
+        max_moving_pad_penetration_m=None,
+    )
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute._stable_bilateral",
+        lambda _backend: (_ for _ in ()).throw(RuntimeError("missing moving pad")),
+    )
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute.evaluate_bilateral_contact",
+        lambda contacts: final_contact if contacts == ("final",) else None,
+    )
+    backend = SimpleNamespace(
+        move_gripper=targets.append,
+        contacts=lambda: ("final",),
+    )
+
+    result = stabilize_to_target_penetration(
+        backend,
+        -0.053,
+        0.465,
+        -0.0596,
+        max_adjustments=2,
+    )
+    contact, target, adjustments = result
+
+    assert contact is final_contact
+    assert target == -0.055
+    assert adjustments == 2
+    assert targets == [0.465, -0.054, 0.465, -0.055]
+    assert not result.target_penetration_proved
+    assert result.continued_after_adjustment_exhaustion
+
+
+def test_target_penetration_continuation_does_not_bypass_hard_ceiling(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute._stable_bilateral",
+        lambda _backend: (_ for _ in ()).throw(
+            RuntimeError("moving-pad penetration ceiling exceeded: 0.00131")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="penetration ceiling exceeded"):
+        stabilize_to_target_penetration(
+            SimpleNamespace(move_gripper=lambda _target: None),
+            -0.053,
+            0.465,
+            -0.0596,
+        )
+
+
+def test_target_penetration_final_evidence_still_obeys_hard_ceiling(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute._stable_bilateral",
+        lambda _backend: (_ for _ in ()).throw(RuntimeError("missing moving pad")),
+    )
+    final_contact = SimpleNamespace(max_moving_pad_penetration_m=0.001300001)
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute.evaluate_bilateral_contact",
+        lambda _contacts: final_contact,
+    )
+
+    with pytest.raises(RuntimeError, match="penetration ceiling exceeded"):
+        stabilize_to_target_penetration(
+            SimpleNamespace(
+                move_gripper=lambda _target: None,
+                contacts=lambda: (),
+            ),
+            -0.053,
+            0.465,
+            -0.0596,
+            max_adjustments=0,
+        )
+
+
+def test_target_penetration_exhaustion_is_observational_by_default(
+    monkeypatch,
+) -> None:
+    final_contact = SimpleNamespace(
+        bilateral=False,
+        max_moving_pad_penetration_m=None,
+    )
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute._stable_bilateral",
+        lambda _backend: (_ for _ in ()).throw(RuntimeError("missing moving pad")),
+    )
+    monkeypatch.setattr(
+        "so101_gazebo_demo.live_execute.evaluate_bilateral_contact",
+        lambda _contacts: final_contact,
+    )
+
+    result = stabilize_to_target_penetration(
+        SimpleNamespace(
+            move_gripper=lambda _target: None,
+            contacts=lambda: (),
+        ),
+        -0.053,
+        0.465,
+        -0.0596,
+        max_adjustments=0,
+    )
+
+    assert result.contact is final_contact
+    assert not result.target_penetration_proved
+    assert result.continued_after_adjustment_exhaustion
 
 
 def test_contact_stopped_gripper_goal_defers_to_cup_outcome() -> None:

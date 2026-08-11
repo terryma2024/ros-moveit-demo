@@ -169,18 +169,25 @@ def coobserved_tcp_sample(tcp_pose, tf_source_stamp, object_samples):
     return tcp_pose,observed_stamp
 
 
-def sample_pose_pair_with_retry(sample_once, *, attempts: int = 2):
+def sample_pose_pair_with_retry(
+    sample_once, *, attempts: int = 3,
+    retry_delay_s: float = 0.25, wait=time.sleep,
+):
     """Retry only a transient empty pose-pair subscription, with a fixed bound."""
     if attempts < 1:
         raise ValueError("pose-pair sample attempts must be positive")
+    if retry_delay_s < 0.0:
+        raise ValueError("pose-pair retry delay must not be negative")
     last_error = None
-    for _ in range(attempts):
+    for attempt in range(attempts):
         try:
             return sample_once()
         except RuntimeError as error:
             if "fresh Gazebo/TCP pose pair unavailable" not in str(error):
                 raise
             last_error = error
+            if attempt + 1 < attempts:
+                wait(retry_delay_s)
     raise last_error
 
 
