@@ -166,7 +166,7 @@ def test_rejects_invalid_mode_specific_records(tmp_path: Path, body: dict[str, o
         load_camera_presets(dump_single(tmp_path, body))
 
 
-def test_production_config_has_four_symmetric_table_corner_views() -> None:
+def test_production_config_has_four_symmetric_table_corner_views_and_top_down() -> None:
     presets = load_camera_presets(PRODUCTION_CONFIG)
     required = [
         "table_corner_nw",
@@ -174,7 +174,7 @@ def test_production_config_has_four_symmetric_table_corner_views() -> None:
         "table_corner_se",
         "table_corner_sw",
     ]
-    assert list(presets) == required
+    assert list(presets) == required + ["top_down"]
     assert all(isinstance(presets[name], FreeCameraPreset) for name in required)
     assert len({presets[name].lookat for name in required}) == 1
     assert len({presets[name].distance for name in required}) == 1
@@ -188,3 +188,11 @@ def test_production_config_has_four_symmetric_table_corner_views() -> None:
             )
             == 90.0
         )
+    assert presets["top_down"] == FreeCameraPreset(
+        name="top_down",
+        lookat=(0.0, -0.20000000000000004, 0.12404123391314203),
+        distance=0.85,
+        azimuth_deg=90.0,
+        elevation_deg=-89.999,
+        orthographic=True,
+    )
