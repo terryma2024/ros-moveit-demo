@@ -1,0 +1,48 @@
+schema_version: 1
+calibration_status: PLANNED
+approved_by_user: false
+enabled: false
+units:
+  signed_distance: m
+  normal_force: N
+  linear_speed: m/s
+  joint_position: rad
+  simulation_time: s
+  receipt_time: s
+source_commit: "1548acb20a2bd376e1bbe867603d824d26ddfb21"
+dependency_commit: "9f02f82aae2888d6e29c472c6dd64c34b38c5f93"
+model_sha256: "a87fb09459a75eb58d1077659fd67c3b8250226e8b22e05141c470a0423d5d28"
+config_sha256: "a787213d6c156581b7792d50146346c825fa7145a056242a01da802495a00e43"
+source_evidence_sha256: null
+regimes:
+  no_contact: &pending
+    sample_count: 0
+    quantiles: {p05: null, p50: null, p95: null}
+  left_only: *pending
+  right_only: *pending
+  bilateral_touch: *pending
+  over_compression: *pending
+  micro_lift_slip: *pending
+  stable_hold: *pending
+thresholds:
+  minimum_bilateral_force_n: null
+  maximum_compression_distance_m: null
+  maximum_safe_force_n: null
+  maximum_hold_linear_speed_m_s: null
+  minimum_stable_hold_duration_s: null
+safety_margins: {}
+misclassification_matrix:
+  no_contact: &pending_confusion
+    no_contact: 0
+    left_only: 0
+    right_only: 0
+    bilateral_touch: 0
+    over_compression: 0
+    micro_lift_slip: 0
+    stable_hold: 0
+  left_only: *pending_confusion
+  right_only: *pending_confusion
+  bilateral_touch: *pending_confusion
+  over_compression: *pending_confusion
+  micro_lift_slip: *pending_confusion
+  stable_hold: *pending_confusion

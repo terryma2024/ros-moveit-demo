@@ -4,9 +4,9 @@
 >
 > **Execution rule:** work inline in `/data/work/ws_moveit/.worktrees/so101-mujoco-ros2`; do not spawn subagents and do not SSH back into `ai-station`.
 
-**Goal:** finish MuJoCo contact calibration, eliminate the launch-directed `move_group` shutdown crash, enforce a genuinely physical pick-place result, and qualify the fixed implementation across independent full-restart and reset-world lifecycles.
+**Goal:** finish MuJoCo contact calibration, eliminate the launch-directed `move_group` shutdown crash, enforce a genuinely physical pick-place result, then rebase the same worktree onto the latest `main`, integrate the refactored Teleop module with `so101_mujoco_demo_py`, and qualify that final combined implementation across independent full-restart and reset-world lifecycles.
 
-**Architecture:** keep `so101_mujoco_demo_py` independent from the protected Gazebo package. Task 13 adds a measurement-only, fail-closed calibration path that uses the atomic MuJoCo evidence stream and a pose-constrained approach. After a mandatory human threshold approval, Task 14 wires the approved contact policy into a live ROS 2/MoveIt workflow whose positive path never welds, teleports, or directly writes the cup state. Task 15 drives the same production entry point through two separately counted qualification series.
+**Architecture:** keep `so101_mujoco_demo_py` independent from the protected Gazebo package. Task 13 adds a measurement-only, fail-closed calibration path that uses the atomic MuJoCo evidence stream and a pose-constrained approach. After a mandatory human threshold approval, Task 14 wires the approved contact policy into a live ROS 2/MoveIt workflow whose positive path never welds, teleports, or directly writes the cup state. Only after one fresh single-cycle physical pick-place is `VALID`, Task 14T checkpoints that evidence, rebases a continuation branch in the same worktree onto the latest `origin/main`, and connects the newly refactored Teleop extension surface to `so101_mujoco_demo_py` without moving MuJoCo-specific code into the Gazebo package. Task 15 drives the post-rebase, Teleop-integrated production entry point through two separately counted qualification series.
 
 **Runtime stack:** ROS 2 Jazzy, MoveIt 2, `ros2_control`, the pinned `zjumty/mujoco_ros2_control` fork based on release `0.0.3`, Python 3, pytest, Ruff, YAML/JSON evidence, tmux, and ai-station CUA for fresh MuJoCo GUI evidence.
 
@@ -24,7 +24,7 @@
 - Isolation baseline: `d300e7a41fb274d6d7e120699b7040666ea61904`
 - Long-running ledger: `docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md`
 
-At plan authoring, `origin/main` and this published feature branch have diverged from the same historical baseline. Do not rewrite the published feature branch or force-push it as an incidental preparation step. Record the fetched refs and merge base at the first checkpoint. If integrating a newer `main` becomes necessary, stop and request an explicit integration decision rather than hiding a rebase inside Task 13.
+At plan authoring, `origin/main` and this published feature branch have diverged from the same historical baseline. Do not rewrite the published feature branch or force-push it as an incidental preparation step. Record the fetched refs and merge base at the first checkpoint. The user has explicitly authorized one integration point after the first `VALID` Task 14.4 physical pick-place: Task 14T creates a continuation branch in this same worktree and rebases that continuation branch onto the then-current `origin/main`. No rebase is allowed before that gate, and the already-published `origin/codex/so101-mujoco-ros2` history must never be force-pushed.
 
 ### 1.2 Preserved dirty state
 
@@ -45,7 +45,9 @@ Before changing them, record their SHA-256 hashes and review the contents. Do no
 5. After Task 13 approval, fix and qualify clean shutdown before starting Task 14. `move_group` exit `-11` is a SIGSEGV/lifecycle failure, not a MoveIt planning result.
 6. Task 14 success requires physical MuJoCo evidence. MoveIt action success, Planning Scene attachment, state-machine `DONE`, or a screenshot is insufficient.
 7. Task 15 requires two independent consecutive-success series: five `FULL_RESTART` and five `RESET_WORLD`. They cannot be mixed.
-8. Teleop Web UI and RGB-D camera integration remain out of scope.
+8. Teleop Web UI integration remains out of scope through Task 14.4. It becomes mandatory only in Task 14T after one fresh physical pick-place is `VALID`; RGB-D camera integration remains out of scope.
+9. Task 14T must preserve the pre-rebase grasp commit and evidence hashes, rebase only a new continuation branch, and never force-push or rewrite the published pre-rebase branch.
+10. `so101_gazebo_demo_py` remains protected during Teleop integration. MuJoCo-specific launch, reset, camera, workflow, and evidence behavior belongs in `so101_mujoco_demo_py`; only a minimal simulator-neutral Teleop extension point may be changed outside it when the latest `main` does not already provide one.
 
 ### 1.4 Experiment discipline
 
@@ -368,7 +370,68 @@ feat(so101_mujoco): enforce physical pick place outcome
 
 ---
 
-## 5. Task 15 — Qualify restart/reset repeatability
+## 5. Task 14T — Rebase onto latest `main` and integrate refactored Teleop
+
+This task starts only after Task 14.4 has produced one fresh `VALID` physical pick-place, committed and pushed with its complete evidence hashes. Its purpose is to obtain the latest refactored Teleop module from `main` and integrate MuJoCo through that module's supported extension boundary. The pre-rebase success remains a historical checkpoint; it does not qualify the post-rebase implementation.
+
+### Task 14T.1: Freeze the successful grasp checkpoint and rebase safely
+
+**Files:**
+
+- Update before rebase: `docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md`
+- Read after fetch: the actual Teleop package/module paths present in the latest `origin/main`
+
+- [ ] Stop every task-owned workflow and GUI process cleanly. Record that no experiment is `RUNNING`, the last valid experiment ID, source/dependency/model/config/contact-policy hashes, artifact hashes, owned-process cleanup, current HEAD, and exact dirty paths in a ledger checkpoint.
+- [ ] Commit and push the complete Task 14.4 checkpoint to `origin/codex/so101-mujoco-ros2`; verify the remote SHA and preserve it as `PRE_REBASE_PHYSICAL_SUCCESS_SHA` in the ledger.
+- [ ] Verify the worktree is clean, the fork submodule matches its dependency lock, and both protected-Gazebo gates pass. Do not stash untracked files to make the gate appear clean.
+- [ ] Fetch `origin/main` and the published feature ref. Record `origin/main`, feature tip, and merge base. Review incoming Teleop changes before resolving any conflict.
+- [ ] In the same worktree, create a new continuation branch `codex/so101-mujoco-ros2-teleop` at the preserved Task 14.4 tip, then rebase that continuation branch onto the freshly fetched `origin/main`.
+- [ ] Resolve conflicts semantically: retain the independent `so101_mujoco_demo_py` package and current MuJoCo evidence/physics contracts, adopt the latest Teleop architecture from `main`, and do not restore deleted legacy Teleop code merely to make a textual conflict disappear.
+- [ ] Do not force-push `origin/codex/so101-mujoco-ros2`. Publish the rebased result only as the new continuation branch with a normal push, then record its new HEAD and the old-to-new commit mapping in the ledger.
+- [ ] Immediately rerun diff, isolation, dependency-lock, protected-Gazebo, Ruff, focused pytest, build, and nonzero package/test-discovery gates before adding Teleop integration code. If the rebase alone changes MuJoCo behavior, stop and diagnose that regression first.
+
+### Task 14T.2: Integrate `so101_mujoco_demo_py` through the latest Teleop extension surface
+
+**Files:**
+
+- Update: actual refactored Teleop provider/registry/config/test files discovered from the rebased `main`
+- Update: `src/so101_mujoco_demo_py/so101_mujoco_demo_py/` only for MuJoCo-specific adapters
+- Update: `src/so101_mujoco_demo_py/launch/`, `config/`, `setup.py`, and tests as required by the discovered interface
+- Update: `docs/guides/so101-mujoco-ros2-integration-guide.md`
+- Update: `docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md`
+- Protected/read-only: `src/so101_gazebo_demo_py/**`
+
+- [ ] First map the rebased Teleop runtime: public API/CLI, backend/provider interface, workflow lifecycle, camera-preset boundary, reset boundary, ROS domain/session ownership, and test entry points. Record the actual paths and contracts in the ledger; do not assume the pre-refactor layout.
+- [ ] Reuse an existing simulator-neutral provider/registry interface if present. If no suitable interface exists, add the smallest simulator-neutral extension point in Teleop and keep the concrete implementation inside `so101_mujoco_demo_py`; Teleop must not import Gazebo internals to operate MuJoCo.
+- [ ] Make MuJoCo an explicit backend selection. The adapter must launch/observe the pinned MuJoCo stack, expose current runtime provenance, route camera presets through the fork's supported camera-preset service, and route reset through the qualified transactional reset sequence rather than a raw `ResetWorld` call.
+- [ ] Connect Teleop workflow commands to the same production `pick_place_state_machine --mode execute` boundary proven by Task 14. Do not duplicate the grasp state machine, contact policy, or motion policy inside the Web/UI layer.
+- [ ] Preserve evidence separation: Teleop status may summarize MoveIt/controller, MuJoCo physical, Planning Scene, and visual states, but may not collapse any one of them into an end-to-end success claim.
+- [ ] Add RED/GREEN contract tests for backend selection, unsupported backend, provenance mismatch, start/stop ownership, reset epoch freshness, camera preset routing, workflow start/cancel/result, stale feedback, and failure propagation. Retain the latest Teleop module's existing Gazebo/backward-compatibility tests unchanged unless a simulator-neutral contract intentionally requires an update.
+- [ ] Keep RGB-D and perception integration out of this task. Do not add Teleop-only object teleport, hidden constraints, direct MuJoCo qpos/qvel writes, or a second pick-place implementation.
+
+### Task 14T.3: Requalify one physical cycle through Teleop
+
+**Files:**
+
+- Update: `docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md`
+- Update: `src/so101_mujoco_demo_py/docs/provenance.json`
+- Update: Teleop/MuJoCo integration tests discovered in Task 14T.2
+
+- [ ] Run the latest Teleop module's complete focused unit/API/UI contract suite plus the MuJoCo package pytest, Ruff, build, colcon test, fork, hidden-constraint, isolation, and protected-Gazebo gates. Record nonzero discovered test counts and exact exit codes.
+- [ ] Pre-register a new `FULL_RESTART` experiment using the rebased continuation branch. The pre-rebase Task 14.4 result is comparison evidence only and cannot be counted for this new fingerprint.
+- [ ] From Teleop, select the MuJoCo backend, start the owned stack, apply one camera preset, perform a transactional reset, and execute the same production physical pick-place workflow. Require all Task 14 physical, MoveIt, controller, Planning Scene, release/settle, and clean-shutdown facts.
+- [ ] Open RViz and MuJoCo Viewer side-by-side through the supported GUI flow and use ai-station CUA for fresh visual corroboration. Confirm that Teleop status, RViz Planning Scene, and MuJoCo physical state refer to the same session/reset epoch.
+- [ ] Commit and normally push the Teleop integration to `origin/codex/so101-mujoco-ros2-teleop` only after this post-rebase experiment is `VALID`:
+
+```text
+feat(so101_mujoco): integrate refactored teleop runtime
+```
+
+- [ ] Task 15 remains blocked until the continuation branch is clean, pushed, and has one post-rebase `VALID` physical cycle. Task 15 must freeze the post-integration fingerprint, not the pre-rebase Task 14.4 fingerprint.
+
+---
+
+## 6. Task 15 — Qualify restart/reset repeatability
 
 ### Task 15.1: Build a fail-visible qualification runner
 
@@ -379,7 +442,7 @@ feat(so101_mujoco): enforce physical pick place outcome
 - Create: `src/so101_mujoco_demo_py/test/test_qualification_contract.py`
 - Update: `src/so101_mujoco_demo_py/setup.py`
 
-**Contract:** the runner never hides retries or changes thresholds. It accepts a frozen fingerprint, runs one lifecycle at a time, resets the consecutive-success count on any valid failure, invalidates a contaminated batch, and records complete per-run provenance/evidence.
+**Contract:** the runner never hides retries or changes thresholds. It accepts the frozen post-rebase, Teleop-integrated fingerprint, runs one lifecycle at a time through the same production entry point, resets the consecutive-success count on any valid failure, invalidates a contaminated batch, and records complete per-run provenance/evidence.
 
 - [ ] Write RED tests for exact count, reset-on-failure, invalid-run batch termination, mixed commit/model/config/policy rejection, duplicate session ID, non-incrementing reset epoch, missing clean-shutdown result, missing physical evidence, and truncated artifact hashes.
 - [ ] Implement one-run execution by invoking the production live entry point, not a qualification-only shortcut.
@@ -441,17 +504,19 @@ test(so101_mujoco): qualify restart and reset repeatability
 
 ---
 
-## 6. Definition of done
+## 7. Definition of done
 
 The migration is complete only when all of the following are simultaneously true:
 
 - `so101_mujoco_demo_py` and `so101_mujoco_support` build and test independently.
 - Runtime provenance proves the installed fork/overlay and exact hashes; apt `0.0.3` is not accidentally selected.
 - The protected Gazebo tree has zero diff/status.
+- The preserved pre-rebase Task 14.4 commit remains remotely traceable, the continuation branch is rebased onto the recorded latest `origin/main` without force-pushing published history, and the old-to-new commit mapping is recorded.
+- The latest refactored Teleop module selects and operates `so101_mujoco_demo_py` through a simulator-neutral extension boundary; MuJoCo-specific reset, camera, workflow, and evidence code does not leak into `so101_gazebo_demo_py`.
 - Current MJCF/URDF visual, collision, transform, dynamics, controller, TF, and scene gates pass.
 - User-approved MuJoCo contact thresholds are enabled only for the exact calibrated fingerprint.
 - The physical path proves bilateral grasp, micro-lift, stable transport, release, and final target-region settle without hidden constraints or object-state writes.
 - `move_group` and every task-owned process shut down cleanly with exit `0` and no leaks.
-- Five consecutive `FULL_RESTART` and five consecutive `RESET_WORLD` runs pass on a frozen fingerprint.
+- One post-rebase physical cycle launched through Teleop is `VALID`, then five consecutive `FULL_RESTART` and five consecutive `RESET_WORLD` runs pass on that same frozen post-integration fingerprint.
 - Raw evidence remains outside the repository, while ledger/report hashes make every conclusion traceable.
 - The final branch is committed and pushed for review, but is not merged automatically.

@@ -1,0 +1,254 @@
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PACKAGE_ROOT))
+
+from so101_mujoco_demo_py.contact_calibration_collector import (  # noqa: E402
+    CollectionAborted,
+    CollectionRequest,
+    ContactCalibrationCollector,
+    RobotCalibrationState,
+)
+from so101_mujoco_demo_py.simulation.types import (  # noqa: E402
+    ContactEvidence,
+    ObjectState,
+    ReceivedSimulationEvidence,
+    SimulationEvidence,
+)
+
+
+def test_contact_calibration_collector_module_exists() -> None:
+    assert (PACKAGE_ROOT / "so101_mujoco_demo_py/contact_calibration_collector.py").is_file()
+
+
+def test_collector_has_console_and_direct_script_entry_points() -> None:
+    assert (PACKAGE_ROOT / "scripts/collect_contact_calibration.py").is_file()
+    setup_text = (PACKAGE_ROOT / "setup.py").read_text(encoding="utf-8")
+    assert (
+        "collect_contact_calibration = so101_mujoco_demo_py.contact_calibration_collector:main"
+    ) in setup_text
+
+
+def make_contact(side: str, force_n: float = 1.0) -> ContactEvidence:
+    return ContactEvidence(
+        body1_id=1,
+        geom1_id=2,
+        body1="cup",
+        geom1="cup_collision",
+        body2_id=3,
+        geom2_id=4,
+        body2="moving_jaw" if side == "right" else "fixed_finger",
+        geom2=f"{side}_fingertip_pad",
+        position_world=(0.2, 0.0, 0.03),
+        normal_world=(1.0, 0.0, 0.0),
+        signed_distance_m=-0.0004,
+        normal_force_n=force_n,
+    )
+
+
+def evidence(
+    sequence: int,
+    *,
+    session: str = "session-a",
+    epoch: int = 4,
+    left: bool = True,
+    right: bool = True,
+    other: bool = False,
+    force_n: float = 1.0,
+    position: tuple[float, float, float] = (0.2, 0.0, 0.03),
+) -> SimulationEvidence:
+    left_contacts = (make_contact("left", force_n),) if left else ()
+    right_contacts = (make_contact("right", force_n),) if right else ()
+    other_contacts = (make_contact("table", force_n),) if other else ()
+    contacts = left_contacts + right_contacts + other_contacts
+    return SimulationEvidence(
+        simulation_time_s=sequence * 0.01,
+        frame_id="world",
+        publisher_sequence=sequence,
+        simulation_step=sequence * 10,
+        reset_epoch=epoch,
+        simulation_session_id=session,
+        paused=False,
+        object_state=ObjectState(
+            body_id=1,
+            body="cup",
+            position_world=position,
+            orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
+            linear_velocity_world=(0.001, 0.0, 0.0),
+            angular_velocity_world=(0.0, 0.0, 0.0),
+        ),
+        has_contact=bool(contacts),
+        minimum_signed_distance_m=min(
+            (contact.signed_distance_m for contact in contacts), default=0.0
+        ),
+        maximum_normal_force_n=max((contact.normal_force_n for contact in contacts), default=0.0),
+        truncated=False,
+        left_fingertip_contacts=left_contacts,
+        right_fingertip_contacts=right_contacts,
+        other_object_contacts=other_contacts,
+    )
+
+
+class Observer:
+    def __init__(self, snapshots: list[ReceivedSimulationEvidence]) -> None:
+        self.snapshots = iter(snapshots)
+
+    def snapshot_with_receipt(self) -> ReceivedSimulationEvidence:
+        return next(self.snapshots)
+
+
+def robot_state() -> RobotCalibrationState:
+    return RobotCalibrationState(
+        q6_rad=0.2,
+        arm_joint_positions_rad=(0.0, -0.4, 0.8, 0.5, 0.0),
+        tcp_position_world_m=(0.2, 0.0, 0.09),
+        tcp_orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
+    )
+
+
+def request(tmp_path: Path, **changes) -> CollectionRequest:
+    values = {
+        "regime": "bilateral_touch",
+        "sample_count": 3,
+        "simulation_session_id": "session-a",
+        "reset_epoch": 4,
+        "output_path": tmp_path / "matrix.json",
+        "source_commit": "1" * 40,
+        "dependency_commit": "2" * 40,
+        "model_sha256": "a" * 64,
+        "config_sha256": "b" * 64,
+        "reference_object_position_m": (0.2, 0.0, 0.03),
+    }
+    values.update(changes)
+    return CollectionRequest(**values)
+
+
+def collector(
+    snapshots: list[ReceivedSimulationEvidence], *, cancelled=lambda: False
+) -> ContactCalibrationCollector:
+    return ContactCalibrationCollector(
+        Observer(snapshots),
+        robot_state,
+        monotonic=lambda: 10.0,
+        cancelled=cancelled,
+    )
+
+
+def received(item: SimulationEvidence, at: float = 9.95) -> ReceivedSimulationEvidence:
+    return ReceivedSimulationEvidence(item, at)
+
+
+def test_collector_writes_exact_bounded_count_with_atomic_replacement(tmp_path: Path) -> None:
+    output = tmp_path / "matrix.json"
+    output.write_text("sentinel", encoding="utf-8")
+    target = collector([received(evidence(index)) for index in range(1, 4)])
+
+    result = target.collect(request(tmp_path))
+
+    document = json.loads(output.read_text(encoding="utf-8"))
+    assert result["status"] == "VALID"
+    assert len(document["regimes"]["bilateral_touch"]) == 3
+    assert [sample["publisher_sequence"] for sample in document["regimes"]["bilateral_touch"]] == [
+        1,
+        2,
+        3,
+    ]
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+@pytest.mark.parametrize(
+    ("items", "message"),
+    [
+        ([received(evidence(1, session="wrong"))], "session"),
+        ([received(evidence(1, epoch=5))], "reset"),
+        ([received(evidence(2)), received(evidence(2))], "sequence"),
+        ([received(evidence(1), at=9.0)], "stale"),
+    ],
+)
+def test_collector_rejects_stream_boundary_violations(
+    tmp_path: Path, items: list[ReceivedSimulationEvidence], message: str
+) -> None:
+    with pytest.raises(CollectionAborted, match=message):
+        collector(items).collect(request(tmp_path))
+
+
+def test_collector_rejects_truncated_and_nonfinite_atomic_state(tmp_path: Path) -> None:
+    truncated = evidence(1)
+    object.__setattr__(truncated, "truncated", True)
+    with pytest.raises(CollectionAborted, match="truncated"):
+        collector([received(truncated)]).collect(request(tmp_path))
+
+    nonfinite = evidence(2)
+    object.__setattr__(nonfinite.object_state, "position_world", (float("nan"), 0.0, 0.03))
+    with pytest.raises(CollectionAborted, match="finite"):
+        collector([received(nonfinite)]).collect(request(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("sample", "message"),
+    [
+        (evidence(1, left=False, right=False, other=True), "bilateral"),
+        (evidence(1, left=True, right=False), "bilateral"),
+        (evidence(1, left=False, right=True), "bilateral"),
+    ],
+)
+def test_other_or_one_sided_contacts_never_count_as_bilateral(
+    tmp_path: Path, sample: SimulationEvidence, message: str
+) -> None:
+    with pytest.raises(CollectionAborted, match=message):
+        collector([received(sample)]).collect(request(tmp_path, wrong_side_limit=1))
+
+
+def test_collector_aborts_on_diagnostic_safety_boundaries(tmp_path: Path) -> None:
+    displaced = evidence(1, left=False, right=False, position=(0.204, 0.0, 0.03))
+    with pytest.raises(CollectionAborted, match="displacement"):
+        collector([received(displaced)]).collect(
+            request(tmp_path, regime="no_contact", pre_contact=True)
+        )
+
+    hazardous = evidence(2, force_n=11.61)
+    with pytest.raises(CollectionAborted, match="force"):
+        collector([received(hazardous)]).collect(request(tmp_path))
+
+
+def test_collector_cancellation_preserves_partial_metadata(tmp_path: Path) -> None:
+    calls = iter((False, True))
+    target = collector([received(evidence(1))], cancelled=lambda: next(calls))
+
+    with pytest.raises(CollectionAborted, match="cancel"):
+        target.collect(request(tmp_path))
+
+    partial = json.loads((tmp_path / "matrix.partial.json").read_text(encoding="utf-8"))
+    assert partial["status"] == "INVALID"
+    assert partial["collected_sample_count"] == 1
+    assert "cancel" in partial["reason"]
+    assert not (tmp_path / "matrix.json").exists()
+
+
+def test_collector_uses_existing_sensor_data_observer_qos(monkeypatch) -> None:
+    from rclpy.qos import qos_profile_sensor_data
+
+    support = ModuleType("so101_mujoco_support")
+    messages = ModuleType("so101_mujoco_support.msg")
+    messages.SimulationEvidence = type("RosSimulationEvidence", (), {})
+    support.msg = messages
+    monkeypatch.setitem(sys.modules, "so101_mujoco_support", support)
+    monkeypatch.setitem(sys.modules, "so101_mujoco_support.msg", messages)
+    from so101_mujoco_demo_py.mujoco.observer import MujocoWorldObserver
+
+    class Node:
+        def create_subscription(self, _message, _topic, _callback, qos):
+            self.qos = qos
+            return object()
+
+    node = Node()
+    MujocoWorldObserver(node, "session-a")
+
+    assert node.qos is qos_profile_sensor_data

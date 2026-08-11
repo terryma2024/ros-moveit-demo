@@ -1,6 +1,7 @@
 <mujoco model="so101_task_scene">
   <include file="so101.xml"/>
-  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"
+          noslip_iterations="10"/>
   <asset>
     <material name="cup_orange" rgba="1.0 0.55 0.12 1"/>
     <material name="target_landing_red" rgba="1 0 0 1"/>
@@ -12,7 +13,7 @@
       <geom group="0" contype="0" conaffinity="0" material="cup_orange"/>
     </default>
     <default class="cup_collision">
-      <geom group="2" contype="1" conaffinity="1" friction="0.7 0.01 0.001"
+      <geom group="2" contype="1" conaffinity="1" friction="1.2 0.01 0.001"
             rgba="0 0 0 0"/>
     </default>
   </default>

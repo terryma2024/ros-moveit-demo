@@ -10,12 +10,12 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-current_commit: 1548acb20a2bd376e1bbe867603d824d26ddfb21
-last_verified_implementation_commit: 100880a55fd3fee5fbc1930f293faeb444da9282
+current_commit: eabe88885bf802fb14968547634fd06c26c1b38a
+last_verified_implementation_commit: eabe88885bf802fb14968547634fd06c26c1b38a
 ledger_commit_pending: true
-task_status: TASK_13_RESET_QUALIFIED_REAPPROACH_PENDING
+task_status: TASK_14_CONTACT_STIFFNESS_CALIBRATION_PENDING_COMMIT
 evidence_root: /tmp/so101-debug-mujoco-migration/
-protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
+protected_nontracked_baseline_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
 confirmed_conclusions:
   - The rebased migration starts from the exact main baseline; CP-001.
@@ -32,12 +32,30 @@ confirmed_conclusions:
   - EXP-045 validly finds no preregistered 0.20-second stable window under the fixed controller reference within the unchanged 30-second deadline, so bounded settle-and-replan is not authorized for implementation; CP-064.
   - EXP-046 validly finds the unchanged stable-window predicate under the exact reviewed SO-101 dynamics, permitting the single separately preregistered safe-execute validation; CP-065.
   - EXP-047 validly proves the unchanged safe trajectory plans, executes through MoveIt and arm_controller, converges all six independent joint samples, and advances atomic MuJoCo evidence under the reviewed dynamics; CP-066.
+  - EXP-075 qualifies the fail-closed transactional ResetWorld implementation, including two same-stack resets and fresh CUA evidence; CP-110.
+  - EXP-076 validly restores the standard fork stack to CLOSE_READY with the formal Planning Scene, unpaused physics, zero fingertip contact, and negligible cup motion; CP-111.
+  - EXP-081 validly proves a constraint-free physical micro-lift: the cup rises 2.097 mm, clears table support, and retains bilateral fingertip contact under the stronger bounded preload; CP-116.
+  - EXP-084 proves the reset hook and client ordering work at runtime and pass CUA, but the experiment is INVALID because debugging attempts advanced the frozen epoch baseline before the final two-cycle run; CP-119.
+  - EXP-085 executed exact 0 -> 1 -> 2 reset receipts and final joint convergence, but is INVALID because its test incorrectly required the asynchronous joint-state stream to be reset at service-return time; CP-120.
+  - EXP-086 validly qualifies ResetWorld on a fresh changed-state stack with exact 0 -> 1 -> 2 step-zero receipts, fresh joint/controller convergence, fail-closed invalid keyframe, and CUA visual restoration; CP-121.
+  - EXP-087 validly reaches CLOSE_READY and completes the first seating preload, but the first 2 mm arm increment does not physically lift the cup and the bilateral-contact monitor aborts; CP-122.
+  - EXP-088 validly applies the final allowed 0.006 rad preload, but the second 2 mm increment raises the cup only 0.0119 mm and leaves table support; CP-123.
+  - EXP-089 validly executes the frozen final 3 mm arm increment with negligible plan-to-execute drift, but the cup remains table-supported and its measured lift is effectively zero; CP-124.
+  - EXP-090 is INVALID because the staged-approach invocation omitted the separately required --execute gate; the CLI failed closed before any robot action and the fresh physical baseline remains unchanged; CP-125.
+  - EXP-091 validly reaches CLOSE_READY and proves the stiff mapping produces a safe 0.415 N transient right-pad contact, but the first q6 search command does not produce bilateral contact; CP-126.
+  - EXP-092 validly proves 2 seconds of bilateral contact at q6=-0.04741 with at least 0.167 N summed normal force per side, under every force, displacement, provenance, and no-hidden-aid gate; CP-127.
+  - EXP-093 validly executes the first 2 mm arm increment but the cup remains table-supported; transient bilateral-contact loss aborts the client monitor even though MoveIt and the controller report success; CP-128.
+  - EXP-094 is INVALID because its intended 20 microradian command increment was incorrectly recomputed from constrained actual q6 each loop, causing non-convergent micro-creep; it was safely interrupted with all physical gates intact; CP-129.
+  - EXP-096 validly sustains at least 0.50 N normal force per fingertip side for 2 seconds by preserving the accumulated gripper command reference; CP-131.
+  - EXP-097 validly executes the frozen second 2 mm arm increment with negligible plan-to-execute drift and continuous bilateral contact, but the cup slips tangentially, rises only 0.001 mm, and remains table-supported; CP-132.
+  - EXP-095 is INVALID because it reached the 0.50 N force target but its hold command reset the controller reference to constrained actual q6, unloading the pads to 0.494 N; CP-130.
+  - EXP-096 validly sustains 0.511-0.515 N normal force per side for 2 seconds by preserving the accumulated command target, with all safety and provenance gates passing; CP-131.
 disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
-  - A future separately authorized read-only experiment may test one outside/lateral approach waypoint while preserving the solver, model, orientation, scene, final contact target, and all fail-closed validators.
-latest_checkpoint: CP-110
-next_experiment: EXP-076
+  - The MuJoCo fingertip contacts are too compliant because only friction parity was mapped; explicitly mapping Gazebo's 1000000 N/m stiffness and 100 N s/m damping through MuJoCo direct-format solref will raise bounded pad normal force enough to carry the 20 g cup.
+latest_checkpoint: CP-131
+next_experiment: EXP-097
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -6047,4 +6065,5896 @@ success_criteria:
   - Resume physics and execute preopen plus all MOVE_ABOVE_OBJECT and DESCEND waypoints under unchanged drift, endpoint, contact, and cup-displacement gates.
   - Stop at CLOSE_READY before applying seating preload or Close.
 decision: PENDING. This entry precedes scene rebuild, resume, and all motion.
+```
+
+## Experiment EXP-076 Terminal Result
+
+```yaml
+experiment_id: EXP-076
+status: VALID
+terminal_result: STANDARD_FORK_STACK_RESTORED_TO_CLOSE_READY
+terminal_time: 2026-08-12T01:11:22+08:00
+runtime_provenance:
+  source_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  dependency_tag: so101-0.0.3-r3
+  install_overlay: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  staged_policy_install: /tmp/so101-staged-20260812/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-standard
+result:
+  planning_scene_verified: true
+  planning_scene_primitive_counts: {pedestal: 1, plastic_cup: 13, table: 1}
+  planning_scene_colors: [pedestal, plastic_cup, table]
+  completed_phase: DESCEND
+  selected_segments: 15
+  maximum_attempts_per_segment: 1
+  maximum_plan_to_execute_drift_rad: 0.000016366700450465288
+  maximum_actual_endpoint_error_rad: 0.0005684239981664993
+  preopen_actual_q6_rad: 0.46420674140947643
+  final_joint_positions_rad: [-0.00012018532261347332, 0.47265601131598245, 0.21495064100102518, 0.8550053840895228, 0.0006591480255024682, 0.46503647069237125]
+  initial_cup_position_world_m: [0.019999721495824203, -0.28000005119151405, 0.16490532861155277]
+  final_cup_position_world_m: [0.019999668520029306, -0.2800000804822789, 0.16490533079389766]
+  final_reset_epoch: 0
+  final_simulation_step: 4570
+  final_fingertip_contact_count: 0
+  physics_paused_calls: 0
+  close_gripper_calls: 0
+evidence:
+  result: /tmp/so101-task13-standard/exp076-reapproach.json
+  result_sha256: ac15f96c450f844610efbaf3a8de0c5613d0f1fb94ae2bbd5d92f59221c41c8f
+  policy_sha256: 303044acea71039f74693e5f0e0d97f3adbaf21c95745c57aa63709fc4c6f321
+decision: KEEP VALID. This proves only the formal unpaused approach and authorizes the separately preregistered no-arm-motion seating-preload probe.
+```
+
+## Checkpoint CP-111
+
+```yaml
+checkpoint_id: CP-111
+checkpoint_time: 2026-08-12T01:22:32+08:00
+last_valid_experiment: EXP-076
+current_hypothesis: The 0.006 rad seating preload omitted by EXP-073 is the first missing physical-grasp boundary; it must be isolated before any lift motion.
+working_tree_status: HEAD and origin/codex/so101-mujoco-ros2 are eabe88885bf802fb14968547634fd06c26c1b38a. The current Task 13/14 implementation paths and execution-plan document remain intentionally dirty; protected src/so101_gazebo_demo_py tracked status is empty.
+owned_processes: tmux so101-mujoco-gui owns the MuJoCo/ros2_control stack in window sim and MoveIt/RViz in window moveit; ROS_DOMAIN_ID=149; simulation_session_id=so101-task13-standard.
+preserved_processes: The pre-existing attached tmux session codex is idle at its shell after its earlier Codex run and is not used for motion execution.
+confirmed_conclusions:
+  - EXP-075 qualifies ResetWorld only through the formal deactivate-pause-reset-resume-activate-feedback transaction.
+  - EXP-076 restores table, pedestal, plastic_cup, and the open gripper to the physical CLOSE_READY state with unpaused physics.
+  - Current readback at publisher_sequence 53762 has reset_epoch 0, q1-q6 approximately [-0.000119, 0.472682, 0.214917, 0.854974, 0.000662, 0.465036], the cup at [0.019999, -0.280001, 0.164905], no fingertip contact, and only table support.
+disproven_routes:
+  - EXP-073 proves nominal Close followed directly by the larger lift target is insufficient; the cup returned to the table and moved laterally.
+open_risks:
+  - The diagnostic 11.60 N force abort remains a safety boundary rather than an approved production contact threshold.
+  - No physical micro-lift, transport, release, or final placement has passed yet.
+next_command: Execute only /tmp/so101_exp077_seating_preload.py after its exact hash, current CLOSE_READY preconditions, runtime provenance, and EXP-077 PLANNED record are verified.
+```
+
+## Experiment EXP-077
+
+```yaml
+experiment_id: EXP-077
+prior_experiment: EXP-073 VALID physical failure; EXP-076 VALID restored CLOSE_READY state
+status: RUNNING
+lifecycle: CONTINUE_OWNED_GUI_STACK_SEATING_PRELOAD_ONLY
+run_mode: nominal_close_then_seating_preload_no_arm_motion
+hypothesis: At the verified CLOSE_READY pose, adding the Gazebo-derived 0.006 rad seating preload after the unchanged nominal Close creates a stable bilateral grasp without requiring arm motion or a simulator constraint.
+prediction: Nominal Close first produces bilateral contact; q6_contact minus 0.006 rad remains above the frozen safe lower bound; the preloaded grasp then preserves bilateral contact for at least 0.30 s while force stays at or below 11.60 N and cup displacement stays at or below 3 mm.
+single_variable: Add seating_preload_rad=0.006 after the same nominal Close used by EXP-073; do not move the arm.
+frozen_inputs:
+  source_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  install_overlay: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-standard
+  expected_reset_epoch: 0
+  close_target_q6_rad: -0.047608632840292
+  seating_preload_rad: 0.006
+  safe_q6_lower_rad: -0.059600220867817
+  maximum_force_n: 11.60
+  maximum_cup_displacement_m: 0.003
+  minimum_nominal_bilateral_duration_s: 0.20
+  minimum_preloaded_bilateral_duration_s: 0.30
+  experiment_script: /tmp/so101_exp077_seating_preload.py
+  experiment_script_sha256: 402f5bfb6f5137ddb08fbe7acbf24b58e444cf9f7e35c85c92d279c569c0fd76
+preconditions:
+  - Planning Scene readback has exact table, pedestal, and plastic_cup primitives/colors and no attached object.
+  - The arm matches the EXP-076 CLOSE_READY target within 0.01 rad; q6 is preopened within 0.01 rad of 0.465038.
+  - MuJoCo evidence is fresh, unpaused, reset_epoch 0, cup on the source position, no fingertip contact, and only table support.
+success_criteria:
+  - Both gripper controller actions succeed and q6 remains within the frozen lower bound.
+  - Bilateral fingertip contact is continuous for the specified nominal and preloaded dwell windows.
+  - Maximum normal force never exceeds 11.60 N and cup displacement from the pre-Close state never exceeds 3 mm.
+  - Physics remains unpaused; reset/session provenance does not change; arm_controller/MoveIt execution count remains zero.
+  - No weld, equality, adhesion, mocap, teleport, direct object qpos/qvel write, or MoveIt attachment is invoked.
+failure_criteria: Any missing bilateral dwell, force/displacement violation, stale evidence, pause/reset/session change, action failure, or provenance mismatch ends EXP-077 before micro-lift.
+invalid_criteria: Starting outside the frozen CLOSE_READY state, running a different script hash, using a different overlay/session/reset epoch, or losing evidence makes the experiment INVALID rather than a behavioral failure.
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp077_seating_preload.py
+    exit_code: PENDING
+evidence_root: /tmp/so101-task13-standard
+runtime_start:
+  time: 2026-08-12T01:28:00+08:00
+  precondition_readback: Controller set active; exact Planning Scene readback passed; CUA screenshot f73366ca849c060f3e86ef51f80a2b7ddf61ad3d02c29a63d71bcfdf1d3f335b shows RViz and MuJoCo side by side at CLOSE_READY; current session/reset/joint/cup/contact state matches CP-111; script hash matches the frozen input.
+decision: PENDING. Preconditions and provenance passed; this state transition occurs before both Close and seating-preload controller actions.
+next_experiment: EXP-078 only if EXP-077 is VALID success; otherwise stop and recover through the qualified ResetWorld transaction.
+```
+
+## Experiment EXP-077 Terminal Result
+
+```yaml
+experiment_id: EXP-077
+status: VALID
+terminal_result: SEATING_PRELOAD_PROVED
+terminal_time: 2026-08-12T01:28:20+08:00
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp077_seating_preload.py
+    exit_code: 0
+result:
+  before_close_joints_rad: [-0.00011890242342363529, 0.4726820103356005, 0.21491690296171834, 0.854974398870263, 0.0006620704549954623, 0.46503648701827793]
+  before_close_cup_position_world_m: [0.019997553643484413, -0.28000130486677305, 0.16490533251860776]
+  nominal_close_q6_rad: -0.04760628697865648
+  preload_target_q6_rad: -0.05360628697865648
+  seated_actual_q6_rad: -0.05356636830053336
+  nominal_bilateral_samples: 27
+  preloaded_bilateral_samples: 27
+  seated_left_contact_count: 3
+  seated_right_contact_count: 4
+  nominal_maximum_normal_force_n: 0.2510282790449008
+  seated_maximum_normal_force_n: 0.3198435404010932
+  cup_displacement_m: [0.0000013275327881701049, 0.00132502300637527, 0.00000035266788878107747]
+  cup_displacement_norm_m: 0.001325023718331752
+  final_reset_epoch: 0
+  physics_paused: false
+  physics_pause_calls: 0
+  simulator_constraint_calls: 0
+  direct_object_state_writes: 0
+  moveit_attach_calls: 0
+visual_evidence:
+  before: /tmp/so101-task13-standard/before-exp077-cua.png
+  before_sha256: f73366ca849c060f3e86ef51f80a2b7ddf61ad3d02c29a63d71bcfdf1d3f335b
+  after: /tmp/so101-task13-standard/after-exp077-cua.png
+  after_sha256: 34e8cac997c617a3cad24e76eba97c9da9e0aab26b80cb74b49f6d5410054a2d
+  observation: RViz and MuJoCo remain side by side; the arm pose is unchanged and the cup remains upright on the table. The view resolves the fingers at the cup rim but cannot by itself prove pad contact. Atomic MuJoCo evidence independently proves opposing fixed/moving fingertip-pad contacts against wall_near_collision.
+evidence:
+  result: /tmp/so101-task13-standard/exp077-seating-preload.json
+  result_sha256: 3e4b6297f0e851c75ec91fdce31831cc1d6610c8c7846b7b6e1f440034aeb0a4
+  log: /tmp/so101-task13-standard/exp077-seating-preload.log
+  log_sha256: 643e4019ff2465ffb545e15d98bd6814fb8b71413a4d2f895482ca343449dbe4
+decision: KEEP VALID. The seating-preload boundary is sufficient for a stationary physical wall pinch and authorizes only the separately preregistered 2 mm micro-lift.
+```
+
+## Checkpoint CP-112
+
+```yaml
+checkpoint_id: CP-112
+checkpoint_time: 2026-08-12T01:30:00+08:00
+last_valid_experiment: EXP-077
+current_hypothesis: The stationary preloaded wall pinch can lift the cup by the frozen 2 mm micro-lift target without lateral slip or table support.
+working_tree_status: Same intentional Task 13/14 and plan/ledger dirty set at HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected src/so101_gazebo_demo_py tracked status remains empty.
+owned_processes: The unchanged so101-mujoco-gui stack remains live in ROS_DOMAIN_ID 149 and session so101-task13-standard; codex-cua is used only for passive CUA snapshots.
+confirmed_conclusions:
+  - The 0.006 rad seating preload creates continuous bilateral fingertip contact at approximately 0.320 N maximum normal force without arm motion.
+  - The cup moved 1.325 mm laterally but remained on the table, within the frozen 3 mm pre-lift boundary.
+  - Physics remained running; no simulator constraint, object-state write, MoveIt attachment, or arm trajectory occurred.
+open_risks:
+  - The cup has not yet left the table; visual evidence cannot substitute for the upcoming object-z/table-contact gate.
+  - MoveIt still represents plastic_cup as a world object and must change it to a collision-only attachment after confirming the physical grasp and before planning arm motion.
+next_command: Verify /tmp/so101_exp078_micro_lift.py hash and current preloaded bilateral state, then execute only the 2 mm micro-lift experiment.
+```
+
+## Experiment EXP-078
+
+```yaml
+experiment_id: EXP-078
+prior_experiment: EXP-077 VALID seating preload
+status: RUNNING
+lifecycle: CONTINUE_OWNED_GUI_STACK_PHYSICAL_MICRO_LIFT
+run_mode: attach_collision_shadow_then_execute_2mm_micro_lift
+hypothesis: The verified preloaded cup-wall pinch physically raises the cup by 2 mm while preserving bilateral contact, with no simulator-side attachment or object-state write.
+prediction: After MoveIt changes plastic_cup from world membership to a gripper collision shadow, the fixed micro-lift target executes with start drift at or below 0.01 rad; cup z rises 1.5-2.5 mm, lateral drift stays at or below 1 mm, table support clears, and bilateral contact persists for at least 0.30 s.
+single_variable: Execute the frozen 2 mm arm micro-lift from the unchanged EXP-077 preloaded physical grasp; the MoveIt attachment is collision bookkeeping only.
+frozen_inputs:
+  source_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  install_overlay: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-standard
+  expected_reset_epoch: 0
+  expected_preload_q6_rad: -0.05360628697865648
+  micro_lift_target_arm_rad: [-0.0002062266287315138, 0.46262046903357984, 0.21277364017949124, 0.8648894480356747, 0.0005764164414532356]
+  maximum_force_n: 11.60
+  minimum_physical_lift_m: 0.0015
+  maximum_physical_lift_m: 0.0025
+  maximum_lateral_drift_m: 0.001
+  minimum_post_lift_bilateral_duration_s: 0.30
+  maximum_plan_to_execute_drift_rad: 0.01
+  experiment_script: /tmp/so101_exp078_micro_lift.py
+  experiment_script_sha256: bac94c79ea0bdcfb68c25427951fc226b4a3e516ce8c843160df361bd4c6d8a8
+preconditions:
+  - Current arm remains within 0.01 rad of CLOSE_READY and q6 remains within 0.01 rad of the verified seating preload.
+  - Fresh atomic evidence shows the same session/reset epoch, running physics, bilateral fingertip contact, force within bounds, and the cup still table-supported.
+  - Planning Scene initially has plastic_cup in world membership with no attached object.
+success_criteria:
+  - MoveIt readback shows plastic_cup attached to gripper with touch_links [gripper, jaw] and absent from world membership before planning.
+  - The plan is non-empty, starts within 0.01 rad of the fresh arm state, executes successfully, and reaches the frozen arm target within 0.01 rad.
+  - Cup z displacement is 1.5-2.5 mm, lateral displacement is at most 1 mm, table_collision is absent, and bilateral contact persists for at least 0.30 s after convergence.
+  - Maximum force remains at or below 11.60 N; physics remains running; session/reset provenance remains fixed.
+  - No weld, equality, adhesion, mocap, teleport, direct object qpos/qvel write, or MuJoCo-side attachment occurs.
+failure_criteria: Any scene-shadow failure, planning/execution failure, start drift, contact loss, force/lift/lateral/table-support violation, stale evidence, pause, reset, or session change stops before transport.
+invalid_criteria: Starting outside the verified EXP-077 state, running a different script hash/overlay/session/reset epoch, or missing fresh evidence makes the experiment INVALID.
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp078_micro_lift.py
+    exit_code: PENDING
+evidence_root: /tmp/so101-task13-standard
+runtime_start:
+  time: 2026-08-12T01:34:19+08:00
+  precondition_readback: Script hash matched; q1-q5 remained at CLOSE_READY, q6=-0.053567 rad; session so101-task13-standard/reset_epoch 0 remained fresh and unpaused; bilateral wall_near_collision contacts remained present at approximately 0.316 N maximum normal force; cup remained table-supported; Planning Scene readback retained exact table/pedestal/plastic_cup world geometry and colors.
+decision: PENDING. Preconditions and provenance passed; this state transition occurs before the Planning Scene attachment, MoveIt plan, and arm execution.
+next_experiment: A bounded transport experiment only if EXP-078 is VALID success; otherwise recover through the qualified ResetWorld transaction.
+```
+
+## Experiment EXP-078 Terminal Result
+
+```yaml
+experiment_id: EXP-078
+status: VALID
+terminal_result: PHYSICAL_MICRO_LIFT_FAILURE_GRIPPER_SLIPPED_ON_CUP_WALL
+terminal_time: 2026-08-12T01:34:48+08:00
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp078_micro_lift.py
+    exit_code: 1
+result:
+  moveit_attached_ids: [plastic_cup]
+  moveit_world_ids_after_attach: [pedestal, table]
+  lift_trajectory_points: 6
+  plan_to_execute_drift_rad: 0.000000007315917162657379
+  arm_execution_succeeded: true
+  final_joint_positions_rad: [-0.00022776510686361472, 0.4631160042473382, 0.21299761594544703, 0.8648150820848761, 0.0004898491567893434, -0.053566920925526354]
+  transient_physical_cup_lift_m: 0.0010224025997758457
+  required_physical_cup_lift_m: [0.0015, 0.0025]
+  settled_cup_position_world_m: [0.020033949175698982, -0.27902969996080207, 0.16490532288843415]
+  settled_table_contact: true
+  settled_left_contact_count: 3
+  settled_right_contact_count: 4
+  settled_maximum_normal_force_n: 0.32671832648538424
+  final_reset_epoch: 0
+  physics_paused: false
+  simulator_constraint_calls: 0
+  direct_object_state_writes: 0
+diagnosis:
+  - MoveIt planning and controller execution succeeded and the arm reached the 2 mm micro-lift target.
+  - The gripper contact points moved upward with the arm while the cup rose only 1.022 mm transiently, then settled back to table support with bilateral contact still present.
+  - This is a physical friction/normal-force failure at the gripper-cup boundary, not a planner, controller, Planning Scene, or reset failure.
+  - The frozen 1.5 mm lower bound is not relaxed after the result.
+evidence:
+  result: /tmp/so101-task13-standard/exp078-micro-lift.json
+  result_sha256: d38c119f7170d3e072b4c3f6b2caaffae394d6b80f83b9b58529b45eca638b33
+  log: /tmp/so101-task13-standard/exp078-micro-lift.log
+  log_sha256: a02a88ec60f27f68d3c440d4bde7f63f2a98eb2584b95760c964efec0dc03acd
+decision: KEEP VALID as a physical failure. Do not continue transport. Isolate one additional bounded preload increment before any second lift motion.
+```
+
+## Checkpoint CP-113
+
+```yaml
+checkpoint_id: CP-113
+checkpoint_time: 2026-08-12T01:36:00+08:00
+last_valid_experiment: EXP-078
+current_hypothesis: The first 0.006 rad seating preload provides bilateral contact but insufficient friction margin; one additional 0.006 rad increment, capped by the existing safe q6 lower bound, may prevent wall slip.
+working_tree_status: Same intentional Task 13/14 and plan/ledger dirty set at HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected Gazebo tracked status remains empty.
+owned_processes: The unchanged GUI stack remains live in domain 149/session so101-task13-standard. The arm is at the EXP-078 endpoint; q6 still holds the first preload; cup remains table-supported; Planning Scene retains plastic_cup as an attached collision shadow.
+confirmed_conclusions:
+  - EXP-078 separates planning from physics: plan/execute passed with negligible start drift, but the cup slipped and returned to the table.
+  - Current atomic evidence remains fresh, unpaused, reset_epoch 0, bilateral, and below the force abort boundary.
+disproven_routes:
+  - A single 0.006 rad seating preload followed by the frozen 2 mm arm micro-lift does not clear the table under this MuJoCo fingerprint.
+open_risks:
+  - Additional preload could displace or over-compress the cup and must be tested with no arm motion first.
+  - The next q6 target is close to, but does not cross, the frozen safe lower bound.
+next_command: Verify and preregister /tmp/so101_exp079_additional_preload.py, then command only the additional q6 preload increment.
+```
+
+## Experiment EXP-079
+
+```yaml
+experiment_id: EXP-079
+prior_experiment: EXP-078 VALID physical slip failure
+status: RUNNING
+lifecycle: CONTINUE_OWNED_GUI_STACK_ADDITIONAL_PRELOAD_ONLY
+run_mode: add_second_0p006rad_preload_no_arm_motion
+hypothesis: One additional 0.006 rad preload increment, capped at the existing safe q6 lower bound, increases the wall-pinch normal force while preserving bilateral contact and bounded cup displacement.
+prediction: q6 moves from approximately -0.053567 rad to approximately -0.059567 rad without crossing -0.059600220867817; bilateral contact remains stable for at least 0.30 s, force stays at or below 11.60 N, and cup displacement during the preload remains at or below 3 mm.
+single_variable: Add one 0.006 rad q6 preload increment; do not move the arm or alter friction, model, planning, or simulator state.
+frozen_inputs:
+  source_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  install_overlay: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-standard
+  expected_reset_epoch: 0
+  expected_arm_state_rad: [-0.0002062266287315138, 0.46262046903357984, 0.21277364017949124, 0.8648894480356747, 0.0005764164414532356]
+  expected_q6_rad: -0.05360628697865648
+  preload_increment_rad: 0.006
+  safe_q6_lower_rad: -0.059600220867817
+  maximum_force_n: 11.60
+  maximum_cup_displacement_m: 0.003
+  minimum_bilateral_duration_s: 0.30
+  experiment_script: /tmp/so101_exp079_additional_preload.py
+  experiment_script_sha256: 28df26eacc26ee84940f1c92ff5cad6d959d6ad9dcbd095efad08f9b1036ba6a
+preconditions:
+  - Arm remains within 0.01 rad of the EXP-078 endpoint and q6 remains within 0.01 rad of the first preload.
+  - Fresh evidence remains unpaused at session so101-task13-standard/reset_epoch 0 with bilateral wall contact, bounded force, and table support.
+  - Planning Scene still reports plastic_cup as the gripper collision shadow; no simulator attachment exists.
+success_criteria:
+  - Gripper controller action succeeds and actual q6 does not cross the frozen safe lower bound.
+  - Bilateral contact persists for at least 0.30 s after convergence, maximum force stays at or below 11.60 N, and cup displacement stays at or below 3 mm.
+  - No arm trajectory, physics pause/reset, simulator constraint, object-state write, or Planning Scene mutation occurs.
+failure_criteria: Any action failure, safe-lower-bound violation, contact loss, force/displacement violation, stale evidence, pause, reset, or session change stops before a second micro-lift.
+invalid_criteria: Starting outside the EXP-078 endpoint/EXP-077 preload state, using a different script hash/overlay/session/reset epoch, or missing fresh evidence makes the experiment INVALID.
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp079_additional_preload.py
+    exit_code: PENDING
+evidence_root: /tmp/so101-task13-standard
+runtime_start:
+  time: 2026-08-12T01:38:16+08:00
+  precondition_readback: Script hash matched; q1-q5 remained at the EXP-078 arm endpoint; q6=-0.053567 rad; fresh unpaused session/reset evidence retained 3 left and 4 right wall contacts at approximately 0.327 N maximum normal force with the cup table-supported; Planning Scene membership was not changed after EXP-078.
+decision: PENDING. Preconditions and provenance passed; this state transition occurs before the additional gripper-controller action.
+next_experiment: A separately preregistered incremental micro-lift only if EXP-079 is VALID success; otherwise recover through the qualified ResetWorld transaction.
+```
+
+## Experiment EXP-079 Terminal Result
+
+```yaml
+experiment_id: EXP-079
+status: VALID
+terminal_result: ADDITIONAL_PRELOAD_PROVED
+terminal_time: 2026-08-12T01:38:36+08:00
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp079_additional_preload.py
+    exit_code: 0
+result:
+  q6_before_rad: -0.0535669207912796
+  preload_target_q6_rad: -0.0595669207912796
+  seated_actual_q6_rad: -0.059447660992339564
+  safe_q6_lower_rad: -0.059600220867817
+  before_bilateral_samples: 31
+  seated_bilateral_samples: 27
+  seated_left_contact_count: 3
+  seated_right_contact_count: 4
+  before_maximum_normal_force_n: 0.326746164584091
+  seated_maximum_normal_force_n: 0.7880521553461874
+  cup_displacement_m: [-0.00000019787980951729844, 0.0002397141753352483, 0.0000005674840344027654]
+  cup_displacement_norm_m: 0.00023971492871994118
+  final_reset_epoch: 0
+  physics_paused: false
+  physics_pause_calls: 0
+  simulator_constraint_calls: 0
+  direct_object_state_writes: 0
+  moveit_attach_calls: 0
+evidence:
+  result: /tmp/so101-task13-standard/exp079-additional-preload.json
+  result_sha256: 564e9e4ee889222c199412e028bc713ecab59f5940cb7db73277abee063715b2
+  log: /tmp/so101-task13-standard/exp079-additional-preload.log
+  log_sha256: 914413883d553165009227982740e561c944fc2241883cb3b8e09632a097e290
+decision: KEEP VALID. The additional preload increases normal-force margin without unsafe displacement and authorizes only the separately preregistered incremental 2 mm micro-lift.
+```
+
+## Checkpoint CP-114
+
+```yaml
+checkpoint_id: CP-114
+checkpoint_time: 2026-08-12T01:39:00+08:00
+last_valid_experiment: EXP-079
+current_hypothesis: The approximately 0.788 N stronger preloaded pinch can prevent the wall slip observed in EXP-078 during one additional 2 mm arm lift.
+working_tree_status: Same intentional Task 13/14 and plan/ledger dirty set at HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected Gazebo tracked status remains empty.
+owned_processes: The unchanged domain 149/session so101-task13-standard stack remains live; arm at EXP-078 endpoint; q6 holds the additional preload; cup remains table-supported; Planning Scene collision shadow remains attached.
+confirmed_conclusions:
+  - The second 0.006 rad preload increment raises maximum normal force from approximately 0.327 N to 0.788 N.
+  - The increment moves the cup only 0.240 mm and preserves 3 left/4 right contacts with running physics and reset_epoch 0.
+open_risks:
+  - Stronger static contact does not yet prove sufficient vertical friction; the next experiment must use object z and table-contact evidence.
+next_command: Verify and preregister /tmp/so101_exp080_incremental_micro_lift.py, then execute only the additional 2 mm arm target.
+```
+
+## Experiment EXP-080
+
+```yaml
+experiment_id: EXP-080
+prior_experiment: EXP-079 VALID additional preload; EXP-078 VALID slip failure
+status: RUNNING
+lifecycle: CONTINUE_OWNED_GUI_STACK_INCREMENTAL_MICRO_LIFT
+run_mode: execute_second_2mm_arm_increment
+hypothesis: The stronger preloaded cup-wall pinch physically raises the cup during one additional 2 mm arm micro-lift while preserving bilateral contact and clearing table support.
+prediction: From the EXP-078 arm endpoint, the next target along the same local joint-space lift direction executes with start drift at or below 0.01 rad; cup z rises 1.5-2.5 mm, lateral drift stays at or below 1 mm, table support clears, and bilateral contact persists for at least 0.30 s.
+single_variable: Execute one additional 2 mm arm lift under the unchanged EXP-079 preload; do not change q6, friction, model, scene membership, or simulator state.
+frozen_inputs:
+  source_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  install_overlay: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-standard
+  expected_reset_epoch: 0
+  previous_arm_target_rad: [-0.0002062266287315138, 0.46262046903357984, 0.21277364017949124, 0.8648894480356747, 0.0005764164414532356]
+  expected_q6_rad: -0.0595669207912796
+  incremental_lift_target_arm_rad: [-0.0002059614124630276, 0.4530466639711597, 0.21089465616398247, 0.8748565203763494, 0.0005761294179064712]
+  maximum_force_n: 11.60
+  minimum_physical_lift_m: 0.0015
+  maximum_physical_lift_m: 0.0025
+  maximum_lateral_drift_m: 0.001
+  minimum_post_lift_bilateral_duration_s: 0.30
+  maximum_plan_to_execute_drift_rad: 0.01
+  experiment_script: /tmp/so101_exp080_incremental_micro_lift.py
+  experiment_script_sha256: 927e5ae5e59bb3b357227bd69443fd5777938f39c73cc6c6073d4dd67955f4fc
+preconditions:
+  - Current arm remains within 0.01 rad of the EXP-078 endpoint and q6 remains within 0.01 rad of the EXP-079 preload.
+  - Fresh evidence remains unpaused at the same session/reset epoch with bilateral contact, force within bounds, and the cup table-supported.
+  - Planning Scene already reports plastic_cup attached to gripper and absent from world membership; the experiment performs no scene mutation.
+success_criteria:
+  - Existing Planning Scene collision-shadow membership is read back before planning.
+  - The plan is non-empty, starts within 0.01 rad of the fresh arm state, executes successfully, and reaches the incremental target within 0.01 rad.
+  - Cup z displacement is 1.5-2.5 mm, lateral displacement is at most 1 mm, table_collision is absent, and bilateral contact persists for at least 0.30 s after convergence.
+  - Maximum force remains at or below 11.60 N; q6 remains unchanged; physics remains running; session/reset provenance remains fixed.
+  - No Planning Scene mutation, weld, equality, adhesion, mocap, teleport, direct object qpos/qvel write, or MuJoCo-side attachment occurs.
+failure_criteria: Any scene-readback failure, planning/execution failure, start drift, contact loss, force/lift/lateral/table-support violation, stale evidence, pause, reset, or session change stops before transport.
+invalid_criteria: Starting outside the EXP-078/079 state, using a different script hash/overlay/session/reset epoch, or missing fresh evidence makes the experiment INVALID.
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp080_incremental_micro_lift.py
+    exit_code: PENDING
+evidence_root: /tmp/so101-task13-standard
+runtime_start:
+  time: 2026-08-12T01:41:06+08:00
+  precondition_readback: Script hash matched; q1-q5 remained at the EXP-078 endpoint, q6=-0.059448 rad; session/reset evidence remained fresh and unpaused with 3 left/4 right wall contacts at approximately 0.788 N and table support; the existing attached collision shadow was preserved from EXP-078.
+decision: PENDING. Preconditions and provenance passed; this state transition occurs before the MoveIt plan and arm execution.
+next_experiment: A bounded transport experiment only if EXP-080 is VALID success; otherwise recover through the qualified ResetWorld transaction.
+```
+
+## Experiment EXP-080 Terminal Result
+
+```yaml
+experiment_id: EXP-080
+status: VALID
+terminal_result: INCREMENTAL_2MM_LIFT_FAILURE_CUP_REMAINED_TABLE_SUPPORTED
+terminal_time: 2026-08-12T01:41:30+08:00
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp080_incremental_micro_lift.py
+    exit_code: 1
+result:
+  moveit_attached_ids_before_incremental_lift: [plastic_cup]
+  moveit_world_ids_before_incremental_lift: [pedestal, table]
+  lift_trajectory_points: 6
+  plan_to_execute_drift_rad: 0.000000011845965718629758
+  arm_execution_succeeded: true
+  final_joint_positions_rad: [-0.00013077478451799392, 0.45359180867627663, 0.21111100554281248, 0.8748310618542893, 0.0005773340904787511, -0.05944748134876294]
+  transient_physical_cup_lift_m: 0.0011991071505775552
+  required_physical_cup_lift_m: [0.0015, 0.0025]
+  settled_cup_position_world_m: [0.020014959710363617, -0.2790812760248211, 0.16490535545801602]
+  settled_table_contact: true
+  settled_left_contact_count: 3
+  settled_right_contact_count: 4
+  settled_maximum_normal_force_n: 0.8041681024961073
+  final_reset_epoch: 0
+  physics_paused: false
+diagnosis:
+  - The stronger preload improved transient physical lift from 1.022 mm to 1.199 mm while plan/execute remained successful.
+  - The cup still returned to table support; therefore force margin alone is not sufficient for a 2 mm arm increment.
+  - q6 is already near the frozen safe lower bound, so further preload is not an admissible next variable.
+  - The measured transfer ratio supports testing one 3 mm arm increment while keeping q6, model, friction, scene, and physics unchanged.
+evidence:
+  result: /tmp/so101-task13-standard/exp080-incremental-micro-lift.json
+  result_sha256: 1188abf73da10da051144a8649cd60c052ad7e93a99919e3f8da7f071ca70ff1
+  log: /tmp/so101-task13-standard/exp080-incremental-micro-lift.log
+  log_sha256: 051c6932fa2ce934823bc4742241cec76f9aac33999b8a37d81edeabcead8227
+decision: KEEP VALID as a physical failure. Do not continue transport. Test one larger arm increment without changing the near-limit preload.
+```
+
+## Checkpoint CP-115
+
+```yaml
+checkpoint_id: CP-115
+checkpoint_time: 2026-08-12T01:43:00+08:00
+last_valid_experiment: EXP-080
+current_hypothesis: With the stronger preload fixed, a 3 mm arm increment should produce approximately 1.8 mm physical cup lift and clear table support.
+working_tree_status: Same intentional Task 13/14 and plan/ledger dirty set at HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected Gazebo tracked status remains empty.
+owned_processes: The unchanged domain 149/session so101-task13-standard stack remains live; arm at EXP-080 endpoint; q6 holds near the safe lower bound; cup remains table-supported; Planning Scene collision shadow remains attached.
+confirmed_conclusions:
+  - Two independent arm lift executions planned and executed successfully but produced 1.022 mm and 1.199 mm transient cup lift, both below the frozen 1.5 mm gate.
+  - Stronger preload improved the physical transfer ratio, but the 2 mm arm increment is too small to clear table support under this fingerprint.
+disproven_routes:
+  - Repeating another 2 mm increment under the same q6 would not provide a new discriminating variable.
+open_risks:
+  - A 3 mm increment may still slip or create lateral motion; it remains bounded by the same force/contact/session gates.
+next_command: Verify and preregister /tmp/so101_exp081_incremental_3mm_lift.py, then execute only the 3 mm arm increment.
+```
+
+## Experiment EXP-081
+
+```yaml
+experiment_id: EXP-081
+prior_experiment: EXP-080 VALID 2 mm physical failure
+status: RUNNING
+lifecycle: CONTINUE_OWNED_GUI_STACK_INCREMENTAL_3MM_LIFT
+run_mode: execute_incremental_3mm_arm_lift
+hypothesis: With the stronger preload unchanged, a 3 mm arm increment yields at least 1.5 mm physical cup lift, clears table support, and preserves bilateral contact.
+prediction: The frozen target executes with start drift at or below 0.01 rad; cup z rises 1.5-3.5 mm, lateral drift stays at or below 1 mm, table support clears, and bilateral contact persists for at least 0.30 s.
+single_variable: Increase the arm lift increment from 2 mm to 3 mm; keep q6, friction, model, scene membership, and simulator state unchanged.
+frozen_inputs:
+  source_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  install_overlay: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-standard
+  expected_reset_epoch: 0
+  previous_arm_target_rad: [-0.0002059614124630276, 0.4530466639711597, 0.21089465616398247, 0.8748565203763494, 0.0005761294179064712]
+  expected_q6_rad: -0.0595669207912796
+  incremental_lift_target_arm_rad: [-0.0002055635880602983, 0.43868595637752946, 0.20807618014071933, 0.8898071288873615, 0.0005756988825863246]
+  maximum_force_n: 11.60
+  minimum_physical_lift_m: 0.0015
+  maximum_physical_lift_m: 0.0035
+  maximum_lateral_drift_m: 0.001
+  minimum_post_lift_bilateral_duration_s: 0.30
+  maximum_plan_to_execute_drift_rad: 0.01
+  experiment_script: /tmp/so101_exp081_incremental_3mm_lift.py
+  experiment_script_sha256: e409c9717fdcb71f6356faf47e89780d90f97ecba42bb2d8c9d7ccdad4a7f223
+preconditions:
+  - Current arm remains within 0.01 rad of the EXP-080 endpoint and q6 remains within 0.01 rad of the EXP-079 preload.
+  - Fresh evidence remains unpaused at the same session/reset epoch with bilateral contact, force within bounds, and the cup table-supported.
+  - Planning Scene already reports plastic_cup attached to gripper and absent from world membership; the experiment performs no scene mutation.
+success_criteria:
+  - Existing Planning Scene collision-shadow membership is read back before planning.
+  - The plan is non-empty, starts within 0.01 rad of the fresh arm state, executes successfully, and reaches the incremental target within 0.01 rad.
+  - Cup z displacement is 1.5-3.5 mm, lateral displacement is at most 1 mm, table_collision is absent, and bilateral contact persists for at least 0.30 s after convergence.
+  - Maximum force remains at or below 11.60 N; q6 remains unchanged; physics remains running; session/reset provenance remains fixed.
+  - No Planning Scene mutation, weld, equality, adhesion, mocap, teleport, direct object qpos/qvel write, or MuJoCo-side attachment occurs.
+failure_criteria: Any scene-readback failure, planning/execution failure, start drift, contact loss, force/lift/lateral/table-support violation, stale evidence, pause, reset, or session change stops before transport.
+invalid_criteria: Starting outside the EXP-080/079 state, using a different script hash/overlay/session/reset epoch, or missing fresh evidence makes the experiment INVALID.
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp081_incremental_3mm_lift.py
+    exit_code: PENDING
+evidence_root: /tmp/so101-task13-standard
+runtime_start:
+  time: 2026-08-12T01:44:02+08:00
+  precondition_readback: Script hash matched; q1-q5 remained at the EXP-080 endpoint, q6=-0.059447 rad; fresh unpaused session/reset evidence retained 3 left/4 right wall contacts at approximately 0.804 N and table support; the attached collision shadow remained the expected scene state.
+decision: PENDING. Preconditions and provenance passed; this state transition occurs before the MoveIt plan and arm execution.
+next_experiment: A bounded transport experiment only if EXP-081 is VALID success; otherwise stop and reassess grasp geometry rather than repeating lift increments.
+```
+
+## Experiment EXP-081 Terminal Result
+
+```yaml
+experiment_id: EXP-081
+status: VALID
+terminal_result: INCREMENTAL_3MM_PHYSICAL_LIFT_PROVED
+terminal_time: 2026-08-12T01:46:51+08:00
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp081_incremental_3mm_lift.py
+    exit_code: 0
+result:
+  moveit_attached_ids_before_incremental_lift: [plastic_cup]
+  moveit_world_ids_before_incremental_lift: [pedestal, table]
+  lift_trajectory_points: 6
+  plan_to_execute_drift_rad: 0.0000002504703686880428
+  arm_execution_succeeded: true
+  final_joint_positions_rad: [-0.0002095371845950378, 0.43925280921578225, 0.20839384089198643, 0.8898089626155721, 0.0006091768252660451, -0.05944518916279066]
+  physical_cup_lift_m: 0.0020966948179507727
+  physical_lateral_drift_m: 0.00038143508538649617
+  settled_cup_position_world_m: [0.02003159096475189, -0.2794623291149958, 0.16700204963252638]
+  settled_table_contact: false
+  settled_left_contact_count: 3
+  settled_right_contact_count: 4
+  settled_maximum_normal_force_n: 0.8304586277017592
+  final_reset_epoch: 0
+  physics_paused: false
+  physics_pause_calls: 0
+  simulator_constraint_calls: 0
+  direct_object_state_writes: 0
+diagnosis:
+  - The frozen 3 mm arm increment produced a 2.097 mm physical cup lift, inside the preregistered 1.5-3.5 mm gate.
+  - Table support cleared and 3 left/4 right fingertip contacts persisted for the post-lift stable window, so the transfer is physical rather than a Planning Scene or simulator attachment artifact.
+  - Force remained below 0.84 N, leaving substantial margin below the unchanged 11.60 N safety gate.
+evidence:
+  result: /tmp/so101-task13-standard/exp081-incremental-3mm-lift.json
+  result_sha256: 332782f1ff3ebe96d326c9348479907b152d43d673c81fb44069c8bcf65bff00
+  log: /tmp/so101-task13-standard/exp081-incremental-3mm-lift.log
+  log_sha256: 662a93679ee57c63b6ec63f8f14e02277efea811f3e2061a4a3268d96a6a2e5e
+decision: KEEP VALID as the first constraint-free physical micro-lift success. Continue only through a separately preregistered policy LIFT waypoint.
+```
+
+## Checkpoint CP-116
+
+```yaml
+checkpoint_id: CP-116
+checkpoint_time: 2026-08-12T01:46:51+08:00
+last_valid_experiment: EXP-081
+current_hypothesis: The stronger physical grasp can carry the cup from the verified micro-lift into policy LIFT waypoint 1 without contact loss or hidden simulator assistance.
+working_tree_status: Same intentional Task 13/14 and plan/ledger dirty set at HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected Gazebo tracked status remains empty.
+owned_processes: The unchanged domain 149/session so101-task13-standard stack remains live; arm at EXP-081 endpoint; q6 holds near -0.05945 rad; cup is physically clear of the table; Planning Scene collision shadow remains attached.
+confirmed_conclusions:
+  - MuJoCo physical evidence, not MoveIt scene state, proves a 2.097 mm cup lift with table support absent and bilateral grasp contact retained.
+  - The unchanged arm controller and MoveIt execution path remain healthy with negligible plan-to-execute drift.
+disproven_routes:
+  - No additional preload or repeated micro-lift increment is needed before testing the first formal policy LIFT waypoint.
+open_risks:
+  - The larger policy waypoint may expose slip or lateral motion that the 3 mm micro-lift could not reveal.
+next_command: Verify and preregister /tmp/so101_exp082_policy_lift_waypoint1.py, then execute only policy LIFT waypoint 1.
+```
+
+## Experiment EXP-082
+
+```yaml
+experiment_id: EXP-082
+prior_experiment: EXP-081 VALID physical micro-lift success
+status: PLANNED
+lifecycle: CONTINUE_OWNED_GUI_STACK_POLICY_LIFT_WAYPOINT1
+run_mode: execute_policy_lift_waypoint1
+hypothesis: The verified stronger preload physically carries the cup through policy LIFT waypoint 1 while bilateral contact and force bounds remain valid.
+prediction: The frozen waypoint executes with start drift at or below 0.01 rad; cup z rises by 5-100 mm, lateral displacement remains at or below 30 mm, table support remains absent, and bilateral contact persists for at least 0.30 s.
+single_variable: Replace the successful 3 mm micro-lift target with the first frozen LIFT waypoint; keep q6, model, friction, controller, scene membership, simulator session, and reset epoch unchanged.
+frozen_inputs:
+  source_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  install_overlay: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-standard
+  expected_reset_epoch: 0
+  previous_arm_target_rad: [-0.0002055635880602983, 0.43868595637752946, 0.20807618014071933, 0.8898071288873615, 0.0005756988825863246]
+  expected_q6_rad: -0.0595669207912796
+  lift_waypoint1_arm_rad: [-0.000284124852, 0.381814591288, 0.272246878070, 0.916741182602, -0.000291565154]
+  maximum_force_n: 11.60
+  minimum_physical_lift_m: 0.005
+  maximum_physical_lift_m: 0.10
+  maximum_lateral_displacement_m: 0.03
+  minimum_post_lift_bilateral_duration_s: 0.30
+  maximum_plan_to_execute_drift_rad: 0.01
+  experiment_script: /tmp/so101_exp082_policy_lift_waypoint1.py
+  experiment_script_sha256: 8c7909e9fdb6666c7a6413571e2d0e6c3f9a5a031aece3b59effbb91fa98fa48
+preconditions:
+  - Current arm remains within 0.01 rad of the EXP-081 endpoint and q6 remains within 0.01 rad of the EXP-079 stronger preload.
+  - Fresh evidence remains unpaused at the same session/reset epoch with bilateral contact, force within bounds, and no cup/table contact.
+  - Planning Scene already reports plastic_cup attached to gripper and absent from world membership; the experiment performs no scene mutation.
+success_criteria:
+  - Existing Planning Scene collision-shadow membership is read back before planning.
+  - The plan is non-empty, starts within 0.01 rad of the fresh arm state, executes successfully, and reaches LIFT waypoint 1 within 0.01 rad.
+  - Cup z displacement is 5-100 mm, lateral displacement is at most 30 mm, table_collision remains absent, and bilateral contact persists for at least 0.30 s after convergence.
+  - Maximum force remains at or below 11.60 N; q6 remains unchanged; physics remains running; session/reset provenance remains fixed.
+  - No Planning Scene mutation, weld, equality, adhesion, mocap, teleport, direct object qpos/qvel write, or MuJoCo-side attachment occurs.
+failure_criteria: Any scene-readback failure, planning/execution failure, start drift, contact loss, force/lift/lateral/table-support violation, stale evidence, pause, reset, or session change stops before the remaining LIFT waypoints.
+invalid_criteria: Starting outside the EXP-081 state, using a different script hash/overlay/session/reset epoch, or missing fresh evidence makes the experiment INVALID.
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp082_policy_lift_waypoint1.py
+    exit_code: PENDING
+evidence_root: /tmp/so101-task13-standard
+decision: PENDING. Execute only after the script hash, current joints, physical grasp, scene membership, and simulator provenance are read back and EXP-082 is transitioned to RUNNING.
+next_experiment: Remaining LIFT waypoints only if EXP-082 is VALID success; otherwise recover through the qualified ResetWorld transaction.
+```
+
+## Experiment EXP-082 Terminal Result
+
+```yaml
+experiment_id: EXP-082
+status: VALID
+terminal_result: PRECONDITION_FAILURE_LONG_HOLD_SLIP
+terminal_time: 2026-08-12T01:50:54+08:00
+commands:
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp082_policy_lift_waypoint1.py
+    exit_code: NOT_RUN
+readback:
+  current_joint_positions_rad: [-0.0002097396399154292, 0.4392237728669602, 0.20837618605608269, 0.8898084733152872, 0.0006093203380582766, -0.059446834210361704]
+  publisher_sequence: 201158
+  simulation_step: 201158
+  reset_epoch: 0
+  simulation_session_id: so101-task13-standard
+  physics_paused: false
+  cup_position_world_m: [0.020030936196574475, -0.279474804905543, 0.16490537262223293]
+  table_contact: true
+  left_contact_count: 3
+  right_contact_count: 4
+  maximum_normal_force_n: 0.8292155129856251
+diagnosis:
+  - The arm and q6 remained at the verified EXP-081 endpoint, but the cup returned from z=0.167002 m to its table-supported z=0.164905 m during the longer unpaused hold.
+  - Bilateral wall contacts and normal force persisted, isolating the failure to gravity-driven tangential slip rather than contact loss, controller drift, or Planning Scene state.
+  - Source inspection found MuJoCo cup collision friction 0.7 and no fingertip-specific TPU friction, while the Gazebo task contract defines cup friction 1.2 and TPU axial/transverse coefficients 3.0/1.2.
+decision: KEEP VALID as a no-motion precondition failure. Do not execute policy LIFT waypoint 1 on a grasp that cannot remain suspended. Correct the explicit MuJoCo material parity, then use the qualified ResetWorld path and replay from the task start.
+```
+
+## Checkpoint CP-117
+
+```yaml
+checkpoint_id: CP-117
+checkpoint_time: 2026-08-12T01:50:54+08:00
+last_valid_experiment: EXP-082
+current_hypothesis: The missing Gazebo TPU-on-plastic axial friction contract, not MoveIt or ros2_control, causes the slow cup slip.
+working_tree_status: Same intentional Task 13/14 and plan/ledger dirty set at HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected Gazebo tracked status remains empty.
+owned_processes: The unchanged domain 149/session so101-task13-standard GUI stack remains live and unpaused; no EXP-082 motion command was sent.
+confirmed_conclusions:
+  - A 0.30 s micro-lift observation is insufficient as a stable-hold gate for this workflow; the next positive hold gate must cover a materially longer window before transport.
+  - MuJoCo task-scene friction is not at parity with the Gazebo light-cup material contract even though mass and geometry are at parity.
+disproven_routes:
+  - Executing the formal transport path immediately after a transient micro-lift would hide a reproducible long-hold slip and is rejected.
+open_risks:
+  - MuJoCo geom friction is isotropic, whereas the Gazebo pad contract distinguishes axial 3.0 from transverse 1.2; the parity implementation must document and test the chosen conservative mapping.
+next_command: Add a tested fingertip/cup friction mapping in the MuJoCo model, rebuild the overlay, restart through the owned GUI scripts, ResetWorld, and preregister the replay as EXP-083.
+```
+
+## Experiment EXP-083
+
+```yaml
+experiment_id: EXP-083
+prior_experiment: EXP-082 VALID no-motion long-hold precondition failure
+status: RUNNING
+lifecycle: FRICTION_PARITY_RESET_REPLAY_AND_LONG_HOLD
+run_mode: execute_exact_qualified_grasp_replay_with_10s_hold
+hypothesis: Mapping the Gazebo light-cup material contract into MuJoCo eliminates the slow gravity-driven cup slip without changing mass, geometry, preload, trajectory, controller, or attachment policy.
+prediction: After the qualified ResetWorld transaction and exact approach/preload/micro-lift replay, the cup remains 1.5-3.5 mm above its pre-lift height with no table contact and continuous bilateral fingertip contact for 10.0 s.
+single_variable: MuJoCo contact friction only: cup sliding friction 0.7 -> 1.2 and the 13 TPU fingertip-pad collisions receive sliding friction 3.0; geometry, mass, inertias, q6 bounds, controller gains, policy waypoints, preload increments, physics timestep, and gravity remain unchanged.
+mapping_rationale:
+  - Gazebo plastic-cup collision friction is 1.2.
+  - Gazebo TPU pad friction is axial 3.0 and transverse 1.2; MuJoCo geom friction is isotropic, so the load-bearing vertical/axial coefficient 3.0 is applied only to the fingertip pad collision geoms and the limitation is retained as an explicit model note for later calibration.
+frozen_inputs:
+  source_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  install_overlay: /tmp/so101-friction-20260812/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-friction-parity
+  expected_initial_reset_epoch: 0
+  robot_mjcf_sha256: 846b460b4933924a64e3eec6ac3dc7a0f9d0f56baf73389e58ffaf6bcef79430
+  scene_mjcf_sha256: aa830e733f9c9715c2e20dc148c70102f00a340e3218bf587fb150360d1b7ef5
+  motion_policy_sha256: 303044acea71039f74693e5f0e0d97f3adbaf21c95745c57aa63709fc4c6f321
+  replay_scripts:
+    - [/tmp/so101_exp083_077_seating_preload.py, 34d01fc0d1b65016aa8a376913ecc96c11c7ec6148e2499894e3c5c25f3cc9a9]
+    - [/tmp/so101_exp083_078_micro_lift.py, fa01c669a2a2c2e896a702e00e6da5fe51ecaaab98672f281aed180a496e3dad]
+    - [/tmp/so101_exp083_079_additional_preload.py, 8d0114effa94bf8285ad2066b2f0ea2d3f6c3bd7a2e2ac48f71dd0b81a96a2ed]
+    - [/tmp/so101_exp083_080_incremental_micro_lift.py, 740d94acb0e85a4b475594c6a567d41c7a11b76cffc76bc14281f8f9b0a7f781]
+    - [/tmp/so101_exp083_081_incremental_3mm_lift.py, 06dc8470b15245d18d4c7c1a9f7b2a0c6cefbd6b7a042f101b9291781c8a4fd4]
+  maximum_force_n: 11.60
+  long_hold_duration_s: 10.0
+  minimum_physical_lift_m: 0.0015
+  maximum_physical_lift_m: 0.0035
+  maximum_lateral_drift_m: 0.001
+preconditions:
+  - Targeted geometry/material tests pass, source and installed MJCF hashes match, the standard fork dependency is unchanged, and protected Gazebo tracked status is empty.
+  - The owned GUI stack reports session so101-task13-friction-parity, reset epoch 0, unpaused physics, active arm/gripper/joint-state controllers, and task-start cup/table state.
+  - No constraint, weld, adhesion, mocap, teleport, object qpos/qvel write, or MuJoCo-side attachment is introduced.
+success_criteria:
+  - ResetWorld(task_start) succeeds transactionally; reset epoch increments and fresh evidence plus GUI show the task-start robot and cup.
+  - Formal scene_setup readback contains exactly table, pedestal, and 13-primitive plastic_cup with colors; staged_approach reaches CLOSE_READY with no early cup/fingertip contact or cup displacement.
+  - The exact EXP-077/078/079/080/081 command sequence replays under the new session with the same two 0.006 rad preload increments and frozen arm targets.
+  - The final 3 mm increment yields 1.5-3.5 mm cup lift, at most 1 mm lateral drift, no table contact, continuous bilateral contact for 10.0 s, force at or below 11.60 N, and no reset/pause/session change.
+failure_criteria: Any build/provenance mismatch, reset or scene failure, early contact, planning/execution failure, contact/force/lift/lateral/table-support violation, or long-hold slip stops before formal transport.
+invalid_criteria: Any unrecorded model/controller/policy/preload/trajectory change, missing script hash, hidden attachment/constraint/write, or missing atomic evidence makes the experiment INVALID.
+commands:
+  - command: ros2 service call /mujoco_ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld "{keyframe: task_start}"
+    exit_code: PENDING
+  - command: ros2 run so101_mujoco_demo_py scene_setup
+    exit_code: PENDING
+  - command: ros2 run so101_mujoco_demo_py staged_approach --mode execute --execute --stop-after DESCEND --simulation-session-id so101-task13-friction-parity --evidence-file /tmp/so101-task13-friction-parity/exp083-staged-approach.json
+    exit_code: PENDING
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp083_077_seating_preload.py
+    exit_code: PENDING
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp083_078_micro_lift.py
+    exit_code: PENDING
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp083_079_additional_preload.py
+    exit_code: PENDING
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp083_080_incremental_micro_lift.py
+    exit_code: PENDING
+  - command: ROS_DOMAIN_ID=149 python3 /tmp/so101_exp083_081_incremental_3mm_lift.py
+    exit_code: PENDING
+evidence_root: /tmp/so101-task13-friction-parity
+runtime_start:
+  time: 2026-08-12T01:58:36+08:00
+  precondition_readback: Targeted material/geometry compilation tests passed 17/17; protected Gazebo tracked status was empty; source and installed robot/scene MJCF hashes matched; domain 149 reported active arm/gripper/joint-state controllers and fresh unpaused session so101-task13-friction-parity evidence at reset epoch 0.
+decision: PENDING. Preconditions and provenance passed; this state transition occurs before ResetWorld, scene mutation, and every motion command.
+next_experiment: Policy LIFT waypoint 1 only if EXP-083 is VALID long-hold success; otherwise stop and reassess the contact-model mapping.
+```
+
+## Experiment EXP-083 Terminal Result
+
+```yaml
+experiment_id: EXP-083
+status: VALID
+terminal_result: RESET_SUCCEEDED_VISUALLY_BUT_ATOMIC_EVIDENCE_DID_NOT_RESUME
+terminal_time: 2026-08-12T02:12:20+08:00
+commands:
+  - command: ros2 service call /mujoco_ros2_control_node/reset_world mujoco_ros2_control_msgs/srv/ResetWorld "{keyframe: task_start}"
+    exit_code: 0_AFTER_FORMAL_DEACTIVATE_PAUSE_RESET_RESUME_ACTIVATE_TRANSACTION
+  - command: ros2 run so101_mujoco_demo_py scene_setup
+    exit_code: 0
+  - command: ros2 run so101_mujoco_demo_py staged_approach --mode execute --execute --stop-after DESCEND --simulation-session-id so101-task13-friction-parity --evidence-file /tmp/so101-task13-friction-parity/exp083-staged-approach.json
+    exit_code: 1
+result:
+  reset_service_success: true
+  reset_visual_success: true
+  joint_states_after_reset_hz: approximately 100
+  evidence_publisher_count_after_reset: 1
+  evidence_messages_after_reset: 0
+  staged_approach_status: FAILED
+  staged_approach_error: fresh MuJoCo evidence timeout
+diagnosis:
+  - ResetWorld restored task_start in MuJoCo and RViz and the controller state stream continued, so physics, ros2_control, and GUI remained alive.
+  - The evidence plugin's on_reset increments a pending generation; ordinary update intentionally refuses to consume it, but the fork reset callback returned without issuing the required paused on_state_snapshot hook.
+  - Consequently the publisher endpoint remained discoverable while no atomic sample could be published, and staged_approach correctly failed closed before any arm motion.
+  - The friction mapping was not physically exercised in this run; no approach, close, preload, or lift command was sent.
+evidence:
+  staged_result: /tmp/so101-task13-friction-parity/exp083-staged-approach.json
+  staged_result_sha256: 37946d4ab06859393fbef47cac55daf4086b13c7198352bba45522b9dfe105aa
+  after_reset_cua: /tmp/so101-task13-friction-parity/after-reset-cua.png
+  after_reset_cua_sha256: 244b6bb688d3e367fd6bc06add0df16f9591a605a46a315e6902b3faa7b483ea
+decision: KEEP VALID as a ResetWorld integration failure. Stop the friction replay and requalify ResetWorld evidence publication before any further grasp action.
+```
+
+## Checkpoint CP-118
+
+```yaml
+checkpoint_id: CP-118
+checkpoint_time: 2026-08-12T02:12:20+08:00
+last_valid_experiment: EXP-083
+current_hypothesis: The missing post-reset paused snapshot hook is both necessary and sufficient to resume atomic evidence at the new reset epoch.
+working_tree_status: Main worktree retains the intentional Task 13/14, friction-model, test, plan, and ledger changes at parent HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected Gazebo tracked status remains empty. The independent fork submodule at 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5 has exactly two intentional dirty paths for the reset hook and regression test.
+confirmed_conclusions:
+  - GUI reset success alone is insufficient; a successful ResetWorld acceptance must also prove a fresh atomic sample at the incremented reset epoch.
+  - A new fork regression test first failed because reset called on_reset but not on_state_snapshot, then passed after adding the paused snapshot hook under the same simulator mutex.
+  - Fork package CTest passes all 4 registered tests after the fix.
+disproven_routes:
+  - Waiting for ordinary running updates cannot recover a pending reset generation by design and must not be used as a workaround.
+open_risks:
+  - The new hook must be revalidated twice in one live GUI stack and visually after a changed arm state before the grasp workflow resumes.
+next_command: Start the GUI stack from /tmp/so101-fork-reset-test/install, preregister EXP-084, execute a bounded safe pose, then perform the formal ResetWorld transaction and verify fresh epoch evidence plus CUA task_start state.
+```
+
+## Experiment EXP-084
+
+```yaml
+experiment_id: EXP-084
+prior_experiment: EXP-083 VALID reset-evidence publication failure
+status: RUNNING
+lifecycle: FIXED_FORK_RESET_EVIDENCE_AND_VISUAL_REQUALIFICATION
+run_mode: two_same_stack_resets_with_changed_state_visual_proof
+hypothesis: The fork's post-reset paused snapshot hook restores a step-zero atomic sample at each incremented epoch while preserving the fail-closed reset transaction and visual state restoration.
+single_variable: Fork reset callback adds plugin on_state_snapshot(mj_model_, mj_data_, true) immediately after reset_simulation_state; the scene, demo overlay, friction model, controllers, services, and reset transaction are unchanged from EXP-083.
+frozen_inputs:
+  fork_base_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  fixed_fork_install: /tmp/so101-fork-reset-test/install
+  fixed_fork_source_sha256: aca60fca0b41c8aa6a5eba6db3574f86bdcb70da3955972c20e665d5b6db5736
+  fixed_fork_test_sha256: 82b971122fc5973d5fa7f13f1cc346072af228949980f412714eeb2ed072a8e6
+  demo_install: /tmp/so101-friction-20260812/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-reset-evidence-fix
+  reset_keyframe: task_start
+  safe_pose: task12_safe
+  expected_reset_epochs: [1, 2]
+preconditions:
+  - Focused reset regression test and all four fork CTest registrations pass; fork and demo installed hashes match their sources.
+  - The replacement GUI stack is owned by tmux so101-mujoco-gui and starts at reset epoch 0 with active controllers and a fresh evidence stream.
+success_criteria:
+  - First formal deactivate-pause-reset-resume-activate transaction succeeds and a fresh unpaused evidence sample reports reset_epoch 1.
+  - A bounded task12_safe MoveIt execution creates a visually distinct arm state without moving the cup.
+  - Second formal reset transaction succeeds; a paused step-zero/new-epoch sample and subsequent fresh unpaused sample report reset_epoch 2, joint feedback returns to task_start, and CUA visually confirms the horizontal open arm plus original cup/table/pedestal/target state.
+  - No process restart occurs between the two resets; no object write, hidden constraint, adhesion, mocap, or teleport outside the authorized keyframe ResetWorld transaction is used.
+failure_criteria: Any service failure, missing/wrong epoch sample, controller activation failure, evidence timeout, joint mismatch, or visual mismatch keeps ResetWorld unqualified and blocks grasp replay.
+invalid_criteria: Different fork/demo hashes, process restart between resets, missing CUA capture, or unrecorded state mutation makes the experiment INVALID.
+evidence_root: /tmp/so101-task13-reset-evidence-fix
+runtime_start:
+  time: 2026-08-12T02:14:19+08:00
+  precondition_readback: Fork CTest passed 4/4; the reset regression passed after first failing on the old callback; the owned GUI stack executable resolved to /tmp/so101-fork-reset-test/install; controllers were active; fresh evidence reported session so101-task13-reset-evidence-fix, reset epoch 0, running physics, and task-start cup/table state.
+decision: PENDING. Preconditions and replacement-stack provenance passed; this state transition occurs before the first fixed-fork ResetWorld command.
+next_experiment: Re-preregister the friction-parity grasp replay only if EXP-084 is VALID.
+```
+
+## Experiment EXP-084 Terminal Result
+
+```yaml
+experiment_id: EXP-084
+status: INVALID
+terminal_result: IMPLEMENTATION_AND_VISUAL_PASS_WITH_CONTAMINATED_FROZEN_EPOCH_BASELINE
+terminal_time: 2026-08-12T02:24:56+08:00
+result:
+  fixed_fork_runtime_hook: PASS
+  reset_client_unit_tests: 20 passed
+  final_two_cycle_live_test: PASS
+  final_two_cycle_epochs: [[4, 5], [5, 6]]
+  authoritative_reset_steps: [0, 0]
+  invalid_keyframe_fail_closed_epoch: 6
+  before_reset_visual: task12_safe arm pose with upright cup
+  after_reset_visual: horizontal open task_start arm, upright original cup, table, pedestal, and red target ring
+invalid_reason:
+  - The frozen input expected_reset_epochs was [1, 2], but three failed test-harness iterations performed real ResetWorld calls before the corrected final run.
+  - Those diagnostic resets were visible in the simulator log but occurred after EXP-084 entered RUNNING and changed the initial epoch, so the final successful 4 -> 5 -> 6 pair cannot satisfy the preregistered exact baseline.
+  - No hidden object write, attachment, constraint, adhesion, mocap, or teleport was used; the invalidation is provenance-only, not a physical or implementation failure.
+evidence:
+  safe_pose_json: /tmp/so101-task13-reset-evidence-fix/safe-pose.json
+  safe_pose_sha256: 015d0346c94d83f1d84971708b2dc57f67571bf8a8ee9c5b57f6e08ee0c4d3de
+  reset_live_log: /tmp/so101-task13-reset-evidence-fix/reset-live-fixed.log
+  reset_live_log_sha256: d9f8afa4fef1e56a357dbed1eebfe998a257ec12b9f47a7579dd7a93a956fa17
+  before_reset_cua: /tmp/so101-task13-reset-evidence-fix/before-reset-cua.png
+  before_reset_cua_sha256: b62413a0243b71a438f02d56c9a4b44c77e8fd33969039b5224d14a7a763ab60
+  after_reset_cua: /tmp/so101-task13-reset-evidence-fix/after-reset-cua.png
+  after_reset_cua_sha256: d523b190a302d508efb5bbe9c9f7210345aa709355eec9dcccc0e1f19aa3d45f
+decision: Preserve as implementation evidence, but do not qualify ResetWorld from this run. Restart a fresh owned stack and repeat the fixed test without code changes.
+```
+
+## Checkpoint CP-119
+
+```yaml
+checkpoint_id: CP-119
+checkpoint_time: 2026-08-12T02:24:56+08:00
+last_terminal_experiment: EXP-084 INVALID
+current_hypothesis: The fixed fork and fixed reset client will reproduce exact 0 -> 1 -> 2 reset receipts on a fresh stack.
+working_tree_status: Main worktree retains the intentional Task 13/14, friction, reset-client, tests, plan, and ledger changes at parent HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected Gazebo tracked status remains empty. The fork submodule retains exactly the reset hook and regression test.
+confirmed_conclusions:
+  - Fork reset callback now publishes the authoritative paused step-zero snapshot immediately after state restoration.
+  - The client must capture that step-zero snapshot before its bounded resume/activate/fresh-joints/re-pause phase; the final paused frame may legitimately have a positive simulation step.
+  - A late subscriber on an already-paused stack must request an idempotent pause snapshot rather than passively waiting for volatile evidence.
+open_risks:
+  - Clean-epoch reproducibility remains unqualified until a new process starts at epoch 0 and completes exactly two cycles without intermediate failures.
+next_command: Preregister EXP-085, restart the owned GUI stack with unchanged fixed hashes, execute task12_safe, and run the already-passing live test once.
+```
+
+## Experiment EXP-085
+
+```yaml
+experiment_id: EXP-085
+prior_experiment: EXP-084 INVALID contaminated epoch baseline
+status: RUNNING
+lifecycle: CLEAN_FIXED_FORK_RESET_EVIDENCE_AND_VISUAL_REQUALIFICATION
+run_mode: fresh_stack_exact_two_cycle_reset_with_changed_state_visual_proof
+hypothesis: On a fresh stack, the unchanged fixed fork and reset client produce exact 0 -> 1 -> 2 authoritative step-zero receipts and restore the visibly changed arm/cup scene.
+single_variable: Process epoch baseline only; code, fork install, demo install, model, controllers, services, scene, and test command are frozen from the final passing EXP-084 attempt.
+frozen_inputs:
+  fork_base_commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  fixed_fork_install: /tmp/so101-fork-reset-test/install
+  fixed_fork_source_sha256: aca60fca0b41c8aa6a5eba6db3574f86bdcb70da3955972c20e665d5b6db5736
+  fixed_fork_test_sha256: 82b971122fc5973d5fa7f13f1cc346072af228949980f412714eeb2ed072a8e6
+  reset_client_sha256: d57e67deb28ca17a7a489396caed043c796a4557a701a366d58b0bbb6b8d04dc
+  reset_unit_test_sha256: cb2c77314f1487fe05f765c5efbb60af1c65e34151a23606b5ecb71f1164696f
+  reset_live_test_sha256: 9eaa910ae4694ddf04e28e79a2a6022b5a8fc5abd852b6a7023ae862c461efc1
+  demo_install: /tmp/so101-friction-20260812/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-reset-clean
+  reset_keyframe: task_start
+  safe_pose: task12_safe
+  expected_initial_reset_epoch: 0
+  expected_receipts: [[0, 1], [1, 2]]
+preconditions:
+  - A replacement owned GUI process starts fresh with the exact frozen installs, active controllers, reset epoch 0, and the formal RViz Planning Scene.
+  - The already-fixed unit and live test sources are unchanged; protected Gazebo tracked status remains empty.
+success_criteria:
+  - task12_safe executes through MoveIt and CUA confirms a visibly changed arm with the original upright cup.
+  - One invocation of the live test yields exact receipts [[0,1],[1,2]], both authoritative reset frames at simulation_step 0, final paused task_start joints/cup, active controllers, and invalid-keyframe fail-closed at epoch 2.
+  - A new CUA capture confirms RViz left, MuJoCo right, horizontal open task_start arm, upright original cup, table, pedestal, and red target ring.
+failure_criteria: Any wrong initial/final epoch, service/evidence/controller/joint/object mismatch, test failure, or visual mismatch blocks grasp replay.
+invalid_criteria: Any code/hash change, intermediate reset outside the one test invocation, process restart during the two cycles, hidden state mutation, or missing visual evidence makes the run INVALID.
+evidence_root: /tmp/so101-task13-reset-clean
+runtime_start:
+  time: 2026-08-12T02:28:21+08:00
+  precondition_readback: Fresh owned GUI processes started from the frozen fixed-fork and friction demo installs; atomic evidence reports session so101-task13-reset-clean, reset epoch 0, running physics, original cup/table contact, and all three controllers active. No reset has occurred.
+decision: PENDING. Fresh-stack provenance and exact epoch-zero preconditions passed; this transition occurs before Planning Scene setup, safe-pose motion, or ResetWorld.
+next_experiment: Re-preregister the friction-parity grasp replay only if EXP-085 is VALID.
+```
+
+## Experiment EXP-085 Terminal Result
+
+```yaml
+experiment_id: EXP-085
+status: INVALID
+terminal_result: RESET_TRANSACTION_PASSED_BUT_LIVE_TEST_ASSERTED_STALE_SERVICE_RETURN_JOINT_SAMPLE
+terminal_time: 2026-08-12T02:31:05+08:00
+result:
+  scene_setup: PASS with table, pedestal, and 13-primitive cup
+  task12_safe_moveit_execution: PASS
+  before_reset_visual: PASS
+  actual_reset_receipts: [[0, 1], [1, 2]]
+  authoritative_reset_steps: [0, 0]
+  final_fresh_joint_convergence: PASS within 0.002 rad
+  final_controllers_active: true
+  test_result: FAILED in post-transaction diagnostic assertion
+invalid_reason:
+  - The test recorded /joint_states immediately when reset_world returned and required that asynchronous sample to already equal task_start.
+  - ResetWorld atomically restores MuJoCo state and publishes step-zero evidence, but joint_state_broadcaster updates independently after the bounded resume/reactivate phase; the reset client correctly waits for a post-reset callback and final convergence.
+  - The incorrect assertion failed only when the pre-reset arm was deliberately moved to task12_safe; earlier task_start-to-task_start runs hid the stale-sample error.
+evidence:
+  safe_pose_json: /tmp/so101-task13-reset-clean/safe-pose.json
+  safe_pose_sha256: c6248cb10ab1b9f4eacb4624f7909824ed7dd6fab3461e1c07f2e7325218c2d5
+  before_reset_cua: /tmp/so101-task13-reset-clean/before-reset-cua.png
+  before_reset_cua_sha256: 3c35fb613596356afabc0ca25756a011c3bfd7fb82802f911f0d3c5ef2aa588e
+  reset_live_log: /tmp/so101-task13-reset-clean/reset-live.log
+  reset_live_log_sha256: 256605f24a2e6338883820f7f5f4b5b68d15c952ca536fb4b2c0629a1f06b108
+decision: Correct the test terminology and gate placement, restart a fresh process, and rerun without changing runtime code.
+```
+
+## Checkpoint CP-120
+
+```yaml
+checkpoint_id: CP-120
+checkpoint_time: 2026-08-12T02:31:05+08:00
+last_terminal_experiment: EXP-085 INVALID
+current_hypothesis: Service-return step-zero atomic state and post-reactivation fresh joint state are separate evidence boundaries and will both pass when checked at their correct times.
+working_tree_status: Same intentional parent/fork dirty sets; protected Gazebo tracked status remains empty. Only the live-test assertion/field name changed after EXP-085.
+confirmed_conclusions:
+  - A changed task12_safe arm makes stale service-return joint feedback observable and prevents a false task_start-to-task_start pass.
+  - Exact runtime receipts were 0 -> 1 -> 2 and both reset events had simulation_step 0; final fresh joints and controllers converged.
+  - The live test must retain immediate atomic object/epoch/step checks but treat service-return joint data as diagnostic until a fresh callback arrives.
+next_command: Preregister EXP-086 with the corrected test hash, restart the unchanged fixed runtime, and run the same scene/safe-pose/CUA/test sequence once.
+```
+
+## Experiment EXP-086
+
+```yaml
+experiment_id: EXP-086
+prior_experiment: EXP-085 INVALID misplaced asynchronous joint assertion
+status: RUNNING
+lifecycle: FINAL_CLEAN_FIXED_FORK_RESET_REQUALIFICATION
+run_mode: fresh_stack_exact_two_cycle_reset_with_correct_evidence_boundaries
+hypothesis: With the test checking atomic reset state at service return and fresh joints after controller reactivation, the unchanged runtime passes exact 0 -> 1 -> 2 reset qualification and visual restoration.
+single_variable: Live-test assertion timing/field semantics only; runtime fork, reset client, model, controller, scene, and motion inputs are unchanged.
+frozen_inputs:
+  fixed_fork_install: /tmp/so101-fork-reset-test/install
+  fixed_fork_source_sha256: aca60fca0b41c8aa6a5eba6db3574f86bdcb70da3955972c20e665d5b6db5736
+  fixed_fork_test_sha256: 82b971122fc5973d5fa7f13f1cc346072af228949980f412714eeb2ed072a8e6
+  reset_client_sha256: d57e67deb28ca17a7a489396caed043c796a4557a701a366d58b0bbb6b8d04dc
+  reset_unit_test_sha256: cb2c77314f1487fe05f765c5efbb60af1c65e34151a23606b5ecb71f1164696f
+  corrected_reset_live_test_sha256: 875841af795e6e05517608f352f935d820b3cf052b663dea20b093988183946f
+  demo_install: /tmp/so101-friction-20260812/overlay/install
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-reset-final
+  expected_initial_reset_epoch: 0
+  expected_receipts: [[0, 1], [1, 2]]
+preconditions:
+  - A replacement owned GUI stack starts from the frozen installs at reset epoch 0 with active controllers and the formal Planning Scene.
+  - task12_safe and a fresh CUA capture establish the changed-state visual baseline before the sole live-test invocation.
+success_criteria:
+  - The test exits 0 with exact receipts [[0,1],[1,2]], authoritative reset frames at step 0, final fresh task_start joints, active controllers, and invalid-keyframe fail-closed at epoch 2.
+  - CUA after the test confirms the horizontal open task_start arm, original upright cup, table, pedestal, and red target ring in side-by-side RViz/MuJoCo.
+failure_criteria: Any nonzero test result, wrong epoch, evidence/controller/joint/object mismatch, or visual mismatch blocks grasp replay.
+invalid_criteria: Any further code change, reset outside the sole test invocation, process restart during the run, hidden state mutation, or missing CUA evidence invalidates the run.
+evidence_root: /tmp/so101-task13-reset-final
+runtime_start:
+  time: 2026-08-12T02:33:02+08:00
+  precondition_readback: Fresh owned GUI processes report the frozen session so101-task13-reset-final, reset epoch 0, running physics, original cup/table state, and all controllers active; corrected live-test hash matches the preregistered input and no reset has occurred.
+decision: PENDING. Exact fresh-stack preconditions passed; this transition occurs before scene mutation, safe-pose motion, or ResetWorld.
+next_experiment: Friction-parity grasp replay only after EXP-086 is VALID.
+```
+
+## Experiment EXP-086 Terminal Result
+
+```yaml
+experiment_id: EXP-086
+status: VALID
+terminal_result: CLEAN_RESETWORLD_TRANSACTION_AND_VISUAL_QUALIFICATION_PASS
+terminal_time: 2026-08-12T02:35:44+08:00
+commands:
+  - command: ros2 run so101_mujoco_demo_py scene_setup
+    exit_code: 0
+  - command: ros2 run so101_mujoco_demo_py headless_execution --run-mode execute --execute --simulation-session-id so101-task13-reset-final --safe-pose task12_safe ...
+    exit_code: 0
+  - command: SO101_MUJOCO_RESET_LIVE_TEST=1 SO101_MUJOCO_SESSION_ID=so101-task13-reset-final python3 -m pytest -q -s test/test_reset_live_contract.py
+    exit_code: 0
+result:
+  scene_setup: PASS with table, pedestal, and 13-primitive cup
+  changed_state_moveit_execution: PASS, 19 points, simulation step delta 180
+  before_reset_cua: PASS
+  reset_receipts: [[0, 1], [1, 2]]
+  authoritative_reset_steps: [0, 0]
+  final_reset_epoch: 2
+  final_paused_simulation_step: 1
+  final_joint_positions: [6.874429849945374e-09, 0.0004841780340401403, 0.0004202376186071116, 5.106316234935229e-05, 2.8564715073084785e-08, -6.594769917410586e-07]
+  final_object_position: [0.01999999708148165, -0.27999999885196103, 0.16494511319038987]
+  controllers_active_before_invalid_keyframe: true
+  invalid_keyframe_fail_closed: true at epoch 2 paused with arm/gripper controllers left inactive
+  after_reset_cua: PASS with horizontal open task-start arm, original upright cup, table, pedestal, target ring, and visible PAUSE status
+evidence:
+  scene_safe_log: /tmp/so101-task13-reset-final/scene-safe.log
+  scene_safe_log_sha256: 3d4143e51f72aac80804e62a7f8a6c5853788fb9b7818cf38c34b578d455c79b
+  safe_pose_json: /tmp/so101-task13-reset-final/safe-pose.json
+  safe_pose_sha256: a60ef83a79daaa6f8b086fc0d6bc028ac873a1e7b132a5bf5fbfc56e2d2cffd8
+  before_reset_cua: /tmp/so101-task13-reset-final/before-reset-cua.png
+  before_reset_cua_sha256: c23e39f50594786b4317be3605a8660d9c9ecdd558b382e57108a41d1a8fc71b
+  reset_live_log: /tmp/so101-task13-reset-final/reset-live.log
+  reset_live_log_sha256: d3fed3ad35b5985079df1f6de80e63afa03857d6e811df6b53bcdff425afa480
+  after_reset_cua: /tmp/so101-task13-reset-final/after-reset-cua.png
+  after_reset_cua_sha256: c12794bc0504c572794c0b4c280af3d542c992975505b82ed60418255dfc37ad
+decision: QUALIFY ResetWorld. The grasp workflow may resume only in a separately preregistered experiment using the qualified fork/client behavior.
+```
+
+## Checkpoint CP-121
+
+```yaml
+checkpoint_id: CP-121
+checkpoint_time: 2026-08-12T02:35:44+08:00
+last_valid_experiment: EXP-086
+current_hypothesis: The friction-parity mapping will preserve the qualified physical micro-lift for the preregistered 10-second hold.
+working_tree_status: Main worktree retains intentional Task 13/14, friction, ResetWorld, tests, plan, and ledger changes at parent HEAD eabe88885bf802fb14968547634fd06c26c1b38a; protected Gazebo tracked status remains empty. Fork contains the now-live-qualified reset hook and regression.
+confirmed_conclusions:
+  - ResetWorld now has three independently verified boundaries: paused step-zero atomic MuJoCo evidence, post-reactivation fresh ROS joint/controller convergence, and CUA visual restoration.
+  - A final paused frame may have simulation_step greater than zero because the transaction intentionally resumes for one or more control cycles; the receipt remains correlated to the captured step-zero frame.
+  - The invalid-keyframe path leaves the simulator paused, leaves command controllers safely inactive, and does not advance reset epoch.
+open_risks:
+  - The friction mapping has not yet completed the exact 10-second physical hold replay after ResetWorld qualification.
+next_command: Commit/push the independent fork reset fix, then preregister and execute the exact friction-parity approach/preload/micro-lift/10-second-hold replay on the qualified runtime.
+```
+
+## Experiment EXP-087
+
+```yaml
+experiment_id: EXP-087
+prior_experiment: EXP-086 VALID clean ResetWorld qualification
+status: RUNNING
+lifecycle: FRICTION_PARITY_EXACT_GRASP_REPLAY_AND_10S_HOLD
+run_mode: execute_staged_approach_then_exact_preload_micro_lift_sequence
+hypothesis: Applying the Gazebo light-cup friction contract to MuJoCo prevents the prior slow cup slip while the unchanged bounded preload and micro-lift sequence remains within force and geometry limits.
+prediction: After the same close, two 0.006 rad seating increments, two 2 mm arm increments, and one 3 mm arm increment, the cup remains 1.5-3.5 mm above its pre-lift height with bilateral fingertip contact, no table contact, at most 1 mm lateral drift, and force at or below 11.60 N for 10.0 continuous seconds.
+single_variable: Friction mapping relative to EXP-077 through EXP-081 only: cup sliding friction 0.7 -> 1.2 and 13 fingertip-pad collisions sliding friction -> 3.0. Mass, inertias, geometry, controller, q6 bounds, approach, preload, arm targets, timestep, gravity, and no-attachment policy are unchanged.
+frozen_inputs:
+  parent_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  fork_commit: 20c77cd71305556cb5c914b07e8d5a4d40d5f3fd
+  fork_remote: git@gitee.com:zjumty/mujoco_ros2_control.git
+  runtime_fork_install: /tmp/so101-fork-reset-test/install
+  demo_install: /tmp/so101-friction-20260812/overlay/install
+  robot_mjcf_sha256: 846b460b4933924a64e3eec6ac3dc7a0f9d0f56baf73389e58ffaf6bcef79430
+  scene_mjcf_sha256: aa830e733f9c9715c2e20dc148c70102f00a340e3218bf587fb150360d1b7ef5
+  motion_policy_sha256: 303044acea71039f74693e5f0e0d97f3adbaf21c95745c57aa63709fc4c6f321
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-reset-final
+  expected_reset_epoch: 2
+  replay_scripts:
+    - [/tmp/so101_exp087_077_seating_preload.py, 8b766fe4f13f187f03f65cc85b904adfb23cfb9eaf4d80aa072d98d3d72f8d3a]
+    - [/tmp/so101_exp087_078_micro_lift.py, c3c07e2289dacd718908fd9e49acd1348e1fcf20a3bd1f809ddeb4b25a6031a1]
+    - [/tmp/so101_exp087_079_additional_preload.py, d9b32b35a816422679b7c23faa434b83e14c81214ea4c557cf168ec83f2dd60d]
+    - [/tmp/so101_exp087_080_incremental_micro_lift.py, f351f000d122d3611f9d9b6b551c75fbc5204bd0f2fd29c6a85a6036592e3e28]
+    - [/tmp/so101_exp087_081_incremental_3mm_lift.py, b91ba61481cdd9159a8c147147c96af92e2df73ab9e7206398d96a4e0b1a496d]
+  maximum_force_n: 11.60
+  long_hold_duration_s: 10.0
+  minimum_physical_lift_m: 0.0015
+  maximum_physical_lift_m: 0.0035
+  maximum_lateral_drift_m: 0.001
+preconditions:
+  - EXP-086 left the same owned stack paused at epoch 2 in visually confirmed task_start state; the invalid-keyframe check intentionally left arm/gripper controllers inactive and they must be reactivated only after physics resumes.
+  - The independent fork reset fix is committed and pushed as 20c77cd; protected Gazebo tracked status is empty.
+  - Script hashes match, patched session/epoch/path fields are the only replay-script differences from the EXP-083 frozen scripts, and the friction overlay hashes match sources.
+success_criteria:
+  - Resume plus arm/gripper controller activation succeeds, formal scene_setup readback contains table, pedestal, and 13-primitive plastic_cup, and staged_approach reaches CLOSE_READY without early cup/fingertip contact or cup displacement.
+  - All five replay scripts exit 0 in order without reset/session/pause change, force violation, loss of required bilateral contact, early table-support violation, or command failure.
+  - The final script proves 1.5-3.5 mm physical cup lift, at most 1 mm lateral drift, no table contact, continuous bilateral contact for 10 seconds, and maximum force at or below 11.60 N.
+failure_criteria: Any precondition, approach, controller, contact, force, lift, drift, table-contact, epoch, evidence, or long-hold violation stops before transport and is recorded VALID failure evidence.
+invalid_criteria: Any unrecorded code/model/policy/preload/trajectory change, missing evidence, hidden constraint/weld/adhesion/mocap, object qpos/qvel write, teleport, or MuJoCo attachment makes the run INVALID.
+evidence_root: /tmp/so101-task13-reset-final
+runtime_start:
+  time: 2026-08-12T02:40:01+08:00
+  precondition_readback: The same owned process still resolves to /tmp/so101-fork-reset-test/install, EXP-086 ended paused at epoch 2 in visually confirmed task_start, arm/gripper controllers are safely inactive after the invalid-keyframe check, joint_state_broadcaster is active, source/install MJCF hashes and all five replay hashes match, fork 20c77cd is pushed, and protected Gazebo tracked status is empty.
+decision: PENDING. Frozen provenance passed; this transition occurs before resume, controller activation, Planning Scene mutation, approach, close, preload, or lift.
+next_experiment: Formal policy LIFT/transport only if EXP-087 is VALID 10-second hold success.
+```
+
+## Experiment EXP-087 Terminal Result
+
+```yaml
+experiment_id: EXP-087
+status: VALID
+terminal_result: FIRST_PRELOAD_SUCCEEDED_FIRST_2MM_PHYSICAL_LIFT_FAILED
+terminal_time: 2026-08-12T02:43:21+08:00
+commands:
+  - command: resume plus activate arm_controller and gripper_controller
+    exit_code: 0
+  - command: scene_setup plus staged_approach through DESCEND
+    exit_code: 0
+  - command: python3 /tmp/so101_exp087_077_seating_preload.py
+    exit_code: 0
+  - command: python3 /tmp/so101_exp087_078_micro_lift.py
+    exit_code: 1
+  - command: remaining EXP-079/080/081 replay scripts
+    exit_code: NOT_RUN
+result:
+  staged_approach_status: CLOSE_READY
+  first_preload_status: PASS
+  first_preload_q6_rad: -0.053606676358756614
+  first_preload_cup_displacement_m: 0.0012796828421551443
+  first_2mm_plan_to_execute_drift_rad: 8.297002973556289e-09
+  first_2mm_controller_result: Controller and MoveIt logs report goal reached and SUCCEEDED
+  first_2mm_script_result: MOVEIT_EXECUTION_MONITOR_ABORTED
+  terminal_arm_joints_rad: [-0.00013512141868308767, 0.4632203191966657, 0.21299495268873445, 0.8648784483336789, 0.0006288526583899354]
+  terminal_q6_rad: -0.05360712557467238
+  terminal_cup_position_m: [0.020001111170286065, -0.2790017238509583, 0.16471177966890116]
+  terminal_table_contact: true
+  terminal_bilateral_contacts: [3, 4]
+  terminal_maximum_force_n: 0.19609305915459255
+diagnosis:
+  - The arm trajectory itself completed, but the execution monitor observed a transient loss of the required bilateral-contact invariant and cancelled its owned MoveIt action before accepting the result response.
+  - The final arm joint state is at the intended first 2 mm increment, while the cup remains table-supported at its original height; therefore the physical lift gate failed regardless of the action-result race.
+  - This matches the prior sequence's reason for introducing one separately bounded additional 0.006 rad preload before the second 2 mm attempt; no remaining script was run automatically.
+evidence:
+  approach_log_sha256: fdf7316d6f0859685f0786f529a6d929f7e726657501afcf4b4b3ab02e9f7c44
+  staged_approach_sha256: 1f8331d05320dd9fe21fa75d8053e8c72b58deb1b748950fb42bca19492a11c4
+  replay_log_sha256: 66f406294c8f395066ac644182ba71436f7bdbbcc47f2875936e568aba449d9a
+  first_preload_sha256: 28f4098867876bc442e318e2acb6b3638810047b5b8e44be6517ed1197ccce24
+  first_2mm_sha256: 2ebfc58fb275cb5c59ce08ddd599a880b8e847f9165fcdeb470aec5cfbb35d24
+  terminal_atomic_evidence_sha256: 93125c470aaaaaf3dcb27d2b245c0499954dc63835a677a536e4e37f2b6ead41
+decision: Keep as a physical failure, preserve the unchanged live state, and preregister the already-designed additional preload plus remaining lift sequence separately.
+```
+
+## Checkpoint CP-122
+
+```yaml
+checkpoint_id: CP-122
+checkpoint_time: 2026-08-12T02:43:21+08:00
+last_valid_experiment: EXP-087
+current_hypothesis: The second 0.006 rad q6 seating increment raises pad normal force enough for the exact remaining lift sequence.
+working_tree_status: Same intentional parent dirty set plus committed/pushed fork gitlink at 20c77cd; protected Gazebo tracked status remains empty. Same owned stack runs at epoch 2 without pause/reset/session change.
+confirmed_conclusions:
+  - Friction parity alone does not make the first single-preload 2 mm increment carry the cup.
+  - The first 2 mm arm target was reached with negligible handoff drift, but the cup stayed on the table, so this is a physical grasp-load failure rather than a planner failure.
+open_risks:
+  - The remaining q6 preload margin is bounded and must not be extended beyond the pre-existing second 0.006 rad increment without a new safety review.
+next_command: Preregister EXP-088 from the current live state, run the exact additional-preload script, then the second 2 mm and final 3 mm scripts only while all gates remain satisfied.
+```
+
+## Experiment EXP-088
+
+```yaml
+experiment_id: EXP-088
+prior_experiment: EXP-087 VALID first 2 mm physical-lift failure
+status: RUNNING
+lifecycle: SECOND_PRELOAD_REMAINING_MICRO_LIFTS_AND_10S_HOLD
+run_mode: continue_current_physical_state_with_exact_exp079_080_081_sequence
+hypothesis: The frozen additional 0.006 rad q6 preload raises fingertip normal force sufficiently for the remaining second 2 mm and final 3 mm arm increments to lift and hold the cup under friction parity.
+single_variable: Apply only the previously frozen second 0.006 rad q6 seating increment; all arm targets, friction, model, controller, physics, scene, session, and no-attachment policy remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-reset-final
+  reset_epoch: 2
+  initial_q6_rad: -0.05360712557467238
+  initial_arm_joints_rad: [-0.00013512141868308767, 0.4632203191966657, 0.21299495268873445, 0.8648784483336789, 0.0006288526583899354]
+  initial_cup_position_m: [0.020001111170286065, -0.2790017238509583, 0.16471177966890116]
+  scripts:
+    - [/tmp/so101_exp087_079_additional_preload.py, d9b32b35a816422679b7c23faa434b83e14c81214ea4c557cf168ec83f2dd60d]
+    - [/tmp/so101_exp087_080_incremental_micro_lift.py, f351f000d122d3611f9d9b6b551c75fbc5204bd0f2fd29c6a85a6036592e3e28]
+    - [/tmp/so101_exp087_081_incremental_3mm_lift.py, b91ba61481cdd9159a8c147147c96af92e2df73ab9e7206398d96a4e0b1a496d]
+  maximum_force_n: 11.60
+  final_hold_duration_s: 10.0
+  final_lift_gate_m: [0.0015, 0.0035]
+  maximum_lateral_drift_m: 0.001
+preconditions:
+  - Same process/session/epoch is running and unpaused; arm/gripper controllers are active; q6, arm, cup, table support, bilateral contact, and force match the EXP-087 terminal state within script tolerances.
+  - No ResetWorld, scene/model change, object write, attachment, constraint, or unrecorded command occurred after EXP-087.
+success_criteria:
+  - Additional preload, second 2 mm lift, and final 3 mm lift scripts each exit 0 in order.
+  - Final physical gate proves 1.5-3.5 mm cup lift relative to its own start, at most 1 mm lateral drift, no table contact, continuous bilateral contact for 10 seconds, force at or below 11.60 N, unchanged epoch/session, and no hidden aid.
+failure_criteria: Any state mismatch, command failure, q6/force/contact/table/lift/drift/evidence violation stops before the next script and is recorded.
+invalid_criteria: Any unrecorded mutation or missing evidence invalidates the run.
+evidence_root: /tmp/so101-task13-reset-final
+runtime_start:
+  time: 2026-08-12T02:45:13+08:00
+  precondition_readback: Fresh atomic evidence and joint feedback match the frozen session, epoch, table-supported cup, bilateral 3/4 contacts, arm target, q6, and force state; controllers and physics remain active/running, hashes match, and no intervening command occurred.
+decision: PENDING. Exact continuation-state preconditions passed; this transition occurs before the additional preload or remaining lift commands.
+next_experiment: Formal policy LIFT/transport only after a VALID 10-second hold success.
+```
+
+## Experiment EXP-088 Terminal Result
+
+```yaml
+experiment_id: EXP-088
+status: VALID
+terminal_result: ADDITIONAL_PRELOAD_SUCCEEDED_SECOND_2MM_PHYSICAL_LIFT_FAILED
+terminal_time: 2026-08-12T02:45:29+08:00
+commands:
+  - command: python3 /tmp/so101_exp087_079_additional_preload.py
+    exit_code: 0
+  - command: python3 /tmp/so101_exp087_080_incremental_micro_lift.py
+    exit_code: 1
+  - command: final 3 mm script
+    exit_code: NOT_RUN
+result:
+  additional_preload_status: ADDITIONAL_PRELOAD_PROVED
+  q6_after_preload_rad: -0.05959697741793274
+  preload_cup_displacement_m: 0.00022107967542450702
+  second_2mm_physical_lift_m: 0.000011932501217309932
+  terminal_arm_joints_rad: [-0.00012527913306650937, 0.4536258785278432, 0.2112317383032714, 0.8748803245910441, 0.0006535962555246532]
+  terminal_q6_rad: -0.0595972283551498
+  terminal_cup_position_m: [0.020007196171377813, -0.279033163746999, 0.16471177913701351]
+  terminal_table_contact: true
+  terminal_paused: false
+  terminal_reset_epoch: 2
+  terminal_maximum_force_n: 0.1963338982477806
+diagnosis:
+  - The final allowed q6 preload completed within the frozen bound and retained bilateral contact.
+  - The second 2 mm arm target executed, but the cup rose only 0.0119 mm and remained table-supported, far below the 1.5 mm physical gate.
+  - No extra preload is authorized; the only remaining frozen action is the prior sequence's final 3 mm increment, which previously produced a transient 2.097 mm lift.
+evidence:
+  additional_preload_log_sha256: 2a71b0125eb980a97d1e1fe74b5256b235c432a1dc874d2cc89076cd480ab0aa
+  additional_preload_json_sha256: 2ba33895225b902b97cfbd196d2e2681abd18536a9eaf83d21c7894b7d125030
+  second_2mm_log_sha256: 95a2f183a7a69dd6cc19d98e5e41660c30c760747e31ae07561f1ca3b679b81c
+  second_2mm_json_sha256: 19dd43f020d3b3807b0713e340f72ddd036f430590e5e16b845dce13a98fce89
+  terminal_joints_sha256: 0c57a0efd235ecd9209b008da628583aac283607ac03c305998c42b7cec5a184
+  terminal_atomic_evidence_sha256: 493376e4413b1d9043861fe273e63cd461b5cc74498daa50ef9b21c3aaa9c47c
+decision: Keep as a physical failure and preregister the unchanged final 3 mm increment plus 10-second hold from this exact state. Do not increase q6 preload.
+```
+
+## Checkpoint CP-123
+
+```yaml
+checkpoint_id: CP-123
+checkpoint_time: 2026-08-12T02:45:29+08:00
+last_valid_experiment: EXP-088
+current_hypothesis: The final 3 mm increment supplies the remaining kinematic lift, and friction parity determines whether the resulting physical lift persists.
+working_tree_status: Same intentional parent/fork state; same owned process/session/epoch runs unpaused with the final bounded preload and second 2 mm arm target.
+confirmed_conclusions:
+  - No further gripper preload is permitted by the frozen sequence or safety margin.
+  - The two 2 mm increments did not carry the cup; transport remains blocked.
+next_command: Preregister EXP-089 and run only the frozen final 3 mm script with its 10-second continuous bilateral/no-table/force/lift gate.
+```
+
+## Experiment EXP-089
+
+```yaml
+experiment_id: EXP-089
+prior_experiment: EXP-088 VALID second 2 mm physical-lift failure
+status: RUNNING
+lifecycle: FINAL_3MM_PHYSICAL_LIFT_AND_10S_STABLE_HOLD
+run_mode: continue_exact_current_state_with_only_frozen_final_increment
+hypothesis: The final 3 mm arm increment reproduces the prior 2.097 mm cup lift, while the new cup/pad friction mapping prevents the prior long-hold slip.
+single_variable: Execute only the frozen final 3 mm arm target from the exact EXP-088 terminal state; no q6, model, controller, scene, epoch, or policy change.
+frozen_inputs:
+  simulation_session_id: so101-task13-reset-final
+  reset_epoch: 2
+  initial_arm_joints_rad: [-0.00012527913306650937, 0.4536258785278432, 0.2112317383032714, 0.8748803245910441, 0.0006535962555246532]
+  initial_q6_rad: -0.0595972283551498
+  initial_cup_position_m: [0.020007196171377813, -0.279033163746999, 0.16471177913701351]
+  script: [/tmp/so101_exp087_081_incremental_3mm_lift.py, b91ba61481cdd9159a8c147147c96af92e2df73ab9e7206398d96a4e0b1a496d]
+  maximum_force_n: 11.60
+  hold_duration_s: 10.0
+  lift_gate_m: [0.0015, 0.0035]
+  maximum_lateral_drift_m: 0.001
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers, bilateral fingertip contact, table-supported cup, frozen arm/q6 state, and no intervening action.
+  - Script and model hashes match; no hidden aid or object-state mutation exists.
+success_criteria:
+  - Script exits 0 and proves 1.5-3.5 mm lift, at most 1 mm lateral drift, no table contact, continuous bilateral contact for 10 seconds, force at or below 11.60 N, unchanged session/epoch, and no hidden aid.
+failure_criteria: Any command/monitor/contact/table/lift/drift/force/evidence failure stops and blocks transport.
+invalid_criteria: Any unrecorded state change or missing evidence invalidates the run.
+evidence_root: /tmp/so101-task13-reset-final
+runtime_start:
+  time: 2026-08-12T02:46:50+08:00
+  precondition_readback: Fresh joint and atomic evidence match the frozen arm, q6, cup/table, unpaused epoch-2 session and active-contact state; no intervening command, reset, pause, or mutation occurred and the final-script hash matches.
+decision: PENDING. Exact continuation preconditions passed; this transition occurs before the sole final 3 mm command.
+next_experiment: Formal policy LIFT/transport only after VALID success.
+```
+
+## Experiment EXP-089 Terminal Result
+
+```yaml
+experiment_id: EXP-089
+status: VALID
+terminal_result: FINAL_3MM_ARM_INCREMENT_SUCCEEDED_PHYSICAL_CUP_LIFT_FAILED
+terminal_time: 2026-08-12T02:46:52+08:00
+commands:
+  - command: python3 /tmp/so101_exp087_081_incremental_3mm_lift.py
+    exit_code: 1
+result:
+  controller_and_moveit_result: SUCCEEDED
+  plan_to_execute_drift_rad: 3.3637154173149497e-10
+  physical_cup_lift_m: -1.2062656151723417e-09
+  terminal_arm_joints_rad: [-0.0003013723145362924, 0.4391831977848682, 0.20831482541019763, 0.889797311475596, 0.0005881521735593593]
+  terminal_q6_rad: -0.05959721999962248
+  terminal_cup_position_m: [0.020007094752016574, -0.2790331642119319, 0.16471177976905596]
+  terminal_table_contact: true
+  terminal_bilateral_contacts: [3, 4]
+  terminal_maximum_normal_force_n: 0.19634095434620263
+  terminal_reset_epoch: 2
+  terminal_paused: false
+diagnosis:
+  - The frozen arm target planned and executed from the correct start state, so planner handoff and controller execution are not the limiting factor.
+  - The cup remained table-supported with effectively zero vertical displacement despite bilateral pad contact at the final safe q6 lower bound.
+  - The reported maximum normal force is dominated by the table carrying the approximately 0.196 N cup weight; the pad contacts remain too compliant to generate the required lateral squeeze force.
+  - No further q6 preload is permitted. Friction-only parity is disproven; contact stiffness and damping parity must be introduced and calibrated as the next single model variable.
+evidence:
+  final_3mm_log_sha256: 39c693d33720b8a996da814528d0d774b6ee78f888ba533fbbb39517da6319e8
+  final_3mm_json_sha256: 35007f941c2ca82f01ebaec897f8b0c48c8e10e0cfdc47c8a386bd04f0998488
+  replay_script_sha256: b91ba61481cdd9159a8c147147c96af92e2df73ab9e7206398d96a4e0b1a496d
+  post_failure_reset_cua_sha256: c237a0b2e7aaa0713c8332bbe1c7d554c8a448b2a505aba62ad3092ada2cb430
+decision: Keep as a physical failure. Stop the unchanged friction-only route and return to task_start before any model-calibration experiment.
+```
+
+## Checkpoint CP-124
+
+```yaml
+checkpoint_id: CP-124
+checkpoint_time: 2026-08-12T02:47:10+08:00
+last_valid_experiment: EXP-089
+current_hypothesis: The missing Gazebo-to-MuJoCo contact-stiffness mapping, rather than friction or arm trajectory, prevents the pads from developing enough normal squeeze force at the safe q6 limit.
+working_tree_status: Same intentional parent/fork state and protected Gazebo tracked status remains empty. The current owned stack is still running at epoch 2 in the EXP-089 terminal pose and must be reset before the model changes take effect.
+confirmed_conclusions:
+  - All three bounded lift increments failed to carry the cup under friction-only parity; the final 3 mm increment produced effectively zero lift.
+  - The gripper is already at its safe lower bound, so additional preload is both unauthorized and physically uninformative.
+  - Gazebo's light plastic cup contract specifies 1000000 N/m contact stiffness and 100 N s/m contact damping, while the MuJoCo fingertip pad geoms currently specify friction only and inherit the default soft solver contact.
+  - MuJoCo's documented direct solref format is (-stiffness, -damping); this supplies a formal, reviewable mapping for the missing material contract.
+open_risks:
+  - A direct 1000000/100 mapping may make the 2 ms simulation numerically stiff or exceed the 11.60 N force gate; the first run must be contact-only and fail closed before any lift.
+next_command: Add a static parity test, map only the fingertip pad contact solver parameters, rebuild a new overlay, reset to task_start, and preregister EXP-090 as a bounded contact-only calibration before replaying any lift.
+```
+
+## Experiment EXP-090
+
+```yaml
+experiment_id: EXP-090
+prior_experiment: EXP-089 VALID friction-only physical-lift failure
+status: RUNNING
+lifecycle: STIFF_TPU_CONTACT_ONLY_CALIBRATION
+run_mode: fresh_stack_staged_approach_then_incremental_gripper_contact_search_without_lift
+hypothesis: Mapping the Gazebo TPU contact stiffness and damping through MuJoCo direct-format solref will generate at least 0.05 N normal force on each fingertip side before q6 reaches its safe lower bound, while remaining below the 11.60 N diagnostic force limit.
+single_variable: Add solref="-1000000 -100" to the same 13 fingertip pad collision geoms; friction, geometry, masses, actuators, controllers, motion policy, cup, scene, and no-attachment contract remain unchanged.
+frozen_inputs:
+  source_commit: eabe88885bf802fb14968547634fd06c26c1b38a
+  dependency_commit: 20c77cd71305556cb5c914b07e8d5a4d40d5f3fd
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  motion_policy_sha256: 303044acea71039f74693e5f0e0d97f3adbaf21c95745c57aa63709fc4c6f321
+  contact_script: [/tmp/so101_exp090_contact_only.py, dfa6e9f8fc14c38cc929b8b1ccfa353922b022dd95e754a85153acaef60727cd]
+  maximum_force_n: 11.60
+  minimum_per_side_normal_force_n: 0.05
+  maximum_cup_displacement_m: 0.003
+  stable_contact_hold_s: 2.0
+  safe_q6_lower_rad: -0.059600220867817
+preconditions:
+  - Static RED proved the solver mapping was absent; the production mapping then made the complete visual-geometry parity test pass 9/9.
+  - The new overlay built successfully and source/install robot MJCF hashes match exactly.
+  - Both live robot_description publishers and the MuJoCo control-node log resolve the same new stiffness-overlay scene path; the control process resolves to the committed fork install.
+  - The previous stack was reset to task_start and CUA confirmed the horizontal open-arm pose, upright cup, complete scene, split RViz/Viewer layout, and PAUSE before shutdown.
+  - The fresh stiffness stack is unpaused at epoch 0 with active arm, gripper, and joint-state controllers; the cup is upright and table-supported without fingertip contact.
+  - Formal scene_setup has published table, pedestal, and 13-primitive plastic_cup into the Planning Scene. No gripper, approach, contact, or lift action has occurred on the fresh stack.
+success_criteria:
+  - Staged approach reaches CLOSE_READY with the preopened gripper, no early fingertip contact, no forbidden contact, and at most 3 mm cup displacement.
+  - Incremental q6 search reaches continuous bilateral contact with at least 0.05 N summed normal force on each side before the safe lower q6 bound.
+  - The contact-only state remains bilateral and above the force threshold for 2 seconds, never exceeds 11.60 N diagnostic force, and never moves the cup more than 3 mm.
+  - No lift/transport, pause, reset, attachment, simulator constraint, direct object write, or hidden aid occurs.
+failure_criteria: Any provenance, approach, contact-shape, q6, force, cup-displacement, freshness, or hold violation stops before lift and is recorded.
+invalid_criteria: Any unrecorded model/policy/script change, missing evidence, weld/equality/adhesion/mocap, teleport, object qpos/qvel write, or simulator attachment invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:03:10+08:00
+  precondition_readback: Source and installed robot MJCF hash to f87a033f; both robot_description publishers point to the stiffness overlay; controllers are active; session so101-task13-stiffness is epoch 0 unpaused; the formal Planning Scene setup reports pedestal 1, plastic_cup 13, table 1.
+decision: PENDING. This transition occurs before staged approach or any gripper/contact command.
+next_experiment: Only a separately preregistered bounded micro-lift if contact-only calibration succeeds.
+```
+
+## Experiment EXP-090 Terminal Result
+
+```yaml
+experiment_id: EXP-090
+status: INVALID
+terminal_result: EXECUTE_GATE_OMITTED_FAIL_CLOSED_BEFORE_ACTION
+terminal_time: 2026-08-12T03:04:30+08:00
+command: ros2 run so101_mujoco_demo_py staged_approach --mode execute --stop-after DESCEND --simulation-session-id so101-task13-stiffness --evidence-file /tmp/so101-task13-stiffness/exp090-staged-approach.json --hold-seconds 0.30
+exit_code: 1
+result:
+  error: RuntimeError execute mode requires the explicit --execute gate
+  physical_action_started: false
+  terminal_arm_joints_rad: [9.669045102590511e-10, 0.0007098293985419334, 0.0006050452792909555, 0.00013253723931816417, 1.6341604703459425e-07]
+  terminal_q6_rad: -7.08100519845596e-06
+  terminal_reset_epoch: 0
+  terminal_paused: false
+  terminal_fingertip_contacts: [0, 0]
+  terminal_cup_position_m: [0.01999916533885187, -0.28000042380956286, 0.16471177879121365]
+diagnosis:
+  - The runtime intentionally requires both --mode execute and the explicit --execute acknowledgement; omitting the second gate is a harness invocation error.
+  - The command failed before gripper preopen, planning, execution, or contact. Fresh joint and atomic evidence confirm the epoch-0 task_start physical baseline is unchanged.
+evidence:
+  staged_approach_log_sha256: df05cdaff81f357dd6e4269935528451b7e95532984c38dbd86bf81ec33658d6
+decision: Do not count this as contact-model evidence. Preserve the unchanged stack and preregister a corrected invocation as a new experiment.
+```
+
+## Checkpoint CP-125
+
+```yaml
+checkpoint_id: CP-125
+checkpoint_time: 2026-08-12T03:04:35+08:00
+last_valid_experiment: EXP-089
+last_invalid_experiment: EXP-090
+current_hypothesis: Unchanged from CP-124; EXP-090 exercised only the staged-approach execution gate and supplied no physical contact evidence.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state. Protected Gazebo tracked status is empty. Fresh stiffness stack remains epoch 0 unpaused at task_start with formal Planning Scene loaded.
+confirmed_conclusions:
+  - The staged-approach CLI fails closed if --execute is absent even when mode is execute.
+  - No robot, cup, session, epoch, or model state changed during the invalid invocation.
+next_command: Preregister EXP-091 with the same frozen inputs and the corrected explicit --execute flag, then run staged approach followed by the unchanged contact-only script if and only if CLOSE_READY succeeds.
+```
+
+## Experiment EXP-091
+
+```yaml
+experiment_id: EXP-091
+prior_experiment: EXP-090 INVALID pre-action invocation error
+status: RUNNING
+lifecycle: STIFF_TPU_CONTACT_ONLY_CALIBRATION_RETRY
+run_mode: unchanged_fresh_stack_with_corrected_staged_approach_execute_gate
+hypothesis: Same as EXP-090: the direct stiffness/damping mapping yields at least 0.05 N normal force per fingertip side within the safe q6 bound and below 11.60 N.
+single_variable: Relative to the invalid EXP-090 harness invocation, add only the required --execute acknowledgement; model, scene, session, epoch, policy, script, bounds, and physical baseline are unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  motion_policy_sha256: 303044acea71039f74693e5f0e0d97f3adbaf21c95745c57aa63709fc4c6f321
+  contact_script: [/tmp/so101_exp090_contact_only.py, dfa6e9f8fc14c38cc929b8b1ccfa353922b022dd95e754a85153acaef60727cd]
+  maximum_force_n: 11.60
+  minimum_per_side_normal_force_n: 0.05
+  maximum_cup_displacement_m: 0.003
+  stable_contact_hold_s: 2.0
+  safe_q6_lower_rad: -0.059600220867817
+preconditions:
+  - All EXP-090 provenance and safety preconditions remain true.
+  - Fresh post-failure joint and atomic evidence proves task_start, epoch 0, unpaused physics, zero fingertip contact, and unchanged upright table-supported cup.
+success_criteria:
+  - Corrected staged approach reaches CLOSE_READY under all pre-contact gates.
+  - The frozen contact-only script proves the same bilateral force, q6, displacement, force ceiling, duration, provenance, and no-hidden-aid gates from EXP-090.
+failure_criteria: Any approach or contact-only gate violation stops before lift.
+invalid_criteria: Any state/model/policy/script mutation beyond the explicit --execute correction invalidates the retry.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:04:40+08:00
+  precondition_readback: EXP-090 failed before action; current joints remain approximately task_start, session/epoch remain so101-task13-stiffness/0, physics is unpaused, and the cup remains table-supported with no fingertip contact.
+decision: PENDING. This transition occurs before the corrected staged-approach command.
+next_experiment: Separately preregister micro-lift only after VALID contact-only success.
+```
+
+## Experiment EXP-091 Terminal Result
+
+```yaml
+experiment_id: EXP-091
+status: VALID
+terminal_result: STAGED_APPROACH_SUCCEEDED_FIRST_CONTACT_SEARCH_WAS_TRANSIENT_RIGHT_ONLY
+terminal_time: 2026-08-12T03:06:25+08:00
+commands:
+  - command: staged_approach --mode execute --execute --stop-after DESCEND
+    exit_code: 0
+  - command: python3 /tmp/so101_exp090_contact_only.py
+    exit_code: 1
+result:
+  staged_approach_status: CLOSE_READY
+  staged_approach_segments: 15
+  q6_command_rad: -0.040
+  sampled_actual_q6_rad: -0.038771091495019894
+  transient_left_contact_count: 0
+  transient_right_contact_count: 2
+  transient_right_normal_force_sum_n: 0.41460596890672896
+  transient_maximum_normal_force_n: 0.303588638561013
+  terminal_q6_rad: -0.03999977306884794
+  terminal_fingertip_contacts: [0, 0]
+  terminal_cup_position_m: [0.01999885918621051, -0.2793983281444021, 0.1647117783475176]
+  cup_displacement_from_exp091_start_m: 0.000602230484
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The corrected staged approach completed all 15 selected waypoints with no early contact and reached the verified CLOSE_READY arm state.
+  - The first bounded gripper command produced a transient right-pad contact well below the force ceiling, shifting the free cup approximately 0.60 mm toward the fixed finger, then settled at q6=-0.04 with no fingertip contact.
+  - Treating any contact before the nominal search bound as a script error was too strict: one-sided contact is the expected seating mechanism needed to move the free cup into bilateral alignment.
+evidence:
+  staged_approach_log_sha256: 500ff9c9853009e77e83cfabea882dd9c9d59f0061eeac3f1656fc106bd425e2
+  staged_approach_json_sha256: 0ae8b5271fa7227f1e2839621f148819a3a7aae3bc75917fa5a252de8d6926cb
+  contact_log_sha256: a6c8533947709bc68d0e5bf0894de1bacacc6eaa98d87d481bc68c777745c8a4
+  contact_json_sha256: 8c563404de36c3ae57b86cdcecdabadbebef03823b38ed43804c069c3eb8b723
+decision: Preserve the exact live state. Do not rerun the arm approach; preregister a continuation that permits bounded unilateral seating while retaining all q6, force, displacement, provenance, and no-hidden-aid gates.
+```
+
+## Checkpoint CP-126
+
+```yaml
+checkpoint_id: CP-126
+checkpoint_time: 2026-08-12T03:06:30+08:00
+last_valid_experiment: EXP-091
+current_hypothesis: Continued incremental closing from q6=-0.04 will seat the cup against the fixed finger and produce bounded bilateral contact before the safe q6 lower limit.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state; protected Gazebo tracked status is empty. Same stiffness process/session/epoch remains unpaused at CLOSE_READY.
+confirmed_conclusions:
+  - Direct stiffness/damping mapping changes pad contact from the prior near-zero squeeze response to a measurable, safe unilateral force.
+  - The first contact was transient because the cup moved laterally on the table; this is seating behavior, not force instability.
+  - Total cup displacement remains below the frozen 3 mm limit and the next action can continue from the exact state without resetting or replanning the arm.
+next_command: Preregister EXP-092 and continue q6 in bounded coarse steps until bilateral contact, switching to 20 microradian steps once bilateral contact appears; stop on every existing force, displacement, q6, freshness, or provenance gate.
+```
+
+## Experiment EXP-092
+
+```yaml
+experiment_id: EXP-092
+prior_experiment: EXP-091 VALID transient unilateral seating contact
+status: RUNNING
+lifecycle: STIFF_TPU_BILATERAL_CONTACT_CONTINUATION
+run_mode: continue_exact_close_ready_state_without_arm_motion_or_reset
+hypothesis: Bounded q6 continuation seats the free cup against the fixed finger and yields at least 0.05 N summed normal force per side for 2 seconds below all safety gates.
+single_variable: Relative to EXP-091, permit transient unilateral seating contact instead of failing immediately; model, policy, state, q6 steps, bounds, session, and no-attachment contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  initial_q6_rad: -0.03999977306884794
+  initial_cup_position_m: [0.01999885918621051, -0.2793983281444021, 0.1647117783475176]
+  reference_cup_position_m: [0.019998946077560063, -0.2800005586174245, 0.16471177790961924]
+  contact_script: [/tmp/so101_exp092_contact_only.py, f56aeea3aed1ef6137371f8954e8300698b0c09c31536f0e9ea1bc5403781f98]
+  coarse_q6_step_rad: 0.0005
+  post_bilateral_q6_step_rad: 0.00002
+  maximum_force_n: 11.60
+  minimum_per_side_normal_force_n: 0.05
+  maximum_total_cup_displacement_m: 0.003
+  stable_contact_hold_s: 2.0
+  safe_q6_lower_rad: -0.059600220867817
+preconditions:
+  - Same live process/session/epoch remains unpaused; controllers are active and the arm remains within 0.01 rad of CLOSE_READY.
+  - Fresh joint and atomic evidence match q6=-0.04, zero terminal fingertip contacts, 0.60 mm total cup seating displacement, table support, and force below the ceiling.
+  - Script hash matches; no reset, pause, model/policy change, arm motion, object write, or hidden aid occurred after EXP-091.
+success_criteria:
+  - Bilateral contact reaches at least 0.05 N summed normal force on both sides before the q6 lower bound.
+  - That condition holds continuously for 2 seconds with force at or below 11.60 N and total cup displacement at or below 3 mm.
+  - Session/epoch remain unchanged and no lift, arm motion, simulator constraint, attachment, pause, or direct object write occurs.
+failure_criteria: Any force, displacement, q6, bilateral-hold, freshness, session, epoch, controller, or action failure stops before lift.
+invalid_criteria: Any unrecorded state/script/model/policy change or hidden physical aid invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:07:20+08:00
+  precondition_readback: Fresh state matches CP-126 and the continuation script is lint-clean with SHA f56aeea3; this transition occurs before the first continuation q6 command.
+decision: PENDING.
+next_experiment: Separately preregister one bounded 2 mm physical micro-lift only after VALID bilateral contact-only success.
+```
+
+## Experiment EXP-092 Terminal Result
+
+```yaml
+experiment_id: EXP-092
+status: VALID
+terminal_result: BILATERAL_CONTACT_ONLY_PROVED
+terminal_time: 2026-08-12T03:08:41+08:00
+command: python3 /tmp/so101_exp092_contact_only.py
+exit_code: 0
+result:
+  terminal_q6_rad: -0.04740743964538249
+  hold_duration_s: 2.0
+  hold_sample_count: 168
+  left_normal_force_range_n: [0.1674629373468175, 0.17051632337500633]
+  right_normal_force_range_n: [0.16746052286713659, 0.17015631805109943]
+  maximum_normal_force_n: 0.19634463904274616
+  terminal_contact_counts: [1, 1]
+  terminal_cup_position_m: [0.019998915139546485, -0.2789645715010863, 0.16471177965894526]
+  total_cup_displacement_m: 0.001035987118
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The bounded seating continuation brought the cup into symmetric one-contact-per-side support without approaching the q6 lower bound.
+  - Each side sustained more than three times the preregistered 0.05 N normal-force threshold for the full 2-second window, while the global maximum stayed near the table's 0.196 N cup-weight reaction and far below 11.60 N.
+  - With MuJoCo sliding friction 3.0, the measured bilateral normal force supplies a theoretical friction margin above the 0.196 N cup weight; a physical lift is now separately testable.
+evidence:
+  contact_log_sha256: ece17372fd06e67c9e8ee26e76da224402bdeb822aba921326850fea67d1f429
+  contact_json_sha256: 16b56138b69a846fcd00ae43b87c083f59568b002d58a705700ffe720247a615
+  contact_script_sha256: f56aeea3aed1ef6137371f8954e8300698b0c09c31536f0e9ea1bc5403781f98
+decision: Preserve the exact bilateral live state and preregister one 2 mm arm micro-lift without changing q6 or any model/policy parameter.
+```
+
+## Checkpoint CP-127
+
+```yaml
+checkpoint_id: CP-127
+checkpoint_time: 2026-08-12T03:08:45+08:00
+last_valid_experiment: EXP-092
+current_hypothesis: The proven bilateral pad normal force will carry the cup through the unchanged 2 mm arm increment while retaining bilateral contact and clearing table support.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state; protected Gazebo tracked status remains empty. Same stiffness process/session/epoch remains unpaused at CLOSE_READY with q6 held at -0.04741.
+confirmed_conclusions:
+  - Gazebo contact stiffness/damping parity fixes the missing-normal-force blocker without extra q6 preload.
+  - The safe contact state is repeatable for 2 seconds with approximately 0.15-0.17 N per pad side on fresh readback.
+  - No physical lift has yet been attempted under the stiffness mapping; transport remains blocked pending that proof.
+next_command: Preregister EXP-093 and execute only the unchanged first 2 mm arm target with q6 fixed, physical cup-lift, lateral-drift, table-clearance, bilateral-contact, force, and provenance gates.
+```
+
+## Experiment EXP-093
+
+```yaml
+experiment_id: EXP-093
+prior_experiment: EXP-092 VALID bilateral contact-only success
+status: RUNNING
+lifecycle: STIFF_TPU_FIRST_2MM_PHYSICAL_MICRO_LIFT
+run_mode: continue_exact_bilateral_state_with_no_q6_change
+hypothesis: The proven bilateral normal force carries the cup 1.5-2.5 mm upward under the unchanged first 2 mm arm target, clears table support, and retains bilateral contact.
+single_variable: Execute only the previously frozen first 2 mm arm target; q6, model, scene, policy, controllers, session, epoch, and no-attachment physics contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00027779933025211256, 0.4726547692920405, 0.21490745392516858, 0.8548797168412275, 0.0004945303285419433]
+  initial_q6_rad: -0.047408698226594014
+  initial_cup_position_m: [0.020001916917135532, -0.2789656303399597, 0.1647117776592463]
+  initial_pad_normal_force_n: [0.15194629020633726, 0.1519311127728159]
+  lift_target_arm_rad: [-0.0002062266287315138, 0.46262046903357984, 0.21277364017949124, 0.8648894480356747, 0.0005764164414532356]
+  lift_script: [/tmp/so101_exp093_micro_lift.py, 03835b526a0ef034f845722085763aae20c272b44307bcbbf189fb302452e60f]
+  lift_gate_m: [0.0015, 0.0025]
+  maximum_lateral_drift_m: 0.001
+  maximum_force_n: 11.60
+preconditions:
+  - Same session/epoch is unpaused with active controllers, arm at CLOSE_READY, q6 held at the EXP-092 endpoint, continuous bilateral contact, table-supported upright cup, and force below the ceiling.
+  - MoveIt world contains table, pedestal, and plastic_cup; the script may attach only the MoveIt collision shadow to gripper/jaw for planning and must not create any MuJoCo attachment or constraint.
+  - Script hash matches and no command occurred after the fresh readback.
+success_criteria:
+  - Plan-to-execute drift is at most 0.01 rad and the arm reaches the frozen target.
+  - Physical cup lift is 1.5-2.5 mm, lateral drift is at most 1 mm, table contact is absent, and bilateral fingertip contact remains continuous through execution and a 0.30-second hold.
+  - Force remains at or below 11.60 N; session/epoch remain unchanged; no pause/reset, q6 change, simulator constraint, attachment, or object write occurs.
+failure_criteria: Any planning, execution, physical lift, drift, table, contact, force, freshness, provenance, or evidence failure stops before further lift/transport.
+invalid_criteria: Any unrecorded state/model/policy/q6/script change or hidden physical aid invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:10:05+08:00
+  precondition_readback: Fresh joint and atomic evidence match the frozen arm/q6/cup/bilateral state with roughly 0.152 N normal force per side and unchanged unpaused epoch 0; script is lint-clean and hash-matched.
+decision: PENDING. This transition occurs before MoveIt collision-shadow attach, planning, or arm execution.
+next_experiment: Only a separately preregistered longer hold/lift/transport sequence after VALID physical micro-lift.
+```
+
+## Experiment EXP-093 Terminal Result
+
+```yaml
+experiment_id: EXP-093
+status: VALID
+terminal_result: FIRST_2MM_ARM_INCREMENT_COMPLETED_PHYSICAL_LIFT_FAILED
+terminal_time: 2026-08-12T03:10:46+08:00
+command: python3 /tmp/so101_exp093_micro_lift.py
+exit_code: 1
+result:
+  plan_to_execute_drift_rad: 9.483820220031886e-10
+  trajectory_points: 5
+  controller_result: SUCCEEDED
+  moveit_result: SUCCEEDED
+  client_monitor_result: MOVEIT_EXECUTION_MONITOR_ABORTED
+  terminal_arm_joints_rad: [-0.00014193927534699227, 0.4632179378559878, 0.21300391266869675, 0.8648224688566525, 0.0005062582799071364]
+  terminal_q6_rad: -0.04740850706589985
+  terminal_cup_position_m: [0.019998206843796027, -0.2792853751169185, 0.16471177953932317]
+  physical_cup_lift_m: approximately_zero
+  terminal_table_contact: true
+  terminal_contact_counts: [1, 1]
+  terminal_pad_normal_force_n: [0.15434181544322256, 0.15427501149629808]
+  terminal_maximum_force_n: 0.1963032720829992
+diagnosis:
+  - The MoveIt plan and arm controller completed the target with negligible start drift, but the monitor observed transient bilateral-contact loss during motion and cancelled its action-result wait.
+  - The pad contact points moved upward approximately 2 mm relative to the robot, while the cup stayed at table height; this is physical tangential slip rather than planner or controller failure.
+  - Bilateral contact and the prior q6 recovered at rest. The approximately 0.154 N per-side normal force is sufficient for static contact but insufficient for this dynamic lift under the current contact solver.
+evidence:
+  micro_lift_log_sha256: e4dde132eac0f435ce403f5418a49344fe71c7a6cf53d4827c3b51ef3a09692e
+  micro_lift_json_sha256: 9431e2b2125da3d1917f53b4f5029f37517b77dccb30e1d8e573cb77932f3502
+  micro_lift_script_sha256: 03835b526a0ef034f845722085763aae20c272b44307bcbbf189fb302452e60f
+decision: Preserve the exact endpoint and bilateral state. Increase only bounded gripper preload to a separately preregistered per-side normal-force target before another arm increment.
+```
+
+## Checkpoint CP-128
+
+```yaml
+checkpoint_id: CP-128
+checkpoint_time: 2026-08-12T03:10:55+08:00
+last_valid_experiment: EXP-093
+current_hypothesis: Raising sustained pad normal force from approximately 0.154 N to 0.50 N per side, still far below the 11.60 N force limit and within q6 margin, will prevent tangential slip on the next 2 mm increment.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state; protected Gazebo tracked status remains empty. Same stiffness session/epoch is unpaused at the first arm endpoint with q6 unchanged and bilateral contact restored.
+confirmed_conclusions:
+  - Normal stiffness parity fixed contact generation but the minimal 0.05 N contact threshold was not a sufficient dynamic-lift threshold.
+  - The first arm increment itself is valid and repeatable; the limiting variable remains pad normal preload.
+  - q6=-0.04741 remains approximately 0.01219 rad above the safe lower bound, so a fine-step contact preload can be tested without returning to the old lower-limit route.
+next_command: Preregister EXP-094 and apply only 20 microradian q6 decrements until both sides sustain at least 0.50 N for 2 seconds, with the same force, displacement, q6, provenance, and no-hidden-aid gates.
+```
+
+## Experiment EXP-094
+
+```yaml
+experiment_id: EXP-094
+prior_experiment: EXP-093 VALID dynamic-slip physical-lift failure
+status: RUNNING
+lifecycle: STIFF_TPU_BOUNDED_PRELOAD_TO_DYNAMIC_FORCE_TARGET
+run_mode: continue_exact_first_lift_endpoint_without_arm_motion
+hypothesis: Fine q6 preload raises each side to at least 0.50 N sustained normal force before any safety bound, creating enough dynamic friction margin for the next lift increment.
+single_variable: Apply only 20 microradian q6 decrements; arm, model, policy, scene, controllers, session, epoch, cup state, and no-attachment contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00014193927534699227, 0.4632179378559878, 0.21300391266869675, 0.8648224688566525, 0.0005062582799071364]
+  initial_q6_rad: -0.04740850706589985
+  initial_cup_position_m: [0.019998206843796027, -0.2792853751169185, 0.16471177953932317]
+  initial_pad_normal_force_n: [0.15434181544322256, 0.15427501149629808]
+  preload_script: [/tmp/so101_exp094_preload_only.py, 437df9d29f9c6ea483abf9706659a01d14321ff93dc14b24f5a66c26652f45e3]
+  q6_step_rad: 0.00002
+  target_per_side_normal_force_n: 0.50
+  maximum_force_n: 11.60
+  maximum_total_cup_displacement_m: 0.003
+  stable_hold_s: 2.0
+  safe_q6_lower_rad: -0.059600220867817
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers, arm within 0.01 rad of the first lift target, q6 unchanged, bilateral contact restored, and the cup still table-supported.
+  - Fresh force, cup, q6, arm, and provenance state match the frozen inputs; script is lint-clean and hash-matched.
+  - No reset, pause, model/policy change, arm motion, object write, simulator constraint, or hidden aid occurred after EXP-093.
+success_criteria:
+  - Both sides reach and continuously sustain at least 0.50 N summed normal force for 2 seconds before q6 lower bound.
+  - Force remains at or below 11.60 N, total cup displacement remains at or below 3 mm, bilateral contact remains continuous, and session/epoch remain unchanged.
+  - No arm/lift motion, pause/reset, simulator attachment/constraint, or object write occurs.
+failure_criteria: Any force, displacement, contact, q6, controller, freshness, provenance, or hold violation stops before another lift.
+invalid_criteria: Any unrecorded state/script/model/policy change or hidden physical aid invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:12:40+08:00
+  precondition_readback: Fresh terminal evidence matches the first lift endpoint with restored bilateral approximately 0.154 N per-side contact; script SHA is 437df9d2 and no action has occurred since readback.
+decision: PENDING. This transition occurs before the first q6 preload step.
+next_experiment: Separately preregister the next 2 mm arm increment only after VALID 0.50 N per-side hold success.
+```
+
+## Experiment EXP-094 Terminal Result
+
+```yaml
+experiment_id: EXP-094
+status: INVALID
+terminal_result: NONCONVERGENT_COMMAND_REFERENCE_SEMANTICS_OPERATOR_INTERRUPTED
+terminal_time: 2026-08-12T03:15:42+08:00
+command: python3 /tmp/so101_exp094_preload_only.py
+exit_code: INTERRUPTED
+result:
+  completed_action_steps: 1102
+  intended_q6_command_step_rad: 0.00002
+  actual_q6_change_rad: -0.00007503687752452
+  terminal_q6_rad: -0.04748354394342437
+  terminal_pad_normal_force_n: [0.18117812328123303, 0.1811966311032288]
+  terminal_maximum_force_n: 0.19630367153390685
+  terminal_cup_position_m: [0.01999759101334119, -0.27928236812433704, 0.1647117766345833]
+  terminal_contact_counts: [1, 1]
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The script calculated every next command as actual_q6 - 20 microradians. Contact compliance allowed only a small fraction of each requested delta, so the command reference did not accumulate and force rose only from approximately 0.154 N to 0.181 N after 1102 actions.
+  - The intended experiment variable was the command-reference increment, not the constrained actual-position increment; the harness therefore did not implement the preregistered manipulation.
+  - SIGINT stopped the owned script. The rclpy shutdown traceback is interruption cleanup noise; fresh joint and atomic evidence prove the simulator, controllers, bilateral contact, cup, force, session, and epoch remain healthy.
+evidence:
+  preload_log_sha256: 27c79d21f7e50553941378d616fe8bf57132656c9b3e275238acc09da21cca67
+  preload_json_sha256: 7bd0bc57dad5c2361cea25c292994bf42a548db06f7766fa5ebec1fbac0bfac8
+  preload_script_sha256: 437df9d29f9c6ea483abf9706659a01d14321ff93dc14b24f5a66c26652f45e3
+decision: Do not use the 1102-step trajectory as calibration evidence. Preserve the exact stable terminal state and correct only command-target accumulation in a new preregistered experiment.
+```
+
+## Checkpoint CP-129
+
+```yaml
+checkpoint_id: CP-129
+checkpoint_time: 2026-08-12T03:15:50+08:00
+last_valid_experiment: EXP-093
+last_invalid_experiment: EXP-094
+current_hypothesis: Unchanged from CP-128; correctly accumulating the commanded q6 target by 20 microradians per action should reach the 0.50 N per-side force target in a bounded number of steps.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state; protected Gazebo tracked status is empty. Same stiffness stack remains unpaused at epoch 0 and first lift endpoint with bilateral contact.
+confirmed_conclusions:
+  - The invalid harness never approached any q6, force, cup-displacement, session, or epoch safety boundary.
+  - Fresh terminal state is a safe continuation point with approximately 0.181 N per side and q6=-0.047484.
+next_command: Preregister EXP-095 with only the command-target accumulation fix, then repeat the 0.50 N per-side static preload gate.
+```
+
+## Experiment EXP-095
+
+```yaml
+experiment_id: EXP-095
+prior_experiment: EXP-094 INVALID command-reference semantics
+status: RUNNING
+lifecycle: STIFF_TPU_ACCUMULATED_COMMAND_PRELOAD_TO_DYNAMIC_FORCE_TARGET
+run_mode: continue_exact_stable_state_with_corrected_command_target_accumulation
+hypothesis: Accumulating the q6 command target by 20 microradians per action reaches 0.50 N per side within the safe q6/force/displacement envelope.
+single_variable: Relative to invalid EXP-094, compute next_command_target = prior_command_target - 0.00002 rather than actual_q6 - 0.00002; all physical parameters, state, bounds, session, and policy remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00014195147731077947, 0.46321794942609174, 0.2130039252149725, 0.8648224810620887, 0.00050627588505617]
+  initial_q6_rad: -0.04748354394342437
+  initial_cup_position_m: [0.01999759101334119, -0.27928236812433704, 0.1647117766345833]
+  initial_pad_normal_force_n: [0.18117812328123303, 0.1811966311032288]
+  preload_script: [/tmp/so101_exp095_preload_only.py, efa22a8165b26d132b87026778e4ac44af961d1b7a7e0385d05c43cf89742b09]
+  command_target_step_rad: 0.00002
+  target_per_side_normal_force_n: 0.50
+  maximum_force_n: 11.60
+  maximum_total_cup_displacement_m: 0.003
+  stable_hold_s: 2.0
+  safe_q6_lower_rad: -0.059600220867817
+preconditions:
+  - Fresh joint and atomic evidence match the frozen arm/q6/cup/bilateral-force state with active controllers, unpaused physics, and epoch 0.
+  - Script differs from EXP-094 only in evidence identity, frozen initial q6, and command-target accumulation semantics; it is lint-clean and hash-matched.
+  - No action occurred after the fresh readback.
+success_criteria:
+  - Both sides continuously sustain at least 0.50 N for 2 seconds before any q6, force, displacement, contact, or provenance limit.
+  - No arm/lift motion, reset/pause, simulator constraint/attachment, object write, or hidden aid occurs.
+failure_criteria: Any action, q6, force, displacement, bilateral, hold, freshness, session, or epoch gate violation stops before lift.
+invalid_criteria: Any unrecorded state/script/model/policy change or harness deviation invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:17:10+08:00
+  precondition_readback: Fresh post-interrupt state matches CP-129; script SHA is efa22a81 and this transition occurs before its first accumulated command.
+decision: PENDING.
+next_experiment: Separately preregister the next arm increment only after VALID dynamic-force hold success.
+```
+
+## Experiment EXP-095 Terminal Result
+
+```yaml
+experiment_id: EXP-095
+status: INVALID
+terminal_result: FORCE_TARGET_REACHED_HOLD_REFERENCE_UNLOADED_PRELOAD
+terminal_time: 2026-08-12T03:17:29+08:00
+command: python3 /tmp/so101_exp095_preload_only.py
+exit_code: 1
+result:
+  accumulated_command_steps: 50
+  peak_left_normal_force_n: 0.5071763603545868
+  peak_right_normal_force_n: 0.5089444156010975
+  hold_command_semantics: target reset to constrained actual q6
+  post_hold_left_normal_force_n: 0.49355559401612487
+  post_hold_right_normal_force_n: 0.49344196943738095
+  terminal_q6_rad: -0.04835171915507183
+  terminal_cup_position_m: [0.019997359859817154, -0.2792475364435764, 0.1647117799173903]
+  terminal_maximum_force_n: 0.49355559401612487
+  terminal_contact_counts: [1, 1]
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - Correctly accumulated command targets reached the preregistered force threshold quickly and safely.
+  - The subsequent hold used hold_target = actual_q6 instead of the final accumulated command target, intentionally or not removing controller position error and reducing pad force just below the 0.50 N gate.
+  - Physical safety and provenance remained valid; only the hold-reference implementation failed to preserve the manipulated variable.
+evidence:
+  preload_log_sha256: cce878bae4f70a935a22ae43e5c63f9c6d5a3ed3b4b145bc54f38bf3755dfa22
+  preload_json_sha256: 5ca3fa27bd27beb4f173296f3d461f8f8e6099213cf406dfdeac1481a09df1ed
+  preload_script_sha256: efa22a8165b26d132b87026778e4ac44af961d1b7a7e0385d05c43cf89742b09
+decision: Do not count the failed hold. Preserve the safe approximately 0.494 N bilateral state and correct only hold_target to the final command reference in a new experiment.
+```
+
+## Checkpoint CP-130
+
+```yaml
+checkpoint_id: CP-130
+checkpoint_time: 2026-08-12T03:17:35+08:00
+last_valid_experiment: EXP-093
+last_invalid_experiment: EXP-095
+current_hypothesis: Preserving the final accumulated q6 command target during the hold will keep both sides above 0.50 N for the required 2 seconds.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state; protected Gazebo tracked status remains empty. Same stiffness stack remains epoch 0 unpaused with bilateral contact and approximately 0.494 N per side.
+confirmed_conclusions:
+  - The 0.50 N target is physically reachable with large q6 and force safety margins.
+  - Only the hold-reference assignment remains unqualified; no additional physics or model change is indicated.
+next_command: Preregister EXP-096, add at most the required accumulated 20 microradian step(s), then hold the final command target unchanged for 2 seconds.
+```
+
+## Experiment EXP-096
+
+```yaml
+experiment_id: EXP-096
+prior_experiment: EXP-095 INVALID hold-reference semantics
+status: RUNNING
+lifecycle: STIFF_TPU_PRESERVED_COMMAND_TARGET_DYNAMIC_FORCE_HOLD
+run_mode: continue_exact_approximately_0_494N_bilateral_state
+hypothesis: Holding the final accumulated q6 command reference unchanged preserves at least 0.50 N per side for 2 seconds.
+single_variable: Relative to invalid EXP-095, use hold_target = final_command_target rather than constrained_actual_q6; all physical inputs, bounds, state, session, epoch, and policy remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  initial_q6_rad: -0.04835171915507183
+  initial_cup_position_m: [0.019997359859817154, -0.2792475364435764, 0.1647117799173903]
+  initial_pad_normal_force_n: [0.49355559401612487, 0.49344196943738095]
+  preload_script: [/tmp/so101_exp096_preload_hold.py, f42eec8e3b1ade34afe9f15eca6ddd1d047839c1b1fe2a4f3a00189df7f2784b]
+  command_target_step_rad: 0.00002
+  target_per_side_normal_force_n: 0.50
+  maximum_force_n: 11.60
+  maximum_total_cup_displacement_m: 0.003
+  stable_hold_s: 2.0
+  safe_q6_lower_rad: -0.059600220867817
+preconditions:
+  - Same session/epoch is unpaused with active controllers, unchanged arm endpoint, bilateral contact, q6 and cup state matching the frozen readback.
+  - Script differs from EXP-095 only in evidence identity, frozen initial q6, and preserved hold command target; it is lint-clean and hash-matched.
+  - No action occurred after the fresh readback.
+success_criteria:
+  - Both sides sustain at least 0.50 N continuously for 2 seconds below q6, force, displacement, and provenance limits.
+  - No arm/lift motion, reset/pause, simulator constraint/attachment, object write, or hidden aid occurs.
+failure_criteria: Any action, q6, force, displacement, bilateral, hold, freshness, session, or epoch gate violation stops before lift.
+invalid_criteria: Any unrecorded state/script/model/policy change or harness deviation invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:19:05+08:00
+  precondition_readback: Fresh state matches CP-130 and script SHA f42eec8e; this transition occurs before its first action.
+decision: PENDING.
+next_experiment: Separately preregister the next arm increment only after VALID hold success.
+```
+
+## Experiment EXP-096 Terminal Result
+
+```yaml
+experiment_id: EXP-096
+status: VALID
+terminal_result: DYNAMIC_FORCE_PRELOAD_HOLD_PROVED
+terminal_time: 2026-08-12T03:19:24+08:00
+command: python3 /tmp/so101_exp096_preload_hold.py
+exit_code: 0
+result:
+  terminal_q6_rad: -0.048409838154160216
+  hold_duration_s: 2.0
+  hold_sample_count: 168
+  left_normal_force_range_n: [0.5105708587952289, 0.5146084511573616]
+  right_normal_force_range_n: [0.5114243944835039, 0.5146383290016993]
+  maximum_normal_force_n: 0.5146383290016993
+  terminal_contact_counts: [1, 1]
+  terminal_cup_position_m: [0.019997154883470834, -0.2792452077011229, 0.16471177632015876]
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - Preserving the final q6 command reference maintains the desired actuator preload and eliminates the EXP-095 force drop.
+  - The 0.50 N per-side dynamic-force target is stable with q6 still more than 0.011 rad above its safe lower bound, force below 5 percent of the ceiling, and total cup displacement below 3 mm.
+evidence:
+  preload_log_sha256: cf5f7179eb78f6ab407029e2a63224ec2d3f55adf004935f29d10ac65ba9a875
+  preload_json_sha256: 76f24cacb730701d1a9652d524e59267318ed5525f9477f09982aff0392e2969
+  preload_script_sha256: f42eec8e3b1ade34afe9f15eca6ddd1d047839c1b1fe2a4f3a00189df7f2784b
+decision: Preserve the exact live state and preregister the next frozen 2 mm arm increment without changing q6 or any model/policy parameter.
+```
+
+## Checkpoint CP-131
+
+```yaml
+checkpoint_id: CP-131
+checkpoint_time: 2026-08-12T03:19:30+08:00
+last_valid_experiment: EXP-096
+current_hypothesis: The stable approximately 0.514 N per-side preload prevents the prior tangential slip and carries the cup during the next 2 mm arm increment.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state; protected Gazebo tracked status remains empty. Same stiffness stack/session/epoch remains unpaused at the first arm endpoint with q6=-0.04841 and bilateral preload held.
+confirmed_conclusions:
+  - Contact stiffness parity plus preserved controller command reference produces a stable, bounded dynamic grasp preload.
+  - The next experiment can isolate arm motion without additional q6 or model changes.
+next_command: Preregister EXP-097 and execute only the frozen next 2 mm arm target with physical lift, table-clearance, bilateral, force, drift, and provenance gates.
+```
+
+## Experiment EXP-097
+
+```yaml
+experiment_id: EXP-097
+prior_experiment: EXP-096 VALID dynamic-force preload hold
+status: RUNNING
+lifecycle: STIFF_TPU_SECOND_2MM_PHYSICAL_MICRO_LIFT
+run_mode: continue_exact_dynamic_preload_state_without_q6_change
+hypothesis: The approximately 0.514 N per-side preload carries the cup 1.5-2.5 mm upward through the frozen second 2 mm arm target, clears table support, and retains bilateral contact.
+single_variable: Execute only the frozen next arm target; q6 command reference, model, policy, scene, controllers, session, epoch, and no-attachment physics contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.0001419546530401199, 0.46321808606063997, 0.21300406080492312, 0.8648226172736213, 0.0005062800969728916]
+  initial_q6_rad: -0.048409837808327805
+  initial_cup_position_m: [0.019996997440378833, -0.2792452127156752, 0.16471177647714613]
+  initial_pad_normal_force_n: [0.5145172623277582, 0.5145457492379995]
+  lift_target_arm_rad: [-0.0002059614124630276, 0.4530466639711597, 0.21089465616398247, 0.8748565203763494, 0.0005761294179064712]
+  lift_script: [/tmp/so101_exp097_micro_lift.py, 4d90cb9573afc390d228254d6378a7afcedec45f761c36454c2246dba1334f99]
+  lift_gate_m: [0.0015, 0.0025]
+  maximum_lateral_drift_m: 0.001
+  maximum_force_n: 11.60
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers, arm at the prior lift endpoint, preserved q6 command preload, bilateral approximately 0.514 N contacts, and table-supported cup.
+  - MoveIt collision shadow remains attached only in Planning Scene; no MuJoCo attachment or constraint exists.
+  - Script is lint-clean and hash-matched; no action occurred after fresh readback.
+success_criteria:
+  - Plan-to-execute drift is at most 0.01 rad and arm reaches the frozen target.
+  - Cup rises 1.5-2.5 mm with at most 1 mm lateral drift, clears table contact, retains bilateral contact through execution and 0.30-second hold, and stays below 11.60 N.
+  - Session/epoch and q6 remain unchanged; no pause/reset, simulator constraint/attachment, object write, or hidden aid occurs.
+failure_criteria: Any planning, execution, lift, drift, table, bilateral, force, q6, freshness, provenance, or evidence violation stops before further motion.
+invalid_criteria: Any unrecorded state/script/model/policy change or hidden physical aid invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:20:35+08:00
+  precondition_readback: Fresh state matches CP-131 with approximately 0.514 N per side and unchanged q6/session/epoch; script SHA is 4d90cb95 and this transition occurs before planning.
+decision: PENDING.
+next_experiment: Long hold and formal LIFT/transport only after VALID physical micro-lift.
+```
+
+## Experiment EXP-097 Terminal Result
+
+```yaml
+experiment_id: EXP-097
+status: VALID
+terminal_result: ARM_INCREMENT_EXECUTED_BUT_CUP_TANGENTIAL_SLIP_PERSISTS
+terminal_time: 2026-08-12T03:22:15+08:00
+command: python3 /tmp/so101_exp097_micro_lift.py
+exit_code: 1
+result:
+  lift_trajectory_points: 6
+  plan_to_execute_drift_rad: 5.6535575862753235e-09
+  terminal_arm_joints_rad: [-0.00015205554902928634, 0.45367375704283847, 0.21112832610769589, 0.874785554158837, 0.0005531937106397004]
+  terminal_q6_rad: -0.04840961567114686
+  cup_vertical_displacement_m: 9.946035553765054e-07
+  terminal_cup_position_m: [0.019996842124513685, -0.2795509976020785, 0.16471177692330288]
+  terminal_pad_normal_force_n: [0.5171833164689629, 0.5171420480585373]
+  terminal_contact_counts: [1, 1]
+  terminal_other_contact_geoms: [table_collision]
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The arm reached the intended approximately 2 mm upward TCP increment; offline kinematic readback confirms the TCP rose approximately 1.997 mm.
+  - Bilateral pad contact and approximately 0.517 N normal force per side remained present, but the cup wall slipped tangentially between the pads and the cup stayed table-supported.
+  - Both pads contact opposite faces of the same thin wall_near_collision cup wall. The contact pair is physical and constraint-free, but the 0.50 N per-side preload is not a sufficient dynamic carry margin for this geometry.
+  - No pause/reset, MuJoCo constraint/attachment, direct object state write, or hidden aid occurred.
+evidence:
+  lift_log_sha256: 205058b0ee0a7e879190842ae5ec6fd20b68bf0530794d77d9e8d0da45fee281
+  lift_json_sha256: 3123512269bfe45ecf9056e09150e6d20d46d8e09681be2856b1473c9df986a8
+  lift_script_sha256: 4d90cb9573afc390d228254d6378a7afcedec45f761c36454c2246dba1334f99
+decision: Preserve the exact live state. Increase only the bounded bilateral preload target before attempting another separately preregistered arm increment.
+```
+
+## Checkpoint CP-132
+
+```yaml
+checkpoint_id: CP-132
+checkpoint_time: 2026-08-12T03:24:30+08:00
+last_valid_experiment: EXP-097
+current_hypothesis: Raising the physical preload from approximately 0.517 N to 1.00 N per side will provide sufficient tangential carry margin without changing model contact parameters.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state; protected Gazebo tracked status remains empty. Same stiffness stack/session/epoch is unpaused at the EXP-097 arm endpoint with q6=-0.048410, continuous bilateral contact, and a table-supported cup.
+confirmed_conclusions:
+  - The joint-space lift target and controller execution are correct; the remaining failure is physical tangential slip at the cup wall contact.
+  - Current force is under 5 percent of the 11.60 N ceiling and q6 remains more than 0.011 rad above its lower bound, so a bounded force-only calibration retains substantial safety margin.
+next_command: Preregister EXP-098 and increase only q6 command preload in 20 microradian steps until both sides sustain 1.00 N for 2 seconds.
+```
+
+## Experiment EXP-098
+
+```yaml
+experiment_id: EXP-098
+prior_experiment: EXP-097 VALID tangential-slip failure
+status: RUNNING
+lifecycle: STIFF_TPU_ONE_NEWTON_BILATERAL_PRELOAD_HOLD
+run_mode: continue_exact_EXP097_terminal_state_without_arm_motion
+hypothesis: A preserved q6 command reference producing at least 1.00 N normal force per side remains stable for 2 seconds inside all force, q6, displacement, and provenance bounds.
+single_variable: Raise only the per-side normal-force target from approximately 0.517 N to 1.00 N by bounded q6 command increments; model, policy, arm target, scene, controllers, session, epoch, and no-attachment physics contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00015205554902928634, 0.45367375704283847, 0.21112832610769589, 0.874785554158837, 0.0005531937106397004]
+  initial_q6_rad: -0.04840961567114686
+  initial_cup_position_m: [0.019996842124513685, -0.2795509976020785, 0.16471177692330288]
+  initial_pad_normal_force_n: [0.5171833164689629, 0.5171420480585373]
+  preload_script: [/tmp/so101_exp098_preload_hold.py, 0f0b98335a3dfefb1754e000c54d07c4be234b54bb7b8ed6a1cc06404d3b2909]
+  command_target_step_rad: 0.00002
+  target_per_side_normal_force_n: 1.00
+  stable_hold_s: 2.0
+  maximum_force_n: 11.60
+  maximum_run_relative_cup_displacement_m: 0.003
+  safe_q6_lower_rad: -0.059600220867817
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers, arm at EXP-097 endpoint, bilateral approximately 0.517 N contacts, and cup still table-supported.
+  - Script is lint-clean and SHA-matched; no arm/lift motion, model change, reset, pause, attachment, constraint, or object write is included.
+  - No physical action occurred after the fresh frozen readback.
+success_criteria:
+  - Both sides continuously sustain at least 1.00 N for 2 seconds before any q6, force, displacement, contact, or provenance bound.
+  - Arm remains at the frozen endpoint and the run contains no lift, pause/reset, simulator constraint/attachment, object write, or hidden aid.
+failure_criteria: Any action, q6, force, displacement, bilateral, hold, freshness, session, epoch, or arm-state gate violation stops before lift.
+invalid_criteria: Any unrecorded state/script/model/policy change or harness deviation invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:25:25+08:00
+  precondition_readback: Fresh state matches CP-132 and script SHA 0f0b9833; this transition occurs before its first q6 command.
+decision: PENDING.
+next_experiment: Separately preregister the next arm increment only after VALID 1.00 N hold success.
+```
+
+## Experiment EXP-098 Terminal Result
+
+```yaml
+experiment_id: EXP-098
+status: VALID
+terminal_result: ONE_NEWTON_BILATERAL_PRELOAD_HOLD_PROVED
+terminal_time: 2026-08-12T03:26:35+08:00
+command: python3 /tmp/so101_exp098_preload_hold.py
+exit_code: 0
+result:
+  terminal_q6_rad: -0.04948697936088109
+  hold_duration_s: 2.0
+  hold_sample_count: 168
+  left_normal_force_range_n: [1.0172414414011424, 1.0282264019389147]
+  right_normal_force_range_n: [1.0191808495642216, 1.0283091296735294]
+  maximum_normal_force_n: 1.0282264019389147
+  terminal_cup_position_m: [0.019996571780144457, -0.2794948429952216, 0.16471177989354552]
+  terminal_other_contact_geoms: [table_collision]
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - Accumulating and preserving the q6 command reference safely establishes more than 1.00 N normal force on both sides for the full 2-second window.
+  - q6 remains approximately 0.0101 rad above its lower bound, maximum force is below 9 percent of the 11.60 N ceiling, and the arm stayed at the frozen endpoint.
+  - Cup displacement during this force-only calibration remained bounded and the cup is still table-supported as required before the next lift probe.
+evidence:
+  preload_log_sha256: 9230c16fb466c1f903021fc6da8f46b003fe7ce0b4e837a6421e65480a0a5fa0
+  preload_json_sha256: 310bdff356b1d60b8e35160a8ff124021a08e8d62eb6413cb4eca84321c932a9
+  preload_script_sha256: 0f0b98335a3dfefb1754e000c54d07c4be234b54bb7b8ed6a1cc06404d3b2909
+decision: Preserve this exact dynamic preload and compute a fresh collision-aware world-Z plus 2 mm IK target without sending a physical action.
+```
+
+## Checkpoint CP-133
+
+```yaml
+checkpoint_id: CP-133
+checkpoint_time: 2026-08-12T03:29:45+08:00
+last_valid_experiment: EXP-098
+current_hypothesis: The 1.00 N per-side dynamic preload supplies enough tangential carry margin for a fresh 2 mm world-Z lift while retaining the no-constraint physical contract.
+working_tree_status: Same intentional source/model/test/plan/ledger/fork state; protected Gazebo tracked status remains empty. Same stiffness stack/session/epoch is unpaused, arm is unchanged from EXP-097, q6=-0.049487, and bilateral preload is stable.
+confirmed_conclusions:
+  - A read-only MoveIt /compute_ik query produced a fresh collision-aware target exactly 2 mm above the live so101_tcp pose while preserving orientation.
+  - The IK query performed no physical command and did not change the frozen live state.
+next_command: Preregister EXP-099 and execute only the fresh world-Z plus 2 mm arm target with physical lift, table-clearance, bilateral, force, drift, and provenance gates.
+```
+
+## Experiment EXP-099
+
+```yaml
+experiment_id: EXP-099
+prior_experiment: EXP-098 VALID one-newton preload hold
+status: RUNNING
+lifecycle: ONE_NEWTON_PRELOAD_PHYSICAL_MICRO_LIFT
+run_mode: continue_exact_EXP098_terminal_state_without_q6_change
+hypothesis: The 1.00 N per-side preload carries the cup 1.5-2.5 mm upward through the fresh 2 mm world-Z TCP target, clears table support, and retains bilateral physical contact.
+single_variable: Execute only the fresh collision-aware arm IK target; q6 command reference, model, policy, scene, controllers, session, epoch, and no-attachment physics contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-stiffness
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00015199328232715195, 0.453674790144152, 0.21112935823295967, 0.87478658720256, 0.0005531032222654058]
+  initial_q6_rad: -0.04948697748447818
+  target_tcp_world_position_m: [0.020663208534545188, -0.26327236426852874, 0.20647326190362447]
+  target_tcp_world_orientation_xyzw: [-0.01103644023320002, -0.011032814797183174, -0.7067686644408122, 0.7072725987546675]
+  lift_target_arm_rad: [-0.0001518459411565051, 0.44180293901908685, 0.21326783756034987, 0.8824699829881489, 0.0005551409688084152]
+  lift_script: [/tmp/so101_exp099_micro_lift.py, 993f8af62c4847aaabd45e29c6b83375546928600a7cb27831570fb7b8457210]
+  lift_gate_m: [0.0015, 0.0025]
+  maximum_lateral_drift_m: 0.001
+  maximum_force_n: 11.60
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers, arm/q6 matching the frozen readback, stable bilateral at least 1.00 N contacts, and a table-supported cup.
+  - MoveIt collision shadow remains attached only in Planning Scene; no MuJoCo attachment or constraint exists.
+  - Script is lint-clean and SHA-matched; the IK query was read-only and no action occurred after the frozen state.
+success_criteria:
+  - Plan-to-execute drift is at most 0.01 rad and arm reaches the frozen target.
+  - Cup rises 1.5-2.5 mm with at most 1 mm lateral drift, clears table contact, retains bilateral contact through execution and a 0.30-second hold, and stays below 11.60 N.
+  - Session/epoch and q6 remain unchanged; no pause/reset, simulator constraint/attachment, object write, or hidden aid occurs.
+failure_criteria: Any planning, execution, lift, drift, table, bilateral, force, q6, freshness, provenance, or evidence violation stops before further motion.
+invalid_criteria: Any unrecorded state/script/model/policy change or hidden physical aid invalidates the run.
+evidence_root: /tmp/so101-task13-stiffness
+runtime_start:
+  time: 2026-08-12T03:30:56+08:00
+  precondition_readback: Fresh state and read-only IK response match CP-133; script SHA is 993f8af6 and this transition occurs before planning.
+decision: PENDING.
+next_experiment: Long physical hold and formal LIFT/transport only after VALID micro-lift success.
+```
+
+## Experiment EXP-099 Terminal Result
+
+```yaml
+experiment_id: EXP-099
+status: VALID
+terminal_result: ONE_NEWTON_PRELOAD_STILL_SLIPS_UNDER_2MM_WORLD_Z_LIFT
+terminal_time: 2026-08-12T03:32:05+08:00
+command: python3 /tmp/so101_exp099_micro_lift.py
+exit_code: 1
+result:
+  lift_trajectory_points: 6
+  plan_to_execute_drift_rad: 1.0888965246732933e-07
+  terminal_arm_joints_rad: [-0.00011112963628103875, 0.44227711898811156, 0.2135541250576643, 0.8823944892632424, 0.0005577176091286036]
+  terminal_q6_rad: -0.04948564659912027
+  cup_vertical_displacement_m: 0.000002225513098974563
+  terminal_cup_position_m: [0.019992715909378792, -0.2794056348922437, 0.1647117840346462]
+  terminal_pad_normal_force_sum_n: [1.0456098344089622, 1.045681135548228]
+  terminal_contact_counts: [1, 2]
+  terminal_other_contact_geoms: [table_collision]
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The arm reached the fresh world-Z plus 2 mm target with negligible plan-to-execute drift while bilateral normal preload remained approximately 1.046 N total per side.
+  - The cup still rose only approximately 2.2 micrometres and remained table-supported, so merely doubling preload did not address the physical failure.
+  - Static model inspection confirms contact dimension 3 and mixed sliding friction 3.0 on the fingertip/cup pairs; the missing mechanism is not an absent friction coefficient or absent tangential dimension.
+  - MuJoCo's default noslip_iterations=0 disables the post-solver intended to suppress friction-dimension slip/drift from soft constraints. This matches the observed slow tangential creep despite valid bilateral normal contacts.
+evidence:
+  lift_log_sha256: 8ed957a6d12271f35a4d70653fa014d39842e1f4b486e367a5ca3ad10fd0c4df
+  lift_json_sha256: 14b9751fe7e2e272a50562615ad5467f99995770cd132816280e0b28f1843cd6
+  lift_script_sha256: 993f8af62c4847aaabd45e29c6b83375546928600a7cb27831570fb7b8457210
+decision: Stop increasing q6 preload. Add an explicit bounded MuJoCo Noslip post-solver budget as the next single model variable, then repeat the physical sequence from a fresh reset stack.
+```
+
+## Checkpoint CP-134
+
+```yaml
+checkpoint_id: CP-134
+checkpoint_time: 2026-08-12T03:34:45+08:00
+last_valid_experiment: EXP-099
+current_hypothesis: Enabling ten Noslip post-solver iterations will suppress the observed friction-dimension drift so the already-sufficient physical friction and normal force can carry the cup.
+working_tree_status: Main worktree adds an intentional red-then-green MJCF option test and scene noslip_iterations=10; protected Gazebo tracked status remains empty. Old stiffness stack remains unpaused only until the fresh model stack replaces it.
+confirmed_conclusions:
+  - Official MuJoCo XML reference defines noslip_iterations as a post-processing solver for suppressing slip/drift in friction dimensions and documents default zero as disabled.
+  - New test failed RED at the default zero, then all 10 visual/model parity tests passed after adding the explicit bounded value 10.
+  - Source and isolated install scene hashes match exactly.
+next_command: Preregister EXP-100, replace the old stack with the isolated noslip overlay, verify exact process/model provenance, and reach formal CLOSE_READY on a fresh session before any contact calibration.
+```
+
+## Experiment EXP-100
+
+```yaml
+experiment_id: EXP-100
+prior_experiment: EXP-099 VALID friction-dimension-slip failure
+status: RUNNING
+lifecycle: NOSLIP_MODEL_FRESH_STACK_AND_CLOSE_READY
+run_mode: replace_old_stack_then_formal_scene_and_staged_approach
+hypothesis: The same model with only noslip_iterations=10 starts cleanly, preserves ResetWorld/scene/robot behavior, and reaches CLOSE_READY without early contact or cup displacement.
+single_variable: Relative to EXP-099, set MuJoCo option noslip_iterations from implicit default 0 to explicit 10. Friction, solref, mass, inertias, geometry, controller, q6 bounds, approach policy, timestep, gravity, and no-attachment contract remain unchanged.
+frozen_inputs:
+  parent_head: eabe88885bf802fb14968547634fd06c26c1b38a
+  fork_commit: 20c77cd71305556cb5c914b07e8d5a4d40d5f3fd
+  runtime_fork_install: /tmp/so101-fork-reset-test/install
+  demo_install: /tmp/so101-noslip-20260812/overlay/install
+  scene_mjcf_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  model_test_sha256: dc71207fe577ba0a749d95e0780d5d74cfcac8ad6fa5dc7b685cd3bb31b77f79
+  motion_policy_sha256: 303044acea71039f74693e5f0e0d97f3adbaf21c95745c57aa63709fc4c6f321
+  static_test_result: 10 passed
+  ros_domain_id: 149
+  simulation_session_id: so101-task13-noslip
+  expected_reset_epoch: 0
+preconditions:
+  - Source/install scene hashes match; all focused model parity tests pass; protected Gazebo tracked status is empty.
+  - Old owned sim and MoveIt processes will be stopped before starting the new session; no unrelated process or user work is targeted.
+  - Formal scene setup and staged approach use the same installed code/policy and explicit execution gate as EXP-091.
+success_criteria:
+  - New process command resolves to the fork runtime and noslip overlay scene, publishes session so101-task13-noslip at epoch 0, and has both controllers active.
+  - Formal Planning Scene contains exactly table, pedestal, and the 13-part cup collision object; staged approach reaches CLOSE_READY through 15 segments.
+  - No early fingertip contact, excessive cup displacement, pause/reset, hidden constraint, attachment, object write, or provenance mismatch occurs.
+failure_criteria: Any process, model, launch, controller, evidence, scene, approach, contact, displacement, or provenance gate violation stops before contact calibration.
+invalid_criteria: Any unrecorded model/policy/code change or failure to replace the old owned process invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+runtime_start:
+  time: 2026-08-12T03:35:49+08:00
+  precondition_readback: Static RED/GREEN and isolated build evidence are complete; this transition occurs before stopping the old stack or starting the new model.
+decision: PENDING.
+next_experiment: Preregister bounded bilateral preload only after VALID CLOSE_READY.
+```
+
+## Experiment EXP-100 Terminal Result
+
+```yaml
+experiment_id: EXP-100
+status: VALID
+terminal_result: NOSLIP_STACK_PROVENANCE_AND_CLOSE_READY_PASSED
+terminal_time: 2026-08-12T03:38:55+08:00
+commands:
+  - command: start simulation and MoveIt/RViz with isolated noslip overlay
+    exit_code: 0
+  - command: ros2 run so101_mujoco_demo_py scene_setup
+    exit_code: 0
+  - command: staged_approach --mode execute --execute --stop-after DESCEND
+    exit_code: 0
+result:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  simulator_process: /tmp/so101-fork-reset-test/install/lib/mujoco_ros2_control/ros2_control_node
+  robot_state_publisher_scene: /tmp/so101-noslip-20260812/overlay/install/so101_mujoco_demo_py/share/so101_mujoco_demo_py/mjcf/scene.xml
+  move_group_scene: /tmp/so101-noslip-20260812/overlay/install/so101_mujoco_demo_py/share/so101_mujoco_demo_py/mjcf/scene.xml
+  active_controllers: [joint_state_broadcaster, arm_controller, gripper_controller]
+  planning_scene_verified: true
+  staged_approach_status: CLOSE_READY
+  staged_approach_segments: 15
+  terminal_joints_rad: [-0.0002534309461740592, 0.4727271845281081, 0.21489824823558118, 0.8549141172788711, 0.0005597648469939641, 0.4650364539746299]
+  terminal_cup_position_m: [0.020000000000000007, -0.28, 0.16480156647042168]
+  terminal_fingertip_contacts: [0, 0]
+  terminal_other_contact_geoms: [table_collision]
+  terminal_paused: false
+diagnosis:
+  - The old owned stack was cleanly stopped and replaced; simulator, robot_state_publisher, and move_group all resolve to the exact fork/noslip model provenance.
+  - Formal scene setup reports pedestal 1, plastic_cup 13, and table 1 primitives, and staged approach completes all 15 selected segments with zero close-gripper calls.
+  - No early fingertip contact or cup displacement occurred; the Noslip option does not regress startup, ResetWorld provenance, controller activation, Planning Scene, or free-space approach behavior.
+evidence:
+  staged_approach_log_sha256: cb46ca1fb6f144ddb611983cbd63dbc152576071d181f5e15fa5fc398bfd737b
+  staged_approach_json_sha256: da3f3c0ebd29b70d8f0359deba04aa23756df732aa860a513dc278b7792031d9
+decision: Preserve exact CLOSE_READY state and separately preregister the same approximately 0.50 N bilateral preload used before the slip probe.
+```
+
+## Checkpoint CP-135
+
+```yaml
+checkpoint_id: CP-135
+checkpoint_time: 2026-08-12T03:39:30+08:00
+last_valid_experiment: EXP-100
+current_hypothesis: The Noslip stack can reproduce the same bounded 0.50 N per-side grasp preload before isolating its effect on tangential carry.
+working_tree_status: Same intentional noslip source/test/model/plan/ledger/fork state; protected Gazebo tracked status remains empty. New noslip stack is epoch 0 unpaused at formal CLOSE_READY with no fingertip contact.
+confirmed_conclusions:
+  - Runtime provenance and the free-space/planning path are qualified on the new model.
+  - The next manipulation changes only q6, permits bounded unilateral seating, accumulates command targets rather than constrained feedback, and preserves the final command reference through hold.
+next_command: Preregister EXP-101 and establish at least 0.50 N per side for 2 seconds without arm motion.
+```
+
+## Experiment EXP-101
+
+```yaml
+experiment_id: EXP-101
+prior_experiment: EXP-100 VALID noslip CLOSE_READY
+status: RUNNING
+lifecycle: NOSLIP_HALF_NEWTON_BILATERAL_CONTACT_HOLD
+run_mode: continue_exact_CLOSE_READY_with_bounded_q6_only
+hypothesis: The Noslip model reaches and sustains at least 0.50 N normal force per fingertip side for 2 seconds within the same q6, force, displacement, and provenance bounds.
+single_variable: From CLOSE_READY, move only q6 through the reviewed coarse-to-fine contact search and preserve the final accumulated command reference. Arm/model/policy/scene/controllers/session/epoch remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.0002534309461740592, 0.4727271845281081, 0.21489824823558118, 0.8549141172788711, 0.0005597648469939641]
+  initial_q6_rad: 0.4650364539746299
+  initial_cup_position_m: [0.020000000000000007, -0.28, 0.16480156647042168]
+  contact_script: [/tmp/so101_exp101_contact_hold.py, aef8015590ee0087652dab1d537d523385a7136f340e9b62c10c87404bc3da74]
+  coarse_start_q6_rad: -0.040
+  nominal_contact_q6_rad: -0.047608632840292
+  coarse_step_rad: 0.0005
+  fine_command_target_step_rad: 0.00002
+  target_per_side_normal_force_n: 0.50
+  stable_hold_s: 2.0
+  maximum_force_n: 11.60
+  maximum_cup_displacement_m: 0.003
+  safe_q6_lower_rad: -0.059600220867817
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers, arm/q6/cup matching CP-135, zero fingertip contact, and formal Planning Scene present.
+  - Script permits physical unilateral seating but rejects displacement, force, q6, contact-loss-during-hold, provenance, arm, and action violations.
+  - Script is lint-clean and SHA-matched; no action occurred after the frozen state.
+success_criteria:
+  - Both sides continuously sustain at least 0.50 N for 2 seconds before any q6, force, displacement, contact, or provenance limit.
+  - Arm remains at CLOSE_READY and no pause/reset, simulator constraint/attachment, object write, or hidden aid occurs.
+failure_criteria: Any action, q6, force, displacement, bilateral, hold, freshness, session, epoch, or arm-state gate violation stops before lift.
+invalid_criteria: Any unrecorded state/script/model/policy change or harness deviation invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+runtime_start:
+  time: 2026-08-12T03:40:14+08:00
+  precondition_readback: Fresh CLOSE_READY state matches CP-135 and script SHA aef80155; this transition occurs before its first q6 command.
+decision: PENDING.
+next_experiment: Separately preregister fresh world-Z plus 2 mm lift only after VALID hold success.
+```
+
+## Experiment EXP-101 Terminal Result
+
+```yaml
+experiment_id: EXP-101
+status: VALID
+terminal_result: NOSLIP_HALF_NEWTON_BILATERAL_HOLD_PROVED
+terminal_time: 2026-08-12T03:41:30+08:00
+command: python3 /tmp/so101_exp101_contact_hold.py
+exit_code: 0
+result:
+  terminal_q6_rad: -0.04850795863514208
+  hold_duration_s: 2.0
+  hold_sample_count: 202
+  left_normal_force_range_n: [0.5098984454701994, 0.5107558378636932]
+  right_normal_force_range_n: [0.6235696582013133, 0.6250287805812613]
+  maximum_normal_force_n: 0.6219057559081005
+  terminal_cup_position_m: [0.019999883392508622, -0.278909877513529, 0.16492155313910403]
+  terminal_other_contact_geoms: [table_collision]
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The reviewed coarse-to-fine q6 search physically seats the cup and preserves the final command reference, producing continuous bilateral force above 0.50 N for the full 2-second window.
+  - q6, force, cumulative cup displacement, session, epoch, arm state, and no-hidden-aid bounds all pass.
+  - This force level matches the approximately 0.50 N preload that slipped in EXP-097, allowing the next lift to isolate the Noslip model change rather than increased grasp force.
+evidence:
+  contact_log_sha256: 4700ade53e351ce3c18ae9cf82581091353cbe241e6e24fccabefb0383fba4a0
+  contact_json_sha256: 2e92facb9b9bd05bcca451727cd1f63a869d605a8657e13592b8a42cce42b7a4
+  contact_script_sha256: aef8015590ee0087652dab1d537d523385a7136f340e9b62c10c87404bc3da74
+decision: Preserve exact live preload. Use the previously validated first 2 mm lift joint target because the read-only position-only IK service returned a distant branch and the constrained retry correctly failed closed.
+```
+
+## Checkpoint CP-136
+
+```yaml
+checkpoint_id: CP-136
+checkpoint_time: 2026-08-12T03:43:30+08:00
+last_valid_experiment: EXP-101
+current_hypothesis: Noslip post-processing will let the same approximately 0.50 N bilateral preload carry the cup through the already validated first 2 mm lift target.
+working_tree_status: Same intentional noslip source/test/model/plan/ledger/fork state; protected Gazebo tracked status remains empty. Noslip stack is epoch 0 unpaused at CLOSE_READY with q6=-0.048508 and stable bilateral contact.
+confirmed_conclusions:
+  - Unconstrained position-only /compute_ik returned a distant joint branch, and adding plus/minus 0.05 rad joint constraints correctly rejected it; neither read-only query changed physical state.
+  - The frozen EXP-093 first-lift joint target already represents the local approximately plus 2 mm world-Z motion from the same CLOSE_READY configuration and is reused without modification.
+next_command: Preregister EXP-102, attach only the MoveIt collision shadow, and execute the frozen first 2 mm target with physical outcome gates.
+```
+
+## Experiment EXP-102
+
+```yaml
+experiment_id: EXP-102
+prior_experiment: EXP-101 VALID half-newton bilateral hold
+status: RUNNING
+lifecycle: NOSLIP_HALF_NEWTON_PHYSICAL_MICRO_LIFT
+run_mode: continue_exact_EXP101_terminal_state_without_q6_change
+hypothesis: With noslip_iterations=10, the approximately 0.51/0.62 N bilateral preload carries the cup 1.5-2.5 mm upward, clears table support, and retains physical fingertip contact.
+single_variable: Execute only the previously validated first 2 mm arm target under the Noslip model; q6 command reference, friction, solref, mass, geometry, policy, controllers, session, and epoch remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.0002502966785858475, 0.4727777913248263, 0.21489935872368246, 0.8548916790786721, 0.0005597798308855102]
+  initial_q6_rad: -0.04850794875050089
+  initial_cup_position_m: [0.019999883392508622, -0.278909877513529, 0.16492155313910403]
+  initial_pad_normal_force_range_n: [[0.5098984454701994, 0.5107558378636932], [0.6235696582013133, 0.6250287805812613]]
+  lift_target_arm_rad: [-0.0002062266287315138, 0.46262046903357984, 0.21277364017949124, 0.8648894480356747, 0.0005764164414532356]
+  lift_script: [/tmp/so101_exp102_micro_lift.py, f2afbdd44ac92907812ce617c35c234857a9a3f576d0b7557cf33650721d77d1]
+  lift_gate_m: [0.0015, 0.0025]
+  maximum_lateral_drift_m: 0.001
+  maximum_force_n: 11.60
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers, arm/q6/cup and stable bilateral force matching CP-136.
+  - Script applies and read-backs only a MoveIt Planning Scene collision shadow on gripper with touch links gripper/jaw; it makes no MuJoCo attachment, constraint, or object state write.
+  - Script is lint-clean and SHA-matched; no physical action occurred after the frozen state.
+success_criteria:
+  - Planning Scene shadow converges, plan-to-execute drift is at most 0.01 rad, and arm reaches the frozen target.
+  - Cup rises 1.5-2.5 mm with at most 1 mm lateral drift, clears table contact, retains bilateral contact through execution and a 0.30-second hold, and stays below 11.60 N.
+  - Session/epoch and q6 remain unchanged; no pause/reset, simulator constraint/attachment, object write, or hidden aid occurs.
+failure_criteria: Any planning, execution, lift, drift, table, bilateral, force, q6, freshness, provenance, or evidence violation stops before further motion.
+invalid_criteria: Any unrecorded state/script/model/policy change or physical attachment aid invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+runtime_start:
+  time: 2026-08-12T03:44:07+08:00
+  precondition_readback: Fresh state matches CP-136; script SHA is f2afbdd4 and this transition occurs before Planning Scene mutation or arm planning.
+decision: PENDING.
+next_experiment: Ten-second physical hold and formal LIFT only after VALID micro-lift success.
+```
+
+## Experiment EXP-102 Terminal Result
+
+```yaml
+experiment_id: EXP-102
+status: VALID
+terminal_result: NOSLIP_PHYSICAL_MICRO_LIFT_PROVED
+terminal_time: 2026-08-12T03:45:02+08:00
+command: python3 /tmp/so101_exp102_micro_lift.py
+exit_code: 0
+result:
+  moveit_attached_ids: [plastic_cup]
+  moveit_world_ids_after_attach: [pedestal, table]
+  lift_trajectory_points: 6
+  plan_to_execute_drift_rad: 2.394127788813566e-11
+  physical_micro_lift_m: 0.001962676807505531
+  physical_lateral_drift_m: 0.0002774959679905805
+  terminal_arm_joints_rad: [-0.00025046805641095214, 0.4631330095326603, 0.21318348538670218, 0.8649578444936947, 0.0005864330989807919]
+  terminal_q6_rad: -0.04850881987104013
+  terminal_cup_position_m: [0.019999966759697226, -0.27918465037865553, 0.166881342541034]
+  terminal_contact_counts: [1, 1]
+  terminal_other_contact_geoms: []
+  terminal_maximum_normal_force_n: 0.5923504518570867
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The exact local first 2 mm arm target executes with negligible plan-to-execute drift and produces a measured 1.963 mm physical cup lift.
+  - The cup clears table support, remains within 0.278 mm lateral drift, and retains bilateral contact without increasing preload beyond the approximately 0.50 N comparison level.
+  - This directly isolates noslip_iterations=10 as the effective fix relative to EXP-097, where the same force scale slipped and produced only approximately 1 micrometre of lift.
+  - The attached object exists only in MoveIt Planning Scene; MuJoCo remains constraint-free with no object qpos/qvel write, weld, equality, adhesion, mocap, or teleport.
+evidence:
+  lift_log_sha256: 629d4fc33096984981b9acd21eef1c58547dabf867b4a025f8418b6448dafdc8
+  lift_json_sha256: 149ca2906dd26d555978680d15403e7179847725a5547d41bd06bf5f7412681d
+  lift_script_sha256: f2afbdd44ac92907812ce617c35c234857a9a3f576d0b7557cf33650721d77d1
+decision: Preserve exact live lifted state and separately preregister a ten-second no-action physical hold before formal LIFT/transport.
+```
+
+## Checkpoint CP-137
+
+```yaml
+checkpoint_id: CP-137
+checkpoint_time: 2026-08-12T03:45:30+08:00
+last_valid_experiment: EXP-102
+current_hypothesis: The Noslip-supported physical grasp remains off-table with bilateral contact for ten seconds without any command or hidden constraint.
+working_tree_status: Same intentional noslip source/test/model/plan/ledger/fork state; protected Gazebo tracked status remains empty. Noslip stack is epoch 0 unpaused at the successful 1.963 mm lifted state.
+confirmed_conclusions:
+  - ResetWorld, staged approach, contact preload, Planning Scene shadow, and the physical micro-lift all pass on the exact noslip runtime.
+  - A time-only observation now isolates stability before increasing lift distance or starting transport.
+next_command: Preregister EXP-103 and observe ten continuous seconds with cup drift, drop, support, bilateral contact, force, arm, q6, session, epoch, and no-action gates.
+```
+
+## Experiment EXP-103
+
+```yaml
+experiment_id: EXP-103
+prior_experiment: EXP-102 VALID physical micro-lift
+status: RUNNING
+lifecycle: NOSLIP_TEN_SECOND_CONSTRAINT_FREE_PHYSICAL_HOLD
+run_mode: observe_exact_EXP102_terminal_state_without_action
+hypothesis: The lifted cup remains off-table with bilateral contact for ten seconds, with at most 1 mm total drift and at most 0.5 mm drop.
+single_variable: Elapsed observation time only. No arm, gripper, Planning Scene, simulator, model, policy, pause, reset, or object-state command is issued.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00025046805641095214, 0.4631330095326603, 0.21318348538670218, 0.8649578444936947, 0.0005864330989807919]
+  initial_q6_rad: -0.04850881987104013
+  initial_cup_position_m: [0.019999966759697226, -0.27918465037865553, 0.166881342541034]
+  hold_script: [/tmp/so101_exp103_hold.py, cf69c47de82e7b84bbf77ec1d4387768961c7a84a0ef4f4cf6ff2ab27e03215b]
+  hold_duration_s: 10.0
+  maximum_cup_drift_m: 0.001
+  maximum_cup_drop_m: 0.0005
+  maximum_arm_error_rad: 0.01
+  maximum_q6_error_rad: 0.002
+  maximum_force_n: 11.60
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers and physical state matching CP-137.
+  - Cup is off-table with bilateral contact and the Planning Scene shadow remains attached; no MuJoCo constraint or attachment exists.
+  - Script is observation-only, lint-clean, and SHA-matched; no action occurred after the frozen state.
+success_criteria:
+  - Every fresh sample for ten seconds remains unpaused at epoch 0, off-table, bilateral, below force ceiling, within arm/q6 bounds, at most 1 mm from initial cup position, and at most 0.5 mm below initial Z.
+  - No command, pause/reset, simulator constraint/attachment, object write, or hidden aid occurs.
+failure_criteria: Any freshness, support, contact, force, cup, arm, q6, session, epoch, or duration gate violation fails the run.
+invalid_criteria: Any unrecorded physical action or harness/model change invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+runtime_start:
+  time: 2026-08-12T03:46:05+08:00
+  precondition_readback: Fresh lifted state matches CP-137 and script SHA cf69c47d; this transition occurs before the observation window.
+decision: PENDING.
+next_experiment: Formal LIFT waypoint only after VALID ten-second hold.
+```
+
+## Experiment EXP-103 Terminal Result
+
+```yaml
+experiment_id: EXP-103
+status: VALID
+terminal_result: TEN_SECOND_CONSTRAINT_FREE_PHYSICAL_HOLD_PROVED
+terminal_time: 2026-08-12T03:46:55+08:00
+command: python3 /tmp/so101_exp103_hold.py
+exit_code: 0
+result:
+  hold_duration_s: 10.0
+  sample_count: 835
+  initial_cup_position_m: [0.01999997789335019, -0.2791846503268693, 0.1668780861227786]
+  terminal_cup_position_m: [0.019999973720013813, -0.2791846503491892, 0.16687805834593536]
+  maximum_cup_drift_m: 0.00000002808861433396681
+  maximum_normal_force_n: 0.5737835676536662
+  terminal_table_contact: false
+  terminal_bilateral_contact: true
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - Every fresh sample for ten continuous seconds remains bilateral, off-table, within cup/arm/q6/force bounds, and on the same session/epoch.
+  - Maximum measured cup drift is approximately 28 nanometres, demonstrating that the physical hold no longer exhibits the prior slow tangential creep.
+  - The run sent no action and used no simulator constraint, object write, pause, reset, or hidden aid.
+evidence:
+  hold_log_sha256: 91bef9272aa031e92a90426567cd50a9e956f254400de0c68a3bf7418bcb78d3
+  hold_json_sha256: 29bb8d5b31341e294e2ec1222440944a7816b6eb491884de00665c37d95b4b93
+  hold_script_sha256: cf69c47de82e7b84bbf77ec1d4387768961c7a84a0ef4f4cf6ff2ab27e03215b
+decision: Preserve exact live state and separately preregister only the first formal LIFT waypoint.
+```
+
+## Checkpoint CP-138
+
+```yaml
+checkpoint_id: CP-138
+checkpoint_time: 2026-08-12T03:47:30+08:00
+last_valid_experiment: EXP-103
+current_hypothesis: The stable physical grasp will carry the cup from the micro-lift endpoint to the first formal LIFT waypoint with bounded displacement and continuous bilateral contact.
+working_tree_status: Same intentional noslip source/test/model/plan/ledger/fork state; protected Gazebo tracked status remains empty. Noslip stack remains epoch 0 unpaused at the stable micro-lift endpoint with Planning Scene shadow attached.
+confirmed_conclusions:
+  - The contact model now passes both transient physical lift and ten-second static stability.
+  - The next action uses the unchanged first waypoint from the formal LIFT policy and does not yet start lateral transport.
+next_command: Preregister EXP-104 and execute only formal LIFT waypoint 1 with MoveIt/controller, bilateral, force, support, cup displacement, drift, session, and epoch gates.
+```
+
+## Experiment EXP-104
+
+```yaml
+experiment_id: EXP-104
+prior_experiment: EXP-103 VALID ten-second hold
+status: RUNNING
+lifecycle: NOSLIP_FORMAL_LIFT_WAYPOINT_1
+run_mode: continue_exact_EXP103_terminal_state
+hypothesis: The unchanged first LIFT policy waypoint transfers the cup at least 5 mm upward while retaining bilateral physical contact and staying within 30 mm lateral displacement.
+single_variable: Execute only LIFT waypoint 1. q6, model, policy, scene, controllers, Planning Scene shadow, session, epoch, and no-attachment physical contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00025046805641095214, 0.4631330095326603, 0.21318348538670218, 0.8649578444936947, 0.0005864330989807919]
+  initial_q6_rad: -0.04850881987104013
+  initial_cup_position_m: [0.019999973720013813, -0.2791846503491892, 0.16687805834593536]
+  lift_target_arm_rad: [-0.000284124852, 0.381814591288, 0.272246878070, 0.916741182602, -0.000291565154]
+  lift_script: [/tmp/so101_exp104_policy_lift_waypoint1.py, e95e515b23c505eabc91e944fcc6a16afb1d839a804a90f4aee207c1e4822f04]
+  minimum_physical_lift_m: 0.005
+  maximum_physical_lift_m: 0.10
+  maximum_lateral_displacement_m: 0.03
+  maximum_force_n: 11.60
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers, arm/q6/cup and stable bilateral state matching CP-138.
+  - Planning Scene shadow readback remains attached; MuJoCo has no constraint or attachment.
+  - Script is lint-clean and SHA-matched; no action occurred after the frozen state.
+success_criteria:
+  - Plan-to-execute drift is at most 0.01 rad and arm reaches the frozen waypoint.
+  - Cup rises 5-100 mm with at most 30 mm lateral displacement, stays off-table, retains bilateral contact through execution and 0.30-second hold, and remains below 11.60 N.
+  - Session/epoch and q6 remain unchanged; no pause/reset, simulator constraint/attachment, object write, or hidden aid occurs.
+failure_criteria: Any planning, execution, lift, displacement, support, bilateral, force, q6, freshness, provenance, or evidence violation stops before waypoint 2.
+invalid_criteria: Any unrecorded state/script/model/policy change or physical attachment aid invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+runtime_start:
+  time: 2026-08-12T03:48:07+08:00
+  precondition_readback: Fresh lifted state matches CP-138; script SHA is e95e515b and this transition occurs before arm planning.
+decision: PENDING.
+next_experiment: Remaining formal LIFT waypoints only after VALID waypoint-1 transfer.
+```
+
+## Experiment EXP-104 Terminal Result
+
+```yaml
+experiment_id: EXP-104
+status: VALID
+terminal_result: FORMAL_LIFT_WAYPOINT_1_PHYSICAL_TRANSFER_PROVED
+terminal_time: 2026-08-12T03:49:00+08:00
+command: python3 /tmp/so101_exp104_policy_lift_waypoint1.py
+exit_code: 0
+result:
+  lift_trajectory_points: 13
+  plan_to_execute_drift_rad: 2.2383872533282556e-10
+  physical_vertical_transfer_m: 0.008092936466791406
+  physical_lateral_displacement_m: 0.010607720271600073
+  terminal_arm_joints_rad: [-0.00023606226902096316, 0.382434587128191, 0.27246225531535007, 0.9166189947303022, -0.0002636111219559103]
+  terminal_q6_rad: -0.04851054636613029
+  terminal_cup_position_m: [0.01999510358025458, -0.2685769318260159, 0.17497068901080073]
+  terminal_contact_counts: [3, 1]
+  terminal_other_contact_geoms: []
+  terminal_maximum_normal_force_n: 0.7962113299935292
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The first unchanged formal LIFT waypoint physically transfers the cup upward 8.09 mm and laterally 10.61 mm with continuous bilateral contact.
+  - The cup remains off-table, force stays below the ceiling, and the MoveIt/controller endpoint converges without changing q6 or provenance.
+evidence:
+  lift_log_sha256: e6ce64946f1a69d8f2168eff60c6d18539e3f33b89e428ba6481e1da966fc092
+  lift_json_sha256: 09a14c5609ba4ec450f0d8216c69847889a638ba3fc0ec1140a6e18415247fd2
+  lift_script_sha256: e95e515b23c505eabc91e944fcc6a16afb1d839a804a90f4aee207c1e4822f04
+decision: Preserve exact live state and execute the remaining four formal LIFT waypoints as one bounded, waypoint-visible experiment.
+```
+
+## Checkpoint CP-139
+
+```yaml
+checkpoint_id: CP-139
+checkpoint_time: 2026-08-12T03:50:45+08:00
+last_valid_experiment: EXP-104
+current_hypothesis: The stable Noslip grasp will traverse the remaining four vertical LIFT waypoints and reach the safe-height endpoint without support/contact/force failure.
+working_tree_status: Same intentional noslip source/test/model/plan/ledger/fork state; protected Gazebo tracked status remains empty. Noslip stack remains epoch 0 unpaused at formal LIFT waypoint 1.
+confirmed_conclusions:
+  - The first policy-scale motion succeeds physically, so remaining LIFT can retain unchanged policy waypoints and velocity/acceleration scaling.
+  - Each remaining waypoint will be separately planned, executed, endpoint-checked, and recorded inside one fail-fast experiment.
+next_command: Preregister EXP-105 and execute LIFT waypoints 2 through 5 with per-waypoint evidence and cumulative transfer gates.
+```
+
+## Experiment EXP-105
+
+```yaml
+experiment_id: EXP-105
+prior_experiment: EXP-104 VALID formal LIFT waypoint 1
+status: RUNNING
+lifecycle: NOSLIP_REMAINING_FORMAL_LIFT
+run_mode: execute_LIFT_waypoints_2_through_5_sequentially
+hypothesis: The remaining four unchanged LIFT waypoints raise the cup another 30-80 mm, keep total lateral displacement within 30 mm, and retain bilateral off-table contact.
+single_variable: Execute only formal LIFT waypoints 2-5 in order. q6, model, policy, Planning Scene shadow, controllers, session, epoch, and physical contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00023606226902096316, 0.382434587128191, 0.27246225531535007, 0.9166189947303022, -0.0002636111219559103]
+  initial_q6_rad: -0.04851054636613029
+  initial_cup_position_m: [0.01999510358025458, -0.2685769318260159, 0.17497068901080073]
+  lift_targets_arm_rad:
+    - [-0.000283936540, 0.312943337339, 0.250048785615, 1.007810530006, -0.000291376841]
+    - [-0.000283745683, 0.253568199427, 0.213237198063, 1.103997256470, -0.000291185985]
+    - [-0.000276912349, 0.287984861834, 0.150788067636, 1.132029723496, -0.000284352650]
+    - [-0.000282114209, 0.200965792445, 0.129655454807, 1.240181404713, -0.000289555209]
+  lift_script: [/tmp/so101_exp105_remaining_lift.py, bda8478f308ff8110db41dba4dcb3d4599f9fa6833c85a4a3d8417abf436c1b6]
+  maximum_segment_cup_displacement_m: 0.05
+  total_vertical_transfer_gate_m: [0.03, 0.08]
+  maximum_total_lateral_displacement_m: 0.03
+  maximum_force_n: 11.60
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers and physical state matching CP-139.
+  - Planning Scene shadow remains attached and MuJoCo remains constraint-free.
+  - Script is lint-clean and SHA-matched; no action occurred after the frozen state.
+success_criteria:
+  - Every waypoint plans with drift at most 0.01 rad, executes, converges, remains bilateral/off-table/below force ceiling, and moves the cup at most 50 mm in that segment.
+  - Final cup rises another 30-80 mm with at most 30 mm cumulative lateral displacement; q6/session/epoch stay unchanged and no hidden aid occurs.
+failure_criteria: Any waypoint planning, execution, convergence, contact, support, force, displacement, q6, session, epoch, freshness, or evidence gate stops before the next waypoint.
+invalid_criteria: Any unrecorded state/script/model/policy change or physical attachment aid invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+runtime_start:
+  time: 2026-08-12T03:51:19+08:00
+  precondition_readback: Fresh waypoint-1 state matches CP-139; script SHA is bda8478f and this transition occurs before planning waypoint 2.
+decision: PENDING.
+next_experiment: MOVE_ABOVE_PLACE transport only after VALID remaining LIFT.
+```
+
+## Experiment EXP-105 Terminal Result
+
+```yaml
+experiment_id: EXP-105
+status: VALID
+terminal_result: REMAINING_FORMAL_LIFT_PROVED
+terminal_time: 2026-08-12T03:52:18+08:00
+command: python3 /tmp/so101_exp105_remaining_lift.py
+exit_code: 0
+result:
+  completed_waypoints: 4
+  total_vertical_transfer_m: 0.04974549584433274
+  total_lateral_displacement_m: 0.0010460641306876228
+  terminal_arm_joints_rad: [-0.00031950472111697334, 0.2015600757345103, 0.1299877504869264, 1.2401457978939827, -0.00027049232842978966]
+  terminal_q6_rad: -0.048510207270894154
+  terminal_cup_position_m: [0.020012970677363965, -0.2696186499109569, 0.22471132092194765]
+  terminal_table_contact: false
+  terminal_bilateral_contact: true
+  terminal_maximum_normal_force_n: 0.7984102689042978
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - All four remaining LIFT waypoints plan, execute, converge, and preserve bilateral off-table physical carry.
+  - The cup rises another 49.75 mm with only 1.05 mm cumulative lateral displacement, completing the formal safe-height LIFT phase.
+evidence:
+  lift_log_sha256: 6630c1800b35f73bf6a270b2d5c3e75350a6009a5ead7e49723307ebde73ab9d
+  lift_json_sha256: b5a98186bdb9aafb38f9cff5551cf810065be4bd3efb0a69ec768b78c260e709
+  lift_script_sha256: bda8478f308ff8110db41dba4dcb3d4599f9fa6833c85a4a3d8417abf436c1b6
+decision: Preserve exact safe-height state and separately preregister the five formal MOVE_ABOVE_PLACE transport waypoints.
+```
+
+## Checkpoint CP-140
+
+```yaml
+checkpoint_id: CP-140
+checkpoint_time: 2026-08-12T03:53:00+08:00
+last_valid_experiment: EXP-105
+current_hypothesis: The stable safe-height grasp will follow the formal five-waypoint lateral transport to above the red target region without slip or loss of contact.
+working_tree_status: Same intentional noslip source/test/model/plan/ledger/fork state; protected Gazebo tracked status remains empty. Noslip stack remains epoch 0 unpaused at final LIFT waypoint with Planning Scene shadow attached.
+confirmed_conclusions:
+  - Formal LIFT is physically complete and stable.
+  - MOVE_ABOVE_PLACE expected TCP travel is approximately 95 mm laterally with only a few millimetres vertical change, so transport gates are separated from lift gates.
+next_command: Preregister EXP-106 and execute all five MOVE_ABOVE_PLACE waypoints with per-waypoint physical evidence.
+```
+
+## Experiment EXP-106
+
+```yaml
+experiment_id: EXP-106
+prior_experiment: EXP-105 VALID remaining LIFT
+status: RUNNING
+lifecycle: NOSLIP_FORMAL_MOVE_ABOVE_PLACE
+run_mode: execute_five_transport_waypoints_sequentially
+hypothesis: The unchanged MOVE_ABOVE_PLACE waypoints carry the cup 60-120 mm laterally with at most 30 mm vertical change and continuous bilateral off-table contact.
+single_variable: Execute only formal MOVE_ABOVE_PLACE waypoints 1-5. q6, model, policy, Planning Scene shadow, controllers, session, epoch, and physical contract remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [-0.00031950472111697334, 0.2015600757345103, 0.1299877504869264, 1.2401457978939827, -0.00027049232842978966]
+  initial_q6_rad: -0.048510207270894154
+  initial_cup_position_m: [0.020012970677363965, -0.2696186499109569, 0.22471132092194765]
+  transport_targets_arm_rad:
+    - [0.078649232242, 0.202916192985, 0.125650124859, 1.227082691882, 0.000085728349]
+    - [0.157580578693, 0.204866593526, 0.121644794912, 1.213983979051, 0.000461011907]
+    - [0.236511925143, 0.206816994066, 0.117639464964, 1.200885266221, 0.000836295464]
+    - [0.315443271594, 0.208767394607, 0.113634135017, 1.187786553390, 0.001211579022]
+    - [0.394374618045, 0.210717795147, 0.109628805069, 1.174687840559, 0.001586862580]
+  transport_script: [/tmp/so101_exp106_transport.py, 0d87f8b7a0a7362dba13a83ce2cf0f71fe316a3c84a27e7e4af83704a4906c81]
+  maximum_segment_cup_displacement_m: 0.04
+  total_lateral_displacement_gate_m: [0.06, 0.12]
+  maximum_total_vertical_change_m: 0.03
+  maximum_force_n: 11.60
+preconditions:
+  - Same process/session/epoch is unpaused with active controllers and physical state matching CP-140.
+  - Planning Scene shadow remains attached and MuJoCo remains constraint-free.
+  - Script is lint-clean and SHA-matched; no action occurred after the frozen state.
+success_criteria:
+  - Every waypoint plans with drift at most 0.01 rad, executes, converges, remains bilateral/off-table/below force ceiling, and moves the cup at most 40 mm in that segment.
+  - Final cup moves 60-120 mm laterally with at most 30 mm total vertical change; q6/session/epoch stay unchanged and no hidden aid occurs.
+failure_criteria: Any waypoint planning, execution, convergence, contact, support, force, displacement, q6, session, epoch, freshness, or evidence gate stops before the next waypoint.
+invalid_criteria: Any unrecorded state/script/model/policy change or physical attachment aid invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+runtime_start:
+  time: 2026-08-12T03:53:33+08:00
+  precondition_readback: Fresh final-LIFT state matches CP-140; script SHA is 0d87f8b7 and this transition occurs before transport waypoint 1.
+decision: PENDING.
+next_experiment: DESCEND_TO_PLACE only after VALID transport.
+```
+
+## Experiment EXP-106 Terminal Result
+
+```yaml
+experiment_id: EXP-106
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_MOVEIT_EXECUTION_MONITOR_ABORTED
+terminal_time: 2026-08-12T03:54:24+08:00
+command: python3 /tmp/so101_exp106_transport.py
+exit_code: 1
+result:
+  completed_recorded_waypoints: 4
+  controller_reached_waypoint_5: true
+  terminal_arm_joints_rad: [0.3941807984901571, 0.21134367594946993, 0.11009181694930642, 1.1746502503950658, 0.0017901430972551884]
+  terminal_q6_rad: -0.048090900762462946
+  terminal_cup_position_m: [-0.07798912725454922, -0.2642760937716864, 0.22856713117290245]
+  terminal_cup_orientation_xyzw: [-0.0165062991, 0.0018002683, -0.1655964131, 0.9860538165]
+  terminal_contact_counts: [3, 4]
+  terminal_other_contact_geoms: []
+  terminal_maximum_normal_force_n: 2.8177
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - Waypoints 1-4 completed with bilateral off-table physical carry; at waypoint 5 the monitor observed one transient non-bilateral sample and cancelled the MoveIt goal.
+  - Fresh post-cancel readback proves the controller nevertheless reached waypoint 5 and the cup remains stably grasped off-table above the target region.
+  - The zero-duration contact monitor is too sensitive to convex-mesh contact-point transitions. This is an execution-observer defect, not proof of a physical grasp failure.
+  - Because the registered success contract required every waypoint execution to report success, EXP-106 is retained as a VALID behavioral failure and cannot count toward final acceptance.
+evidence:
+  transport_log_sha256: 46f7c042020694bbd541b68e3844eedaa3eee37ea67906bff3ca5bd6949da817
+  transport_json_sha256: 3a32648ae9201096378694a6b8f429248e7e8fe7ef2892bc6852d5ad673a3697
+  transport_script_sha256: 0d87f8b7a0a7362dba13a83ce2cf0f71fe316a3c84a27e7e4af83704a4906c81
+decision: Add a bounded 50 ms bilateral-contact loss grace to the execution observer, first validate the preserved endpoint with an observation-only window, then continue descent. A fresh full reset-to-release cycle remains mandatory for acceptance.
+```
+
+## Checkpoint CP-141
+
+```yaml
+checkpoint_id: CP-141
+checkpoint_time: 2026-08-12T03:57:40+08:00
+last_valid_experiment: EXP-106 VALID behavioral failure
+current_hypothesis: The waypoint-5 endpoint is physically stable; a 50 ms grace will reject sustained loss while avoiding cancellation on one transient contact-point handoff.
+working_tree_status: Same intentional noslip source/test/model/plan/ledger/fork state; protected Gazebo tracked status remains empty. Session so101-task13-noslip remains epoch 0 unpaused at the final MOVE_ABOVE_PLACE endpoint.
+confirmed_conclusions:
+  - The cup physically traversed the entire transport path and is above the target region.
+  - No physics pause, reset, object state write, simulator constraint, or hidden attachment occurred.
+  - EXP-106 does not satisfy the success contract and forces a later clean full-cycle rerun.
+next_command: Preregister and run an observation-only endpoint stability window before any descent.
+```
+
+## Experiment EXP-107
+
+```yaml
+experiment_id: EXP-107
+prior_experiment: EXP-106 VALID behavioral failure
+status: RUNNING
+lifecycle: NOSLIP_TRANSPORT_ENDPOINT_STABILITY_READBACK
+run_mode: observation_only_no_motion
+hypothesis: The preserved waypoint-5 endpoint remains bilateral, off-table, below force ceiling, and position-stable for at least 2 seconds without any command.
+single_variable: Observe the unchanged live state only. No planning, controller goal, gripper command, reset, pause, Planning Scene mutation, or model/source change is permitted.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  expected_arm_joints_rad: [0.3941807984901571, 0.21134367594946993, 0.11009181694930642, 1.1746502503950658, 0.0017901430972551884]
+  expected_q6_rad: -0.048090900762462946
+  expected_cup_position_m: [-0.07798912725454922, -0.2642760937716864, 0.22856713117290245]
+  observation_duration_s: 2.0
+  maximum_cup_position_drift_m: 0.0005
+  maximum_force_n: 11.60
+preconditions:
+  - Controllers remain active; the exact session/epoch is unpaused and matches CP-141.
+  - Planning Scene shadow remains attached and MuJoCo remains constraint-free.
+success_criteria:
+  - Every fresh sample is epoch 0, unpaused, bilateral, off-table, below 11.60 N, and total cup position drift is at most 0.5 mm over at least 2 seconds.
+failure_criteria: Any stale evidence, provenance change, support contact, sustained or transient non-bilateral sample, force breach, or excessive drift is a behavioral failure.
+invalid_criteria: Any motion or state mutation during the window invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+decision: PENDING.
+next_experiment: Implement/test the 50 ms execution-monitor grace and preregister DESCEND_TO_PLACE only after VALID stability.
+```
+
+## Experiment EXP-107 Terminal Result
+
+```yaml
+experiment_id: EXP-107
+status: VALID
+terminal_result: TRANSPORT_ENDPOINT_STABLE
+terminal_time: 2026-08-12T03:59:28+08:00
+command: python3 /tmp/so101_exp107_observe.py
+exit_code: 0
+result:
+  observation_duration_s: 2.0038569410025957
+  fresh_sample_count: 167
+  maximum_cup_position_drift_m: 4.6659496498187894e-09
+  terminal_cup_position_m: [-0.07798644503551211, -0.2642695347918186, 0.2285615847719923]
+  terminal_contact_counts: [3, 4]
+  terminal_other_contact_geoms: []
+  terminal_maximum_normal_force_n: 2.8207965652082163
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - The waypoint-5 endpoint is physically stable over 167 consecutive fresh samples with only 4.7 nm observed position drift.
+  - Bilateral contact, off-table state, force ceiling, epoch, and unpaused provenance remain valid throughout the no-motion window.
+  - This isolates EXP-106 to a transient execution-monitor sample rather than a persistent physical contact loss.
+evidence:
+  observe_log_sha256: 4d26880f5bc01b5e22da37b1e058b6e504648ea34c0bca33d027169d250dff3d
+  observe_json_sha256: 9dd09da6c876399825f860ab0b710b2b084e2490a71b20d5806e8a18dfdf0942
+  observe_script_sha256: e94fae1593912c9b2c9a5a7cc0eed3355eae2abdb25be5907399d8fec44005ec
+decision: Keep the physical state unchanged, land the tested SustainedConditionGuard contract, and execute formal DESCEND_TO_PLACE with a 50 ms bilateral-contact loss grace.
+```
+
+## Checkpoint CP-142
+
+```yaml
+checkpoint_id: CP-142
+checkpoint_time: 2026-08-12T04:01:00+08:00
+last_valid_experiment: EXP-107
+current_hypothesis: The three formal descent waypoints will place the cup on the table inside the red target region while the bounded monitor rejects only sustained bilateral loss.
+working_tree_status: Same intentional source/model/plan/ledger/fork state plus tested SustainedConditionGuard source and unit tests. Protected Gazebo tracked status remains empty; session remains epoch 0 unpaused at transport endpoint.
+confirmed_conclusions:
+  - SustainedConditionGuard unit contract is RED then GREEN: shorter than 50 ms recovers, 50 ms sustained loss raises, invalid negative grace is rejected.
+  - The guard applies only to bilateral-contact continuity; stale evidence, pause/reset, force breach, and premature table contact remain immediate aborts.
+next_command: Preregister EXP-108 and execute only the three formal DESCEND_TO_PLACE waypoints.
+```
+
+## Experiment EXP-108
+
+```yaml
+experiment_id: EXP-108
+prior_experiment: EXP-107 VALID endpoint stability
+status: RUNNING
+lifecycle: NOSLIP_FORMAL_DESCEND_TO_PLACE
+run_mode: execute_three_descend_waypoints_sequentially
+hypothesis: The unchanged DESCEND_TO_PLACE waypoints lower the cup 40-90 mm onto table support within the red target region while preserving bilateral contact and force safety.
+single_variable: Execute only formal DESCEND_TO_PLACE waypoints 1-3 with the tested 50 ms bilateral-contact-loss grace. q6, model, physics, policy waypoints, Planning Scene shadow, controllers, session, and epoch remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [0.3941807984901571, 0.21134367594946993, 0.11009181694930642, 1.1746502503950658, 0.0017901430972551884]
+  initial_q6_rad: -0.048090900762462946
+  initial_cup_position_m: [-0.07798644503551211, -0.2642695347918186, 0.2285615847719923]
+  descend_targets_arm_rad:
+    - [0.392478252768, 0.303606814934, 0.110730521878, 1.115206323144, 0.001727851167]
+    - [0.390581887491, 0.396495834720, 0.111832238686, 1.055724805729, 0.001868839753]
+    - [0.389633705130, 0.442941344113, 0.112383097091, 1.025984047022, 0.001939334047]
+  descend_script: [/tmp/so101_exp108_descend.py, 73eec4f7149a8db37d38de3e3717da583a14bda8d6b818a9d0a4c27734a1d3ad]
+  bilateral_contact_loss_grace_s: 0.05
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+  total_vertical_descent_gate_m: [0.04, 0.09]
+  maximum_total_lateral_displacement_m: 0.03
+  maximum_force_n: 11.60
+preconditions:
+  - Same session/epoch is unpaused, active, attached only in MoveIt Planning Scene, and matches CP-142.
+  - Script is Ruff-clean, pycompile-clean, and SHA-matched; no state action occurred after preregistration.
+success_criteria:
+  - Waypoints 1-2 plan, execute, converge, remain bilateral/off-table/below force ceiling; final waypoint may gain table support and must stabilize bilateral plus supported for 0.20 s.
+  - Final cup descends 40-90 mm, moves at most 30 mm laterally, and lies inside the frozen target XY bounds; q6/session/epoch remain unchanged.
+failure_criteria: Any planning, handoff, execution, sustained contact-loss, support timing, force, convergence, displacement, target-region, q6, or provenance gate failure stops immediately.
+invalid_criteria: Any pause/reset, state write, simulator constraint, unrecorded input change, or hidden physical aid invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+decision: PENDING.
+next_experiment: RELEASE only after VALID supported descent.
+```
+
+## Experiment EXP-108 Terminal Result
+
+```yaml
+experiment_id: EXP-108
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_INCORRECT_PRE_RELEASE_SUPPORT_GATE
+terminal_time: 2026-08-12T04:04:02+08:00
+command: python3 /tmp/so101_exp108_descend.py
+exit_code: 1
+result:
+  completed_recorded_waypoints: 2
+  controller_reached_waypoint_3: true
+  terminal_arm_joints_rad: [0.38957355585773323, 0.4433948955089533, 0.11258928948614937, 1.0259276430255333, 0.0020372554389736976]
+  terminal_q6_rad: -0.04807858385022937
+  terminal_cup_position_m: [-0.07653212406397943, -0.2611527991773442, 0.18441365797552164]
+  terminal_cup_orientation_xyzw: [-0.014502704376037298, 0.0012653019622647238, -0.1765424037415066, 0.9841853739300821]
+  terminal_contact_counts: [3, 2]
+  terminal_other_contact_geoms: []
+  terminal_maximum_normal_force_n: 4.777083790809136
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - All three formal DESCEND_TO_PLACE waypoints physically executed and converged; the script then timed out because it incorrectly required table support before opening the gripper.
+  - The protected Gazebo production lifecycle deliberately ends DESCEND_TO_PLACE at a pre-release clearance and validates against release_alignment_target, equal to place pose plus [0.005, -0.005, 0.014] m settling compensation.
+  - The frozen Gazebo-parity release target is [-0.075, -0.255, 0.179] m. The live cup errors are [0.001532, 0.006153, -0.005414] m, within the formal 10 mm XY and 10 mm Z pre-release tolerances.
+  - Therefore this is a VALID test-harness failure, not a physical descent failure. It cannot count as final acceptance, but the preserved physical state is eligible for the formal OPEN_GRIPPER transition.
+evidence:
+  descend_log_sha256: 58321ac3413f23b32139bde3ca738119b8c7a0ea74bb14e006f67b88e6cc8e4e
+  descend_json_sha256: 3686bb630d8abd9992021d10f0e5780fddf2d8fadade0e183ffe0cd4df6bfe38
+  descend_script_sha256: 73eec4f7149a8db37d38de3e3717da583a14bda8d6b818a9d0a4c27734a1d3ad
+decision: Preserve the live pre-release pose, use the Gazebo-parity compensated release target, then OPEN_GRIPPER, RETREAT, detach/sync the Planning Scene shadow, and evaluate the real post-release cup.
+```
+
+## Checkpoint CP-143
+
+```yaml
+checkpoint_id: CP-143
+checkpoint_time: 2026-08-12T04:09:00+08:00
+last_valid_experiment: EXP-108 VALID behavioral failure
+current_hypothesis: Opening q6 at the valid compensated pre-release pose lets the unconstrained cup settle on the table, after which the formal retreat and Planning Scene detach/sync yield a stable final placement.
+working_tree_status: Same intentional source/model/plan/ledger/fork state plus SustainedConditionGuard. Protected Gazebo tracked status remains empty; session remains epoch 0 unpaused at formal DESCEND_TO_PLACE endpoint.
+confirmed_conclusions:
+  - MuJoCo and Gazebo share the same formal pre-release clearance semantics; table support is a post-open outcome, not a pre-open requirement.
+  - No additional downward arm motion is authorized or necessary at this checkpoint.
+  - The diagnostic cycle remains non-accepting because EXP-106 and EXP-108 had valid behavioral failures; a later clean full rerun is mandatory.
+next_command: Preregister EXP-109 and execute OPEN_GRIPPER plus formal RETREAT, Planning Scene detach/sync, and final physical outcome evaluation.
+```
+
+## Experiment EXP-109
+
+```yaml
+experiment_id: EXP-109
+prior_experiment: EXP-108 VALID behavioral failure at physically valid pre-release pose
+status: RUNNING
+lifecycle: NOSLIP_RELEASE_RETREAT_FINAL_OUTCOME_DIAGNOSTIC
+run_mode: open_gripper_then_three_retreat_waypoints_then_detach_sync_and_evaluate
+hypothesis: The unconstrained cup settles from the Gazebo-parity pre-release clearance into the target region, stays supported while the arm retreats, and passes the frozen final-placement evaluator after Planning Scene detach/sync.
+single_variable: Execute only the formal OPEN_GRIPPER, RETREAT, DETACH_MOVEIT/SYNC_WORLD_OBJECT, and final outcome transitions. No model, physics, arm waypoint, target, evaluator, session, or epoch change is permitted.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [0.38957355585773323, 0.4433948955089533, 0.11258928948614937, 1.0259276430255333, 0.0020372554389736976]
+  initial_q6_rad: -0.04807858385022937
+  initial_cup_position_m: [-0.07653212406397943, -0.2611527991773442, 0.18441365797552164]
+  release_target_xyz_m: [-0.075, -0.255, 0.179]
+  pre_release_xy_tolerance_m: 0.010
+  pre_release_z_tolerance_m: 0.010
+  release_q6_rad: 0.750
+  retreat_targets_arm_rad:
+    - [0.390581887491, 0.396495834720, 0.111832238686, 1.055724805729, 0.001868839753]
+    - [0.392478252768, 0.303606814934, 0.110730521878, 1.115206323144, 0.001727851167]
+    - [0.394374618045, 0.210717795147, 0.109628805069, 1.174687840559, 0.001586862580]
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+  final_support_height_range_m: [0.155, 0.175]
+  release_script: [/tmp/so101_exp109_release_retreat.py, 278414996f9e1242c74d7bb02ff33d227d50e2a8c35f7dc96ecad2147259dbae]
+  maximum_force_n: 11.60
+preconditions:
+  - Same unpaused epoch-0 session, active controllers, bilateral off-table grasp, and exact physical state match CP-143.
+  - Planning Scene plastic_cup remains attached only as a collision shadow; MuJoCo remains constraint-free.
+  - Script is Ruff-clean, pycompile-clean, and SHA-matched; no state action occurred after preregistration.
+success_criteria:
+  - OPEN_GRIPPER reaches q6 0.750; the cup becomes gripper-contact-free and table-supported for at least 0.20 s.
+  - Three formal RETREAT waypoints plan, execute, and converge while the real cup remains supported and is never re-contacted.
+  - Planning Scene readback contains a 13-primitive world plastic_cup and no attached plastic_cup at the observed pose.
+  - At least five post-release samples spanning 0.20 s pass target region, height, upright, stillness, support, detach, controller, safety, and shadow gates.
+failure_criteria: Any release, settling, planning, execution, support, re-contact, force, detach/sync, final placement, or provenance gate failure stops immediately.
+invalid_criteria: Any pause/reset, object state write, simulator constraint, hidden attachment, unrecorded input change, or evidence discontinuity invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+decision: PENDING.
+next_experiment: Clean ResetWorld and full production rerun regardless of diagnostic result.
+```
+
+## Experiment EXP-109 Terminal Result
+
+```yaml
+experiment_id: EXP-109
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_RESIDUAL_FIXED_PAD_CONTACT_GATE
+terminal_time: 2026-08-12T04:11:15+08:00
+command: python3 /tmp/so101_exp109_release_retreat.py
+exit_code: 1
+result:
+  release_command_completed: true
+  retreat_waypoints_executed: 0
+  terminal_arm_joints_rad: [0.38959016995746437, 0.4434564518190401, 0.11270955937314296, 1.0259245490073445, 0.0020365678671788972]
+  terminal_q6_rad: 0.7499563770835956
+  terminal_cup_position_m: [-0.07681417919303282, -0.26186788592522575, 0.1659757806194288]
+  terminal_cup_orientation_xyzw: [-0.014497102330612213, 0.0012573369792875288, -0.17660340233720787, 0.9841745228416847]
+  terminal_table_contact: true
+  terminal_contact_counts: [2, 0]
+  terminal_maximum_normal_force_n: 0.13408595319523298
+  residual_fixed_pad_force_n: 0.018556938760667562
+  terminal_reset_epoch: 0
+  terminal_paused: false
+diagnosis:
+  - q6 reached the frozen 0.750 release target and the unconstrained cup fell onto the table at the correct upright support height.
+  - The moving jaw has zero contact, but the fixed fingertip remains in a near-zero 0.0186 N grazing contact until arm retreat begins.
+  - The script incorrectly required zero contact from both fingers before RETREAT. The protected Gazebo lifecycle allows this residual fixed-pad contact and removes it with immediate retreat before final outcome evaluation.
+  - No arm retreat or Planning Scene detach occurred, so the live state is safely recoverable by the next registered continuation.
+evidence:
+  release_log_sha256: ca14253598262443c7ab924a626f19d2b3fec5b8df1c3ec97914a8d878888080
+  release_json_sha256: ea8c562cd280c95cc104ccd83814725aa5702edd7622e1f49503dc4652f65a45
+  release_script_sha256: 278414996f9e1242c74d7bb02ff33d227d50e2a8c35f7dc96ecad2147259dbae
+decision: Preserve the supported cup and open gripper; continue the formal immediate RETREAT while allowing only the observed sub-1 N fixed-pad residual, then require zero gripper contact at each endpoint.
+```
+
+## Checkpoint CP-144
+
+```yaml
+checkpoint_id: CP-144
+checkpoint_time: 2026-08-12T04:13:00+08:00
+last_valid_experiment: EXP-109 VALID behavioral failure
+current_hypothesis: The first retreat waypoint clears the residual fixed-pad grazing contact without disturbing the supported cup; remaining retreat, detach/sync, and final evaluation then complete normally.
+working_tree_status: Same intentional source/model/plan/ledger/fork state. Protected Gazebo tracked status remains empty; session is epoch 0 unpaused with q6 open, cup table-supported, and Planning Scene shadow still attached.
+confirmed_conclusions:
+  - Physical release succeeded without simulator attachment or object state mutation.
+  - Residual contact is only on the fixed side, at 0.0186 N, while the moving jaw is clear.
+  - Final target membership remains unknown and will be judged only after retreat and settling; this diagnostic cycle still cannot count as final acceptance.
+next_command: Preregister EXP-110 and execute formal RETREAT, then detach/sync and evaluate.
+```
+
+## Experiment EXP-110
+
+```yaml
+experiment_id: EXP-110
+prior_experiment: EXP-109 VALID behavioral failure after completed physical release
+status: RUNNING
+lifecycle: NOSLIP_RETREAT_DETACH_SYNC_FINAL_OUTCOME_CONTINUATION
+run_mode: three_retreat_waypoints_then_detach_sync_and_evaluate
+hypothesis: The unchanged RETREAT path clears the residual fixed-pad contact, leaves the cup supported, and permits a correct 13-primitive Planning Scene world sync and final placement evaluation.
+single_variable: Continue from the completed OPEN_GRIPPER transition. During motion only, allow the already observed fixed-pad residual while prohibiting moving-jaw contact and any released-cup contact force above 1 N; all endpoints require zero gripper contact.
+frozen_inputs:
+  simulation_session_id: so101-task13-noslip
+  reset_epoch: 0
+  initial_arm_joints_rad: [0.38959016995746437, 0.4434564518190401, 0.11270955937314296, 1.0259245490073445, 0.0020365678671788972]
+  initial_q6_rad: 0.7499563770835956
+  initial_cup_position_m: [-0.07681417919303282, -0.26186788592522575, 0.1659757806194288]
+  initial_table_contact: true
+  initial_residual_fixed_pad_force_n: 0.018556938760667562
+  retreat_targets_arm_rad:
+    - [0.390581887491, 0.396495834720, 0.111832238686, 1.055724805729, 0.001868839753]
+    - [0.392478252768, 0.303606814934, 0.110730521878, 1.115206323144, 0.001727851167]
+    - [0.394374618045, 0.210717795147, 0.109628805069, 1.174687840559, 0.001586862580]
+  continuation_script: [/tmp/so101_exp110_retreat_detach.py, cf858df5d23be6ffd583b8bc469dacdb83b4bf679691f6e34ba61e6869c88aae]
+  maximum_released_contact_force_during_retreat_n: 1.0
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+  final_support_height_range_m: [0.155, 0.175]
+preconditions:
+  - Same session/epoch is unpaused; q6 is open; cup is upright and table-supported; moving jaw has no contact; residual fixed contact remains below 1 N.
+  - Planning Scene plastic_cup remains attached only as a collision shadow, and MuJoCo remains constraint-free.
+  - Script is Ruff-clean, pycompile-clean, and SHA-matched; no state action occurred after preregistration.
+success_criteria:
+  - All three retreat waypoints plan, execute, converge, and end with stable table support and zero gripper contact; during motion the moving jaw never recontacts and released-cup force stays below 1 N.
+  - Planning Scene readback contains a 13-primitive world plastic_cup and no attached plastic_cup at the observed physical pose.
+  - Five or more new samples spanning 0.20 s pass the unchanged final-placement evaluator.
+failure_criteria: Any planning, execution, support, contact-force, endpoint, detach/sync, final outcome, or provenance gate failure stops immediately.
+invalid_criteria: Any pause/reset, object state write, simulator constraint, hidden attachment, unrecorded input change, or evidence discontinuity invalidates the run.
+evidence_root: /tmp/so101-task13-noslip
+decision: PENDING.
+next_experiment: Clean ResetWorld and full production rerun regardless of result.
+```
+
+## Experiment EXP-113 Terminal Result
+
+```yaml
+experiment_id: EXP-113
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_RESET_CLIENT_RETRY_STORM
+terminal_time: 2026-08-12T04:31:13+08:00
+command: python3 /tmp/so101_exp113_reset.py
+exit_code: 1
+result:
+  reset_service_reported_success: true
+  reset_client_terminal_error: ResetFailed reset timeout waiting for authoritative step-zero evidence
+  before_reset_epoch: 0
+  before_simulation_step: 31748
+  before_arm_joint_positions_rad: [0.000021856609761458833, 0.10055151128456585, 0.10039613118161532, 0.20010896297833683, 0.000011508124652193543]
+  before_cup_position_m: [0.020000000000000007, -0.28, 0.16480156647042168]
+  terminal_controllers_active: false
+  terminal_paused: true
+follow_up_read_only_diagnosis:
+  - One idempotent pause(true) after the failed client returned authoritative reset_epoch=1, simulation_step=0, paused=true, and cup_position=[0.02,-0.28,0.165]. The central MuJoCo reset and support-plugin ABI therefore worked.
+  - The failed transaction issued approximately 930 idempotent pause snapshot retries in 10 seconds. Each old-epoch/stale loop synchronously called pause(true), saturating the service and Best-Effort evidence path before the observer could drain the reset snapshot.
+  - The live contract test had hidden this production-path difference by wrapping reset_world and pause with an extra drain_feedback interval; the real MujocoResetClient had no bounded drain interval.
+evidence:
+  reset_json_sha256: 0de55567663b686536fa8332d31a6fd079f4faed9f6161ba1731c53f8c36b16e
+  reset_log_sha256: d564134364e9f22a64495d43114656d2a27fa35d36d09dcb300cd402dc9f60ad
+  pre_reset_cua_sha256: f3d9e1b697030e3565a217462820abab1feff2f8d3cbabcc44f9b253e979d432
+  diagnostic_script_sha256: 5dc85c3a513a9ac13f4afae5e9ec6cff1f7d14bf4d099ab0da09f7908ca04b1d
+decision: Preserve this as a valid failure. Fix the production client to drain subscriptions before an at-most-20-Hz idempotent snapshot retry; do not weaken epoch, step-zero, pause, joint, object, controller, scene, or visual acceptance.
+```
+
+## Checkpoint CP-148
+
+```yaml
+checkpoint_id: CP-148
+checkpoint_time: 2026-08-12T04:46:00+08:00
+last_valid_experiment: EXP-113 VALID behavioral failure
+current_hypothesis: A 50 ms bounded snapshot-retry period permits DDS feedback drain and prevents the service retry storm while retaining an idempotent recovery path for publisher contention.
+working_tree_status: Intentional Task 13/14 changes plus the reset-client/test fix. Protected src/so101_gazebo_demo_py tracked status remains empty.
+confirmed_conclusions:
+  - New regression test failed under the old client with a reset timeout when a pause retry interrupted required subscription drain.
+  - Minimal production fix passed that regression test; complete test_mujoco_reset.py is 21/21 passing.
+  - so101_mujoco_demo_py was rebuilt into the active fresh overlay without changing the running simulator model or support-plugin binary.
+  - Reset source SHA is d0b618416816904b6dce3a4a199adf81c2c52f1574e99cdca4fa57889e38fc7d and test SHA is 5775129b40a95b7ae861a2fd00b165e7bed1208a366d28c2e4800e328390860b.
+next_command: Preregister EXP-114, reactivate/resume only as recorded setup, move to task12_safe, capture pre-reset CUA, then run the rebuilt reset client for epoch 1 -> 2.
+```
+
+## Experiment EXP-114
+
+```yaml
+experiment_id: EXP-114
+prior_experiment: EXP-113 VALID reset-client retry-storm failure
+status: RUNNING
+lifecycle: BOUNDED_DRAIN_RESETWORLD_REQUALIFICATION
+run_mode: controlled_recovery_changed_state_then_one_task_start_reset_and_scene_restore
+hypothesis: The rebuilt client drains evidence before retrying snapshots, so one ResetWorld(task_start) produces a correlated epoch 1 -> 2 step-zero receipt and restores the full task-start scene.
+single_variable: Replace only the reset client's unbounded pause retry storm with a 50 ms bounded retry interval. Physics, model, controller configuration, keyframe, scene geometry, evidence thresholds, and session remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 1
+  expected_new_reset_epoch: 2
+  keyframe: task_start
+  controlled_setup:
+    - resume physics from the EXP-113 fail-closed pause
+    - reactivate arm_controller and gripper_controller
+    - execute the unchanged task12_safe target [0.0, 0.1, 0.1, 0.2, 0.0]
+  expected_reset_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  reset_retry_period_s: 0.05
+  reset_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py, d0b618416816904b6dce3a4a199adf81c2c52f1574e99cdca4fa57889e38fc7d]
+  reset_test: [src/so101_mujoco_demo_py/test/test_mujoco_reset.py, 5775129b40a95b7ae861a2fd00b165e7bed1208a366d28c2e4800e328390860b]
+  reset_script: [/tmp/so101_exp114_reset.py, fed04912453c5d29782e404fdaa07697dc462602a376a49f244d498b9841a67c]
+preconditions:
+  - Same session and simulator process are preserved at authoritative epoch 1 step 0, paused, with the physical task-start state proven by read-only diagnostics.
+  - Only the failed transaction's controllers are inactive; controlled setup will restore them before the unchanged changed-state motion.
+  - Reset regression test and the entire reset unit file pass; installed Python package contains the new reset client.
+success_criteria:
+  - Changed-state setup executes successfully and passive CUA proves the arm is not at task_start before reset.
+  - Reset receipt is exactly 1 -> 2 at step 0; final evidence is paused, the cup is within 3 mm, all six joints are within 0.002 rad, and both motion controllers are active.
+  - Planning Scene readback is exactly table=1, pedestal=1, plastic_cup=13 with expected colors and no attached object.
+  - Passive post-reset CUA shows RViz left, Viewer right, horizontal task-start arm, open gripper clear of upright original cup, table, pedestal, target ring, and PAUSE.
+failure_criteria: Any setup, reset, epoch, joint, object, controller, scene, or visual mismatch blocks the full pick-place rerun.
+invalid_criteria: Any unrecorded state action, process restart, model/config change, direct state write, hidden constraint, or missing CUA evidence invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: One fresh full production pick-place only after EXP-114 is VALID.
+```
+
+## Experiment EXP-114 Terminal Result
+
+```yaml
+experiment_id: EXP-114
+status: VALID
+terminal_result: QUALIFIED_RESETWORLD_AND_VISUAL_ACCEPTANCE
+terminal_time: 2026-08-12T04:40:00+08:00
+command: python3 /tmp/so101_exp114_reset.py
+exit_code: 0
+result:
+  reset_receipt: {old_epoch: 1, new_epoch: 2, simulation_step: 0, keyframe: task_start}
+  final_paused: true
+  final_cup_position_m: [0.02, -0.28, 0.165]
+  final_cup_linear_velocity_m_s: [0.0, 0.0, 0.0]
+  final_cup_angular_velocity_rad_s: [0.0, 0.0, 0.0]
+  final_joint_positions_rad: [0.000000020106801636346586, 0.0000911352966981906, 0.00008220945026002406, 0.000007552795673726909, 0.000000002240418047689964, -0.0000000607537537969906]
+  controllers_active: true
+  planning_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  planning_scene_color_ids: [pedestal, plastic_cup, table]
+  planning_scene_attached_object_ids: []
+visual_acceptance:
+  rviz_left_mujoco_right: true
+  horizontal_task_start_arm: true
+  open_gripper_clear_of_cup: true
+  upright_cup_at_original_position: true
+  table_pedestal_target_ring_visible: true
+  viewer_pause_visible: true
+evidence:
+  reset_json_sha256: 04ecb3de2e2f391dbae2f77164fd6ed8b71effe4c0a2809cab54887cfa8cd85b
+  reset_log_sha256: 17587908681b2e3736d50f6c4848d950804beb257313681d0f8d885fce2d66ff
+  changed_state_json_sha256: 4b9dd5e296359531a18b0dbc42094e1e8abe2a00b9ac9fdff52aa80e99ae508a
+  changed_state_log_sha256: 61ccf60c962a5ec01b29f5f6578bfa0eaf420610a791318a083c3cdde27c3854
+  pre_reset_cua_sha256: 6b4d1e29afbc1662c4fe4a2ae26aa0d21d6c6eaf4f4321e9ef9e827460bbbe93
+  post_reset_cua_sha256: 62ec2515fc6f2fb6da862125b96f380749f721ae919964321be15efcb929ddda
+decision: ResetWorld is qualified for repeated downstream experiments. Start one fresh full physical pick-place from this epoch-2 paused task_start checkpoint; do not reuse partial EXP-102 through EXP-111 outcomes as success.
+```
+
+## Checkpoint CP-149
+
+```yaml
+checkpoint_id: CP-149
+checkpoint_time: 2026-08-12T04:41:00+08:00
+last_valid_experiment: EXP-114 VALID qualified reset
+current_hypothesis: The no-slip physical policy plus measured place-settling compensation can complete one uninterrupted staged pick-place from epoch 2.
+working_tree_status: Intentional Task 13/14 changes including reset fix; protected src/so101_gazebo_demo_py tracked status remains empty. Simulator is paused at task_start with controllers active and exact formal Planning Scene restored.
+confirmed_conclusions:
+  - ResetWorld is now an effective, repeatable experiment boundary proven electronically and visually.
+  - The prior segmented experiments proved staged approach/contact, low-force physical grasp, micro-lift, lift, transport, descent, release, and retreat independently, but no prior sequence counts as a full-cycle success.
+  - Place settling compensation target remains [-0.0788,-0.2475,0.1835] before release so the settled cup can enter the unchanged final target region.
+next_command: Freeze and preregister one full-cycle runner that executes the same staged phase contracts without teleport, hidden constraint, object-state write, or unbounded retry.
+```
+
+## Experiment EXP-115
+
+```yaml
+experiment_id: EXP-115
+prior_experiment: EXP-114 VALID qualified reset
+status: RUNNING
+lifecycle: FULL_PHYSICAL_PICK_PLACE_WITH_CLOSED_LOOP_ALIGNMENT
+run_mode: one_uninterrupted_epoch_2_staged_cycle
+hypothesis: The independently qualified no-slip phase contracts, followed by bounded closed-loop alignment to the measured MuJoCo pre-release target, complete one physical pick-place with the cup stably inside the unchanged red-ring target.
+single_variable: Combine the already qualified phase implementations into one uninterrupted epoch-2 cycle and insert only the tested bounded place-alignment correction before release. No reset, pause, object-state write, simulator constraint, hidden attachment, model/config change, or unregistered retry is permitted after physics resumes.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 2
+  initial_state: paused task_start with active arm/gripper controllers and exact formal Planning Scene
+  policy: [/tmp/so101-acceptance-20260812-lzfOqk/install/so101_mujoco_demo_py/share/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, 6b741dc8a73f8e1845b3ba6f6c20196b691364294cd0023a0c33c7a33766375a]
+  staged_approach_executable: [/tmp/so101-acceptance-20260812-lzfOqk/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/staged_approach, 70f76ef452976dcf6176f4559061822505e39baad1f465b6c02f5620222d6588]
+  orchestration_script: [/tmp/so101_exp115_run.bash, 78b5ace85ef1e7c5f6b1caff8f40ea165fb6c42492ab7c9bb43b919bd2a16a16]
+  pre_action_startup_attempt: The first shell exited while sourcing /opt/ros/jazzy/setup.bash because nounset was enabled too early; it never reached resume physics or any ROS state action. Nounset now starts only after all setup files load.
+  phase_scripts:
+    - [/tmp/so101_exp115_contact_hold.py, e81fc0309a0b5905efecf27ca62523468e2921fdf4011ff5f50a9e56bd42e0ba]
+    - [/tmp/so101_exp115_micro_lift.py, 5351990b45096ed4c5540397b4a989f9b3cf2ea97592115815c4e4a45e5b82f4]
+    - [/tmp/so101_exp115_policy_lift_waypoint1.py, 481ba41e04b48c1cfb52aa083fbcdf07bf644e9d66b1d7da0a41ac21af6746c9]
+    - [/tmp/so101_exp115_remaining_lift.py, edbded505e9fa4bd8105e037ebf28a44b64fae07fe076595bea38f248168574b]
+    - [/tmp/so101_exp115_transport.py, 2488c31d2e8bbf7db690bedde6e38bcff3e84e2d7583ffe0bf78e2e2e3a9eaa2]
+    - [/tmp/so101_exp115_descend.py, dbaaa288b32cbf53c4a890019403de5e7c3273b8b78ea641ac2f66f9d70b275d]
+    - [/tmp/so101_exp115_place_alignment.py, 28ee34861acfd88fb77619a282895378fec193edb872495b3c1c5cd6ce979b9b]
+    - [/tmp/so101_exp115_release_retreat.py, 26f2fd77200fef2a25e183ebf122f487c209cfc7dc296cfbecb0b2b310813bea]
+  phase_order:
+    - resume physics
+    - PRE_OPEN_GRIPPER plus MOVE_ABOVE_OBJECT plus DESCEND via staged_approach --stop-after DESCEND
+    - bilateral low-force CONTACT_HOLD
+    - physical CLOSE_GRIPPER plus MICRO_LIFT plus MoveIt collision-shadow attach
+    - LIFT waypoint 1
+    - remaining LIFT waypoints
+    - TRANSPORT waypoints
+    - DESCEND to off-table pre-release clearance
+    - bounded closed-loop TCP alignment to pre-release cup target [-0.0788, -0.2475, 0.1835]
+    - OPEN_GRIPPER plus immediate RETREAT plus Planning Scene detach/sync plus final evaluation
+  place_alignment_tolerance_m: 0.003
+  place_alignment_max_attempts: 3
+  place_alignment_max_axis_correction_m: 0.030
+  table_support_loss_grace_s: 0.05
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+preconditions:
+  - EXP-114 proved epoch-2 task_start electronically and visually; the same owned simulator, MoveIt, RViz, and Viewer processes remain running.
+  - All eight phase scripts are Ruff-clean, pycompile-clean, SHA-matched, and hard-code the same session and epoch.
+  - Protected src/so101_gazebo_demo_py tracked status is empty.
+success_criteria:
+  - Every phase executes in the frozen order without reset, pause, process restart, direct state mutation, simulator attachment, or unbounded retry.
+  - Physical bilateral contact and low-force grasp survive micro-lift, lift, transport, descent, and bounded place alignment.
+  - Release settles the unconstrained cup upright, table-supported, within the unchanged red-ring target; final evaluator observes at least five fresh stable samples spanning 0.20 s.
+  - Final Planning Scene has table=1, pedestal=1, plastic_cup=13 at the observed pose, expected colors, and no attached object; final gripper contact is zero.
+  - Passive CUA shows RViz left and MuJoCo Viewer right with the cup inside the target ring and the arm retreated.
+failure_criteria: Any phase, planning, execution, convergence, contact, force, support, alignment, placement, scene, provenance, or visual gate failure stops the cycle immediately and is retained as a valid failure.
+invalid_criteria: Any reset/pause after resume, object qpos/qvel write, teleport, weld/equality/adhesion/mocap constraint, hidden physical attachment, model/config mutation, process restart, missing phase evidence, or action outside this preregistration invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Diagnose only the first failed phase, or record the first qualified full-cycle success and proceed to production runner/gates.
+```
+
+## Experiment EXP-115 Terminal Result
+
+```yaml
+experiment_id: EXP-115
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_STALE_LITERAL_RESET_EPOCH_IN_REMAINING_LIFT_GATE
+terminal_time: 2026-08-12T04:57:29+08:00
+command: bash /tmp/so101_exp115_run.bash
+exit_code: 1
+completed_phases:
+  - staged approach: CLOSE_READY after 15 executed segments
+  - contact hold: CONTACT_ONLY_PROVED with q6=-0.048507025 and 201 samples
+  - micro lift: PHYSICAL_MICRO_LIFT_PROVED with 0.001967381 m lift and bilateral contact
+  - first policy lift waypoint: POLICY_LIFT_WAYPOINT1_PHYSICAL_TRANSFER_PROVED with 0.008086705 m lift
+failure:
+  phase: remaining_lift
+  error: RuntimeError MuJoCo pause/reset during bilateral gate
+  exact_cause: The post-waypoint call retained stable_bilateral(0) from the original epoch-0 diagnostic instead of using before.reset_epoch. The same latent literal also existed in transport.
+  actual_terminal_reset_epoch: 2
+  actual_terminal_paused: false
+  terminal_cup_position_m: [0.0199975741292537, -0.2685622106962029, 0.1897583781660382]
+  terminal_bilateral_contact_counts: [3, 1]
+  terminal_maximum_normal_force_n: 0.8083875446423894
+  direct_object_state_writes: 0
+  simulator_constraint_calls: 0
+visual_acceptance:
+  rviz_left_mujoco_right: true
+  arm_in_non_task_start_lift_pose: true
+  cup_physically_held_between_fingertips: true
+  cup_lifted_clear_of_table: true
+  table_pedestal_target_ring_robot_cup_visible: true
+  viewer_running: true
+evidence:
+  staged_approach_json_sha256: f1a149118b322ae9ab746ff5107de4c4b854091865e2071e8240042a5fc2d10e
+  contact_hold_json_sha256: 35104f4677b3c1c99e99bfa9dc224d986abd25c8e9137db5f6fbab1e446776ae
+  micro_lift_json_sha256: 24e1a2f70755d357671c77bb9bdc342ce6400e2e95602ef46872a1bc9451d3e3
+  first_lift_json_sha256: d67b7aee521965f80c14e61a0d3417377dfbf7e335dc90b4a8406ceef0c68ae8
+  remaining_lift_json_sha256: 21ea623e5c0387e75c685172ab66ec034cb4c9e935864915674b4e37c765a261
+  master_log_sha256: fe410afef1d9775f0bd38ec62521fbd2befa1d11aab9ee7ac373854275cc47a0
+  terminal_evidence_sha256: effdee73791e13ee9527c9f98322c927d2b2c7024a490e2df25105b0772e7123
+  terminal_cua_sha256: ca742d689dcb5f921be9762ad298649a5362bf6ea024d61d2b0174f6f00cd499
+decision: Preserve this as a valid full-cycle failure. Replace only the two stale epoch-0 literals with the observed current epoch, qualify ResetWorld from the still-held state, and rerun the entire cycle from task_start; this partial run cannot count as success.
+```
+
+## Checkpoint CP-150
+
+```yaml
+checkpoint_id: CP-150
+checkpoint_time: 2026-08-12T04:57:29+08:00
+last_valid_experiment: EXP-115 VALID behavioral failure
+current_hypothesis: Using the transaction's observed reset epoch for post-waypoint bilateral gates removes the false provenance failure without changing physical motion or contact acceptance.
+working_tree_status: Intentional Task 13/14 source/model/plan/ledger/fork state remains. Protected src/so101_gazebo_demo_py tracked status is empty. Simulator remains epoch 2, running, with cup physically held and lifted.
+confirmed_conclusions:
+  - The fresh full cycle proved all phases through the first formal lift waypoint in one uninterrupted run.
+  - Failure was caused by a deterministic stale diagnostic literal, not loss of grasp, force exceedance, pause, reset, or physical instability.
+  - Both remaining_lift and transport copies now use stable_bilateral(before.reset_epoch); they are Ruff-clean and pycompile-clean.
+next_command: Preregister and execute one qualified ResetWorld from epoch 2 to 3, restore the exact Planning Scene, then preregister a fresh full cycle with updated phase hashes.
+```
+
+## Experiment EXP-116
+
+```yaml
+experiment_id: EXP-116
+prior_experiment: EXP-115 VALID behavioral failure while physically held
+status: RUNNING
+lifecycle: QUALIFIED_RESETWORLD_AFTER_FULL_CYCLE_FAILURE
+run_mode: one_task_start_transaction_then_exact_scene_restore
+hypothesis: The qualified ResetWorld implementation safely recovers the physically held epoch-2 failure state to a paused epoch-3 task_start with active controllers and exact formal Planning Scene.
+single_variable: Execute exactly one ResetWorld(task_start) transaction and formal Planning Scene restore. No motion planning, gripper command, physics/model/config change, direct object-state write, or hidden constraint is permitted.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 2
+  expected_new_reset_epoch: 3
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  reset_script: [/tmp/so101_exp116_reset.py, 3e064d923e7a8dcc00ff9506ba59facef496a65d00f08848bb5519748cfde40c]
+preconditions:
+  - Same owned stack remains epoch 2 and running with active controllers, physical bilateral grasp, lifted cup, and MoveIt collision shadow attached.
+  - EXP-115 terminal evidence and passive CUA were captured before this preregistration.
+  - Reset script is Ruff-clean, pycompile-clean, and SHA-matched; it uses the qualified bounded-drain client.
+success_criteria:
+  - Reset receipt is exactly 2 -> 3 at authoritative step 0; final evidence is paused, cup is within 3 mm of task_start, all six joints are within 0.002 rad, and arm/gripper controllers are active.
+  - Planning Scene readback is exactly table=1, pedestal=1, plastic_cup=13 with expected colors and no attached object.
+  - Passive CUA shows horizontal task-start arm, open gripper clear of upright original cup, complete scene, and visible PAUSE.
+failure_criteria: Any reset, epoch, joint, object, controller, scene, provenance, or visual mismatch blocks the rerun.
+invalid_criteria: Any unrecorded state action, process restart, model/config mutation, direct object-state write, simulator attachment, or missing visual evidence invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Fresh full cycle at epoch 3 only after VALID reset and visual acceptance.
+```
+
+## Experiment EXP-116 Terminal Result
+
+```yaml
+experiment_id: EXP-116
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_STALE_MOVEIT_ATTACHMENT_SURVIVED_PHYSICAL_RESET
+terminal_time: 2026-08-12T04:59:00+08:00
+command: python3 /tmp/so101_exp116_reset.py
+exit_code: 1
+result:
+  reset_receipt: {old_epoch: 2, new_epoch: 3, simulation_step: 0, keyframe: task_start}
+  final_paused: true
+  final_cup_position_m: [0.02, -0.28, 0.165]
+  final_joint_positions_rad: [0.000000007587183007158268, 0.00003223533334847307, 0.00002938616047419338, 0.0000024632646104060205, 0.0000000008462017928351062, -0.000000022938828005989564]
+  controllers_active: true
+  planning_scene_world_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  planning_scene_attached_object_ids: [plastic_cup]
+diagnosis:
+  - The physical MuJoCo reset fully succeeded, but make_task_scene only added the world cup and never emitted a REMOVE operation for a stale attached collision shadow from the previous cycle.
+  - ResetWorld therefore was not yet a complete cross-system transaction for repeated experiments; leaving the attached cup would corrupt the next MoveIt planning state.
+evidence:
+  reset_json_sha256: 1be18f5c308ea35a21c6ecee871486ce0565344c56e5343220fe5e9ac319c097
+  reset_log_sha256: 8d0ebb4fa2b3b27890ee474524dc7b9c5a0858ae12e43165c4a6d493073aec97
+decision: Preserve as a valid failure. Make formal task-scene restoration explicitly remove attached plastic_cup before adding the world geometry, prove it with a RED/GREEN contract test, rebuild the overlay, and repeat one full reset transaction.
+```
+
+## Checkpoint CP-151
+
+```yaml
+checkpoint_id: CP-151
+checkpoint_time: 2026-08-12T05:00:51+08:00
+last_valid_experiment: EXP-116 VALID behavioral failure
+current_hypothesis: A PlanningScene diff containing AttachedCollisionObject plastic_cup with CollisionObject.REMOVE atomically clears the old collision shadow while restoring the 13-primitive world cup.
+working_tree_status: Intentional Task 13/14 state plus scene_setup.py and its contract test. Protected src/so101_gazebo_demo_py tracked status is empty. Physical simulator is paused at epoch-3 task_start; stale MoveIt attachment remains pending formal reset.
+confirmed_conclusions:
+  - New regression test failed before the fix because make_task_scene returned zero attached operations.
+  - make_task_scene now emits exactly one attached plastic_cup REMOVE operation and the complete world geometry; all four focused scene tests pass with source PYTHONPATH.
+  - Ruff passes and so101_mujoco_demo_py has been rebuilt into the active fresh overlay.
+  - scene_setup source SHA is 4125cbb3ba87222bca9323572d6e3d1d381d503acc50261e7b20a136947fc66f and test SHA is 7b536457118c7e8d94ab7e775d3bd9b85a065cae1216f1cb1f7cce1d17ce99bd.
+next_command: Preregister and execute one epoch 3 -> 4 ResetWorld transaction using the rebuilt formal scene restore, then obtain passive CUA proof.
+```
+
+## Experiment EXP-117
+
+```yaml
+experiment_id: EXP-117
+prior_experiment: EXP-116 VALID cross-system reset failure
+status: RUNNING
+lifecycle: ATTACHMENT_CLEAN_RESETWORLD_REQUALIFICATION
+run_mode: one_task_start_transaction_then_attachment_clean_scene_restore
+hypothesis: The rebuilt formal task scene removes the stale MoveIt attachment and restores exact world geometry, completing a valid epoch 3 -> 4 ResetWorld transaction.
+single_variable: Add only the explicit attached plastic_cup REMOVE operation to make_task_scene. Physical model, controller setup, reset client, keyframe, geometry, colors, thresholds, and session remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 3
+  expected_new_reset_epoch: 4
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  scene_setup_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/scene_setup.py, 4125cbb3ba87222bca9323572d6e3d1d381d503acc50261e7b20a136947fc66f]
+  scene_setup_test: [src/so101_mujoco_demo_py/test/test_scene_setup_contract.py, 7b536457118c7e8d94ab7e775d3bd9b85a065cae1216f1cb1f7cce1d17ce99bd]
+  reset_script: [/tmp/so101_exp117_reset.py, e66e3d13d7faed889f5bebe4f3960f1a980b046f5b87cb376c4ccae53d954db6]
+preconditions:
+  - Same owned simulator is paused at authoritative epoch 3 step 0 with physical task_start state and active controllers.
+  - The stale Planning Scene attachment from EXP-116 is intentionally present, making this a non-vacuous cleanup test.
+  - Focused tests, Ruff, build, pycompile, and SHA checks pass before state action.
+success_criteria:
+  - Reset receipt is exactly 3 -> 4 at authoritative step 0; final state is paused, cup within 3 mm, all six joints within 0.002 rad, and controllers active.
+  - Planning Scene readback is table=1, pedestal=1, plastic_cup=13 with expected colors and no attached objects.
+  - Passive CUA shows RViz left, Viewer right, horizontal task-start arm, open gripper clear of original upright cup, complete scene, and visible PAUSE.
+failure_criteria: Any reset, epoch, joint, object, controller, scene cleanup, provenance, or visual mismatch blocks the rerun.
+invalid_criteria: Any unrecorded state action, process restart, model/config mutation, direct state write, simulator constraint, or missing CUA evidence invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: One fresh full-cycle attempt at epoch 4 only after VALID reset and visual acceptance.
+```
+
+## Experiment EXP-117 Terminal Result
+
+```yaml
+experiment_id: EXP-117
+status: VALID
+terminal_result: PRE_ACTION_FAILURE_FRESH_SUBSCRIBER_CANNOT_READ_ALREADY_PAUSED_SENSOR_QOS
+terminal_time: 2026-08-12T05:01:10+08:00
+command: python3 /tmp/so101_exp117_reset.py
+exit_code: 1
+result:
+  reset_world_called: false
+  physics_pause_calls: 0
+  controller_switch_calls: 0
+  physical_state_unchanged: true
+  error: RuntimeError initial evidence unavailable
+diagnosis:
+  - The simulator was already paused before the fresh reset observer subscribed, and sensor-data QoS does not replay the last evidence frame.
+  - MujocoResetClient previously called observer.snapshot directly before entering its transaction, so a fresh client could not take ownership of an already paused world.
+decision: Preserve as a valid pre-action failure. Add bounded idempotent pause(true) snapshot acquisition to the production reset client, with a RED/GREEN test; let the reset client itself acquire initial provenance instead of requiring wrapper pre-read.
+```
+
+## Checkpoint CP-152
+
+```yaml
+checkpoint_id: CP-152
+checkpoint_time: 2026-08-12T05:04:40+08:00
+last_valid_experiment: EXP-117 VALID pre-action failure
+current_hypothesis: A fresh paused-world client can request an authoritative current snapshot through bounded idempotent pause(true), then execute the unchanged reset transaction without QoS durability changes.
+working_tree_status: Intentional Task 13/14 changes plus production reset initial-snapshot acquisition and regression test. Protected src/so101_gazebo_demo_py tracked status is empty. Simulator remains paused at epoch-3 task_start with stale MoveIt attachment.
+confirmed_conclusions:
+  - New test failed before the fix with EvidenceStale from the first observer snapshot.
+  - Production client now first consumes any fresh frame without service action; only on typed EvidenceStale does it request pause(true) at no more than 20 Hz while draining subscriptions.
+  - All 22 reset tests pass, Ruff passes, and so101_mujoco_demo_py is rebuilt into the active overlay.
+  - Reset source SHA is bf78b0eed961092835ee9c82e8f8c22c6a4dfe1fff7f4d4a39f9c3949b35009d and test SHA is 63480ee6394c0516158ec2d35e353f2089d8709da4a67bc4bb9a5d81e0b79d1c.
+next_command: Preregister EXP-118, exercise the production client's paused-world acquisition, reset epoch 3 -> 4, clean stale attachment, and obtain passive CUA evidence.
+```
+
+## Experiment EXP-118
+
+```yaml
+experiment_id: EXP-118
+prior_experiment: EXP-117 VALID paused-subscriber pre-action failure
+status: RUNNING
+lifecycle: PAUSED_CLIENT_AND_ATTACHMENT_CLEAN_RESETWORLD_REQUALIFICATION
+run_mode: fresh_client_snapshot_then_one_task_start_transaction_and_exact_scene_restore
+hypothesis: The rebuilt client acquires current epoch-3 paused evidence through one bounded idempotent snapshot request, ResetWorld advances to epoch 4, and formal scene restoration removes the stale attached cup.
+single_variable: Add only production initial-snapshot acquisition on EvidenceStale; all EXP-117 scene cleanup, reset, geometry, controller, keyframe, thresholds, and session inputs remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 3
+  expected_new_reset_epoch: 4
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  reset_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py, bf78b0eed961092835ee9c82e8f8c22c6a4dfe1fff7f4d4a39f9c3949b35009d]
+  reset_test: [src/so101_mujoco_demo_py/test/test_mujoco_reset.py, 63480ee6394c0516158ec2d35e353f2089d8709da4a67bc4bb9a5d81e0b79d1c]
+  scene_setup_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/scene_setup.py, 4125cbb3ba87222bca9323572d6e3d1d381d503acc50261e7b20a136947fc66f]
+  reset_script: [/tmp/so101_exp118_reset.py, 398cb26d75839b73b90476fef829052a3c53431a3fd20eb99274d890b6170ebc]
+preconditions:
+  - Same simulator is paused at epoch 3 step 0 and has emitted no replayable sample to the new client; stale Planning Scene attachment remains.
+  - Focused tests, Ruff, build, pycompile, and SHA checks pass; wrapper intentionally performs no observer pre-read.
+success_criteria:
+  - Production client obtains initial epoch-3 provenance without timeout or retry storm; receipt is exactly 3 -> 4 at step 0.
+  - Final state is paused, cup within 3 mm, all joints within 0.002 rad, controllers active, exact world geometry/colors present, and attached object list empty.
+  - Passive CUA shows RViz left, Viewer right, horizontal task-start arm, open gripper clear of original upright cup, complete scene, and visible PAUSE.
+failure_criteria: Any snapshot, reset, epoch, joint, object, controller, scene cleanup, provenance, or visual mismatch blocks the full-cycle rerun.
+invalid_criteria: Any unrecorded action, process restart, model/config change, direct state write, simulator constraint, or missing visual evidence invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Fresh full-cycle attempt at epoch 4 only after VALID reset and visual acceptance.
+```
+
+## Experiment EXP-127 Terminal Result
+
+```yaml
+experiment_id: EXP-127
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_FINAL_OUT_OF_REGION_AFTER_PHYSICAL_RELEASE_AND_RETREAT
+terminal_time: 2026-08-12T05:28:34+08:00
+command: python3 /tmp/so101_exp127_release_retreat.py
+exit_code: 1
+result:
+  release_completed: true
+  retreat_waypoints_completed: 3
+  planning_scene_attachment_ids: []
+  planning_scene_world_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  final_table_contact: true
+  final_gripper_contact_counts: {left: 0, right: 0}
+  final_upright_tilt_rad: 0.016152592261982922
+  final_cup_position_m: [-0.0790507188907473, -0.26109349992666697, 0.1654421668216515]
+  target_x_bounds_m: [-0.085, -0.075]
+  target_y_bounds_m: [-0.255, -0.245]
+  target_y_miss_m: -0.006093499926666965
+  error: RuntimeError final placement failed FINAL_OUT_OF_REGION
+diagnosis:
+  - The physical q6 release, three collision-checked retreat waypoints, detach/world-scene sync, table support, upright, zero-gripper-contact, and stability gates all passed.
+  - From the verified pre-release alignment sample to the settled final sample, the unconstrained cup shifted [-0.0008601825, -0.0149821894, -0.0172304940] m during release and retreat.
+  - The unchanged target region rejected the final y position by 6.09 mm. This diagnostic cannot count as a successful pick-and-place.
+evidence:
+  release_retreat_json_sha256: f583c5ad26e90925208685266611a48a6ff7b713e2cd79bee71661e5b349dbff
+  release_retreat_log_sha256: 782f465dd5b8b83ddd3f2cc7214a3ad0743751ae55436a145f2a76351c3a20ba
+decision: Keep the target region and all success thresholds unchanged. Compensate the measured y settling shift in the MuJoCo-only pre-release target, reset, and rerun one uninterrupted full lifecycle.
+```
+
+## Checkpoint CP-158
+
+```yaml
+checkpoint_id: CP-158
+checkpoint_time: 2026-08-12T05:32:29+08:00
+last_valid_experiment: EXP-127 VALID final-out-of-region failure
+current_hypothesis: A pre-release y compensation of +0.0150 m cancels the measured -0.014982 m unconstrained settling shift while preserving the unchanged final target bounds.
+working_tree_status: Intentional Task 13/14 changes plus the MuJoCo-only place-settling compensation. Protected Gazebo package remains unmodified. Simulator remains running at epoch 6 after physical release and retreat; cup is stable on the table outside the target.
+change:
+  policy_file: src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml
+  old_place_settling_compensation_m: [0.0012, 0.0025, 0.0185]
+  new_place_settling_compensation_m: [0.0012, 0.0150, 0.0185]
+  final_target_bounds_changed: false
+  policy_sha256: bc06bd8afd4936ca05653c19f720c5f2e2db339eb34bc4a426b4a1a2ba513205
+  test_sha256: bcfb3f60a66a12a79593ce76fc07139ad95afa64da50d8e893bbb44dbc0b6682
+verification:
+  place_alignment_tests: 7 passed
+  ruff: passed
+  overlay_build: passed
+next_command: Preregister one qualified ResetWorld epoch 6 to 7, visually verify task_start, then preregister and execute a fresh full cycle using the frozen compensated target.
+```
+
+## Experiment EXP-119 Terminal Result
+
+```yaml
+experiment_id: EXP-119
+status: VALID
+terminal_result: QUALIFIED_FRESH_PAUSED_CLIENT_RESET_AND_SCENE_CLEANUP
+terminal_time: 2026-08-12T05:07:00+08:00
+command: python3 /tmp/so101_exp119_reset.py
+exit_code: 0
+result:
+  reset_receipt: {old_epoch: 3, new_epoch: 4, simulation_step: 0, keyframe: task_start}
+  final_paused: true
+  controllers_active: true
+  final_cup_position_m: [0.02, -0.28, 0.165]
+  planning_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  planning_scene_color_ids: [pedestal, plastic_cup, table]
+  planning_scene_attached_object_ids: []
+visual_acceptance:
+  rviz_left_mujoco_right: true
+  horizontal_task_start_arm: true
+  open_gripper_clear_of_cup: true
+  upright_cup_at_original_position: true
+  table_pedestal_target_ring_robot_cup_visible: true
+  viewer_pause_visible: true
+evidence:
+  reset_json_sha256: e4f397767a87c2c2c499590166e44320cd96a645043d7fcca1233c9179e56ea5
+  reset_log_sha256: 7c58f5e1f3c402d9f0f630fdbd933d21a9260af6a5d804b2d7ea7b5f6f30cfbf
+  post_reset_cua_sha256: 8420a6a1cc8a0b1158bc874474832ce6a59f14f102b6d5a5d9f2dd48c8b434ae
+decision: ResetWorld is now qualified as a repeatable cross-system experiment boundary for a fresh client joining an already paused world, including stale MoveIt attachment cleanup and CUA visual proof.
+```
+
+## Checkpoint CP-154
+
+```yaml
+checkpoint_id: CP-154
+checkpoint_time: 2026-08-12T05:08:00+08:00
+last_valid_experiment: EXP-119 VALID qualified reset
+current_hypothesis: With stale epoch literals fixed and the measured pre-release alignment enabled, a fresh epoch-4 full cycle completes the physical placement inside the red ring.
+working_tree_status: Intentional Task 13/14 changes including reset and scene fixes. Protected src/so101_gazebo_demo_py tracked status is empty. Simulator is paused at exact epoch-4 task_start with active controllers and clean formal Planning Scene.
+confirmed_conclusions:
+  - Repeated ResetWorld now works from a genuinely fresh paused client and cleans both physical and MoveIt state.
+  - EXP-115's only full-cycle failure was a stale epoch-0 literal after a successfully executed first remaining-lift waypoint; both remaining_lift and transport now derive the current epoch.
+  - All EXP-120 phase scripts are Ruff-clean, pycompile-clean, session-bound to so101-task14-acceptance, and epoch-bound to 4.
+next_command: Preregister and execute one uninterrupted epoch-4 full physical pick-place.
+```
+
+## Experiment EXP-120
+
+```yaml
+experiment_id: EXP-120
+prior_experiment: EXP-119 VALID qualified reset
+status: RUNNING
+lifecycle: FULL_PHYSICAL_PICK_PLACE_WITH_CLOSED_LOOP_ALIGNMENT
+run_mode: one_uninterrupted_epoch_4_staged_cycle
+hypothesis: The qualified physical phase contracts plus corrected current-epoch gates and bounded alignment complete one physical pick-place with the stable cup inside the unchanged target.
+single_variable: Replace only the two stale post-waypoint epoch literals with the observed current epoch. All motion targets, physical/contact gates, place compensation, geometry, model, controller, scene, and phase order remain unchanged from EXP-115.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 4
+  initial_state: paused task_start with active controllers and exact attachment-free formal Planning Scene
+  policy: [/tmp/so101-acceptance-20260812-lzfOqk/install/so101_mujoco_demo_py/share/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, 6b741dc8a73f8e1845b3ba6f6c20196b691364294cd0023a0c33c7a33766375a]
+  staged_approach_executable: [/tmp/so101-acceptance-20260812-lzfOqk/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/staged_approach, 70f76ef452976dcf6176f4559061822505e39baad1f465b6c02f5620222d6588]
+  orchestration_script: [/tmp/so101_exp120_run.bash, 885d9e9095e750996a7835e8e042cad3ff54419df60a1b5aeae2cbd9f526929b]
+  phase_scripts:
+    - [/tmp/so101_exp120_contact_hold.py, 55c11d03bf7b5529a5b42778e24bb8d967f48f717e8d927c7bd3e0972f059f75]
+    - [/tmp/so101_exp120_micro_lift.py, 922b92e979134a377193295ae0df91ab55bd40ae375b8551d38078d53c4fc838]
+    - [/tmp/so101_exp120_policy_lift_waypoint1.py, 4c00923b6fe3017e1416ebda750a30892c6b690ade5d8f34dbcc36ae3ebb7b25]
+    - [/tmp/so101_exp120_remaining_lift.py, 19656fe8f2751fa88e86898efb510b22cfa50f9b99a62e05876c98bb4cbd6d60]
+    - [/tmp/so101_exp120_transport.py, 87d1d75cf9c05091335f7d0437f1d2142a7211945d7a764fe0d3657d14952ef0]
+    - [/tmp/so101_exp120_descend.py, d16d513d93c29993483f43c521ce81e970c61f4b7270acf6db0b6712add9105e]
+    - [/tmp/so101_exp120_place_alignment.py, ac4c8ad5ab5fe4eb4ca7db406c58d1d9dbccd415a4a00ac1909ec8500805b705]
+    - [/tmp/so101_exp120_release_retreat.py, c6846d61e6ebdcabbc3c4474322fcb286642a1aca5241d64058408e85e26c245]
+  phase_order: [resume, staged_approach, contact_hold, micro_lift_attach_shadow, lift_waypoint_1, remaining_lift, transport, descend_to_pre_release_clearance, bounded_place_alignment, release_retreat_detach_sync_final_evaluation]
+  place_alignment_target_m: [-0.0788, -0.2475, 0.1835]
+  place_alignment_tolerance_m: 0.003
+  place_alignment_max_attempts: 3
+  place_alignment_max_axis_correction_m: 0.030
+  table_support_loss_grace_s: 0.05
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+preconditions:
+  - EXP-119 electronically and visually proves exact epoch-4 task_start and attachment-free scene on the same owned stack.
+  - All scripts pass Ruff, pycompile, provenance scan, and SHA matching before resume.
+success_criteria:
+  - Every phase completes in order without reset/pause/process restart/direct state write/simulator attachment/unbounded retry.
+  - Bilateral physical grasp survives lift, transport, descent, and bounded alignment under force/contact gates.
+  - Release settles the unconstrained upright cup table-supported inside the unchanged target for at least five fresh stable samples over 0.20 s.
+  - Final scene has table=1, pedestal=1, 13-primitive plastic_cup at observed pose, colors, no attachment, and zero gripper contact.
+  - Passive CUA shows RViz left, Viewer right, cup inside red ring, and arm retreated.
+failure_criteria: Any phase, planning, execution, convergence, contact, force, support, alignment, placement, scene, provenance, or visual gate failure stops immediately and is retained.
+invalid_criteria: Any reset/pause after resume, direct object qpos/qvel write, teleport, weld/equality/adhesion/mocap constraint, hidden physical attachment, model/config mutation, process restart, missing evidence, or unregistered retry invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Diagnose only first failure, or record first full-cycle success and proceed to production runner/gates.
+```
+
+## Experiment EXP-125 Terminal Result
+
+```yaml
+experiment_id: EXP-125
+status: VALID
+terminal_result: PRE_DESCEND_FAILURE_STALE_STABLE_GATE_EPOCH_LITERAL
+terminal_time: 2026-08-12T05:26:06+08:00
+command: bash /tmp/so101_exp125_run.bash
+exit_code: 1
+result:
+  transport_status: FORMAL_MOVE_ABOVE_PLACE_PROVED
+  transport_waypoints_completed: 5
+  transport_scaling: 0.05
+  transport_force_boundary_passed: true
+  descend_motion_started: false
+  error: RuntimeError MuJoCo pause/reset during stable gate
+diagnosis:
+  - descend initial provenance correctly observed epoch 6, but called stable_gate(2) from the original diagnostic copy before issuing any descend trajectory.
+  - The same literal occurred after each descend waypoint; both are replaced with before.reset_epoch. No physical policy or threshold changes.
+evidence:
+  master_log_sha256: 267dcaef04321ab44f73b7460d485a3f646e1f8a548e4d2c35642035f5db1a60
+  transport_json_sha256: 269ce40d8c5dfcb36bd6e9f2637825ed837f08ab1aa9af92d444949bebd74d72
+  descend_json_sha256: 1080c81ac5aa83b282e10c47df9a6d4cdd4cfa0365ef9ce3f23c3a77858818f8
+decision: Do not count as full success. Preserve the proven transport endpoint, continue descend/alignment/release only as a registered diagnostic, then reset and rerun from task_start.
+```
+
+## Experiment EXP-126
+
+```yaml
+experiment_id: EXP-126
+prior_experiment: EXP-125 VALID pre-descend literal failure
+status: RUNNING
+lifecycle: PRESERVED_STATE_DESCEND_ALIGNMENT_RELEASE_DIAGNOSTIC
+run_mode: continue_from_verified_transport_endpoint
+hypothesis: Using the observed epoch in descend stable gates allows the already qualified descend, bounded alignment, physical release, retreat, detach/sync, and final evaluator to complete.
+single_variable: Replace only two stable_gate(2) calls with stable_gate(before.reset_epoch). No reset, pause, trajectory, threshold, scene, or model change.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 6
+  initial_state: running, physically held cup at completed EXP-125 transport endpoint, attached collision shadow present
+  continuation_script: [/tmp/so101_exp126_continue.bash, b0275c54f9db67cf23d1f4c48914ba6c9e1590675bf47615dd6b8f6267bbd933]
+  descend_script: [/tmp/so101_exp126_descend.py, 43627c6f5a191d719e208ade17172221edb0a535bf03944ec91386860fddb7f8]
+  place_alignment_script: [/tmp/so101_exp126_place_alignment.py, 764ed4fa41660cc374db6bcd764f0e7ab9f34500ec6f0aafccefe244d177c209]
+  release_retreat_script: [/tmp/so101_exp126_release_retreat.py, 1aba97496af58361c164b7af2569a9e049fdf580cb8515d76e238fde63d62b59]
+preconditions:
+  - Same epoch-6 state is preserved; transport completed all five waypoints under force/contact gates; no descend action occurred.
+  - Scripts pass Ruff, pycompile, and hashes; no state action after preregistration.
+success_criteria:
+  - Descend reaches pre-release clearance with physical grasp; alignment reaches target within 3 mm; release/retreat settles inside target and produces attachment-free scene.
+failure_criteria: Any descend, alignment, release, support, placement, scene, force, contact, or provenance failure stops immediately.
+invalid_criteria: Any reset/pause, direct state write, simulator attachment, model/config mutation, or unregistered retry invalidates diagnostic.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Qualified reset and fresh full cycle regardless of diagnostic result.
+```
+
+## Experiment EXP-126 Terminal Result
+
+```yaml
+experiment_id: EXP-126
+status: VALID
+terminal_result: PRE_RELEASE_FAILURE_STALE_PRE_ALIGNMENT_JOINT_HANDOFF
+terminal_time: 2026-08-12T05:27:44+08:00
+command: bash /tmp/so101_exp126_continue.bash
+exit_code: 1
+result:
+  descend_status: FORMAL_DESCEND_TO_PRE_RELEASE_CLEARANCE_PROVED
+  descend_waypoints_completed: 3
+  alignment_status: PRE_RELEASE_ALIGNMENT_PROVED
+  alignment_attempts: 1
+  aligned_cup_position_m: [-0.078190536404924, -0.24611131054611562, 0.1826726608372338]
+  release_action_started: false
+  error: RuntimeError robot is not at EXP-108 physical endpoint
+diagnosis:
+  - Closed-loop alignment intentionally changed arm joints after the old EXP-108 descend endpoint.
+  - Release already verifies live epoch, bilateral grasp, force, no table support, and cup position within 3 mm of the release target; requiring the pre-alignment joint vector is contradictory and redundant.
+evidence:
+  master_log_sha256: db0798610ae37c71104a64130a651443dc825d15b23761661590e5a59e6ea79a
+  descend_json_sha256: a10acfb2e2796f0da18ccf2194f2ebaf37f38dbff8e9abfd3d65abdbdb7a583d
+  alignment_json_sha256: f3755feb208478c21afe369096cce7f93288c1accf71ca9f9761f61787fd363f
+  release_json_sha256: d746a271022d4fb307b57dd851fc7d13c155b75376781d6b9baf9e7925ce8820
+decision: Preserve aligned held state. Remove only the obsolete pre-alignment arm-vector assertion; retain live alignment/contact/force/epoch/scene gates and continue release as a diagnostic.
+```
+
+## Experiment EXP-127
+
+```yaml
+experiment_id: EXP-127
+prior_experiment: EXP-126 VALID pre-release handoff failure
+status: RUNNING
+lifecycle: PRESERVED_ALIGNED_STATE_RELEASE_RETREAT_FINAL_DIAGNOSTIC
+run_mode: release_from_verified_alignment_then_retreat_detach_sync_evaluate
+hypothesis: The live physical and alignment gates are the correct handoff contract, so release, retreat, scene sync, and final evaluation complete from the preserved aligned state.
+single_variable: Remove only the obsolete EXPECTED_START_ARM assertion. All live gates, q6 target, retreat targets, support/force limits, final region, and session/epoch remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 6
+  aligned_cup_position_m: [-0.078190536404924, -0.24611131054611562, 0.1826726608372338]
+  release_target_m: [-0.0788, -0.2475, 0.1835]
+  release_script: [/tmp/so101_exp127_release_retreat.py, 61e5e588b8ce68d90cd9a8e44a5fef6aac1442d5743d6434b993ced7b9685346]
+preconditions:
+  - Same epoch-6 state remains running, aligned within 3 mm, physically bilateral, off-table, force-safe, and MoveIt shadow attached.
+  - No release action occurred; script passes Ruff, pycompile, and hash checks.
+success_criteria:
+  - q6 opens, cup gains stable table support, retreat removes all gripper contact, scene detaches/syncs 13 world primitives, and final evaluator passes unchanged target/stability gates.
+failure_criteria: Any release, support, retreat, contact, force, scene, target, stability, or provenance gate failure stops immediately.
+invalid_criteria: Any reset/pause, direct object write, simulator attachment, model/config change, or unregistered retry invalidates diagnostic.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Qualified reset and fresh full cycle regardless of result.
+```
+
+## Experiment EXP-123 Terminal Result
+
+```yaml
+experiment_id: EXP-123
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_TRANSPORT_FORCE_BOUNDARY_EXCEEDED
+terminal_time: 2026-08-12T05:21:00+08:00
+command: bash /tmp/so101_exp123_run.bash
+exit_code: 1
+completed_phases: [staged_approach, contact_hold, micro_lift, first_lift_waypoint, remaining_lift, transport_waypoints_1_to_4]
+failure:
+  phase: transport waypoint 5 monitor
+  error: MOVEIT_EXECUTION_MONITOR_ABORTED force boundary exceeded during transport
+  maximum_allowed_force_n: 11.60
+  terminal_reset_epoch: 5
+  terminal_paused: false
+  terminal_cup_position_m: [-0.07804321329331593, -0.26427221632293524, 0.2284816389310016]
+  terminal_bilateral_contact: true
+  terminal_settled_force_n: 2.7848259288872956
+  terminal_table_contact: false
+diagnosis:
+  - The new 50 ms contact-loss guard removed the prior single-frame contact abort and exposed a distinct transient force spike at the same final transport segment.
+  - The 11.60 N force boundary remains a hard gate and is not relaxed. The safe independent variable is transport velocity/acceleration, currently 0.10.
+evidence:
+  master_log_sha256: 7f7d7202e2d6b4f5eff23150989ea538660ddc42e716303091e4dba1b85544f7
+  transport_json_sha256: 47a12dee1bef1760f05fc022447f44d0e142dcec8f2b387c35123ae79d7ef5bd
+  terminal_joints_sha256: 05f313c3308da53841476f77fbd039bdaec2cf34a36eb51294f4b9d04ab992c6
+  terminal_evidence_sha256: 65abeb2d131da999a8db590f93d31d54cd841a8e105d87075a1351dbd44da324
+decision: Do not count. Preserve the force threshold, reduce only transport velocity and acceleration scaling from 0.10 to 0.05, reset, and rerun the full cycle.
+```
+
+## Experiment EXP-124
+
+```yaml
+experiment_id: EXP-124
+prior_experiment: EXP-123 VALID transport force failure
+status: RUNNING
+lifecycle: QUALIFIED_RESETWORLD_AFTER_TRANSPORT_FORCE_FAILURE
+run_mode: one_task_start_transaction_then_attachment_clean_scene_restore
+hypothesis: Qualified ResetWorld recovers the held epoch-5 transport endpoint to clean paused epoch-6 task_start.
+single_variable: Execute only unchanged ResetWorld(task_start) and exact scene restore.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 5
+  expected_new_reset_epoch: 6
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  reset_script: [/tmp/so101_exp124_reset.py, c258971f1015bd02fee2786538f1a408702f88b1a25885a615ff4a772a9cdc44]
+preconditions:
+  - Same epoch-5 owned stack is running, controllers active, cup physically held, and MoveIt collision shadow attached.
+  - Reset script and current client pass Ruff, pycompile, tests, build, and hashes.
+success_criteria:
+  - Receipt exactly 5 -> 6 at step 0; paused task_start object/joints, active controllers, exact attachment-free scene satisfy unchanged gates.
+failure_criteria: Any reset, convergence, scene cleanup, or provenance mismatch blocks rerun.
+invalid_criteria: Any unregistered motion, process restart, model/config mutation, direct state write, or simulator constraint invalidates run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Fresh epoch-6 full cycle with transport scaling 0.05 only after VALID reset.
+```
+
+## Experiment EXP-124 Terminal Result
+
+```yaml
+experiment_id: EXP-124
+status: VALID
+terminal_result: QUALIFIED_RESETWORLD_AFTER_FORCE_FAILURE
+terminal_time: 2026-08-12T05:22:30+08:00
+command: python3 /tmp/so101_exp124_reset.py
+exit_code: 0
+result:
+  reset_receipt: {old_epoch: 5, new_epoch: 6, simulation_step: 0, keyframe: task_start}
+  final_paused: true
+  controllers_active: true
+  planning_scene_attached_object_ids: []
+evidence:
+  reset_json_sha256: 9c800a8fca69532ec36cdd4a788a3f4d81a355494507013cd4d78be22400d7dc
+  reset_log_sha256: 26063affa6d6d4ebbca9c28656e65734868b5c363aab80c9d81b70e5221b1cd3
+decision: Start a fresh epoch-6 full cycle with only transport scaling reduced.
+```
+
+## Experiment EXP-125
+
+```yaml
+experiment_id: EXP-125
+prior_experiment: EXP-124 VALID qualified reset
+status: RUNNING
+lifecycle: FULL_PHYSICAL_PICK_PLACE_LOW_IMPACT_TRANSPORT
+run_mode: one_uninterrupted_epoch_6_staged_cycle
+hypothesis: Reducing transport velocity and acceleration scaling from 0.10 to 0.05 removes the transient force spike while preserving the physical grasp and all unchanged acceptance gates.
+single_variable: transport velocity_scaling and acceleration_scaling are 0.05 instead of 0.10. Force threshold remains 11.60 N; contact grace remains 0.05 s; all other inputs are frozen.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 6
+  initial_state: paused exact task_start with active controllers and clean scene
+  orchestration_script: [/tmp/so101_exp125_run.bash, d3900ca765fc49168a1db71b5f3a8d4fb85fe0d27870473b8540ba1ca337c7c6]
+  phase_scripts:
+    - [/tmp/so101_exp125_contact_hold.py, 9d747455c2691bfddad632d3521fd2a571fe946d7746ae48347436790b71d388]
+    - [/tmp/so101_exp125_micro_lift.py, 3638834212170859fb9f6a2c4774a14b1063f871c22dcf6a715ac9d447bd76d4]
+    - [/tmp/so101_exp125_policy_lift_waypoint1.py, b6a268ae62613733a5b9d3983f30bfb3510e413a21200e90534a9837bcf89d5c]
+    - [/tmp/so101_exp125_remaining_lift.py, 18f65f7b04b4e369b13238677ac98f1cc4758ba4ceec0baebd414da357dd9592]
+    - [/tmp/so101_exp125_transport.py, 2774278ad750447dacb161a0265cb4c7d080104228b5a132bbda9e80f15380c4]
+    - [/tmp/so101_exp125_descend.py, 82079f8ef2303331203d09272cde8b6633f22e54c6e710f8f3dbff995038972b]
+    - [/tmp/so101_exp125_place_alignment.py, 8a3d8f03bb0d758a2ea7533bfc734bde115bba9dd36e773737bc647cfd8bf40a]
+    - [/tmp/so101_exp125_release_retreat.py, 18434b1801adaf6b4f39fd02cbc318c51edc03c97626291a1a2c472538c2c6d1]
+  transport_scaling: {velocity: 0.05, acceleration: 0.05}
+  maximum_force_n: 11.60
+  contact_loss_grace_s: 0.05
+  place_alignment_target_m: [-0.0788, -0.2475, 0.1835]
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+preconditions:
+  - Same owned epoch-6 stack is paused at task_start; scripts pass Ruff, pycompile, SHA, and protected Gazebo checks.
+success_criteria:
+  - All phases complete in order, force never exceeds 11.60 N, sustained contact remains bilateral, and no prohibited state action occurs.
+  - Release settles unconstrained cup upright/table-supported inside target; final scene detached/synced; passive CUA shows successful placement and retreat.
+failure_criteria: Any phase, force, sustained contact, support, alignment, placement, scene, provenance, or visual gate failure stops immediately.
+invalid_criteria: Any reset/pause after resume, direct state write, teleport, simulator constraint, model/config mutation, process restart, missing evidence, or unregistered retry invalidates run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Diagnose only first failure, or record first full-cycle success and proceed to production runner/gates.
+```
+
+## Experiment EXP-120 Terminal Result
+
+```yaml
+experiment_id: EXP-120
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_SINGLE_SAMPLE_TRANSPORT_CONTACT_MONITOR_ABORT
+terminal_time: 2026-08-12T05:12:11+08:00
+command: bash /tmp/so101_exp120_run.bash
+exit_code: 1
+completed_phases:
+  - staged approach: CLOSE_READY after 15 segments
+  - contact hold: CONTACT_ONLY_PROVED
+  - micro lift: PHYSICAL_MICRO_LIFT_PROVED
+  - first policy lift waypoint: POLICY_LIFT_WAYPOINT1_PHYSICAL_TRANSFER_PROVED
+  - remaining lift: REMAINING_FORMAL_LIFT_PROVED after 4 segments
+  - transport waypoints 1 through 4: completed and recorded
+failure:
+  phase: transport waypoint 5 monitor
+  wrapper_error: MOVEIT_EXECUTION_MONITOR_ABORTED
+  controller_terminal_status: SUCCEEDED
+  move_group_terminal_status: SUCCEEDED
+  endpoint_maximum_joint_residual_rad: 0.000530535
+  terminal_joint_positions_rad: [0.39434280843720515, 0.2112483299802611, 0.10994771952116496, 1.1747040661819488, 0.001602909366881152, -0.04813173336122323]
+  terminal_cup_position_m: [-0.07801247910015179, -0.2642998316584434, 0.22834796143610123]
+  terminal_reset_epoch: 4
+  terminal_paused: false
+  terminal_bilateral_contact: true
+  terminal_maximum_normal_force_n: 2.807418031601841
+  terminal_table_contact: false
+diagnosis:
+  - The final transport trajectory physically reached its target and both lower layers returned success.
+  - Before the successful MoveIt result future reached the client, the transport monitor observed one instantaneous bilateral-contact false sample and cancelled because it had no grace window.
+  - All adjacent stages already use a 50 ms SustainedConditionGuard for contact/support manifold handoffs; transport was the remaining immediate single-sample gate.
+evidence:
+  master_log_sha256: 2254463fec34277f2824d9f10defd8ffacc9dd41f2627ea6e80b25946d9b7edf
+  transport_json_sha256: 50f10d69ec372f69d69e2e6f3b3728bb37b5015acf151967b2b0045c853debaa
+  terminal_joints_sha256: d643919cc9e9310a6f7642432a838f0bf43ce077b7d68416e2fa5dbca79af7bb
+  terminal_evidence_sha256: 3c1461ea20fdcfc7728718d13d027b1a8fe6426a73b775a9170371060381b139
+  simulator_log_sha256: 2341b8caa80e749ad9a6e224924adc28ad10a93ed8d73a94e5b1bc54b3ff2304
+  moveit_log_sha256: 5a6a732d5e2d471ac334504141cfd46beef649495a8a4a54d4b81c17e8ddfc85
+decision: Do not count this run. Add only a 50 ms bilateral-contact loss guard to transport, preserve immediate force/pause/epoch/table-support failures, ResetWorld, and rerun the whole cycle.
+```
+
+## Checkpoint CP-155
+
+```yaml
+checkpoint_id: CP-155
+checkpoint_time: 2026-08-12T05:12:11+08:00
+last_valid_experiment: EXP-120 VALID behavioral failure
+current_hypothesis: A 50 ms sustained bilateral-contact loss guard filters the single contact-manifold handoff while still aborting any real grasp loss before the next physical phase.
+working_tree_status: Same intentional Task 13/14 source/model/plan/ledger/fork state. Protected Gazebo status remains clean. Simulator is epoch 4 running at the completed transport endpoint with physical bilateral grasp and MoveIt collision shadow attached.
+confirmed_conclusions:
+  - Corrected current-epoch gates passed the entire remaining lift and four transport waypoints.
+  - Waypoint 5 physically completed; failure was an observer false abort after lower-layer success, not planning, controller, force, support, or grasp failure.
+  - Full-cycle acceptance still requires a fresh reset and uninterrupted rerun.
+next_command: Preregister and execute one qualified epoch 4 -> 5 ResetWorld, then rebuild epoch-5 scripts with the bounded transport guard.
+```
+
+## Experiment EXP-121
+
+```yaml
+experiment_id: EXP-121
+prior_experiment: EXP-120 VALID transport-monitor failure
+status: RUNNING
+lifecycle: QUALIFIED_RESETWORLD_AFTER_TRANSPORT_MONITOR_FAILURE
+run_mode: one_task_start_transaction_then_attachment_clean_scene_restore
+hypothesis: The qualified ResetWorld boundary recovers the held transport endpoint to clean paused epoch-5 task_start.
+single_variable: Execute only one unchanged ResetWorld(task_start) transaction and exact formal Planning Scene restore.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 4
+  expected_new_reset_epoch: 5
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  reset_script: [/tmp/so101_exp121_reset.py, dce89d726720d515293be1e808fd4b00ba026f7b5bebdbd62f1eded464574fb2]
+preconditions:
+  - Same owned epoch-4 stack is running at the physically completed transport endpoint with active controllers and attached collision shadow.
+  - EXP-120 terminal electronic/log evidence is captured; reset script passes Ruff, pycompile, and SHA verification.
+success_criteria:
+  - Receipt exactly 4 -> 5 at step 0; final paused task_start object/joints, active controllers, exact world scene/colors, and empty attachment list satisfy unchanged gates.
+failure_criteria: Any reset, joint, object, controller, scene, provenance, or cleanup mismatch blocks the rerun.
+invalid_criteria: Any unregistered motion, process restart, model/config change, direct state write, or simulator constraint invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Fresh epoch-5 full cycle with bounded transport contact guard only after VALID reset.
+```
+
+## Experiment EXP-122 Terminal Result
+
+```yaml
+experiment_id: EXP-122
+status: VALID
+terminal_result: QUALIFIED_ORDERED_SNAPSHOT_RESET_AND_VISUAL_ACCEPTANCE
+terminal_time: 2026-08-12T05:17:00+08:00
+command: python3 /tmp/so101_exp122_reset.py
+exit_code: 0
+result:
+  reset_receipt: {old_epoch: 4, new_epoch: 5, simulation_step: 0, keyframe: task_start}
+  final_paused: true
+  controllers_active: true
+  final_cup_position_m: [0.02, -0.28, 0.165]
+  planning_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  planning_scene_attached_object_ids: []
+visual_acceptance:
+  rviz_left_mujoco_right: true
+  horizontal_task_start_arm: true
+  open_gripper_clear_of_upright_cup: true
+  complete_scene_and_target_ring_visible: true
+  viewer_pause_visible: true
+evidence:
+  reset_json_sha256: c117c1731a54daefc004e990496e922b99437023113a3a51ac7b8af3252f79d8
+  reset_log_sha256: 7aced85c2df459cbbf4892b401ffdb3eda2c3ab1d31e1ff1d724cf8d58d9bc2b
+  post_reset_cua_sha256: 227ff5c357649e2cc1383114ca7125f112aa5d146de4c503dba5afa8955aa326
+decision: Ordered fresh-client ResetWorld is qualified electronically and visually. Begin a fresh epoch-5 full cycle.
+```
+
+## Checkpoint CP-157
+
+```yaml
+checkpoint_id: CP-157
+checkpoint_time: 2026-08-12T05:18:00+08:00
+last_valid_experiment: EXP-122 VALID qualified reset
+current_hypothesis: The final missing transport monitor grace aligns transport with the already qualified contact-manifold semantics and permits one uninterrupted full success.
+working_tree_status: Intentional Task 13/14 reset/scene/phase changes remain. Protected Gazebo status is clean. Simulator is paused at exact epoch-5 task_start with active controllers and clean formal scene.
+confirmed_conclusions:
+  - ResetWorld has now recovered two real held-object failures and is visually repeatable.
+  - EXP-123 changes only transport bilateral-contact loss from instantaneous abort to 50 ms sustained loss; pause/epoch, force, and table-contact failures remain immediate.
+  - All epoch-5 scripts pass Ruff, pycompile, provenance scan, and SHA matching.
+next_command: Preregister and execute one uninterrupted epoch-5 full physical pick-place.
+```
+
+## Experiment EXP-123
+
+```yaml
+experiment_id: EXP-123
+prior_experiment: EXP-122 VALID qualified reset
+status: RUNNING
+lifecycle: FULL_PHYSICAL_PICK_PLACE_WITH_BOUNDED_CONTACT_AND_ALIGNMENT
+run_mode: one_uninterrupted_epoch_5_staged_cycle
+hypothesis: A 50 ms transport contact-loss guard filters the observed single-frame handoff while all real physical failures remain bounded, allowing the qualified cycle to place the cup stably inside the target.
+single_variable: Add only SustainedConditionGuard(0.05) to bilateral contact loss in transport. Motion targets, force limits, pause/epoch gates, table-contact gate, alignment, release, scene, model, and phase order remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 5
+  initial_state: EXP-122 visually accepted paused task_start with clean scene
+  policy_sha256: 6b741dc8a73f8e1845b3ba6f6c20196b691364294cd0023a0c33c7a33766375a
+  staged_approach_sha256: 70f76ef452976dcf6176f4559061822505e39baad1f465b6c02f5620222d6588
+  orchestration_script: [/tmp/so101_exp123_run.bash, 3ce015603fd4877890d1ba3a1572855270e5fc09006e4dec94d8387ac5da8b54]
+  phase_scripts:
+    - [/tmp/so101_exp123_contact_hold.py, 4db8501a1407d95adf4fe8359af6ad9cedf95ada47242a12175efa34a846c6bb]
+    - [/tmp/so101_exp123_micro_lift.py, 0c2d05271d5986687328c074ba8fe741ebe353e7475d473f1d57d7287e90a07b]
+    - [/tmp/so101_exp123_policy_lift_waypoint1.py, b0f2253a02836d771e9817c02608244d36195adab29a0fb85e1ad62107c6e0fe]
+    - [/tmp/so101_exp123_remaining_lift.py, ed68495b6aae46249a3a652c695c2435c3c2c0f8fc9651908de99044179c9a06]
+    - [/tmp/so101_exp123_transport.py, f71921c0cd0124864dc73fae9de4f723227a362ed4efa79fb3c8a655ed9b371b]
+    - [/tmp/so101_exp123_descend.py, 4ccdb8c5e4a367e91cd3b447735e32e44b4c9d1db5bd9d35663c3808bfeefd00]
+    - [/tmp/so101_exp123_place_alignment.py, 6d8cf2a71ce865a20e481d72315a0527f0a389c39783fe5f1dc45cdc4ec5e889]
+    - [/tmp/so101_exp123_release_retreat.py, 5655f476ba78ec435bbf934fbee4638578872f4db054c6a6cdc8c425f03f5418]
+  transport_contact_loss_grace_s: 0.05
+  place_alignment_target_m: [-0.0788, -0.2475, 0.1835]
+  place_alignment_tolerance_m: 0.003
+  place_alignment_max_attempts: 3
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+preconditions:
+  - Same owned epoch-5 stack is paused at task_start, controllers active, no attached object, exact scene and visual evidence accepted.
+  - Scripts are Ruff/pycompile/SHA clean; no state action after preregistration.
+success_criteria:
+  - All phases complete in order without reset/pause/process restart/direct state write/simulator attachment/unbounded retry.
+  - Physical bilateral grasp stays within force/contact gates through lift, transport, descend, and alignment.
+  - Unconstrained release settles upright and table-supported inside unchanged target for at least five fresh stable samples over 0.20 s.
+  - Final Planning Scene contains exact world geometry/colors and no attached object; final gripper contact is zero.
+  - Passive CUA shows RViz left, Viewer right, cup inside red ring, and arm retreated.
+failure_criteria: Any phase, planning, execution, convergence, sustained contact, force, support, alignment, placement, scene, provenance, or visual gate failure stops immediately.
+invalid_criteria: Any reset/pause after resume, direct object write, teleport, simulator constraint/attachment, model/config mutation, process restart, missing evidence, or unregistered retry invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Diagnose only first failure, or record first full-cycle success and proceed to production runner/gates.
+```
+
+## Experiment EXP-121 Terminal Result
+
+```yaml
+experiment_id: EXP-121
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_QUEUED_RUNNING_FRAME_ACCEPTED_AFTER_PAUSE_SNAPSHOT_REQUEST
+terminal_time: 2026-08-12T05:14:00+08:00
+command: python3 /tmp/so101_exp121_reset.py
+exit_code: 1
+result:
+  reset_world_called: false
+  reset_epoch_unchanged: 4
+  terminal_paused: true
+  controllers_active_after_failure: [arm_controller, gripper_controller]
+  error: ResetFailed reset transaction error switch controllers service timeout
+diagnosis:
+  - Initial acquisition requested pause(true), but accepted one queued pre-pause Running evidence frame before the authoritative paused frame arrived.
+  - It therefore skipped prepare-running and requested strict controller deactivation while the control loop was actually paused; controller_manager timed out after 5 seconds.
+  - Fail-closed behavior preserved epoch 4, active controllers, grasped cup, and paused physics; ResetWorld was never called.
+decision: Require paused=true after any active initial snapshot request, while still accepting an immediately available fresh frame without service action. Add queued-running regression coverage, rebuild, and retry.
+```
+
+## Checkpoint CP-156
+
+```yaml
+checkpoint_id: CP-156
+checkpoint_time: 2026-08-12T05:16:02+08:00
+last_valid_experiment: EXP-121 VALID behavioral failure
+current_hypothesis: Waiting past queued Running evidence until the requested paused frame arrives guarantees resume-before-deactivate ordering and prevents switch timeout.
+working_tree_status: Intentional Task 13/14 changes plus ordered initial snapshot acquisition. Protected Gazebo status remains clean. Simulator remains paused at epoch 4, controllers active, physical cup held, stale MoveIt attachment present.
+confirmed_conclusions:
+  - Modified regression test failed before the fix because operations were pause(true), deactivate instead of pause(true), pause(false), deactivate.
+  - Client now accepts any immediately fresh frame before service action, but after requesting pause it ignores same-session frames until paused=true.
+  - All 22 reset tests, Ruff, and rebuild pass. Reset source SHA is 4149260ad44e47b45d47576a17bf2132af9e86a668122ff7c41cbfec8c2212f2; test SHA is 218c5f7565e744f13b183ecb6b581c3ce2f6aa3d7349890853ca7218fa37c921.
+next_command: Preregister and execute EXP-122 on the preserved epoch-4 paused state.
+```
+
+## Experiment EXP-122
+
+```yaml
+experiment_id: EXP-122
+prior_experiment: EXP-121 VALID ordered-snapshot failure
+status: RUNNING
+lifecycle: ORDERED_PAUSED_SNAPSHOT_RESETWORLD_REQUALIFICATION
+run_mode: requested_paused_snapshot_then_reset_and_attachment_clean_scene_restore
+hypothesis: Ignoring queued Running evidence after pause request yields resume-before-deactivate ordering and a qualified epoch 4 -> 5 reset.
+single_variable: Require paused=true only after an initial snapshot request. Reset, controllers, scene, model, geometry, keyframe, session, and thresholds remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 4
+  expected_new_reset_epoch: 5
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  reset_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py, 4149260ad44e47b45d47576a17bf2132af9e86a668122ff7c41cbfec8c2212f2]
+  reset_test: [src/so101_mujoco_demo_py/test/test_mujoco_reset.py, 218c5f7565e744f13b183ecb6b581c3ce2f6aa3d7349890853ca7218fa37c921]
+  reset_script: [/tmp/so101_exp122_reset.py, 3346375088bdab7350abda23b4704adb8360a57cbc1c654a28d41a7f592d75c9]
+preconditions:
+  - Same epoch-4 stack remains paused after EXP-121, controllers active, cup physically held, stale collision shadow attached.
+  - Tests, Ruff, build, pycompile, hashes, and protected Gazebo check pass.
+success_criteria:
+  - Ordered acquisition resumes before strict deactivation; receipt exactly 4 -> 5 at step 0.
+  - Final paused task_start object/joints, active controllers, exact world geometry/colors, and empty attachment list satisfy unchanged gates.
+failure_criteria: Any acquisition, controller ordering, reset, convergence, scene cleanup, or provenance mismatch blocks the full cycle.
+invalid_criteria: Any unregistered action, process restart, model/config mutation, direct state write, or simulator constraint invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Fresh epoch-5 full cycle with bounded transport contact guard only after VALID reset.
+```
+
+## Experiment EXP-118 Terminal Result
+
+```yaml
+experiment_id: EXP-118
+status: VALID
+terminal_result: PRE_ACTION_FAILURE_REDUNDANT_INITIAL_JOINT_WAIT_IN_TEST_WRAPPER
+terminal_time: 2026-08-12T05:05:00+08:00
+command: python3 /tmp/so101_exp118_reset.py
+exit_code: 1
+result:
+  reset_client_called: false
+  reset_world_called: false
+  physical_state_unchanged: true
+  error: RuntimeError initial joint state unavailable
+diagnosis:
+  - The experimental wrapper still waited for pre-reset joint feedback, but a fresh subscriber receives no historical joint sample while the simulator is paused.
+  - The production transaction does not require pre-reset joints; after acquiring provenance it resumes and explicitly requires a new post-reset joint callback before convergence.
+decision: Remove only the redundant wrapper precondition. Keep every production post-reset joint freshness and convergence gate unchanged.
+```
+
+## Checkpoint CP-153
+
+```yaml
+checkpoint_id: CP-153
+checkpoint_time: 2026-08-12T05:06:25+08:00
+last_valid_experiment: EXP-118 VALID pre-action failure
+current_hypothesis: Directly invoking the rebuilt production reset client is sufficient to acquire paused provenance, resume for fresh joints, reset, converge, re-pause, and restore the scene.
+working_tree_status: Same intentional Task 13/14 state; no source change after CP-152. Protected Gazebo status remains clean. Simulator remains paused at epoch 3 with stale MoveIt attachment.
+confirmed_conclusions:
+  - EXP-118 never called the production reset client and therefore did not test the new behavior.
+  - EXP-119 wrapper has no pre-evidence or pre-joint reads; it delegates initial acquisition and all convergence to MujocoResetClient.
+next_command: Preregister and execute EXP-119 on the unchanged epoch-3 paused state.
+```
+
+## Experiment EXP-119
+
+```yaml
+experiment_id: EXP-119
+prior_experiment: EXP-118 VALID wrapper pre-action failure
+status: RUNNING
+lifecycle: DIRECT_FRESH_PAUSED_CLIENT_RESETWORLD_REQUALIFICATION
+run_mode: direct_production_reset_then_attachment_clean_scene_restore
+hypothesis: Direct invocation of the rebuilt reset client acquires epoch-3 paused provenance, resets to epoch 4, obtains fresh joints, and removes the stale Planning Scene attachment.
+single_variable: Delete only the wrapper's redundant pre-reset joint wait. Production code and all frozen EXP-118 inputs remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 3
+  expected_new_reset_epoch: 4
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  reset_source_sha256: bf78b0eed961092835ee9c82e8f8c22c6a4dfe1fff7f4d4a39f9c3949b35009d
+  scene_setup_source_sha256: 4125cbb3ba87222bca9323572d6e3d1d381d503acc50261e7b20a136947fc66f
+  reset_script: [/tmp/so101_exp119_reset.py, 9e9be8ccf4596c8a3330d7272ac3edb76997dbdf195157bba0af68c26f3f26ef]
+preconditions:
+  - Same fresh client condition: simulator paused at epoch 3, no replayable evidence or joint history, stale attached plastic_cup present.
+  - Reset and scene tests pass; overlay rebuilt; wrapper Ruff and pycompile pass; hashes match.
+success_criteria:
+  - Receipt exactly 3 -> 4 at step 0; final paused task_start object/joints and active controllers satisfy unchanged thresholds.
+  - Planning Scene contains exact world geometry/colors and no attached object.
+  - Passive CUA proves task_start arm/open gripper/original upright cup/complete scene/visible PAUSE with RViz left and Viewer right.
+failure_criteria: Any acquisition, reset, joint freshness, convergence, scene cleanup, provenance, or visual mismatch blocks the full cycle.
+invalid_criteria: Any unregistered action, process restart, model/config change, direct state write, simulator constraint, or missing visual evidence invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Fresh full-cycle attempt at epoch 4 only after VALID reset and visual acceptance.
+```
+
+## Experiment EXP-128
+
+```yaml
+experiment_id: EXP-128
+prior_experiment: EXP-127 VALID final-out-of-region failure
+status: RUNNING
+lifecycle: QUALIFIED_RESETWORLD_AFTER_PHYSICAL_RELEASE_PLACEMENT_MISS
+run_mode: one_task_start_transaction_then_attachment_clean_scene_restore
+hypothesis: The qualified ResetWorld boundary recovers the released epoch-6 scene to exact paused epoch-7 task_start before the compensated full-cycle rerun.
+single_variable: Execute only one unchanged ResetWorld(task_start) transaction and exact formal Planning Scene restore. The newly built placement compensation is not exercised during reset.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 6
+  expected_new_reset_epoch: 7
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  reset_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py, 4149260ad44e47b45d47576a17bf2132af9e86a668122ff7c41cbfec8c2212f2]
+  scene_setup_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/scene_setup.py, 4125cbb3ba87222bca9323572d6e3d1d381d503acc50261e7b20a136947fc66f]
+  reset_script: [/tmp/so101_exp128_reset.py, d8735015d0ce340d1d51e17d00984d8959a2ba1771aba0964ce0a277f7c748d8]
+preconditions:
+  - Same epoch-6 stack remains running after EXP-127, controllers active, cup physically released and stable on the table, no gripper contact, and no MoveIt attachment.
+  - Reset tests, Ruff, build, script pycompile/hash, and protected Gazebo check pass.
+success_criteria:
+  - Receipt exactly 6 -> 7 at step 0; final paused task_start object/joints and active controllers satisfy unchanged thresholds.
+  - Planning Scene contains exact table, pedestal, 13-primitive cup geometry/colors and no attached object.
+  - Passive CUA proves horizontal task_start arm, open gripper, original upright cup, complete scene, red target ring, RViz left, Viewer right, and visible PAUSE.
+failure_criteria: Any reset, joint, object, controller, scene, provenance, or visual mismatch blocks the rerun.
+invalid_criteria: Any unregistered motion, process restart, model/config mutation, direct state write, or simulator constraint invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Fresh epoch-7 full physical cycle with the frozen measured settling compensation only after VALID electronic and visual reset.
+```
+
+## Experiment EXP-128 Terminal Result
+
+```yaml
+experiment_id: EXP-128
+status: VALID
+terminal_result: QUALIFIED_RESETWORLD_AND_VISUAL_ACCEPTANCE
+terminal_time: 2026-08-12T05:37:00+08:00
+command: python3 /tmp/so101_exp128_reset.py
+exit_code: 0
+result:
+  reset_receipt: {old_epoch: 6, new_epoch: 7, simulation_step: 0, keyframe: task_start}
+  final_paused: true
+  controllers_active: true
+  final_joint_positions_rad: [2.0106801636346586e-08, 9.11352966981906e-05, 8.220945026002406e-05, 7.552795673726909e-06, 2.240418047689964e-09, -6.07537537969906e-08]
+  final_cup_position_m: [0.02, -0.28, 0.165]
+  planning_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  planning_scene_attached_object_ids: []
+visual_acceptance:
+  rviz_left_mujoco_right: true
+  horizontal_task_start_arm: true
+  open_gripper_clear_of_upright_original_cup: true
+  complete_scene_and_red_target_ring_visible: true
+  viewer_pause_and_status_paused_visible: true
+evidence:
+  reset_json_sha256: 0398783829e0f17a1a54d2b7bc6307b39eb118704ab5ac8876fa3cd90c7afcb6
+  reset_log_sha256: dcb028a78b817600e0a7e1dc3b51f0c3ad287d1e508e070e8127366d52ce9d49
+  post_reset_cua_sha256: f8d838206694bac86a58214dc106f899a3e5a3ca36094cd0b7d511405eab02e8
+decision: ResetWorld is qualified across physics, controllers, joint state, reset evidence, Planning Scene, and visible GUI. Proceed to one fresh epoch-7 full cycle.
+```
+
+## Checkpoint CP-159
+
+```yaml
+checkpoint_id: CP-159
+checkpoint_time: 2026-08-12T05:37:00+08:00
+last_valid_experiment: EXP-128 VALID qualified reset
+current_hypothesis: The frozen +0.0150 m pre-release y compensation moves the post-release settled cup into the unchanged target region while all already qualified phase gates remain intact.
+working_tree_status: Intentional Task 13/14 changes. Protected Gazebo package remains clean. Simulator is paused at exact epoch-7 task_start with active controllers and clean formal scene.
+next_command: Generate epoch-7 scripts, lint/compile/provenance-scan/hash them, preregister EXP-129, then execute once without interruption.
+```
+
+## Experiment EXP-129
+
+```yaml
+experiment_id: EXP-129
+prior_experiment: EXP-128 VALID qualified reset
+status: RUNNING
+lifecycle: FULL_PHYSICAL_PICK_PLACE_WITH_MEASURED_SETTLING_COMPENSATION
+run_mode: one_uninterrupted_epoch_7_staged_cycle
+hypothesis: Applying the measured +0.0150 m pre-release y compensation places the unconstrained settled cup inside the unchanged final target after physical release and collision-checked retreat.
+single_variable: Change only MuJoCo place settling compensation y from +0.0025 m to +0.0150 m based on EXP-127 measured -0.014982 m settling shift. Final target bounds, phase sequence, motion targets except pre-release alignment, force/contact/stability thresholds, controller path, scene geometry, and model remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 7
+  initial_state: EXP-128 electronically and visually accepted paused task_start with clean formal scene
+  policy: [src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, bc06bd8afd4936ca05653c19f720c5f2e2db339eb34bc4a426b4a1a2ba513205]
+  staged_approach_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/staged_approach.py, 06e3b30ba0830e058eff42bd06010f842e57a9155729e148520bf414e4367a18]
+  orchestration_script: [/tmp/so101_exp129_run.bash, 23487abae8a54d0ddaca6e8d7c31174db2e25016f45982070017c6ad0bee2fd5]
+  phase_scripts:
+    - [/tmp/so101_exp129_contact_hold.py, 8f154dfb7da9dd0e02c8a39a087bf4cd8e602c8c8620773bb0f2b27e2d14bf5d]
+    - [/tmp/so101_exp129_micro_lift.py, 0d0280141e9fb76b223ec042b8183b55a69c19ba3abaa841fac326df60ca0c08]
+    - [/tmp/so101_exp129_policy_lift_waypoint1.py, 9552f3cc430a0dc741665bf6090d8c21809edf93b9bddcc9b0887c1e8a608cb2]
+    - [/tmp/so101_exp129_remaining_lift.py, 6aeb720d48c30efdbef87655e48d97918bb2f17701911cef1da836c5014d49ec]
+    - [/tmp/so101_exp129_transport.py, 07dc4154ef2e05245fecefe457cba5d953167f32a7e5c7be67b9d9b806564493]
+    - [/tmp/so101_exp129_descend.py, 03ffe68d17849060bd5f42c20f9825327fc76f00b95c0d21aebcfacbae7400e8]
+    - [/tmp/so101_exp129_place_alignment.py, 0f468623d788909a54aa23717582f27b1eda908a0a047910fb6b31d97770d0a5]
+    - [/tmp/so101_exp129_release_retreat.py, efb7f8cc75850a79887eed5d43c443b613da7a64b7d7efe5e828b1aa17e3a567]
+  transport_velocity_acceleration_scaling: 0.05
+  transport_contact_loss_grace_s: 0.05
+  place_xyz_m: [-0.080, -0.250, 0.165]
+  place_settling_compensation_m: [0.0012, 0.0150, 0.0185]
+  pre_release_target_m: [-0.0788, -0.2350, 0.1835]
+  place_alignment_tolerance_m: 0.003
+  place_alignment_max_attempts: 3
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+preconditions:
+  - Same epoch-7 stack remains paused at exact task_start, controllers active, attachment-free exact Planning Scene, and EXP-128 CUA evidence accepted.
+  - All scripts pass Bash syntax, Ruff, pycompile, forbidden-action provenance scan, SHA matching, and protected Gazebo isolation check.
+success_criteria:
+  - All phases complete in order without reset, pause after resume, process restart, direct object state write, simulator attachment, teleport, or unbounded retry.
+  - Physical bilateral grasp remains within force/contact/support gates through micro-lift, policy lift, transport, descend, and bounded alignment.
+  - q6 physically opens; the unconstrained cup settles upright and table-supported inside unchanged target bounds for at least five fresh stable samples over 0.20 s.
+  - Three MoveIt-planned retreat waypoints finish, both fingertip contact counts become zero, and the final Planning Scene has exact world geometry/colors and no attachment.
+  - Passive CUA shows RViz left, Viewer right, cup visibly inside the red target ring, arm retreated, complete scene, and Viewer Running.
+failure_criteria: Any phase, planning, execution, convergence, contact, force, support, alignment, placement, scene, provenance, or visual gate failure stops immediately and is retained.
+invalid_criteria: Any reset/pause after resume, direct object qpos/qvel write, teleport, weld/equality/adhesion/mocap constraint, hidden physical attachment, model/config mutation, process restart, missing evidence, or unregistered retry invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: On success, capture passive CUA and formalize production runner. On failure, diagnose only the first failure before any next state action.
+```
+
+## Experiment EXP-129 Terminal Result
+
+```yaml
+experiment_id: EXP-129
+status: VALID
+terminal_result: BEHAVIORAL_FAILURE_FIXED_JOINT_RETREAT_SWEEPS_RELEASED_CUP_OUT_OF_TARGET
+terminal_time: 2026-08-12T05:42:25+08:00
+command: bash /tmp/so101_exp129_run.bash
+exit_code: 1
+completed_phases:
+  - staged_approach_15_waypoints
+  - bilateral_contact_hold_168_samples
+  - physical_micro_lift
+  - policy_lift_5_waypoints
+  - transport_5_waypoints
+  - descend_3_waypoints
+  - bounded_place_alignment_1_attempt
+  - physical_q6_release
+  - retreat_3_waypoints
+  - detach_and_world_scene_sync
+failure:
+  phase: final placement evaluation after retreat
+  code: FINAL_OUT_OF_REGION
+  pre_release_cup_position_m: [-0.0796618373785821, -0.23296885133827266, 0.18409645994095847]
+  free_released_cup_position_m: [-0.07984725866953395, -0.23331722112065933, 0.16491956762291168]
+  free_released_contacts: {left: 0, right: 0, table: true}
+  retreat_waypoint_1_cup_position_m: [-0.07910846769998967, -0.26084658626364815, 0.1652335437602212]
+  retreat_waypoint_1_contacts: {left: 1, right: 0, table: true}
+  final_cup_position_m: [-0.07938639767784889, -0.261368301573421, 0.16507549445788602]
+  final_contacts: {left: 0, right: 0, table: true}
+  final_upright_tilt_rad: 0.006867942443317374
+  target_x_bounds_m: [-0.085, -0.075]
+  target_y_bounds_m: [-0.255, -0.245]
+diagnosis:
+  - The +0.0150 m pre-release y compensation was correctly executed, but free release changed y by only -0.000348 m and was stable with zero fingertip contact.
+  - Fixed RETREAT waypoint 1 then undid the alignment correction and swept the left fingertip through the cup, moving it -0.027529 m in y; the terminal left contact count was 1.
+  - Therefore the prior 15 mm estimate conflated free settling with retreat-induced contact. More alignment compensation is invalid; the root cause is the post-alignment fixed-joint retreat path.
+  - The latest Gazebo implementation already solves the same geometry by a bounded 10 mm radial TCP separation away from the observed cup, followed by a 60 mm world-z lift. The MuJoCo package must independently implement that formal outcome-first retreat without changing the protected Gazebo package.
+evidence:
+  master_log_sha256: d3f65f534a4c79352403c46e13d49c015332cecaf992ae8e5b3395f500859d94
+  release_retreat_json_sha256: 36c8bfa96ee9a65655a1629e4dca9e6d1914c9df0dfc888460ba3dd065aef033
+  release_retreat_log_sha256: d14f77de044b4f9ce405cc728c403fd9bccea2401c8d29eada12b75edd98e50a
+  place_alignment_json_sha256: 61c9536697bab2e66a10fd326417464ed46c0610d3739b8c2df7aae58105206e
+  transport_json_sha256: e5a070cd4362e4d6c839d1544a080ab0b4b35a75a27c41fe5cb31b92fc894f83
+decision: Do not count. Revert the disproved y compensation to +0.0025 m, add bounded radial TCP separation plus vertical lift before any joint-space retreat, require zero fingertip contact throughout separation, then qualified-reset and rerun from task_start.
+```
+
+## Checkpoint CP-160
+
+```yaml
+checkpoint_id: CP-160
+checkpoint_time: 2026-08-12T05:43:49+08:00
+last_valid_experiment: EXP-129 VALID retreat-contact failure
+current_hypothesis: Outcome-first task-space separation after the stable zero-contact release prevents the aligned gripper from re-entering the cup; the original +0.0025 m y compensation already places the freely released cup inside the unchanged target.
+working_tree_status: Intentional Task 13/14 changes. Protected Gazebo status is clean. Simulator remains epoch 7 running after release/retreat, cup stable outside target, no fingertip contact, scene detached/synced.
+next_command: Add a MuJoCo-owned tested release-separation policy/helper, revert only the disproved compensation, rebuild, then preregister ResetWorld before changing physical state.
+```
+
+## Checkpoint CP-161
+
+```yaml
+checkpoint_id: CP-161
+checkpoint_time: 2026-08-12T05:47:00+08:00
+last_valid_experiment: EXP-129 VALID retreat-contact failure
+current_hypothesis: The opened gripper must separate in task space using the observed TCP-to-cup radial direction before lifting, rather than returning to pre-alignment joint waypoints.
+production_change:
+  module: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/release_retreat.py, bf5fbb5573b9c2711d715f0dfc5fa7fa47db04ba21697bf8409fc490c30f7b40]
+  test: [src/so101_mujoco_demo_py/test/test_release_retreat.py, 8690303ccb8a31ea9d23e01f7ed0bab181251a94c7c399778ee510fe616b224f]
+  place_test: [src/so101_mujoco_demo_py/test/test_place_alignment.py, 87f93d3c4fe5835aad30964cfb6a3ff609745b10ab020576e3ceadb720e5d4a9]
+  policy: [src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, 9867a31f013a5556231e46c05d38972809e06de6d1960145b95a9cd6b134145c]
+  place_settling_compensation_m: [0.0012, 0.0025, 0.0185]
+  release_retreat:
+    radial_separation_m: 0.010
+    vertical_clearance_m: 0.060
+    orientation_tolerance_rad: 0.15
+    position_tolerance_m: 0.001
+    velocity_scaling: 0.03
+    acceleration_scaling: 0.03
+verification:
+  tdd_red: test collection failed because so101_mujoco_demo_py.release_retreat did not exist
+  tdd_green: 13 passed
+  ruff: passed
+  overlay_build: passed
+  protected_gazebo_status: clean
+next_command: Execute exactly one preregistered ResetWorld epoch 7 to 8 before the fresh full-cycle validation.
+```
+
+## Experiment EXP-130
+
+```yaml
+experiment_id: EXP-130
+prior_experiment: EXP-129 VALID retreat-contact failure
+status: RUNNING
+lifecycle: QUALIFIED_RESETWORLD_AFTER_RETREAT_CONTACT_FAILURE
+run_mode: one_task_start_transaction_then_attachment_clean_scene_restore
+hypothesis: The qualified ResetWorld boundary recovers the released epoch-7 scene to exact paused epoch-8 task_start before testing the new outcome-first retreat.
+single_variable: Execute only one unchanged ResetWorld(task_start) transaction and exact formal Planning Scene restore. The new release-retreat policy is not exercised during reset.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  expected_old_reset_epoch: 7
+  expected_new_reset_epoch: 8
+  keyframe: task_start
+  expected_joint_positions_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  expected_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  reset_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py, 4149260ad44e47b45d47576a17bf2132af9e86a668122ff7c41cbfec8c2212f2]
+  scene_setup_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/scene_setup.py, 4125cbb3ba87222bca9323572d6e3d1d381d503acc50261e7b20a136947fc66f]
+  reset_script: [/tmp/so101_exp130_reset.py, 596dbee7e433281b54fb52bb80eeee2220730af207a7529536ce6322aca9a35d]
+preconditions:
+  - Same epoch-7 stack remains running after EXP-129, controllers active, cup physically released and stable on the table, no fingertip contact, and no MoveIt attachment.
+  - Reset tests, Ruff, build, script pycompile/hash, and protected Gazebo check pass.
+success_criteria:
+  - Receipt exactly 7 -> 8 at step 0; final paused task_start object/joints and active controllers satisfy unchanged thresholds.
+  - Planning Scene contains exact table, pedestal, 13-primitive cup geometry/colors and no attached object.
+  - Passive CUA proves horizontal task_start arm, open gripper, original upright cup, complete scene, red target ring, RViz left, Viewer right, and visible PAUSE.
+failure_criteria: Any reset, joint, object, controller, scene, provenance, or visual mismatch blocks the rerun.
+invalid_criteria: Any unregistered motion, process restart, model/config mutation, direct state write, or simulator constraint invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Fresh epoch-8 full physical cycle with tested task-space separation only after VALID electronic and visual reset.
+```
+
+## Experiment EXP-130 Terminal Result
+
+```yaml
+experiment_id: EXP-130
+status: VALID
+terminal_result: QUALIFIED_RESETWORLD_AND_VISUAL_ACCEPTANCE
+terminal_time: 2026-08-12T05:49:00+08:00
+command: python3 /tmp/so101_exp130_reset.py
+exit_code: 0
+result:
+  reset_receipt: {old_epoch: 7, new_epoch: 8, simulation_step: 0, keyframe: task_start}
+  final_paused: true
+  controllers_active: true
+  final_joint_positions_rad: [5.179811209889032e-08, 0.0002673190668043892, 0.0002364111460597401, 2.530913097659213e-05, 5.760706345855852e-09, -1.5631363299656996e-07]
+  final_cup_position_m: [0.02, -0.28, 0.165]
+  planning_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  planning_scene_attached_object_ids: []
+visual_acceptance:
+  rviz_left_mujoco_right: true
+  horizontal_task_start_arm: true
+  open_gripper_clear_of_upright_original_cup: true
+  complete_scene_and_red_target_ring_visible: true
+  viewer_pause_and_status_paused_visible: true
+evidence:
+  reset_json_sha256: f0ef3ed683f2b4f865d8776021ae27850b51f75dbce11349de8dee3b587cba08
+  reset_log_sha256: 77125658514bd212171d70046ab69e922cdbcb053f2930aef4d479b8294bc828
+  post_reset_cua_sha256: 54a9c116359e9c317ed47ee07bc3f094d4605caa229dc112d6a373906bf4e320
+decision: ResetWorld is qualified electronically and visually. Proceed to one fresh epoch-8 full cycle with the tested outcome-first retreat.
+```
+
+## Checkpoint CP-162
+
+```yaml
+checkpoint_id: CP-162
+checkpoint_time: 2026-08-12T05:49:00+08:00
+last_valid_experiment: EXP-130 VALID qualified reset
+current_hypothesis: Stable zero-contact free release at the original compensated target, followed by radial separation and vertical lift, will preserve the cup inside the unchanged red-ring target.
+working_tree_status: Intentional Task 13/14 changes plus MuJoCo-owned release-retreat helper/tests/config. Protected Gazebo remains clean. Simulator is paused at exact epoch-8 task_start with active controllers and clean scene.
+next_command: Freeze/lint/hash epoch-8 full-cycle scripts, preregister EXP-131, then execute once without interruption.
+```
+
+## Experiment EXP-131
+
+```yaml
+experiment_id: EXP-131
+prior_experiment: EXP-130 VALID qualified reset
+status: RUNNING
+lifecycle: FULL_PHYSICAL_PICK_PLACE_WITH_OUTCOME_FIRST_TASK_SPACE_RETREAT
+run_mode: one_uninterrupted_epoch_8_staged_cycle
+hypothesis: The original free-settling compensation places the released cup inside the unchanged target; detaching the MoveIt shadow immediately, then moving the opened gripper 10 mm radially away and 60 mm upward with zero fingertip contact preserves that valid physical outcome.
+single_variable: Replace the post-alignment fixed-joint retreat with two bounded pose-planned task-space segments and revert the disproved y compensation from +0.0150 m to +0.0025 m. All pre-release phases, final target bounds, force/contact/stability thresholds, model, controller path, and scene geometry remain unchanged.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 8
+  initial_state: EXP-130 electronically and visually accepted paused task_start with clean formal scene
+  policy: [src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, 9867a31f013a5556231e46c05d38972809e06de6d1960145b95a9cd6b134145c]
+  release_retreat_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/release_retreat.py, bf5fbb5573b9c2711d715f0dfc5fa7fa47db04ba21697bf8409fc490c30f7b40]
+  staged_approach_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/staged_approach.py, 06e3b30ba0830e058eff42bd06010f842e57a9155729e148520bf414e4367a18]
+  orchestration_script: [/tmp/so101_exp131_run.bash, 642828998b8687c85425884b8e48a2613d1e9443ff7bda667f9ad8cf0f690736]
+  phase_scripts:
+    - [/tmp/so101_exp131_contact_hold.py, f0407778053d27a4235910c4333bed243e7b59cc3cd5dbce54ea4b4e70f7f050]
+    - [/tmp/so101_exp131_micro_lift.py, cf25cbe67a9b55f606d79f7dbacfcd97c36e5a8b5417cd072814d792f82cd50b]
+    - [/tmp/so101_exp131_policy_lift_waypoint1.py, 23049fcb071263e64bb3291fe06f03be06881eb0df8bd053375c851c2b072b3c]
+    - [/tmp/so101_exp131_remaining_lift.py, 1662ecdde0000487438dc978fbeb07477108b206587ea1d650b4ba420fe4a709]
+    - [/tmp/so101_exp131_transport.py, ae2514d21325b41c186600130dd593fab0f7b15b73ff8bc837a2d5b4f236d061]
+    - [/tmp/so101_exp131_descend.py, af87faeaf5770c20c307e4f11a9ebfd131df5162149a5eca9f03af2c62b3adff]
+    - [/tmp/so101_exp131_place_alignment.py, 64f64c35f4ed3b7270049b3d9ee9bae224a5336a02d54eac9d2c38a00de82ee4]
+    - [/tmp/so101_exp131_release_retreat.py, 27c993860388e28f1aa854ef35e5966cbb9f4fba5095df1212898a48935d72ed]
+  transport_velocity_acceleration_scaling: 0.05
+  transport_contact_loss_grace_s: 0.05
+  place_xyz_m: [-0.080, -0.250, 0.165]
+  place_settling_compensation_m: [0.0012, 0.0025, 0.0185]
+  pre_release_target_m: [-0.0788, -0.2475, 0.1835]
+  release_retreat_translations:
+    - radial_away_from_observed_cup_m: 0.010
+    - world_z_clearance_m: 0.060
+  retreat_zero_fingertip_contact_required: true
+  final_target_min_xy_m: [-0.085, -0.255]
+  final_target_max_xy_m: [-0.075, -0.245]
+preconditions:
+  - Same epoch-8 stack remains paused at exact task_start, controllers active, attachment-free exact Planning Scene, and EXP-130 CUA evidence accepted.
+  - Production policy/helper tests pass 13/13; all scripts pass Bash syntax, Ruff, pycompile, forbidden-action provenance scan, SHA matching, and protected Gazebo isolation.
+success_criteria:
+  - Every phase completes in order without reset, pause after resume, process restart, direct object state write, simulator attachment, teleport, or unbounded retry.
+  - Bilateral physical grasp remains force/contact/support-safe through lift, transport, descend, and bounded alignment.
+  - q6 opens; the cup first reaches stable table support with zero fingertip contact inside the unchanged target.
+  - MoveIt shadow is detached before retreat; radial and vertical pose-planned segments finish with table support and zero left/right fingertip contact throughout.
+  - Final outcome passes stable upright target gates; Planning Scene contains exact synchronized world cup and no attachment.
+  - Passive CUA shows RViz left, Viewer right, cup visibly inside the red target ring, arm/gripper clear above it, complete scene, and Viewer Running.
+failure_criteria: Any phase, planning, execution, convergence, contact, force, support, alignment, placement, scene, provenance, or visual gate failure stops immediately and is retained.
+invalid_criteria: Any reset/pause after resume, direct object qpos/qvel write, teleport, weld/equality/adhesion/mocap constraint, hidden physical attachment, model/config mutation, process restart, missing evidence, or unregistered retry invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: On success, capture passive CUA and promote the proven phase behavior into the production runner. On failure, diagnose only the first failure.
+```
+
+## Experiment EXP-131 Terminal Result
+
+```yaml
+experiment_id: EXP-131
+status: VALID
+terminal_result: PRE_RETREAT_FAILURE_ZERO_CONTACT_GATE_REJECTED_LOW_FORCE_FIXED_PAD_RESIDUAL
+terminal_time: 2026-08-12T05:55:15+08:00
+command: bash /tmp/so101_exp131_run.bash
+exit_code: 1
+completed_phases:
+  - staged_approach_15_waypoints
+  - bilateral_contact_hold_169_samples
+  - physical_micro_lift
+  - policy_lift_5_waypoints
+  - transport_5_waypoints
+  - descend_3_waypoints
+  - bounded_place_alignment_1_attempt
+  - physical_q6_release
+failure:
+  phase: post_release_stable_gate_before_any_retreat_motion
+  error: RuntimeError stable physical state timeout
+  retreat_motion_started: false
+  released_q6_rad: 0.749956367645697
+  released_cup_position_m: [-0.07801148852466819, -0.24742434242920178, 0.16551389665645916]
+  released_cup_inside_target: true
+  released_table_contact: true
+  residual_contact:
+    side: fixed_left_fingertip
+    count: 2
+    maximum_individual_force_n: 0.003019232536991923
+    moving_right_contact_count: 0
+  terminal_maximum_normal_force_n_including_table_n: 0.13954125284839594
+diagnosis:
+  - Physical release succeeded and the freely settled cup is stable inside the unchanged target before retreat.
+  - Exact-zero contact is too strict at the handoff because the fixed pad can retain a harmless approximately 0.003 N manifold while the opened moving jaw is clear.
+  - The outcome-first radial move is specifically intended to clear this residual. It must be allowed only at entry, force-bounded to 0.05 N, displacement-bounded to 3 mm, and required to disappear within 0.05 s; all later retreat motion still requires exact zero contact.
+evidence:
+  master_log_sha256: 918ef68ee3daacfdf520e385b4798889547d4d1557d0c7dcac7134915826100a
+  release_retreat_json_sha256: 5cd552d42bb150d01f30083e055ad2319f230068fd629d4485bd80c16b29de4d
+  release_retreat_log_sha256: 4bd41ca9628060a7d6862cf4d4ca784f5d2b9d4fe60fe85d159a2ad8e50c51a4
+decision: Do not count. Preserve the released in-target state. Add explicit bounded residual-contact policy and validate radial/vertical retreat as a preregistered continuation diagnostic before reset and full rerun.
+```
+
+## Checkpoint CP-163
+
+```yaml
+checkpoint_id: CP-163
+checkpoint_time: 2026-08-12T05:56:28+08:00
+last_valid_experiment: EXP-131 VALID pre-retreat gate failure
+current_hypothesis: A 50 ms grace for only sub-0.05 N residual fingertip contact permits radial separation to clear the fixed pad without allowing the cup to be pushed; a 3 mm cup-displacement bound detects any harmful interaction.
+working_tree_status: Intentional Task 13/14 changes. Protected Gazebo remains clean. Simulator remains epoch 8 running, q6 open, cup stable inside target on table, light fixed-left-pad contact only, MoveIt shadow still attached because retreat/detach did not start.
+next_command: Add tested residual-contact policy bounds, build, then preregister a no-release continuation diagnostic from the preserved epoch-8 state.
+```
+
+## Checkpoint CP-164
+
+```yaml
+checkpoint_id: CP-164
+checkpoint_time: 2026-08-12T05:59:00+08:00
+last_valid_experiment: EXP-131 VALID pre-retreat gate failure
+current_hypothesis: A low-force, displacement-bounded residual manifold can be admitted only during the start of radial separation and must clear within 0.05 s.
+production_change:
+  module: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/release_retreat.py, a0c3a379fb71b25f2168e864e7499d57d835189c71836fe6d49ebcc4a6fe67f1]
+  test: [src/so101_mujoco_demo_py/test/test_release_retreat.py, 723b250682b3ddb857fd22a919958b30fb170e8a8ad2eaf6ba8b26ec324c7b1c]
+  policy: [src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808]
+  residual_contact_grace_s: 0.05
+  max_residual_fingertip_force_n: 0.05
+  max_released_cup_displacement_m: 0.003
+verification:
+  tdd_red: import failed because residual_contact_within_bounds did not exist
+  tdd_green: 14 passed
+  ruff: passed
+  overlay_build: passed
+  protected_gazebo_status: clean
+next_command: Execute preregistered EXP-132 from the preserved released state without reissuing q6 or any prior motion.
+```
+
+## Experiment EXP-132
+
+```yaml
+experiment_id: EXP-132
+prior_experiment: EXP-131 VALID pre-retreat gate failure
+status: RUNNING
+lifecycle: PRESERVED_RELEASED_STATE_OUTCOME_FIRST_RETREAT_DIAGNOSTIC
+run_mode: continue_from_stable_in_target_q6_open_epoch_8_state
+hypothesis: The bounded radial translation clears the approximately 0.003 N fixed-pad residual within 0.05 s without moving the cup more than 3 mm; the subsequent 60 mm vertical lift remains zero-contact and preserves the cup inside target.
+single_variable: Admit only the measured low-force fixed-pad residual at radial-separation entry under explicit force/displacement/grace bounds. No q6 command, reset, pause, pre-release motion, target change, model change, or simulator constraint is allowed.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 8
+  initial_state:
+    q6_rad: 0.749956367645697
+    cup_position_m: [-0.07801148852466819, -0.24742434242920178, 0.16551389665645916]
+    cup_inside_target: true
+    table_contact: true
+    moving_right_contact_count: 0
+    fixed_left_contact_max_force_n: 0.003019232536991923
+    moveit_shadow_attached: true
+  diagnostic_script: [/tmp/so101_exp132_release_retreat.py, 8e3e44c48fea0fe1dad0b51d77f8d34968cf4f61f07adde8d081368036cd2a57]
+  policy: [src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808]
+  release_retreat_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/release_retreat.py, a0c3a379fb71b25f2168e864e7499d57d835189c71836fe6d49ebcc4a6fe67f1]
+preconditions:
+  - Same EXP-131 terminal state is preserved, running and stable; no state action occurred after the failure.
+  - Script passes Ruff, pycompile, forbidden-action scan, SHA matching, and protected Gazebo isolation.
+success_criteria:
+  - Script accepts only q6-open, table-supported, in-target epoch-8 state and performs no gripper command.
+  - MoveIt shadow detaches/syncs before retreat; 10 mm radial and 60 mm vertical pose plans execute.
+  - Residual fingertip force stays at or below 0.05 N, cup displacement stays at or below 3 mm, and all fingertip contact clears within 0.05 s of radial execution.
+  - Radial endpoint, vertical segment, final stable gate, Planning Scene readback, and unchanged final placement evaluator all pass.
+failure_criteria: Any state mismatch, planning/execution failure, residual-force/displacement/grace violation, re-contact, support loss, target/stability/scene/provenance failure stops immediately.
+invalid_criteria: Any reset, pause, q6 command, direct object state write, teleport, simulator attachment/constraint, model/config mutation, process restart, or unregistered retry invalidates diagnostic.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Qualified reset and fresh full lifecycle regardless of diagnostic result.
+```
+
+## Experiment EXP-132 Terminal Result
+
+```yaml
+experiment_id: EXP-132
+status: VALID
+terminal_result: PRE_MOTION_MOVEIT_START_STATE_COLLISION_REJECTED
+terminal_time: 2026-08-12T06:02:18+08:00
+command: python3 /tmp/so101_exp132_release_retreat.py
+exit_code: 1
+completed_phases:
+  - preserved_released_state_validation
+  - moveit_shadow_detach_and_exact_world_sync
+failure:
+  phase: radial_retreat_segment_1_planning
+  error: RuntimeError retreat segment 1 planning failed: MOVEIT_PLAN_FAILED
+  retreat_motion_started: false
+  released_q6_rad: 0.7499563659574505
+  released_cup_position_m: [-0.07801147859740672, -0.24742434117913314, 0.16551208060853104]
+  released_cup_inside_target: true
+  released_table_contact: true
+  fixed_left_contact_count: 2
+  moving_right_contact_count: 0
+diagnosis:
+  - Detaching the collision shadow correctly exposes the exact world cup before retreat.
+  - The fixed gripper pad still lightly intersects or touches the synchronized world cup at the start state, so MoveIt rejects the radial plan before any physical motion.
+  - The physical force/displacement/grace bounds cannot help a plan that is rejected by collision checking at its initial state.
+  - The narrow corrective mechanism is a temporary Allowed Collision Matrix permission for only plastic_cup and the fixed gripper link during the 10 mm radial separation; the original ACM value must be restored and read back before the vertical segment.
+evidence:
+  diagnostic_json_sha256: 2c27599d089ab7b9554b8bca25175f080af3365875e255b7f0da57c3b725f0b4
+  diagnostic_log_sha256: ba582dc53e0a6334cc5816e06cd46a6291a960b9ebc49daee50f627e8b07cf54
+  diagnostic_script_sha256: 8e3e44c48fea0fe1dad0b51d77f8d34968cf4f61f07adde8d081368036cd2a57
+decision: Do not count. Preserve epoch 8 and implement/test an exact, reversible ACM scope before another registered continuation diagnostic.
+```
+
+## Checkpoint CP-165
+
+```yaml
+checkpoint_id: CP-165
+checkpoint_time: 2026-08-12T06:02:18+08:00
+last_valid_experiment: EXP-132 VALID pre-motion planning failure
+current_hypothesis: A reversible plastic_cup-to-gripper-only ACM scope permits planning from the intentional light fixed-pad contact while the existing physical force, displacement, and 50 ms clearing gates prevent contact exploitation.
+working_tree_status: Intentional Task 13/14 changes. Protected Gazebo remains clean. Simulator remains epoch 8 running, q6 open, cup stable inside target; Planning Scene now contains the exact world cup and no attachment.
+next_command: Add TDD-covered ACM mutation/readback helpers, rebuild, then preregister a no-release continuation diagnostic from the same epoch-8 state.
+```
+
+## Checkpoint CP-166
+
+```yaml
+checkpoint_id: CP-166
+checkpoint_time: 2026-08-12T06:07:30+08:00
+last_valid_experiment: EXP-132 VALID pre-motion planning failure
+production_change:
+  module: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/planning_scene_acm.py, 1a8c571fe9948a8d8203b0d87823787051da5c5436cceef0d940d865de226880]
+  test: [src/so101_mujoco_demo_py/test/test_planning_scene_acm.py, 1671af42c6ce8d2c379c980a6efacc3a9042e686b08b45449c851f1aee0d84cd]
+verification:
+  tdd_red: collection failed because planning_scene_acm did not exist
+  tdd_green: 11 focused tests passed
+  ruff_package_gate: passed after mechanically fixing six I001 import-order findings inside only so101_mujoco_demo_py
+  overlay_build: passed
+  protected_gazebo_status: clean
+scope_contract:
+  - Only an explicit plastic_cup-to-gripper pair may be enabled.
+  - The pair is symmetric; unrelated explicit and default ACM entries are preserved.
+  - Missing or malformed readback fails closed.
+  - The complete original ACM snapshot must be restored and read back before the vertical retreat segment.
+next_command: Execute preregistered EXP-133 without reset, q6 command, or any pre-release motion.
+```
+
+## Experiment EXP-133
+
+```yaml
+experiment_id: EXP-133
+prior_experiment: EXP-132 VALID pre-motion planning failure
+status: RUNNING
+lifecycle: PRESERVED_RELEASED_STATE_RADIAL_ONLY_REVERSIBLE_ACM_DIAGNOSTIC
+run_mode: continue_from_stable_in_target_q6_open_epoch_8_state
+hypothesis: A temporary plastic_cup-to-fixed-gripper ACM permission allows MoveIt to plan the 10 mm radial separation from the intentional light fixed-pad contact; physical force/displacement/grace gates clear that contact, and restoring the original ACM before the 60 mm vertical segment preserves normal collision checking.
+single_variable: Add only the reversible plastic_cup-to-gripper ACM scope around radial separation. No jaw permission, q6 command, reset, pause, pre-release motion, target change, model change, or simulator constraint is allowed.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 8
+  current_read_only_state:
+    cup_position_m: [-0.07801145703404712, -0.24742434760930085, 0.16551228566006881]
+    cup_inside_target: true
+    table_contact: true
+    moving_right_contact_count: 0
+    fixed_left_contact_count: 2
+    maximum_individual_fixed_left_force_n: 0.032816839062360034
+  diagnostic_script: [/tmp/so101_exp133_release_retreat.py, ebcbe99508712c9bf43100ba5d0ca413f926064ae2c7044a5c574ba70e4cfa6f]
+  acm_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/planning_scene_acm.py, 1a8c571fe9948a8d8203b0d87823787051da5c5436cceef0d940d865de226880]
+  policy: [src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808]
+preconditions:
+  - Same epoch-8 released state is preserved and remains stable inside the target; no physical state action occurred after EXP-132.
+  - Script passes Ruff, pycompile, forbidden-action provenance scan, SHA matching, and protected Gazebo isolation.
+success_criteria:
+  - Original plastic_cup-to-gripper ACM value is false; only that pair becomes true and plastic_cup-to-jaw remains false.
+  - 10 mm radial plan and execution pass while fingertip force stays at or below 0.05 N, cup displacement stays at or below 3 mm, and all fingertip contact clears within 0.05 s.
+  - Complete original ACM snapshot is restored and read back with the pair false before vertical planning.
+  - 60 mm vertical plan executes with ordinary collision checking and zero fingertip contact; final placement and exact Planning Scene readback pass.
+failure_criteria: Any state mismatch, ACM scope/readback/restoration failure, planning/execution failure, force/displacement/grace violation, re-contact, support loss, target/stability/scene/provenance failure stops immediately.
+invalid_criteria: Any reset, pause, q6 command, direct object state write, teleport, simulator attachment/constraint, model/config mutation, process restart, jaw collision permission, global collision bypass, or unregistered retry invalidates diagnostic.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Qualified reset and fresh uninterrupted full lifecycle if the diagnostic passes; otherwise diagnose only its first failure.
+```
+
+## Experiment EXP-133 Terminal Result
+
+```yaml
+experiment_id: EXP-133
+status: VALID
+terminal_result: RELEASE_RETREAT_FINAL_PLACEMENT_PROVED
+terminal_time: 2026-08-12T06:08:24+08:00
+command: python3 /tmp/so101_exp133_release_retreat.py
+exit_code: 0
+completed_phases:
+  - preserved_released_state_validation
+  - exact_world_cup_scene_sync
+  - radial_only_plastic_cup_to_gripper_acm_enable_and_readback
+  - 10_mm_radial_pose_plan_and_execution
+  - zero_fingertip_contact_stable_gate
+  - complete_original_acm_restore_and_readback
+  - 60_mm_vertical_pose_plan_and_execution_under_normal_collision_checking
+  - final_physical_placement_and_scene_readback
+results:
+  radial_trajectory_points: 13
+  vertical_trajectory_points: 32
+  radial_acm_object: plastic_cup
+  radial_acm_link: gripper
+  moving_jaw_allowed: false
+  acm_restored_before_vertical: true
+  final_left_contact_count: 0
+  final_right_contact_count: 0
+  final_table_contact: true
+  final_cup_position_m: [-0.0780114571055083, -0.2474243476370848, 0.16550312392426883]
+  final_upright_tilt_rad: 0.017509988034019854
+  final_sample_count: 18
+  final_stable_duration_s: 0.204
+  final_max_linear_speed_m_s: 0.0
+  final_max_angular_speed_rad_s: 0.000007853601525831116
+  planning_scene_world_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  planning_scene_attached_object_ids: []
+provenance:
+  physics_pause_calls: 0
+  simulator_constraint_calls: 0
+  direct_object_state_writes: 0
+evidence:
+  diagnostic_json_sha256: b4c8c17cc41c8d13fcfcf754a814bb04b6ed859b6e4b1769e7680a61bf728c52
+  diagnostic_log_sha256: 37f80d294e8063b5885239c9c4d7f8c0a89d620832bd22d567e5f6c9e54283ad
+  diagnostic_script_sha256: ebcbe99508712c9bf43100ba5d0ca413f926064ae2c7044a5c574ba70e4cfa6f
+decision: Diagnostic hypothesis proved. Do not count as a full lifecycle because it resumed after release. Proceed to a qualified ResetWorld and one fresh uninterrupted lifecycle using the same frozen behavior.
+```
+
+## Checkpoint CP-167
+
+```yaml
+checkpoint_id: CP-167
+checkpoint_time: 2026-08-12T06:08:24+08:00
+last_valid_experiment: EXP-133 VALID release-retreat continuation success
+current_hypothesis: The complete EXP-131 lifecycle plus the now-proven radial-only reversible ACM retreat will produce one valid uninterrupted physical pick-and-place after ResetWorld.
+next_command: Preregister and execute EXP-134 ResetWorld qualification, including electronic postconditions and passive CUA visual verification, before preregistering the full lifecycle.
+```
+
+## Experiment EXP-134
+
+```yaml
+experiment_id: EXP-134
+prior_experiment: EXP-133 VALID release-retreat continuation success
+status: RUNNING
+lifecycle: QUALIFIED_RESETWORLD_TO_TASK_START_BEFORE_FULL_LIFECYCLE
+hypothesis: The patched ResetWorld transaction restores the exact task_start keyframe and MoveIt task scene from the epoch-8 final placement without process restart or model mutation.
+single_variable: Execute one ResetWorld task_start transaction and exact Planning Scene restore. No task motion begins in this experiment.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  old_reset_epoch: 8
+  keyframe: task_start
+  expected_joint_positions_rad: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  reset_script: [/tmp/so101_exp134_reset.py, 94f3307667e5f0a5b120724f6a170e1e5d52f0070a5f34884e4fb3dcac13578e]
+  reset_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/reset.py, 4149260ad44e]
+preconditions:
+  - EXP-133 finished with zero fingertip contact, cup stable inside target, exact world cup, no attachment, and original ACM restored.
+  - Reset script passes Ruff and pycompile; protected Gazebo status is clean.
+success_criteria:
+  - Service returns success; reset_epoch increments exactly 8 to 9 and authoritative paused step-zero evidence belongs to the same session.
+  - All six joints and the cup return within configured task_start tolerances; arm and gripper controllers are active.
+  - Planning Scene readback is exactly table 1, pedestal 1, plastic_cup 13, with no attached cup.
+  - Passive CUA shows RViz left and MuJoCo Viewer right with the arm, pedestal, table, cup, and red target ring visibly restored to task_start; Viewer is Running or visibly in the qualified paused reset state as recorded.
+failure_criteria: Any epoch/session/joint/object/controller/scene/evidence/visual mismatch fails and is retained.
+invalid_criteria: Process restart, direct object state write outside ResetWorld, model/config mutation, task motion before terminal evidence, or missing CUA evidence invalidates the experiment.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Only after electronic and visual reset acceptance, preregister and execute the fresh full lifecycle at epoch 9.
+```
+
+## Experiment EXP-134 Terminal Result
+
+```yaml
+experiment_id: EXP-134
+status: VALID
+terminal_result: QUALIFIED_RESET_AND_SCENE_RESTORE_PROVED
+terminal_time: 2026-08-12T06:11:45+08:00
+command: python3 /tmp/so101_exp134_reset.py
+exit_code: 0
+electronic_results:
+  reset_epoch: [8, 9]
+  simulation_step: 0
+  paused: true
+  cup_position_m: [0.02, -0.28, 0.165]
+  cup_orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+  cup_linear_velocity_m_s: [0.0, 0.0, 0.0]
+  cup_angular_velocity_rad_s: [0.0, 0.0, 0.0]
+  joint_positions_rad: [0.00000005171177762341105, 0.0002673190157197849, 0.00023641112083134245, 0.000025309125207896054, 0.000000005750872309928381, -0.000000156048348687488]
+  controllers_active: true
+  planning_scene_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  planning_scene_attached_object_ids: []
+visual_results:
+  method: passive CUA via codex-cua
+  rviz_left: true
+  mujoco_viewer_right: true
+  task_start_horizontal_arm: true
+  open_gripper_clear_of_upright_cup: true
+  complete_scene_and_red_ring_visible: true
+  viewer_pause_visible: true
+evidence:
+  reset_json_sha256: fa7164469debbc37fdab6db2fc9c6a2978d7833c1df7937eb864bd332a8dc725
+  reset_log_sha256: 0c660ba75dbe0d156da32c6bbcfb444f7edd344266f4b701837ca41d255301b3
+  cua_screenshot_sha256: 9d4f000590ab8d93f348b384e0464044344869c85c9fb6b57bf87f686cf19341
+decision: ResetWorld is electronically and visually accepted. Epoch 9 is frozen at task_start for EXP-135.
+```
+
+## Experiment EXP-135
+
+```yaml
+experiment_id: EXP-135
+prior_experiment: EXP-134 VALID qualified reset
+status: RUNNING
+lifecycle: UNINTERRUPTED_PHYSICAL_PICK_TRANSPORT_PLACE_RELEASE_RETREAT_FINAL_PROOF
+hypothesis: The frozen staged physical grasp/transport/alignment behavior plus the proven radial-only reversible ACM retreat completes one uninterrupted pick-and-place from epoch-9 task_start with the cup stable inside the unchanged target.
+single_variable: Integrate the EXP-133-proven ACM scope into the otherwise unchanged EXP-131 full lifecycle. No target, model, friction, controller, grasp, alignment, or motion waypoint changes.
+frozen_inputs:
+  simulation_session_id: so101-task14-acceptance
+  reset_epoch: 9
+  start_keyframe: task_start
+  phase_order:
+    - resume_physics_once
+    - staged_approach_15_waypoints_to_close_ready
+    - bounded_bilateral_contact_hold
+    - physical_micro_lift
+    - policy_lift_waypoint_1
+    - remaining_lift_waypoints_2_to_5
+    - transport_5_waypoints
+    - descend_3_waypoints
+    - bounded_place_alignment
+    - physical_q6_release
+    - radial_only_reversible_acm_retreat_10_mm
+    - original_acm_restore_and_readback
+    - ordinary_collision_checked_vertical_retreat_60_mm
+    - final_physical_and_scene_proof
+  suite_manifest_sha256: 61cce69310a5abfe5eb0ed83247269802f19f75c47c67c67e42d612e6dda8b73
+  runner: [/tmp/so101_exp135_run.bash, 1fa0396a6e3fbac33d8b383d23cf1c35e0b71aa2d80387c88dd699441c6fa755]
+  release_retreat_script: [/tmp/so101_exp135_release_retreat.py, b93fbe3f7c1afc4de996e7a823eb988c4d81608413d6f431b9cc918e1a33056b]
+  policy: [src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808]
+  acm_source: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/planning_scene_acm.py, 1a8c571fe9948a8d8203b0d87823787051da5c5436cceef0d940d865de226880]
+preconditions:
+  - EXP-134 electronically and visually proved epoch-9 task_start; simulation remains paused and no subsequent state action occurred.
+  - All eight phase scripts pass pycompile and Ruff; runner passes Bash syntax; forbidden simulator-constraint/object-write scan passes.
+  - Package Ruff gate and focused tests/build pass; protected Gazebo status and diff are clean.
+success_criteria:
+  - Every phase completes in order without reset, pause after the single resume, process restart, direct object state write, simulator attachment, teleport, or unbounded retry.
+  - Bilateral physical grasp remains force/contact/support-safe through lift, transport, descend, and bounded alignment.
+  - q6 opens; released cup remains table-supported within force/displacement bounds; radial contact clears within 0.05 s.
+  - Only plastic_cup-to-gripper is temporarily ACM-allowed; plastic_cup-to-jaw remains false; complete original ACM is restored before vertical planning.
+  - Final cup is upright and stable inside x [-0.085,-0.075], y [-0.255,-0.245], supported by table, with zero fingertip contact; Planning Scene has exact world cup and no attachment.
+  - Passive final CUA shows RViz left, Viewer right, cup visibly inside the red ring, arm/gripper clear above it, complete scene, and Viewer Running.
+failure_criteria: Any phase, planning, execution, convergence, contact, force, support, alignment, placement, ACM, scene, provenance, or visual gate failure stops immediately and is retained.
+invalid_criteria: Any reset/pause after resume, direct object qpos/qvel write, teleport, weld/equality/adhesion/mocap constraint, hidden physical attachment, global/jaw ACM bypass, model/config mutation, process restart, missing evidence, or unregistered retry invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: On success, capture passive CUA, then promote the proven lifecycle into the production runner; on failure, preserve and diagnose only the first failure.
+```
+
+## Experiment EXP-135 Terminal Result
+
+```yaml
+experiment_id: EXP-135
+status: VALID
+terminal_result: UNINTERRUPTED_PHYSICAL_PICK_AND_PLACE_VISUALLY_PROVED
+terminal_time: 2026-08-12T06:16:45+08:00
+command: /tmp/so101_exp135_run.bash
+exit_code: 0
+completed_phases:
+  - resume_physics_once
+  - staged_approach_15_waypoints
+  - bounded_bilateral_contact_hold
+  - physical_micro_lift
+  - policy_lift_5_waypoints_total
+  - transport_5_waypoints
+  - descend_3_waypoints
+  - bounded_place_alignment_1_attempt
+  - physical_q6_release
+  - radial_only_reversible_acm_retreat_10_mm
+  - original_acm_restore_and_readback
+  - ordinary_collision_checked_vertical_retreat_60_mm
+  - final_physical_and_scene_proof
+phase_results:
+  staged_approach_status: CLOSE_READY
+  staged_approach_segments: 15
+  contact_hold_status: CONTACT_ONLY_PROVED
+  contact_hold_samples: 73
+  micro_lift_status: PHYSICAL_MICRO_LIFT_PROVED
+  remaining_lift_status: REMAINING_FORMAL_LIFT_PROVED
+  remaining_lift_segments: 4
+  transport_status: FORMAL_MOVE_ABOVE_PLACE_PROVED
+  transport_segments: 5
+  descend_status: FORMAL_DESCEND_TO_PRE_RELEASE_CLEARANCE_PROVED
+  descend_segments: 3
+  place_alignment_status: PRE_RELEASE_ALIGNMENT_PROVED
+  release_retreat_status: RELEASE_RETREAT_FINAL_PLACEMENT_PROVED
+final_physical_result:
+  reset_epoch: 9
+  cup_position_m: [-0.07866599849254928, -0.2473756541793162, 0.1653858428271493]
+  upright_tilt_rad: 0.017638161717676775
+  table_contact: true
+  left_fingertip_contact_count: 0
+  right_fingertip_contact_count: 0
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.000010239843591340283
+  stable_sample_count: 18
+  stable_duration_s: 0.204
+  target_bounds_xy_m: {x: [-0.085, -0.075], y: [-0.255, -0.245]}
+planning_scene_result:
+  world_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  attached_object_ids: []
+radial_acm_result:
+  allowed_pair: [plastic_cup, gripper]
+  moving_jaw_allowed: false
+  restored_before_vertical: true
+  restored_pair_allowed: false
+visual_result:
+  method: passive CUA via codex-cua
+  rviz_left: true
+  mujoco_viewer_right: true
+  upright_cup_visibly_inside_red_ring: true
+  opened_gripper_and_arm_clear: true
+  complete_scene_visible: true
+  viewer_status_running: true
+provenance:
+  lifecycle_reset_calls_after_resume: 0
+  lifecycle_pause_calls_after_resume: 0
+  direct_object_state_writes: 0
+  simulator_constraint_calls: 0
+  process_restarts: 0
+evidence:
+  master_log_sha256: d6503a12b4fd0c1c6368119f7e232374cf530beb5f576a08844d11a57c012075
+  staged_approach_json_sha256: 18dfe1078134e61a96fe56ca77da05265b658fe462d28d2a7f7b0d23adaca7fa
+  contact_hold_json_sha256: 1a6c048da234a35fa1c47734e4713ecea45ccb97c0b1271b73505b4d076b5772
+  micro_lift_json_sha256: 70b1a5783d0a99bef8285bd4bb2c26ba40539a5d1afec92a12d5723dd51693a1
+  transport_json_sha256: 1a38a19195dd49cd1d91eb925739f01db225036c7ebb0fb46e2a89762b177b67
+  place_alignment_json_sha256: 6154f8741cc295c28e403c1fffd88cf6d5f8a36999a99d87970dd0f8eaf5117f
+  release_retreat_json_sha256: fccf4239950d2872568a5f4135d7c1a05959c42d5363a5c31ea5e3db18b42c39
+  release_retreat_log_sha256: 04fb4c8aa3a9275e2709260a67c72e2355babad5a588db4dd828c664e999cfc7
+  cua_screenshot_sha256: 829e9546104144a9a8e8cacce43311f67a9bd0ec2f39e24ca4e43b7db321b7c8
+decision: Count as the required one successful uninterrupted physical pick-and-place. Next, promote this exact behavior into the production runner and pass package gates before the planned rebase and Teleop integration.
+```
+
+## Checkpoint CP-168
+
+```yaml
+checkpoint_id: CP-168
+checkpoint_time: 2026-08-12T06:16:45+08:00
+last_valid_experiment: EXP-135 VALID uninterrupted physical pick-and-place success
+accepted_success_count: 1
+current_state: Viewer remains Running at epoch 9 with the cup stable inside the target, arm/gripper clear, exact world cup in Planning Scene, no attachment, and original ACM restored.
+next_command: Implement the proven phase lifecycle as the so101_mujoco_demo_py production execution path, run full quality/provenance/isolation gates, commit and push, then create the continuation branch and rebase it on latest main for Teleop integration.
+```
+
+## Experiment EXP-136 Registration
+
+```yaml
+experiment_id: EXP-136
+registered_at: 2026-08-12T06:35:51+08:00
+purpose: Qualify ResetWorld immediately before validating the promoted production execution entrypoint.
+simulation_session_id: so101-task14-acceptance
+expected_epoch_transition: 9 -> 10
+initial_state: EXP-135 terminal state; cup stable inside the target and simulation running.
+state_action: Exactly one ResetWorld(task_start), followed by Planning Scene restore and passive CUA inspection.
+reset_script: [/tmp/so101_exp136_reset.py, 7c0f50f6df10749e39968dba2e630eb78a2d91b00559ffacdf62582446eee210]
+success_criteria:
+  - Reset receipt and authoritative evidence both prove epoch 10 and paused step-zero task_start.
+  - Arm is at the six-joint task_start state, controllers are active, and cup is upright at [0.02, -0.28, 0.165] within 3 mm.
+  - Planning Scene contains exact table, pedestal, and 13-primitive cup with no attached cup.
+  - Passive CUA visibly proves RViz left, MuJoCo Viewer right, task_start arm, open gripper, original cup position, complete scene, and Paused status.
+failure_criteria: Any reset, epoch, pose, controller, scene, or visual mismatch is retained and blocks production validation.
+invalid_criteria: Any additional reset, object state write, teleport, simulator attachment, hidden constraint, model mutation, or GUI manipulation invalidates the experiment.
+evidence_root: /tmp/so101-task14-acceptance
+decision: PENDING.
+next_experiment: Only after valid reset and visual proof, pre-register and execute the production runner as EXP-137.
+```
+
+## Experiment EXP-136 Terminal Result
+
+```yaml
+experiment_id: EXP-136
+status: VALID
+terminal_result: RESET_WORLD_AND_VISUAL_TASK_START_PROVED
+terminal_time: 2026-08-12T06:38:02+08:00
+reset_result:
+  reset_epoch: 9 -> 10
+  simulation_step: 0
+  paused: true
+  cup_position_world_m: [0.02, -0.28, 0.165]
+  cup_orientation_world_xyzw: [0.0, 0.0, 0.0, 1.0]
+  cup_linear_velocity_world_m_s: [0.0, 0.0, 0.0]
+  controllers_active: true
+planning_scene_result:
+  world_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  attached_object_ids: []
+visual_result:
+  method: passive CUA via codex-cua
+  rviz_left: true
+  mujoco_viewer_right: true
+  task_start_arm_and_open_gripper: true
+  upright_cup_at_original_position: true
+  complete_scene_visible: true
+  viewer_status_paused: true
+evidence:
+  reset_json_sha256: 55fff4795fa0495cef8bfd77c2842f4e186bf7d5f7baa717511a147bf4b95879
+  reset_log_sha256: c9030b8fb1d6a8eabca953ab7309bef7b84324f1518bf038608b11bfe9978eb5
+  cua_screenshot_sha256: 642a21981f7e54e195fa58838eb6f208a29301570b660e7cafc01f77f688e52a
+decision: Proceed once to the production runner validation at epoch 10.
+```
+
+## Experiment EXP-137 Registration
+
+```yaml
+experiment_id: EXP-137
+registered_at: 2026-08-12T06:38:02+08:00
+purpose: Validate that the promoted pick_place_state_machine production execution entrypoint reproduces the proven uninterrupted physical lifecycle.
+simulation_session_id: so101-task14-acceptance
+expected_reset_epoch: 10
+initial_state: EXP-136 valid paused task_start with exact Planning Scene.
+command: pick_place_state_machine --mode execute --execute --session-id so101-task14-acceptance --expected-reset-epoch 10 --evidence-root /tmp/so101-task14-acceptance/exp137-live-runtime --motion-policy src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml
+production_sources:
+  live_runtime: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_runtime.py, e2f6af57391fcc22925433ce851a31812527ff08dd2b2cbcddf0151f00c38ac0]
+  cli: [src/so101_mujoco_demo_py/so101_mujoco_demo_py/cli.py, bfa38273761ebef7ce4b4023c617bebb858f790aff9a8f4e7f61cfa5e882f7fa]
+  policy: [src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml, d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808]
+preconditions:
+  - EXP-136 qualified epoch-10 paused task_start and passive visual state.
+  - Fresh two-package colcon build and test passed: 359 tests, 0 errors, 0 failures, 4 skipped.
+  - Package pytest passed 344 tests with 4 skipped; Ruff and migration isolation gates passed.
+success_criteria:
+  - Production entrypoint resumes physics exactly once and completes all nine registered phases without reset, pause, process restart, direct object state write, simulator attachment, teleport, or hidden constraint.
+  - Manifest is DONE, every phase exit code is zero, every evidence artifact has a SHA-256 digest, and all evidence is session/epoch exact.
+  - Final cup is upright and stable inside the target bounds, table-supported, with zero fingertip contact; original ACM is restored and exact Planning Scene has no attachment.
+  - Passive final CUA proves RViz left, Viewer right, cup visibly inside red ring, arm/gripper clear, complete scene, and Viewer Running.
+failure_criteria: Any phase, evidence, physical, scene, ACM, provenance, or visual failure stops and is retained.
+invalid_criteria: Any reset/pause after resume, direct object qpos/qvel write, teleport, weld/equality/adhesion/mocap constraint, hidden physical attachment, model mutation, unregistered retry, or GUI manipulation invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance/exp137-live-runtime
+decision: PENDING.
+next_experiment: None without a new ledger registration; on success perform clean shutdown, commit/push, then rebase continuation branch for Teleop integration.
+```
+
+## Experiment EXP-137 Terminal Result
+
+```yaml
+experiment_id: EXP-137
+status: FAILED_BEFORE_STATE_ACTION
+terminal_time: 2026-08-12T06:39:13+08:00
+failure: ROS overlay setup was sourced directly by the inherited zsh with stale COLCON_CURRENT_PREFIX; /opt/ros/jazzy/setup.bash attempted to load setup.sh from the worktree root.
+state_actions_performed: 0
+physics_resumed: false
+runner_started: false
+evidence_root_created: false
+retention: The tmux pane output is retained; there was no runtime master log because the shell's && chain stopped before the tee pipeline.
+decision: Do not count. Preserve epoch-10 paused task_start and pre-register a new execution using an isolated Bash wrapper that clears COLCON_CURRENT_PREFIX.
+```
+
+## Experiment EXP-138 Registration
+
+```yaml
+experiment_id: EXP-138
+registered_at: 2026-08-12T06:39:13+08:00
+purpose: Execute the same production-runner validation from a deterministic Bash environment after EXP-137 failed before any state action.
+simulation_session_id: so101-task14-acceptance
+expected_reset_epoch: 10
+initial_state: Unchanged EXP-136 valid paused task_start; EXP-137 performed zero state actions.
+command: /tmp/so101_exp138_run.bash
+runner_wrapper: [/tmp/so101_exp138_run.bash, bc8e97d491f22eb4dba8382de0ab7d773a029b3650792149fc8f9748c1357ed4]
+environment_fix: Clear inherited COLCON_CURRENT_PREFIX, then source ROS, qualified fork, active integration overlay, and fresh production overlay under Bash.
+success_criteria:
+  - Production entrypoint resumes physics exactly once and completes all nine registered phases without reset, pause, process restart, direct object state write, simulator attachment, teleport, or hidden constraint.
+  - Manifest is DONE, every phase exit code is zero, every evidence artifact has a SHA-256 digest, and all evidence is session/epoch exact.
+  - Final cup is upright and stable inside target bounds, table-supported, with zero fingertip contact; original ACM restored and exact Planning Scene has no attachment.
+  - Passive final CUA proves RViz left, Viewer right, cup inside red ring, arm/gripper clear, complete scene, and Viewer Running.
+failure_criteria: Any environment, phase, evidence, physical, scene, ACM, provenance, or visual failure stops and is retained.
+invalid_criteria: Any reset/pause after resume, direct object qpos/qvel write, teleport, weld/equality/adhesion/mocap constraint, hidden physical attachment, model mutation, unregistered retry, or GUI manipulation invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance/exp138-live-runtime
+decision: PENDING.
+next_experiment: None without a new ledger registration.
+```
+
+## Experiment EXP-138 Terminal Result
+
+```yaml
+experiment_id: EXP-138
+status: FAILED_BEFORE_STATE_ACTION
+terminal_time: 2026-08-12T06:40:37+08:00
+exit_code: 127
+failure: The ament_python console script is intentionally installed under lib/so101_mujoco_demo_py and is not a bare PATH command.
+state_actions_performed: 0
+physics_resumed: false
+runner_started: false
+evidence_root_created: false
+evidence:
+  master_log_sha256: 64bde3c94926d5ff5adb233fe2af1f5fb8b6a8520c3a9954713f2d4b815a97e0
+diagnostic_readback: ros2 pkg executables so101_mujoco_demo_py lists pick_place_state_machine.
+decision: Do not count. Preserve epoch-10 paused task_start and invoke the installed formal entrypoint through ros2 run in a new registered experiment.
+```
+
+## Experiment EXP-139 Registration
+
+```yaml
+experiment_id: EXP-139
+registered_at: 2026-08-12T06:40:37+08:00
+purpose: Execute the installed production runner through the canonical ROS 2 console-script entrypoint.
+simulation_session_id: so101-task14-acceptance
+expected_reset_epoch: 10
+initial_state: Unchanged EXP-136 valid paused task_start; EXP-137 and EXP-138 performed zero state actions.
+command: /tmp/so101_exp139_run.bash
+runner_wrapper: [/tmp/so101_exp139_run.bash, 48a2bd6f6bd195aece0c6707962295fbb219669721d0bafc6b952c87df71c9a0]
+formal_entrypoint: ros2 run so101_mujoco_demo_py pick_place_state_machine --mode execute --execute
+success_criteria:
+  - Production entrypoint resumes physics exactly once and completes all nine registered phases without reset, pause, process restart, direct object state write, simulator attachment, teleport, or hidden constraint.
+  - Manifest is DONE, every phase exit code is zero, every evidence artifact has a SHA-256 digest, and all evidence is session/epoch exact.
+  - Final cup is upright and stable inside target bounds, table-supported, with zero fingertip contact; original ACM restored and exact Planning Scene has no attachment.
+  - Passive final CUA proves RViz left, Viewer right, cup inside red ring, arm/gripper clear, complete scene, and Viewer Running.
+failure_criteria: Any environment, phase, evidence, physical, scene, ACM, provenance, or visual failure stops and is retained.
+invalid_criteria: Any reset/pause after resume, direct object qpos/qvel write, teleport, weld/equality/adhesion/mocap constraint, hidden physical attachment, model mutation, unregistered retry, or GUI manipulation invalidates the run.
+evidence_root: /tmp/so101-task14-acceptance/exp139-live-runtime
+decision: PENDING.
+next_experiment: None without a new ledger registration.
+```
+
+## Experiment EXP-139 Terminal Result
+
+```yaml
+experiment_id: EXP-139
+status: VALID
+terminal_result: INSTALLED_PRODUCTION_RUNNER_PHYSICAL_PICK_AND_PLACE_VISUALLY_PROVED
+terminal_time: 2026-08-12T06:44:33+08:00
+exit_code: 0
+completed_phases:
+  - staged_approach
+  - contact_hold
+  - micro_lift
+  - policy_lift_waypoint1
+  - remaining_lift
+  - transport
+  - descend
+  - place_alignment
+  - release_retreat
+manifest_result:
+  status: DONE
+  expected_reset_epoch: 10
+  phase_exit_codes_all_zero: true
+  artifact_sha256_count: 9
+final_physical_result:
+  cup_position_world_m: [-0.07935794584628292, -0.24539781774692443, 0.16514775924087624]
+  upright_tilt_rad: 0.012631139187870259
+  table_contact: true
+  left_fingertip_contact_count: 0
+  right_fingertip_contact_count: 0
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0
+  stable_sample_count: 21
+  stable_duration_s: 0.2
+planning_scene_result:
+  world_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  attached_object_ids: []
+radial_acm_result:
+  allowed_pair: [plastic_cup, gripper]
+  moving_jaw_allowed: false
+  restored_before_vertical: true
+  restored_pair_allowed: false
+visual_result:
+  method: passive CUA via codex-cua
+  rviz_left: true
+  mujoco_viewer_right: true
+  upright_cup_visibly_inside_red_ring: true
+  opened_gripper_and_arm_clear: true
+  complete_scene_visible: true
+  viewer_status_running: true
+provenance:
+  lifecycle_reset_calls_after_resume: 0
+  lifecycle_pause_calls_after_resume: 0
+  direct_object_state_writes: 0
+  simulator_constraint_calls: 0
+  process_restarts: 0
+evidence:
+  master_log_sha256: 76acc587ccbb332fbb09940fe0d6495b2d9c8bb73bdce6ef2d34d60174bbbdb4
+  manifest_sha256: 50db4a99d6766233dc62ac709d84be5657e348e1bfe8a2511f5ffa2cc0b6b305
+  release_retreat_json_sha256: 93c9ae940c133997e10b14318fd733ded491b883df76b2160da21995e488f32d
+  cua_screenshot_sha256: 2d9b1d4677c31fa57f17eb27b84f3560c280d7d0e3abea6308e211b4679eb8e6
+decision: Production execution entrypoint is live-qualified. Proceed to clean shutdown, pre-rebase commit/push, and the registered Teleop continuation work.
+```
+
+## Checkpoint CP-169
+
+```yaml
+checkpoint_id: CP-169
+checkpoint_time: 2026-08-12T06:44:33+08:00
+last_valid_experiment: EXP-139 VALID installed production-runner physical pick-and-place
+accepted_success_count: 2
+current_state: Viewer remains Running at epoch 10 with the cup stable inside target, arm/gripper clear, exact Planning Scene, no attachment, and original ACM restored.
+next_command: Perform scoped clean shutdown and verify owned processes exit cleanly; then commit and push codex/so101-mujoco-ros2 before creating the non-force continuation branch for rebase and Teleop integration.
+```
+
+## Experiment EXP-140 Registration
+
+```yaml
+experiment_id: EXP-140
+registered_at: 2026-08-12T06:49:25+08:00
+purpose: Reproduce and verify the fork-side clean GUI shutdown fix after the accepted production pick-place.
+baseline_failure:
+  mujoco_ros2_control_exit_code: -11
+  stack: libGLdispatch during controller-manager shutdown
+  observation: Simulate and its GLFW/OpenGL context were created on the render thread but the Simulate member was destroyed later on the controller-manager main thread.
+hypothesis: Stop physics first, then signal the render thread to destroy Simulate on the context-owning thread before joining it.
+patched_sources:
+  header_sha256: f2f86c124d11510bb498b78c51e9eb335cf7e87593a01909356e9823727457e0
+  source_sha256: 377efae3ec07587bd6feed6eaf563b76456d90d0f5f06c7becbb64fe74ab09ad
+build_artifact:
+  libmujoco_ros2_control_so_sha256: 6599ee0d4c36f603ea2d4a7aed573f526645f6dfd94cf6f4fd7cdf1b633e9ee7
+test_precondition:
+  - Static owner-thread destruction contract failed before the patch and passes after it.
+  - Fork core build passed and all four core test targets passed, including 10 headless tests and 96 URDF conversion tests.
+state_action: Launch one isolated GUI MuJoCo stack on ROS_DOMAIN_ID 150 from the patched fork overlay, wait for readiness, then send one scoped Ctrl-C to its tmux pane.
+success_criteria:
+  - Viewer and controller stack reach readiness using the patched library.
+  - On Ctrl-C, controllers deactivate, physics stops, render thread releases graphics resources, and ros2_control_node exits code 0 with no SIGSEGV/libGLdispatch stack.
+  - No unrelated process or tmux session is signaled.
+failure_criteria: Any launch, readiness, hang, forced kill, SIGSEGV, nonzero child exit, or graphics teardown error is retained.
+invalid_criteria: Reusing the old fork overlay, signaling a broad process set, or editing the model during the run invalidates the test.
+evidence_root: /tmp/so101-shutdown-exp140
+decision: PENDING.
+next_experiment: Diagnose only if the owner-thread teardown still fails; otherwise update the fork release and dependency lock.
+```
+
+## Experiment EXP-140 Terminal Result
+
+```yaml
+experiment_id: EXP-140
+status: INCONCLUSIVE_TEST_HARNESS_FAILURE
+terminal_time: 2026-08-12T06:51:25+08:00
+launch_ready: true
+observed_exit: 120
+segmentation_fault_observed: false
+failure: The tee pipeline shared the foreground terminal process group; Ctrl-C terminated the log transport before complete launch shutdown output could be retained, so controller deactivation and child exit status were not provable.
+evidence:
+  partial_launch_log_sha256: 93f8a5dc8ecd95fd82b16511abdd33b5dd3a9afa260bf060efda34b1b2239a94
+decision: Do not accept. Re-run with ros2 launch exec'd directly and simple file redirection, retaining tmux pane_dead_status as the authoritative process exit.
+```
+
+## Experiment EXP-141 Registration
+
+```yaml
+experiment_id: EXP-141
+registered_at: 2026-08-12T06:51:25+08:00
+purpose: Repeat the fork GUI shutdown test with a signal-transparent launch harness.
+state_action: Start the patched GUI stack on ROS_DOMAIN_ID 151; after all three controllers activate, send one Ctrl-C to the single owned tmux pane.
+runner: [/tmp/so101_exp141_shutdown.bash, b9ca90a696b634e519dd309997ec356199d11851321da3e2043c036e0feb877d]
+harness: exec ros2 launch with direct stdout/stderr file redirection; tmux remain-on-exit records the real pane exit code.
+success_criteria:
+  - arm_controller, gripper_controller, and joint_state_broadcaster all activate before shutdown.
+  - Shutdown log shows controller deactivation, hardware deactivate/shutdown, and clean ros2_control_node and robot_state_publisher exits.
+  - tmux pane exit is zero or the launcher's documented Ctrl-C success status, with no -11, SIGSEGV, libGLdispatch error, hang, or forced kill.
+failure_criteria: Missing readiness, missing shutdown lifecycle, graphics crash, non-clean child exit, hang, or forced kill.
+invalid_criteria: Old fork overlay, broad process signal, model mutation, or tee/pipeline in the signal path.
+evidence_root: /tmp/so101-shutdown-exp141
+decision: PENDING.
+next_experiment: None without new registration.
+```
+
+## Experiment EXP-141 Terminal Result
+
+```yaml
+experiment_id: EXP-141
+status: INVALID_RUNTIME_PROVENANCE
+terminal_time: 2026-08-12T06:53:12+08:00
+launch_ready: true
+shutdown_lifecycle_observed: true
+observed_child_exit: -11
+invalid_reason: The launch log proves ros2_control_node was resolved from /tmp/so101-fork-reset-test/install, because sourcing the project overlay reintroduced its build-time fork underlay after the patched fork prefix.
+evidence:
+  launch_log_sha256: 7a3b6b9b32a16f10e0e18e3a54fc684d92af4b7c629150c039ac4197a9d4259c
+decision: Do not evaluate the patch from this run. Reorder overlays and record ros2 pkg prefix before launch.
+```
+
+## Experiment EXP-142 Registration
+
+```yaml
+experiment_id: EXP-142
+registered_at: 2026-08-12T06:53:12+08:00
+purpose: Validly test patched fork shutdown with explicit runtime-prefix proof.
+runner: [/tmp/so101_exp142_shutdown.bash, b9036dc64c6a264c14ceb63b619d0adbb0d207587717a1f6cae30c756c5d8e1b]
+state_action: Launch GUI stack on ROS_DOMAIN_ID 152 after sourcing the project overlay first and the patched fork overlay last; after all controllers activate, send one Ctrl-C to the owned tmux pane.
+runtime_provenance_gate:
+  required_mujoco_prefix: /tmp/so101-fork-shutdown-build/install/mujoco_ros2_control
+  required_project_prefix: /tmp/so101-production-build-v2/install/so101_mujoco_demo_py
+  evidence_file: /tmp/so101-shutdown-exp142/runtime-prefixes.txt
+success_criteria:
+  - Runtime-prefix evidence exactly names the patched fork and fresh project overlay.
+  - All three controllers activate before shutdown.
+  - Shutdown log shows controller and hardware teardown, and clean ros2_control_node/robot_state_publisher exits.
+  - tmux pane exit is zero, with no -11, SIGSEGV, libGLdispatch error, hang, or forced kill.
+failure_criteria: Any provenance mismatch, readiness gap, missing teardown lifecycle, crash, nonzero exit, hang, or forced kill.
+invalid_criteria: Old fork prefix, broad process signal, model mutation, or pipeline in the signal path.
+evidence_root: /tmp/so101-shutdown-exp142
+decision: PENDING.
+next_experiment: None without new registration.
+```
+
+## Experiment EXP-142 Terminal Result
+
+```yaml
+experiment_id: EXP-142
+status: VALID
+terminal_result: PATCHED_MUJOCO_GUI_CLEAN_SHUTDOWN_PROVED
+terminal_time: 2026-08-12T06:58:46+08:00
+runtime_provenance:
+  mujoco_ros2_control_prefix: /tmp/so101-fork-shutdown-build/install/mujoco_ros2_control
+  so101_mujoco_demo_py_prefix: /tmp/so101-production-build-v2/install/so101_mujoco_demo_py
+readiness:
+  arm_controller_active: true
+  gripper_controller_active: true
+  joint_state_broadcaster_active: true
+shutdown:
+  controller_deactivation_observed: true
+  hardware_deactivate_and_shutdown_observed: true
+  robot_state_publisher_clean_exit: true
+  ros2_control_node_clean_exit: true
+  tmux_pane_exit_code: 0
+  segmentation_fault: false
+  libGLdispatch_error: false
+evidence:
+  launch_log_sha256: 8b2cc18e1c5436abac1e041926e60ad62fdbc16fcce4d269b1782f0cb92efe19
+  runtime_prefixes_sha256: f97ee30a822d08f2ceeb039f39d72afd1b1934377dc6fc0336b1e6b1c641f4c1
+decision: Accept the fork-side context-owner teardown fix. Validate the MoveIt ordered shutdown executable in the formal project composition next.
+```
+
+## Experiment EXP-143 Registration
+
+```yaml
+experiment_id: EXP-143
+registered_at: 2026-08-12T06:58:46+08:00
+purpose: Validate a project-owned MoveIt entrypoint that keeps the ROS context valid until MoveGroupExe, MoveItCpp, and the planning scene monitor are destroyed.
+baseline_failure:
+  executable: /opt/ros/jazzy/lib/moveit_ros_move_group/move_group
+  exit_code: -11
+  stack: MoveItCpp -> TrajectoryExecutionManager -> rclcpp::Node -> CallbackGroup destructor after SIGINT context shutdown
+implementation:
+  source: src/so101_mujoco_support/src/so101_move_group.cpp
+  source_sha256: 15931e3d1b31ba104b8cda6a8ba9ae5581200da8e305276d69a6c6f7c2ccfb20
+  executable_sha256: 5ab239f1962cf9ee8ad247b5c59c34abd7eca4e75b4628333f1b8e07b3e0f809
+  upstream_basis: moveit/moveit2 tag 2.12.4 move_group.cpp
+  change: Disable the default rclcpp signal handler, poll a signal-safe shutdown flag, remove the node from the executor, destroy all MoveIt objects, then call rclcpp::shutdown.
+runner: [/tmp/so101_exp143_ordered_shutdown.bash, acb47851f6b7b854c5f3dbf825302ebd8ae519589772fd9b41e3b801545471cc]
+state_action: Run the formal so101_pick_place.launch.py in GUI dry-run mode on ROS_DOMAIN_ID 153 and let its workflow-owned Shutdown event terminate the complete stack.
+success_criteria:
+  - Runtime provenance selects patched MuJoCo, fresh support/demo overlay, and installed so101_move_group.
+  - Planning Scene setup succeeds and dry-run workflow reaches DONE.
+  - Workflow-owned shutdown cleanly exits so101_move_group, ros2_control_node, and robot_state_publisher with no -11, SIGSEGV, graphics teardown error, hang, or forced kill.
+  - tmux pane exit code is zero and evidence/log files are retained.
+failure_criteria: Any provenance, launch, scene, workflow, process-exit, teardown, or timeout failure.
+invalid_criteria: Using the apt move_group executable, old fork overlay, broad process signal, or model mutation.
+evidence_root: /tmp/so101-shutdown-exp143
+decision: PENDING.
+next_experiment: None without new registration.
+```
+
+## Experiment EXP-143 Terminal Result
+
+```yaml
+experiment_id: EXP-143
+status: FAILED
+terminal_time: 2026-08-12T07:00:23+08:00
+runtime_provenance_valid: true
+planning_scene_setup: succeeded
+dry_run_workflow: succeeded
+workflow_owned_shutdown: triggered
+mujoco_ros2_control_clean_exit: true
+robot_state_publisher_clean_exit: true
+so101_move_group_exit_code: -11
+last_moveit_log: Deleting MoveItCpp
+finding: Keeping the ROS context valid until MoveIt object teardown was necessary but not sufficient; an internal MoveIt lifetime/thread race remains.
+evidence:
+  launch_log_sha256: dc6035a17a92864d54912224074d1ac863e25dacd04181213049e76549c3eb99
+  workflow_json_sha256: 9ba42b336e98a68004f1a90cd53ade1f69f03c2ce035c9e4796caf7cf2617c9a
+  runtime_prefixes_sha256: c5f267ec6de007921a611493a74e5f1159c011413c0638cdab250075afe05b43
+decision: Retain failure and obtain an all-thread GDB backtrace from the same lifecycle before changing teardown again.
+```
+
+## Experiment EXP-144 Registration
+
+```yaml
+experiment_id: EXP-144
+registered_at: 2026-08-12T07:00:23+08:00
+purpose: Capture the exact crashing thread and frames for the ordered MoveIt shutdown failure.
+state_action: Re-run the same formal GUI dry-run lifecycle on ROS_DOMAIN_ID 154 with only so101_move_group under noninteractive GDB.
+debug_launch: [/tmp/so101_exp144_gdb.launch.py, 0929b01c83afe8100a4983e8298784d7a4983502b23cb18beb012ea5c308a984]
+runner: [/tmp/so101_exp144_gdb_shutdown.bash, 6f9ce95960e0a351ba9e4ceb50c0a8722ddaabb6ed8145ab25189135b4658573]
+gdb_commands: run; thread apply all bt
+success_criteria:
+  - Same planning and workflow lifecycle completes.
+  - If a crash occurs, launch.log contains the faulting signal, thread, and all-thread backtrace sufficient to identify the owning MoveIt component.
+  - Other stack processes shut down without broad signaling or forced kill.
+failure_criteria: Debugger fails to start, lifecycle differs before shutdown, backtrace is missing, or stack hangs.
+invalid_criteria: Source/model mutation during the run, apt move_group substitution, old fork overlay, or unregistered retry.
+evidence_root: /tmp/so101-shutdown-exp144
+decision: PENDING.
+next_experiment: Patch only the component/lifetime proven by the backtrace.
+```
+
+## Experiment EXP-144 Terminal Result
+
+```yaml
+experiment_id: EXP-144
+status: INVALID_DEBUGGER_LAUNCH
+terminal_time: 2026-08-12T07:03:00+08:00
+failure: launch_ros treated the prefix list as one concatenated executable name, so GDB never started; scene_setup later timed out because move_group was absent.
+move_group_started: false
+backtrace_captured: false
+state_mutation: Only an isolated simulator launch; shutdown remained clean for the patched MuJoCo process.
+evidence:
+  launch_log_sha256: 8f66d7b86b75f2722449db2ef8667d6b3aa496b883e0b6fe7465d7f75c8e0e7a
+decision: Do not use for diagnosis. Re-register with the launch prefix as one shell-tokenized string.
+```
+
+## Experiment EXP-145 Registration
+
+```yaml
+experiment_id: EXP-145
+registered_at: 2026-08-12T07:03:00+08:00
+purpose: Capture the ordered MoveIt shutdown crash with a correctly tokenized GDB prefix.
+state_action: Repeat the GUI dry-run lifecycle on ROS_DOMAIN_ID 155 with so101_move_group under gdb -batch.
+debug_launch: [/tmp/so101_exp145_gdb.launch.py, 1502345fadc413889604496f96f2d82526008f40a0442a31fb092e2190e0cdc6]
+runner: [/tmp/so101_exp145_gdb_shutdown.bash, 7329c866d4f8f4bd33fd220f161649ea65b1d97a61dcd8957dbf1e58645834bc]
+gdb_commands: run; thread apply all bt
+success_criteria:
+  - GDB starts the installed so101_move_group and the same planning/workflow lifecycle completes.
+  - On fault, launch.log retains signal, crashing thread, and all-thread frames sufficient to identify the object/lifetime race.
+  - Patched MuJoCo and other owned processes shut down cleanly.
+failure_criteria: Debugger/startup mismatch, lifecycle divergence, missing backtrace, or hang.
+invalid_criteria: Source/model mutation, apt move_group substitution, old fork overlay, or unregistered retry.
+evidence_root: /tmp/so101-shutdown-exp145
+decision: PENDING.
+next_experiment: Patch only the proven lifetime race.
+```
+
+## Experiment EXP-145 Terminal Result
+
+```yaml
+experiment_id: EXP-145
+status: INCONCLUSIVE_DEBUGGER_SIGNAL_POLICY
+terminal_time: 2026-08-12T07:05:23+08:00
+runtime_provenance_valid: true
+dry_run_workflow: succeeded
+headless_execution_result: HEADLESS_EXECUTION_OK
+debugger_result: GDB stopped on the launch-delivered SIGINT before the process signal handler and printed live-thread backtraces; it did not observe the later SIGSEGV path.
+mujoco_ros2_control_clean_exit: true
+robot_state_publisher_clean_exit: true
+evidence:
+  launch_log_sha256: 6fdc406e480bd175a3a3308d69f89aad253b6f256acd8e5cdc61b4c7d15359a8
+  debug_launch_sha256: 1502345fadc413889604496f96f2d82526008f40a0442a31fb092e2190e0cdc6
+  runner_sha256: 7329c866d4f8f4bd33fd220f161649ea65b1d97a61dcd8957dbf1e58645834bc
+decision: Preserve as a valid lifecycle but inconclusive crash diagnosis. Re-run with GDB configured to pass SIGINT without stopping so it can catch the subsequent SIGSEGV.
+```
+
+## Experiment EXP-146 Registration
+
+```yaml
+experiment_id: EXP-146
+registered_at: 2026-08-12T07:05:23+08:00
+purpose: Capture the exact ordered MoveIt shutdown SIGSEGV while allowing the workflow SIGINT to reach the custom handler.
+state_action: Repeat the same GUI dry-run lifecycle on ROS_DOMAIN_ID 156 with so101_move_group under GDB configured to pass SIGINT without stopping.
+debug_launch: [/tmp/so101_exp146_gdb.launch.py, e0ad0c66a140544eb5d52e8a2d351b0d437b2d4084c54eed69b6ace6b83e3c23]
+runner: [/tmp/so101_exp146_gdb_shutdown.bash, 316583e57cbc0aef98e6341f77c2aa0e0c0da7985704120b9d313dbde6b73f2b]
+gdb_commands: handle SIGINT nostop noprint pass; run; thread apply all bt
+success_criteria:
+  - Same planning and workflow lifecycle completes.
+  - SIGINT reaches the installed so101_move_group signal handler without stopping GDB.
+  - If teardown faults, launch.log retains the SIGSEGV thread and all-thread backtrace sufficient to identify the owning MoveIt component.
+  - Patched MuJoCo and other owned processes shut down cleanly.
+failure_criteria: Debugger/startup mismatch, lifecycle divergence, missing fault backtrace, or hang.
+invalid_criteria: Source/model mutation, apt move_group substitution, old fork overlay, or unregistered retry.
+evidence_root: /tmp/so101-shutdown-exp146
+decision: PENDING.
+next_experiment: Patch only the lifetime proven by the SIGSEGV backtrace.
+```
+
+## Experiment EXP-146 Terminal Result
+
+```yaml
+experiment_id: EXP-146
+status: FAILED_WITH_ACTIONABLE_BACKTRACE
+terminal_time: 2026-08-12T07:09:40+08:00
+runtime_provenance_valid: true
+dry_run_workflow: succeeded
+headless_execution_result: HEADLESS_EXECUTION_OK
+fault: SIGSEGV in rclcpp::CallbackGroup::~CallbackGroup during MoveItCpp teardown
+owning_chain: MoveItCpp::~MoveItCpp -> TrajectoryExecutionManager::~TrajectoryExecutionManager -> rclcpp::Node::~Node -> rclcpp::CallbackGroup::~CallbackGroup
+concurrent_worker: PlanningSceneMonitor::scenePublishingThread was still alive when MoveItCpp teardown began.
+mujoco_ros2_control_clean_exit: true
+robot_state_publisher_clean_exit: true
+evidence:
+  launch_log_sha256: 641fafdfb5eae32dff5821b9c416ecd2571a289b551fca582276af38a7339393
+  workflow_json_sha256: fb3307dd2e4eca811618dbdf6987b203f123713526b0ab17c61893db0a78c9a5
+decision: Add ordered PlanningSceneMonitor worker shutdown before aggregate MoveItCpp destruction, with a red/green source contract; keep the ROS context valid until object teardown completes.
+```
+
+## Experiment EXP-147 Registration
+
+```yaml
+experiment_id: EXP-147
+registered_at: 2026-08-12T07:09:40+08:00
+purpose: Verify the formal launch stack exits cleanly after explicitly stopping every PlanningSceneMonitor worker before MoveItCpp teardown.
+state_action: Run the unchanged GUI dry-run lifecycle on ROS_DOMAIN_ID 157 using the v6 installed overlay and normal workflow-owned shutdown.
+source_patch: [src/so101_mujoco_support/src/so101_move_group.cpp, 6637c16e8fdda58121fb03ea5e2cc3b9162a38d5be695379771ef3996180d388]
+installed_executable_sha256: be79feb97a6de9388e717c241918fc3436ea39907f28d052296caebe31bedf5d
+runner: [/tmp/so101_exp147_ordered_shutdown.bash, fbc65555c95ec76ff34f1200dcdd58250bd0165a2d4812840753d30b4ea82e8b]
+success_criteria:
+  - Scene setup and the same headless dry-run workflow succeed.
+  - so101_move_group exits with code 0 and no SIGSEGV/CallbackGroup fault.
+  - Patched MuJoCo and robot_state_publisher also exit cleanly.
+  - No residual experiment processes remain.
+failure_criteria: Any lifecycle divergence, nonzero owned-process exit, GL crash, CallbackGroup fault, or residual process.
+invalid_criteria: Source/model mutation during the run, old build prefix, apt move_group substitution, or unregistered retry.
+evidence_root: /tmp/so101-shutdown-exp147
+decision: PENDING.
+next_experiment: If clean, freeze shutdown regression and update the fork/package release evidence; otherwise return to a debugger using this exact lifecycle.
+```
+
+## Experiment EXP-147 Terminal Result
+
+```yaml
+experiment_id: EXP-147
+status: FAILED
+terminal_time: 2026-08-12T07:12:10+08:00
+runtime_provenance_valid: true
+dry_run_workflow: succeeded
+headless_execution_result: HEADLESS_EXECUTION_OK
+planning_scene_workers_stopped: true
+so101_move_group_exit_code: -11
+last_moveit_log: Deleting MoveItCpp
+mujoco_ros2_control_clean_exit: true
+robot_state_publisher_clean_exit: true
+evidence:
+  launch_log_sha256: d707d046c7af91013471b1b5273d384c8cfde979e0aea3e629d3a76e3bb2b474
+  workflow_json_sha256: 2d75801da0b13d2b19b5f34ee3a8563ce4c7d9cc475d85c40a23a3da134b1b44
+finding: Stopping PlanningSceneMonitor removes the concurrent scene-publisher thread but does not make TrajectoryExecutionManager's private executor leave before its callback-group teardown.
+decision: Preserve failure. Stop public MoveIt workers, then invalidate the ROS context so the TEM private executor exits, then destroy MoveIt objects.
+```
+
+## Experiment EXP-148 Registration
+
+```yaml
+experiment_id: EXP-148
+registered_at: 2026-08-12T07:12:10+08:00
+purpose: Verify two-stage shutdown: stop public MoveIt workers, invalidate ROS context to stop private executors, then destroy MoveIt objects.
+state_action: Run the unchanged GUI dry-run lifecycle on ROS_DOMAIN_ID 158 using the v7 installed overlay and normal workflow-owned shutdown.
+source_patch: [src/so101_mujoco_support/src/so101_move_group.cpp, 3744b0c08cb3a7e78fe52f123baf30b0d8b8b8223c3acb4aeabba76bc3659799]
+installed_executable_sha256: cef03d96f43a39c9a31c182eba73c96465b24d48826d1b176973351e02f74890
+runner: [/tmp/so101_exp148_ordered_shutdown.bash, 6583e942f4874d889493cf726d11a8925f4cb12d4c685ddce02d37bea8506415]
+success_criteria:
+  - Scene setup and the same headless dry-run workflow succeed.
+  - so101_move_group exits with code 0 and no SIGSEGV/CallbackGroup fault.
+  - Patched MuJoCo and robot_state_publisher also exit cleanly.
+  - No residual experiment processes remain.
+failure_criteria: Any lifecycle divergence, nonzero owned-process exit, GL crash, CallbackGroup fault, or residual process.
+invalid_criteria: Source/model mutation during the run, old build prefix, apt move_group substitution, or unregistered retry.
+evidence_root: /tmp/so101-shutdown-exp148
+decision: PENDING.
+next_experiment: If clean, lock the shutdown contract and proceed to fork/package release gates; otherwise patch the proven TEM private-executor ownership defect rather than broadening process signals.
+```
+
+## Experiment EXP-148 Terminal Result
+
+```yaml
+experiment_id: EXP-148
+status: FAILED
+terminal_time: 2026-08-12T07:14:51+08:00
+runtime_provenance_valid: true
+dry_run_workflow: succeeded
+headless_execution_result: HEADLESS_EXECUTION_OK
+planning_scene_workers_stopped: true
+ros_context_shutdown_before_moveit_destruction: true
+so101_move_group_exit_code: -11
+last_moveit_log: Deleting MoveItCpp
+mujoco_ros2_control_clean_exit: true
+robot_state_publisher_clean_exit: true
+evidence:
+  launch_log_sha256: 12b7f5dddc39e1615c82a90bd5fd41493d34f9fdfc78330c11a866cdc7ab4eaf
+  workflow_json_sha256: 34ba51925d6ec9f6f1759736c513028f88bf07190fcf3ca41b1bae577455baa8
+finding: The apt MoveIt/rclcpp callback-group destructor remains defective after both public workers and the ROS context stop; no public MoveIt API exposes TEM's private executor for explicit removal.
+decision: Use a bounded compatibility process boundary: stop public workers and ROS context, emit a marker, then exit the dedicated move_group process with code 0 before entering the defective third-party destructor.
+```
+
+## Experiment EXP-149 Registration
+
+```yaml
+experiment_id: EXP-149
+registered_at: 2026-08-12T07:14:51+08:00
+purpose: Verify the bounded apt-MoveIt compatibility exit after all project-owned/public workers and the ROS context stop.
+state_action: Run the unchanged GUI dry-run lifecycle on ROS_DOMAIN_ID 159 using the v8 installed overlay and normal workflow-owned shutdown.
+source_patch: [src/so101_mujoco_support/src/so101_move_group.cpp, 2177d43d7e906aae34661a2307bf1d677348a66e967991e7a020185d7f3e5613]
+installed_executable_sha256: 680971f91d908c5baf80c2b81b7231e93a54647dcc1f2240c5d8c51ae1b7bf1c
+runner: [/tmp/so101_exp149_ordered_shutdown.bash, 9d80c16c434f2da088643888d96b862f972b65777ba2898f55a92f43b162f733]
+success_criteria:
+  - Scene setup and the same headless dry-run workflow succeed.
+  - Log contains SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK.
+  - so101_move_group exits with code 0 and no SIGSEGV/CallbackGroup fault.
+  - Patched MuJoCo and robot_state_publisher also exit cleanly.
+  - No residual experiment processes remain.
+failure_criteria: Missing ordered-shutdown marker, any lifecycle divergence, nonzero owned-process exit, GL crash, or residual process.
+invalid_criteria: Source/model mutation during the run, old build prefix, apt move_group substitution, or unregistered retry.
+evidence_root: /tmp/so101-shutdown-exp149
+decision: PENDING.
+next_experiment: If clean, freeze this explicit compatibility contract and proceed to fork/package release gates.
+```
+
+## Experiment EXP-149 Terminal Result
+
+```yaml
+experiment_id: EXP-149
+status: VALID
+terminal_time: 2026-08-12T07:15:53+08:00
+runtime_provenance_valid: true
+dry_run_workflow: succeeded
+headless_execution_result: HEADLESS_EXECUTION_OK
+ordered_shutdown_marker: SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK
+so101_move_group_exit_code: 0
+mujoco_ros2_control_exit_code: 0
+robot_state_publisher_exit_code: 0
+sigsegv_or_callback_group_fault: false
+residual_owned_processes: []
+evidence:
+  launch_log_sha256: 99b0d31142643c99cb61ba721408efd1692e0909beea8b1466837b7cd1f53b15
+  workflow_json_sha256: 1333149fc5046cf95422a6aebcbfabe8ff0109aeeb9f06ee8c505b17fa296a2b
+  runtime_prefixes_sha256: 80c2065e5bad194e3cbc4ca055c44f815360f6a7c3c7ee47ef1b36a227ee1f4e
+decision: Accept the bounded project-owned compatibility exit for the ROS Jazzy apt MoveIt/rclcpp destructor defect. Proceed to full gates and dependency release; retain EXP-146 through EXP-148 as the attribution trail.
+```
+
+## Task 14.4 / Task 13S Release Gate Checkpoint
+
+```yaml
+recorded_at: 2026-08-12T07:24:00+08:00
+physical_success_experiments: [EXP-135, EXP-139]
+installed_entrypoint_success: EXP-139
+clean_shutdown_acceptance: EXP-149
+mujoco_fork:
+  origin: git@gitee.com:zjumty/mujoco_ros2_control.git
+  tag: so101-0.0.3-r5
+  commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  push_verified: true
+  core_tests: {discovered: 118, errors: 0, failures: 0, skipped: 0}
+  live_gui_shutdown: EXP-142
+project_gates:
+  pytest: {passed: 345, skipped: 4, exit_code: 0}
+  ruff: {checked_files: 100, exit_code: 0}
+  colcon: {discovered: 360, errors: 0, failures: 0, skipped: 4}
+  migration_isolation: passed
+  diff_check: passed
+  protected_gazebo_diff: zero
+  protected_gazebo_status: clean
+dependency_runtime:
+  fork_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+  validation_errors: []
+decision: The pre-rebase physical-success implementation and shutdown compatibility boundary are ready for a scoped superproject commit and normal push. After the remote checkpoint is frozen, continue with Task 14T on a new branch rebased onto fresh origin/main.
 ```

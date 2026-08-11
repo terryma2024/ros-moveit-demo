@@ -109,13 +109,19 @@ def resetter(services, observer, now, **kwargs):
 
 def test_reset_orders_pause_controller_reset_snapshot_and_independent_verification() -> None:
     services = FakeServices()
-    observer = FakeObserver([evidence(), evidence(epoch=1, step=0, paused=True)])
+    observer = FakeObserver(
+        [
+            evidence(),
+            evidence(epoch=1, step=0, paused=True),
+            evidence(epoch=1, step=3, paused=True),
+        ]
+    )
     now = [0.0]
     target = resetter(services, observer, now)
 
     def progress():
         now[0] += 0.01
-        services.joint_callback_count = 1
+        services.joint_callback_count += 1
 
     target._progress = progress
     receipt = target.reset("task_start")
@@ -131,7 +137,7 @@ def test_reset_orders_pause_controller_reset_snapshot_and_independent_verificati
         ("activate", ("arm_controller", "gripper_controller")),
         ("pause", True),
         ("controllers_active", ("arm_controller", "gripper_controller")),
-        ("joints_converged", (0.0,) * 6, 0.002, 0),
+        ("joints_converged", (0.0,) * 6, 0.002, 1),
     ]
     assert all(operation[0] != "step" for operation in services.operations)
 
@@ -174,7 +180,10 @@ def test_bounded_resume_waits_for_post_reset_joint_callback_before_repause() -> 
 def test_failure_is_explicit_and_leaves_world_paused(operation) -> None:
     services = FakeServices()
     services.fail_operation = operation
-    target = resetter(services, FakeObserver([evidence()]), [0.0])
+    snapshots = [evidence()]
+    if operation == "activate":
+        snapshots.append(evidence(epoch=1, step=0, paused=True))
+    target = resetter(services, FakeObserver(snapshots), [0.0])
     with pytest.raises(ResetFailed, match=operation):
         target.reset("task_start")
     assert services.operations[-1] == ("pause", True)
@@ -215,7 +224,9 @@ def test_two_identical_resets_produce_sequential_receipts() -> None:
             evidence(epoch=0, step=9),
             evidence(epoch=1, step=0, paused=True),
             evidence(epoch=1, step=8, paused=True),
+            evidence(epoch=1, step=8, paused=True),
             evidence(epoch=2, step=0, paused=True),
+            evidence(epoch=2, step=6, paused=True),
         ]
     )
     target = resetter(services, observer, [0.0])
@@ -251,6 +262,42 @@ def test_paused_start_is_resumed_before_strict_deactivate() -> None:
     observer = FakeObserver([evidence(paused=True), evidence(epoch=1, step=0, paused=True)])
     resetter(services, observer, [0.0]).reset("task_start")
     assert services.operations[:2] == [
+        ("pause", False),
+        ("deactivate", ("arm_controller", "gripper_controller")),
+    ]
+
+
+def test_fresh_client_requests_snapshot_when_world_is_already_paused() -> None:
+    class PausedSnapshotObserver:
+        def __init__(self):
+            self.snapshot_requested = False
+            self.accepted_reads = 0
+
+        def snapshot(self):
+            if not self.snapshot_requested:
+                raise EvidenceStale("paused publisher has not emitted to this subscriber")
+            self.accepted_reads += 1
+            if self.accepted_reads == 1:
+                return evidence(epoch=0, step=12, paused=False)
+            if self.accepted_reads == 2:
+                return evidence(epoch=0, step=0, paused=True)
+            return evidence(epoch=1, step=0, paused=True)
+
+    observer = PausedSnapshotObserver()
+
+    class SnapshotServices(FakeServices):
+        def pause(self, paused):
+            if paused:
+                observer.snapshot_requested = True
+            return super().pause(paused)
+
+    services = SnapshotServices()
+    receipt = resetter(services, observer, [0.0]).reset("task_start")
+
+    assert receipt.old_epoch == 0
+    assert receipt.new_epoch == 1
+    assert services.operations[:3] == [
+        ("pause", True),
         ("pause", False),
         ("deactivate", ("arm_controller", "gripper_controller")),
     ]
@@ -295,7 +342,7 @@ def test_progresses_subscriptions_before_first_post_service_snapshot() -> None:
     assert receipt.new_epoch == 1
 
 
-def test_retries_typed_stale_evidence_within_existing_deadline() -> None:
+def test_drains_typed_stale_evidence_before_service_retry_deadline() -> None:
     class StaleThenFreshObserver:
         def __init__(self):
             self.reads = 0
@@ -315,8 +362,58 @@ def test_retries_typed_stale_evidence_within_existing_deadline() -> None:
 
     receipt = target.reset("task_start")
     assert receipt.new_epoch == 1
-    assert observer.reads == 4
-    assert services.operations.count(("pause", True)) == 4
+    assert observer.reads == 5
+    assert services.operations.count(("pause", True)) == 2
+
+
+def test_waits_for_subscription_drain_before_retrying_idempotent_pause() -> None:
+    """A service retry must not starve delivery of its own reset snapshot."""
+
+    progress_streak = [0]
+
+    class DrainRequiredObserver:
+        def __init__(self):
+            self.initial_read = False
+
+        def snapshot(self):
+            if not self.initial_read:
+                self.initial_read = True
+                return evidence()
+            if progress_streak[0] < 3:
+                return evidence()
+            return evidence(epoch=1, step=0, paused=True)
+
+    class RetryInterruptsDrainServices(FakeServices):
+        def pause(self, paused):
+            if paused:
+                progress_streak[0] = 0
+            return super().pause(paused)
+
+    observer = DrainRequiredObserver()
+    services = RetryInterruptsDrainServices()
+    now = [0.0]
+
+    def progress():
+        progress_streak[0] += 1
+        now[0] += 0.01
+        services.joint_callback_count += 1
+
+    target = MujocoResetClient(
+        services,
+        observer,
+        simulation_session_id="session-a",
+        controller_names=("arm_controller", "gripper_controller"),
+        expected_joint_positions=(0.0,) * 6,
+        expected_object_position=(0.27, 0.0, 0.08),
+        timeout_s=0.1,
+        monotonic=lambda: now[0],
+        progress=progress,
+    )
+
+    receipt = target.reset("task_start")
+
+    assert receipt.new_epoch == 1
+    assert services.operations.count(("pause", True)) == 2
 
 
 def test_ros_client_separates_service_clients_from_joint_subscription() -> None:
@@ -394,6 +491,22 @@ def test_step_zero_is_required_and_publisher_sequence_must_advance() -> None:
     object.__setattr__(current, "publisher_sequence", 1)
     with pytest.raises(ResetFailed, match="publisher sequence"):
         resetter(services, FakeObserver([evidence(step=9), current]), [0.0]).reset("task_start")
+
+
+def test_receipt_preserves_authoritative_step_zero_after_bounded_resume() -> None:
+    services = FakeServices()
+    observer = FakeObserver(
+        [
+            evidence(step=9),
+            evidence(epoch=1, step=0, paused=True),
+            evidence(epoch=1, step=4, paused=True),
+        ]
+    )
+
+    receipt = resetter(services, observer, [0.0]).reset("task_start")
+
+    assert receipt.simulation_step == 0
+    assert observer.snapshot().simulation_step == 4
 
 
 def test_non_stale_observer_error_is_terminal_without_retry() -> None:

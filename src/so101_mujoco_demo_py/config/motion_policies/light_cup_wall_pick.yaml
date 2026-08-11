@@ -14,6 +14,62 @@ gripper_actions:
   grasp_close_q6: -0.047608632840292
   seating_preload_rad: 0.006
   release_q6: 0.750
+place_alignment:
+  # EXP-129 proved the larger lateral shift came from retreat contact, not free settling.
+  settling_compensation_m: [0.0012, 0.0025, 0.0185]
+  xy_tolerance_m: 0.003
+  z_tolerance_m: 0.003
+  max_attempts: 3
+  max_axis_correction_m: 0.030
+release_retreat:
+  radial_separation_m: 0.010
+  vertical_clearance_m: 0.060
+  orientation_tolerance_rad: 0.15
+  position_tolerance_m: 0.001
+  velocity_scaling: 0.03
+  acceleration_scaling: 0.03
+  residual_contact_grace_s: 0.05
+  max_residual_fingertip_force_n: 0.05
+  max_released_cup_displacement_m: 0.003
+contact_calibration_approach:
+  planner: pose_constrained
+  frame_id: world
+  tcp_link: so101_tcp
+  stable_home_rad: [0.0, 0.0, 0.0, 0.0, 0.0]
+  pregrasp_offset_m: [0.0006766838, 0.0171789788, 0.0756306106]
+  contact_offset_m: [0.0006766838, 0.0171789788, 0.0356306106]
+  tcp_orientation_xyzw: [-0.0102659913, -0.0102629866, -0.7067526865, 0.7073117563]
+  position_tolerance_m: 0.0005
+  orientation_tolerance_rad: [0.01, 0.01, 0.01]
+  plan_start_tolerance_rad: 0.01
+  home_tolerance_rad: 0.01
+  home_max_joint_speed_rad_s: 0.02
+  maximum_lateral_deviation_m: 0.003
+  maximum_precontact_cup_displacement_m: 0.003
+  maximum_diagnostic_force_n: 11.60
+  maximum_receipt_age_s: 0.2
+  maximum_replans: 1
+  pause_physics: false
+  allow_precontact_fingertip_contact: false
+staged_approach_execution:
+  pause_physics: false
+  phases: [MOVE_ABOVE_OBJECT, DESCEND]
+  planning_time_s: 5.0
+  plan_timeout_s: 12.0
+  execute_timeout_s: 45.0
+  gripper_duration_s: 2.0
+  gripper_timeout_s: 15.0
+  stable_window_s: 0.20
+  stable_timeout_s: 10.0
+  joint_state_max_age_s: 0.20
+  max_joint_speed_rad_s: 0.03
+  max_position_span_rad: 0.003
+  plan_start_tolerance_rad: 0.01
+  convergence_tolerance_rad: 0.01
+  maximum_replans_per_segment: 2
+  maximum_receipt_age_s: 0.50
+  maximum_preclose_cup_displacement_m: 0.003
+  maximum_preclose_force_n: 11.60
 states:
   MOVE_ABOVE_OBJECT:
     logical_start: [0.0, 0.0, 0.0, 0.0, 0.0]

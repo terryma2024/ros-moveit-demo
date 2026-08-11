@@ -350,7 +350,7 @@ def validate_provenance(payload: bytes) -> None:
             fail(f"invalid provenance visual reference commit at index {index}")
         source_path = update["source_path"]
         if not isinstance(source_path, str) or not source_path.startswith(
-            f"src/{legacy_namespace}/"
+            "src/so101_gazebo_demo_py/"
         ):
             fail(f"invalid provenance visual reference source at index {index}")
         destination_path = update["destination_path"]

@@ -4,7 +4,7 @@
 > 适用分支：`codex/so101-mujoco-ros2`
 > 本文校准基线：`dfc03d3`
 > 工作区：由 checkout 决定；`SO101_WORKSPACE_DIR` 只指定其外部工作目录。
-> 当前结论：MuJoCo 模型、`ros2_control`、MoveIt 规划/执行、reset 事务、模型可视化、零位稳定保持和四角 viewer debug camera 已分别通过验证；真实夹取接触、最终放置、重复性和 clean shutdown 尚未完成。
+> 当前结论：MuJoCo 模型、`ros2_control`、MoveIt 规划/执行、reset 事务、模型可视化、零位稳定保持、viewer camera、一次完整物理抓取放置和受控 clean shutdown 已通过验证；rebase 后的 Teleop 集成与批量重复性仍待完成。
 
 ## 1. 这份指南解决什么问题
 
@@ -831,7 +831,9 @@ KDL 配置仍是 `position_only_ik: true`，但这次 request 另有独立 orien
 
 ### 11.3 `move_group -11` 的含义
 
-Task 11 观察到的 `move_group` 返回 `-11` 是进程在 launch-directed shutdown 阶段收到 SIGSEGV，不是 MoveIt planning error code。功能请求已经可能成功，但 lifecycle/clean shutdown 仍有风险。用户此前指定在 Task 13 后修；Task 13 尚未完成，所以这一项当前仍是 open issue。
+Task 11 观察到的 `move_group` 返回 `-11` 是进程在 launch-directed shutdown 阶段收到 SIGSEGV，不是 MoveIt planning error code。GDB 最终把故障定位到 apt MoveIt 2.12.4 的 `MoveItCpp -> TrajectoryExecutionManager -> rclcpp::Node -> CallbackGroup` 析构链。停止 PlanningSceneMonitor、先关闭 ROS context 都不能消除故障，而且公开 API 无法移除 TEM 的私有 executor。
+
+项目因此使用专用 `so101_move_group` 进程作为兼容边界：先停止 PlanningSceneMonitor 的 publishing、scene、world-geometry 和 state workers，输出 `SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK`，关闭 ROS context，再用成功状态直接结束这个专用进程，避免进入已证实有缺陷的第三方析构器。该方案不 broad-kill 其他进程；验收仍要求 MoveIt workflow 成功、marker 存在、所有 owned process exit code 为 0 且无残留。
 
 ## 12. 接触标定：已学到什么，为什么仍未完成
 
@@ -896,7 +898,7 @@ Task 13 不能复制 Gazebo 阈值，必须基于当前 MuJoCo geometry/dynamics
 | 补充 | home-pose self-contact jitter | 已通过，commit `2d39539` |
 | 补充 | Gazebo 对齐 TCP plan + execute | EXP-060 已通过 |
 | 13 | MuJoCo contact evidence calibration | **未完成**；旧数据因路径与几何变更无效 |
-| 13 后 | clean shutdown / `move_group -11` | **未修复** |
+| 13 后 | clean shutdown / `move_group -11` | 已定位 apt MoveIt/rclcpp 析构缺陷；专用进程受控退出通过 |
 | 14 | 强制真实双指接触、抓取、最终放置 | **未开始** |
 | 15 | 5 次 FULL_RESTART + 5 次 RESET_WORLD 重复性 | **未开始** |
 | 扩展 | RGB-D camera | 不在本轮核心迁移范围，尚未集成 |
@@ -944,7 +946,7 @@ Task 13 不能复制 Gazebo 阈值，必须基于当前 MuJoCo geometry/dynamics
 | 本地 capture helper 截不到 MuJoCo | helper 是 Gazebo demo 专用 | 用 ai-station Codex CUA 获取真实窗口 |
 | 进程“已清理”但 tmux/PID 仍在 | 只看 wrapper 日志，未读回 ownership | 记录 PID/PGID/tmux，逐个 read-back；禁止 broad `pkill` |
 | launch SIGINT 后进程不退出 | 子进程忽略/延迟处理 SIGINT | 只对 task-owned exact PID 有界等待后 SIGTERM，保留其他 session |
-| `move_group` 返回 `-11` | shutdown lifecycle SIGSEGV | 不解释成 planning error；Task 13 后单独修 clean shutdown |
+| `move_group` 返回 `-11` | apt MoveIt 2.12.4 TEM 私有 executor 与 rclcpp CallbackGroup 析构缺陷 | 用项目专用 `so101_move_group`：先停 PSM workers/context，记录 marker，再受控成功退出；同时验证无残留 |
 | Task 13 force 看似很大却无抓取 | 实际是 cup/table other contact | 左/右/other arrays 分开解释，不能混成 fingertip threshold |
 | 只有左指接触、杯子先被推走 | joint-space approach 扫过杯壁 | 改用保持方向的 Cartesian/pose-constrained descent |
 | 直接沿用 Gazebo contact threshold | 两个引擎 solver/mesh/material 不同 | MuJoCo 固定几何上重新做七类 regime calibration，并单独审批 |
@@ -986,6 +988,8 @@ Task 13 不能复制 Gazebo 阈值，必须基于当前 MuJoCo geometry/dynamics
 - 捕获 `move_group` backtrace/core。
 - 区分 launch event handler、node destruction、plugin unload 和 outstanding action/service callback。
 - 要求正常 SIGINT/launch shutdown exit code 0，domain 内无 task-owned node 残留。
+
+MuJoCo fork 另有一个独立 GUI 退出坑：GLFW/OpenGL context 在 render thread 创建时，不能在 controller-manager main thread 析构 `Simulate`。fork `so101-0.0.3-r5` 会先 join physics thread，再通知 render thread 在 context owner 上执行 `sim_.reset()`，最后 join UI thread。安装时必须以 `dependency-lock.yaml` 的 r5 tag、commit 和标准 install-prefix hashes 为准，不能让旧 `/tmp` overlay 被 project overlay 的 chained setup 重新带回。
 
 ### 16.3 Task 14：真实物理抓取和放置
 

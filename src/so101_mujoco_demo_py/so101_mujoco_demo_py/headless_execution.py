@@ -11,6 +11,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+from so101_mujoco_demo_py.scene_setup import (
+    EXPECTED_PRIMITIVE_COUNTS,
+    REQUIRED_WORLD_OBJECTS,
+    scene_matches_task_geometry,
+    task_scene_readback,
+)
+
 REQUIRED_NODES = {
     "/controller_manager",
     "/move_group",
@@ -62,6 +69,17 @@ def assert_headless_summary(summary: dict[str, Any], *, expected_mode: str) -> N
     assert readiness["controllers"] == CONTROLLER_MAPPING
     assert readiness["tf_world_to_tcp"] is True
     assert readiness["moveit_planning_group"] == "arm"
+    _require_subset(
+        "Planning Scene world objects",
+        REQUIRED_WORLD_OBJECTS,
+        readiness["planning_scene_world_objects"],
+    )
+    assert readiness["planning_scene_primitive_counts"] == EXPECTED_PRIMITIVE_COUNTS
+    _require_subset(
+        "Planning Scene object colors",
+        set(REQUIRED_WORLD_OBJECTS),
+        readiness["planning_scene_color_ids"],
+    )
     assert summary["plan"]["accepted"] is True
     assert summary["plan"]["trajectory_points"] > 0
     assert summary["mujoco"]["publisher_sequence_delta"] > 0
@@ -195,7 +213,8 @@ def run_diagnostic(options: argparse.Namespace) -> dict[str, Any]:
     from control_msgs.msg import JointTrajectoryControllerState
     from controller_manager_msgs.srv import ListControllers
     from moveit_msgs.action import ExecuteTrajectory
-    from moveit_msgs.srv import GetMotionPlan
+    from moveit_msgs.msg import PlanningSceneComponents
+    from moveit_msgs.srv import GetMotionPlan, GetPlanningScene
     from rclpy.action import ActionClient
     from rclpy.qos import qos_profile_sensor_data
     from rclpy.time import Time
@@ -334,6 +353,7 @@ def run_diagnostic(options: argparse.Namespace) -> dict[str, Any]:
         node, FollowJointTrajectory, "/arm_controller/follow_joint_trajectory"
     )
     planner_service = node.create_client(GetMotionPlan, "/plan_kinematic_path")
+    scene_service = node.create_client(GetPlanningScene, "/get_planning_scene")
     list_controllers = node.create_client(ListControllers, "/controller_manager/list_controllers")
     mujoco_client = MujocoRosClient(
         node,
@@ -372,6 +392,32 @@ def run_diagnostic(options: argparse.Namespace) -> dict[str, Any]:
             deadline,
             "world to so101_tcp TF timeout",
         )
+        scene_request = GetPlanningScene.Request()
+        scene_request.components.components = (
+            PlanningSceneComponents.WORLD_OBJECT_NAMES
+            | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+            | PlanningSceneComponents.OBJECT_COLORS
+        )
+        planning_scene_world_objects: list[str] = []
+        planning_scene_primitive_counts: dict[str, int] = {}
+        planning_scene_color_ids: list[str] = []
+        while time.monotonic() < deadline:
+            scene_response = _service_result(node, scene_service, scene_request, deadline)
+            scene = scene_response.scene
+            planning_scene_world_objects = sorted(item.id for item in scene.world.collision_objects)
+            primitive_counts, color_ids = task_scene_readback(scene)
+            planning_scene_primitive_counts = dict(sorted(primitive_counts.items()))
+            planning_scene_color_ids = sorted(color_ids)
+            if scene_matches_task_geometry(scene):
+                break
+            rclpy.spin_once(node, timeout_sec=0.05)
+        else:
+            raise RuntimeError(
+                "Planning Scene readiness timeout: "
+                f"objects={planning_scene_world_objects}, "
+                f"primitive_counts={planning_scene_primitive_counts}, "
+                f"colors={planning_scene_color_ids}"
+            )
         planning_client = MoveItPlanningClient(
             planner_service,
             request_factory=make_get_motion_plan_request,
@@ -527,6 +573,9 @@ def run_diagnostic(options: argparse.Namespace) -> dict[str, Any]:
                 "controller_states": controller_states,
                 "tf_world_to_tcp": True,
                 "moveit_planning_group": configuration["planning_group"],
+                "planning_scene_world_objects": planning_scene_world_objects,
+                "planning_scene_primitive_counts": planning_scene_primitive_counts,
+                "planning_scene_color_ids": planning_scene_color_ids,
             },
             "plan": {"accepted": True, "trajectory_points": len(points)},
             "execution": {
