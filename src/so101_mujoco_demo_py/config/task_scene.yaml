@@ -6,6 +6,9 @@ simulation_seconds: 10.0
 finite_state_required: true
 stationary_table_required: true
 stationary_cup_after_settle_required: true
+stationary_robot_after_settle_required: true
+robot_position_envelope_limit_rad: 0.001
+robot_velocity_limit_rad_s: 0.01
 initial_inputs:
   timestep_s: 0.002
   joint_damping: 0.05
