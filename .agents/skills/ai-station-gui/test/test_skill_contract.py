@@ -26,3 +26,12 @@ def test_capture_contract_makes_only_desktop_required():
     assert '"rviz": null' in text
     assert '"ghostty": null' in text
     assert "skipped_no_window" in text
+
+
+def test_capture_contract_defines_local_and_remote_transfer_safety():
+    text = (ROOT / "references" / "capture-contract.md").read_text()
+
+    assert "`--local`" in text
+    assert "`--remote`" in text
+    assert "non-null" in text
+    assert "exact remote manifest" in text
