@@ -127,6 +127,34 @@ def test_unparseable_owner_output_returns_backend_output_invalid(tmp_path):
     assert result.error.code == "BACKEND_OUTPUT_INVALID"
 
 
+def test_cpp_owner_trace_preserves_every_state(tmp_path):
+    completed = subprocess.CompletedProcess(
+        ["owner"], 0,
+        "status=DONE\ntrace=BOOTSTRAP -> PREPARE_OPEN_GRIPPER -> DONE\n", "",
+    )
+    adapter, _runner = adapter_for(tmp_path, "gazebo_cpp", completed)
+
+    result = adapter.run_workflow(workflow_request("run"))
+
+    assert result.ok is True
+    assert result.result["trace"] == (
+        "BOOTSTRAP -> PREPARE_OPEN_GRIPPER -> DONE"
+    )
+
+
+def test_python_owner_state_trace_is_normalized_to_backend_trace(tmp_path):
+    completed = subprocess.CompletedProcess(
+        ["owner"], 0,
+        "status=SUCCEEDED\nstate_trace=IDLE,PREPARE_OPEN_GRIPPER,DONE\n", "",
+    )
+    adapter, _runner = adapter_for(tmp_path, "gazebo_py", completed)
+
+    result = adapter.run_workflow(workflow_request("run"))
+
+    assert result.ok is True
+    assert result.result["trace"] == "IDLE -> PREPARE_OPEN_GRIPPER -> DONE"
+
+
 def test_reset_accepts_owner_exit_success_without_stdout(tmp_path):
     completed = subprocess.CompletedProcess(["owner"], 0, "", "")
     adapter, runner = adapter_for(tmp_path, "gazebo_cpp", completed)

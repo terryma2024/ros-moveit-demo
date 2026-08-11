@@ -60,10 +60,18 @@ def _parse_result(stdout: str, allow_empty: bool) -> dict | None:
             continue
         if isinstance(value, dict):
             return value
-    pairs = {
-        match.group(1): match.group(2)
-        for match in re.finditer(r"(?:^|\s)([A-Za-z][A-Za-z0-9_]*)=([^\s]+)", text)
-    }
+    pairs = {}
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if separator and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", key):
+            pairs[key] = value.strip()
+    if "trace" not in pairs and "state_trace" in pairs:
+        pairs["trace"] = " -> ".join(
+            state.strip()
+            for state in pairs["state_trace"].split(",")
+            if state.strip()
+        )
     return pairs or None
 
 
