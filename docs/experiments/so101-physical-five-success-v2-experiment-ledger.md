@@ -7,7 +7,7 @@ success_contract: Fixed commit and policy; Gazebo attachment remains detached th
 worktree: /data/work/ws_moveit/.worktrees/so101-physical-five-success
 branch: codex/so101-physical-five-success
 base_commit: ef73c10f159c270b91748a41df9c4bac728fde80
-current_commit: ef73c10f159c270b91748a41df9c4bac728fde80
+current_commit: f31ee7af0179c7107661afbc10ba55ab48ce3cd6
 evidence_root: /tmp/so101-physical-five-success-v2/
 confirmed_conclusions:
   - The superseded campaign CP-RESULT-EXP-081-261 proved one RESET_WORLD physical-outcome success with Gazebo detached throughout; it did not count toward qualification.
@@ -29,8 +29,8 @@ open_hypotheses:
   - H-R0: requiring and, when necessary, boundedly reacquiring bilateral pad contact immediately before OPEN_GRIPPER prevents the moving-pad sweep observed in PHY5-B0-001 without changing the target region or penetration ceilings.
   - H-G1: the current 0.0001 m target-penetration lower bound accepts a bilateral but torsionally weak grasp; raising only that lower bound to 0.0008 m while preserving the 0.0010 m target maximum and 0.0013 m hard ceiling reduces in-gripper rotation during carry.
   - H-G2: when a bilateral contact is present but shallower than 0.8 mm, direct bounded 1 mrad tightening preserves contact topology better than fully opening and regrasping before every tightening step.
-latest_checkpoint: CP-V2-G7-RUNTIME-002-RESET-PROVED-041
-next_experiment: PHY5-G7-RUNTIME-002
+latest_checkpoint: CP-V2-PREOPEN-TILT-DOC-C10-M1-M8-061
+next_experiment: PHY5-G13-XY-ONLY-ALIGNMENT
 ```
 
 ```yaml
@@ -3049,4 +3049,68 @@ confirmed_conclusions:
 owned_processes: existing Gazebo and MoveIt windows only; no execute, recorder, video, or capture process remains
 qualification_status: NOT_STARTED
 next_command: choose a pre-open anti-leaning correction or center compensation; use RESET_WORLD for the next complete sample
+```
+
+```yaml
+checkpoint_id: CP-V2-PREOPEN-TILT-MATRIX-RESET-PROVED-060
+recorded_at: 2026-08-11 Asia/Shanghai
+last_valid_experiment: PHY5-G12-CONTROLLED-RELEASE-RETREAT-RUNTIME-001
+source_commit: f31ee7af0179c7107661afbc10ba55ab48ce3cd6
+active_install_overlay: /data/work/ws_moveit/.worktrees/so101-physical-five-success/install
+ros_domain_id: 189
+gz_partition: so101_phy5_v2_r0_001
+analysis_document: docs/experiments/so101-pre-open-tilt-root-cause-and-drop-strategy-matrix.md
+analysis_document_sha256: 0a162cf3c7a07f63a2d37e50b38e12501bd9ac495c119d92fd86d7681ae7947c
+current_state: RESET_WORLD_PROVED; arm at home, cup upright at canonical pick pose, gripper separated, Gazebo detached, MoveIt world-only plastic_cup
+reset:
+  command: SO101_PY_EVIDENCE_DIR=<evidence>/reset ros2 run so101_gazebo_demo_py reset_so101_world --timeout 15.0
+  exit_code: 0
+  object_pose_error_m: 0.0000007536096944757548
+  gazebo_attachment_state: detached
+  moveit_world_objects: [plastic_cup]
+  moveit_attached_objects: []
+  finger_contact: false
+  arm_tcp_finite: true
+  evidence: /tmp/so101-physical-five-success-v2/phy5-pre-open-tilt-reset-hH9OaU/reset/reset-world.json
+  evidence_sha256: a691f181b86e706015e2f7c20cb9fda0abc5de2c2fe5a8641071794787f4e642
+observed:
+  - the first shell attempt at /tmp/so101-physical-five-success-v2/phy5-pre-open-tilt-reset-hGwGk8 stopped before ros2 was loaded because nounset was incompatible with the ROS setup script; it issued no reset or robot command
+  - the successful attempt reused the existing Gazebo and MoveIt stack and did not perform FULL_RESTART
+  - all three controllers remained active before reset
+  - fresh Gazebo capture visually confirms the arm at home, the upright cup at the pick-side spawn pose, and the red target ring at the place side
+visual_evidence:
+  remote: /tmp/so101-physical-five-success-v2/phy5-pre-open-tilt-reset-hH9OaU/reset/gazebo-after-reset.png
+  sha256: 51b1058471d1bd98d6eae41e173e4fa726ce4dab8f4c4616e075ca317cced8f8
+  local_copy: /Users/matianyi/Projects/robot_demo_001/assets/captures/ai-station/20260811-phy5-pre-open-tilt-reset/gazebo-after-reset.png
+confirmed_conclusions:
+  - G12 tilt grows primarily during MOVE_ABOVE_PLACE, coupled XYZ PLACE_ALIGNMENT, and clamped RELEASE_SEATING; OPEN_GRIPPER is not the first bad boundary
+  - the next highest-information isolated variable is XY-only PLACE_ALIGNMENT at safe height; the proved +35 mm controlled retreat remains frozen
+working_tree_status: expected documentation-only changes in the matrix document and this ledger checkpoint
+owned_processes: existing tmux so101-phy5-v2-r0 Gazebo and MoveIt stack only; no execute, recorder, or video process
+qualification_status: NOT_STARTED
+next_experiment: PHY5-G13-XY-ONLY-ALIGNMENT
+next_command: preregister PHY5-G13-XY-ONLY-ALIGNMENT and add its RED test before changing runtime behavior
+```
+
+```yaml
+checkpoint_id: CP-V2-PREOPEN-TILT-DOC-C10-M1-M8-061
+recorded_at: 2026-08-11 Asia/Shanghai
+last_valid_experiment: PHY5-G12-CONTROLLED-RELEASE-RETREAT-RUNTIME-001
+source_commit: f31ee7af0179c7107661afbc10ba55ab48ce3cd6
+current_state: unchanged RESET_WORLD_PROVED state from CP-V2-PREOPEN-TILT-MATRIX-RESET-PROVED-060
+runtime_action: NONE
+document: docs/experiments/so101-pre-open-tilt-root-cause-and-drop-strategy-matrix.md
+document_sha256: 02ce5178b9e7234687fb18633475787439061839aa1a8157d06ad19b7b48cb7a
+document_changes:
+  - clarify that cup pose, tilt, bottom clearance, alignment feedback, and final outcome come from Gazebo; TCP comes from TF; MoveIt only holds a collision shadow seeded from Gazebo
+  - reclassify C10 as low direct physical causality, high control/modeling gap, and medium indirect planning influence
+  - retain only M1 through M8 in the drop-strategy matrix
+  - remove T5 and T6 because they depended on out-of-scope M9 through M11 routes
+preserved_processes:
+  - SO-101 physical stack in tmux so101-phy5-v2-r0, ROS_DOMAIN_ID 189, GZ_PARTITION so101_phy5_v2_r0_001
+  - separately owned MuJoCo MoveIt process in ROS_DOMAIN_ID 138; no conflict and no action taken
+working_tree_status: expected documentation-only changes in the matrix document and experiment ledger
+qualification_status: NOT_STARTED
+next_experiment: PHY5-G13-XY-ONLY-ALIGNMENT
+next_command: preregister PHY5-G13-XY-ONLY-ALIGNMENT and add its RED test before changing runtime behavior
 ```
