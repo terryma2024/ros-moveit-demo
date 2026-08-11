@@ -11958,3 +11958,27 @@ dependency_runtime:
   validation_errors: []
 decision: The pre-rebase physical-success implementation and shutdown compatibility boundary are ready for a scoped superproject commit and normal push. After the remote checkpoint is frozen, continue with Task 14T on a new branch rebased onto fresh origin/main.
 ```
+
+## Task 14T Pre-Rebase Checkpoint
+
+```yaml
+recorded_at: 2026-08-12T07:30:00+08:00
+PRE_REBASE_PHYSICAL_SUCCESS_SHA: e5bbf25ec06459c7be3b19ea36167051317528c5
+published_ref: origin/codex/so101-mujoco-ros2
+published_ref_sha: e5bbf25ec06459c7be3b19ea36167051317528c5
+last_valid_physical_experiment: EXP-139
+last_valid_shutdown_experiment: EXP-149
+running_experiment: null
+owned_runtime_processes: []
+fork_installer:
+  first_retry_failure: lodepng FetchContent update failed with GitHub GnuTLS recv error -110
+  fix: pass -DFETCHCONTENT_UPDATES_DISCONNECTED=ON so an existing pinned FetchContent checkout is not unnecessarily updated after cmake-clean-cache
+  formal_rerun: passed
+  tests: {discovered: 131, errors: 0, failures: 0, skipped: 0}
+  installed_hashes_match_dependency_lock: true
+pending_dirty_paths_before_checkpoint_commit:
+  - scripts/install-mujoco-ros2-control.zsh
+  - src/so101_mujoco_demo_py/test/test_fork_dependency.py
+  - docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md
+decision: Commit and push this bounded installer/checkpoint follow-up, verify a clean worktree, then create the continuation branch and rebase onto freshly fetched origin/main without rewriting the published physical-success branch.
+```

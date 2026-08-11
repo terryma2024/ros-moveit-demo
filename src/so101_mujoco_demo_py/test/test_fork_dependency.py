@@ -64,6 +64,7 @@ def test_installer_has_no_destructive_or_underlay_install_commands() -> None:
     assert "/data/work/ws_mujoco_ros2_control_fork" not in script
     assert "SO101_WORKSPACE_DIR" in script
     assert "setup.bash" not in script
+    assert "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON" in script
 
 
 def test_installer_disables_nounset_while_sourcing_generated_ros_setups() -> None:

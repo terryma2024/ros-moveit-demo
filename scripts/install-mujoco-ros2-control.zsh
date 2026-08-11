@@ -138,6 +138,7 @@ build_and_test_overlay() {
     --install-base "${install_base}" \
     --merge-install \
     --cmake-clean-cache \
+    --cmake-args -DFETCHCONTENT_UPDATES_DISCONNECTED=ON \
     --packages-select "${fork_packages[@]}"
   source_setup "${install_base}/setup.zsh"
   colcon --log-base "${log_base}" test \
