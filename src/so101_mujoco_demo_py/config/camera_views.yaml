@@ -28,3 +28,10 @@ presets:
     azimuth_deg: -135.0
     elevation_deg: -20.0
     orthographic: false
+  top_down:
+    mode: free
+    lookat: [0.0, -0.20000000000000004, 0.12404123391314203]
+    distance: 0.85
+    azimuth_deg: 90.0
+    elevation_deg: -89.999
+    orthographic: true
