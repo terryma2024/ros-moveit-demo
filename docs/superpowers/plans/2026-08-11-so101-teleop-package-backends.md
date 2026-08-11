@@ -17,6 +17,7 @@
 - Use argument arrays with `subprocess.run(argv, shell=False)`; write sanitized diagnostics only under `/tmp/so101-teleop/{sanitized_session_id}/`.
 - Direct calls to unsupported operations return `BACKEND_CAPABILITY_UNAVAILABLE` before creating a run, checkpoint, or subprocess.
 - `mujoco_py` initially exposes only `backend_probe=true`; every live workflow/reset/scene/physical/manual/camera capability remains false.
+- `gazebo_py` initially exposes `scene_operations=false`: its installed scene owner accepts `observe|attach|detach` but not the `upsert` operation required by Teleop scene repair. Do not mark the broader capability true until that owner contract exists.
 - Move `tile_ai_station_guis.py` and its X11/EWMH implementation to `so101_teleop`; delete the C++ package entry and do not leave a wrapper.
 - Keep historical specs, plans, handoffs, and experiment ledgers unchanged; update only current package/operator/Skill documentation.
 - Use RED -> GREEN for each behavior change, then package tests, installed-overlay provenance, and live validation. Never count `DONE`, API success, or a screenshot alone as robot-runtime acceptance.
@@ -143,6 +144,7 @@ git commit -m "test: lock standalone Teleop ownership"
 - Modify: `src/so101_teleop/CMakeLists.txt`
 - Modify: `src/so101_teleop/package.xml`
 - Modify: `src/so101_teleop/launch/so101_teleop.launch.py`
+- Modify: `src/so101_gazebo_demo_cpp/CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: current FastAPI, ROS worker, Bun build, OpenAPI, lease/session, and Teleop tests unchanged in behavior.
@@ -150,7 +152,7 @@ git commit -m "test: lock standalone Teleop ownership"
 
 - [ ] **Step 1: Move tracked files without copying or leaving wrappers.**
 
-Use `git mv` for every path above. Preserve history and do not edit robot workflow code.
+Use `git mv` for every path above. Preserve history and do not edit robot workflow code. In the same working change, remove the C++ CMake references to every moved Web, Python, launch, config, doc, script, and test path; never leave an intermediate commit that cannot configure or build.
 
 - [ ] **Step 2: Give the new package direct dependencies and complete install rules.**
 
@@ -167,7 +169,7 @@ install(DIRECTORY config docs launch DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/so101_teleop_server.py DESTINATION lib/${PROJECT_NAME})
 ```
 
-Copy the existing Bun discovery, `SO101_TELEOP_WEB_SOURCES`, frozen install, Vite build, and `so101_teleop_web ALL` target into this CMake unchanged except for paths/package name. Register every moved `test/teleop/test_*.py` with `ament_add_pytest_test`.
+Move the existing Bun discovery, `SO101_TELEOP_WEB_SOURCES`, frozen install, Vite build, and `so101_teleop_web ALL` target from the C++ CMake into this CMake, changing only paths/package name. Move every Teleop pytest registration into the new package. Keep both package CMake files internally valid in this same step.
 
 - [ ] **Step 3: Retarget installed package lookup and launch ownership.**
 
@@ -280,7 +282,7 @@ Use these exact owner differences:
 - `gazebo_py`: package `so101_gazebo_demo_py`; workflow fixed args include `--live-runtime`; reset `reset_so101_world`; scene `so101_moveit_scene` with `--operation observe|attach|detach`.
 - `mujoco_py`: package `so101_mujoco_demo_py`; probe executable `pick_place_state_machine`; no live operation specs.
 
-Both Gazebo profiles set all capabilities listed above true except that capability keys unsupported by the existing UI must remain absent from command routing, not inferred from executable presence.
+`gazebo_cpp` sets the listed capabilities true. `gazebo_py` sets workflow, reset, physical observation, manual joint/TCP, and camera capabilities true but `scene_operations=false`, because the current Python scene CLI cannot perform Teleop's `upsert` repair. Capability values are explicit profile facts and are never inferred from executable presence.
 
 - [ ] **Step 5: Run tests and commit.**
 
@@ -478,10 +480,10 @@ assert workflow_argv == [
     "--session-id", "session-a"
 ]
 assert reset_argv == [python_reset]
-assert scene_argv == [python_scene, "--operation", "attach"]
+assert capabilities["scene_operations"] is False
 ```
 
-Also assert no argv path contains `so101_gazebo_demo_cpp` when `gazebo_py` is selected.
+Also assert no workflow/reset argv path contains `so101_gazebo_demo_cpp` when `gazebo_py` is selected, and a Teleop scene-repair request returns `BACKEND_CAPABILITY_UNAVAILABLE` without invoking the Python scene executable.
 
 - [ ] **Step 2: Run the new tests RED, fix only profile/adapter mapping, then run GREEN.**
 
@@ -685,7 +687,7 @@ Replace legacy Teleop ownership assertions with negative checks. Keep robot/Gaze
 
 - [ ] **Step 2: Remove Teleop CMake blocks and direct-only dependencies.**
 
-Delete the Bun/Web target, `ament_python_install_package(so101_teleop)`, Web install, Teleop/tiler scripts, Teleop pytest registrations, and X11 module install from the C++ CMake. Remove only dependencies no remaining C++ package source/script needs; verify with `rg` before each removal.
+Confirm Task 2 already removed the Bun/Web target, `ament_python_install_package(so101_teleop)`, Web install, Teleop scripts, and Teleop pytest registrations, while Task 9 removed tiler/X11 rules. Remove only now-unused package dependencies and any remaining stale ownership reference; verify with `rg` before each removal.
 
 - [ ] **Step 3: Update active documentation only.**
 
