@@ -1,17 +1,33 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
-import json
 import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
-LOCK = ROOT / "config/dependency-lock.yaml"
-PROBE = ROOT / "scripts/check_mujoco_runtime.py"
-PINNED_COMMIT = "35ba8174b62d9560093614f981a3d4b978a96036"
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = PACKAGE_ROOT.parents[1]
+LOCK = PACKAGE_ROOT / "config/dependency-lock.yaml"
+PROBE = PACKAGE_ROOT / "scripts/check_mujoco_runtime.py"
+SUBMODULE = PROJECT_ROOT / "third_party/mujoco_ros2_control"
+OFFICIAL_COMMIT = "35ba8174b62d9560093614f981a3d4b978a96036"
+FORK_URL = "git@gitee.com:zjumty/mujoco_ros2_control.git"
+FORK_TAG = "so101-0.0.3-r1"
+WORKSPACE_ENV = "SO101_WORKSPACE_DIR"
+FORK_WORKSPACE = "ws_mujoco_ros2_control_fork"
+CAMERA_INTERFACES = {
+    "mujoco_ros2_control_msgs/msg/ViewerCamera",
+    "mujoco_ros2_control_msgs/srv/SetViewerCamera",
+    "mujoco_ros2_control_msgs/srv/GetViewerCamera",
+}
+RESET_INTERFACES = {
+    "mujoco_ros2_control_msgs/srv/ResetWorld",
+    "mujoco_ros2_control_msgs/srv/SetPause",
+    "mujoco_ros2_control_msgs/srv/StepSimulation",
+}
 
 
 def load_probe():
@@ -22,18 +38,57 @@ def load_probe():
     return module
 
 
-def test_lock_pins_exact_reset_qualified_provider() -> None:
-    lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
-    assert lock["schema_version"] == 2
-    assert lock["provider"] == "patched_source"
+def load_lock() -> dict:
+    return yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+
+
+def test_lock_pins_exact_qualified_fork() -> None:
+    lock = load_lock()
+    submodule_head = subprocess.run(
+        ["git", "-C", str(SUBMODULE), "rev-parse", "HEAD"],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.strip()
+
+    assert lock["schema_version"] == 3
+    assert lock["provider"] == "gitee_fork_submodule"
     assert lock["release"] == "0.0.3"
-    assert lock["prefix"] == "/data/work/ws_mujoco_ros2_control_003/install"
-    assert lock["upstream"] == {
-        "url": "https://github.com/ros-controls/mujoco_ros2_control",
-        "tag": "0.0.3",
-        "commit": PINNED_COMMIT,
+    assert lock["fork"] == {
+        "url": FORK_URL,
+        "tag": FORK_TAG,
+        "commit": submodule_head,
     }
-    assert len(lock["required_files"]) == 4
+    assert lock["upstream"] == {
+        "url": "https://github.com/ros-controls/mujoco_ros2_control.git",
+        "tag": "0.0.3",
+        "commit": OFFICIAL_COMMIT,
+    }
+    assert lock["submodule_path"] == "third_party/mujoco_ros2_control"
+    assert lock["paths"] == {
+        "workspace_env": WORKSPACE_ENV,
+        "workspace_default": "repo_parent",
+        "fork_workspace": FORK_WORKSPACE,
+        "fork_install": f"{FORK_WORKSPACE}/install",
+        "project_install": "install",
+    }
+    assert "patch" not in lock
+    assert "/data/work/" not in LOCK.read_text(encoding="utf-8")
+
+
+def test_lock_declares_source_order_prefixes_and_all_interfaces() -> None:
+    lock = load_lock()
+    assert lock["source_order"] == [
+        "ros_underlay",
+        "fork_overlay",
+        "project_overlay",
+    ]
+    assert "package_prefixes" not in lock
+    assert "project_package_prefixes" not in lock
+    assert set(lock["interface_sha256"]) == CAMERA_INTERFACES | RESET_INTERFACES
+    assert all(len(value) == 64 for value in lock["interface_sha256"].values())
+    assert lock["required_files"]
+    assert all(len(value) == 64 for value in lock["required_files"].values())
 
 
 @pytest.mark.parametrize("floating", ["main", "master", "latest", "HEAD"])
@@ -41,43 +96,19 @@ def test_lock_forbids_floating_git_references(floating: str) -> None:
     assert floating not in LOCK.read_text(encoding="utf-8").split()
 
 
-def test_validator_rejects_wrong_release_prefix_or_commit() -> None:
+def test_validator_rejects_wrong_fork_release_path_policy_or_commit() -> None:
     probe = load_probe()
-    valid = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+    valid = load_lock()
     assert probe.validate_lock(valid) == []
     for path, value in (
         (("release",), "0.0.4"),
-        (("prefix",), "/tmp/wrong"),
+        (("paths", "workspace_env"), "WRONG_WORKSPACE"),
+        (("fork", "commit"), "deadbeef"),
         (("upstream", "commit"), "deadbeef"),
     ):
-        changed = {**valid, "upstream": dict(valid["upstream"])}
+        changed = copy.deepcopy(valid)
         if len(path) == 1:
             changed[path[0]] = value
         else:
             changed[path[0]][path[1]] = value
         assert probe.validate_lock(changed)
-
-
-def test_live_probe_reports_exact_packages_interfaces_and_hashes() -> None:
-    result = subprocess.run(
-        ["python3", str(PROBE), "--lock", str(LOCK)],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    report = json.loads(result.stdout)
-    assert report["provider"] == "patched_source"
-    assert report["release"] == "0.0.3"
-    assert report["prefixes"] == {
-        "mujoco_vendor": "/opt/ros/jazzy",
-        "mujoco_ros2_control": "/data/work/ws_mujoco_ros2_control_003/install",
-        "mujoco_ros2_control_msgs": "/data/work/ws_mujoco_ros2_control_003/install",
-        "mujoco_ros2_control_plugins": "/data/work/ws_mujoco_ros2_control_003/install",
-    }
-    assert set(report["interface_sha256"]) == {
-        "mujoco_ros2_control_msgs/srv/ResetWorld",
-        "mujoco_ros2_control_msgs/srv/SetPause",
-        "mujoco_ros2_control_msgs/srv/StepSimulation",
-    }
-    assert report["validation_errors"] == []
