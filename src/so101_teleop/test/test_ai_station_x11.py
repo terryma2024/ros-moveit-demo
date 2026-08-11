@@ -6,8 +6,9 @@ import pytest
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
-    / 'scripts'
-    / 'ai_station_x11.py'
+    / 'so101_teleop'
+    / 'gui'
+    / 'x11.py'
 )
 SPEC = importlib.util.spec_from_file_location('ai_station_x11', SCRIPT_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)

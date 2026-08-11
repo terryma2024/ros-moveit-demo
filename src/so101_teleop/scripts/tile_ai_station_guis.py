@@ -3,16 +3,11 @@
 
 import argparse
 import ctypes  # noqa: F401  (re-exported for tests and callers)
-import os
 import subprocess
 import sys
 import time
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
-from ai_station_x11 import (  # noqa: E402,F401
+from so101_teleop.gui.x11 import (  # noqa: F401
     ClientMessageData,
     Rect,
     WindowInfo,

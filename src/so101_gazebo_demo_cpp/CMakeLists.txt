@@ -31,7 +31,6 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(pick_place_common REQUIRED)
-find_package(ament_cmake_python REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(control_msgs REQUIRED)
@@ -53,40 +52,6 @@ find_package(shape_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
-# The Teleop frontend uses Bun consistently for dependency resolution and scripts.
-if(DEFINED ENV{SO101_TELEOP_BUN})
-  set(BUN_EXECUTABLE "$ENV{SO101_TELEOP_BUN}")
-elseif(EXISTS "/home/lenovo/.bun/bin/bun")
-  set(BUN_EXECUTABLE "/home/lenovo/.bun/bin/bun")
-else()
-  find_program(BUN_EXECUTABLE bun REQUIRED)
-endif()
-if(NOT EXISTS "${BUN_EXECUTABLE}")
-  message(FATAL_ERROR "Bun is required; set SO101_TELEOP_BUN to its executable")
-endif()
-get_filename_component(SO101_TELEOP_BUN_BIN "${BUN_EXECUTABLE}" DIRECTORY)
-
-# The production FastAPI server serves this Vite bundle from the installed
-# package. Keep it generated (never committed) while making a clean colcon
-# build reproduce it under the project Bun toolchain.
-set(SO101_TELEOP_WEB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/web)
-set(SO101_TELEOP_WEB_INDEX ${SO101_TELEOP_WEB_ROOT}/dist/index.html)
-file(GLOB_RECURSE SO101_TELEOP_WEB_SOURCES CONFIGURE_DEPENDS
-  ${SO101_TELEOP_WEB_ROOT}/src/*.ts
-  ${SO101_TELEOP_WEB_ROOT}/src/*.tsx
-  ${SO101_TELEOP_WEB_ROOT}/e2e/*.ts
-)
-add_custom_command(
-  OUTPUT ${SO101_TELEOP_WEB_INDEX}
-  COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} install --frozen-lockfile
-  COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} run build
-  WORKING_DIRECTORY ${SO101_TELEOP_WEB_ROOT}
-  DEPENDS ${SO101_TELEOP_WEB_ROOT}/package.json ${SO101_TELEOP_WEB_ROOT}/bun.lock
-    ${SO101_TELEOP_WEB_ROOT}/vite.config.ts ${SO101_TELEOP_WEB_ROOT}/tailwind.config.ts
-    ${SO101_TELEOP_WEB_ROOT}/postcss.config.cjs ${SO101_TELEOP_WEB_SOURCES}
-  VERBATIM)
-add_custom_target(so101_teleop_web ALL DEPENDS ${SO101_TELEOP_WEB_INDEX})
 
 set(SO101_FINGERTIP_PAD_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/fingertip_pad_assets)
 set(SO101_FINGERTIP_PAD_MANIFEST ${SO101_FINGERTIP_PAD_ASSET_DIR}/fixed/manifest.yaml)
@@ -409,24 +374,8 @@ if(BUILD_TESTING)
   )
   ament_add_pytest_test(test_so101_srdf test/test_so101_srdf.py)
   ament_add_pytest_test(
-    test_tile_ai_station_guis
-    test/test_tile_ai_station_guis.py
-  )
-  ament_add_pytest_test(
-    test_ai_station_x11
-    test/test_ai_station_x11.py
-  )
-  ament_add_pytest_test(
     test_gazebo_camera_pose
     test/test_gazebo_camera_pose.py
-  )
-  ament_add_pytest_test(
-    test_so101_stack_inventory
-    test/test_so101_stack_inventory.py
-  )
-  ament_add_pytest_test(
-    test_gazebo_window_recorder
-    test/test_gazebo_window_recorder.py
   )
   ament_add_pytest_test(
     test_video_extract_frame
@@ -472,18 +421,6 @@ if(BUILD_TESTING)
   # 60 s CTest wrapper expired at 60.03 s; retain assertion coverage while
   # allowing bounded wrapper/scheduler headroom.
   set_tests_properties(test_fingertip_pad_geometry PROPERTIES TIMEOUT 90)
-  ament_add_pytest_test(test_teleop_api test/teleop/test_api.py)
-  ament_add_pytest_test(test_teleop_camera test/teleop/test_camera.py)
-  ament_add_pytest_test(test_teleop_control test/teleop/test_control.py)
-  ament_add_pytest_test(test_teleop_geometry test/teleop/test_geometry.py)
-  ament_add_pytest_test(test_teleop_models test/teleop/test_models.py)
-  ament_add_pytest_test(test_teleop_openapi_export test/teleop/test_openapi_export.py)
-  ament_add_pytest_test(test_teleop_moveit_gateway test/teleop/test_moveit_gateway.py)
-  ament_add_pytest_test(test_teleop_scene_gateway test/teleop/test_scene_gateway.py)
-  ament_add_pytest_test(test_teleop_screenshot test/teleop/test_screenshot.py)
-  ament_add_pytest_test(test_teleop_telemetry test/teleop/test_telemetry.py)
-  ament_add_pytest_test(test_teleop_workflow_gateway test/teleop/test_workflow_gateway.py)
-  ament_add_pytest_test(test_teleop_server_safety test/teleop/test_server_safety.py)
   add_test(
     NAME test_cpp_quality_gate
     COMMAND
@@ -510,12 +447,6 @@ install(
   DESTINATION include
 )
 
-ament_python_install_package(so101_teleop)
-
-install(DIRECTORY web/dist/
-  DESTINATION share/${PROJECT_NAME}/web
-)
-
 install(
   DIRECTORY config docs launch meshes rviz scripts urdf worlds
   DESTINATION share/${PROJECT_NAME}
@@ -536,19 +467,10 @@ install(
     scripts/generate_fingertip_pad_meshes.py
     scripts/gripper_preopen_calc.py
     scripts/prepare_simulation_model.py
-    scripts/tile_ai_station_guis.py
-    scripts/so101_teleop_server.py
     scripts/gazebo_camera_pose.py
-    scripts/so101_stack_inventory.py
-    scripts/gazebo_window_recorder.py
     scripts/video_extract_frame.py
     scripts/video_sample_frames.py
     scripts/video_mosaic.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-install(
-  FILES scripts/ai_station_x11.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

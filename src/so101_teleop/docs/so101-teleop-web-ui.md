@@ -43,9 +43,10 @@ ss -ltnp | rg ':8000'
 ```bash
 cd /data/work/ws_moveit
 source /opt/ros/jazzy/setup.zsh
-colcon build --packages-select so101_gazebo_demo_cpp --symlink-install
+colcon build --packages-select so101_gazebo_demo_cpp so101_teleop --symlink-install
 source install/setup.zsh
 ros2 pkg prefix so101_gazebo_demo_cpp
+ros2 pkg prefix so101_teleop
 ```
 
 本项目统一使用 Bun，以 `bun.lock` 为唯一 Web 依赖锁文件：
@@ -126,7 +127,8 @@ tailscale ip -4
 记下 ai-station 的 Tailscale IPv4，然后启动：
 
 ```bash
-ros2 launch so101_gazebo_demo_cpp so101_teleop.launch.py \
+ros2 launch so101_teleop so101_teleop.launch.py \
+  backend:=gazebo_cpp \
   bind_address:=<ai-station-tailscale-ip> \
   port:=8000 \
   simulation_session_id:=teleop-$(date +%Y%m%d-%H%M%S)
@@ -136,8 +138,9 @@ ros2 launch so101_gazebo_demo_cpp so101_teleop.launch.py \
 发现时显式传入：
 
 ```bash
-ros2 launch so101_gazebo_demo_cpp so101_teleop.launch.py \
-  web_source_dir:=/data/work/ws_moveit/src/so101_gazebo_demo_cpp/web
+ros2 launch so101_teleop so101_teleop.launch.py \
+  backend:=gazebo_cpp \
+  web_source_dir:=/data/work/ws_moveit/src/so101_teleop/web
 ```
 
 可用 `SO101_TELEOP_BUN=/absolute/path/to/bun` 指定 Bun。只有在已存在完整 bundle 且希望禁止构建时才使用

@@ -14,7 +14,6 @@ import uuid
 import pytest
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
-from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 
@@ -27,7 +26,6 @@ MOVEIT_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_moveit.launch.py'
 MOVE_GROUP_HEADLESS_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_move_group_headless.launch.py'
 PICK_PLACE_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_pick_place.launch.py'
 PICK_PLACE_WORLD_TEST = PACKAGE_DIR / 'test' / 'test_so101_pick_place_world.py'
-TELEOP_LAUNCH = PACKAGE_DIR / 'launch' / 'so101_teleop.launch.py'
 LAUNCH_MANUAL = PACKAGE_DIR.parents[1] / 'docs' / 'pick-place-launch-parameters.md'
 
 
@@ -146,79 +144,6 @@ def declared_argument(path, name):
 def launch_default_text(argument):
     """Render a literal launch default from TextSubstitution objects."""
     return ''.join(part.text for part in argument.default_value)
-
-
-def test_teleop_launch_is_explicitly_simulation_only_and_never_wildcard_bound():
-    arguments = {
-        entity.name: launch_default_text(entity)
-        for entity in load_launch_description(TELEOP_LAUNCH).entities
-        if isinstance(entity, DeclareLaunchArgument)
-    }
-
-    assert arguments['bind_address'] == '127.0.0.1'
-    assert arguments['simulation_only'] == 'true'
-    assert arguments['bind_address'] != '0.0.0.0'
-    assert {'port', 'world_name', 'tcp_frame', 'simulation_session_id'} <= set(arguments)
-
-
-def test_teleop_launch_declares_web_preflight_and_defers_server_node():
-    description = load_launch_description(TELEOP_LAUNCH)
-    arguments = {
-        entity.name: launch_default_text(entity)
-        for entity in description.entities
-        if isinstance(entity, DeclareLaunchArgument)
-    }
-    assert arguments['build_web_if_needed'] == 'true'
-    assert arguments['web_source_dir'] == ''
-    assert 'gz_partition' in arguments
-    assert any(isinstance(entity, OpaqueFunction) for entity in description.entities)
-    assert not any(isinstance(entity, Node) for entity in description.entities)
-    assert 'name="so101_teleop_server_process"' not in TELEOP_LAUNCH.read_text()
-
-
-def test_teleop_launch_preflight_completes_before_server_node(monkeypatch, tmp_path):
-    module = load_launch_module(TELEOP_LAUNCH)
-    source = tmp_path / 'web'
-    source.mkdir()
-    (source / 'package.json').write_text('{}')
-    dist = source / 'dist'
-    dist.mkdir()
-    called = []
-    monkeypatch.setattr(module, 'ensure_web_bundle', lambda path, build_if_needed: called.append((Path(path), build_if_needed)) or dist)
-    context = LaunchContext()
-    context.launch_configurations.update({
-        'bind_address': '127.0.0.1', 'port': '8000', 'world_name': 'world',
-        'tcp_frame': 'tcp', 'simulation_session_id': 'session',
-        'gz_partition': 'camera-test-partition',
-        'web_source_dir': str(source), 'build_web_if_needed': 'true',
-    })
-    nodes = module.launch_setup(context)
-    assert called == [(source, True)]
-    assert len(nodes) == 1 and isinstance(nodes[0], Node)
-    process = vars(nodes[0])['_ExecuteLocal__process_description']
-    additional_env = {
-        perform_substitutions(context, key): perform_substitutions(context, value)
-        for key, value in vars(process)['_Executable__additional_env']
-    }
-    assert additional_env['SO101_TELEOP_WEB_ROOT'] == str(dist)
-    assert additional_env['GZ_PARTITION'] == 'camera-test-partition'
-
-
-def test_teleop_launch_preflight_failure_prevents_server_node(monkeypatch, tmp_path):
-    module = load_launch_module(TELEOP_LAUNCH)
-    source = tmp_path / 'web'
-    source.mkdir()
-    (source / 'package.json').write_text('{}')
-    monkeypatch.setattr(module, 'ensure_web_bundle', lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('build failed')))
-    context = LaunchContext()
-    context.launch_configurations.update({
-        'bind_address': '127.0.0.1', 'port': '8000', 'world_name': 'world',
-        'tcp_frame': 'tcp', 'simulation_session_id': 'session',
-        'gz_partition': 'camera-test-partition',
-        'web_source_dir': str(source), 'build_web_if_needed': 'true',
-    })
-    with pytest.raises(RuntimeError, match='build failed'):
-        module.launch_setup(context)
 
 
 def test_gazebo_uses_canonical_base_height_default():

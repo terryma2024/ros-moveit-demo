@@ -90,18 +90,18 @@ source commit `65c371e`.
 ## Scope
 
 The package installs its own robot description, simulation, controller,
-MoveIt, Teleop, test, and helper assets without depending on the original
+MoveIt, test, and robot-specific helper assets without depending on the original
 SO-101 workspace. Robot-independent workflow, runner, resume validation, and
 Gazebo/MoveIt convergence algorithms are shared through `pick_place_common`;
 SO-101 behavior remains local behind explicit workflow and policy interfaces.
 
 ## Simulation-only Teleop Web UI
 
-The full operator guide, Target YAML schema, workflow safety boundary and
-shutdown procedure are documented in
-[`docs/so101-teleop-web-ui.md`](docs/so101-teleop-web-ui.md).
+The backend-neutral Teleop package and its operator guide now live in
+[`../so101_teleop`](../so101_teleop). The C++ package remains the selected
+robot workflow/reset/scene owner when `backend:=gazebo_cpp` is used.
 
-The installable `so101_teleop_server.py` serves the production Vite bundle and
+The `so101_teleop` package's installable server serves the production Vite bundle and
 owns its ROS 2 worker.  It is intentionally simulation-only: it binds only to
 `127.0.0.1` or a Tailscale `100.64.0.0/10` address and rejects every other
 bind address.  Never use it with hardware.
@@ -119,7 +119,8 @@ source install/setup.zsh
 export ROS_DOMAIN_ID=<existing-simulation-domain>
 export GZ_PARTITION=<existing-gazebo-partition>
 command -v bun && bun --version
-ros2 launch so101_gazebo_demo_cpp so101_teleop.launch.py \
+ros2 launch so101_teleop so101_teleop.launch.py \
+  backend:=gazebo_cpp \
   bind_address:=127.0.0.1 \
   simulation_session_id:=<new-session-id>
 ```

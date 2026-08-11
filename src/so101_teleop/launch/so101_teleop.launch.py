@@ -43,7 +43,7 @@ def _source_directory(explicit: str) -> Path | None:
 
 def _installed_bundle() -> Path:
     from ament_index_python.packages import get_package_share_directory
-    return Path(get_package_share_directory("so101_gazebo_demo_cpp")) / "web"
+    return Path(get_package_share_directory("so101_teleop")) / "web"
 
 
 def _as_bool(value: str) -> bool:
@@ -56,6 +56,12 @@ def _as_bool(value: str) -> bool:
 
 
 def launch_setup(context):
+    backend = LaunchConfiguration("backend").perform(context)
+    if backend != "gazebo_cpp":
+        raise RuntimeError(
+            f"unsupported Teleop backend {backend!r}; this extraction checkpoint "
+            "supports only gazebo_cpp"
+        )
     explicit_source = LaunchConfiguration("web_source_dir").perform(context)
     build_if_needed = _as_bool(LaunchConfiguration("build_web_if_needed").perform(context))
     source = _source_directory(explicit_source)
@@ -67,11 +73,11 @@ def launch_setup(context):
     except Exception as error:
         raise RuntimeError(
             f"SO-101 Teleop Web preflight failed: {error}. "
-            "Provide web_source_dir:=/path/to/so101_gazebo_demo_cpp/web or a valid installed bundle."
+            "Provide web_source_dir:=/path/to/so101_teleop/web or a valid installed bundle."
         ) from error
 
     return [Node(
-        package="so101_gazebo_demo_cpp",
+        package="so101_teleop",
         executable="so101_teleop_server.py",
         output="screen",
         additional_env={
@@ -81,6 +87,7 @@ def launch_setup(context):
             "SO101_TCP_FRAME": LaunchConfiguration("tcp_frame"),
             "SO101_SIMULATION_SESSION_ID": LaunchConfiguration("simulation_session_id"),
             "SO101_TELEOP_WEB_ROOT": str(web_root),
+            "SO101_TELEOP_BACKEND": backend,
             "GZ_PARTITION": LaunchConfiguration("gz_partition"),
         },
     )]
@@ -88,6 +95,7 @@ def launch_setup(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument("backend"),
         DeclareLaunchArgument("bind_address", default_value="127.0.0.1"),
         DeclareLaunchArgument("port", default_value="8000"),
         DeclareLaunchArgument("simulation_only", default_value="true"),
