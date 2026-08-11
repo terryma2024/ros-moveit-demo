@@ -15,6 +15,9 @@ from so101_mujoco_demo_py.camera_presets import (
     preset_to_yaml_fields,
 )
 
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+PRODUCTION_CONFIG = PACKAGE_ROOT / "config/camera_views.yaml"
+
 
 def write_config(tmp_path: Path, body: str) -> Path:
     config = tmp_path / "camera_views.yaml"
@@ -161,3 +164,27 @@ def test_rejects_invalid_root_or_preset_mapping(tmp_path: Path, document: str) -
 def test_rejects_invalid_mode_specific_records(tmp_path: Path, body: dict[str, object]) -> None:
     with pytest.raises(CameraPresetConfigError):
         load_camera_presets(dump_single(tmp_path, body))
+
+
+def test_production_config_has_four_symmetric_table_corner_views() -> None:
+    presets = load_camera_presets(PRODUCTION_CONFIG)
+    required = [
+        "table_corner_nw",
+        "table_corner_ne",
+        "table_corner_se",
+        "table_corner_sw",
+    ]
+    assert list(presets) == required
+    assert all(isinstance(presets[name], FreeCameraPreset) for name in required)
+    assert len({presets[name].lookat for name in required}) == 1
+    assert len({presets[name].distance for name in required}) == 1
+    assert len({presets[name].elevation_deg for name in required}) == 1
+    assert len({presets[name].orthographic for name in required}) == 1
+    for left, right in zip(required, required[1:] + required[:1], strict=True):
+        assert (
+            circular_azimuth_distance(
+                presets[left].azimuth_deg,
+                presets[right].azimuth_deg,
+            )
+            == 90.0
+        )
