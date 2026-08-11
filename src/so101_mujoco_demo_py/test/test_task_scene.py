@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -37,6 +38,51 @@ def test_task_scene_compiles_with_named_rigid_world_and_keyframes() -> None:
     assert excluded is not None
     assert excluded.attrib["body1"] == "base"
     assert excluded.attrib["body2"] == "shoulder"
+
+
+def test_table_has_visual_only_target_landing_tolerance_ring() -> None:
+    root = ET.parse(SCENE).getroot()
+    table = root.find(".//body[@name='table']")
+    assert table is not None
+
+    marker = table.find("./geom[@name='target_landing_tolerance_ring']")
+    assert marker is not None
+    assert marker.attrib["type"] == "mesh"
+    assert marker.attrib["mesh"] == "target_landing_tolerance_ring"
+    assert marker.attrib["material"] == "target_landing_red"
+    assert marker.attrib["group"] == "0"
+    assert marker.attrib["contype"] == "0"
+    assert marker.attrib["conaffinity"] == "0"
+
+    table_position = tuple(float(value) for value in table.attrib["pos"].split())
+    marker_position = tuple(float(value) for value in marker.attrib["pos"].split())
+    assert math.isclose(table_position[0] + marker_position[0], -0.080, abs_tol=1e-9)
+    assert math.isclose(table_position[1] + marker_position[1], -0.250, abs_tol=1e-9)
+    table_surface_z = table_position[2] + 0.02
+    assert math.isclose(
+        table_position[2] + marker_position[2] - table_surface_z,
+        0.0001,
+        abs_tol=1e-9,
+    )
+
+    material = root.find("./asset/material[@name='target_landing_red']")
+    assert material is not None
+    assert material.attrib["rgba"] == "1 0 0 1"
+    mesh = root.find("./asset/mesh[@name='target_landing_tolerance_ring']")
+    assert mesh is not None
+    assert mesh.attrib["file"] == "assets/target_landing_tolerance_ring.obj"
+
+    vertices = [
+        tuple(float(value) for value in line.split()[1:])
+        for line in (SCENE.parent / mesh.attrib["file"]).read_text(encoding="utf-8").splitlines()
+        if line.startswith("v ")
+    ]
+    assert len(vertices) >= 128
+    radii = [math.hypot(vertex[0], vertex[1]) for vertex in vertices]
+    assert math.isclose(min(radii), 0.050, abs_tol=1e-9)
+    assert math.isclose(max(radii), 0.055, abs_tol=1e-9)
+    thickness = max(vertex[2] for vertex in vertices) - min(vertex[2] for vertex in vertices)
+    assert math.isclose(thickness, 0.0001, abs_tol=1e-9)
 
 
 def test_task_inputs_are_explicitly_uncalibrated() -> None:
