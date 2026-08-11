@@ -33,6 +33,10 @@ def test_task_scene_compiles_with_named_rigid_world_and_keyframes() -> None:
     robot_root = ET.parse(SCENE.parent / include.attrib["file"]).getroot()
     assert robot_root.find(".//key[@name='home']") is not None
     assert root.find(".//key[@name='task_start']") is not None
+    excluded = root.find("./contact/exclude[@name='exclude_base_shoulder']")
+    assert excluded is not None
+    assert excluded.attrib["body1"] == "base"
+    assert excluded.attrib["body2"] == "shoulder"
 
 
 def test_task_inputs_are_explicitly_uncalibrated() -> None:
@@ -46,6 +50,9 @@ def test_task_inputs_are_explicitly_uncalibrated() -> None:
     assert config["finite_state_required"] is True
     assert config["stationary_table_required"] is True
     assert config["stationary_cup_after_settle_required"] is True
+    assert config["stationary_robot_after_settle_required"] is True
+    assert config["robot_position_envelope_limit_rad"] == 0.001
+    assert config["robot_velocity_limit_rad_s"] == 0.01
     assert config["initial_inputs"]["cup_free_joint_damping"] == 1.0
 
 
@@ -83,3 +90,5 @@ def test_headless_scene_is_finite_and_stationary_for_ten_seconds() -> None:
     assert report["cup_translation_after_settle_m"] <= 1.0e-5
     assert report["final_two_second_translation_envelope_m"] <= 1.0e-5
     assert report["final_two_second_net_speed_m_per_s"] <= 1.0e-5
+    assert max(report["robot_final_five_second_position_envelope_rad"]) <= 0.001
+    assert max(report["robot_final_five_second_max_abs_velocity_rad_s"]) <= 0.01

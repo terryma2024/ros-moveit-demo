@@ -4324,3 +4324,177 @@ invalid_instrumentation_addendum:
   - The task-created cache was moved intact to /tmp/so101-debug-mujoco-visual-parity-20260811/pytest-cache-final-invalid. The authoritative rerun used -p no:cacheprovider and passed 207/3 without recreating source-tree cache.
 decision: EXP-058 remains VALID; no production source changed after the qualified mesh-type fix.
 ```
+
+## Experiment EXP-059
+
+```yaml
+experiment_id: EXP-059
+prior_experiment: EXP-058 VALID
+status: PLANNED
+lifecycle: REUSE_STACK for read-only ROS observation; FULL_RESTART only after a qualified production fix
+hypothesis: The visible non-stationary arm at Gazebo home q1..q5=0 is caused either by newly executable robot mesh contacts at the home pose or by an underdamped high-gain position actuator/control boundary; a contact-aware qpos/qvel envelope and one evidence-only collision-disabled A/B will identify the first divergence before any controller tuning.
+prediction:
+  - Baseline q=0 stepping or the live ROS stack will show a bounded/non-bounded robot joint envelope and identify whether contacts are present while the arm departs home.
+  - If contacts are causal, an evidence-only copy with only robot collision participation disabled will remove the joint motion without changing visual meshes, actuator gains, timestep, gravity, or initial qpos.
+  - If motion persists without contacts, actuator/control-loop characterization must precede any production gain change.
+single_variable: Diagnostic A/B changes only robot collision contype/conaffinity in an evidence-only temporary MJCF copy; production MJCF remains unchanged until the causal branch is proven.
+gazebo_home_contract:
+  arm_q1_to_q5_rad: [0, 0, 0, 0, 0]
+  reset_q6_rad: 0
+  moveit_gripper_home_q6_rad: -0.059600220867817
+stability_success_criteria:
+  - At the selected Gazebo-aligned initial pose, every arm joint position has a final five-second peak-to-peak envelope <= 0.001 rad and absolute velocity <= 0.01 rad/s after settling.
+  - No unexplained position drift, high-frequency limit cycle, NaN, or controller transition occurs.
+  - A fresh CUA observation shows a visually stationary detailed arm across two separated snapshots.
+failure_criteria:
+  - Any joint exceeds the stability envelope under valid provenance, or the GUI/control stack exits.
+invalid_criteria:
+  - Stale install, wrong ROS domain, action contamination, direct state write, unbounded process ownership, or changing more than the declared A/B variable.
+follow_on_gate: Only after stability succeeds, set the robot to Gazebo home, start the qualified MoveIt composition, plan and execute TCP to the Gazebo grasp pose, then verify controller success and final TCP/joint error. No grasp close or contact-success claim is included.
+safety_contract: Simulation only; no hardware, teleport/direct qpos writes, weld, equality, adhesion, mocap following, broad process kill, or action before stability qualification.
+evidence_root: /tmp/so101-debug-mujoco-jitter-20260811
+provenance:
+  source_commit: 79effd9
+  install_overlay: /tmp/so101-debug-mujoco-visual-parity-20260811/install until a fresh fix build is required
+  runtime_executable: /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 138 for the existing visualization-only stack
+decision: PENDING; diagnostic preregistration only.
+```
+
+## Experiment EXP-059 Terminal Result
+
+```yaml
+experiment_id: EXP-059
+status: VALID
+terminal_result: PASS
+root_cause:
+  - At Gazebo home q1..q6=0, the compiled MuJoCo model generated three base/shoulder contacts with penetration depths 0.022401 to 0.027882 m.
+  - Those contacts drove joint 1 to 1.238513 rad with 19.7272 rad/s residual velocity and a 0.279879 rad final-five-second envelope while the actuator saturated at -3.35.
+causal_ab:
+  - An evidence-only collision-disabled robot copy made all six final-five-second envelopes zero while retaining the cup/table contact.
+  - A narrower evidence-only copy excluding only body pair base/shoulder produced the same zero-envelope result and retained cup/table collision participation.
+production_fix:
+  - Add one explicit MuJoCo contact exclusion for the fixed base/shoulder body pair; do not disable global robot collision and do not change gravity, gains, timestep, visual geometry, or initial positions.
+  - Extend the task-scene contract/checker with final-five-second robot position and velocity gates.
+verification:
+  targeted_test: 4 passed
+  full_pytest: 207 passed, 3 skipped
+  ruff: All checks passed; 67 files already formatted
+  isolated_build: two packages finished
+  production_checker: all six position envelopes exactly 0 rad; maximum absolute joint velocity approximately 1e-17 rad/s
+  live_ros_window: 501 samples over 4.99976 s; all six position envelopes exactly 0 rad; maximum absolute velocity 1.7069e-17 rad/s
+  cua_observation: two CUA-only screenshots five seconds apart show the same detailed arm; robot-region comparison differs by only 3 of 220000 pixels
+evidence:
+  root: /tmp/so101-debug-mujoco-jitter-20260811
+  production_checker: production-green-10s.json
+  live_ros_window: live-stability-window.json
+  cua_frames: [cua-stable-1.png, cua-stable-2.png]
+  tests: [exclude-red.log, full-pytest.log, ruff.log, rebuild.log]
+runtime:
+  ros_domain_id: 138
+  simulation_session_id: exp059-stable-home
+  launch_pid_pgid: 2034111
+  ros2_control_pid: 2034128
+  install_overlay: /tmp/so101-debug-mujoco-jitter-20260811/install
+gazebo_home_observed_q1_to_q6_rad: [-2.646e-10, 0.000630961, 0.000535699, 0.000124815, 1.588e-07, -7.081e-06]
+scope_boundary: This validates stationary closed-loop hold at the Gazebo reset pose and the causal contact fix. It does not yet validate MoveIt planning/execution, grasp closure, or physical contact success.
+decision: KEEP VALID; proceed only to the separately preregistered TCP plan-and-execute check.
+```
+
+## Experiment EXP-060
+
+```yaml
+experiment_id: EXP-060
+prior_experiment: EXP-059 VALID
+status: PLANNED
+lifecycle: REUSE qualified domain-138 MuJoCo runtime; add one task-owned move_group process without restarting simulation
+hypothesis: With the base/shoulder contact defect removed, MoveIt can generate a pose-constrained trajectory from the Gazebo reset pose to the TCP pose corresponding to the unchanged Gazebo DESCEND final arm posture, and ros2_control can execute that trajectory without drift or controller failure.
+start_contract:
+  source: protected Gazebo initial_positions.yaml and home state
+  arm_q1_to_q5_rad: [0, 0, 0, 0, 0]
+  reset_q6_rad: 0
+target_contract:
+  source: identical Gazebo and MuJoCo light_cup_wall_pick.yaml DESCEND final waypoint
+  arm_q1_to_q5_rad: [-0.000206491845, 0.472194274096, 0.214652624195, 0.854922375695, 0.000576703465]
+  tcp_pose: compute once through the live MoveIt /compute_fk service from the exact target joints, then freeze it before planning
+  pose_constraint: world frame, so101_tcp link, box half-width 0.0005 m per axis, orientation tolerance 0.01 rad per axis
+single_variable: Commanded arm target changes from Gazebo home to the frozen Gazebo grasp TCP pose. q6 remains at reset value and no cup/contact/grasp-close action is sent.
+procedure:
+  - Confirm fresh joint state is still inside the EXP-059 home and stability gates.
+  - Start one domain-138 move_group against the already running qualified MuJoCo/RSP/controller stack.
+  - Compute and record target FK; submit a plan-only MoveGroup pose goal with the current live state.
+  - Require successful nonempty plan before one bounded ExecuteTrajectory request.
+  - Observe fresh final joint state and TF, then measure a post-execution five-second stationary window.
+success_criteria:
+  - MoveIt planning error code 1 and nonempty trajectory.
+  - ExecuteTrajectory error code 1 with terminal action status SUCCEEDED.
+  - Final TCP translation error <= 0.002 m and quaternion angular error <= 0.02 rad from the frozen target.
+  - Final joint state is finite; the arm remains within 0.01 rad of the exact Gazebo target joints, or an alternate IK solution is accepted only if the TCP thresholds pass and MoveIt reports success.
+  - Post-execution five-second arm position envelope <= 0.001 rad and absolute velocity <= 0.01 rad/s.
+failure_criteria:
+  - Planning/execution error, empty trajectory, stale state, threshold violation, controller transition, NaN, or runtime exit.
+invalid_criteria:
+  - Wrong ROS domain/overlay, direct qpos write, a second simulation/controller stack, missing source/target provenance, or unbounded process ownership.
+safety_contract: Simulation only; no hardware, no gripper close, no object teleport, no weld/equality/adhesion/mocap following, and no physical-grasp claim.
+evidence_root: /tmp/so101-debug-mujoco-tcp-20260811
+decision: PENDING; preregistration only, before starting move_group or sending any plan/action.
+```
+
+## Experiment EXP-060 Terminal Result
+
+```yaml
+experiment_id: EXP-060
+status: VALID
+terminal_result: PASS
+runtime:
+  ros_domain_id: 138
+  simulation_launch_pid_pgid: 2034111
+  ros2_control_pid: 2034128
+  move_group_launch_pid_pgid: 2049496
+  move_group_pid: 2049562
+  simulation_session_id: exp059-stable-home
+  install_overlay: /tmp/so101-debug-mujoco-jitter-20260811/install
+  controllers_after_execution: [arm_controller active, gripper_controller active, joint_state_broadcaster active]
+start_state:
+  joints_q1_to_q5_rad: [-2.646255564896834e-10, 0.0006309607155470753, 0.0005356994435149631, 0.00012481540248078117, 1.5882302354461913e-07]
+  max_abs_error_from_gazebo_home_rad: 0.0006309607155470753
+  max_abs_velocity_rad_s: 1.7069348527116118e-17
+target:
+  gazebo_descend_joints_q1_to_q5_rad: [-0.000206491845, 0.472194274096, 0.214652624195, 0.854922375695, 0.000576703465]
+  frozen_fk_tcp_xyz_xyzw: [0.02067668378158652, -0.2628210212382375, 0.20063061058386278, -0.010265991324917133, -0.010262986627481915, -0.7067526865362342, 0.7073117563008668]
+planning:
+  group: arm
+  link: so101_tcp
+  constraint: world-frame position box plus quaternion orientation constraint
+  action_status: SUCCEEDED
+  moveit_error_code: 1
+  trajectory_points: 50
+execution:
+  action_status: SUCCEEDED
+  moveit_error_code: 1
+  controller_log: arm_controller successfully finished; trajectory execution completed SUCCEEDED
+final_state:
+  joints_q1_to_q5_rad: [-0.001833389268777149, 0.4761581623857801, 0.21371631761742924, 0.8508522630334032, 0.004561491804273007]
+  max_abs_joint_error_from_gazebo_target_rad: 0.0040701126615967365
+  tcp_xyz_xyzw: [0.02115245801016753, -0.2630700124327577, 0.20002946577425498, -0.010647133309820585, -0.010618923307277425, -0.7047598711769995, 0.7092865436469642]
+  tcp_translation_error_m: 0.0008060600558574085
+  tcp_orientation_error_rad: 0.005707210798801107
+post_execution_stability:
+  samples: 503 over five seconds
+  max_joint_position_envelope_rad: 0.000052858921871623554
+  max_abs_joint_velocity_rad_s: 0.001183125091727367
+visual_evidence:
+  source: ai-station CUA get_window_state, session exp060-grasp
+  screenshot: /tmp/so101-debug-mujoco-tcp-20260811/cua-grasp.png
+  screenshot_sha256: b5f191bff2a2e0e9d601c6d37541ce80414cb911542ba3e54266dd4be72003c0
+  observation: Detailed SO-101 arm is visibly in the cup-side grasp posture; base and mesh visuals remain present.
+evidence:
+  result: /tmp/so101-debug-mujoco-tcp-20260811/exp060-result.json
+  result_sha256: 5e53ad0068fbe33607f0eebf96fe2172c14b90c152608a4a5211079cda39e146
+  move_group_log: /tmp/so101-debug-mujoco-tcp-20260811/move-group.log
+scope_boundary:
+  - This validates the MoveIt pose-constrained arm plan, ExecuteTrajectory path, arm_controller, and MuJoCo ros2_control closed-loop hold.
+  - q6 remained at reset, the gripper was not closed, and no grasp/contact/lift success is claimed.
+  - The configured KDL solver uses position_only_ik, but the MoveGroup request included an independent orientation constraint and the measured final FK passed the preregistered 0.02 rad orientation threshold.
+decision: KEEP VALID; EXP-059 jitter fix and EXP-060 MoveIt/ros2_control execution qualification both pass.
+```

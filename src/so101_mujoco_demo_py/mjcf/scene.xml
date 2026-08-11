@@ -89,6 +89,9 @@
             pos="0 0 -0.044" size="0.040 0.001"/>
     </body>
   </worldbody>
+  <contact>
+    <exclude name="exclude_base_shoulder" body1="base" body2="shoulder"/>
+  </contact>
   <keyframe>
     <key name="task_start" qpos="0 0 0 0 0 0 0.02 -0.28 0.165 1 0 0 0"
          ctrl="0 0 0 0 0 0"/>
