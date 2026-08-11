@@ -3,12 +3,11 @@
 <package format="3">
   <name>so101_gazebo_demo_cpp</name>
   <version>0.1.0</version>
-  <description>SO-101 Gazebo, MoveIt, Teleop, and robot policies built on the shared pick-place core.</description>
+  <description>SO-101 Gazebo, MoveIt, and robot policies built on the shared pick-place core.</description>
   <maintainer email="maintainer@example.com">SO-101 Demo Maintainer</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <depend>ament_index_cpp</depend>
   <depend>pick_place_common</depend>
@@ -26,10 +25,7 @@
   <depend>rclcpp_action</depend>
   <depend>sensor_msgs</depend>
   <depend>trajectory_msgs</depend>
-  <depend>rclpy</depend>
-  <depend>tf2_ros</depend>
   <depend>tf2_msgs</depend>
-  <depend>controller_manager_msgs</depend>
   <depend>shape_msgs</depend>
   <depend>std_msgs</depend>
   <depend>yaml-cpp</depend>
@@ -54,15 +50,8 @@
   <depend>moveit_simple_controller_manager</depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
-  <exec_depend>python3-fastapi</exec_depend>
-  <exec_depend>python3-uvicorn</exec_depend>
-  <exec_depend>python3-pydantic</exec_depend>
-  <exec_depend>python3-pil</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
-  <exec_depend>libx11</exec_depend>
   <exec_depend>ffmpeg</exec_depend>
-  <exec_depend>x11-utils</exec_depend>
-  <exec_depend>libx11-6</exec_depend>
 
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>

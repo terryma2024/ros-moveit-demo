@@ -22,18 +22,14 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
-from ai_station_x11 import (  # noqa: E402
+from so101_teleop.gui.x11 import (
     Rect,
     WindowInfo,
     X11EwmhBackend,
     parse_xwininfo_geometry,
     select_unique_window,
 )
-from so101_stack_inventory import parse_start_ticks  # noqa: E402
+from so101_stack_inventory import parse_start_ticks
 
 
 SCRIPT_PATH = Path(__file__).resolve()

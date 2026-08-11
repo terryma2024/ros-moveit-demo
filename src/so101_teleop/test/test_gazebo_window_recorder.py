@@ -6,6 +6,7 @@ import threading
 import textwrap
 import time
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -15,6 +16,8 @@ SCRIPT_PATH = (
     / 'scripts'
     / 'gazebo_window_recorder.py'
 )
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(SCRIPT_PATH.parent))
 SPEC = importlib.util.spec_from_file_location('gazebo_window_recorder', SCRIPT_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

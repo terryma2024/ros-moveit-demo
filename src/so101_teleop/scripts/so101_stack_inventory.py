@@ -17,11 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
-
-from ai_station_x11 import X11EwmhBackend, classify_window  # noqa: E402
+from so101_teleop.gui.x11 import X11EwmhBackend, classify_window
 
 
 COMMAND_TIMEOUT_SEC = 10.0
