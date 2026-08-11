@@ -62,17 +62,24 @@ def main() -> int:
     steps = math.ceil(float(config["simulation_seconds"]) / timestep)
     settle_step = math.ceil(2.0 / timestep)
     sample_start_step = math.ceil(8.0 / timestep)
+    robot_sample_start_step = math.ceil(5.0 / timestep)
     sample_stride = max(1, math.ceil(0.01 / timestep))
     settled: list[float] | None = None
     final_window_positions: list[list[float]] = []
+    robot_window_positions: list[list[float]] = []
+    robot_window_velocities: list[list[float]] = []
     try:
         for step_index in range(steps):
             library.mj_step(model, data)
             if step_index + 1 == settle_step:
                 settled = state(library, model, data)
-            if step_index + 1 >= sample_start_step and (step_index + 1) % sample_stride == 0:
+            if step_index + 1 >= robot_sample_start_step and (step_index + 1) % sample_stride == 0:
                 sampled = state(library, model, data)
-                final_window_positions.append(sampled[1 + ROBOT_NQ : 1 + ROBOT_NQ + 3])
+                nq = ROBOT_NQ + CUP_NQ
+                robot_window_positions.append(sampled[1 : 1 + ROBOT_NQ])
+                robot_window_velocities.append(sampled[1 + nq : 1 + nq + ROBOT_NQ])
+                if step_index + 1 >= sample_start_step:
+                    final_window_positions.append(sampled[1 + ROBOT_NQ : 1 + ROBOT_NQ + 3])
         final = state(library, model, data)
     finally:
         library.mj_deleteData(data)
@@ -99,6 +106,15 @@ def main() -> int:
     ]
     final_window_envelope = math.sqrt(sum(value * value for value in coordinate_ranges))
     final_window_net_speed = math.dist(final_window_positions[0], final_window_positions[-1]) / 2.0
+    robot_position_envelopes = [
+        max(position[joint] for position in robot_window_positions)
+        - min(position[joint] for position in robot_window_positions)
+        for joint in range(ROBOT_NQ)
+    ]
+    robot_max_abs_velocities = [
+        max(abs(velocity[joint]) for velocity in robot_window_velocities)
+        for joint in range(ROBOT_NQ)
+    ]
     report = {
         "cup_final_position_m": final_position,
         "cup_final_velocity": cup_velocity,
@@ -118,12 +134,17 @@ def main() -> int:
         "simulation_seconds": final[0],
         "state_size": len(final),
         "table_dofs": 0,
+        "robot_final_five_second_position_envelope_rad": robot_position_envelopes,
+        "robot_final_five_second_max_abs_velocity_rad_s": robot_max_abs_velocities,
     }
     print(json.dumps(report, sort_keys=True))
     stationary = (
         drift <= 1.0e-5 and final_window_envelope <= 1.0e-5 and final_window_net_speed <= 1.0e-5
     )
-    return 0 if report["finite_state"] and stationary else 1
+    stationary_robot = max(robot_position_envelopes) <= float(
+        config["robot_position_envelope_limit_rad"]
+    ) and max(robot_max_abs_velocities) <= float(config["robot_velocity_limit_rad_s"])
+    return 0 if report["finite_state"] and stationary and stationary_robot else 1
 
 
 if __name__ == "__main__":
