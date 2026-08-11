@@ -15,7 +15,7 @@ import yaml
 
 OFFICIAL_COMMIT = "35ba8174b62d9560093614f981a3d4b978a96036"
 FORK_URL = "git@gitee.com:zjumty/mujoco_ros2_control.git"
-FORK_TAG = "so101-0.0.3-r1"
+FORK_TAG = "so101-0.0.3-r2"
 APT_PREFIX = "/opt/ros/jazzy"
 PACKAGES = (
     "mujoco_vendor",
