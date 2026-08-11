@@ -55,3 +55,10 @@ def test_gui_diagnostics_are_installed_by_the_teleop_owner():
         for element in package.findall(tag)
     }
     assert {"ffmpeg", "libx11-6", "x11-utils"} <= dependencies
+
+
+def test_cpp_operator_docs_route_gui_tiling_to_the_teleop_owner():
+    readme = (CPP / "README.md").read_text()
+
+    assert "ros2 run so101_teleop tile_ai_station_guis.py" in readme
+    assert "ros2 run so101_gazebo_demo_cpp tile_ai_station_guis.py" not in readme

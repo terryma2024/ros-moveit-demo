@@ -79,7 +79,7 @@ GNOME display environment and place RViz on the left and Gazebo on the right:
 source ~/gui-env.zsh
 source /opt/ros/jazzy/setup.zsh
 source /data/work/ws_moveit/install/setup.zsh
-ros2 run so101_gazebo_demo_cpp tile_ai_station_guis.py
+ros2 run so101_teleop tile_ai_station_guis.py
 ```
 
 ## Provenance
