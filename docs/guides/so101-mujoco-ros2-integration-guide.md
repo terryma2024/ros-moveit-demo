@@ -2,11 +2,9 @@
 
 > 更新时间：2026-08-11
 > 适用分支：`codex/so101-mujoco-ros2`
-> 本文校准基线：`2d39539e442f92b30a37b6d7abd30bd76774ff56`
-> 工作区：`/data/work/ws_moveit/.worktrees/so101-mujoco-ros2`
-> 当前结论：MuJoCo 模型、`ros2_control`、MoveIt 规划/执行、reset 事务、模型可视化和零位稳定保持已分别通过验证；真实夹取接触、最终放置、重复性和 clean shutdown 尚未完成。
-
-> 发布状态说明：本文提交前，远端 `origin/codex/so101-mujoco-ros2` 停在 `c9ab83d`，ai-station 当前分支另有 Task 11/12 与视觉、稳定性修复共 6 个提交（`90e1411` 至 `2d39539`）。本文与这 6 个祖先提交需要一起 push，远端才具有文中描述的完整实现。
+> 本文校准基线：`dfc03d3`
+> 工作区：由 checkout 决定；`SO101_WORKSPACE_DIR` 只指定其外部工作目录。
+> 当前结论：MuJoCo 模型、`ros2_control`、MoveIt 规划/执行、reset 事务、模型可视化、零位稳定保持和四角 viewer debug camera 已分别通过验证；真实夹取接触、最终放置、重复性和 clean shutdown 尚未完成。
 
 ## 1. 这份指南解决什么问题
 
@@ -108,60 +106,71 @@ URDF 仍是 MoveIt、TF 和 controller joint semantics 的来源；MJCF 是实�
 
 ## 4. 固定依赖与环境
 
-### 4.1 唯一认可的上游
+### 4.1 当前唯一认可的 fork 依赖
 
-`mujoco_ros2_control` 的权威上游是：
+当前运行依赖是项目 submodule 固定的 Gitee fork，不再运行时重放 patch：
 
-- URL：`https://github.com/ros-controls/mujoco_ros2_control`
-- tag：`0.0.3`
-- commit：`35ba8174b62d9560093614f981a3d4b978a96036`
-- patched overlay：`/data/work/ws_mujoco_ros2_control_003/install`
+- Gitee fork：`git@gitee.com:zjumty/mujoco_ros2_control.git`
+- 官方基线：`https://github.com/ros-controls/mujoco_ros2_control.git`，tag `0.0.3`，commit `35ba8174b62d9560093614f981a3d4b978a96036`
+- 当前 fork release：以 `dependency-lock.yaml` 的 immutable `so101-0.0.3-r*` tag 和 commit 为准；release commit 必须保留官方基线为祖先。
+- 项目 pin：`third_party/mujoco_ros2_control` gitlink 与 schema-3 lock 必须指向同一 fork commit。
 
-`moveit/mujoco_ros2_control` 不是本项目使用的依赖。系统 apt 的 0.0.3 只能作为早期 underlay probe，不能作为 reset-qualified runtime。
+不得跟随浮动 branch、覆盖 `/opt/ros/jazzy`、把源码复制进项目包，或只凭 `ros2 pkg prefix` 判断二进制 provenance。
 
-禁止：
+### 4.2 可迁移工作目录和安装
 
-- 覆盖 `/opt/ros/jazzy`。
-- 跟随浮动 `main`。
-- 把依赖源码 vendor 到项目包里。
-- 只看 `ros2 pkg prefix` 就认为二进制与 patch 正确。
-
-### 4.2 构建 reset-qualified dependency overlay
-
-```bash
-cd /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
-bash src/so101_mujoco_demo_py/scripts/build_reset_qualified_overlay.sh
-```
-
-脚本会：
-
-1. clone 固定上游和 commit。
-2. 确认 tag `0.0.3` 正好指向该 commit。
-3. 只接受 clean checkout 或“恰好等于仓库 patch”的 diff。
-4. 应用 reset/pause/state-snapshot hook patch。
-5. 构建并测试三个依赖包。
-
-### 4.3 source 顺序
-
-在 zsh 中必须按下面顺序：
+checkout 后只需选择外部工作目录；未指定时，安装器使用当前 repo 根目录的父目录：
 
 ```zsh
+cd /path/to/so101-mujoco-ros2
+
+# 可选；省略时等价于 repo 的父目录。
+export SO101_WORKSPACE_DIR=/path/to/workspace
+
+git submodule update --init third_party/mujoco_ros2_control
+zsh scripts/install-mujoco-ros2-control.zsh
+```
+
+安装器从自身位置解析 repo 根目录，而不是依赖调用者的当前目录。fork 的 build/install/log 位于
+`${SO101_WORKSPACE_DIR:-<repo-parent>}/ws_mujoco_ros2_control_fork/`；lock 只保存逻辑相对路径，
+不保存某台机器的 checkout 绝对路径。`--init-submodule` 可让安装器初始化尚未初始化的 submodule。
+
+安装会 fail closed 地验证 Gitee origin、gitlink commit、release tag、官方 0.0.3 ancestry、clean submodule，
+然后构建并测试 `mujoco_ros2_control_msgs`、`mujoco_ros2_control_plugins` 和
+`mujoco_ros2_control`。当前流程没有 patch replay；`src/so101_mujoco_demo_py/patches/` 下的旧 patch
+及 `ws_mujoco_ros2_control_003` 只用于历史审计/回滚，不得计入当前 qualification。
+
+### 4.3 source 顺序和 provenance read-back
+
+从新的 zsh 严格按 underlay → fork overlay → project overlay source：
+
+```zsh
+cd /path/to/so101-mujoco-ros2
+export SO101_WORKSPACE_DIR=${SO101_WORKSPACE_DIR:-${PWD:h}}
+
 source /opt/ros/jazzy/setup.zsh
-source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh
-source /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh
+source "$SO101_WORKSPACE_DIR/ws_mujoco_ros2_control_fork/install/setup.zsh"
+source "$PWD/install/setup.zsh"
+
+for package in mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins; do
+  ros2 pkg prefix "$package"
+done
+ros2 pkg prefix mujoco_vendor
+
+python3 src/so101_mujoco_demo_py/scripts/check_mujoco_runtime.py \
+  --lock src/so101_mujoco_demo_py/config/dependency-lock.yaml
 ```
 
-bash 使用对应的 `setup.bash`。不要在 zsh 中 source `.bash`，也不要在 ROS setup 脚本周围启用 shell `nounset`。
+前三个 package prefix 必须等于
+`$SO101_WORKSPACE_DIR/ws_mujoco_ros2_control_fork/install`，`mujoco_vendor` 必须仍来自
+`/opt/ros/jazzy`。checker 还会验证接口、头文件、shared libraries、runtime executable 的哈希，
+以及项目 package prefix。不要在 ROS generated setup 脚本周围启用 shell `nounset`。
 
-验证依赖、patch、安装文件哈希和 overlay 顺序：
+### 4.4 历史 patched-overlay 流程（已废弃，仅供审计和回滚）
 
-```zsh
-python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py \
-  --lock src/so101_mujoco_demo_py/config/dependency-lock.yaml \
-  --check-only
-```
-
-### 4.4 用 patched source overlay 替代 apt 0.0.3
+以下 `_003` 内容记录旧实现路线，已被上面的 Gitee fork submodule 工作流取代。不得执行旧 build
+脚本或 patch replay 来完成当前安装、测试或资格化；需要回滚时也必须在独立新 shell 中明确选择旧
+overlay，不能与当前 fork overlay 混合 source。
 
 这里的“替代”是 ROS overlay shadow，不是卸载或覆盖 apt 文件：
 
@@ -313,9 +322,10 @@ source install/setup.zsh
 保持三个 overlay 都已经 source：
 
 ```zsh
-cd /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
+cd /path/to/so101-mujoco-ros2
+export SO101_WORKSPACE_DIR=${SO101_WORKSPACE_DIR:-${PWD:h}}
 source /opt/ros/jazzy/setup.zsh
-source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh
+source "$SO101_WORKSPACE_DIR/ws_mujoco_ros2_control_fork/install/setup.zsh"
 source install/setup.zsh
 
 python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py \
@@ -392,9 +402,10 @@ ros2 pkg prefix mujoco_ros2_control
 开发树中曾出现旧 ament Python build artifact 与 `--symlink-install` 冲突。为了不删除用户文件，推荐把 build/install/log 放到 `/tmp`：
 
 ```zsh
-cd /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
+cd /path/to/so101-mujoco-ros2
+export SO101_WORKSPACE_DIR=${SO101_WORKSPACE_DIR:-${PWD:h}}
 source /opt/ros/jazzy/setup.zsh
-source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh
+source "$SO101_WORKSPACE_DIR/ws_mujoco_ros2_control_fork/install/setup.zsh"
 
 export SO101_BUILD_ROOT=/tmp/so101-mujoco-guide-build
 colcon --log-base "$SO101_BUILD_ROOT/log" build \
@@ -408,9 +419,11 @@ colcon --log-base "$SO101_BUILD_ROOT/log" build \
 source "$SO101_BUILD_ROOT/install/setup.zsh"
 ```
 
-`--cmake-clean-cache` 很重要：从 apt provider 切换到 patched overlay 后，旧 CMake cache 可能仍指向 `/opt/ros/jazzy` 里的头文件。
+`--cmake-clean-cache` 很重要：从 apt 或历史 `_003` provider 切换到 fork overlay 后，旧 CMake cache 可能仍指向旧头文件。
 
-隔离 build 用来证明源码可干净构建和测试；`dependency-lock.yaml` 中的 `project_package_prefixes` 有意固定为 worktree 的标准 `install/`。因此在 `/tmp` install 上运行 `check_reset_qualified_runtime.py` 会因 project prefix 不一致而 fail closed。正式 provenance qualification 需要再构建标准 install 并按第 4.3 节 source；不要为了让 checker 通过而放宽 lock。
+隔离 build 用来证明源码可干净构建和测试；正式 provenance qualification 仍需构建标准
+project `install/` 并按第 4.3 节 source。`check_mujoco_runtime.py` 根据 repo 根目录和
+`SO101_WORKSPACE_DIR` 解析实际 prefix；不要为了让 checker 通过而把机器绝对路径写回 lock。
 
 ### 5.2 Python 和 Ruff 门
 
@@ -418,7 +431,7 @@ Ruff 版本固定为 `0.15.20`，门同时执行 lint 和 format check：
 
 ```zsh
 ruff --version
-src/so101_mujoco_demo_py/scripts/check_ruff.sh
+bash src/so101_mujoco_demo_py/scripts/check_ruff.sh
 ```
 
 直接调用系统 Python 可能找不到 Ruff；应使用提供了准确版本的开发环境运行仓库脚本，而不是跳过门。
@@ -726,9 +739,34 @@ ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py \
 3. 通过 ai-station 的 Codex CUA 启动/操作并读取真实窗口。
 4. 不使用 `ai-station-capture.sh`；它是 Gazebo demo 的截图辅助，不是这个 MuJoCo GUI 的证据入口。
 
-GUI 目前只作为 visual/operator evidence。历史上 GUI 模式中 evidence plugin 调用 `mj_contactForce` 出现过 SIGSEGV，因此曾使用不加载 evidence plugin 的 visualization-only stack。该模式不能产生接触结论；接触、reset 和物理验收仍以 headless atomic evidence 为准。当前尚未提供一个已资格化的“GUI + contact evidence”单命令入口。
+GUI 主要作为 visual/operator evidence。历史上 evidence plugin 曾因 control/read buffer 缺少同一
+`sim_mutex_` 边界而在 `mj_contactForce` 中崩溃；fork release `so101-0.0.3-r2` 修复后，GUI、
+evidence plugin、三个 active controller 和 camera service 已在同一正常运行生命周期中通过验证。
+接触和 reset 结论仍必须使用 atomic evidence，不能由截图或 camera service 成功替代。
 
 CUA 会话过期时要显式 `start_session` 恢复，再用真实 PID/window id 调用 `get_window_state`。HiDPI 下对错误坐标点击 panel 曾触发 `update_sim_display` SIGSEGV，所以无需交互时只观察，不发送 GUI 输入。
+
+### 10.5 四角 viewer debug camera
+
+GUI 运行且已按第 4.3 节 source 后，可列出、应用并独立读回预设：
+
+```zsh
+ros2 run so101_mujoco_demo_py camera_preset --list
+ros2 run so101_mujoco_demo_py camera_preset table_corner_nw
+ros2 run so101_mujoco_demo_py camera_preset --current --format yaml
+
+ros2 run so101_mujoco_demo_py camera_preset table_corner_ne
+ros2 run so101_mujoco_demo_py camera_preset table_corner_se
+ros2 run so101_mujoco_demo_py camera_preset table_corner_sw
+```
+
+四个记录共享实测 `lookat`、`distance`、`elevation_deg` 和 projection，只把 azimuth 依次旋转
+90 度。每次应用都要用 `--current --format yaml` 数值核对；视觉 qualification 还要求四张独立、
+新鲜的 CUA frame，每张都完整包含机械臂、夹爪、底座、杯子和主桌面，方向明显不同且尺度一致。
+
+这些预设控制的是 MuJoCo 交互式 viewer 的调试相机，不是 MJCF/URDF 中的 RGB-D sensor camera；
+不会改变 sensor topic、成像标定或机器人任务状态。Teleop Web UI 集成明确延期，不属于本轮
+camera preset 工作流，也不能借本功能改动 Teleop 状态或路径。
 
 ## 11. MoveIt 规划和执行验证
 
