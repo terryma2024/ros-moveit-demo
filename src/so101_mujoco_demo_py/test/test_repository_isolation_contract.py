@@ -24,6 +24,7 @@ BACKUP_COMMIT = "3add34f8390b78a1f4a13ff49aefb2dc87638245"
 EXPECTED_BRANCH = "codex/so101-mujoco-ros2"
 EXPECTED_WORKTREE = "/data/work/ws_moveit/.worktrees/so101-mujoco-ros2"
 EXPECTED_EVIDENCE_ROOT = "/tmp/so101-debug-mujoco-migration/"
+APPROVED_FORK_URL = "git@gitee.com:zjumty/mujoco_ros2_control.git"
 LEGACY_NAMESPACE = "so101_gazebo_" + "demo_py"
 PROTECTED_TREE = Path("src") / ("so101_gazebo_" + "demo_py")
 BACKUP_BRANCH = "codex/so101-mujoco-ros2-pre-" + "isolation-20260810"
@@ -473,3 +474,12 @@ def test_gate_ignores_backup_references_in_generated_evidence_roots(
     evidence_file.write_text(f"review evidence: {BACKUP_BRANCH} {BACKUP_COMMIT}\n")
 
     require_success(run(isolated_checkout / GATE_RELATIVE_PATH, cwd=isolated_checkout))
+
+
+def test_gate_rejects_unapproved_control_submodule_url(isolated_checkout: Path) -> None:
+    gitmodules = isolated_checkout / ".gitmodules"
+    document = gitmodules.read_text(encoding="utf-8")
+    assert APPROVED_FORK_URL in document
+    gitmodules.write_text(document.replace(APPROVED_FORK_URL, "https://example.com/wrong.git"))
+
+    require_gate_failure(isolated_checkout, "control submodule URL")
