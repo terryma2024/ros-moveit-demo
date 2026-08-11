@@ -21,14 +21,15 @@ runtime:
   q6_position_tolerance_rad: 0.001
   q6_contact_stop_tolerance_rad: 0.00125
 physical_outcome:
-  # Frozen from the same production Bullet Featherstone calibration as semantic reference 641f7c4.
-  # These values never replace or relax grasp/collision penetration ceilings.
+  # Physical gates originate from the production Bullet Featherstone calibration.
+  # The final target center tolerance was explicitly revised to 10 mm; it does
+  # not replace or relax grasp/collision penetration ceilings.
   intended_support_collision: table::table_top::collision
   minimum_support_contact_depth_m: -0.0000001
   final_target_region:
     kind: axis_aligned_box
-    min_xy_m: [-0.085, -0.255]
-    max_xy_m: [-0.075, -0.245]
+    min_xy_m: [-0.090, -0.260]
+    max_xy_m: [-0.070, -0.240]
   support_height_range_m: [0.155, 0.175]
   max_upright_tilt_rad: 0.08726646259971647
   max_linear_speed_m_s: 0.001

@@ -126,7 +126,8 @@ def test_immediate_retreat_collects_only_post_retreat_outcome() -> None:
 
 def test_post_retreat_failure_is_persisted_before_it_is_raised() -> None:
     source = (PACKAGE / "src/live_execute.py").read_text()
-    final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
+    final_path = source[
+        source.index("outcomes=collect_final_outcome_after_immediate_retreat"):]
 
     assert '"final-outcome-failure.json"' in final_path
     assert final_path.index('"final-outcome-failure.json"') < final_path.index(
@@ -134,10 +135,12 @@ def test_post_retreat_failure_is_persisted_before_it_is_raised() -> None:
     )
 
 
-def test_live_failure_evidence_persists_both_release_epochs() -> None:
+def test_live_failure_evidence_persists_post_retreat_epoch() -> None:
     source = (PACKAGE / "src/live_execute.py").read_text()
-    final_path = source[source.index("outcomes=collect_final_outcomes_around_retreat"):]
+    final_path = source[
+        source.index("outcomes=collect_final_outcome_after_immediate_retreat"):]
 
+    assert "collect_final_outcomes_around_retreat(" not in final_path
     assert '"pre_retreat_outcome":collected_outcome_payload(' in final_path
     assert '"post_retreat_outcome":outcome_payload(' in final_path
     assert '"pre_retreat_final_sample":collected_final_sample_payload(' in final_path

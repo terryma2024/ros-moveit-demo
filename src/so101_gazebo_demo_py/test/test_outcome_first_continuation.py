@@ -206,6 +206,26 @@ def test_micro_lift_allows_detectable_positive_progress_within_outcome_tolerance
     assert result[1] == pytest.approx(0.000556)
 
 
+def test_micro_lift_rejects_g2_carry_failure_lateral_drift() -> None:
+    class Backend:
+        def __init__(self) -> None:
+            self.sample_count = 0
+
+        def sample(self) -> PoseSample:
+            self.sample_count += 1
+            if self.sample_count == 1:
+                return sample(0.0, 0.0, 0.165)
+            return sample(0.004223, 0.0, 0.166945)
+
+        def contacts(self):
+            return ()
+
+    with pytest.raises(RuntimeError, match="CUP_LATERAL_DRIFT"):
+        live_execute.verify_physical_micro_lift(
+            Backend(), execute=lambda delta: (3, 0.200),
+        )
+
+
 def test_full_grasp_attempt_reaches_cup_result_gate_without_bilateral_contact() -> None:
     class Backend:
         def __init__(self) -> None:
@@ -317,6 +337,120 @@ def test_contact_stopped_gripper_result_defers_to_cup_outcome_gate() -> None:
     assert gripper_result_acceptable(output, bilateral=False)
 
 
+def release_contacts(*, fixed: bool, moving: bool) -> tuple[ContactPair, ...]:
+    contacts = []
+    if fixed:
+        contacts.append(ContactPair(
+            "plastic_cup::body::wall_near",
+            "fixed_fingertip_pad_collision_001",
+            (0.0006,),
+        ))
+    if moving:
+        contacts.append(ContactPair(
+            "plastic_cup::body::wall_near",
+            "moving_fingertip_pad_collision_001",
+            (0.0007,),
+        ))
+    return tuple(contacts)
+
+
+def test_bilateral_release_opens_without_reseating() -> None:
+    class Backend:
+        def __init__(self) -> None:
+            self.commands = []
+
+        def contacts(self):
+            return release_contacts(fixed=True, moving=True)
+
+        def move_gripper(self, target, *, final_release=False):
+            self.commands.append((target, final_release))
+
+    backend = Backend()
+    result = live_execute.open_gripper_from_bilateral_release(
+        backend, seating_target=-0.053, release_q6=0.750,
+    )
+
+    assert result["reseated"] is False
+    assert result["contact"].bilateral
+    assert backend.commands == [(0.750, True)]
+
+
+def test_fixed_only_release_reseats_before_opening() -> None:
+    class Backend:
+        def __init__(self) -> None:
+            self.commands = []
+            self.reseated = False
+
+        def contacts(self):
+            return release_contacts(
+                fixed=True,
+                moving=self.reseated,
+            )
+
+        def move_gripper(self, target, *, final_release=False):
+            self.commands.append((target, final_release))
+            if target == -0.053:
+                self.reseated = True
+
+    backend = Backend()
+    result = live_execute.open_gripper_from_bilateral_release(
+        backend, seating_target=-0.053, release_q6=0.750,
+    )
+
+    assert result["reseated"] is True
+    assert result["contact"].bilateral
+    assert backend.commands == [(-0.053, False), (0.750, True)]
+
+
+def test_release_records_unilateral_timeout_and_still_opens() -> None:
+    class Backend:
+        def __init__(self) -> None:
+            self.commands = []
+
+        def contacts(self):
+            return release_contacts(fixed=True, moving=False)
+
+        def move_gripper(self, target, *, final_release=False):
+            self.commands.append((target, final_release))
+
+    backend = Backend()
+    result = live_execute.open_gripper_from_bilateral_release(
+        backend, seating_target=-0.053, release_q6=0.750,
+    )
+
+    assert result["reseated"] is True
+    assert not result["contact"].bilateral
+    assert not result["bilateral_stability_proved"]
+    assert "bilateral stability timeout" in result["stability_observation"]
+    assert backend.commands == [(-0.053, False), (0.750, True)]
+
+
+def test_release_observation_does_not_bypass_penetration_hard_ceiling() -> None:
+    class Backend:
+        def __init__(self) -> None:
+            self.commands = []
+
+        def contacts(self):
+            return (
+                ContactPair(
+                    "plastic_cup::body::wall_near",
+                    "moving_fingertip_pad_collision_001",
+                    (0.001300001,),
+                ),
+            )
+
+        def move_gripper(self, target, *, final_release=False):
+            self.commands.append((target, final_release))
+
+    backend = Backend()
+    with pytest.raises(RuntimeError, match="penetration ceiling exceeded"):
+        live_execute.open_gripper_from_bilateral_release(
+            backend, seating_target=-0.053, release_q6=0.750,
+        )
+
+    assert backend.commands == [(-0.053, False)]
+
+
 def test_same_run_place_alignment_uses_cup_error_and_returns_reverse_path() -> None:
     samples = iter((
         sample(-0.097, -0.256, 0.165),
@@ -343,7 +477,7 @@ def test_same_run_place_alignment_uses_cup_error_and_returns_reverse_path() -> N
     assert telemetry[-1]["after_xy_error_m"] < telemetry[-1]["before_xy_error_m"]
 
 
-def test_release_alignment_target_preserves_ten_mm_pre_open_clearance() -> None:
+def test_release_alignment_target_restores_proven_g4_baseline_target() -> None:
     assert live_execute.release_alignment_target(
         (-0.080, -0.250, 0.165)
     ) == pytest.approx((-0.075, -0.255, 0.179))
@@ -636,3 +770,95 @@ def test_same_run_place_alignment_fails_after_attempt_budget() -> None:
             execute=lambda *_args: (12, (0.39, 0.49, 0.11, 1.0, 0.002)),
             max_attempts=2,
         )
+
+
+def test_controlled_release_retreat_preflight_omits_plans_and_restores_attach() -> None:
+    events = []
+    observed = sample(-0.080, -0.250, 0.169)
+
+    class Backend:
+        def sample(self):
+            return observed
+
+    def apply_scene(operation, pose=None):
+        events.append(operation)
+        return {"operation":operation,"pose":pose}
+
+    result = live_execute.preflight_controlled_release_retreat(
+        Backend(), apply_scene,
+        plan_retreat=lambda: events.append("plan") or 17,
+    )
+
+    assert events == ["omit", "plan", "attach"]
+    assert result["planned_points"] == 17
+    assert result["restored_scene"]["operation"] == "attach"
+
+
+def test_controlled_release_retreat_preflight_restores_before_raising() -> None:
+    events = []
+    observed = sample(-0.080, -0.250, 0.169)
+
+    class Backend:
+        def sample(self):
+            return observed
+
+    def apply_scene(operation, pose=None):
+        events.append(operation)
+        return {"operation":operation,"pose":pose}
+
+    with pytest.raises(RuntimeError, match="preflight planning failed"):
+        live_execute.preflight_controlled_release_retreat(
+            Backend(), apply_scene,
+            plan_retreat=lambda: (_ for _ in ()).throw(
+                RuntimeError("preflight planning failed")
+            ),
+        )
+
+    assert events == ["omit", "attach"]
+
+
+def test_controlled_release_retreat_executes_then_restores_world_object() -> None:
+    events = []
+    released = sample(-0.080, -0.250, 0.169)
+    retreated = sample(-0.080, -0.250, 0.169)
+
+    class Backend:
+        def sample(self):
+            return retreated
+
+    def apply_scene(operation, pose=None):
+        events.append(operation)
+        return {"operation":operation,"pose":pose}
+
+    result = live_execute.execute_controlled_release_retreat(
+        Backend(), apply_scene, released,
+        execute_retreat=lambda: events.append("execute") or 23,
+    )
+
+    assert events == ["omit", "execute", "detach"]
+    assert result["execution_points"] == 23
+    assert result["retreated"] is retreated
+    assert result["restored_scene"]["operation"] == "detach"
+
+
+def test_controlled_release_retreat_restores_world_object_after_execution_error() -> None:
+    events = []
+    released = sample(-0.080, -0.250, 0.169)
+
+    class Backend:
+        def sample(self):
+            return released
+
+    def apply_scene(operation, pose=None):
+        events.append(operation)
+        return {"operation":operation,"pose":pose}
+
+    with pytest.raises(RuntimeError, match="retreat execution failed"):
+        live_execute.execute_controlled_release_retreat(
+            Backend(), apply_scene, released,
+            execute_retreat=lambda: (_ for _ in ()).throw(
+                RuntimeError("retreat execution failed")
+            ),
+        )
+
+    assert events == ["omit", "detach"]

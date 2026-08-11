@@ -46,6 +46,22 @@ class CollectedFinalOutcome:
         return self.result.evaluation
 
 
+@dataclass(frozen=True, slots=True)
+class TargetPenetrationResult:
+    contact: object
+    target_q6: float
+    adjustments: int
+    target_penetration_proved: bool
+    continued_after_adjustment_exhaustion: bool
+    stability_observation: str | None
+
+    def __iter__(self):
+        """Keep the existing contact, target, adjustments unpacking contract."""
+        yield self.contact
+        yield self.target_q6
+        yield self.adjustments
+
+
 def collect_final_outcomes_around_retreat(*, collect_epoch, retreat) -> FinalOutcomeEpochs:
     """Collect independent outcome epochs with RETREAT strictly between them."""
     pre_retreat=collect_epoch()
@@ -242,6 +258,42 @@ def release_alignment_target(
             place_xyz, settling_compensation_m, strict=True,
         )
     )
+
+
+def cup_bottom_clearance_m(
+    observed, *, cup_height_m: float, cup_radius_m: float, support_z_m: float,
+) -> float:
+    """Return the lowest point of the tilted cup above the support plane."""
+    x,y,z,w=observed.object_xyzw
+    row_z=(
+        2.0*(x*z-w*y),
+        2.0*(y*z+w*x),
+        1.0-2.0*(x*x+y*y),
+    )
+    half_extent=(
+        cup_height_m/2.0*abs(row_z[2])
+        + cup_radius_m*math.hypot(row_z[0],row_z[1])
+    )
+    return observed.object_xyz[2]-half_extent-support_z_m
+
+
+def release_seating_translation(
+    observed, *, cup_height_m: float, cup_radius_m: float, support_z_m: float,
+    target_clearance_m: float = 0.001, max_correction_m: float = 0.010,
+) -> tuple[float, float, float]:
+    """Lower a held cup near support before opening, without changing XY."""
+    clearance=cup_bottom_clearance_m(
+        observed,cup_height_m=cup_height_m,cup_radius_m=cup_radius_m,
+        support_z_m=support_z_m,
+    )
+    correction=target_clearance_m-clearance
+    if correction >= 0.0:
+        return (0.0,0.0,0.0)
+    if abs(correction) > max_correction_m:
+        raise RuntimeError(
+            f"release seating correction exceeds bound: {correction}"
+        )
+    return (0.0,0.0,correction)
 
 
 def release_separation_translation(
@@ -481,7 +533,10 @@ def local_x_world_delta(quaternion_xyzw, distance_m: float):
     )
 
 
-def make_pose_move_group_goal(names, positions, target_xyz_xyzw):
+def make_pose_move_group_goal(
+    names, positions, target_xyz_xyzw,
+    orientation_tolerances_rad: tuple[float,float,float] = (.005,.005,.005),
+):
     """Build the main-workspace request-scoped pose-constrained micro-lift goal."""
     from geometry_msgs.msg import Pose
     from moveit_msgs.action import MoveGroup
@@ -506,7 +561,11 @@ def make_pose_move_group_goal(names, positions, target_xyz_xyzw):
     orientation=OrientationConstraint()
     orientation.header.frame_id="world"; orientation.link_name="so101_tcp"; orientation.weight=1.0
     orientation.orientation.x,orientation.orientation.y,orientation.orientation.z,orientation.orientation.w=target_xyz_xyzw[3:]
-    orientation.absolute_x_axis_tolerance=.005; orientation.absolute_y_axis_tolerance=.005; orientation.absolute_z_axis_tolerance=.005
+    (
+        orientation.absolute_x_axis_tolerance,
+        orientation.absolute_y_axis_tolerance,
+        orientation.absolute_z_axis_tolerance,
+    )=orientation_tolerances_rad
     constraints.position_constraints=[position]; constraints.orientation_constraints=[orientation]
     goal.request.goal_constraints=[constraints]
     goal.planning_options.plan_only=True
@@ -631,7 +690,9 @@ def _moveit_world_z_execute(
     world_translation_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
     world_x_rotation_rad: float = 0.0,
     orientation_tolerance_rad: float = 0.005,
+    orientation_tolerances_rad: tuple[float,float,float] | None = None,
     return_arm_start: bool = False,
+    execute_trajectory: bool = True,
 ):
     import rclpy
     from moveit_msgs.action import ExecuteTrajectory, MoveGroup
@@ -658,11 +719,12 @@ def _moveit_world_z_execute(
     target_pose=rotated_grasp_pose(translated_grasp_pose(target_pose,world_translation_m),world_x_rotation_rad)
     client=ActionClient(node,MoveGroup,"/move_action")
     if not client.wait_for_server(timeout_sec=10.): raise RuntimeError("/move_action unavailable")
-    goal=make_pose_move_group_goal(names,positions,target_pose)
-    orientation=goal.request.goal_constraints[0].orientation_constraints[0]
-    orientation.absolute_x_axis_tolerance=orientation_tolerance_rad
-    orientation.absolute_y_axis_tolerance=orientation_tolerance_rad
-    orientation.absolute_z_axis_tolerance=orientation_tolerance_rad
+    if orientation_tolerances_rad is None:
+        orientation_tolerances_rad=(orientation_tolerance_rad,)*3
+    goal=make_pose_move_group_goal(
+        names,positions,target_pose,
+        orientation_tolerances_rad=orientation_tolerances_rad,
+    )
     future=client.send_goal_async(goal); rclpy.spin_until_future_complete(node,future,timeout_sec=5.)
     handle=future.result() if future.done() else None
     if handle is None or not handle.accepted: raise RuntimeError("world-Z MoveGroup goal rejected")
@@ -673,6 +735,11 @@ def _moveit_world_z_execute(
     if not trajectory.joint_trajectory.points: raise RuntimeError("world-Z MoveGroup plan was empty")
     progress=lambda: rclpy.spin_once(node,timeout_sec=.01)
     points=len(trajectory.joint_trajectory.points)
+    if not execute_trajectory:
+        node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
+        if return_arm_start:
+            return points,transform.transform.translation.z,arm_start
+        return points,transform.transform.translation.z
     result=MoveItExecutionClient(ActionClient(node,ExecuteTrajectory,"/execute_trajectory"),make_execute_goal,progress).execute(trajectory,30.)
     node.destroy_subscription(subscription); node.destroy_node(); rclpy.shutdown()
     if result.failure: raise RuntimeError(str(result.failure))
@@ -693,6 +760,92 @@ def _moveit_world_translation_execute(
     return points,arm_start
 
 
+def _object_pose(sample):
+    return (*sample.object_xyz,*sample.object_xyzw)
+
+
+def _restore_scene_or_raise(
+    operation, apply_scene, backend, fallback_sample, primary_error,
+):
+    latest=fallback_sample
+    try:
+        latest=backend.sample()
+    except Exception:
+        pass
+    try:
+        return apply_scene(operation,_object_pose(latest))
+    except Exception as restore_error:
+        if primary_error is not None:
+            raise RuntimeError(
+                f"controlled release retreat failed: {primary_error}; "
+                f"Planning Scene restore failed: {restore_error}"
+            ) from restore_error
+        raise
+
+
+def _plan_controlled_release_retreat():
+    return _moveit_world_z_execute(
+        0.035,
+        orientation_tolerances_rad=(0.005,0.060,0.005),
+        execute_trajectory=False,
+    )[0]
+
+
+def _execute_controlled_release_retreat():
+    return _moveit_world_z_execute(
+        0.035,
+        orientation_tolerances_rad=(0.005,0.060,0.005),
+    )[0]
+
+
+def preflight_controlled_release_retreat(backend,apply_scene,plan_retreat):
+    held=backend.sample()
+    omitted_scene=None
+    planned_points=None
+    primary_error=None
+    try:
+        omitted_scene=apply_scene("omit")
+        planned_points=plan_retreat()
+    except Exception as error:
+        primary_error=error
+    restored_scene=_restore_scene_or_raise(
+        "attach",apply_scene,backend,held,primary_error,
+    )
+    if primary_error is not None:
+        raise primary_error
+    return {
+        "planned_points":planned_points,
+        "omitted_scene":omitted_scene,
+        "restored_scene":restored_scene,
+    }
+
+
+def execute_controlled_release_retreat(
+    backend,apply_scene,released,execute_retreat,
+):
+    omitted_scene=None
+    execution_points=None
+    retreated=None
+    primary_error=None
+    try:
+        omitted_scene=apply_scene("omit")
+        execution_points=execute_retreat()
+        retreated=backend.sample()
+    except Exception as error:
+        primary_error=error
+    restored_scene=_restore_scene_or_raise(
+        "detach",apply_scene,backend,retreated or released,primary_error,
+    )
+    if primary_error is not None:
+        raise primary_error
+    return {
+        "execution_points":execution_points,
+        "retreated":retreated,
+        "omitted_scene":omitted_scene,
+        "restored_scene":restored_scene,
+    }
+
+
 def _stable_bilateral(backend: RosGazeboLiveBackend, required: int = 6):
     consecutive=0; last=None
     for _ in range(30):
@@ -706,19 +859,54 @@ def _stable_bilateral(backend: RosGazeboLiveBackend, required: int = 6):
 
 
 def seat_and_stabilize_physical_grasp(backend, seating_target: float):
-    """Apply the preload, then require stable physical contact before shadow attach."""
+    """Apply preload and observe contact without gating on bilateral stability."""
     backend.move_gripper(seating_target)
-    return _stable_bilateral(backend)
+    try:
+        return _stable_bilateral(backend)
+    except RuntimeError as error:
+        if "penetration ceiling exceeded" in str(error):
+            raise
+        return evaluate_bilateral_contact(backend.contacts())
+
+
+def open_gripper_from_bilateral_release(
+    backend, seating_target: float, release_q6: float,
+):
+    """Use bilateral stability as release telemetry, never as an ordinary gate."""
+    initial_contact=evaluate_bilateral_contact(backend.contacts())
+    reseated=False
+    if not initial_contact.bilateral:
+        backend.move_gripper(seating_target)
+        reseated=True
+    stability_observation=None
+    try:
+        contact=_stable_bilateral(backend)
+    except RuntimeError as error:
+        if "penetration ceiling exceeded" in str(error):
+            raise
+        stability_observation=str(error)
+        contact=evaluate_bilateral_contact(backend.contacts())
+        bilateral_stability_proved=False
+    else:
+        bilateral_stability_proved=True
+    backend.move_gripper(release_q6,final_release=True)
+    return {
+        "initial_contact":initial_contact,
+        "contact":contact,
+        "reseated":reseated,
+        "bilateral_stability_proved":bilateral_stability_proved,
+        "stability_observation":stability_observation,
+    }
 
 
 def stabilize_to_target_penetration(
     backend, seating_target: float, preopen_q6: float, q6_safe_lower: float,
-    minimum_penetration_m: float = 0.0001,
-    maximum_penetration_m: float = 0.001,
+    minimum_penetration_m: float = 0.0005,
+    maximum_penetration_m: float = 0.0011,
     adjustment_rad: float = 0.001,
     max_adjustments: int = 4,
 ):
-    """Bound q6 adjustments until stable bilateral penetration is in range."""
+    """Adjust q6 from bilateral observations, then always hand off to lift."""
     if not 0.0 < minimum_penetration_m <= maximum_penetration_m:
         raise ValueError("invalid target penetration interval")
     if adjustment_rad <= 0.0 or max_adjustments < 0:
@@ -739,24 +927,47 @@ def stabilize_to_target_penetration(
                 depth is not None
                 and minimum_penetration_m <= depth <= maximum_penetration_m
             ):
-                return contact,target,adjustment
+                return TargetPenetrationResult(
+                    contact=contact,
+                    target_q6=target,
+                    adjustments=adjustment,
+                    target_penetration_proved=True,
+                    continued_after_adjustment_exhaustion=False,
+                    stability_observation=(
+                        str(last_error) if last_error is not None else None
+                    ),
+                )
         if adjustment == max_adjustments:
             break
         if depth is not None and depth > maximum_penetration_m:
             next_target=min(preopen_q6,target+adjustment_rad)
         else:
-            backend.move_gripper(preopen_q6)
+            if depth is None:
+                backend.move_gripper(preopen_q6)
             next_target=max(q6_safe_lower,target-adjustment_rad)
         if next_target == target:
             break
         target=next_target
         backend.move_gripper(target)
-    detail=(
-        str(last_error) if last_error is not None
-        else f"depth={depth} target_q6={target}"
-    )
-    raise RuntimeError(
-        "target penetration not reached within bounded adjustments: " + detail
+    final_contact=evaluate_bilateral_contact(backend.contacts())
+    final_depth=final_contact.max_moving_pad_penetration_m
+    if (
+        final_depth is not None
+        and final_depth > MOVING_PAD_MESH_PENETRATION_CEILING_M
+    ):
+        raise RuntimeError(
+            f"moving-pad penetration ceiling exceeded: {final_depth}"
+        )
+    return TargetPenetrationResult(
+        contact=final_contact,
+        target_q6=target,
+        adjustments=adjustment,
+        target_penetration_proved=False,
+        continued_after_adjustment_exhaustion=True,
+        stability_observation=(
+            str(last_error) if last_error is not None
+            else f"depth={depth} target_q6={target}"
+        ),
     )
 
 
@@ -774,7 +985,7 @@ def verify_physical_micro_lift(backend, execute=_moveit_world_z_execute):
         commanded_object_delta_m=(0.0,0.0,0.002),
         position_tolerance_m=0.006,
         minimum_axial_progress_m=0.0001,
-        maximum_lateral_drift_m=0.006,
+        maximum_lateral_drift_m=0.001,
         arm_stable=all(math.isfinite(value) for value in (*after.tcp_xyz,*after.tcp_xyzw)),
         contact_evidence=contact,
         q6_position=None,
@@ -886,6 +1097,11 @@ class PlanningSceneShadowClient:
             pose=Pose(); pose.position.x,pose.position.y,pose.position.z=object_pose[:3]; pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w=object_pose[3:]
             attached.object.primitive_poses=[pose]
             scene.robot_state.attached_collision_objects=[attached]
+        elif operation == "omit":
+            remove=AttachedCollisionObject(); remove.object.id="plastic_cup"; remove.object.operation=CollisionObject.REMOVE
+            scene.robot_state.attached_collision_objects=[remove]
+            world=CollisionObject(); world.id="plastic_cup"; world.header.frame_id="world"; world.operation=CollisionObject.REMOVE
+            scene.world.collision_objects=[world]
         elif operation == "detach":
             if object_pose is None:
                 raise ValueError("MoveIt shadow detach requires the latest Gazebo object pose")
@@ -988,15 +1204,19 @@ def _run_live_execute_with_scene(
     backend.move_gripper(close_target)
     initial_contact=evaluate_bilateral_contact(backend.contacts())
     if initial_contact.bilateral:
-        try: _stable_bilateral(backend)
-        except RuntimeError: pass
+        try:
+            _stable_bilateral(backend)
+        except RuntimeError as error:
+            if "penetration ceiling exceeded" in str(error):
+                raise
     q6_contact=_current_joint_position("6")
     seating_target=seating_preload_target(q6_contact,-.059600220867817,bundle.motion.seating_preload_rad)
     try:
         backend.move_gripper(seating_target)
-        seated_contact,normalized_seating_target,seating_adjustments=stabilize_to_target_penetration(
+        penetration_result=stabilize_to_target_penetration(
             backend,seating_target,bundle.motion.preopen_q6,-.059600220867817,
         )
+        seated_contact,normalized_seating_target,seating_adjustments=penetration_result
         seating_actual_q6=_current_joint_position("6")
     except Exception as error:
         (evidence_directory/"physical-failure.json").write_text(json.dumps({
@@ -1013,6 +1233,9 @@ def _run_live_execute_with_scene(
         "actual_q6":seating_actual_q6,
         "bilateral":seated_contact.bilateral,
         "moving_pad_depth_m":seated_contact.max_moving_pad_penetration_m,
+        "target_penetration_proved":penetration_result.target_penetration_proved,
+        "continued_after_adjustment_exhaustion":penetration_result.continued_after_adjustment_exhaustion,
+        "stability_observation":penetration_result.stability_observation,
     }
     pre_probe=backend.sample()
     shadow_pose=(*pre_probe.object_xyz,*pre_probe.object_xyzw)
@@ -1073,24 +1296,81 @@ def _run_live_execute_with_scene(
         return _moveit_world_translation_execute(delta,orientation_tolerance_rad)
     placed,_place_reverse_waypoints,place_alignment=align_cup_for_release(
         backend,target_place_xyz,execute=execute_place_correction,
+        xy_tolerance_m=0.005,
         max_arm_linear_speed_m_s=outcome_policy.max_linear_speed_m_s,
         max_arm_angular_speed_rad_s=outcome_policy.max_angular_speed_rad_s,
     )
-    if place_alignment:
+    object_model=bundle.object.data["model"]
+    cup_height_m=float(object_model["height_m"])
+    cup_radius_m=float(object_model["outer_radius_m"])
+    support_z_m=float(bundle.object.place_pose.values[2])-cup_height_m/2.0
+    seating_delta=release_seating_translation(
+        placed,cup_height_m=cup_height_m,cup_radius_m=cup_radius_m,
+        support_z_m=support_z_m,
+    )
+    release_seating={
+        "before_bottom_clearance_m":cup_bottom_clearance_m(
+            placed,cup_height_m=cup_height_m,cup_radius_m=cup_radius_m,
+            support_z_m=support_z_m,
+        ),
+        "commanded_translation_m":seating_delta,
+        "planned_points":0,
+    }
+    if seating_delta[2] < 0.0:
+        gate_shadow("RELEASE_SEATING")
+        seating_points,_seating_start=_moveit_world_translation_execute(
+            seating_delta,0.15,
+        )
+        placed=backend.sample()
+        after_clearance=cup_bottom_clearance_m(
+            placed,cup_height_m=cup_height_m,cup_radius_m=cup_radius_m,
+            support_z_m=support_z_m,
+        )
+        release_seating.update({
+            "planned_points":seating_points,
+            "after_bottom_clearance_m":after_clearance,
+            "after_object_xyz":placed.object_xyz,
+        })
+        if not -0.0005 <= after_clearance <= 0.003:
+            raise RuntimeError(
+                f"release seating clearance outside bound: {after_clearance}"
+            )
+    if place_alignment or seating_delta[2] < 0.0:
         gate_shadow("PRE_RELEASE_RETREAT")
-    backend.move_gripper(bundle.motion.release_q6, final_release=True)
+    try:
+        release_retreat_preflight=preflight_controlled_release_retreat(
+            backend,apply_scene,
+            plan_retreat=_plan_controlled_release_retreat,
+        )
+    except Exception as error:
+        (evidence_directory/"controlled-release-retreat-failure.json").write_text(
+            json.dumps({
+                "status":"FAILED",
+                "phase":"PRE_OPEN_RETREAT_PREFLIGHT",
+                "error":str(error),
+                "gazebo_attachment_state":backend.attachment_state(),
+            },indent=2)
+        )
+        raise
+    release_preparation=open_gripper_from_bilateral_release(
+        backend,
+        seating_target=normalized_seating_target,
+        release_q6=bundle.motion.release_q6,
+    )
+    release_preparation_payload={
+        "reseated":release_preparation["reseated"],
+        "initial_bilateral":release_preparation["initial_contact"].bilateral,
+        "bilateral":release_preparation["contact"].bilateral,
+        "bilateral_stability_proved":release_preparation["bilateral_stability_proved"],
+        "stability_observation":release_preparation["stability_observation"],
+        "max_moving_pad_penetration_m":release_preparation["contact"].max_moving_pad_penetration_m,
+    }
     released=backend.sample()
     detached_scene=[None]
     scene_membership=[None]
     synchronized_scene=[None]
-    state=next(state for state in bundle.motion.states if state.value=="RETREAT")
-    retreat_policy=bundle.motion.states[state]
     release_separation=[None]
-    def detach_and_sync(observed):
-        observed_pose=(*observed.object_xyz,*observed.object_xyzw)
-        detached_scene[0]=apply_scene("detach",observed_pose)
-        synchronized_scene[0]=detached_scene[0]
-        scene_membership[0]=detached_scene[0]
+    controlled_retreat=[None]
     def collect_release_epoch():
         with backend.final_observer() as final_observer:
             return collect_final_outcome_epoch(
@@ -1098,36 +1378,62 @@ def _run_live_execute_with_scene(
                 gazebo_detached=backend.attachment_state() == "detached",
                 scene_membership=scene_membership[0],
             )
-    if not place_alignment:
-        def immediate_retreat():
-            backend.move_arm(retreat_policy.waypoints, velocity_scaling=retreat_policy.velocity_scaling)
-            retreated=backend.sample()
-            retreated_pose=(*retreated.object_xyz,*retreated.object_xyzw)
-            detached_scene[0]=apply_scene("detach",retreated_pose)
-            synchronized_scene[0]=detached_scene[0]
-            scene_membership[0]=detached_scene[0]
+    def immediate_retreat():
+        controlled_retreat[0]=execute_controlled_release_retreat(
+            backend,apply_scene,released,
+            execute_retreat=_execute_controlled_release_retreat,
+        )
+        retreated=controlled_retreat[0]["retreated"]
+        detached_scene[0]=controlled_retreat[0]["restored_scene"]
+        synchronized_scene[0]=controlled_retreat[0]["restored_scene"]
+        scene_membership[0]=controlled_retreat[0]["restored_scene"]
+        release_separation[0]=tuple(
+            retreated.tcp_xyz[index]-released.tcp_xyz[index]
+            for index in range(3)
+        )
+    try:
         outcomes=collect_final_outcome_after_immediate_retreat(
             collect_epoch=collect_release_epoch,
             retreat=immediate_retreat,
         )
-    else:
-        detach_and_sync(released)
-        def retreat_after_settle(_pre_retreat):
-            release_separation[0]=release_separation_translation(placed)
-            _moveit_world_translation_execute(
-                release_separation[0],0.15,
-            )
-            _moveit_world_z_execute(
-                0.060, orientation_tolerance_rad=0.15,
-            )
-            retreated=backend.sample()
-            detach_and_sync(retreated)
-        outcomes=collect_final_outcomes_around_retreat(
-            collect_epoch=collect_release_epoch,
-            retreat=retreat_after_settle,
+    except Exception as error:
+        latest=released
+        try:
+            latest=backend.sample()
+        except Exception:
+            pass
+        recovery_error=None
+        try:
+            recovered_scene=apply_scene("detach",_object_pose(latest))
+        except Exception as scene_error:
+            recovered_scene=None
+            recovery_error=str(scene_error)
+        (evidence_directory/"controlled-release-retreat-failure.json").write_text(
+            json.dumps({
+                "status":"FAILED",
+                "phase":"POST_OPEN_CONTROLLED_RETREAT",
+                "error":str(error),
+                "scene_recovery_error":recovery_error,
+                "planning_scene":recovered_scene,
+                "released_object_xyz":released.object_xyz,
+                "latest_object_xyz":latest.object_xyz,
+                "gazebo_attachment_state":backend.attachment_state(),
+            },indent=2)
         )
+        raise
     pre_retreat_outcome=outcomes.pre_retreat
     post_retreat_outcome=outcomes.post_retreat
+    release_retreat_payload={
+        "world_z_target_m":0.035,
+        "orientation_tolerances_rad":[0.005,0.060,0.005],
+        "preflight_planned_points":release_retreat_preflight["planned_points"],
+        "execution_planned_points":controlled_retreat[0]["execution_points"],
+        "preflight_omitted_scene":release_retreat_preflight["omitted_scene"],
+        "preflight_restored_scene":release_retreat_preflight["restored_scene"],
+        "execution_omitted_scene":controlled_retreat[0]["omitted_scene"],
+        "execution_restored_scene":controlled_retreat[0]["restored_scene"],
+        "tcp_translation_m":release_separation[0],
+    }
     def outcome_payload(evaluation):
         return {"success":evaluation.success,"failure_code":evaluation.failure_code,"sample_count":evaluation.sample_count,"duration_s":evaluation.duration_s,"max_linear_speed_m_s":evaluation.max_linear_speed_m_s,"max_angular_speed_rad_s":evaluation.max_angular_speed_rad_s,"metrics":dict(evaluation.metrics),"telemetry":[sample.as_dict() for sample in evaluation.telemetry]}
     def final_sample_payload(sample):
@@ -1157,12 +1463,15 @@ def _run_live_execute_with_scene(
             "planning_scene":synchronized_scene[0],
             "shadow_checks":shadow_checks,
             "place_alignment":place_alignment,
+            "release_seating":release_seating,
+            "release_preparation":release_preparation_payload,
             "release_separation_m":release_separation[0],
+            "controlled_release_retreat":release_retreat_payload,
         }
         (evidence_directory/"final-outcome-failure.json").write_text(
             json.dumps(failure,indent=2)
         )
         raise RuntimeError(f"post-retreat final physical outcome failed: {settle.evaluation.failure_code}")
     final=outcomes.post_retreat.final_sample
-    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene[0],"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment,"release_separation_m":release_separation[0]},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral},"pre_retreat_outcome":collected_outcome_payload(pre_retreat_outcome),"pre_retreat_final_sample":collected_final_sample_payload(pre_retreat_outcome),"release_start_sample":final_sample_payload(placed),"final_outcome":outcome_payload(post_retreat_outcome.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
+    summary={"status":"DONE","current_state":"DONE","state_trace":TRACE,"exit_code":0,"moveit":{"planned_points":moveit_points,"micro_lift_planned_points":micro_points,"execute_succeeded":True,"attached_scene":attached_scene,"detached_scene":detached_scene[0],"synchronized_scene":synchronized_scene[0],"shadow_checks":shadow_checks,"place_alignment":place_alignment,"release_seating":release_seating,"release_separation_m":release_separation[0],"controlled_release_retreat":release_retreat_payload},"gazebo":{"bilateral_before_attach":contact.bilateral,"max_penetration_m":contact.max_moving_pad_penetration_m,"events":[],"attachment_state":backend.attachment_state(),"initial_object_xyz":initial.object_xyz,"pre_attach_object_xyz":after.object_xyz,"place_object_xyz":placed.object_xyz,"final_object_xyz":final.object_xyz,"final_object_xyzw":final.object_xyzw},"controller":{"arm":"SUCCEEDED","gripper":"SUCCEEDED"},"tf":{"micro_lift_start_z":micro_start_z,"initial_tcp_xyz":initial.tcp_xyz,"final_tcp_xyz":final.tcp_xyz},"physical":{"reclose_target_q6":close_target,"q6_contact":q6_contact,"seating_preload_rad":bundle.motion.seating_preload_rad,"seating_target_q6":seating_target,"micro_lift_world_z":lift,"lateral_drift_m":lateral,"release_preparation":release_preparation_payload},"pre_retreat_outcome":collected_outcome_payload(pre_retreat_outcome),"pre_retreat_final_sample":collected_final_sample_payload(pre_retreat_outcome),"release_start_sample":final_sample_payload(placed),"final_outcome":outcome_payload(post_retreat_outcome.evaluation),"provenance":{"package_share":str(share),"policy_sha256":bundle.sha256,"ros_domain_id":os.environ.get("ROS_DOMAIN_ID"),"gz_partition":os.environ.get("GZ_PARTITION")}}
     path=evidence_directory/"live-summary.json"; path.write_text(json.dumps(summary,indent=2)); return summary

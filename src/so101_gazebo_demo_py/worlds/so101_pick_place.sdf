@@ -203,6 +203,25 @@
             <diffuse>0.36 0.24 0.14 1</diffuse>
           </material>
         </visual>
+        <visual name="target_landing_tolerance_ring">
+          <!--
+            World center (-0.080, -0.250) matches scene.place_pose.
+            The flat annulus inner radius is cup radius 40 mm plus the
+            conservative 5 mm center tolerance inscribed in the accepted box.
+          -->
+          <pose>-0.080 -0.050 0.0201 0 0 0</pose>
+          <cast_shadows>false</cast_shadows>
+          <geometry>
+            <mesh>
+              <uri>model://so101_gazebo_demo_py/meshes/target_landing_tolerance_ring.stl</uri>
+            </mesh>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>
+            <diffuse>1 0 0 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
       </link>
     </model>
 

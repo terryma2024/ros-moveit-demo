@@ -7,6 +7,7 @@ from so101_gazebo_demo.live_execute import (
     _stable_bilateral, carry_with_shadow_gates, compose_pose,
     plan_waypoint_sequence, relative_pose, rotated_grasp_pose,
     run_bounded_physical_grasp_attempts, shadow_divergence_healthy,
+    release_seating_translation,
     seat_and_stabilize_physical_grasp,
     synchronize_planning_shadow,
     translated_grasp_pose,
@@ -41,10 +42,31 @@ def test_live_path_normalizes_approved_penetration_target_before_carry() -> None
     live_path = source[source.index("def run_live_execute") :]
     assert "tune_seating_penetration(" not in live_path
     assert "stabilize_to_target_penetration(" in live_path
-    assert "minimum_penetration_m: float = 0.0001" in source
-    assert "maximum_penetration_m: float = 0.001" in source
+    assert "minimum_penetration_m: float = 0.0005" in source
+    assert "maximum_penetration_m: float = 0.0011" in source
+    assert "continue_after_exhaustion" not in live_path
     assert '"normalized_target_q6":normalized_seating_target' in live_path
+    assert '"continued_after_adjustment_exhaustion":' in live_path
     assert "moving-pad penetration ceiling exceeded" in source
+    initial_stability = live_path[
+        live_path.index("if initial_contact.bilateral:"):
+        live_path.index('q6_contact=_current_joint_position("6")')
+    ]
+    assert 'except RuntimeError as error:' in initial_stability
+    assert 'if "penetration ceiling exceeded" in str(error):' in initial_stability
+    assert "raise" in initial_stability
+
+
+def test_final_failure_preserves_release_contact_observation_telemetry() -> None:
+    source = LIVE_EXECUTE.read_text()
+    failure_path = source[
+        source.index('failure={', source.index('"status":"VALID_FAILURE"') - 80):
+        source.index('(evidence_directory/"final-outcome-failure.json")')
+    ]
+
+    assert '"release_preparation":release_preparation_payload' in failure_path
+    assert '"bilateral_stability_proved"' in source
+    assert '"stability_observation"' in source
 
 
 def test_grasp_tcp_translation_occurs_before_physical_close() -> None:
@@ -94,7 +116,7 @@ def test_final_epoch_uses_one_observer_with_bounded_evidence_wait() -> None:
         live_path.index("return collect_final_outcome_epoch(")
     )
     assert live_path.index("return collect_final_outcome_epoch(") < (
-        live_path.index("outcomes=collect_final_outcomes_around_retreat(")
+        live_path.index("outcomes=collect_final_outcome_after_immediate_retreat(")
     )
     backend_source = ROS_GAZEBO_BACKEND.read_text()
     assert "deadline=time.monotonic()+3.0" in backend_source
@@ -127,7 +149,26 @@ def test_transient_empty_pose_pair_retries_one_fresh_subscription() -> None:
     assert attempts == [1, 2]
 
 
-def test_pose_pair_retry_remains_bounded_after_two_empty_subscriptions() -> None:
+def test_pose_pair_retry_backs_off_and_recovers_third_subscription() -> None:
+    expected = SimpleNamespace(object_xyz=(0.0, 0.0, 0.165))
+    attempts = []
+    waits = []
+
+    def sample_once():
+        attempts.append(len(attempts) + 1)
+        if len(attempts) < 3:
+            raise RuntimeError(
+                "fresh Gazebo/TCP pose pair unavailable: "
+                "{'object': None, 'tcp': None}"
+            )
+        return expected
+
+    assert sample_pose_pair_with_retry(sample_once, wait=waits.append) is expected
+    assert attempts == [1, 2, 3]
+    assert waits == [0.25, 0.25]
+
+
+def test_pose_pair_retry_remains_bounded_after_three_empty_subscriptions() -> None:
     attempts = []
 
     def sample_once():
@@ -140,7 +181,7 @@ def test_pose_pair_retry_remains_bounded_after_two_empty_subscriptions() -> None
     with pytest.raises(RuntimeError, match="fresh Gazebo/TCP pose pair unavailable"):
         sample_pose_pair_with_retry(sample_once)
 
-    assert attempts == [1, 2]
+    assert attempts == [1, 2, 3]
 
 
 def test_moveit_shadow_attach_requires_authoritative_gazebo_pose() -> None:
@@ -148,6 +189,19 @@ def test_moveit_shadow_attach_requires_authoritative_gazebo_pose() -> None:
     assert 'operation == "attach"' in source
     assert "object_pose is None" in source
     assert "object_pose[:3]" in source
+
+
+def test_moveit_shadow_can_temporarily_omit_cup_for_release_retreat() -> None:
+    source = LIVE_EXECUTE.read_text()
+    apply_body = source[
+        source.index("    def apply("):
+        source.index("\n\ndef run_live_plan_only")
+    ]
+
+    assert 'elif operation == "omit":' in apply_body
+    assert "scene.robot_state.attached_collision_objects=[remove]" in apply_body
+    assert "scene.world.collision_objects=[world]" in apply_body
+    assert "world.operation=CollisionObject.REMOVE" in apply_body
 
 
 def test_live_run_reuses_one_isolated_planning_scene_client() -> None:
@@ -160,8 +214,8 @@ def test_live_run_reuses_one_isolated_planning_scene_client() -> None:
     assert "with PlanningSceneShadowClient() as scene_client:" in forward_path
     assert "apply_scene=scene_client.apply" in forward_path
     assert "apply_scene(\"attach\",shadow_pose)" in source
-    assert "detach_and_sync(released)" in source
-    assert 'apply_scene("detach",observed_pose)' in source
+    assert "preflight_controlled_release_retreat(" in forward_path
+    assert "execute_controlled_release_retreat(" in forward_path
     assert "_apply_scene(" not in forward_path
 
 
@@ -192,55 +246,113 @@ def test_live_path_retries_one_failed_micro_lift_at_requested_preload() -> None:
     assert '"actual_q6":seating_actual_q6' in forward_path
 
 
-def test_no_alignment_release_retreats_before_scene_detach_and_settle() -> None:
+def test_live_place_alignment_uses_five_mm_xy_tolerance() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+    alignment_call = forward_path[
+        forward_path.index("placed,_place_reverse_waypoints,place_alignment="):
+        forward_path.index('object_model=bundle.object.data["model"]')
+    ]
+
+    assert "xy_tolerance_m=0.005" in alignment_call
+
+
+def test_release_seating_lowers_bottom_to_one_mm_without_xy_motion() -> None:
+    observed = SimpleNamespace(
+        object_xyz=(-0.080, -0.250, 0.173),
+        object_xyzw=(0.0, 0.0, 0.0, 1.0),
+    )
+
+    assert release_seating_translation(
+        observed,
+        cup_height_m=0.090,
+        cup_radius_m=0.040,
+        support_z_m=0.120,
+    ) == pytest.approx((0.0, 0.0, -0.007))
+
+
+def test_release_seating_fails_closed_beyond_ten_mm_correction() -> None:
+    observed = SimpleNamespace(
+        object_xyz=(-0.080, -0.250, 0.190),
+        object_xyzw=(0.0, 0.0, 0.0, 1.0),
+    )
+
+    with pytest.raises(RuntimeError, match="release seating correction exceeds bound"):
+        release_seating_translation(
+            observed,
+            cup_height_m=0.090,
+            cup_radius_m=0.040,
+            support_z_m=0.120,
+        )
+
+
+def test_live_release_seats_cup_before_opening() -> None:
+    source = LIVE_EXECUTE.read_text()
+    forward_path = source[source.index("def run_live_execute"):]
+    seating_index = forward_path.index("release_seating_translation(")
+    opening_index = forward_path.index(
+        "release_preparation=open_gripper_from_bilateral_release("
+    )
+
+    assert seating_index < opening_index
+    assert 'gate_shadow("RELEASE_SEATING")' in forward_path[seating_index:opening_index]
+    assert '"release_seating":release_seating' in forward_path
+
+
+def test_every_release_preflights_opens_and_uses_controlled_retreat() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
 
+    preflight_index = forward_path.index(
+        "release_retreat_preflight=preflight_controlled_release_retreat("
+    )
     release_index = forward_path.index(
-        "backend.move_gripper(bundle.motion.release_q6, final_release=True)"
+        "release_preparation=open_gripper_from_bilateral_release("
     )
-    no_alignment_index = forward_path.index("if not place_alignment:", release_index)
+    controlled_index = forward_path.index(
+        "execute_controlled_release_retreat(", release_index,
+    )
     immediate_index = forward_path.index(
-        "collect_final_outcome_after_immediate_retreat(", no_alignment_index,
-    )
-    detach_index = forward_path.index(
-        'apply_scene("detach",retreated_pose)', no_alignment_index,
+        "collect_final_outcome_after_immediate_retreat(", release_index,
     )
 
     assert forward_path.index("align_cup_for_release(") < release_index
-    assert release_index < no_alignment_index < immediate_index
-    assert forward_path.index("backend.move_arm(", no_alignment_index) < detach_index
-    assert detach_index < immediate_index
+    assert "release_q6=bundle.motion.release_q6" in forward_path[release_index:]
+    assert "if not place_alignment:" not in forward_path[release_index:immediate_index]
+    assert preflight_index < release_index < controlled_index < immediate_index
+    assert "plan_retreat=_plan_controlled_release_retreat" in forward_path[
+        preflight_index:release_index
+    ]
+    assert "execute_retreat=_execute_controlled_release_retreat" in forward_path[
+        controlled_index:immediate_index
+    ]
     assert "return FinalOutcomeEpochs(None,collect_epoch())" in source
 
 
-def test_alignment_release_retains_independent_pre_retreat_epoch() -> None:
+def test_release_retreat_restores_scene_before_final_outcome_collection() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
-    aligned_index = forward_path.index(
-        "else:\n        detach_and_sync(released)",
-        forward_path.index("if not place_alignment:"),
-    )
-    detach_index = forward_path.index("detach_and_sync(released)", aligned_index)
-    epochs_index = forward_path.index(
-        "collect_final_outcomes_around_retreat(", detach_index,
-    )
+    release_path = forward_path[
+        forward_path.index("released=backend.sample()"):
+        forward_path.index("pre_retreat_outcome=outcomes.pre_retreat")
+    ]
 
-    assert aligned_index < detach_index < epochs_index
+    assert "collect_final_outcomes_around_retreat(" not in release_path
+    assert "_moveit_world_translation_execute(" not in release_path
+    assert "controlled_retreat[0]=execute_controlled_release_retreat(" in release_path
+    assert 'scene_membership[0]=controlled_retreat[0]["restored_scene"]' in release_path
 
 
-def test_no_alignment_retreat_uses_explicit_fast_policy_scaling() -> None:
+def test_continuous_release_has_no_fixed_joint_retreat_fallback() -> None:
     source = LIVE_EXECUTE.read_text()
     forward_path = source[source.index("def run_live_execute"):]
-    retreat = MOTION_POLICY.read_text().split("  RETREAT:", 1)[1].split(
-        "  RECOVER_LIFT_TO_SAFE_HEIGHT:", 1,
-    )[0]
+    release_path = forward_path[
+        forward_path.index("release_preparation=open_gripper_from_bilateral_release("):
+        forward_path.index("pre_retreat_outcome=outcomes.pre_retreat")
+    ]
 
-    assert (
-        "backend.move_arm(retreat_policy.waypoints, "
-        "velocity_scaling=retreat_policy.velocity_scaling)"
-    ) in forward_path
-    assert "velocity_scaling: 0.10" in retreat
+    assert "retreat_policy" not in release_path
+    assert "backend.move_arm(" not in release_path
 
 
 def test_shadow_divergence_gate_fails_closed_on_each_bound_and_age() -> None:

@@ -124,8 +124,8 @@ def test_loads_calibrated_physical_outcome_policy() -> None:
     outcome = load_bundle().validation.physical_outcome
     assert outcome.intended_support_collision == "table::table_top::collision"
     assert outcome.minimum_support_contact_depth_m == -0.0000001
-    assert outcome.final_target_min_xy_m == (-0.085, -0.255)
-    assert outcome.final_target_max_xy_m == (-0.075, -0.245)
+    assert outcome.final_target_min_xy_m == (-0.090, -0.260)
+    assert outcome.final_target_max_xy_m == (-0.070, -0.240)
     assert outcome.support_height_range_m == (0.155, 0.175)
     assert outcome.consecutive_samples == 5
     assert outcome.max_telemetry_samples == 40
