@@ -34,14 +34,18 @@ public:
   bool configure(const mjModel * model, const std::string & object_body,
                  const std::string & left_geom, const std::string & right_geom,
                  const std::vector<std::string> & other_geoms, std::size_t max_contacts);
+  bool configure(const mjModel * model, const std::string & object_body,
+                 const std::vector<std::string> & left_geoms,
+                 const std::vector<std::string> & right_geoms,
+                 const std::vector<std::string> & other_geoms, std::size_t max_contacts);
   msg::SimulationEvidence build(const mjModel * model, const mjData * data, bool paused,
                                 EvidenceState & state, uint64_t reset_generation = 0) const;
 
 private:
   bool object_geom(int geom_id) const;
   int object_body_id_{-1};
-  int left_geom_id_{-1};
-  int right_geom_id_{-1};
+  std::vector<int> left_geom_ids_;
+  std::vector<int> right_geom_ids_;
   std::vector<int> object_geom_ids_;
   std::vector<int> other_geom_ids_;
   std::vector<std::string> body_names_;

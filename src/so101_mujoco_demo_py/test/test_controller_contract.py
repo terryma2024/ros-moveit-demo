@@ -38,9 +38,9 @@ def test_atomic_plugin_configuration_uses_stable_scene_names() -> None:
     parameters = document["/**"]["ros__parameters"]
     plugin = parameters["mujoco_plugins"]["simulation_evidence"]
     assert plugin["type"] == "so101_mujoco_support/SimulationEvidencePlugin"
-    assert parameters["object_body"] == "cup"
-    assert parameters["left_fingertip_geom"] == "fixed_fingertip_collision"
-    assert parameters["right_fingertip_geom"] == "moving_fingertip_collision"
+    assert parameters["object_body"] == "plastic_cup"
+    assert len(parameters["left_fingertip_geoms"]) == 14
+    assert len(parameters["right_fingertip_geoms"]) == 14
     assert parameters["other_contact_geoms"] == ["table_collision"]
     assert parameters["topic"] == "/so101/simulation/evidence"
 

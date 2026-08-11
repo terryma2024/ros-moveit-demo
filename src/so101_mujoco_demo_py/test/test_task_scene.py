@@ -20,14 +20,14 @@ def test_task_scene_compiles_with_named_rigid_world_and_keyframes() -> None:
     compile_mjcf(SCENE)
     root = ET.parse(SCENE).getroot()
     assert root.find(".//body[@name='table']") is not None
-    cup = root.find(".//body[@name='cup']")
+    cup = root.find(".//body[@name='plastic_cup']")
     assert cup is not None
     cup_joint = cup.find("./joint[@name='cup_free_joint']")
     assert cup_joint is not None
     assert cup_joint.attrib["type"] == "free"
     assert float(cup_joint.attrib["damping"]) == 1.0
     assert root.find(".//geom[@name='table_collision']") is not None
-    assert root.find(".//geom[@name='cup_collision']") is not None
+    assert root.find(".//geom[@name='wall_near_collision']") is not None
     include = root.find("./include[@file='so101.xml']")
     assert include is not None
     robot_root = ET.parse(SCENE.parent / include.attrib["file"]).getroot()
@@ -39,7 +39,9 @@ def test_task_inputs_are_explicitly_uncalibrated() -> None:
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     assert config["schema_version"] == 1
     assert config["calibration_status"] == "UNCALIBRATED"
-    assert config["source"] == "MuJoCo initial inputs; not migrated Gazebo/Bullet values"
+    assert config["source"] == (
+        "Frozen Gazebo geometry/names with independent uncalibrated MuJoCo dynamics/contact inputs"
+    )
     assert config["simulation_seconds"] == 10.0
     assert config["finite_state_required"] is True
     assert config["stationary_table_required"] is True
@@ -52,7 +54,10 @@ def test_task_scene_provenance_marks_native_inputs_uncalibrated() -> None:
     artifacts = {entry["path"]: entry for entry in provenance["independent_artifacts"]}
     assert artifacts["mjcf/scene.xml"] == {
         "path": "mjcf/scene.xml",
-        "origin": "independent MuJoCo task scene",
+        "origin": (
+            "MuJoCo scene with geometry and names adapted from the frozen Gazebo reference; "
+            "MuJoCo dynamics and contact inputs remain independent"
+        ),
         "calibration_status": "UNCALIBRATED",
     }
     assert artifacts["config/task_scene.yaml"] == {
