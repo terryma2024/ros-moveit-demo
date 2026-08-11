@@ -59,22 +59,25 @@ def main() -> None:
     address = validate_bind_address(os.environ.get("SO101_TELEOP_BIND", "127.0.0.1"))
     backend = select_backend(os.environ)
     worker = RosTelemetryWorker(backend)
-    worker.start()
-    camera_config = os.environ.get("SO101_CAMERA_VIEWS")
-    if camera_config is None:
-        from ament_index_python.packages import get_package_share_directory
-        camera_config = str(Path(get_package_share_directory("so101_teleop")) / "config" / "camera_views.yaml")
-    camera = CameraController(load_camera_presets(camera_config))
-    captures = Path(os.environ.get("SO101_TELEOP_CAPTURE_DIR", "/tmp/so101-teleop-captures"))
-    uvicorn.run(
-        create_app(
-            TeleopService(worker, camera, backend=backend),
-            installed_web_assets(),
-            captures,
-        ),
-        host=address,
-        port=int(os.environ.get("SO101_TELEOP_PORT", "8000")),
-    )
+    try:
+        worker.start()
+        camera_config = os.environ.get("SO101_CAMERA_VIEWS")
+        if camera_config is None:
+            from ament_index_python.packages import get_package_share_directory
+            camera_config = str(Path(get_package_share_directory("so101_teleop")) / "config" / "camera_views.yaml")
+        camera = CameraController(load_camera_presets(camera_config))
+        captures = Path(os.environ.get("SO101_TELEOP_CAPTURE_DIR", "/tmp/so101-teleop-captures"))
+        uvicorn.run(
+            create_app(
+                TeleopService(worker, camera, backend=backend),
+                installed_web_assets(),
+                captures,
+            ),
+            host=address,
+            port=int(os.environ.get("SO101_TELEOP_PORT", "8000")),
+        )
+    finally:
+        worker.stop()
 
 
 if __name__ == "__main__":
