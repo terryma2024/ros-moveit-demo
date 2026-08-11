@@ -72,7 +72,51 @@ def test_installer_disables_nounset_while_sourcing_generated_ros_setups() -> Non
     assert 'set +u\n  source "$1"\n  set -u' in script
 
 
-def prepare_installer_fixture(tmp_path: Path, checkout_ref: str) -> tuple[Path, Path]:
+def commit_fixture_superproject(
+    project: Path,
+    *,
+    gitlink_mode: str | None = "160000",
+    gitlink_commit: str,
+) -> None:
+    run("git", "init", "--quiet", project, cwd=project.parent)
+    run("git", "-C", project, "config", "user.name", "SO101 Test")
+    run("git", "-C", project, "config", "user.email", "so101-test@example.invalid")
+    run(
+        "git",
+        "-C",
+        project,
+        "add",
+        ".gitmodules",
+        "scripts/install-mujoco-ros2-control.zsh",
+        "src/so101_mujoco_demo_py/config/dependency-lock.yaml",
+    )
+    if gitlink_mode == "160000":
+        run(
+            "git",
+            "-C",
+            project,
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            f"160000,{gitlink_commit},third_party/mujoco_ros2_control",
+        )
+    elif gitlink_mode == "100644":
+        checkout = project / "third_party/mujoco_ros2_control"
+        shutil.rmtree(checkout)
+        checkout.write_text("not a gitlink\n", encoding="utf-8")
+        run("git", "-C", project, "add", "third_party/mujoco_ros2_control")
+    run("git", "-C", project, "commit", "--quiet", "-m", "fixture")
+
+
+def prepare_installer_fixture(
+    tmp_path: Path,
+    checkout_ref: str,
+    *,
+    superproject: bool = True,
+    gitlink_mode: str | None = "160000",
+    gitlink_commit: str | None = None,
+    linked_worktree: bool = False,
+) -> tuple[Path, Path]:
     project = tmp_path / "project"
     scripts = project / "scripts"
     config = project / "src/so101_mujoco_demo_py/config"
@@ -95,6 +139,61 @@ def prepare_installer_fixture(tmp_path: Path, checkout_ref: str) -> tuple[Path, 
     subprocess.run(
         ["git", "-C", str(checkout), "remote", "set-url", "origin", APPROVED_ORIGIN], check=True
     )
+    if superproject:
+        commit_fixture_superproject(
+            project,
+            gitlink_mode=gitlink_mode,
+            gitlink_commit=gitlink_commit or checkout_ref,
+        )
+        if gitlink_mode == "100644":
+            (project / "third_party/mujoco_ros2_control").unlink()
+            subprocess.run(
+                ["git", "clone", "--quiet", "--shared", str(SUBMODULE), str(checkout)],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(checkout), "checkout", "--quiet", checkout_ref], check=True
+            )
+            subprocess.run(
+                ["git", "-C", str(checkout), "remote", "set-url", "origin", APPROVED_ORIGIN],
+                check=True,
+            )
+        if linked_worktree:
+            linked_project = tmp_path / "linked-project"
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(project),
+                    "worktree",
+                    "add",
+                    "--quiet",
+                    "--detach",
+                    str(linked_project),
+                ],
+                check=True,
+            )
+            linked_checkout = linked_project / "third_party/mujoco_ros2_control"
+            subprocess.run(
+                ["git", "clone", "--quiet", "--shared", str(SUBMODULE), str(linked_checkout)],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(linked_checkout), "checkout", "--quiet", checkout_ref], check=True
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(linked_checkout),
+                    "remote",
+                    "set-url",
+                    "origin",
+                    APPROVED_ORIGIN,
+                ],
+                check=True,
+            )
+            return linked_project, linked_checkout
     return project, checkout
 
 
@@ -119,7 +218,9 @@ def test_installer_rejects_invalid_source_before_colcon(tmp_path: Path, source_s
     checkout_ref = (
         lock["fork"]["commit"] if source_state == "dirty" else f"{lock['fork']['commit']}^"
     )
-    project, checkout = prepare_installer_fixture(tmp_path, checkout_ref)
+    project, checkout = prepare_installer_fixture(
+        tmp_path, checkout_ref, gitlink_commit=lock["fork"]["commit"]
+    )
     if source_state == "dirty":
         (checkout / "unexpected.txt").write_text("dirty\n", encoding="utf-8")
     environment, marker = installer_environment(tmp_path)
@@ -131,9 +232,64 @@ def test_installer_rejects_invalid_source_before_colcon(tmp_path: Path, source_s
     assert source_state.split("-")[0] in result.stderr.lower()
 
 
-def test_installer_clean_qualified_source_reaches_colcon(tmp_path: Path) -> None:
+def test_installer_rejects_checkout_without_superproject_before_colcon(tmp_path: Path) -> None:
     lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
-    project, _ = prepare_installer_fixture(tmp_path, lock["fork"]["commit"])
+    project, _ = prepare_installer_fixture(tmp_path, lock["fork"]["commit"], superproject=False)
+    environment, marker = installer_environment(tmp_path)
+
+    result = run(project / "scripts" / INSTALLER.name, cwd=project, env=environment)
+
+    assert result.returncode != 0
+    assert "superproject" in result.stderr.lower()
+    assert not marker.exists()
+
+
+def test_installer_rejects_superproject_without_gitlink_before_colcon(tmp_path: Path) -> None:
+    lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+    project, _ = prepare_installer_fixture(tmp_path, lock["fork"]["commit"], gitlink_mode=None)
+    environment, marker = installer_environment(tmp_path)
+
+    result = run(project / "scripts" / INSTALLER.name, cwd=project, env=environment)
+
+    assert result.returncode != 0
+    assert "gitlink" in result.stderr.lower()
+    assert not marker.exists()
+
+
+def test_installer_rejects_non_gitlink_mode_before_colcon(tmp_path: Path) -> None:
+    lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+    project, _ = prepare_installer_fixture(tmp_path, lock["fork"]["commit"], gitlink_mode="100644")
+    environment, marker = installer_environment(tmp_path)
+
+    result = run(project / "scripts" / INSTALLER.name, cwd=project, env=environment)
+
+    assert result.returncode != 0
+    assert "mode 160000" in result.stderr.lower()
+    assert not marker.exists()
+
+
+def test_installer_rejects_gitlink_commit_mismatch_before_colcon(tmp_path: Path) -> None:
+    lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+    previous_commit = run(
+        "git", "-C", SUBMODULE, "rev-parse", f"{lock['fork']['commit']}^"
+    ).stdout.strip()
+    project, _ = prepare_installer_fixture(
+        tmp_path,
+        lock["fork"]["commit"],
+        gitlink_commit=previous_commit,
+    )
+    environment, marker = installer_environment(tmp_path)
+
+    result = run(project / "scripts" / INSTALLER.name, cwd=project, env=environment)
+
+    assert result.returncode != 0
+    assert "gitlink commit" in result.stderr.lower()
+    assert not marker.exists()
+
+
+def test_installer_clean_qualified_linked_worktree_reaches_colcon(tmp_path: Path) -> None:
+    lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+    project, _ = prepare_installer_fixture(tmp_path, lock["fork"]["commit"], linked_worktree=True)
     environment, marker = installer_environment(tmp_path)
 
     result = run(project / "scripts" / INSTALLER.name, cwd=project, env=environment)
