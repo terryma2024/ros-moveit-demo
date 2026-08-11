@@ -10,20 +10,33 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: f2827f825ddf15e8d346e44be5f8fe464986d2e4
-ledger_commit_pending: false
-task_status: TASK_11_COMPLETE
+last_verified_implementation_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6
+ledger_commit_pending: true
+task_status: TASK_12_IMPLEMENTATION_PENDING_COMMIT
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
 confirmed_conclusions:
   - The rebased migration starts from the exact main baseline; CP-001.
+  - EXP-036 is a VALID Task 12 dry-run behavioral failure at MoveIt time parameterization because joint acceleration limits are absent; CP-050.
+  - User direction resumed Task 12 and authorized restoring the exact frozen joint-limit contract from the sole behavior source; CP-051.
+  - EXP-037 is a VALID full-launch readiness failure because the diagnostic sampled controller states before the concurrently spawned gripper controller became active; CP-052.
+  - User direction resumed Task 12 and authorized a bounded readiness-only correction under the existing overall deadline; CP-053.
+  - EXP-038 is a VALID full-launch dry_run success, while EXP-039 is a VALID execute failure at MoveIt start-state validation; CP-055.
+  - EXP-039 lacks the boundary-correlated trajectory first point and pre-execute joint sample required to distinguish request-time deviation from post-plan drift; CP-056.
+  - EXP-040 validly confirms the trajectory first point exactly matched the request sample and joint drift accumulated during planning, before plan response; CP-057.
+  - Installed controller-state provenance exposes reference, feedback, error, and output fields needed to determine whether the active position controller holds a command while physics drifts; CP-058.
+  - EXP-041 validly shows constant current reference/output with changing feedback/error: desired does not change and the position command interface is present; CP-059.
+  - EXP-044 validly shows freeze-plan-resume is nondeterministic: planning stays stationary while paused, but immediate resume can exceed the unchanged start tolerance before MoveIt validation; CP-063.
+  - EXP-045 validly finds no preregistered 0.20-second stable window under the fixed controller reference within the unchanged 30-second deadline, so bounded settle-and-replan is not authorized for implementation; CP-064.
+  - EXP-046 validly finds the unchanged stable-window predicate under the exact reviewed SO-101 dynamics, permitting the single separately preregistered safe-execute validation; CP-065.
+  - EXP-047 validly proves the unchanged safe trajectory plans, executes through MoveIt and arm_controller, converges all six independent joint samples, and advances atomic MuJoCo evidence under the reviewed dynamics; CP-066.
 disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
-  - The behavior source can be migrated to MuJoCo while preserving the strict no-weld/no-teleport contract.
-latest_checkpoint: CP-049
-next_experiment: EXP-035
+  - NONE; Task 12 implementation still requires final offline gates and review before its scoped commit.
+latest_checkpoint: CP-069
+next_experiment: NONE
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -2054,4 +2067,1143 @@ open_risks:
   - Live execute composition remains intentionally fail-closed with LIVE_RUNTIME_NOT_IMPLEMENTED until Task 12; ROS-free plan_only remains available and characterized.
   - Sandbox DDS socket creation emits transport warnings in the support GTest, but all nine support tests pass and no runtime graph is started.
 next_command: Stage the exact Task 11 review-fix round 2 allowlist, verify the index and gates, commit the scoped fix, and do not push.
+```
+
+## Experiment EXP-035
+
+```yaml
+experiment_id: EXP-035
+status: INVALID
+prior_experiment: EXP-034
+hypothesis: The independent full headless launch can compose MuJoCo, ros2_control, robot description and TF, MoveIt and Planning Scene, atomic observer/reset services, and the Task 12 workflow diagnostic; dry_run will obtain a nonempty arm plan without sending a controller execution goal and will then shut down only its owned stack.
+prediction: The bounded diagnostic reports every required node/topic/service/action, active exact controller mapping, world-to-so101_tcp TF, planning group arm, a positive-point plan, no execute goal, advancing MuJoCo publisher sequence and simulation step, unchanged reset epoch, launch exit zero, and an empty domain after owned cleanup.
+single_variable: First Task 12 live mode is dry_run with execute:=false; model, safe pose task12_safe, controller configuration, source, overlays, and readiness bounds are fixed.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus only the reviewed Task 12 dirty paths; protected Gazebo tree remains unchanged.
+  - Source order is /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install and reset-qualified provenance passes.
+  - Fresh ROS_DOMAIN_ID 116, GZ_PARTITION so101_mujoco_task12_exp035, task-owned tmux session so101-mujoco-exp035, and evidence root /tmp/so101-debug-mujoco-migration/exp-035/.
+  - Existing codex, kimi, and so101-py-qual processes/sessions are preserved and must not be signaled or stopped.
+success_criteria:
+  - Readiness proves the exact node, topic, service, action, TF, planning-group, controller, Planning Scene, observer, and reset boundaries.
+  - GetMotionPlan accepts task12_safe with at least one trajectory point; execute goal_sent is false and controller result is NOT_REQUESTED.
+  - Atomic MuJoCo publisher_sequence and simulation_step both advance without reset-epoch change.
+  - Launch exits zero, only the named owned session/PIDs are cleaned, and domain 116 is empty afterward.
+failure_criteria:
+  - With valid provenance, ownership, readiness, and evidence, any planning, no-execute, MuJoCo advancement, TF, or clean-shutdown assertion failure is a VALID behavioral failure and stops Task 12.
+invalid_criteria:
+  - Provenance mismatch, nonempty initial domain, stale install, missing ownership/process evidence, incomplete summary/log/hash/graph evidence, or polluted cleanup makes the run INVALID and it cannot support behavior.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus Task 12 dirty paths
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 116
+  gz_partition: so101_mujoco_task12_exp035
+commands:
+  - command: ROS_DOMAIN_ID=116 GZ_PARTITION=so101_mujoco_task12_exp035 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=dry_run execute:=false simulation_session_id:=task12-exp035 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-035/summary.json
+    exit_code: 1
+observed:
+  - Preflight domain 116 was empty, exact HEAD was 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6, the task-owned process tree was captured, and the protected Gazebo tree remained unchanged.
+  - The provenance command was invoked without its mandatory --lock argument and exited 2, but the wrapper lacked errexit and incorrectly continued into launch. This violates frozen preconditions and makes all runtime behavior non-counting.
+  - The launched diagnostic then rejected launch-appended --ros-args before readiness; no summary.json existed. Its process exit was 2, while the wrapper's pipeline incorrectly recorded 0, independently proving the instrumentation invalid.
+  - Only so101-mujoco-exp035 was cleaned; domain 116 was empty afterward. Unrelated physical-five-success MoveIt/RViz/Gazebo PIDs 525187, 525188, 525207, 525209, 525231, and 525232 remained present and were not signaled.
+inferred:
+  - No planning, execution, TF, controller, or MuJoCo behavior conclusion is permitted from EXP-035.
+conclusion: INVALID measurement: failed provenance precondition, non-fail-fast wrapper, missing summary, and unreliable pipeline exit capture.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-035/launch.log (sha256 25b502231b282409b038a206ac42fc544674dff4e427655557102fe1283a70e1)
+  - /tmp/so101-debug-mujoco-migration/exp-035/domain-before.txt (sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-035/domain-after.txt (sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-035/process-tree.txt (sha256 a8dcb6f35b9cb08ec1e9492cf5b6e5daa2b21baddb88edbf69923b9d86869c42)
+  - /tmp/so101-debug-mujoco-migration/task-12/red/ros-args-red.log (sha256 df1b89c22cb160e0dc7a6b78b0e50451aa59c9e31d982937b83679ef30a95103)
+  - /tmp/so101-debug-mujoco-migration/task-12/green/ros-args-green.log (sha256 0150d14b42c4902b2b469e43e5529c434d6053054a9e809ba2e84afbc5b2994d)
+decision: REPEAT with corrected preflight arguments, fail-fast wrapper, direct launch exit capture, and ROS-argument stripping; use a new ID.
+next_experiment: EXP-036
+```
+
+## Experiment EXP-036
+
+```yaml
+experiment_id: EXP-036
+status: VALID
+prior_experiment: EXP-035
+hypothesis: With the four specific EXP-035 instrumentation defects removed, the exact Task 12 source will complete the preregistered dry_run contract and produce independently checkable planning/no-execute/MuJoCo/readiness/shutdown evidence.
+prediction: A fail-fast provenance preflight passes, launch exits zero directly without a pipeline, summary.json contains the complete valid dry_run contract, the opt-in live test passes, and fresh domain 117 is empty before and after.
+single_variable: Measurement validity only: correct --lock provenance invocation, fail-fast wrapper, direct launch exit code, and the TDD-qualified stripping of launch-appended ROS arguments. Runtime mode, task12_safe pose, model, controllers, overlays, and acceptance contract are unchanged from EXP-035.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus the same Task 12 dirty paths, including ROS-argument RED/GREEN; protected Gazebo tree unchanged.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; check_reset_qualified_runtime.py --lock config/dependency-lock.yaml --check-only exits zero under errexit.
+  - Fresh ROS_DOMAIN_ID 117, GZ_PARTITION so101_mujoco_task12_exp036, task-owned session so101-mujoco-exp036, evidence root /tmp/so101-debug-mujoco-migration/exp-036/.
+  - Existing codex, kimi, so101-py-qual, and independently observed physical-five-success processes remain preserved and untouched.
+success_criteria:
+  - Same dry_run readiness, planning, no-controller-execution, MuJoCo advancement, unchanged reset epoch, and clean shutdown criteria frozen in EXP-035.
+  - Summary validator passes only after direct launch exit zero and an independently empty post-launch domain are supplied.
+failure_criteria:
+  - With all preconditions valid, any contract assertion failure is a VALID behavioral failure and stops Task 12 without guessing or starting execute.
+invalid_criteria:
+  - Any provenance, initial-domain, install, ownership, summary, graph, hash, exit-code, or cleanup defect remains INVALID and cannot support behavior.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus Task 12 dirty paths
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 117
+  gz_partition: so101_mujoco_task12_exp036
+commands:
+  - command: ROS_DOMAIN_ID=117 GZ_PARTITION=so101_mujoco_task12_exp036 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=dry_run execute:=false simulation_session_id:=task12-exp036 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-036/summary.json
+    exit_code: 0
+observed:
+  - All frozen preconditions passed: domain 117 was empty, reset-qualified runtime provenance SHA-256 was b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1, exact HEAD was 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus the declared Task 12 paths, and ownership/process evidence was complete.
+  - The full graph reached readiness before planning: three controllers configured and activated, atomic MuJoCo evidence and reset services were available, MoveIt loaded OMPL and both FollowJointTrajectory controller mappings, Planning Scene published, and the planning service accepted the request.
+  - OMPL constructed an arm RRTConnect planning context, but AddTimeOptimalParameterization reported no acceleration limit for joint 1 and failed the PlanningResponseAdapter. The service returned MOVEIT_PLAN_FAILED; the diagnostic node exited 1 and summary.json recorded that exact failure.
+  - The launch supervisor completed its requested shutdown with wrapper exit zero, domain 117 was empty afterward, and only so101-mujoco-exp036 was cleaned. The unrelated physical-five-success MoveIt/RViz/Gazebo processes observed before the run remained after it and were not signaled.
+  - Because planning failed, no dry_run success can be claimed and EXP-037 execute was not registered or started.
+inferred:
+  - The first bad behavioral boundary is MoveIt response time parameterization, not ROS graph readiness, controller activation, TF, Planning Scene startup, MuJoCo evidence availability, or OMPL pipeline loading.
+conclusion: VALID behavioral failure: the required dry_run planning proof failed because the composed robot planning configuration has no acceleration limit for joint 1 (and therefore cannot pass AddTimeOptimalParameterization).
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-036/launch.log (sha256 836d6199a2d6ae9870320e219ab863643e8ec3b918d3fb73d38a41e1cd9a08bb)
+  - /tmp/so101-debug-mujoco-migration/exp-036/summary.json (sha256 24579a7f3760bbcdf39087680e897ad9d436a7abf0875e39ef7329d83f9bcc2b)
+  - /tmp/so101-debug-mujoco-migration/exp-036/graph-live.txt (sha256 57298d3bcc79b168e00bf6732617d232b3ee0954d691a3607eb90d5350990a3a)
+  - /tmp/so101-debug-mujoco-migration/exp-036/domain-before.txt (sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-036/domain-after.txt (sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-036/process-tree.txt (sha256 8188497e636c47978894cbefc3611f22b11095efb477c758cd175a034e7a90b6)
+  - /tmp/so101-debug-mujoco-migration/exp-036/processes-before.txt (sha256 205d3ce83144507c1884ebd2f750806ca2feb6c7a4ab27befc0b5912a5be405d)
+  - /tmp/so101-debug-mujoco-migration/exp-036/processes-after.txt (sha256 dae2f24e991cc2b2cc3a178ae308571b0ca8550efc38416c7a5e94086a643816)
+  - /tmp/so101-debug-mujoco-migration/exp-036/provenance.txt (sha256 b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1)
+decision: ABANDON Task 12 at the mandated valid-failure stop. Do not alter limits, register EXP-037, execute motion, run final success gates, or commit.
+next_experiment: NONE
+```
+
+## Checkpoint CP-050
+
+```yaml
+checkpoint_id: CP-050
+last_valid_experiment: EXP-036
+current_hypothesis: The full headless stack reaches the MoveIt planning response boundary, but the owned planning configuration lacks acceleration limits required by AddTimeOptimalParameterization.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; only Task 12 independent-package config, launch, headless diagnostic, tests, provenance, package metadata, ledger, and report paths are dirty or untracked; protected Gazebo diff/status remain zero.
+owned_processes: NONE; so101-mujoco-exp035 and so101-mujoco-exp036 are absent, and domains 116 and 117 are empty.
+preserved_processes: codex, kimi, so101-py-qual, and the independently observed physical-five-success MoveIt/RViz/Gazebo processes remain untouched.
+confirmed_conclusions:
+  - Initial launch contract RED failed on the missing headless module (exit 2); focused GREEN passed 7 plus one live skip.
+  - ROS-argument RED failed on the missing stripping boundary (exit 2); GREEN passed 8 plus one live skip.
+  - Pre-live two-package build passed, Ruff passed, installed launch/executables resolved to the project overlay, and non-live tests passed 182 with three skips.
+  - EXP-035 is INVALID because its provenance/instrumentation preconditions failed; it supports no behavior conclusion.
+  - EXP-036 is a VALID behavioral failure after complete provenance, readiness, ownership, graph, and cleanup evidence. The first bad boundary is AddTimeOptimalParameterization rejecting absent joint acceleration limits.
+disproven_routes:
+  - The Task 12 dry-run failure is not caused by absent MuJoCo services/evidence, inactive controllers, missing Planning Scene, unavailable trajectory actions, missing TF, or an unloaded OMPL pipeline; all preceded the failure successfully in EXP-036.
+open_risks:
+  - No successful Task 12 dry-run exists, so no execute run was authorized or attempted and no joint convergence or executed MuJoCo movement claim is available.
+  - Launch shutdown after the diagnostic failure logged a move_group exit -11 even though domain cleanup completed; this remains unqualified and is secondary to the first planning failure.
+  - Task 12 changes are intentionally uncommitted because the success contract failed.
+next_command: NONE; user direction is required before changing any planning limit or registering a new experiment.
+```
+
+## Checkpoint CP-051
+
+```yaml
+checkpoint_id: CP-051
+last_valid_experiment: EXP-036
+current_hypothesis: Restoring the exact frozen joint dynamics configuration omitted by Task 12 will let the already-reached MoveIt response adapter time-parameterize task12_safe.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; the existing Task 12 dirty state is preserved and now additionally contains the focused joint-limit regression, independent config, launch injection, and provenance correction.
+owned_processes: NONE; no live process was started during the authorized correction and prior task-owned sessions remain absent.
+preserved_processes: codex, kimi, so101-py-qual, and independently observed physical-five-success processes remain untouched.
+confirmed_conclusions:
+  - User direction explicitly resumed the full goal after CP-050 and authorized one correction round without reset, stash, or clean.
+  - Frozen behavior source 8d7913e7f552a40ee627d65be8b873ac16748bc9 defines exact joints 1 through 6 max_velocity 10.0, max_acceleration 5.0, and default velocity/acceleration scaling 0.1; source SHA-256 is 210bb4792821bf081df092b11edc398050b1140cbef5c6f8f139687e87148973.
+  - Behavior-level RED failed because moveit_parameters lacked robot_description_planning; RED log SHA-256 is 3f04c90de2427eeec18c0ff9e0fce3566ec3ea2c712e1b8559365829378e9c3f.
+  - The independent config now matches that frozen source byte-for-byte and focused GREEN passed nine tests with one opt-in live skip; GREEN log SHA-256 is d070d4fa1ac6f0f5656bb7a5216bdd3658f870e5b02442b3af232b8c90a60ad2.
+disproven_routes:
+  - Inventing or tuning a new acceleration threshold is unnecessary; the omitted contract already exists in the sole allowed behavior source.
+open_risks:
+  - The correction has not yet been exercised in a fresh live domain.
+next_command: Run the preregistered EXP-037 dry_run only after all offline, provenance, ownership, and fresh-domain preconditions pass.
+```
+
+## Experiment EXP-037
+
+```yaml
+experiment_id: EXP-037
+status: VALID
+prior_experiment: EXP-036
+hypothesis: Injecting the exact frozen six-joint dynamics limits into robot_description_planning will let the otherwise unchanged full headless stack time-parameterize and accept a task12_safe arm plan without execution.
+prediction: The reset-qualified full stack reaches the same readiness boundary as EXP-036, planning returns at least one trajectory point without an AddTimeOptimalParameterization error, no controller goal is sent, MuJoCo publisher sequence and simulation step advance with unchanged reset epoch, launch exits zero, and the fresh domain is empty afterward.
+single_variable: The only behavioral change from EXP-036 is the exact byte-matching frozen joint_limits.yaml and its robot_description_planning injection; run mode remains dry_run, execute remains false, and model, safe pose, controllers, overlays, timeouts, and evidence validator are unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus only the declared Task 12 dirty paths; protected Gazebo tree remains unchanged.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; reset-qualified runtime provenance check passes with the frozen lock.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 118, GZ_PARTITION so101_mujoco_task12_exp037, task-owned tmux session so101-mujoco-exp037, and evidence root /tmp/so101-debug-mujoco-migration/exp-037/.
+  - Existing codex, kimi, so101-py-qual, and independently observed physical-five-success processes/sessions are preserved and must not be signaled or stopped.
+success_criteria:
+  - Readiness independently proves required nodes, topics, services, actions, active exact controller mapping, world-to-so101_tcp TF, planning group arm, Planning Scene, observer, and reset boundaries.
+  - GetMotionPlan accepts task12_safe with at least one trajectory point; execution goal_sent is false and controller result is NOT_REQUESTED.
+  - Atomic MuJoCo publisher_sequence and simulation_step both advance without reset-epoch change.
+  - Direct launch exit is zero, only the named task-owned session/PIDs are cleaned, and domain 118 is empty afterward.
+failure_criteria:
+  - With valid provenance, fresh-domain, ownership, readiness, evidence, graph, and cleanup preconditions, any planning, no-execute, MuJoCo advancement, or shutdown assertion failure is a VALID behavioral failure and stops Task 12 without guessing or registering execute.
+invalid_criteria:
+  - Any provenance mismatch, nonempty initial domain, stale install, ownership defect, incomplete summary/log/hash/graph evidence, unreliable exit capture, or polluted cleanup makes the run INVALID and supports no behavior conclusion.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus the declared Task 12 dirty paths and frozen joint-limit correction
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  behavior_source_joint_limits_sha256: 210bb4792821bf081df092b11edc398050b1140cbef5c6f8f139687e87148973
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 118
+  gz_partition: so101_mujoco_task12_exp037
+commands:
+  - command: ROS_DOMAIN_ID=118 GZ_PARTITION=so101_mujoco_task12_exp037 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=dry_run execute:=false simulation_session_id:=task12-exp037 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-037/summary.json
+    exit_code: 0
+observed:
+  - All preconditions passed: domain 118 was empty, exact HEAD was 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 paths, protected Gazebo tracked/status gates were zero, the installed frozen config was rebuilt, reset-qualified provenance SHA-256 was b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1, and the owned session name was free.
+  - The runtime started MuJoCo, robot_state_publisher, MoveIt, controller manager, all three spawners, and the diagnostic. The required graph boundary became visible as soon as the arm trajectory action and planning boundaries existed.
+  - The diagnostic then called ListControllers once. Its response contained arm_controller and joint_state_broadcaster as active but did not yet contain gripper_controller; it immediately raised `RuntimeError: controllers are not active` instead of waiting within the remaining 30-second readiness deadline.
+  - The launch supervisor performed owned shutdown and returned zero, while summary.json preserved the diagnostic failure. No plan was attempted, so the frozen joint-limit correction did not reach time parameterization and no execution run was authorized.
+  - The owned so101-mujoco-exp037 session was removed, domain 118 was independently empty afterward, and codex, kimi, and so101-py-qual remained present and untouched. The earlier physical-five-success processes were already absent in the preregistered before snapshot and were not part of this experiment.
+inferred:
+  - The first bad boundary is a controller-readiness race in the Task 12 diagnostic: graph readiness can complete after the arm action appears but before the concurrently spawned gripper controller is listed active, and controller state is not polled to the deadline.
+  - EXP-037 cannot support any conclusion about the joint-limit planning correction because planning was never invoked.
+conclusion: VALID behavioral failure: the required full-launch readiness contract is nondeterministic because the diagnostic samples controller state once instead of waiting for every required controller to become active.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-037/launch.log (sha256 fdbb16ecf5db6371d567a47cc57cac00877d16af9a3170f8c186627b4cf9b8c5)
+  - /tmp/so101-debug-mujoco-migration/exp-037/summary.json (sha256 4ef1fa8132706e7e38ee210e53d02b76f02a4a6672bfa6c29e50db3710dbd446)
+  - /tmp/so101-debug-mujoco-migration/exp-037/process-tree.txt (sha256 8d3a71df0732eddf2ec2f03e0835c096a89428ead5eede211f28fa16344a14e2)
+  - /tmp/so101-debug-mujoco-migration/exp-037/domain-before.txt (sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-037/domain-after.txt (sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-037/provenance.txt (sha256 b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1)
+  - /tmp/so101-debug-mujoco-migration/exp-037/hashes.txt
+decision: ABANDON Task 12 at the mandated valid-failure stop. Do not rerun to mask the race, change readiness behavior, register execute, run final success gates, or commit without new user direction.
+next_experiment: NONE
+```
+
+## Checkpoint CP-052
+
+```yaml
+checkpoint_id: CP-052
+last_valid_experiment: EXP-037
+current_hypothesis: The Task 12 full launch has a controller-readiness race because it waits for graph boundaries but samples ListControllers only once before all concurrent spawners necessarily finish.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; only Task 12 independent-package config, launch, headless diagnostic, tests, provenance, package metadata, ledger, and ignored report paths are dirty or untracked; protected Gazebo diff/status remain zero.
+owned_processes: NONE; so101-mujoco-exp037 is absent and domain 118 is empty.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched; the earlier physical-five-success processes were already absent before EXP-037.
+confirmed_conclusions:
+  - Joint-limit correction TDD is exact: behavior RED failed on missing robot_description_planning, focused GREEN passed nine with one opt-in skip, and the independent config SHA matches frozen source SHA 210bb4792821bf081df092b11edc398050b1140cbef5c6f8f139687e87148973.
+  - Ruff passed and the two-package build passed with the independent joint_limits.yaml installed. Package pytest has 183 passes and three opt-in skips; its single failure is the expected nonterminal ledger-state assertion while an experiment was registered.
+  - EXP-037 passed provenance, source, isolation, fresh-domain, ownership, and cleanup preconditions but failed before planning when the one-shot controller-state response omitted the still-spawning gripper controller.
+  - No execute experiment was registered or started; no hardware, GUI, grasp, threshold, Gazebo-tree, unrelated-session, push, merge, reset, stash, or clean action occurred.
+disproven_routes:
+  - A single ListControllers response after generic graph readiness does not prove every required controller is active under concurrent spawner startup.
+  - Repeating the same run until the race happens to pass would not qualify the deterministic full-launch readiness contract.
+open_risks:
+  - The frozen joint-limit correction remains live-unqualified because EXP-037 never reached planning.
+  - No successful Task 12 dry_run or execute evidence exists, so plan acceptance, controller execution, joint convergence, and executed MuJoCo movement cannot be claimed.
+  - Shutdown after the diagnostic failure again logged move_group exit -11; it remains secondary to the first readiness failure.
+next_command: NONE; user direction is required before adding a controller-readiness polling correction or registering another experiment.
+```
+
+## Checkpoint CP-053
+
+```yaml
+checkpoint_id: CP-053
+last_valid_experiment: EXP-037
+current_hypothesis: Polling exact required controller names and active states only until the existing overall readiness deadline will make concurrent spawner startup deterministic without changing any timeout or planning behavior.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; the preserved Task 12 dirty state additionally contains only readiness behavior tests and the bounded production poll.
+owned_processes: NONE; no live process was started during fix round 2.
+preserved_processes: codex, kimi, and so101-py-qual remain untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - User direction explicitly resumed the persistent Task 12 goal after CP-052 and authorized readiness fix round 2 without reset, stash, or clean.
+  - Executable controlled-sequence RED produced three failures because the current implementation had no polling boundary; RED SHA-256 is b3f39098d4005cb61d4536c458e4b899d1c524851a18fbf9ab3e62e4ee902abd.
+  - Minimal GREEN repeatedly consumes ListControllers responses until every exact required controller is active or the unchanged overall deadline expires; missing, inactive, or otherwise unexpected required states do not count. Focused result is 12 passed plus one opt-in live skip; GREEN SHA-256 is 170f4642aaeddc36e92eada7bcf91f9f2591215a656254e9e5e6f47fcdbb8000.
+disproven_routes:
+  - Extending the readiness timeout or adding a guessed startup sleep is unnecessary; the existing deadline already bounds service polling.
+open_risks:
+  - The correction has not yet been exercised against concurrent live spawners, and the frozen joint-limit correction has still not reached live planning.
+next_command: Run the preregistered EXP-038 dry_run only after offline, provenance, ownership, and fresh-domain preconditions pass.
+```
+
+## Experiment EXP-038
+
+```yaml
+experiment_id: EXP-038
+status: VALID
+prior_experiment: EXP-037
+hypothesis: With exact required-controller polling bounded by the unchanged overall readiness deadline, the full headless stack will pass concurrent startup and the restored frozen joint dynamics contract will let task12_safe plan successfully without execution.
+prediction: All three required controllers become active within the existing deadline, readiness and the full graph pass, planning returns at least one trajectory point without time-parameterization failure, no execution goal is sent, MuJoCo publisher sequence and simulation step advance with unchanged reset epoch, launch exits zero, and the fresh domain is empty afterward.
+single_variable: The only change from EXP-037 is bounded repeated ListControllers sampling for exact required active states; readiness_timeout_s remains 30.0 and joint limits, model, safe pose, controllers, overlays, dry_run mode, and acceptance thresholds are unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus only declared Task 12 dirty paths; protected Gazebo tree remains unchanged.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; reset-qualified runtime provenance passes with the frozen lock.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 119, GZ_PARTITION so101_mujoco_task12_exp038, task-owned tmux session so101-mujoco-exp038, and evidence root /tmp/so101-debug-mujoco-migration/exp-038/.
+  - Existing codex, kimi, and so101-py-qual processes/sessions are preserved and must not be signaled or stopped.
+success_criteria:
+  - Readiness proves required nodes, topics, services, actions, active exact controller mapping, world-to-so101_tcp TF, planning group arm, Planning Scene, observer, and reset boundaries.
+  - GetMotionPlan accepts task12_safe with at least one trajectory point; execution goal_sent is false and controller result is NOT_REQUESTED.
+  - Atomic MuJoCo publisher_sequence and simulation_step both advance without reset-epoch change.
+  - Direct launch exit is zero, only the named owned session/PIDs are cleaned, and domain 119 is empty afterward.
+failure_criteria:
+  - With valid provenance, source, fresh-domain, ownership, evidence, and cleanup, any readiness, planning, no-execute, MuJoCo advancement, or shutdown contract failure is a VALID behavioral failure and stops Task 12 without guessing or registering execute.
+invalid_criteria:
+  - Provenance mismatch, nonempty initial domain, stale install, ownership defect, incomplete summary/log/hash/process evidence, unreliable exit capture, or polluted cleanup makes the run INVALID and supports no behavior conclusion.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and readiness fix round 2
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 119
+  gz_partition: so101_mujoco_task12_exp038
+commands:
+  - command: ROS_DOMAIN_ID=119 GZ_PARTITION=so101_mujoco_task12_exp038 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=dry_run execute:=false simulation_session_id:=task12-exp038 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-038/summary.json
+    exit_code: 0
+observed:
+  - All preconditions passed: fresh domain 119 was empty, exact HEAD and declared dirty scope were captured, reset-qualified provenance SHA-256 was b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1, the installed overlay was rebuilt, protected Gazebo gates were zero, and owned/preserved sessions were recorded.
+  - The live graph contained controller manager, MuJoCo ros2_control, robot_state_publisher, move_group, arm controller, diagnostic, and TF helper nodes while the owned launch was running.
+  - Readiness waited through concurrent startup and summary evidence recorded arm_controller, gripper_controller, and joint_state_broadcaster all active with their exact joint mapping, required graph boundaries, world-to-so101_tcp TF, and planning group arm.
+  - The restored frozen limits reached MoveIt: task12_safe planning was accepted with 47 trajectory points; execution goal_sent was false, succeeded was false, and controller result was NOT_REQUESTED.
+  - Atomic MuJoCo publisher_sequence and simulation_step each advanced by 1 with reset epoch unchanged at 0. Launch exit was zero, live summary validation passed one test, only the owned session was removed, and domain 119 was empty afterward.
+inferred:
+  - Bounded exact-controller polling removes the EXP-037 startup race without extending the existing deadline.
+  - Frozen joint dynamics injection resolves the EXP-036 time-parameterization failure for the non-executing safe plan.
+conclusion: VALID success: the full headless dry_run independently proves readiness, planning, no controller execution, advancing MuJoCo evidence, unchanged reset epoch, and clean owned shutdown.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-038/launch.log (sha256 e479863bb4990a8c37ec136f514f0db234931c2cd51632858281c2d057d88dcc)
+  - /tmp/so101-debug-mujoco-migration/exp-038/summary-final.json (sha256 68fe89b6615b84832e98b160886393ac6c111aca4a08d570c54162998ade1011)
+  - /tmp/so101-debug-mujoco-migration/exp-038/graph-live.txt (sha256 a248f93a82c75bb40767a9d75d9532d68784e6835e898a0a722a45caf416e7b6)
+  - /tmp/so101-debug-mujoco-migration/exp-038/process-tree.txt (sha256 8b2b508f49c276ee02be96a02b1dffd1add2364971bc183849750d1bdd5e752a)
+  - /tmp/so101-debug-mujoco-migration/exp-038/live-validator.log (sha256 57e483a5ab24700c87774df1edfdab1c89dfaf089ba40715ea705e2c323836ac)
+  - /tmp/so101-debug-mujoco-migration/exp-038/domain-before.txt and domain-after.txt (each sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-038/provenance.txt (sha256 b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1)
+decision: ACCEPT dry_run evidence and preregister one separate non-grasp execute on a new domain; do not reuse this runtime.
+next_experiment: EXP-039
+```
+
+## Checkpoint CP-054
+
+```yaml
+checkpoint_id: CP-054
+last_valid_experiment: EXP-038
+current_hypothesis: The same fixed full stack can execute task12_safe once, with the five arm joints converging to their named target and joint 6 independently remaining at its captured non-grasp hold target.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; only declared Task 12 implementation/config/test/provenance/package/ledger/report paths remain dirty or untracked.
+owned_processes: NONE; so101-mujoco-exp038 is absent and domain 119 is empty.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched.
+confirmed_conclusions:
+  - EXP-038 is a valid dry_run success with 47 planned points, no controller goal, all required active controller states, positive atomic publisher/step deltas, unchanged reset epoch, and clean shutdown.
+  - Reset-qualified provenance and protected Gazebo gates remained valid before the run.
+disproven_routes:
+  - The EXP-036 missing-limit failure and EXP-037 controller-startup race no longer occur in the qualified dry_run.
+open_risks:
+  - No execution, arm convergence, joint-6 hold convergence, or executed MuJoCo movement proof exists yet.
+next_command: Run preregistered EXP-039 only after its fresh-domain, exact-source, provenance, ownership, and independent six-joint evidence capture preconditions pass.
+```
+
+## Experiment EXP-039
+
+```yaml
+experiment_id: EXP-039
+status: VALID
+prior_experiment: EXP-038
+hypothesis: The exact EXP-038 stack can explicitly execute the non-grasp task12_safe trajectory, converge arm joints 1 through 5 to their configured target while joint 6 holds its captured initial target, produce advancing atomic MuJoCo motion evidence, and cleanly stop only its owned runtime.
+prediction: Planning is accepted with positive trajectory points, MoveIt/controller execution succeeds, joints 1 through 5 finish within 0.01 rad of [0.0, 0.1, 0.1, 0.2, 0.0], independent joint-state stream shows joint 6 final within 0.01 rad of its initial non-grasp hold value, maximum arm motion exceeds 0.05 rad, MuJoCo publisher_sequence and simulation_step advance with unchanged reset epoch, launch exits zero, and the fresh domain ends empty.
+single_variable: Explicit run_mode execute with execute true; source, model, controller configuration, safe pose, fixed frozen limits, readiness deadline, convergence/motion thresholds, overlays, and headless runtime are unchanged from successful EXP-038.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus only declared Task 12 dirty paths; protected Gazebo tree unchanged.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; reset-qualified provenance passes with the frozen lock.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 120, GZ_PARTITION so101_mujoco_task12_exp039, task-owned tmux session so101-mujoco-exp039, and evidence root /tmp/so101-debug-mujoco-migration/exp-039/.
+  - A task-owned joint-state evidence subscriber records the first and final complete six-joint samples in the same domain; it commands nothing and is cleaned with the owned session.
+  - Existing codex, kimi, and so101-py-qual processes/sessions are preserved and must not be signaled or stopped.
+success_criteria:
+  - Readiness and planning satisfy EXP-038's exact graph/controller/TF/Planning Scene/observer/reset contract.
+  - Plan contains positive trajectory points, explicit execution goal is sent, MoveIt/controller result is SUCCEEDED, and summary proves joints 1 through 5 converged with maximum target error at most 0.01 rad and maximum motion greater than 0.05 rad.
+  - Independent complete joint-state samples prove joint 6 remains within 0.01 rad of its initial non-grasp hold target, completing six-joint convergence evidence.
+  - Atomic MuJoCo publisher_sequence and simulation_step advance, reset epoch is unchanged, launch exit is zero, only named owned processes are cleaned, and domain 120 is empty afterward.
+failure_criteria:
+  - With valid preconditions, any readiness, planning, execution, controller result, six-joint convergence, MuJoCo movement, reset-epoch, or clean-shutdown assertion failure is a VALID behavioral failure and stops Task 12.
+invalid_criteria:
+  - Provenance mismatch, nonempty initial domain, stale install, missing/invalid six-joint stream, ownership defect, incomplete summary/log/hash/process evidence, unreliable exit capture, or polluted cleanup makes the run INVALID and supports no behavior conclusion.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths qualified by EXP-038
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 120
+  gz_partition: so101_mujoco_task12_exp039
+commands:
+  - command: ROS_DOMAIN_ID=120 GZ_PARTITION=so101_mujoco_task12_exp039 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=execute execute:=true simulation_session_id:=task12-exp039 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-039/summary.json
+    exit_code: 0
+observed:
+  - Preconditions passed: domain 120 was empty, exact HEAD/dirty scope and protected Gazebo gates were valid, reset-qualified provenance SHA-256 was b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1, and only the task-owned launch plus read-only joint-state subscriber were started.
+  - Live graph and process evidence captured controller manager, MoveIt, MuJoCo ros2_control, robot_state_publisher, controllers, diagnostic, and the task-owned joint-state subscriber.
+  - Readiness completed with the bounded controller poll. MoveIt accepted planning and completed AddTimeOptimalParameterization, ValidateSolution, and DisplayMotionPath before receiving the explicit execution request.
+  - TrajectoryExecutionManager rejected the handoff before sending a controller trajectory: `Invalid Trajectory: start point deviates from current robot state more than 0.01 at joint '2'`. The execution action completed ABORTED and the diagnostic summary recorded `execution failed: MOVEIT_EXECUTION_FAILED`.
+  - The independent stream contains 147 complete ordered six-joint samples with no subscriber error. Joint 6 remained within 0.0023626745226074733 rad of its initial non-grasp hold target, but arm execution/convergence cannot be claimed because controller handoff was rejected.
+  - Launch supervisor exit was zero after diagnostic-directed shutdown. Only so101-mujoco-exp039 and its evidence window were removed, domain 120 was empty afterward, and codex, kimi, and so101-py-qual remained untouched.
+inferred:
+  - The first bad execute boundary is MoveIt's frozen start-state tolerance validation between planning-state capture and controller handoff, not readiness, planning, time parameterization, or joint-6 hold evidence.
+  - No controller execution, five-arm-joint convergence, or executed MuJoCo movement success is supported by EXP-039.
+conclusion: VALID behavioral failure: the explicit non-grasp execute request was aborted because joint 2 drifted more than the unchanged 0.01 start tolerance before trajectory execution.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-039/launch.log (sha256 cfea801064418c8e359af944834702e173734c8f507a5ee8fb5c1fcdb4b4cb64)
+  - /tmp/so101-debug-mujoco-migration/exp-039/summary.json (sha256 78acfc7676e1f970a08d0891d5b060eea423ce036931a4f2c8d5e54dda73ab94)
+  - /tmp/so101-debug-mujoco-migration/exp-039/graph-live.txt (sha256 9eeffff2a899d86d056a937d2f5e88e016d9bf451b4758d3c23e6b778f6f9425)
+  - /tmp/so101-debug-mujoco-migration/exp-039/process-tree.txt (sha256 66eaa06e61b3f37aa545a7ff1b6a0642a5ae71da127832cf10185b9360babf48)
+  - /tmp/so101-debug-mujoco-migration/exp-039/joint-states.yaml (sha256 b73051d5428c604ed08c3863356380b7e801df9c9efa26dc98ee998a4e131cd4)
+  - /tmp/so101-debug-mujoco-migration/exp-039/joint-evidence-summary.json (sha256 c7e395a8e269969e853542457e71e0945794e0033b299e18ba2f0cef30356ea6)
+  - /tmp/so101-debug-mujoco-migration/exp-039/domain-before.txt and domain-after.txt (each sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-039/provenance.txt (sha256 b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1)
+decision: ABANDON Task 12 at the mandated valid-failure stop. Do not adjust the 0.01 tolerance, modify planning/execution, rerun, run final success gates, stage, or commit without new user direction.
+next_experiment: NONE
+```
+
+## Checkpoint CP-055
+
+```yaml
+checkpoint_id: CP-055
+last_valid_experiment: EXP-039
+current_hypothesis: Joint 2 can drift farther than MoveIt's unchanged 0.01 allowed_start_tolerance between current-state capture and explicit trajectory handoff.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; only Task 12 independent-package config, launch, diagnostic, tests, provenance, package metadata, ledger, and ignored report paths are dirty or untracked; protected Gazebo tracked/status gates remain zero.
+owned_processes: NONE; so101-mujoco-exp038 and so101-mujoco-exp039 are absent, and domains 119 and 120 are empty.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Readiness fix round 2 has executable RED/GREEN coverage for delayed concurrent activation, never-active timeout, and rejection of non-active required states, all under the unchanged overall deadline.
+  - Ruff check/format and the two-package build pass. Focused contract/Ruff gates pass 16 plus one opt-in skip; the full package run before formatting reported 185 passes and three skips with only the formatting gate and truthful in-progress-ledger assertion failing, and formatting is now corrected.
+  - EXP-038 validly proves full readiness, 47-point safe planning, no execution, positive atomic MuJoCo deltas, unchanged reset epoch, and clean owned shutdown.
+  - EXP-039 validly proves readiness and planning reached explicit execution, then failed at MoveIt's unchanged start-state tolerance for joint 2 before controller trajectory execution. The independent six-joint stream is valid, but execution/convergence/movement success is absent.
+  - No hardware, GUI, grasp, threshold change, Gazebo-tree modification, unrelated-session signal, push, merge, reset, stash, or clean action occurred.
+disproven_routes:
+  - Controller readiness polling and frozen joint limits are insufficient by themselves to qualify execute when the planning start state drifts before handoff.
+  - Rerunning or widening the 0.01 start tolerance would violate the preregistered stop and no-threshold-change rules.
+open_risks:
+  - Task 12 lacks successful controller execution, five-arm-joint target convergence, and executed MuJoCo movement proof.
+  - Launch-directed failure teardown continues to log move_group exit -11 as a secondary unqualified shutdown issue.
+next_command: NONE; user direction is required before any new planning/execution behavior correction or experiment.
+```
+
+## Checkpoint CP-056
+
+```yaml
+checkpoint_id: CP-056
+last_valid_experiment: EXP-039
+current_hypothesis: Joint 2 either already differs from the returned trajectory first point at plan response or accumulates the rejecting deviation between plan response and ExecuteTrajectory handoff.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; current Task 12 dirty state preserved without reset, stash, or clean; no production behavior correction has been made after CP-055.
+owned_processes: NONE; prior task-owned sessions are absent and domains 119/120 are empty.
+preserved_processes: codex, kimi, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - EXP-039 launch log timestamps planning request at 1786368114.054992233, returned adapters through 1786368114.076488838, execution request at 1786368114.084640160, and rejection at 1786368114.086281582.
+  - EXP-039 summary contains only the terminal MOVEIT_EXECUTION_FAILED error. Its external six-joint stream has simulation stamps and complete values, but not local receipt timestamps correlated to plan request, plan response, or immediate pre-execute.
+  - The current ordering is complete joint sample -> GetMotionPlan -> trajectory extraction -> ExecuteTrajectory, with no explicit spin between plan response and execute call; however, exact first-point positions and exact latest samples at those boundaries were not serialized.
+disproven_routes:
+  - EXP-039's first/last external joint samples cannot prove whether the 0.01 deviation existed at plan response or accumulated afterward.
+open_risks:
+  - Measurement logging itself must not add a spin, sleep, timeout, planning, tolerance, controller, or motion change.
+next_command: Run the preregistered measurement-only EXP-040 once after adding structured boundary observability and passing source/provenance/ownership/fresh-domain preconditions.
+```
+
+## Experiment EXP-040
+
+```yaml
+experiment_id: EXP-040
+status: VALID
+prior_experiment: EXP-039
+hypothesis: Boundary-correlated measurements will show whether the returned trajectory first point already deviates from the latest finite complete joint state at plan response, or whether a greater-than-0.01 deviation accumulates before ExecuteTrajectory.
+prediction: Structured evidence records exact trajectory joint names/first-point positions, complete finite joint samples with message simulation stamp and local receipt monotonic time at plan request, plan response, and immediately pre-execute, plus controller states and atomic MuJoCo simulation_time/publisher_sequence/simulation_step/reset_epoch/session tuple. Per-joint deltas and boundary time deltas then identify the first crossing of 0.01 without changing execution semantics.
+single_variable: Measurement observability only; the exact EXP-039 config, code ordering, execute call, model, controllers, safe pose, frozen 0.01 start tolerance, thresholds, readiness timeout, planning limits, source order, and motion remain unchanged. Measurement adds no spin, sleep, wait, service/action call, or state mutation.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and measurement-only structured logging; protected Gazebo tree unchanged.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; reset-qualified provenance passes with the frozen lock.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 121, GZ_PARTITION so101_mujoco_task12_exp040, task-owned tmux session so101-mujoco-exp040, evidence root /tmp/so101-debug-mujoco-migration/exp-040/.
+  - Existing codex, kimi, and so101-py-qual processes/sessions are preserved and must not be signaled or stopped.
+success_criteria:
+  - All three named boundary records contain finite ordered joint samples, local receipt/sample monotonic values, simulation stamps, controller states, and atomic evidence tuple; plan response contains exact trajectory first point and names.
+  - The one unchanged execute diagnostic reaches a terminal underlying success or failure with direct launch exit capture, complete logs/hashes/process evidence, owned cleanup, and empty domain 121.
+  - VALID measurement semantics are independent of the underlying behavior: execution success is recorded as behavioral success; the same or another contract failure is recorded as behavioral failure, provided all measurement/precondition evidence remains valid.
+failure_criteria:
+  - A complete valid measurement whose unchanged run fails readiness, planning, execution, convergence, MuJoCo movement, reset epoch, or shutdown is a VALID behavioral failure and is terminalized without a production fix.
+invalid_criteria:
+  - Missing/malformed boundary record, instrumentation that changes call ordering or adds runtime waits/calls, provenance mismatch, nonempty initial domain, stale install, ownership defect, incomplete summary/log/hash/process evidence, unreliable exit capture, or polluted cleanup makes EXP-040 INVALID and supports no causal conclusion.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and measurement-only observability
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 121
+  gz_partition: so101_mujoco_task12_exp040
+commands:
+  - command: ROS_DOMAIN_ID=121 GZ_PARTITION=so101_mujoco_task12_exp040 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=execute execute:=true simulation_session_id:=task12-exp040 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-040/summary.json
+    exit_code: 0
+observed:
+  - All frozen preconditions passed: domain 121 was empty, exact HEAD and dirty scope were captured, reset-qualified provenance SHA-256 was b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1, protected Gazebo gates were zero, and only the named owned session was started.
+  - Plan-request boundary monotonic time was 2692557.461306925. Its latest complete finite joint sample was received at 2692557.455336982 with simulation stamp 1.734 s and positions [-0.0016580672244613085, 0.6637178770200481, 0.26929049715874454, 0.05754074285101374, 0.00009117452787544724, -0.003487822006456804]. Atomic evidence was session task12-exp040, simulation time 1.738 s, publisher sequence/step 167/167, reset epoch 0; all three required controllers were active.
+  - Plan-response boundary monotonic time was 2692557.757419311. The returned first point for joints 1 through 5 exactly equaled the plan-request sample, with zero per-joint delta and time_from_start zero. The latest joint sample was received at 2692557.753158297 with simulation stamp 2.016 s and positions [-0.00013910291309458155, 1.3508556799055613, 0.3710563485655239, 0.07926001452117376, 0.00009731322268405661, -0.002300061280728079].
+  - From trajectory first point to plan-response sample, deltas in radians were joint 1 +0.001518964311366727, joint 2 +0.6871378028855132, joint 3 +0.10176585140677935, joint 4 +0.021719271670160023, and joint 5 +0.000006138694808609371. Planning-boundary elapsed time was 0.29611238604411483 s, joint-receipt elapsed time 0.29782131500542164 s, simulation time advanced 0.2719999999999998 s, and atomic sequence/step advanced 27/27 with no reset.
+  - Immediate pre-execute boundary monotonic time was 2692557.757545859, only 0.00012654811143875122 s after plan response. Its joint sample, sample receipt, simulation stamp, atomic tuple, controller states, and trajectory first point were byte-for-value identical to plan response; every response-to-pre-execute joint/sequence/step/reset delta was zero.
+  - The unchanged execution again failed `Invalid Trajectory: start point deviates from current robot state more than 0.01 at joint '2'` and summary recorded MOVEIT_EXECUTION_FAILED. Only the owned session was removed and domain 121 was empty afterward.
+inferred:
+  - No start-state deviation existed at plan request: the trajectory first point is exactly the requested current state for all five arm joints.
+  - The rejecting deviation already existed when planning returned. Physics continued for 27 steps during the approximately 0.296-second planning interval, moving joint 2 by +0.6871378028855132 rad and also moving joints 3 and 4 beyond 0.01 rad.
+  - No additional sampled drift accumulated after plan response and before the execute call. The failure is therefore not caused by a post-plan application delay or a planner-altered first point.
+conclusion: VALID measurement and VALID behavioral failure: uncontrolled robot-state drift while planning makes the exact returned trajectory start stale before ExecuteTrajectory; joint 2 is the first MoveIt-reported rejection under the unchanged 0.01 tolerance.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-040/launch.log (sha256 37ed5ac4e9707a38132112c1ebbe9e72ac0377113a3063f68498df7d360e06e8)
+  - /tmp/so101-debug-mujoco-migration/exp-040/measurements.ndjson (sha256 87ae537b26c18391f277d8f06a4381c1695cf6933e7e7f5d5699fb7f6a3fdf8d)
+  - /tmp/so101-debug-mujoco-migration/exp-040/delta-analysis.json (sha256 8e3b5691a6ce841dbb759aed8068b2402354e3ca2ef26c3b4219e82f7efc3908)
+  - /tmp/so101-debug-mujoco-migration/exp-040/summary.json (sha256 78acfc7676e1f970a08d0891d5b060eea423ce036931a4f2c8d5e54dda73ab94)
+  - /tmp/so101-debug-mujoco-migration/exp-040/graph-live.txt (sha256 0e7e4a89606ac7e07b95e31476425f220f78a78e340196841769e53556b568ae)
+  - /tmp/so101-debug-mujoco-migration/exp-040/process-tree.txt (sha256 35acc65d125602ea43d8de820d705ca70f8e308edcaf80fd86621db342b57cdb)
+  - /tmp/so101-debug-mujoco-migration/exp-040/domain-before.txt and domain-after.txt (each sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-040/provenance.txt (sha256 b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1)
+decision: ACCEPT the root-cause diagnosis and stop. Do not alter production motion behavior, tolerance, threshold, timeout, controller settings, or planning/execution ordering without new user direction.
+next_experiment: NONE
+```
+
+## Checkpoint CP-057
+
+```yaml
+checkpoint_id: CP-057
+last_valid_experiment: EXP-040
+current_hypothesis: NONE; EXP-040 confirms the exact stale-start mechanism.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; the pre-existing Task 12 dirty implementation remains plus measurement-only structured logging in headless_execution.py, ledger diagnosis, and ignored report. No production behavior fix, reset, stash, clean, stage, commit, or push occurred.
+owned_processes: NONE; so101-mujoco-exp040 is absent and domain 121 is empty.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - The plan request sample and returned trajectory first point are exactly equal for every arm joint.
+  - Over the planning interval, simulation advanced 27 steps/0.272 s and joint 2 drifted +0.6871378028855132 rad. Joints 3 and 4 also exceeded 0.01 rad relative to the trajectory first point.
+  - Plan response and immediate pre-execute used the same latest joint sample and atomic tuple; only 0.00012654811143875122 s elapsed and all measured deltas were zero.
+  - The root cause is robot physics drift during planning, creating a stale trajectory start before ExecuteTrajectory, not a planner first-point mismatch or post-response delay.
+  - EXP-040 is VALID despite the expected behavioral failure because every preregistered measurement, provenance, ownership, graph, exit, cleanup, and hash boundary is complete.
+disproven_routes:
+  - The trajectory response does not alter or omit the requested start positions.
+  - Drift does not accumulate in the diagnostic between plan response and the immediate execute call.
+open_risks:
+  - Task 12 still lacks successful controller execution, arm convergence, and executed MuJoCo movement proof.
+  - Measurement-only observability remains dirty and uncommitted pending user direction on the behavioral correction.
+next_command: NONE; report the confirmed root cause and wait for direction before any production behavior fix.
+```
+
+## Checkpoint CP-058
+
+```yaml
+checkpoint_id: CP-058
+last_valid_experiment: EXP-040
+current_hypothesis: Controller-state reference/feedback/error/output across the planning interval will distinguish failed physical holding from changing/stale/absent position commands.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; preserved Task 12 dirty implementation plus EXP-040 measurement logging, ledger/report diagnosis; no production behavior correction.
+owned_processes: NONE; prior task-owned session is absent and domain 121 is empty.
+preserved_processes: codex, kimi, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - Installed `/opt/ros/jazzy/share/control_msgs/msg/JointTrajectoryControllerState.msg` defines joint_names and trajectory-point fields reference (desired set point), feedback (latest measured process value), error (reference minus feedback), and output (current controller output), plus speed_scaling_factor.
+  - The runtime topic is `/arm_controller/controller_state`; EXP-038/039/040 graph evidence shows it present.
+  - Source and installed `ros2_controllers.yaml` match: arm joints 1-5, command_interfaces [position], state_interfaces [position, velocity], open_loop_control false, and no gain or timeout change.
+  - EXP-040 logs confirm the active controller lifecycle and state drift but did not subscribe to or preserve the controller's reference/feedback/error/output stream.
+disproven_routes:
+  - Joint states alone cannot determine whether the position command held constant, changed, or was absent/stale.
+open_risks:
+  - The diagnostic subscriber must remain read-only and add no controller/action/service call, wait, sleep, ordering, tolerance, gain, timeout, or motion change.
+next_command: Run preregistered EXP-041 once after installing finally-flushed read-only controller-state measurement and passing fresh-domain/provenance/ownership checks.
+```
+
+## Experiment EXP-041
+
+```yaml
+experiment_id: EXP-041
+status: VALID
+prior_experiment: EXP-040
+hypothesis: The complete arm controller-state stream will show whether reference holds the plan-request positions while feedback drifts, reference itself changes, output is absent/stale, or the state message is unavailable.
+prediction: A read-only subscription started before plan request records finite complete arm joint_names and available reference/feedback/error/output arrays with header and receipt timestamps across plan request, plan response, and immediate pre-execute. Boundary records correlate joint_states, atomic simulation tuple, and active controller lifecycle without changing the EXP-040 execution outcome or timing semantics.
+single_variable: Measurement-only `/arm_controller/controller_state` subscription and finally-flushed serialization; exact EXP-040 behavior, ordering, frozen 0.01 tolerance, timeout, controller gains/config, model, plan, execute call, and motion remain unchanged. No extra wait, spin, sleep, service/action call, command publication, or state mutation is allowed.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and measurement-only subscriber; protected Gazebo tree unchanged.
+  - Installed field provenance is `/opt/ros/jazzy/share/control_msgs/msg/JointTrajectoryControllerState.msg`; topic type is `control_msgs/msg/JointTrajectoryControllerState`; source/installed controller config both specify position command and position/velocity state interfaces with open_loop_control false.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; reset-qualified provenance passes with frozen lock.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 122, GZ_PARTITION so101_mujoco_task12_exp041, task-owned session so101-mujoco-exp041, evidence root /tmp/so101-debug-mujoco-migration/exp-041/.
+  - Existing codex, kimi, and so101-py-qual processes/sessions are preserved and must not be signaled or stopped.
+success_criteria:
+  - Finally output persists plan_request, plan_response, and pre_execute boundary records containing complete finite six-joint joint_states, atomic tuple, and exact required controller lifecycle states.
+  - Finally output persists the complete received arm controller-state stream from before plan request through terminal execution result, including receipt/header times, names, reference, feedback, error, output, and speed scaling exactly as available.
+  - Exact joint-2 reference/feedback/error/output evolution identifies one of: fixed desired with drifting actual, changing desired, absent/stale command/output, or unavailable state message.
+  - One unchanged safe execute attempt reaches a terminal behavior, direct exit is captured, evidence hashes/process graph are complete, only owned session is cleaned, and domain 122 is empty afterward.
+failure_criteria:
+  - With all measurement/precondition evidence valid, an unchanged readiness/planning/execution/convergence/MuJoCo/shutdown failure remains a VALID behavioral failure and is terminalized without a production fix.
+invalid_criteria:
+  - Missing/malformed finally records, incomplete/nonfinite required arrays preventing the preregistered classification, subscriber/instrumentation that changes runtime behavior or adds waits/calls/commands, provenance mismatch, nonempty domain, stale install, ownership defect, incomplete logs/hashes/process evidence, or polluted cleanup makes EXP-041 INVALID.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and measurement-only controller-state subscriber
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  controller_state_definition: /opt/ros/jazzy/share/control_msgs/msg/JointTrajectoryControllerState.msg
+  controller_state_topic: /arm_controller/controller_state
+  controller_state_type: control_msgs/msg/JointTrajectoryControllerState
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 122
+  gz_partition: so101_mujoco_task12_exp041
+commands:
+  - command: ROS_DOMAIN_ID=122 GZ_PARTITION=so101_mujoco_task12_exp041 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=execute execute:=true simulation_session_id:=task12-exp041 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-041/summary.json
+    exit_code: 0
+observed:
+  - All frozen preconditions passed: domain 122 was empty, exact HEAD/dirty scope and protected Gazebo gates were valid, reset-qualified provenance SHA-256 was b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1, installed/source controller config hashes matched, and only the task-owned session was started.
+  - Installed field source `/opt/ros/jazzy/share/control_msgs/msg/JointTrajectoryControllerState.msg` SHA-256 is 7fb2953ccaae67b77ede3a32ef01376763e4aa133064d67d6929ef2fc16582b4. It defines joint_names plus reference, feedback, error, output, and speed_scaling_factor. `ros2 interface show` evidence SHA-256 is 12e53ded1bcf8696bff7e713597bec4341a6f57b51adc8ef1468c18b98b61de7.
+  - Source and installed controller config SHA-256 are both 499d471acb93ede255199ac6f220fbff39ae2f01f2277eed8e9967230ebbf16a: position command, position/velocity state, open_loop_control false. The read-only subscriber received eight complete finite five-arm-joint messages from `/arm_controller/controller_state`, proving the topic/message was live even though a later post-shutdown `ros2 topic info` probe found the already-removed topic.
+  - Every one of the eight samples contained complete reference, feedback, error, and output position arrays. Every reference array was identical across the stream, every output position array was identical, reference equaled output position in every sample, and speed scaling was 1.0. Message header stamps advanced from simulation time 1.856 to 1.870 s, so the fixed output was current stream data rather than an unavailable message.
+  - Joint 2 exact stream values: reference/output remained 0.48821437858892025 rad in all eight samples. Feedback was 0.48777616859526296 first and 0.4873421481950245 last, delta -0.0004340204002384329 rad and range 0.000809004454683182 rad. Error was +0.0004382099936572903 first, ranged 0.000809004454683182, and ended +0.0008722303938957232 rad.
+  - Boundary-aligned latest controller samples: at plan request reference/output 0.48821437858892025, feedback 0.48777616859526296, error +0.0004382099936572903; at plan response and pre-execute reference/output remained 0.48821437858892025, feedback was 0.4871243426927168, error +0.001090035896203434. Joint-state joint 2 changed from 0.4891500991800762 at request to 0.4873421481950245 at response, delta -0.001807950985051654 rad.
+  - Planning lasted 0.02512173680588603 s and response-to-pre-execute 0.000045596156269311905 s. The unchanged attempt again failed MoveIt start validation, this time reporting joint 3 over 0.01; summary recorded MOVEIT_EXECUTION_FAILED. Finally output preserved all three boundaries and the complete controller stream.
+  - Only so101-mujoco-exp041 was removed, domain 122 was empty afterward, and codex, kimi, and so101-py-qual remained untouched.
+inferred:
+  - Desired/reference does not change during planning. The controller publishes a live, constant position output equal to that reference, so the position command interface is neither absent nor unavailable.
+  - Actual feedback changes while desired/output remains fixed; classification is `fixed_reference_and_position_output_with_drifting_feedback`, HIGH confidence for the measured interval.
+  - The stale trajectory-start mechanism is downstream of JTC desired generation: physical/simulation feedback can move relative to a current fixed position command. This measurement does not by itself identify MuJoCo actuator/plant tracking internals or explain which joint first exceeds 0.01 on every run; confidence in that deeper mechanism is MEDIUM.
+conclusion: VALID measurement and VALID behavioral failure: arm controller desired/reference and position output hold constant while actual feedback drifts; command state is available/current and desired itself is not the source of trajectory-start drift.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-041/controller-state-analysis.json (sha256 5ea2c5b8581c735112f53d9e98a3afd2ad06cbff13e8e3f0fe1dbe24375bb27e)
+  - /tmp/so101-debug-mujoco-migration/exp-041/controller-state-stream.json (sha256 9a06fb0ec9d8d318020fd127278674aee2fb7d30086fb96d01a6719f8fedc823)
+  - /tmp/so101-debug-mujoco-migration/exp-041/boundary-records.json (sha256 6e4ee843db09d72d29d24b7f9ea3e248086c9c7ddc49d9ed54fe8c5fa186539d)
+  - /tmp/so101-debug-mujoco-migration/exp-041/controller-field-config-provenance.txt (sha256 ceb2d4e35b804fc91f0876426ff63e99f6bef24d324f785a627985da35cfb862)
+  - /tmp/so101-debug-mujoco-migration/exp-041/controller-state-interface.txt (sha256 12e53ded1bcf8696bff7e713597bec4341a6f57b51adc8ef1468c18b98b61de7)
+  - /tmp/so101-debug-mujoco-migration/exp-041/launch.log (sha256 f4274a8859581e7341f79b1e6bb0189faab8dca7d530640da480bff842af20d1)
+  - /tmp/so101-debug-mujoco-migration/exp-041/summary.json (sha256 78acfc7676e1f970a08d0891d5b060eea423ce036931a4f2c8d5e54dda73ab94)
+  - /tmp/so101-debug-mujoco-migration/exp-041/graph-live.txt (sha256 2407abad0386f4ef3be3251f097539efb4157c840a9599db39bfeeb9e8de1cbb)
+  - /tmp/so101-debug-mujoco-migration/exp-041/process-tree.txt (sha256 a196cf4dbc192fb6164212a57487b4d1cd44251d69c80f46cfc2af8c6d82a05a)
+  - /tmp/so101-debug-mujoco-migration/exp-041/domain-before.txt and domain-after.txt (each sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-041/provenance.txt (sha256 b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1)
+decision: ACCEPT the controller-side root-cause classification and stop. Do not change production behavior, ordering, tolerance, timeout, gains, controller configuration, actuator parameters, or motion without new user direction.
+next_experiment: NONE
+```
+
+## Checkpoint CP-059
+
+```yaml
+checkpoint_id: CP-059
+last_valid_experiment: EXP-041
+current_hypothesis: NONE; EXP-041 resolves controller desired/output availability and evolution.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; pre-existing Task 12 dirty implementation plus measurement-only boundary/controller-stream logging, ledger diagnosis, and ignored report. No production behavior fix, reset, stash, clean, stage, commit, or push occurred.
+owned_processes: NONE; so101-mujoco-exp041 is absent and domain 122 is empty.
+preserved_processes: codex, kimi, and so101-py-qual remain present and untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Installed field/topic provenance and source/installed position-controller config are exact and hashed.
+  - All arm-controller reference/output positions remain fixed and equal across eight current messages; all feedback/error arrays are complete and evolve.
+  - Joint 2 reference/output is exactly 0.48821437858892025 rad throughout; feedback/error exact boundary and stream values are recorded in EXP-041.
+  - The command interface is present/current, desired does not change, and actual feedback drifts relative to fixed desired/output. Classification confidence is HIGH for the observed controller interval and MEDIUM for deeper MuJoCo plant/actuator causation.
+  - EXP-041 is VALID despite the unchanged behavioral failure because field provenance, finally records, lifecycle, graph, exit, cleanup, hashes, and ownership are complete; the post-shutdown topic-info miss is expected and non-causal because eight live messages were preserved.
+disproven_routes:
+  - Controller state is not unavailable.
+  - Desired/reference and output do not change during planning.
+  - The position output is not absent; it equals the fixed reference in every sample.
+open_risks:
+  - The downstream cause of feedback tracking error under a fixed position command is not yet isolated between MuJoCo actuator/plant configuration and hardware-interface command application.
+  - Task 12 still lacks successful controller execution, arm convergence, and executed MuJoCo movement proof.
+next_command: NONE; report controller-state diagnosis and wait for user direction.
+```
+
+## Checkpoint CP-060
+
+```yaml
+checkpoint_id: CP-060
+last_valid_experiment: EXP-041
+current_hypothesis: Freezing MuJoCo before start-state capture and planning, then resuming immediately before ExecuteTrajectory, prevents the confirmed planning-interval drift without changing motion, tolerance, controller, actuator, deadline, or MoveIt adapter behavior.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; preserved Task 12 dirty implementation plus measurement observability and the strict-TDD freeze-plan-resume-execute change. No reset, stash, clean, stage, commit, or push occurred.
+owned_processes: NONE; no Task 12 runtime is active before EXP-042 registration.
+preserved_processes: codex, kimi, and so101-py-qual remain outside Task 12 ownership and must not be signaled or stopped.
+confirmed_conclusions:
+  - EXP-040 proved exact request/trajectory equality and drift only during planning; EXP-041 proved current fixed controller reference/output with changing feedback/error.
+  - Fix-round-3 RED failed six executable behavior tests because execute mode had no freeze-plan orchestration; RED log SHA-256 is 584c6979aee83557c1a26edab7391c9705797d017dc9c440ed35693d8c1dc92b.
+  - Focused GREEN passes 6/6, full headless contract passes 18 with one opt-in skip, Ruff check/format pass, and the two-package symlink build passes.
+  - Full direct package pytest passes 192 with three opt-in skips and only the pre-existing ledger-state test failing because it rejects truthful in-progress task status; it must be rerun after final ledger terminalization.
+disproven_routes:
+  - Planning while physics runs is not safe under the frozen 0.01 start tolerance; EXP-040.
+  - Changing desired/output or a missing command interface does not explain the observed planning interval; EXP-041.
+open_risks:
+  - The freeze-plan-resume execute hypothesis has not yet been tested live.
+  - Failure teardown has previously logged a secondary move_group exit -11.
+next_command: Confirm ROS_DOMAIN_ID 123 is empty without daemon use, verify exact source/installed/protected-tree provenance and ownership, then transition EXP-042 to RUNNING and execute it once.
+```
+
+## Experiment EXP-042
+
+```yaml
+experiment_id: EXP-042
+status: INVALID
+prior_experiment: EXP-041
+hypothesis: An authoritative MuJoCo pause before capturing the planning start state, maintained through planning and released immediately before ExecuteTrajectory, prevents the confirmed stale-start rejection while preserving the frozen safe motion and tolerances.
+prediction: Pause(true) succeeds and fresh atomic evidence reports paused=true before plan request; publisher_sequence, simulation_step, and joint start positions remain fixed through plan response/pre-execute; pause(false) succeeds and is followed immediately by ExecuteTrajectory; planning and controller execution succeed; all six joints satisfy the existing convergence/hold contract; executed atomic publisher/step movement is positive; only owned processes stop and the fresh domain ends empty.
+single_variable: Execute-only ordering changes from plan while running to pause(true), authoritative paused evidence, start capture and plan while paused, then pause(false) immediately followed by ExecuteTrajectory. Dry-run, task12_safe target, 0.01 convergence/start tolerance, controller/actuator parameters, planning limits, overall deadline, MoveIt adapter, overlays, and all other configuration remain unchanged. No StepSimulation call.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and fix round 3; index empty; protected Gazebo tree unchanged.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; reset-qualified provenance and installed runtime path pass.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 123, GZ_PARTITION so101_mujoco_task12_exp042, task-owned tmux session so101-mujoco-exp042, and evidence root /tmp/so101-debug-mujoco-migration/exp-042/.
+  - A task-owned read-only joint-state subscriber records complete six-joint samples and commands nothing; codex, kimi, and so101-py-qual remain preserved.
+success_criteria:
+  - Exact required graph, TF, Planning Scene, observer/reset services, MoveIt group, action servers, controller mappings, and all three active controller states pass.
+  - Pause boundary records prove successful true before plan request and successful false immediately before the ExecuteTrajectory client call; plan-request/response/pre-execute atomic records are authoritative paused=true with no simulation-step advance.
+  - Plan is accepted with positive trajectory points; ExecuteTrajectory and the arm controller succeed; arm joints 1-5 converge to task12_safe within unchanged 0.01 rad and independent joint 6 holds within 0.01 rad; maximum arm motion exceeds 0.05 rad.
+  - Atomic publisher_sequence and simulation_step advance after resume/execute without reset-epoch change; launch exits zero, evidence/hashes are complete, only owned session/PIDs are cleaned, and domain 123 ends empty.
+failure_criteria:
+  - With valid source, provenance, fresh-domain, graph, ownership, instrumentation, and cleanup, any pause/order, planning, execution, controller, six-joint convergence, MuJoCo movement, reset-epoch, or shutdown assertion failure is a VALID behavioral failure and terminates Task 12 with no fourth fix.
+invalid_criteria:
+  - Provenance mismatch, nonempty initial domain, stale install, missing/malformed pause/boundary/joint/atomic evidence, instrumentation pollution, ownership defect, unreliable exit capture, incomplete hashes, or polluted cleanup makes the run INVALID and supports no behavioral conclusion.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and fix round 3
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 123
+  gz_partition: so101_mujoco_task12_exp042
+commands:
+  - command: ROS_DOMAIN_ID=123 GZ_PARTITION=so101_mujoco_task12_exp042 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=execute execute:=true simulation_session_id:=task12-exp042 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-042/summary.json
+    exit_code: 1
+observed:
+  - Host preconditions passed before the task session: domain 123 was empty, the session name was absent, package prefix/provenance/protected-tree isolation passed, exact HEAD/status were captured, and preserved sessions were recorded.
+  - The task driver enabled zsh nounset before sourcing ROS. `/opt/ros/jazzy/setup.zsh` and both overlays reported unset trace variables; only `/opt/ros/jazzy` remained searchable and `ros2 launch` exited 1 with package not found.
+  - No MuJoCo, controller, MoveIt, workflow, planning, execution, or motion process started. The bounded graph probe was manually ended by killing only session so101-mujoco-exp042; exact task-owned ROS daemon PID 649285 was terminated, and domain 123 ended empty.
+inferred:
+  - The package lookup failure is entirely harness/source-order pollution and says nothing about the freeze-plan-resume production behavior.
+conclusion: INVALID before product behavior. EXP-042 is excluded from the denominator and its ID will not be reused.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-042/launch.log (sha256 f0158dd08219f6a2f1ac06425b6db978ea3a22bfadac3d90a3ef730b3f1f8e9a)
+  - /tmp/so101-debug-mujoco-migration/exp-042/launch-exit-code.txt (sha256 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865)
+  - /tmp/so101-debug-mujoco-migration/exp-042/domain-before.txt and domain-after.txt (each sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-042/provenance.txt (sha256 76af023c7edb82ce615907266d60c219cf4ed5d2032b44530bd1701eb6759d3b)
+decision: REPEAT only after removing harness nounset and using a new experiment ID/domain/session.
+next_experiment: EXP-043
+```
+
+## Checkpoint CP-061
+
+```yaml
+checkpoint_id: CP-061
+last_valid_experiment: EXP-041
+current_hypothesis: The freeze-plan-resume hypothesis remains untested because EXP-042 never launched the package; corrected instrumentation on a fresh lifecycle can test it.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; exact Task 12 dirty scope remains, with ledger-only EXP-042 terminalization. No production code/config/tolerance/deadline/controller/actuator/motion change followed the invalid run.
+owned_processes: NONE; so101-mujoco-exp042 was removed, its exact domain-123 daemon PID was terminated, and domain 123 is empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual were observed and untouched.
+confirmed_conclusions:
+  - EXP-042 is INVALID before behavior: nounset corrupted ROS setup, the package was unavailable, and no simulator or workflow started.
+  - Source/provenance/isolation/domain gates passed independently before the invalid task harness.
+disproven_routes:
+  - Enabling zsh nounset before ROS setup is not a valid experiment harness; it repeats the known EXP-031-style setup pollution class.
+open_risks:
+  - The production hypothesis has no live evidence yet.
+next_command: Preregister corrected EXP-043 on fresh domain 124 with nounset removed, exact source order, and no-daemon graph polling, then run once.
+```
+
+## Experiment EXP-043
+
+```yaml
+experiment_id: EXP-043
+status: INVALID
+prior_experiment: EXP-042
+hypothesis: An authoritative MuJoCo pause before capturing the planning start state, maintained through planning and released immediately before ExecuteTrajectory, prevents the confirmed stale-start rejection while preserving the frozen safe motion and tolerances.
+prediction: With corrected source-order instrumentation, pause(true) succeeds and fresh atomic evidence reports paused=true before plan request; publisher_sequence, simulation_step, and joint start positions remain fixed through plan response/pre-execute; pause(false) succeeds and is followed immediately by ExecuteTrajectory; planning and controller execution succeed; all six joints satisfy the existing convergence/hold contract; executed atomic publisher/step movement is positive; only owned processes stop and the fresh domain ends empty.
+single_variable: Relative to EXP-041 product behavior, execute-only ordering changes to pause(true), authoritative paused evidence, start capture and plan while paused, then pause(false) immediately followed by ExecuteTrajectory. Relative to INVALID EXP-042 instrumentation, zsh nounset is removed and graph polling explicitly disables daemon use. No production variable changed after EXP-042. Dry-run, target, tolerances, controller/actuator parameters, planning limits, deadline, MoveIt adapter, overlays, and all other configuration remain unchanged. No StepSimulation.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact source HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and fix round 3; index empty; protected Gazebo tree unchanged.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install succeeds; reset-qualified provenance and installed package prefix pass.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 124, GZ_PARTITION so101_mujoco_task12_exp043, task-owned tmux session so101-mujoco-exp043, and evidence root /tmp/so101-debug-mujoco-migration/exp-043/.
+  - Task-owned read-only complete six-joint recorder; all existing sessions/processes preserved.
+success_criteria:
+  - Required graph/TF/Planning Scene/observer/reset/MoveIt/actions/exact active controllers pass; pause and boundary records prove paused planning with no step advance and successful resume immediately before execute.
+  - Positive plan; successful ExecuteTrajectory/controller result; arm joints 1-5 converge to task12_safe and joint 6 independently holds within unchanged 0.01 rad; maximum arm motion exceeds 0.05 rad.
+  - Atomic publisher/step movement is positive after resume with unchanged reset epoch; launch/evidence/hashes/ownership/cleanup pass and domain 124 ends empty.
+failure_criteria:
+  - With valid prerequisites, any behavior-contract failure is VALID and terminates Task 12 with no fourth fix.
+invalid_criteria:
+  - Any source/provenance/domain/install/instrumentation/ownership/evidence/cleanup pollution is INVALID.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and fix round 3
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 124
+  gz_partition: so101_mujoco_task12_exp043
+commands:
+  - command: ROS_DOMAIN_ID=124 GZ_PARTITION=so101_mujoco_task12_exp043 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=execute execute:=true simulation_session_id:=task12-exp043 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-043/summary.json
+    exit_code: 0
+observed:
+  - Exact source/provenance/isolation/empty-domain/ownership and live graph/controller prerequisites passed. Successful pause(true) completed at monotonic 2694237.58006063; plan-request, response, and pre-execute atomic evidence all remained paused=true at publisher_sequence/simulation_step 138, simulation time 1.48 s, with byte-identical complete six-joint start samples.
+  - Pause(false) completed at 2694237.844421942, MoveIt validated the unchanged 0.01 start tolerance, started execution, sent the trajectory to arm_controller, and the controller reported goal reached/success. The headless diagnostic later failed its unchanged independent arm joint convergence timeout.
+  - The external recorder received ROS external shutdown, then its finally path called shutdown before writing JSON and raised `rcl_shutdown already called`; no external joint-states.json was persisted. This violates the preregistered mandatory independent six-joint evidence criterion.
+  - The owned session ended, graph/process evidence is present, domain 124 ended empty, and unrelated sessions were untouched.
+inferred:
+  - Freeze-plan-resume removed the stale-start rejection in this run, but the downstream convergence failure cannot be counted without the mandatory external final joint-6 stream.
+conclusion: INVALID due evidence-recorder flush pollution. The run supports no product success/failure denominator and its ID will not be reused.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-043/launch.log (sha256 98cdd6b558f1d57c2a1790522bdacfffb512c1cf5c3e4c221c072e7f67100c02)
+  - /tmp/so101-debug-mujoco-migration/exp-043/summary.json (sha256 2a3bd242502745cd30233f60c906bed774d2b401aece53c1cd56e164fe18fd5a)
+  - /tmp/so101-debug-mujoco-migration/exp-043/pause-boundaries.ndjson (sha256 bf9f72fdd42f753a3b8d2b8e472296f1c1a0bba563a18f542bb5fb10f7a62f4c)
+  - /tmp/so101-debug-mujoco-migration/exp-043/boundary-records.ndjson (sha256 6af926006822a5f7cbdf993796dc7f50272b9459bb0c92bf96e352c15003ef13)
+  - /tmp/so101-debug-mujoco-migration/exp-043/joint-recorder.log (sha256 5189682eab0d8c747b7437bcd8c461adb49a9fb5c1f33b6da788314bd39af4ce)
+  - /tmp/so101-debug-mujoco-migration/exp-043/domain-before.txt and domain-after.txt (each sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+decision: REPEAT only with recorder JSON flushed before conditional rclpy shutdown, under a new ID/domain/session and no production change.
+next_experiment: EXP-044
+```
+
+## Checkpoint CP-062
+
+```yaml
+checkpoint_id: CP-062
+last_valid_experiment: EXP-041
+current_hypothesis: The post-controller-success joint-convergence timeout seen internally in EXP-043 may be genuine, but only a fresh valid run with independently flushed six-joint evidence can classify it.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; production Task 12 scope unchanged since EXP-043; only ledger and /tmp recorder harness flush ordering changed.
+owned_processes: NONE; so101-mujoco-exp043 is absent and domain 124 is empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - EXP-043 validly observed stationary paused planning and a successful controller action, but is INVALID overall because its required external six-joint JSON was not persisted.
+  - Recorder root cause is exact: write occurred after unconditional rclpy shutdown, which raised because SIGTERM had already shut the context down. Harness now writes first and calls shutdown only while rclpy remains ok.
+open_risks:
+  - A valid recurrence of joint convergence timeout is a terminal behavioral failure; no production change or fourth fix is authorized.
+next_command: Preregister and run EXP-044 once on fresh domain 125 with the corrected recorder and otherwise identical configuration.
+```
+
+## Experiment EXP-044
+
+```yaml
+experiment_id: EXP-044
+status: VALID
+prior_experiment: EXP-043
+hypothesis: With valid independent six-joint recording, the exact freeze-plan-resume execute path will either satisfy the full convergence/movement contract or validly reproduce the downstream joint-convergence timeout seen in instrumentation-invalid EXP-043.
+prediction: Pause/plan/execute ordering remains stationary and accepted as in EXP-043; recorder flushes complete first/final six-joint samples; controller result, arm convergence, joint-6 hold, atomic movement, and shutdown can then be classified without instrumentation ambiguity.
+single_variable: Evidence-harness flush order only relative to INVALID EXP-043: write recorder JSON before conditional rclpy shutdown. Production source/config/order, target, tolerances, controller/actuator parameters, limits, deadline, MoveIt adapter, overlays, and motion are identical. No StepSimulation.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty production paths unchanged; protected Gazebo tree unchanged; index empty.
+  - Exact /opt -> dependency -> project source order, reset-qualified provenance, package prefix, fresh confirmed-empty ROS_DOMAIN_ID 125, GZ_PARTITION so101_mujoco_task12_exp044, task-owned session so101-mujoco-exp044, evidence root /tmp/so101-debug-mujoco-migration/exp-044/.
+  - Corrected task-owned recorder persists complete six-joint JSON before ROS shutdown; all unrelated sessions/processes preserved.
+success_criteria:
+  - Full EXP-043 graph/pause/stationary-plan/start-validation/controller gates plus successful diagnostic convergence, independent six-joint target/hold within 0.01 rad, maximum arm motion above 0.05 rad, positive atomic publisher/step movement, unchanged reset epoch, complete hashes/ownership/cleanup, and empty final domain.
+failure_criteria:
+  - With all prerequisites and external recorder evidence valid, any planning/execution/controller/convergence/joint6/atomic/shutdown behavior failure is VALID, terminal, and permits no further production fix or experiment.
+invalid_criteria:
+  - Any source/provenance/domain/install/recorder/ownership/evidence/cleanup pollution is INVALID.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and fix round 3
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 125
+  gz_partition: so101_mujoco_task12_exp044
+commands:
+  - command: ROS_DOMAIN_ID=125 GZ_PARTITION=so101_mujoco_task12_exp044 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=execute execute:=true simulation_session_id:=task12-exp044 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-044/summary.json
+    exit_code: 0
+observed:
+  - Exact HEAD/dirty scope, source order, installed package prefix, reset-qualified provenance, protected Gazebo isolation, fresh empty domain 125, session ownership, and live graph prerequisites passed. The headless boundary was reached only after exact required services/actions/TF/controllers were ready; all three required controller states were serialized active.
+  - Pause(true) completed successfully at monotonic 2694464.652202733. Plan request, response, and pre-execute records all report paused=true, publisher_sequence 141, simulation_step 141, simulation time 1.532 s, reset epoch 0, and the identical complete six-joint sample. Planning lasted 0.284183059 s with zero atomic/joint change, and the trajectory first point exactly equaled the captured five-arm-joint start.
+  - Pause(false) completed successfully at monotonic 2694464.936908546. The MuJoCo log timestamp for resume was 1786370458.851636249; MoveIt rejected `Invalid Trajectory: start point deviates from current robot state more than 0.01 at joint '2'` at 1786370458.852767565, approximately 0.001131316 s later, before controller trajectory handoff.
+  - The corrected recorder persisted 128 complete six-joint samples. Joint 6 changed only 0.0018858426702411208 rad from first to last, within the unchanged 0.01 hold gate. Arm feedback moved up to 0.1170006891841896 rad and ended with maximum target error 0.7335231890418306 rad, but this is resume-time physical drift, not successful controller execution.
+  - The launch supervisor exited zero after required-process shutdown while the workflow summary recorded MOVEIT_EXECUTION_FAILED. The read-only controller probe was explicitly terminated by exact PID only after its captured live graph became stale during fast failure teardown; internal exact active controller/readiness evidence and action-path logs are complete. The recorder flushed, only owned processes/session/daemon were removed, domain 125 ended empty, and all preserved sessions remained untouched.
+inferred:
+  - Freeze-plan-resume fixes the planning-interval drift but creates an unavoidable unpaused validation window under this architecture. EXP-043 happened to pass validation, while otherwise identical valid EXP-044 exceeded 0.01 in about 1.13 ms; therefore the hypothesis is not deterministic under the frozen tolerance and current plant/controller behavior.
+conclusion: VALID behavioral failure and terminal third-fix result. Planning was stationary and exact while paused, but immediate resume still allowed joint 2 to violate MoveIt's unchanged start tolerance before controller handoff. No fourth production fix, rerun, final success gate, commit, or push is authorized.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-044/launch.log (sha256 26a45ddb94bfdcfb7fc610eb13d7f8b73386017df369bd77046b4c246f587ae9)
+  - /tmp/so101-debug-mujoco-migration/exp-044/summary.json (sha256 78acfc7676e1f970a08d0891d5b060eea423ce036931a4f2c8d5e54dda73ab94)
+  - /tmp/so101-debug-mujoco-migration/exp-044/joint-states.json (sha256 7a34675cd5ace9cafe7f62f8b28c1043654591c7eaa44363c3e13e36d23a8f10)
+  - /tmp/so101-debug-mujoco-migration/exp-044/execution-analysis.json (sha256 db7068780dad049c9baec518b09984b168e7d10e760bea1602b51b806538c2a0)
+  - /tmp/so101-debug-mujoco-migration/exp-044/graph-live.txt (sha256 78a35c85af96ffac79cd1be5f9cbc26aeff91a43911aeab20db69fc77f632e7e)
+  - /tmp/so101-debug-mujoco-migration/exp-044/process-tree.txt (sha256 36709399ef050ee796a5bb9f9b32679bf7b95dea5fb325bb4b92ecd929ac2f01)
+  - /tmp/so101-debug-mujoco-migration/exp-044/domain-before.txt and domain-after.txt (each sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-044/provenance.txt (sha256 76af023c7edb82ce615907266d60c219cf4ed5d2032b44530bd1701eb6759d3b)
+decision: ABANDON freeze-plan-resume as insufficient under the frozen architecture; stop Task 12 per the valid-failure/no-fourth-fix rule.
+next_experiment: NONE
+```
+
+## Checkpoint CP-063
+
+```yaml
+checkpoint_id: CP-063
+last_valid_experiment: EXP-044
+current_hypothesis: NONE; the third and final authorized fix is disproven as a deterministic execution solution.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; exact uncommitted Task 12 independent package/config/launch/headless/test/provenance/metadata paths plus ledger/report. No reset, stash, clean, stage, commit, push, merge, tolerance/deadline/controller/actuator/target/adapter change occurred.
+owned_processes: NONE; so101-mujoco-exp044 is absent, exact recorded PIDs are absent, task-owned domain-125 daemon was stopped, and domain 125 is empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain present and untouched.
+confirmed_conclusions:
+  - Strict TDD proves execute-only pause/authoritative observation/capture/plan/resume/immediate execute ordering, idempotent paused start, planning-failure cleanup, execute-rejection running state, and unchanged dry-run behavior.
+  - EXP-044 proves zero physics/joint drift during paused planning and exact trajectory first-point equality, but joint 2 violates 0.01 within about 1.13 ms after resume and before MoveIt controller handoff.
+  - The same implementation passed start validation/controller action in instrumentation-invalid EXP-043, so the architecture is nondeterministic rather than uniformly broken at planning.
+  - EXP-044 prerequisites, external six-joint recording, failure boundary, provenance, ownership, cleanup, hashes, and protected-tree isolation are valid; it is a behavior failure in the denominator.
+disproven_routes:
+  - Freeze-plan-resume alone cannot deterministically preserve MoveIt's frozen start-state tolerance through its post-resume validation window.
+open_risks:
+  - Task 12 still lacks a valid successful controller execution, target convergence, and executed atomic MuJoCo movement proof.
+  - Failure teardown still triggers the secondary move_group exit -11.
+next_command: NONE; stop without a fourth fix, confirmation experiment, final success gates, stage, commit, or push and report to the orchestrator.
+```
+
+## Experiment EXP-045
+
+```yaml
+experiment_id: EXP-045
+status: VALID
+prior_experiment: EXP-044
+hypothesis: With the existing fixed arm-controller reference and no planning or execution request, the running MuJoCo plant enters a repeatable stable window within the unchanged 30-second Task 12 total deadline, making settle-and-replan potentially viable without changing tolerance, controller, actuator, target, deadline, or MoveIt behavior.
+prediction: A read-only recorder will observe at least 21 consecutive complete finite six-joint samples spanning at least 0.20 simulation seconds, with every adjacent joint sample separated by 0.005 through 0.030 simulation seconds, all six per-joint position ranges at most 0.002 rad, and all six maximum absolute finite-difference velocities at most 0.02 rad/s. Over the same interval, complete arm controller reference/feedback/error/output samples span the joint window; every arm reference is byte-for-value fixed, every arm feedback range is at most 0.002 rad, every maximum absolute arm feedback finite-difference velocity is at most 0.02 rad/s, and every absolute arm controller error is at most 0.002 rad. The recorder reports the first qualifying window entry, qualifying duration, ranges, velocities, errors, controller lifecycle, and atomic evidence without commanding motion.
+single_variable: Measurement-only stable-window observation. Relative to EXP-044, no production behavior, planning, execution, pause, threshold, timeout, controller/actuator setting, target, model, source order, or MoveIt adapter is changed; no planning or ExecuteTrajectory goal is sent. The stack runs under the same 30-second overall deadline while an external task-owned recorder continuously observes joint_states, arm controller reference/feedback/error/output, atomic evidence, and controller lifecycle.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus the preserved declared Task 12 dirty scope; index empty; protected Gazebo tree unchanged.
+  - Source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> project install; installed package prefix and reset-qualified provenance pass.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 126, GZ_PARTITION so101_mujoco_task12_exp045, task-owned tmux session so101-mujoco-exp045, evidence root /tmp/so101-debug-mujoco-migration/exp-045/; only exact recorded owned PIDs/session/domain may be cleaned.
+  - Existing codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual processes/sessions are preserved and must not be signaled or stopped.
+success_criteria:
+  - The preregistered stable predicate qualifies within the unchanged 30-second deadline and is repeatable by construction over 21 consecutive 100 Hz samples spanning at least 0.20 simulation seconds.
+  - Evidence includes every raw complete joint/controller/atomic/lifecycle record, exact first-entry monotonic/simulation time, qualifying duration, per-joint ranges/velocities/errors, fixed-reference proof, source/install/process/domain ownership, exits, hashes, and clean owned shutdown with domain 126 empty.
+failure_criteria:
+  - With valid preconditions and complete instrumentation, absence of a qualifying stable window by the existing deadline is a VALID behavioral failure and terminates the authorized path without production change, tests, further experiment, commit, or push.
+invalid_criteria:
+  - Any source/install/domain/protected-tree mismatch; a planning, execution, pause, StepSimulation, reset, controller command, or other state-changing instrumentation call; incomplete/nonfinite stream; missing controller/atomic/lifecycle/ownership/exit/hash evidence; or polluted cleanup makes EXP-045 INVALID and supports no behavior conclusion.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths; observation harness only under /tmp
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node plus installed Task 12 robot/controller configuration
+  ros_domain_id: 126
+  gz_partition: so101_mujoco_task12_exp045
+commands:
+  - command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_mujoco_ros2_control_003/install/setup.zsh; source /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh; ROS_DOMAIN_ID=126 GZ_PARTITION=so101_mujoco_task12_exp045 ROS2_DISABLE_DAEMON=1 ros2 launch /tmp/so101-debug-mujoco-migration/exp-045/observe_launch.py, with /tmp/so101-debug-mujoco-migration/exp-045/observe_stability.py running concurrently for exactly the preregistered 30-second deadline
+    exit_code: 2 for the preregistered observer (no stable window); 143 for exact task-owned launch SIGTERM cleanup after background SIGINT was not handled
+observed:
+  - Domain 126 was confirmed empty with daemon disabled before launch. Exact HEAD, empty index, declared Task 12 dirty scope, installed config/model hashes, protected Gazebo zero status/diff, task-owned session/PIDs, and the five preserved tmux sessions were captured before the run.
+  - The read-only observer ran one continuous data window of 30.00041930982843 monotonic seconds and recorded 2855 complete finite ordered six-joint samples, 14580 complete arm-controller state samples, 2625 atomic MuJoCo evidence samples, 118 controller lifecycle samples, and zero invalid messages. All three required controllers were active in 112 lifecycle samples.
+  - No preregistered stable window qualified. `first_stable_window` is null, so there is no stable first-entry time or duration to report. The selected best 21-sample near miss began at monotonic 2698189.375974547 / simulation time 1.034 s and spanned 0.19999999999999996 s through monotonic 2698189.575924635 / simulation time 1.234 s with exact 0.01-second joint intervals and 101 covering controller samples.
+  - Best-window six-joint ranges in radians were {1: 0.004581396243925966, 2: 0.04946422629381009, 3: 0.015135787444986115, 4: 0.009863413912184482, 5: 0.00001949159678606564, 6: 0.0010783035515416282}; maximum finite-difference speeds in rad/s were {1: 0.024888018636053055, 2: 0.8614782942395475, 3: 0.26145953546672906, 4: 0.11155060113439687, 5: 0.0001203545562467104, 6: 0.006745104051453747}. Joints 1 through 4 violated at least one 0.002-range/0.02-speed predicate bound.
+  - Best-window arm controller feedback ranges in radians were {1: 0.004581396243925966, 2: 0.04947158845380595, 3: 0.015146819879692464, 4: 0.009867947839288294, 5: 0.00001949159678606564}; maximum feedback speeds in rad/s were {1: 0.024894167269590595, 2: 0.9004944339636715, 3: 0.2687972611666032, 4: 0.11210083496431673, 5: 0.00012040637018354152}; maximum absolute errors in radians were {1: 0.0026824341511067335, 2: 0.2683168234475872, 3: 0.07332690094415001, 4: 0.03156323901101571, 5: 0.00003401952157476026}. Controller reference and output each had exactly one unique vector across all 14580 samples, proving the command stayed fixed while feedback failed the gate.
+  - Atomic evidence remained session task12-exp045, paused=false, reset_epoch 0 and advanced from sequence/step 0/0 to 2624/2624; no planning, ExecuteTrajectory, pause, reset, StepSimulation, or controller command was issued by instrumentation.
+  - Observer exit 2 is the declared behavioral no-window result. Background SIGINT did not terminate ros2 launch, so only its exact recorded PID 765155 received SIGTERM; launch exited 143, exact pane/launch PIDs and session are absent, domain 126 is empty, and the preserved codex/codex-temp/kimi/so101-phy5-v2-r0/so101-py-qual sessions remain unchanged.
+inferred:
+  - The fixed controller reference is not sufficient for the current plant to settle inside the authorized stability envelope within the existing Task 12 deadline. Because the observation failed its preregistered prerequisite, bounded replan implementation would be speculative and is not authorized.
+conclusion: VALID behavioral failure: no repeatable stable window satisfying the frozen predicate occurred within the unchanged deadline. Stop before TDD production work or further live experiments.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-045/stability-observation.json (sha256 880816e35a2e3cfad5aea6db10cad349c211ac194252662a3af61581ea9db78a)
+  - /tmp/so101-debug-mujoco-migration/exp-045/observer.log (sha256 dd7bd9736dd2dcc73bd5b45f0df46bee3af1f500f6299f13be0b899266d43a7e)
+  - /tmp/so101-debug-mujoco-migration/exp-045/launch.log (sha256 af0faceb095c9300b867be2018b146de06e238404bb7aad7b1ec19391924b9ef)
+  - /tmp/so101-debug-mujoco-migration/exp-045/provenance.txt (sha256 7ae9f4cd1714141c4e21a03886945b0728c335b7f646cd56d0aa426bf67ad7e8)
+  - /tmp/so101-debug-mujoco-migration/exp-045/reset-qualified-provenance.json (sha256 b16f98a073f3808332ae15761a188c8a60db6ac5dc9439f7bda054c807e4e6d1)
+  - /tmp/so101-debug-mujoco-migration/exp-045/observer-exit-code.txt (sha256 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3)
+  - /tmp/so101-debug-mujoco-migration/exp-045/launch-exit-code.txt (sha256 9d9b18720961e9b4689fd763b85e7b6f36160ccd3a8a1c9ddc5103bb0f66c396)
+  - /tmp/so101-debug-mujoco-migration/exp-045/git-status-before.txt (sha256 2d8c08a1d5d1853e00eaaa9f8950f688009f90a548439e9580247325db6c65a2)
+  - /tmp/so101-debug-mujoco-migration/exp-045/tmux-before.txt (sha256 2769e2a8146442c813f111856567d7a4dcbbcfb706bb6c397767eb1c8e10e842)
+decision: STOP. Do not implement settle/replan, modify production behavior, run strict TDD, start another experiment, stage, commit, or push because the authorized observation prerequisite failed validly.
+next_experiment: NONE
+```
+
+## Checkpoint CP-064
+
+```yaml
+checkpoint_id: CP-064
+last_valid_experiment: EXP-045
+current_hypothesis: NONE; the user-authorized stable-window prerequisite failed under its frozen predicate and existing deadline.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; pre-existing Task 12 independent-package/config/launch/headless/test/provenance/metadata dirty scope plus this ledger is preserved. No production source/config, tolerance, deadline, controller/actuator, target, motion, MoveIt adapter, protected Gazebo, reset, stash, clean, stage, commit, push, or merge change occurred.
+owned_processes: NONE; so101-mujoco-exp045 is absent, recorded pane PID 765072 and launch PID 765155 are absent, and domain 126 is empty with daemon disabled.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual sessions remain present and untouched.
+confirmed_conclusions:
+  - EXP-045 is a VALID observation and behavior failure: the fixed-reference running plant produced complete finite 100 Hz joint/controller/atomic/lifecycle evidence but no 0.20-second window satisfying the preregistered 0.002 rad range/error and 0.02 rad/s speed bounds within the unchanged 30-second deadline.
+  - The controller reference/output remained exactly fixed across all 14580 controller samples; moving feedback/error, not a changing command, prevents qualification.
+  - The observation issued no planning, execution, pause, reset, StepSimulation, or controller command, and protected/unrelated state was preserved.
+disproven_routes:
+  - Waiting for an uncommanded fixed-reference stable window within the current Task 12 deadline cannot be assumed as a prerequisite for bounded replanning.
+open_risks:
+  - Task 12 still lacks successful controller execution, six-joint convergence, and executed MuJoCo movement proof.
+  - Launch required exact-PID SIGTERM after background SIGINT was not handled; cleanup nevertheless remained task-owned and domain-clean.
+next_command: NONE; stop because the stable-window prerequisite failed validly. Further architecture or controller/plant changes require new user direction.
+```
+
+## Experiment EXP-046
+
+```yaml
+experiment_id: EXP-046
+status: VALID
+prior_experiment: EXP-045
+hypothesis: Replacing only the unqualified independent MJCF joint/actuator dynamics with the exact shared-lineage SO-101 new-calibration effective values makes the fixed-reference plant satisfy EXP-045's unchanged stability predicate within the same 30-second deadline.
+prediction: Under the exact EXP-045 lifecycle and observer, at least 21 consecutive complete finite six-joint samples spanning at least 0.20 simulation seconds qualify: every adjacent joint sample is 0.005 through 0.030 simulation seconds apart; all six joint position ranges are at most 0.002 rad; all six maximum absolute finite-difference speeds are at most 0.02 rad/s; complete arm controller samples span the joint window with byte-for-value fixed reference/output, each feedback range at most 0.002 rad, each feedback speed at most 0.02 rad/s, and each absolute controller error at most 0.002 rad.
+single_variable: Relative to EXP-045, only `src/so101_mujoco_demo_py/mjcf/so101.xml` effective dynamics change: joints 1 through 6 damping 0.60, frictionloss 0.052, armature 0.028; position actuators 1 through 6 kp 998.22, kv 2.731, forcelimited true, forcerange [-3.35, 3.35]. Geometry, names, joint ranges, ctrlrange, keyframe, scene gravity/timestep, controller YAML, reference lifecycle, observer/predicate, 30-second deadline, motion target, MoveIt tolerance/adapter, and all other behavior remain identical. No planning, ExecuteTrajectory, pause, reset, StepSimulation, or controller command is issued.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus preserved Task 12 dirty state and the TDD-qualified exact dynamics/provenance/test paths; index empty; Gazebo protected tree diff/status zero.
+  - RED old-model regression fails on damping/armature/frictionloss; GREEN exact XML regression, MJCF compile, model parity, provenance, Ruff, isolation, package gates, fresh two-package build/install, and reset-qualified runtime provenance are captured before launch. The known repository-isolation ledger-completion assertion may remain the sole expected package failure because it only accepts Task 1 pending or committed TASK_N_COMPLETE state and cannot truthfully represent this in-progress no-commit Task 12 experiment.
+  - Exact source order /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> freshly rebuilt project install.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 127, GZ_PARTITION so101_mujoco_task12_exp046, task-owned tmux session so101-mujoco-exp046, evidence root /tmp/so101-debug-mujoco-migration/exp-046/; only exact recorded owned PIDs/session/domain may be cleaned.
+  - Existing codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual sessions/processes are preserved and must not be signaled or stopped.
+success_criteria:
+  - The exact unchanged EXP-045 stable-window predicate qualifies within the same 30-second observation deadline and the first-entry time, duration, joint/controller ranges, velocities, errors, fixed reference/output, lifecycle, and atomic evidence are complete.
+  - Raw streams are finite and complete; atomic evidence stays session-bound, unpaused, reset epoch unchanged, and advances; source/install/provenance/ownership/exits/hashes/cleanup are complete and domain 127 ends empty.
+failure_criteria:
+  - With valid preconditions and complete instrumentation, absence of a qualifying stable window by the existing deadline is a VALID behavioral failure and stops Task 12 without further tuning, execute validation, retry, commit, or push.
+invalid_criteria:
+  - Source/install/domain/provenance/protected-tree mismatch; predicate/lifecycle drift from EXP-045; planning/execution/pause/reset/StepSimulation/controller command; incomplete/nonfinite stream; ownership/exit/hash/cleanup pollution makes EXP-046 INVALID and supports no dynamics conclusion.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and exact reviewed dynamics paths
+  dynamics_source_a: https://github.com/TheRobotStudio/SO-ARM100 commit 7629d2ad9853d10fb903093a33ef6114099d97e5 path Simulation/SO101/so101_new_calib.xml
+  dynamics_source_b: https://github.com/johnsutor/so101-nexus commit 3619f7dce086445dc31311edd593a4de93b21c47 path src/so101_nexus/assets/SO101/so101_new_calib.xml; inherited/shared lineage, not independent calibration evidence
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node plus freshly installed Task 12 robot/controller configuration
+  ros_domain_id: 127
+  gz_partition: so101_mujoco_task12_exp046
+commands:
+  - command: tmux new-session -d -s so101-mujoco-exp046 'zsh /tmp/so101-debug-mujoco-migration/exp-046/run.zsh'; source order /opt/ros/jazzy/setup.zsh -> /data/work/ws_mujoco_ros2_control_003/install/setup.zsh -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh; ROS_DOMAIN_ID=127 GZ_PARTITION=so101_mujoco_task12_exp046 ROS2_DISABLE_DAEMON=1; exact EXP-045 observation predicate/lifecycle with only installed model dynamics changed
+    exit_code: 0 for the observer; task-owned launch terminated by the harness with expected signal exit 143 after observation
+observed:
+  - Exact source/install MJCF SHA-256 matched at 17e6b5c8670a60de1a78606773fe894f637dd15e6210a8311897a0d48c4a4f83; domain 127 and session name were empty before launch, protected Gazebo status/diff and index were empty, and the exact source order was recorded.
+  - The observer ran for 30.016790496185422 wall seconds and captured 2,885 complete finite six-joint samples, 14,615 complete finite arm-controller samples, 2,628 atomic evidence samples, 118 lifecycle samples, and zero invalid messages.
+  - The first qualifying window began at simulation time 0.818 s and qualified at 1.018 s: all adjacent joint samples were 0.01 s apart; joint position ranges were at most 6.537781817653188e-12 rad; joint finite-difference speeds were at most 2.174649132644089e-10 rad/s; controller feedback ranges were at most 6.537781817653188e-12 rad; controller feedback speeds were at most 2.54383428384408e-10 rad/s; and maximum controller error was 0.0005400181350476855 rad.
+  - Controller reference and output were exactly fixed across the 101 controller samples spanning the first stable window. All three required controllers were active. Atomic evidence stayed unpaused in session task12-exp046 at reset epoch 0 and advanced publisher_sequence/simulation_step from 0/0 to 2627/2627.
+  - The task-owned launch PID received only the declared SIGTERM after observation, the task session disappeared, domain 127 ended empty, and all unrelated sessions remained present and untouched.
+inferred:
+  - The exact reviewed shared-lineage dynamics eliminate the prior fixed-reference drift under the unchanged EXP-045 lifecycle and predicate; this is sufficient to permit exactly one separately preregistered safe-execute validation, but does not itself prove execution.
+conclusion: VALID success. The preregistered stable-window gate passed without controller, tolerance, deadline, target, planning, or motion changes.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-046/stability-observation.json (sha256 37e05f107dd185da17c2e00baf86456b7d897555dc189ef19dd4c60dd1f8af52)
+  - /tmp/so101-debug-mujoco-migration/exp-046/launch.log (sha256 c7b88a105db6096afa6c8ac67c9663251a68d548e247ff24f6672b3aa336a1ea)
+  - /tmp/so101-debug-mujoco-migration/exp-046/observer.log (sha256 11fc74a2af331008c3a84fe9bbb9bcbf01862b4eb9714ba7445b5f2b9a0b53ac)
+  - /tmp/so101-debug-mujoco-migration/exp-046/domain-preflight.txt and domain-postflight.txt (each sha256 d207a7d99918d0fd6bf947e0a785fe851692a8c8b25c811cd3aa05c992c514fe)
+  - /tmp/so101-debug-mujoco-migration/exp-046/preflight-state.txt (sha256 3ad7f1d489dd4d186afc4de972d6983807dab667b497c87a59532af92511ec05)
+decision: PROCEED to the one authorized, separately preregistered safe-execute validation; no tuning or hidden retry.
+next_experiment: EXP-047
+```
+
+## Checkpoint CP-065
+
+```yaml
+checkpoint_id: CP-065
+last_valid_experiment: EXP-046
+current_hypothesis: The exact reviewed dynamics that validly satisfy the fixed-reference stable-window contract may also preserve the unchanged MoveIt start tolerance through handoff and allow the existing task12_safe trajectory to execute and converge.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; preserved Task 12 dirty scope plus exact dynamics test/MJCF/provenance/ledger changes; protected Gazebo tree unchanged; no reset, stash, clean, stage, commit, or push.
+owned_processes: NONE; so101-mujoco-exp046 is absent and ROS domain 127 is empty after exact task-owned launch cleanup.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain present and untouched.
+confirmed_conclusions:
+  - EXP-046 is a VALID stable-window success under the exact unchanged EXP-045 predicate and deadline.
+  - Exact source/install dynamics and provenance, complete finite joint/controller/atomic/lifecycle streams, fixed reference/output, task ownership, cleanup, and protected-tree isolation are proven.
+open_risks:
+  - Successful MoveIt acceptance, controller execution, independent six-joint convergence, and executed MuJoCo movement remain unproven under the reviewed dynamics.
+next_command: Preregister EXP-047 on fresh domain 128 and run exactly one unchanged task12_safe execute validation with independent joint, controller/action, and atomic evidence.
+```
+
+## Experiment EXP-047
+
+```yaml
+experiment_id: EXP-047
+status: VALID
+prior_experiment: EXP-046
+hypothesis: The exact reviewed dynamics that validly remove fixed-reference drift preserve MoveIt's unchanged 0.01 rad start tolerance through the existing pause-plan-resume handoff and allow the existing task12_safe trajectory to execute and converge.
+prediction: The existing execute-only ordering produces an accepted positive MoveIt plan, successful ExecuteTrajectory and arm_controller result, all five arm joints converge to task12_safe within 0.01 rad, joint 6 independently holds within 0.01 rad, maximum arm motion exceeds 0.05 rad, and atomic publisher_sequence/simulation_step advance after resume with unchanged reset epoch.
+single_variable: Relative to VALID behavior failure EXP-044, only the exact reviewed MJCF effective dynamics qualified by EXP-046 change. Production ordering, task12_safe target, MoveIt start/convergence tolerance 0.01 rad, overall deadline, planning limits/adapter, controller configuration, URDF/scene, source order, launch arguments, and evidence contract are unchanged. No StepSimulation, reset, grasp, GUI, tolerance change, retry, or tuning.
+lifecycle: FULL_RESTART
+preconditions:
+  - Exact HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and exact reviewed dynamics; index empty; protected Gazebo tree unchanged.
+  - Fresh build/install already passed; source/install MJCF hashes and reset-qualified provenance match; exact source order /opt/ros/jazzy -> dependency overlay -> project install.
+  - Fresh confirmed-empty ROS_DOMAIN_ID 128, GZ_PARTITION so101_mujoco_task12_exp047, ROS2_DISABLE_DAEMON=1, task-owned tmux session so101-mujoco-exp047, evidence root /tmp/so101-debug-mujoco-migration/exp-047/; only exact owned PIDs/session/domain may be cleaned.
+  - The corrected task-owned independent joint recorder persists complete finite six-joint samples before conditional shutdown; live graph/actions/controllers and atomic summary are captured; all unrelated sessions/processes are preserved.
+success_criteria:
+  - Required MuJoCo/controllers/robot description/TF/MoveIt/planning scene/observer/reset/workflow graph and all three exact active controllers are present.
+  - Positive plan; successful MoveIt ExecuteTrajectory and arm_controller FollowJointTrajectory completion; independent arm joints 1-5 converge to task12_safe within unchanged 0.01 rad and joint 6 holds within 0.01 rad; maximum arm motion exceeds 0.05 rad.
+  - Atomic publisher_sequence/simulation_step movement is positive after resume with reset epoch unchanged; summary/launch/recorder/graph/controller/action/hashes/ownership/cleanup are complete; task session ends and domain 128 is empty.
+failure_criteria:
+  - With valid prerequisites and evidence, any planning, action/controller, convergence, joint-6 hold, atomic movement, reset-epoch, shutdown, or required graph assertion failure is a VALID behavioral failure and stops Task 12 without retry, tuning, commit, or push.
+invalid_criteria:
+  - Any source/install/provenance/domain/protected-tree mismatch, recorder/graph/evidence pollution, missing finite six-joint stream, ownership defect, unreliable exit capture, or polluted cleanup is INVALID and supports no behavior conclusion; no hidden retry is permitted.
+provenance:
+  source_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6 plus declared Task 12 dirty paths and exact reviewed dynamics paths
+  behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
+  dynamics_source_a: https://github.com/TheRobotStudio/SO-ARM100 commit 7629d2ad9853d10fb903093a33ef6114099d97e5 path Simulation/SO101/so101_new_calib.xml
+  dynamics_source_b: https://github.com/johnsutor/so101-nexus commit 3619f7dce086445dc31311edd593a4de93b21c47 path src/so101_nexus/assets/SO101/so101_new_calib.xml; shared lineage
+  install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/headless_execution
+  ros_domain_id: 128
+  gz_partition: so101_mujoco_task12_exp047
+commands:
+  - command: tmux new-session -d -s so101-mujoco-exp047 'export ROS2_DISABLE_DAEMON=1 TASK_EXPERIMENT=047 TASK_DOMAIN=128; zsh /tmp/so101-debug-mujoco-migration/run-exp043.zsh'; launch arguments run_mode:=execute execute:=true simulation_session_id:=task12-exp047 evidence_file:=/tmp/so101-debug-mujoco-migration/exp-047/summary.json
+    exit_code: 0
+observed:
+  - The required MuJoCo, controller, TF, MoveIt, Planning Scene, observer, reset, and workflow graph was present; arm_controller, gripper_controller, and joint_state_broadcaster were active with the exact joint mapping.
+  - MoveIt accepted a 19-point plan, validated the unchanged 0.01 rad start tolerance, handed the trajectory to arm_controller, and both ExecuteTrajectory and the controller completed with SUCCEEDED.
+  - The headless summary reported arm joints 1 through 5 converged with maximum target error 0.0006389627246847218 rad and maximum arm motion 0.19985624988757617 rad. The separately subscribed recorder persisted 207 complete finite six-joint samples; its final maximum arm target error was 0.0006650965035636253 rad, joint 6 hold error was 3.533242558078027e-07 rad, and maximum arm motion was 0.19987267414821783 rad.
+  - Atomic evidence remained in session task12-exp047 at reset epoch 0 and advanced publisher_sequence and simulation_step by 157 after resume. Planning was performed against one authoritative paused boundary at sequence/step 140 before the successful resume and execution.
+  - The launch exited 0. The initially still-running task-owned recorder PID 838409 was identified from its recorded PID/cmdline, terminated with SIGTERM only after the run, flushed joint-states.json, and was reaped. The named task session was absent and the final ROS_DOMAIN_ID 128 no-daemon node list was empty; unrelated sessions/processes were not signaled.
+inferred:
+  - The exact reviewed dynamics are sufficient to remove the fixed-reference drift and preserve MoveIt's unchanged start tolerance through the existing Task 12 pause-plan-resume handoff; no proxy, JTC patch, bounded retry, tolerance change, or hidden rerun was used.
+conclusion: VALID success. The single authorized safe execute satisfied planning, action/controller, independent six-joint convergence, atomic MuJoCo movement, reset-epoch stability, ownership, and cleanup contracts.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-047/summary.json (sha256 0da0dd74a2dfa1bdc15500f08d30891fb763803c6da2cdd42d71623ac8ddb65c)
+  - /tmp/so101-debug-mujoco-migration/exp-047/launch.log (sha256 faaa01fd892d7dda13449887b292b8c2bd584beb5e414bfc20920af76953c3c1)
+  - /tmp/so101-debug-mujoco-migration/exp-047/joint-states.json (sha256 69473b1c82135a0cd21c8b1d25c5a6e918cc19621037a6defb462748c9d3ec46)
+  - /tmp/so101-debug-mujoco-migration/exp-047/joint-recorder.log (sha256 2334e5c4cb6d2845430b5b16f035248c6768ec8d730761fe1fa890a498046d37)
+  - /tmp/so101-debug-mujoco-migration/exp-047/graph-live.txt (sha256 ba936ae9aaed779f0055c8d552cfa26e62aceb6c9ca16d17d26d45dc8cb32711)
+  - /tmp/so101-debug-mujoco-migration/exp-047/controllers-live.txt (sha256 370cf8eecda3dec95a351ed45b3bfcc4d1961242d02a9659c4a9ad9ab6b4ee7a)
+  - /tmp/so101-debug-mujoco-migration/exp-047/domain-postflight.txt (empty; sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+decision: KEEP the exact reviewed dynamics and proceed only to Task 12 offline gates/review; no additional live retry.
+next_experiment: NONE; this is the single authorized safe-execute validation and no hidden retry is permitted
+```
+
+## Checkpoint CP-066
+
+```yaml
+checkpoint_id: CP-066
+last_valid_experiment: EXP-047
+current_hypothesis: NONE; EXP-046 and EXP-047 qualify the exact reviewed dynamics for Task 12 fixed-reference stability and one unchanged safe execute.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; exactly sixteen preserved Task 12/dynamics dirty paths; protected Gazebo tree unchanged; no reset, stash, clean, stage, commit, push, merge, or rebase.
+owned_processes: NONE; task-owned recorder PID 838409 was precisely verified, terminated, flushed, and reaped; so101-mujoco-exp047 is absent and ROS domain 128 is empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - EXP-046 is VALID success: first stable window 0.818 through 1.018 simulation seconds, maximum joint range 6.537781817653188e-12 rad, maximum speed 2.174649132644089e-10 rad/s, and maximum controller error 0.0005400181350476855 rad under the unchanged predicate.
+  - EXP-047 is VALID success: MoveIt/controller SUCCEEDED, independent six-joint evidence converged with maximum arm error 0.0006650965035636253 rad and joint-6 hold error 3.533242558078027e-07 rad, and atomic sequence/step advanced by 157 at unchanged reset epoch 0.
+  - The only model change is the explicitly authorized dynamics parameter set; geometry, ranges, ctrlrange, scene, controller YAML, target, tolerance, deadline, and positive-path physics constraints remain unchanged.
+open_risks:
+  - MoveIt emits a secondary exit -11 during launch-directed teardown after the successful result, but launch ownership cleanup and domain cleanup complete; this does not alter the successful action/controller/joint/atomic behavior and remains a Task 12 teardown risk.
+  - Task 12 final offline package gates and scoped review/commit are not part of this handoff and remain pending.
+next_command: Run the focused dynamics/model tests, full non-live package suite with isolated ROS/cache paths, Ruff, model parity, dependency provenance, migration isolation, diff check, and protected Gazebo gates; do not rerun EXP-047.
+```
+
+## Checkpoint CP-067
+
+```yaml
+checkpoint_id: CP-067
+last_valid_experiment: EXP-047
+current_hypothesis: NONE; the exact authorized dynamics and single safe execute are validly qualified, while Task 12 final commit/review remains outside this handoff.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; exactly sixteen dirty paths comprising the preserved Task 12 scope plus the authorized MJCF, dynamics regression, provenance, and ledger; protected Gazebo status/diff zero.
+owned_processes: NONE; the exact task-owned EXP-047 recorder PID 838409 was terminated and reaped after flushing 207 complete finite six-joint samples; ROS_DOMAIN_ID 128 no-daemon node list is empty and so101-mujoco-exp047 is absent.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - Focused dynamics/MJCF compile/model-parity/provenance tests pass 9/9; Ruff check and format, reset-qualified runtime provenance, migration isolation, git diff check, and protected Gazebo gates pass.
+  - Full non-live package pytest initially reported 193 passed, 3 skipped, and one ledger-state contract failure because the Task 1-era test could not represent a later task's truthful terminal next_experiment NONE or generalized pending-commit state. That failure is the RED for the minimal state-machine contract correction performed before Task 12 review.
+  - EXP-046 and EXP-047 evidence hashes and exact numerical conclusions are terminalized above; EXP-047 was not rerun.
+open_risks:
+  - Task 12 still requires full fresh package/colcon verification and scoped review before commit.
+  - MoveIt teardown still emits a secondary exit -11 after successful execution; task-owned cleanup and final empty-domain evidence pass.
+next_command: NONE; hand off the exact dirty state for Task 12 final review and an explicit decision on the ledger contract before any scoped commit.
+```
+
+## Checkpoint CP-068
+
+```yaml
+checkpoint_id: CP-068
+last_valid_experiment: EXP-047
+current_hypothesis: NONE; Task 12 behavior is qualified and only final review, gates, and scoped commit remain.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty; exactly seventeen Task 12 dirty paths after the intentional generalized ledger-contract test correction; protected Gazebo status/diff zero.
+owned_processes: NONE after corrective cleanup at 2026-08-11 08:46+08; host preflight found that CP-066/CP-067 had incorrectly declared the EXP-047 session absent while tmux session so101-mujoco-exp047 and its task-owned process tree remained: PID 838316 -> 838410 -> 838945, with PID 838945 blocked in /opt/ros/jazzy/bin/ros2 control list_controllers. Their cmdlines, parentage, PGID 838316, session ownership, and wait states were verified before precisely terminating only that session/tree. All three PIDs and the session are now absent. ROS_DOMAIN_ID 128 `ros2 node list --no-daemon` is empty in domain-128-after-main-cleanup.txt (sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855).
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual were observed running and preserved; no unrelated process or session was stopped.
+confirmed_conclusions:
+  - CP-066 and CP-067 remain valid for EXP-046/EXP-047 behavior and evidence, but their owned_processes NONE/session-absent cleanup statements were premature and are superseded by this factual cleanup timeline.
+  - The Task 1-specific ledger test produced the expected RED against truthful Task 12 terminal state; its minimal generalization accepts EXP-NNN or NONE and applies pending/complete state plus commit-ancestry validation to any numbered Task without fabricating another experiment.
+open_risks:
+  - MoveIt still emits a secondary exit -11 during launch-directed teardown after the successful execution result; this remains an explicitly uncorrected teardown risk.
+  - Final non-live, Ruff, provenance, isolation, diff, protected-tree, and scoped-commit gates remain pending at this checkpoint.
+next_command: Complete read-only Task 12 diff review, run all required final gates without rerunning EXP-047, then create the scoped Task 12 commit if every gate passes.
+```
+
+## Checkpoint CP-069
+
+```yaml
+checkpoint_id: CP-069
+last_valid_experiment: EXP-047
+current_hypothesis: NONE; Task 12 is review-complete and commit-ready.
+working_tree_status: HEAD 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6; index empty before restricted staging; exactly seventeen reviewed Task 12 paths; protected Gazebo status/diff zero.
+owned_processes: NONE; corrective EXP-047 cleanup from CP-068 remains verified, domain 128 is empty, and no new live process or experiment was started.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - Final non-live pytest passes 194 with three opt-in live skips; Ruff checks all 64 files; two-package colcon reports 447 tests, zero errors, zero failures, and five skips.
+  - Reset-qualified runtime provenance passes for upstream 0.0.3 commit 35ba8174b62d9560093614f981a3d4b978a96036 and patch SHA-256 fd2869212d40809dca70f4cc971f93215a64812900cc992817305a33dfcf971e.
+  - Migration isolation, git diff check, and both protected Gazebo gates pass. EXP-047 was not rerun.
+open_risks:
+  - MoveIt emits a secondary exit -11 during launch-directed teardown after the successful action/controller/joint/atomic result; Task 12 does not resolve this teardown-only risk.
+next_command: Stage exactly the seventeen reviewed Task 12 paths, rerun cached-diff and protected-tree gates, and commit with the frozen Task 12 subject; do not push.
 ```
