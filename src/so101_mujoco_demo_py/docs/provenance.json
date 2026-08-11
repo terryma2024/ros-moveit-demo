@@ -84,12 +84,51 @@
       "src/so101_gazebo_demo_py/urdf/so101.urdf.xacro",
       "src/so101_gazebo_demo_py/urdf/so101_base.xacro",
       "src/so101_gazebo_demo_py/urdf/so101_gazebo.xacro",
-      "src/so101_gazebo_demo_py/urdf/so101_ros2_control.xacro"
+      "src/so101_gazebo_demo_py/urdf/so101_ros2_control.xacro",
+      "src/so101_gazebo_demo_py/launch/so101_move_group_headless.launch.py",
+      "src/so101_gazebo_demo_py/launch/so101_pick_place.launch.py",
+      "src/so101_gazebo_demo_py/config/moveit_controllers.yaml",
+      "src/so101_gazebo_demo_py/config/joint_limits.yaml",
+      "src/so101_gazebo_demo_py/config/ompl_planning.yaml",
+      "src/so101_gazebo_demo_py/config/kinematics.yaml",
+      "src/so101_gazebo_demo_py/config/so101.srdf",
+      "src/so101_gazebo_demo_py/so101_gazebo_demo_py/runtime.py",
+      "src/so101_gazebo_demo_py/test/test_runtime.py",
+      "src/so101_gazebo_demo_py/test/test_pick_place_launch.py"
     ]
   },
   "rejected_backup": {
     "branch": "codex/so101-mujoco-ros2-pre-isolation-20260810",
     "commit": "3add34f8390b78a1f4a13ff49aefb2dc87638245"
+  },
+  "dynamics_parameter_sources": {
+    "shared_lineage": "The SO101 README, joints_properties.xml, scene.xml, old-calibration XML, and assets have identical Git objects in both repositories; the second repository is inherited evidence, not an independent calibration validation.",
+    "sources": [
+      {
+        "url": "https://github.com/TheRobotStudio/SO-ARM100",
+        "commit": "7629d2ad9853d10fb903093a33ef6114099d97e5",
+        "path": "Simulation/SO101/so101_new_calib.xml"
+      },
+      {
+        "url": "https://github.com/johnsutor/so101-nexus",
+        "commit": "3619f7dce086445dc31311edd593a4de93b21c47",
+        "path": "src/so101_nexus/assets/SO101/so101_new_calib.xml"
+      }
+    ],
+    "parameter_update_commit": "aec17bbc256d1a7342d53aaa4950595d4c30b40d",
+    "effective_values": {
+      "joint": {
+        "damping": 0.6,
+        "frictionloss": 0.052,
+        "armature": 0.028
+      },
+      "position_actuator": {
+        "kp": 998.22,
+        "kv": 2.731,
+        "forcerange": [-3.35, 3.35]
+      }
+    },
+    "selection_rationale": "Both current new-calibration XML files agree on the effective joint and actuator values. The separately copied joints_properties.xml predates the actuator-model update and retains stale kp=17.8 and kv=0 values, so it is not used. Geometry, cameras, sites, joint ranges, and ctrlrange remain package-owned and unchanged."
   },
   "independent_artifacts": [
     {
@@ -677,6 +716,76 @@
       "destination_path": "src/so101_mujoco_demo_py/package.xml",
       "source_sha256": "c884eedeea7669d55725cce277023941520c818641309bf2f23d9a7076bb2282",
       "adaptation": "Selected only MoveIt and trajectory message dependencies; all legacy simulator dependencies remain excluded."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/launch/so101_move_group_headless.launch.py",
+      "destination_path": "src/so101_mujoco_demo_py/launch/so101_pick_place.launch.py",
+      "source_sha256": "34187eb5e7ddfff465154ea82697801c55d062ca5ed666fc91683a2eb5d26924",
+      "adaptation": "Composed the independent package robot description, SRDF, OMPL pipeline, controller mapping, and headless move_group process."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/launch/so101_pick_place.launch.py",
+      "destination_path": "src/so101_mujoco_demo_py/launch/so101_pick_place.launch.py",
+      "source_sha256": "79bd80adb2bfa5f0cae404311473471c372ef60244f96222c83dc1686c6555b0",
+      "adaptation": "Replaced Gazebo includes with one owned MuJoCo, MoveIt, readiness, planning, evidence, and shutdown composition whose execution path is opt-in."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/config/moveit_controllers.yaml",
+      "destination_path": "src/so101_mujoco_demo_py/config/moveit_controllers.yaml",
+      "source_sha256": "6054a1400f33d67b6ee5b9348ce22488bb97b6fe5d9fa6a3e6318e3b65199f9e",
+      "adaptation": "Preserved the public arm and gripper FollowJointTrajectory mapping for joints 1 through 6."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/config/joint_limits.yaml",
+      "destination_path": "src/so101_mujoco_demo_py/config/joint_limits.yaml",
+      "source_sha256": "210bb4792821bf081df092b11edc398050b1140cbef5c6f8f139687e87148973",
+      "adaptation": "Copied the frozen six-joint velocity, acceleration, and default MoveIt scaling contract byte-for-byte into the independent package."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/config/ompl_planning.yaml",
+      "destination_path": "src/so101_mujoco_demo_py/config/ompl_planning.yaml",
+      "source_sha256": "9a554006bbf999c76216543cf5ed2ba02a32b06b1f681f8c120daadf6913dc81",
+      "adaptation": "Preserved the single arm OMPL planning pipeline without a simulator dependency."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/config/kinematics.yaml",
+      "destination_path": "src/so101_mujoco_demo_py/config/kinematics.yaml",
+      "source_sha256": "3aaf10befa4c8634615855662bbc92ce768c5f294f019fe0e877cffd0b5f6350",
+      "adaptation": "Preserved the arm KDL position-only kinematics contract for the five-axis arm."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/config/so101.srdf",
+      "destination_path": "src/so101_mujoco_demo_py/config/so101.srdf",
+      "source_sha256": "e169ee8b561192e8e9ba8b0a901e4dd4c4d41f41aa3b5ebe38c06de97ec52478",
+      "adaptation": "Preserved the arm and gripper semantic groups, named states, and adjacent-link collision exclusions."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/runtime.py",
+      "destination_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/headless_execution.py",
+      "source_sha256": "ab03a649f95e20612594a487617760fa342999f87a4ac68a7c5459db46a0a6f8",
+      "adaptation": "Replaced injected workflow stubs with a bounded live readiness, planning, optional execution, joint convergence, TF, Planning Scene, reset-service, and MuJoCo evidence diagnostic."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_runtime.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_headless_execution_contract.py",
+      "source_sha256": "f7f8963ff254ea7ba496961ead2518334fbbc36fdf9ee7a5fe2d90da2e051e4c",
+      "adaptation": "Ported the plan-without-execute and explicit-execute behavior as a real evidence-summary contract."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/test/test_pick_place_launch.py",
+      "destination_path": "src/so101_mujoco_demo_py/test/test_headless_execution_contract.py",
+      "source_sha256": "c51d44d5f672137890e94fb73b767a7dd02af3e5814335863dabcd1fcc0d6cfe",
+      "adaptation": "Replaced source-text assertions with real launch actions, safe defaults, composed boundary ownership, clean shutdown, and live evidence validation."
     }
   ]
 }

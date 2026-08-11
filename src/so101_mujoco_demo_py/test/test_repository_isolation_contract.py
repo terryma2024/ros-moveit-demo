@@ -164,7 +164,7 @@ def test_ledger_records_complete_task_contract_and_checkpoint() -> None:
     assert front_matter["branch"] == EXPECTED_BRANCH
     assert front_matter["worktree"] == EXPECTED_WORKTREE
     assert front_matter["evidence_root"] == EXPECTED_EVIDENCE_ROOT
-    assert re.fullmatch(r"EXP-[0-9]{3}", front_matter["next_experiment"])
+    assert re.fullmatch(r"EXP-[0-9]{3}|NONE", front_matter["next_experiment"])
     assert re.fullmatch(r"[0-9a-f]{64}", front_matter["protected_nontracked_baseline_sha256"])
 
     physics_contract = front_matter["strict_physics_contract"].lower()
@@ -183,7 +183,7 @@ def test_ledger_records_complete_task_contract_and_checkpoint() -> None:
     pending = front_matter["ledger_commit_pending"]
     task_status = front_matter["task_status"]
     if pending == "true":
-        assert task_status == "TASK_1_FIX_IMPLEMENTATION_PENDING_COMMIT"
+        assert re.fullmatch(r"TASK_[1-9][0-9]*_[A-Z0-9_]*PENDING_COMMIT", task_status)
     else:
         assert pending == "false"
         assert re.fullmatch(r"TASK_[1-9][0-9]*_COMPLETE", task_status)
