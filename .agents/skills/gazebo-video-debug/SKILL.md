@@ -7,19 +7,21 @@ description: Use when recording a Gazebo window as pick-place evidence, diagnosi
 
 本 skill 用于 ai-station 上 SO101 Gazebo 抓取实验的可复现视频取证:相机就位、单栈就绪、精确录屏、分层抽帧和证据对齐报告。判断与排序在 Codex;工具只做确定性的原子操作,不提供端到端脚本。
 
-**必须同时使用 `$so101-dev`**。本 skill 继承其全部证据规则:provenance 三层确认、单栈前提、A/B 单变量隔离、构建后重新 source 验证安装产物、结论按 `OBSERVED / INFERRED / HYPOTHESIS` 分层、用本轮新鲜截图验收。
+**必须同时使用 `$so101-dev` 和 `$ai-station-gui`**。本 skill 继承 SO-101 的 provenance 三层确认、单栈前提、A/B 单变量隔离和构建-source 规则；桌面截图与 GUI 控制由 `$ai-station-gui` 按当前 agent 能力路由，视频结论仍按 `OBSERVED / INFERRED / HYPOTHESIS` 分层。
 
 ## 工具与证据目录
 
-所有工具以安装产物调用,一律使用 `ros2 run so101_gazebo_demo_cpp <tool>`:
+所有工具以安装产物调用，并按当前 owner 选择包：
 
-- `tile_ai_station_guis.py --maximize gazebo`(无参数调用仍保持左右分屏)
+- `ros2 run so101_teleop tile_ai_station_guis.py --maximize gazebo`(无参数调用仍保持左右分屏)
 - `gazebo_camera_pose.py compute --config <yaml> --preset <left-front|right-front|left-rear|right-rear> --json <path>` 与 `apply --world <sdf> --pose-json <path>`
-- `so101_stack_inventory.py [--json <path>]`(只读)
-- `gazebo_window_recorder.py start --output <mkv> --state <json>` / `status --state <json>` / `stop --state <json>`
+- `ros2 run so101_teleop so101_stack_inventory.py [--json <path>]`(只读)
+- `ros2 run so101_teleop gazebo_window_recorder.py start --output <mkv> --state <json>` / `status --state <json>` / `stop --state <json>`
 - `video_extract_frame.py --input <video> --at <last|seconds> --output <png>`
 - `video_sample_frames.py --input <video> --start <s> --end <s> --interval <s> --max-width <px> --output-dir <dir>`
 - `video_mosaic.py --frames <dir> --columns <n> --output <jpg> --max-width <px>`
+
+未写明包名的相机与视频后处理工具仍由 `so101_gazebo_demo_cpp` 安装。
 
 每次实验建立独立证据目录 `/tmp/so101-video-debug-<UTC>/`,布局:`manifest.json`、`process-inventory-before.json`、`process-inventory-after.json`、`camera-pose.json`、`ready-probe.mkv`、`ready-last-frame.png`、`run.mkv`、`recorder.json`、`recorder.log`、`pick-place.log`、`frames-low/`、`mosaic-low.jpg`、`frames-dense-<NN>/`、`mosaic-dense-<NN>.jpg`、`keyframes/`、`report.md`。
 
@@ -30,9 +32,9 @@ description: Use when recording a Gazebo window as pick-place evidence, diagnosi
 1. **Provenance**:记录本地和 ai-station 的 commit、branch、`git status --short`、安装前缀和工具版本,写入 `manifest.json`。按 `$so101-dev` 规则从运行进程、安装产物和 source tree 三者确认版本。
 2. **Camera compute/apply**:从四个 preset 选一个 compute;人工核对数值和 SDF diff 后才 apply。数学覆盖只是候选,最终视角由 ready 末帧验收。
 3. **Inventory/精确清理**:运行 `so101_stack_inventory.py` 存为 `process-inventory-before.json`。把资源分为“本轮停止”“必须保留”“不确定”;只向确认属于本轮旧 stack 的 PID 发正常终止信号,超时后对同一 PID 升级。再次 inventory 存 `process-inventory-after.json`,证明无重复 Gazebo、MoveIt、controller、robot_state_publisher 或抓取进程。
-4. **GUI/maximize**:在明确 tmux session 中 source `~/gui-env.zsh`、ROS Jazzy 和最新 workspace overlay(不得硬编码 `DISPLAY`/`XAUTHORITY`)。启动必要服务和唯一 Gazebo GUI,然后 `tile_ai_station_guis.py --maximize gazebo`,必须输出 `LAYOUT_OK`。
+4. **GUI/maximize**:在明确 tmux session 中 source `~/gui-env.zsh`、ROS Jazzy 和最新 workspace overlay(不得硬编码 `DISPLAY`/`XAUTHORITY`)。启动必要服务和唯一 Gazebo GUI,然后运行 `ros2 run so101_teleop tile_ai_station_guis.py --maximize gazebo`,必须输出 `LAYOUT_OK`。桌面截图或内部 GUI 控制调用 `$ai-station-gui`。
 5. **1 秒 probe 与视觉判断**:录制约 1 秒 `ready-probe.mkv`,正常 stop 后提取 `ready-last-frame.png`。**实际查看图片**:确认完整机械臂、杯子、桌面和放置区可见,无加载空白、错误对话框或严重遮挡。ready 未通过不得进入下一步。
-6. **正式录屏与 pre-roll**:`gazebo_window_recorder.py start` 录 `run.mkv`,`status` 确认在录且文件增长。保留 2–3 秒 pre-roll(抓取程序启动前的稳定场景)。
+6. **正式录屏与 pre-roll**:`ros2 run so101_teleop gazebo_window_recorder.py start` 录 `run.mkv`,`status` 确认在录且文件增长。保留 2–3 秒 pre-roll(抓取程序启动前的稳定场景)。
 7. **独立启动任务**:单独命令启动抓取程序,记录完整命令、wall-clock 开始时间、日志路径(`pick-place.log`)和退出码。录屏与任务不得封装成同一条命令。
 8. **立即停止录屏**:任务返回后(无论退出码)立即 `stop`;用 ffprobe 验证 duration、resolution、frame rate 和可解码性。
 9. **低密度马赛克**:首轮采样最多约 12–16 帧,初始间隔通常 2 秒,存入 `frames-low/` 并拼 `mosaic-low.jpg`。查看马赛克,标出最后正常帧和第一异常帧,**写下选择该区间的视觉证据**。
