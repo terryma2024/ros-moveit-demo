@@ -5,7 +5,7 @@ success_contract: Standalone so101_teleop and ai-station-gui owners pass package
 worktree: /data/work/ws_moveit/.worktrees/so101-teleop-extraction
 branch: codex/so101-teleop-extraction
 base_commit: c6982116d79c834de60b21d9e324a449a569a9c9
-current_commit: b95432c
+current_commit: e5ac41a28c3f59b71d43fb759d40aa5c2ab5601d
 evidence_root: /tmp/so101-debug-teleop-extraction-20260811/
 confirmed_conclusions:
   - Approved design keeps robot workflow and physics ownership in each backend module; Teleop owns only the control plane (SPEC-2026-08-11).
@@ -113,4 +113,36 @@ open_risks:
   - server.py still resolves so101_gazebo_demo_cpp executables directly; backend profiles and the fixed registry are not implemented yet.
   - No live Teleop backend validation is claimed at this checkpoint.
 next_command: Write RED tests for frozen backend profiles, fixed backend IDs, strict schema rejection, and probe-only MuJoCo capabilities.
+```
+
+## EXP-001 — Isolated installed-package contract suite
+
+```yaml
+experiment_id: EXP-001
+status: COMPLETE
+hypothesis: The extracted Teleop owner and the unchanged C++ robot owner pass their installed package suites together without observing or modifying the preserved live stacks.
+source_commit: e5ac41a28c3f59b71d43fb759d40aa5c2ab5601d
+branch: codex/so101-teleop-extraction
+overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
+installed_owners:
+  - /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/so101_gazebo_demo_cpp
+  - /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/so101_teleop
+runtime_executable: colcon test --packages-select so101_gazebo_demo_cpp so101_teleop
+lifecycle: REUSE_STACK
+isolation:
+  ros_domain_id: Per-test unique values from test_so101_pick_place_world.py, beginning at 100 + pytest PID modulo 100.
+  gz_partition: Per-test UUID-suffixed so101_task1 and so101_task1_ready partitions; one one-iteration static world check uses so101_pick_place_world_contract.
+owned_processes: Only subprocesses created by this test invocation; test cleanup may stop those exact child process groups.
+preserved_processes: physical-five-success Gazebo/RViz/move_group; existing MuJoCo GUI; codex-cua and all other user/agent tmux sessions
+motion_scope: Isolated headless test fixtures only; no commands target the preserved live ROS domain or Gazebo partition.
+evidence_dir: /tmp/so101-debug-teleop-extraction-20260811/exp-001-installed-package-tests
+success_gate: colcon test completes and colcon test-result --verbose reports zero errors and zero failures for both selected packages; post-test inventory shows no surviving test-owned Gazebo children.
+abort_gate: Any evidence that a test resolves the preserved live ROS domain/partition, any unowned process cleanup target, or any attempt to stop/take over another agent process.
+observed_result:
+  - so101_teleop passed all 24 CTest entries.
+  - so101_gazebo_demo_cpp passed all 67 CTest entries, including the isolated headless Gazebo contracts and C++ quality gate.
+  - colcon test-result reported 1000 tests, 0 errors, 0 failures, and 8 skipped.
+  - Post-test process audit found no surviving task1/task1_ready/world-contract process; only the audit shell and rg command matched their own query text.
+conclusion: The extracted Teleop and C++ robot owners pass together from the worktree-installed overlay without leaking isolated test children or disturbing preserved stacks.
+next_command: Commit the Task 10 ownership boundary and proceed to the ai-station-gui skill TDD plan.
 ```
