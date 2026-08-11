@@ -273,3 +273,130 @@ deviations:
 conclusion: The installed Gazebo C++ owner passed isolated Teleop connection and one-action single-step acceptance with mutually consistent backend, controller, joint/TF, Gazebo, MoveIt, checkpoint, and fresh visual evidence; the task-owned stack was fully removed.
 next_command: Commit the lifecycle correction and current ledger, then plan the separate Gazebo Python acceptance on a new domain/partition.
 ```
+
+## EXP-005 — Dedicated Gazebo Python Teleop single-step acceptance
+
+```yaml
+experiment_id: EXP-005
+status: COMPLETE
+hypothesis: Teleop from commit dd97ff1 connects to a separately owned Gazebo Python stack, selects only so101_gazebo_demo_py with its fixed --live-runtime adapter argument, and completes one Start/single-step boundary with independent runtime evidence.
+source_commit: dd97ff1
+branch: codex/so101-teleop-extraction
+owner_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh
+teleop_overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
+backend: gazebo_py
+lifecycle: ISOLATED
+isolation:
+  ros_domain_id: 223
+  gz_partition: so101_teleop_exp005_py_20260811
+  port: 18105
+  simulation_session_id: exp005-py-live
+owned_processes: Exact child trees of new foreground Gazebo Python, MoveIt Python, and Teleop exec sessions; PIDs/window IDs will be appended after startup. Cleanup may interrupt only those owned sessions.
+preserved_processes: physical-five-success Gazebo/RViz/move_group; other move_group; existing MuJoCo GUI and Python qualification stack; codex-cua and all other user/agent tmux sessions
+motion_scope: One Teleop workflow Start request only. No subsequent Step/Run/Resume, reset, manual motion, attachment, scene mutation, camera control, or FULL_RESTART.
+evidence_dir: /tmp/so101-debug-teleop-extraction-20260811/exp-005-gazebo-py-live
+success_gate:
+  - Dedicated Python stack exposes controller, joint/TF, Gazebo world/model, and MoveIt facts; Teleop reaches READY with exp005-py-live.
+  - /capabilities names gazebo_py and so101_gazebo_demo_py/pick_place_state_machine, while scene_operations remains false.
+  - Start creates a fresh owner checkpoint/trace and only the first workflow boundary is executed.
+  - Independent before/after evidence records expected joint/TF effects, stable Gazebo cup facts, and MoveIt scene facts.
+  - A fresh ai-station-gui desktop is correlated to the new EXP-005 Gazebo PID/window and visibly agrees with the numerical result.
+  - Teleop exits cleanly through the dd97ff1 stop path; all EXP-005 PIDs disappear and port 18105 is reusable.
+abort_gate: Any conflict with a preserved process/session/window, action beyond the single-step scope, inability to establish unambiguous installed owner provenance, or cleanup target outside the exact EXP-005 sessions.
+owned_runtime:
+  gazebo_launch_session: exec session 27278; launch PID 2499281; Gazebo 2499462 with GUI 2499481; robot_state_publisher 2499463; relay 2499630; bridge 2499715
+  moveit_launch_session: exec session 68419; launch PID 2500457; move_group 2500534
+  teleop_launch_session: exec session 29072; launch PID 2501004; server 2501063
+  workflow_owner: so101_gazebo_demo_py/pick_place_state_machine PID 2502876, invoked by the Teleop server
+observed_result:
+  - Installed provenance and connection gates passed: Teleop resolved from the current overlay, the owner resolved from the so101-mujoco-ros2 installed overlay, /health and /capabilities returned 200, and /snapshot reached READY with exp005-py-live and both controllers active. Capabilities named gazebo_py/so101_gazebo_demo_py/pick_place_state_machine and kept scene_operations false.
+  - The only mutation was one POST /workflow/start. The adapter invoked the exact fixed argv with --live-runtime, --mode execute, a unique checkpoint, --session-id exp005-py-live, and --step.
+  - The owner opened joint 6 by +0.465037234690044 rad; joints 1-5 changed by at most 1.72e-7 rad, TCP by at most 5.59e-8 m, and the cup translation was 0.0 m in the last fresh Teleop snapshot.
+  - The Gazebo child then received SIGINT and shut down while the Python owner waited on a 36-second arm trajectory. The owner ultimately exited 1 with LIVE_EXECUTE_FAILED because its ros2 action send_goal subprocess timed out after 56 seconds. Teleop returned HTTP 503/BACKEND_OPERATION_FAILED with the fixed owner package/executable and owner_failure_code, and no checkpoint was created; it did not report false success.
+  - Teleop subsequently exited cleanly through the dd97ff1 worker teardown. The remaining owned MoveIt/Gazebo launch sessions were interrupted directly; every exact EXP-005 PID disappeared and port 18105 was reusable.
+deviations:
+  - The planned success gate was not met: the Python owner did not complete its single-step boundary, and the owned Gazebo GUI ended before a fresh Skill image could be captured. No reset, retry, detach, scene action, or additional workflow request was issued within EXP-005.
+  - The Python owner stack began with gazebo_attached true and moveit_attached null. This was recorded as owner telemetry and was not treated as convergence or changed by Teleop.
+  - As in EXP-004, the upstream Jazzy move_group binary segfaulted during its own SIGINT destructor. The Python relay also called rclpy.shutdown after its context was already stopped and exited 1 during cleanup. Both were confined to stopping EXP-005-owned processes and left no child.
+conclusion: The Python selection, fixed argv, readiness, partial physical effect, and fail-closed error propagation are proven, but the live single-step and fresh visual gates are disproven for this exec-session attempt because the owned Gazebo child ended mid-command.
+next_command: Plan one isolated retry with new IDs and task-owned tmux sessions so the long workflow/tool wait cannot share foreground signal handling with the Gazebo GUI session.
+```
+
+## EXP-006 — Gazebo Python single-step retry in task-owned tmux sessions
+
+```yaml
+experiment_id: EXP-006
+status: COMPLETE
+hypothesis: Keeping each Python stack component in a task-owned tmux session prevents the unexplained EXP-005 foreground Gazebo SIGINT, allowing the same single Start/--step request to complete and be captured visually without altering owner code.
+source_commit: dd97ff1
+branch: codex/so101-teleop-extraction
+owner_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh
+teleop_overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
+backend: gazebo_py
+lifecycle: ISOLATED
+isolation:
+  ros_domain_id: 224
+  gz_partition: so101_teleop_exp006_py_20260811
+  port: 18106
+  simulation_session_id: exp006-py-live
+  tmux_sessions: so101-exp006-gazebo, so101-exp006-moveit, so101-exp006-teleop
+owned_processes: Only the three newly named tmux sessions and their exact child trees. Cleanup may interrupt/kill only these names after process evidence is complete.
+preserved_processes: Every pre-existing tmux session and process listed in prior experiments, including so101-py-qual and codex-cua
+motion_scope: One workflow Start request only. No Step/Run/Resume/reset/manual/scene/attachment action; capture is screenshot-only.
+evidence_dir: /tmp/so101-debug-teleop-extraction-20260811/exp-006-gazebo-py-tmux-retry
+success_gate:
+  - New stack reaches READY and fixed Python provenance/capabilities are unchanged.
+  - One Start request exits with a fresh checkpoint/trace and no false-success or second request.
+  - Independent numerical and scene facts plus a PID-correlated fresh Skill desktop agree with the result.
+  - Teleop exits cleanly; all three task-owned tmux sessions are removed; port 18106 is reusable.
+abort_gate: Any existing tmux name collision, signal/action affecting a pre-existing session, loss of fixed owner provenance, or need for a second workflow request.
+owned_runtime:
+  gazebo_tmux: so101-exp006-gazebo, pane leader 2510811; Gazebo GUI PID 2510970; robot_state_publisher 2510948; relay 2511044; bridge 2511205
+  moveit_tmux: so101-exp006-moveit, pane leader 2513145
+  teleop_tmux: so101-exp006-teleop, pane leader 2513156; server 2513323
+observed_result:
+  - All three task-owned tmux sessions started without a name collision. The stack reached READY with exp006-py-live, active controllers, and the same fixed gazebo_py owner/capabilities; active Gazebo window 0x4e0000e PID 2510970 belonged to the owned Gazebo tree.
+  - The only workflow request used the exact installed Python owner argv with --live-runtime and --step. It returned HTTP 503/BACKEND_OPERATION_FAILED with owner_failure_code LIVE_EXECUTE_FAILED and created no checkpoint.
+  - Unlike EXP-005, the isolated Gazebo, MoveIt, and Teleop sessions all stayed alive. The controller accepted the arm goal and then aborted it because joint 2 position error 0.008001 exceeded path tolerance 0.008000; ros2 action reported error_code -4 and ABORTED. This establishes a deterministic owner/controller failure rather than a Teleop routing or signal-lifecycle failure.
+  - Independent before/after telemetry kept READY/controllers active. Joint deltas were approximately q1 -0.002766, q2 -0.003988, q3 +0.000421, q4 +0.010126, q5 +0.000192, q6 +0.465060 rad; TCP translated by at most 0.000939 m. The cup translated by (0.000608, 0.002403, 0.000208) m while the Python relay continued to report gazebo_attached true and MoveIt attached remained unknown; the MoveIt world-object-name query remained empty.
+  - The ai-station-gui Skill produced a fresh 513440-byte desktop at gui/captures/20260811T190011-4252f72dffe4/desktop.png, restored active window 0x4e0000e, and visual inspection showed the owned foreground Gazebo with opened gripper and cup still visibly on the table. It is failure evidence, not a success claim. Optional preserved RViz was not counted.
+  - Ctrl-C was sent only to the three exact task-owned tmux sessions. Their names disappeared, all active children ended, and port 18106 was reusable. The pre-existing tmux session list remained intact.
+deviations:
+  - The retry disproved the hypothesis that signal isolation alone would make the Python boundary pass. It removed the EXP-005 signal ambiguity and exposed the underlying controller tolerance failure.
+  - Pane leaders 2510811 and 2513145 remain as terminated zombie entries parented by the shared tmux server PID 1843453, despite their sessions being gone. Zombies run no code and hold no port/device, but only their shared parent can reap them. Restarting/signaling that parent would interrupt the preserved codex, codex-cua, codex-teleop, kimi, physical, MuJoCo, and Python qualification sessions, so it is forbidden without new user approval and was not attempted.
+conclusion: Gazebo Python installed selection and fail-closed behavior are proven with complete numerical/visual failure evidence, but live single-step success is not claimed: the current Python owner/controller aborts at its 8 mrad path-tolerance boundary.
+next_command: Run the complete final build/test/Web/Skill/ownership verification, append a final checkpoint, commit the ledger, and publish the feature branch without modifying the Python owner worktree.
+```
+
+## CP-005 — Final verification and publication readiness
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-006
+source_commit: dd97ff13f835f804cabe32dcb584dc615f249eb2
+branch: codex/so101-teleop-extraction
+working_tree_status: Only ledger appends EXP-005, EXP-006, and CP-005 are dirty; implementation and EXP-003/004 evidence are committed through dd97ff1.
+owned_processes: NONE active
+preserved_processes: codex, codex-cua, codex-teleop, kimi, so101-mujoco-gui, so101-phy5-v2-r0, and so101-py-qual tmux sessions and their stacks
+verification:
+  - colcon build --packages-select so101_gazebo_demo_cpp so101_teleop --symlink-install completed for both packages.
+  - colcon test completed all 24 so101_teleop and 67 so101_gazebo_demo_cpp CTest entries; colcon test-result --verbose reported 1001 tests, 0 errors, 0 failures, and 8 skipped.
+  - The Web package's declared Vitest entry passed 44 of 44 tests across 14 files; tsc -b and the Vite production build passed; Playwright passed 9 of 9 Chromium tests.
+  - The ai-station-gui Skill passed 18 of 18 pytest tests, bash -n for its wrapper, and the official quick_validate.py validator.
+  - Source ownership assertions proved no legacy Teleop tree, Web tree, or launch file remains in so101_gazebo_demo_cpp, and its CMake/package manifests contain no Teleop or tiler ownership reference.
+  - git diff --check passed.
+cleanup_audit:
+  - No EXP-004/005/006 tmux session, isolated port 18104/18105/18106 listener, or active experiment process remained.
+  - The preserved tmux session inventory was unchanged.
+  - EXP-006 pane leaders 2510811 and 2513145 remain terminated zombies under shared tmux server PID 1843453. They execute no code and hold no port or device. Reaping them would require signaling or restarting the shared parent and would interrupt preserved agent/user sessions, so no such action was taken.
+deviations:
+  - A first Web verification used Bun's built-in `bun test`, which ignored the repository's Vitest environment and tried to mix Playwright and jsdom suites. This was a verification-entry error, not a product failure; the package-declared `bun run test` entry passed 44 of 44.
+  - Playwright could not bind its loopback Vite server inside the restricted sandbox. The same package-declared test was rerun with approved host permission and passed 9 of 9.
+confirmed_conclusions:
+  - The standalone Teleop package, fixed backend profiles, extracted Web UI, C++ ownership boundary, and project-local ai-station-gui Skill satisfy their automated and installed-overlay gates.
+  - Gazebo C++ live single-step acceptance passed with backend/controller/Gazebo/MoveIt/checkpoint/fresh-visual evidence.
+  - MuJoCo remains honestly probe-only.
+  - Gazebo Python routing and fail-closed propagation are proven, but live single-step success remains disproven by the independently observed joint-2 path-tolerance abort at 0.008001 versus 0.008000 rad.
+open_boundary: The separate Mac robot_demo_001 owner migration must fetch the published feature commit, remove duplicate root capture code, update current root references, and advance the moveit-demo gitlink in its own branch/worktree.
+next_command: Commit CP-005, push codex/so101-teleop-extraction to origin without force, and verify the remote branch SHA with git ls-remote.
+```
