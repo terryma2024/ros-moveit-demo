@@ -41,18 +41,28 @@ bool EvidenceBuilder::configure(const mjModel * model, const std::string & objec
                                 const std::vector<std::string> & other_geoms,
                                 std::size_t max_contacts)
 {
-  if (model == nullptr || object_body.empty() || left_geom.empty() || right_geom.empty()) {
+  return configure(model, object_body, std::vector<std::string>{left_geom},
+                   std::vector<std::string>{right_geom}, other_geoms, max_contacts);
+}
+
+bool EvidenceBuilder::configure(const mjModel * model, const std::string & object_body,
+                                const std::vector<std::string> & left_geoms,
+                                const std::vector<std::string> & right_geoms,
+                                const std::vector<std::string> & other_geoms,
+                                std::size_t max_contacts)
+{
+  if (model == nullptr || object_body.empty() || left_geoms.empty() || right_geoms.empty()) {
     return false;
   }
   object_body_id_ = mj_name2id(model, mjOBJ_BODY, object_body.c_str());
-  left_geom_id_ = mj_name2id(model, mjOBJ_GEOM, left_geom.c_str());
-  right_geom_id_ = mj_name2id(model, mjOBJ_GEOM, right_geom.c_str());
-  if (object_body_id_ < 0 || left_geom_id_ < 0 || right_geom_id_ < 0) {
+  if (object_body_id_ < 0) {
     return false;
   }
   object_body_name_ = object_body;
   max_contacts_ = max_contacts;
   object_geom_ids_.clear();
+  left_geom_ids_.clear();
+  right_geom_ids_.clear();
   other_geom_ids_.clear();
   body_names_.clear();
   geom_names_.clear();
@@ -68,6 +78,19 @@ bool EvidenceBuilder::configure(const mjModel * model, const std::string & objec
     if (body == object_body_id_) {
       object_geom_ids_.push_back(id);
     }
+  }
+  const auto resolve = [model](const std::vector<std::string> & names, std::vector<int> & ids) {
+    for (const auto & geom : names) {
+      const int id = mj_name2id(model, mjOBJ_GEOM, geom.c_str());
+      if (id < 0) {
+        return false;
+      }
+      ids.push_back(id);
+    }
+    return true;
+  };
+  if (!resolve(left_geoms, left_geom_ids_) || !resolve(right_geoms, right_geom_ids_)) {
+    return false;
   }
   for (const auto & geom : other_geoms) {
     const int id = mj_name2id(model, mjOBJ_GEOM, geom.c_str());
@@ -142,8 +165,10 @@ msg::SimulationEvidence EvidenceBuilder::build(const mjModel * model, const mjDa
     }
     const int object_id = first_object ? contact.geom1 : contact.geom2;
     const int other_id = first_object ? contact.geom2 : contact.geom1;
-    const bool left = other_id == left_geom_id_;
-    const bool right = other_id == right_geom_id_;
+    const bool left =
+      std::find(left_geom_ids_.begin(), left_geom_ids_.end(), other_id) != left_geom_ids_.end();
+    const bool right =
+      std::find(right_geom_ids_.begin(), right_geom_ids_.end(), other_id) != right_geom_ids_.end();
     const bool other =
       std::find(other_geom_ids_.begin(), other_geom_ids_.end(), other_id) != other_geom_ids_.end();
     if (!left && !right && !other) {
@@ -201,8 +226,14 @@ bool SimulationEvidencePlugin::init(rclcpp::Node::SharedPtr node, const mjModel 
     return false;
   try {
     const auto object = parameter<std::string>(node, "object_body", "task_object");
-    const auto left = parameter<std::string>(node, "left_fingertip_geom", "left_fingertip");
-    const auto right = parameter<std::string>(node, "right_fingertip_geom", "right_fingertip");
+    auto left = parameter<std::vector<std::string>>(node, "left_fingertip_geoms", {});
+    auto right = parameter<std::vector<std::string>>(node, "right_fingertip_geoms", {});
+    if (left.empty()) {
+      left = {parameter<std::string>(node, "left_fingertip_geom", "left_fingertip")};
+    }
+    if (right.empty()) {
+      right = {parameter<std::string>(node, "right_fingertip_geom", "right_fingertip")};
+    }
     const auto other = parameter<std::vector<std::string>>(node, "other_contact_geoms", {});
     const auto max_contacts = parameter<int64_t>(node, "max_contacts", 128);
     const auto rate = parameter<double>(node, "publish_rate", 100.0);

@@ -26,8 +26,8 @@ def test_mjcf_has_stable_robot_evidence_and_control_names() -> None:
     body_names = {body.get("name") for body in root.findall(".//body")}
     assert {"base", "shoulder", "upper_arm", "lower_arm", "wrist", "gripper", "jaw"} <= body_names
     assert root.find('.//site[@name="so101_tcp"]') is not None
-    assert root.find('.//geom[@name="fixed_fingertip_collision"]') is not None
-    assert root.find('.//geom[@name="moving_fingertip_collision"]') is not None
+    assert root.find('.//geom[@name="fixed_fingertip_pad_collision_000"]') is not None
+    assert root.find('.//geom[@name="moving_fingertip_pad_collision_000"]') is not None
     assert [actuator.get("name") for actuator in root.findall("./actuator/position")] == [
         "1",
         "2",
@@ -39,7 +39,7 @@ def test_mjcf_has_stable_robot_evidence_and_control_names() -> None:
     assert root.find('./keyframe/key[@name="home"]') is not None
 
 
-def test_mjcf_uses_reviewed_servo_dynamics_without_changing_geometry_or_ranges() -> None:
+def test_mjcf_uses_reviewed_servo_dynamics_without_changing_joint_ranges() -> None:
     root = ET.parse(MJCF).getroot()
     joint_default = root.find("./default/joint")
     assert joint_default is not None
@@ -84,65 +84,6 @@ def test_mjcf_uses_reviewed_servo_dynamics_without_changing_geometry_or_ranges()
             "-3.35 3.35",
             "-0.059600220867817 1.74533",
         ),
-    ]
-
-    assert [geom.attrib for geom in root.findall("./worldbody//geom")] == [
-        {
-            "name": "base_collision",
-            "class": "robot_collision",
-            "type": "box",
-            "pos": "0.0208 0.0180 0.055",
-            "size": "0.055 0.065 0.055",
-        },
-        {
-            "name": "shoulder_collision",
-            "class": "robot_collision",
-            "type": "capsule",
-            "fromto": "0 0 0 -0.0303992 -0.0182778 -0.0542",
-            "size": "0.032",
-        },
-        {
-            "name": "upper_arm_collision",
-            "class": "robot_collision",
-            "type": "capsule",
-            "fromto": "0 0 0 -0.11257 -0.028 0",
-            "size": "0.024",
-        },
-        {
-            "name": "lower_arm_collision",
-            "class": "robot_collision",
-            "type": "capsule",
-            "fromto": "0 0 0 -0.1349 0.0052 0",
-            "size": "0.023",
-        },
-        {
-            "name": "wrist_collision",
-            "class": "robot_collision",
-            "type": "capsule",
-            "fromto": "0 0 0 0 -0.0611 0.0181",
-            "size": "0.025",
-        },
-        {
-            "name": "gripper_collision",
-            "class": "robot_collision",
-            "type": "box",
-            "pos": "0.0077 0.0001 -0.0234",
-            "size": "0.026 0.022 0.032",
-        },
-        {
-            "name": "fixed_fingertip_collision",
-            "class": "robot_collision",
-            "type": "box",
-            "pos": "0 -0.043 0.0189",
-            "size": "0.012 0.028 0.010",
-        },
-        {
-            "name": "moving_fingertip_collision",
-            "class": "robot_collision",
-            "type": "box",
-            "pos": "0 -0.030 0.0189",
-            "size": "0.012 0.026 0.010",
-        },
     ]
 
 

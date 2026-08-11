@@ -3,9 +3,37 @@
     mujoco_plugins:
       simulation_evidence:
         type: so101_mujoco_support/SimulationEvidencePlugin
-    object_body: cup
-    left_fingertip_geom: fixed_fingertip_collision
-    right_fingertip_geom: moving_fingertip_collision
+    object_body: plastic_cup
+    left_fingertip_geoms:
+      - fixed_finger_contact_convex_000
+      - fixed_finger_contact_convex_001
+      - fixed_finger_contact_convex_002
+      - fixed_finger_contact_convex_003
+      - fixed_finger_contact_convex_004
+      - fixed_finger_contact_convex_005
+      - fixed_finger_contact_convex_006
+      - fixed_fingertip_pad_collision_000
+      - fixed_fingertip_pad_collision_001
+      - fixed_fingertip_pad_collision_002
+      - fixed_fingertip_pad_collision_003
+      - fixed_fingertip_pad_collision_004
+      - fixed_fingertip_pad_collision_005
+      - fixed_fingertip_pad_collision_006
+    right_fingertip_geoms:
+      - moving_jaw_contact_convex_000
+      - moving_jaw_contact_convex_001
+      - moving_jaw_contact_convex_002
+      - moving_jaw_contact_convex_003
+      - moving_jaw_contact_convex_004
+      - moving_jaw_contact_convex_005
+      - moving_jaw_contact_convex_006
+      - moving_jaw_contact_convex_007
+      - moving_fingertip_pad_collision_000
+      - moving_fingertip_pad_collision_001
+      - moving_fingertip_pad_collision_002
+      - moving_fingertip_pad_collision_003
+      - moving_fingertip_pad_collision_004
+      - moving_fingertip_pad_collision_005
     other_contact_geoms: [table_collision]
     max_contacts: 128
     publish_rate: 100.0

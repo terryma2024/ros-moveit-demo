@@ -172,6 +172,61 @@ TEST_F(AtomicEvidenceTest, ClassifiesLeftRightAndOtherContactsWithIdsAndAggregat
   EXPECT_DOUBLE_EQ(message.maximum_normal_force_n, observed_maximum_force);
 }
 
+TEST(SimulationEvidencePluginContactSets,
+     ClassifiesEveryConfiguredFingertipGeomWithoutAggregateCollision)
+{
+  const auto xml_path =
+    std::filesystem::temp_directory_path() / "so101_atomic_evidence_contact_sets.xml";
+  std::ofstream(xml_path) << R"(<mujoco><option gravity="0 0 0"/>
+    <worldbody>
+      <body name="cup"><freejoint name="cup_joint"/>
+        <geom name="cup_geom" type="sphere" size=".02" mass=".02"/>
+      </body>
+      <body name="left"><freejoint name="left_joint"/>
+        <geom name="left_a" type="sphere" pos="-.04 0 0" size=".02" mass=".01"/>
+        <geom name="left_b" type="sphere" pos=".04 0 0" size=".02" mass=".01"/>
+      </body>
+      <body name="right"><freejoint name="right_joint"/>
+        <geom name="right_a" type="sphere" pos="-.04 0 0" size=".02" mass=".01"/>
+        <geom name="right_b" type="sphere" pos=".04 0 0" size=".02" mass=".01"/>
+      </body>
+    </worldbody></mujoco>)";
+  char error[1024]{};
+  std::unique_ptr<mjModel, ModelDeleter> model(
+    mj_loadXML(xml_path.c_str(), nullptr, error, sizeof(error)));
+  ASSERT_NE(model, nullptr) << error;
+  std::unique_ptr<mjData, DataDeleter> data(mj_makeData(model.get()));
+  ASSERT_NE(data, nullptr);
+  EvidenceBuilder builder;
+  ASSERT_TRUE(builder.configure(model.get(), "cup", std::vector<std::string>{"left_a", "left_b"},
+                                std::vector<std::string>{"right_a", "right_b"}, {}, 32));
+
+  EvidenceState state;
+  state.simulation_session_id = "contact-set-test";
+  const int left_address = model->jnt_qposadr[mj_name2id(model.get(), mjOBJ_JOINT, "left_joint")];
+  const int right_address = model->jnt_qposadr[mj_name2id(model.get(), mjOBJ_JOINT, "right_joint")];
+  data->qpos[left_address] = 0.04;
+  data->qpos[left_address + 3] = 1.0;
+  data->qpos[right_address] = -0.04;
+  data->qpos[right_address + 3] = 1.0;
+  mj_forward(model.get(), data.get());
+
+  const auto first = builder.build(model.get(), data.get(), false, state);
+  ASSERT_FALSE(first.left_fingertip_contacts.empty());
+  ASSERT_FALSE(first.right_fingertip_contacts.empty());
+  EXPECT_EQ(first.left_fingertip_contacts.front().geom2, "left_a");
+  EXPECT_EQ(first.right_fingertip_contacts.front().geom2, "right_b");
+
+  data->qpos[left_address] = -0.04;
+  data->qpos[right_address] = 0.04;
+  mj_forward(model.get(), data.get());
+  const auto second = builder.build(model.get(), data.get(), false, state);
+  ASSERT_FALSE(second.left_fingertip_contacts.empty());
+  ASSERT_FALSE(second.right_fingertip_contacts.empty());
+  EXPECT_EQ(second.left_fingertip_contacts.front().geom2, "left_b");
+  EXPECT_EQ(second.right_fingertip_contacts.front().geom2, "right_a");
+}
+
 TEST_F(AtomicEvidenceTest, MarksPausedAndTruncatesBoundedContacts)
 {
   mj_forward(model_.get(), data_.get());
@@ -189,8 +244,8 @@ TEST_F(AtomicEvidenceTest, PluginPublishesAuthoritativePausedResetOnlyFromSnapsh
   const auto topic = "/test/so101/authoritative_pause";
   auto options = rclcpp::NodeOptions().parameter_overrides({
     rclcpp::Parameter("object_body", "cup"),
-    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
-    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+    rclcpp::Parameter("left_fingertip_geoms", std::vector<std::string>{"left_tip"}),
+    rclcpp::Parameter("right_fingertip_geoms", std::vector<std::string>{"right_tip"}),
     rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
     rclcpp::Parameter("simulation_session_id", "pause-test"),
     rclcpp::Parameter("publish_rate", 100.0),

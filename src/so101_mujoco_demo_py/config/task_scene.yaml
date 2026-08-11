@@ -1,7 +1,7 @@
 schema_version: 1
 scene: mjcf/scene.xml
 calibration_status: UNCALIBRATED
-source: MuJoCo initial inputs; not migrated Gazebo/Bullet values
+source: Frozen Gazebo geometry/names with independent uncalibrated MuJoCo dynamics/contact inputs
 simulation_seconds: 10.0
 finite_state_required: true
 stationary_table_required: true
