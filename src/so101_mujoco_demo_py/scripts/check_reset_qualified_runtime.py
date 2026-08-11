@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Verify fork source identity and installed reset/viewer-camera runtime."""
+
 from __future__ import annotations
 
 import argparse
@@ -10,6 +12,22 @@ import sys
 from pathlib import Path
 
 import yaml
+
+ROS_UNDERLAY = Path("/opt/ros/jazzy")
+FORK_PACKAGES = (
+    "mujoco_ros2_control",
+    "mujoco_ros2_control_msgs",
+    "mujoco_ros2_control_plugins",
+)
+PROJECT_PACKAGES = ("so101_mujoco_support", "so101_mujoco_demo_py")
+
+
+def resolved_prefixes(lock: dict, project_root: Path) -> tuple[Path, Path]:
+    paths = lock["paths"]
+    workspace = (
+        Path(os.environ.get(paths["workspace_env"], project_root.parent)).expanduser().resolve()
+    )
+    return workspace / paths["fork_install"], project_root / paths["project_install"]
 
 
 def sha256(path: Path) -> str:
@@ -30,85 +48,85 @@ def main() -> int:
     parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
     lock = yaml.safe_load(args.lock.read_text(encoding="utf-8"))
-    package_root = args.lock.resolve().parents[1]
-    source = Path(lock["source_checkout"])
-    patch = package_root / lock["patch"]["path"]
+    project_root = args.lock.resolve().parents[3]
+    fork_prefix, project_install = resolved_prefixes(lock, project_root)
+    source = project_root / lock["submodule_path"]
+    fork = lock["fork"]
+    upstream = lock["upstream"]
 
     observed: dict[str, object] = {
-        "upstream_url": command("git", "-C", str(source), "remote", "get-url", "origin"),
-        "upstream_commit": command("git", "-C", str(source), "rev-parse", "HEAD"),
-        "upstream_tags": command(
-            "git", "-C", str(source), "tag", "--points-at", "HEAD"
-        ).splitlines(),
-        "applied_patch_sha256": hashlib.sha256(
-            subprocess.run(
-                ["git", "-C", str(source), "diff", "HEAD", "--binary", "--unified=0"],
-                check=True,
-                capture_output=True,
-            ).stdout
-        ).hexdigest(),
-        "patch_sha256": sha256(patch),
+        "fork_url": command("git", "-C", str(source), "remote", "get-url", "origin"),
+        "fork_commit": command("git", "-C", str(source), "rev-parse", "HEAD"),
+        "fork_tag_commit": command("git", "-C", str(source), "rev-list", "-n", "1", fork["tag"]),
+        "fork_status": command(
+            "git", "-C", str(source), "status", "--porcelain", "--untracked-files=all"
+        ),
         "package_prefixes": {},
         "required_files": {},
     }
-    expected_upstream = lock["upstream"]
-    if observed["upstream_url"] != expected_upstream["url"]:
-        fail("upstream URL mismatch")
-    if observed["upstream_commit"] != expected_upstream["commit"]:
-        fail("upstream commit mismatch")
-    if expected_upstream["tag"] not in observed["upstream_tags"]:
-        fail("stable tag is not attached to pinned commit")
-    if observed["patch_sha256"] != lock["patch"]["sha256"]:
-        fail("patch SHA-256 mismatch")
-    if observed["applied_patch_sha256"] != lock["patch"]["sha256"]:
-        fail("dependency checkout does not contain exactly the approved patch")
+    if observed["fork_url"] != fork["url"]:
+        fail("fork URL mismatch")
+    if observed["fork_commit"] != fork["commit"]:
+        fail("fork commit mismatch")
+    if observed["fork_tag_commit"] != fork["commit"]:
+        fail("fork release tag mismatch")
+    if observed["fork_status"]:
+        fail("fork checkout is dirty")
+    ancestry = subprocess.run(
+        ["git", "-C", str(source), "merge-base", "--is-ancestor", upstream["commit"], "HEAD"],
+        check=False,
+    )
+    if ancestry.returncode != 0:
+        fail("official base ancestry mismatch")
 
-    prefixes = os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep)
-    expected_order = [
-        "/opt/ros/jazzy",
-        lock["prefix"],
+    prefixes = [
+        entry for entry in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep) if entry
     ]
-    positions = [prefixes.index(item) for item in expected_order if item in prefixes]
-    if len(positions) != 2 or positions[1] >= positions[0]:
-        fail("dependency overlay does not precede its ROS underlay in AMENT_PREFIX_PATH")
+    if str(fork_prefix) not in prefixes or str(ROS_UNDERLAY) not in prefixes:
+        fail("fork overlay and ROS underlay must both be sourced")
+    if prefixes.index(str(fork_prefix)) >= prefixes.index(str(ROS_UNDERLAY)):
+        fail("fork overlay does not precede its ROS underlay")
 
     observed_prefixes: dict[str, str] = {}
-    for package, expected in lock["package_prefixes"].items():
+    expected_prefixes = {"mujoco_vendor": str(ROS_UNDERLAY)}
+    expected_prefixes.update({package: str(fork_prefix) for package in FORK_PACKAGES})
+    for package, expected in expected_prefixes.items():
         actual = command("ros2", "pkg", "prefix", package)
         observed_prefixes[package] = actual
         if actual != expected:
             fail(f"package prefix mismatch for {package}: {actual}")
     observed["package_prefixes"] = observed_prefixes
+
     project_prefixes: dict[str, str] = {}
-    for package, expected in lock["project_package_prefixes"].items():
+    for package in PROJECT_PACKAGES:
+        expected = str(project_install / package)
         actual = command("ros2", "pkg", "prefix", package)
         project_prefixes[package] = actual
         if actual != expected:
             fail(f"project package prefix mismatch for {package}: {actual}")
     observed["project_package_prefixes"] = project_prefixes
 
-    header = (
-        Path(lock["prefix"])
-        / "include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
+    plugin_header = fork_prefix / (
+        "include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"
     )
-    header_source = header.read_text(encoding="utf-8")
-    if "virtual void on_reset() {}" not in header_source:
-        fail("installed plugin base does not contain the qualified reset hook")
-    if "virtual void on_pause(bool paused)" not in header_source:
-        fail("installed plugin base does not contain the authoritative pause hook")
-    if (
-        "virtual void on_state_snapshot(const mjModel* model, const mjData* data, bool paused)"
-        not in header_source
+    plugin_source = plugin_header.read_text(encoding="utf-8")
+    for hook in (
+        "virtual void on_reset() {}",
+        "virtual void on_pause(bool paused)",
+        "virtual void on_state_snapshot(const mjModel* model, const mjData* data, bool paused)",
     ):
-        fail("installed plugin base does not contain the authoritative state snapshot hook")
+        if hook not in plugin_source:
+            fail(f"installed plugin base is missing hook: {hook}")
+    viewer_header = fork_prefix / "include/mujoco_ros2_control/viewer_camera.hpp"
+    if "validate_and_apply_viewer_camera" not in viewer_header.read_text(encoding="utf-8"):
+        fail("installed viewer camera API is missing")
 
     required_files = lock.get("required_files", {})
     if not required_files:
-        fail("lock has no installed header/runtime hashes")
+        fail("lock has no installed runtime hashes")
     observed_files: dict[str, str] = {}
     for raw_path, expected_hash in required_files.items():
-        path = Path(raw_path)
-        actual_hash = sha256(path)
+        actual_hash = sha256(fork_prefix / raw_path)
         observed_files[raw_path] = actual_hash
         if actual_hash != expected_hash:
             fail(f"installed file hash mismatch: {raw_path}")
@@ -120,6 +138,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception as exc:  # fail closed with one diagnostic
+    except Exception as exc:
         print(json.dumps({"error": str(exc)}, sort_keys=True), file=sys.stderr)
         sys.exit(1)

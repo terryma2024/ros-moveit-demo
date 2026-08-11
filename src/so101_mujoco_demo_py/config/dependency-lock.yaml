@@ -1,29 +1,35 @@
-schema_version: 2
-provider: patched_source
+schema_version: 3
+provider: gitee_fork_submodule
 release: 0.0.3
+fork:
+  url: git@gitee.com:zjumty/mujoco_ros2_control.git
+  tag: so101-0.0.3-r1
+  commit: f58e2fdc5ed06af98dd58fdf36080e0f989d64f7
 upstream:
-  url: https://github.com/ros-controls/mujoco_ros2_control
+  url: https://github.com/ros-controls/mujoco_ros2_control.git
   tag: 0.0.3
   commit: 35ba8174b62d9560093614f981a3d4b978a96036
-source_checkout: /data/work/ws_mujoco_ros2_control_003/src/mujoco_ros2_control
-prefix: /data/work/ws_mujoco_ros2_control_003/install
-patch:
-  path: patches/mujoco_ros2_control-0.0.3-reset-hook.patch
-  sha256: fd2869212d40809dca70f4cc971f93215a64812900cc992817305a33dfcf971e
+submodule_path: third_party/mujoco_ros2_control
+paths:
+  workspace_env: SO101_WORKSPACE_DIR
+  workspace_default: repo_parent
+  fork_workspace: ws_mujoco_ros2_control_fork
+  fork_install: ws_mujoco_ros2_control_fork/install
+  project_install: install
 source_order:
-  - /opt/ros/jazzy
-  - /data/work/ws_mujoco_ros2_control_003/install
-  - project_install
-package_prefixes:
-  mujoco_ros2_control: /data/work/ws_mujoco_ros2_control_003/install
-  mujoco_ros2_control_msgs: /data/work/ws_mujoco_ros2_control_003/install
-  mujoco_ros2_control_plugins: /data/work/ws_mujoco_ros2_control_003/install
-  mujoco_vendor: /opt/ros/jazzy
-project_package_prefixes:
-  so101_mujoco_support: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_support
-  so101_mujoco_demo_py: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py
+  - ros_underlay
+  - fork_overlay
+  - project_overlay
+interface_sha256:
+  mujoco_ros2_control_msgs/msg/ViewerCamera: e2547f376ac77588dcceda74431a7e44ce21b377f6bd16ea0ec27477b21ca0dc
+  mujoco_ros2_control_msgs/srv/SetViewerCamera: 9c7181b11f6aa52b2977492e97a1e24a72422a1c83c339f2ac8bea0425effd6f
+  mujoco_ros2_control_msgs/srv/GetViewerCamera: 180628889d9d00b55682c9c717562fc9328bd2867dd9020149bc201fa2e69034
+  mujoco_ros2_control_msgs/srv/ResetWorld: df91a4e6ea7590b758df9b3fd0d0c290bd0875e0b117b9aa3a0c706533cc3ab5
+  mujoco_ros2_control_msgs/srv/SetPause: e1d7d41a86128a75126500d61236cc1325c706bedc875f76f5a72746e04cc9a5
+  mujoco_ros2_control_msgs/srv/StepSimulation: 443fed7fb261958fc2e735ea99cca30f1c3385288b7be0eba52877bdc2b4f5d8
 required_files:
-  /data/work/ws_mujoco_ros2_control_003/install/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 688337291e7e1d340daf9ffe36fe8c6ed72f085f1ddf302215e5a4a8a35386dc
-  /data/work/ws_mujoco_ros2_control_003/install/lib/libmujoco_ros2_control_plugins.so: 8042fe00bb42d52aeea8d9b53bc0030e81e00e344595009242884cd0d939f701
-  /data/work/ws_mujoco_ros2_control_003/install/lib/libmujoco_ros2_control.so: cff515efd2701f2f9e52e0bc5d9cc61a6793797fec6ee5fc7b04ae33436dd019
-  /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node: 81fc00e192b572f0ffe866522b384d508a6db561afa647b6f82eb91bf2dd2e3b
+  include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 688337291e7e1d340daf9ffe36fe8c6ed72f085f1ddf302215e5a4a8a35386dc
+  include/mujoco_ros2_control/viewer_camera.hpp: 488364d11a6d591438bda116831e111b9fdb7934146117af2a8106120efae6ed
+  lib/libmujoco_ros2_control_plugins.so: 526c19497bdce2049ac723807e15b8e8a25d62b456d2f23d63a31dc824cc0d5a
+  lib/libmujoco_ros2_control.so: 9c9a8c6c9ce09a5280d71e0d25fa874f79ac3c1e386d63e4562f1eb7526cf1e0
+  lib/mujoco_ros2_control/ros2_control_node: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e

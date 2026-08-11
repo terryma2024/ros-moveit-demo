@@ -6,6 +6,8 @@ readonly main_base_commit="d300e7a41fb274d6d7e120699b7040666ea61904"
 readonly task_base_commit="45c6efc701b133c45875e86b0053cfc37dab7f4f"
 readonly protected_tree="src/so101_gazebo_"'demo_py'
 readonly ledger="docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md"
+readonly control_submodule="third_party/mujoco_ros2_control"
+readonly approved_control_url="git@gitee.com:zjumty/mujoco_ros2_control.git"
 
 fail() {
   printf 'migration isolation check failed: %s\n' "$1" >&2
@@ -15,6 +17,16 @@ fail() {
 repository_root=$(git rev-parse --show-toplevel 2>/dev/null) ||
   fail "not inside a Git worktree"
 cd "$repository_root"
+
+control_url=$(git config -f .gitmodules --get "submodule.${control_submodule}.url" 2>/dev/null) ||
+  fail "control submodule URL is missing"
+if [[ "$control_url" != "$approved_control_url" ]]; then
+  fail "control submodule URL is not approved"
+fi
+control_entry=$(git ls-files --stage -- "$control_submodule")
+if [[ "$control_entry" != 160000\ * ]]; then
+  fail "control dependency is not recorded as a gitlink"
+fi
 
 current_branch=$(git branch --show-current)
 if [[ "$current_branch" != "$expected_branch" ]]; then
