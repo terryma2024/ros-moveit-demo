@@ -92,6 +92,8 @@
       "src/so101_gazebo_demo_py/config/ompl_planning.yaml",
       "src/so101_gazebo_demo_py/config/kinematics.yaml",
       "src/so101_gazebo_demo_py/config/so101.srdf",
+      "src/so101_gazebo_demo_py/config/task_objects/light_plastic_cup.yaml",
+      "src/so101_gazebo_demo_py/worlds/so101_pick_place.sdf",
       "src/so101_gazebo_demo_py/so101_gazebo_demo_py/runtime.py",
       "src/so101_gazebo_demo_py/test/test_runtime.py",
       "src/so101_gazebo_demo_py/test/test_pick_place_launch.py"
@@ -133,7 +135,7 @@
   "independent_artifacts": [
     {
       "path": "mjcf/scene.xml",
-      "origin": "independent MuJoCo task scene",
+      "origin": "MuJoCo scene with geometry and names adapted from the frozen Gazebo reference; MuJoCo dynamics and contact inputs remain independent",
       "calibration_status": "UNCALIBRATED"
     },
     {
@@ -143,6 +145,20 @@
     }
   ],
   "adaptations": [
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/worlds/so101_pick_place.sdf",
+      "destination_path": "src/so101_mujoco_demo_py/mjcf/scene.xml",
+      "source_sha256": "386f293037aa0c38687803b21a2989901f7c33b84adc553ea7306c780f6386f2",
+      "adaptation": "Re-expressed the authoritative plastic_cup name, 0.020 kg inertia, and open 12-wall-plus-bottom geometry in MuJoCo while retaining package-owned x/y layout and uncalibrated MuJoCo-only contact/friction inputs. No Gazebo/Bullet friction or threshold value was migrated."
+    },
+    {
+      "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
+      "source_path": "src/so101_gazebo_demo_py/config/task_objects/light_plastic_cup.yaml",
+      "destination_path": "src/so101_mujoco_demo_py/mjcf/scene.xml",
+      "source_sha256": "da271bbba8a64eb9f6840227de67a6faecb4b224a7f3c9412eef65a9f5cc9dfe",
+      "adaptation": "Preserved the authoritative plastic_cup identity, mass, dimensions, wall/bottom thickness, and 12-side compound geometry contract without migrating Gazebo/Bullet contact calibration."
+    },
     {
       "source_commit": "8d7913e7f552a40ee627d65be8b873ac16748bc9",
       "source_path": "src/so101_gazebo_demo_py/so101_gazebo_demo_py/grasp/evidence_store.py",

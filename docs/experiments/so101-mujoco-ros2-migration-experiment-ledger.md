@@ -10,9 +10,9 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: 4f4bad295ba8ebd11118ed87b432a7eb9b5aa3f6
+last_verified_implementation_commit: 997e8ed95100e4097744c92f1b065613ab390220
 ledger_commit_pending: true
-task_status: TASK_12_IMPLEMENTATION_PENDING_COMMIT
+task_status: TASK_13_IMPLEMENTATION_PENDING_COMMIT
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -35,8 +35,8 @@ disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
   - NONE; Task 12 implementation still requires final offline gates and review before its scoped commit.
-latest_checkpoint: CP-069
-next_experiment: NONE
+latest_checkpoint: CP-091
+next_experiment: EXP-057
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -3206,4 +3206,1121 @@ confirmed_conclusions:
 open_risks:
   - MoveIt emits a secondary exit -11 during launch-directed teardown after the successful action/controller/joint/atomic result; Task 12 does not resolve this teardown-only risk.
 next_command: Stage exactly the seventeen reviewed Task 12 paths, rerun cached-diff and protected-tree gates, and commit with the frozen Task 12 subject; do not push.
+```
+
+## Experiment EXP-048
+
+```yaml
+experiment_id: EXP-048
+prior_experiment: EXP-047
+status: PLANNED
+lifecycle: FULL_RESTART
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus only the declared Task 13 calibration files and this ledger entry
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: pinned mujoco_ros2_control ros2_control_node plus a task-owned /tmp calibration collector using only ROS 2 controller actions and atomic /so101/simulation/evidence
+package_prefixes: mujoco_ros2_control=/data/work/ws_mujoco_ros2_control_003/install; so101_mujoco_support=/data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_support; so101_mujoco_demo_py=/data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py
+ros_domain_id: 129
+gz_partition: NONE; MuJoCo only
+hypothesis: bounded physical controller motions can produce finite atomic distributions for no-contact, left-only, right-only, bilateral-touch, over-compression, micro-lift slip, and stable-hold without importing Gazebo thresholds or using forbidden constraints/state writes
+single_variable: regime-specific ROS 2 arm/gripper controller targets while model, dynamics, scene, controller parameters, publish rate, and evidence schema remain fixed
+matrix:
+  regimes: [no_contact, left_only, right_only, bilateral_touch, over_compression, micro_lift_slip, stable_hold]
+  minimum_samples_per_regime: 20
+  required_atomic_fields: [simulation_session_id, publisher_sequence, simulation_step, reset_epoch, paused, object_pose_world, object_twist_world, left_fingertip_contacts, right_fingertip_contacts, other_object_contacts, minimum_signed_distance_m, maximum_normal_force_n]
+  metrics: [signed_distance_m, normal_force_n, bilateral_presence, object_translation_m, object_linear_speed_m_s, object_angular_speed_rad_s]
+success_criteria:
+  - all seven regimes have at least twenty finite, strictly ordered, same-session atomic samples with exact model/config/provenance hashes
+  - no_contact has neither fingertip contact; left_only and right_only each exhibit exactly their named side; bilateral_touch has both sides; over_compression is physically generated and distinguishable by distance and/or force; micro_lift_slip has controller-caused object motion followed by loss/degradation of hold; stable_hold retains bilateral contact with bounded object twist
+  - analyzer emits units, sample counts, quantiles, safety margins, observed false-positive/false-negative matrix, exact hashes, proposed disabled thresholds, and approved_by_user=false
+invalid_criteria:
+  - missing/cross-session/stale/nonfinite/truncated evidence, inability to produce any required regime without forbidden state manipulation, provenance/readiness/cleanup contamination, or incomplete ownership evidence
+failure_criteria:
+  - valid evidence shows the seven physical regimes cannot be separated sufficiently to propose fail-closed thresholds; record VALID behavioral failure and stop without inventing values
+safety_contract: simulation only; no weld, equality, adhesion, mocap following, teleport, direct object qpos/qvel writes, hardware, Gazebo, GUI, or MoveIt grasp workflow
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-048
+decision: PENDING
+next_experiment: NONE until EXP-048 is terminalized
+```
+
+## Checkpoint CP-070
+
+```yaml
+checkpoint_id: CP-070
+last_valid_experiment: EXP-047
+current_hypothesis: EXP-048 will measure the seven required MuJoCo contact regimes under one fixed model/controller stack and support a disabled threshold proposal.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; only this Task 13 ledger preregistration is dirty; protected Gazebo status/diff zero.
+owned_processes: NONE; EXP-048 has not started.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain protected.
+confirmed_conclusions:
+  - Task 12 is committed at 997e8ed95100e4097744c92f1b065613ab390220 with EXP-047 VALID success.
+  - EXP-048 is preregistered before tests, runtime, or data collection; no Gazebo/Bullet numerical contact threshold is an input.
+open_risks:
+  - The exact controller target sequence needed to realize left-only versus right-only and stable-hold versus slip is not yet observed and may validly fail without authorizing model/controller changes.
+  - MoveIt teardown -11 remains a Task 12 risk but EXP-048 does not launch MoveIt.
+next_command: Add the Task 13 schema/analyzer behavior test only and capture RED caused by the absent calibration artifacts.
+```
+
+## Experiment EXP-048 Terminal Result
+
+```yaml
+experiment_id: EXP-048
+status: INVALID
+observed:
+  - The task-owned stack reached all three active controllers and published atomic evidence, but the readiness harness invoked unsupported `ros2 topic list --no-daemon` and never entered collect.py.
+  - No arm/gripper trajectory, pause, reset, step, MoveIt, or object-state operation occurred; all-atomic-evidence.json was never created.
+  - Exact session/PGID and domain-129 daemon were terminated; domain-129 no-daemon postflight is empty.
+inferred: NONE about contact regimes; this is a harness instrumentation failure before the experimental variable.
+conclusion: INVALID and excluded from all behavioral denominators.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-048/launch.log
+  - /tmp/so101-debug-mujoco-migration/exp-048/pane-ownership.txt
+  - /tmp/so101-debug-mujoco-migration/exp-048/pstree-start.txt
+  - /tmp/so101-debug-mujoco-migration/exp-048/domain-postflight.txt (empty)
+decision: Correct only the unsupported topic-readiness invocation and use a fresh experiment/domain.
+```
+
+## Experiment EXP-049
+
+```yaml
+experiment_id: EXP-049
+prior_experiment: EXP-048
+status: PLANNED
+lifecycle: FULL_RESTART
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus the unchanged Task 13 calibration files and ledger
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: identical EXP-048 collector; readiness uses ROS2_DISABLE_DAEMON=1 with supported `ros2 topic list`
+ros_domain_id: 130
+gz_partition: NONE; MuJoCo only
+hypothesis: identical to EXP-048
+single_variable: measurement harness correction from unsupported `ros2 topic list --no-daemon` to supported `ros2 topic list`; physical controller target matrix is byte-equivalent
+success_criteria: identical to EXP-048
+invalid_criteria: identical to EXP-048 plus any remaining readiness/ownership/cleanup defect
+failure_criteria: identical to EXP-048
+safety_contract: identical to EXP-048
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-049
+decision: PENDING
+next_experiment: NONE until terminalized
+```
+
+## Checkpoint CP-071
+
+```yaml
+checkpoint_id: CP-071
+last_valid_experiment: EXP-047
+current_hypothesis: EXP-049 can exercise the preregistered contact matrix after correcting only EXP-048's unsupported readiness command.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; Task 13 ledger, config, analyzer, and test only; Gazebo protected tree unchanged.
+owned_processes: NONE; so101-mujoco-exp048 and its exact recorded process tree are absent; ROS domain 129 is empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - EXP-048 is measurement INVALID before controller motion and cannot support a contact conclusion.
+  - Offline analyzer/schema remains GREEN 6/6 and Ruff passes after formatting.
+open_risks:
+  - Required physical regimes may still be absent or inseparable; that outcome must stop without model/controller tuning.
+next_command: Confirm fresh domain 130, start the corrected task-owned EXP-049 stack, and run the byte-equivalent collector exactly once.
+```
+
+## Experiment EXP-049 Terminal Result
+
+```yaml
+experiment_id: EXP-049
+status: INVALID
+observed:
+  - The corrected topic command returned, but the shell readiness loop then blocked inside a `ros2 control list_controllers` subprocess after launch logs had already recorded all three controllers active.
+  - collect.py never started; there was no controller motion and no atomic matrix evidence.
+  - Exact session/PGID and domain-130 daemon were terminated; domain-130 postflight is empty.
+inferred: The remaining blind spot is dependence on a separate ros2 CLI readiness process, not controller/product behavior.
+conclusion: INVALID and excluded from behavioral denominators.
+decision: Remove the external CLI readiness loop; use bounded action-server discovery and atomic callback count inside the collector.
+```
+
+## Experiment EXP-050
+
+```yaml
+experiment_id: EXP-050
+prior_experiment: EXP-049
+status: PLANNED
+lifecycle: FULL_RESTART
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus unchanged Task 13 files and ledger
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: EXP-048 physical collector with bounded in-process readiness; no ros2 CLI readiness subprocess
+ros_domain_id: 131
+gz_partition: NONE; MuJoCo only
+hypothesis: identical to EXP-048
+single_variable: readiness ownership moves from external ros2 CLI probes to collector-local action-server discovery plus twenty atomic callbacks; physical target sequence is unchanged
+success_criteria: identical to EXP-048
+invalid_criteria: identical to EXP-048
+failure_criteria: identical to EXP-048
+safety_contract: identical to EXP-048
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-050
+decision: PENDING
+```
+
+## Checkpoint CP-072
+
+```yaml
+checkpoint_id: CP-072
+last_valid_experiment: EXP-047
+current_hypothesis: collector-local bounded readiness removes the two proven CLI instrumentation blind spots without changing contact physics.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; Task 13 files only; protected Gazebo tree unchanged.
+owned_processes: NONE; EXP-049 session/PIDs are absent and domain 130 is empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - EXP-048 and EXP-049 are both INVALID before collector/controller motion and support no contact inference.
+open_risks:
+  - If EXP-050 cannot establish in-process readiness or a complete regime matrix, stop rather than add another readiness mechanism or tune physics.
+next_command: Confirm fresh domain 131 and run EXP-050 once.
+```
+
+## Experiment EXP-050 Terminal Result
+
+```yaml
+experiment_id: EXP-050
+status: INVALID
+observed:
+  - The collector discovered the evidence publisher but DDS reported incompatible RELIABILITY QoS; zero atomic callbacks arrived during the bounded 30-second readiness window.
+  - all-atomic-evidence.json contains zero samples and exact model/config hashes; no arm or gripper trajectory was sent because readiness precedes the first command.
+  - The task-owned launch exited through its cleanup trap; exact PGID/session are absent and ROS domain 131 no-daemon postflight is empty.
+inferred: The third instrumentation failure is the collector subscription QoS contract, not evidence publication, controller readiness, contact physics, or regime separability.
+conclusion: INVALID and excluded from all behavioral denominators. Per CP-072 stop condition, do not add another measurement fix or experiment without explicit direction.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-050/collector.log (sha256 16bc6652b70fc2338082147d4f29f2bc5cd1c943135d2db4e239d5cb3404faa8)
+  - /tmp/so101-debug-mujoco-migration/exp-050/all-atomic-evidence.json (sha256 a66db491c70e2e5b3f06cefb0732bdedad76cc59584f04163b327d629acea755)
+  - /tmp/so101-debug-mujoco-migration/exp-050/launch.log (sha256 6b13d99ebffc16230042310e0734d5bdcab20ae2ed227cb16427073702c164f1)
+  - /tmp/so101-debug-mujoco-migration/exp-050/domain-preflight.txt and domain-postflight.txt (both empty; sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+decision: STOP; no threshold proposal, scoped commit, or Task 14.
+```
+
+## Checkpoint CP-073
+
+```yaml
+checkpoint_id: CP-073
+last_valid_experiment: EXP-047
+current_hypothesis: The Task 13 runtime collector must use the evidence publisher's sensor-data/best-effort QoS, but the repeated-instrumentation stop condition forbids implementing or rerunning that correction in this turn.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; four Task 13 dirty paths (ledger, proposed disabled template, analyzer, behavior test); protected Gazebo status/diff zero.
+owned_processes: NONE; EXP-048/049/050 sessions and recorded process trees are absent; domains 129, 130, and 131 postflight empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual were observed running and preserved.
+confirmed_conclusions:
+  - Strict RED was 6 failed because config/analyzer were absent (red.log sha256 3ad59bdbeefc4ec4c2e1c94e5d3e30342cac1653a3411605f6b8c7e53728588d); minimal offline GREEN is 6 passed and Ruff passes 66 files.
+  - EXP-048 and EXP-049 are INVALID external-readiness instrumentation failures; EXP-050 is INVALID QoS instrumentation failure. None sent a controller trajectory or produced contact-regime evidence.
+  - No contact thresholds are proposed or approved; contact_calibration.yaml remains PLANNED, disabled, and approved_by_user=false.
+open_risks:
+  - Seven-regime MuJoCo contact distributions and false-positive/negative separation remain wholly unmeasured.
+  - The minimum next correction is measurement-only: subscribe with qos_profile_sensor_data, then use a fresh experiment/domain; this requires explicit resume direction after the repeated-failure stop.
+  - Task 12 MoveIt teardown -11 remains unchanged.
+next_command: NONE; wait for explicit direction on the measurement-only QoS correction. Do not commit, enter Task 14, or fabricate thresholds.
+```
+
+## Experiment EXP-051
+
+```yaml
+experiment_id: EXP-051
+prior_experiment: EXP-050
+status: PLANNED
+lifecycle: FULL_RESTART
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus unchanged Task 13 files and ledger
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: EXP-050 collector with only the SimulationEvidence subscription QoS changed to qos_profile_sensor_data
+ros_domain_id: 132
+gz_partition: NONE; MuJoCo only
+hypothesis: matching the evidence publisher's best-effort sensor-data QoS will allow the frozen physical target sequence to produce the seven-regime atomic matrix
+single_variable: SimulationEvidence subscriber QoS changes from default reliable depth-100 to qos_profile_sensor_data; readiness, target sequence, model, controllers, and time bounds remain unchanged
+success_criteria: identical to EXP-048
+invalid_criteria: identical to EXP-048
+failure_criteria: identical to EXP-048
+safety_contract: identical to EXP-048
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-051
+decision: PENDING
+```
+
+## Checkpoint CP-074
+
+```yaml
+checkpoint_id: CP-074
+last_valid_experiment: EXP-047
+current_hypothesis: EXP-050's observed DDS incompatibility is resolved solely by the standard sensor-data QoS required by the publisher.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; four Task 13 dirty paths; protected Gazebo status/diff zero.
+owned_processes: NONE; domains 129 through 131 and all prior calibration sessions are empty/absent.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain protected.
+confirmed_conclusions:
+  - Goal continuation explicitly resumes progress after CP-073; scope remains the measurement-only QoS correction identified there.
+open_risks:
+  - QoS compatibility does not imply all physical regimes will occur or be separable.
+next_command: Confirm fresh domain 132 and execute EXP-051 exactly once.
+```
+
+## Experiment EXP-051 Terminal Result
+
+```yaml
+experiment_id: EXP-051
+status: INVALID
+observed:
+  - The wrapper failed before executing the collector because it searched the EXP-050 wrapper, rather than the immutable EXP-048 collector, for the subscription source boundary.
+  - No rclpy node, controller command, or atomic callback was created; task-owned launch cleanup completed and domain 132 is empty.
+inferred: This is a source-composition error in measurement tooling and carries no runtime/contact evidence.
+conclusion: INVALID and excluded from all denominators.
+decision: Compose both already-approved readiness and QoS substitutions directly against EXP-048 in one auditable wrapper.
+```
+
+## Experiment EXP-052
+
+```yaml
+experiment_id: EXP-052
+prior_experiment: EXP-051
+status: PLANNED
+lifecycle: FULL_RESTART
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus unchanged Task 13 files and ledger
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: immutable EXP-048 physical collector with the EXP-050 bounded readiness and EXP-051 sensor-data QoS substitutions applied directly and asserted exactly once
+ros_domain_id: 133
+gz_partition: NONE; MuJoCo only
+hypothesis: identical to EXP-051
+single_variable: no physical variable; measurement wrapper composition is corrected while the intended collector behavior is byte-equivalent to the preregistered EXP-051 target
+success_criteria: identical to EXP-048
+invalid_criteria: identical to EXP-048
+failure_criteria: identical to EXP-048
+safety_contract: identical to EXP-048
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-052
+decision: PENDING
+```
+
+## Checkpoint CP-075
+
+```yaml
+checkpoint_id: CP-075
+last_valid_experiment: EXP-047
+current_hypothesis: Direct, asserted composition against the immutable collector removes EXP-051's pre-execution wrapper error.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; Task 13 paths only; protected Gazebo tree unchanged.
+owned_processes: NONE; EXP-051 session absent and domain132 empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - EXP-051 is INVALID before ROS/client creation and supports no product inference.
+open_risks:
+  - EXP-052 may expose the first actual controller/contact boundary; no threshold or physics change is authorized.
+next_command: Confirm fresh domain133 and execute EXP-052 exactly once.
+```
+
+## Experiment EXP-052 Terminal Result
+
+```yaml
+experiment_id: EXP-052
+status: INVALID
+observed:
+  - Wrapper assertion failed before collector execution because literal diff-marker plus signs were accidentally embedded in subscription_old/subscription_new.
+  - Read-only comparison proves the immutable collector contains exactly one subscription boundary and one readiness boundary; the generated wrapper, not source/runtime, was defective.
+  - No ROS collector node or controller command ran; session absent and domain133 postflight empty.
+inferred: NONE about runtime/contact behavior.
+conclusion: INVALID and excluded from all denominators.
+decision: Build a clean direct wrapper and require offline render assertions before launch.
+```
+
+## Experiment EXP-053
+
+```yaml
+experiment_id: EXP-053
+prior_experiment: EXP-052
+status: PLANNED
+lifecycle: FULL_RESTART
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus unchanged Task 13 files and ledger
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: immutable EXP-048 collector with clean, offline-verified direct QoS/readiness substitutions
+ros_domain_id: 134
+gz_partition: NONE; MuJoCo only
+hypothesis: identical to EXP-051
+single_variable: correction of literal wrapper text only; intended QoS/readiness and all physical targets are unchanged
+success_criteria: identical to EXP-048
+invalid_criteria: identical to EXP-048
+failure_criteria: identical to EXP-048
+safety_contract: identical to EXP-048
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-053
+decision: PENDING
+```
+
+## Checkpoint CP-076
+
+```yaml
+checkpoint_id: CP-076
+last_valid_experiment: EXP-047
+current_hypothesis: Offline verification of the rendered collector prevents another pre-execution wrapper defect.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; four Task 13 paths only; Gazebo protected tree unchanged.
+owned_processes: NONE; EXP-052 session absent and domain133 empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - EXP-052 is measurement INVALID before ROS creation; exact immutable boundaries are now known.
+open_risks:
+  - EXP-053 is still the first opportunity to observe actual controller/contact behavior.
+next_command: Offline-render/compile EXP-053 collector, then and only then confirm fresh domain134 and execute once.
+```
+
+## Experiment EXP-053 Terminal Result
+
+```yaml
+experiment_id: EXP-053
+status: VALID
+behavioral_result: FAILURE
+observed:
+  - Offline render gate proved exactly one QoS boundary and one readiness boundary were replaced; rendered collector compiled before launch.
+  - Collector completed without stderr and preserved 2126 finite, nontruncated samples from the sole session exp053-contact-calibration with strictly increasing publisher_sequence.
+  - Every sample had left_count=0 and right_count=0 across no_contact, descend_preopen, all eight close_scan targets through q6=-0.047608632840292, over_compression q6=-0.059600220867817, stable_hold, and micro_lift_slip.
+  - The reported force range 1.1743701417978498 to 1.1907453853021033 N and signed-distance range -0.00018425941641561755 to -0.00017893451818707415 m are from other_object_contacts (cup/table), not fingertip contact.
+  - Object world Z remained within 0.07981585620210911 to 0.07982071232213495 m; the commanded arm/gripper sequence neither grasped nor lifted the cup.
+  - Session ended normally; domain134 preflight/postflight are empty and the task-owned session/process tree is absent.
+inferred:
+  - HIGH confidence: the frozen Task 12 joint-space DESCEND endpoint does not place either MuJoCo fingertip collision geom against the cup under the current independent MJCF geometry.
+  - No inference is made about usable contact force/distance thresholds because zero fingertip-contact samples exist.
+conclusion: VALID behavioral failure. The seven-regime matrix is absent and cannot support a threshold proposal; stop without changing pose, target, model, controller, timeout, or analyzer outputs.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-053/all-atomic-evidence.json (sha256 8546472b1bd6dbe12d34221bc8b920597605090f07cebf4dcd17ba8db8dbed4e)
+  - /tmp/so101-debug-mujoco-migration/exp-053/collector.log (empty; sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-053/launch.log (sha256 5ee0be2c9457549ebe66fd4e0b5c723c473e932b7c164c9303a1f32dfad08749)
+  - /tmp/so101-debug-mujoco-migration/exp-053/collect.py (sha256 47da25ccc374ae4c7dc171f027aa597f2c6abe594e26a96e49e99857ff48a7e5)
+  - /tmp/so101-debug-mujoco-migration/exp-053/rendered.sha256-input.py (sha256 8e11030ec88feb9b09836fc704b8f3298e3bacaf6dc7f8123b796802186aa408)
+  - /tmp/so101-debug-mujoco-migration/exp-053/domain-preflight.txt and domain-postflight.txt (both empty)
+decision: STOP; no threshold proposal, Task 13 commit, or Task 14.
+```
+
+## Checkpoint CP-077
+
+```yaml
+checkpoint_id: CP-077
+last_valid_experiment: EXP-053
+current_hypothesis: The first physical divergence is grasp-pose/collision alignment, upstream of contact-threshold calibration; resolving it requires a separately authorized bounded alignment experiment rather than threshold tuning.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; four Task 13 dirty paths (ledger, PLANNED disabled config, analyzer, test); protected Gazebo diff/status zero.
+owned_processes: NONE; so101-mujoco-exp053 and recorded process tree are absent; domain134 no-daemon postflight empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual are observed running and preserved.
+confirmed_conclusions:
+  - Task 13 offline RED/GREEN is complete, but EXP-053 validly disproves that the frozen target sequence can populate the required contact matrix.
+  - Table-contact force/distance must not be reused as a fingertip threshold; no threshold is proposed, enabled, or user-approved.
+open_risks:
+  - Exact MuJoCo fingertip-to-cup pose alignment is unmeasured; any next work must vary only a bounded arm pose component while retaining physical controller motion and atomic evidence.
+  - Task 12 MoveIt teardown -11 remains unchanged.
+next_command: NONE; wait for explicit authorization of a bounded grasp-alignment diagnostic. Do not commit Task 13 or enter Task 14.
+```
+
+## Experiment EXP-054
+
+```yaml
+experiment_id: EXP-054
+prior_experiment: EXP-053
+status: PLANNED
+lifecycle: FULL_RESTART
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus unchanged Task 13 files and ledger
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: EXP-053 QoS/readiness collector reduced to alignment/no-contact/close-scan/stable-hold only
+ros_domain_id: 135
+gz_partition: NONE; MuJoCo only
+hypothesis: replacing only the misframed frozen arm target with the deterministic in-limit MuJoCo FK candidate will place the cup between the fingertip collision geoms and produce at least twenty consecutive bilateral atomic samples
+single_variable: arm alignment target changes from [-0.000206491845, 0.472194274096, 0.214652624195, 0.854922375695, 0.000576703465] to [-1.6427287520696188, 1.74533, -0.71278589545175775, -0.24463292122728339, -2.2078521108750988]; q6 scan/model/controllers/dynamics remain unchanged
+offline_prediction:
+  frozen_midpoint_m: [-0.00088325, -0.2488925, 0.26697]
+  candidate_fixed_geom_m: [0.23368635125741621, 0.017733287074258499, 0.12442274702180217]
+  candidate_moving_geom_m: [0.30393243351109345, -0.017917959879469765, 0.089642287283639627]
+  candidate_midpoint_target_error_m: 0.0023573710955259622
+success_criteria:
+  - at least twenty finite, ordered, nontruncated bilateral fingertip samples in one session after a physically commanded q6 close
+  - cup remains finite and no forbidden object-state operation occurs
+failure_criteria:
+  - valid controller/evidence run produces no bilateral contact; stop before another alignment candidate
+invalid_criteria:
+  - provenance/readiness/QoS/ownership/cleanup failure or incomplete evidence
+safety_contract: simulation-only controller motion; no lift, MoveIt, weld, equality, adhesion, mocap, teleport, or direct object qpos/qvel write
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-054
+decision: PENDING
+```
+
+## Checkpoint CP-078
+
+```yaml
+checkpoint_id: CP-078
+last_valid_experiment: EXP-053
+current_hypothesis: A single deterministic arm-target replacement corrects the observed 0.38 m grasp-frame mismatch sufficiently to establish bilateral contact.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; four Task13 paths only; Gazebo protected tree unchanged.
+owned_processes: NONE.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - Read-only MuJoCo FK/seeded search evidence is at task13/fk-probe-2.txt and ik-search-precise.txt under the evidence root; no production or model file changed.
+open_risks:
+  - Midpoint alignment alone may not produce bilateral collision because geom orientation and cup curvature are not optimized.
+next_command: Offline-render EXP-054 collector, confirm fresh domain135, and execute exactly once.
+```
+
+## Experiment EXP-054 Terminal Result
+
+```yaml
+experiment_id: EXP-054
+status: VALID
+behavioral_result: FAILURE
+observed:
+  - 1759 finite, nontruncated, strictly ordered samples came from sole session exp054-grasp-alignment.
+  - During the single home-to-alignment arm trajectory, 16 left-only samples appeared with maximum reported force 11.595366862398484 N and minimum signed distance -0.0010473808587063134 m; no right/bilateral sample appeared.
+  - The physical left-finger sweep displaced the cup from approximately [0.27000035, 0, 0.07982070] m to [0.26886801, 0.05875761, 0.08060937] m, a roughly 58.8 mm Y displacement before q6 close scanning.
+  - All later close-scan, over-compression, and stable-hold samples had zero left/right contact because the cup had already been pushed out of the candidate grasp corridor.
+  - Domain135 preflight/postflight are empty and task-owned session/processes are absent.
+inferred:
+  - HIGH confidence: direct single-segment joint interpolation to the collision-aligned endpoint sweeps the fixed fingertip laterally through the cup; the first failing boundary is approach path geometry, not endpoint midpoint or threshold sensitivity.
+conclusion: VALID behavioral failure. Per preregistered failure criteria, stop before another alignment candidate; do not tune thresholds or silently add a waypoint.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-054/all-atomic-evidence.json (sha256 58ea2c590313f270e0739af2024ad8ec4a59d038b7ec48aadab7acf3d05dc5e1)
+  - /tmp/so101-debug-mujoco-migration/exp-054/launch.log (sha256 c9b4aa7b5a7af7ad7f26e1facd6daf6f0f738eeba3ea64f0906a30e742374b13)
+  - /tmp/so101-debug-mujoco-migration/exp-054/collector.log and domain-postflight.txt (both empty; sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+decision: STOP; require explicit approval for an above-object pre-approach waypoint diagnostic.
+```
+
+## Checkpoint CP-079
+
+```yaml
+checkpoint_id: CP-079
+last_valid_experiment: EXP-054
+current_hypothesis: A collision-free above-object pre-approach followed by a bounded descent to the same FK endpoint may avoid the observed lateral fixed-finger sweep, but this is a new path variable and is not authorized by EXP-054.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; four Task13 dirty paths; protected Gazebo diff/status zero.
+owned_processes: NONE; so101-mujoco-exp054 absent and domain135 empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - Endpoint FK alignment reduced the geometric midpoint error to 2.357 mm, but direct approach caused a large physical cup displacement before closing.
+  - No bilateral/stable-hold/micro-lift data exists, so no contact threshold can be proposed or approved.
+open_risks:
+  - A safe pre-approach waypoint must be derived and validated without model edits, object state writes, or threshold changes.
+  - The observed transient force 11.595 N during the failed sweep is a collision hazard signal, not a calibration sample.
+next_command: NONE; wait for explicit approval of a single above-object pre-approach waypoint diagnostic. Do not commit Task13 or enter Task14.
+```
+
+## Checkpoint CP-080
+
+```yaml
+checkpoint_id: CP-080
+last_valid_experiment: EXP-054
+current_hypothesis: Unchanged from CP-079; an above-object pre-approach may avoid the observed lateral fixed-finger sweep, but no EXP-055 or waypoint execution is authorized.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; exactly four Task 13 dirty paths (ledger, PLANNED disabled calibration config, analyzer, behavior test); protected Gazebo diff/status zero.
+owned_processes: NONE; no experiment, ROS stack, build, test, or shutdown diagnostic was started after CP-079.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain untouched.
+confirmed_conclusions:
+  - User direction freezes sequencing only: first finish and scoped-commit Task 13; then, before Task 14, independently diagnose and fix the Task 12 move_group launch-directed shutdown SIGSEGV/exit -11; only after that may Task 14 begin.
+  - The shutdown -11 is a process-lifecycle SIGSEGV risk and must not be described or interpreted as a MoveIt planning error code.
+  - The future shutdown task requires its own so101-dev/systematic-debugging ledger experiment, a reproducible RED, single-variable lifecycle/destructor-order A/B, GREEN clean exit 0 without SIGSEGV, exact task-owned/domain cleanup, and non-regression of the existing planning/controller/joint/atomic success evidence.
+  - This sequencing direction does not authorize the CP-079 pre-approach waypoint, EXP-055, or any shutdown experiment/fix now.
+open_risks:
+  - Task 13 remains incomplete because EXP-054 produced only transient left contact and no bilateral calibration matrix; no thresholds can be proposed or committed.
+  - move_group launch-directed shutdown still exits -11 after successful Task 12 execution and remains an explicitly deferred lifecycle risk until Task 13 is committed.
+next_command: NONE; remain at the Task 13 pre-approach/user-approval boundary. Do not start EXP-055, the shutdown fix, Task 14, or any live stack without new explicit authorization.
+```
+
+## Experiment EXP-055
+
+```yaml
+experiment_id: EXP-055
+prior_experiment: EXP-054
+status: PLANNED
+lifecycle: FULL_RESTART
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus unchanged Task 13 files and ledger
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: EXP-053 QoS/readiness collector with q6 preopen, one above-object pre-approach, descent to the unchanged EXP-054 FK endpoint, unchanged q6 scan, and no micro-lift command
+ros_domain_id: 136
+gz_partition: NONE; MuJoCo only
+hypothesis: preopening before a collision-free above-object waypoint and then descending to the unchanged FK endpoint avoids EXP-054's lateral fixed-finger sweep and permits at least twenty consecutive bilateral stable-hold samples
+single_variable: action path changes from one home-to-endpoint arm segment to q6=0.465038 -> pre-approach [-1.6569865645696216, 1.0199393749999999, -0.41161402045175799, 0.67333582877271692, -2.2953521108750996] -> unchanged endpoint [-1.6427287520696188, 1.74533, -0.71278589545175775, -0.24463292122728339, -2.2078521108750988]
+frozen: model, dynamics, controllers, joint limits, q6 scan/limits, endpoint, contact thresholds, cup initial state, deadlines, evidence QoS, and physical no-object-state-write contract
+success_criteria:
+  - cup displacement before q6 close remains at most 0.003 m and no transient fingertip force exceeds the EXP-054 observed hazard 11.595366862398484 N
+  - at least twenty finite, ordered, nontruncated bilateral samples occur during stable_hold in one session
+  - object pose/twist remain finite and task-owned/domain cleanup is exact
+failure_criteria:
+  - valid run has no qualifying bilateral stable hold, exceeds the pre-close displacement bound, or repeats/exceeds the transient collision hazard; stop without another path/target change
+invalid_criteria:
+  - provenance, readiness, evidence, ownership, or cleanup contamination
+safety_contract: simulation only; no MoveIt, lift, weld, equality, adhesion, mocap, teleport, direct qpos/qvel/object state write, hardware, GUI, or Gazebo
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-055
+decision: PENDING
+```
+
+## Checkpoint CP-081
+
+```yaml
+checkpoint_id: CP-081
+last_valid_experiment: EXP-054
+current_hypothesis: The user-authorized pre-approach path prevents the lateral sweep while preserving the same collision-aligned endpoint.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; four Task13 dirty paths; protected Gazebo diff/status zero.
+owned_processes: NONE; EXP-055 not started.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain protected.
+confirmed_conclusions:
+  - User explicitly authorizes EXP-055 as the next bounded simulation-only single-variable experiment and corrects CP-080's pause interpretation.
+  - Offline pre-approach midpoint is [0.27010501421268041, -0.000019548144345264348, 0.21988375563066981] m; the 20-point FK path descends to the unchanged endpoint without changing the model.
+open_risks:
+  - Endpoint fixed-finger geometry may still contact before closing and displace the cup; EXP-055 must fail closed on pre-close displacement/force.
+next_command: Offline-render and compile the exact EXP-055 collector; if clean, confirm fresh domain136 and run once.
+```
+
+## Experiment EXP-055 Terminal Result
+
+```yaml
+experiment_id: EXP-055
+status: VALID
+behavioral_result: FAILURE
+observed:
+  - 2362 finite, nontruncated, strictly ordered atomic samples came from sole session exp055-preapproach.
+  - q6 preopen and the above-object pre-approach produced zero fingertip contact and negligible cup displacement; this portion behaved as predicted.
+  - During descent to the unchanged endpoint, contact transitioned through 43 right-only and 119 left-only samples but never bilateral. Peak reported force was 24.849138808364394 N.
+  - The descent displaced the cup from [0.2700003674472347, -9.487605365773128e-09, 0.07982069076083212] m to [0.2664426553797439, 0.014319873698789483, 0.07846153013325524] m, a 0.014817681574346203 m displacement before close scanning, exceeding the frozen 0.003 m gate.
+  - Every q6 close-scan, over-compression, and stable-hold sample was left-only; stable_hold contained 197 left-only and zero bilateral samples. Force remained approximately 19.1 to 20.7 N after the failed descent.
+  - Domain136 preflight/postflight are empty and the task-owned session/process tree is absent.
+inferred:
+  - HIGH confidence: the above waypoint prevents the home-path sweep, but joint-space descent changes fingertip orientation/path such that opposite sides contact sequentially and push the cup rather than closing around it.
+conclusion: VALID behavioral failure. It exceeds both preregistered safety gates (14.8 mm pre-close displacement versus 3 mm; 24.85 N versus 11.60 N hazard reference) and produces no bilateral stable hold. Stop without changing another waypoint, endpoint, model, controller, q6 scan, or threshold.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-055/all-atomic-evidence.json (sha256 3ba075e7965cfc479730661f35bc163707e6e1cd097a022012844d1cca94e216)
+  - /tmp/so101-debug-mujoco-migration/exp-055/launch.log (sha256 850ffb11fb7240a6c74dc11e6be3df8d1686bb3a1b71944c8b1617242c6c5d79)
+  - /tmp/so101-debug-mujoco-migration/exp-055/collector.log and domain-postflight.txt (both empty; sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+  - /tmp/so101-debug-mujoco-migration/exp-055/rendered.py (sha256 eb2d988864aef48e363b9e798c2726f428c406f8cf7313b823b0611b92aed9f2)
+decision: STOP; Task 13 cannot complete or commit from this matrix, and clean-shutdown/Task14 must not start.
+```
+
+## Checkpoint CP-082
+
+```yaml
+checkpoint_id: CP-082
+last_valid_experiment: EXP-055
+current_hypothesis: Joint-space descent does not preserve the desired fingertip world geometry; a future solution would require a separately designed Cartesian/pose-constrained approach or revised endpoint orientation, neither authorized after EXP-055 failure.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; exactly four Task13 dirty paths; protected Gazebo diff/status zero.
+owned_processes: NONE; so101-mujoco-exp055 absent and domain136 no-daemon postflight empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, and so101-py-qual remain observed and untouched.
+confirmed_conclusions:
+  - EXP-055 validates the collision-free pre-approach but validly fails the descent/bilateral contract and its two hard safety gates.
+  - Task 13 still has no bilateral, stable-hold, or micro-lift matrix; contact_calibration.yaml remains PLANNED, disabled, and unapproved.
+  - CP-080 sequencing remains binding: clean-shutdown -11 work cannot start until Task 13 is complete and committed.
+open_risks:
+  - A safe pose-constrained descent that preserves fingertip orientation is missing.
+  - Peak transient contact 24.849 N demonstrates that another blind joint-space waypoint adjustment is unsafe even in simulation qualification.
+next_command: NONE; wait for explicit architecture/direction after the authorized EXP-055 failure. Do not commit Task13, start shutdown work, or enter Task14.
+```
+
+## Experiment EXP-056
+
+```yaml
+experiment_id: EXP-056
+prior_experiment: EXP-055
+status: PLANNED
+lifecycle: REUSE_STACK
+source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus the preserved Task 13 dirty ledger/config/analyzer/test state; no production source or configuration change
+install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install
+runtime_executable: visualization-only /tmp launch using the same MJCF, controllers, and EXP-055 action targets
+ros_domain_id: 137
+gz_partition: NONE
+headless: false
+evidence_plugin_loaded: false
+evidence_plugin_exclusion_reason: Visualization-only mitigation for the already observed GUI-mode evidence-plugin mj_contactForce SIGSEGV; this exclusion is not a production configuration change.
+hypothesis: The current EXP-055 strategy can be replayed visibly in the MuJoCo GUI so its baseline and final geometry/path outcome can be observed without changing action targets or drawing contact conclusions.
+single_variable: Observation mode changes from headless=true to headless=false; the visualization-only /tmp launch omits the evidence plugin solely to avoid the observed GUI-mode mj_contactForce SIGSEGV. MJCF, controllers, and EXP-055 action targets remain identical.
+success_criteria:
+  - all replay action goals complete without rejection
+  - baseline and final MuJoCo GUI states are freshly visible and can be captured as visual evidence
+failure_criteria:
+  - any action goal is rejected
+  - MuJoCo GUI or task-owned stack exits before the required baseline/final observation
+invalid_criteria:
+  - wrong MJCF/controller/action-target provenance, missing baseline/final visual boundary, ownership contamination, or inability to distinguish fresh frames
+evidence_scope:
+  - visual evidence only
+  - excluded from the Task 13 behavioral denominator
+  - cannot support contact presence, contact force, signed distance, calibration threshold, physical grasp, or success claims
+safety_contract: simulation only; no hardware, Gazebo, MoveIt grasp, weld, equality, adhesion, mocap following, teleport, or direct object qpos/qvel/state write
+evidence_root: /tmp/so101-debug-mujoco-migration/exp-056
+decision: PENDING; preregistration only, no stack/action/GUI started
+next_experiment: NONE until EXP-056 is explicitly started and terminalized
+```
+
+## Experiment EXP-056 Terminal Result
+
+```yaml
+experiment_id: EXP-056
+status: INVALID
+result: ROBOT_NOT_VISIBLE
+lifecycle: REUSE_STACK
+ros_domain_id: 137
+gz_partition: NONE
+observed:
+  - The existing visualization-only GUI stack was reused; `/tmp/so101_mujoco_visual_replay.py` sent the exact EXP-055 targets and durations one by one.
+  - Every action goal was accepted and completed; strategy.exit=0.
+  - ros2_control_node PID 1695804 remained alive after the replay completed.
+  - User-provided screenshot observation confirms that the robot is not visible at any point in the replay; the white/yellow object near the center of the baseline table cannot be identified as an observable robot.
+  - The final frame still visibly contains the cup, while the table and robot are outside the captured view/framing.
+  - The GUI remains running in the final state and was not reset.
+visual_ambiguity:
+  - The final frame alone cannot distinguish an abnormal model pose from a camera auto-framing/viewpoint change.
+  - No physical/contact inference is made from the missing table/robot in the final framing.
+evidence:
+  - /tmp/so101-debug-mujoco-migration/exp-056/baseline.png (sha256 b482fb18fcadbc43791674012eab5a45417167a1aeb985faa3f211044040c25a)
+  - /tmp/so101-debug-mujoco-migration/exp-056/final.png (sha256 c67a76e6f13aa1dd1589d216a6f5983c362feb176cb2bc2b1a2c0c3e1796a966)
+  - /tmp/so101-debug-mujoco-migration/exp-056/strategy.log (sha256 21584c280c578a3d371021b011e01f10a4e965e5ae84f0b3b1e55928fc3c8929)
+decision: INVALID because the preregistered baseline/final visual boundary cannot show robot motion; action completion remains only a control-interface fact.
+evidence_scope:
+  - remains excluded from the Task 13 behavioral denominator
+  - cannot support contact presence, force, signed distance, threshold calibration, physical grasp, or grasp-success conclusions
+  - does not supersede EXP-055 VALID behavioral failure
+cleanup_state: GUI and ros2_control_node PID 1695804 intentionally remain running at the final state; no reset or cleanup was requested or performed.
+next_experiment: NONE
+```
+
+## Checkpoint CP-083
+
+```yaml
+checkpoint_id: CP-083
+last_valid_experiment: EXP-055
+current_hypothesis: Unchanged from CP-082 for Task 13 behavior; EXP-056 is invalid because neither baseline nor final visual evidence makes the robot or its motion observable.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index remains empty; the existing four Task 13 dirty paths are preserved; no production source or configuration was changed.
+owned_processes: Visualization-only GUI stack remains intentionally running on ROS_DOMAIN_ID 137; ros2_control_node PID 1695804 is alive at the final state and must not be treated as cleaned or abandoned.
+preserved_processes: No action, stack, reset, cleanup, or process mutation was performed while terminalizing this ledger entry.
+confirmed_conclusions:
+  - User-provided screenshot observation confirms the robot never appears; the baseline table's central white/yellow block cannot be classified as an observable robot.
+  - EXP-056 is INVALID under its preregistered missing-boundary/inability-to-observe-motion criterion. Every exact EXP-055 action goal being accepted/completed and strategy.exit=0 is retained only as a control-interface fact, not a valid visual replay result.
+  - The baseline/final images remain visual artifacts, but they do not establish a robot-motion boundary and final framing is ambiguous between model-pose behavior and camera auto-framing.
+  - EXP-056 remains excluded from the Task 13 behavioral denominator and supports no contact, force, signed-distance, threshold, physical-grasp, or grasp-success claim.
+open_risks:
+  - Task 13 remains blocked at CP-082: no bilateral/stable-hold/micro-lift calibration matrix exists.
+  - The visualization-only GUI stack and PID 1695804 remain live by explicit user direction; future ownership/cleanup must preserve this fact.
+next_command: NONE; goal remains blocked. Do not reset/stop the GUI, start an experiment, modify production files, or infer Task 13 physical success from EXP-056.
+```
+
+## Experiment EXP-057
+
+```yaml
+experiment_id: EXP-057
+status: PLANNED
+prior_experiment: EXP-056 (INVALID)
+hypothesis: Rebuilding only the MuJoCo MJCF geometry/rendering and task-object geometry/names from the protected Gazebo reference will make the robot base, complete arm, and open cup visible while preserving the already-qualified kinematics, dynamics, actuators, and controllers.
+prediction: Executable structure tests will first fail on the current simplified geometry, then pass after exact visual/collision parity is implemented; the rebuilt MJCF will compile, preserve FK, remain finite/stationary for 10 seconds, and a FULL_RESTART GUI run will freshly show the base, complete arm, open cup, and observable robot motion.
+single_variable: Rebuild only MJCF geometry/rendering and task-object geometry/names. Do not change joint transforms, joint limits, dynamics, actuators, or controllers.
+lifecycle: FULL_RESTART
+authoritative_sources:
+  robot_geometry: Protected `src/so101_gazebo_demo_py` URDF expanded with `gazebo_collision_primitives=true`.
+  cup_geometry: Protected `src/so101_gazebo_demo_py/worlds/so101_pick_place.sdf` and `src/so101_gazebo_demo_py/config/task_objects/light_plastic_cup.yaml`.
+  frozen_local_urdf: `src/so101_mujoco_demo_py/urdf/so101.urdf`; its expanded structural counts and transforms match the authoritative URDF, with only fixed/moving-pad flattened filename prefixes differing.
+observed_baseline:
+  - The current MJCF has no mesh visual geoms; `robot_collision` uses group 3 and alpha 0.25.
+  - The current cup is a solid cylinder with radius 0.035 m, half-height 0.06 m, and mass 0.12 kg.
+  - The authoritative cup is an open 13-part compound primitive model with mass 0.020 kg, height 0.090 m, outer radius 0.040 m, wall/bottom thickness 0.002 m, and 12 sides.
+preconditions:
+  - Use only the frozen authoritative sources above; the protected Gazebo tree remains byte-for-byte unchanged.
+  - Preserve the independent `so101_mujoco_demo_py` package and all frozen joint transform, limit, dynamics, actuator, and controller contracts.
+  - Establish executable behavior-level RED before changing production MJCF/configuration, then minimal GREEN.
+success_criteria:
+  - RED-to-GREEN structural tests prove that every key robot body has the visual mesh instance, transform, and material defined by the package-local frozen URDF.
+  - Collision structure matches the collision instances, transforms, and asset families from the same URDF; MuJoCo collision geoms may retain independent group/contype settings, while every visual geom has `contype=0` and `conaffinity=0`.
+  - Cup visual and collision geometry is the 13-part open compound and matches the authoritative Gazebo SDF dimensions, poses, names, and 0.020 kg mass.
+  - MJCF compilation and FK parity pass, followed by a 10-second finite/stationary runtime gate.
+  - A FULL_RESTART GUI run produces fresh baseline/final screenshots that visibly contain the robot base, complete arm, and open cup and make robot motion observable.
+failure_criteria:
+  - Any structural, MJCF compilation, FK parity, 10-second finite/stationary, or visual gate fails under valid provenance and ownership.
+invalid_criteria:
+  - Wrong authoritative source, stale/old install artifact, process or ROS-domain contamination, or missing/non-fresh baseline or final screenshot.
+calibration_invalidation:
+  - Task 13 contact calibration on the old geometry cannot migrate to the rebuilt geometry.
+  - EXP-055 remains historical evidence for the old model only; after EXP-057 geometry qualification, a new contact-calibration batch is mandatory before proposing thresholds.
+provenance:
+  source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus the preserved Task 13 dirty state; production remains unchanged at preregistration
+  install_overlay: PENDING; must be freshly rebuilt and proven before RUNNING
+  runtime_executable: PENDING; FULL_RESTART GUI runtime must resolve only from the qualified MuJoCo overlays
+  ros_domain_id: PENDING; select and prove a fresh isolated domain before RUNNING
+  gz_partition: NONE
+evidence_root: /tmp/so101-debug-mujoco-visual-parity-20260811
+safety_contract: Simulation only; no hardware, weld, equality, adhesion, mocap following, teleport, or direct object qpos/qvel/state writes.
+commands:
+  - command: NONE; preregistration only
+    exit_code: PENDING
+observed:
+  - PLANNED only; no source/configuration/process/runtime action has been taken for EXP-057.
+inferred:
+  - NONE
+conclusion: PENDING
+decision: PENDING
+next_experiment: NONE until EXP-057 is run and terminalized
+```
+
+## Checkpoint CP-084
+
+```yaml
+checkpoint_id: CP-084
+last_valid_experiment: EXP-055
+current_hypothesis: EXP-057 Phase B static GREEN supports the frozen geometry/parity implementation, but EXP-057 remains PLANNED until the separately authorized Phase C finite/stationary and FULL_RESTART visual gates are executed.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; preserved Task 13 ledger/config/analyzer/test plus the unstaged EXP-057 demo/support implementation and tests; protected Gazebo status and d300e7a diff are empty.
+owned_processes: NONE. Read-only final `ps -p 1695804` returned no process; this turn did not signal, stop, reset, or otherwise mutate PID 1695804 or any GUI/ROS process.
+preserved_processes: No process or tmux session was started or stopped for Phase B.
+confirmed_conclusions:
+  - The package-local frozen URDF contains 19 visual and 42 collision mesh instances; the GREEN MJCF maps every instance per link/body with exact local transform, asset family, and authoritative material, without aggregate or dummy collision geometry.
+  - The `plastic_cup` static contract is an open 13-part visual/collision pair with 12 thin box walls, one bottom cylinder, mass 0.020 kg, authoritative diagonal inertia, package-owned x/y, and bottom resting on the table top.
+  - EvidenceBuilder and the plugin accept complete left/right geom sets; executable GTest proves distinct members on both sides classify correctly, while singular parameters remain compatibility-only.
+  - Static verification passed: targeted Python 15/15; final geometry/FK suite 11/11; scene compile 1/1; final contracts/provenance/isolation 41/41; demo non-dynamics 203 passed, 3 skipped, 1 deliberately deselected; support GTest 10/10; Ruff, clang-format, isolated two-package build, diff check, isolation, and d300e7a Gazebo gates all exit 0.
+  - The kickoff protected-tree diff remains historical: its SHA-256 exactly equals the 8464038-to-d300e7a protected-tree diff (`dfaf6e546353bac864c07f80da9c0366f8a21a636553f97267170524bba8283b`); current protected-tree working status is empty.
+disproven_routes:
+  - A singleton or added aggregate fingertip evidence geom is not used; it would diverge from the authoritative 42-instance collision structure and omit valid same-side contacts.
+open_risks:
+  - Phase C has not been qualified and no fresh GUI/FULL_RESTART screenshot exists; robot/cup visibility and observable motion remain unproven.
+  - Old-geometry Task 13 contact calibration remains non-transferable; a new calibration batch is mandatory after EXP-057 qualification.
+  - The first targeted Python command accidentally selected `test_headless_scene_is_finite_and_stationary_for_ten_seconds`; it passed in accelerated in-process MuJoCo, but was outside the requested Phase B selection and is explicitly excluded from EXP-057/Phase C evidence. No GUI or ROS stack was started.
+  - The normal worktree symlink-install retry encountered pre-existing install-tree collisions around the Task 13 `contact_calibration.yaml`; the clean isolated evidence-root build passed and no Task 13 source file was changed or removed.
+next_command: NONE; stop at GREEN_STATIC_READY and await explicit Phase C direction. Do not promote EXP-057 from PLANNED or count the accidental in-process dynamics test as runtime qualification.
+```
+
+## Experiment EXP-057 Running Transition
+
+```yaml
+experiment_id: EXP-057
+status: RUNNING
+transition_time: 2026-08-11 Asia/Shanghai
+prior_experiment: EXP-056 (INVALID)
+lifecycle: FULL_RESTART
+single_variable: Unchanged from preregistration; only the qualified MJCF geometry/rendering and task-object geometry/names differ from the old model.
+provenance:
+  source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus the preserved unstaged Task 13 and EXP-057 state
+  phase_b_tracked_package_diff_sha256: 8b23b731485fb4f1e9e9747f3a18c6ec5d89f4a7ea70b32949c6dd34060a4ab1
+  visual_geometry_test_sha256: acc9b9f178c531788bc63c41d0972f5a5eab5a59387b987b511cefccd317c67e
+  install_overlay: /opt/ros/jazzy -> /data/work/ws_mujoco_ros2_control_003/install -> /tmp/so101-debug-mujoco-visual-parity-20260811/install
+  installed_scene_sha256: 5ab8a6e2f56c7a7b40adb06f56d4382b90c2d6717c5c192be58537394b292599
+  installed_robot_mjcf_sha256: 33f2266fccea1cdf843e6e3510b9a470a0285bf42915c418a11d4a4708204e74
+  installed_evidence_plugin_sha256: 6246290cbbb44258fef9aa926e524bd794065175f47171a9d227ae697fef6452
+  ros_domain_id: 138
+  ros_domain_preflight: `ROS_DOMAIN_ID=138 ros2 node list --no-daemon` returned empty
+  gz_partition: NONE
+phase_b_evidence:
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/build-isolated.log (sha256 979b0e6dec64efcef938132b8a94dbedbd4649f616bb6fcd050c2bc007de4b6c)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/support-gtest-final.log (sha256 351964dbefdb21b925dc1fdcc9bc53daab61cf2a3d8744eb36913150d08add18)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/demo-non-dynamics-tests.log (sha256 b04e3a00214d7304b9b90fede407fbc85e1c9342cf25930bae961b982db72db5)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/mjcf-fk-parity.log (sha256 85b0c3b5a4b851c0888bd9be92989708d69a901a020a981aa5f2fda19dfbe089)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/scene-compile.log (sha256 0234d51de03c8da96792f0ed8d0043697c9f1b2888dbf66e9cf6b5620819903b)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/final-targeted-contracts.log (sha256 40e9ad7d98c2f097664b395d1dd989651c46cda572ae7a1ad91a91826a651440)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/ruff-final.log (sha256 966803eeaadd9efbe57c1f3e92399e3b8c74e032b03b3fccc1fc0aef26c18235)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/isolation-final.log (sha256 da0bc64fdbd48508db4a4037af30987b9fa6b5d750c2acda8c7ebcc4ef8dd0ab)
+process_ownership:
+  - Existing domain-137 visualization-only stack in tmux `so101-mujoco-gui`, including ros2_control_node PID 1695804, is observed running and preserved; it is not EXP-057-owned.
+  - EXP-057 will reuse the tmux session name by adding an isolated domain-138 window/process tree; it will not signal or replace the domain-137 stack.
+commands:
+  - command: `ROS_DOMAIN_ID=138 ros2 node list --no-daemon`
+    exit_code: 0
+observed:
+  - Phase B source/install hashes are frozen above and the selected fresh domain is empty.
+  - Protected Gazebo working status and d300e7a diff remain empty.
+inferred:
+  - NONE; runtime finite/stationary and visual behavior are not yet claimed.
+conclusion: RUNNING; proceed first to the formal 10-second finite/stationary gate.
+decision: PENDING
+next_experiment: NONE until EXP-057 is terminalized
+```
+
+## EXP-057 Running Ownership and Instrumentation Correction
+
+```yaml
+correction_time: 2026-08-11 Asia/Shanghai
+supersedes:
+  - CP-084 `owned_processes: NONE` and its statement that PID 1695804 was absent
+  - EXP-057 Running Transition wording that classified the domain-137 GUI stack as external and proposed a parallel domain-138 window
+observed:
+  - User-provided host evidence and the subsequent read-only process-tree audit confirm that PID 1695804 is alive and belongs to the task-owned EXP-056 visualization-only stack on ROS_DOMAIN_ID 137.
+  - tmux `so101-mujoco-gui:0.0` has pane PID 1687386. Its exact task-owned launch tree is rooted at PID/PGID 1695784; tee PID 1695785, robot_state_publisher PID 1695803, and ros2_control_node PID 1695804 belong to that tree.
+  - The EXP-056 stack remains running and has not yet been signaled. Other tmux sessions and ROS/Gazebo processes remain preserved.
+  - The first formal ten-second gate attempt exited before simulation because the evidence-only ctypes script used `1<<6` for `mjSTATE_CTRL`; the installed MuJoCo header defines `mjSTATE_CTRL = 1<<5`.
+correction:
+  - The first formal-gate result is INVALID instrumentation evidence and is not an EXP-057 product/model failure.
+  - After a corrected formal gate passes, FULL_RESTART must revalidate PID/PGID/cmdline, precisely stop only the task-owned PGID 1695784 tree, prove domain 137 empty, retain and reuse the same tmux pane/window, and start one fresh domain-138 GUI stack. Two GUI stacks must not coexist.
+  - No broad `pkill`, unrelated-session mutation, or protected Gazebo mutation is permitted.
+evidence:
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/formal-10s-gate.json (invalid instrumentation; sha256 43f8d231551dc3fcd4982acce8be453264c3d6be3589e43f9fec1c744835cd3c)
+decision: KEEP EXP-057 RUNNING; correct only the measurement bitmask and rerun the formal gate to a new evidence file before any process cleanup.
+```
+
+## Checkpoint CP-085
+
+```yaml
+checkpoint_id: CP-085
+last_valid_experiment: EXP-055
+current_hypothesis: EXP-057 geometry remains statically qualified; the first formal runtime attempt was invalid solely because the evidence harness selected the wrong documented MuJoCo state bit.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; all preserved Task 13 and EXP-057 dirty paths remain unstaged; protected Gazebo status and d300e7a diff remain empty.
+owned_processes: EXP-056 visualization-only domain-137 stack is task-owned and live in tmux so101-mujoco-gui:0.0; exact launch tree root PID/PGID 1695784 includes tee 1695785, robot_state_publisher 1695803, and ros2_control_node 1695804. It is intentionally retained until the corrected formal gate passes.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, so101-py-qual, and all unrelated ROS/Gazebo processes remain untouched.
+confirmed_conclusions:
+  - CP-084's PID-absent statement and the EXP-057 Running Transition's external-process classification are false and superseded by the host ownership evidence above.
+  - The first formal gate did not simulate; its state-size assertion reflects an instrumentation bitmask error, not geometry or dynamics behavior.
+open_risks:
+  - Formal ten-second finite/stationary behavior and fresh GUI visibility remain unqualified.
+  - Precise EXP-056 teardown must preserve the tmux pane for domain-138 reuse and prove domain 137 empty before launch.
+next_command: Run the corrected evidence-only formal ten-second gate against the frozen isolated install and write a new, non-overwriting result file.
+```
+
+## Checkpoint CP-086
+
+```yaml
+checkpoint_id: CP-086
+last_valid_experiment: EXP-055
+current_hypothesis: The rebuilt geometry is finite and stationary under the formal ten-second gate; fresh GUI visibility and observable controller-driven motion remain to be reviewed.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; preserved Task 13 and EXP-057 dirty paths remain unstaged; protected Gazebo status and d300e7a diff remain empty.
+owned_processes: The exact EXP-056 process group 1695784 was revalidated by PPID/PGID/cmdline and sent SIGINT. Launch 1695784, tee 1695785, robot_state_publisher 1695803, and ros2_control_node 1695804 are absent; tmux pane 1687386 remains alive for the required reuse. Domain 137 no-daemon node list is empty.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, so101-py-qual, and all unrelated ROS/Gazebo processes remain untouched.
+confirmed_conclusions:
+  - Corrected formal gate exits 0 after 10.000000000000009 simulated seconds; all qpos/qvel/ctrl are finite, table is fixed with zero DOFs, and plastic_cup is present.
+  - Cup translation after settle is 2.465955717647727e-08 m; final two-second translation envelope is 2.0779550502379467e-08 m and net speed is 2.8598807963247134e-09 m/s.
+  - Corrected evidence SHA-256 is 6af27589572a2f4276fe1a41b0d02e442dffdfc5158d35b332426422558d84c4; domain-137 cleanup evidence is empty SHA-256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+open_risks:
+  - Fresh domain-138 GUI provenance, full robot/cup visibility, and visually/numerically observable safe motion are not yet established.
+  - The visualization-only launch must omit the evidence plugin only in /tmp and must not support contact conclusions.
+next_command: Reuse tmux so101-mujoco-gui:0.0 to launch the frozen isolated overlay on ROS_DOMAIN_ID 138 with headless=false and no evidence plugin, then prove readiness/provenance before capture.
+```
+
+## Checkpoint CP-087
+
+```yaml
+checkpoint_id: CP-087
+last_valid_experiment: EXP-055
+current_hypothesis: Fresh domain-138 runtime provenance and controller readiness are valid; only CUA visual framing/inspection remains before any motion is authorized.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; preserved Task 13 and EXP-057 dirty paths remain unstaged; protected Gazebo status and d300e7a diff remain empty.
+owned_processes: EXP-057 visualization-only launch PID/PGID 1783524 in retained tmux so101-mujoco-gui:0.0; robot_state_publisher 1783548 and ros2_control_node 1783549 are live on domain 138. The old domain-137 tree remains absent.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, so101-py-qual, and unrelated ROS/Gazebo processes remain untouched.
+confirmed_conclusions:
+  - Controller readiness is valid: arm_controller, gripper_controller, and joint_state_broadcaster are exactly three active controllers; a complete fresh six-joint sample was received.
+  - Runtime provenance resolves demo package to `/tmp/so101-debug-mujoco-visual-parity-20260811/install/so101_mujoco_demo_py`, dependency to `/data/work/ws_mujoco_ros2_control_003/install`, and ros2_control executable to the pinned dependency overlay.
+  - Installed scene and robot MJCF hashes remain 5ab8a6e2f56c7a7b40adb06f56d4382b90c2d6717c5c192be58537394b292599 and 33f2266fccea1cdf843e6e3510b9a470a0285bf42915c418a11d4a4708204e74.
+  - Two preliminary readiness collectors were INVALID instrumentation: the first produced no durable output; the second parsed controller state from field 2 although `ros2 control list_controllers` places `active` in the final field. The corrected collector uses `$NF`, returns active_count=3, and is the only readiness result used.
+  - The local capture helper attempt is INVALID capture instrumentation, not GUI/model failure: it aborted because no visible Ghostty window existed. Per user correction, no capture helper artifact may qualify EXP-057; all subsequent observation and screenshots use ai-station CUA only.
+open_risks:
+  - CUA has not yet demonstrated that the base, complete arm, and open cup are simultaneously visible in a fresh frame.
+  - The visualization-only run omits evidence plugin and therefore supports no contact or threshold conclusion.
+next_command: Inventory/create tmux codex-cua, snapshot the live MuJoCo window with CUA, adjust task_camera/free camera only if needed using snapshot/action/fresh-snapshot, and save baseline-cua.png; do not send controller actions.
+```
+
+## Checkpoint CP-088
+
+```yaml
+checkpoint_id: CP-088
+last_valid_experiment: EXP-055
+current_hypothesis: The fresh CUA frame exposes a visual-geometry failure rather than a camera-framing absence: the cup and table are clear, but the robot mesh instances appear as separated floating segments rather than one contiguous base-mounted arm.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; all Task 13 and EXP-057 dirty paths remain unstaged; protected Gazebo status and d300e7a diff remain empty.
+owned_processes: EXP-057 visualization-only domain-138 launch PID/PGID 1783524, robot_state_publisher 1783548, and ros2_control_node 1783549 remain live in so101-mujoco-gui:0.0. Dedicated CUA-only tmux codex-cua:0.0 is live; it did not edit the repository or ledger.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, so101-py-qual, and unrelated ROS/Gazebo processes remain untouched.
+confirmed_conclusions:
+  - CUA identified the exact on-screen window `MuJoCo : so101_task_scene` owned by PID 1783549 and saved a fresh 1568x869 window snapshot.
+  - The frame visibly contains the open orange cup and table. Multiple yellow/black/blue robot mesh segments and their shadows are visible, but they are spatially separated and floating; no coherent base-to-arm chain can be identified.
+  - Because the full scene extents are already inside the frame, camera reframing cannot by itself establish the required contiguous base/complete-arm visual boundary. No CUA input or controller action was sent.
+  - Baseline CUA image SHA-256 is 59d33f09c24ab74c39102d191a168f756b88e9b80bce5dd90ca949de97b9d469.
+open_risks:
+  - EXP-057 remains RUNNING and is not terminalized, but the preregistered visual success criterion is not currently met.
+  - The likely visual transform/model cause is not diagnosed in this observation-only checkpoint; no additional source/configuration change is authorized here.
+next_command: NONE; keep the domain-138 GUI and CUA baseline available for user inspection. Do not send motion or capture a final frame until the user reviews baseline-cua.png and authorizes the next step.
+```
+
+## Checkpoint CP-089
+
+```yaml
+checkpoint_id: CP-089
+last_valid_experiment: EXP-055
+current_hypothesis: CONFIRMED root cause: copying URDF RPY triples into default MuJoCo Euler attributes changes multi-axis rotations; explicit URDF-derived quaternions should restore contiguous robot geometry without changing physics/control contracts.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; preserved Task 13 and EXP-057 dirty paths plus the transform-level test and robot MJCF quaternion correction remain unstaged; protected Gazebo status and d300e7a diff remain empty.
+owned_processes: The pre-fix EXP-057 domain-138 visualization stack remains live at launch PID/PGID 1783524 and ros2_control PID 1783549 pending exact restart; codex-cua remains CUA-only.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, so101-py-qual, and unrelated ROS/Gazebo processes remain untouched.
+confirmed_conclusions:
+  - Transform RED is 1 failed/4 passed: the old model relies on Euler for robot geoms; SHA-256 469a17cbb96b2fc92b4ed59d87d7c77518bff5520aa28a3b39a068150b605501.
+  - Direct MuJoCo compilation characterization proves the semantic divergence. For URDF rpy `(1.5708, 1.5708, 0)`, URDF `Rz*Ry*Rx` yields wxyz approximately `(0.5,0.5,0.5,-0.5)` while MuJoCo's old Euler compiles to `(0.5,0.5,0.5,+0.5)`.
+  - All 61 robot visual/collision geom Euler attributes were replaced mechanically by explicit normalized URDF-derived wxyz quaternions. Seven body transforms, joints, dynamics, actuators, and cup are unchanged.
+  - Targeted transform/MJCF/FK GREEN is 12/12. Isolated two-package rebuild exits 0; host package tests are 219 total, 0 errors/failures, 3 skips (demo 205 passed/3 skipped; support 10/10); Ruff passes 67 files.
+  - Formal 10-second gate exits 0 with the same finite/stationary metrics: cup settle translation 2.465955717647727e-08 m and final two-second envelope 2.0779550502379467e-08 m. Evidence SHA-256 is 6af27589572a2f4276fe1a41b0d02e442dffdfc5158d35b332426422558d84c4.
+  - The first sandbox package-test attempt is environment-invalid, not a product failure: ROS log writes and DDS sockets were denied, and Ruff identified only formatting in the new test. The corrected host/domain-139 run above is authoritative.
+open_risks:
+  - Fresh post-fix CUA visual evidence is still required; EXP-057 remains RUNNING and the pre-fix screenshot remains correction evidence.
+next_command: Revalidate and SIGINT only PGID 1783524, prove domain 138 empty, reuse so101-mujoco-gui:0.0 with the rebuilt isolated overlay, prove controller readiness, and take a fresh CUA baseline without sending motion.
+```
+
+## Checkpoint CP-090
+
+```yaml
+checkpoint_id: CP-090
+last_valid_experiment: EXP-055
+current_hypothesis: Explicit URDF-derived geom quaternions fix a real Euler semantic defect but do not explain the dominant visual separation; the next first-divergence boundary is raw-URDF versus compiled-MuJoCo mesh world AABB/refpose.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; all Task 13/EXP-057 changes remain unstaged; Gazebo protected tree remains zero-diff/status.
+owned_processes: Fresh quaternion-fixed domain-138 launch PID/PGID 1820786, robot_state_publisher 1820794, and ros2_control_node 1820795 remain live in so101-mujoco-gui:0.0; codex-cua remains live and CUA-only.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, so101-py-qual, and unrelated ROS/Gazebo processes remain untouched.
+confirmed_conclusions:
+  - Pre-fix domain-138 PGID 1783524 was precisely stopped after revalidation; domain 138 was empty before the exact pane reuse.
+  - Restarted runtime loads installed robot MJCF SHA-256 4f397baae52b45e3983dcbd6e4507c37e3be68b2497436d01101847fbc722f9e and all three controllers are active.
+  - The first post-restart CUA call was INVALID instrumentation because session `exp057-baseline` had expired; it was rejected before capture/action. After explicit session revival, CUA saved a fresh frame with SHA-256 ee7c64efd25a4dc81baad1af4a424dbc3bd208f714907af9e7473270a2374614.
+  - The post-fix image still shows robot mesh pieces as separated floating segments. No GUI input or controller action was sent. The quaternion change therefore does not by itself satisfy the visual gate.
+open_risks:
+  - Mesh asset preprocessing/refpose/scale or another transform layer may diverge even though declared geom origins and body joint transforms pass static parity.
+  - EXP-057 remains RUNNING and must not be terminalized or advanced to motion.
+next_command: Generate read-only per-instance world AABB evidence from raw frozen URDF meshes and from MuJoCo's compiled geom vertex/xpos/xmat data at qpos zero; do not modify production code.
+```
+
+## Checkpoint CP-091
+
+```yaml
+checkpoint_id: CP-091
+last_valid_experiment: EXP-055
+current_hypothesis: The remaining visual failure is above the per-instance geometry boundary, likely in the authoritative root/world layout or the visual interpretation of that layout; changing geom transforms further is disproven by exact world-AABB parity and would be a guess.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; preserved Task 13/EXP-057 dirty state plus transform test/quaternion correction remains unstaged; protected Gazebo status and d300e7a diff remain empty.
+owned_processes: Quaternion-fixed EXP-057 domain-138 launch PID/PGID 1820786, robot_state_publisher 1820794, and ros2_control_node 1820795 remain live in so101-mujoco-gui:0.0; codex-cua remains live and CUA-only. No motion was sent.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, so101-py-qual, and unrelated ROS/Gazebo processes remain untouched.
+confirmed_conclusions:
+  - A compiled-model C++ probe uses MuJoCo `geom_xpos`, `geom_xmat`, and compiled mesh vertices at qpos zero; an independent raw-URDF probe transforms every original STL vertex by URDF body and visual-origin transforms.
+  - All 19 robot visual instance world AABBs agree between those two paths. Maximum center/extent error is 4.702449263316311e-09 m (`upper_arm_visual_01`); evidence SHA-256 is 04fd68656aa660afe32d501596dab46dcec76aac9e96b1dc6d795dc2bf17bd22.
+  - Mesh scale, compiler refpose compensation, geom local orientation, geom local position, and body-chain application therefore reproduce the frozen package-local URDF at the executable world-geometry boundary.
+  - The fresh post-fix CUA image still does not satisfy the user-reviewed visual contract and remains visual-gate failure/correction evidence; SHA-256 ee7c64efd25a4dc81baad1af4a424dbc3bd208f714907af9e7473270a2374614.
+disproven_routes:
+  - Further camera changes cannot repair the observed separation.
+  - Further ungrounded geom quaternion/refpose/scale changes are not justified: compiled world AABB already matches raw URDF to nanometer-scale numerical tolerance.
+open_risks:
+  - The authoritative root/world placement or an upstream frozen-URDF layout assumption may be inconsistent with the intended mounted SO-101 visual scene. This has not been A/B tested and its modification is outside the current no-body/joint-change authorization.
+  - EXP-057 remains RUNNING, not terminalized; no action/final capture/contact/calibration claim is permitted.
+next_command: NONE; keep the domain-138 GUI available and request direction on a separate root/world-layout diagnostic or authoritative-reference correction. Do not send motion or modify body/joint/dynamics/actuator/cup.
+```
+
+## Checkpoint CP-092
+
+```yaml
+checkpoint_id: CP-092
+last_valid_experiment: EXP-055
+current_experiment: EXP-057 RUNNING
+current_hypothesis: The Gazebo-aligned pedestal/table/cup world layout is now executable and stable, while the remaining robot appearance is not caused by Convex Hull, BVH, inertia/contact overlays, collision groups, lost faces, smooth normals, or a mesh-to-sphere renderer substitution. The executable q=0 reference pose/view is now the first unresolved boundary; changing joint initial state is not authorized by this round.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; 16 preserved Task 13/EXP-057 dirty paths remain unstaged; protected Gazebo d300e7a diff and worktree status are empty.
+owned_processes: Source-matching visualization-only domain-138 stack is restored in retained tmux so101-mujoco-gui:0.0 at launch PID/PGID 1917471 and ros2_control_node PID 1917488. CUA-only session remains separate. No action goal was sent.
+preserved_processes: codex, codex-temp, kimi, so101-phy5-v2-r0, so101-py-qual, and all unrelated ROS/Gazebo processes remain untouched. The existing Gazebo reference was captured read-only without focus/input/camera changes.
+confirmed_conclusions:
+  - CP-091 is corrected: world-AABB parity did not prove viewer rendering. CUA subsequently read Rendering flags (Joint/Inertia/Center of Mass/Contact all off), Group enable (Geom 0/1/2 on and 3/4/5 off), and performed Convex Hull plus BVH A/B. Convex Hull was already off; BVH False became selected; neither changed the robot silhouette.
+  - Scene RED was 3 failed/4 passed for absent base_pedestal, wrong table pose/size/pairing, and stale cup/keyframe pose (SHA-256 670d5d4bd0e4030fcbd2c023c94f32a366b19a258ce42ca4f853037879718e90). Minimal GREEN is 7/7 (SHA-256 ee09f6debd9f81709cd5af75a47e8b1c6ed9a94b8e82a9b34c00f597199e9c); combined static/compile gate is 15/15.
+  - The scene now includes paired visual/collision base_pedestal at center 0,0,0.17 and full size 0.18,0.18,0.10; paired table at center 0,-0.20,0.10 and full size 0.50,0.60,0.04; plastic_cup and task_start are at 0.02,-0.28,0.165.
+  - Formal ten-second gate remains finite with table_dofs=0, cup settle translation 1.854380331613668e-08 m, final two-second envelope 1.3066197182688203e-08 m, evidence SHA-256 ac7504d58ca91e2a34a8b0e6203e55b315a4edae76ae74f3e619b0f85505551c.
+  - Gazebo read-only CUA reference shows the same asset family as detailed mechanical parts (SHA-256 9fce3adeaedb715accfdf80c244b1ccad1367588c17024d8c7e26c20378fe930). MuJoCo preserves every raw STL face exactly and all 19 robot visuals enter mjvScene as mjGEOM_MESH, not sphere (probe SHAs 0b38c1ec8c188aabda0581960f36f16271324f81beca5f9afe427456155528d6 and 846919f723d5e399ba647600fec9526238478fa3d6f7418ccf92cb6c68f6f44e).
+  - Asset-level smoothnormal=false was tested as a single-variable A/B after a strict RED; static/10-second gates passed but the fresh CUA silhouette did not change. The test and production attributes were removed, rebuilt, and the source-matching runtime restored.
+  - One HiDPI-misdirected CUA panel operation triggered the known GUI display-thread SIGSEGV in update_sim_display; its launch shut down automatically. Exact task-owned leftovers were cleaned and a fresh source-matching stack was restored. This is GUI instrumentation/runtime risk, not physics qualification evidence.
+open_risks:
+  - EXP-057 remains RUNNING. The user-reviewed full-arm visual criterion is not yet met, so no motion/final frame/contact/calibration conclusion is allowed.
+  - The source-matching q=0 reference pose/view differs materially from the preserved Gazebo reference pose. Any change to robot keyframe/controller initial state needs an explicit frozen pose contract; no joint transform, limit, dynamics, actuator, controller, or target was changed here.
+next_command: Review and authorize an exact robot reference-pose contract (or a single-mesh visual qualification fixture) before changing robot qpos; do not send action goals or terminalize EXP-057.
+```
+
+## Correction to CP-092 and Experiment EXP-058
+
+```yaml
+correction_to: CP-092
+reason: The prior render-scene probe interpreted MuJoCo geom enum value 2 as mesh. In MuJoCo, value 2 is mjGEOM_SPHERE and value 7 is mjGEOM_MESH. The executable probe therefore proves the opposite of CP-092's renderer-substitution claim: every robot geom with model_type=2/rendered_type=2 is a sphere even though dataid references a loaded mesh asset.
+superseded_claim: All 19 robot visuals enter mjvScene as mjGEOM_MESH, not sphere.
+preserved_evidence: /tmp/so101-debug-mujoco-visual-parity-20260811/render-scene-probe.txt
+
+experiment_id: EXP-058
+prior_experiment: EXP-057 RUNNING
+status: PLANNED
+lifecycle: FULL_RESTART
+hypothesis: The robot geoms compile as spheres because their robot_visual and robot_collision defaults omit type="mesh"; explicitly inheriting type="mesh" will make the existing ai-station worktree assets render and collide as the paired detailed meshes without changing transforms, qpos, dynamics, actuators, controllers, or mesh locations.
+prediction:
+  - A source contract test will fail because both robot geom defaults omit type="mesh".
+  - After the one-variable patch, the source contract and MJCF compile gates will pass, a compiled-model probe will report mjGEOM_MESH (enum 7) for all robot visual/collision geoms, and a fresh CUA frame will show detailed mechanical links instead of spheres.
+single_variable: Add type="mesh" to the robot_visual and robot_collision default geoms in src/so101_mujoco_demo_py/mjcf/so101.xml.
+authoritative_reference: https://github.com/johnsutor/so101-nexus/blob/main/src/so101_nexus/assets/SO101/so101_new_calib.xml explicitly types mesh geoms; retain this package's existing assets/... file attributes because the ai-station worktree stores meshes under src/so101_mujoco_demo_py/mjcf/assets.
+success_criteria:
+  - RED fails only on the missing explicit mesh type, then GREEN passes.
+  - All robot visual and collision geoms compile as mjGEOM_MESH enum 7 and retain valid mesh data ids.
+  - Visual/collision instance parity and asset existence tests pass with no Gazebo changes.
+  - A ten-second finite/stationary gate passes after the collision type correction.
+  - Exact task-owned FULL_RESTART provenance is valid and a fresh ai-station CUA image visibly shows detailed mechanical robot geometry.
+failure_criteria:
+  - Any geom remains sphere/primitive, MJCF fails to compile, stability regresses, or fresh CUA still shows spherical robot geometry.
+invalid_criteria:
+  - Stale install, wrong overlay/domain, non-CUA screenshot, process contamination, or changes outside the single-variable production patch.
+provenance:
+  source_commit: 997e8ed95100e4097744c92f1b065613ab390220 plus preserved unstaged Task 13/EXP-057 work
+  install_overlay: /tmp/so101-debug-mujoco-visual-parity-20260811/install after fresh rebuild
+  runtime_executable: pinned mujoco_ros2_control overlay plus freshly rebuilt so101_mujoco_demo_py
+  ros_domain_id: 138 after exact task-owned restart
+  gz_partition: NONE
+evidence_root: /tmp/so101-debug-mujoco-visual-parity-20260811
+safety_contract: Visualization and static/runtime stability only; no action goals, robot motion command, hardware, teleport, direct state writes, equality, weld, adhesion, or mocap following.
+decision: PENDING; preregistration and RED-test addition only.
+```
+
+## Experiment EXP-058 Terminal Result
+
+```yaml
+experiment_id: EXP-058
+status: VALID
+result: ROBOT_MESH_VISUAL_RESTORED
+lifecycle: FULL_RESTART
+single_variable_applied: Added type="mesh" only to the robot_visual and robot_collision default geoms; retained every existing assets/... file attribute and did not modify mesh assets, transforms, qpos, dynamics, actuators, controllers, scene layout, or Gazebo.
+root_cause:
+  - MJCF geom defaults to sphere when type is omitted.
+  - A mesh attribute/data id alone does not make the geom a mesh; the corrected MuJoCo enum interpretation is mjGEOM_SPHERE=2 and mjGEOM_MESH=7.
+red:
+  result: 1 failed on visual_default type None versus mesh
+  evidence: /tmp/so101-debug-mujoco-visual-parity-20260811/robot-geom-type-red.log
+  sha256: 7da232842880bcdaac78a45f5b8df8be196112d48fc27b173906f5cec7ba02c7
+green:
+  targeted_source_compile: 11 passed
+  compiled_geometry: 19 robot visual plus 42 robot collision geoms; all type=7, dataid>=0, bad=0
+  package_tests: 207 passed, 3 skipped
+  ruff: All checks passed; 67 files already formatted
+  isolated_build: 2 packages finished
+runtime_gate:
+  simulation_seconds: 10.000000000000009
+  finite_state: true
+  table_dofs: 0
+  cup_translation_after_settle_m: 1.8543803469486458e-08
+  final_two_second_translation_envelope_m: 1.3066197291198687e-08
+runtime_provenance:
+  launch_pid_pgid: 1984990
+  ros2_control_node_pid: 1984999
+  ros_domain_id: 138
+  package_prefix: /tmp/so101-debug-mujoco-visual-parity-20260811/install/so101_mujoco_demo_py
+  ros2_control_executable: /data/work/ws_mujoco_ros2_control_003/install/lib/mujoco_ros2_control/ros2_control_node
+  installed_robot_mjcf_sha256: cf888f91218deaef6b5d394ab6ace0cd3a9cc9b5b2e9a2fdc5ce1423503253bd
+  controllers: arm_controller, gripper_controller, and joint_state_broadcaster active
+cua_observation:
+  - Fresh CUA window snapshot from MuJoCo PID 1984999/window 81788935 visibly contains the mounted robot base, detailed servo housings, mechanical links, wrist, gripper/fingertips, pedestal, table, and open compound cup.
+  - The prior yellow/black/blue spherical blobs are absent. No GUI input, camera change, controller action, or motion goal was sent.
+  evidence: /tmp/so101-debug-mujoco-visual-parity-20260811/exp058-cua-fresh.png
+  sha256: d88b1669b031d767c3d9d71e40392dc88da90de5b5e8e969dcca2a9b4fbf60a2
+evidence:
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/robot-geom-type-green-source.log (sha256 1d6b6c9aebd712df39deb27f2f3a2e22e9c38806c7802572491d6f47d6e81d88)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/robot-geom-probe-green.txt (sha256 9b5a5fe82e7f572125471f723102fe9e876c7b1420f5346f60b5fc27bbe9f7d7)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/robot-mesh-fix-10s.json (sha256 04acbf99ab5f1949315d3bcf50fc0ee4f679254d3d7a003537cac8ea0d98fd8c)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/robot-mesh-fix-rebuild.log (sha256 8e9f615507e054f6bc4185e213363bff84dd8f4a44d63f9f69ceb5876dd16187)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/exp058-demo-pytest.log (sha256 6bde2d889c1a6e99829c31e59b44bb608e5122ec91061f4390e793d7a14deb15)
+  - /tmp/so101-debug-mujoco-visual-parity-20260811/exp058-ruff-valid.log (sha256 966803eeaadd9efbe57c1f3e92399e3b8c74e032b03b3fccc1fc0aef26c18235)
+invalid_instrumentation:
+  - The first combined GREEN command lacked source PYTHONPATH and failed test collection; the corrected source-qualified command is authoritative.
+  - The first corrected-enum probe filter also selected scene visual geoms; the body-ancestry probe supersedes it and exits 0 at visual=19 collision=42 bad=0.
+  - A direct system-Python Ruff invocation could not import Ruff; the repository gate with pinned Ruff 0.15.20 is authoritative and passes.
+scope_boundary:
+  - This terminal result validates robot visual/collision geom typing, executable mesh loading, existing table/cup stability gate, and fresh GUI appearance only.
+  - It does not validate MoveIt execution, contact calibration, grasp success, or robot closed-loop hold. The live joint-state stream still reports nonzero instantaneous velocity and is not used as a stability claim here.
+preservation:
+  - src/so101_gazebo_demo_py status and diff are empty.
+  - src/so101_mujoco_demo_py/mjcf/assets status is empty; ai-station workspace mesh locations and bytes are unchanged.
+  - Existing Task 13 and EXP-057 unstaged paths remain preserved; index remains empty.
+decision: KEEP EXP-058 VALID for the visual repair. Leave the source-matching domain-138 MuJoCo GUI running for user review; do not send actions or infer Task 13 success.
+```
+
+## Checkpoint CP-093
+
+```yaml
+checkpoint_id: CP-093
+last_valid_experiment: EXP-058
+current_experiment: EXP-057 remains RUNNING under its separate observable-motion criterion
+current_hypothesis: The spherical-robot visual defect is fixed at the executable geom-type boundary. Any remaining joint drift/hold behavior is a separate control/contact task and must not be hidden inside the visual repair.
+working_tree_status: HEAD 997e8ed95100e4097744c92f1b065613ab390220; index empty; preserved Task 13/EXP-057 dirty state plus EXP-058 test/MJCF/ledger changes remain unstaged; protected Gazebo and mesh-asset statuses are empty.
+owned_processes: Source-matching visualization-only domain-138 stack remains live at launch PID/PGID 1984990 and ros2_control_node PID 1984999 in retained tmux so101-mujoco-gui:0.0; no action goal was sent.
+confirmed_conclusions:
+  - Explicit type="mesh" is necessary and sufficient to replace the robot spheres with the already-present detailed ai-station worktree meshes.
+  - Visual and collision geometry retain the same authoritative paired instance structure; all 61 compiled robot geoms are mesh enum 7 with valid data ids.
+  - Fresh CUA visual evidence satisfies the user-requested robot visual repair and shows the mounted base plus complete detailed arm.
+open_risks:
+  - EXP-057's controller-driven observable-motion criterion is not terminalized by a no-action visual repair.
+  - Live closed-loop joint hold remains unqualified and should be diagnosed separately from visual geometry.
+next_command: NONE for visual geometry. Keep the GUI available for user inspection and await direction before any action, contact calibration, or hold diagnosis.
+```
+
+## EXP-058 Final Verification Addendum
+
+```yaml
+final_verification:
+  - Fresh no-action CUA snapshot s0296 again shows the same complete detailed mechanical robot, mounted base, pedestal, table, and open cup after more than 220000 simulation steps.
+  - Full package verification with pytest cache disabled is 207 passed, 3 skipped; Ruff remains clean with 67 files already formatted.
+  - Source and installed robot MJCF SHA-256 remain identical at cf888f91218deaef6b5d394ab6ace0cd3a9cc9b5b2e9a2fdc5ce1423503253bd.
+  - Protected Gazebo and MuJoCo mesh-asset statuses remain empty; diff-check passes.
+fresh_cua_evidence: /tmp/so101-debug-mujoco-visual-parity-20260811/exp058-cua-final.png
+fresh_cua_sha256: ab55c52a4eef21bdbd6416dffc676ff1a243a9d83ed7b0d6be200172b6b893df
+invalid_instrumentation_addendum:
+  - One final direct pytest rerun created src/so101_mujoco_demo_py/.pytest_cache; the repository isolation test correctly rejected that ignored runtime artifact on the next invocation.
+  - The task-created cache was moved intact to /tmp/so101-debug-mujoco-visual-parity-20260811/pytest-cache-final-invalid. The authoritative rerun used -p no:cacheprovider and passed 207/3 without recreating source-tree cache.
+decision: EXP-058 remains VALID; no production source changed after the qualified mesh-type fix.
 ```
