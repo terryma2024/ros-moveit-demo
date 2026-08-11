@@ -8,6 +8,7 @@ type Props = {
   joints: Record<string, JointSample>;
   targets: Record<string, number>;
   leaseHeld: boolean;
+  manualJointExecute?: boolean;
   plan: { id?: string; executable: boolean; staleCode?: string };
   onEdit: (joint: string, value: number) => void;
   onClampNotice?: (message: string) => void;
@@ -18,9 +19,9 @@ type Props = {
   onCancel: () => void;
 };
 
-export function JointPanel({ joints, targets, leaseHeld, plan, onEdit, onClampNotice, onPlan, onExecute, onExecuteGripper, onExecuteAll, onCancel }: Props) {
+export function JointPanel({ joints, targets, leaseHeld, manualJointExecute = true, plan, onEdit, onClampNotice, onPlan, onExecute, onExecuteGripper, onExecuteAll, onCancel }: Props) {
   const names = ["1", "2", "3", "4", "5", "6"];
-  const blocked = !leaseHeld;
+  const blocked = !leaseHeld || !manualJointExecute;
   const applyTarget = (joint: string, value: number) => {
     const result = clampJointTarget(joint, value, joints[joint]);
     if (result.unavailable) return;
@@ -41,10 +42,10 @@ export function JointPanel({ joints, targets, leaseHeld, plan, onEdit, onClampNo
     {plan.staleCode && <p className="mt-3 text-amber-300">{plan.staleCode}: Target changed after planning.</p>}
     <div className="mt-4 flex flex-wrap gap-2">
       <Button disabled={blocked} onClick={onPlan}>Plan Arm</Button>
-      <Button disabled={!leaseHeld || !plan.executable} onClick={onExecute}>Execute Arm</Button>
-      <Button disabled={!leaseHeld} variant="outline" onClick={onCancel}>Cancel</Button>
-      <Button disabled={!leaseHeld} variant="secondary" onClick={onExecuteGripper}>Execute gripper</Button>
-      <Button disabled={!leaseHeld || !plan.executable} onClick={onExecuteAll}>Execute All</Button>
+      <Button disabled={blocked || !plan.executable} onClick={onExecute}>Execute Arm</Button>
+      <Button disabled={blocked} variant="outline" onClick={onCancel}>Cancel</Button>
+      <Button disabled={blocked} variant="secondary" onClick={onExecuteGripper}>Execute gripper</Button>
+      <Button disabled={blocked || !plan.executable} onClick={onExecuteAll}>Execute All</Button>
     </div>
   </Card>;
 }

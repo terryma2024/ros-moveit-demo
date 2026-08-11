@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +19,29 @@ class ServerMode(str, Enum):
 class StepFrame(str, Enum):
     WORLD = "WORLD"
     TOOL = "TOOL"
+
+
+class BackendCapabilityMap(BaseModel):
+    backend_probe: bool
+    workflow_execute: bool
+    workflow_start: bool
+    workflow_run: bool
+    workflow_resume: bool
+    reset_world: bool
+    scene_operations: bool
+    physical_observation: bool
+    manual_joint_execute: bool
+    manual_tcp_execute: bool
+    camera_presets: bool
+
+
+class BackendCapabilitiesResponse(BaseModel):
+    simulation_only: bool
+    bind_policy: str
+    backend: Literal["gazebo_cpp", "gazebo_py", "mujoco_py"]
+    owner_package: str
+    owner_executable: str
+    capabilities: BackendCapabilityMap
 
 
 class Pose6D(BaseModel):

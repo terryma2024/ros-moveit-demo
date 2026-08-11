@@ -24,15 +24,28 @@ const pendingLabels: Record<string, string> = {
   "force-continue": "Force Continuing…",
 };
 
-export function WorkflowPanel({ snapshot, leaseHeld, command }: { snapshot?: any; leaseHeld: boolean; command: (operation: string, body?: Record<string, unknown>) => Promise<unknown> }) {
+type WorkflowCapabilities = {
+  workflow_start: boolean;
+  workflow_run: boolean;
+  workflow_resume: boolean;
+};
+
+const supportedWorkflow: WorkflowCapabilities = {
+  workflow_start: true,
+  workflow_run: true,
+  workflow_resume: true,
+};
+
+export function WorkflowPanel({ snapshot, leaseHeld, command, capabilities = supportedWorkflow }: { snapshot?: any; leaseHeld: boolean; command: (operation: string, body?: Record<string, unknown>) => Promise<unknown>; capabilities?: WorkflowCapabilities }) {
   const [pendingOperation, setPendingOperation] = useState<string>();
   const validationFailed = snapshot?.current_state === "VALIDATION_FAILED";
   const pending = pendingOperation !== undefined;
   const hasWorkflow = Boolean(snapshot?.run_id);
   const done = snapshot?.current_state === "DONE";
-  const canBegin = leaseHeld && !hasWorkflow && !pending;
-  const canContinue = leaseHeld && hasWorkflow && !done && !pending;
-  const canReset = leaseHeld && hasWorkflow && !pending;
+  const canStart = capabilities.workflow_start && leaseHeld && !hasWorkflow && !pending;
+  const canRun = capabilities.workflow_run && leaseHeld && !hasWorkflow && !pending;
+  const canContinue = capabilities.workflow_resume && leaseHeld && hasWorkflow && !done && !pending;
+  const canReset = capabilities.workflow_resume && leaseHeld && hasWorkflow && !pending;
   const execute = async (operation: string, body?: Record<string, unknown>) => {
     if (pending) return;
     setPendingOperation(operation);
@@ -49,9 +62,9 @@ export function WorkflowPanel({ snapshot, leaseHeld, command }: { snapshot?: any
     <p className="my-3">{snapshot?.current_state ?? "IDLE"} → {snapshot?.next_state ?? "—"}; browser never selects a state.</p>
     {pendingOperation && <p role="status" aria-live="polite" className="mb-3 text-sm text-sky-200">Executing {operationLabels[pendingOperation]}…</p>}
     <div className="flex flex-wrap gap-2">
-      <Button disabled={!canBegin} onClick={() => void execute("start")}>{label("start")}</Button>
+      <Button disabled={!canStart} onClick={() => void execute("start")}>{label("start")}</Button>
       <Button disabled={!canContinue} onClick={() => void execute("step", { snapshot_revision: snapshot?.snapshot_revision })}>{label("step")}</Button>
-      <Button disabled={!canBegin} onClick={() => void execute("run")}>{label("run")}</Button>
+      <Button disabled={!canRun} onClick={() => void execute("run")}>{label("run")}</Button>
       <Button disabled={!canContinue} variant="outline" onClick={() => void execute("stop")}>{label("stop")}</Button>
       <Button disabled={!canContinue} onClick={() => void execute("resume")}>{label("resume")}</Button>
       <ConfirmAction label="Reset workflow" disabled={!canReset} onConfirm={() => void execute("reset")}/>

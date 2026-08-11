@@ -11,6 +11,54 @@ const environment = {
   LD_LIBRARY_PATH: "/data/work/ws_moveit/install/so101_gazebo_demo_cpp/lib:/opt/ros/jazzy/lib",
 };
 const snapshot = { mode: "READY", revision: 9, simulation_session_id: "e2e-session", environment, joints: Object.fromEntries(["1", "2", "3", "4", "5", "6"].map((name) => [name, { position_rad: 0, velocity_rad_s: 0, lower_limit_rad: hardLimits[name][0], upper_limit_rad: hardLimits[name][1] }])), tcp: { frame_id: "world", tcp_frame: "so101_tcp", x_m: 0.1, y_m: 0.2, z_m: 0.3, roll_rad: 0, pitch_rad: 0, yaw_rad: 0 }, moveit_collisions: [], gazebo_contacts: [] };
+const gazeboCapabilities = {
+  backend: "gazebo_cpp",
+  owner_package: "so101_gazebo_demo_cpp",
+  owner_executable: "pick_place_state_machine",
+  capabilities: {
+    backend_probe: true, workflow_execute: true, workflow_start: true,
+    workflow_run: true, workflow_resume: true, reset_world: true,
+    scene_operations: true, physical_observation: true,
+    manual_joint_execute: true, manual_tcp_execute: true, camera_presets: true,
+  },
+};
+const probeOnlyCapabilities = {
+  backend: "mujoco_py",
+  owner_package: "so101_mujoco_demo_py",
+  owner_executable: "pick_place_state_machine",
+  capabilities: Object.fromEntries(Object.keys(gazeboCapabilities.capabilities).map((key) => [key, key === "backend_probe"])),
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/capabilities", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify(gazeboCapabilities),
+  }));
+});
+
+test("probe-only backend stays visible while every live control is disabled", async ({ page }) => {
+  await page.route("**/capabilities", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify(probeOnlyCapabilities),
+  }));
+  await page.route("**/snapshot", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(snapshot) }));
+  await page.route("**/control/lease", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ code: "OK", succeeded: true, layers: { lease_id: "lease-probe" } }),
+  }));
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Acquire lease" }).click();
+  await expect(page.getByRole("button", { name: "Plan Arm" })).toBeDisabled();
+  await page.getByRole("tab", { name: "TCP" }).click();
+  await expect(page.getByRole("button", { name: "Plan TCP" })).toBeDisabled();
+  await page.getByRole("tab", { name: "Workflow" }).click();
+  await expect(page.getByRole("button", { name: "Start" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Run" })).toBeDisabled();
+  await page.getByRole("tab", { name: "Environment" }).click();
+  await expect(page.getByText("mujoco_py", { exact: true })).toBeVisible();
+  await expect(page.getByText("so101_mujoco_demo_py", { exact: true })).toBeVisible();
+});
 
 test("runtime environment is visible, bounded and copyable", async ({ page }) => {
   await page.route("**/snapshot", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(snapshot) }));

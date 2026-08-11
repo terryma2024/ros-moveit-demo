@@ -89,6 +89,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/gazebo/camera/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Camera Presets */
+        get: operations["camera_presets_gazebo_camera_presets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gazebo/camera/presets/{preset}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Camera Preset */
+        post: operations["camera_preset_gazebo_camera_presets__preset__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/gazebo/screenshot": {
         parameters: {
             query?: never;
@@ -297,10 +331,215 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BackendCapabilitiesResponse */
+        BackendCapabilitiesResponse: {
+            /**
+             * Backend
+             * @enum {string}
+             */
+            backend: "gazebo_cpp" | "gazebo_py" | "mujoco_py";
+            /** Bind Policy */
+            bind_policy: string;
+            capabilities: components["schemas"]["BackendCapabilityMap"];
+            /** Owner Executable */
+            owner_executable: string;
+            /** Owner Package */
+            owner_package: string;
+            /** Simulation Only */
+            simulation_only: boolean;
+        };
+        /** BackendCapabilityMap */
+        BackendCapabilityMap: {
+            /** Backend Probe */
+            backend_probe: boolean;
+            /** Camera Presets */
+            camera_presets: boolean;
+            /** Manual Joint Execute */
+            manual_joint_execute: boolean;
+            /** Manual Tcp Execute */
+            manual_tcp_execute: boolean;
+            /** Physical Observation */
+            physical_observation: boolean;
+            /** Reset World */
+            reset_world: boolean;
+            /** Scene Operations */
+            scene_operations: boolean;
+            /** Workflow Execute */
+            workflow_execute: boolean;
+            /** Workflow Resume */
+            workflow_resume: boolean;
+            /** Workflow Run */
+            workflow_run: boolean;
+            /** Workflow Start */
+            workflow_start: boolean;
+        };
+        /** CollisionPair */
+        CollisionPair: {
+            /**
+             * Allowed
+             * @default false
+             */
+            allowed: boolean;
+            /** Depth M */
+            depth_m?: number;
+            /** First Seen At */
+            first_seen_at?: number;
+            /** Last Seen At */
+            last_seen_at?: number;
+            /** Object A */
+            object_a: string;
+            /** Object B */
+            object_b: string;
+            /** Source */
+            source: string;
+            /** Waypoint Index */
+            waypoint_index?: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** JointSample */
+        JointSample: {
+            /**
+             * Age S
+             * @default 0
+             */
+            age_s: number;
+            /** Lower Limit Rad */
+            lower_limit_rad?: number;
+            /** Name */
+            name: string;
+            /** Position Rad */
+            position_rad: number;
+            /** Upper Limit Rad */
+            upper_limit_rad?: number;
+            /**
+             * Velocity Rad S
+             * @default 0
+             */
+            velocity_rad_s: number;
+        };
+        /** PhysicalOutcomeEvidence */
+        PhysicalOutcomeEvidence: {
+            /**
+             * Duration S
+             * @default 0
+             */
+            duration_s: number;
+            final_pose?: components["schemas"]["Pose6D"];
+            /** First Sequence */
+            first_sequence?: number;
+            /** Gazebo Attached */
+            gazebo_attached?: boolean;
+            /** Gripper Contact */
+            gripper_contact?: boolean;
+            /** Intended Support Contact */
+            intended_support_contact?: boolean;
+            /** Last Sequence */
+            last_sequence?: number;
+            /** Metrics */
+            metrics?: {
+                [key: string]: number;
+            };
+            /** Moveit Attached */
+            moveit_attached?: boolean;
+            /** Primary Failure */
+            primary_failure?: string;
+            /** Release Epoch Id */
+            release_epoch_id?: string;
+            /**
+             * Sample Count
+             * @default 0
+             */
+            sample_count: number;
+            /** World Object Synchronized */
+            world_object_synchronized?: boolean;
+        };
+        /** Pose6D */
+        Pose6D: {
+            /** Frame Id */
+            frame_id: string;
+            /** Pitch Rad */
+            pitch_rad: number;
+            /** Roll Rad */
+            roll_rad: number;
+            /** Tcp Frame */
+            tcp_frame: string;
+            /** X M */
+            x_m: number;
+            /** Y M */
+            y_m: number;
+            /** Yaw Rad */
+            yaw_rad: number;
+            /** Z M */
+            z_m: number;
+        };
+        /**
+         * ServerMode
+         * @description An enumeration.
+         * @enum {string}
+         */
+        ServerMode: "STARTING" | "READ_ONLY" | "READY" | "BUSY" | "DEGRADED";
+        /** TelemetrySnapshot */
+        TelemetrySnapshot: {
+            /** Controllers */
+            controllers?: {
+                [key: string]: string;
+            };
+            /** Environment */
+            environment?: {
+                [key: string]: string;
+            };
+            /** Gazebo Attached */
+            gazebo_attached?: boolean;
+            /** Gazebo Contacts */
+            gazebo_contacts?: components["schemas"]["CollisionPair"][];
+            /** Joints */
+            joints?: {
+                [key: string]: components["schemas"]["JointSample"];
+            };
+            /** @default STARTING */
+            mode: components["schemas"]["ServerMode"];
+            /** Moveit Attached */
+            moveit_attached?: boolean;
+            /** Moveit Collisions */
+            moveit_collisions?: components["schemas"]["CollisionPair"][];
+            object_pose?: components["schemas"]["Pose6D"];
+            physical_outcome?: components["schemas"]["PhysicalOutcomeEvidence"];
+            /** Real Time Factor */
+            real_time_factor?: number;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Scene Revision
+             * @default 0
+             */
+            scene_revision: number;
+            /**
+             * Sequence
+             * @default 0
+             */
+            sequence: number;
+            /**
+             * Server Timestamp
+             * @default 0
+             */
+            server_timestamp: number;
+            /**
+             * Simulation Session Id
+             * @default
+             */
+            simulation_session_id: string;
+            /** Source Ages S */
+            source_ages_s?: {
+                [key: string]: number;
+            };
+            tcp?: components["schemas"]["Pose6D"];
         };
         /** ValidationError */
         ValidationError: {
@@ -370,7 +609,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BackendCapabilitiesResponse"];
                 };
             };
         };
@@ -446,6 +685,61 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    camera_presets_gazebo_camera_presets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    camera_preset_gazebo_camera_presets__preset__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -810,7 +1104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TelemetrySnapshot"];
                 };
             };
         };

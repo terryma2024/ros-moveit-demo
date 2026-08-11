@@ -5,6 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 import { JointPanel } from "./joint-panel";
 
 describe("JointPanel", () => {
+  it("disables manual joint operations when the backend capability is false", () => {
+    render(<JointPanel joints={{}} targets={{}} leaseHeld plan={{ executable: true }} manualJointExecute={false} onEdit={vi.fn()} onPlan={vi.fn()} onExecute={vi.fn()} onExecuteGripper={vi.fn()} onExecuteAll={vi.fn()} onCancel={vi.fn()} />);
+
+    for (const name of ["Plan Arm", "Execute Arm", "Cancel", "Execute gripper", "Execute All"]) {
+      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+
   it("blocks planning without a lease and explains the safety gate", () => {
     render(<JointPanel joints={{}} targets={{}} leaseHeld={false} plan={{ executable: false }} onEdit={vi.fn()} onPlan={vi.fn()} onExecute={vi.fn()} onExecuteGripper={vi.fn()} onExecuteAll={vi.fn()} onCancel={vi.fn()} />);
     expect((screen.getByRole("button", { name: "Plan Arm" }) as HTMLButtonElement).disabled).toBe(true);

@@ -9,6 +9,19 @@ const isDisabled = (name: string) =>
   (screen.getByRole("button", { name }) as HTMLButtonElement).disabled;
 
 describe("WorkflowPanel", () => {
+  it("disables every live workflow operation for a probe-only backend", () => {
+    render(<WorkflowPanel
+      leaseHeld
+      command={vi.fn()}
+      capabilities={{ workflow_start: false, workflow_run: false, workflow_resume: false }}
+    />);
+
+    expect(isDisabled("Start")).toBe(true);
+    expect(isDisabled("Run")).toBe(true);
+    expect(isDisabled("Resume")).toBe(true);
+    expect(isDisabled("Next Step")).toBe(true);
+  });
+
   it("enables Start and Run only before a workflow exists", () => {
     render(<WorkflowPanel leaseHeld command={vi.fn()} />);
 

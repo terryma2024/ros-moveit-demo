@@ -8,6 +8,13 @@ import { TcpPanel } from "./tcp-panel";
 const pose = { frame_id: "world", tcp_frame: "so101_tcp", x_m: 0.02, y_m: -0.28, z_m: 0.2, roll_rad: 0, pitch_rad: 0, yaw_rad: 0 };
 
 describe("TcpPanel", () => {
+  it("disables manual TCP operations when the backend capability is false", () => {
+    render(<TcpPanel pose={pose} frame="WORLD" leaseHeld manualTcpExecute={false} plan={{ executable: true }} onFrame={vi.fn()} onEdit={vi.fn()} onStep={vi.fn()} onPlan={vi.fn()} onExecute={vi.fn()} onCancel={vi.fn()} />);
+    expect((screen.getByRole("button", { name: "Plan TCP" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Execute planned TCP" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Cancel TCP" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("shows a duplicate-safe pending state while TCP IK planning is in progress", () => {
     render(<TcpPanel pose={pose} frame="WORLD" leaseHeld planning plan={{ executable: false }} onFrame={vi.fn()} onEdit={vi.fn()} onStep={vi.fn()} onPlan={vi.fn()} onExecute={vi.fn()} onCancel={vi.fn()} />);
     expect((screen.getByRole("button", { name: "Planning TCP…" }) as HTMLButtonElement).disabled).toBe(true);
