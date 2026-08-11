@@ -5,7 +5,7 @@ success_contract: all four presets round-trip through set/get, preserve physics 
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2
 base_commit: 2de4a0ef4cf26e333a56d6c57d5b440060a38624
-current_commit: 076c9bb72dc293131758c0d5c7c394aaba248b37
+current_commit: 54887162bd1ccdcf162a34f72a029bc7b3d9da88
 fork_commit: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
 fork_tag: so101-0.0.3-r2
 workspace_env: SO101_WORKSPACE_DIR
@@ -13,8 +13,8 @@ workspace_default: repo_parent
 install_overlay: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
 runtime_executable: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/lib/mujoco_ros2_control/ros2_control_node
 evidence_root: /tmp/so101-debug-mujoco-viewer-camera/
-task_status: TASK_10_COMPLETE
-latest_checkpoint: CP-008
+task_status: REVIEW_FIXES_COMPLETE
+latest_checkpoint: CP-009
 current_experiment: EXP-003 VALID
 next_experiment: NONE
 ---
@@ -181,7 +181,8 @@ next_command: Commit Task 9, then preregister EXP-003 before recording any Task 
 experiment_id: EXP-003
 prior_experiment: EXP-002 VALID
 status: VALID
-lifecycle: CONTINUATION
+lifecycle: REUSE_STACK
+correction_2026_08_11: The original record used the non-schema lifecycle label CONTINUATION. It meant reuse of the exact EXP-002 process tree without restart or reset, so the lifecycle is corrected to REUSE_STACK; the preregistered conditions, evidence, result, and success count are unchanged.
 hypothesis: Applying all four accepted viewer-camera presets during normal unpaused physics does not reset or pause simulation, alter controller lifecycle, or introduce a camera-aligned joint-position discontinuity beyond the no-switch baseline.
 independent_variable: Four viewer-camera service calls in NW, NE, SE, SW order during one timestamped joint-state recording.
 controlled_variables: HEAD dfc03d3; fork 9f02f82aae2888d6e29c472c6dd64c34b38c5f93 tag so101-0.0.3-r2; source order /opt/ros/jazzy -> /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install -> project install; ROS_DOMAIN_ID 192; GUI session so101-mujoco-camera; simulation_session_id viewer-camera-exp002-domain192; normal running state inherited from EXP-002; no reset, pause, step, controller, object-pose, qpos, qvel, or Teleop operation.
@@ -260,4 +261,45 @@ evidence:
   - /tmp/so101-debug-mujoco-viewer-camera/exp-003/
 open_risks: NONE within the viewer-camera preset scope; Teleop Web UI and RGB-D sensor camera remain explicitly deferred.
 next_command: Commit the guide and qualification checkpoint, then push and verify remote read-back in dependency order.
+```
+
+## Dated lifecycle correction — 2026-08-11
+
+EXP-003 was originally committed with `lifecycle: CONTINUATION`, which is not one of the ledger
+schema's allowed lifecycle values. The original term described continuing the exact EXP-002 stack:
+there was no reset or restart. Its field is therefore corrected to `REUSE_STACK`, and this dated note
+preserves what the prior text said and why it changed. No experiment inputs, evidence, result, validity,
+or stability count are retroactively changed.
+
+## Checkpoint CP-009
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-003
+current_experiment: EXP-003 VALID
+source_commit: 54887162bd1ccdcf162a34f72a029bc7b3d9da88
+working_tree_status: code commit F is clean; this ledger and the integration guide are intentional documentation changes; config/contact_calibration.yaml, scripts/analyze_contact_calibration.py, and test/test_contact_calibration_contract.py under src/so101_mujoco_demo_py remain untracked and untouched.
+owned_processes: NONE
+preserved_processes: so101-mujoco-gui, codex-cua, codex-teleop, codex, kimi, so101-phy5-v2-r0, so101-py-qual, all unrelated Gazebo/MoveIt processes, and EXP-057 remain untouched; no GUI/CUA action or runtime restart occurred.
+confirmed_conclusions:
+  - Finding 1 remains intentionally preserved: SO101_WORKSPACE_DIR and the repo-parent default keep the fork overlay relocatable.
+  - Installer RED showed no-superproject, no-gitlink, wrong-mode, and mismatched-gitlink fixtures reached fake colcon; GREEN commit F rejects each before colcon and accepts a valid linked-worktree gitlink.
+  - Camera RED showed apply performed SET only, printed the SET response, ignored GET failure, and accepted typed/float readback mismatch; GREEN commit F performs exactly one SET followed by one independent GET, prints GET state, validates FREE/FIXED and typed fields with 1e-9 absolute float tolerance, returns nonzero on mismatch or GET failure, and always closes.
+  - Focused tests reported 64 passed and 1 skipped; package build completed for so101_mujoco_support and so101_mujoco_demo_py.
+  - Package tests reported 517 tests, 0 errors, 0 failures, and 6 skipped. The preserved untracked Task13 test/test_contact_calibration_contract.py was discovered and contributed 6 passing tests; those 6 are contamination and are not evidence for these review fixes.
+  - Ruff 0.15.20 reported all checks passed and 73 files formatted; git diff --check and migration isolation passed.
+  - Runtime provenance reported provider gitee_fork_submodule, validation_errors [], fork origin git@gitee.com:zjumty/mujoco_ros2_control.git, source/tag/lock commit 9f02f82aae2888d6e29c472c6dd64c34b38c5f93, expected overlay prefixes and file/interface hashes, and empty fork status.
+evidence:
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/red-installer.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/red-camera.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/green-installer.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/green-camera.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/focused-tests.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/package-build.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/package-tests.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/ruff.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/static-gates.log
+  - /tmp/so101-debug-mujoco-viewer-camera-review-fixes/docs-gates.log
+open_risks: Package totals include the explicitly disclosed six-test Task13 contamination; no GUI/runtime requalification was requested or needed because these fixes are installer preflight and CLI transaction/readback boundaries.
+next_command: Commit only this ledger and the integration guide, push origin codex/so101-mujoco-ros2 without force, then read back refs/heads/codex/so101-mujoco-ros2.
 ```

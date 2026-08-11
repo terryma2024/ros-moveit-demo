@@ -135,10 +135,14 @@ zsh scripts/install-mujoco-ros2-control.zsh
 `${SO101_WORKSPACE_DIR:-<repo-parent>}/ws_mujoco_ros2_control_fork/`；lock 只保存逻辑相对路径，
 不保存某台机器的 checkout 绝对路径。`--init-submodule` 可让安装器初始化尚未初始化的 submodule。
 
-安装会 fail closed 地验证 Gitee origin、gitlink commit、release tag、官方 0.0.3 ancestry、clean submodule，
-然后构建并测试 `mujoco_ros2_control_msgs`、`mujoco_ros2_control_plugins` 和
-`mujoco_ros2_control`。当前流程没有 patch replay；`src/so101_mujoco_demo_py/patches/` 下的旧 patch
-及 `ws_mujoco_ros2_control_003` 只用于历史审计/回滚，不得计入当前 qualification。
+安装会在调用 `colcon` 前 fail closed：脚本所在 checkout 必须是 Git superproject 根目录，且
+superproject 的已提交 `HEAD` 必须把 `third_party/mujoco_ros2_control` 记录为 mode `160000`；该
+gitlink、schema-3 lock 和 clean submodule checkout 的 `HEAD` 必须是同一个 commit。普通 checkout
+和 linked worktree 都支持，但 standalone clone、缺少 gitlink、错误 mode、staged-only gitlink 或
+commit 不一致都不能构建。随后脚本还会验证 Gitee origin、release tag、官方 0.0.3 ancestry，再构建
+并测试 `mujoco_ros2_control_msgs`、`mujoco_ros2_control_plugins` 和 `mujoco_ros2_control`。当前流程
+没有 patch replay；`src/so101_mujoco_demo_py/patches/` 下的旧 patch 及
+`ws_mujoco_ros2_control_003` 只用于历史审计/回滚，不得计入当前 qualification。
 
 ### 4.3 source 顺序和 provenance read-back
 
@@ -748,11 +752,12 @@ CUA 会话过期时要显式 `start_session` 恢复，再用真实 PID/window id
 
 ### 10.5 四角 viewer debug camera
 
-GUI 运行且已按第 4.3 节 source 后，可列出、应用并独立读回预设：
+GUI 运行且已按第 4.3 节 source 后，可列出、应用并读回预设：
 
 ```zsh
 ros2 run so101_mujoco_demo_py camera_preset --list
 ros2 run so101_mujoco_demo_py camera_preset table_corner_nw
+# 可选的额外当前状态查询：
 ros2 run so101_mujoco_demo_py camera_preset --current --format yaml
 
 ros2 run so101_mujoco_demo_py camera_preset table_corner_ne
@@ -760,9 +765,14 @@ ros2 run so101_mujoco_demo_py camera_preset table_corner_se
 ros2 run so101_mujoco_demo_py camera_preset table_corner_sw
 ```
 
+`--list` 不初始化 ROS。`--current` 只执行一次 GET。每次 apply 严格执行一次 SET，再执行一次独立
+GET，打印 GET 的状态；GET 服务失败、FREE/FIXED 类型或离散字段不一致，以及浮点字段超过
+`1e-9` absolute tolerance 时均返回非零，并且所有已创建的 ROS gateway 都会关闭。因此 apply
+成功本身已经包含数值 read-back；`--current --format yaml` 只在需要额外快照时使用。
+
 四个记录共享实测 `lookat`、`distance`、`elevation_deg` 和 projection，只把 azimuth 依次旋转
-90 度。每次应用都要用 `--current --format yaml` 数值核对；视觉 qualification 还要求四张独立、
-新鲜的 CUA frame，每张都完整包含机械臂、夹爪、底座、杯子和主桌面，方向明显不同且尺度一致。
+90 度。视觉 qualification 还要求四张独立、新鲜的 CUA frame，每张都完整包含机械臂、夹爪、
+底座、杯子和主桌面，方向明显不同且尺度一致。
 
 这些预设控制的是 MuJoCo 交互式 viewer 的调试相机，不是 MJCF/URDF 中的 RGB-D sensor camera；
 不会改变 sensor topic、成像标定或机器人任务状态。Teleop Web UI 集成明确延期，不属于本轮
