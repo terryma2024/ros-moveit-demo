@@ -1,0 +1,30 @@
+schema_version: 1
+presets:
+  table_corner_nw:
+    mode: free
+    lookat: [0.0, -0.20000000000000004, 0.12404123391314203]
+    distance: 1.2451965895004553
+    azimuth_deg: 135.0
+    elevation_deg: -20.0
+    orthographic: false
+  table_corner_ne:
+    mode: free
+    lookat: [0.0, -0.20000000000000004, 0.12404123391314203]
+    distance: 1.2451965895004553
+    azimuth_deg: 45.0
+    elevation_deg: -20.0
+    orthographic: false
+  table_corner_se:
+    mode: free
+    lookat: [0.0, -0.20000000000000004, 0.12404123391314203]
+    distance: 1.2451965895004553
+    azimuth_deg: -45.0
+    elevation_deg: -20.0
+    orthographic: false
+  table_corner_sw:
+    mode: free
+    lookat: [0.0, -0.20000000000000004, 0.12404123391314203]
+    distance: 1.2451965895004553
+    azimuth_deg: -135.0
+    elevation_deg: -20.0
+    orthographic: false
