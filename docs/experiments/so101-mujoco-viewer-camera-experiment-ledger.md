@@ -13,10 +13,10 @@ workspace_default: repo_parent
 install_overlay: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
 runtime_executable: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/lib/mujoco_ros2_control/ros2_control_node
 evidence_root: /tmp/so101-debug-mujoco-viewer-camera/
-task_status: TASK_9_COMPLETE
-latest_checkpoint: CP-005
-current_experiment: EXP-002 VALID
-next_experiment: EXP-003
+task_status: TASK_10_COMPLETE
+latest_checkpoint: CP-008
+current_experiment: EXP-003 VALID
+next_experiment: NONE
 ---
 
 # SO-101 MuJoCo Viewer Camera Experiment Ledger
@@ -173,4 +173,91 @@ confirmed_conclusions:
 open_risks:
   - Task 10 still must compare time-bounded joint-state deltas around switching with a no-switch baseline and run every final automated gate.
 next_command: Commit Task 9, then preregister EXP-003 before recording any Task 10 numeric qualification evidence.
+```
+
+## Experiment EXP-003
+
+```yaml
+experiment_id: EXP-003
+prior_experiment: EXP-002 VALID
+status: VALID
+lifecycle: CONTINUATION
+hypothesis: Applying all four accepted viewer-camera presets during normal unpaused physics does not reset or pause simulation, alter controller lifecycle, or introduce a camera-aligned joint-position discontinuity beyond the no-switch baseline.
+independent_variable: Four viewer-camera service calls in NW, NE, SE, SW order during one timestamped joint-state recording.
+controlled_variables: HEAD dfc03d3; fork 9f02f82aae2888d6e29c472c6dd64c34b38c5f93 tag so101-0.0.3-r2; source order /opt/ros/jazzy -> /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install -> project install; ROS_DOMAIN_ID 192; GUI session so101-mujoco-camera; simulation_session_id viewer-camera-exp002-domain192; normal running state inherited from EXP-002; no reset, pause, step, controller, object-pose, qpos, qvel, or Teleop operation.
+acceptance_criteria: reset_epoch is unchanged; simulation_step strictly increases; joint_state_broadcaster, arm_controller, and gripper_controller remain active; all four set/get round trips succeed; the maximum adjacent per-joint delta in each switch window introduces no discontinuity relative to the no-switch baseline; EXP-002 CUA screenshots remain the accepted visual evidence.
+invalid_criteria: GUI crash, service/read-back failure, reset or pause change, controller lifecycle change, non-increasing simulation_step, missing timestamped joint-state windows, switch-window discontinuity, provenance drift, or process ownership ambiguity.
+evidence_path: /tmp/so101-debug-mujoco-viewer-camera/exp-003/
+domain_id: 192
+owned_processes: Continued so101-mujoco-camera shell PID 2376826; launch PID/PGID 2393227; tee PID 2393228; fork ros2_control_node PID 2393256; robot_state_publisher PID 2393255.
+preserved_processes: All unrelated sessions/processes and EXP-057 remain untouched.
+result: VALID; reset_epoch remained 0 and simulation_step advanced from 42368 to 44782 while paused remained false. Before/after controller files are byte-identical (sha256 7a77a1a30f36e653f8069ae0f3dbf8d9becc0126d605ad632dec60a4edc4006e), with joint_state_broadcaster, arm_controller, and gripper_controller active. Four set/get read-backs matched. The 301-sample no-switch baseline and four switch windows of 246, 305, 277, and 304 samples each had maximum adjacent position delta 0 for every one of six joints, so camera calls introduced no discontinuity relative to baseline.
+callback_boundary: Viewer camera set/get take sim_mutex_ in third_party/mujoco_ros2_control/mujoco_ros2_control/src/mujoco_system_interface.cpp lines 2763 and 2782; read/plugin update takes the same lock from line 1502.
+unit_boundary: HeadlessInitTest.ViewerCameraSetGetPreservePhysicsState at test_headless_init.cpp:364 proves qpos, qvel, ctrl, and xfrc_applied remain unchanged; HeadlessInitTest.ReadWaitsForSimulationMutexAndUpdatesPluginsUnderTheLock at line 282 proves synchronized evidence reads.
+visual_boundary: EXP-002 CUA snapshots s029b through s029e and their absolute screenshot paths remain the accepted four-view visual evidence.
+cleanup: CUA session viewer-camera-exp002 ended successfully; launch PGID 2393227 and children exited after Ctrl-C; the exact task tmux session so101-mujoco-camera was removed; domain 192 had no daemon; unrelated sessions/processes and EXP-057 were untouched.
+next_command: Run every final automated gate from a fresh shell, record results, and commit only this ledger plus the integration guide.
+```
+
+## Checkpoint CP-006
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-002
+current_experiment: EXP-003 RUNNING
+working_tree_status: HEAD dfc03d3; only this ledger is intentionally modified; the three Task13 files remain untracked and untouched.
+owned_processes: EXP-003 continues the exact task-owned EXP-002 GUI process tree; no restart or pause occurred between experiments.
+preserved_processes: Existing unrelated sessions/processes and EXP-057 remain unchanged.
+confirmed_conclusions:
+  - EXP-002 provides accepted CUA visual evidence and exact four-preset read-backs.
+  - EXP-003 was preregistered before its first qualification sample or camera action.
+open_risks:
+  - Time-bounded joint-delta and final lifecycle/controller comparisons are not yet collected.
+next_command: Save before evidence/controllers, then capture baseline and switch-window joint-state streams.
+```
+
+## Checkpoint CP-007
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-003
+current_experiment: EXP-003 VALID
+working_tree_status: HEAD dfc03d3; this ledger and the integration guide are intentional Task 10 changes; the three Task13 files remain untracked and untouched.
+owned_processes: NONE; the Task 9/10 CUA session, GUI process tree, tmux session, and domain 192 daemon state were cleanly closed after evidence capture.
+preserved_processes: so101-mujoco-gui and every other unrelated session/process remain; EXP-057 remains RUNNING and untouched.
+confirmed_conclusions:
+  - All four camera set/get round trips succeeded in one unpaused lifecycle.
+  - reset_epoch stayed 0, simulation_step increased 2414 steps, and all three controller states remained active.
+  - The no-switch baseline and every camera-switch window had maximum adjacent joint-position delta 0 across all six joints; no camera-aligned discontinuity was introduced.
+  - Fork unit tests bind camera calls to unchanged qpos/qvel/ctrl/xfrc arrays and both camera callbacks/read-plugin updates to sim_mutex_.
+  - EXP-002's four CUA screenshots remain accepted and are not replaced by numeric service evidence.
+open_risks:
+  - Fresh-shell installer, complete fork/project tests, provenance, isolation, formatting, and remote read-back remain to be run.
+next_command: Run the Task 10 final gates, then update the terminal checkpoint with exact results.
+```
+
+## Checkpoint CP-008
+
+```yaml
+checkpoint_id: CP-008
+last_valid_experiment: EXP-003
+current_experiment: EXP-003 VALID
+working_tree_status: HEAD dfc03d3; only this ledger and the integration guide are intentional staged candidates; the three Task13 files remain untracked and untouched.
+owned_processes: NONE
+preserved_processes: so101-mujoco-gui and every unrelated session/process remain; EXP-057 remains RUNNING and untouched.
+confirmed_conclusions:
+  - Fresh env-isolated installer rebuilt the Gitee fork overlay and reported 129 tests, 0 errors, 0 failures, 0 skipped.
+  - Fresh project colcon test reported 504 tests, 0 errors, 0 failures, 6 skipped; the Python package portion reported 249 passed and 4 skipped. The preserved untracked Task13 contract test was discovered but not modified or staged.
+  - Ruff 0.15.20 reported all checks passed and 73 files formatted; the script's Bash shebang was honored because the plan's zsh invocation is incompatible with its BASH_SOURCE use.
+  - check_mujoco_runtime.py returned provider gitee_fork_submodule, fork commit 9f02f82aae2888d6e29c472c6dd64c34b38c5f93, tag match, empty source status, expected prefixes/hashes, and validation_errors [].
+  - Migration isolation, git diff --check, and clean fork status passed.
+  - EXP-003 proved unchanged epoch/controller lifecycle and no joint discontinuity; EXP-002 provides four accepted CUA screenshots and exact preset read-backs.
+evidence:
+  - /tmp/so101-debug-mujoco-viewer-camera/task10-installer.log
+  - /tmp/so101-debug-mujoco-viewer-camera/task10-project-tests.log
+  - /tmp/so101-debug-mujoco-viewer-camera/task10-static-gates.log
+  - /tmp/so101-debug-mujoco-viewer-camera/exp-002/
+  - /tmp/so101-debug-mujoco-viewer-camera/exp-003/
+open_risks: NONE within the viewer-camera preset scope; Teleop Web UI and RGB-D sensor camera remain explicitly deferred.
+next_command: Commit the guide and qualification checkpoint, then push and verify remote read-back in dependency order.
 ```
