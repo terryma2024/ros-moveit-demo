@@ -185,3 +185,91 @@ deviations:
 conclusion: The local screenshot fallback and CUA-priority routing satisfy the live acceptance gate without SSH, key/mouse injection, codex-cua takeover, stack reset, or robot movement.
 next_command: Run the official Skill validator and final static/unit checks, then commit the live-discovered capture correction and ledger evidence.
 ```
+
+## EXP-003 — Installed backend fail-closed and MuJoCo probe-only acceptance
+
+```yaml
+experiment_id: EXP-003
+status: COMPLETE
+hypothesis: The installed Teleop launch fails before binding a server for an invalid backend or an absent selected owner executable, while a resolvable MuJoCo owner starts probe-only and reports no live runtime features.
+source_commit: 7db054c7168f967a197d913ff2fd2981643a07b6
+branch: codex/so101-teleop-extraction
+overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
+installed_owner: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/so101_teleop
+runtime_executable: ros2 launch so101_teleop so101_teleop.launch.py
+lifecycle: ISOLATED
+isolation:
+  ros_domain_id: 221
+  gz_partition: so101_teleop_exp003_20260811
+  ports: 18103 for each sequential case, verified unbound between cases
+owned_processes: Only the foreground timeout/launch/server process groups created for EXP-003; cleanup may signal only those exact process groups or interactive exec sessions.
+preserved_processes: physical-five-success Gazebo/RViz/move_group; existing MuJoCo GUI and move_group; codex-cua and all other user/agent tmux sessions
+action_scope: Backend selection, executable probing, and read-only HTTP health/capability/snapshot requests only; no workflow, planning, controller, reset, keyboard, mouse, or robot action.
+evidence_dir: /tmp/so101-debug-teleop-extraction-20260811/exp-003-backend-failclosed-probe
+success_gate:
+  - An invalid backend exits nonzero before port 18103 is bound.
+  - A synthetic first-prefix package marker with no owner executable causes the Teleop server child to exit nonzero with an explicit BACKEND_EXECUTABLE_NOT_FOUND error before port 18103 is bound; the enclosing ROS 2 launch service may still exit zero after reporting that child failure.
+  - A resolvable mujoco_py owner serves health/capabilities/snapshot, reports backend_probe true, and reports all live runtime capabilities false.
+  - The server exits through its owned foreground session and port 18103 is unbound afterward.
+abort_gate: Any route that targets a preserved ROS domain/partition, any attempt to clean an unowned process, any live command capability unexpectedly true in probe-only mode, or any request to stop/take over another agent process.
+observed_result:
+  - The installed prefix resolved to the current worktree; installed launch, three fixed backend YAML profiles, Web bundle, server, tiler, inventory, and recorder were present. Symlink-install paths resolved back to this worktree's source and built Web assets.
+  - backend:=not_a_backend exited 1 with unsupported Teleop backend and port 18103 remained unbound.
+  - The synthetic ament first-prefix marker resolved so101_gazebo_demo_cpp to the fixture. The Teleop server child exited 1 with BACKEND_EXECUTABLE_NOT_FOUND for the fixture path and port 18103 remained unbound. ROS 2 launch itself returned 0 after logging the child failure, consistent with its process-service semantics.
+  - With the MuJoCo installed overlay below the current Teleop overlay, /health returned 200, /capabilities named so101_mujoco_demo_py/pick_place_state_machine, backend_probe was true, and every live capability was false. /snapshot stayed STARTING with no claimed live session or telemetry.
+  - The owned launch session was stopped by its own foreground Ctrl-C; Uvicorn and the server child shut down cleanly, port 18103 was reusable, and the only post-cleanup process match was the read-only audit shell matching its query text.
+deviations:
+  - The first invalid-backend harness post-processing used zsh's read-only status variable. The product had already failed closed and the port was free; the case was rerun end-to-end with exit_code and passed.
+  - The initially drafted gate incorrectly required the enclosing ROS 2 launch command to propagate the missing server child's nonzero status. It was corrected before acceptance to the approved requirement: explicit child failure and no server.
+conclusion: Installed selection fails closed before serving for invalid or unresolved owners, while the resolvable MuJoCo owner remains honestly probe-only with no live-success claim.
+next_command: Plan EXP-004 for a dedicated Gazebo C++ stack, Teleop connection, one Start/single-step boundary, independent ROS/Gazebo/MoveIt evidence, and a fresh Skill capture.
+```
+
+## EXP-004 — Dedicated Gazebo C++ Teleop single-step acceptance
+
+```yaml
+experiment_id: EXP-004
+status: COMPLETE
+hypothesis: Teleop from the current installed overlay connects to a newly owned Gazebo C++ stack, reports its fixed C++ owner and live READY provenance, and dispatches one Start/single-step boundary whose checkpoint and physical effects are independently observable.
+source_commit: 7db054c7168f967a197d913ff2fd2981643a07b6
+branch: codex/so101-teleop-extraction
+overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
+backend: gazebo_cpp
+lifecycle: ISOLATED
+isolation:
+  ros_domain_id: 222
+  gz_partition: so101_teleop_exp004_cpp_20260811
+  port: 18104
+  simulation_session_id: exp004-cpp-live
+owned_processes: Exact child trees of the new foreground Gazebo, MoveIt, and Teleop exec sessions; PIDs and window IDs will be appended after startup. Cleanup may interrupt only those three owned sessions.
+preserved_processes: physical-five-success Gazebo/RViz/move_group; other move_group; existing MuJoCo GUI; codex-cua and all other user/agent tmux sessions
+motion_scope: One Teleop workflow Start request only, which maps to the installed C++ owner with --step. No subsequent Step/Run/Resume, manual motion, attach/detach, scene repair, or FULL_RESTART. RESET_WORLD is the only permitted reset if recovery is needed.
+evidence_dir: /tmp/so101-debug-teleop-extraction-20260811/exp-004-gazebo-cpp-live
+success_gate:
+  - Dedicated stack exposes its own controller, joint/TF, Gazebo world/model, and MoveIt Planning Scene facts and Teleop reaches READY with exp004-cpp-live.
+  - /capabilities names gazebo_cpp and so101_gazebo_demo_cpp/pick_place_state_machine.
+  - Start returns the installed backend owner envelope, creates a fresh checkpoint, and advances exactly one workflow boundary.
+  - Before/after evidence records expected joint/TF effects (including an explicit no-change conclusion if the first boundary is non-motion), Gazebo object facts, and MoveIt scene facts.
+  - The ai-station-gui Skill emits a fresh desktop manifest/image; the visible new GUI is correlated to an EXP-004-owned PID/window before it is used as evidence.
+  - All EXP-004 sessions exit cleanly and domain/partition/port have no surviving task-owned process.
+abort_gate: Any conflict with an existing agent-owned process/session/window, ambiguity that would require controlling another window, readiness loss, action beyond the single-step scope, or cleanup target outside exact EXP-004 child sessions.
+owned_runtime:
+  gazebo_launch_session: exec session 17677; launch PID 2475406; robot_state_publisher 2475535; Gazebo launch child 2475536 with server/GUI descendants 2475538/2475559/2475560; relay 2475574
+  moveit_launch_session: exec session 92239; launch PID 2476596; move_group 2476650
+  teleop_launch_session: exec session 89898; launch PID 2477879; server 2477935
+  shutdown_probe_session: exec session 27846; launch PID 2493368; server 2493539
+observed_result:
+  - Before mutation, /health and /capabilities returned 200; /snapshot was READY with exp004-cpp-live, both arm and gripper controllers active, six fresh joints, TCP and Gazebo cup pose. Capabilities fixed the owner as so101_gazebo_demo_cpp/pick_place_state_machine.
+  - The only workflow request was POST /workflow/start after acquiring its own lease. It returned 200/OK with a fresh run/checkpoint and the owner-produced trace IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT; the checkpoint recorded last_completed_state PREPARE_OPEN_GRIPPER, next_state MOVE_ABOVE_OBJECT, source_mode execute, and exp004-cpp-live.
+  - Independent before/after telemetry measured joint 6 delta +0.46503919138831407 rad; joints 1-5 changed by at most 1.04e-7 rad, TCP translation by at most 2.02e-8 m, and cup translation by exactly 0.0 m. Arm/gripper controllers remained active.
+  - Direct Gazebo Pose_V evidence kept plastic_cup at approximately (0.02, -0.28, 0.165) m and the SO-101 base at the world origin. MoveIt's WORLD_OBJECT_NAMES response changed from empty before the boundary to base_pedestal, plastic_cup, and table afterward, matching the owner checkpoint.
+  - Active X11 window 0x4e0000e reported PID 2475560 and Gazebo Sim, correlating it to the EXP-004 Gazebo child tree. The ai-station-gui Skill produced a fresh 513295-byte desktop at gui/captures/20260811T184237-c21123761f88/desktop.png; visual inspection showed the owned foreground Gazebo with open gripper and the cup still supported on the table. Optional RViz belonged to a preserved stack and was not counted as EXP-004 evidence. The active window was restored to 0x4e0000e after capture.
+  - After cleanup, every listed EXP-004 PID was absent and port 18104 was reusable. The only partition/session process match was the read-only audit shell matching its query text.
+deviations:
+  - The workflow-response harness expected layers.owner, but the stable API currently proves fixed package/executable provenance through /capabilities and returns the owner's parsed checkpoint/trace under data.workflow. The workflow was not rerun; the successful response and checkpoint were used as the owner-output evidence.
+  - The first Skill post-processing pass retained the literal Manifest: prefix and stopped after capture. The existing fresh manifest was read and validated without repeating the screenshot action.
+  - On the first live cleanup, Uvicorn completed shutdown but the Teleop child aborted because RosTelemetryWorker had no explicit executor/thread teardown. A RED lifecycle test reproduced the missing stop call; main now uses finally and the worker explicitly stops/join/releases its middleware resources. The test passes 4/4, and a fresh READ_ONLY installed launch on the emptied EXP-004 domain then exited cleanly with child exit 0.
+  - The Jazzy move_group binary segfaulted inside its upstream destructor after SIGINT. This affected only the already-stopping EXP-004-owned process; it left no child and did not alter the successful pre-shutdown MoveIt evidence. No repository behavior was changed to mask that external teardown defect.
+conclusion: The installed Gazebo C++ owner passed isolated Teleop connection and one-action single-step acceptance with mutually consistent backend, controller, joint/TF, Gazebo, MoveIt, checkpoint, and fresh visual evidence; the task-owned stack was fully removed.
+next_command: Commit the lifecycle correction and current ledger, then plan the separate Gazebo Python acceptance on a new domain/partition.
+```

@@ -128,6 +128,9 @@ class RosTelemetryWorker:
         self._physical_outcome: PhysicalOutcomeEvidence | None = None
         self._gazebo_transport = None
         self._scene_revision = 0; self._scene_tuple = None; self._scene_stamp = 0.0
+        self._executor: SingleThreadedExecutor | None = None
+        self._threads: list[threading.Thread] = []
+        self._stop_event = threading.Event()
 
     def start(self) -> None:
         rclpy.init(args=None)
@@ -150,13 +153,36 @@ class RosTelemetryWorker:
         self._gripper = ActionClient(self._node, FollowJointTrajectory,
                                      "/gripper_controller/follow_joint_trajectory")
         self._node.create_timer(0.20, self._publish_snapshot)
-        executor = SingleThreadedExecutor(); executor.add_node(self._node)
-        threading.Thread(target=executor.spin, name="so101-rclpy", daemon=True).start()
-        threading.Thread(target=self._state_validity_sampler, name="so101-state-validity", daemon=True).start()
+        self._executor = SingleThreadedExecutor(); self._executor.add_node(self._node)
+        self._threads = [
+            threading.Thread(target=self._executor.spin, name="so101-rclpy", daemon=True),
+            threading.Thread(target=self._state_validity_sampler, name="so101-state-validity", daemon=True),
+        ]
         self._gazebo_transport = GzTransportNode()
         self._gazebo_transport.subscribe(Pose_V, "/world/so101_pick_place/pose/info", self._on_gazebo_pose_v)
         self._gazebo_transport.subscribe(StringMsg, "/so101/object_attached", self._on_gazebo_attachment_state)
-        threading.Thread(target=self._scene_observer_sampler, name="so101-scene-observer", daemon=True).start()
+        self._threads.append(
+            threading.Thread(target=self._scene_observer_sampler, name="so101-scene-observer", daemon=True)
+        )
+        for thread in self._threads:
+            thread.start()
+
+    def stop(self) -> None:
+        """Stop background middleware work before interpreter teardown."""
+        self._stop_event.set()
+        self._gazebo_transport = None
+        if self._executor is not None:
+            self._executor.shutdown(timeout_sec=2.0)
+        for thread in self._threads:
+            if thread is not threading.current_thread():
+                thread.join(timeout=2.0)
+        if self._node is not None:
+            self._node.destroy_node()
+            self._node = None
+        if rclpy.ok():
+            rclpy.shutdown()
+        self._executor = None
+        self._threads = []
 
     def _on_joints(self, message: JointState) -> None:
         indexed = {name: index for index, name in enumerate(message.name)}
@@ -210,12 +236,12 @@ class RosTelemetryWorker:
 
     def _scene_observer_sampler(self) -> None:
         """Planning Scene attachment is sampled independently of mutation commands."""
-        while rclpy.ok():
+        while rclpy.ok() and not self._stop_event.is_set():
             try:
                 self.query_moveit_attachment()
             except RuntimeError:
                 self._moveit_attached = None
-            time.sleep(1.0)
+            self._stop_event.wait(1.0)
 
     def _on_contacts(self, message: Contacts) -> None:
         from .models import CollisionPair
@@ -225,13 +251,13 @@ class RosTelemetryWorker:
         self._contacts_stamp = time.time()
 
     def _state_validity_sampler(self) -> None:
-        while rclpy.ok():
+        while rclpy.ok() and not self._stop_event.is_set():
             try:
                 self._sample_state_validity()
             except Exception:
                 self._moveit_collisions = []
                 self._moveit_stamp = 0.0
-            time.sleep(1.0)
+            self._stop_event.wait(1.0)
 
     def _sample_state_validity(self) -> None:
         if self._node is None or not self._state_validity.wait_for_service(timeout_sec=0.2):
