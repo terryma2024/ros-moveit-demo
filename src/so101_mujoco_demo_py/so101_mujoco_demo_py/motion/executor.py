@@ -13,6 +13,39 @@ def _wait(future: Any, deadline: float, progress: Callable[[], None]) -> bool:
     return future.done()
 
 
+class SustainedConditionGuard:
+    """Allow a condition to be false briefly, but fail on sustained loss."""
+
+    def __init__(
+        self,
+        failure_grace_s: float,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if failure_grace_s < 0.0:
+            raise ValueError("failure_grace_s must be non-negative")
+        self._failure_grace_s = failure_grace_s
+        self._clock = clock
+        self._failure_started_s: float | None = None
+
+    @property
+    def failure_started_s(self) -> float | None:
+        return self._failure_started_s
+
+    def require(self, condition: bool, message: str) -> None:
+        if condition:
+            self._failure_started_s = None
+            return
+        now = self._clock()
+        if self._failure_started_s is None:
+            self._failure_started_s = now
+        elapsed_s = now - self._failure_started_s
+        if elapsed_s >= self._failure_grace_s:
+            raise RuntimeError(
+                f"{message} for {elapsed_s:.6f}s (grace {self._failure_grace_s:.6f}s)"
+            )
+
+
 class MoveItExecutionClient:
     def __init__(
         self,
@@ -24,7 +57,13 @@ class MoveItExecutionClient:
         self._goal_factory = goal_factory
         self._progress = progress
 
-    def execute(self, trajectory: Any, timeout_s: float) -> ActionResult:
+    def execute(
+        self,
+        trajectory: Any,
+        timeout_s: float,
+        *,
+        monitor: Callable[[], None] | None = None,
+    ) -> ActionResult:
         def failure(
             status: ActionStatus, code: str, message: str, **metrics: float
         ) -> ActionResult:
@@ -56,7 +95,20 @@ class MoveItExecutionClient:
                 "goal rejected",
             )
         result_future = goal_handle.get_result_async()
-        if not _wait(result_future, deadline, self._progress):
+        while not result_future.done() and time.monotonic() < deadline:
+            self._progress()
+            if monitor is not None:
+                try:
+                    monitor()
+                except RuntimeError as error:
+                    goal_handle.cancel_goal_async()
+                    return failure(
+                        ActionStatus.FAILED,
+                        "MOVEIT_EXECUTION_MONITOR_ABORTED",
+                        str(error),
+                    )
+            time.sleep(0.001)
+        if not result_future.done():
             goal_handle.cancel_goal_async()
             return failure(
                 ActionStatus.TIMED_OUT,

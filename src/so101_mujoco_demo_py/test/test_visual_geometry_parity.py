@@ -175,6 +175,48 @@ def test_fingertip_contact_sets_cover_every_authoritative_gripper_and_jaw_collis
     )
 
 
+def test_mujoco_fingertip_material_preserves_gazebo_axial_grip_friction() -> None:
+    root = ET.parse(ROBOT_MJCF).getroot()
+    fingertip_collisions = [
+        geom
+        for geom in root.findall("./worldbody//geom")
+        if "fingertip_pad_collision_" in geom.get("name", "")
+    ]
+    assert len(fingertip_collisions) == 13
+    assert {_numbers(geom.get("friction"), 3) for geom in fingertip_collisions} == {
+        (3.0, 0.01, 0.001)
+    }
+
+
+def test_mujoco_fingertip_material_preserves_gazebo_contact_solver_contract() -> None:
+    root = ET.parse(ROBOT_MJCF).getroot()
+    fingertip_collisions = [
+        geom
+        for geom in root.findall("./worldbody//geom")
+        if "fingertip_pad_collision_" in geom.get("name", "")
+    ]
+    assert len(fingertip_collisions) == 13
+
+    # MuJoCo's negative direct format is (-stiffness, -damping).  Keep this
+    # explicit on each TPU pad so it cannot silently fall back to the default
+    # soft contact when the robot MJCF is included by another scene.
+    assert {_numbers(geom.get("solref"), 2) for geom in fingertip_collisions} == {
+        (-1_000_000.0, -100.0)
+    }
+
+
+def test_mujoco_scene_enables_noslip_post_solver_for_physical_grasp() -> None:
+    root = ET.parse(SCENE_MJCF).getroot()
+    option = root.find("./option")
+    assert option is not None
+
+    # The default is zero, which disables MuJoCo's post-solver suppression of
+    # friction-dimension drift.  The physical grasp path requires an explicit,
+    # bounded iteration budget so a slowly lifted cup does not creep through
+    # otherwise valid bilateral fingertip contacts.
+    assert int(option.get("noslip_iterations", "0")) == 10
+
+
 WALL_NAMES = (
     "wall_near",
     "wall_01",
@@ -267,6 +309,7 @@ def test_plastic_cup_is_open_gazebo_parity_compound_with_paired_parts() -> None:
     assert collision_default is not None
     assert int(collision_default.get("contype", "0")) != 0
     assert int(collision_default.get("conaffinity", "0")) != 0
+    assert _numbers(collision_default.get("friction"), 3) == pytest.approx((1.2, 0.01, 0.001))
 
     visuals = _cup_parts(cup, "visual")
     collisions = _cup_parts(cup, "collision")

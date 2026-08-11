@@ -62,15 +62,100 @@ class MujocoResetClient:
         if not success:
             raise self._failure(f"{operation} failed")
 
+    def _wait_for_reset_snapshot(
+        self,
+        *,
+        old: Any,
+        expected_epoch: int,
+        deadline: float,
+    ) -> Any:
+        """Capture the authoritative paused step-zero frame before physics resumes."""
+        retry_period_s = min(0.05, self._timeout_s / 2.0)
+        next_snapshot_retry_s = self._monotonic() + retry_period_s
+
+        def retry_snapshot_if_due() -> None:
+            nonlocal next_snapshot_retry_s
+            now = self._monotonic()
+            if now < next_snapshot_retry_s:
+                return
+            self._require(self._services.pause(True), "reset snapshot retry")
+            next_snapshot_retry_s = now + retry_period_s
+
+        while self._monotonic() <= deadline:
+            self._progress()
+            try:
+                current = self._observer.snapshot()
+            except EvidenceStale:
+                retry_snapshot_if_due()
+                continue
+            if current.simulation_session_id != self._session_id:
+                raise self._failure("evidence session mismatch")
+            if current.reset_epoch > expected_epoch:
+                raise self._failure("reset epoch mismatch")
+            if current.reset_epoch != expected_epoch:
+                retry_snapshot_if_due()
+                continue
+            if current.publisher_sequence <= old.publisher_sequence:
+                raise self._failure("publisher sequence did not advance")
+            if current.simulation_step != 0:
+                raise self._failure("reset evidence is not step zero")
+            if not current.paused:
+                raise self._failure("atomic reset evidence is not authoritatively paused")
+            object_values = (
+                *current.object_state.position_world,
+                *current.object_state.orientation_xyzw,
+                *current.object_state.linear_velocity_world,
+                *current.object_state.angular_velocity_world,
+                current.minimum_signed_distance_m,
+                current.maximum_normal_force_n,
+            )
+            if not all(math.isfinite(value) for value in object_values):
+                raise self._failure("atomic object evidence is not finite")
+            if (
+                math.dist(current.object_state.position_world, self._expected_object)
+                > self._object_tolerance_m
+            ):
+                raise self._failure("object pose convergence failed")
+            return current
+        raise self._failure("reset timeout waiting for authoritative step-zero evidence")
+
+    def _wait_for_initial_snapshot(self, *, deadline: float) -> Any:
+        """Acquire current provenance even when a fresh client joins a paused world."""
+        try:
+            current = self._observer.snapshot()
+        except EvidenceStale:
+            pass
+        else:
+            if current.simulation_session_id != self._session_id:
+                raise self._failure("initial evidence session mismatch")
+            return current
+
+        retry_period_s = min(0.05, self._timeout_s / 2.0)
+        next_snapshot_request_s = self._monotonic()
+        while self._monotonic() <= deadline:
+            now = self._monotonic()
+            if now >= next_snapshot_request_s:
+                self._require(self._services.pause(True), "initial snapshot request")
+                next_snapshot_request_s = now + retry_period_s
+            self._progress()
+            try:
+                current = self._observer.snapshot()
+            except EvidenceStale:
+                continue
+            if current.simulation_session_id != self._session_id:
+                raise self._failure("initial evidence session mismatch")
+            if not current.paused:
+                continue
+            return current
+        raise self._failure("initial evidence unavailable")
+
     def reset(self, keyframe: str) -> ResetReceipt:
         if not keyframe:
             raise ValueError("keyframe must be non-empty")
-        old = self._observer.snapshot()
-        if old.simulation_session_id != self._session_id:
-            raise self._failure("initial evidence session mismatch")
-        expected_epoch = old.reset_epoch + 1
         deadline = self._monotonic() + self._timeout_s
         try:
+            old = self._wait_for_initial_snapshot(deadline=deadline)
+            expected_epoch = old.reset_epoch + 1
             if old.paused:
                 self._require(self._services.pause(False), "prepare running")
             self._require(
@@ -79,6 +164,11 @@ class MujocoResetClient:
             )
             self._require(self._services.pause(True), "pause")
             self._require(self._services.reset_world(keyframe), "reset")
+            reset_snapshot = self._wait_for_reset_snapshot(
+                old=old,
+                expected_epoch=expected_epoch,
+                deadline=deadline,
+            )
             joint_callback_count_after_reset = self._services.joint_callback_count
             self._require(self._services.pause(False), "resume")
             self._require(
@@ -102,12 +192,8 @@ class MujocoResetClient:
                 if current.reset_epoch > expected_epoch:
                     raise self._failure("reset epoch mismatch")
                 if current.reset_epoch == expected_epoch:
-                    if current.publisher_sequence <= old.publisher_sequence:
-                        raise self._failure("publisher sequence did not advance")
-                    if current.simulation_step != 0:
-                        raise self._failure("reset evidence is not step zero")
                     if not current.paused:
-                        raise self._failure("atomic reset evidence is not authoritatively paused")
+                        raise self._failure("final transaction evidence is not paused")
                     if not self._services.controllers_active(self._controllers):
                         raise self._failure("controller convergence failed")
                     if not self._services.joints_converged(
@@ -116,26 +202,11 @@ class MujocoResetClient:
                         after_callback_count=joint_callback_count_after_reset,
                     ):
                         raise self._failure("joint convergence failed")
-                    object_values = (
-                        *current.object_state.position_world,
-                        *current.object_state.orientation_xyzw,
-                        *current.object_state.linear_velocity_world,
-                        *current.object_state.angular_velocity_world,
-                        current.minimum_signed_distance_m,
-                        current.maximum_normal_force_n,
-                    )
-                    if not all(math.isfinite(value) for value in object_values):
-                        raise self._failure("atomic object evidence is not finite")
-                    if (
-                        math.dist(current.object_state.position_world, self._expected_object)
-                        > self._object_tolerance_m
-                    ):
-                        raise self._failure("object pose convergence failed")
                     return ResetReceipt(
                         old_epoch=old.reset_epoch,
-                        new_epoch=current.reset_epoch,
+                        new_epoch=reset_snapshot.reset_epoch,
                         keyframe=keyframe,
-                        simulation_step=current.simulation_step,
+                        simulation_step=reset_snapshot.simulation_step,
                         simulation_session_id=self._session_id,
                     )
         except ResetFailed:

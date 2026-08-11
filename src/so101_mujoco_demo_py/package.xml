@@ -9,6 +9,7 @@
   <buildtool_depend>ament_python</buildtool_depend>
 
   <depend>ament_index_python</depend>
+  <depend>geometry_msgs</depend>
   <depend>builtin_interfaces</depend>
   <depend>control_msgs</depend>
   <depend>mujoco_ros2_control</depend>
@@ -25,7 +26,9 @@
   <depend>robot_state_publisher</depend>
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
+  <depend>shape_msgs</depend>
   <depend>so101_mujoco_support</depend>
+  <depend>std_msgs</depend>
   <depend>trajectory_msgs</depend>
   <depend>tf2_ros</depend>
   <exec_depend>python3-yaml</exec_depend>

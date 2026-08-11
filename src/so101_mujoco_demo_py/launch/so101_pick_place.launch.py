@@ -9,11 +9,13 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch.actions import (
     DeclareLaunchArgument,
+    EmitEvent,
     OpaqueFunction,
     RegisterEventHandler,
     Shutdown,
 )
 from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown as ShutdownEvent
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterFile
@@ -22,6 +24,15 @@ from launch import LaunchDescription
 
 PACKAGE_NAME = "so101_mujoco_demo_py"
 CONTROLLERS = ("joint_state_broadcaster", "arm_controller", "gripper_controller")
+
+
+def actions_after_success_or_shutdown(event, success_actions, operation: str):
+    """Advance a launch stage only when its prerequisite exited successfully."""
+
+    if event.returncode == 0:
+        return success_actions
+    reason = f"{operation} failed with exit code {event.returncode}"
+    return [EmitEvent(event=ShutdownEvent(reason=reason))]
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,12 +158,24 @@ def compose_launch(
             controller_spawners.add(controller)
 
     move_group = Node(
-        package="moveit_ros_move_group",
-        executable="move_group",
+        package="so101_mujoco_support",
+        executable="so101_move_group",
         parameters=[moveit_parameters(package_root, robot_description), {"use_sim_time": True}],
         output="both",
     )
     nodes.append(move_group)
+    scene_setup = Node(
+        package=PACKAGE_NAME,
+        executable="scene_setup",
+        parameters=[
+            {
+                "use_sim_time": True,
+                "readiness_timeout_s": readiness_timeout_s,
+            }
+        ],
+        output="both",
+    )
+    nodes.append(scene_setup)
     workflow_arguments = [
         "--run-mode",
         run_mode,
@@ -176,20 +199,35 @@ def compose_launch(
         parameters=[{"use_sim_time": True}],
         output="both",
     )
-    nodes.append(workflow)
+    all_nodes = (*nodes, workflow)
+    start_workflow_after_scene = RegisterEventHandler(
+        OnProcessExit(
+            target_action=scene_setup,
+            on_exit=lambda event, context: actions_after_success_or_shutdown(
+                event,
+                [workflow],
+                "SO-101 MuJoCo Planning Scene setup",
+            ),
+        )
+    )
     shutdown = RegisterEventHandler(
         OnProcessExit(
             target_action=workflow,
             on_exit=[Shutdown(reason="headless workflow complete")],
         )
     )
-    actions = (*nodes, shutdown)
+    # workflow is intentionally absent from the root actions: the scene setup
+    # process owns the gate and emits it only after apply + readback succeeds.
+    actions = (*nodes, start_workflow_after_scene, shutdown)
     return LaunchComposition(
         actions=actions,
-        node_executables={(node.node_package, node.node_executable) for node in nodes},
+        node_executables={(node.node_package, node.node_executable) for node in all_nodes},
         controller_spawners=controller_spawners,
         includes_robot_description=True,
-        includes_planning_scene=True,
+        includes_planning_scene=(
+            (scene_setup.node_package, scene_setup.node_executable) == (PACKAGE_NAME, "scene_setup")
+            and workflow not in actions
+        ),
         includes_observer=start_simulation,
         includes_reset_services=start_simulation,
         includes_workflow=True,

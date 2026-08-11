@@ -7,6 +7,7 @@ import time
 
 import pytest
 import rclpy
+
 from so101_mujoco_demo_py.mujoco.client import MujocoRosClient
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
 from so101_mujoco_demo_py.mujoco.reset import MujocoResetClient, ResetFailed
@@ -34,9 +35,6 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
     events = []
 
     class RecordingServices:
-        def __init__(self):
-            self._pending_reset_snapshot = False
-
         def _timed(self, operation, callback):
             started = time.monotonic()
             result = callback()
@@ -59,10 +57,8 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
                             "object_linear_velocity": snapshot.object_state.linear_velocity_world,
                             "object_angular_velocity": snapshot.object_state.angular_velocity_world,
                             "joint_positions": services.latest_joint_positions(),
-                            "post_reset_snapshot": self._pending_reset_snapshot,
                         }
                     )
-                    self._pending_reset_snapshot = False
             return result
 
         def switch_controllers(self, *, activate, deactivate):
@@ -74,7 +70,22 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
 
         def reset_world(self, keyframe):
             result = self._timed("reset", lambda: services.reset_world(keyframe))
-            self._pending_reset_snapshot = result
+            if result:
+                drain_feedback()
+                snapshot = observer.snapshot()
+                events[-1].update(
+                    {
+                        "reset_epoch": snapshot.reset_epoch,
+                        "simulation_step": snapshot.simulation_step,
+                        "publisher_sequence": snapshot.publisher_sequence,
+                        "paused": snapshot.paused,
+                        "object_position": snapshot.object_state.position_world,
+                        "object_linear_velocity": snapshot.object_state.linear_velocity_world,
+                        "object_angular_velocity": snapshot.object_state.angular_velocity_world,
+                        "joint_positions_at_service_return": services.latest_joint_positions(),
+                        "authoritative_reset_snapshot": True,
+                    }
+                )
             return result
 
         def controllers_active(self, names):
@@ -115,6 +126,9 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
                 observer.snapshot()
                 break
             except EvidenceStale:
+                if observer_node.count_publishers("/so101/simulation/evidence") > 0:
+                    assert services.pause(True)
+                    drain_feedback()
                 if time.monotonic() >= deadline:
                     raise AssertionError(
                         "observer readiness timeout: "
@@ -126,6 +140,11 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
                         f"last_rejection={observer.last_rejection!r}"
                     )
         precondition_baseline = observer.snapshot()
+        if precondition_baseline.paused:
+            assert services.pause(False)
+            drain_feedback()
+            precondition_baseline = observer.snapshot()
+            assert not precondition_baseline.paused
         joint_count_before_rejected_reset = services.joint_callback_count
         assert not services.reset_world("task_start")
         drain_feedback()
@@ -140,33 +159,29 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
         assert receipts[1].new_epoch == receipts[1].old_epoch + 1
         assert all(receipt.keyframe == "task_start" for receipt in receipts)
         assert latest.reset_epoch == receipts[-1].new_epoch
-        assert latest.simulation_step == 0
         assert all(receipt.simulation_step == 0 for receipt in receipts)
         assert not any(event["operation"] == "step" for event in events)
         assert latest.paused
-        assert latest.object_state.position_world == pytest.approx(
-            (0.02, -0.28, 0.165), abs=0.003
-        )
+        assert latest.object_state.position_world == pytest.approx((0.02, -0.28, 0.165), abs=0.003)
         assert services.latest_joint_positions() == pytest.approx((0.0,) * 6, abs=0.002)
         assert services.controllers_active(("arm_controller", "gripper_controller"))
         pause_events = [event for event in events if event["operation"] == "pause:True"]
         assert len(pause_events) == 4
         for event in pause_events:
             assert event["paused"]
-        post_reset_pause_events = [event for event in pause_events if event["post_reset_snapshot"]]
-        assert len(post_reset_pause_events) == 2
-        for event in post_reset_pause_events:
-            assert event["object_position"] == pytest.approx(
-                (0.02, -0.28, 0.165), abs=0.003
-            )
-            assert event["joint_positions"] == pytest.approx((0.0,) * 6, abs=0.002)
+        reset_events = [event for event in events if event.get("authoritative_reset_snapshot")]
+        assert len(reset_events) == 2
+        for event in reset_events:
+            assert event["paused"]
+            assert event["simulation_step"] == 0
+            assert event["object_position"] == pytest.approx((0.02, -0.28, 0.165), abs=0.003)
             assert all(
                 math.isfinite(value)
                 for field in (
                     "object_position",
                     "object_linear_velocity",
                     "object_angular_velocity",
-                    "joint_positions",
+                    "joint_positions_at_service_return",
                 )
                 for value in event[field]
             )

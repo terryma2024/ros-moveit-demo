@@ -7,7 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, EmitEvent, OpaqueFunction, RegisterEventHandler
+from launch_ros.actions import Node
 
 from so101_mujoco_demo_py.headless_execution import (
     CONTROLLER_MAPPING,
@@ -17,6 +18,9 @@ from so101_mujoco_demo_py.headless_execution import (
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 LAUNCH_FILE = PACKAGE_ROOT / "launch/so101_pick_place.launch.py"
+ORDERED_MOVE_GROUP_SOURCE = (
+    PACKAGE_ROOT.parents[1] / "src/so101_mujoco_support/src/so101_move_group.cpp"
+)
 
 
 def load_launch_module():
@@ -84,8 +88,9 @@ def test_launch_composes_every_headless_runtime_boundary_and_shutdown_owner() ->
         ("mujoco_ros2_control", "ros2_control_node"),
         ("robot_state_publisher", "robot_state_publisher"),
         ("controller_manager", "spawner"),
-        ("moveit_ros_move_group", "move_group"),
+        ("so101_mujoco_support", "so101_move_group"),
         ("so101_mujoco_demo_py", "headless_execution"),
+        ("so101_mujoco_demo_py", "scene_setup"),
     }
     assert composition.controller_spawners == {
         "joint_state_broadcaster",
@@ -98,6 +103,55 @@ def test_launch_composes_every_headless_runtime_boundary_and_shutdown_owner() ->
     assert composition.includes_reset_services
     assert composition.includes_workflow
     assert composition.shutdown_on_workflow_exit
+
+    root_nodes = {
+        (action.node_package, action.node_executable)
+        for action in composition.actions
+        if isinstance(action, Node)
+    }
+    assert ("so101_mujoco_demo_py", "scene_setup") in root_nodes
+    assert ("so101_mujoco_demo_py", "headless_execution") not in root_nodes
+    assert sum(isinstance(action, RegisterEventHandler) for action in composition.actions) == 2
+
+
+def test_ordered_move_group_stops_workers_before_controlled_process_exit() -> None:
+    source = ORDERED_MOVE_GROUP_SOURCE.read_text(encoding="utf-8")
+
+    assert "rclcpp::SignalHandlerOptions::None" in source
+    assert "std::signal(SIGINT, request_shutdown);" in source
+    assert "std::signal(SIGTERM, request_shutdown);" in source
+    spin = source.index("executor.spin_some")
+    stop_publishing = source.index("planning_scene_monitor->stopPublishingPlanningScene();")
+    stop_scene = source.index("planning_scene_monitor->stopSceneMonitor();")
+    stop_world = source.index("planning_scene_monitor->stopWorldGeometryMonitor();")
+    stop_state = source.index("planning_scene_monitor->stopStateMonitor();")
+    marker = source.index("SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK", stop_state)
+    shutdown = source.index("rclcpp::shutdown();", stop_state)
+    controlled_exit = source.index("std::_Exit(EXIT_SUCCESS);", shutdown)
+    assert (
+        spin
+        < stop_publishing
+        < stop_scene
+        < stop_world
+        < stop_state
+        < marker
+        < shutdown
+        < controlled_exit
+    )
+
+
+def test_scene_setup_exit_gate_starts_workflow_only_on_success() -> None:
+    module = load_launch_module()
+    workflow = object()
+
+    assert module.actions_after_success_or_shutdown(
+        SimpleNamespace(returncode=0), [workflow], "scene setup"
+    ) == [workflow]
+    failure_actions = module.actions_after_success_or_shutdown(
+        SimpleNamespace(returncode=7), [workflow], "scene setup"
+    )
+    assert len(failure_actions) == 1
+    assert isinstance(failure_actions[0], EmitEvent)
 
 
 def test_move_group_receives_frozen_joint_dynamics_limits() -> None:
@@ -446,6 +500,13 @@ def valid_summary(mode: str) -> dict:
             },
             "tf_world_to_tcp": True,
             "moveit_planning_group": "arm",
+            "planning_scene_world_objects": ["pedestal", "plastic_cup", "table"],
+            "planning_scene_primitive_counts": {
+                "pedestal": 1,
+                "plastic_cup": 13,
+                "table": 1,
+            },
+            "planning_scene_color_ids": ["pedestal", "plastic_cup", "table"],
         },
         "plan": {"accepted": True, "trajectory_points": 4},
         "execution": {
