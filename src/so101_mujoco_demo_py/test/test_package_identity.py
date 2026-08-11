@@ -65,6 +65,7 @@ def test_console_entry_point_preserves_ros_facing_executable_name() -> None:
     entry_points = ast.literal_eval(keyword(setup_call(), "entry_points"))
     assert entry_points == {
         "console_scripts": [
+            "camera_preset = so101_mujoco_demo_py.camera_preset_cli:main",
             "pick_place_state_machine = so101_mujoco_demo_py.cli:main",
             "headless_execution = so101_mujoco_demo_py.headless_execution:main",
         ]
