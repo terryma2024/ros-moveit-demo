@@ -13,13 +13,25 @@ describe("WorkflowPanel", () => {
     render(<WorkflowPanel
       leaseHeld
       command={vi.fn()}
-      capabilities={{ workflow_start: false, workflow_run: false, workflow_resume: false }}
+      capabilities={{ workflow_start: false, workflow_run: false, workflow_resume: false, workflow_stop: false }}
     />);
 
     expect(isDisabled("Start")).toBe(true);
     expect(isDisabled("Run")).toBe(true);
     expect(isDisabled("Resume")).toBe(true);
     expect(isDisabled("Next Step")).toBe(true);
+  });
+
+  it("keeps Stop disabled when the backend has no explicit stop owner", () => {
+    render(<WorkflowPanel
+      snapshot={{ run_id: "run-1", current_state: "PREPARE_OPEN_GRIPPER" }}
+      leaseHeld
+      command={vi.fn()}
+      capabilities={{ workflow_start: true, workflow_run: true, workflow_resume: true, workflow_stop: false }}
+    />);
+
+    expect(isDisabled("Resume")).toBe(false);
+    expect(isDisabled("Stop")).toBe(true);
   });
 
   it("enables Start and Run only before a workflow exists", () => {

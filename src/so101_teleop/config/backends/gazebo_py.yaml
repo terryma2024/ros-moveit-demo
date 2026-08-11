@@ -12,6 +12,7 @@ capabilities:
   workflow_start: true
   workflow_run: true
   workflow_resume: true
+  workflow_stop: false
   reset_world: true
   scene_operations: false
   physical_observation: true

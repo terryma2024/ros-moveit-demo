@@ -73,6 +73,10 @@ PLANNED -> RUNNING -> VALID
 
 不得从结果倒推并重写 `PLANNED` 内容。需要更正时追加 `correction`、时间和理由。
 
+`ISOLATED_STACK` 只表示为单轮诊断新建了独立 ROS domain、Gazebo partition 和进程树；
+它不能计入 `RESET_WORLD` 或 `FULL_RESTART` 的稳定性批次。用户指定重复实验生命周期时，
+不得用 `ISOLATED_STACK` 绕过该约束。
+
 ## 实验记录模板
 
 每轮复制下面完整模板；`experiment_id` 一经使用不得复用：
@@ -84,7 +88,7 @@ prior_experiment: <experiment-id-or-NONE>
 hypothesis: <本轮准备证伪的解释>
 prediction: <若假设成立会观察到什么>
 single_variable: <唯一主动变化；NONE 表示固定配置复验>
-lifecycle: REUSE_STACK | RESET_WORLD | FULL_RESTART
+lifecycle: REUSE_STACK | RESET_WORLD | FULL_RESTART | ISOLATED_STACK
 preconditions:
   - <初始机器人、物体、scene 和进程条件>
 success_criteria:
@@ -126,7 +130,7 @@ next_experiment: <experiment-id-or-NONE>
 - `VALID` 成功：进入分母并延长当前成功序列。
 - `VALID` 失败：进入分母并终止当前成功序列。
 - `INVALID`：不进入分母、不算产品失败，但终止当前统计批次；修复污染后创建新的实验 ID 和批次。
-- `REUSE_STACK`、`RESET_WORLD`、`FULL_RESTART` 分开统计，不得混算为一个稳定性结论。
+- `REUSE_STACK`、`RESET_WORLD`、`FULL_RESTART` 和 `ISOLATED_STACK` 分开统计，不得混算为一个稳定性结论。
 
 ## 交接 checkpoint
 

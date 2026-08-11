@@ -38,6 +38,7 @@ const unavailableCapabilities: BackendCapabilityMap = {
   workflow_start: false,
   workflow_run: false,
   workflow_resume: false,
+  workflow_stop: false,
   reset_world: false,
   scene_operations: false,
   physical_observation: false,

@@ -28,12 +28,14 @@ type WorkflowCapabilities = {
   workflow_start: boolean;
   workflow_run: boolean;
   workflow_resume: boolean;
+  workflow_stop: boolean;
 };
 
 const supportedWorkflow: WorkflowCapabilities = {
   workflow_start: true,
   workflow_run: true,
   workflow_resume: true,
+  workflow_stop: false,
 };
 
 export function WorkflowPanel({ snapshot, leaseHeld, command, capabilities = supportedWorkflow }: { snapshot?: any; leaseHeld: boolean; command: (operation: string, body?: Record<string, unknown>) => Promise<unknown>; capabilities?: WorkflowCapabilities }) {
@@ -45,6 +47,7 @@ export function WorkflowPanel({ snapshot, leaseHeld, command, capabilities = sup
   const canStart = capabilities.workflow_start && leaseHeld && !hasWorkflow && !pending;
   const canRun = capabilities.workflow_run && leaseHeld && !hasWorkflow && !pending;
   const canContinue = capabilities.workflow_resume && leaseHeld && hasWorkflow && !done && !pending;
+  const canStop = capabilities.workflow_stop && leaseHeld && hasWorkflow && !done && !pending;
   const canReset = capabilities.workflow_resume && leaseHeld && hasWorkflow && !pending;
   const execute = async (operation: string, body?: Record<string, unknown>) => {
     if (pending) return;
@@ -65,7 +68,7 @@ export function WorkflowPanel({ snapshot, leaseHeld, command, capabilities = sup
       <Button disabled={!canStart} onClick={() => void execute("start")}>{label("start")}</Button>
       <Button disabled={!canContinue} onClick={() => void execute("step", { snapshot_revision: snapshot?.snapshot_revision })}>{label("step")}</Button>
       <Button disabled={!canRun} onClick={() => void execute("run")}>{label("run")}</Button>
-      <Button disabled={!canContinue} variant="outline" onClick={() => void execute("stop")}>{label("stop")}</Button>
+      <Button disabled={!canStop} variant="outline" onClick={() => void execute("stop")}>{label("stop")}</Button>
       <Button disabled={!canContinue} onClick={() => void execute("resume")}>{label("resume")}</Button>
       <ConfirmAction label="Reset workflow" disabled={!canReset} onConfirm={() => void execute("reset")}/>
       {validationFailed && <ConfirmAction label="Force Continue" disabled={!leaseHeld || pending} evidence={JSON.stringify(snapshot.validation ?? {}, null, 2)} typedConfirmation="FORCE CONTINUE" onConfirm={() => void execute("force-continue", { snapshot_revision: snapshot?.snapshot_revision, operator_confirmation: "FORCE CONTINUE" })}/>}

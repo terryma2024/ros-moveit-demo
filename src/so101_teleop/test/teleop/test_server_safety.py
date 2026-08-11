@@ -1,4 +1,7 @@
 import asyncio
+import os
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -19,6 +22,7 @@ from so101_teleop.server import (
 )
 from so101_teleop.control import PlanRejected, PlanStore
 from so101_teleop.main import installed_web_assets
+import so101_teleop.server as server_module
 
 
 PACKAGE = Path(__file__).resolve().parents[2]
@@ -416,6 +420,39 @@ def test_worker_generates_nonempty_startup_session_without_launch_environment(mo
     monkeypatch.delenv("SO101_SIMULATION_SESSION_ID", raising=False)
     worker = RosTelemetryWorker(None)
     assert worker._session_id.startswith("startup-")
+
+
+def test_server_module_import_does_not_require_gazebo_python_bindings(tmp_path):
+    blocker = tmp_path / "bindings-blocker"
+    (blocker / "gz").mkdir(parents=True)
+    (blocker / "gz" / "__init__.py").write_text("# block system gz namespace\n")
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        (str(blocker), str(PACKAGE), environment.get("PYTHONPATH", ""))
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", "import so101_teleop.server; print('IMPORTED')"],
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "IMPORTED"
+
+
+def test_gazebo_binding_preflight_names_the_installable_ubuntu_packages():
+    def missing(_name):
+        raise ImportError("missing for test")
+
+    with pytest.raises(RuntimeError) as caught:
+        server_module.load_gazebo_bindings(import_module=missing)
+
+    message = str(caught.value)
+    assert "python3-gz-transport13" in message
+    assert "python3-gz-msgs10" in message
 
 
 def test_joint_samples_publish_authoritative_so101_urdf_position_limits():

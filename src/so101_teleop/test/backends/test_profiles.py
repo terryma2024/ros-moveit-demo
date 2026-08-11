@@ -26,7 +26,12 @@ def test_gazebo_cpp_profile_pins_installed_owners():
     scene = profile.operations[BackendOperation.SCENE]
     assert scene.executable == "so101_moveit_scene"
     assert scene.scene_style == "positional"
-    assert all(profile.capabilities.as_dict().values())
+    assert profile.capabilities.workflow_stop is False
+    assert all(
+        value
+        for name, value in profile.capabilities.as_dict().items()
+        if name != "workflow_stop"
+    )
 
 
 def test_gazebo_py_profile_pins_python_cli_differences():
@@ -53,6 +58,7 @@ def test_mujoco_profile_exposes_probe_only():
         "workflow_start": False,
         "workflow_run": False,
         "workflow_resume": False,
+        "workflow_stop": False,
         "reset_world": False,
         "scene_operations": False,
         "physical_observation": False,

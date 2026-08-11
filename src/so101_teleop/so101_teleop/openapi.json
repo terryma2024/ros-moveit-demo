@@ -88,6 +88,10 @@
           "workflow_start": {
             "title": "Workflow Start",
             "type": "boolean"
+          },
+          "workflow_stop": {
+            "title": "Workflow Stop",
+            "type": "boolean"
           }
         },
         "required": [
@@ -96,6 +100,7 @@
           "workflow_start",
           "workflow_run",
           "workflow_resume",
+          "workflow_stop",
           "reset_world",
           "scene_operations",
           "physical_observation",

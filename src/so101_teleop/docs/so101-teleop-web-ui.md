@@ -38,6 +38,17 @@ ss -ltnp | rg ':8000'
 
 ## 3. 构建与 Bun
 
+Gazebo C++/Python profile 的物理观测依赖 Gazebo Harmonic 的 Python bindings。
+ai-station 的 rosdep 数据库没有对应 key，因此先显式安装并预检 Ubuntu 包：
+
+```bash
+sudo apt install python3-gz-transport13 python3-gz-msgs10
+python3 -c 'import gz.transport13, gz.msgs10'
+```
+
+`mujoco_py` probe-only profile 不加载这些 bindings；选择物理观测 profile 时若缺失，
+server 会以 `GAZEBO_PYTHON_BINDINGS_MISSING` 失败，而不是在模块导入阶段崩溃。
+
 安装 package 时执行：
 
 ```bash
@@ -410,7 +421,7 @@ Reset 完成后等待状态恢复为 `READY`，再依次执行 Acquire lease、C
 - **Start**：仅在 workflow 尚未开始时可用；创建新的 run/checkpoint，并执行第一个单步请求。
 - **Next Step**：从当前 checkpoint 执行下一状态，适合逐状态调试。
 - **Run**：仅在 workflow 尚未开始时可用；创建新的 run/checkpoint，从头连续执行到结束或首个失败边界。
-- **Stop**：停止请求后续状态；它不是急停，也不等同于取消正在执行的 MoveIt action。
+- **Stop**：只允许调用后端 owner 明确实现的停止协议；它不是急停，也不等同于取消正在执行的 MoveIt action。当前三个固定 profile 均声明 `workflow_stop=false`，所以按钮禁用，直接请求会在创建 subprocess 或改变 checkpoint 前返回 `BACKEND_CAPABILITY_UNAVAILABLE`。
 - **Resume**：仅在已有 workflow checkpoint 时可用；从当前 checkpoint 连续执行到结束或首个失败边界。
 - **Reset workflow**：使当前 workflow checkpoint 失效，不重置整个 Gazebo world。
 
