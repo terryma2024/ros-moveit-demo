@@ -155,6 +155,14 @@ def test_required_isolation_artifacts_exist() -> None:
     assert os.access(GATE_PATH, os.X_OK)
 
 
+def test_viewer_camera_live_contract_is_opt_in_and_does_not_touch_gazebo() -> None:
+    contract = REPOSITORY_ROOT / IMPLEMENTATION_ROOT / "test/test_viewer_camera_live_contract.py"
+    source = contract.read_text(encoding="utf-8")
+    assert 'os.environ.get("SO101_MUJOCO_LIVE_TEST") != "1"' in source
+    assert "so101_mujoco.launch.py" in source
+    assert LEGACY_NAMESPACE not in source
+
+
 def test_ledger_records_complete_task_contract_and_checkpoint() -> None:
     front_matter = parse_front_matter(LEDGER_PATH)
     assert front_matter["main_base_commit"] == MAIN_BASE_COMMIT
