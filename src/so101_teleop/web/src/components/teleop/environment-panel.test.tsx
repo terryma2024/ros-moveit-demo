@@ -32,6 +32,16 @@ describe("EnvironmentPanel", () => {
     expect(screen.getByTitle("ROS_DISTRO unavailable").textContent).toBe("—");
   });
 
+  it("shows immutable backend provenance separately from the environment", () => {
+    render(<TooltipProvider><EnvironmentPanel
+      environment={{}}
+      backend={{ backend: "gazebo_py", owner_package: "so101_gazebo_demo_py" }}
+    /></TooltipProvider>);
+
+    expect(screen.getByText("gazebo_py")).toBeTruthy();
+    expect(screen.getByText("so101_gazebo_demo_py")).toBeTruthy();
+  });
+
   it("copies the complete value even when the visible cell is bounded", async () => {
     const longValue = "/opt/ros/jazzy:" + "/data/work/ws_moveit/install:".repeat(20);
     const user = userEvent.setup();

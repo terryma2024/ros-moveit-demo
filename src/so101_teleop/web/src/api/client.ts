@@ -1,5 +1,5 @@
 import { createCommandId } from "@/lib/command-id";
-import type { CommandResult } from "./types";
+import type { BackendCapabilities, CommandResult } from "./types";
 
 type Fetcher = typeof fetch;
 const browserFetch: Fetcher = (input, init) => fetch(input, init);
@@ -14,6 +14,12 @@ export class TeleopApiClient {
       body: JSON.stringify({ ...body, command_id: this.commandId(), lease_id: leaseId, session_id: sessionId }),
     });
     return response.json() as Promise<CommandResult>;
+  }
+
+  async capabilities(): Promise<BackendCapabilities> {
+    const response = await this.fetcher("/capabilities", { method: "GET" });
+    if (!response.ok) throw new Error(`HTTP_${response.status}`);
+    return response.json() as Promise<BackendCapabilities>;
   }
 
   async executeAll(planId: string, gripperTarget: number, leaseId: string, sessionId: string) {

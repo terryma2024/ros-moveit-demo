@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { TeleopApiClient } from "@/api/client";
 import { isTelemetrySnapshot } from "@/api/telemetry-client";
-import type { CommandResult, Pose6D, ReplayableTarget, TelemetrySnapshot } from "@/api/types";
+import type { BackendCapabilities, BackendCapabilityMap, CommandResult, Pose6D, ReplayableTarget, TelemetrySnapshot } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollisionPanel } from "@/components/teleop/collision-panel";
@@ -32,6 +32,19 @@ type LiveSnapshot = TelemetrySnapshot & {
 };
 
 const client = new TeleopApiClient();
+const unavailableCapabilities: BackendCapabilityMap = {
+  backend_probe: false,
+  workflow_execute: false,
+  workflow_start: false,
+  workflow_run: false,
+  workflow_resume: false,
+  reset_world: false,
+  scene_operations: false,
+  physical_observation: false,
+  manual_joint_execute: false,
+  manual_tcp_execute: false,
+  camera_presets: false,
+};
 
 export function App() {
   const [state, dispatch] = useReducer(reduceTeleop, undefined, initialTeleopState);
@@ -43,9 +56,11 @@ export function App() {
   const [rttMs, setRttMs] = useState<number>();
   const [tcpPlanning, setTcpPlanning] = useState(false);
   const [cameraPresets, setCameraPresets] = useState<string[]>([]);
+  const [backend, setBackend] = useState<BackendCapabilities>();
   const sessionRef = useRef("");
   const snapshot = state.actual as LiveSnapshot;
   const environment = snapshot.environment ?? {};
+  const capabilities = backend?.capabilities ?? unavailableCapabilities;
 
   const acceptSnapshot = useCallback((next: LiveSnapshot) => {
     if (sessionRef.current && sessionRef.current !== next.simulation_session_id) {
@@ -85,12 +100,25 @@ export function App() {
 
   useEffect(() => {
     let active = true;
+    client.capabilities()
+      .then((payload) => { if (active) setBackend(payload); })
+      .catch(() => { if (active) setNotice("Backend capabilities unavailable"); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!backend) return;
+    if (!backend.capabilities.camera_presets) {
+      setCameraPresets([]);
+      return;
+    }
+    let active = true;
     fetch("/gazebo/camera/presets")
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP_${response.status}`)))
       .then((payload: { presets?: string[] }) => { if (active) setCameraPresets(payload.presets ?? []); })
       .catch(() => { if (active) setNotice("Camera presets unavailable"); });
     return () => { active = false; };
-  }, []);
+  }, [backend]);
 
   useEffect(() => {
     if (!lease) return;
@@ -186,8 +214,8 @@ export function App() {
       <TabsList aria-label="Teleop panel navigation" className="w-full max-w-full justify-start overflow-x-auto overflow-y-hidden bg-slate-900 text-slate-300">
         {([['joints', 'Joints'], ['tcp', 'TCP'], ['collision', 'Collision'], ['target', 'Target'], ['gazebo', 'Gazebo'], ['workflow', 'Workflow'], ['events', 'Events'], ['environment', 'Environment']] as const).map(([value, label]) => <TabsTrigger className="shrink-0 data-[state=active]:bg-sky-700 data-[state=active]:text-white" key={value} value={value}>{label}</TabsTrigger>)}
       </TabsList>
-      <TabsContent value="joints"><JointPanel joints={snapshot.joints} targets={state.target.joints} leaseHeld={Boolean(lease)} plan={state.plan} onEdit={(joint, value) => dispatch({ type: "edit-joint", joint, value })} onClampNotice={setNotice} onPlan={planJoints} onExecute={execute} onExecuteGripper={() => call("/gripper/execute", { target_position_rad: state.target.joints["6"] })} onExecuteAll={executeAll} onCancel={() => call("/execution/cancel")}/></TabsContent>
-      <TabsContent value="tcp"><TcpPanel pose={targetPose} frame={state.target.stepFrame} leaseHeld={Boolean(lease)} planning={tcpPlanning} plan={state.plan} onFrame={(frame) => dispatch({ type: "set-step-frame", frame })} onEdit={(tcp) => dispatch({ type: "edit-tcp", tcp })} onStep={(axis, direction) => dispatch({ type: "edit-tcp", tcp: applyPoseStep(targetPose, axis, direction, state.target.stepFrame) })} onPlan={planTcp} onExecute={execute} onCancel={() => call("/execution/cancel")}/></TabsContent>
+      <TabsContent value="joints"><JointPanel joints={snapshot.joints} targets={state.target.joints} leaseHeld={Boolean(lease)} manualJointExecute={capabilities.manual_joint_execute} plan={state.plan} onEdit={(joint, value) => dispatch({ type: "edit-joint", joint, value })} onClampNotice={setNotice} onPlan={planJoints} onExecute={execute} onExecuteGripper={() => call("/gripper/execute", { target_position_rad: state.target.joints["6"] })} onExecuteAll={executeAll} onCancel={() => call("/execution/cancel")}/></TabsContent>
+      <TabsContent value="tcp"><TcpPanel pose={targetPose} frame={state.target.stepFrame} leaseHeld={Boolean(lease)} manualTcpExecute={capabilities.manual_tcp_execute} planning={tcpPlanning} plan={state.plan} onFrame={(frame) => dispatch({ type: "set-step-frame", frame })} onEdit={(tcp) => dispatch({ type: "edit-tcp", tcp })} onStep={(axis, direction) => dispatch({ type: "edit-tcp", tcp: applyPoseStep(targetPose, axis, direction, state.target.stepFrame) })} onPlan={planTcp} onExecute={execute} onCancel={() => call("/execution/cancel")}/></TabsContent>
       <TabsContent value="collision"><CollisionPanel
         moveit={(snapshot.moveit_collisions as import("@/components/teleop/collision-panel").Evidence[] | undefined) ?? []}
         gazebo={(snapshot.gazebo_contacts as import("@/components/teleop/collision-panel").Evidence[] | undefined) ?? []}
@@ -196,10 +224,10 @@ export function App() {
         sourceAges={(snapshot.source_ages_s as Record<string, number> | undefined) ?? {}}
       /></TabsContent>
       <TabsContent value="target"><TargetYamlControls target={replayableTarget} onImport={importTarget} onError={setNotice}/></TabsContent>
-      <TabsContent value="gazebo"><GazeboPanel leaseHeld={Boolean(lease)} gazeboAttached={snapshot.gazebo_attached} moveitAttached={snapshot.moveit_attached} shot={shot} cameraPresets={cameraPresets} onCameraPreset={(preset) => call(`/gazebo/camera/presets/${preset}`)} onScreenshot={async () => { const result = await call("/gazebo/screenshot"); const data = result.data as any; if (data?.url) setShot(data.url); }} onAttach={() => call("/attachment/attach")} onDetach={() => call("/attachment/detach")} onRepair={() => call("/scene/repair", { confirmation: "CONFIRM SCENE_REPAIR" })} onHome={() => call("/robot/home", { confirmation: "CONFIRM ROBOT_HOME" })} onReset={() => call("/simulation/reset", { confirmation: "CONFIRM SIMULATION_RESET" })}/></TabsContent>
-      <TabsContent value="workflow"><WorkflowPanel snapshot={workflow} leaseHeld={Boolean(lease)} command={workflowCommand}/></TabsContent>
+      <TabsContent value="gazebo"><GazeboPanel leaseHeld={Boolean(lease)} capabilities={capabilities} gazeboAttached={snapshot.gazebo_attached} moveitAttached={snapshot.moveit_attached} shot={shot} cameraPresets={cameraPresets} onCameraPreset={(preset) => call(`/gazebo/camera/presets/${preset}`)} onScreenshot={async () => { const result = await call("/gazebo/screenshot"); const data = result.data as any; if (data?.url) setShot(data.url); }} onAttach={() => call("/attachment/attach")} onDetach={() => call("/attachment/detach")} onRepair={() => call("/scene/repair", { confirmation: "CONFIRM SCENE_REPAIR" })} onHome={() => call("/robot/home", { confirmation: "CONFIRM ROBOT_HOME" })} onReset={() => call("/simulation/reset", { confirmation: "CONFIRM SIMULATION_RESET" })}/></TabsContent>
+      <TabsContent value="workflow"><WorkflowPanel snapshot={workflow} leaseHeld={Boolean(lease)} capabilities={capabilities} command={workflowCommand}/></TabsContent>
       <TabsContent value="events"><EventLog entries={events}/></TabsContent>
-      <TabsContent value="environment"><EnvironmentPanel environment={environment}/></TabsContent>
+      <TabsContent value="environment"><EnvironmentPanel environment={environment} backend={backend}/></TabsContent>
     </Tabs>
   </main>;
 }

@@ -38,3 +38,24 @@ export type CommandResult = {
   layers?: Record<string, string>;
   data?: Record<string, unknown>;
 };
+
+export type BackendCapabilityMap = {
+  backend_probe: boolean;
+  workflow_execute: boolean;
+  workflow_start: boolean;
+  workflow_run: boolean;
+  workflow_resume: boolean;
+  reset_world: boolean;
+  scene_operations: boolean;
+  physical_observation: boolean;
+  manual_joint_execute: boolean;
+  manual_tcp_execute: boolean;
+  camera_presets: boolean;
+};
+
+export type BackendCapabilities = {
+  backend: "gazebo_cpp" | "gazebo_py" | "mujoco_py";
+  owner_package: string;
+  owner_executable: string;
+  capabilities: BackendCapabilityMap;
+};

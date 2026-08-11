@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .models import TelemetrySnapshot
+from .models import BackendCapabilitiesResponse, TelemetrySnapshot
 
 
 def validate_bind_address(address: str) -> str:
@@ -35,7 +35,7 @@ def create_app(service, static_dir: str | Path | None = None, capture_dir: str |
     async def snapshot():
         return await service.current_snapshot()
 
-    @app.get("/capabilities")
+    @app.get("/capabilities", response_model=BackendCapabilitiesResponse)
     async def capabilities():
         return await service.capabilities()
 

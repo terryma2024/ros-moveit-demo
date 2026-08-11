@@ -10,11 +10,12 @@ export const TELEOP_ENVIRONMENT_KEYS = [
   "GZ_SIM_SYSTEM_PLUGIN_PATH", "PYTHONPATH", "LD_LIBRARY_PATH",
 ] as const;
 
-export function EnvironmentPanel({ environment }: { environment: Record<string, string> }) {
+export function EnvironmentPanel({ environment, backend }: { environment: Record<string, string>; backend?: { backend: string; owner_package: string; owner_executable?: string } }) {
   return <Card aria-label="Environment panel" className="min-w-0 overflow-hidden">
     <CardHeader>
       <CardTitle>ROS and Gazebo environment</CardTitle>
       <CardDescription>Read-only allowlisted runtime metadata from the Teleop process.</CardDescription>
+      {backend && <p className="text-sm text-sky-200">Backend <span className="font-mono">{backend.backend}</span> · owner <span className="font-mono">{backend.owner_package}</span>{backend.owner_executable ? <>/{backend.owner_executable}</> : null}</p>}
     </CardHeader>
     <CardContent className="mt-4 min-w-0 overflow-hidden">
       <Table aria-label="Runtime environment" className="table-fixed">

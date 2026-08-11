@@ -1,6 +1,111 @@
 {
   "components": {
     "schemas": {
+      "BackendCapabilitiesResponse": {
+        "properties": {
+          "backend": {
+            "enum": [
+              "gazebo_cpp",
+              "gazebo_py",
+              "mujoco_py"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "bind_policy": {
+            "title": "Bind Policy",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/BackendCapabilityMap"
+          },
+          "owner_executable": {
+            "title": "Owner Executable",
+            "type": "string"
+          },
+          "owner_package": {
+            "title": "Owner Package",
+            "type": "string"
+          },
+          "simulation_only": {
+            "title": "Simulation Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "simulation_only",
+          "bind_policy",
+          "backend",
+          "owner_package",
+          "owner_executable",
+          "capabilities"
+        ],
+        "title": "BackendCapabilitiesResponse",
+        "type": "object"
+      },
+      "BackendCapabilityMap": {
+        "properties": {
+          "backend_probe": {
+            "title": "Backend Probe",
+            "type": "boolean"
+          },
+          "camera_presets": {
+            "title": "Camera Presets",
+            "type": "boolean"
+          },
+          "manual_joint_execute": {
+            "title": "Manual Joint Execute",
+            "type": "boolean"
+          },
+          "manual_tcp_execute": {
+            "title": "Manual Tcp Execute",
+            "type": "boolean"
+          },
+          "physical_observation": {
+            "title": "Physical Observation",
+            "type": "boolean"
+          },
+          "reset_world": {
+            "title": "Reset World",
+            "type": "boolean"
+          },
+          "scene_operations": {
+            "title": "Scene Operations",
+            "type": "boolean"
+          },
+          "workflow_execute": {
+            "title": "Workflow Execute",
+            "type": "boolean"
+          },
+          "workflow_resume": {
+            "title": "Workflow Resume",
+            "type": "boolean"
+          },
+          "workflow_run": {
+            "title": "Workflow Run",
+            "type": "boolean"
+          },
+          "workflow_start": {
+            "title": "Workflow Start",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "backend_probe",
+          "workflow_execute",
+          "workflow_start",
+          "workflow_run",
+          "workflow_resume",
+          "reset_world",
+          "scene_operations",
+          "physical_observation",
+          "manual_joint_execute",
+          "manual_tcp_execute",
+          "camera_presets"
+        ],
+        "title": "BackendCapabilityMap",
+        "type": "object"
+      },
       "CollisionPair": {
         "properties": {
           "allowed": {
@@ -414,7 +519,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BackendCapabilitiesResponse"
+                }
               }
             },
             "description": "Successful Response"

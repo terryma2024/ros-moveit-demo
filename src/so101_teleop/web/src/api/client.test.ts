@@ -3,6 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import { TeleopApiClient } from "./client";
 
 describe("Execute All", () => {
+  it("loads the immutable backend capability snapshot with GET", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      backend: "mujoco_py",
+      owner_package: "so101_mujoco_demo_py",
+      capabilities: { backend_probe: true, workflow_run: false },
+    })));
+    const client = new TeleopApiClient(fetcher, () => "command-id");
+
+    const result = await client.capabilities();
+
+    expect(result.backend).toBe("mujoco_py");
+    expect(fetcher).toHaveBeenCalledWith("/capabilities", { method: "GET" });
+  });
+
   it("calls the browser fetch function without rebinding its native receiver", async () => {
     const original = globalThis.fetch;
     globalThis.fetch = function (this: unknown) {
