@@ -13,3 +13,9 @@ velocity_scaling: 0.05
 acceleration_scaling: 0.05
 joint_convergence_tolerance_rad: 0.01
 minimum_joint_motion_rad: 0.05
+contact_calibration:
+  minimum_valid_samples_per_regime: 20
+  max_receipt_age_s: 0.2
+  diagnostic_abort_only:
+    maximum_pre_contact_displacement_m: 0.003
+    maximum_normal_force_n: 11.60

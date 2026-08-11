@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from .domain import RunMode, RunRequest, RunStatus, State
+from .live_runtime import LiveRuntimeConfig, run_live_workflow
 from .runner import FileCheckpointStore, StateMachineRunner, dry_run_actions
 
 
@@ -32,6 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force-continue", action="store_true")
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--session-id", default="")
+    parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--expected-reset-epoch", type=int)
+    parser.add_argument("--evidence-root", type=Path)
+    parser.add_argument("--motion-policy", type=Path)
     parser.add_argument("--max-state-transitions", type=int, default=100)
     return parser
 
@@ -65,9 +70,41 @@ def main(arguments: list[str] | None = None) -> int:
             arguments = arguments[: arguments.index("--ros-args")]
     options = build_parser().parse_args(arguments)
     if options.mode == RunMode.EXECUTE.value:
+        if not options.execute:
+            print("status=ERROR")
+            print("current_state=ERROR")
+            print("failure=EXPLICIT_EXECUTE_REQUIRED")
+            return 1
+        if (
+            not options.session_id
+            or options.expected_reset_epoch is None
+            or options.evidence_root is None
+            or options.motion_policy is None
+        ):
+            print("status=ERROR")
+            print("current_state=ERROR")
+            print("failure=LIVE_RUNTIME_CONFIG_REQUIRED")
+            return 1
+        result = run_live_workflow(
+            LiveRuntimeConfig(
+                simulation_session_id=options.session_id,
+                expected_reset_epoch=options.expected_reset_epoch,
+                evidence_root=options.evidence_root,
+                motion_policy=options.motion_policy,
+            )
+        )
+        if result.success:
+            print("status=DONE")
+            print("current_state=DONE")
+            print(f"transition_count={len(result.completed_phases)}")
+            print("state_trace=" + ",".join(result.completed_phases))
+            print(f"evidence_manifest={result.manifest_path}")
+            return 0
         print("status=ERROR")
         print("current_state=ERROR")
-        print("failure=LIVE_RUNTIME_NOT_IMPLEMENTED")
+        print(f"failure={result.failure}")
+        print(f"failed_phase={result.failed_phase}")
+        print(f"evidence_manifest={result.manifest_path}")
         return 1
     request = RunRequest(
         mode=RunMode(options.mode),
