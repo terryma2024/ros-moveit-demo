@@ -83,6 +83,27 @@ initialize_submodule() {
   git -C "${project_root}" submodule update --init -- "${submodule_path}"
 }
 
+verify_superproject_gitlink() {
+  local superproject_root
+  superproject_root=$(git -C "${project_root}" rev-parse --show-toplevel 2>/dev/null) ||
+    fail "project root is not a Git superproject: ${project_root}"
+  [[ ${superproject_root:A} == ${project_root:A} ]] ||
+    fail "installer checkout is not the superproject root: ${project_root}"
+
+  local tree_entry
+  tree_entry=$(git -C "${project_root}" ls-tree HEAD -- "${submodule_path}") ||
+    fail "could not read superproject gitlink: ${submodule_path}"
+  [[ -n ${tree_entry} ]] || fail "superproject has no gitlink for ${submodule_path}"
+
+  local recorded_mode recorded_type recorded_commit recorded_path
+  read -r recorded_mode recorded_type recorded_commit recorded_path <<< "${tree_entry}"
+  [[ ${recorded_mode} == 160000 && ${recorded_type} == commit ]] ||
+    fail "superproject must record ${submodule_path} as mode 160000"
+  [[ ${recorded_commit} == ${fork_commit} ]] ||
+    fail "superproject gitlink commit ${recorded_commit} does not match lock ${fork_commit}"
+  gitlink_commit=${recorded_commit}
+}
+
 verify_source_identity() {
   [[ -e ${source_dir}/.git ]] || fail "submodule is not initialized: ${submodule_path}"
   local configured_url
@@ -99,8 +120,8 @@ verify_source_identity() {
 
   local observed_commit
   observed_commit=$(git -C "${source_dir}" rev-parse HEAD)
-  [[ ${observed_commit} == ${fork_commit} ]] ||
-    fail "wrong fork commit: ${observed_commit} (expected ${fork_commit})"
+  [[ ${observed_commit} == ${fork_commit} && ${observed_commit} == ${gitlink_commit} ]] ||
+    fail "wrong fork commit: ${observed_commit} (expected lock/gitlink ${fork_commit})"
   git -C "${source_dir}" merge-base --is-ancestor "${upstream_commit}" HEAD ||
     fail "official 0.0.3 commit is not an ancestor of fork HEAD"
   local tagged_commit
@@ -173,6 +194,7 @@ main() {
   done
 
   resolve_project_root
+  verify_superproject_gitlink
   if [[ ! -e ${source_dir}/.git ]]; then
     if [[ ${init_submodule} == true ]]; then
       initialize_submodule

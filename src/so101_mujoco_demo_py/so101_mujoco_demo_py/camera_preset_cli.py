@@ -3,20 +3,30 @@
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import yaml
 
-from .camera_presets import CameraPresetConfigError, load_camera_presets
+from .camera_presets import (
+    CameraPreset,
+    CameraPresetConfigError,
+    FreeCameraPreset,
+    load_camera_presets,
+)
 from .viewer_camera_client import (
+    FixedViewerCameraState,
+    FreeViewerCameraState,
     RosViewerCameraGateway,
     ViewerCameraGateway,
     ViewerCameraServiceError,
     ViewerCameraState,
     viewer_camera_state_to_yaml_fields,
 )
+
+READBACK_ABS_TOLERANCE = 1e-9
 
 
 def _default_config_file() -> Path:
@@ -50,6 +60,37 @@ def _print_state(state: ViewerCameraState, output_format: str) -> None:
         print(f"{key}={rendered}")
 
 
+def _readback_mismatches(preset: CameraPreset, state: ViewerCameraState) -> list[str]:
+    if isinstance(preset, FreeCameraPreset):
+        if not isinstance(state, FreeViewerCameraState):
+            return ["mode: expected free, got fixed"]
+        mismatches = []
+        for index, (expected, observed) in enumerate(zip(preset.lookat, state.lookat)):
+            if not math.isclose(expected, observed, rel_tol=0.0, abs_tol=READBACK_ABS_TOLERANCE):
+                mismatches.append(f"lookat[{index}]: expected {expected}, got {observed}")
+        for field, expected, observed in (
+            ("distance", preset.distance, state.distance),
+            ("azimuth_deg", preset.azimuth_deg, state.azimuth_deg),
+            ("elevation_deg", preset.elevation_deg, state.elevation_deg),
+        ):
+            if not math.isclose(expected, observed, rel_tol=0.0, abs_tol=READBACK_ABS_TOLERANCE):
+                mismatches.append(f"{field}: expected {expected}, got {observed}")
+        if preset.orthographic != state.orthographic:
+            mismatches.append(
+                f"orthographic: expected {preset.orthographic}, got {state.orthographic}"
+            )
+        return mismatches
+
+    if not isinstance(state, FixedViewerCameraState):
+        return ["mode: expected fixed, got free"]
+    if preset.fixed_camera_name != state.fixed_camera_name:
+        return [
+            "fixed_camera_name: "
+            f"expected {preset.fixed_camera_name!r}, got {state.fixed_camera_name!r}"
+        ]
+    return []
+
+
 def run(
     argv: Sequence[str] | None = None,
     *,
@@ -81,10 +122,22 @@ def run(
     gateway: ViewerCameraGateway | None = None
     try:
         gateway = gateway_factory()
-        state = (
-            gateway.get_camera() if options.current else gateway.set_camera(presets[options.preset])
-        )
+        if options.current:
+            state = gateway.get_camera()
+            preset = None
+        else:
+            preset = presets[options.preset]
+            gateway.set_camera(preset)
+            state = gateway.get_camera()
         _print_state(state, options.format)
+        if preset is not None:
+            mismatches = _readback_mismatches(preset, state)
+            if mismatches:
+                print(
+                    "viewer camera readback mismatch: " + "; ".join(mismatches),
+                    file=sys.stderr,
+                )
+                return 1
         return 0
     except ViewerCameraServiceError as error:
         print(f"viewer camera error: {error}", file=sys.stderr)
