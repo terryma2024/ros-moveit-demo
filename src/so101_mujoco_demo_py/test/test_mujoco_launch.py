@@ -48,6 +48,10 @@ def test_launch_builds_independent_description_and_expected_nodes() -> None:
     assert "@SO101_MUJOCO_SCENE@" in source_urdf
     assert "@SO101_MUJOCO_SCENE@" not in rendered
     assert str(PACKAGE_ROOT / "mjcf/scene.xml") in rendered
+    assert '<param name="headless">true</param>' in rendered
+    assert '<param name="headless">false</param>' in module.render_robot_description(
+        PACKAGE_ROOT, headless="false"
+    )
     assert module.RUNTIME_NODE_CONTRACT == {
         "mujoco_ros2_control/ros2_control_node",
         "robot_state_publisher/robot_state_publisher",
