@@ -613,6 +613,13 @@ class TeleopService:
     async def command(self, name: str, body: dict):
         command_id=body.get("command_id", "")
         if not command_id: return self._result(body, False, "COMMAND_ID_REQUIRED", "command_id is required")
+        if name == "execute" and not (
+            self._backend.capabilities().manual_joint_execute
+            or self._backend.capabilities().manual_tcp_execute
+        ):
+            return self._backend_unavailable(
+                body, "manual_joint_execute|manual_tcp_execute"
+            )
         capability = self._required_capability(name)
         if capability is not None and not getattr(self._backend.capabilities(), capability):
             return self._backend_unavailable(body, capability)
