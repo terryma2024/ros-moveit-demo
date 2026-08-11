@@ -75,6 +75,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_teleop_web_bundle test/teleop/test_web_bundle.py)
   ament_add_pytest_test(test_teleop_workflow_gateway test/teleop/test_workflow_gateway.py)
   ament_add_pytest_test(test_teleop_server_safety test/teleop/test_server_safety.py)
+  ament_add_pytest_test(test_backend_capabilities test/teleop/test_backend_capabilities.py)
+  ament_add_pytest_test(test_main_backend test/teleop/test_main_backend.py)
 endif()
 
 ament_package()

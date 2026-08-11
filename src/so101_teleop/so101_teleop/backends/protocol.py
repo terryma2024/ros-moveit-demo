@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, Protocol
 
 
 BackendId = Literal["gazebo_cpp", "gazebo_py", "mujoco_py"]
@@ -74,3 +74,17 @@ class ResetRequest:
 class SceneRequest:
     operation: Literal["observe", "attach", "detach", "upsert"]
     session_id: str
+
+
+class BackendProtocol(Protocol):
+    profile: Any
+
+    def probe(self) -> BackendEnvelope: ...
+
+    def capabilities(self) -> BackendCapabilities: ...
+
+    def run_workflow(self, request: WorkflowRequest) -> BackendEnvelope: ...
+
+    def reset_world(self, request: ResetRequest) -> BackendEnvelope: ...
+
+    def scene_operation(self, request: SceneRequest) -> BackendEnvelope: ...
