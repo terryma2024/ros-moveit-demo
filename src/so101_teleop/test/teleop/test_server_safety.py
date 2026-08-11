@@ -1,5 +1,4 @@
 import asyncio
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -7,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from so101_teleop.backends.protocol import BackendEnvelope
+from so101_teleop.backends.registry import load_backend_profile
 from so101_teleop.models import PlanSummary, Pose6D, ServerMode, TelemetrySnapshot
 from so101_teleop.server import (
     TELEOP_ENVIRONMENT_KEYS,
@@ -18,6 +19,9 @@ from so101_teleop.server import (
 )
 from so101_teleop.control import PlanRejected, PlanStore
 from so101_teleop.main import installed_web_assets
+
+
+PACKAGE = Path(__file__).resolve().parents[2]
 
 
 def test_legacy_gazebo_pose_callback_is_removed():
@@ -63,44 +67,81 @@ class PlanningWorker(Worker):
         return stored
 
 
+class Backend:
+    """Fixed Gazebo C++ adapter double; owner argv itself is tested by cli_adapter."""
+
+    def __init__(self, worker):
+        self.profile = load_backend_profile("gazebo_cpp", PACKAGE)
+        self.worker = worker
+
+    def capabilities(self):
+        return self.profile.capabilities
+
+    def _success(self, operation, session_id, executable, result):
+        return BackendEnvelope(
+            ok=True,
+            backend=self.profile.backend,
+            operation=operation,
+            session_id=session_id,
+            owner_package=self.profile.owner_package,
+            owner_executable=executable,
+            exit_code=0,
+            result=result,
+        )
+
+    def run_workflow(self, request):
+        args = [
+            "--mode", "execute", "--checkpoint", str(request.checkpoint),
+            "--session-id", request.session_id,
+        ]
+        if request.operation == "start":
+            args.append("--step")
+        elif request.operation == "step":
+            args.extend(("--resume", "true", "--step"))
+        elif request.operation in ("resume", "force-continue"):
+            args.extend(("--resume", "true"))
+        if request.operation == "force-continue":
+            args.append("--force-continue")
+        output = self.worker.package_cli("pick_place_state_machine", args)
+        trace = next(
+            (line for line in output.splitlines() if line.startswith("trace=")),
+            "trace=",
+        )
+        return self._success(
+            f"workflow_{request.operation}",
+            request.session_id,
+            "pick_place_state_machine",
+            {"trace": trace},
+        )
+
+    def reset_world(self, request):
+        self.worker.package_cli("reset_so101_world", [])
+        return self._success(
+            "reset_world", request.session_id, "reset_so101_world",
+            {"status": "SUCCEEDED"},
+        )
+
+    def scene_operation(self, request):
+        output = self.worker.package_cli("so101_moveit_scene", [request.operation])
+        return self._success(
+            f"scene_{request.operation}", request.session_id,
+            "so101_moveit_scene", {"output": output},
+        )
+
+
+def service_for(worker, camera=None):
+    return TeleopService(worker, camera, backend=Backend(worker))
+
+
 async def lease(service):
     return (await service.command("lease", {"command_id": "lease"})).layers["lease_id"]
-
-
-def test_package_cli_preserves_cpp_owner_failure_diagnostics(monkeypatch, tmp_path):
-    prefix = tmp_path / "prefix"
-    executable = prefix / "lib" / "so101_gazebo_demo_cpp" / "pick_place_state_machine"
-    executable.parent.mkdir(parents=True)
-    executable.touch()
-    diagnostic_dir = tmp_path / "diagnostics"
-    monkeypatch.setenv("SO101_TELEOP_OWNER_DIAGNOSTIC_DIR", str(diagnostic_dir))
-    monkeypatch.setattr(
-        "ament_index_python.packages.get_package_prefix", lambda package: str(prefix))
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *args, **kwargs: SimpleNamespace(
-            returncode=1,
-            stdout="status=ERROR\nfailure=ARM_NOT_QUIESCENT_AFTER_EXECUTION\n",
-            stderr="owner stderr evidence\n",
-        ),
-    )
-    worker = object.__new__(RosTelemetryWorker)
-
-    with pytest.raises(RuntimeError, match="^CPP_OWNER_FAILED_pick_place_state_machine$"):
-        worker.package_cli("pick_place_state_machine", ["--mode", "execute"], 1.0)
-
-    diagnostic = (diagnostic_dir / "last-pick_place_state_machine.log").read_text()
-    assert "failure=ARM_NOT_QUIESCENT_AFTER_EXECUTION" in diagnostic
-    assert "owner stderr evidence" in diagnostic
-    assert "arguments=['--mode', 'execute']" in diagnostic
 
 
 def test_joint_plan_forwards_bounded_velocity_and_acceleration_scaling():
     """Loaded pick/place moves can run slower without weakening path tolerance."""
     async def scenario():
         worker = PlanningWorker()
-        service = TeleopService(worker)
+        service = service_for(worker)
         token = await lease(service)
 
         result = await service.command("plan_joints", {
@@ -160,7 +201,7 @@ def test_worker_snapshot_captures_runtime_ros_and_gazebo_environment(monkeypatch
     monkeypatch.setenv("GZ_PARTITION", "partition-a")
     monkeypatch.setenv("SECRET_TOKEN", "must-not-leak")
 
-    snapshot = RosTelemetryWorker().snapshot()
+    snapshot = RosTelemetryWorker(None).snapshot()
 
     assert snapshot.environment["ROS_DOMAIN_ID"] == "55"
     assert snapshot.environment["GZ_PARTITION"] == "partition-a"
@@ -170,7 +211,7 @@ def test_worker_snapshot_captures_runtime_ros_and_gazebo_environment(monkeypatch
 def test_second_client_cannot_silently_replace_an_unexpired_control_lease():
     """A diagnostic browser must not steal the operator's one-writer lease."""
     async def scenario():
-        service = TeleopService(Worker())
+        service = service_for(Worker())
         first = await service.command("lease", {"command_id": "lease-first"})
         second = await service.command("lease", {"command_id": "lease-second"})
         renewed = await service.command("lease_renew", {
@@ -197,7 +238,7 @@ def test_valid_lease_renewal_is_not_rejected_while_workflow_owner_is_running():
             return "trace=WAIT_GRASP_STABLE"
 
         worker.package_cli = blocking_owner
-        service = TeleopService(worker)
+        service = service_for(worker)
         acquired = await service.command("lease", {"command_id": "lease"})
         lease_id = acquired.layers["lease_id"]
         workflow = asyncio.create_task(service.command("workflow_start", {
@@ -233,7 +274,7 @@ def test_workflow_step_resumes_the_existing_cpp_checkpoint_before_single_step():
             return "trace=IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT"
 
         worker.package_cli = owner
-        service = TeleopService(worker)
+        service = service_for(worker)
         lease_id = await lease(service)
         started = await service.command("workflow_start", {
             "command_id": "workflow-start",
@@ -269,7 +310,7 @@ def test_workflow_run_creates_a_fresh_run_without_step_or_resume_flags():
             return "trace=IDLE -> PREPARE_OPEN_GRIPPER -> DONE"
 
         worker.package_cli = owner
-        service = TeleopService(worker)
+        service = service_for(worker)
         lease_id = await lease(service)
         result = await service.command("workflow_run", {
             "command_id": "workflow-run",
@@ -297,7 +338,7 @@ def test_workflow_run_cannot_replace_an_existing_workflow():
             return "trace=IDLE -> PREPARE_OPEN_GRIPPER"
 
         worker.package_cli = owner
-        service = TeleopService(worker)
+        service = service_for(worker)
         lease_id = await lease(service)
         started = await service.command("workflow_start", {
             "command_id": "workflow-start",
@@ -331,7 +372,7 @@ def test_workflow_resume_requires_an_existing_run_and_uses_resume_only():
             return "trace=IDLE -> PREPARE_OPEN_GRIPPER"
 
         worker.package_cli = owner
-        service = TeleopService(worker)
+        service = service_for(worker)
         lease_id = await lease(service)
         missing = await service.command("workflow_resume", {
             "command_id": "workflow-resume-missing",
@@ -364,7 +405,7 @@ def test_workflow_resume_requires_an_existing_run_and_uses_resume_only():
 def test_detach_publishes_detach_and_waits_for_detached_convergence():
     """A suffix match made detach issue an attach event; exact operation identity is required."""
     async def scenario():
-        worker = Worker(); service = TeleopService(worker); token = await lease(service)
+        worker = Worker(); service = service_for(worker); token = await lease(service)
         result = await service.command("attachment_detach", {"command_id": "detach", "lease_id": token})
         assert result.succeeded and worker.attaches == [False]
     asyncio.run(scenario())
@@ -373,7 +414,7 @@ def test_detach_publishes_detach_and_waits_for_detached_convergence():
 def test_worker_generates_nonempty_startup_session_without_launch_environment(monkeypatch):
     """An omitted launch variable must not collapse the plan/session safety boundary."""
     monkeypatch.delenv("SO101_SIMULATION_SESSION_ID", raising=False)
-    worker = RosTelemetryWorker()
+    worker = RosTelemetryWorker(None)
     assert worker._session_id.startswith("startup-")
 
 
@@ -429,7 +470,7 @@ def test_reset_session_is_visible_to_snapshot_without_waiting_for_timer():
 def test_execute_rejects_live_joint_drift_instead_of_using_stored_start():
     """A trajectory planned from A must not execute after feedback reports B."""
     async def scenario():
-        worker = Worker(); service = TeleopService(worker); token = await lease(service)
+        worker = Worker(); service = service_for(worker); token = await lease(service)
         summary = PlanSummary(plan_id="plan", start_fingerprint="start-a", target_fingerprint="target", scene_revision=0, expires_at_monotonic=time.monotonic() + 30)
         worker._plans["plan"] = StoredTrajectory(summary, object(), "sim-a", 7); service._plans.put(summary)
         worker.fingerprint = "start-b"
@@ -441,7 +482,7 @@ def test_execute_rejects_live_joint_drift_instead_of_using_stored_start():
 def test_execute_rejects_non_latest_plan_id():
     """The path requested by the client must be the same plan validated by PlanStore."""
     async def scenario():
-        worker = Worker(); service = TeleopService(worker); token = await lease(service)
+        worker = Worker(); service = service_for(worker); token = await lease(service)
         first = PlanSummary(plan_id="first", start_fingerprint="start-a", target_fingerprint="first", scene_revision=0, expires_at_monotonic=time.monotonic() + 30)
         latest = PlanSummary(plan_id="latest", start_fingerprint="start-a", target_fingerprint="latest", scene_revision=0, expires_at_monotonic=time.monotonic() + 30)
         worker._plans["first"] = StoredTrajectory(first, object(), "sim-a", 7)
@@ -454,7 +495,7 @@ def test_execute_rejects_non_latest_plan_id():
 def test_execute_rejects_plan_when_independently_observed_scene_revision_changes():
     """Attachment/scene changes invalidate a plan even when joints remain unchanged."""
     async def scenario():
-        worker = Worker(); service = TeleopService(worker); token = await lease(service)
+        worker = Worker(); service = service_for(worker); token = await lease(service)
         summary = PlanSummary(plan_id="scene-plan", start_fingerprint="start-a", target_fingerprint="target", scene_revision=0, expires_at_monotonic=time.monotonic() + 30)
         worker._plans["scene-plan"] = StoredTrajectory(summary, object(), "sim-a", 7); service._plans.put(summary)
         worker._snapshot.scene_revision = 1
@@ -466,7 +507,7 @@ def test_execute_rejects_plan_when_independently_observed_scene_revision_changes
 def test_scene_mutations_clear_worker_and_service_trajectory_stores():
     """A scene repair or home motion cannot leave a cached trajectory executable."""
     async def scenario():
-        worker = Worker(); service = TeleopService(worker); token = await lease(service)
+        worker = Worker(); service = service_for(worker); token = await lease(service)
         summary = PlanSummary(plan_id="cached", start_fingerprint="start-a", target_fingerprint="target", scene_revision=0, expires_at_monotonic=time.monotonic() + 30)
         worker._plans["cached"] = StoredTrajectory(summary, object(), "sim-a", 7); service._plans.put(summary)
         repaired = await service.command("scene_repair", {"command_id": "repair", "lease_id": token, "confirmation": "CONFIRM SCENE_REPAIR"})
@@ -479,7 +520,7 @@ def test_scene_mutations_clear_worker_and_service_trajectory_stores():
 
 def test_reset_revokes_old_lease_and_workflow_run():
     async def scenario():
-        worker = Worker(); service = TeleopService(worker); lease_id = await lease(service)
+        worker = Worker(); service = service_for(worker); lease_id = await lease(service)
         service._workflow["run"] = (Path("/tmp/checkpoint"), "sim-a")
         reset = await service.command("simulation_reset", {"command_id":"reset", "lease_id":lease_id, "confirmation":"CONFIRM SIMULATION_RESET"})
         assert reset.succeeded
@@ -492,7 +533,7 @@ def test_reset_revokes_old_lease_and_workflow_run():
 def test_parameter_round_trip_returns_operator_targets_not_snapshot():
     """Save/load must preserve browser targets, not silently substitute live telemetry."""
     async def scenario():
-        worker = Worker(); service = TeleopService(worker); token = await lease(service)
+        worker = Worker(); service = service_for(worker); token = await lease(service)
         service._parameters = Path("/tmp/so101-teleop-test-parameters.json")
         saved = await service.command("parameters_save", {"command_id": "save", "lease_id": token, "target_joints_rad": {"1": 0.1}, "target_tcp": {"x_m": 0.02}})
         loaded = await service.command("parameters_load", {"command_id": "load", "lease_id": token})
@@ -511,15 +552,29 @@ def transaction_worker(*, gazebo: bool, moveit: bool, fail_owner: bool = False):
     worker.publish_attachment = lambda attach: (state["events"].append(attach), state.__setitem__("gazebo", attach))
     worker._wait_gazebo_attachment = lambda attach, timeout_s=4.0: state["gazebo"] is attach
     worker.snapshot = lambda: SimpleNamespace(gazebo_attached=state["gazebo"])
-    def owner(executable, arguments, timeout_s=45.0):
-        if executable == "so101_moveit_scene" and arguments[0] in ("attach", "detach") and fail_owner:
-            raise RuntimeError("CPP_OWNER_FAILED_so101_moveit_scene")
-        if executable == "so101_moveit_scene" and arguments[0] == "attach": state["moveit"] = True
-        if executable == "so101_moveit_scene" and arguments[0] == "detach": state["moveit"] = False
-        if executable == "so101_moveit_scene" and arguments[0] == "observe":
-            return f"task_object_attached={'true' if state['moveit'] else 'false'}"
-        return ""
-    worker.package_cli = owner
+    class SceneBackend:
+        profile = load_backend_profile("gazebo_cpp", PACKAGE)
+
+        def scene_operation(self, request):
+            if request.operation in ("attach", "detach") and fail_owner:
+                raise RuntimeError("BACKEND_OPERATION_FAILED")
+            if request.operation == "attach":
+                state["moveit"] = True
+            if request.operation == "detach":
+                state["moveit"] = False
+            return BackendEnvelope(
+                ok=True,
+                backend="gazebo_cpp",
+                operation=f"scene_{request.operation}",
+                session_id=request.session_id,
+                owner_package="so101_gazebo_demo_cpp",
+                owner_executable="so101_moveit_scene",
+                exit_code=0,
+                result={"task_object_attached": state["moveit"]},
+            )
+
+    worker._backend = SceneBackend()
+    worker._session_id = "sim-a"
     return worker, state
 
 
@@ -539,11 +594,15 @@ def test_attachment_owner_failure_rolls_back_gazebo_to_detached():
 def test_attachment_rejects_independent_planning_scene_mismatch():
     """A successful owner command is insufficient when its queried scene disagrees."""
     worker, state = transaction_worker(gazebo=False, moveit=False)
-    original = worker.package_cli
-    def mismatch(executable, arguments, timeout_s=45.0):
-        if arguments == ["observe"]: return "task_object_attached=false"
-        return original(executable, arguments, timeout_s)
-    worker.package_cli = mismatch
+    original = worker._backend.scene_operation
+    def mismatch(request):
+        envelope = original(request)
+        if request.operation == "observe":
+            return BackendEnvelope(
+                **{**envelope.__dict__, "result": {"task_object_attached": False}}
+            )
+        return envelope
+    worker._backend.scene_operation = mismatch
     try:
         worker.attachment_transaction(True)
         assert False, "expected independent scene mismatch"

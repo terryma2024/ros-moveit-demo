@@ -57,11 +57,8 @@ def _as_bool(value: str) -> bool:
 
 def launch_setup(context):
     backend = LaunchConfiguration("backend").perform(context)
-    if backend != "gazebo_cpp":
-        raise RuntimeError(
-            f"unsupported Teleop backend {backend!r}; this extraction checkpoint "
-            "supports only gazebo_cpp"
-        )
+    if backend not in {"gazebo_cpp", "gazebo_py", "mujoco_py"}:
+        raise RuntimeError(f"unsupported Teleop backend {backend!r}")
     explicit_source = LaunchConfiguration("web_source_dir").perform(context)
     build_if_needed = _as_bool(LaunchConfiguration("build_web_if_needed").perform(context))
     source = _source_directory(explicit_source)

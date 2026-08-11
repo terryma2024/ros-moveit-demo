@@ -48,7 +48,7 @@ def create_app(service, static_dir: str | Path | None = None, capture_dir: str |
         if getattr(result, "succeeded", False):
             return result
         return JSONResponse(status_code=409 if getattr(result, "code", "").startswith(
-            ("PLAN_", "LEASE_", "SERVER_", "CHECKPOINT_", "OVERRIDE_", "SESSION_", "CONFIRMATION_", "READINESS_", "COMMAND_", "WORKFLOW_", "MOVEIT_IK_")) else 503,
+            ("PLAN_", "LEASE_", "SERVER_", "CHECKPOINT_", "OVERRIDE_", "SESSION_", "CONFIRMATION_", "READINESS_", "COMMAND_", "WORKFLOW_", "MOVEIT_IK_", "BACKEND_CAPABILITY_")) else 503,
             content=result.dict())
 
     @app.post("/plans/{plan_id}/execute")

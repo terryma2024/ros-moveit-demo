@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.utilities import perform_substitutions
@@ -32,7 +33,9 @@ def test_launch_requires_explicit_backend_and_defers_server_node():
     assert not any(isinstance(entity, Node) for entity in description.entities)
 
 
-def test_launch_starts_new_package_and_freezes_backend_environment(monkeypatch, tmp_path):
+@pytest.mark.parametrize("backend", ["gazebo_cpp", "gazebo_py", "mujoco_py"])
+def test_launch_starts_new_package_and_freezes_backend_environment(
+        monkeypatch, tmp_path, backend):
     module = load_launch_module()
     source = tmp_path / "web"
     source.mkdir()
@@ -42,7 +45,7 @@ def test_launch_starts_new_package_and_freezes_backend_environment(monkeypatch, 
     monkeypatch.setattr(module, "ensure_web_bundle", lambda *_args: dist)
     context = LaunchContext()
     context.launch_configurations.update({
-        "backend": "gazebo_cpp",
+        "backend": backend,
         "bind_address": "127.0.0.1",
         "port": "8000",
         "world_name": "world",
@@ -64,5 +67,28 @@ def test_launch_starts_new_package_and_freezes_backend_environment(monkeypatch, 
         perform_substitutions(context, key): perform_substitutions(context, value)
         for key, value in vars(process)["_Executable__additional_env"]
     }
-    assert environment["SO101_TELEOP_BACKEND"] == "gazebo_cpp"
+    assert environment["SO101_TELEOP_BACKEND"] == backend
     assert environment["SO101_TELEOP_WEB_ROOT"] == str(dist)
+
+
+def test_launch_rejects_backend_outside_fixed_registry(monkeypatch, tmp_path):
+    module = load_launch_module()
+    source = tmp_path / "web"
+    source.mkdir()
+    (source / "package.json").write_text("{}")
+    monkeypatch.setattr(module, "ensure_web_bundle", lambda *_args: source / "dist")
+    context = LaunchContext()
+    context.launch_configurations.update({
+        "backend": "request-selected-package",
+        "bind_address": "127.0.0.1",
+        "port": "8000",
+        "world_name": "world",
+        "tcp_frame": "tcp",
+        "simulation_session_id": "session-a",
+        "gz_partition": "partition-a",
+        "web_source_dir": str(source),
+        "build_web_if_needed": "true",
+    })
+
+    with pytest.raises(RuntimeError, match="unsupported Teleop backend"):
+        module.launch_setup(context)

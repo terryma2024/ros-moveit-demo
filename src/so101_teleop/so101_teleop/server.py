@@ -42,6 +42,13 @@ from gz.msgs10.pose_v_pb2 import Pose_V
 from gz.msgs10.stringmsg_pb2 import StringMsg
 
 from .api import create_app, validate_bind_address
+from .backends.protocol import (
+    BackendEnvelope,
+    BackendProtocol,
+    ResetRequest,
+    SceneRequest,
+    WorkflowRequest,
+)
 from .camera import CameraController
 from .control import CommandCoordinator, CommandIdReused, PlanRejected, PlanStore
 from .models import (CommandResult, JointPlanRequest, JointSample, PhysicalOutcomeEvidence,
@@ -103,7 +110,8 @@ class StoredTrajectory:
 
 class RosTelemetryWorker:
     """The sole owner of ROS graph objects and live MoveIt/controller calls."""
-    def __init__(self) -> None:
+    def __init__(self, backend: BackendProtocol | None) -> None:
+        self._backend = backend
         self._collector = TelemetryCollector(); self._lock = threading.Lock()
         self._environment = read_teleop_environment(os.environ)
         self._latest = TelemetrySnapshot(mode=ServerMode.STARTING, environment=self._environment)
@@ -388,12 +396,21 @@ class RosTelemetryWorker:
 
     def query_moveit_attachment(self) -> bool:
         """Read the Planning Scene owner; never infer this from a requested command."""
-        output = self.package_cli("so101_moveit_scene", ["observe"], 10.0)
-        matched = re.search(r"\btask_object_attached=(true|false)\b", output)
-        if matched is None:
+        if self._backend is None:
+            raise RuntimeError("BACKEND_NOT_CONFIGURED")
+        envelope = self._backend.scene_operation(
+            SceneRequest("observe", self._session_id)
+        )
+        if not envelope.ok:
+            code = envelope.error.code if envelope.error is not None else "BACKEND_OPERATION_FAILED"
+            raise RuntimeError(code)
+        observed = (envelope.result or {}).get("task_object_attached")
+        if isinstance(observed, str):
+            observed = {"true": True, "false": False}.get(observed.casefold())
+        if not isinstance(observed, bool):
             self._moveit_attached = None
             raise RuntimeError("MOVEIT_SCENE_OBSERVATION_UNPARSEABLE")
-        self._moveit_attached = matched.group(1) == "true"
+        self._moveit_attached = observed
         with self._lock:
             self._record_scene_observation(self._attached, self._moveit_attached)
         return self._moveit_attached
@@ -411,9 +428,16 @@ class RosTelemetryWorker:
             raise RuntimeError("GAZEBO_ATTACHMENT_CONVERGENCE_TIMEOUT")
         self._attachment_evidence["gazebo"] = "attached" if attach else "detached"
         try:
-            # The C++ owner performs the scene mutation.  Its subsequent
+            # The selected backend owner performs the scene mutation. Its subsequent
             # `observe` call is a separate PlanningScene query, not command echo.
-            self.package_cli("so101_moveit_scene", ["attach" if attach else "detach"], 20.0)
+            if self._backend is None:
+                raise RuntimeError("BACKEND_NOT_CONFIGURED")
+            envelope = self._backend.scene_operation(
+                SceneRequest("attach" if attach else "detach", self._session_id)
+            )
+            if not envelope.ok:
+                code = envelope.error.code if envelope.error is not None else "BACKEND_OPERATION_FAILED"
+                raise RuntimeError(code)
             if self.query_moveit_attachment() is not attach:
                 raise RuntimeError("MOVEIT_SCENE_STATE_MISMATCH")
             self._attachment_evidence["moveit"] = "attached" if attach else "detached"
@@ -424,7 +448,12 @@ class RosTelemetryWorker:
             # whether the compensation itself converged.
             self._moveit_attached = None
             try:
-                self.package_cli("so101_moveit_scene", ["detach" if attach else "attach"], 20.0)
+                envelope = self._backend.scene_operation(
+                    SceneRequest("detach" if attach else "attach", self._session_id)
+                )
+                if not envelope.ok:
+                    code = envelope.error.code if envelope.error is not None else "BACKEND_OPERATION_FAILED"
+                    raise RuntimeError(code)
                 compensated = self.query_moveit_attachment() is (not attach)
                 self._attachment_evidence["moveit_rollback"] = "converged" if compensated else "mismatch"
             except RuntimeError:
@@ -465,26 +494,6 @@ class RosTelemetryWorker:
     def cancel(self) -> None:
         if self._active_goal is not None: self._active_goal.cancel_goal_async()
 
-    def package_cli(self, executable: str, arguments: list[str], timeout_s: float = 45.0) -> str:
-        """Run an installed C++ owner; Python only transports its checkpoint result."""
-        from ament_index_python.packages import get_package_prefix
-        path=Path(get_package_prefix("so101_gazebo_demo_cpp")) / "lib" / "so101_gazebo_demo_cpp" / executable
-        result=subprocess.run([str(path), *arguments], text=True, capture_output=True, timeout=timeout_s, check=False)
-        if result.returncode:
-            # Keep the public fail-closed error code stable, but preserve the
-            # owner's concrete failure and metrics for post-mortem debugging.
-            directory=Path(os.environ.get(
-                "SO101_TELEOP_OWNER_DIAGNOSTIC_DIR", "/tmp/so101-teleop-owner-diagnostics"))
-            directory.mkdir(parents=True, exist_ok=True)
-            diagnostic=directory / f"last-{executable}.log"
-            temporary=directory / f".{diagnostic.name}.{uuid.uuid4()}.tmp"
-            temporary.write_text(
-                f"executable={executable}\narguments={arguments!r}\nreturncode={result.returncode}\n"
-                f"--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}\n")
-            os.replace(temporary, diagnostic)
-            raise RuntimeError(f"CPP_OWNER_FAILED_{executable}")
-        return result.stdout
-
     def start_fingerprint(self) -> str:
         current=self._current_positions()
         return _joint_fingerprint({str(i): current[str(i)] for i in range(1, 6)})
@@ -505,17 +514,36 @@ class RosTelemetryWorker:
 
 
 class TeleopService:
-    def __init__(self, worker: RosTelemetryWorker, camera: CameraController | None = None) -> None:
+    def __init__(
+        self,
+        worker: RosTelemetryWorker,
+        camera: CameraController | None = None,
+        *,
+        backend: BackendProtocol,
+    ) -> None:
         self._worker=worker; self._commands=CommandCoordinator(); self._plans=PlanStore(); self._lease: tuple[str,float] | None=None
         self._camera = camera
+        self._backend = backend
         self._parameters=Path(os.environ.get("SO101_TELEOP_PARAMETERS", "/tmp/so101-teleop-parameters.json"))
         self._workflow: dict[str, tuple[Path, str]] = {}
     async def health(self):
         snapshot=self._worker.snapshot(); return {"ok": True, "simulation_only": True, "mode": snapshot.mode,
             "ros_worker": "rclpy", "moveit_plan_service": "/plan_kinematic_path", "moveit_execute_action": "/execute_trajectory"}
     async def current_snapshot(self): return self._worker.snapshot()
-    async def capabilities(self): return {"simulation_only": True, "bind_policy":"loopback_or_tailscale", "workflow_transition_owner":"pick_place_state_machine"}
-    async def camera_presets(self): return {"presets": self._camera.names if self._camera else []}
+    async def capabilities(self):
+        profile = self._backend.profile
+        return {
+            "simulation_only": True,
+            "bind_policy": "loopback_or_tailscale",
+            "backend": profile.backend,
+            "owner_package": profile.owner_package,
+            "owner_executable": profile.probe.executable,
+            "capabilities": self._backend.capabilities().as_dict(),
+        }
+    async def camera_presets(self):
+        if not self._backend.capabilities().camera_presets:
+            return {"presets": []}
+        return {"presets": self._camera.names if self._camera else []}
     async def telemetry_wait(self): await asyncio.sleep(.2)
     def _result(self, body, ok, code, message, **kw): return CommandResult(command_id=body.get("command_id", ""), accepted=ok, succeeded=ok, code=code, message=message, snapshot_revision=self._worker.snapshot().revision, **kw)
     def _lease_ok(self, body) -> bool: return self._lease is not None and self._lease[0] == body.get("lease_id") and self._lease[1] > time.monotonic()
@@ -528,11 +556,66 @@ class TeleopService:
         if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
         if body.get("session_id") and body["session_id"] != self._worker.snapshot().simulation_session_id: return self._result(body,False,"SESSION_MISMATCH","simulation session changed")
         return None
+    def _required_capability(self, name: str) -> str | None:
+        if name.startswith("workflow_"):
+            operation = name.removeprefix("workflow_")
+            return {
+                "start": "workflow_start",
+                "run": "workflow_run",
+                "step": "workflow_resume",
+                "resume": "workflow_resume",
+                "force-continue": "workflow_resume",
+                "reset": "workflow_resume",
+                "stop": "workflow_resume",
+            }.get(operation)
+        return {
+            "simulation_reset": "reset_world",
+            "scene_repair": "scene_operations",
+            "attachment_attach": "scene_operations",
+            "attachment_detach": "scene_operations",
+            "plan_joints": "manual_joint_execute",
+            "plan_tcp": "manual_tcp_execute",
+            "gripper": "manual_joint_execute",
+            "robot_home": "manual_joint_execute",
+            "screenshot": "physical_observation",
+            "camera_preset": "camera_presets",
+        }.get(name)
+    def _backend_unavailable(self, body, capability: str):
+        return self._result(
+            body,
+            False,
+            "BACKEND_CAPABILITY_UNAVAILABLE",
+            f"{capability} is unavailable for backend {self._backend.profile.backend}",
+            layers={
+                "backend": self._backend.profile.backend,
+                "owner_package": self._backend.profile.owner_package,
+                "capability": capability,
+            },
+        )
+    def _backend_result(self, body, envelope: BackendEnvelope):
+        if envelope.ok:
+            return None
+        error = envelope.error
+        return self._result(
+            body,
+            False,
+            error.code if error is not None else "BACKEND_OPERATION_FAILED",
+            error.message if error is not None else "backend operation failed",
+            layers={
+                "backend": envelope.backend,
+                "owner_package": envelope.owner_package,
+                "owner_executable": envelope.owner_executable,
+                "owner_failure_code": error.owner_failure_code if error else None,
+            },
+        )
     async def execute_plan(self, plan_id: str, body: dict):
         return await self.command("execute", {**body, "plan_id": plan_id})
     async def command(self, name: str, body: dict):
         command_id=body.get("command_id", "")
         if not command_id: return self._result(body, False, "COMMAND_ID_REQUIRED", "command_id is required")
+        capability = self._required_capability(name)
+        if capability is not None and not getattr(self._backend.capabilities(), capability):
+            return self._backend_unavailable(body, capability)
         # Lease liveness is independent of mutation serialization.  A valid
         # operator must be able to renew while a long MoveIt/workflow owner
         # holds the command lock, otherwise the UI loses its lease even though
@@ -609,16 +692,26 @@ class TeleopService:
                         # service summary and the worker's executable trajectory.
                         self._worker._plans.clear(); self._plans.clear()
                         return self._result(body,True,"OK","MoveIt home trajectory and gripper action converged",layers={"owner":"moveit_execute_trajectory"})
-                    executable, args=("so101_moveit_scene", ["upsert"]) if name == "scene_repair" else ("reset_so101_world", [])
-                    output=await asyncio.to_thread(self._worker.package_cli, executable, args)
                     if name == "simulation_reset":
+                        envelope = await asyncio.to_thread(
+                            self._backend.reset_world,
+                            ResetRequest(self._worker.snapshot().simulation_session_id),
+                        )
+                        if failure := self._backend_result(body, envelope):
+                            return failure
                         new_session=self._worker.invalidate_session(); self._plans.clear(); self._lease=None; self._workflow.clear(); self._commands.clear()
-                        return self._result(body,True,"OK","C++ reset owner converged and prior session invalidated",layers={"owner":executable,"session_id":new_session})
+                        return self._result(body,True,"OK","backend reset owner converged and prior session invalidated",layers={"owner":envelope.owner_executable,"session_id":new_session})
+                    envelope = await asyncio.to_thread(
+                        self._backend.scene_operation,
+                        SceneRequest("upsert", self._worker.snapshot().simulation_session_id),
+                    )
+                    if failure := self._backend_result(body, envelope):
+                        return failure
                     # Scene repair can alter collision/attachment state.  The
                     # worker cache must not retain a trajectory the API no
                     # longer exposes as current.
                     self._worker._plans.clear(); self._plans.clear()
-                    return self._result(body,True,"OK","C++ scene owner converged",layers={"owner":executable,"output":output[-500:]})
+                    return self._result(body,True,"OK","backend scene owner converged",layers={"owner":envelope.owner_executable})
                 if name.startswith("workflow_"):
                     if gate:=self._mutation_gate(body): return gate
                     operation=name.removeprefix("workflow_")
@@ -636,16 +729,19 @@ class TeleopService:
                     if operation == "reset":
                         if body.get("confirmation") != "CONFIRM WORKFLOW_RESET": return self._result(body,False,"CONFIRMATION_REQUIRED","second server-side confirmation required")
                         self._workflow.pop(run_id, None); return self._result(body,True,"OK","workflow checkpoint invalidated")
-                    args=["--mode","execute","--checkpoint",str(checkpoint),"--session-id",self._worker.snapshot().simulation_session_id]
-                    if operation == "start": args.append("--step")
-                    if operation == "step": args.extend(["--resume","true","--step"])
-                    if operation in ("resume","force-continue"): args.extend(["--resume","true"])
                     if operation == "force-continue":
                         if body.get("operator_confirmation") != "FORCE CONTINUE": return self._result(body,False,"OVERRIDE_NOT_ALLOWED","physical validation confirmation required")
-                        args.append("--force-continue")
                     if operation == "stop": return self._result(body,True,"OK","workflow is checkpoint-controlled; no transition was requested")
-                    output=await asyncio.to_thread(self._worker.package_cli,"pick_place_state_machine",args,120.0)
-                    trace=next((line.removeprefix("trace=") for line in output.splitlines() if line.startswith("trace=")),"")
+                    envelope = await asyncio.to_thread(
+                        self._backend.run_workflow,
+                        WorkflowRequest(operation, session_id, checkpoint),
+                    )
+                    if failure := self._backend_result(body, envelope):
+                        if operation in ("start", "run"):
+                            self._workflow.pop(run_id, None)
+                        return failure
+                    output = str((envelope.result or {}).get("trace", ""))
+                    trace=output.removeprefix("trace=")
                     states=[state.strip() for state in trace.split("->") if state.strip()]
                     physical_outcome = None
                     if checkpoint.is_file():
@@ -655,7 +751,7 @@ class TeleopService:
                                 "SYNC_WORLD_OBJECT"}:
                             physical_outcome = physical_outcome_from_checkpoint(checkpoint_data)
                             self._worker._physical_outcome = physical_outcome
-                    return self._result(body,True,"OK","C++ checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file(),"physical_outcome":physical_outcome.dict() if physical_outcome else None}})
+                    return self._result(body,True,"OK","backend checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file(),"physical_outcome":physical_outcome.dict() if physical_outcome else None}})
                 return self._result(body,False,"READINESS_NOT_SATISFIED",f"{name} requires a live dedicated gateway")
             except (RuntimeError, PlanRejected, KeyError, ValueError) as error:
                 layers = dict(getattr(self._worker, "_attachment_evidence", {})) if name.startswith("attachment_") else {}
