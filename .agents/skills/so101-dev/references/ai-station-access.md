@@ -64,6 +64,10 @@ source install/setup.zsh
 
 ## GUI 进程
 
+GUI screenshot、桌面检查和语义控制必须使用项目内 `$ai-station-gui`；读取
+`.agents/skills/ai-station-gui/SKILL.md` 后按其当前 agent capability 路由执行。
+SO-101 的 provenance、进程所有权和视觉证据门仍由 `$so101-dev` 约束。
+
 任何需要显示到已登录 GNOME 会话的 GUI 程序都必须由 tmux 持有，并在该 tmux shell 内先执行：
 
 ```bash
@@ -94,7 +98,7 @@ ldconfig -p | rg 'libX11\.so'
 source ~/gui-env.zsh
 source /opt/ros/jazzy/setup.zsh
 source /data/work/ws_moveit/install/setup.zsh
-ros2 run so101_gazebo_demo_cpp tile_ai_station_guis.py
+ros2 run so101_teleop tile_ai_station_guis.py
 ```
 
 该工具读取当前 EWMH work area，取消两个窗口的最大化状态，将 RViz 放在左侧 50%、Gazebo 放在右侧 50%；屏幕宽度为奇数时多出的 1 px 分给右侧。它等待目标窗口最多 30 秒，并在移动后回读两侧窗口几何。
@@ -103,7 +107,7 @@ ros2 run so101_gazebo_demo_cpp tile_ai_station_guis.py
 
 - 命令退出码为 `0`，输出 `LAYOUT_OK RVIZ=... GAZEBO=...`；
 - 回读位置和尺寸与目标几何的差值不超过默认 `12 px` 装饰边框容差；
-- 分屏后重新运行本机 `<repo-root>/scripts/capture-ai-station.sh`；
+- 分屏后用 `$ai-station-gui` 生成本轮新鲜桌面截图；
 - 实际打开新的 `desktop.png`，确认 RViz 左、Gazebo 右，各约占可用工作区 50%，两侧关键场景均可见且没有互相遮挡。
 
 `LAYOUT_ERROR` 或退出码 `2` 表示失败。根据错误检查缺少的窗口、X11 依赖、`DISPLAY` 或窗口几何；不要把命令已发送当成分屏成功。若窗口尺寸正确但内部场景不可辨认，再用 CUA 按 `snapshot -> action -> fresh snapshot` 调整相机或面板，并保存新截图。
@@ -118,17 +122,19 @@ ros2 run so101_gazebo_demo_cpp tile_ai_station_guis.py
 4. CUA 每次动作前获取 snapshot，动作后获取 fresh snapshot；element 索引只属于产生它的那次 snapshot。
 5. 工具回报 `verified=false`、`degraded=true` 或效果不确定时，以新截图/read-back 验证，不把发送动作当成动作生效。
 
-需要 CUA 驱动细节时再读取仓库 `skills/remote/cua-driver/SKILL.md` 与 `LINUX.md`；它们是参考快照，现场工具 schema 优先。
+需要 CUA 驱动细节时按 `$ai-station-gui` 检查当前 agent 已加载的能力与现场 schema；不得把另一个 agent 的会话当作本 agent 的控制能力。
 
 ## 视觉证据
 
-本机仓库已有抓取入口：
+先按 `$ai-station-gui` 判断当前 agent 是否有健康的 CUA 能力。脚本 fallback 只抓取截图；本机入口为：
 
 ```bash
-./scripts/capture-ai-station.sh
+capture_evidence_dir=$(mktemp -d)
+.agents/skills/ai-station-gui/scripts/capture-ai-station.sh --local \
+  --output-root "$capture_evidence_dir/captures"
 ```
 
-它会把 desktop、RViz 和 Ghostty 截图拉到忽略版本控制的 `assets/captures/ai-station/<timestamp>/`。先直接运行；只有远端 helper 缺失且任务允许部署 helper 时才运行 `--install`。
+`desktop.png` 必须存在且新鲜；RViz 和 Ghostty 是可选 manifest 字段，窗口缺失不构成失败。直接运行在 ai-station 时不得 SSH 自身；仅 Mac/orchestrator 使用显式 remote 模式。
 
 验收截图必须：
 
