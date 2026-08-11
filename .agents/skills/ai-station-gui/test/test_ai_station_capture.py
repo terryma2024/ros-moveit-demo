@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,10 +25,14 @@ class FakeWindowManager:
     def __init__(self, _display_name: str):
         self.shortcuts = []
         self.focused = []
+        self.activated = []
         self.closed = False
 
     def focus_window(self, window_id):
         self.focused.append(window_id)
+
+    def activate_window(self, window_id):
+        self.activated.append(window_id)
 
     def send_shortcut(self, modifiers, key):
         self.shortcuts.append((modifiers, key))
@@ -113,3 +118,93 @@ def test_tab_test_skips_without_ghostty_and_sends_no_key(tmp_path):
 
     assert manifest["ghostty_tab_test"] == "skipped_no_window"
     assert managers == []
+
+
+def test_window_inventory_uses_absolute_geometry_from_xwininfo(monkeypatch):
+    output = (
+        '  0x4200106 "moveit.rviz - RViz": ("rviz2" "rviz2")  '
+        '1887x2091+14+49  +712+124\n'
+    )
+    monkeypatch.setattr(
+        MODULE.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout=output),
+    )
+
+    windows = MODULE.list_windows()
+
+    assert windows[0]["x"] == 712
+    assert windows[0]["y"] == 124
+
+
+def test_window_capture_activates_selected_window_before_grab(monkeypatch, tmp_path):
+    activated = []
+    raised = []
+
+    class Manager:
+        def raise_window(self, window_id):
+            raised.append(window_id)
+
+        def activate_window(self, window_id):
+            activated.append(window_id)
+
+    class Image:
+        def save(self, output_path, _format):
+            output_path.write_bytes(b"focused-window")
+
+    monkeypatch.setattr(MODULE.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        MODULE.ImageGrab,
+        "grab",
+        lambda **_kwargs: Image(),
+    )
+    output = tmp_path / "window.png"
+
+    MODULE.capture_window(
+        Manager(),
+        {
+            "id": 42,
+            "raise_id": 84,
+            "x": 10,
+            "y": 20,
+            "width": 100,
+            "height": 80,
+        },
+        output,
+        ":1",
+    )
+
+    assert raised == [84]
+    assert activated == [42]
+    assert output.read_bytes() == b"focused-window"
+
+
+def test_find_window_prefers_application_client_and_pairs_mutter_frame():
+    title = "moveit.rviz - RViz"
+    windows = [
+        {
+            "id": 10,
+            "title": title,
+            "wm_class": ("mutter-x11-frames", "mutter-x11-frames"),
+            "description": f'{title} mutter-x11-frames',
+            "width": 1915,
+            "height": 2157,
+            "x": 698,
+            "y": 75,
+        },
+        {
+            "id": 20,
+            "title": title,
+            "wm_class": ("rviz2", "rviz2"),
+            "description": f'{title} rviz2',
+            "width": 1887,
+            "height": 2091,
+            "x": 712,
+            "y": 124,
+        },
+    ]
+
+    selected = MODULE.find_window(windows, ("rviz",))
+
+    assert selected["id"] == 20
+    assert selected["raise_id"] == 10

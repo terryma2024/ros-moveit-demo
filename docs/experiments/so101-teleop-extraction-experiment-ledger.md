@@ -5,7 +5,7 @@ success_contract: Standalone so101_teleop and ai-station-gui owners pass package
 worktree: /data/work/ws_moveit/.worktrees/so101-teleop-extraction
 branch: codex/so101-teleop-extraction
 base_commit: c6982116d79c834de60b21d9e324a449a569a9c9
-current_commit: e5ac41a28c3f59b71d43fb759d40aa5c2ab5601d
+current_commit: bb99f90ee08706f9988d2c17c229ab89c227e951
 evidence_root: /tmp/so101-debug-teleop-extraction-20260811/
 confirmed_conclusions:
   - Approved design keeps robot workflow and physics ownership in each backend module; Teleop owns only the control plane (SPEC-2026-08-11).
@@ -145,4 +145,43 @@ observed_result:
   - Post-test process audit found no surviving task1/task1_ready/world-contract process; only the audit shell and rg command matched their own query text.
 conclusion: The extracted Teleop and C++ robot owners pass together from the worktree-installed overlay without leaking isolated test children or disturbing preserved stacks.
 next_command: Commit the Task 10 ownership boundary and proceed to the ai-station-gui skill TDD plan.
+```
+
+## EXP-002 — Live desktop-first capture fallback
+
+```yaml
+experiment_id: EXP-002
+status: COMPLETE
+hypothesis: The project-local ai-station-gui fallback captures a fresh nonempty desktop and exits zero even when RViz or Ghostty is naturally absent, without using SSH or taking over the existing codex-cua session.
+source_commit: bb99f90ee08706f9988d2c17c229ab89c227e951
+branch: codex/so101-teleop-extraction
+agent: Codex running directly on AI-STATION-001
+capability_route:
+  current_agent_cua_schema: unavailable in the current callable tool inventory
+  existing_cua_session: codex-cua belongs to the so101-mujoco-ros2 worktree and is preserved read-only
+  selected_route: .agents/skills/ai-station-gui/scripts/capture-ai-station.sh --local
+overlay: /data/work/ws_moveit/.worktrees/so101-teleop-extraction/install/setup.zsh
+runtime_executable: .agents/skills/ai-station-gui/scripts/capture-ai-station.sh
+lifecycle: REUSE_STACK
+ros_domain_id: not used by screenshot capture
+gz_partition: not used by screenshot capture
+owned_processes: Only the wrapper, Python helper, and ImageGrab/X11 read operations created by this invocation.
+preserved_processes: physical-five-success Gazebo/RViz/move_group; existing MuJoCo GUI; codex-cua daemon/session; all other user/agent tmux sessions
+action_scope: Full-desktop and optional-window screenshots; optional capture may focus the selected window and then restore the original active window. No semantic UI action, key, mouse, window close, stack reset, or robot movement.
+evidence_dir: /tmp/so101-debug-teleop-extraction-20260811/exp-002-ai-station-gui.LFG1Ng
+success_gate: Local wrapper exits zero; manifest is valid; desktop is fresh and nonempty; naturally absent optional windows are null; desktop is visually inspected; a no-Ghostty tab test, if naturally applicable, reports skipped_no_window without constructing an X11 manager.
+abort_gate: Any SSH attempt, any key/mouse or focus action beyond capture-and-restore mechanics, any need to restart/take over codex-cua, or any stale/empty/placeholder capture.
+next_command: Run the local wrapper into the planned evidence directory and inspect its manifest before deciding whether the no-Ghostty tab case is naturally safe.
+observed_result:
+  - The current Codex tool inventory exposed no callable cua-driver screen schema; codex-cua was read-only inspected and preserved because it belongs to so101-mujoco-ros2.
+  - Initial desktop capture exited zero and produced a fresh 438242-byte desktop showing maximized Gazebo, the SO-101 arm, table, cup, and red target circle without an error dialog.
+  - Ghostty was naturally absent in every live manifest; the final tab-skip manifest recorded ghostty null and ghostty_tab_test skipped_no_window, and the unit-injected path proves no send_shortcut call occurs.
+  - Live visual inspection exposed two optional-window bugs before acceptance: xwininfo relative coordinates were used instead of the final absolute offsets, and raise/XSetInputFocus did not activate the Mutter-managed client.
+  - RED tests now lock absolute geometry, application-client selection with its paired Mutter frame, and EWMH activation before capture; the full Skill suite passes 18 tests.
+  - Final fresh RViz capture was 262226 bytes and visibly showed the RViz menu, Displays/MotionPlanning panels, SO-101 model, and planning-scene objects. The original Gazebo client 0x400000e was restored as _NET_ACTIVE_WINDOW afterward.
+deviations:
+  - The planned action wording initially said no focus. The approved helper contract requires capture-and-restore mechanics for optional windows, so the ledger was corrected before the successful reruns to distinguish screenshot activation from semantic GUI control.
+  - Both optional windows were not naturally absent: RViz was present and Ghostty was absent. The required desktop and the naturally available no-Ghostty path were validated without closing user windows.
+conclusion: The local screenshot fallback and CUA-priority routing satisfy the live acceptance gate without SSH, key/mouse injection, codex-cua takeover, stack reset, or robot movement.
+next_command: Run the official Skill validator and final static/unit checks, then commit the live-discovered capture correction and ledger evidence.
 ```

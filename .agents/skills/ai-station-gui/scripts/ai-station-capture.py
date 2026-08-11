@@ -22,11 +22,39 @@ from PIL import ImageGrab
 WINDOW_GEOMETRY = re.compile(
     r"(?P<width>\d+)x(?P<height>\d+)(?P<x>[+-]\d+)(?P<y>[+-]\d+)"
 )
+WINDOW_OFFSET = re.compile(r"(?P<x>[+-]\d+)(?P<y>[+-]\d+)")
 WINDOW_ID = re.compile(r"0x[0-9a-fA-F]+")
+WINDOW_TITLE = re.compile(r'0x[0-9a-fA-F]+\s+"([^"]*)"')
+WINDOW_CLASS = re.compile(r'\("([^"]*)"\s+"([^"]*)"\)')
 OPTIONAL_WINDOWS = {
     "rviz": ("rviz",),
     "ghostty": ("ghostty", "com.mitchellh.ghostty"),
 }
+
+
+class ClientMessageData(ctypes.Union):
+    _fields_ = [
+        ("b", ctypes.c_char * 20),
+        ("s", ctypes.c_short * 10),
+        ("l", ctypes.c_long * 5),
+    ]
+
+
+class XClientMessageEvent(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_int),
+        ("serial", ctypes.c_ulong),
+        ("send_event", ctypes.c_int),
+        ("display", ctypes.c_void_p),
+        ("window", ctypes.c_ulong),
+        ("message_type", ctypes.c_ulong),
+        ("format", ctypes.c_int),
+        ("data", ClientMessageData),
+    ]
+
+
+class XEvent(ctypes.Union):
+    _fields_ = [("xclient", XClientMessageEvent), ("pad", ctypes.c_long * 24)]
 
 
 def read_process_environment(pid: int) -> dict[str, str]:
@@ -87,11 +115,18 @@ def list_windows() -> list[dict[str, int | str]]:
             name: int(geometry_match.group(name))
             for name in ("width", "height", "x", "y")
         }
+        absolute_offset = list(WINDOW_OFFSET.finditer(line))[-1]
+        values["x"] = int(absolute_offset.group("x"))
+        values["y"] = int(absolute_offset.group("y"))
+        title_match = WINDOW_TITLE.search(line)
+        class_match = WINDOW_CLASS.search(line)
         if values["width"] < 50 or values["height"] < 50:
             continue
         windows.append(
             {
                 "id": int(id_match.group(), 16),
+                "title": title_match.group(1) if title_match else "",
+                "wm_class": class_match.groups() if class_match else (),
                 "description": line.strip(),
                 **values,
             }
@@ -107,14 +142,43 @@ def find_window(
         for window in windows
         if any(pattern in str(window["description"]).lower() for pattern in patterns)
     ]
-    return (
-        max(matches, key=lambda window: int(window["width"]) * int(window["height"]))
-        if matches
-        else None
+    if not matches:
+        return None
+    application_matches = [
+        window
+        for window in matches
+        if "mutter-x11-frames"
+        not in {str(value).lower() for value in window.get("wm_class", ())}
+    ]
+    selected = dict(max(
+        application_matches or matches,
+        key=lambda window: int(window["width"]) * int(window["height"]),
+    ))
+    selected_title = str(selected.get("title", ""))
+    decorator_matches = [
+        window
+        for window in matches
+        if selected_title
+        and window.get("title") == selected_title
+        and "mutter-x11-frames"
+        in {str(value).lower() for value in window.get("wm_class", ())}
+    ]
+    selected["raise_id"] = int(
+        max(
+            decorator_matches,
+            key=lambda window: int(window["width"]) * int(window["height"]),
+        )["id"]
+        if decorator_matches
+        else selected["id"]
     )
+    return selected
 
 
 class X11WindowManager:
+    CLIENT_MESSAGE = 33
+    SUBSTRUCTURE_NOTIFY_MASK = 1 << 19
+    SUBSTRUCTURE_REDIRECT_MASK = 1 << 20
+
     def __init__(self, display_name: str) -> None:
         library_name = ctypes.util.find_library("X11") or "libX11.so.6"
         xtst_library_name = ctypes.util.find_library("Xtst") or "libXtst.so.6"
@@ -122,6 +186,18 @@ class X11WindowManager:
         self.xtst = ctypes.cdll.LoadLibrary(xtst_library_name)
         self.x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
         self.x11.XOpenDisplay.restype = ctypes.c_void_p
+        self.x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+        self.x11.XDefaultRootWindow.restype = ctypes.c_ulong
+        self.x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+        self.x11.XInternAtom.restype = ctypes.c_ulong
+        self.x11.XSendEvent.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.c_int,
+            ctypes.c_long,
+            ctypes.POINTER(XEvent),
+        ]
+        self.x11.XSendEvent.restype = ctypes.c_int
         self.x11.XRaiseWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
         self.x11.XSetInputFocus.argtypes = [
             ctypes.c_void_p,
@@ -144,15 +220,39 @@ class X11WindowManager:
         self.display = self.x11.XOpenDisplay(display_name.encode())
         if not self.display:
             raise RuntimeError(f"Unable to open X11 display {display_name}")
+        self.root = self.x11.XDefaultRootWindow(self.display)
 
     def raise_window(self, window_id: int) -> None:
         self.x11.XRaiseWindow(self.display, window_id)
         self.x11.XFlush(self.display)
 
     def focus_window(self, window_id: int) -> None:
-        self.raise_window(window_id)
-        self.x11.XSetInputFocus(self.display, window_id, 2, 0)
+        self.activate_window(window_id)
+
+    def activate_window(self, window_id: int) -> None:
+        event = XEvent()
+        event.xclient.type = self.CLIENT_MESSAGE
+        event.xclient.serial = 0
+        event.xclient.send_event = True
+        event.xclient.display = self.display
+        event.xclient.window = window_id
+        event.xclient.message_type = self.x11.XInternAtom(
+            self.display, b"_NET_ACTIVE_WINDOW", False
+        )
+        event.xclient.format = 32
+        event.xclient.data.l[0] = 1
+        event.xclient.data.l[1] = 0
+        mask = self.SUBSTRUCTURE_NOTIFY_MASK | self.SUBSTRUCTURE_REDIRECT_MASK
+        sent = self.x11.XSendEvent(
+            self.display,
+            self.root,
+            False,
+            mask,
+            ctypes.byref(event),
+        )
         self.x11.XFlush(self.display)
+        if sent == 0:
+            raise RuntimeError(f"Unable to activate X11 window 0x{window_id:x}")
 
     def send_shortcut(self, modifiers: tuple[str, ...], key: str) -> None:
         names = (*modifiers, key)
@@ -196,7 +296,8 @@ def capture_window(
     output_path: Path,
     display_name: str,
 ) -> None:
-    manager.raise_window(int(window["id"]))
+    manager.raise_window(int(window.get("raise_id", window["id"])))
+    manager.activate_window(int(window["id"]))
     time.sleep(0.35)
     x = int(window["x"])
     y = int(window["y"])
@@ -283,7 +384,7 @@ def capture_session(
             tab_result = "skipped_no_window"
         elif test_ghostty_tabs:
             assert manager is not None
-            manager.focus_window(int(ghostty["id"]))
+            manager.activate_window(int(ghostty["id"]))
             manager.send_shortcut(("Control_L",), "Tab")
             time.sleep(0.6)
             switched = output_dir / "ghostty-after-ctrl-tab.png"
@@ -293,7 +394,7 @@ def capture_session(
                     manager, ghostty, temporary, display_name
                 ),
             )
-            manager.focus_window(int(ghostty["id"]))
+            manager.activate_window(int(ghostty["id"]))
             manager.send_shortcut(("Control_L",), "Page_Up")
             time.sleep(0.6)
             restored = output_dir / "ghostty-after-restore.png"
@@ -308,7 +409,7 @@ def capture_session(
             tab_result = "completed"
 
         if manager is not None and original_window:
-            manager.focus_window(original_window)
+            manager.activate_window(original_window)
     finally:
         if manager is not None:
             manager.close()
