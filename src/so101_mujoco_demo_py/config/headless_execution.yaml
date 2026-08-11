@@ -1,0 +1,15 @@
+schema_version: 1
+planning_group: arm
+tcp_link: so101_tcp
+arm_joints: ["1", "2", "3", "4", "5"]
+controller_mapping:
+  arm_controller: ["1", "2", "3", "4", "5"]
+  gripper_controller: ["6"]
+  joint_state_broadcaster: []
+safe_poses:
+  task12_safe: [0.0, 0.1, 0.1, 0.2, 0.0]
+planning_time_s: 5.0
+velocity_scaling: 0.05
+acceleration_scaling: 0.05
+joint_convergence_tolerance_rad: 0.01
+minimum_joint_motion_rad: 0.05

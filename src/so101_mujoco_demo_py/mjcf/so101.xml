@@ -2,7 +2,7 @@
   <compiler angle="radian" coordinate="local" autolimits="false" balanceinertia="false"
             inertiafromgeom="false"/>
   <default>
-    <joint damping="0.05" armature="0.01"/>
+    <joint damping="0.60" frictionloss="0.052" armature="0.028"/>
     <default class="robot_collision">
       <geom contype="1" conaffinity="1" group="3" rgba="0.25 0.55 0.85 0.25"/>
     </default>
@@ -68,12 +68,24 @@
     </body>
   </worldbody>
   <actuator>
-    <position name="1" joint="1" kp="1" ctrllimited="true" ctrlrange="-1.91986 1.91986"/>
-    <position name="2" joint="2" kp="1" ctrllimited="true" ctrlrange="-1.74533 1.74533"/>
-    <position name="3" joint="3" kp="1" ctrllimited="true" ctrlrange="-1.74533 1.5708"/>
-    <position name="4" joint="4" kp="1" ctrllimited="true" ctrlrange="-1.65806 1.65806"/>
-    <position name="5" joint="5" kp="1" ctrllimited="true" ctrlrange="-2.79253 2.79253"/>
-    <position name="6" joint="6" kp="1" ctrllimited="true" ctrlrange="-0.059600220867817 1.74533"/>
+    <position name="1" joint="1" kp="998.22" kv="2.731" forcelimited="true"
+              forcerange="-3.35 3.35"
+              ctrllimited="true" ctrlrange="-1.91986 1.91986"/>
+    <position name="2" joint="2" kp="998.22" kv="2.731" forcelimited="true"
+              forcerange="-3.35 3.35"
+              ctrllimited="true" ctrlrange="-1.74533 1.74533"/>
+    <position name="3" joint="3" kp="998.22" kv="2.731" forcelimited="true"
+              forcerange="-3.35 3.35"
+              ctrllimited="true" ctrlrange="-1.74533 1.5708"/>
+    <position name="4" joint="4" kp="998.22" kv="2.731" forcelimited="true"
+              forcerange="-3.35 3.35"
+              ctrllimited="true" ctrlrange="-1.65806 1.65806"/>
+    <position name="5" joint="5" kp="998.22" kv="2.731" forcelimited="true"
+              forcerange="-3.35 3.35"
+              ctrllimited="true" ctrlrange="-2.79253 2.79253"/>
+    <position name="6" joint="6" kp="998.22" kv="2.731" forcelimited="true"
+              forcerange="-3.35 3.35"
+              ctrllimited="true" ctrlrange="-0.059600220867817 1.74533"/>
   </actuator>
   <keyframe>
     <key name="home" qpos="0 0 0 0 0 0" ctrl="0 0 0 0 0 0"/>
