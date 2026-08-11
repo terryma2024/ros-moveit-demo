@@ -132,6 +132,22 @@
     },
     "selection_rationale": "Both current new-calibration XML files agree on the effective joint and actuator values. The separately copied joints_properties.xml predates the actuator-model update and retains stale kp=17.8 and kv=0 values, so it is not used. Geometry, cameras, sites, joint ranges, and ctrlrange remain package-owned and unchanged."
   },
+  "visual_reference_updates": [
+    {
+      "source_commit": "c6982116d79c834de60b21d9e324a449a569a9c9",
+      "source_path": "src/so101_gazebo_demo_py/worlds/so101_pick_place.sdf",
+      "destination_path": "src/so101_mujoco_demo_py/mjcf/scene.xml",
+      "source_sha256": "d12b381af049a08998c4ab2f14dbf5347fceb37e31720763e20c7957b4c6a8d3",
+      "adaptation": "Preserved the visual-only red target-ring center, material, table-surface offset, and no-collision contract from the latest Gazebo scene."
+    },
+    {
+      "source_commit": "c6982116d79c834de60b21d9e324a449a569a9c9",
+      "source_path": "src/so101_gazebo_demo_py/meshes/target_landing_tolerance_ring.stl",
+      "destination_path": "src/so101_mujoco_demo_py/mjcf/assets/target_landing_tolerance_ring.obj",
+      "source_sha256": "7650822c44a353967637f456440c1334f92b808c26c45b599a1b830a8417ff37",
+      "adaptation": "Converted the zero-thickness ASCII STL annulus into a MuJoCo-loadable 0.1 mm annular prism while preserving the 50 mm inner radius and 5 mm line width."
+    }
+  ],
   "independent_artifacts": [
     {
       "path": "mjcf/scene.xml",
