@@ -10,9 +10,10 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-last_verified_implementation_commit: 997e8ed95100e4097744c92f1b065613ab390220
+current_commit: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+last_verified_implementation_commit: 100880a55fd3fee5fbc1930f293faeb444da9282
 ledger_commit_pending: true
-task_status: TASK_13_IMPLEMENTATION_PENDING_COMMIT
+task_status: TASK_13_RESET_QUALIFIED_REAPPROACH_PENDING
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -34,9 +35,9 @@ confirmed_conclusions:
 disproven_routes:
   - The pre-isolation backup is provenance only and is not an implementation source; CP-001.
 open_hypotheses:
-  - NONE; Task 12 implementation still requires final offline gates and review before its scoped commit.
-latest_checkpoint: CP-091
-next_experiment: EXP-057
+  - A future separately authorized read-only experiment may test one outside/lateral approach waypoint while preserving the solver, model, orientation, scene, final contact target, and all fail-closed validators.
+latest_checkpoint: CP-110
+next_experiment: EXP-076
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -4497,4 +4498,1553 @@ scope_boundary:
   - q6 remained at reset, the gripper was not closed, and no grasp/contact/lift success is claimed.
   - The configured KDL solver uses position_only_ik, but the MoveGroup request included an independent orientation constraint and the measured final FK passed the preregistered 0.02 rad orientation threshold.
 decision: KEEP VALID; EXP-059 jitter fix and EXP-060 MoveIt/ros2_control execution qualification both pass.
+```
+
+## Checkpoint CP-094
+
+```yaml
+checkpoint_id: CP-094
+checkpoint_time: 2026-08-11T19:45:43+08:00
+last_valid_experiment: EXP-060
+current_hypothesis: A fresh pose-constrained calibration approach can retain the EXP-059 stable-home and EXP-060 TCP orientation boundaries while preventing the early one-sided contact and cup sweep seen in EXP-055.
+working_tree_status: HEAD 1548acb20a2bd376e1bbe867603d824d26ddfb21 on codex/so101-mujoco-ros2; index empty; exactly the three intentional Task 13 drafts are untracked; protected src/so101_gazebo_demo_py diff from d300e7a41fb274d6d7e120699b7040666ea61904 and protected-tree status are empty.
+owned_processes: NONE for this Task 13 continuation; no stack, parameter change, GUI action, reset, or process cleanup has occurred.
+preserved_processes: All pre-existing sessions and processes are preserved, including codex, codex-cua, codex-teleop, kimi, so101-mujoco-gui windows 0-2, so101-phy5-v2-r0, so101-py-qual, domain-189 Gazebo/MoveIt/RViz, domain-138 move_group PID 2049562, and the domain-139 MuJoCo camera stack with launch PID 2566866, robot_state_publisher PID 2566877, and ros2_control_node PID 2566878.
+repository_provenance:
+  head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  implementation_baseline: 100880a55fd3fee5fbc1930f293faeb444da9282
+  origin_main: c6982116d79c834de60b21d9e324a449a569a9c9
+  origin_branch: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  merge_base_with_origin_main: d300e7a41fb274d6d7e120699b7040666ea61904
+  dependency_gitlink_and_checkout: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+  dependency_release: so101-0.0.3-r2
+draft_sha256:
+  contact_calibration_yaml: 570e38b24bf2b8c339757ccaf1e9d0121bededf2beb375aad8af80978b549681
+  analyze_contact_calibration_py: 1c259364e1c921fcfda377ab51dc30aa995ecff37881ddbd7f3b213f7589e891
+  test_contact_calibration_contract_py: aeb7ea66e702f5931713163b022b58100227a85b7a025d825fe380613452287b
+fixed_input_sha256:
+  scene_xml: a87fb09459a75eb58d1077659fd67c3b8250226e8b22e05141c470a0423d5d28
+  so101_xml: cf888f91218deaef6b5d394ab6ace0cd3a9cc9b5b2e9a2fdc5ce1423503253bd
+  model_parity_yaml: a787213d6c156581b7792d50146346c825fa7145a056242a01da802495a00e43
+  mujoco_plugins_yaml: dee81a0bd4c8eff0936662f7c256c812aeb07e9eccc4200c9093b1defc0cf8e3
+  ros2_controllers_yaml: 499d471acb93ede255199ac6f220fbff39ae2f01f2277eed8e9967230ebbf16a
+  dependency_lock_yaml: 2df6e17593d9246be661365d7666994a218cc9fdfbae0c5535aecfa233e2a021
+confirmed_conclusions:
+  - EXP-055 is a VALID behavioral failure of the old joint-space descent: 14.8177 mm pre-close cup displacement, 24.8491 N peak force, and zero bilateral stable-hold samples. Blind joint-waypoint tuning is disproven.
+  - EXP-055 contact observations cannot calibrate the current model because EXP-057/EXP-058 subsequently replaced and qualified executable geometry; a new fixed-fingerprint matrix is mandatory.
+  - EXP-058 restored executable mesh geometry, EXP-059 qualified stable Gazebo-home closed-loop hold, and EXP-060 qualified pose-constrained MoveIt execution to the cup-side TCP target without closing q6 or claiming contact/grasp success.
+  - The three preserved drafts are not an approved policy: they contain placeholder hashes, empty distributions/confusion cells, and fixed 0.9/1.1 multipliers. They must be hardened with RED/GREEN tests before collection.
+  - moveit launch-directed shutdown exit -11 remains an explicitly deferred lifecycle defect. Task 13S, Task 14, and Task 15 remain blocked behind the mandatory Task 13 threshold-approval stop.
+  - Repository layout contains no moveit-demo/AGENTS.md and no nested AGENTS.md; the root AGENTS.md is the only repository instruction file present.
+disproven_routes:
+  - Reusing old-geometry force/distance samples or other_object_contacts as fingertip calibration evidence.
+  - Continuing the EXP-055 joint-space waypoint ladder or manufacturing separation with fixed quantile multipliers.
+open_risks:
+  - No bounded collector, current-fingerprint seven-regime matrix, classification report, or safe threshold proposal exists yet.
+  - Domain 138 and 139 are occupied by preserved pre-existing processes; every Task 13 live experiment must use a separately proven empty domain and exact ownership.
+  - The historical EXP-057 record was never explicitly terminalized, while its earlier owned runtime no longer exists; this checkpoint does not rewrite that history or count it as current Task 13 evidence.
+evidence:
+  - /tmp/so101-debug-mujoco-task13-4iKEMQVr/baseline-provenance.txt (sha256 188feb71b2be0e45a83e1a227ec2ab3d8630890d811345c52efebc4bfeba140f)
+  - /tmp/so101-debug-mujoco-task13-4iKEMQVr/input-hashes.txt (sha256 7a0f420f3d853c2d78fbe8d95787a89df3bfca22e36cfb21fac6086a3c9a11d0)
+  - /tmp/so101-debug-mujoco-task13-4iKEMQVr/process-domain-inventory-v3.txt (sha256 96f626f0659c503e743293a652639dde23cf618c3b139bc4a0da2e33e76bb42d)
+next_experiment: EXP-061, the first bounded fixed-geometry no-contact pose-approach qualification after Tasks 13.1-13.3 and isolated build provenance pass.
+next_command: Extend test_contact_calibration_contract.py first and capture the required Task 13.1 RED before changing production analyzer/configuration behavior.
+```
+
+## Experiment EXP-061
+
+```yaml
+experiment_id: EXP-061
+prior_experiment: EXP-060 VALID
+status: PLANNED
+lifecycle: FULL_RESTART
+ownership: proven-empty ROS domain 140; only the exact tmux session and process group created for EXP-061 are owned
+hypothesis: The fixed-geometry MuJoCo stack can start at the EXP-059 stable q1..q5=0 home, pre-open q6, then execute the new world/so101_tcp pose-constrained pre-grasp and axial descent while physics remains unpaused, without early fingertip contact, forbidden robot/table contact, cup displacement beyond 0.003 m, or force beyond the inherited 11.60 N diagnostic abort boundary.
+prediction:
+  - The isolated stack reaches active joint_state_broadcaster, arm_controller, and gripper_controller with session task13-exp061 and reset epoch 0.
+  - Pre-open reaches q6=0.465038 rad without arm motion or cup displacement.
+  - Both pose plans are nonempty, use the frozen EXP-060 orientation, and have fresh plan-to-execute starts; at most one replan is permitted per phase.
+  - Sampled FK for the descent is axially monotonic and remains within the 0.003 m lateral corridor.
+  - ExecuteTrajectory succeeds for pre-grasp and descent, MuJoCo evidence remains unpaused and in one session/reset, fingertip contact stays empty, and cup displacement stays at or below 0.003 m.
+single_variable: Relative to EXP-060, the commanded path changes from one direct frozen grasp-pose move to the production Task 13 two-phase pose-constrained pre-grasp plus axial descent derived from the current cup pose; model, dependency, controller/dynamics, q6 pre-open target, orientation, and safety bounds remain fixed.
+source_provenance:
+  head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  source_manifest_sha256: e4c9b90d71405d8473950bbe78ea3a4cde944abcfd6cfebfd552011f1448c8f7
+  model_sha256: a87fb09459a75eb58d1077659fd67c3b8250226e8b22e05141c470a0423d5d28
+  config_sha256: a787213d6c156581b7792d50146346c825fa7145a056242a01da802495a00e43
+  dependency_commit: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+  fork_library_sha256: e42731cc13a522c19ea2f7049b0e43d2e08e8b4280f4333a79053ef962a93e1a
+  fork_node_sha256: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
+  isolated_overlay: /tmp/so101-debug-mujoco-task13-4iKEMQVr/task13-overlay/install
+  isolated_build_log_sha256: ae932e59b9dc4159bb93f4f1d2453aaecc71214c934dabe053873e4c96ed9a42
+  overlay_provenance_sha256: c37aa97b499a7f5530912c79c17a17dbc2defeff279e2636676fd962464e162b
+experiment_adapter:
+  launch_sha256: e06fd71b551ffce68c3066f54c8a225a2b82fce4be74a9907d2a6c53cfc0b7ab
+  runner_sha256: 7eadfe2938ee894a2b0cc2fb76794bc40a392b5514efce3bfc6a23d23da51409
+domain_proof: ROS domains 140 through 144 each had empty no-daemon node discovery and no readable process environment declaring that domain; domain 140 selected.
+exact_commands:
+  stack: ROS_DOMAIN_ID=140 ROS_LOCALHOST_ONLY=1 ros2 launch /tmp/so101-debug-mujoco-task13-4iKEMQVr/exp061_stack.launch.py
+  runner: ROS_DOMAIN_ID=140 ROS_LOCALHOST_ONLY=1 python3 /tmp/so101-debug-mujoco-task13-4iKEMQVr/run_exp061.py
+success_criteria:
+  - Runner status VALID, both phases complete, execution results succeed, and replan count is at most 2 total.
+  - Final evidence remains session task13-exp061/reset 0 and paused false with zero fingertip/forbidden contacts.
+  - Cup displacement from the frozen initial pose is at most 0.003 m and maximum observed force is at most 11.60 N.
+failure_criteria: Any planning/execution/FK error, empty or invalid path, exhausted replan, early contact, displacement/force abort, paused physics, stale state, or controller/runtime exit is a VALID behavioral failure and stops matrix collection.
+invalid_criteria: Provenance mismatch, wrong domain/session/reset, stale overlay, missing atomic evidence, unowned process contamination, direct state write, hidden constraint, or changing another active variable.
+safety_contract: Simulation only; no hardware, pause, StepSimulation, direct qpos/qvel write, set-pose, teleport, weld/equality/adhesion/mocap following, or gripper close.
+evidence_root: /tmp/so101-debug-mujoco-task13-4iKEMQVr
+decision: PENDING; preregistration completed at 2026-08-11T20:13:57+08:00 before stack start or parameter/action change.
+```
+
+## Experiment EXP-061 Running Transition
+
+```yaml
+experiment_id: EXP-061
+status: RUNNING
+transition_time: 2026-08-11T20:15:19+08:00
+provenance_verified_before_action:
+  ros_domain_id: 140
+  simulation_session_id: task13-exp061
+  tmux_session: so101-task13-exp061
+  owned_pgid: 2670511
+  launch_pid: 2670579
+  robot_state_publisher_pid: 2670607
+  ros2_control_pid: 2670608
+  move_group_pid: 2670612
+  ros2_control_executable: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/lib/mujoco_ros2_control/ros2_control_node
+  ros2_control_executable_sha256: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
+  ament_prefix_order: [/tmp/so101-debug-mujoco-task13-4iKEMQVr/task13-overlay/install/so101_mujoco_demo_py, /tmp/so101-debug-mujoco-task13-4iKEMQVr/task13-overlay/install/so101_mujoco_support, /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install, /opt/ros/jazzy]
+  controllers: [joint_state_broadcaster active, arm_controller active, gripper_controller active]
+  stack_log_sha256_at_transition: 661a4aad5af9a0f4c43081cad197682a481d1a8520be080a8566eda5b56a0f56
+action_state: No pre-open, planning request, or execution action had been sent when this transition was recorded. The next and only action command is the frozen EXP-061 runner.
+```
+
+## Experiment EXP-061 Terminal Result
+
+```yaml
+experiment_id: EXP-061
+status: VALID
+terminal_result: FAIL
+terminal_time: 2026-08-11T20:16:00+08:00
+observed_result:
+  - The owned stack and all three controllers were ready with exact provenance. Gripper pre-open completed successfully at q6=0.465038 rad.
+  - Initial arm error from q1..q5=0 was at most 0.001080 rad and maximum arm speed was approximately 2.6e-17 rad/s. Physics was unpaused, session/reset were task13-exp061/0, fingertip and forbidden contacts were empty, and table-support force was approximately 0.196 N.
+  - Cup position changed only about 4e-9 m through pre-open. No arm ExecuteTrajectory goal was sent.
+  - The first pre-grasp GetMotionPlan request returned MOVEIT_PLAN_FAILED; MoveIt's exact terminal error was START_STATE_INVALID before any trajectory existed.
+  - The runner therefore completed zero phases with zero replans and failed closed. Final cup/contact/session/reset/paused evidence remained safe and valid.
+acceptance:
+  controller_result: PREOPEN_SUCCEEDED; ARM_NOT_SENT
+  plan_result: START_STATE_INVALID
+  trajectory_points: 0
+  early_fingertip_contacts: 0
+  forbidden_contacts: 0
+  cup_displacement_m: approximately 4e-9
+  maximum_observed_force_n: approximately 0.1964
+  physics_paused: false
+  provenance_valid: true
+evidence:
+  result: /tmp/so101-debug-mujoco-task13-4iKEMQVr/exp061-result.json
+  result_sha256: 4dd866be8e31697f3ec768af876b10a2db7efba8c2b983c45a6138d7771826d4
+  runner_log: /tmp/so101-debug-mujoco-task13-4iKEMQVr/exp061-run.log
+  runner_log_sha256: 137d8097368cb024dfd9c1c356ad4c1ddaa06d6f3c5612a9982e83acc6fc7bfc
+decision: KEEP VALID as an evidence-valid behavioral failure. Do not collect the seven-regime matrix. Perform read-only state-validity diagnosis before deciding whether one single-variable follow-up is justified.
+```
+
+## Experiment EXP-062
+
+```yaml
+experiment_id: EXP-062
+prior_experiment: EXP-061 VALID behavioral failure
+status: PLANNED
+lifecycle: REUSE_STACK
+hypothesis: EXP-061 failed because its explicit MoveIt start RobotState contained q1..q5 but omitted the independently pre-opened q6; supplying the exact current q1..q6 while leaving planning_group=arm will make the unchanged two-phase pose approach plan from the state that MoveIt's read-only validity service has proven valid.
+diagnostic_basis:
+  - EXP-061 returned START_STATE_INVALID with an explicit q1..q5-only start and sent no arm trajectory.
+  - A subsequent read-only /check_state_validity call on the same stack with current q1..q6, including q6=0.4650347488, returned valid=true with zero contacts and zero cost sources.
+  - The existing working EXP-060 pattern used a complete current robot state for pose planning.
+single_variable: The pose request start RobotState changes from current q1..q5 only to current q1..q6; planning group arm, target derivation, pre-grasp/contact offsets, orientation, tolerances, model, dependency, controllers, session/reset, and safety bounds are unchanged.
+tdd_evidence:
+  red_sha256: 998ab9c685d48f96c7fdaa8c595b16c872f19c21c8524c7c05fbfd57530edd73
+  green_sha256: 8a2a1da34fd240a2e0198a96637ecd1297d0a9e5f272f0ef221977101ad3ee31
+provenance:
+  source_head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  corrected_motion_module_sha256: f09895138a5b3a742e8e2b8257e8962f2e8abb2a3c81b103f37ffab7da251f4b
+  corrected_test_sha256: 73c87bb7c5146a6508dbc2ba5b2991820f2b4c7b66eba13a17681715cc468155
+  isolated_rebuild_log_sha256: 4ec6b1c83624e9ada9cb06dcfb26eb7d7b7279b224d9fe8f092377d8569d6233
+  read_only_state_validity_sha256: 19f3a63e1e7f90a1dbf8cb6ae4fe665baabc50c1cb3e4c62db7371a3212903af
+  adapter_sha256: e4021c7993d56f5a10d3b38b32da9920befa8c2baef9063cb30b8ec0165a555a
+stack_reuse_contract: Reuse only if PGID 2670511, ros2_control PID 2670608, move_group PID 2670612, domain 140, session task13-exp061/reset 0, controller activity, executable hash, unpaused evidence, q1..q5 stable home, pre-open q6, and zero fingertip/forbidden contact all remain fresh. Otherwise mark INVALID without action.
+exact_command: ROS_DOMAIN_ID=140 ROS_LOCALHOST_ONLY=1 python3 /tmp/so101-debug-mujoco-task13-4iKEMQVr/run_exp062.py
+success_criteria: Unchanged from EXP-061; both phases must plan and execute with all safety evidence passing.
+failure_criteria: Unchanged from EXP-061. A second evidence-valid behavioral failure with no new discriminating evidence triggers checkpoint/stop rather than further tuning.
+invalid_criteria: Any stack/provenance/session/reset/controller mismatch or any active-variable change beyond full start-state inclusion.
+decision: PENDING; preregistered before EXP-062 action.
+```
+
+## Experiment EXP-062 Running Transition
+
+```yaml
+experiment_id: EXP-062
+status: RUNNING
+transition_time: 2026-08-11T20:20:18+08:00
+reuse_provenance_verified:
+  owned_pgid_alive: 2670511
+  ros2_control_pid_alive: 2670608
+  move_group_pid_alive: 2670612
+  ros2_control_executable_sha256: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
+  controllers: [joint_state_broadcaster active, arm_controller active, gripper_controller active]
+  simulation_session_id: task13-exp061
+  reset_epoch: 0
+  paused: false
+  arm_q1_to_q5_rad: [-3.6353329156e-09, 0.00107951465, 0.00090670055, 0.00023423788, 3.070742e-07]
+  arm_velocity_rad_s: [9.85e-23, -5.04e-17, -1.36e-17, 2.01e-18, -5.78e-21]
+  q6_rad: 0.4650347488
+action_state: No EXP-062 action had been sent at this transition. The next action is the one frozen runner command.
+```
+
+## Experiment EXP-062 Terminal Result
+
+```yaml
+experiment_id: EXP-062
+status: VALID
+terminal_result: FAIL
+observed_result:
+  - Full current q1..q6 start-state inclusion passed its unit contract but the unchanged first pre-grasp plan still returned START_STATE_INVALID; no arm trajectory or execution goal was produced.
+  - Pre-open, stable home, session/reset, unpaused physics, zero fingertip/forbidden contacts, approximately 0.1964 N table-support force, and nanometre-scale cup motion all remained valid.
+  - The full-start-state hypothesis is disproven. A read-only TF measurement found the current home TCP quaternion [-0.499444172, -0.499448153, -0.500549705, 0.500556745] differs from the required EXP-060 target quaternion by 1.539548976 rad, far outside the 0.01 rad path constraint.
+root_cause: The request applies the final orientation as a path constraint during pre-grasp, so the otherwise state-valid home pose violates the path constraint at time zero. The pre-grasp needs the orientation as a goal constraint while the already-aligned descent retains it as a path constraint.
+evidence:
+  result_sha256: 389caf85765816df660b44f323bf2d0e52243a411aa039eb6cfa3bbfbb9ea93f
+  runner_log_sha256: c46aeb396d25c09df0c7b1f61f504d7a8332446692ff180208ee8b12bc4ddff8
+  home_tcp_tf_sha256: f90ff13c602a0235dc90fd07b3fefe08c234a6924ddc11b08840dc674b10af04
+decision: KEEP VALID as a second evidence-valid behavioral failure with new discriminating evidence. Permit one TDD-protected constraint-staging follow-up; do not tune target positions or waypoints.
+```
+
+## Experiment EXP-063
+
+```yaml
+experiment_id: EXP-063
+prior_experiment: EXP-062 VALID behavioral failure
+status: PLANNED
+lifecycle: REUSE_STACK
+hypothesis: Treating the frozen TCP orientation as a pre-grasp goal constraint, then applying it as a path constraint only after pre-grasp alignment during descent, will remove the proven invalid-start contradiction while preserving the unchanged orientation/path/safety contract.
+single_variable: Orientation constraint staging changes from goal-plus-path for both phases to goal-only for pre-grasp and goal-plus-path for descent. Full q1..q6 start state, targets, offsets, orientation, tolerances, planning group, model, controllers, and safety bounds remain unchanged.
+tdd_evidence:
+  red_sha256: 5e96ac168b2509379f8501bfb67d461ad0c1e4c1a60b9a5f14417ef2c680b345
+  green_sha256: 825c05f5502a5c7e2a42779447b9a47758b55672285cdad29fdacfe8c5acf677
+provenance:
+  moveit_planning_sha256: 4b4245347b52fae8ec58c401725d88ed10dd94818cac9a48a0288b6aa58091de
+  calibration_motion_sha256: c9bf6b6a0c61b679e11b38d4a2826a702c0998f42f4172c2239a294578525470
+  moveit_test_sha256: ff61252543c37050be1a679d898ebe7f4e9b7ea3c8df5b1958ab0e38037369cf
+  motion_test_sha256: af213cade89016167bce2ffccf4c2a445a73623dee97d27c7501f811cbae5a78
+  isolated_rebuild_sha256: 783718bd5a6d8f73c4a007ce84ed641903b12c561f08ed6fe1640783cd3fe5b1
+  adapter_sha256: 5ea46baac199fa737327395f384218e2299c8cf041ab5b6cd4bb328a16bbc093
+stack_reuse_contract: Identical to EXP-062 and must be reverified before RUNNING.
+exact_command: ROS_DOMAIN_ID=140 ROS_LOCALHOST_ONLY=1 python3 /tmp/so101-debug-mujoco-task13-4iKEMQVr/run_exp063.py
+success_criteria: Identical to EXP-061, including both completed phases, successful execution, unpaused physics, zero early contacts, and bounded cup/force evidence.
+failure_criteria: Any further evidence-valid behavior failure stops approach qualification with a checkpoint; no fourth tuning experiment is authorized.
+decision: PENDING; preregistered before action.
+```
+
+## Experiment EXP-063 Running Transition
+
+```yaml
+experiment_id: EXP-063
+status: RUNNING
+transition_time: 2026-08-11T20:24:09+08:00
+reuse_provenance_verified:
+  owned_processes_alive: [PGID 2670511, ros2_control 2670608, move_group 2670612]
+  ros2_control_executable_sha256: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
+  controllers: [joint_state_broadcaster active, arm_controller active, gripper_controller active]
+  simulation_session_id: task13-exp061
+  reset_epoch: 0
+  paused: false
+action_state: No EXP-063 action had been sent when this transition was recorded.
+```
+
+## Experiment EXP-063 Terminal Result
+
+```yaml
+experiment_id: EXP-063
+status: VALID
+terminal_result: FAIL
+observed_result:
+  - Constraint staging removed the EXP-061/EXP-062 invalid-start condition. MoveIt entered goal sampling from the valid current state and repeatedly invoked the position-only KDL IK plugin.
+  - No valid goal state could be sampled for the current-cup-derived pre-grasp position with the frozen EXP-060 orientation; MoveIt terminated with GOAL_STATE_INVALID after the configured five-second planning window.
+  - No arm trajectory or ExecuteTrajectory action was produced. Pre-open, stable home, unpaused physics, session/reset, zero fingertip/forbidden contacts, approximately 0.1964 N support force, and negligible cup motion remained valid.
+acceptance:
+  pregrasp_plan: GOAL_STATE_INVALID
+  trajectory_points: 0
+  completed_phases: 0
+  arm_action_sent: false
+  safety_abort: false
+  provenance_valid: true
+evidence:
+  result_sha256: 0745c533879ebfde45713de68852dd1f39b38605f00c22ee741b848e3c7bf648
+  runner_log_sha256: 17aef583c94a0997dc89cd8cbe0342a6f014e306e8a854a9f66f4c31e2b090ff
+decision: KEEP VALID as an evidence-valid behavioral failure. Stop approach qualification with no fourth path/target experiment, no GUI mirror, and no seven-regime matrix collection. Task 13.5 calibration/commit/push and the mandatory threshold-approval packet are not reachable from this failed prerequisite.
+```
+
+## Checkpoint CP-095
+
+```yaml
+checkpoint_id: CP-095
+checkpoint_time: 2026-08-11T20:29:41+08:00
+last_valid_experiment: EXP-063
+current_hypothesis: The frozen EXP-060 orientation is not reachable at the current-cup-derived Task 13 pre-grasp position under the fixed position-only KDL solver and unchanged model; resolving that conflict requires a newly reviewed plan rather than another unapproved tuning experiment.
+working_tree_status: HEAD 1548acb20a2bd376e1bbe867603d824d26ddfb21 on codex/so101-mujoco-ros2; Task 13 implementation, tests, configuration, and this ledger are uncommitted; protected src/so101_gazebo_demo_py tracked diff and normal status are empty.
+owned_processes: NONE. The exact Task 13 tmux session so101-task13-exp061 and its owned PGID/PIDs were stopped; ROS domain 140 has no discovered nodes.
+preserved_processes: All pre-existing sessions and processes remain preserved, including codex, codex-cua, codex-teleop, kimi, so101-mujoco-gui, so101-phy5-v2-r0, so101-py-qual, so101-teleop-server, domain-189 Gazebo/MoveIt/RViz, domain-138 move_group, and the domain-139 MuJoCo camera stack.
+confirmed_conclusions:
+  - Task 13.1 strict RED/GREEN produced a fail-closed schema-v1 analyzer and a still-disabled placeholder policy; approved_by_user/enabled remain false and no threshold is approved.
+  - Task 13.2 strict RED/GREEN produced a bounded atomic collector using the existing MuJoCo observer/session/reset/sequence contract; partial or stale evidence is rejected and output remains outside the repository.
+  - Task 13.3 strict RED/GREEN produced the bounded two-phase pose approach with fresh start states, one replan limit, safety monitoring, and no simulation pause or direct state writes.
+  - EXP-061 validly failed at START_STATE_INVALID before any arm action. Read-only state validity isolated the incomplete start-state hypothesis.
+  - EXP-062 validly disproved that hypothesis and identified a 1.539548976 rad home-to-target orientation conflict caused by applying the final orientation as a pre-grasp path constraint.
+  - EXP-063 validly removed the invalid-start contradiction but failed at GOAL_STATE_INVALID: no reachable current-cup-derived pre-grasp goal was sampled with the frozen orientation. No arm trajectory, contact matrix sample, or GUI evidence was produced.
+  - The preregistered Task 13.4 prerequisite therefore failed. A fourth tuning experiment, Task 13.5 matrix collection/calibration, code or documentation commits, push, and the mandatory threshold-approval packet are not authorized or reachable in this run.
+  - EXP-057 remains historical and unchanged; this checkpoint does not silently terminalize or rewrite it.
+test_contamination:
+  - The package-test gate observes four ignored Gazebo pyc files timestamped 2026-08-11T18:51:50+08:00, before CP-094 and this Task 13 run began. Normal Git status and tracked diff remain empty, but the protected nontracked manifest is aaa2030e5a56b6a8ec959a24c1c42dc5afdc5d566e2ccb6eaadd704c0b7b44f6 rather than the recorded 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f.
+  - Even excluding those four conspicuous pyc files yields 0245cca862d4d94585aceb9e41a4b2ba82bcf10931c4e24b2098b4baee088415, proving broader ignored-manifest drift pre-existed this package-test invocation. No protected-tree file was deleted or rewritten in this run; Task 13 tests were run with PYTHONDONTWRITEBYTECODE=1.
+verification_state:
+  focused_tdd: PASS; all recorded Task 13 RED cases failed for the intended missing behavior and all corresponding GREEN suites passed.
+  isolated_build: PASS for so101_mujoco_support and so101_mujoco_demo_py with exact dependency provenance.
+  full_package_pytest: 286 passed, 4 skipped, 15 failed after the final package-identity/header corrections; one remaining failure is the protected ignored-manifest gate and fourteen expose the already-present HEAD visual_reference_updates provenance/gate incompatibility. The latter was independently reproduced from clean committed HEAD 1548acb.
+  final_offline_gates: Focused Task 13/MoveIt/package-identity/ledger suite 53 passed; Ruff passed with 79 files formatted; git diff --check passed; protected Gazebo tracked diff/status passed; migration isolation failed only at the recorded ignored-manifest mismatch.
+evidence:
+  root: /tmp/so101-debug-mujoco-task13-4iKEMQVr
+  exp061_result_sha256: 4dd866be8e31697f3ec768af876b10a2db7efba8c2b983c45a6138d7771826d4
+  exp062_result_sha256: 389caf85765816df660b44f323bf2d0e52243a411aa039eb6cfa3bbfbb9ea93f
+  exp063_result_sha256: 0745c533879ebfde45713de68852dd1f39b38605f00c22ee741b848e3c7bf648
+  final_process_isolation_sha256: 617d45baac638591a5189f0695e3abf55abfb86818b8ec5a9df7d4d639e69d47
+  final_focused_pytest_sha256: e8440f26a8e0998acb9a88b6e2629c9f229c03c8fd16a6213e7d96cf252b84ff
+  final_full_pytest_sha256: 9ff69811f24c831d5bed8041e33fdb24a78be4191259db3115e52372fd7da338
+  final_migration_isolation_sha256: 0687d85ecf399fd28dfa52094daac4945a680ae9266bbe571987e765d7f5b025
+  head_baseline_provenance_repro_sha256: fd98c6341a766d02f6c57dbbd4d890248399026a85b08317d05be08a46a89334
+open_risks:
+  - The Task 13 approach target/orientation contract is infeasible as currently frozen; no current-fingerprint seven-regime evidence or confusion matrix exists.
+  - The protected ignored-manifest and HEAD provenance/isolation-gate mismatches prevent a clean package/migration verification claim and are outside this stopped Task 13 experiment variable.
+  - The separately deferred moveit launch-directed shutdown defect remains untouched; Task 13S, Task 14, and Task 15 remain blocked.
+next_experiment: NONE. A new user-reviewed plan is required before any target, orientation, solver, waypoint, contact-threshold, or runtime change.
+next_command: Stop at the Task 13 approval boundary and report the failed prerequisite; do not commit, push, set approved_by_user/enabled true, start clean-shutdown work, or begin Task 14/15.
+```
+
+## Checkpoint CP-096
+
+```yaml
+checkpoint_id: CP-096
+checkpoint_time: 2026-08-11T21:55:46+08:00
+recovery_reason: ai-station reboot after CP-095; user explicitly authorized recovery plus one bounded read-only reachability diagnostic and, only if gated, one motion qualification.
+last_valid_experiment: EXP-063
+current_hypothesis: A frozen 0/5/10/15/20/25/30/35/40 mm vertical-offset grid at the unchanged EXP-060 TCP orientation can distinguish an unreachable fixed-orientation pre-grasp contract from an offset-specific reachability failure.
+host_recovery:
+  hostname: AI-STATION-001
+  kernel_boot_id: e56cb844-9226-4e5d-89a9-3fe537392975
+  boot_time: 2026-08-11T20:43:27+08:00
+  observation_time: 2026-08-11T21:55:46+08:00
+  tmux_sessions: [codex]
+  codex_cua: ABSENT
+  relevant_ros_gazebo_moveit_processes: NONE
+  checked_ros_domains_with_empty_graph: [0, 138, 139, 140, 141, 142, 143, 144, 189]
+repository_provenance:
+  worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
+  linked_worktree: true
+  branch: codex/so101-mujoco-ros2
+  head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  origin_branch: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  origin_main: c6982116d79c834de60b21d9e324a449a569a9c9
+  merge_base_with_origin_main: d300e7a41fb274d6d7e120699b7040666ea61904
+  dependency_gitlink_mode: 160000
+  dependency_gitlink_and_checkout: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+working_tree_status:
+  tracked_modified:
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md
+    - src/so101_mujoco_demo_py/config/headless_execution.yaml
+    - src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml
+    - src/so101_mujoco_demo_py/setup.py
+    - src/so101_mujoco_demo_py/so101_mujoco_demo_py/moveit/planning.py
+    - src/so101_mujoco_demo_py/test/test_moveit_boundary.py
+    - src/so101_mujoco_demo_py/test/test_package_identity.py
+  untracked_preserved:
+    - src/so101_mujoco_demo_py/config/contact_calibration.yaml
+    - src/so101_mujoco_demo_py/scripts/analyze_contact_calibration.py
+    - src/so101_mujoco_demo_py/scripts/collect_contact_calibration.py
+    - src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_calibration.py
+    - src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_calibration_collector.py
+    - src/so101_mujoco_demo_py/so101_mujoco_demo_py/motion/calibration.py
+    - src/so101_mujoco_demo_py/test/test_contact_calibration_collector.py
+    - src/so101_mujoco_demo_py/test/test_contact_calibration_contract.py
+    - src/so101_mujoco_demo_py/test/test_contact_calibration_motion.py
+  protected_gazebo_tracked_diff: EMPTY
+  protected_gazebo_normal_status: EMPTY
+  protected_ignored_manifest: Existing mismatch aaa2030e5a56b6a8ec959a24c1c42dc5afdc5d566e2ccb6eaadd704c0b7b44f6 versus recorded 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f; preserved without deletion or workaround.
+evidence_recovery:
+  prior_root: /tmp/so101-debug-mujoco-task13-4iKEMQVr
+  prior_root_status: EVIDENCE_UNAVAILABLE after reboot
+  historical_records_retained:
+    - EXP-061 result sha256 4dd866be8e31697f3ec768af876b10a2db7efba8c2b983c45a6138d7771826d4
+    - EXP-062 result sha256 389caf85765816df660b44f323bf2d0e52243a411aa039eb6cfa3bbfbb9ea93f
+    - EXP-063 result sha256 0745c533879ebfde45713de68852dd1f39b38605f00c22ee741b848e3c7bf648
+  qualification: Historical ledger summaries remain durable conclusions, but prior raw files and their hashes cannot be reverified on this boot and must not be cited as currently available artifacts.
+  new_root: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz
+owned_processes: NONE. Every CP-095 runtime PID, process group, tmux session, ROS graph, and /tmp overlay is invalid after reboot and cannot be reused.
+preserved_processes: Current Codex tmux session only; no other live tmux or relevant ROS/Gazebo/MoveIt process was observed on this boot.
+lifecycle_boundary:
+  - REUSE_STACK is prohibited after reboot.
+  - Every subsequent live experiment must use FULL_RESTART, a newly proven empty ROS domain, a new simulation session ID, and a newly rebuilt /tmp overlay/evidence root.
+  - Old /tmp install paths cannot establish current runtime provenance.
+confirmed_conclusions:
+  - EXP-061/062/063 are not repeated; their ledger conclusions remain the historical basis for the newly authorized offset-grid diagnostic.
+  - EXP-064 is plan/read-only only: no ExecuteTrajectory, gripper action, pause/step, qpos/qvel write, teleport, weld, equality, target, solver, model, dynamics, controller, or contact-threshold change is authorized.
+  - EXP-065 is permitted at most once only if EXP-064 finds at least one reachable, state-valid, collision-free, outside-cup/table candidate with positive geometric clearance. Its offset selection rule is the largest qualifying vertical offset.
+evidence:
+  reboot_repository_inventory: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/reboot-repository-inventory.txt
+  reboot_repository_inventory_sha256: c37864669c4d9388669e8528814394d9c52566168ae52deec71f24c8527665f9
+  reboot_process_tmux_inventory: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/reboot-process-tmux-inventory.txt
+  reboot_process_tmux_inventory_sha256: 4ffee63986f9b054f0aa447e94b1c7ac0443b3fc72ea39bb018a68842775d980
+  reboot_ros_graphs: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/reboot-ros-graphs.txt
+  reboot_ros_graphs_sha256: 35dea0434eddc18a09bd70acd81b77f1894d6387c537fde975011f80cf38cc60
+  reboot_evidence_availability: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/reboot-evidence-availability.txt
+  reboot_evidence_availability_sha256: 0b9e1f2b7e260610f8f4f588cc1ce7eed9dc4360740e1ee11f5ec49dfc5c8ae9
+open_risks:
+  - No EXP-064 overlay, stack, domain, session, grid result, collision-distance evidence, or trajectory exists yet.
+  - The committed-HEAD provenance/isolation incompatibility and protected ignored-manifest mismatch remain disclosed baseline failures; they must not be bypassed by deleting ignored protected files.
+  - Contact thresholds remain absent, disabled, and unapproved. Clean shutdown, Task 14, and Task 15 remain out of scope.
+next_experiment: EXP-064
+next_command: Rebuild a fresh isolated /tmp overlay from the exact dirty source and pinned dependency, verify hashes/prefixes, then preregister EXP-064 before starting any stack.
+```
+
+## Experiment EXP-064
+
+```yaml
+experiment_id: EXP-064
+prior_experiment: EXP-063 VALID behavioral failure; CP-096 reboot recovery
+status: PLANNED
+lifecycle: FULL_RESTART
+hypothesis: At the unchanged EXP-060 TCP orientation and fixed current-cup-derived x/y contact target, at least one preregistered positive vertical offset may admit IK, a valid collision-free goal, positive cup/table clearance, positive joint-limit margin, and a nonempty plan even though the former 40 mm pre-grasp failed goal sampling.
+single_variable: Vertical offset above the frozen contact target, evaluated on the finite grid [0, 5, 10, 15, 20, 25, 30, 35, 40] mm; no other model, solver, orientation, x/y target, start state, collision geometry, tolerance, planning, controller, dynamics, or threshold input changes.
+frozen_inputs:
+  contact_target_m: [0.0206766838, -0.2628210212, 0.2006306106]
+  tcp_orientation_xyzw: [-0.0102659913, -0.0102629866, -0.7067526865, 0.7073117563]
+  start_joint_names: ['1', '2', '3', '4', '5', '6']
+  start_joint_positions_rad: [0.0, 0.0, 0.0, 0.0, 0.0, 0.4650347488]
+  offset_grid_mm: [0, 5, 10, 15, 20, 25, 30, 35, 40]
+  offset_zero_role: Regression point only; never a pre-grasp candidate.
+  selection_rule: If one or more positive-offset points satisfy every qualification predicate, select the largest qualifying vertical offset before observing any motion result.
+qualification_predicate:
+  - IK succeeds and its returned state is valid.
+  - Goal-only fixed-orientation planning succeeds with a nonempty trajectory from the identical full q1-q6 start state.
+  - The returned endpoint is valid and every locally evaluated IK/trajectory sample is free of self, cup, table, and combined world collision.
+  - Minimum unpadded geometric clearance to both cup and table is strictly positive over the evaluated samples.
+  - Minimum bounded joint-limit margin is strictly positive.
+read_only_boundary:
+  services: [/compute_ik, /compute_fk, /check_state_validity, /plan_kinematic_path]
+  local_geometry: A temporary non-production MoveIt PlanningScene mirrors the current MJCF cup wall/bottom and table geometry solely for FCL collision/distance evaluation; it does not apply objects to the live scene.
+  forbidden_calls: [ExecuteTrajectory, gripper action, controller or arm action, pause, step, qpos write, qvel write, teleport, weld, equality]
+  stack: Minimal robot_state_publisher plus move_group only; no MuJoCo, ros2_control, controller, workflow, or execution node.
+fresh_runtime:
+  ros_domain_id: 145
+  ros_localhost_only: 1
+  simulation_session_id: task13-exp064-reboot-e56cb844
+  tmux_session: so101-task13-exp064
+  prestart_graph: EMPTY
+provenance:
+  source_head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  dependency_gitlink_and_checkout: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+  fresh_overlay_build_sha256: 6b69219b0d8a9788a2796aab2897a18f4bd74f97d4caa0d817f639fc4689bc88
+  fresh_overlay_provenance_sha256: 5e7a58e82badb4bb4f3cf061c282cbcb4c68194ca4d4612f5192b77f2e22f926
+  diagnostic_launch_sha256: 9c2041490859a86ad727b51816faf53f435e28571c5cb1a6f5f6b5e79ed7f20f
+  diagnostic_runner_sha256: 0079e6ffa53ef3ec1923581438e848be4ba42b6490ac5a64d8c9467664c4a0b9
+  local_geometry_helper_sha256: abd60df6b90793eb3f44359b78a1e8ee7a998e54051857a77a2d9e4449bc0900
+  rendered_urdf_sha256: 82ead9d1716dc43773c2ed2d3c78ee30c7f53a238ab67baa3b08aebc96e7e38d
+  helper_rebuild_log_sha256: 89c1695869a0c6b0a0d7f7d97628f4554a0a8c51d7e4a34c48b3f7a03efd0f2e
+  empty_domain_evidence_sha256: f7ccb8a1262f798e033b3e6768e97dfbb3cd414acb795f2bc3e81fe31a2fec73
+exact_command: ROS_DOMAIN_ID=145 ROS_LOCALHOST_ONLY=1 python3 /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/run_exp064.py --helper /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/reachability_clearance/install/so101_reachability_clearance/bin/reachability_clearance --urdf /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/exp064_robot_description.urdf --srdf /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install/so101_mujoco_demo_py/share/so101_mujoco_demo_py/config/so101.srdf --output /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/exp064-result.json
+success_criteria: Terminalize VALID after all nine frozen offsets are evaluated with complete service and local-geometry fields. EXP-065 becomes eligible only if selected_offset_mm is non-null.
+failure_criteria: Terminalize VALID with no candidate and stop if selected_offset_mm is null; do not change the grid, orientation, solver, model, x/y target, or waypoint.
+invalid_criteria: Missing/mismatched provenance, nonempty prestart graph, incomplete grid, service/runtime corruption, or any forbidden action/state mutation.
+decision: PENDING; preregistered before starting the minimal MoveIt stack.
+```
+
+## Experiment EXP-064 Running Transition
+
+```yaml
+experiment_id: EXP-064
+status: RUNNING
+transition_time: 2026-08-11T22:09:15+08:00
+full_restart_provenance_verified:
+  ros_domain_id: 145
+  prestart_graph: EMPTY
+  tmux_session: so101-task13-exp064
+  process_group_id: 95546
+  robot_state_publisher_pid: 95632
+  move_group_pid: 95633
+  runtime_prefix: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  dependency_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+  observed_nodes: [/move_group, /robot_state_publisher]
+  prohibited_runtime_nodes: NONE
+  runtime_provenance_sha256: e2e5ad900f508b0c3fd97847846eb77924b2870b3e774cfdc378bcf6791a3d05
+action_state: No diagnostic service call had been sent at this transition. MoveGroup exposes its standard actions, but the frozen runner has no action client and calls only the four preregistered read-only/plan services.
+```
+
+## Experiment EXP-064 Terminal Result
+
+```yaml
+experiment_id: EXP-064
+status: VALID
+terminal_result: FAIL
+terminal_time: 2026-08-11T22:10:59+08:00
+grid_complete: true
+read_only_contract:
+  action_calls: 0
+  execute_trajectory_calls: 0
+  simulation_state_writes: 0
+  runtime_components: [robot_state_publisher, move_group]
+observed_result:
+  - All nine frozen offsets completed IK, FK, state-validity, goal sampling/planning, local collision/distance, and joint-limit-margin evaluation.
+  - Position-only KDL IK returned success and a MoveIt-valid state at every offset, but each independently returned IK state collided with the cup in the exact local cup/table geometry; its orientation error was nonzero because this solver is configured position-only.
+  - Goal-constrained planning returned generic failure code 99999 with no trajectory at 0, 5, 10, 15, 25, 30, 35, and 40 mm; MoveGroup logged invalid goal sampling. At 20 mm it returned SUCCESS with 41 points and a valid endpoint.
+  - The 20 mm trajectory was nevertheless not collision-free in the frozen cup geometry: six late trajectory samples, indices 33 through 38, placed gripper in plastic_cup collision. Its final sample cleared the cup by 0.0004381571171105936 m, so the path approaches from inside/intersection before ending outside.
+  - No offset satisfied the preregistered conjunction of fixed-direction reachability, collision-free state/path, positive cup/table clearance, positive joint-limit margin, and nonempty trajectory. qualified_offsets_mm is empty and selected_offset_mm is null.
+offset_results:
+  fields: [offset_mm, ik_code, state_valid, plan_code, trajectory_points, self_collision, world_collision, cup_collision, table_collision, minimum_joint_margin_rad, minimum_cup_clearance_m, minimum_table_clearance_m, qualified]
+  rows:
+    - [0, 1, true, 99999, 0, false, true, true, false, 0.20466149001708223, -1.0, 0.05647541469860941, false]
+    - [5, 1, true, 99999, 0, false, true, true, false, 0.1643422187889596, -1.0, 0.06281728900812954, false]
+    - [10, 1, true, 99999, 0, false, true, true, false, 0.5169062178240369, -1.0, 0.05206880246936112, false]
+    - [15, 1, true, 99999, 0, false, true, true, false, 0.4998865386736273, -1.0, 0.05720111427996215, false]
+    - [20, 1, true, 1, 41, false, true, true, false, 0.48713596135634596, -1.0, 0.06233824609061987, false]
+    - [25, 1, true, 99999, 0, false, true, true, false, 0.45326380279126677, -1.0, 0.06624211972402426, false]
+    - [30, 1, true, 99999, 0, false, true, true, false, 0.4291703409428369, -1.0, 0.07127597103846782, false]
+    - [35, 1, true, 99999, 0, false, true, true, false, 0.40866136514295226, -1.0, 0.07630525387350927, false]
+    - [40, 1, true, 99999, 0, false, true, true, false, 0.391650099193936, -1.0, 0.08134044712815865, false]
+distance_note: The unpadded MoveIt/FCL distance API reports -1.0 for a colliding state; collision flags and contact pairs identify those rows as gripper/plastic_cup intersections rather than positive clearance.
+evidence:
+  result_sha256: 4896d8b96dc1d89c2484b797ca30770a4effa8a4bca57eb740bc552f4f3758f4
+  geometry_query_sha256: e15ba5da5887d004813003a7864f01988e968a8373faec9791d00c37c7104b9f
+  geometry_results_sha256: c4594e9c5bf5b3e03f1133b36238de828b512781801455280d2c0b54263b78ef
+  summary_sha256: 7a5142f742e961baf87bcfd531b0b453b34950ee03cdb6667f7f5de260d5bc1e
+  runner_log_sha256: ce8b054f13820bf702128b6be903be67da5892be04a595b4fb111cecfc2759ae
+  stack_log_sha256: f93842d75a27187c749c47a07989250d6123519d7174c1d8740802dac240ba37
+  postrun_audit_sha256: e7b099ad73e740a661e93cfa02f74f6e53c5d0f0289f02b2d299aad32d01809d
+  poststop_isolation_sha256: b7aaa3cc8d904bf27229b355760aecba4b451ff389ca50c47b6a72ce8532c8dc
+decision: KEEP VALID as the complete bounded read-only diagnostic. Stop because there is no qualifying offset; EXP-065, Task 13.5 collection, threshold proposal, commit, and push are not authorized or reachable.
+```
+
+## Checkpoint CP-097
+
+```yaml
+checkpoint_id: CP-097
+checkpoint_time: 2026-08-11T22:11:43+08:00
+last_valid_experiment: EXP-064
+current_hypothesis: The entire preregistered vertical grid fails the unchanged fixed-orientation, collision-free, positive-clearance approach contract; vertical offset alone cannot qualify the current approach.
+working_tree_status: HEAD and origin/codex/so101-mujoco-ros2 remain 1548acb20a2bd376e1bbe867603d824d26ddfb21; Task 13 implementation/tests/configuration and ledger are intentionally dirty and uncommitted. The three user-protected original draft files retain sha256 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1, a03d3d5ef3b00e56d0f33486f4bb52ce5eab0ab16e4701c6462c3cb4367213bf, and de91a4e997c61f068758dbdbb9ba0806405841b053c65913737509b5738663d8.
+owned_processes: NONE. The exact EXP-064 tmux session/process group and PIDs were stopped; ROS domain 145 is empty.
+preserved_processes: The pre-existing codex tmux session remains; no unrelated session or process was stopped.
+confirmed_conclusions:
+  - CP-096 validly established reboot recovery, invalidated all old runtime provenance, and required FULL_RESTART.
+  - EXP-064 used the freshly rebuilt pinned overlay, a previously empty domain, and only a minimal non-executing MoveIt/robot-model service stack.
+  - The frozen nine-point grid is complete. No qualifying positive offset exists; 20 mm alone planned, but its path intersects the cup, while every other point failed goal sampling and every independent position-only IK sample also intersects the cup.
+  - The preregistered gate therefore prohibits EXP-065. No production offset selection logic was changed, so no conditional RED/GREEN implementation was entered.
+  - Task 13.5 seven-regime collection, disabled threshold proposal, scoped commit, push, and mandatory threshold-approval packet remain unreachable. approved_by_user/enabled remain false.
+  - EXP-057 and all prior experiment history remain unchanged; clean-shutdown work and Tasks 14/15 were not started.
+test_contamination:
+  - The protected ignored Gazebo manifest remains the pre-existing aaa2030e5a56b6a8ec959a24c1c42dc5afdc5d566e2ccb6eaadd704c0b7b44f6 mismatch against recorded 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f.
+  - No protected ignored file was deleted or rewritten to bypass this known package/migration isolation failure. Protected Gazebo tracked diff and normal status remain empty.
+verification_state:
+  focused_task13: PASS; 52 passed.
+  ledger_contract: PASS; 1 passed, 33 deselected.
+  ruff: PASS; all checks passed and 79 files already formatted.
+  combined_with_repository_isolation: 71 passed, 15 failed. The failures reproduce the previously disclosed protected ignored-manifest mismatch and committed-HEAD visual_reference_updates provenance incompatibility; they are not attributed to EXP-064.
+  migration_isolation: EXPECTED BASELINE FAIL with exit 1 at protected nontracked manifest aaa2030e5a56b6a8ec959a24c1c42dc5afdc5d566e2ccb6eaadd704c0b7b44f6 versus 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f.
+  final_boundaries: PASS; git diff check, protected Gazebo tracked diff/status, unchanged local/remote HEAD, disabled/unapproved policy, empty domain 145, and codex-only tmux state.
+evidence:
+  root: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz
+  exp064_result_sha256: 4896d8b96dc1d89c2484b797ca30770a4effa8a4bca57eb740bc552f4f3758f4
+  exp064_geometry_results_sha256: c4594e9c5bf5b3e03f1133b36238de828b512781801455280d2c0b54263b78ef
+  exp064_stack_log_sha256: f93842d75a27187c749c47a07989250d6123519d7174c1d8740802dac240ba37
+  exp064_poststop_isolation_sha256: b7aaa3cc8d904bf27229b355760aecba4b451ff389ca50c47b6a72ce8532c8dc
+  final_task13_focused_pytest_sha256: 1a2588935b40290ea4ccca5181db800c9b5b548118f167b1f0f02c3e4c3da2ec
+  final_ledger_pytest_sha256: 2778392902065c53a85331e4a8033096dc7d2a046de476a5af3ddc6a27d0e5ca
+  final_ruff_sha256: e3e75536809fddead684100d219413a6157dcc009e3a2f510ac2e0f3d1e2307a
+  contaminated_combined_pytest_sha256: 9e4d87b470e2c4646bad62029a948f5e4187e127dd6f8b5b2c2587429f911870
+  final_migration_isolation_sha256: 0687d85ecf399fd28dfa52094daac4945a680ae9266bbe571987e765d7f5b025
+  final_boundary_audit_sha256: 161236bc58503f1580e3c029bac5664dccf569f83959e72ee9199d484298ee06
+open_risks:
+  - No current fixed-orientation, collision-free, positive-clearance pre-grasp exists on the authorized grid, so no motion qualification or seven-regime data exists.
+  - Resolving the geometry conflict would require a new user-reviewed change such as orientation, lateral waypoint, solver/model, or target-contract work; none is authorized here.
+  - The protected ignored-manifest and committed-HEAD provenance/isolation incompatibilities remain disclosed baseline failures.
+next_experiment: NONE
+next_command: Stop and report. Do not execute EXP-065, change approach variables, collect Task 13.5 regimes, commit/push, approve/enable thresholds, start clean-shutdown repair, or begin Task 14/15.
+```
+
+## Checkpoint CP-098
+
+```yaml
+checkpoint_id: CP-098
+checkpoint_time: 2026-08-11T22:58:29+08:00
+recovery_reason: User reviewed the mandatory CP-097 stop and supplied a new bounded authorization for EXP-066 read-only contract-layer diagnosis plus only a later, explicitly gated minimal fix.
+last_valid_experiment: EXP-064
+current_hypothesis: Goal-sampling incompatibility and physical cup intersection are potentially independent failures; they must be separated before selecting an owning layer or changing production behavior.
+working_tree_status: Exact CP-097 dirty path set is preserved. HEAD and origin/codex/so101-mujoco-ros2 remain 1548acb20a2bd376e1bbe867603d824d26ddfb21. The protected drafts retain sha256 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1, a03d3d5ef3b00e56d0f33486f4bb52ce5eab0ab16e4701c6462c3cb4367213bf, and de91a4e997c61f068758dbdbb9ba0806405841b053c65913737509b5738663d8.
+owned_processes: NONE. Checked ROS domains 0, 138, 139, 140, 145, 146, 147, and 189 are empty; no relevant ROS/Gazebo/MoveIt process exists.
+preserved_processes: Existing codex tmux session only; no session or process was stopped.
+protected_gazebo_gate: Tracked diff and normal status are empty. Protected files were read only for geometry/TCP parity and remain unmodified.
+cp097_readback:
+  - EXP-064 result and geometry-result files remain present with their recorded hashes 4896d8b96dc1d89c2484b797ca30770a4effa8a4bca57eb740bc552f4f3758f4 and c4594e9c5bf5b3e03f1133b36238de828b512781801455280d2c0b54263b78ef.
+  - No EXP-065, Task 13.5 matrix, threshold approval/enablement, commit, push, clean-shutdown work, Task 14, or Task 15 occurred between CP-097 and this recovery.
+new_evidence_root: /tmp/so101-debug-mujoco-task13-exp066-C4zQir6j
+evidence:
+  recovery_inventory_sha256: 4ff2043331b91c48ed930786b217fbbf824798d2330e8922e07adcd1b8a1e5e2
+  recovery_ros_graphs_sha256: c3b7f8c24a80320a776e88f75184131d961458d3a061b300043b1d00d7d59f19
+  prestart_isolation_sha256: b12e77db2ba99cb4432d3616cb5cdb39e2bffc3623ca1fa0b857aae8a46d6b13
+next_experiment: EXP-066
+next_command: Preregister EXP-066 with the frozen full-pose versus position-only goal A/B and static geometry parity evidence, then start only the minimal MoveIt/robot-model service stack on empty domain 146.
+```
+
+## Experiment EXP-066
+
+```yaml
+experiment_id: EXP-066
+prior_experiment: EXP-064 VALID behavioral failure; CP-098 recovery
+status: PLANNED
+lifecycle: FULL_RESTART
+hypotheses:
+  H1: The five-DoF arm with position-only KDL IK is incompatible with the production three-axis 0.01 rad orientation pose-goal contract, causing full-pose goal sampling failure.
+  H2: Independently of the goal-sampling contract, successful plans to the current pre-grasp/contact x/y/z grid intersect the cup and are unsafe.
+  H3: EXP-064 collision findings are false positives caused by a cup/table geometry, frame, TCP transform, or robot-collision-mesh mismatch against current MJCF/URDF/Gazebo reference.
+single_variable: Goal constraint representation changes between A=production full position plus three-axis orientation goal and B=the identical position region without an orientation constraint. Target positions, frozen nine-point offset grid, start q1-q6, planning group, solver/config, model, tolerances, planner time, collision evaluator, and geometry remain fixed.
+frozen_inputs:
+  offsets_mm: [0, 5, 10, 15, 20, 25, 30, 35, 40]
+  contact_target_m: [0.0206766838, -0.2628210212, 0.2006306106]
+  tcp_orientation_xyzw: [-0.0102659913, -0.0102629866, -0.7067526865, 0.7073117563]
+  orientation_tolerance_rad: [0.01, 0.01, 0.01]
+  start_joint_names: ['1', '2', '3', '4', '5', '6']
+  start_joint_positions_rad: [0.0, 0.0, 0.0, 0.0, 0.0, 0.4650347488]
+  planning_attempts_per_mode_per_offset: 1
+  allowed_planning_time_s: 5.0
+  mode_order_per_offset: [full_pose, position_only]
+predictions:
+  H1_supported: At least one offset fails A but succeeds B, while direct IK succeeds yet its FK orientation error exceeds 0.01 rad; this localizes the first divergence to goal-contract/solver compatibility rather than raw positional reachability.
+  H2_supported: At least one successful A or B trajectory has a gripper/jaw versus plastic_cup collision under the exact unpadded local geometry; planner success remains insufficient for safety.
+  H3_supported: Any mismatch is found in cup pose/walls/bottom, table pose/size, world/TCP mapping, or robot gripper/fingertip collision meshes, or fresh collision evaluation does not reproduce the claimed contact under source-faithful inputs.
+  H3_disfavored: Current MuJoCo and protected Gazebo cup/table parameters, MuJoCo and protected Gazebo TCP transform, and corresponding robot collision meshes match exactly, and fresh FCL identifies the same robot/cup contact family.
+static_geometry_audit:
+  - MuJoCo scene and protected Gazebo world both place the cup at [0.02, -0.28, 0.165] and table at [0, -0.20, 0.10].
+  - All 12 wall poses/sizes, the cup bottom dimensions, and table dimensions are represented identically after MuJoCo half-size to SDF/FCL full-size conversion.
+  - MuJoCo URDF and protected Gazebo xacro both define gripper to so101_tcp translation [0.0214, 0, -0.083949] with zero rotation.
+  - Seven fixed-pad, six moving-pad, and seven fixed-finger collision mesh pairs are byte-identical.
+  corrected_audit_sha256: 9fb7bea6e499533769cf1a8eeef63c5a0935d33cf2305e0615854f2f2ba59ea0
+  correction: Earlier /tmp geometry-static-parity.txt is INVALID only for its fixed-finger subsection because its check used a nonexistent path and printed false MATCH lines; the corrected audit uses collision/fixed_finger_contact and fails closed.
+read_only_boundary:
+  services: [/compute_ik, /compute_fk, /check_state_validity, /plan_kinematic_path]
+  forbidden: [controller calls, actions, ExecuteTrajectory, gripper calls, MuJoCo runtime, pause, step, qpos write, qvel write, teleport, weld, equality, production config change]
+  runtime_components: [robot_state_publisher, move_group]
+fresh_runtime:
+  ros_domain_id: 146
+  ros_localhost_only: 1
+  simulation_session_id: task13-exp066-contract-diagnostic
+  tmux_session: so101-task13-exp066
+provenance:
+  source_head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  dependency_gitlink_and_checkout: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+  fresh_overlay_build_sha256: 5a3aacaf82ec1bc6948e5634cdbfa492bd848ba4d8aeae0cc28b6fdd2873d2af
+  fresh_overlay_provenance_sha256: e90ce72ebb23461f218e7db96d4c44a520c1bac6d1f864ae5006f8b1e286d653
+  kinematics_sha256: 7d1854edc8c6e28125fcb92f80641241e828f547a674a94a2c9857b001747d4b
+  motion_policy_sha256: b903ff79620f81c9ccafaa5f216fbd4fd263d5b37cb7247ae959605f8c302ae7
+  planning_module_sha256: 4b4245347b52fae8ec58c401725d88ed10dd94818cac9a48a0288b6aa58091de
+  diagnostic_launch_sha256: 7356ba18b80763dc24e790666d2795e42fd612e1e4a99e2732e15b006a32369b
+  diagnostic_runner_sha256: e7557436509bb461c5853d55dbe9c97a8211f9b235d46f56fae25a5457dd294d
+  rendered_urdf_sha256: 5f4dd80cee053945879ec5ac5a00437430ff7ed328cef149f4a79300ada056f9
+  local_geometry_helper_sha256: abd60df6b90793eb3f44359b78a1e8ee7a998e54051857a77a2d9e4449bc0900
+  helper_build_sha256: 86a3e33e917609f4129b5f04f3aa4dd04510551525dfc02859a6bb848f55b6fd
+  prestart_isolation_sha256: b12e77db2ba99cb4432d3616cb5cdb39e2bffc3623ca1fa0b857aae8a46d6b13
+exact_command: ROS_DOMAIN_ID=146 ROS_LOCALHOST_ONLY=1 python3 /tmp/so101-debug-mujoco-task13-exp066-C4zQir6j/run_exp066.py --helper /tmp/so101-debug-mujoco-task13-exp066-C4zQir6j/helper/install/so101_reachability_clearance/bin/reachability_clearance --urdf /tmp/so101-debug-mujoco-task13-exp066-C4zQir6j/exp066_robot_description.urdf --srdf /tmp/so101-debug-mujoco-task13-exp066-C4zQir6j/overlay/install/so101_mujoco_demo_py/share/so101_mujoco_demo_py/config/so101.srdf --geometry-parity-sha256 9fb7bea6e499533769cf1a8eeef63c5a0935d33cf2305e0615854f2f2ba59ea0 --output /tmp/so101-debug-mujoco-task13-exp066-C4zQir6j/exp066-result.json
+success_criteria: All nine offsets complete direct IK/FK and both frozen plan modes with state, trajectory, FK, and local geometry evidence sufficient to decide H1/H2 independently and audit H3.
+invalid_criteria: Incomplete grid/mode, provenance mismatch, nonempty prestart graph, runtime contamination, missing geometry evidence, or any forbidden call/state mutation.
+decision: PENDING; preregistered before starting the minimal stack or sending a service request.
+```
+
+## Experiment EXP-066 Running Transition
+
+```yaml
+experiment_id: EXP-066
+status: RUNNING
+transition_time: 2026-08-11T23:00:10+08:00
+full_restart_provenance_verified:
+  ros_domain_id: 146
+  prestart_graph: EMPTY
+  tmux_session: so101-task13-exp066
+  process_group_id: 123799
+  robot_state_publisher_pid: 123880
+  move_group_pid: 123881
+  runtime_prefix: /tmp/so101-debug-mujoco-task13-exp066-C4zQir6j/overlay/install
+  dependency_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+  live_kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  live_position_only_ik: true
+  mujoco_or_controller_runtime: NONE
+  runtime_provenance_sha256: bf008cd0c9ee7b65245bcac3bed1cabbec6f383a5da775d988f722aaa322e56f
+action_state: No diagnostic service request had been sent at this transition. The frozen runner constructs only GetPositionIK, GetPositionFK, GetStateValidity, and GetMotionPlan clients and contains no action client.
+```
+
+## Experiment EXP-066 Terminal Result
+
+```yaml
+experiment_id: EXP-066
+status: VALID
+terminal_result: DIAGNOSED
+terminal_time: 2026-08-11T23:01:57+08:00
+grid_complete: true
+read_only_contract:
+  action_calls: 0
+  execute_trajectory_calls: 0
+  controller_calls: 0
+  mujoco_state_writes: 0
+observed_result:
+  - The live move_group readback confirmed kdl_kinematics_plugin/KDLKinematicsPlugin with position_only_ik=true.
+  - Direct IK succeeded at all nine offsets, but FK orientation error ranged from 0.7780211832 to 1.5296967606 rad, always far above the production 0.01 rad tolerance.
+  - Full-pose planning succeeded at 5, 10, 15, and 40 mm and failed with code 99999 at 0, 20, 25, 30, and 35 mm. Position-only planning succeeded at all nine offsets. The full-fail/position-success set is [0, 20, 25, 30, 35] mm.
+  - Full-pose success is stochastic rather than uniformly impossible: EXP-064 succeeded only at 20 mm, while this fresh FULL_RESTART succeeded at 5/10/15/40 and failed at 20. Goal sampling repeatedly invokes a solver that does not solve orientation and succeeds only when a sampled positional IK state happens to meet the independent orientation constraint.
+  - Removing the orientation goal is not a safe fix. Every position-only trajectory intersected plastic_cup; endpoint orientation errors remained approximately 0.77 to 1.52 rad.
+  - Full-pose trajectories at 5, 10, and 15 mm also intersected plastic_cup in 7, 6, and 6 samples respectively. The 40 mm full-pose trajectory was the sole collision-free full-pose plan in this run: 43 points, final orientation error 0.0025229242 rad, minimum cup clearance 0.0096339350 m, and minimum table clearance 0.0993070469 m.
+hypothesis_decisions:
+  H1: SUPPORTED with qualification. The contract is sampling-incompatible and nondeterministic, not mathematically unreachable at every offset.
+  H2: SUPPORTED as an independent safety boundary. Eliminating orientation constraints makes every sampled path collide, and some successful full-pose paths also collide. The stronger claim that every full-pose 40 mm approach must collide is disproven by this run.
+  H3: DISFAVORED. Corrected static audit found exact source parity for cup/table pose and dimensions, TCP transform, and corresponding robot collision meshes; fresh FCL again reported gripper/plastic_cup contacts. No frame or geometry mismatch was found.
+first_bad_boundaries:
+  goal_contract: A position-only IK plugin feeds a three-axis 0.01 rad orientation goal sampler, producing nondeterministic goal sampling across identical targets.
+  collision_safety: The minimal MoveGroup planning world contains no cup/table collision objects, so planner SUCCESS cannot reject paths that the source-faithful external geometry proves intersect the cup.
+conditional_fix_decision:
+  - Do not remove orientation constraints; EXP-066 directly disproves that minimal-looking change as safe.
+  - Do not automatically change position_only_ik or inject planning-scene geometry in this experiment. Those alter two separate owning layers and require an explicitly preregistered D2 with RED/GREEN contracts and a plan-only validation.
+  - Do not execute the collision-free 40 mm sample; it is one stochastic plan, not a repaired deterministic contract.
+evidence:
+  result_sha256: 8c2f1c1711e4e977185692240484e7b0d3231dd6767c74bb7720dbe88457f5b0
+  geometry_query_sha256: 582b671b3b410eba88f7762f9904b77517778a25ccc320a4345781e15c873fae
+  geometry_results_sha256: 75a700a711887692702c77ffc5fbbf51815f4d201ddfc698d7d07612a56342d2
+  summary_sha256: 19054b7bdfdc812cce39379eabbfa09dc1ae84e03f7083008761e12898f7bb5f
+  runner_log_sha256: 53fe97d327fda2d0304d29701e9ef3a25990afa61ff598d06a2a79fea692ba4c
+  stack_log_sha256: 3bcd67e9f012ebacc63f38ed78472ffa7a30e5f36c25a5e63d3ed307f8f470a3
+  corrected_static_geometry_audit_sha256: 9fb7bea6e499533769cf1a8eeef63c5a0935d33cf2305e0615854f2f2ba59ea0
+  corrected_postrun_audit_sha256: cba1c3cd66b14087073c4611a5aaa1b09ffbb597a89dd866d4f161c527abfc6c
+  poststop_isolation_sha256: 09a172b85b2a27cc62d43d79383454de9c03ee2a55cfecc4c3a35df6f4ac491d
+evidence_corrections:
+  - geometry-static-parity.txt sha256 c087935502550283497cbcf50cbaa09bf842b0238ab090fea1c99a9f85946e73 is INVALID for its fixed-finger subsection because the command used a nonexistent path and did not fail its output pipeline; no conclusion uses its false MATCH lines.
+  - exp066-postrun-audit.txt sha256 0bab090a2e31eb3938249f12d847db3559df27fefbe9f0d3aa4a12ec0902bc45 is INVALID only for its position-only collision subsection because jq queried the wrong object level. The result and geometry JSON were unaffected; corrected audit cba1c3cd66b14087073c4611a5aaa1b09ffbb597a89dd866d4f161c527abfc6c records six colliding 40 mm position-only samples.
+decision: KEEP VALID as the bounded D1 diagnosis. No production fix, action, Task 13.5 collection, threshold change, commit, or push follows without a separately frozen D2.
+```
+
+## Checkpoint CP-099
+
+```yaml
+checkpoint_id: CP-099
+checkpoint_time: 2026-08-11T23:02:25+08:00
+last_valid_experiment: EXP-066
+current_hypothesis: Two independent owning-layer defects exist: orientation-blind goal sampling is nondeterministic, and the planner lacks an authoritative cup/table collision world. A safe minimal repair cannot be selected by deleting orientation constraints.
+working_tree_status: Exact Task 13 dirty path set remains preserved; only this ledger changed during D1. HEAD and origin/codex/so101-mujoco-ros2 remain 1548acb20a2bd376e1bbe867603d824d26ddfb21.
+owned_processes: NONE. The EXP-066 tmux session/process group and exact robot_state_publisher/move_group PIDs were stopped; ROS domain 146 is empty.
+preserved_processes: Existing codex tmux session remains. No unrelated process/session was stopped.
+protected_gazebo_gate: Protected files were only read for parity; tracked diff and normal status remain empty.
+confirmed_conclusions:
+  - H1 is supported as a stochastic solver/goal-contract mismatch. The same full-pose grid changed successful offsets across EXP-064 and EXP-066, while position-only plans succeeded everywhere and all direct IK orientations missed tolerance.
+  - H2 is a distinct safety failure. Planner success alone is unsafe because its live world omits the cup/table; source-faithful local collision checks reject all position-only paths and three of four full-pose successes.
+  - H3 is disfavored by exact MJCF/Gazebo/URDF/TCP/mesh parity and reproduced gripper/plastic_cup contacts.
+  - A 40 mm full-pose plan can be geometrically safe, but one stochastic plan does not satisfy deterministic qualification and was not executed.
+  - Dropping orientation constraints is disproven as a conditional minimal repair. No production file was modified in D1.
+  - approved_by_user and enabled remain false; Task 13.5, commit/push, clean shutdown, Task 14, and Task 15 remain untouched.
+test_contamination: The existing protected ignored-manifest and committed-HEAD isolation incompatibilities remain unchanged; no protected ignored file was deleted or rewritten.
+evidence:
+  root: /tmp/so101-debug-mujoco-task13-exp066-C4zQir6j
+  exp066_result_sha256: 8c2f1c1711e4e977185692240484e7b0d3231dd6767c74bb7720dbe88457f5b0
+  exp066_geometry_results_sha256: 75a700a711887692702c77ffc5fbbf51815f4d201ddfc698d7d07612a56342d2
+  corrected_geometry_parity_sha256: 9fb7bea6e499533769cf1a8eeef63c5a0935d33cf2305e0615854f2f2ba59ea0
+  exp066_poststop_isolation_sha256: 09a172b85b2a27cc62d43d79383454de9c03ee2a55cfecc4c3a35df6f4ac491d
+open_risks:
+  - No deterministic orientation-aware goal-sampling contract has been tested.
+  - No production planning-scene cup/table collision contract exists in the current approach path.
+  - The sole collision-free 40 mm full-pose plan has no repeatability evidence and cannot authorize execution.
+next_experiment: NONE
+next_command: Await a bounded D2 authorization that freezes one owning layer at a time. Recommended first D2 is temporary orientation-aware IK plan-only diagnosis at the unchanged 40 mm target, followed only if viable by RED/GREEN production configuration work; collision-world integration must remain a separate gated change.
+```
+
+## Correction after CP-099: supplemental D1 evidence scope
+
+```yaml
+correction_time: 2026-08-11T23:07:56+08:00
+applies_to: EXP-066 evidence completeness, not its recorded observations or terminal status
+reason: The user's detailed D1 evidence requirements arrived after EXP-066 and CP-099 had already been terminalized. The monotonic ledger therefore does not rewrite EXP-066 history.
+preserved_conclusions:
+  - EXP-066 remains VALID for its recorded A/B service results, independent whole-path cup/table/self collision flags and clearances, and static MJCF/Gazebo/URDF parity conclusion.
+new_limitations:
+  - EXP-066 recorded only scalar quaternion orientation error, not per-axis error components or the protected Gazebo approach-axis error.
+  - EXP-066 recorded contact pairs/counts, not per-contact penetration depth and the first colliding trajectory index/depth/classification.
+  - EXP-066 did not preserve the protected Gazebo waypoint/TCP/approach-axis/touch-link semantics in one explicit read-only evidence artifact.
+consequence: EXP-066 cannot by itself gate a production request-expression fix under the new authorization. EXP-067 remains reserved exclusively for the conditional post-RED/GREEN plan-only validation named by the user. EXP-068 is the monotonic supplemental read-only D1 experiment.
+```
+
+## Checkpoint CP-100
+
+```yaml
+checkpoint_id: CP-100
+checkpoint_time: 2026-08-11T23:07:56+08:00
+recovery_reason: Read back CP-097 through CP-099 and apply the user's new bounded authorization without silently rewriting the already terminal EXP-066 record.
+last_valid_experiment: EXP-066
+working_tree_status: The exact CP-099 Task 13 dirty path set and protected draft hashes are unchanged. HEAD and origin/codex/so101-mujoco-ros2 both remain 1548acb20a2bd376e1bbe867603d824d26ddfb21.
+owned_processes: NONE. No MoveIt, robot_state_publisher, MuJoCo, ros2_control, RViz, or task runtime is active. Domains 0, 145, 146, 147, 148, and 189 were read as empty before preregistration.
+preserved_processes: Existing codex tmux session only; no unrelated session or process was changed.
+protected_gazebo_gate: Tracked diff and normal status are empty. Gazebo sources were read only and establish five arm variables 1-5, so101_tcp fixed under gripper at [0.0214, 0, -0.083949], approach-axis validation at 0.08726646259971647 rad, no allowed approach touch pairs, and attachment touch_links [gripper, jaw] only after attachment.
+protected_drafts_sha256:
+  contact_calibration_yaml: 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1
+  analyzer: a03d3d5ef3b00e56d0f33486f4bb52ce5eab0ab16e4701c6462c3cb4367213bf
+  contract_test: de91a4e997c61f068758dbdbb9ba0806405841b053c65913737509b5738663d8
+evidence:
+  root: /tmp/so101-debug-mujoco-task13-exp068-MQn9fJqx
+  cp099_readback_sha256: 8941c6abb9864074812e7a56ad8b39636f2ca2b2365a0fb3acc2618e1399840f
+  prestart_ros_graphs_sha256: b709f0918c813f8c072aa9f201c836f0eb120423dbae24a03b924f58c7b1c3c0
+  gazebo_readonly_contract_sha256: cdeb8f17486f260d966311514f9becc9809722cda5c37f01bbea01bfc83528d0
+  frozen_provenance_sha256: 3bb4f2a6a58244f71a5a2ceb10f483fae643bcb7052800f8365159949fc3da1e
+next_experiment: EXP-068
+next_command: Preregister the supplemental read-only A/B before constructing its temporary contact-detail evaluator or launching the minimal MoveIt stack.
+```
+
+## Experiment EXP-068
+
+```yaml
+experiment_id: EXP-068
+prior_experiment: EXP-066 VALID, with the post-CP-099 evidence-completeness correction above
+status: PLANNED
+lifecycle: FULL_RESTART
+hypotheses:
+  H1: Five-DoF position-only KDL makes full-quaternion goal sampling stochastic, while a diagnostic position-only goal improves sampling; the protected Gazebo reference validates only the controllable TCP approach-axis direction and separately fails closed on path geometry.
+  H2: Independently of sampling, current pre-grasp/contact geometry still produces forbidden early cup penetration under the unchanged local PlanningScene.
+  H3: A mismatch in cup/table dimensions, pose, frame, TCP transform, robot collision meshes, or approach touch semantics created false collision evidence.
+single_variable: A=the current position plus three-axis 0.01 rad orientation goal versus B=the identical position region with no orientation goal. Only goal-constraint expression changes; all target positions, start state, model, SRDF, solver, scene, grid, planning limits, and path acceptance checks are identical.
+frozen_inputs:
+  source_head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  runtime_install: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  runtime_overlay_provenance_sha256: 5e7a58e82badb4bb4f3cf061c282cbcb4c68194ca4d4612f5192b77f2e22f926
+  rendered_urdf_sha256: 82ead9d1716dc43773c2ed2d3c78ee30c7f53a238ab67baa3b08aebc96e7e38d
+  srdf_sha256: d3e73396a809ef1a69501612eda57bfb98f80e9dc28deee93238ab8fcca88d6d
+  offsets_mm: [0, 5, 10, 15, 20, 25, 30, 35, 40]
+  contact_target_m: [0.0206766838, -0.2628210212, 0.2006306106]
+  tcp_orientation_xyzw: [-0.0102659913, -0.0102629866, -0.7067526865, 0.7073117563]
+  start_joint_names: ['1', '2', '3', '4', '5', '6']
+  start_joint_positions_rad: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.4650347488]
+  cup_pose_m: [0.02, -0.28, 0.165]
+  cup_wall_size_m: [0.020705524, 0.002, 0.088]
+  cup_bottom_radius_height_m: [0.040, 0.002]
+  table_pose_m: [0.0, -0.20, 0.10]
+  table_size_m: [0.50, 0.60, 0.04]
+  tcp_link: so101_tcp
+  planning_group: arm
+  allow_precontact_fingertip_contact: false
+  allowed_planning_time_s: 5.0
+  planning_attempts_per_mode_per_offset: 1
+required_measurements:
+  - Arm active variable count/names, KDL plugin, position_only_ik, and per-offset quaternion relative rotation-vector/RPY plus protected-Gazebo approach-axis error.
+  - Both A/B plan results for every frozen offset.
+  - Every nonempty trajectory evaluated sample-by-sample by one independent source-faithful local PlanningScene for self/cup/table collision, contact pair/depth/position, minimum clearance, joint-limit margin, and endpoint FK.
+  - First collision index/pair/depth and fail-closed classification: any contact before attachment is forbidden because MOVE_ABOVE_OBJECT and DESCEND allow no touch pair; attachment touch links do not legalize approach penetration.
+  - Static parity of cup/table pose, dimensions, frame, TCP transform, gripper/jaw collision meshes, and protected Gazebo approach/touch semantics.
+success_criteria: Complete nine-offset A/B grid and all required measurements under unchanged provenance, with zero forbidden calls or state writes, sufficient to decide H1/H2/H3 independently.
+invalid_criteria: Missing offset/mode/path sample, provenance mismatch, prestart/runtime contamination, missing contact depths, modified protected Gazebo content, or any action/controller/ExecuteTrajectory/MuJoCo state-write call.
+read_only_boundary:
+  services: [/compute_ik, /compute_fk, /check_state_validity, /plan_kinematic_path]
+  forbidden: [controller calls, actions, ExecuteTrajectory, gripper calls, MuJoCo runtime, pause, step, qpos write, qvel write, teleport, weld, equality, production config change]
+fresh_runtime:
+  ros_domain_id: 148
+  ros_localhost_only: 1
+  simulation_session_id: task13-exp068-contract-evidence
+  tmux_session: so101-task13-exp068
+decision: PENDING. This PLANNED record precedes temporary diagnostic helper construction, runtime launch, and all service requests.
+```
+
+## Experiment EXP-068 Running Transition
+
+```yaml
+experiment_id: EXP-068
+status: RUNNING
+transition_time: 2026-08-11T23:14:23+08:00
+full_restart_provenance_verified:
+  ros_domain_id: 148
+  prestart_graph: EMPTY
+  tmux_session: so101-task13-exp068
+  process_group_id: 139571
+  robot_state_publisher_pid: 139671
+  move_group_pid: 139672
+  runtime_prefix: /tmp/so101-debug-mujoco-task13-reboot-UKG4mIaz/overlay/install
+  dependency_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+  live_kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  live_position_only_ik: true
+  mujoco_or_controller_runtime: NONE
+temporary_diagnostic_provenance:
+  runner_sha256: 2dbd6514c3cb8e28d41cdd1e22681186a641d9aa2ee56a5072cbcd44b924bd52
+  launch_sha256: 2c2bec252a88f4fb6122a359580b88da86ae526260b92ac32df737a7ea161041
+  helper_source_sha256: 4a43d08c7eacbb72d11106e49b9be1a605e6e7b13d952a8d30e4728593a4ea27
+  helper_binary_sha256: 32ae64d6372da37ba0756674726c3808300968adf104662ae11ef614a6bb9d63
+  helper_build_log_sha256: 13a83644936204ee8f8e940fa9fa7a7af0c8b397d3c562a84c21c50370f0df6f
+  static_parity_sha256: 3db0624c988354da74fc42d3a37a2d3189d2cbda26ec6fe2e4e3784530e794b6
+  prelaunch_isolation_sha256: 2b743f90c47cb72dba30e36eaca96e2fb39d608264fcc33d6bb93d91d865a9b8
+  running_provenance_sha256: 787094da8ca292f5ae2ff07617c0145ad84a207ab208c2f6cb7ee345e7fa902b
+action_state: No diagnostic service request had been sent at this transition. The runner contains only GetPositionIK, GetPositionFK, GetStateValidity, and GetMotionPlan clients and no action client.
+```
+
+## Experiment EXP-068 Terminal Result
+
+```yaml
+experiment_id: EXP-068
+status: VALID
+terminal_result: DIAGNOSED_H1_AND_H2_H3_DISFAVORED_NO_FIX_GATE
+terminal_time: 2026-08-11T23:18:35+08:00
+grid_complete: true
+read_only_contract:
+  action_calls: 0
+  execute_trajectory_calls: 0
+  controller_calls: 0
+  mujoco_state_writes: 0
+arm_contract:
+  actual_active_dof: 5
+  active_variables: ['1', '2', '3', '4', '5']
+  group_tip: so101_tcp
+  kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  position_only_ik: true
+  protected_gazebo_orientation_semantics: Rotate TCP local [0, 0, -1] into world and require angular error from world [0, 0, -1] no greater than 0.08726646259971647 rad; full quaternion roll is not the protected reference gate.
+ab_result:
+  full_pose_success_count: 4 of 9; offsets [0, 10, 15, 30]
+  position_only_success_count: 9 of 9
+  full_fail_position_success_offsets_mm: [5, 20, 25, 35, 40]
+  conclusion: Goal sampling improved from 4/9 to 9/9 when only the goal-constraint expression changed, supporting H1. Full-pose success remains stochastic across EXP-064, EXP-066, and EXP-068.
+direct_ik_orientation_component_rows:
+  fields: [offset_mm, relative_rotation_vector_xyz_rad, relative_rpy_xyz_rad, protected_approach_axis_error_rad]
+  rows:
+    - [0, [0.6530951022, -0.9655181552, -0.9151400335], [1.0745191212, -0.4125496928, -1.2765453336], 1.1483572039]
+    - [5, [0.6961674988, -0.9820244573, -0.9439019855], [1.1178352127, -0.3813225012, -1.3095919187], 1.1814442883]
+    - [10, [0.0009727628, -0.8075663318, -0.0028003935], [0.0028079730, -0.8075628640, -0.0041629423], 0.8366000133]
+    - [15, [0.0009542308, -0.7925945508, -0.0028052102], [0.0027238061, -0.7925911913, -0.0041016485], 0.8216282259]
+    - [20, [0.0009543009, -0.7780153906, -0.0028465230], [0.0026862977, -0.7780120344, -0.0041004633], 0.8070490742]
+    - [25, [0.0006781898, -0.9511301610, -0.0019826503], [0.0025042318, -0.9511279945, -0.0034366448], 0.9801636100]
+    - [30, [0.0006578218, -0.9403994005, -0.0019655201], [0.0024142440, -0.9403973379, -0.0033513975], 0.9694328431]
+    - [35, [0.0006599338, -0.9310535790, -0.0019828722], [0.0023902098, -0.9310515210, -0.0033404447], 0.9600870244]
+    - [40, [0.0007054678, -0.9229988770, -0.0020714778], [0.0024849420, -0.9229966298, -0.0034680534], 0.9520323447]
+whole_path_rows:
+  fields: [offset_mm, mode, plan_code, points, cup_collision_samples, first_collision_index, first_pair, first_index_max_depth_m, minimum_cup_clearance_m, minimum_table_clearance_m, minimum_joint_margin_rad, endpoint_protected_axis_error_rad]
+  rows:
+    - [0, full_pose, 1, 38, 8, 28, jaw/plastic_cup, 0.0011598315, -1.0, 0.0592024062, 0.5246349697, 0.0388291377]
+    - [0, position_only, 1, 51, 18, 33, gripper/plastic_cup, 0.0030945870, -1.0, 0.0572994231, 0.2028327041, 1.1506338290]
+    - [5, full_pose, 99999, 0, 0, null, null, null, null, null, null, null]
+    - [5, position_only, 1, 51, 17, 34, gripper/plastic_cup, 0.0016193835, -1.0, 0.0618267036, 0.1697694334, 1.1786274385]
+    - [10, full_pose, 1, 40, 6, 31, gripper/plastic_cup, 0.0009747141, -1.0, 0.0693218646, 0.5246349697, 0.0239313242]
+    - [10, position_only, 1, 43, 13, 30, gripper/plastic_cup, 0.0007745291, -1.0, 0.0524622646, 0.5184426513, 0.8406412024]
+    - [15, full_pose, 1, 40, 5, 32, gripper/plastic_cup, 0.0050365530, -1.0, 0.0748916203, 0.5246349697, 0.0342898799]
+    - [15, position_only, 1, 43, 11, 32, gripper/plastic_cup, 0.0047176977, -1.0, 0.0569670592, 0.5040114167, 0.8239710305]
+    - [20, full_pose, 99999, 0, 0, null, null, null, null, null, null, null]
+    - [20, position_only, 1, 43, 10, 33, gripper/plastic_cup, 0.0021981563, -1.0, 0.0627378583, 0.4871167154, 0.8125042248]
+    - [25, full_pose, 99999, 0, 0, null, null, null, null, null, null, null]
+    - [25, position_only, 1, 43, 9, 34, gripper/plastic_cup, 0.0009867555, -1.0, 0.0673500567, 0.4737437649, 0.8024169386]
+    - [30, full_pose, 1, 42, 0, null, null, null, 0.0003461158, 0.0897453801, 0.5246349697, 0.0249831169]
+    - [30, position_only, 1, 44, 10, 34, gripper/plastic_cup, 0.0000942747, -1.0, 0.0714097144, 0.4312262876, 0.9703625457]
+    - [35, full_pose, 99999, 0, 0, null, null, null, null, null, null, null]
+    - [35, position_only, 1, 45, 9, 36, gripper/plastic_cup, 0.0001520767, -1.0, 0.0759175855, 0.4138078976, 0.9597526895]
+    - [40, full_pose, 99999, 0, 0, null, null, null, null, null, null, null]
+    - [40, position_only, 1, 45, 6, 39, gripper/plastic_cup, 0.0003070295, -1.0, 0.0813709928, 0.3948910818, 0.9529940936]
+collision_classification:
+  - Every reported collision is cup penetration before attachment. Because the protected MOVE_ABOVE_OBJECT and DESCEND states both have allowed_touch_pairs=[] and temporal_contact=null, none is an allowed final fingertip contact.
+  - The first pair is jaw/plastic_cup at full-pose 0 mm and gripper/plastic_cup for all other colliding paths. Both links are forbidden during approach; post-attachment touch_links=[gripper,jaw] does not retroactively allow them.
+  - All trajectories had zero self-collision samples and zero table-collision samples. All nonempty paths had positive joint-limit margin; collision paths remain rejected irrespective of margin.
+  - The 30 mm full-pose sample alone had no collision, positive cup/table clearance, positive joint margin, and endpoint approach-axis error within the protected tolerance. It is not a repaired request contract and is not executable evidence because full-pose success changed across the three fresh runs.
+hypothesis_decisions:
+  H1: SUPPORTED. Position-only KDL plus a full-quaternion goal creates stochastic goal sampling; B improves sampling but does not satisfy the protected controllable-axis endpoint contract.
+  H2: SUPPORTED. Every B trajectory intersects the cup, with first penetration at indices 30-39 and positive FCL depths. Several A trajectories independently reproduce cup penetration.
+  H3: DISFAVORED. Cup/table world poses and dimensions, world frame, TCP transform, fixed-finger/moving-jaw/fixed-pad/moving-pad meshes, and Gazebo approach/touch semantics match; fresh local FCL reproduces link/cup penetration with positions, normals, and depths.
+request_fix_gate:
+  - No unique production MoveIt goal expression is established. The protected Gazebo reference uniquely defines an external approach-axis validator, but MoveIt's present three-axis OrientationConstraint and a goal with orientation entirely removed are not equivalent ways to sample that axis constraint.
+  - B is specifically disproven as a fix because all nine endpoints violate the protected approach-axis tolerance and all nine paths collide. Simply deleting orientation checks would not fail closed.
+  - No production file was changed, so RED/GREEN was not entered and EXP-067 was not preregistered or run.
+evidence:
+  root: /tmp/so101-debug-mujoco-task13-exp068-MQn9fJqx
+  result_sha256: ce7681517fbf6c01079ad2abb76aef275b87a83b29a799a7fd93ef298f4561b0
+  geometry_query_sha256: 94d7fb6b9c073092b5ce09df979985224f1b5e5068c1accf7789af576e1675c7
+  geometry_results_sha256: 8c185494caa3a9cb08df191a9f591134fc69e40188887ffaa73c9acf451cbe4d
+  summary_sha256: 2771f856a7316e7fd638a4fd24f9bf31a19254a8e03eee7279d648a53fbd6542
+  static_parity_sha256: 3db0624c988354da74fc42d3a37a2d3189d2cbda26ec6fe2e4e3784530e794b6
+  runner_log_sha256: da1396a6c6ffd2e504ba865b11e05389bcba780ab03403bc4c6e0bf7c7c3ea3e
+  stack_log_sha256: 9e2c7af9e248b6bab18ab1d8a44c1f6b75de9545202b692317986bcbfbbaf1f2
+  postrun_audit_sha256: 83dfdb6545aebf888f70c9913d65d1dd3a3572f570caa6f9ccd646effbf0cc31
+  poststop_isolation_sha256: 5c39c4cf44478ffde183d8a0b0a09dc40a9e875af7c5025d63c63864c2e38eb4
+decision: KEEP VALID as the supplemental read-only contract diagnosis. Do not modify the planning request, run EXP-067, execute motion, or begin Task 13.5.
+```
+
+## Checkpoint CP-101
+
+```yaml
+checkpoint_id: CP-101
+checkpoint_time: 2026-08-11T23:18:35+08:00
+last_valid_experiment: EXP-068
+current_hypothesis: The next bounded geometry investigation should preserve solver, model, final contact target, and orientation while changing only the approach-path geometry to use one outside/lateral waypoint; request-expression work alone cannot remove the observed cup penetration.
+working_tree_status: Task 13 dirty files remain uncommitted and preserved. HEAD and origin/codex/so101-mujoco-ros2 remain 1548acb20a2bd376e1bbe867603d824d26ddfb21. Protected Gazebo tracked diff/status remain empty.
+owned_processes: NONE. The EXP-068 tmux session/process group was stopped and domain 148 is empty.
+preserved_processes: Existing codex tmux session remains; no unrelated process or session was changed.
+confirmed_conclusions:
+  - EXP-068 separates goal sampling from geometry. Position-only goals improve service success to 9/9 but every resulting path penetrates the cup and every endpoint violates the protected controllable approach-axis gate.
+  - H3 remains disfavored by exact source parity, including all 28 relevant fixed/moving finger and pad collision meshes plus protected Gazebo touch semantics.
+  - One full-pose 30 mm plan is safe in this stochastic sample, but it does not define a deterministic request repair and was not executed.
+  - No unique fail-closed production request expression was derived, so no TDD repair and no EXP-067 occurred.
+next_single_variable_geometry_proposal:
+  status: PROPOSED_NOT_PLANNED_NOT_AUTHORIZED
+  variable: approach_path_geometry
+  old_value: Direct plan from frozen q1-q6 start to a frozen vertical-grid pose at the contact x/y.
+  proposed_value: Add exactly one outside/lateral approach waypoint at the protected Gazebo MOVE_ABOVE_OBJECT TCP reference [0.020673889, -0.254030551, 0.259837209], then retain the unchanged final contact target [0.0206766838, -0.2628210212, 0.2006306106].
+  frozen_unchanged: [source, install, model, SRDF, KDL position-only solver, start q1-q6, cup/table scene, TCP link, final contact target, final target quaternion, contact thresholds, allow_precontact_fingertip_contact=false]
+  required_future_gate: A separately authorized PLANNED read-only experiment must validate both segments with the same local PlanningScene and protected approach-axis validator before any motion qualification.
+test_contamination: The 15 known baseline package/isolation failures remain disclosed and were not bypassed; no protected ignored file was deleted or rewritten. Fresh post-experiment verification is pending at this checkpoint.
+evidence:
+  root: /tmp/so101-debug-mujoco-task13-exp068-MQn9fJqx
+  result_sha256: ce7681517fbf6c01079ad2abb76aef275b87a83b29a799a7fd93ef298f4561b0
+  summary_sha256: 2771f856a7316e7fd638a4fd24f9bf31a19254a8e03eee7279d648a53fbd6542
+  poststop_isolation_sha256: 5c39c4cf44478ffde183d8a0b0a09dc40a9e875af7c5025d63c63864c2e38eb4
+next_experiment: NONE
+next_command: Run fresh ledger and boundary verification, record it monotonically, then stop and report. Do not preregister or execute the proposed geometry experiment without new authorization.
+```
+
+## Checkpoint CP-102
+
+```yaml
+checkpoint_id: CP-102
+checkpoint_time: 2026-08-11T23:22:48+08:00
+last_valid_experiment: EXP-068
+current_hypothesis: Unchanged direct approach geometry and position-only goal sampling are both unsafe; the next admissible investigation is the single outside/lateral waypoint proposal recorded in CP-101, but it is not authorized or PLANNED.
+verification_correction:
+  - The first fresh ledger check found that the temporary header value TASK_13_EXP068_VALID_VERIFICATION_PENDING violated the existing ledger_commit_pending=true naming contract, adding one new test failure to the known 15.
+  - Only the header status label was corrected to TASK_13_CONTRACT_DIAGNOSTIC_STOP_PENDING_COMMIT. The fresh rerun passed the ledger contract and restored the repository-isolation result to exactly the 15 pre-existing failures.
+verification_state:
+  ledger_contract: PASS; 1 passed, 33 deselected.
+  repository_isolation: EXPECTED CONTAMINATED RESULT; 19 passed, 15 failed. The failures are the same protected ignored-manifest mismatch and committed visual_reference_updates provenance incompatibility already disclosed before EXP-068.
+  ruff: PASS; all checks passed and 79 files already formatted.
+  migration_isolation: EXPECTED BASELINE FAIL; protected nontracked actual aaa2030e5a56b6a8ec959a24c1c42dc5afdc5d566e2ccb6eaadd704c0b7b44f6 differs from recorded 65f17d820ad021ada76043e38ce1b458ce1e80b447a289a935cf9bffbeb9d52f.
+  result_contract: PASS; nine offsets, 18 A/B records, arm five-DoF metadata, orientation components, all nonempty path samples, per-contact depth/position/normal, and 28 mesh parity pairs were checked from the saved JSON.
+  final_boundaries: PASS; git diff check, unchanged local/remote HEAD, exact dirty set, protected Gazebo tracked diff/status, protected draft hashes, false approval/enable/precontact gates, empty domain 148, no task runtime, and codex-only tmux state.
+evidence:
+  root: /tmp/so101-debug-mujoco-task13-exp068-MQn9fJqx
+  final_ledger_pytest_sha256: 2778392902065c53a85331e4a8033096dc7d2a046de476a5af3ddc6a27d0e5ca
+  final_repository_isolation_pytest_sha256: a014802a6f430b16cf1d2c349856d460c90af753f8376714a568fb597658d710
+  final_ruff_sha256: e3e75536809fddead684100d219413a6157dcc009e3a2f510ac2e0f3d1e2307a
+  final_migration_isolation_sha256: 0687d85ecf399fd28dfa52094daac4945a680ae9266bbe571987e765d7f5b025
+  final_boundary_audit_sha256: 05ff671d221db45c6c910c0a6b105aacfc79923f7f9fc0c67b883f68ac726652
+working_tree_status: HEAD and origin/codex/so101-mujoco-ros2 remain 1548acb20a2bd376e1bbe867603d824d26ddfb21. Task 13 dirty work is preserved; protected Gazebo tracked status is empty. No commit or push occurred.
+owned_processes: NONE. Domain 148 remains empty and the only tmux session is the pre-existing codex session.
+next_experiment: NONE
+next_command: Mandatory bounded diagnostic stop. Do not implement request or geometry changes, run EXP-067, execute motion, start Task 13.5, approve/enable thresholds, commit/push, start clean-shutdown work, or begin Task 14/15 without new authorization.
+```
+
+## Checkpoint CP-103
+
+```yaml
+checkpoint_id: CP-103
+checkpoint_time: 2026-08-11T23:30:00+08:00
+recovery_reason: The user explicitly requested direct takeover, then narrowed the immediate request to opening RViz and MuJoCo Viewer side by side and running a visible planning task.
+last_valid_experiment: EXP-068
+working_tree_status: Preserve the exact Task 13 dirty path set and protected draft hashes recorded by CP-102. HEAD and origin/codex/so101-mujoco-ros2 remain 1548acb20a2bd376e1bbe867603d824d26ddfb21.
+owned_processes: NONE before launch. The previous ai-station Codex process exited to its tmux zsh prompt; no MoveIt, MuJoCo, ros2_control, RViz, or task runtime was active.
+preserved_processes: The pre-existing codex tmux shell is preserved and will not own the GUI stack.
+authorization_boundary:
+  - Start a new owned GUI simulation stack with MuJoCo Viewer and RViz.
+  - Run plan-only service requests and publish one resulting trajectory to /display_planned_path for visual inspection.
+  - Do not call ExecuteTrajectory, controller actions, gripper actions, or mutate MuJoCo state as part of EXP-069.
+  - The known missing authoritative cup/table Planning Scene means EXP-069 is visualization evidence only and cannot authorize motion execution.
+next_experiment: EXP-069
+next_command: Start the owned GUI stack on empty ROS domain 149, tile RViz left and MuJoCo Viewer right, then publish one bounded full-pose plan for visual inspection.
+```
+
+## Experiment EXP-069
+
+```yaml
+experiment_id: EXP-069
+prior_experiment: EXP-068 VALID; CP-103 direct-takeover authorization
+status: PLANNED
+lifecycle: FULL_RESTART
+run_mode: plan_only_visualization
+hypothesis: The current MuJoCo/ros2_control/MoveIt stack can produce a nonempty full-pose plan from the live initial joint state and RViz can display it while MuJoCo Viewer remains open and physics is not commanded by the planner.
+single_variable: GUI-visible planning and /display_planned_path publication at the frozen 30 mm pre-grasp target; no production source, solver, geometry, target, controller, dynamics, or contact-threshold change.
+frozen_inputs:
+  source_head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  dependency_gitlink_and_checkout: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+  ros_domain_id: 149
+  simulation_session_id: so101-exp069-gui-plan
+  planning_group: arm
+  tcp_link: so101_tcp
+  target_position_m: [0.0206766838, -0.2628210212, 0.2306306106]
+  target_orientation_xyzw: [-0.0102659913, -0.0102629866, -0.7067526865, 0.7073117563]
+  position_tolerance_m: 0.0005
+  orientation_tolerance_rad: [0.01, 0.01, 0.01]
+  maximum_planning_attempts: 12
+  execute_trajectory: false
+read_only_boundary:
+  allowed: [/plan_kinematic_path, /display_planned_path publication, joint-state and process readback, GUI camera/layout]
+  forbidden: [ExecuteTrajectory, controller action, gripper action, pause, step, qpos write, qvel write, teleport, weld, equality, production config change]
+success_criteria:
+  - MuJoCo Viewer and RViz are both visible and verified in a fresh desktop capture.
+  - The two windows are tiled left/right and their outer geometry is read back within 12 px of the current EWMH work area split.
+  - At least one bounded full-pose request returns success with a nonempty trajectory and that exact RobotTrajectory is published to /display_planned_path.
+  - RViz visibly displays the planned path; no execution/action/state-write call occurs.
+failure_criteria: Terminalize VALID/FAIL if the bounded attempts produce no nonempty plan or the GUI/path cannot be visually verified; do not execute or relax constraints.
+invalid_criteria: Runtime/provenance mismatch, duplicate stack, missing start-state readback, GUI ambiguity, any forbidden call, or modification of protected Gazebo content.
+evidence_root: /tmp/so101-debug-mujoco-task13-exp069-gui-plan
+decision: PENDING. This entry precedes GUI/runtime launch and all planning requests.
+```
+
+## Experiment EXP-069 Terminal Result
+
+```yaml
+experiment_id: EXP-069
+status: VALID
+terminal_result: VISUALIZATION_ONLY_DIRECT_TCP_ROUTE_REJECTED
+terminal_time: 2026-08-11T23:47:21+08:00
+result:
+  selected_attempt: 10
+  selected_trajectory_points: 42
+  display_topic: /display_planned_path
+  execute_trajectory_calls: 0
+  controller_action_calls: 0
+  gui_layout: RViz left and MuJoCo Viewer right
+limitation:
+  - The Planning Scene did not yet include the authoritative table, cup, and pedestal when this request was planned.
+  - The request planned directly to one TCP pose and did not reproduce the Gazebo preopen, MOVE_ABOVE_OBJECT, and DESCEND lifecycle.
+  - Therefore this result is retained only as GUI plumbing evidence and cannot authorize execution.
+evidence:
+  result: /tmp/so101-debug-mujoco-task13-exp069-gui-plan/plan-display.json
+  result_sha256: 52553f9098ba7bdc6f4425b403d14e3e2502c1ab90190e0c597edac8d880dc8a
+decision: KEEP VALID as visualization-only evidence; reject the direct-TCP experimental route.
+```
+
+## Checkpoint CP-104
+
+```yaml
+checkpoint_id: CP-104
+checkpoint_time: 2026-08-11T23:50:00+08:00
+last_valid_experiment: EXP-069
+user_correction:
+  - The Gazebo demo preopens the gripper and approaches in phases.
+  - A direct TCP move to the pre-Close pose is not a representative or safe experiment.
+required_experiment_lifecycle: [PREOPEN_GRIPPER, MOVE_ABOVE_OBJECT, DESCEND, STOP_BEFORE_CLOSE]
+required_scene: Formal MoveIt Planning Scene containing exact table, plastic_cup, and pedestal geometry and colors before workflow startup.
+execution_boundary: Plan-only first. Any later execution must keep MuJoCo physics running and stop before Close if early contact, cup movement, stale evidence, reset, or instability is observed.
+next_experiment: EXP-070
+```
+
+## Experiment EXP-070
+
+```yaml
+experiment_id: EXP-070
+status: VALID
+run_mode: temporary_read_only_staged_plan_diagnostic
+terminal_time: 2026-08-11T23:54:16+08:00
+single_variable: Replace the rejected direct-TCP request with the frozen Gazebo waypoint ladders while preserving the existing GUI stack and performing no execution.
+result:
+  preopen_q6_rad: 0.465038
+  move_above_object_segments: 10
+  descend_segments: 5
+  selected_segments: 15
+  planning_scene_world_objects: [pedestal, plastic_cup, table]
+  execute_trajectory_calls: 0
+  controller_action_calls: 0
+  close_gripper_calls: 0
+  status: PLAN_ONLY_VALID
+limitation: The helper was temporary diagnostic code. Production acceptance requires the same contract through an installed so101_mujoco_demo_py executable with an explicit execute gate, live start-state handoff checks, safety monitoring, and atomic evidence.
+evidence:
+  result: /tmp/so101-debug-mujoco-task13-exp070-staged-plan/result.json
+  result_sha256: cd90ef89f40d1399efa3d9d58703f066ab325ff6271b7981b29fad730110b951
+decision: KEEP VALID as staged-plan diagnostic evidence only.
+```
+
+## Checkpoint CP-105
+
+```yaml
+checkpoint_id: CP-105
+checkpoint_time: 2026-08-12T00:18:00+08:00
+last_valid_experiment: EXP-070
+implementation:
+  - Added a formal scene_setup executable and launch gate; the workflow cannot start until the exact task Planning Scene is applied and read back.
+  - Added staged_approach as an installed package executable with explicit plan_only versus dual-gated execute modes.
+  - The full q1-q6 current state, including preopened q6, is sent as the MoveIt start state while only q1-q5 are goal constrained.
+  - Execution is fail closed on stale MuJoCo evidence, pause, reset/session change, early fingertip contact, forbidden cup contact, cup displacement, force boundary, start drift, convergence failure, or an unstable joint window.
+  - No Close command exists in the staged-approach experiment and no contact-calibration draft was approved or enabled.
+verification:
+  ruff: PASS
+  focused_tests: 40 passed, 1 skipped
+  isolated_colcon_build: PASS; one package built
+  installed_executables: [headless_execution, scene_setup, staged_approach]
+protected_gazebo_tree: No tracked diff or worktree status.
+next_experiment: EXP-071
+```
+
+## Checkpoint CP-106
+
+```yaml
+checkpoint_id: CP-106
+checkpoint_time: 2026-08-12T00:25:00+08:00
+last_valid_experiment: EXP-070
+current_hypothesis: The installed formal staged_approach executable can plan all 15 frozen approach segments from the live initial state while verifying the authoritative Planning Scene and issuing no action or physics command.
+owned_runtime:
+  ros_domain_id: 149
+  simulation_session_id: so101-exp069-gui-plan
+  tmux_session: so101-mujoco-gui
+  gui: MuJoCo Viewer and RViz remain open side by side.
+authorization_boundary: The user authorized continued planning experiments and later staged execution, but EXP-071 itself is plan-only.
+next_experiment: EXP-071
+```
+
+## Experiment EXP-071
+
+```yaml
+experiment_id: EXP-071
+prior_experiment: EXP-070 VALID; CP-105 formal implementation gate passed
+status: PLANNED
+lifecycle: REUSE_OWNED_GUI_STACK_READ_ONLY
+run_mode: formal_staged_plan_only
+hypothesis: The installed staged_approach executable will verify the formal scene and plan PREOPEN display plus all 10 MOVE_ABOVE_OBJECT and 5 DESCEND segments without executing motion.
+frozen_inputs:
+  source_head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  dependency_checkout: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+  ros_domain_id: 149
+  simulation_session_id: so101-exp069-gui-plan
+  staged_approach_source_sha256: 06e3b30ba0830e058eff42bd06010f842e57a9155729e148520bf414e4367a18
+  policy_sha256: 303044acea71039f74693e5f0e0d97f3adbaf21c95745c57aa63709fc4c6f321
+  preopen_q6_rad: 0.465038
+  phases: [MOVE_ABOVE_OBJECT, DESCEND]
+  execute: false
+success_criteria:
+  - Planning Scene exact geometry and colors are read back before planning.
+  - Exactly 15 segments are selected with trajectory endpoints within the fixed convergence tolerance.
+  - The cumulative DisplayTrajectory is published for RViz inspection.
+  - physics_paused_calls, Close calls, ExecuteTrajectory calls, and controller action calls remain zero.
+failure_criteria: Any missing scene geometry, planning failure after bounded retries, endpoint mismatch, runtime provenance mismatch, or forbidden action fails the experiment without relaxing a threshold.
+evidence_root: /tmp/so101-debug-mujoco-task13-exp071-formal-staged-plan
+decision: PENDING. This record precedes the formal package executable invocation.
+```
+
+## Experiment EXP-071 Terminal Result
+
+```yaml
+experiment_id: EXP-071
+status: VALID
+terminal_result: FORMAL_STAGED_PLAN_CLOSE_READY
+terminal_time: 2026-08-12T00:26:26+08:00
+result:
+  installed_executable: so101_mujoco_demo_py/staged_approach
+  planning_scene_verified: true
+  mode: plan_only
+  selected_segments: 15
+  attempts_per_segment: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+  maximum_trajectory_endpoint_error_rad: 0.00009933590530414316
+  final_open_joint_positions_rad: [-0.000206491845, 0.472194274096, 0.214652624195, 0.854922375695, 0.000576703465, 0.465038]
+  physics_paused_calls: 0
+  close_gripper_calls: 0
+  execute_trajectory_calls: 0
+evidence:
+  result: /tmp/so101-debug-mujoco-task13-exp071-formal-staged-plan/result.json
+  result_sha256: 9157d4726dd319eb6a4101581941e6db357664a6b2ca78c5ebcbd3d3958ac436
+decision: KEEP VALID. This authorizes only a separately preregistered staged execution from the unchanged live initial state.
+```
+
+## Checkpoint CP-107
+
+```yaml
+checkpoint_id: CP-107
+checkpoint_time: 2026-08-12T00:27:00+08:00
+last_valid_experiment: EXP-071
+pre_execution_readback:
+  joint_names: ['1', '2', '3', '4', '5', '6']
+  positions_rad: [-0.000000003636221687, 0.001079804375380911, 0.0009069895288303677, 0.00023452701017389544, 0.000000307070333499, -0.000005825630929604]
+  velocities_rad_s: approximately zero for all six joints
+  conclusion: The plan-only run did not move the robot and the owned MuJoCo stack remains at its initial state.
+execution_design:
+  - Command q6 to the frozen preopen target and verify convergence.
+  - For each of 15 frozen policy waypoints, require a 0.20 second unpaused stable window, plan from the fresh full q1-q6 state, reject plan-to-execute drift above 0.01 rad, execute, and verify convergence.
+  - Continuously cancel and fail on stale evidence, pause/reset/session change, early fingertip contact, forbidden cup contact, cup displacement above 3 mm, or force above 11.60 N.
+  - Stop after DESCEND with q6 still preopened. Do not command Close.
+next_experiment: EXP-072
+```
+
+## Experiment EXP-072
+
+```yaml
+experiment_id: EXP-072
+prior_experiment: EXP-071 VALID; CP-107 stable initial-state readback
+status: PLANNED
+lifecycle: REUSE_OWNED_GUI_STACK_EXECUTE
+run_mode: formal_staged_execute_stop_before_close
+hypothesis: With unpaused physics and q6 preopened, all 15 frozen approach segments can be planned from fresh stable state and executed through MoveIt without pre-Close contact or cup displacement.
+frozen_inputs:
+  source_head: 1548acb20a2bd376e1bbe867603d824d26ddfb21
+  dependency_checkout: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+  ros_domain_id: 149
+  simulation_session_id: so101-exp069-gui-plan
+  staged_approach_source_sha256: 06e3b30ba0830e058eff42bd06010f842e57a9155729e148520bf414e4367a18
+  policy_sha256: 303044acea71039f74693e5f0e0d97f3adbaf21c95745c57aa63709fc4c6f321
+  preopen_q6_rad: 0.465038
+  phases: [MOVE_ABOVE_OBJECT, DESCEND]
+  physics_pause_allowed: false
+  close_allowed: false
+  maximum_replans_per_segment: 2
+  plan_start_tolerance_rad: 0.01
+  convergence_tolerance_rad: 0.01
+safety_boundaries:
+  maximum_preclose_cup_displacement_m: 0.003
+  maximum_preclose_force_n: 11.60
+  maximum_evidence_age_s: 0.50
+  early_fingertip_contact_allowed: false
+  non_table_cup_contact_allowed: false
+success_criteria:
+  - Preopen converges and every segment executes with bounded planning and fresh state/evidence.
+  - Actual final q1-q5 is within 0.01 rad of the final DESCEND waypoint and q6 remains within 0.01 rad of preopen.
+  - MuJoCo evidence advances while unpaused, reset/session provenance remains unchanged, and the cup moves no more than 3 mm before Close.
+  - The result is CLOSE_READY and close_gripper_calls remains zero.
+failure_criteria: Fail closed and cancel the owned trajectory on any boundary violation; do not relax thresholds or proceed to Close.
+evidence_root: /tmp/so101-debug-mujoco-task13-exp072-formal-staged-execute
+decision: PENDING. This entry precedes the first gripper/controller/ExecuteTrajectory action of EXP-072.
+```
+
+## Experiment EXP-072 Terminal Result
+
+```yaml
+experiment_id: EXP-072
+status: VALID
+terminal_result: PHYSICAL_CLOSE_READY_WITH_UNPAUSED_STAGED_EXECUTION
+terminal_time: 2026-08-12T00:28:30+08:00
+result:
+  status: CLOSE_READY
+  preopen_actual_q6_rad: 0.46374169771140566
+  selected_segments: 15
+  maximum_attempts_per_segment: 1
+  maximum_plan_to_execute_drift_rad: 0.000018661116396367916
+  maximum_actual_endpoint_error_rad: 0.0005860968467436001
+  final_joint_positions_rad: [-0.00016372898158321418, 0.4726993433667315, 0.21490240185264656, 0.854993211832095, 0.0005211211883640602, 0.46503647008102744]
+  cup_displacement_m: 0.0000000619551001829137
+  initial_simulation_step: 262970
+  final_simulation_step: 265140
+  reset_epoch: 0
+  paused: false
+  fingertip_contact_count: 0
+  close_gripper_calls: 0
+visual_evidence:
+  method: cua-driver desktop capture
+  screenshot: /tmp/so101-debug-mujoco-task13-exp072-formal-staged-execute/close-ready-cua.png
+  screenshot_sha256: 86654679ea3654c5c635cf0c6bb39fa7348f85790694dd9728d56916968f2c2f
+  dimensions: [5120, 2880]
+  observation: RViz left shows the formal scene and cumulative planned path; MuJoCo right shows the open gripper inserted at the cup wall, ready for Close.
+evidence:
+  result: /tmp/so101-debug-mujoco-task13-exp072-formal-staged-execute/result.json
+  result_sha256: 90d9fc5661ace70f755db28461fec400a179636c276a84b6ac2ff7b562c5e085
+decision: KEEP VALID as the unpaused staged approach execution. It does not yet prove a physical grasp or pick/place.
+```
+
+## Checkpoint CP-108
+
+```yaml
+checkpoint_id: CP-108
+checkpoint_time: 2026-08-12T00:38:00+08:00
+last_valid_experiment: EXP-072
+current_hypothesis: The frozen grasp_close_q6 can create bilateral fingertip contact at the verified Close-ready pose, after which one bounded LIFT waypoint can demonstrate that the cup follows the gripper without a simulator constraint.
+planning_scene_boundary:
+  - After physical bilateral contact is observed, plastic_cup may be moved from the MoveIt world to an AttachedCollisionObject on link gripper with touch_links [gripper, jaw].
+  - This attachment is a collision-planning shadow only. It must not create any MuJoCo weld, equality, mocap, teleport, qpos, or qvel change.
+  - Physical success is determined only from atomic MuJoCo contact and object-state evidence.
+next_experiment: EXP-073
+```
+
+## Experiment EXP-073
+
+```yaml
+experiment_id: EXP-073
+prior_experiment: EXP-072 VALID close-ready state
+status: PLANNED
+lifecycle: CONTINUE_OWNED_GUI_STACK_PHYSICAL_GRASP_PROBE
+run_mode: close_attach_shadow_and_first_lift_waypoint
+hypothesis: Closing q6 to the frozen grasp target creates sustained bilateral fingertip contact, and executing only LIFT waypoint 0 raises the physical cup while contact remains bilateral.
+frozen_inputs:
+  ros_domain_id: 149
+  simulation_session_id: so101-exp069-gui-plan
+  close_target_q6_rad: -0.047608632840292
+  lift_waypoint_0_rad: [-0.000284124852, 0.381814591288, 0.272246878070, 0.916741182602, -0.000291565154]
+  maximum_force_n: 11.60
+  minimum_bilateral_duration_s: 0.20
+  maximum_plan_to_execute_drift_rad: 0.01
+  convergence_tolerance_rad: 0.01
+forbidden_simulator_mechanisms: [weld, equality, adhesion, mocap, teleport, qpos_write, qvel_write, pause]
+success_criteria:
+  - The Close action produces left and right fingertip contact for at least 0.20 s without exceeding 11.60 N or changing session/reset provenance.
+  - MoveIt reports plastic_cup attached to gripper and absent from the world only after physical bilateral contact exists.
+  - LIFT waypoint 0 executes with bounded drift; cup z increases by at least 5 mm and bilateral contact remains at the endpoint.
+  - MuJoCo evidence advances unpaused and no simulator constraint or direct object-state write is invoked.
+failure_criteria: On missing bilateral contact, unsafe force, action failure, scene-shadow failure, planning/execution failure, slip, stale evidence, pause, or reset, stop before further transfer; do not relax thresholds.
+evidence_root: /tmp/so101-debug-mujoco-task13-exp073-grasp-probe
+decision: PENDING. This entry precedes Close, MoveIt shadow attachment, and LIFT execution.
+```
+
+## Experiment EXP-073 Terminal Result
+
+```yaml
+experiment_id: EXP-073
+status: VALID
+terminal_result: PHYSICAL_GRASP_FAILURE_MISSING_SEATING_PRELOAD
+terminal_time: 2026-08-12T00:43:00+08:00
+actions_completed: [CLOSE, ATTACH_MOVEIT_COLLISION_SHADOW, LIFT_WAYPOINT_0]
+result:
+  close_action: SUCCEEDED
+  close_q6_rad: -0.04760629894348962
+  sustained_bilateral_samples: 19
+  moveit_attached_ids: [plastic_cup]
+  moveit_world_ids_after_attach: [pedestal, table]
+  lift_trajectory_points: 10
+  plan_to_execute_drift_rad: 0.00000018263232395843154
+  transient_cup_z_increase_m: 0.0018271075044508367
+  settled_cup_position_world_m: [0.020002714629709904, -0.26857298362480636, 0.16490533020352235]
+  settled_table_contact: true
+  settled_left_contact_forces_n: [0.012298655729818003, 0.012298682879844182, 0.0091612575629419]
+  settled_right_contact_forces_n: [0.033690325149744266]
+diagnosis:
+  - The cup did not remain lifted; it returned to table support and was pushed approximately 10 mm laterally.
+  - Bilateral contact existed but total grip force was insufficient to overcome the approximately 0.196 N cup weight.
+  - The protected Gazebo chain applies seating_preload_rad=0.006 after nominal Close and holds that preload through MICRO_LIFT. EXP-073 omitted this required lifecycle step.
+  - No evidence supports changing friction, adding a simulator constraint, or relaxing the physical outcome contract.
+evidence:
+  result: /tmp/so101-debug-mujoco-task13-exp073-grasp-probe/result.json
+  result_sha256: e3b91141eb977677b85c33503892b14e9460e90f3734aa6054a0c283826b7d14
+decision: KEEP VALID as a physical failure. Do not continue transfer from this displaced-cup state.
+```
+
+## Checkpoint CP-109
+
+```yaml
+checkpoint_id: CP-109
+checkpoint_time: 2026-08-12T00:45:00+08:00
+last_valid_experiment: EXP-073
+recovery_requirement:
+  - Reset the owned MuJoCo stack to keyframe task_start and verify reset_epoch increments, simulation step restarts, q1-q6 return to the initial state, and the cup returns to its source pose.
+  - Reapply and read back the complete formal Planning Scene so the stale MoveIt attachment is removed and table, pedestal, and plastic_cup return to the world.
+  - Reexecute the already-qualified preopen plus 15-stage approach with unpaused physics, stopping before Close.
+next_experiment: EXP-074
+```
+
+## Experiment EXP-074
+
+```yaml
+experiment_id: EXP-074
+prior_experiment: EXP-073 VALID failure requiring reset
+status: PLANNED
+lifecycle: RESET_WORLD
+run_mode: reset_scene_rebuild_and_formal_reapproach
+hypothesis: The qualified reset, formal scene setup, and staged approach can restore the owned GUI stack to the same Close-ready state with a new reset epoch and the cup at the original source pose.
+frozen_inputs:
+  ros_domain_id: 149
+  simulation_session_id: so101-exp069-gui-plan
+  reset_keyframe: task_start
+  approach_executable: so101_mujoco_demo_py/staged_approach
+  phases: [MOVE_ABOVE_OBJECT, DESCEND]
+  preopen_q6_rad: 0.465038
+success_criteria:
+  - ResetWorld returns success; reset_epoch increments and evidence restarts from the reset boundary without changing simulation_session_id.
+  - q1-q6 and cup pose match task_start within existing reset tolerances.
+  - scene_setup readback contains table, pedestal, plastic_cup with exact primitive counts and colors and no attached object.
+  - The formal staged approach again reaches CLOSE_READY with no pre-Close contact, cup displacement, pause, or reset during motion.
+failure_criteria: Any reset, scene readback, staged plan/execution, provenance, or safety failure stops before Close.
+evidence_root: /tmp/so101-debug-mujoco-task13-exp074-reset-reapproach
+decision: PENDING. This entry precedes ResetWorld and all recovery motion.
+```
+
+## Experiment EXP-074 Terminal Result
+
+```yaml
+experiment_id: EXP-074
+status: INVALID
+terminal_result: UNSAFE_DIRECT_RESET_FALSE_POSITIVE
+terminal_time: 2026-08-12T00:50:00+08:00
+observed_sequence:
+  - Direct ResetWorld(task_start) was called while the simulation was running and command controllers were active.
+  - The service returned success=true, but both /joint_states and /so101/simulation/evidence stopped producing fresh samples for more than 27 seconds.
+  - ros2_control_node, robot_state_publisher, move_group, and RViz remained alive; the server log contained only the reset request and success message.
+  - A full owned-stack restart restored telemetry, after which the qualified staged approach reached Close-ready again without executing Close.
+invalid_reason:
+  - The preregistered lifecycle required an effective ResetWorld transaction on the same stack. A success response without post-reset telemetry is not reset authority.
+  - The full-restart fallback changed the lifecycle and therefore cannot make EXP-074 valid.
+decision: KEEP INVALID. Freeze all further grasp motion until ResetWorld is fail-closed and repeatedly qualified.
+```
+
+## Checkpoint CP-110
+
+```yaml
+checkpoint_id: CP-110
+checkpoint_time: 2026-08-12T01:05:00+08:00
+last_valid_experiment: EXP-075
+root_cause:
+  - The fork ResetWorld callback accepted state replacement while MuJoCo was running and command controllers could still own stale command state.
+  - Its success response validated only completion of the callback; it did not prove that the physics, controller, evidence, or Viewer loops remained usable.
+implemented_boundary:
+  - ResetWorld now rejects unavailable simulation state and rejects every request while sim_->run is true without mutating qpos, qvel, or simulation time.
+  - The supported path remains running strict deactivate -> pause -> ResetWorld -> bounded resume -> strict activate -> fresh joint feedback -> re-pause -> atomic evidence verification.
+fork_release:
+  commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
+  tag: so101-0.0.3-r3
+  origin: git@gitee.com:zjumty/mujoco_ros2_control.git
+next_experiment: EXP-076
+```
+
+## Experiment EXP-075
+
+```yaml
+experiment_id: EXP-075
+prior_experiment: EXP-074 INVALID
+status: VALID
+lifecycle: RESET_WORLD_FAIL_CLOSED_AND_REPEATED_QUALIFICATION
+run_mode: fork_component_tests_headless_live_contract_and_gui_visual_reset
+controlled_variables:
+  model: so101_task_scene
+  keyframe: task_start
+  expected_joints_rad: [0, 0, 0, 0, 0, 0]
+  expected_cup_position_m: [0.02, -0.28, 0.165]
+  joint_tolerance_rad: 0.002
+  object_tolerance_m: 0.003
+  controller_names: [arm_controller, gripper_controller]
+acceptance_criteria:
+  - An unpaused direct ResetWorld request returns success=false, changes no reset epoch, and fresh joint feedback continues.
+  - Two consecutive formal transactions each increment reset_epoch exactly once and end with paused step-zero evidence, active controllers, converged fresh joints, and the cup at task_start.
+  - An invalid keyframe changes no epoch and leaves the world paused.
+  - On the GUI stack, a visibly displaced Close-ready robot, gripper, and cup state is restored to task_start and confirmed through real CUA screenshots.
+result:
+  fork_tests: 118 passed, 0 errors, 0 failures, 0 skipped
+  headless_live_contract: passed
+  gui_live_contract: passed
+  gui_epochs: [[0, 1], [1, 2]]
+  final_reset_epoch: 2
+  final_simulation_step: 0
+  final_paused: true
+  final_joint_positions_rad: [0.000000004184, 0.000267318810, 0.000236410832, 0.000025308964, 0.000000015461, -0.000000356937]
+  final_cup_position_m: [0.019999997286, -0.279999998932, 0.164963108567]
+visual_evidence:
+  before_reset:
+    path: /tmp/so101-reset-visual/before-reset-cua.png
+    sha256: aac5feb0d67511f42421d9c54b91276b99e26e70c1f8f0499c18937f819a80eb
+    observation: MuJoCo shows the open gripper descended into the cup at Close-ready; RViz shows the same displaced arm and the formal scene.
+  after_reset:
+    path: /tmp/so101-reset-visual/after-reset-cua.png
+    sha256: 99f8ee239b539fa79c8052c3eb11a5d8d6fe610edf4744aa35d4e1ec0164bdc3
+    observation: MuJoCo shows PAUSE and Status Paused; the open gripper and arm are restored to the horizontal task_start pose and the cup is restored on the table. RViz shows the matching joint state.
+decision: KEEP VALID. ResetWorld is qualified for repeated use only through the formal transaction; resume Task 13 from a fresh re-approach, not from the reset pose.
+```
+
+## Experiment EXP-076
+
+```yaml
+experiment_id: EXP-076
+prior_experiment: EXP-075 VALID reset qualification
+status: PLANNED
+lifecycle: FORMAL_SCENE_REBUILD_AND_REAPPROACH
+run_mode: resume_rebuild_scene_and_stop_at_close_ready
+hypothesis: After the qualified paused reset, formal scene readback and the already-qualified unpaused staged approach restore the same Close-ready state without object displacement or pre-Close contact.
+success_criteria:
+  - Reapply exact table, pedestal, and plastic_cup Planning Scene geometry and colors with no attached object.
+  - Resume physics and execute preopen plus all MOVE_ABOVE_OBJECT and DESCEND waypoints under unchanged drift, endpoint, contact, and cup-displacement gates.
+  - Stop at CLOSE_READY before applying seating preload or Close.
+decision: PENDING. This entry precedes scene rebuild, resume, and all motion.
 ```

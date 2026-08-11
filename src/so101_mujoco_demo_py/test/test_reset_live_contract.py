@@ -7,7 +7,6 @@ import time
 
 import pytest
 import rclpy
-
 from so101_mujoco_demo_py.mujoco.client import MujocoRosClient
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
 from so101_mujoco_demo_py.mujoco.reset import MujocoResetClient, ResetFailed
@@ -102,7 +101,7 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
         simulation_session_id=session_id,
         controller_names=("arm_controller", "gripper_controller"),
         expected_joint_positions=(0.0,) * 6,
-        expected_object_position=(0.27, 0.0, 0.08),
+        expected_object_position=(0.02, -0.28, 0.165),
         timeout_s=10.0,
         object_tolerance_m=0.003,
         progress=progress,
@@ -126,6 +125,14 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
                         f"rejected={observer.rejected_count} "
                         f"last_rejection={observer.last_rejection!r}"
                     )
+        precondition_baseline = observer.snapshot()
+        joint_count_before_rejected_reset = services.joint_callback_count
+        assert not services.reset_world("task_start")
+        drain_feedback()
+        rejected_running_reset = observer.snapshot()
+        assert rejected_running_reset.reset_epoch == precondition_baseline.reset_epoch
+        assert services.joint_callback_count > joint_count_before_rejected_reset
+
         receipts = [resetter.reset("task_start"), resetter.reset("task_start")]
         latest = observer.snapshot()
         assert receipts[0].new_epoch == receipts[0].old_epoch + 1
@@ -137,7 +144,9 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
         assert all(receipt.simulation_step == 0 for receipt in receipts)
         assert not any(event["operation"] == "step" for event in events)
         assert latest.paused
-        assert latest.object_state.position_world == pytest.approx((0.27, 0.0, 0.08), abs=0.003)
+        assert latest.object_state.position_world == pytest.approx(
+            (0.02, -0.28, 0.165), abs=0.003
+        )
         assert services.latest_joint_positions() == pytest.approx((0.0,) * 6, abs=0.002)
         assert services.controllers_active(("arm_controller", "gripper_controller"))
         pause_events = [event for event in events if event["operation"] == "pause:True"]
@@ -147,7 +156,9 @@ def test_two_live_task_start_reset_cycles_are_epoch_correlated() -> None:
         post_reset_pause_events = [event for event in pause_events if event["post_reset_snapshot"]]
         assert len(post_reset_pause_events) == 2
         for event in post_reset_pause_events:
-            assert event["object_position"] == pytest.approx((0.27, 0.0, 0.08), abs=0.003)
+            assert event["object_position"] == pytest.approx(
+                (0.02, -0.28, 0.165), abs=0.003
+            )
             assert event["joint_positions"] == pytest.approx((0.0,) * 6, abs=0.002)
             assert all(
                 math.isfinite(value)

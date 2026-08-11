@@ -3,8 +3,8 @@ provider: gitee_fork_submodule
 release: 0.0.3
 fork:
   url: git@gitee.com:zjumty/mujoco_ros2_control.git
-  tag: so101-0.0.3-r2
-  commit: 9f02f82aae2888d6e29c472c6dd64c34b38c5f93
+  tag: so101-0.0.3-r3
+  commit: 17fd1eca8d605d4f7c801eb7b54f3209f86f7cd5
 upstream:
   url: https://github.com/ros-controls/mujoco_ros2_control.git
   tag: 0.0.3
@@ -31,5 +31,5 @@ required_files:
   include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 688337291e7e1d340daf9ffe36fe8c6ed72f085f1ddf302215e5a4a8a35386dc
   include/mujoco_ros2_control/viewer_camera.hpp: 488364d11a6d591438bda116831e111b9fdb7934146117af2a8106120efae6ed
   lib/libmujoco_ros2_control_plugins.so: 526c19497bdce2049ac723807e15b8e8a25d62b456d2f23d63a31dc824cc0d5a
-  lib/libmujoco_ros2_control.so: e42731cc13a522c19ea2f7049b0e43d2e08e8b4280f4333a79053ef962a93e1a
+  lib/libmujoco_ros2_control.so: 3667acda1afc609f298064950854a6a222a84c26fddf9f65d4ef97e70be873af
   lib/mujoco_ros2_control/ros2_control_node: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
