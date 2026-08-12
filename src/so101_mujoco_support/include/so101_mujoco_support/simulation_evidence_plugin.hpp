@@ -1,5 +1,9 @@
+// Copyright 2026 SO-101 maintainers
+
 #ifndef SO101_MUJOCO_SUPPORT__SIMULATION_EVIDENCE_PLUGIN_HPP_
 #define SO101_MUJOCO_SUPPORT__SIMULATION_EVIDENCE_PLUGIN_HPP_
+
+#include <mujoco/mujoco.h>
 
 #include <atomic>
 #include <cstddef>
@@ -10,7 +14,6 @@
 #include <string>
 #include <vector>
 
-#include <mujoco/mujoco.h>
 #include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <realtime_tools/realtime_publisher.hpp>
@@ -151,4 +154,4 @@ private:
   std::atomic<double> current_simulation_time_s_{0.0};
 };
 }  // namespace so101_mujoco_support
-#endif
+#endif  // SO101_MUJOCO_SUPPORT__SIMULATION_EVIDENCE_PLUGIN_HPP_

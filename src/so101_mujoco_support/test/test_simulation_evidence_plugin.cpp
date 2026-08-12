@@ -1,4 +1,7 @@
+// Copyright 2026 SO-101 maintainers
+
 #include <gtest/gtest.h>
+#include <mujoco/mujoco.h>
 
 #include <algorithm>
 #include <chrono>
@@ -11,8 +14,6 @@
 #include <thread>
 #include <type_traits>
 #include <vector>
-
-#include <mujoco/mujoco.h>
 
 #define private public
 #include "so101_mujoco_support/simulation_evidence_plugin.hpp"
