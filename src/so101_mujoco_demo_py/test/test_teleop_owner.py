@@ -1,8 +1,36 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from so101_mujoco_demo_py.teleop_reset import build_parser as reset_parser
-from so101_mujoco_demo_py.teleop_workflow import owner_result, production_arguments
+from so101_mujoco_demo_py.teleop_workflow import (
+    evidence_root_for,
+    owner_result,
+    production_arguments,
+)
+
+
+def test_workflow_evidence_root_keeps_legacy_default(monkeypatch) -> None:
+    monkeypatch.delenv("SO101_TELEOP_EVIDENCE_BASE", raising=False)
+
+    assert evidence_root_for("sim-a", Path("/tmp/run-1.json")) == Path(
+        "/tmp/so101-teleop-evidence/sim-a/run-1"
+    )
+
+
+def test_workflow_evidence_root_uses_operator_provisioned_volume(tmp_path, monkeypatch) -> None:
+    base = tmp_path / "fast-evidence"
+    monkeypatch.setenv("SO101_TELEOP_EVIDENCE_BASE", str(base))
+
+    assert evidence_root_for("sim/a", Path("/tmp/run one.json")) == (base / "sim_a" / "run_one")
+
+
+def test_workflow_evidence_root_rejects_relative_override(monkeypatch) -> None:
+    monkeypatch.setenv("SO101_TELEOP_EVIDENCE_BASE", "relative/evidence")
+
+    with pytest.raises(ValueError, match="must be absolute"):
+        evidence_root_for("sim-a", Path("/tmp/run-1.json"))
 
 
 def test_reset_cli_requires_the_physical_simulation_session() -> None:

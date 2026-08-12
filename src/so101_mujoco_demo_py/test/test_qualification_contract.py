@@ -98,6 +98,17 @@ def test_fingerprint_rejects_truncated_values() -> None:
         validate_fingerprint(fingerprint)
 
 
+def test_stack_environment_routes_high_rate_evidence_to_qualification_volume(
+    tmp_path,
+) -> None:
+    runner = ProductionQualificationRunner(evidence_root=tmp_path, fingerprint=FINGERPRINT)
+
+    environment = runner._stack_environment(domain_id=195)
+
+    assert environment["ROS_DOMAIN_ID"] == "195"
+    assert environment["SO101_TELEOP_EVIDENCE_BASE"] == str(tmp_path / "teleop-evidence")
+
+
 class DummyRunner(ProductionQualificationRunner):
     def __init__(self, evidence_root) -> None:
         super().__init__(evidence_root=evidence_root, fingerprint=FINGERPRINT)
