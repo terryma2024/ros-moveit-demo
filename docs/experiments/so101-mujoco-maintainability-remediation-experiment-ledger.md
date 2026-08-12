@@ -3212,3 +3212,33 @@ batch_decision: Do not start EXP-116..120. Continue a new RED-GREEN evidence-pat
 next_experiment: NONE_PENDING_POST_EXP115_RED
 next_command: Add RED tests that retain the complete first chunk header and prove whether an empty evidence-loss sentinel loses session identity; then apply only the evidence-path fix justified by those tests.
 ```
+
+## Checkpoint MNT-CP-026 — post-EXP-115 sentinel RED→GREEN and producer cadence diagnosis
+
+```yaml
+checkpoint_id: MNT-CP-026
+recorded_at: 2026-08-12T19:29:16+08:00
+last_valid_experiment: EXP-109
+immutable_invalid_experiments:
+  - EXP-110 INVALID_EVIDENCE; never rerun or reclassified.
+  - EXP-115 INVALID_EVIDENCE; never rerun or reclassified.
+abandoned_ids: EXP-111..114 remain unexecuted and will not be reused; EXP-116..120 were not started.
+red_confirmation:
+  cpp: PhysicsStepEvidenceBufferTest.EmptyLossSentinelRetainsTheLastObservedIdentity failed because prepare_chunk() returned a default empty session and epoch after mark_published() cleared samples and a later non-contiguous append latched evidence_loss.
+  python: The durable mismatch test initially failed because the first received chunk header was not persisted; after adding the header assertion, the only incidental mismatch was the exact binary float representation used by the test fixture.
+green_fix:
+  producer: An empty evidence-loss sentinel now copies only simulation_session_id and reset_epoch from last_observed_; it does not fabricate a sample, range, or successful evidence.
+  observer: The first chunk's complete header is atomically persisted before strict identity/evidence validation.
+  strict_semantics: A correctly identified empty loss sentinel is rejected as `chunk evidence loss latched`; a wrong session remains a strict identity mismatch. No session equality check was weakened.
+green_evidence:
+  python: 2 focused observer tests passed, including the correctly identified empty loss sentinel.
+  cpp: The focused empty loss sentinel GTest passed after rebuilding so101_mujoco_support.
+live_root_cause_status:
+  parameter_scope: DISPROVEN; root session binding produced the correct ordinary snapshot identity in EXP-115.
+  empty_session: CONFIRMED as a secondary serialization defect in the evidence-loss sentinel path.
+  evidence_loss_cadence: Source diagnosis shows generic plugin update() is invoked from MujocoSystemInterface::read(), i.e. the controller-manager cadence, while authoritative mj_step() executes independently in the physics loop. EvidenceBuilder advances physics_step by elapsed simulation time, so a read spanning multiple 2 ms physics steps creates a non-contiguous append and latches evidence_loss. A physics-step hook is required to meet the approved 500 Hz evidence contract; this must receive its own RED tests before implementation.
+frozen_behavior: No q6, waypoint, planner, speed/acceleration, MJCF, scene, geometry, controller command, contact/grasp phase, or protected Gazebo source has changed.
+runtime_state: No task-owned processes; no new live experiment is preregistered.
+next_experiment: NONE_PENDING_PHYSICS_HOOK_GREEN
+next_command: Add RED coverage in the pinned mujoco_ros2_control fork for one read-independent callback after each successful mj_step, then route only diagnostic evidence sampling through that hook while retaining ordinary snapshots at controller cadence.
+```

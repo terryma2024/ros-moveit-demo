@@ -115,8 +115,52 @@ def test_session_mismatch_is_rejected_with_structured_durable_identity(tmp_path:
         "message_kind": "PhysicsStepEvidenceChunk",
         "topic": "/so101/simulation/physics_step_chunks",
     }
+    assert document["first_chunk_header"] == {
+        "chunk_sequence": 0,
+        "evidence_loss": False,
+        "failed_publish_attempts": 0,
+        "first_physics_step": 100,
+        "first_simulation_time_s": 0.2,
+        "last_physics_step": 104,
+        "last_simulation_time_s": 104 * 0.002,
+        "reset_epoch": 4,
+        "sample_count": 5,
+        "simulation_session_id": "producer-fallback",
+    }
     assert document["chunks"] == []
     assert document["boundaries"] == []
+
+
+def test_empty_loss_sentinel_keeps_identity_and_is_rejected_as_evidence_loss(
+    tmp_path: Path,
+) -> None:
+    value = observer(tmp_path)
+    sentinel = replace(
+        chunk(100, 104),
+        evidence_loss=True,
+        failed_publish_attempts=1,
+        samples=(),
+    )
+
+    with pytest.raises(EvidenceInvalid, match="chunk evidence loss latched") as caught:
+        value.accept_chunk(sentinel)
+    index_path = value.close_invalid(caught.value)
+
+    document = json.loads(index_path.read_text(encoding="utf-8"))
+    assert document["first_chunk_session_id"] == "EXP-110-session"
+    assert document["first_chunk_header"] == {
+        "chunk_sequence": 0,
+        "evidence_loss": True,
+        "failed_publish_attempts": 1,
+        "first_physics_step": 100,
+        "first_simulation_time_s": 0.2,
+        "last_physics_step": 104,
+        "last_simulation_time_s": 104 * 0.002,
+        "reset_epoch": 4,
+        "sample_count": 0,
+        "simulation_session_id": "EXP-110-session",
+    }
+    assert "identity_mismatch" not in document
 
 
 def test_first_identity_mismatch_is_not_overwritten(tmp_path: Path) -> None:

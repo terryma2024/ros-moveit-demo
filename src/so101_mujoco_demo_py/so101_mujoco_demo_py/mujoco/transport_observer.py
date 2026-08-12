@@ -470,6 +470,18 @@ class DynamicTransportEvidenceObserver:
                 self._first_chunk_session_id = chunk.simulation_session_id
                 self._store.checkpoint_metadata(
                     expected_session_id=self._session_id,
+                    first_chunk_header={
+                        "chunk_sequence": chunk.chunk_sequence,
+                        "evidence_loss": chunk.evidence_loss,
+                        "failed_publish_attempts": chunk.failed_publish_attempts,
+                        "first_physics_step": chunk.first_physics_step,
+                        "first_simulation_time_s": chunk.first_simulation_time_s,
+                        "last_physics_step": chunk.last_physics_step,
+                        "last_simulation_time_s": chunk.last_simulation_time_s,
+                        "reset_epoch": chunk.reset_epoch,
+                        "sample_count": len(chunk.samples),
+                        "simulation_session_id": chunk.simulation_session_id,
+                    },
                     first_chunk_session_id=chunk.simulation_session_id,
                 )
         if chunk.simulation_session_id != self._session_id:
