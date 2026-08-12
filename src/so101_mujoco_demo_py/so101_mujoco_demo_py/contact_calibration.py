@@ -61,6 +61,7 @@ CONTACT_FIELDS = (
 )
 METRICS = (
     "minimum_signed_distance_m",
+    "minimum_fingertip_signed_distance_m",
     "maximum_normal_force_n",
     "linear_speed_m_s",
     "left_normal_force_n",
@@ -292,12 +293,21 @@ def _contact_force(sample: dict[str, Any], field: str) -> float:
     return sum(float(item["normal_force_n"]) for item in sample[field])
 
 
+def _minimum_fingertip_signed_distance(sample: dict[str, Any]) -> float:
+    contacts = (
+        *sample["left_fingertip_contacts"],
+        *sample["right_fingertip_contacts"],
+    )
+    return min((float(item["signed_distance_m"]) for item in contacts), default=0.0)
+
+
 def sample_metrics(sample: dict[str, Any]) -> dict[str, float]:
     linear = sample["object_twist_world"]["linear_m_s"]
     left_force = _contact_force(sample, "left_fingertip_contacts")
     right_force = _contact_force(sample, "right_fingertip_contacts")
     return {
         "minimum_signed_distance_m": float(sample["minimum_signed_distance_m"]),
+        "minimum_fingertip_signed_distance_m": _minimum_fingertip_signed_distance(sample),
         "maximum_normal_force_n": float(sample["maximum_normal_force_n"]),
         "linear_speed_m_s": math.sqrt(sum(float(value) ** 2 for value in linear)),
         "left_normal_force_n": left_force,
@@ -348,8 +358,14 @@ def _thresholds(
         metrics, ("bilateral_touch", "micro_lift_slip", "stable_hold")
     )
     maximum_compression, compression_margin = _separating_threshold(
-        [max(0.0, -sample["minimum_signed_distance_m"]) for sample in acceptable_compression],
-        [max(0.0, -sample["minimum_signed_distance_m"]) for sample in metrics["over_compression"]],
+        [
+            max(0.0, -sample["minimum_fingertip_signed_distance_m"])
+            for sample in acceptable_compression
+        ],
+        [
+            max(0.0, -sample["minimum_fingertip_signed_distance_m"])
+            for sample in metrics["over_compression"]
+        ],
         "compression distance",
     )
     acceptable_force = _flatten(metrics, ("bilateral_touch", "micro_lift_slip", "stable_hold"))
@@ -397,7 +413,7 @@ def classify(sample: dict[str, Any], thresholds: dict[str, float]) -> str:
     if right and not left:
         return "right_only"
     metrics = sample_metrics(sample)
-    compression = max(0.0, -metrics["minimum_signed_distance_m"])
+    compression = max(0.0, -metrics["minimum_fingertip_signed_distance_m"])
     if (
         compression >= thresholds["maximum_compression_distance_m"]
         or metrics["maximum_normal_force_n"] >= thresholds["maximum_safe_force_n"]
@@ -565,12 +581,18 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
     evidence = validate_evidence(json.loads(raw))
     all_regimes = evidence["regimes"]
     analyzed_regimes = PHYSICAL_REGIMES if evidence["source_schema_version"] == 3 else REGIMES
+    ordered_regimes = {
+        name: sorted(all_regimes[name], key=lambda sample: sample["publisher_sequence"])
+        for name in analyzed_regimes
+    }
     calibration = {
-        name: [sample for sample in all_regimes[name] if sample["publisher_sequence"] % 5]
+        name: [sample for index, sample in enumerate(ordered_regimes[name], start=1) if index % 5]
         for name in analyzed_regimes
     }
     evaluation = {
-        name: [sample for sample in all_regimes[name] if sample["publisher_sequence"] % 5 == 0]
+        name: [
+            sample for index, sample in enumerate(ordered_regimes[name], start=1) if index % 5 == 0
+        ]
         for name in analyzed_regimes
     }
     matrix = {
@@ -593,7 +615,7 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
             "minimum_consecutive_samples": 5,
         },
         "allowed_other_contact_bodies": ["table"],
-        "split_method": "publisher_sequence_modulo_5",
+        "split_method": "per_regime_ordered_index_modulo_5",
         "calibration_sample_count": sum(map(len, calibration.values())),
         "evaluation_sample_count": sum(map(len, evaluation.values())),
         "regimes": _summaries(all_regimes),

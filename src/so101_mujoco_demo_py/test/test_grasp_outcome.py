@@ -167,6 +167,27 @@ def test_accepts_fresh_bilateral_window_inside_approved_bounds() -> None:
     assert len(result.telemetry) == 5
 
 
+def test_allowed_table_penetration_does_not_define_fingertip_compression() -> None:
+    result = evaluate(
+        five_bilateral_samples(
+            signed_distance_m=-0.0004,
+            other=(
+                contact(
+                    "other",
+                    0.1,
+                    signed_distance_m=-0.004,
+                    body2="table",
+                    geom2="table_collision",
+                ),
+            ),
+        )
+    )
+
+    assert result.success
+    assert result.failure_code is None
+    assert result.metrics["maximum_compression_distance_m"] == pytest.approx(0.0004)
+
+
 @pytest.mark.parametrize(
     ("samples", "code"),
     (

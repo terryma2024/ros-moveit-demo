@@ -131,8 +131,16 @@ without activating contact execution; it still reports all fingerprints.
 Only five reachable physical regimes contribute samples to threshold fitting,
 quantiles, held-out evaluation, and the physical misclassification matrix:
 `no_contact`, `bilateral_touch`, `over_compression`, `micro_lift_slip`, and
-`stable_hold`. Each requires at least 25 fresh raw samples so the deterministic
-modulo-five split retains at least 20 calibration and 5 evaluation samples.
+`stable_hold`. Each requires at least 25 fresh raw samples. Within each regime,
+samples are sorted by publisher sequence and every fifth sample is held out, so
+the deterministic split retains at least 20 calibration and 5 evaluation samples
+without depending on unrelated publisher-sequence residues or append timing.
+
+The raw global `minimum_signed_distance_m` remains a whole-scene diagnostic and
+may be dominated by allowed table support. Compression fitting, classification,
+and the live grasp gate use the deepest left/right fingertip contact distance
+only; allowed other-contact penetration must never be interpreted as fingertip
+over-compression.
 
 `left_only` and `right_only` are deterministic rejection contracts, not
 required physical calibration cohorts. Each contract records:
