@@ -198,6 +198,64 @@ cleanup_scope: only the exact tmux session/process group created for FUSION-GUI-
 expected: one visible non-counting nine-phase mirror with valid success, fresh screenshots, numeric evidence, and no owned orphan
 ```
 
+## Checkpoint CP-FUSION-023 — invalid smoke and qualified-fingerprint repair
+
+```yaml
+checkpoint_id: CP-FUSION-023
+recorded_at: 2026-08-13T05:12:00+08:00
+terminal_experiment: fusion-smoke-007
+status: INVALID
+source_commit: ba1ab5f34646eeb0482eeb7e2fa5cc0c180eebd9
+bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
+failure: workflow owner configuration failed with POLICY_FINGERPRINT_MISMATCH before motion
+reset_epoch: -1
+clean_shutdown: true
+manifest_sha256: bcef5839bc420035f2d216fff7241be21bee717c7a5d2997fc3d5954644e6aa0
+diagnosis:
+  - Direct textual MJCF/scene path rewrites changed their SHA-256 values, while the approved contact calibration intentionally pins the exact qualified model and scene bytes.
+  - Updating contact calibration approval or thresholds is forbidden and was not attempted.
+  - The corrected ownership representation restores the exact qualified XML hashes and replaces regular duplicate source files with 44 Git symlinks resolving to assets/common/visual, assets/common/task_objects, or assets/mujoco/collision.
+  - The unified URDF continues to reference common visuals and MuJoCo collision assets explicitly.
+replacement_source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+replacement_bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+restored_model_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+restored_scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+cancelled_before_launch:
+  - EXP-FUSION-006
+  - fusion-full-restart-003
+  - fusion-reset-world-002
+  - fusion-gui-002
+cancel_reason: Their preregistered ba1ab5f source and 073519b bundle are not eligible after the invalid smoke.
+owned_processes_after_invalid_run: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+decision: Reject the invalid run and every unlaunched ba1ab5f plan. Run one newly preregistered non-counting smoke before registering any replacement counted batch.
+```
+
+## Planned experiment FUSION-SMOKE-008
+
+```yaml
+experiment_id: fusion-smoke-008
+status: PLANNED
+counting_qualification_run: false
+purpose: Prove the source-owned symlink asset closure retains the exact approved MJCF/scene fingerprint and completes one installed headless nine-phase run.
+lifecycle: FULL_RESTART
+count: 1
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+model_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+ros_domain_id: 201
+port: 27840
+evidence_root: /data/work/so101-debug-fusion-smoke-008
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+abort_criteria: any provenance/fingerprint mismatch, invalid evidence, phase or physical failure, or unclean shutdown
+expected: one non-counting VALID/SUCCESS nine-phase run with contiguous durable evidence and no owned orphan
+```
+
 ## Checkpoint CP-FUSION-016 — qualification runner and pinned-fork gate
 
 ```yaml
