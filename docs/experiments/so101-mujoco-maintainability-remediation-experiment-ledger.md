@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 4f168ec2f15c297d0509f91e4bb88e5983a8ae3d
+current_commit: a3d18a59b3ac955aed1cb53d20922ae7ba112709
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-025
-next_experiment: NONE_PENDING_POST_EXP115_RED
+latest_checkpoint: MNT-CP-029
+next_experiment: EXP-121_PENDING_PREREGISTRATION
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3307,4 +3307,48 @@ frozen_behavior: No q6, waypoint, trajectory, planner, speed/acceleration, contr
 runtime_state: No live stack or experiment started.
 next_experiment: NONE_PENDING_FULL_AUTOMATIC_GATES
 next_command: Commit this evidence-only producer change, rebuild the pinned fork overlay, then run clean isolated three-package build/test, Ruff, manifest/protected-tree/provenance gates before preregistering a new diagnostic ID.
+```
+
+## Checkpoint MNT-CP-029 — r6 exact-release and automatic-gate checkpoint
+
+```yaml
+checkpoint_id: MNT-CP-029
+recorded_at: 2026-08-12T19:58:36+08:00
+last_valid_experiment: EXP-109
+immutable_invalid_experiments:
+  - EXP-110 INVALID_EVIDENCE; never rerun or reclassified.
+  - EXP-115 INVALID_EVIDENCE; never rerun or reclassified.
+reserved_or_abandoned_ids:
+  - EXP-111..114 remain abandoned and unexecuted.
+  - EXP-116..120 were never started and will not be reused for the replacement diagnostic.
+source_checkpoint:
+  parent_head: a3d18a59b3ac955aed1cb53d20922ae7ba112709
+  fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_release_tag: so101-0.0.3-r6
+  tag_type: local annotated tag, matching the existing r1..r5 convention
+  exact_release_gate: so101-0.0.3-r6 resolves exactly to locked commit 738e304551b4ea6db020b466086a13db71b65607; no ancestor relaxation remains in installer, runtime probes, or tests.
+  publication: Fork commit/tag and parent submodule pointer exist locally only. Neither repository nor tag has been pushed; remote publication requires later explicit user authorization.
+automatic_gates:
+  fork_suite: 133 tests, 0 errors, 0 failures, 0 skipped at 738e304.
+  isolated_build: PASS for so101_mujoco_support, so101_mujoco_demo_py, and so101_teleop under /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-gate-install.
+  isolated_tests: 793 tests, 0 errors, 0 failures, 4 skipped; MuJoCo Python package 532 passed and 4 skipped; SimulationEvidencePlugin 19 GTests passed.
+  changed_scope_ruff: PASS for the five changed Python runtime/test files; Ruff 0.15.20 lint and format check both pass.
+  whole_teleop_ruff_characterization: A broad src/so101_teleop Ruff probe reports 194 pre-existing legacy findings. The package's checked-in test_ruff_gate and all package tests pass; these unrelated legacy findings are not modified or counted as this evidence-only change.
+  provenance: PASS; fork source is clean, exact tag equals locked commit, all fork packages resolve to the persistent fork overlay, all three project packages resolve to the isolated install, and required installed hashes match dependency-lock.yaml.
+  frozen_behavior_manifest_sha256: d5b6dbd747192592e5bc2ccf95521c2c665d1045bbfcb2147825c534f353561c
+  protected_gazebo: src/so101_gazebo_demo_py has zero diff/status and its registered tree matches.
+  strategy_freeze: q6, waypoints, trajectories, planner, speeds/accelerations, controller, MJCF, scene, geometry, phase order, thresholds, and normal execution semantics are unchanged.
+diagnostic_lifecycle_gate:
+  replacement_experiment: EXP-121 only; FULL_RESTART evidence-plumbing diagnostic, not a policy qualification run.
+  required_stop: Use the existing supported workflow cancellation/stop handshake or wait for normal workflow unwind before stack teardown. Never terminate the workflow process directly, never send whole-stack SIGINT while it is unwinding, and never use broad pkill.
+  shutdown_order: After workflow terminal/unwind is observed, stop owned stack components in dependency order and verify clean exit, empty owned process set, empty experiment ROS domain, and free HTTP port.
+  acceptance_scope: One publisher per evidence topic; snapshot and chunk sessions equal the preregistered session; first chunk has exactly five continuous samples at approximately 0.002 s timestep with no evidence_loss; first typed transport boundary persists; ordered clean shutdown succeeds.
+  failure_policy: Any invalid identity, evidence continuity, boundary, provenance, lifecycle, or shutdown condition makes EXP-121 INVALID and stops all work. If EXP-121 is VALID, report its result before any five-run batch.
+working_tree_status: Only the two protected unrelated untracked documents; no tracked change before this checkpoint edit.
+owned_processes: NONE
+protected_documents:
+  - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md remains untouched/untracked.
+  - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md remains untouched/untracked.
+next_experiment: EXP-121_PENDING_PREREGISTRATION
+next_command: Commit this checkpoint, generate and validate a runtime fingerprint from that committed HEAD, then preregister EXP-121 before any stack starts.
 ```
