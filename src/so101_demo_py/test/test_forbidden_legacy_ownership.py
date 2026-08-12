@@ -52,3 +52,11 @@ def test_unified_package_never_imports_legacy_packages():
         if "import so101_mujoco_demo_py" in text or "import so101_gazebo_demo_py" in text:
             offenders.append(str(path.relative_to(unified)))
     assert offenders == []
+
+
+def test_teleop_mujoco_profile_names_unified_runtime_owner():
+    profile = SOURCE_ROOT / "so101_teleop/config/backends/mujoco_py.yaml"
+    text = profile.read_text(encoding="utf-8")
+
+    assert "so101_mujoco_demo_py" not in text
+    assert "owner_package: so101_demo_py" in text

@@ -19,19 +19,9 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from so101_demo.ports.capabilities import BackendCapabilities, CapabilityRequirements
+from so101_demo.runtime.provenance import installed_bundle
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-REQUIRED_FINGERPRINT_KEYS = (
-    "source_commit",
-    "dependency_sha256",
-    "task_scene_sha256",
-    "scene_sha256",
-    "robot_mjcf_sha256",
-    "urdf_sha256",
-    "motion_policy_sha256",
-    "contact_policy_sha256",
-)
 REQUIRED_PHASES = (
     "staged_approach",
     "contact_hold",
@@ -94,17 +84,10 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def validate_fingerprint(fingerprint: Mapping[str, str]) -> dict[str, str]:
-    missing = [key for key in REQUIRED_FINGERPRINT_KEYS if key not in fingerprint]
-    if missing:
-        raise InvalidRun(f"fingerprint missing keys: {', '.join(missing)}")
-    normalized = {str(key): str(value) for key, value in fingerprint.items()}
-    if not COMMIT_RE.fullmatch(normalized["source_commit"]):
-        raise InvalidRun("source_commit must be a full 40-character commit")
-    for key in REQUIRED_FINGERPRINT_KEYS[1:]:
-        if not SHA256_RE.fullmatch(normalized[key]):
-            raise InvalidRun(f"{key} must be a full lowercase SHA-256")
-    return normalized
+def validate_bundle_sha256(value: str) -> str:
+    if not SHA256_RE.fullmatch(value):
+        raise InvalidRun("bundle must be a full lowercase SHA-256")
+    return value
 
 
 def _validate_artifact_hashes(value: object) -> bool:
@@ -119,11 +102,11 @@ def summarize_records(
     records: Sequence[Mapping[str, Any]],
     *,
     lifecycle: Lifecycle,
-    fingerprint: Mapping[str, str],
+    bundle_sha256: str,
     target_count: int,
 ) -> dict[str, Any]:
     """Validate a batch without hiding failures or contaminated attempts."""
-    expected = validate_fingerprint(fingerprint)
+    expected = validate_bundle_sha256(bundle_sha256)
     if target_count <= 0:
         raise ValueError("target_count must be positive")
     sessions: set[str] = set()
@@ -134,8 +117,8 @@ def summarize_records(
         if record.get("lifecycle") != lifecycle.value:
             invalid_reason = f"run {index} lifecycle mismatch"
             break
-        if record.get("fingerprint") != expected:
-            invalid_reason = f"run {index} fingerprint mismatch"
+        if record.get("bundle_sha256") != expected:
+            invalid_reason = f"run {index} bundle mismatch"
             break
         session_id = str(record.get("simulation_session_id", ""))
         if not session_id:
@@ -210,13 +193,30 @@ class ProductionQualificationRunner:
         self,
         *,
         evidence_root: Path,
-        fingerprint: Mapping[str, str],
+        bundle_sha256: str,
         headless: bool = True,
         startup_timeout_s: float = 90.0,
         workflow_timeout_s: float = 900.0,
     ) -> None:
         self.evidence_root = evidence_root
-        self.fingerprint = validate_fingerprint(fingerprint)
+        self.bundle_sha256 = validate_bundle_sha256(bundle_sha256)
+        bundle = installed_bundle()
+        if bundle.bundle_sha256 != self.bundle_sha256:
+            raise InvalidRun(
+                "provided bundle does not match the installed qualification bundle"
+            )
+        inputs = bundle.manifest["inputs"]
+        from ament_index_python.packages import get_package_share_directory
+
+        share = Path(get_package_share_directory("so101_demo_py"))
+        policy_path = share / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+        self.provenance = {
+            "backend": "mujoco",
+            "source_commit": inputs["source_commit"],
+            "installed_prefix": inputs["package_prefix"],
+            "policy_sha256": sha256_file(policy_path),
+            "bundle_sha256": self.bundle_sha256,
+        }
         self.headless = headless
         self.startup_timeout_s = startup_timeout_s
         self.workflow_timeout_s = workflow_timeout_s
@@ -256,15 +256,15 @@ class ProductionQualificationRunner:
         environment = self._stack_environment(domain_id=domain_id)
         log_path = run_root / "launch.log"
         command = [
-            "ros2",
-            "launch",
-            "so101_demo_py",
-            "so101_mujoco_teleop.launch.py",
-            f"headless:={'true' if self.headless else 'false'}",
-            f"simulation_session_id:={session_id}",
-            "bind_address:=127.0.0.1",
-            f"port:={port}",
-            "build_web_if_needed:=false",
+            "python3",
+            "-m",
+            "so101_demo.application.qualification_stack",
+            "--session-id",
+            session_id,
+            "--port",
+            str(port),
+            "--headless",
+            "true" if self.headless else "false",
         ]
         log_stream = log_path.open("w")
         process = subprocess.Popen(
@@ -499,7 +499,7 @@ class ProductionQualificationRunner:
             {
                 "lifecycle": lifecycle.value,
                 "status": record.get("status", RunStatus.SUCCESS.value),
-                "fingerprint": self.fingerprint,
+                **self.provenance,
                 "clean_shutdown": dict(shutdown),
                 "artifact_sha256": {name: sha256_file(Path(path)) for name, path in paths.items()},
                 "artifact_paths": paths,
@@ -648,14 +648,14 @@ class ProductionQualificationRunner:
         summary = summarize_records(
             records,
             lifecycle=lifecycle,
-            fingerprint=self.fingerprint,
+            bundle_sha256=self.bundle_sha256,
             target_count=count,
         )
         manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
             "batch_id": batch_id,
             "lifecycle": lifecycle.value,
-            "fingerprint": self.fingerprint,
+            **self.provenance,
             "records": records,
             "summary": summary,
         }
@@ -666,25 +666,96 @@ class ProductionQualificationRunner:
         return manifest
 
 
+def verify_batch(
+    *,
+    evidence_root: Path,
+    expected_lifecycle: Lifecycle,
+    expected_count: int,
+    expected_bundle: str,
+) -> dict[str, Any]:
+    manifest_path = evidence_root / "qualification-manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise InvalidRun(f"qualification manifest is unreadable: {error}") from error
+    bundle = validate_bundle_sha256(expected_bundle)
+    if manifest.get("bundle_sha256") != bundle:
+        raise InvalidRun("qualification manifest bundle mismatch")
+    if manifest.get("lifecycle") != expected_lifecycle.value:
+        raise InvalidRun("qualification manifest lifecycle mismatch")
+    records = manifest.get("records")
+    if not isinstance(records, list):
+        raise InvalidRun("qualification manifest records are invalid")
+    summary = summarize_records(
+        records,
+        lifecycle=expected_lifecycle,
+        bundle_sha256=bundle,
+        target_count=expected_count,
+    )
+    if not summary["qualified"]:
+        raise InvalidRun(
+            "qualification batch is not qualified: "
+            + str(summary.get("invalid_reason") or "winning streak incomplete")
+        )
+    return summary
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="run_qualification")
-    parser.add_argument("--batch-id", required=True)
-    parser.add_argument("--lifecycle", choices=[item.value for item in Lifecycle], required=True)
-    parser.add_argument("--count", type=int, required=True)
-    parser.add_argument("--fingerprint", type=Path, required=True)
-    parser.add_argument("--evidence-root", type=Path, required=True)
-    parser.add_argument("--base-domain-id", type=int, required=True)
-    parser.add_argument("--base-port", type=int, required=True)
+    parser.add_argument(
+        "command", nargs="?", choices=("run", "verify-batch"), default="run"
+    )
+    parser.add_argument("--batch-id")
+    parser.add_argument("--lifecycle", choices=[item.value for item in Lifecycle])
+    parser.add_argument("--count", type=int)
+    parser.add_argument("--fingerprint")
+    parser.add_argument("--evidence-root", type=Path)
+    parser.add_argument("--base-domain-id", type=int)
+    parser.add_argument("--base-port", type=int)
     parser.add_argument("--headless", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--expected-lifecycle", choices=[item.value for item in Lifecycle]
+    )
+    parser.add_argument("--expected-count", type=int)
+    parser.add_argument("--expected-bundle")
     return parser
 
 
 def main(arguments: list[str] | None = None) -> int:
     options = build_parser().parse_args(arguments)
-    fingerprint = json.loads(options.fingerprint.read_text())
+    if options.command == "verify-batch":
+        if (
+            options.evidence_root is None
+            or options.expected_lifecycle is None
+            or options.expected_count is None
+            or options.expected_bundle is None
+        ):
+            raise InvalidRun("verify-batch requires all expected values and evidence root")
+        summary = verify_batch(
+            evidence_root=options.evidence_root,
+            expected_lifecycle=Lifecycle(options.expected_lifecycle),
+            expected_count=options.expected_count,
+            expected_bundle=options.expected_bundle,
+        )
+        print("QUALIFIED")
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+    if any(
+        value is None
+        for value in (
+            options.batch_id,
+            options.lifecycle,
+            options.count,
+            options.fingerprint,
+            options.evidence_root,
+            options.base_domain_id,
+            options.base_port,
+        )
+    ):
+        raise InvalidRun("run requires batch, lifecycle, count, bundle, evidence, domain, and port")
     runner = ProductionQualificationRunner(
         evidence_root=options.evidence_root,
-        fingerprint=fingerprint,
+        bundle_sha256=options.fingerprint,
         headless=options.headless,
     )
     manifest = runner.run_batch(
@@ -696,3 +767,7 @@ def main(arguments: list[str] | None = None) -> int:
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0 if manifest["summary"]["qualified"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

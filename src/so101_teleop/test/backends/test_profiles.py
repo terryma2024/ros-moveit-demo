@@ -49,8 +49,8 @@ def test_gazebo_py_profile_pins_python_cli_differences():
 def test_mujoco_profile_exposes_only_qualified_live_boundaries():
     profile = load_backend_profile("mujoco_py", PACKAGE)
 
-    assert profile.owner_package == "so101_mujoco_demo_py"
-    assert profile.probe.executable == "pick_place_state_machine"
+    assert profile.owner_package == "so101_demo_py"
+    assert profile.probe.executable == "pick_place"
     assert set(profile.operations) == {
         BackendOperation.WORKFLOW,
         BackendOperation.RESET_WORLD,
