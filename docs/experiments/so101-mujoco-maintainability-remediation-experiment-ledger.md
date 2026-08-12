@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: a3d18a59b3ac955aed1cb53d20922ae7ba112709
+current_commit: 49d498d25d1da345622fb40054036e64942c5fbd
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -20,7 +20,7 @@ disproven_routes:
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
 latest_checkpoint: MNT-CP-029
-next_experiment: EXP-121_PENDING_PREREGISTRATION
+next_experiment: EXP-121
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3351,4 +3351,53 @@ protected_documents:
   - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md remains untouched/untracked.
 next_experiment: EXP-121_PENDING_PREREGISTRATION
 next_command: Commit this checkpoint, generate and validate a runtime fingerprint from that committed HEAD, then preregister EXP-121 before any stack starts.
+```
+
+## EXP-121 preregistration — authoritative physics-step evidence diagnostic
+
+```yaml
+experiment_id: EXP-121
+recorded_at: 2026-08-12T20:11:56+08:00
+prior_experiments:
+  - EXP-110 and EXP-115 remain permanently INVALID_EVIDENCE and are not rerun or reclassified.
+  - EXP-111..114 remain abandoned and unexecuted.
+  - EXP-116..120 were never started and are not reused.
+status: PLANNED
+purpose: Validate authoritative 500 Hz physics-step evidence identity, continuity, publisher provenance, typed boundary persistence, and clean lifecycle only; do not evaluate or tune grasp policy.
+lifecycle: FULL_RESTART
+behavior_source_commit: 49d498d25d1da345622fb40054036e64942c5fbd
+fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+fork_release_tag: so101-0.0.3-r6
+install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-gate-install
+runtime_fingerprint:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-runtime-fingerprint.json
+  sha256: 42dd62ef63c2719944dd96ca25adab2014e16f43880ba2ecd59f21a1ab8dac1f
+frozen_behavior_manifest_sha256: d5b6dbd747192592e5bc2ccf95521c2c665d1045bbfcb2147825c534f353561c
+harness:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp121_evidence_diagnostic.py
+  sha256: 515bda9df23c7777213adb18d95448a1c798b85473e96b2fbd1b8bd36cb98dfe
+  static_checks: py_compile PASS; Ruff lint/format PASS; no terminate(), kill(), or /execution/cancel path.
+runtime_identity:
+  session: MNT-A-EXP121-full-01
+  ros_domain_id: 193
+  port: 8033
+  gz_partition: so101-mnt-a-exp121
+  evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/exp121
+single_variable: PhysicsStepEvidence production moved from the approximately 100 Hz controller read cadence to the fork's authoritative post-mj_step 500 Hz hook. q6, waypoints, trajectories, planner, speeds/accelerations, controller, MJCF, scene, geometry, thresholds, and phase behavior remain frozen.
+procedure:
+  - Start exactly one fresh non-headless stack from the r6 isolated overlay and perform the existing transactional reset.
+  - Start the unchanged production workflow and observe the atomically checkpointed raw index.
+  - Record the first persisted typed boundary plus content-addressed physics-step chunk, but send no cancellation or other command to the independent workflow owner.
+  - Wait for /workflow/run to return naturally, regardless of business success or failure; only after its HTTP terminal response may ordered stop_stack run.
+  - If the workflow does not naturally return within the bounded timeout, mark INVALID_EVIDENCE and preserve the owned stack for manual handling; never terminate/kill the workflow or tear down underneath it.
+acceptance:
+  - Exactly one publisher exists on /so101/simulation/evidence and /so101/simulation/physics_step_chunks, with publisher identities/GIDs persisted.
+  - Expected session, first snapshot session, first chunk session, and all five first-chunk sample sessions equal MNT-A-EXP121-full-01.
+  - The first chunk contains exactly five samples, physics_step increases strictly by one, adjacent simulation_time_s differs by approximately 0.002 s, failed_publish_attempts is zero, and evidence_loss is false.
+  - At least one typed transport boundary persists; no identity_mismatch or later invalid_reason is recorded.
+  - Workflow returns through its HTTP ownership boundary before teardown; ordered shutdown passes with no process-died/fatal-signal marker and no owned process/domain/port residue.
+  - Workflow grasp outcome is not an EXP-121 acceptance signal.
+failure_policy: Any failed identity, continuity, publisher, boundary, provenance, workflow-unwind, or shutdown condition makes EXP-121 INVALID_EVIDENCE and stops further batch work. EXP-121 is run exactly once.
+command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh; source /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-gate-install/setup.zsh; GZ_PARTITION=so101-mnt-a-exp121 PYTHONPATH=/data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_mujoco_demo_py python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp121_evidence_diagnostic.py
+next_if_valid: Stop and report EXP-121 before preregistering any new five-run batch.
 ```
