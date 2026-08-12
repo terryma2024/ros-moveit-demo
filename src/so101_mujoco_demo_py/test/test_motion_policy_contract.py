@@ -25,3 +25,18 @@ def test_motion_policy_preserves_approved_pick_place_endpoints() -> None:
     assert states["MOVE_ABOVE_PLACE"]["velocity_scaling"] == 0.10
     assert states["DESCEND_TO_PLACE"]["velocity_scaling"] == 0.05
     assert states["DESCEND_TO_PLACE"]["acceleration_scaling"] == 0.05
+
+
+def test_motion_policy_owns_safety_and_final_outcome_contracts() -> None:
+    document = yaml.safe_load(POLICY.read_text())
+    outcome = document["physical_outcome"]
+
+    assert document["safety_limits"] == {"maximum_diagnostic_force_n": 11.60}
+    assert outcome["final_target_region"] == {
+        "kind": "axis_aligned_box",
+        "min_xy_m": [-0.090, -0.260],
+        "max_xy_m": [-0.070, -0.240],
+    }
+    assert outcome["support_height_range_m"] == [0.155, 0.175]
+    assert outcome["consecutive_samples"] == 5
+    assert outcome["planning_shadow"]["max_pair_age_s"] == 0.10

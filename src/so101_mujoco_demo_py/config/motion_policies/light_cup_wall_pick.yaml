@@ -6,6 +6,8 @@ tcp_link: so101_tcp
 gripper_joint: "6"
 all_joints: ["1", "2", "3", "4", "5", "6"]
 arm_joints: ["1", "2", "3", "4", "5"]
+safety_limits:
+  maximum_diagnostic_force_n: &maximum_diagnostic_force_n 11.60
 approach_outside_clearance_m: 0.001
 grasp_tcp_translation_offset_m: [0.0, 0.0, 0.0]
 grasp_tcp_world_x_rotation_rad: 0.0
@@ -46,7 +48,7 @@ contact_calibration_approach:
   home_max_joint_speed_rad_s: 0.02
   maximum_lateral_deviation_m: 0.003
   maximum_precontact_cup_displacement_m: 0.003
-  maximum_diagnostic_force_n: 11.60
+  maximum_diagnostic_force_n: *maximum_diagnostic_force_n
   maximum_receipt_age_s: 0.2
   maximum_replans: 1
   pause_physics: false
@@ -69,7 +71,31 @@ staged_approach_execution:
   maximum_replans_per_segment: 2
   maximum_receipt_age_s: 0.50
   maximum_preclose_cup_displacement_m: 0.003
-  maximum_preclose_force_n: 11.60
+  maximum_preclose_force_n: *maximum_diagnostic_force_n
+physical_outcome:
+  intended_support_collision: table_collision
+  minimum_support_signed_distance_m: -0.0000001
+  final_target_region:
+    kind: axis_aligned_box
+    min_xy_m: [-0.090, -0.260]
+    max_xy_m: [-0.070, -0.240]
+  support_height_range_m: [0.155, 0.175]
+  max_upright_tilt_rad: 0.08726646259971647
+  max_linear_speed_m_s: 0.001
+  max_angular_speed_rad_s: 0.05
+  consecutive_samples: 5
+  minimum_stable_duration_s: 0.20
+  sample_interval_s: 0.05
+  settle_timeout_s: 2.0
+  max_observation_age_s: 0.10
+  max_telemetry_samples: 40
+  catastrophic_workspace_bounds_m: [-0.21, -0.46, 0.12, 0.21, 0.06, 0.30]
+  max_relative_position_drift_m: 0.005
+  max_relative_orientation_drift_rad: 0.070
+  planning_shadow:
+    max_position_divergence_m: 0.005
+    max_orientation_divergence_rad: 0.070
+    max_pair_age_s: 0.10
 states:
   MOVE_ABOVE_OBJECT:
     logical_start: [0.0, 0.0, 0.0, 0.0, 0.0]
