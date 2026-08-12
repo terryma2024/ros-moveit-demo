@@ -22,12 +22,21 @@ FORK_PACKAGES = (
 PROJECT_PACKAGES = ("so101_mujoco_support", "so101_mujoco_demo_py")
 
 
-def resolved_prefixes(lock: dict, project_root: Path) -> tuple[Path, Path]:
+def resolved_prefixes(
+    lock: dict,
+    project_root: Path,
+    project_install_override: Path | None = None,
+) -> tuple[Path, Path]:
     paths = lock["paths"]
     workspace = (
         Path(os.environ.get(paths["workspace_env"], project_root.parent)).expanduser().resolve()
     )
-    return workspace / paths["fork_install"], project_root / paths["project_install"]
+    project_install = (
+        project_install_override.expanduser().resolve()
+        if project_install_override is not None
+        else project_root / paths["project_install"]
+    )
+    return workspace / paths["fork_install"], project_install
 
 
 def sha256(path: Path) -> str:
@@ -45,11 +54,20 @@ def fail(message: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lock", required=True, type=Path)
+    parser.add_argument(
+        "--project-install",
+        type=Path,
+        help="explicit project install root for a fresh isolated acceptance build",
+    )
     parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
     lock = yaml.safe_load(args.lock.read_text(encoding="utf-8"))
     project_root = args.lock.resolve().parents[3]
-    fork_prefix, project_install = resolved_prefixes(lock, project_root)
+    fork_prefix, project_install = resolved_prefixes(
+        lock,
+        project_root,
+        args.project_install,
+    )
     source = project_root / lock["submodule_path"]
     fork = lock["fork"]
     upstream = lock["upstream"]

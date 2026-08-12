@@ -12,6 +12,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = PACKAGE_ROOT.parents[1]
 LOCK = PACKAGE_ROOT / "config/dependency-lock.yaml"
 PROBE = PACKAGE_ROOT / "scripts/check_mujoco_runtime.py"
+RESET_PROBE = PACKAGE_ROOT / "scripts/check_reset_qualified_runtime.py"
 SUBMODULE = PROJECT_ROOT / "third_party/mujoco_ros2_control"
 OFFICIAL_COMMIT = "35ba8174b62d9560093614f981a3d4b978a96036"
 FORK_URL = "git@gitee.com:zjumty/mujoco_ros2_control.git"
@@ -38,8 +39,31 @@ def load_probe():
     return module
 
 
+def load_reset_probe():
+    spec = importlib.util.spec_from_file_location("reset_runtime_probe", RESET_PROBE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_lock() -> dict:
     return yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+
+
+def test_reset_checker_accepts_an_explicit_fresh_project_install(tmp_path: Path) -> None:
+    probe = load_reset_probe()
+    lock = load_lock()
+    project_install = tmp_path / "acceptance" / "install"
+
+    fork_prefix, resolved_project_install = probe.resolved_prefixes(
+        lock,
+        PROJECT_ROOT,
+        project_install,
+    )
+
+    assert fork_prefix == PROJECT_ROOT.parent / FORK_WORKSPACE / "install"
+    assert resolved_project_install == project_install.resolve()
 
 
 def test_lock_pins_exact_qualified_fork() -> None:
