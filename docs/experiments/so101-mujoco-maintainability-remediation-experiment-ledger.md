@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 80e558b564d4445cc6ba01c7c5e53343ad0f80f9
+current_commit: efeb7bcb47bffacd3017b0770deb5ab5628a3365
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,8 +21,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-053
-next_experiment: RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
+latest_checkpoint: MNT-CP-054
+next_experiment: NONE_TASK9_STATIC_ANALYSIS_AUTHORIZED
 ```
 
 ## Checkpoint MNT-CP-001
@@ -5459,4 +5459,54 @@ protected_user_state:
     - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
 next_experiment: RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
 next_command: Decide whether to first generate the diagnostic schema-v4 proposal from EXP-126..130 under a new explicit checkpoint, or preregister the five RESET_WORLD challenge; do not start either path implicitly.
+```
+
+## Checkpoint MNT-CP-054 — authorized substitute inputs for phase-aware Task 9
+
+```yaml
+checkpoint_id: MNT-CP-054
+recorded_at: 2026-08-13T00:49:58+08:00
+prior_checkpoint: MNT-CP-053
+source_commit: efeb7bcb47bffacd3017b0770deb5ab5628a3365
+status: AUTHORIZED_NOT_STARTED
+user_authorization_verbatim: 明确授权用已经完成的 EXP-126..130 替代输入。
+scope:
+  plan: docs/superpowers/plans/2026-08-12-so101-mujoco-phase-aware-transport-evidence.md
+  task: Task 9 — generate the exact-hash disabled proposal and stop
+  immutable_abandoned_batch:
+    EXP-110: INVALID_EVIDENCE; never rerun or reclassified
+    EXP-111_through_EXP-114: unexecuted; identifiers never reused
+  authorized_substitute_inputs: [EXP-126, EXP-127, EXP-128, EXP-129, EXP-130]
+  input_lifecycle: FULL_RESTART
+  input_evidence_contract: five independent successful runs, lossless 500 Hz content-addressed chunks, canonical stored summaries, common runtime fingerprint
+required_actions:
+  - Reconstruct each DynamicTransportRun from its run-index and every content-addressed raw chunk.
+  - Re-run analyze_dynamic_transport with the unchanged static shadow threshold 1.1579004532160448 N.
+  - Require each replayed canonical summary to be byte-identical to its stored transport-dynamic-summary.json.
+  - Build one dynamic-input document that marks EXP-126..129 descriptive repeats and EXP-130 the replication while retaining original simulation session IDs and bound hashes.
+  - Generate two schema-v4 proposal files through the existing analyzer and require byte identity and equal SHA-256.
+  - Validate approval disabled, acceptance_role diagnostic_only, no dynamic acceptance threshold, unchanged 11.60 N diagnostic hard stop, and exact embedded proposal hash.
+exact_stop: Record proposal path, file SHA-256, embedded proposal_sha256, replay hashes, run/waypoint summaries, and set USER_APPROVAL_REQUIRED. Do not approve, activate, edit checked-in policy, start RESET_WORLD, merge, rebase, or push.
+frozen_behavior:
+  strategy_or_threshold_change: NONE
+  checked_in_contact_policy_change: NONE
+  motion_mjcf_scene_controller_change: NONE
+provenance:
+  baseline_json: docs/experiments/so101-mujoco-full-restart-baseline.json
+  baseline_sha256: 7e24e479dbed11292b7e95e95069a29a18e610298f5d9d655cbf64dad3f66368
+  runtime_source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271
+  fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+execution_state:
+  owned_processes: NONE
+  simulation_started: false
+  reset_world_started: false
+  proposal_directory_preexisting: false
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  preserved_untracked_documents:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+next_experiment: NONE_TASK9_STATIC_ANALYSIS_AUTHORIZED
+next_command: Create the isolated phase-aware-proposal evidence directory and run the hash-recorded replay tool against EXP-126..130; no ROS or MuJoCo stack is required.
 ```
