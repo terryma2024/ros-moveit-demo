@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 01b252a8b0d04c8f62ceaf052991b936b2723f25
+current_commit: ab96a689f7c7db8c761d4bfb54b284ed3e1202ed
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -26,7 +26,7 @@ open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
 latest_checkpoint: CP-FUSION-008
-next_experiment: NONE
+next_experiment: EXP-FUSION-001
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -277,4 +277,105 @@ evidence:
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task11/gazebo-show-args.log sha256=84e10d1f45cbd7a78a1b24844013586504356fbb2e92a6e04be79ae58ff7bae6
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task11/dry-run.log sha256=111caa2698bd02860b7ce95112ce36f6873ba7ebe3c558acee5eeee1099aa3ec
   - log/fusion-t11/latest_build
+```
+
+## Planned experiment EXP-FUSION-001
+
+```yaml
+experiment_id: EXP-FUSION-001
+status: PLANNED
+purpose: Deferred Tasks 6-9 installed complete MuJoCo execute gate after unified asset and launch ownership exists.
+lifecycle: ISOLATED_STACK
+counting_qualification_run: false
+source_commit: ab96a689f7c7db8c761d4bfb54b284ed3e1202ed
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-t11-live/so101_demo_py
+runtime_executable: /opt/ros/jazzy/bin/ros2
+policy_id: light_cup_wall_pick
+policy_version: v1
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: d48293fde8a37f9d8f3450564c297506091588f6aa92d72deaf40bb162197978
+ros_domain_id: 171
+gz_partition: NOT_APPLICABLE
+session_id: fusion-exp-001-ab96a68
+evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-001
+command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-001-ab96a68 evidence_file:=/tmp/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-001/result.json
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+abort_criteria:
+  - any session, epoch, policy, installed-prefix, or bundle mismatch
+  - unavailable controller, MoveIt, scene, observer, reset/pause, or evidence service
+  - any phase nonzero exit, missing/invalid evidence, safety boundary, or physical outcome failure
+  - any unowned process selected for cleanup
+cleanup_scope: only the launch process group created for EXP-FUSION-001; bounded launch shutdown, then exact owned-PID audit
+expected: one complete nine-phase success, valid installed evidence manifest, and no owned orphan
+```
+
+## Checkpoint CP-FUSION-009 — EXP-FUSION-001 terminal valid failure
+
+```yaml
+checkpoint_id: CP-FUSION-009
+recorded_at: 2026-08-13T03:17:31+08:00
+terminal_experiment: EXP-FUSION-001
+status: VALID_FAILURE_NONCOUNTING
+source_commit: ab96a689f7c7db8c761d4bfb54b284ed3e1202ed
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: d48293fde8a37f9d8f3450564c297506091588f6aa92d72deaf40bb162197978
+completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift]
+failed_phase: transport
+failure: EvidenceInvalid chunk sequence mismatch
+first_stored_chunk: {sequence: 5384, first_physics_step: 26923, last_physics_step: 26927, reset_epoch: 0}
+diagnosis:
+  first_bad_boundary: The strict high-rate transport consumer observed a gap immediately after its first durably checkpointed five-sample chunk.
+  evidence_filesystem: {source: /dev/sda3, mount_target: /tmp, filesystem: ext4}
+  matching_repository_evidence: MNT-CP-057 records the same /tmp chunk-gap failure; EXP-124 and EXP-126 through EXP-130 prove the unchanged 500 Hz trace on /data NVMe.
+  robot_strategy_defect: false
+  policy_or_threshold_defect: false
+  unified_launch_or_phase_order_defect: false
+  task_result: The unified launch graph, controllers, MoveIt, scene setup, and first five physical phases all executed; the deferred complete-execute gate remains unsatisfied.
+artifacts_sha256:
+  transport_result: fac1c77acbb34260737f04baf51b97e18e6b40474b553d674ccab06606e963df
+  raw_run_index: 730ba2975dfccf0e7998d09a558827cbebe0a5e6f3f9487a9e9d1fc29c4d49a8
+  live_runtime_manifest: 15472fd27a2665ff5db85e6a120cf351abdb4a4df1a9b0d181cd57a13eaf1f8f
+  launch_log: 02b0502843c355373f57a68b38c8d89e9b419317d3d0f113910e2e2eb60d65f3
+cleanup:
+  ordered_launch_shutdown: true
+  owned_processes_after_probe: NONE
+  preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+decision: Do not reuse EXP-FUSION-001. Register one replacement with evidence storage as the sole changed variable and no source, policy, model, scene, timing, target, or threshold change.
+next_experiment: EXP-FUSION-002
+```
+
+## Planned experiment EXP-FUSION-002
+
+```yaml
+experiment_id: EXP-FUSION-002
+status: PLANNED
+purpose: Replacement deferred Tasks 6-9 installed complete MuJoCo execute gate after correcting only the known high-rate durable-evidence storage boundary.
+lifecycle: ISOLATED_STACK
+counting_qualification_run: false
+source_commit: ab96a689f7c7db8c761d4bfb54b284ed3e1202ed
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-t11-live/so101_demo_py
+runtime_executable: /opt/ros/jazzy/bin/ros2
+policy_id: light_cup_wall_pick
+policy_version: v1
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: d48293fde8a37f9d8f3450564c297506091588f6aa92d72deaf40bb162197978
+single_variable_from_EXP_FUSION_001: Evidence root moves from /tmp on /dev/sda3 to /data/work on /dev/nvme0n1p5.
+behavior_changes: NONE
+ros_domain_id: 172
+gz_partition: NOT_APPLICABLE
+session_id: fusion-exp-002-ab96a68
+evidence_root: /data/work/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-002
+evidence_root_pre_registration_state: ABSENT
+evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
+command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-002-ab96a68 evidence_file:=/data/work/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-002/result.json
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+abort_criteria:
+  - any session, epoch, policy, installed-prefix, or bundle mismatch
+  - unavailable controller, MoveIt, scene, observer, reset/pause, or evidence service
+  - any phase nonzero exit, missing/invalid evidence, safety boundary, or physical outcome failure
+  - any unowned process selected for cleanup
+cleanup_scope: only the launch process group created for EXP-FUSION-002; bounded launch shutdown, then exact owned-PID audit
+expected: one complete nine-phase success with lossless transport evidence on the qualified NVMe volume, valid installed evidence manifest, and no owned orphan
 ```
