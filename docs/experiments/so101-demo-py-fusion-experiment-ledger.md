@@ -25,8 +25,8 @@ disproven_routes:
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-012
-next_experiment: EXP-FUSION-004
+latest_checkpoint: CP-FUSION-013
+next_experiment: EXP-FUSION-005
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -190,6 +190,50 @@ owned_processes_before_launch: NONE
 preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
 acceptance_and_abort_criteria: IDENTICAL_TO_EXP_FUSION_003
 cleanup_scope: only the launch process group and GZ partition created for EXP-FUSION-004
+expected: registered source/bundle at launch, then a valid non-INVALID natural Gazebo result
+```
+
+## Checkpoint CP-FUSION-013 — EXP-FUSION-004 invalid pre-launch command
+
+```yaml
+checkpoint_id: CP-FUSION-013
+terminal_experiment: EXP-FUSION-004
+status: INVALID_PRELAUNCH_ABORT
+failure: The operator invoked nonexistent gazebo_demo.launch.py instead of the registered so101_gazebo_pick_place.launch.py entry point.
+simulation_started: false
+controller_action_started: false
+result_manifest_created: false
+identifier_reusable: false
+owned_processes_after_probe: NONE
+artifact_sha256:
+  launch_log: d3e74c9a101e999a2accb8a65e8f86254c1249e69db8bdf588915d1b36330eca
+decision: Register a fresh ID with identical installed bytes, provenance, behavior, and acceptance criteria; correct only the launch filename.
+next_experiment: EXP-FUSION-005
+```
+
+## Planned experiment EXP-FUSION-005
+
+```yaml
+experiment_id: EXP-FUSION-005
+status: PLANNED
+purpose: Replacement Task 13 bounded Gazebo execute after correcting only the launch filename.
+lifecycle: FULL_RESTART_SINGLE_RUN
+counting_qualification_run: false
+source_commit: f184617805e551b92bc5773433244c6193442abc
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-t13-live/so101_demo_py
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 4edb642e4f152eb913fac5d2fecd2e6a969fad3a8774be72749c92e75092382f
+single_variable_from_EXP_FUSION_004: Invoke so101_gazebo_pick_place.launch.py, the installed launch entry point named in the approved plan and EXP-FUSION-003 registration.
+behavior_changes: NONE
+ros_domain_id: 175
+gz_partition: fusion-exp-005-f184617
+session_id: fusion-exp-005-f184617
+evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-005
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+acceptance_and_abort_criteria: IDENTICAL_TO_EXP_FUSION_003
+cleanup_scope: only the launch process group and GZ partition created for EXP-FUSION-005
 expected: registered source/bundle at launch, then a valid non-INVALID natural Gazebo result
 ```
 
