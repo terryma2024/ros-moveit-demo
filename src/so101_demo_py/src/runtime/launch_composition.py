@@ -25,6 +25,8 @@ from launch_ros.parameter_descriptions import ParameterFile
 from launch import LaunchDescription
 
 from ..core.policy_registry import load_policy_variant
+from ..ports.capabilities import CapabilityRequirements
+from .composition import backend_capabilities
 from .provenance import installed_bundle
 
 COMMON_ARGUMENTS = {
@@ -205,6 +207,8 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
         share,
     )
     bundle = installed_bundle()
+    capabilities = backend_capabilities(backend)
+    base_capabilities = CapabilityRequirements.base_execute().validate(capabilities)
     source_commit = str(bundle.manifest["inputs"]["source_commit"])
     messages = [
         LogInfo(msg=f"so101 backend={backend}"),
@@ -213,6 +217,14 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
         LogInfo(msg=f"so101 policy_sha256={policy.policy_sha256}"),
         LogInfo(msg=f"so101 bundle_sha256={bundle.bundle_sha256}"),
         LogInfo(msg=f"so101 execute={str(execute).lower()} session_id={session_id}"),
+        LogInfo(
+            msg="so101 base_execute_capabilities="
+            + ("accepted" if base_capabilities.accepted else "rejected")
+        ),
+        LogInfo(
+            msg="so101 lossless_physics_step_trace="
+            + str(capabilities.lossless_physics_step_trace).lower()
+        ),
         LogInfo(msg=f"so101 ROS_DOMAIN_ID={os.environ.get('ROS_DOMAIN_ID', '')}"),
     ]
     if backend == "gazebo":
