@@ -25,8 +25,8 @@ disproven_routes:
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-013
-next_experiment: EXP-FUSION-005
+latest_checkpoint: CP-FUSION-014
+next_experiment: NONE_TASK_14_IMPLEMENTATION
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -191,6 +191,40 @@ preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and
 acceptance_and_abort_criteria: IDENTICAL_TO_EXP_FUSION_003
 cleanup_scope: only the launch process group and GZ partition created for EXP-FUSION-004
 expected: registered source/bundle at launch, then a valid non-INVALID natural Gazebo result
+```
+
+## Checkpoint CP-FUSION-014 — EXP-FUSION-005 valid Gazebo execute boundary
+
+```yaml
+checkpoint_id: CP-FUSION-014
+terminal_experiment: EXP-FUSION-005
+status: COMPLETE
+task_13_gate: PASS
+run_status: FAILED
+qualification_status: NOT_QUALIFIED
+failure_category: EXECUTION
+first_failed_phase: PREPARE_OPEN_GRIPPER
+error_code: ACTION_REJECTED
+evidence_valid: true
+runner_exit_code: 1
+simulation_started: true
+controller_action_started: true
+observed_boundary: The gripper FollowJointTrajectory server received and rejected the pre-open goal while controller activation completed; this is the first actual controller boundary and is classified as a valid execution failure, not INVALID or SKIPPED.
+provenance:
+  source_commit: f184617805e551b92bc5773433244c6193442abc
+  policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  bundle_sha256: 4edb642e4f152eb913fac5d2fecd2e6a969fad3a8774be72749c92e75092382f
+  ros_domain_id: 175
+  gz_partition: fusion-exp-005-f184617
+evidence_retained: [initial_joints_rad, terminal_joints_rad, world_pose, world_stats, action_status, action_error_code]
+artifact_sha256:
+  launch_log: c19793b53d7678ff986f4df8dca73d592eedadc07dfcb264906cca375bf2f16b
+  result_manifest: 5c761515ebdaad9c0cef67106f6c6e086dc13b37a907ae0de3c8ae0ac72b460b
+  raw_evidence: ceabcdd2970be226ae45aecfe8af011f08df67419142a3df21613ee9273c6cfc
+cleanup:
+  owned_processes_after_probe: NONE
+  preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+decision: Task 13 accepts either valid FAILED or SUCCEEDED. Proceed to compatibility forwarding without tuning Gazebo behavior.
 ```
 
 ## Checkpoint CP-FUSION-013 — EXP-FUSION-004 invalid pre-launch command
