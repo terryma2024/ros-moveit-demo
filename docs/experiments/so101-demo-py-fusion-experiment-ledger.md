@@ -35,6 +35,169 @@ Raw build, test, runtime, screenshot, video, and qualification evidence remains 
 task evidence root. This ledger stores checkpoints and conclusions only. Live experiments must be
 pre-registered here before any stack is launched.
 
+## Checkpoint CP-FUSION-022 — completion-audit correction and replacement freeze
+
+```yaml
+checkpoint_id: CP-FUSION-022
+recorded_at: 2026-08-13T05:01:14+08:00
+status: CORRECTION_AND_REQUALIFICATION_REQUIRED
+supersedes_completion_claim: CP-FUSION-021
+qualified_source_commit: ba1ab5f34646eeb0482eeb7e2fa5cc0c180eebd9
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
+mujoco_ros2_control_gitlink: 738e304551b4ea6db020b466086a13db71b65607
+mujoco_ros2_control_executable_sha256: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
+audit_corrections:
+  - CP-FUSION-014 recorded owned_processes_after_probe as NONE, but the completion audit found PID 2952064, PPID 1, with ROS_DOMAIN_ID=175, GZ_PARTITION=fusion-exp-005-f184617, the EXP-FUSION-005 ROS_LOG_DIR, and this worktree as cwd.
+  - The exact singleton task-owned Gazebo PID received SIGINT and exited; no related process or ROS/Gazebo topic remained. No broad process selection was used.
+  - The MuJoCo MJCF, scene, and URDF still referenced assets/mujoco/assets despite the geometry manifest claiming assets/common/visual. The duplicate 45-file tree was removed and all model references now point directly to common visuals/task objects or backend-specific collision meshes.
+  - The common run-result schema omitted source_commit and installed_prefix. Both are now validated, serialized, and passed from the installed bundle to the Gazebo executor.
+superseded_evidence:
+  - fusion-full-restart-002 and fusion-reset-world-001 remain historically valid for bundle 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388 but cannot qualify corrected source ba1ab5f.
+  - fusion-gui-001 and EXP-FUSION-005 remain historical corroboration only.
+static_gates:
+  fresh_nonsymlink_build: PASS
+  unified_tests: 105 passed
+  compatibility_profile_tests: 17 passed
+  installed_provenance_tests: 3 passed
+  fusion_contract: PASS
+  installed_module_under_final_prefix: PASS
+owned_processes_after_correction: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+evidence:
+  orphan_cleanup_log_sha256: edac55a595f358e246b31fb369064dc77a5f4c404451d230119a1480127ae34b
+  build_log_sha256: 41a7fd33d39b8877cb74a40b60af7e8c919aae22c6c60c7fdb78b6c7fd2f0026
+  contract_log_sha256: bfd6bf592e60d527dfcf761881196f0c84f458809a33be5b1a957eb90672cc07
+  installed_test_log_sha256: 7cf85ad7b7f99933799375eba00849fc59d3a34f3a93db7da478800b5cf2a33e
+decision: Freeze ba1ab5f and bundle 073519b for one smoke, a replacement Gazebo result, new independent FULL_RESTART and RESET_WORLD batches, and a fresh GUI mirror.
+```
+
+## Planned experiment FUSION-SMOKE-007
+
+```yaml
+experiment_id: fusion-smoke-007
+status: PLANNED
+counting_qualification_run: false
+purpose: Prove the corrected common-visual MJCF/scene loads and completes one installed headless nine-phase run before counted replacement batches.
+lifecycle: FULL_RESTART
+count: 1
+source_commit: ba1ab5f34646eeb0482eeb7e2fa5cc0c180eebd9
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+ros_domain_id: 192
+port: 27800
+evidence_root: /data/work/so101-debug-fusion-smoke-007
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+abort_criteria: any provenance mismatch, invalid evidence, phase or physical failure, or unclean shutdown
+expected: one non-counting VALID/SUCCESS nine-phase run with common visual paths, contiguous durable evidence, and no owned orphan
+```
+
+## Planned experiment EXP-FUSION-006
+
+```yaml
+experiment_id: EXP-FUSION-006
+status: PLANNED
+task: 13 replacement evidence
+backend: gazebo
+counting_qualification_run: false
+source_commit: ba1ab5f34646eeb0482eeb7e2fa5cc0c180eebd9
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+ros_domain_id: 193
+gz_partition: fusion-exp-006-ba1ab5f
+session_id: fusion-exp-006-ba1ab5f
+evidence_root: /data/work/so101-debug-fusion-gazebo-006
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+command: ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-006-ba1ab5f evidence_file:=/data/work/so101-debug-fusion-gazebo-006/result.json
+abort_criteria: INVALID result, missing direct source/install provenance, unowned cleanup target, or contaminated initial/runtime evidence
+cleanup_scope: only the exact launch process group and any conclusively identified orphan created by EXP-FUSION-006
+expected: valid FAILED or SUCCEEDED with direct source_commit, installed_prefix, first boundary, stable code, classification, and evidence references
+```
+
+## Planned batch FUSION-FULL-RESTART-003
+
+```yaml
+batch_id: fusion-full-restart-003
+status: PLANNED
+task: 17 replacement
+lifecycle: FULL_RESTART
+backend: mujoco
+required_consecutive_successes: 5
+reuse_previous_batch_results: false
+invalid_run_effect: invalidate_batch
+valid_failure_effect: break_streak
+source_commit: ba1ab5f34646eeb0482eeb7e2fa5cc0c180eebd9
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
+ros_domain_ids: [194, 195, 196, 197, 198]
+ports: [27810, 27811, 27812, 27813, 27814]
+evidence_root: /data/work/so101-debug-fusion-full-restart-003
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+abort_criteria: any provenance drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
+expected: exactly five independent VALID/SUCCESS records with unique sessions and clean ordered shutdown
+```
+
+## Planned batch FUSION-RESET-WORLD-002
+
+```yaml
+batch_id: fusion-reset-world-002
+status: PLANNED
+task: 18 replacement
+lifecycle: RESET_WORLD
+backend: mujoco
+required_consecutive_successes: 5
+reuse_full_restart_results: false
+invalid_run_effect: invalidate_batch
+valid_failure_effect: break_streak
+source_commit: ba1ab5f34646eeb0482eeb7e2fa5cc0c180eebd9
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
+ros_domain_id: 199
+port: 27820
+evidence_root: /data/work/so101-debug-fusion-reset-world-002
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+abort_criteria: any provenance/lifecycle/epoch drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
+expected: exactly five VALID/SUCCESS records in one session with reset epochs 1 through 5 and clean ordered shutdown
+```
+
+## Planned experiment FUSION-GUI-002
+
+```yaml
+experiment_id: fusion-gui-002
+status: PLANNED
+task: 18 replacement visual evidence
+lifecycle: GUI_MIRROR
+backend: mujoco
+counting_qualification_run: false
+source_commit: ba1ab5f34646eeb0482eeb7e2fa5cc0c180eebd9
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
+ros_domain_id: 200
+session_id: fusion-gui-002-ba1ab5f
+tmux_session: so101-fusion-gui-audit
+cua_session: so101-fusion-gui-audit
+evidence_root: /data/work/so101-debug-fusion-gui-002
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+inspection_contract: ai-station CUA fresh window-scoped snapshot, inspect, then fresh snapshot; record image path/hash plus terminal numeric evidence
+abort_criteria: any provenance drift, invalid evidence, phase or physical failure, or unowned cleanup target
+cleanup_scope: only the exact tmux session/process group created for FUSION-GUI-002
+expected: one visible non-counting nine-phase mirror with valid success, fresh screenshots, numeric evidence, and no owned orphan
+```
+
 ## Checkpoint CP-FUSION-016 — qualification runner and pinned-fork gate
 
 ```yaml
