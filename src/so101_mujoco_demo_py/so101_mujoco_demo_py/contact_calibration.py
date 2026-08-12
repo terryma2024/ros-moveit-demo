@@ -335,6 +335,21 @@ def _separating_threshold(
     return (negative_edge + positive_edge) / 2.0, margin
 
 
+def _positive_scale_threshold(
+    negative: list[float], positive: list[float], label: str
+) -> tuple[float, float]:
+    """Separate a positive scale metric without bias toward the larger magnitude."""
+    negative_edge = max(negative)
+    positive_edge = max(positive)
+    margin = positive_edge - negative_edge
+    if negative_edge < 0.0 or margin <= 0.0:
+        raise ValueError(f"overlapping distributions do not separate {label}")
+    threshold = (
+        math.sqrt(negative_edge * positive_edge) if negative_edge > 0.0 else positive_edge / 2.0
+    )
+    return threshold, margin
+
+
 def _thresholds(
     regimes: dict[str, list[dict[str, Any]]],
 ) -> tuple[dict[str, float], dict[str, float]]:
@@ -374,9 +389,9 @@ def _thresholds(
         [sample["maximum_normal_force_n"] for sample in metrics["over_compression"]],
         "safe force",
     )
-    maximum_speed, speed_margin = _separating_threshold(
+    maximum_speed, speed_margin = _positive_scale_threshold(
         [sample["linear_speed_m_s"] for sample in metrics["stable_hold"]],
-        [sample["linear_speed_m_s"] for sample in metrics["micro_lift_slip"]],
+        [max(sample["linear_speed_m_s"] for sample in metrics["micro_lift_slip"])],
         "hold linear speed",
     )
     minimum_duration, duration_margin = _separating_threshold(
@@ -402,8 +417,13 @@ def _thresholds(
     )
 
 
-def classify(sample: dict[str, Any], thresholds: dict[str, float]) -> str:
-    """Classify one atomic sample using only calibrated measurements."""
+def classify(
+    sample: dict[str, Any],
+    thresholds: dict[str, float],
+    *,
+    window_maximum_linear_speed_m_s: float | None = None,
+) -> str:
+    """Classify one sample while matching the live window-maximum slip gate."""
     left = bool(sample["left_fingertip_contacts"])
     right = bool(sample["right_fingertip_contacts"])
     if not left and not right:
@@ -419,7 +439,12 @@ def classify(sample: dict[str, Any], thresholds: dict[str, float]) -> str:
         or metrics["maximum_normal_force_n"] >= thresholds["maximum_safe_force_n"]
     ):
         return "over_compression"
-    if metrics["linear_speed_m_s"] >= thresholds["maximum_hold_linear_speed_m_s"]:
+    slip_speed = (
+        metrics["linear_speed_m_s"]
+        if window_maximum_linear_speed_m_s is None
+        else window_maximum_linear_speed_m_s
+    )
+    if slip_speed >= thresholds["maximum_hold_linear_speed_m_s"]:
         return "micro_lift_slip"
     if metrics["contact_duration_s"] >= thresholds["minimum_stable_hold_duration_s"]:
         return "stable_hold"
@@ -616,6 +641,15 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
         },
         "allowed_other_contact_bodies": ["table"],
         "split_method": "per_regime_ordered_index_modulo_5",
+        "classification_contract": {
+            "slip_metric": "maximum_linear_speed_over_split_window_m_s",
+            "calibration_window_sample_counts": {
+                name: len(calibration[name]) for name in analyzed_regimes
+            },
+            "evaluation_window_sample_counts": {
+                name: len(evaluation[name]) for name in analyzed_regimes
+            },
+        },
         "calibration_sample_count": sum(map(len, calibration.values())),
         "evaluation_sample_count": sum(map(len, evaluation.values())),
         "regimes": _summaries(all_regimes),
@@ -655,8 +689,16 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
     proposal["safety_margins"] = margins
     errors = 0
     for actual in analyzed_regimes:
+        window_maximum_speed = max(
+            (sample_metrics(sample)["linear_speed_m_s"] for sample in evaluation[actual]),
+            default=0.0,
+        )
         for sample in evaluation[actual]:
-            predicted = classify(sample, thresholds)
+            predicted = classify(
+                sample,
+                thresholds,
+                window_maximum_linear_speed_m_s=window_maximum_speed,
+            )
             matrix[actual][predicted] += 1
             errors += predicted != actual
             for subcohort in ("table_only", "post_release"):

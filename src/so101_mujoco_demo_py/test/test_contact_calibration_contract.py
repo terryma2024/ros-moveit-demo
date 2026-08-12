@@ -358,6 +358,32 @@ def test_table_support_penetration_does_not_define_fingertip_compression_thresho
     ] == pytest.approx(-0.0007012)
 
 
+def test_slip_calibration_uses_the_same_window_maximum_as_live_grasp(
+    tmp_path: Path,
+) -> None:
+    evidence = schema_v3_evidence()
+    for sample in evidence["regimes"]["bilateral_touch"]:
+        sample["object_twist_world"]["linear_m_s"] = [1.0e-8, 0.0, 0.0]
+    for sample in evidence["regimes"]["stable_hold"]:
+        sample["object_twist_world"]["linear_m_s"] = [1.0e-6, 0.0, 0.0]
+    for index, sample in enumerate(evidence["regimes"]["micro_lift_slip"]):
+        speed_m_s = 0.002 if index == 0 else 0.0002 if index == 4 else 0.5e-6
+        sample["object_twist_world"]["linear_m_s"] = [speed_m_s, 0.0, 0.0]
+
+    result, output = run_analyzer(tmp_path, evidence)
+
+    assert result.returncode == 0, result.stderr
+    proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert proposal["calibration_status"] == "VALID"
+    assert proposal["classification_contract"] == {
+        "slip_metric": "maximum_linear_speed_over_split_window_m_s",
+        "calibration_window_sample_counts": dict.fromkeys(PHYSICAL_REGIMES, 20),
+        "evaluation_window_sample_counts": dict.fromkeys(PHYSICAL_REGIMES, 5),
+    }
+    assert proposal["misclassification_matrix"]["micro_lift_slip"]["micro_lift_slip"] == 5
+    assert 1.0e-6 < proposal["thresholds"]["maximum_hold_linear_speed_m_s"] < 0.0002
+
+
 @pytest.mark.parametrize(
     ("mutate", "message"),
     (
