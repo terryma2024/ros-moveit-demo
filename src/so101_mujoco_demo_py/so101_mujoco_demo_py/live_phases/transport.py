@@ -466,9 +466,7 @@ def main() -> int:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
         result["observer_expected_session_id"] = SESSION_ID
-        result["observer_last_received_session_id"] = (
-            dynamic_observer.first_snapshot_session_id
-        )
+        result["observer_last_received_session_id"] = dynamic_observer.first_snapshot_session_id
         try:
             partial_index = dynamic_observer.close_invalid(error)
             result["dynamic_raw_index"] = str(partial_index)

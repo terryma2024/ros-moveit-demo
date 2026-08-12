@@ -193,9 +193,7 @@ def test_observer_checkpoints_both_topic_publishers_before_first_chunk(tmp_path:
     value.checkpoint_snapshot_session("EXP-110-session")
     value.accept_chunk(chunk(100, 104))
 
-    document = json.loads(
-        (tmp_path / "run-index.json").read_text(encoding="utf-8")
-    )
+    document = json.loads((tmp_path / "run-index.json").read_text(encoding="utf-8"))
     assert document["expected_session_id"] == "EXP-110-session"
     assert document["first_chunk_session_id"] == "EXP-110-session"
     assert document["first_snapshot_session_id"] == "EXP-110-session"
