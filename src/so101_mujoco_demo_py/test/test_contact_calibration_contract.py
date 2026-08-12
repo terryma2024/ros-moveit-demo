@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from so101_mujoco_demo_py.contact_policy import proposal_sha256
+from so101_mujoco_demo_py.contact_policy import (
+    ContactPolicyFingerprint,
+    load_approved_contact_policy,
+    proposal_sha256,
+)
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 CONFIG = PACKAGE_ROOT / "config/contact_calibration.yaml"
@@ -202,32 +206,36 @@ def run_analyzer(tmp_path: Path, evidence: dict) -> tuple[subprocess.CompletedPr
     return result, output
 
 
-def test_checked_in_policy_is_schema_v3_planned_and_disabled() -> None:
+def test_checked_in_policy_is_the_exact_approved_runtime_policy() -> None:
     policy = load_policy()
+    approved_hash = "670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897"
+    expected_fingerprint = ContactPolicyFingerprint(
+        dependency_commit="f42b7b3d77288c2fee750fe53b0258e0a3d18194",
+        model_sha256="f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca",
+        scene_sha256="b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0",
+        motion_policy_sha256="aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356",
+        source_evidence_sha256=("3610de6a81ad5b5babc9c1d1172509a46d270f48f925e61906b753776369aefb"),
+    )
 
     assert policy["schema_version"] == 3
     assert policy["policy_id"] == "light_cup_wall_pick-contact"
-    assert policy["calibration_status"] == "PLANNED"
+    assert policy["calibration_status"] == "VALID"
     assert policy["approval"] == {
-        "enabled": False,
-        "approved": False,
-        "approved_by": None,
-        "approved_at": None,
-        "proposal_sha256": None,
+        "enabled": True,
+        "approved": True,
+        "approved_by": "user",
+        "approved_at": "2026-08-12T15:33:42+08:00",
+        "proposal_sha256": approved_hash,
     }
-    assert policy["evaluation"] == {
-        "maximum_observation_age_s": 0.10,
-        "minimum_consecutive_samples": 5,
-    }
+    assert proposal_sha256(policy) == approved_hash
     assert set(policy["regimes"]) == PHYSICAL_REGIMES
     assert set(policy["unilateral_rejection_contracts"]) == UNILATERAL_REGIMES
-    assert len(policy["fingerprint"]["source_commit"]) == 40
-    assert len(policy["fingerprint"]["dependency_commit"]) == 40
-    for field in ("model_sha256", "scene_sha256", "motion_policy_sha256"):
-        assert len(policy["fingerprint"][field]) == 64
-        assert set(policy["fingerprint"][field]) != {"0"}
-    assert policy["fingerprint"]["source_evidence_sha256"] is None
-    assert all(value is None for value in policy["thresholds"].values())
+
+    loaded = load_approved_contact_policy(CONFIG, expected_fingerprint)
+
+    assert loaded.policy_id == "light_cup_wall_pick-contact"
+    assert loaded.approval.proposal_sha256 == approved_hash
+    assert loaded.thresholds.minimum_bilateral_force_n == pytest.approx(0.05126429271696818)
 
 
 def test_analyzer_accepts_schema_v3_five_physical_regimes_and_contracts(

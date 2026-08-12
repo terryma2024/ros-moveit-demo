@@ -1864,3 +1864,40 @@ checked_in_policy: schema-v3 PLANNED, enabled false, approved false, proposal ha
 state: USER_APPROVAL_REQUIRED
 next_step: Wait for the user to approve exact proposal_sha256 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897. Do not self-approve, activate policy, enter Task 9, run the nine-stage regression, run RESET_WORLD five-win qualification, merge, or push main before that exact-hash approval.
 ```
+
+## Task 9 exact-hash user approval and policy activation
+
+```yaml
+approval_event:
+  stage_order: After the USER_APPROVAL_REQUIRED checkpoint above.
+  user_response: "批准 proposal hash 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897"
+  user_approved_proposal_sha256: 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897
+  proposal_embedded_sha256: 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897
+  comparison: EXACT_MATCH
+  approved_by: user
+  approved_at_command_time: 2026-08-12T15:33:42+08:00
+  clock_audit_note: The command-time wall clock is recorded verbatim even though it is earlier than the pre-existing 16:58 ledger timestamp; stage order is defined by this append position and Git history, not by rewriting either timestamp.
+source_proposal:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal-v3-batch6.yaml
+  file_sha256: 41fce814a2e15aa4ca843501e37efd9eb6fbb71dbe47ae6d2240401d544b08e5
+  source_evidence_sha256: 3610de6a81ad5b5babc9c1d1172509a46d270f48f925e61906b753776369aefb
+activation:
+  mechanism: analyze_contact_calibration --approve with the exact supplied proposal hash
+  checked_in_policy: src/so101_mujoco_demo_py/config/contact_calibration.yaml
+  checked_in_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  state: {schema_version: 3, calibration_status: VALID, enabled: true, approved: true}
+  thresholds_changed_from_proposal: false
+  proposal_content_changed: false
+validation:
+  analyzer_validate: PASS
+  first_focused_run:
+    result: 40 passed, 1 failed
+    failure: The Task-8 checked-in-artifact test still required PLANNED/disabled after the authorized Task-9 transition.
+    diagnosis: Phase-bound test expectation was stale; approval CLI, proposal hash, and policy validation were not the cause.
+  contract_test_update:
+    scope: Replace the pre-approval state assertion with the exact approved hash plus real runtime-loader and immutable artifact-fingerprint acceptance.
+    production_policy_or_threshold_change: false
+  final_focused_run: 41 passed in 3.58 s
+decision: TASK_9_COMPLETE; the exact user-approved policy is active. No simulation, controller action, formal nine-stage regression, RESET_WORLD five-win challenge, merge, or push was performed in Task 9.
+next_step: Execute Task 10 automatic gates, fresh isolated build, and one preregistered FULL_RESTART Project-A physical acceptance cycle before entering Project B.
+```
