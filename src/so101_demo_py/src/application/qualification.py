@@ -363,6 +363,16 @@ class ProductionQualificationRunner:
             raise InvalidRun(f"{path} failed: {json.dumps(result, sort_keys=True)}")
         return result
 
+    def _configure_camera(self, handle: StackHandle, lease_id: str) -> dict[str, Any]:
+        if self.headless:
+            return {
+                "skipped": True,
+                "reason": "headless MuJoCo has no interactive viewer",
+            }
+        return self._post_command(
+            handle, "/gazebo/camera/presets/table_corner_nw", lease_id
+        )
+
     def execute_workflow(
         self, handle: StackHandle, *, experiment_id: str, run_root: Path
     ) -> dict[str, Any]:
@@ -370,7 +380,7 @@ class ProductionQualificationRunner:
         capabilities = self._request(handle.base_url, "/capabilities")
         lease1 = self._post_command(handle, "/control/lease", "")
         lease1_id = str(lease1["response"]["layers"]["lease_id"])
-        camera = self._post_command(handle, "/gazebo/camera/presets/table_corner_nw", lease1_id)
+        camera = self._configure_camera(handle, lease1_id)
         reset = self._post_command(
             handle,
             "/simulation/reset",

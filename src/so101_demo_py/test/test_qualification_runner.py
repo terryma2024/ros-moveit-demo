@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from so101_demo.application.qualification import (
     Lifecycle,
+    ProductionQualificationRunner,
     RunStatus,
     build_parser,
     summarize_records,
@@ -117,3 +118,16 @@ def test_module_cli_supports_verify_batch_subcommand() -> None:
     )
 
     assert options.command == "verify-batch"
+
+
+def test_headless_qualification_does_not_call_interactive_viewer() -> None:
+    runner = object.__new__(ProductionQualificationRunner)
+    runner.headless = True
+    runner._post_command = lambda *_args, **_kwargs: pytest.fail("viewer was called")
+
+    result = runner._configure_camera(object(), "lease")
+
+    assert result == {
+        "skipped": True,
+        "reason": "headless MuJoCo has no interactive viewer",
+    }
