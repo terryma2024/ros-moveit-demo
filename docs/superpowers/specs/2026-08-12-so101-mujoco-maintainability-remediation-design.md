@@ -7,6 +7,12 @@
 **Baseline:** `70bece06e008b27da8f0923472668e95a369309e` on
 `codex/so101-mujoco-ros2-teleop`
 
+**Phase-aware amendment:** The user-approved physical-step transport evidence design in
+`docs/superpowers/specs/2026-08-12-so101-mujoco-phase-aware-transport-evidence-design.md`
+is normative for the remainder of Project A. It supersedes any statement in this document that
+applies the static `1.1579004532160448 N` contact threshold as a hard stop after transport waypoint
+1 goal dispatch, or that treats the `11.60 N` diagnostic ceiling as an acceptance threshold.
+
 ## 1. Purpose
 
 The migration has qualified one fixed MuJoCo pick-place implementation, but the

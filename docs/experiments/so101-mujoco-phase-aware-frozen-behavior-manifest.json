@@ -1,0 +1,199 @@
+{
+  "schema": "so101-mujoco-frozen-behavior-manifest-v1",
+  "generated_at": "2026-08-12T17:25:25+08:00",
+  "behavior_baseline_commit": "8f71442ae6cff43e0770eec929b13211d2057628",
+  "behavior_source_commit": "a172765e3b193bfccad9782d02e2745e70f1cbd2",
+  "baseline_relation": "8f71442 differs from a172765 only in the maintainability ledger",
+  "scope": "phase-aware measurement may change instrumentation but none of these behavior inputs or call semantics",
+  "approved_policy": {
+    "proposal_sha256": "670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897",
+    "contact_policy_sha256": "c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82",
+    "static_maximum_safe_force_n": 1.1579004532160448,
+    "dynamic_shadow_force_n": 1.1579004532160448,
+    "dynamic_diagnostic_hard_stop_n": 11.6
+  },
+  "grasp": {
+    "five_win_seating_preload_q6_rad": -0.04850794875050089,
+    "application_semantics": "min(detected_contact_q6_rad, FIVE_WIN_SEATING_PRELOAD_Q6_RAD)",
+    "source_path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_phases/grasp_strategy.py",
+    "source_sha256": "8ae37f96c2408ca061ca5c87c41ff6d92f320e273b9a5a8c4bc778c46fda2239"
+  },
+  "runtime_phase_order": [
+    "staged_approach",
+    "contact_hold",
+    "micro_lift",
+    "policy_lift_waypoint1",
+    "remaining_lift",
+    "transport",
+    "descend",
+    "place_alignment",
+    "release_retreat"
+  ],
+  "runtime_phase_statuses": {
+    "staged_approach": "CLOSE_READY",
+    "contact_hold": "CONTACT_ONLY_PROVED",
+    "micro_lift": "PHYSICAL_MICRO_LIFT_PROVED",
+    "policy_lift_waypoint1": "POLICY_LIFT_WAYPOINT1_PHYSICAL_TRANSFER_PROVED",
+    "remaining_lift": "REMAINING_FORMAL_LIFT_PROVED",
+    "transport": "FORMAL_MOVE_ABOVE_PLACE_PROVED",
+    "descend": "FORMAL_DESCEND_TO_PRE_RELEASE_CLEARANCE_PROVED",
+    "place_alignment": "PRE_RELEASE_ALIGNMENT_PROVED",
+    "release_retreat": "RELEASE_RETREAT_FINAL_PLACEMENT_PROVED"
+  },
+  "motion_policy": {
+    "path": "src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml",
+    "sha256": "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356",
+    "bound_semantic_subtrees": [
+      "gripper_actions",
+      "contact_calibration_approach",
+      "staged_approach_execution",
+      "place_alignment",
+      "release_retreat",
+      "physical_outcome",
+      "states.MOVE_ABOVE_OBJECT",
+      "states.DESCEND",
+      "states.LIFT",
+      "states.MOVE_ABOVE_PLACE",
+      "states.DESCEND_TO_PLACE",
+      "states.RETREAT",
+      "states.RECOVER_LIFT_TO_SAFE_HEIGHT",
+      "states.RECOVER_MOVE_ABOVE_PICK",
+      "states.RECOVER_DESCEND_TO_PICK",
+      "states.RECOVER_RETREAT"
+    ],
+    "required_state_order": [
+      "MOVE_ABOVE_OBJECT",
+      "DESCEND",
+      "LIFT",
+      "MOVE_ABOVE_PLACE",
+      "DESCEND_TO_PLACE",
+      "RETREAT",
+      "RECOVER_LIFT_TO_SAFE_HEIGHT",
+      "RECOVER_MOVE_ABOVE_PICK",
+      "RECOVER_DESCEND_TO_PICK",
+      "RECOVER_RETREAT"
+    ]
+  },
+  "transport_ast_semantics": {
+    "path": "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_phases/transport.py",
+    "baseline_source_sha256": "d2edcb461416f462503ae5b4f31ae55579ae5882a0c6340467871c61015930cd",
+    "expected_start_arm_rad": [
+      -0.00031950472111697334,
+      0.2015600757345103,
+      0.1299877504869264,
+      1.2401457978939827,
+      -0.00027049232842978966
+    ],
+    "expected_q6_rad": -0.048510207270894154,
+    "targets_arm_rad": [
+      [0.078649232242, 0.202916192985, 0.125650124859, 1.227082691882, 0.000085728349],
+      [0.157580578693, 0.204866593526, 0.121644794912, 1.213983979051, 0.000461011907],
+      [0.236511925143, 0.206816994066, 0.117639464964, 1.200885266221, 0.000836295464],
+      [0.315443271594, 0.208767394607, 0.113634135017, 1.187786553390, 0.001211579022],
+      [0.394374618045, 0.210717795147, 0.109628805069, 1.174687840559, 0.00158686258]
+    ],
+    "planner_request": {
+      "joint_names": ["1", "2", "3", "4", "5"],
+      "all_start_state_joint_names": ["1", "2", "3", "4", "5", "6"],
+      "velocity_scaling": 0.05,
+      "acceleration_scaling": 0.05,
+      "planning_time_s": 5.0,
+      "plan_timeout_s": 12.0,
+      "execute_timeout_s": 45.0,
+      "endpoint_timeout_s": 10.0,
+      "plan_to_execute_tolerance_rad": 0.01,
+      "start_arm_tolerance_rad": 0.01,
+      "start_q6_tolerance_rad": 0.002
+    },
+    "physical_contract": {
+      "contact_loss_grace_s": 0.05,
+      "maximum_segment_cup_displacement_m": 0.04,
+      "minimum_total_lateral_m": 0.06,
+      "maximum_total_lateral_m": 0.12,
+      "maximum_total_vertical_change_m": 0.03,
+      "forbid_table_recontact": true,
+      "require_bilateral_contact": true,
+      "waypoint_loop_order": [1, 2, 3, 4, 5]
+    },
+    "allowed_semantic_change": "force interpretation is typed static before dispatch and shadow during transport; diagnostic evidence and >=11.60 latch may be added",
+    "forbidden_semantic_changes": [
+      "target mutation",
+      "planner or planning-time mutation",
+      "velocity or acceleration mutation",
+      "trajectory filtering or replanning",
+      "new delay or grace period",
+      "phase or waypoint reorder",
+      "normal outcome-contract mutation"
+    ]
+  },
+  "phase_source_hashes": {
+    "live_runtime.py": "a59651a9baf74367fbbc0d81102502e4cbb84c806153c4ea2f051d6b72d806f0",
+    "staged_approach.py": "06e3b30ba0830e058eff42bd06010f842e57a9155729e148520bf414e4367a18",
+    "contact_hold.py": "ead01c1ad46eba35845c3ce37e705a5b5a2fc5494d198bf79ee8adef384b63b7",
+    "micro_lift.py": "e6cd9395f7fd0965e626b06a67c50a0981766bc545f1ab3a052381b13c79e8f7",
+    "policy_lift_waypoint1.py": "234dd2dbf4331e45470e48f5f4ef986b5419d7ca89c8be0226ec2cf67ec8ed2e",
+    "remaining_lift.py": "0b5cd9639efb4daa1dc61c3a2d7592592170ec30240d424014bf78ff99f1bc1d",
+    "transport.py": "d2edcb461416f462503ae5b4f31ae55579ae5882a0c6340467871c61015930cd",
+    "descend.py": "3b9baaa299b6b7ee31409478801b149f7d48baf86c503e5df3813d27eb4c1c74",
+    "place_alignment.py": "5d60a14067ae50be3c282db2cd676d5a1f6c09586418bc981057a2d8b2b4c190",
+    "release_retreat.py": "20fbfa2094cf1729a5a87d577f33f9cccadecf885a3df57512e100442bb65481"
+  },
+  "model_scene_geometry": {
+    "scene_xml_sha256": "b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0",
+    "robot_mjcf_sha256": "f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca",
+    "task_scene_yaml_sha256": "a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0",
+    "urdf_sha256": "0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a",
+    "mjcf_assets_git_tree_oid": "c521632ba175298e74507e626c9101432d7a9f3e",
+    "mjcf_assets_path_and_content_sha256": "aed046287607b8c5ef27806baf3c050ba8cbb6b67d1341475c9a10eab1007366",
+    "physics_timestep_s": 0.002
+  },
+  "planning_and_control": {
+    "dependency_lock_sha256": "1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d",
+    "ompl_planning_sha256": "87da57854e0ee318a5157d48a58f1145e7099f24c07d4277c1c7279b8f7cd364",
+    "joint_limits_sha256": "210bb4792821bf081df092b11edc398050b1140cbef5c6f8f139687e87148973",
+    "moveit_controllers_sha256": "4768fb786e33d89b9b145da34e7bbc2ff5f6841403c5ccedc00ab257446e3998",
+    "ros2_controllers_sha256": "499d471acb93ede255199ac6f220fbff39ae2f01f2277eed8e9967230ebbf16a",
+    "mujoco_plugins_sha256": "dee81a0bd4c8eff0936662f7c256c812aeb07e9eccc4200c9093b1defc0cf8e3",
+    "controller_update_rate_hz": 500,
+    "joint_state_publish_rate_hz": 100,
+    "planner_plugin": "ompl_interface/OMPLPlanner",
+    "planner_config": "geometric::RRTConnect"
+  },
+  "protected_gazebo": {
+    "path": "src/so101_gazebo_demo_py",
+    "git_tree_oid": "3158e296e2aad5d80dd3e484b87132c85b3832f7",
+    "working_tree_diff": "NONE"
+  },
+  "instrumentation_diff_gate": {
+    "allowed_paths": [
+      "src/so101_mujoco_support/msg",
+      "src/so101_mujoco_support/include/so101_mujoco_support/simulation_evidence_plugin.hpp",
+      "src/so101_mujoco_support/src/simulation_evidence_plugin.cpp",
+      "src/so101_mujoco_support/test/test_simulation_evidence_plugin.cpp",
+      "src/so101_mujoco_support/CMakeLists.txt",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/dynamic_transport_evidence.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/transport_observer.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_phases/transport.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_calibration.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_calibration_collector.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_policy.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/simulation/types.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/frozen_behavior.py",
+      "src/so101_mujoco_demo_py/test",
+      "docs/experiments",
+      "docs/superpowers/specs",
+      "docs/superpowers/plans"
+    ],
+    "protected_paths": [
+      "src/so101_gazebo_demo_py",
+      "src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml",
+      "src/so101_mujoco_demo_py/config/contact_calibration.yaml",
+      "src/so101_mujoco_demo_py/mjcf",
+      "src/so101_mujoco_demo_py/urdf",
+      "src/so101_mujoco_demo_py/config/ompl_planning.yaml",
+      "src/so101_mujoco_demo_py/config/joint_limits.yaml",
+      "src/so101_mujoco_demo_py/config/moveit_controllers.yaml",
+      "src/so101_mujoco_demo_py/config/ros2_controllers.yaml"
+    ]
+  }
+}
