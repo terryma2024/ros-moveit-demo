@@ -15,6 +15,7 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.live_phases.grasp_strategy import seating_preload_target
 from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.gripper import GripperClient
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
@@ -182,8 +183,17 @@ def main() -> int:
             evidence, q6 = command_and_sample(gripper, target, 0.10)
             bilateral = bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts)
 
-        hold_target = target
-        command_and_sample(gripper, hold_target, 0.20)
+        contact_detection_q6 = q6
+        hold_target = seating_preload_target(contact_detection_q6)
+        evidence, q6 = command_and_sample(gripper, hold_target, 0.20)
+        left, right = validate(evidence)
+        if not evidence.left_fingertip_contacts or not evidence.right_fingertip_contacts:
+            raise RuntimeError("bilateral contact lost while applying seating preload")
+        if min(left, right) < contact_thresholds.minimum_bilateral_force_n:
+            raise RuntimeError("seating preload did not retain qualified bilateral contact")
+        result["contact_detection_q6_rad"] = contact_detection_q6
+        result["seating_preload_target_q6_rad"] = hold_target
+        atomic_write(result)
         hold_samples: list[dict] = []
         deadline = time.monotonic() + STABLE_HOLD_S
         last_sequence = -1

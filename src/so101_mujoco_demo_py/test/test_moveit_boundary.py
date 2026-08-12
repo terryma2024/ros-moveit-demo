@@ -16,8 +16,10 @@ from so101_mujoco_demo_py.moveit.planning import (
 class FakeFuture:
     value: object = None
     done_value: bool = True
+    done_calls: int = 0
 
     def done(self):
+        self.done_calls += 1
         return self.done_value
 
     def result(self):
@@ -169,9 +171,10 @@ class FakeGoal:
         self.result_done = result_done
         self.result = result
         self.cancel_count = 0
+        self.result_future = FakeFuture(self.result, self.result_done)
 
     def get_result_async(self):
-        return FakeFuture(self.result, self.result_done)
+        return self.result_future
 
     def cancel_goal_async(self):
         self.cancel_count += 1
@@ -195,7 +198,9 @@ def test_execute_rejection_timeout_and_moveit_error_are_stable() -> None:
     assert rejected.failure.code == "MOVEIT_EXECUTION_REJECTED"
 
     owned = FakeGoal(result_done=False)
-    result = MoveItExecutionClient(FakeAction(owned)).execute(object(), 0.001)
+    result = MoveItExecutionClient(FakeAction(owned), cancellation_timeout_s=0.001).execute(
+        object(), 0.001
+    )
     assert result.status is ActionStatus.TIMED_OUT
     assert result.failure.code == "MOVEIT_EXECUTION_TIMEOUT"
     assert owned.cancel_count == 1
@@ -211,7 +216,14 @@ def test_execute_rejection_timeout_and_moveit_error_are_stable() -> None:
 
 
 def test_execute_monitor_abort_cancels_the_owned_goal() -> None:
-    owned = FakeGoal(result_done=False)
+    class SettlingGoal(FakeGoal):
+        def cancel_goal_async(self):
+            self.cancel_count += 1
+            self.result_future.done_value = True
+            return FakeFuture()
+
+    owned = SettlingGoal(result_done=False)
+    polls_before_cancel = owned.result_future.done_calls
     result = MoveItExecutionClient(FakeAction(owned)).execute(
         object(),
         0.1,
@@ -221,6 +233,19 @@ def test_execute_monitor_abort_cancels_the_owned_goal() -> None:
     assert result.status is ActionStatus.FAILED
     assert result.failure.code == "MOVEIT_EXECUTION_MONITOR_ABORTED"
     assert "early contact" in result.failure.message
+    assert owned.cancel_count == 1
+    assert owned.result_future.done_calls > polls_before_cancel + 1
+
+
+def test_execute_timeout_bounds_cancel_settlement() -> None:
+    owned = FakeGoal(result_done=False)
+
+    result = MoveItExecutionClient(FakeAction(owned), cancellation_timeout_s=0.001).execute(
+        object(), 0.001
+    )
+
+    assert result.failure.code == "MOVEIT_EXECUTION_TIMEOUT"
+    assert result.failure.metrics["cancel_settled"] == 0.0
     assert owned.cancel_count == 1
 
 
