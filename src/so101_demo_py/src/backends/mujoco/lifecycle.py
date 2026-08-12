@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -71,3 +72,29 @@ class MujocoLifecycleAdapter:
         except Exception:
             return ShutdownResult(False, "SHUTDOWN_FAILED")
         return ShutdownResult(bool(accepted), None if accepted else "SHUTDOWN_FAILED")
+
+
+def resume_physics(config: Any) -> bool:
+    """Resume a qualified MuJoCo stack; application code receives this as a callback."""
+
+    del config
+    import rclpy
+    from mujoco_ros2_control_msgs.srv import SetPause
+
+    rclpy.init()
+    node = rclpy.create_node("so101_live_runtime_resume")
+    try:
+        client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
+        if not client.wait_for_service(timeout_sec=5.0):
+            return False
+        request = SetPause.Request()
+        request.paused = False
+        future = client.call_async(request)
+        deadline = time.monotonic() + 5.0
+        while not future.done() and time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.01)
+        response = future.result() if future.done() else None
+        return bool(response is not None and response.success)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
