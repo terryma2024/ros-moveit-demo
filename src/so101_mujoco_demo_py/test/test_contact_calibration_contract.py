@@ -231,6 +231,22 @@ def test_analyzer_reports_deterministic_quality_and_margins(tmp_path: Path) -> N
     )
 
 
+def test_table_support_force_does_not_define_bilateral_fingertip_threshold(
+    tmp_path: Path,
+) -> None:
+    evidence = complete_evidence()
+    for sample in evidence["regimes"]["no_contact"]:
+        sample["other_object_contacts"] = [contact("other", 4.0, -0.0002)]
+        sample["minimum_signed_distance_m"] = -0.0002
+        sample["maximum_normal_force_n"] = 4.0
+
+    result, output = run_analyzer(tmp_path, evidence)
+
+    assert result.returncode == 0, result.stderr
+    proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert 0.22 < proposal["thresholds"]["minimum_bilateral_force_n"] < 1.0
+
+
 @pytest.mark.parametrize(
     ("mutate", "message"),
     (
