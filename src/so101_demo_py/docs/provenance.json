@@ -2,7 +2,7 @@
   "schema_version": 1,
   "qualification_status": "QUALIFIED",
   "qualified_source": {
-    "commit": "d78093cc6daa3c105383becf537cbb196e40bab7",
+    "commit": "e5e4d9b21ea81488b553da250070ae546695f36f",
     "branch": "codex/so101-demo-py-fusion",
     "base_commit": "866656b217eff4c57eade161c94ea0cef326d13d",
     "installed_prefix": "/data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py"
@@ -21,53 +21,57 @@
     "executable": "/data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/lib/mujoco_ros2_control/ros2_control_node",
     "executable_sha256": "9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e"
   },
-  "installed_bundle_sha256": "8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388",
+  "installed_bundle_sha256": "40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743",
   "mujoco_qualification": {
     "full_restart": {
-      "batch_id": "fusion-full-restart-002",
+      "batch_id": "fusion-full-restart-004",
       "lifecycle": "FULL_RESTART",
       "status": "QUALIFIED",
       "valid_successes": 5,
       "attempts": 5,
-      "evidence_root": "/data/work/so101-debug-fusion-full-restart-002",
-      "manifest": "/data/work/so101-debug-fusion-full-restart-002/qualification-manifest.json",
-      "manifest_sha256": "bf6c113340b7b158a2714316b5cbe8c8d6e9464d9c66265b68efd2202bbff2e0"
+      "evidence_root": "/data/work/so101-debug-fusion-full-restart-004",
+      "manifest": "/data/work/so101-debug-fusion-full-restart-004/qualification-manifest.json",
+      "manifest_sha256": "98e98b96959bf20591bf268d8452383fc9dce045e6346e5b37642acb4a4bc810",
+      "independent_verifier_log_sha256": "e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37"
     },
     "reset_world": {
-      "batch_id": "fusion-reset-world-001",
+      "batch_id": "fusion-reset-world-003",
       "lifecycle": "RESET_WORLD",
       "status": "QUALIFIED",
       "valid_successes": 5,
       "attempts": 5,
-      "session_id": "fusion-reset-world-001-reset",
+      "session_id": "fusion-reset-world-003-reset",
       "reset_epochs": [1, 2, 3, 4, 5],
-      "evidence_root": "/data/work/so101-debug-fusion-reset-world-001",
-      "manifest": "/data/work/so101-debug-fusion-reset-world-001/qualification-manifest.json",
-      "manifest_sha256": "cb810a4d870dfdcd61c65acfbb34a68430fd73a0222686f9191e93e699b6b13c"
+      "evidence_root": "/data/work/so101-debug-fusion-reset-world-003",
+      "manifest": "/data/work/so101-debug-fusion-reset-world-003/qualification-manifest.json",
+      "manifest_sha256": "0a0445b64558de7661cfe9c4ff1dccc3ffb189b15da306f922b147195fb73bec",
+      "independent_verifier_log_sha256": "e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37"
     }
   },
   "gazebo_execute": {
-    "experiment_id": "EXP-FUSION-005",
+    "experiment_id": "EXP-FUSION-007",
     "status": "FAILED",
     "qualification_status": "NOT_QUALIFIED",
     "classification": "VALID",
     "evidence_valid": true,
-    "first_failed_phase": "PREPARE_OPEN_GRIPPER",
-    "error_code": "ACTION_REJECTED",
-    "source_commit": "f184617805e551b92bc5773433244c6193442abc",
-    "bundle_sha256": "4edb642e4f152eb913fac5d2fecd2e6a969fad3a8774be72749c92e75092382f",
-    "evidence_root": "/tmp/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-005",
+    "first_failed_phase": "MOVE_ABOVE_OBJECT",
+    "error_code": "PATH_TOLERANCE_VIOLATED",
+    "failure_category": "EXECUTION",
+    "source_commit": "e5e4d9b21ea81488b553da250070ae546695f36f",
+    "installed_prefix": "/data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py",
+    "bundle_sha256": "40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743",
+    "evidence_root": "/data/work/so101-debug-fusion-gazebo-007",
     "artifact_sha256": {
-      "launch_log": "c19793b53d7678ff986f4df8dca73d592eedadc07dfcb264906cca375bf2f16b",
-      "result_manifest": "5c761515ebdaad9c0cef67106f6c6e086dc13b37a907ae0de3c8ae0ac72b460b",
-      "raw_evidence": "ceabcdd2970be226ae45aecfe8af011f08df67419142a3df21613ee9273c6cfc"
+      "launch_log": "3357d1ebcfbba712f7387574f45cd6fde6366d37a86285a7942bae6119961bfe",
+      "result_manifest": "fb6f930c8bd7e60c3ab93922b65a8d7dbf2fc5398466395233ab7ba577a8b2e6",
+      "raw_evidence": "13a494bd75dd63588a82b9ff12955922bf44c0eae292b658a43aeb2456c1d63f"
     }
   },
   "gui_numeric_review": {
-    "experiment_id": "fusion-gui-001",
+    "experiment_id": "fusion-gui-003",
     "counting_qualification_run": false,
     "status": "VALID_SUCCESS_NONCOUNTING",
-    "simulation_session_id": "fusion-gui-001-d78093c",
+    "simulation_session_id": "fusion-gui-003-e5e4d9b",
     "reset_epoch": 0,
     "completed_phases": [
       "staged_approach",
@@ -80,32 +84,31 @@
       "place_alignment",
       "release_retreat"
     ],
-    "evidence_root": "/data/work/so101-debug-fusion-gui-001",
+    "evidence_root": "/data/work/so101-debug-fusion-gui-003",
     "visual_evidence": [
       {
-        "path": "/data/work/so101-debug-fusion-gui-001/cua-snapshot-01.png",
-        "sha256": "b888827857d6abec9da21207042c5ee7e77f5816f74980b3c5af7866b76823bc",
+        "path": "/data/work/so101-debug-fusion-gui-003/cua-snapshot-01.png",
+        "sha256": "e92cab9317bae61ba887e6c91394604e034b4b2a4c68a8d1f538f89710bc2707",
         "observation": "Running MuJoCo task scene with the articulated SO-101, cup, table, pedestal, and target marker visible."
       },
       {
-        "path": "/data/work/so101-debug-fusion-gui-001/cua-snapshot-02.png",
-        "sha256": "c717912bc82c55306410c90f4008e98f1685030004a2cfd59cd19568a54332e2",
+        "path": "/data/work/so101-debug-fusion-gui-003/cua-snapshot-02.png",
+        "sha256": "2b0ea691d81a44cb5122b2189d0a4215a4fe8eafee9549b5993594a9f3d2e4bb",
         "observation": "Fresh follow-up snapshot shows the live arm moved into the cup with the gripper aligned at the rim."
       }
     ],
     "final_world_evidence": {
-      "cup_position_world_m": [-0.07973180070562448, -0.24808909440122215, 0.1655015459302394],
-      "cup_orientation_world_xyzw": [-0.008694425765315704, 0.0006744799924911488, -0.17989761837995225, 0.9836466839971405],
-      "cup_linear_velocity_world_m_s": [-1.860974722206872e-18, -6.147913509096571e-19, 4.316166783245854e-18],
-      "cup_angular_velocity_world_rad_s": [-3.464407938212852e-19, 2.967432782366928e-19, 1.917358694397895e-19],
+      "cup_position_world_m": [-0.08048027501390147, -0.24779380138572246, 0.16532868235999496],
+      "cup_orientation_world_xyzw": [-0.00867284838045709, 0.000741197193639696, -0.17214515618244697, 0.985033135245008],
+      "cup_linear_velocity_world_m_s": [-2.4554003131648064e-18, -1.883461288956691e-18, 3.1686290238250907e-18],
+      "cup_angular_velocity_world_rad_s": [-2.881929935645583e-19, -8.69199206070456e-21, 7.377884868043234e-20],
       "left_contact_count": 0,
       "right_contact_count": 0,
       "table_contact": true,
-      "maximum_normal_force_n": 0.14720319757277728,
-      "simulation_step": 41060
+      "maximum_normal_force_n": 0.23673941661525327
     },
-    "terminal_joint_positions_rad": [0.4337200693563427, -0.0707225816549531, 0.36989403888553524, 1.157962537477882, 0.004384487391312311, 0.7499563555423376],
-    "terminal_tcp_position_world_m": [-0.07112000794548362, -0.2213343527605413, 0.2767921383962761],
+    "terminal_joint_positions_rad": [0.43040388464991197, -0.020286616359602997, 0.2984321199543253, 1.214633851749454, 0.0799946494434734, 0.7499564709096569],
+    "terminal_tcp_position_world_m": [-0.06953442989043869, -0.2234912152065353, 0.2771281502155549],
     "controllers_healthy": true,
     "planning_scene": {
       "attached_object_ids": [],
@@ -116,11 +119,26 @@
       }
     },
     "artifact_sha256": {
-      "live_runtime_manifest": "b9824abdcb083514d11ab6ef05680546915db274b3b23510893795e04942b9f1",
-      "release_retreat": "7a8e7609a24b31c1f9e22897364a89ed4ecd468624913d977971ef7f449ffa6a",
-      "launch_log": "93e493198bcf421303e8bc5d75dd5865d274d419670eff036d3ffca8cea13889"
+      "live_runtime_manifest": "bb6c7ef1ceda99179bc9077d14922677b9e986e2f0c9350497f750875c27da25",
+      "release_retreat": "44c230950940270743f5ed2d7ba7dde32bcde488dcc159c70be7182060dc2803",
+      "launch_log": "a2418a362d8d15db35d0c125bb4b48f0b2e9dfb9e53c3e45cf6981e328d14c82"
     },
     "ordered_shutdown": true
+  },
+  "final_acceptance": {
+    "fresh_nonsymlink_build": true,
+    "installed_module_under_final_prefix": true,
+    "unified_tests_passed": 105,
+    "compatibility_profile_tests_passed": 17,
+    "installed_provenance_tests_passed": 3,
+    "ruff_passed": true,
+    "fusion_contract_passed": true,
+    "source_asset_symlinks": 44,
+    "build_log_sha256": "e4039dc8945b59a1c472a18a13cf8daabd74277b2bc52ac0c01e8afa7504c026",
+    "fusion_contract_log_sha256": "64be94471f74d3addf3d7629545a3f4b2d12b8e52e412e753309bbf4ae4ca547",
+    "installed_provenance_log_sha256": "db58d0792e021e6c3fb7e4cdfd186077e8b54fd1fe8f52d4871d055bffbca88b",
+    "ruff_log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "static_fingerprint_log_sha256": "aa1c75b74382a1465bf76f54301057bb74eb6b9c30156b5224d1e7f74bd88032"
   },
   "preserved_external_state": {
     "owned_processes_after_final_review": "NONE",

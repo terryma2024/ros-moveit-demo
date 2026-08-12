@@ -5,8 +5,8 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: d78093cc6daa3c105383becf537cbb196e40bab7
-evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
+current_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+evidence_root: /data/work/so101-debug-fusion-*
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
   - The frozen MuJoCo policy SHA-256 is aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356; CP-FUSION-001.
@@ -19,13 +19,14 @@ confirmed_conclusions:
   - Task 9 centralizes backend composition and separates execution classification from qualification status; CP-FUSION-006.
   - Task 10 installs common visual/task geometry with separate simulator collision/physics trees; CP-FUSION-007.
   - Task 11 installs four explicit launchers and restores exact qualified MuJoCo model/scene fingerprints; CP-FUSION-008.
-  - The frozen d78093c bundle independently qualifies FULL_RESTART and RESET_WORLD 5/5; CP-FUSION-019 and CP-FUSION-020.
-  - Gazebo reports a valid natural execute failure boundary, and a fresh MuJoCo GUI/numeric mirror completes all nine phases; CP-FUSION-014 and CP-FUSION-021.
+  - The corrected e5e4d9b bundle independently qualifies FULL_RESTART and RESET_WORLD 5/5; CP-FUSION-026 and CP-FUSION-027.
+  - Gazebo reports a valid natural execute failure boundary with direct source/install provenance, and a fresh MuJoCo GUI/numeric mirror completes all nine phases; CP-FUSION-025 and CP-FUSION-027.
+  - Source asset compatibility paths are Git symlinks to canonical common or backend-specific owners while the exact qualified MuJoCo model and scene bytes remain unchanged; CP-FUSION-023 and CP-FUSION-024.
 disproven_routes:
   - Historical TASK15-FULL-A is INVALID because headless execution could not satisfy the required viewer-camera readiness gate; CP-156.
   - Recreating or sourcing the removed migration worktree is unnecessary and would contradict the verified merged-main handoff; CP-FUSION-001.
 open_hypotheses: []
-latest_checkpoint: CP-FUSION-021
+latest_checkpoint: CP-FUSION-027
 next_experiment: NONE_TASKS_1_THROUGH_18_COMPLETE
 ---
 
@@ -379,6 +380,147 @@ inspection_contract: ai-station CUA fresh window-scoped snapshot, inspect, then 
 abort_criteria: any provenance drift, invalid evidence, phase or physical failure, or unowned cleanup target
 cleanup_scope: only the exact tmux session/process group created for FUSION-GUI-003
 expected: one visible non-counting nine-phase mirror with valid success, fresh screenshots, numeric evidence, and no owned orphan
+```
+
+## Checkpoint CP-FUSION-025 — replacement Gazebo execute boundary
+
+```yaml
+checkpoint_id: CP-FUSION-025
+terminal_experiment: EXP-FUSION-007
+status: VALID_FAILURE_NONCOUNTING
+backend: gazebo
+execution_status: FAILED
+qualification_status: NOT_QUALIFIED
+classification: VALID
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+simulation_session_id: fusion-exp-007-e5e4d9b
+first_failed_phase: MOVE_ABOVE_OBJECT
+error_code: PATH_TOLERANCE_VIOLATED
+failure_category: EXECUTION
+evidence_root: /data/work/so101-debug-fusion-gazebo-007
+artifacts_sha256:
+  result_manifest: fb6f930c8bd7e60c3ab93922b65a8d7dbf2fc5398466395233ab7ba577a8b2e6
+  raw_evidence: 13a494bd75dd63588a82b9ff12955922bf44c0eae292b658a43aeb2456c1d63f
+  launch_log: 3357d1ebcfbba712f7387574f45cd6fde6366d37a86285a7942bae6119961bfe
+cleanup:
+  bounded_owned_shutdown: true
+  owned_processes_after_probe: NONE
+  ros_nodes_or_gz_topics_after_probe: NONE
+  preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+confirmed_conclusion: The unified installed Gazebo graph reaches a real execution boundary and emits a valid common result with direct immutable source and installed-prefix provenance.
+```
+
+## Checkpoint CP-FUSION-026 — corrected FULL_RESTART qualification
+
+```yaml
+checkpoint_id: CP-FUSION-026
+terminal_batch: fusion-full-restart-004
+task: 17
+lifecycle: FULL_RESTART
+status: QUALIFIED
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+valid_successes: 5
+attempts: 5
+unique_simulation_sessions: 5
+reset_epochs: [1, 1, 1, 1, 1]
+physical_primary_failures: [null, null, null, null, null]
+clean_shutdowns: [true, true, true, true, true]
+final_cup_positions_world_m:
+  - [-0.08001060875265474, -0.24608875736916191, 0.16511309243584835]
+  - [-0.07822998699807902, -0.24724557768473976, 0.1651375249750083]
+  - [-0.08001397604556273, -0.2477560114245982, 0.1650046757431374]
+  - [-0.07783297232130451, -0.2475437199345982, 0.16548776973562837]
+  - [-0.07793536623543336, -0.24853611640939705, 0.16548355927049258]
+evidence_root: /data/work/so101-debug-fusion-full-restart-004
+manifest_sha256: 98e98b96959bf20591bf268d8452383fc9dce045e6346e5b37642acb4a4bc810
+independent_verifier: QUALIFIED
+independent_verifier_log_sha256: e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37
+owned_processes_after_batch: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+confirmed_conclusion: Five independent fresh-stack runs qualify the exact corrected source, installed bundle, frozen policy, and pinned controller runtime.
+```
+
+## Checkpoint CP-FUSION-027 — corrected RESET_WORLD qualification and GUI mirror
+
+```yaml
+checkpoint_id: CP-FUSION-027
+terminal_batch: fusion-reset-world-003
+task: 18
+lifecycle: RESET_WORLD
+status: QUALIFIED
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+valid_successes: 5
+attempts: 5
+simulation_session_id: fusion-reset-world-003-reset
+reset_epochs: [1, 2, 3, 4, 5]
+physical_primary_failures: [null, null, null, null, null]
+clean_shutdowns: [true, true, true, true, true]
+final_cup_positions_world_m:
+  - [-0.07954820902571293, -0.24677626955348245, 0.16532460622509274]
+  - [-0.0793235146607238, -0.24865800716917477, 0.16535149327967644]
+  - [-0.07938944189962344, -0.24901961906169562, 0.1654861923702452]
+  - [-0.07881753165954725, -0.2475221045956349, 0.16507803747757804]
+  - [-0.0792330496299509, -0.2469499387342337, 0.16513009744534393]
+evidence_root: /data/work/so101-debug-fusion-reset-world-003
+manifest_sha256: 0a0445b64558de7661cfe9c4ff1dccc3ffb189b15da306f922b147195fb73bec
+independent_verifier: QUALIFIED
+independent_verifier_log_sha256: e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37
+gui_mirror:
+  experiment_id: fusion-gui-003
+  status: VALID_SUCCESS_NONCOUNTING
+  simulation_session_id: fusion-gui-003-e5e4d9b
+  completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+  evidence_root: /data/work/so101-debug-fusion-gui-003
+  screenshots_sha256:
+    - e92cab9317bae61ba887e6c91394604e034b4b2a4c68a8d1f538f89710bc2707
+    - 2b0ea691d81a44cb5122b2189d0a4215a4fe8eafee9549b5993594a9f3d2e4bb
+  final_cup_position_world_m: [-0.08048027501390147, -0.24779380138572246, 0.16532868235999496]
+  terminal_tcp_position_world_m: [-0.06953442989043869, -0.2234912152065353, 0.2771281502155549]
+  world_contacts: {left: 0, right: 0, table: true, maximum_normal_force_n: 0.23673941661525327}
+  artifacts_sha256:
+    live_runtime_manifest: bb6c7ef1ceda99179bc9077d14922677b9e986e2f0c9350497f750875c27da25
+    release_retreat: 44c230950940270743f5ed2d7ba7dde32bcde488dcc159c70be7182060dc2803
+    launch_log: a2418a362d8d15db35d0c125bb4b48f0b2e9dfb9e53c3e45cf6981e328d14c82
+  ordered_shutdown: true
+final_acceptance:
+  fresh_nonsymlink_build: PASS
+  installed_module_under_final_prefix: PASS
+  unified_tests: 105 passed
+  compatibility_profile_tests: 17 passed
+  installed_provenance_tests: 3 passed
+  ruff: PASS
+  fusion_contract: PASS
+  json_validation: PASS
+  git_diff_check: PASS
+  exact_policy_and_simulator_variant_bytes: PASS
+  exact_qualified_model_and_scene_bytes: PASS
+  source_asset_symlinks: 44/44
+  pinned_controller_gitlink_and_executable: PASS
+  full_restart_independent_verifier: QUALIFIED
+  reset_world_independent_verifier: QUALIFIED
+  evidence_sha256:
+    build_log: e4039dc8945b59a1c472a18a13cf8daabd74277b2bc52ac0c01e8afa7504c026
+    fusion_contract_log: 64be94471f74d3addf3d7629545a3f4b2d12b8e52e412e753309bbf4ae4ca547
+    installed_provenance_log: db58d0792e021e6c3fb7e4cdfd186077e8b54fd1fe8f52d4871d055bffbca88b
+    ruff_log: 82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18
+    static_fingerprint_log: aa1c75b74382a1465bf76f54301057bb74eb6b9c30156b5224d1e7f74bd88032
+    full_restart_verifier_log: e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37
+    reset_world_verifier_log: e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37
+    owned_process_probe: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    preserved_tmux_sessions: 8c18fdd27cf9da55947fb009939a155c3a25e9fb27a4a279e2f1eb73552b9719
+owned_processes_after_batch_and_gui: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+confirmed_conclusion: Five reset cycles in one unchanged session qualify independently from FULL_RESTART, and the fresh visible mirror corroborates all nine phases plus terminal numeric state.
+next_experiment: NONE_TASKS_1_THROUGH_18_COMPLETE
 ```
 
 ## Checkpoint CP-FUSION-016 — qualification runner and pinned-fork gate
