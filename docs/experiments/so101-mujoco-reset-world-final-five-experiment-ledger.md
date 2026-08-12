@@ -180,7 +180,7 @@ the permanent experiment IDs below.
   next_experiment: EXP-139
 - experiment_id: EXP-139
   manifest_record_id: MNT-Q-RESET-EXP136-140-04
-  status: RUNNING
+  status: VALID
   prior_experiment: EXP-138
   hypothesis: The same shared stack repeats the frozen successful outcome after reset epoch 4 without accumulated runtime state.
   prediction: The fourth independent nine-phase workflow succeeds with the same session and strictly increasing epoch.
@@ -192,13 +192,21 @@ the permanent experiment IDs below.
   failure_criteria: [any valid physical or workflow failure]
   invalid_criteria: [any challenge contract contamination]
   provenance: {source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271, install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install, runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/run_qualification, ros_domain_id: 204, gz_partition: NOT_APPLICABLE_MUJOCO_RUNTIME}
-  observed: [PENDING]
-  conclusion: PENDING
-  decision: PENDING
+  observed:
+    - SUCCESS; reset epoch 4; unchanged simulation session; exact nine-phase trace and fresh checkpoint.
+    - Physical primary_failure null; moveit_attached false; world_object_synchronized true; intended support retained and gripper contact absent.
+    - Final cup pose [-0.07943893586054612, -0.24690689413099687, 0.16537425718711438] m; upright tilt 0.017384344672837507 rad.
+    - actions SHA-256 dd101000a3d8ea1a7a4a14263299acda990eca40ad1e8847e805572e1be7619f.
+    - owner manifest SHA-256 7730c49326663423592fa9200d7696acc54785d0b669d8788161bcc28b982a4b.
+    - raw run-index SHA-256 3e92965a395b0a650eda5067b8bd2346e3aeeff66dbbd86831d74718948a254a.
+    - dynamic summary SHA-256 1be12fda32c1608c21d8ca21f64e7ac356eafd30184c44f6663aa00d8cf3b235.
+    - Shared launch log SHA-256 is deferred until clean shutdown closes the common file.
+  conclusion: VALID SUCCESS 4/5 in the frozen RESET_WORLD batch.
+  decision: KEEP
   next_experiment: EXP-140
 - experiment_id: EXP-140
   manifest_record_id: MNT-Q-RESET-EXP136-140-05
-  status: PLANNED
+  status: RUNNING
   prior_experiment: EXP-139
   hypothesis: The fifth unchanged reset epoch completes the exact five-consecutive-success RESET_WORLD challenge.
   prediction: The fifth independent nine-phase workflow succeeds and the fixed batch summary reports attempt_count 5, consecutive_successes 5, qualified true, and batch_invalid false.
