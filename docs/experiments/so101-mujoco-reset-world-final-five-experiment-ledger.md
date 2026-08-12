@@ -7,7 +7,7 @@ success_contract: Exactly five serial VALID SUCCESS records on one unchanged non
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 302c4ef9550e036f127111e473f44a823b1ab643
-current_commit: 302c4ef9550e036f127111e473f44a823b1ab643
+current_commit: a622f82ec331191363609e1b5a4a9d414862b232
 evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
 confirmed_conclusions:
   - MNT-CP-057 terminated MNT-Q-RESET-EXP131-135 permanently after EXP-131 used high-rate evidence on the slow /tmp volume and the old runner continued into polluted EXP-132/133 attempts.
@@ -18,7 +18,7 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-001
+latest_checkpoint: RESET-FIVE-CP-002
 next_experiment: EXP-136
 ```
 
@@ -222,4 +222,70 @@ protected_user_state:
     - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
     - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
 next_command: Commit this preregistration before build or stack startup.
+```
+
+## Checkpoint RESET-FIVE-CP-002 — build and runtime preflight passed
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-002
+recorded_at: 2026-08-13T01:27:00+08:00
+prior_checkpoint: RESET-FIVE-CP-001
+preregistration_commit: a622f82ec331191363609e1b5a4a9d414862b232
+status: READY_TO_START_SINGLE_COUNTING_INVOCATION
+source_order:
+  - /opt/ros/jazzy/setup.zsh
+  - /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh
+  - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh
+build:
+  packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+  result: PASS
+  summary: 3 packages finished
+  symlink_install: true
+focused_tests:
+  result: PASS
+  summary: 78 passed, 1 skipped
+  scope:
+    - mujoco reset unit contracts
+    - reset live contract
+    - qualification contract including fail-fast
+    - Teleop owner contract
+    - MuJoCo launch contract
+    - fork dependency contract
+    - frozen behavior contract
+    - diagnostic-only proposal contract
+ruff:
+  version: 0.15.20
+  result: PASS
+  summary: All checks passed; 131 files already formatted
+backend_integration:
+  result: PASS
+  output: backend integration contract passed
+fork_and_reset_runtime:
+  result: PASS
+  fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_tag: so101-0.0.3-r6
+  fork_status: CLEAN
+  reset_qualified_runtime_probe: PASS
+  project_package_prefixes: ALL_CURRENT_PROJECT_INSTALL
+  fork_package_prefixes: ALL_PINNED_FORK_INSTALL
+frozen_behavior:
+  verifier_result: PASS
+  manifest_sha256: 2587388a204f58d12c072ede6005e45d167d2bd861135dcc1c3dadc13efa8dfd
+  instrumentation_diff_gate: MATCH
+  transport_semantics: MATCH
+  frozen_runtime_artifact_diff: NONE
+  dependency_sha256: be6bc595cd71a10df32765e11884183c0096db765a5ee35c3ef6a0b109ef5a3a
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+counting_evidence_root_after_preflight: ABSENT
+owned_processes: NONE
+protected_user_state:
+  protected_documents_byte_hashes_unchanged: true
+  pyc_deleted: false
+next_experiment: EXP-136
+next_command: Start the preregistered run_qualification command once in tmux session MNT-Q-RESET-EXP136-140 with non-headless GUI environment.
 ```
