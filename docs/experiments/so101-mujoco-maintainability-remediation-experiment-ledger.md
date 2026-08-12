@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
 latest_checkpoint: MNT-CP-012
-next_experiment: EXP-091
+next_experiment: EXP-096
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1622,4 +1622,62 @@ batch_4:
   EXP-094: Same concurrent micro_lift_slip method and acceptance as EXP-079.
   EXP-095: Same stable_hold method and acceptance as EXP-080.
 decision: PLANNED before batch-4 stack launch. No reachability boundary, offset, or new motion target is introduced.
+```
+
+## EXP-091 through EXP-094 results and EXP-096 through EXP-100 preregistration
+
+```yaml
+batch_4_results:
+  EXP-091:
+    status: VALID
+    regime: no_contact
+    observed: 13 table-only plus 12 post-release samples admitted; frozen RECOVER_RETREAT[0] controller goal succeeded and fresh release readback had zero fingertip contacts.
+  EXP-092:
+    status: VALID
+    regime: bilateral_touch
+    observed: 25 samples admitted at terminal left/right force approximately 0.0810/0.2099 N.
+  EXP-093:
+    status: VALID
+    regime: over_compression
+    observed: 25 samples admitted after frozen q6 -0.004 rad increment; terminal left/right summed force approximately 2.026/2.138 N and maximum single-contact force 1.646 N.
+  EXP-094:
+    status: INVALID
+    regime: micro_lift_slip
+    admitted_samples: 1 in the invalid partial artifact; not present in the matrix and excluded.
+    observed:
+      - Collector began on verified 0.08 N-per-side preload and overlapped the unchanged 1.0 s MICRO_LIFT_ARM motion.
+      - One fingertip side disappeared during collection, triggering the unchanged bilateral-continuity guard.
+      - Terminal motion readback was bilateral again, left/right force approximately 0.176/0.124 N, but this cannot erase the in-window continuity failure.
+      - Terminal cup position [0.0199992502, -0.2792368145, 0.1667746266] m was approximately 0.002024 m from reset, below the 0.010 m terminal-total gate.
+    decision: Exclude the entire batch 4 and do not execute EXP-095.
+  EXP-095:
+    status: NOT_RUN
+    reason: Batch stopped at EXP-094 INVALID.
+  evidence:
+    partial_matrix_sha256: 3e74850abc5a55cdaf56a3e2851903b994be905dc813b982ddb061f540414db3
+    invalid_partial_sha256: 493328c3ac4d11240a386671bef7d2adc352dc22ff756431994258293c1d10aa
+    collector_log_sha256: 0156dbbd286e758db24d4493950bae812a704758ed0336a459fe86c13b8d45bf
+    stack_log_sha256: e6ea90d4bbe450e54cab85ec51892a1123c359128b975c06a62a073d3c2145a4
+  cleanup: Ordered shutdown complete; tmux so101-mnt-cal-v3d absent and domain 180 empty.
+revised_hypothesis: Raising only the declared micro_lift_slip minimum bilateral preload from 0.08 N to 0.12 N can preserve bilateral continuity while remaining weak enough to reject stable carry.
+batch_5:
+  source_commit: 66210bedc4a1f5670608fc8fe39bfda503bd263c
+  dependency_model_scene_motion_contract_driver_build: Identical to MNT-CP-012.
+  ros_domain_id: 181
+  gz_partition: so101-mnt-cal-v3e
+  simulation_session_id: so101-mnt-cal-v3e
+  reset_epoch: 0
+  tmux_session: so101-mnt-cal-v3e
+  matrix_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3-batch5.json
+  proposal_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal-v3-batch5.yaml
+  safety_frozen_release_retreat_and_no_contact_method: Identical to batch 4.
+  ordered_experiments:
+    - [EXP-096, no_contact, "13 table-only plus frozen release/RECOVER_RETREAT[0] and 12 explicit post-release append"]
+    - [EXP-097, micro_lift_slip, "only minimum bilateral preload changes from 0.08 N to 0.12 N; same concurrent collector and MICRO_LIFT_ARM motion"]
+    - [EXP-098, bilateral_touch, "frozen centered 0.08 N-per-side light touch"]
+    - [EXP-099, over_compression, "frozen q6 -0.004 rad increment"]
+    - [EXP-100, stable_hold, "frozen centered 0.50 N-per-side preload plus same MICRO_LIFT_ARM and >=0.30 s collector preroll"]
+  EXP-097_success: 25 admitted bilateral samples spanning the motion, retained bilateral continuity, and a speed/carry response separable from stable_hold; otherwise stop without changing continuity or sample labels.
+  safety_and_frozen_scope: Identical to MNT-CP-012; no q6 step, waypoint, planner, geometry, simulator-state, or threshold change.
+decision: PLANNED before batch-5 stack launch. The calibration order moves the unresolved physical regime immediately after the required pre-contact/post-release negative controls to avoid unnecessary later motion if it remains unavailable.
 ```
