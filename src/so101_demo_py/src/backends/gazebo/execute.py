@@ -56,6 +56,8 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--result", type=Path, required=True)
+    parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--installed-prefix", required=True)
     parser.add_argument("--policy-sha256", required=True)
     parser.add_argument("--bundle-sha256", required=True)
     parser.add_argument("--readiness-timeout-s", type=float, default=60.0)
@@ -300,6 +302,8 @@ def main(arguments: list[str] | None = None) -> int:
         backend="gazebo",
         session_id=options.session_id,
         reset_epoch=0,
+        source_commit=options.source_commit,
+        installed_prefix=options.installed_prefix,
         policy_sha256=options.policy_sha256,
         bundle_sha256=options.bundle_sha256,
     )

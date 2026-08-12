@@ -6,7 +6,7 @@
     <material name="cup_orange" rgba="1.0 0.55 0.12 1"/>
     <material name="target_landing_red" rgba="1 0 0 1"/>
     <mesh name="target_landing_tolerance_ring"
-          file="assets/target_landing_tolerance_ring.obj"/>
+          file="../common/task_objects/target_landing_tolerance_ring.obj"/>
   </asset>
   <default>
     <default class="cup_visual">

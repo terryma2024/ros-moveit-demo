@@ -32,6 +32,8 @@ def test_policy_failure_reports_real_boundary(tmp_path) -> None:
         backend="gazebo",
         session_id="gazebo-session",
         reset_epoch=0,
+        source_commit="c" * 40,
+        installed_prefix="/opt/so101/fusion-final",
         policy_sha256="a" * 64,
         bundle_sha256="b" * 64,
     )
@@ -43,6 +45,8 @@ def test_policy_failure_reports_real_boundary(tmp_path) -> None:
     path = write_run_result(tmp_path / "result.json", result)
     document = json.loads(path.read_text())
     assert document["run_status"] == "FAILED"
+    assert document["source_commit"] == "c" * 40
+    assert document["installed_prefix"] == "/opt/so101/fusion-final"
     assert document["evidence_refs"] == ["initial-world.json", "arm-action.json"]
 
 
@@ -52,6 +56,8 @@ def test_successful_action_is_not_qualified_for_gazebo() -> None:
         backend="gazebo",
         session_id="gazebo-session",
         reset_epoch=0,
+        source_commit="c" * 40,
+        installed_prefix="/opt/so101/fusion-final",
         policy_sha256="a" * 64,
         bundle_sha256="b" * 64,
     )
@@ -73,6 +79,8 @@ def test_invalid_evidence_is_not_a_policy_failure() -> None:
         backend="gazebo",
         session_id="gazebo-session",
         reset_epoch=0,
+        source_commit="c" * 40,
+        installed_prefix="/opt/so101/fusion-final",
         policy_sha256="a" * 64,
         bundle_sha256="b" * 64,
     )
