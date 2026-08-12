@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: e18aedcbb593842553655df5b0070f6e2df3b2ff
+current_commit: f9c6fe6787d5c03c9835b5cf9c0f575deea4d1d0
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -20,7 +20,7 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-036
+latest_checkpoint: MNT-CP-037
 next_experiment: EXP-126
 ```
 
@@ -4111,4 +4111,74 @@ experiments:
     decision: PENDING
     next_experiment: NONE_FINALIZE_BATCH_ON_SUCCESS
 decision: PLANNED
+```
+
+## Checkpoint MNT-CP-037 — common five-run build and provenance gate
+
+```yaml
+checkpoint_id: MNT-CP-037
+recorded_at: 2026-08-12T22:08:30+08:00
+last_valid_experiment: EXP-125
+preregistration_commit: f9c6fe6787d5c03c9835b5cf9c0f575deea4d1d0
+batch_status: PLANNED
+fresh_common_overlay:
+  root: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate
+  install: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install
+  install_tree_sha256: 7ad7be4828e7b67b8147f4ec24cb32099e8e77859cd17f1b79a5cb21f49f01a7
+  packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+  build: PASS; three packages completed from the preregistered source in a newly absent build/install root.
+automated_gates:
+  focused_regression: 82 passed
+  full_source_pytest: 539 passed, 4 skipped
+  isolated_colcon_test_result: 800 tests, 0 errors, 0 failures, 4 skipped
+  ruff_check: PASS
+  ruff_format_check: PASS; 128 files already formatted
+  runtime_source_lock: PASS
+  reset_source_lock: PASS
+  frozen_behavior:
+    manifest_sha256: eb42f058017252c8c9824f408982a5f29939bba41a27a32c8ad963aab61a90ed
+    transport_semantics: MATCH
+    protected_gazebo: MATCH
+    instrumentation_diff_gate: MATCH
+provenance:
+  fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_tag_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_status: CLEAN
+  fork_overlay: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+  project_package_prefixes:
+    so101_teleop: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install/so101_teleop
+    so101_mujoco_support: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install/so101_mujoco_support
+    so101_mujoco_demo_py: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install/so101_mujoco_demo_py
+runtime_fingerprint:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-runtime-fingerprint.json
+  sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  byte_identical_to_EXP_125: true
+run_harness:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py
+  sha256: b90ff4d8ccf4b87aef7796d4125a1c907e9321d2c6ad826c903807b79bf14054
+  contract: Parameter-only run identity; one stack start, one workflow/reset transaction, lossless transport validation, owner-manifest/artifact validation, forbidden-intervention validation, fresh CUA hold point, and ordered shutdown.
+audit_artifacts:
+  colcon_test_result:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/logs/colcon-test-result.txt
+    sha256: d2a5d7dd2631d3e8839cb3a1270bcb3d886aa97097a9537baba6cfea33a418f6
+  runtime_source_lock:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/logs/runtime-source-lock.json
+    sha256: 62dd76ed9c32895c43341121d3461b2d168db0e6d5e5d360102ac2f706a89b9b
+  reset_source_lock:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/logs/reset-source-lock.json
+    sha256: 4a0c3d0705f3a980cbe8c21f83e0dfd08ea4399cca1fe187fe3010aa7051f761
+  frozen_behavior:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/logs/frozen-behavior.json
+    sha256: b7447ae8187668fe176868d1f87e284c3d9e132d876c93bd1ddfac7629e77edf
+invalid_pre_run_audit_attempts:
+  - Focused source pytest before the fresh overlay build could not collect generated so101_mujoco_support messages. This was an environment-invalid pre-build audit, not a product test result; the same focused suite passed 82 tests after the required fresh build.
+  - The first reset-lock capture used a nonexistent lock filename, then the authoritative config/dependency-lock.yaml command passed and was saved above.
+protected_state:
+  src_so101_gazebo_demo_py_diff: NONE
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+owned_processes: NONE
+decision: PASS; EXP-126 may transition from PLANNED to RUNNING after this checkpoint is committed.
+next_experiment: EXP-126
 ```
