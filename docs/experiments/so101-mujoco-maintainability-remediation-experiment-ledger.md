@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 368abe4d7388a15a9b18ef175b362e584f2812df
+current_commit: d68aaca8537b7fdf087580d8c7029ebd4bd7c43d
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-019
-next_experiment: NONE_BATCH_STOPPED_EXP110_INVALID
+latest_checkpoint: MNT-CP-020
+next_experiment: NONE_PENDING_RED_DIAGNOSIS
 ```
 
 ## Checkpoint MNT-CP-001
@@ -2943,4 +2943,51 @@ open_risks:
   - A corrected implementation would require a new RED-GREEN gate and a newly preregistered five-run batch; EXP-110 cannot be relabeled or rerun.
 next_experiment: NONE_BATCH_STOPPED_EXP110_INVALID
 next_command: Wait for explicit user direction before any code change or new experiment batch.
+```
+
+## Checkpoint MNT-CP-020 — authorized evidence-chain unblock
+
+```yaml
+checkpoint_id: MNT-CP-020
+recorded_at: 2026-08-12T18:36:00+08:00
+last_valid_experiment: EXP-109
+immutable_experiment_history:
+  EXP-110: Permanently INVALID_EVIDENCE; never rerun or reclassified.
+  EXP-111_through_EXP-114: Unexecuted members of the abandoned batch; identifiers will never be reused.
+authorization:
+  scope: Directly execute a new RED-GREEN evidence-chain diagnosis and repair cycle, then EXP-115 identity-plumbing FULL_RESTART diagnostic, then only on success preregister EXP-116..120 and generate a disabled exact-hash schema-v4 proposal.
+  design_reapproval_required: false
+  root_cause_status: HYPOTHESIS_ONLY until RED evidence proves parameter resolution and excludes duplicate/old publishers or split snapshot/chunk producers.
+  exact_stop: After a byte-identical twice-generated proposal, record its SHA-256 and stop at USER_APPROVAL_REQUIRED.
+frozen_behavior:
+  strategy: Fixed q6, all waypoints, velocities, acceleration, planner, MJCF, scene, geometry, controller, contact/grasp phase logic, phase-aware thresholds, and normal execution semantics remain unchanged.
+  frozen_manifest_sha256: 912746ac6f6ac6589d5c11d7e9b9483e1ea4ebfeb3f6118a84ee0df48cd54195
+  prior_runtime_fingerprint_sha256: 9a35d05fc4ad97a92757b28e7886e84e0461a7ffbcb908e1df6f55728028fa90
+  protected_gazebo: src/so101_gazebo_demo_py must remain zero diff.
+  forbidden_fix: Removing, weakening, or bypassing session equality is prohibited.
+required_red_evidence:
+  - Characterize fully-qualified parameter resolution for SimulationEvidencePlugin initialized through get_node()->create_sub_node(plugin_name).
+  - Persist structured expected_session_id, actual_session_id, topic, and message_kind when DynamicTransportEvidenceObserver rejects a mismatch.
+  - Prove ordinary SimulationEvidence and PhysicsStepEvidenceChunk have the same configured session source and identify publisher count/GID so duplicate or stale producers are excluded.
+required_green_boundary:
+  - Pass the runtime simulation_session_id explicitly into the exact plugin scope or make the plugin resolve one deterministic fully-qualified parameter without hard-coded run IDs or silent fallback.
+  - Empty or unconfigured session must fail fast/unhealthy and must not publish acceptable evidence.
+  - Focused/full tests, Ruff, C++ read-only style, clean isolated three-package build/test, installed provenance, frozen behavior, and protected Gazebo gates precede EXP-115.
+working_tree_status:
+  head: d68aaca8537b7fdf087580d8c7029ebd4bd7c43d
+  tracked: Clean before this ledger checkpoint.
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+runtime_state:
+  host: AI-STATION-001; direct local execution, no SSH
+  fork_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  owned_processes: NONE
+  ros_domain_0_nodes: []
+  preserved_tmux: [codex attached, codex-cua idle historical, so101-mujoco-gui historical]
+next_experiment_new_information:
+  prior: EXP-110 retained only a generic chunk session mismatch and could not distinguish plugin parameter fallback from duplicate/stale publisher or split producer identity.
+  new: RED characterization will expose exact parameter scope plus structured actual/expected identity and publisher provenance before any live experiment.
+next_experiment: NONE_PENDING_RED_DIAGNOSIS
+next_command: Write and run the minimum failing launch/plugin parameter-resolution and structured mismatch persistence tests.
 ```
