@@ -1971,3 +1971,39 @@ EXP-106:
     - No axis, planner, q6 step, 3 mm pre-contact gate, 11.60 N safety gate, MJCF, scene, geometry, simulator state, motion waypoint, contact threshold, or five-win grasp-strategy change.
 decision: PLANNED and committed before stack launch or controller action. Only the registered production qualification runner may execute EXP-106.
 ```
+
+## EXP-106 terminal result and startup-boundary remediation
+
+```yaml
+recorded_at: 2026-08-12T15:54:19+08:00
+EXP-106:
+  status: INVALID
+  behavioral_result: NOT_STARTED
+  attempts_started: 1
+  automatic_extra_attempts: 0
+  terminal_cause: The fresh acceptance install omitted the workspace runtime package so101_teleop, so the production launch exited with PackageNotFoundError before READY, reset, controller action, or workflow execution.
+  runner_result:
+    process_exit_code: 1
+    manifest: MISSING because the pre-remediation runner allowed StackStartupError to escape before record finalization.
+    wrapper_exit_artifact: Contains the malformed literal "1n" and is not used as authoritative exit evidence; the traceback and ros2run failure establish exit 1.
+  evidence:
+    runner_log: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp106-runner.log, f6a23ea693fcb5ff2fa65d0b8081564a78827d5f5aeb8145cf1e2c14e2c91d3d]
+    launch_log: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp106/run-01/launch.log, 353770b73f217b0f6d329c216ca9c958dadd15044d40d06dfdf2e9de4e7f6092]
+    malformed_wrapper_exit_file: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp106-exit-code.txt, 741d14df730e53a5a019a710116f696db4ec23a132b74cf6fbb3cf7617e68313]
+  cleanup:
+    tmux_session_absent: true
+    domain_183_nodes: []
+    port_8023_listeners: []
+    owned_runtime_processes: []
+  disposition: Excluded from physical acceptance and from every later streak. Do not reinterpret it as a valid workflow failure or retry it under the same experiment ID.
+remediation:
+  red_green_contracts:
+    - package.xml must declare so101_teleop as the production launch runtime dependency.
+    - FULL_RESTART and RESET_WORLD startup failures must each emit exactly one INVALID record, preserve failure and launch-log artifacts, and enter no workflow or retry.
+  implementation:
+    - StackStartupError retains the owned handle for exact stop/finalization.
+    - Failure finalization preserves the first startup cause when shutdown also fails its success-only marker contract.
+    - Fresh builds use --packages-up-to so101_mujoco_demo_py and the reset-qualified checker verifies so101_teleop in the same explicit project install.
+  verification: 473 package tests passed, 4 skipped; Ruff lint/format, migration isolation, and git diff check passed.
+decision: Commit the remediation, create a new unique three-package acceptance build, and preregister EXP-107 before any further live action.
+```

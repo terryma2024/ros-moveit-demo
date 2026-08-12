@@ -343,7 +343,7 @@ python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py \
 - checkout diff 与 patch SHA-256 完全一致。
 - patched header 中三个 hook 确实存在。
 - dependency overlay 先于 ROS underlay。
-- SO-101 两个项目包来自当前 worktree 的标准 install。
+- SO-101 MuJoCo demo、support 与其声明的 Teleop runtime dependency 都来自当前 worktree 的标准 install。
 - installed header、两组 shared libraries 和 `ros2_control_node` 的 SHA-256 与 lock 完全一致。
 
 checker 输出一份 JSON 且 exit code 为 0 才算 provider 切换完成。`ros2 pkg prefix` 正确但文件 hash 不匹配仍然是失败，通常表示 install stale 或 build 后 lock 尚未经过资格化更新。

@@ -49,6 +49,12 @@ def test_package_name_and_build_type_are_independent() -> None:
     assert setup_arguments()["name"] == PACKAGE_NAME
 
 
+def test_package_declares_the_teleop_launch_runtime_dependency() -> None:
+    dependencies = {item.text for item in package_xml().findall("exec_depend")}
+
+    assert "so101_teleop" in dependencies
+
+
 def test_resource_marker_and_python_namespace_exist() -> None:
     assert (PACKAGE_ROOT / "resource" / PACKAGE_NAME).is_file()
     assert (PACKAGE_ROOT / PACKAGE_NAME / "__init__.py").is_file()
