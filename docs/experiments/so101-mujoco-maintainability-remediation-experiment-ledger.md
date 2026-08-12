@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
 latest_checkpoint: MNT-CP-012
-next_experiment: EXP-081
+next_experiment: EXP-086
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1530,4 +1530,48 @@ batch_2:
   EXP-084: Same concurrent micro_lift_slip method and acceptance as EXP-079.
   EXP-085: Same stable_hold method and acceptance as EXP-080.
 decision: PLANNED before any batch-2 stack launch or controller action. No new waypoint or offset is introduced.
+```
+
+## EXP-081 terminal result and EXP-086 through EXP-090 preregistration
+
+```yaml
+EXP-081:
+  status: INVALID
+  admitted_samples: 13 table_only no_contact samples; excluded with batch 2.
+  observed:
+    - CLOSE_READY and the first 13 samples passed.
+    - Frozen open again left one fixed-finger contact after moving-side release.
+    - The production staged-approach entry rejected the registered MOVE_ABOVE_OBJECT retreat with STAGED_APPROACH_FAILED early fingertip contact before Close.
+    - The rejected entry executed no arm waypoint and no sample was appended.
+  decision: Exclude EXP-081-through-085 and stop the owned stack. Do not bypass the staged-approach early-contact guard.
+  evidence:
+    partial_matrix_sha256: c8cd6ae64b60daed04e5e7f5fbdb39c02723fafdc7097f7d0c9ade4928ee4a4c
+    close_ready_evidence_sha256: a7e50c44a7fad8dadb67b5dad0f8bf2e5d65492a50578c24c495c63b8d7397b7
+    stack_log_sha256: b9fb8a2ea5181fa16580baa80d114e0ffa45e5030d9cb1cbc1a81a183721ca54
+  cleanup: Ordered shutdown complete; tmux so101-mnt-cal-v3b absent and domain 178 empty.
+revised_hypothesis: After frozen open, the already registered 2 mm MICRO_LIFT_ARM target can separate the open fixed finger from the table-supported cup while remaining inside the unchanged total-displacement gate.
+batch_3:
+  source_commit: 66210bedc4a1f5670608fc8fe39bfda503bd263c
+  dependency_model_scene_motion_contract_driver_build: Identical to MNT-CP-012.
+  ros_domain_id: 179
+  gz_partition: so101-mnt-cal-v3c
+  simulation_session_id: so101-mnt-cal-v3c
+  reset_epoch: 0
+  tmux_session: so101-mnt-cal-v3c
+  matrix_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3-batch3.json
+  proposal_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal-v3-batch3.yaml
+  safety_and_frozen_scope: Identical to MNT-CP-012; no offsets, new waypoint, planner change, or safety-limit change.
+  EXP-086:
+    regime: no_contact
+    ordered_actions:
+      - Collect 13 CLOSE_READY --pre-contact --table-only samples.
+      - Frozen centered 0.08 N bilateral touch, then frozen open.
+      - Execute only the existing calibration_driver micro-lift operation to the unchanged MICRO_LIFT_ARM target while q6 remains open.
+      - Require fresh zero-left/zero-right contact and terminal total displacement <=0.010 m, then append 12 --post-release samples.
+    failure: Any residual contact, object lift/instability incompatible with a negative control, or safety/provenance violation stops the batch.
+  EXP-087: Same bilateral_touch method and acceptance as EXP-077 after frozen restore-close-ready.
+  EXP-088: Same over_compression method and acceptance as EXP-078.
+  EXP-089: Same concurrent micro_lift_slip method and acceptance as EXP-079.
+  EXP-090: Same stable_hold method and acceptance as EXP-080.
+decision: PLANNED before batch-3 stack launch. The only changed setup choice is reuse of an already frozen motion target after release.
 ```
