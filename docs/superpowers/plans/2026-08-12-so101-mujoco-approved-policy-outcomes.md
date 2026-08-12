@@ -75,7 +75,7 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
-  - A fresh seven-regime fixed-fingerprint campaign can produce non-overlapping deterministic thresholds for the current model and motion policy.
+  - Five reachable physical regimes plus deterministic unilateral rejection contracts can produce honest non-overlapping thresholds without fabricated physical cohorts.
 latest_checkpoint: MNT-CP-001
 next_experiment: EXP-001
 ```
@@ -917,16 +917,35 @@ explicit list.
 
 ---
 
-### Task 8: Run the fresh seven-regime calibration campaign
+### Task 8: Calibrate five physical regimes and prove unilateral rejection
 
 **Files:**
+- Modify: `src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_calibration.py`
+- Modify: `src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_calibration_collector.py`
+- Modify: `src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_policy.py`
+- Modify: `src/so101_mujoco_demo_py/config/contact_calibration.yaml`
+- Modify: `src/so101_mujoco_demo_py/test/test_contact_calibration_contract.py`
+- Modify: `src/so101_mujoco_demo_py/test/test_contact_calibration_collector.py`
+- Modify: `src/so101_mujoco_demo_py/test/test_contact_policy.py`
+- Modify: `src/so101_mujoco_demo_py/test/test_grasp_outcome.py`
 - Modify: `docs/experiments/so101-mujoco-maintainability-remediation-experiment-ledger.md`
 - Create outside repository: `/tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/`
-- Generate outside repository: `contact-calibration-raw.json`, `contact-calibration-proposal.yaml`, logs, and hashes.
+- Generate outside repository: `unilateral-contracts.json`, `contact-calibration-raw.json`, `contact-calibration-proposal.yaml`, test logs, live logs, and hashes.
 
 **Interfaces:**
-- Consumes: installed Task 7 collector/analyzer, current model/scene/motion hashes, one isolated MuJoCo stack, minimum 20 valid samples per regime.
-- Produces: one schema-v2 disabled proposal and its exact `proposal_sha256`; it does not modify checked-in approval state.
+- Consumes: installed Task 7 collector/analyzer, current model/scene/motion hashes, authentic unilateral evidence already captured by the ledger, one isolated MuJoCo stack, and minimum 25 valid raw samples for each of five physical regimes.
+- Produces: one schema-v3 disabled proposal and its exact `proposal_sha256`; it does not enable checked-in approval state.
+
+**Frozen safety and motion boundary:**
+
+- Do not start any more offset search or live action intended to manufacture
+  `left_only` or `right_only`.
+- Do not change axis, planner, q6 step, MJCF, scene, geometry, simulator state,
+  motion waypoints, or the qualified grasp strategy.
+- Keep the independently monitored maximum pre-contact displacement at
+  `0.003 m`, terminal total diagnostic displacement at `0.010 m`, and maximum
+  diagnostic force at `11.60 N`. Terminal total displacement must never be
+  substituted for the independent pre-contact field.
 
 - [ ] **Step 1: Build a clean isolated overlay and verify provenance**
 
@@ -954,19 +973,77 @@ python3 src/so101_mujoco_demo_py/scripts/check_mujoco_runtime.py \
 Expected: package prefixes point to the new isolated install; fork packages
 point to the pinned fork overlay; validation errors are empty.
 
-- [ ] **Step 2: Pre-register seven experiments before any live action**
+- [ ] **Step 2: Write RED schema, collector, analyzer, and evaluator tests**
 
-Create `EXP-001` through `EXP-007`, one for each ordered regime:
-`no_contact`, `left_only`, `right_only`, `bilateral_touch`,
-`over_compression`, `micro_lift_slip`, `stable_hold`.
+Before implementation changes, add tests that require all of the following:
+
+1. schema-v3 raw evidence contains exactly the five physical regime arrays and
+   exactly two unilateral rejection contracts;
+2. each unilateral contract is `observed` or `physical_unreachable`, binds
+   authentic evidence references, sets `stable_grasp_allowed: false`, and uses
+   `null` rather than zero for physical calibration/evaluation counts and
+   misclassification rate;
+3. the collector accepts only the five physical regimes and rejects
+   `left_only`/`right_only` before reading or moving anything;
+4. the analyzer fits thresholds only from the five physical cohorts, emits
+   confusion rows only for those cohorts, and retains all seven possible
+   prediction labels;
+5. typed/fault-injected left-only and right-only evidence windows fail with
+   `GRASP_RIGHT_CONTACT_MISSING` and `GRASP_LEFT_CONTACT_MISSING`, respectively,
+   and can never return stable-grasp success;
+6. schema-v1/v2 evidence and policy remain read-only compatible where already
+   promised, but only schema v3 can be produced for the new campaign;
+7. the checked-in policy remains disabled and unapproved.
+
+Run the focused tests and retain their expected failure output in the evidence
+root before modifying production code.
+
+- [ ] **Step 3: Implement schema v3 and turn the focused suite GREEN**
+
+Introduce explicit `PHYSICAL_REGIMES`, `UNILATERAL_REGIMES`, and
+`CLASSIFICATION_LABELS` constants. The raw schema contains five physical
+sample arrays plus two contract records. Contract records are metadata and
+must never pass through `sample_metrics`, threshold fitting, quantile
+summaries, or the physical confusion matrix.
+
+The `left_only` contract requires `GRASP_RIGHT_CONTACT_MISSING`; the
+`right_only` contract requires `GRASP_LEFT_CONTACT_MISSING`. For either
+contract, `physical_calibration_sample_count`,
+`physical_evaluation_sample_count`, and `physical_misclassification_rate` are
+`null`. An unavailable side is recorded as `physical_unreachable`, not as a
+zero-error category.
+
+Run focused tests until GREEN, then run the full Python package and Ruff. Keep
+`config/contact_calibration.yaml` disabled and unapproved.
+
+- [ ] **Step 4: Register the two unilateral contracts from authentic evidence**
+
+Create `unilateral-contracts.json` outside the repository. Reuse the authentic
+physical `left_only` observation from EXP-062 and authentic `right_only`
+observations from the retained logs, binding exact artifact SHA-256 values and
+ledger experiment references. Record that EXP-062 failed exact-reset
+repeatability in EXP-066; therefore no repeatable left-only cohort exists and
+the left contract disposition is `physical_unreachable`. The right contract
+may be `observed` because authentic right-only evidence exists, but it remains
+non-statistical and fail-closed.
+
+Do not copy a log row into a calibration sample, synthesize a physical sample,
+or report a physical misclassification rate for either contract.
+
+- [ ] **Step 5: Pre-register five physical experiments before live action**
+
+Create one new experiment for each ordered physical regime:
+`no_contact`, `bilateral_touch`, `over_compression`, `micro_lift_slip`, and
+`stable_hold`.
 
 Each record freezes one source commit, dependency/model/scene/motion hashes,
 one `ROS_DOMAIN_ID`, one `GZ_PARTITION`, one session/reset epoch, exact command,
-single active motion/contact variable, safety aborts (`11.60 N`, `3 mm`
-pre-contact displacement, stale/truncated/reset mismatch), and minimum 25 raw
-samples so the modulo-five split leaves at least 20 calibration samples.
+single active motion/contact variable, safety aborts (`11.60 N`, independent
+`3 mm` pre-contact displacement, `10 mm` terminal total displacement,
+stale/truncated/reset mismatch), and minimum 25 raw samples so the modulo-five
+split leaves at least 20 calibration and 5 evaluation samples.
 
-- [ ] **Step 3: Start one owned isolated stack and collect regimes in order**
+- [ ] **Step 6: Start one owned isolated stack and collect physical regimes**
 
 Use a tmux-held stack with exact PID/process-group ownership. For each regime:
 
@@ -977,11 +1054,9 @@ Use a tmux-held stack with exact PID/process-group ownership. For each regime:
 4. save command exit code and partial evidence on any abort;
 5. mark the experiment `VALID` or `INVALID` before proceeding.
 
-The regime labels must be physically created and independently checked:
+The five regime labels must be physically created and independently checked:
 
 - `no_contact`: table-only pre-close and post-release negative controls;
-- `left_only` and `right_only`: exactly one fingertip side, never inferred from
-  a missing callback;
 - `bilateral_touch`: both sides with light contact while the cup remains
   table-supported;
 - `over_compression`: bilateral contact beyond the acceptable compression/force
@@ -994,7 +1069,7 @@ If the current geometry cannot produce a required regime without crossing a
 safety abort, record a `VALID` behavioral failure and stop. Do not manufacture
 samples or relabel another regime.
 
-- [ ] **Step 4: Analyze the immutable raw matrix**
+- [ ] **Step 7: Analyze the immutable schema-v3 matrix**
 
 Run the installed analyzer, then independently validate it:
 
@@ -1009,18 +1084,25 @@ sha256sum /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibrat
 ```
 
 Expected: `calibration_status: VALID`, `approval.enabled: false`,
-`approval.approved: false`, at least 25 samples per regime, zero evaluation
-misclassifications, positive safety margins, and a non-placeholder
-`approval.proposal_sha256`.
+`approval.approved: false`, at least 25 samples for each of five physical
+regimes, zero held-out misclassifications for those observed cohorts, positive
+safety margins, and a non-placeholder `approval.proposal_sha256`. Both
+unilateral contracts must report `stable_grasp_allowed: false`; their physical
+sample-count and misclassification fields remain `null` and are excluded from
+the zero-error claim.
 
-- [ ] **Step 5: Stop only the owned stack and checkpoint the evidence**
+- [ ] **Step 8: Stop only the owned stack and checkpoint the evidence**
 
 Use the exact process group, wait for ordered shutdown, verify no owned residual
-processes/nodes, and update the ledger with observed distributions, hashes,
-proposal path/hash, invalid runs, and the next step `USER_APPROVAL_REQUIRED`.
+processes/nodes, and update the ledger with observed distributions, unilateral
+contract dispositions and artifact hashes, focused/full test results, proposal
+path/hash, invalid runs, the two independent displacement-gate audit fields,
+and the next step `USER_APPROVAL_REQUIRED`.
 
-Do not copy raw evidence into the repository and do not modify
-`contact_calibration.yaml` yet.
+Do not copy raw evidence into the repository, do not enable
+`contact_calibration.yaml`, and do not enter Task 9 or the formal nine-phase
+regression. Present the complete evidence packet and stop for exact-hash user
+approval.
 
 ---
 
@@ -1032,14 +1114,16 @@ Do not copy raw evidence into the repository and do not modify
 
 **Interfaces:**
 - Consumes: Task 8 disabled proposal and exact `proposal_sha256`.
-- Produces: one checked-in enabled schema-v2 policy whose approval envelope references the exact hash.
+- Produces: one checked-in enabled schema-v3 policy whose approval envelope references the exact hash.
 
 - [ ] **Step 1: Present the approval packet and stop**
 
-Report one table with every threshold, unit, calibration/evaluation sample count,
-p05/p50/p95 per regime, safety margin, confusion matrix, false-positive/negative
-count, model/scene/motion hashes, raw evidence SHA-256, proposal file SHA-256,
-and `proposal_sha256`.
+Report one table with every threshold, unit, physical calibration/evaluation
+sample count, p05/p50/p95 for each of five physical regimes, safety margin,
+physical-cohort confusion matrix, false-positive/negative count, both
+unilateral dispositions and immutable evidence hashes, their explicit `null`
+statistical fields, typed rejection-test evidence, model/scene/motion hashes,
+raw evidence SHA-256, proposal file SHA-256, and `proposal_sha256`.
 
 Ask the user to type the fixed prefix `批准 contact proposal ` followed
 immediately by the exact 64-hex `proposal_sha256` displayed in the packet.
