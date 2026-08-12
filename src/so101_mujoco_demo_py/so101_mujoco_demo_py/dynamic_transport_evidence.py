@@ -310,7 +310,9 @@ def _validate_and_flatten(run: DynamicTransportRun) -> tuple[PhysicsStepSample, 
     if run.physics_timestep_s <= 0.0 or not run.chunks:
         raise EvidenceInvalid("run must contain chunks at a positive timestep")
     flattened: list[PhysicsStepSample] = []
-    for expected_sequence, item in enumerate(run.chunks):
+    first_chunk_sequence = run.chunks[0].chunk_sequence
+    for offset, item in enumerate(run.chunks):
+        expected_sequence = first_chunk_sequence + offset
         if item.chunk_sequence != expected_sequence:
             raise EvidenceInvalid("chunk sequence mismatch")
         if item.evidence_loss:
@@ -368,7 +370,7 @@ def _waypoint_ranges(
         raise EvidenceInvalid("transport boundaries are missing")
     if (
         run.boundaries[0].kind is not TransportBoundaryKind.PHASE_START
-        or run.boundaries[0].physics_step != samples[0].physics_step
+        or run.boundaries[0].physics_step not in {item.physics_step for item in samples}
         or run.boundaries[-1].kind is not TransportBoundaryKind.PHASE_END
         or run.boundaries[-1].physics_step != samples[-1].physics_step
     ):
@@ -537,6 +539,7 @@ class AtomicTransportEvidenceStore:
         self.root = root
         self.run_id = run_id
         self._chunks: list[dict[str, Any]] = []
+        self._boundaries: list[dict[str, Any]] = []
         self._index_path = root / "run-index.json"
 
     def _write_index(self, **terminal: Any) -> Path:
@@ -544,6 +547,7 @@ class AtomicTransportEvidenceStore:
             "schema": "so101-dynamic-transport-raw-v4",
             "run_id": self.run_id,
             "chunks": list(self._chunks),
+            "boundaries": list(self._boundaries),
             "status": "RUNNING",
         }
         document.update(terminal)
@@ -551,7 +555,9 @@ class AtomicTransportEvidenceStore:
         return self._index_path
 
     def checkpoint_chunk(self, chunk: PhysicsStepChunk) -> str:
-        expected_sequence = len(self._chunks)
+        expected_sequence = (
+            chunk.chunk_sequence if not self._chunks else self._chunks[-1]["chunk_sequence"] + 1
+        )
         if chunk.chunk_sequence != expected_sequence:
             raise EvidenceInvalid("chunk sequence mismatch at checkpoint")
         document = asdict(chunk)
@@ -571,7 +577,23 @@ class AtomicTransportEvidenceStore:
         self._write_index()
         return digest
 
-    def close_partial(self, *, outcome_class: str, trigger_physics_step: int) -> Path:
+    def checkpoint_boundary(self, boundary: TransportBoundary) -> Path:
+        if not isinstance(boundary, TransportBoundary):
+            raise TypeError("boundary must be TransportBoundary")
+        if self._boundaries and boundary.physics_step < self._boundaries[-1]["physics_step"]:
+            raise EvidenceInvalid("boundary order reversed at checkpoint")
+        self._boundaries.append(
+            {
+                "kind": boundary.kind.value,
+                "waypoint": boundary.waypoint,
+                "physics_step": boundary.physics_step,
+            }
+        )
+        return self._write_index()
+
+    def close_partial(
+        self, *, outcome_class: str, trigger_physics_step: int, **terminal: Any
+    ) -> Path:
         if not outcome_class:
             raise ValueError("outcome_class must be non-empty")
         if isinstance(trigger_physics_step, bool) or trigger_physics_step < 0:
@@ -580,4 +602,25 @@ class AtomicTransportEvidenceStore:
             status="PARTIAL_CLOSED",
             outcome_class=outcome_class,
             trigger_physics_step=trigger_physics_step,
+            **terminal,
+        )
+
+    def close_complete(self, *, physical_transport_outcome: str, **terminal: Any) -> Path:
+        if not physical_transport_outcome:
+            raise ValueError("physical_transport_outcome must be non-empty")
+        return self._write_index(
+            status="COMPLETE",
+            outcome_class="PHYSICAL_TRANSPORT_SUCCESS",
+            physical_transport_outcome=physical_transport_outcome,
+            **terminal,
+        )
+
+    def close_invalid(self, *, invalid_reason: str, **terminal: Any) -> Path:
+        if not invalid_reason:
+            raise ValueError("invalid_reason must be non-empty")
+        return self._write_index(
+            status="PARTIAL_CLOSED",
+            outcome_class="INVALID_EVIDENCE",
+            invalid_reason=invalid_reason,
+            **terminal,
         )

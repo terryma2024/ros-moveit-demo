@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 import rclpy
@@ -17,6 +19,11 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.dynamic_transport_evidence import (
+    AtomicTransportEvidenceStore,
+    ContactForceMode,
+    analyze_dynamic_transport,
+)
 from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
@@ -29,11 +36,19 @@ from so101_mujoco_demo_py.moveit.planning import (
     make_get_motion_plan_request,
 )
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
+from so101_mujoco_demo_py.mujoco.transport_observer import (
+    BoundaryActionClient,
+    DynamicTransportEvidenceObserver,
+    EvidenceInvalid,
+    check_force,
+)
 from so101_mujoco_demo_py.staged_approach import maximum_joint_error
 
 SESSION_ID = os.environ["SO101_SIMULATION_SESSION_ID"]
 EXPECTED_EPOCH = int(os.environ["SO101_EXPECTED_RESET_EPOCH"])
 EVIDENCE_PATH = Path(os.environ["SO101_EVIDENCE_ROOT"]) / "transport.json"
+DYNAMIC_RAW_ROOT = EVIDENCE_PATH.parent / "transport-dynamic-raw"
+DYNAMIC_SUMMARY_PATH = EVIDENCE_PATH.parent / "transport-dynamic-summary.json"
 ARM_JOINTS = ("1", "2", "3", "4", "5")
 ALL_JOINTS = (*ARM_JOINTS, "6")
 EXPECTED_START_ARM = (
@@ -56,13 +71,20 @@ MAX_SEGMENT_CUP_DISPLACEMENT_M = 0.04
 MIN_TOTAL_LATERAL_M = 0.06
 MAX_TOTAL_LATERAL_M = 0.12
 MAX_TOTAL_VERTICAL_CHANGE_M = 0.03
+DIAGNOSTIC_HARD_STOP_FORCE_N = 11.60
+MAXIMUM_REACTION_STEPS = 25
+PHYSICS_TIMESTEP_S = 0.002
 
 
-def atomic_write(document: dict) -> None:
-    EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary = EVIDENCE_PATH.with_name(f".{EVIDENCE_PATH.name}.{os.getpid()}.tmp")
+def atomic_write(document: dict, path: Path = EVIDENCE_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(temporary, EVIDENCE_PATH)
+    os.replace(temporary, path)
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def evidence_dict(value) -> dict:
@@ -108,6 +130,13 @@ def main() -> int:
     planning_service = node.create_client(GetMotionPlan, "/plan_kinematic_path")
     get_scene = node.create_client(GetPlanningScene, "/get_planning_scene")
     execute_action = ActionClient(node, ExecuteTrajectory, "/execute_trajectory")
+    dynamic_observer = DynamicTransportEvidenceObserver(
+        node=node,
+        simulation_session_id=SESSION_ID,
+        reset_epoch=EXPECTED_EPOCH,
+        store=AtomicTransportEvidenceStore(DYNAMIC_RAW_ROOT, run_id=SESSION_ID),
+        maximum_reaction_steps=MAXIMUM_REACTION_STEPS,
+    )
 
     def progress() -> None:
         rclpy.spin_once(node, timeout_sec=0.01)
@@ -127,7 +156,11 @@ def main() -> int:
         except EvidenceStale:
             return None
 
-    def stable_bilateral(epoch: int, duration_s: float = 0.20):
+    def stable_bilateral(
+        epoch: int,
+        mode: ContactForceMode,
+        duration_s: float = 0.20,
+    ):
         start: float | None = None
         last_sequence = -1
         latest = None
@@ -140,8 +173,18 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != epoch:
                 raise RuntimeError("MuJoCo pause/reset during bilateral gate")
-            if evidence.maximum_normal_force_n > maximum_safe_force_n:
-                raise RuntimeError("force boundary exceeded during bilateral gate")
+            force = check_force(
+                evidence.maximum_normal_force_n,
+                mode,
+                static_threshold_n=maximum_safe_force_n,
+                diagnostic_stop_n=DIAGNOSTIC_HARD_STOP_FORCE_N,
+            )
+            if force.cancel:
+                raise RuntimeError(force.reason)
+            if dynamic_observer.invalid_reason is not None:
+                raise RuntimeError(dynamic_observer.invalid_reason)
+            if dynamic_observer.hazard is not None:
+                raise RuntimeError("diagnostic hazard latch received")
             if any(item.geom2 == "table_collision" for item in evidence.other_object_contacts):
                 raise RuntimeError("cup regained table support")
             bilateral = bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts)
@@ -170,7 +213,10 @@ def main() -> int:
             raise RuntimeError("robot is not at the verified EXP-105 endpoint")
         if abs(start_positions[-1] - EXPECTED_Q6) > 0.002:
             raise RuntimeError("q6 is not at the verified EXP-104 endpoint")
-        stable = stable_bilateral(before.reset_epoch)
+        stable = stable_bilateral(
+            before.reset_epoch,
+            ContactForceMode.PRE_TRANSPORT_STATIC_HOLD,
+        )
         initial_cup = tuple(stable.object_state.position_world)
         result["before_joints_rad"] = list(start_positions)
         result["before_evidence"] = evidence_dict(stable)
@@ -230,8 +276,18 @@ def main() -> int:
                     raise RuntimeError("stale MuJoCo evidence during transport")
                 if evidence.paused or evidence.reset_epoch != before.reset_epoch:
                     raise RuntimeError("MuJoCo pause/reset during transport")
-                if evidence.maximum_normal_force_n > maximum_safe_force_n:
-                    raise RuntimeError("force boundary exceeded during transport")
+                force = check_force(
+                    evidence.maximum_normal_force_n,
+                    ContactForceMode.DYNAMIC_TRANSPORT_SHADOW,
+                    static_threshold_n=maximum_safe_force_n,
+                    diagnostic_stop_n=DIAGNOSTIC_HARD_STOP_FORCE_N,
+                )
+                if force.diagnostic_hazard_breached:
+                    raise RuntimeError(force.reason)
+                if dynamic_observer.invalid_reason is not None:
+                    raise RuntimeError(dynamic_observer.invalid_reason)
+                if dynamic_observer.hazard is not None:
+                    raise RuntimeError("diagnostic hazard latch received")
                 contact_guard.require(
                     bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts),
                     "bilateral contact lost during transport",
@@ -239,12 +295,65 @@ def main() -> int:
                 if any(item.geom2 == "table_collision" for item in evidence.other_object_contacts):
                     raise RuntimeError("cup regained table support during transport")
 
+            def goal_dispatched() -> None:
+                try:
+                    if index > 1:
+                        dynamic_observer.mark_waypoint_complete(waypoint=index - 1)
+                    dynamic_observer.mark_goal_dispatched(waypoint=index)
+                except EvidenceInvalid as error:
+                    dynamic_observer.record_invalid(error)
+
+            def cancellation_requested() -> None:
+                try:
+                    dynamic_observer.publish_cancellation_request()
+                except EvidenceInvalid as error:
+                    dynamic_observer.record_invalid(error)
+
             execution = MoveItExecutionClient(
-                execute_action,
+                BoundaryActionClient(
+                    execute_action,
+                    on_goal_dispatched=goal_dispatched,
+                    on_cancellation_requested=cancellation_requested,
+                ),
                 goal_factory=make_execute_goal,
                 progress=progress,
-            ).execute(planned.trajectory, 45.0, monitor=monitor)
+            ).execute(
+                planned.trajectory,
+                45.0,
+                monitor=monitor,
+            )
             if execution.failure is not None:
+                if dynamic_observer.hazard is not None:
+                    ack_deadline = time.monotonic() + 1.0
+                    while (
+                        dynamic_observer.cancellation_request_upper_bound_step is None
+                        and dynamic_observer.invalid_reason is None
+                        and time.monotonic() < ack_deadline
+                    ):
+                        progress()
+                    if (
+                        dynamic_observer.cancellation_request_upper_bound_step is None
+                        and dynamic_observer.invalid_reason is None
+                    ):
+                        dynamic_observer.record_invalid(
+                            EvidenceInvalid("cancellation request physics-step ack timeout")
+                        )
+                    if dynamic_observer.invalid_reason is None:
+                        status = "VALID_SAFETY_ABORT"
+                        partial_index = dynamic_observer.close_safety_abort()
+                    else:
+                        status = "INVALID"
+                        partial_index = dynamic_observer.close_invalid_abort()
+                    result.update(
+                        {
+                            "status": status,
+                            "outcome_class": status,
+                            "dynamic_raw_index": str(partial_index),
+                            "dynamic_raw_index_sha256": sha256_file(partial_index),
+                        }
+                    )
+                    atomic_write(result)
+                    return 2
                 raise RuntimeError(
                     f"transport waypoint {index} execution failed: "
                     f"{execution.failure.code}: {execution.failure.message}"
@@ -262,7 +371,10 @@ def main() -> int:
                 10.0,
                 f"transport waypoint {index} endpoint timeout",
             )
-            after = stable_bilateral(before.reset_epoch)
+            after = stable_bilateral(
+                before.reset_epoch,
+                ContactForceMode.DYNAMIC_TRANSPORT_SHADOW,
+            )
             cup = tuple(after.object_state.position_world)
             segment_displacement = math.dist(cup, previous_cup)
             if segment_displacement > MAX_SEGMENT_CUP_DISPLACEMENT_M:
@@ -287,11 +399,27 @@ def main() -> int:
             raise RuntimeError("transport total vertical change exceeded")
         if not MIN_TOTAL_LATERAL_M <= total_lateral <= MAX_TOTAL_LATERAL_M:
             raise RuntimeError("transport total lateral displacement outside gate")
+        dynamic_observer.mark_waypoint_complete(waypoint=len(TARGETS))
+        dynamic_observer.mark_phase_complete(waypoint=len(TARGETS))
+        transport_outcome = "FORMAL_MOVE_ABOVE_PLACE_PROVED"
+        summary = analyze_dynamic_transport(
+            dynamic_observer.build_run(
+                physics_timestep_s=PHYSICS_TIMESTEP_S,
+                physical_transport_outcome=transport_outcome,
+            ),
+            shadow_force_n=maximum_safe_force_n,
+        )
+        atomic_write(asdict(summary), DYNAMIC_SUMMARY_PATH)
+        dynamic_index = dynamic_observer.close_success(physical_transport_outcome=transport_outcome)
         result.update(
             {
-                "status": "FORMAL_MOVE_ABOVE_PLACE_PROVED",
+                "status": transport_outcome,
                 "total_vertical_change_m": total_vertical_change,
                 "total_lateral_displacement_m": total_lateral,
+                "dynamic_raw_index": str(dynamic_index),
+                "dynamic_raw_index_sha256": sha256_file(dynamic_index),
+                "dynamic_summary": str(DYNAMIC_SUMMARY_PATH),
+                "dynamic_summary_sha256": sha256_file(DYNAMIC_SUMMARY_PATH),
             }
         )
         atomic_write(result)
@@ -304,6 +432,12 @@ def main() -> int:
     except Exception as error:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
+        try:
+            partial_index = dynamic_observer.close_invalid(error)
+            result["dynamic_raw_index"] = str(partial_index)
+            result["dynamic_raw_index_sha256"] = sha256_file(partial_index)
+        except Exception as close_error:
+            result["dynamic_raw_close_error"] = f"{type(close_error).__name__}: {close_error}"
         atomic_write(result)
         print(f"EXP106_FAILED {type(error).__name__}: {error}", flush=True)
         return 1

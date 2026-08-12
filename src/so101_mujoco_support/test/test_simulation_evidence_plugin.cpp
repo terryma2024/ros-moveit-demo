@@ -25,6 +25,7 @@ using so101_mujoco_support::EvidenceState;
 using so101_mujoco_support::PhysicsStepEvidenceBuffer;
 using so101_mujoco_support::SimulationEvidencePlugin;
 using so101_mujoco_support::make_physics_step_evidence;
+using so101_mujoco_support::make_cancellation_ack;
 using so101_mujoco_support::msg::ContactSample;
 using so101_mujoco_support::msg::PhysicsStepEvidence;
 using so101_mujoco_support::msg::SimulationEvidence;
@@ -50,7 +51,8 @@ protected:
   void SetUp() override
   {
     const auto xml_path = std::filesystem::temp_directory_path() / "so101_atomic_evidence.xml";
-    std::ofstream(xml_path) << R"(<mujoco><option timestep="0.001" gravity="0 0 -9.81"/>
+    std::ofstream(xml_path) <<
+      R"(<mujoco><option timestep="0.001" gravity="0 0 -9.81"/>
       <worldbody><geom name="table" type="plane" size="1 1 .1"/>
       <body name="cup" pos="0 0 .08"><freejoint name="cup_joint"/><geom name="cup_geom" type="sphere" size=".05" mass=".1"/></body>
       <body name="left"><freejoint name="left_joint"/><geom name="left_tip" type="sphere" size=".02" mass=".1"/></body>
@@ -124,6 +126,25 @@ TEST_F(AtomicEvidenceTest, ResetGenerationIsTheOnlyEpochAuthority)
   EXPECT_EQ(reset.publisher_sequence, time_decrease.publisher_sequence + 1);
 }
 
+TEST(CancellationEvidenceTest, AckUsesPluginPhysicsStepAsConservativeRequestUpperBound)
+{
+  so101_mujoco_support::msg::PhysicsCancellationRequest request;
+  request.simulation_session_id = "session-a";
+  request.reset_epoch = 4;
+  request.hazard_physics_step = 100;
+  request.request_sequence = 7;
+
+  const auto ack = make_cancellation_ack(request, 4, 123, 0.246);
+
+  EXPECT_EQ(ack.simulation_session_id, "session-a");
+  EXPECT_EQ(ack.reset_epoch, 4U);
+  EXPECT_EQ(ack.hazard_physics_step, 100U);
+  EXPECT_EQ(ack.request_sequence, 7U);
+  EXPECT_EQ(ack.observed_physics_step, 123U);
+  EXPECT_DOUBLE_EQ(ack.observed_simulation_time_s, 0.246);
+  EXPECT_EQ(ack.observed_physics_step - ack.hazard_physics_step, 23U);
+}
+
 TEST_F(AtomicEvidenceTest, ConsumesAllResetGenerationIncrementsWithoutLoss)
 {
   mj_forward(model_.get(), data_.get());
@@ -150,7 +171,8 @@ TEST_F(AtomicEvidenceTest, ClassifiesLeftRightAndOtherContactsWithIdsAndAggregat
   double observed_minimum = std::numeric_limits<double>::infinity();
   double observed_maximum_force = 0.0;
   for (const auto * contacts :
-       {&message.left_fingertip_contacts, &message.right_fingertip_contacts}) {
+    {&message.left_fingertip_contacts, &message.right_fingertip_contacts})
+  {
     for (const auto & contact : *contacts) {
       EXPECT_GE(contact.body1_id, 0);
       EXPECT_GE(contact.geom1_id, 0);
@@ -181,7 +203,8 @@ TEST(SimulationEvidencePluginContactSets,
 {
   const auto xml_path =
     std::filesystem::temp_directory_path() / "so101_atomic_evidence_contact_sets.xml";
-  std::ofstream(xml_path) << R"(<mujoco><option gravity="0 0 0"/>
+  std::ofstream(xml_path) <<
+      R"(<mujoco><option gravity="0 0 0"/>
     <worldbody>
       <body name="cup"><freejoint name="cup_joint"/>
         <geom name="cup_geom" type="sphere" size=".02" mass=".02"/>
@@ -243,24 +266,25 @@ TEST_F(AtomicEvidenceTest, MarksPausedAndTruncatesBoundedContacts)
 
 TEST_F(AtomicEvidenceTest, PluginPublishesAuthoritativePausedResetOnlyFromSnapshotHook)
 {
-  if (!rclcpp::ok())
+  if (!rclcpp::ok()) {
     rclcpp::init(0, nullptr);
+  }
   const auto topic = "/test/so101/authoritative_pause";
   auto options = rclcpp::NodeOptions().parameter_overrides({
-    rclcpp::Parameter("object_body", "cup"),
-    rclcpp::Parameter("left_fingertip_geoms", std::vector<std::string>{"left_tip"}),
-    rclcpp::Parameter("right_fingertip_geoms", std::vector<std::string>{"right_tip"}),
-    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
-    rclcpp::Parameter("simulation_session_id", "pause-test"),
-    rclcpp::Parameter("publish_rate", 100.0),
-    rclcpp::Parameter("topic", topic),
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geoms", std::vector<std::string>{"left_tip"}),
+      rclcpp::Parameter("right_fingertip_geoms", std::vector<std::string>{"right_tip"}),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+      rclcpp::Parameter("simulation_session_id", "pause-test"),
+      rclcpp::Parameter("publish_rate", 100.0),
+      rclcpp::Parameter("topic", topic),
   });
   auto plugin_node = std::make_shared<rclcpp::Node>("authoritative_pause_plugin", options);
   auto observer_node = std::make_shared<rclcpp::Node>("authoritative_pause_observer");
   std::vector<SimulationEvidence> messages;
   const auto subscription = observer_node->create_subscription<SimulationEvidence>(
     topic, rclcpp::SensorDataQoS(),
-    [&messages](const SimulationEvidence & message) { messages.push_back(message); });
+    [&messages](const SimulationEvidence & message) {messages.push_back(message);});
   (void)subscription;
   SimulationEvidencePlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node, model_.get(), data_.get()));
@@ -269,12 +293,12 @@ TEST_F(AtomicEvidenceTest, PluginPublishesAuthoritativePausedResetOnlyFromSnapsh
   executor.add_node(observer_node);
 
   const auto spin_until = [&executor, &messages](std::size_t expected) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (messages.size() < expected && std::chrono::steady_clock::now() < deadline) {
-      executor.spin_some();
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-  };
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+      while (messages.size() < expected && std::chrono::steady_clock::now() < deadline) {
+        executor.spin_some();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    };
 
   plugin.on_pause(false);
   plugin.update(model_.get(), data_.get());
@@ -316,24 +340,25 @@ TEST_F(AtomicEvidenceTest, PluginPublishesAuthoritativePausedResetOnlyFromSnapsh
 TEST_F(AtomicEvidenceTest,
        RunningUpdateRetainsPendingGenerationUntilPausedSnapshotPublishesStepZero)
 {
-  if (!rclcpp::ok())
+  if (!rclcpp::ok()) {
     rclcpp::init(0, nullptr);
+  }
   const auto topic = "/test/so101/pending_until_snapshot";
   auto options = rclcpp::NodeOptions().parameter_overrides({
-    rclcpp::Parameter("object_body", "cup"),
-    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
-    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
-    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
-    rclcpp::Parameter("simulation_session_id", "snapshot-test"),
-    rclcpp::Parameter("publish_rate", 100.0),
-    rclcpp::Parameter("topic", topic),
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+      rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+      rclcpp::Parameter("simulation_session_id", "snapshot-test"),
+      rclcpp::Parameter("publish_rate", 100.0),
+      rclcpp::Parameter("topic", topic),
   });
   auto plugin_node = std::make_shared<rclcpp::Node>("pending_snapshot_plugin", options);
   auto observer_node = std::make_shared<rclcpp::Node>("pending_snapshot_observer");
   std::vector<SimulationEvidence> messages;
   const auto subscription = observer_node->create_subscription<SimulationEvidence>(
     topic, rclcpp::SensorDataQoS(),
-    [&messages](const SimulationEvidence & message) { messages.push_back(message); });
+    [&messages](const SimulationEvidence & message) {messages.push_back(message);});
   (void)subscription;
   SimulationEvidencePlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node, model_.get(), data_.get()));
@@ -341,12 +366,12 @@ TEST_F(AtomicEvidenceTest,
   executor.add_node(plugin_node);
   executor.add_node(observer_node);
   const auto spin_until = [&executor, &messages](std::size_t expected) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (messages.size() < expected && std::chrono::steady_clock::now() < deadline) {
-      executor.spin_some();
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-  };
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+      while (messages.size() < expected && std::chrono::steady_clock::now() < deadline) {
+        executor.spin_some();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    };
 
   plugin.on_pause(false);
   plugin.update(model_.get(), data_.get());
@@ -383,24 +408,25 @@ TEST_F(AtomicEvidenceTest,
 
 TEST_F(AtomicEvidenceTest, SnapshotPublisherContentionKeepsGenerationPendingForIdempotentRetry)
 {
-  if (!rclcpp::ok())
+  if (!rclcpp::ok()) {
     rclcpp::init(0, nullptr);
+  }
   const auto topic = "/test/so101/snapshot_contention";
   auto options = rclcpp::NodeOptions().parameter_overrides({
-    rclcpp::Parameter("object_body", "cup"),
-    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
-    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
-    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
-    rclcpp::Parameter("simulation_session_id", "contention-test"),
-    rclcpp::Parameter("publish_rate", 100.0),
-    rclcpp::Parameter("topic", topic),
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+      rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+      rclcpp::Parameter("simulation_session_id", "contention-test"),
+      rclcpp::Parameter("publish_rate", 100.0),
+      rclcpp::Parameter("topic", topic),
   });
   auto plugin_node = std::make_shared<rclcpp::Node>("snapshot_contention_plugin", options);
   auto observer_node = std::make_shared<rclcpp::Node>("snapshot_contention_observer");
   std::vector<SimulationEvidence> messages;
   const auto subscription = observer_node->create_subscription<SimulationEvidence>(
     topic, rclcpp::SensorDataQoS(),
-    [&messages](const SimulationEvidence & message) { messages.push_back(message); });
+    [&messages](const SimulationEvidence & message) {messages.push_back(message);});
   (void)subscription;
   SimulationEvidencePlugin plugin;
   ASSERT_TRUE(plugin.init(plugin_node, model_.get(), data_.get()));
@@ -530,14 +556,14 @@ TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFi
   snapshot.has_contact = true;
   snapshot.maximum_normal_force_n = 5.0;
   const auto contact = [](double force, double distance, double nx, double ny, double nz) {
-    ContactSample sample;
-    sample.normal_force_n = force;
-    sample.signed_distance_m = distance;
-    sample.normal_world.x = nx;
-    sample.normal_world.y = ny;
-    sample.normal_world.z = nz;
-    return sample;
-  };
+      ContactSample sample;
+      sample.normal_force_n = force;
+      sample.signed_distance_m = distance;
+      sample.normal_world.x = nx;
+      sample.normal_world.y = ny;
+      sample.normal_world.z = nz;
+      return sample;
+    };
   snapshot.left_fingertip_contacts = {
     contact(2.0, -0.001, 1.0, 0.0, 0.0),
     contact(3.0, -0.002, 1.0, 0.0, 0.0),
@@ -567,16 +593,17 @@ TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFi
 
 TEST_F(AtomicEvidenceTest, PhysicsStepAdvancesAtFiveHundredHertzNotPublishCadence)
 {
-  if (!rclcpp::ok())
+  if (!rclcpp::ok()) {
     rclcpp::init(0, nullptr);
+  }
   auto options = rclcpp::NodeOptions().parameter_overrides({
-    rclcpp::Parameter("object_body", "cup"),
-    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
-    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
-    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
-    rclcpp::Parameter("simulation_session_id", "physics-step-test"),
-    rclcpp::Parameter("publish_rate", 100.0),
-    rclcpp::Parameter("topic", "/test/so101/physics_step_snapshot"),
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+      rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+      rclcpp::Parameter("simulation_session_id", "physics-step-test"),
+      rclcpp::Parameter("publish_rate", 100.0),
+      rclcpp::Parameter("topic", "/test/so101/physics_step_snapshot"),
   });
   auto node = std::make_shared<rclcpp::Node>("physics_step_plugin", options);
   SimulationEvidencePlugin plugin;
@@ -595,16 +622,17 @@ TEST_F(AtomicEvidenceTest, PhysicsStepAdvancesAtFiveHundredHertzNotPublishCadenc
 
 TEST_F(AtomicEvidenceTest, RepeatedNonAdvancingUpdateDoesNotInventDuplicatePhysicsStep)
 {
-  if (!rclcpp::ok())
+  if (!rclcpp::ok()) {
     rclcpp::init(0, nullptr);
+  }
   auto options = rclcpp::NodeOptions().parameter_overrides({
-    rclcpp::Parameter("object_body", "cup"),
-    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
-    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
-    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
-    rclcpp::Parameter("simulation_session_id", "non-advancing-test"),
-    rclcpp::Parameter("publish_rate", 100.0),
-    rclcpp::Parameter("topic", "/test/so101/non_advancing_snapshot"),
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+      rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+      rclcpp::Parameter("simulation_session_id", "non-advancing-test"),
+      rclcpp::Parameter("publish_rate", 100.0),
+      rclcpp::Parameter("topic", "/test/so101/non_advancing_snapshot"),
   });
   auto node = std::make_shared<rclcpp::Node>("non_advancing_plugin", options);
   SimulationEvidencePlugin plugin;
