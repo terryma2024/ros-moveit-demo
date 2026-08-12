@@ -59,6 +59,13 @@ _CAPABILITIES = {
 }
 
 
+def _real_stub_adapters(_backend: str) -> BackendAdapters:
+    from ..backends.real_stub.backend import RealStubBackend
+
+    stub = RealStubBackend()
+    return BackendAdapters(stub, stub, stub, stub)
+
+
 def backend_capabilities(backend: str) -> BackendCapabilities:
     """Return the immutable declared capability set for one explicit backend."""
 
@@ -75,6 +82,8 @@ def compose_backend(
     """Compose exactly one explicit backend without policy or adapter fallback."""
 
     capabilities = backend_capabilities(request.backend)
+    if request.backend == "real_stub" and adapter_provider is None:
+        adapter_provider = _real_stub_adapters
     if adapter_provider is None:
         raise RuntimeCompositionError("backend adapter context is required")
     policy = load_policy_variant(
