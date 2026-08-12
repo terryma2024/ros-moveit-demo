@@ -500,3 +500,64 @@ protected_user_state:
 next_experiment: NEW_BATCH_AFTER_REBUILD_AND_PREREGISTRATION
 next_command: Commit this evidence-boundary fix, rebuild and probe the three packages, then preregister EXP-141 through EXP-145 with a new batch ID and absent NVMe evidence root before startup.
 ```
+
+## Checkpoint RESET-FIVE-CP-007 — rebuilt fix and registered frozen artifact
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-007
+recorded_at: 2026-08-13T01:44:00+08:00
+prior_checkpoint: RESET-FIVE-CP-006
+status: READY_FOR_FRESH_BATCH_PREREGISTRATION
+fix_commit: 1b49979824b89fe7d333b393a02208ca7550219d
+build:
+  packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+  result: PASS
+  summary: 3 packages finished
+focused_tests:
+  result: PASS
+  summary: 79 passed, 1 skipped
+  scope:
+    - mujoco reset unit contracts
+    - reset live contract
+    - qualification contract including fail-fast
+    - Teleop owner contract including evidence-publisher discovery
+    - MuJoCo launch contract
+    - fork dependency contract
+    - frozen behavior contract
+    - diagnostic-only proposal contract
+frozen_behavior_registration:
+  first_gate_result: EXPECTED_REGISTRATION_FAILURE
+  first_gate_reason: The verifier correctly detected observer.py and teleop_runtime.py as changed instrumentation files not yet named by the frozen-behavior allowlist.
+  correction: Add only those two evidence-plumbing paths to the frozen manifest and update the manifest's pinned test hash.
+  runtime_behavior_change: NONE
+  manifest_sha256: d74395d79ea62246656f820abe0cba54b3f18cf8104e735e2c7b91e196dc2c5b
+  instrumentation_diff_gate: MATCH
+  transport_semantics: MATCH
+  frozen_runtime_artifact_diff: NONE
+ruff:
+  version: 0.15.20
+  result: PASS
+  summary: All checks passed; 131 files already formatted
+backend_integration:
+  result: PASS
+  output: backend integration contract passed
+fork_and_reset_runtime:
+  result: PASS
+  fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_tag: so101-0.0.3-r6
+  fork_status: CLEAN
+  reset_qualified_runtime_probe: PASS
+  project_package_prefixes: ALL_CURRENT_PROJECT_INSTALL
+  fork_package_prefixes: ALL_PINNED_FORK_INSTALL
+behavior_changes:
+  motion_policy: NONE
+  contact_policy: NONE
+  thresholds_targets_timing_speed_replanning_delay_grasp: NONE
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  protected_documents_byte_hashes_unchanged: true
+next_experiment: EXP-141
+next_command: Commit the frozen artifact registration, then preregister EXP-141 through EXP-145 before any stack startup.
+remote_push_state: FORBIDDEN
+```
