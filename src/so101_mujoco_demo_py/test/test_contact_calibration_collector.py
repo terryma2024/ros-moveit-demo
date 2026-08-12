@@ -11,6 +11,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE_ROOT))
 
 from so101_mujoco_demo_py.contact_calibration_collector import (  # noqa: E402
+    CalibrationReadinessPending,
     CollectionAborted,
     CollectionRequest,
     ContactCalibrationCollector,
@@ -198,6 +199,33 @@ def test_collector_waits_for_first_atomic_evidence_within_bounded_deadline(
     result = target.collect(request(tmp_path, sample_count=1))
 
     assert result["collected_sample_count"] == 1
+
+
+def test_collector_waits_for_first_robot_state_without_admitting_sample(
+    tmp_path: Path,
+) -> None:
+    calls = 0
+
+    def initially_missing_state() -> RobotCalibrationState:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise CalibrationReadinessPending("no joint state is available")
+        return robot_state()
+
+    target = ContactCalibrationCollector(
+        Observer([received(evidence(1)), received(evidence(2))]),
+        initially_missing_state,
+        monotonic=lambda: 10.0,
+    )
+
+    result = target.collect(request(tmp_path, sample_count=1))
+
+    assert result["collected_sample_count"] == 1
+    sample = json.loads((tmp_path / "matrix.json").read_text(encoding="utf-8"))["regimes"][
+        "bilateral_touch"
+    ][0]
+    assert sample["publisher_sequence"] == 2
 
 
 def test_stable_hold_requires_continuous_bilateral_preroll_before_recording(
