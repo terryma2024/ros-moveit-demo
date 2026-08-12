@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 6b687791cf97e94c0062a6343e75497c322266e7
+current_commit: 80e558b564d4445cc6ba01c7c5e53343ad0f80f9
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,7 +21,7 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-052
+latest_checkpoint: MNT-CP-053
 next_experiment: RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
 ```
 
@@ -5387,4 +5387,76 @@ qualification:
   overall_task_status: RESET_WORLD_CHALLENGE_PENDING
 next_experiment: RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
 next_command: Preregister five new RESET_WORLD experiment IDs against this exact runtime/config fingerprint and the unchanged successful strategy; do not start a run before preregistration.
+```
+
+## Checkpoint MNT-CP-053 — five-run baseline and plan execution audit
+
+```yaml
+checkpoint_id: MNT-CP-053
+recorded_at: 2026-08-13T00:43:30+08:00
+prior_checkpoint: MNT-CP-052
+source_commit: 80e558b564d4445cc6ba01c7c5e53343ad0f80f9
+status: COMPLETE
+baseline:
+  json: docs/experiments/so101-mujoco-full-restart-baseline.json
+  sha256: 7e24e479dbed11292b7e95e95069a29a18e610298f5d9d655cbf64dad3f66368
+  input_experiments: [EXP-126, EXP-127, EXP-128, EXP-129, EXP-130]
+  independent_run_count: 5
+  repeated_measure_sample_count: 18575
+  policy_effect: NONE_READ_ONLY_BASELINE
+  threshold_derivation: NONE_DIAGNOSTIC_COMPARISON_ONLY
+  exp126_visual_evidence: USER_WAIVER_PRESERVED
+  dynamic_transport_observer_maximum_normal_force_n:
+    minimum: 4.913286
+    median: 4.925252
+    maximum: 4.982987
+  raw_single_contact_force_n:
+    p50: 4.094265
+    p95: 6.197460
+    p99: 6.575667
+    maximum: 6.610767
+  released_static_final_maximum_normal_force_n:
+    minimum: 0.151060
+    median: 0.233202
+    maximum: 0.240023
+verification:
+  focused_red_green: 5 passed
+  full_python: 522 passed, 4 skipped
+  ruff: All checks passed; 131 files already formatted
+  backend_integration_contract: PASS
+  fresh_three_package_build: PASS
+  installed_cli_regeneration: BYTE_IDENTICAL_SHA256_MATCH
+non_product_invocation_characterization:
+  - The first final SHA check ran from repository root although the checksum file stores a path relative to docs/experiments; rerunning from docs/experiments returned OK.
+  - The first final focused pytest ran from repository root without the source package on PYTHONPATH and failed collection on ModuleNotFoundError; rerunning from src/so101_mujoco_demo_py with PYTHONPATH=. returned 5 passed.
+plan_audit:
+  document: docs/experiments/so101-mujoco-plan-execution-audit-2026-08-13.md
+  approved_policy_outcomes:
+    tasks_complete: [1, 2, 3, 4, 5, 6, 7, 9]
+    tasks_complete_with_approved_supersession: [8, 10]
+    remaining_implementation_gap: NONE
+  phase_aware_transport_evidence:
+    tasks_complete: [1, 2, 3, 4, 5, 6, 7]
+    tasks_partial: [8]
+    tasks_not_executed: [9]
+    immutable_history: EXP-110 INVALID_EVIDENCE; EXP-111..114 unexecuted and never reusable
+    later_equivalent_input_data: EXP-126..130 five independent lossless FULL_RESTART runs
+    missing_terminal_artifact: disabled deterministic schema-v4 proposal and USER_APPROVAL_REQUIRED checkpoint
+historical_contract_updates:
+  gazebo_immutability: SUPERSEDED_BY_USER_APPROVED_BACKEND_INTEGRATION_CONTRACT
+  full_restart_counts_as_reset_world: false
+execution_state:
+  simulation_started: false
+  reset_world_started: false
+  strategy_or_threshold_change: NONE
+  rebase_merge_push: false
+  owned_processes: NONE
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  preserved_untracked_documents:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+next_experiment: RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
+next_command: Decide whether to first generate the diagnostic schema-v4 proposal from EXP-126..130 under a new explicit checkpoint, or preregister the five RESET_WORLD challenge; do not start either path implicitly.
 ```
