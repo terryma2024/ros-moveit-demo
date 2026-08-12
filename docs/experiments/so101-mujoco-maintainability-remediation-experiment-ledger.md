@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: d03e48f3ac294bb629daee3d1427aefcf08b9f0a
+current_commit: 540d51b2596cb441409d4545c298f153646c2a52
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -197,4 +197,66 @@ open_risks:
   - The checked-in contact policy remains PLANNED and deliberately makes execute unavailable.
   - Temporary subprocess phases remain until the in-process state-action replacement passes parity in Task 9.
 next_command: colcon --log-base /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/log build --base-paths src --packages-select so101_mujoco_support so101_mujoco_demo_py --build-base /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/build --install-base /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install --symlink-install
+```
+
+## Experiments EXP-001 through EXP-007 preregistration
+
+```yaml
+status: PLANNED
+recorded_at: 2026-08-12T13:12:00+08:00
+ordered_experiments:
+  - [EXP-001, no_contact, "collector only at verified CLOSE_READY before Close"]
+  - [EXP-002, left_only, "q1 offset search plus bounded q6 close until exactly left-only"]
+  - [EXP-003, right_only, "opposite q1 offset search plus bounded q6 close until exactly right-only"]
+  - [EXP-004, bilateral_touch, "centered bounded q6 close to first bilateral light touch"]
+  - [EXP-005, over_compression, "only q6 advances 0.004 rad from bilateral touch below 11.60 N"]
+  - [EXP-006, micro_lift_slip, "light bilateral preload plus registered 2 mm arm target while collecting"]
+  - [EXP-007, stable_hold, "centered >=0.50 N bilateral preload plus 0.30 s verified preroll"]
+frozen_provenance:
+  source_commit: 540d51b2596cb441409d4545c298f153646c2a52
+  dependency_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  model_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  overlay: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install
+  ros_domain_id: 176
+  gz_partition: so101-mnt-cal-001
+  simulation_session_id: so101-mnt-cal-001
+  reset_epoch: 0
+  driver: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/calibration_driver.py
+  driver_sha256: 957c382ac53aa73f1df3c6d1282f826107b5c7d96d073352015c111d0bea8bc9
+matrix_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw.json
+sample_count_per_regime: 25
+common_collector_command: >-
+  ros2 run so101_mujoco_demo_py collect_contact_calibration --regime REGIME
+  --sample-count 25 --simulation-session-id so101-mnt-cal-001 --reset-epoch 0
+  --output /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw.json
+  --source-commit 540d51b2596cb441409d4545c298f153646c2a52
+  --dependency-commit f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  --model-sha256 f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  --scene-sha256 b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  --motion-policy-sha256 aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  --reference-object-position-m 0.020 -0.280 0.1649 --timeout-s 30
+safety_aborts:
+  - maximum_normal_force_n > 11.60
+  - pre-contact cup displacement > 0.003 m
+  - session/reset/pause/freshness/truncation/nonfinite/sequence mismatch
+  - driver cup displacement > 0.010 m
+valid_failure_stop: Any physically unavailable declared regime or overlapping analyzed distribution stops the campaign without relabeling or manufactured samples.
+owned_processes: NONE before stack start; domain 176 no-daemon preflight was empty.
+decision: PENDING
+```
+
+## Experiment EXP-001 terminal result
+
+```yaml
+experiment_id: EXP-001
+status: INVALID
+terminal_time: 2026-08-12T13:15:00+08:00
+observed:
+  - The isolated stack and production staged approach reached verified CLOSE_READY at epoch 0 with zero fingertip contacts.
+  - The first collector invocation called snapshot_with_receipt before its first sensor-data callback and propagated EvidenceStale instead of continuing its bounded pump loop.
+  - No controller command, reset, pause, object state write, or other physical action occurred during EXP-001; the stack remains at CLOSE_READY.
+inference: NONE about the no_contact distribution; zero samples were admitted.
+decision: Exclude EXP-001 through EXP-007 from all denominators and restart the full ordered batch under fresh experiment IDs after a TDD-covered readiness fix.
 ```
