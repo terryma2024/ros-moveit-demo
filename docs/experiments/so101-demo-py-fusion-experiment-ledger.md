@@ -19,14 +19,14 @@ confirmed_conclusions:
   - Task 9 centralizes backend composition and separates execution classification from qualification status; CP-FUSION-006.
   - Task 10 installs common visual/task geometry with separate simulator collision/physics trees; CP-FUSION-007.
   - Task 11 installs four explicit launchers and restores exact qualified MuJoCo model/scene fingerprints; CP-FUSION-008.
+  - The frozen d78093c bundle independently qualifies FULL_RESTART and RESET_WORLD 5/5; CP-FUSION-019 and CP-FUSION-020.
+  - Gazebo reports a valid natural execute failure boundary, and a fresh MuJoCo GUI/numeric mirror completes all nine phases; CP-FUSION-014 and CP-FUSION-021.
 disproven_routes:
   - Historical TASK15-FULL-A is INVALID because headless execution could not satisfy the required viewer-camera readiness gate; CP-156.
   - Recreating or sourcing the removed migration worktree is unnecessary and would contradict the verified merged-main handoff; CP-FUSION-001.
-open_hypotheses:
-  - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
-  - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-019
-next_experiment: NONE_TASK_18_PREREGISTRATION
+open_hypotheses: []
+latest_checkpoint: CP-FUSION-021
+next_experiment: NONE_TASKS_1_THROUGH_18_COMPLETE
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -212,6 +212,150 @@ independent_verifier: QUALIFIED
 owned_processes_after_batch: NONE
 preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
 decision: Task 17 complete. Task 18 must use the exact same source, policy, installed dependency, and bundle in an independent RESET_WORLD batch.
+```
+
+## Planned batch FUSION-RESET-WORLD-001
+
+```yaml
+batch_id: fusion-reset-world-001
+status: PLANNED
+task: 18
+lifecycle: RESET_WORLD
+backend: mujoco
+required_consecutive_successes: 5
+reuse_full_restart_results: false
+invalid_run_effect: invalidate_batch
+valid_failure_effect: break_streak
+source_commit: d78093cc6daa3c105383becf537cbb196e40bab7
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+mujoco_ros2_control_gitlink: 738e304551b4ea6db020b466086a13db71b65607
+policy_id: light_cup_wall_pick
+policy_version: v1
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
+ros_domain_id: 190
+port: 27600
+evidence_root: /data/work/so101-debug-fusion-reset-world-001
+evidence_root_pre_registration_state: ABSENT
+evidence_filesystem: /data NVMe
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+abort_criteria:
+  - any source, installed-prefix, dependency, policy, bundle, session, lifecycle, or monotonic-epoch mismatch
+  - any invalid evidence, valid physical failure, missing/truncated artifact hash, or unclean shutdown
+  - any unowned process selected for cleanup
+cleanup_scope: one shared qualification supervisor and its exact child launch trees only
+expected: exactly five VALID/SUCCESS records in one session with strictly increasing reset epochs and clean ordered shutdown
+```
+
+## Checkpoint CP-FUSION-020 — Task 18 RESET_WORLD qualified 5/5
+
+```yaml
+checkpoint_id: CP-FUSION-020
+terminal_batch: fusion-reset-world-001
+task: 18
+lifecycle: RESET_WORLD
+status: QUALIFIED
+source_commit: d78093cc6daa3c105383becf537cbb196e40bab7
+bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+attempt_count: 5
+consecutive_successes: 5
+session: fusion-reset-world-001-reset
+reset_epochs: [1, 2, 3, 4, 5]
+statuses: [SUCCESS, SUCCESS, SUCCESS, SUCCESS, SUCCESS]
+clean_shutdown: [true, true, true, true, true]
+final_cup_positions_world_m:
+  - [-0.07965998144332882, -0.24918479149052, 0.16544657573553728]
+  - [-0.07846209026723004, -0.24554242748391314, 0.16516591058846306]
+  - [-0.07826337709499363, -0.24723705284677905, 0.1654943827374158]
+  - [-0.07920668205893189, -0.2470717016105473, 0.16547750861403235]
+  - [-0.07947944076995722, -0.2466100581842877, 0.16516363946745616]
+manifest_sha256: cb810a4d870dfdcd61c65acfbb34a68430fd73a0222686f9191e93e699b6b13c
+independent_verifier: QUALIFIED
+owned_processes_after_batch: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+decision: The independent Task 18 RESET_WORLD gate is complete on the exact Task 17 source, policy, dependency, and bundle. One fresh non-counting GUI/numeric mirror remains.
+```
+
+## Planned experiment FUSION-GUI-001
+
+```yaml
+experiment_id: fusion-gui-001
+status: PLANNED
+task: 18
+lifecycle: GUI_MIRROR
+backend: mujoco
+counting_qualification_run: false
+source_commit: d78093cc6daa3c105383becf537cbb196e40bab7
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+mujoco_ros2_control_gitlink: 738e304551b4ea6db020b466086a13db71b65607
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
+ros_domain_id: 191
+session_id: fusion-gui-001-d78093c
+tmux_session: so101-fusion-gui-final
+cua_session: so101-fusion-gui-final
+evidence_root: /data/work/so101-debug-fusion-gui-001
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=false session_id:=fusion-gui-001-d78093c evidence_file:=/data/work/so101-debug-fusion-gui-001/result.json
+inspection_contract: ai-station CUA fresh window-scoped snapshot, inspect, then fresh snapshot; record image path/hash plus terminal numeric evidence
+abort_criteria:
+  - any source, installed-prefix, dependency, policy, bundle, or session mismatch
+  - invalid evidence, phase failure, physical failure, or an unowned process selected for cleanup
+cleanup_scope: only the tmux session and exact process group created for FUSION-GUI-001
+expected: one visible non-counting nine-phase mirror with a valid success result and inspectable numeric evidence
+```
+
+## Checkpoint CP-FUSION-021 — Task 18 GUI/numeric mirror and fusion completion
+
+```yaml
+checkpoint_id: CP-FUSION-021
+terminal_experiment: fusion-gui-001
+task: 18
+status: VALID_SUCCESS_NONCOUNTING
+source_commit: d78093cc6daa3c105383becf537cbb196e40bab7
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
+simulation_session_id: fusion-gui-001-d78093c
+reset_epoch: 0
+completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+phase_exit_codes: ALL_ZERO
+terminal_status: DONE
+visual_review:
+  cua_contract: snapshot, inspect, fresh snapshot
+  window: "MuJoCo : so101_task_scene"
+  first_snapshot: {path: /data/work/so101-debug-fusion-gui-001/cua-snapshot-01.png, sha256: b888827857d6abec9da21207042c5ee7e77f5816f74980b3c5af7866b76823bc}
+  fresh_snapshot: {path: /data/work/so101-debug-fusion-gui-001/cua-snapshot-02.png, sha256: c717912bc82c55306410c90f4008e98f1685030004a2cfd59cd19568a54332e2}
+  observed_change: The first image shows the running loaded task scene; the fresh image shows the arm moved into the cup with the gripper aligned at its rim.
+numeric_review:
+  final_cup_position_world_m: [-0.07973180070562448, -0.24808909440122215, 0.1655015459302394]
+  final_cup_orientation_world_xyzw: [-0.008694425765315704, 0.0006744799924911488, -0.17989761837995225, 0.9836466839971405]
+  final_cup_linear_velocity_world_m_s: [-1.860974722206872e-18, -6.147913509096571e-19, 4.316166783245854e-18]
+  final_cup_angular_velocity_world_rad_s: [-3.464407938212852e-19, 2.967432782366928e-19, 1.917358694397895e-19]
+  final_contacts: {left: 0, right: 0, table: true, maximum_normal_force_n: 0.14720319757277728}
+  terminal_joint_positions_rad: [0.4337200693563427, -0.0707225816549531, 0.36989403888553524, 1.157962537477882, 0.004384487391312311, 0.7499563555423376]
+  terminal_tcp_position_world_m: [-0.07112000794548362, -0.2213343527605413, 0.2767921383962761]
+  controllers_healthy: true
+  planning_scene: {attached_object_ids: [], world_primitive_counts: {pedestal: 1, plastic_cup: 13, table: 1}}
+artifact_sha256:
+  live_runtime_manifest: b9824abdcb083514d11ab6ef05680546915db274b3b23510893795e04942b9f1
+  release_retreat: 7a8e7609a24b31c1f9e22897364a89ed4ecd468624913d977971ef7f449ffa6a
+  launch_log: 93e493198bcf421303e8bc5d75dd5865d274d419670eff036d3ffca8cea13889
+ordered_shutdown: PASS
+owned_processes_after_review: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+qualification_summary:
+  full_restart: {batch: fusion-full-restart-002, status: QUALIFIED, successes: 5, manifest_sha256: bf6c113340b7b158a2714316b5cbe8c8d6e9464d9c66265b68efd2202bbff2e0}
+  reset_world: {batch: fusion-reset-world-001, status: QUALIFIED, successes: 5, manifest_sha256: cb810a4d870dfdcd61c65acfbb34a68430fd73a0222686f9191e93e699b6b13c}
+  gazebo_execute: {experiment: EXP-FUSION-005, classification: VALID, status: FAILED, first_failed_phase: PREPARE_OPEN_GRIPPER, error_code: ACTION_REJECTED}
+provenance_file: src/so101_demo_py/docs/provenance.json
+decision: Tasks 1 through 18 are complete. The exact frozen MuJoCo bundle independently qualifies both lifecycles, Gazebo has a valid natural execute boundary, and the fresh GUI/numeric mirror corroborates the installed runtime. Stop without push or merge.
 ```
 
 ## Planned batch FUSION-FULL-RESTART-001

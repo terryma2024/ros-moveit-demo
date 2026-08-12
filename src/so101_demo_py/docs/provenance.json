@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "qualification_status": "QUALIFIED",
+  "qualified_source": {
+    "commit": "d78093cc6daa3c105383becf537cbb196e40bab7",
+    "branch": "codex/so101-demo-py-fusion",
+    "base_commit": "866656b217eff4c57eade161c94ea0cef326d13d",
+    "installed_prefix": "/data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py"
+  },
+  "policy": {
+    "id": "light_cup_wall_pick",
+    "version": "v1",
+    "mujoco_path": "src/so101_demo_py/config/policies/light_cup_wall_pick/v1/mujoco.yaml",
+    "gazebo_path": "src/so101_demo_py/config/policies/light_cup_wall_pick/v1/gazebo.yaml",
+    "sha256": "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356",
+    "simulator_variants_byte_identical": true
+  },
+  "mujoco_ros2_control": {
+    "gitlink_commit": "738e304551b4ea6db020b466086a13db71b65607",
+    "installed_prefix": "/data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install",
+    "executable": "/data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/lib/mujoco_ros2_control/ros2_control_node",
+    "executable_sha256": "9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e"
+  },
+  "installed_bundle_sha256": "8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388",
+  "mujoco_qualification": {
+    "full_restart": {
+      "batch_id": "fusion-full-restart-002",
+      "lifecycle": "FULL_RESTART",
+      "status": "QUALIFIED",
+      "valid_successes": 5,
+      "attempts": 5,
+      "evidence_root": "/data/work/so101-debug-fusion-full-restart-002",
+      "manifest": "/data/work/so101-debug-fusion-full-restart-002/qualification-manifest.json",
+      "manifest_sha256": "bf6c113340b7b158a2714316b5cbe8c8d6e9464d9c66265b68efd2202bbff2e0"
+    },
+    "reset_world": {
+      "batch_id": "fusion-reset-world-001",
+      "lifecycle": "RESET_WORLD",
+      "status": "QUALIFIED",
+      "valid_successes": 5,
+      "attempts": 5,
+      "session_id": "fusion-reset-world-001-reset",
+      "reset_epochs": [1, 2, 3, 4, 5],
+      "evidence_root": "/data/work/so101-debug-fusion-reset-world-001",
+      "manifest": "/data/work/so101-debug-fusion-reset-world-001/qualification-manifest.json",
+      "manifest_sha256": "cb810a4d870dfdcd61c65acfbb34a68430fd73a0222686f9191e93e699b6b13c"
+    }
+  },
+  "gazebo_execute": {
+    "experiment_id": "EXP-FUSION-005",
+    "status": "FAILED",
+    "qualification_status": "NOT_QUALIFIED",
+    "classification": "VALID",
+    "evidence_valid": true,
+    "first_failed_phase": "PREPARE_OPEN_GRIPPER",
+    "error_code": "ACTION_REJECTED",
+    "source_commit": "f184617805e551b92bc5773433244c6193442abc",
+    "bundle_sha256": "4edb642e4f152eb913fac5d2fecd2e6a969fad3a8774be72749c92e75092382f",
+    "evidence_root": "/tmp/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-005",
+    "artifact_sha256": {
+      "launch_log": "c19793b53d7678ff986f4df8dca73d592eedadc07dfcb264906cca375bf2f16b",
+      "result_manifest": "5c761515ebdaad9c0cef67106f6c6e086dc13b37a907ae0de3c8ae0ac72b460b",
+      "raw_evidence": "ceabcdd2970be226ae45aecfe8af011f08df67419142a3df21613ee9273c6cfc"
+    }
+  },
+  "gui_numeric_review": {
+    "experiment_id": "fusion-gui-001",
+    "counting_qualification_run": false,
+    "status": "VALID_SUCCESS_NONCOUNTING",
+    "simulation_session_id": "fusion-gui-001-d78093c",
+    "reset_epoch": 0,
+    "completed_phases": [
+      "staged_approach",
+      "contact_hold",
+      "micro_lift",
+      "policy_lift_waypoint1",
+      "remaining_lift",
+      "transport",
+      "descend",
+      "place_alignment",
+      "release_retreat"
+    ],
+    "evidence_root": "/data/work/so101-debug-fusion-gui-001",
+    "visual_evidence": [
+      {
+        "path": "/data/work/so101-debug-fusion-gui-001/cua-snapshot-01.png",
+        "sha256": "b888827857d6abec9da21207042c5ee7e77f5816f74980b3c5af7866b76823bc",
+        "observation": "Running MuJoCo task scene with the articulated SO-101, cup, table, pedestal, and target marker visible."
+      },
+      {
+        "path": "/data/work/so101-debug-fusion-gui-001/cua-snapshot-02.png",
+        "sha256": "c717912bc82c55306410c90f4008e98f1685030004a2cfd59cd19568a54332e2",
+        "observation": "Fresh follow-up snapshot shows the live arm moved into the cup with the gripper aligned at the rim."
+      }
+    ],
+    "final_world_evidence": {
+      "cup_position_world_m": [-0.07973180070562448, -0.24808909440122215, 0.1655015459302394],
+      "cup_orientation_world_xyzw": [-0.008694425765315704, 0.0006744799924911488, -0.17989761837995225, 0.9836466839971405],
+      "cup_linear_velocity_world_m_s": [-1.860974722206872e-18, -6.147913509096571e-19, 4.316166783245854e-18],
+      "cup_angular_velocity_world_rad_s": [-3.464407938212852e-19, 2.967432782366928e-19, 1.917358694397895e-19],
+      "left_contact_count": 0,
+      "right_contact_count": 0,
+      "table_contact": true,
+      "maximum_normal_force_n": 0.14720319757277728,
+      "simulation_step": 41060
+    },
+    "terminal_joint_positions_rad": [0.4337200693563427, -0.0707225816549531, 0.36989403888553524, 1.157962537477882, 0.004384487391312311, 0.7499563555423376],
+    "terminal_tcp_position_world_m": [-0.07112000794548362, -0.2213343527605413, 0.2767921383962761],
+    "controllers_healthy": true,
+    "planning_scene": {
+      "attached_object_ids": [],
+      "world_primitive_counts": {
+        "pedestal": 1,
+        "plastic_cup": 13,
+        "table": 1
+      }
+    },
+    "artifact_sha256": {
+      "live_runtime_manifest": "b9824abdcb083514d11ab6ef05680546915db274b3b23510893795e04942b9f1",
+      "release_retreat": "7a8e7609a24b31c1f9e22897364a89ed4ecd468624913d977971ef7f449ffa6a",
+      "launch_log": "93e493198bcf421303e8bc5d75dd5865d274d419670eff036d3ffca8cea13889"
+    },
+    "ordered_shutdown": true
+  },
+  "preserved_external_state": {
+    "owned_processes_after_final_review": "NONE",
+    "tmux_sessions_unchanged": [
+      "MNT-Q-RESET-EXP136-140",
+      "codex",
+      "codex-cua",
+      "so101-mujoco-gui"
+    ]
+  }
+}
