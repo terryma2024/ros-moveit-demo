@@ -100,6 +100,8 @@ def test_loads_single_source_motion_and_final_outcome_policy() -> None:
     assert policy.physical_outcome.final_target_min_xy_m == (-0.090, -0.260)
     assert policy.physical_outcome.final_target_max_xy_m == (-0.070, -0.240)
     assert policy.maximum_diagnostic_force_n == 11.60
+    assert policy.carry.micro_lift.minimum_cup_lift_m == 0.0015
+    assert policy.carry.transport.minimum_table_clearance_m == 0.001
     assert set(policy.states) == EXPECTED_STATES
     assert (
         policy.fingerprint.motion_policy_sha256
@@ -230,3 +232,13 @@ def test_rejects_contact_policy_bound_to_different_motion_bytes(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="motion policy fingerprint mismatch"):
         load_task_policy(MOTION_POLICY, contact_path, changed, require_approved_contact=True)
+
+
+def test_rejects_reversed_micro_lift_bounds(tmp_path: Path) -> None:
+    def change(document: dict[str, object]) -> None:
+        document["physical_outcome"]["micro_lift"]["minimum_cup_lift_m"] = 0.004  # type: ignore[index]
+
+    candidate = write_candidate(tmp_path, change)
+
+    with pytest.raises(ValueError, match="micro_lift cup lift bounds must be ordered"):
+        load_task_policy(candidate)
