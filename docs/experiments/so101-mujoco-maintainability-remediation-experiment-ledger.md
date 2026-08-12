@@ -260,6 +260,30 @@ inference: NONE about physical distributions.
 decision: Exclude EXP-008 through EXP-014 and restart under new IDs only after readiness-pending is explicitly separated from terminal collection errors.
 ```
 
+## Experiments EXP-015 through EXP-021 preregistration
+
+```yaml
+status: PLANNED
+recorded_at: 2026-08-12T13:22:00+08:00
+ordered_experiments: [[EXP-015, no_contact], [EXP-016, left_only], [EXP-017, right_only], [EXP-018, bilateral_touch], [EXP-019, over_compression], [EXP-020, micro_lift_slip], [EXP-021, stable_hold]]
+source_commit: 2f4d5326a87099e511136436169d6270b7c93e0f
+other_frozen_provenance_driver_commands_safety_and_terminal_contract: Identical to EXP-008 through EXP-014; the live stack is unchanged and fresh atomic readback remains CLOSE_READY.
+decision: PENDING
+```
+
+## Experiment EXP-015 terminal result
+
+```yaml
+experiment_id: EXP-015
+status: INVALID
+terminal_time: 2026-08-12T13:23:00+08:00
+observed:
+  - Snapshot polling read the same fresh publisher sequence twice before the next 100 Hz callback; the collector rejected equality as non-monotonic.
+  - No sample, controller command, reset, pause, or physical action occurred; CLOSE_READY remains unchanged.
+inference: NONE about physical distributions.
+decision: Exclude EXP-015 through EXP-021 and restart after equality is treated as bounded waiting while true sequence regression remains terminal.
+```
+
 ## Experiment EXP-001 terminal result
 
 ```yaml

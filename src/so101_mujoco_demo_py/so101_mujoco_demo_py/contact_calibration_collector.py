@@ -212,6 +212,11 @@ class ContactCalibrationCollector:
                     continue
                 except StopIteration as error:
                     raise CollectionAborted("insufficient fresh samples") from error
+                if (
+                    previous_sequence is not None
+                    and received.evidence.publisher_sequence == previous_sequence
+                ):
+                    continue
                 evidence = self._validated_evidence(request, received, previous_sequence)
                 previous_sequence = evidence.publisher_sequence
                 if not _contact_shape_matches(request.regime, evidence):
@@ -278,8 +283,8 @@ class ContactCalibrationCollector:
         age = self._monotonic() - received.received_monotonic_s
         if not math.isfinite(age) or age < 0.0 or age > request.max_receipt_age_s:
             raise CollectionAborted("stale evidence receipt")
-        if previous_sequence is not None and evidence.publisher_sequence <= previous_sequence:
-            raise CollectionAborted("publisher sequence is duplicate or non-monotonic")
+        if previous_sequence is not None and evidence.publisher_sequence < previous_sequence:
+            raise CollectionAborted("publisher sequence is non-monotonic")
         state = evidence.object_state
         try:
             _finite_values(
