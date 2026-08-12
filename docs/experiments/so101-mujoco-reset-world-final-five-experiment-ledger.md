@@ -7,7 +7,7 @@ success_contract: Exactly five serial VALID SUCCESS records on one unchanged non
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 302c4ef9550e036f127111e473f44a823b1ab643
-current_commit: eb7e3323cc7ab4cbf9d3cc34aa16ee4f80166a38
+current_commit: 64e2c5ae35b83c680b2dcd84e662175d3d08fecd
 evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
 confirmed_conclusions:
   - MNT-CP-057 terminated MNT-Q-RESET-EXP131-135 permanently after EXP-131 used high-rate evidence on the slow /tmp volume and the old runner continued into polluted EXP-132/133 attempts.
@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-004
-next_experiment: EXP-136
+latest_checkpoint: RESET-FIVE-CP-005
+next_experiment: NEW_BATCH_AFTER_EVIDENCE_DISCOVERY_FIX
 ```
 
 ## Immutable challenge boundary
@@ -87,9 +87,9 @@ shell_contract:
 tmux_session: MNT-Q-RESET-EXP136-140
 invocation_count: 1
 hidden_retries: FORBIDDEN
-exit_code: PENDING
+exit_code: 1
 manifest: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-manifest.json
-manifest_sha256: PENDING
+manifest_sha256: cdd932110c84eb67fcd77f185490a081b4a273b8a66d9aa21727633edb969ffa
 ```
 
 ## Experiments EXP-136 through EXP-140
@@ -206,7 +206,7 @@ the permanent experiment IDs below.
   next_experiment: EXP-140
 - experiment_id: EXP-140
   manifest_record_id: MNT-Q-RESET-EXP136-140-05
-  status: RUNNING
+  status: INVALID
   prior_experiment: EXP-139
   hypothesis: The fifth unchanged reset epoch completes the exact five-consecutive-success RESET_WORLD challenge.
   prediction: The fifth independent nine-phase workflow succeeds and the fixed batch summary reports attempt_count 5, consecutive_successes 5, qualified true, and batch_invalid false.
@@ -218,9 +218,16 @@ the permanent experiment IDs below.
   failure_criteria: [any valid physical or workflow failure]
   invalid_criteria: [any challenge contract contamination]
   provenance: {source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271, install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install, runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/run_qualification, ros_domain_id: 204, gz_partition: NOT_APPLICABLE_MUJOCO_RUNTIME}
-  observed: [PENDING]
-  conclusion: PENDING
-  decision: PENDING
+  observed:
+    - Reset service succeeded from epoch 4 to epoch 5 for the unchanged session, with simulation_step 0.
+    - The immediately following workflow owner returned HTTP 503 before staged_approach with owner_failure_code STALE_OR_MISMATCHED_MUJOCO_EVIDENCE.
+    - Owner diagnostic reports fresh atomic MuJoCo evidence unavailable; no fifth workflow evidence directory, owner manifest, raw run-index, or dynamic summary exists.
+    - actions SHA-256 4ebebc5ba31d0eaab2ff83c7094131b54916b174822ff730625eb62cda4a160b.
+    - failure SHA-256 20041322d0d39188491472913071065fef2a14f6b5d18b6effff198100e44b56.
+    - preserved owner diagnostic SHA-256 912579658d5da94c90116cfb0cd28a81916e6174f82d5a4dfab6059dd7a8f6e2.
+    - Shared stack shutdown passed with ordered marker and no process-died or fatal-signal marker.
+  conclusion: INVALID before the first workflow phase; this terminates MNT-Q-RESET-EXP136-140 at four consecutive successes and cannot be counted as a product failure.
+  decision: ABANDON
   next_experiment: NONE
 ```
 
@@ -393,4 +400,64 @@ first_reset_epoch_started: 1
 evidence_volume: /dev/nvme0n1p5 mounted at /data
 owned_process_cleanup_rule: Only the qualification runner's own process group and tmux session may be stopped; historical sessions remain untouched.
 next_command: Monitor run-01 and owner evidence until the runner records SUCCESS or the first fail-fast terminal result.
+```
+
+## Checkpoint RESET-FIVE-CP-005 — MNT-Q-RESET-EXP136-140 terminal INVALID
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-005
+recorded_at: 2026-08-13T01:36:47+08:00
+prior_checkpoint: RESET-FIVE-CP-004
+status: TERMINAL_INVALID
+batch:
+  batch_id: MNT-Q-RESET-EXP136-140
+  lifecycle: RESET_WORLD
+  experiments: [EXP-136, EXP-137, EXP-138, EXP-139, EXP-140]
+  identifiers_reusable: false
+  attempt_count: 5
+  successful_runs: [EXP-136, EXP-137, EXP-138, EXP-139]
+  invalid_run: EXP-140
+  consecutive_successes: 4
+  qualified: false
+  batch_invalid: true
+  reset_epochs_observed_from_actions: [1, 2, 3, 4, 5]
+  manifest_record_epochs: [1, 2, 3, 4, -1]
+  manifest_secondary_invalid_reason: run 5 reset epoch did not increase
+  primary_invalid_reason: The workflow owner could not acquire a fresh atomic MuJoCo snapshot after the successful epoch-5 reset.
+  simulation_session_id: MNT-Q-RESET-EXP136-140-reset
+  manifest: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-manifest.json
+  manifest_sha256: cdd932110c84eb67fcd77f185490a081b4a273b8a66d9aa21727633edb969ffa
+  runner_log_sha256: d796644c256d69bb3fdf04001f1e7ad6921be53ae83a0046e6471565ad53d09c
+  shared_launch_log_sha256: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4
+  runner_exit_code: 1
+  clean_shutdown: true
+  ordered_shutdown_marker: true
+  owned_processes_after_probe: NONE
+  ros_domain_204_nodes_after_probe: NONE
+artifact_contract:
+  EXP-136: {actions: ebbb44abbf98b80d877dc69b77d01333f16a460377c6ecd324d9efefa1a62fe6, owner_manifest: 9de471de921f6e15ec68d95402488c0f4b147b9a5235e094a408a3eab7566be3, raw_run_index: 86345dbd2e8df2f10677fe59b09f5d243cae5549bf81fd4f153b8c0a0f58e73e, dynamic_summary: a8c51bd110f25f831e4cbf664c12072fa2ded0b961ae8fa52cfb522a3a06101b, launch_log: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4}
+  EXP-137: {actions: bd561ba517a039e1e2669d0ff4dfe0701ede7e0ff1a506334148af6c0732a550, owner_manifest: 79f2389020b2544d3acaa90788ff3da2a51503215adc951c1b42345a6c3d44dc, raw_run_index: 2e3ebd39b74bb7039bb542cec381b830a9a92c0f9f175a4a1960058641e8fdee, dynamic_summary: 0261e227b1064831173bb0ab4d14cf37f7936200b99646eaa6dac81ae779df17, launch_log: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4}
+  EXP-138: {actions: 1e241904ef80f705a4d22e3a35909c36c7de6dc86c100a388bfeb29299dff09a, owner_manifest: 8984a44b9df464ad79d006fe6c74bf19e68138741e38e0ba30c0a3ab9b1da849, raw_run_index: c16ab3137fdec7f52488fe12e4c64a261a84f434b30d99a6cd1d124b9e2ab973, dynamic_summary: 0daebc24632e1e7a58675ad3135edf41af1b7315244ad6ec8a5561901b2905b6, launch_log: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4}
+  EXP-139: {actions: dd101000a3d8ea1a7a4a14263299acda990eca40ad1e8847e805572e1be7619f, owner_manifest: 7730c49326663423592fa9200d7696acc54785d0b669d8788161bcc28b982a4b, raw_run_index: 3e92965a395b0a650eda5067b8bd2346e3aeeff66dbbd86831d74718948a254a, dynamic_summary: 1be12fda32c1608c21d8ca21f64e7ac356eafd30184c44f6663aa00d8cf3b235, launch_log: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4}
+  EXP-140: {actions: 4ebebc5ba31d0eaab2ff83c7094131b54916b174822ff730625eb62cda4a160b, owner_manifest: ABSENT_PREPHASE_INVALID, raw_run_index: ABSENT_PREPHASE_INVALID, dynamic_summary: ABSENT_PREPHASE_INVALID, failure: 20041322d0d39188491472913071065fef2a14f6b5d18b6effff198100e44b56, owner_diagnostic: 912579658d5da94c90116cfb0cd28a81916e6174f82d5a4dfab6059dd7a8f6e2, launch_log: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4}
+visual_process_evidence:
+  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/cua-run4-baseline.png
+  screenshot_sha256: 8c39212ad1ba6769abdc629befe08620508e12ee64fd714edda83b9999e63d43
+  interpretation: Fresh CUA process frame during EXP-139 showed the running MuJoCo Viewer with robot, pedestal, table, cup, and red ring; it is not a final-success acceptance image and does not count toward 5/5.
+first_bad_boundary:
+  observed: The epoch-5 transactional reset succeeded and the next workflow owner failed before staged_approach because current_evidence timed out without accepting a fresh atomic snapshot.
+  hypothesis: current_evidence creates a new best-effort volatile subscription and immediately requests a pause snapshot before discovery is guaranteed; if that single paused publication is missed, the paused simulator emits no replacement and the five-second observer loop expires.
+  competing_hypotheses:
+    - Publisher stopped or wrong session after reset; less likely because reset receipt and four prior workflows used the same live publisher/session and shutdown remained clean.
+    - Evidence was rejected as truncated or out of order; less likely because the diagnostic says no fresh atomic evidence rather than a conversion/rejection message, but callback counters were not persisted.
+  classification: HYPOTHESIS_PENDING_RED_GREEN_AB_TEST
+allowed_fix_boundary: Evidence subscriber/publisher discovery synchronization only; no robot motion, policy, threshold, target, timing, speed, replanning, delay, contact, or grasp behavior may change.
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  protected_documents_byte_hashes_unchanged: true
+merge_state: NOT_AUTHORIZED_BATCH_NOT_QUALIFIED
+remote_push_state: FORBIDDEN
+next_experiment: NEW_BATCH_AFTER_EVIDENCE_DISCOVERY_FIX
+next_command: Add a failing unit contract for pause-snapshot discovery, implement the minimum evidence-discovery synchronization, rebuild/test, then preregister fresh EXP-141 through EXP-145 on a new absent NVMe evidence root.
 ```
