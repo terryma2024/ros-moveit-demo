@@ -212,6 +212,12 @@ class ProductionQualificationRunner:
         self.workflow_timeout_s = workflow_timeout_s
         evidence_root.mkdir(parents=True, exist_ok=True)
 
+    def _stack_environment(self, *, domain_id: int) -> dict[str, str]:
+        environment = dict(os.environ)
+        environment["ROS_DOMAIN_ID"] = str(domain_id)
+        environment["SO101_TELEOP_EVIDENCE_BASE"] = str(self.evidence_root / "teleop-evidence")
+        return environment
+
     @staticmethod
     def _request(
         base_url: str, path: str, body: Mapping[str, Any] | None = None, *, timeout: float = 30.0
@@ -237,8 +243,7 @@ class ProductionQualificationRunner:
     def start_stack(
         self, *, session_id: str, domain_id: int, port: int, run_root: Path
     ) -> StackHandle:
-        environment = dict(os.environ)
-        environment["ROS_DOMAIN_ID"] = str(domain_id)
+        environment = self._stack_environment(domain_id=domain_id)
         log_path = run_root / "launch.log"
         command = [
             "ros2",

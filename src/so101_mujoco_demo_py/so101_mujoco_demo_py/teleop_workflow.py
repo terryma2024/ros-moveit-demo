@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import sys
 from pathlib import Path
@@ -28,7 +29,10 @@ def _safe(value: str) -> str:
 
 
 def evidence_root_for(session_id: str, checkpoint: Path) -> Path:
-    return Path("/tmp/so101-teleop-evidence") / _safe(session_id) / _safe(checkpoint.stem)
+    base = Path(os.environ.get("SO101_TELEOP_EVIDENCE_BASE", "/tmp/so101-teleop-evidence"))
+    if not base.is_absolute():
+        raise ValueError("SO101_TELEOP_EVIDENCE_BASE must be absolute")
+    return base / _safe(session_id) / _safe(checkpoint.stem)
 
 
 def _rpy_from_xyzw(values: list[float]) -> tuple[float, float, float]:

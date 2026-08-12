@@ -180,6 +180,8 @@
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/simulation/types.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/frozen_behavior.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_runtime.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/qualification.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/teleop_workflow.py",
       "src/so101_mujoco_demo_py/test",
       "src/so101_mujoco_demo_py/config/dependency-lock.yaml",
       "src/so101_mujoco_demo_py/scripts/check_mujoco_runtime.py",
