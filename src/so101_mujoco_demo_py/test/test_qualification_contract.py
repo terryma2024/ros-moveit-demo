@@ -16,6 +16,7 @@ from so101_mujoco_demo_py.qualification import (
 FINGERPRINT = {
     "source_commit": "1" * 40,
     "dependency_sha256": "2" * 64,
+    "task_scene_sha256": "8" * 64,
     "scene_sha256": "3" * 64,
     "robot_mjcf_sha256": "4" * 64,
     "urdf_sha256": "5" * 64,

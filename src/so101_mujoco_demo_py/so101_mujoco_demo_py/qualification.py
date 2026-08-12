@@ -23,6 +23,7 @@ COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_FINGERPRINT_KEYS = (
     "source_commit",
     "dependency_sha256",
+    "task_scene_sha256",
     "scene_sha256",
     "robot_mjcf_sha256",
     "urdf_sha256",
