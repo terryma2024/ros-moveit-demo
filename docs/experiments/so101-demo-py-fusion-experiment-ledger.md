@@ -25,8 +25,8 @@ disproven_routes:
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-011
-next_experiment: EXP-FUSION-003
+latest_checkpoint: CP-FUSION-012
+next_experiment: EXP-FUSION-004
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -140,6 +140,57 @@ abort_criteria:
   - unowned process selected for control or cleanup
 cleanup_scope: only the launch process group and GZ partition created for EXP-FUSION-003; bounded shutdown followed by exact owned-PID/partition audit
 expected: a valid non-INVALID policy result at the first natural controller/MoveIt boundary, likely MOVE_ABOVE_OBJECT PATH_TOLERANCE_VIOLATED, with nonzero exit for FAILED
+```
+
+## Checkpoint CP-FUSION-012 — EXP-FUSION-003 invalid pre-action provenance abort
+
+```yaml
+checkpoint_id: CP-FUSION-012
+terminal_experiment: EXP-FUSION-003
+status: INVALID_PREACTION_ABORT
+failure: Installed symlink provenance resolved the later ledger HEAD 27c7b9c2d07b56276e176efcc8ca4cb5d3a353be because SO101_SOURCE_COMMIT was omitted, instead of the registered implementation commit f184617805e551b92bc5773433244c6193442abc.
+observed_bundle_sha256: e3fdba028e2af5b0975cdd44111333360b8f9f4abe1d8c0496a8b2368fb321c8
+expected_bundle_sha256: 4edb642e4f152eb913fac5d2fecd2e6a969fad3a8774be72749c92e75092382f
+simulation_started: true
+controller_action_started: false
+result_manifest_created: false
+identifier_reusable: false
+cleanup:
+  exact_owned_process_group: 2949049
+  signal: SIGINT
+  owned_processes_after_probe: NONE
+  preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+artifact_sha256:
+  launch_log: acdf931bdd749dd03d0d6fd4d62616e17562035fcc81ab00d8d1cd2c65cfa142
+root_cause: Runtime provenance intentionally honors SO101_SOURCE_COMMIT; the launch environment must freeze it when ledger commits occur after the immutable implementation build.
+decision: Register a fresh ID with the identical installed bytes and behavior, explicitly exporting the already registered source commit. Do not rebuild or alter policy/behavior.
+next_experiment: EXP-FUSION-004
+```
+
+## Planned experiment EXP-FUSION-004
+
+```yaml
+experiment_id: EXP-FUSION-004
+status: PLANNED
+purpose: Replacement Task 13 bounded Gazebo execute after correcting only the launch provenance environment.
+lifecycle: FULL_RESTART_SINGLE_RUN
+counting_qualification_run: false
+source_commit: f184617805e551b92bc5773433244c6193442abc
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-t13-live/so101_demo_py
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 4edb642e4f152eb913fac5d2fecd2e6a969fad3a8774be72749c92e75092382f
+single_variable_from_EXP_FUSION_003: Export SO101_SOURCE_COMMIT=f184617805e551b92bc5773433244c6193442abc before provenance audit and launch.
+behavior_changes: NONE
+ros_domain_id: 174
+gz_partition: fusion-exp-004-f184617
+session_id: fusion-exp-004-f184617
+evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-004
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+acceptance_and_abort_criteria: IDENTICAL_TO_EXP_FUSION_003
+cleanup_scope: only the launch process group and GZ partition created for EXP-FUSION-004
+expected: registered source/bundle at launch, then a valid non-INVALID natural Gazebo result
 ```
 
 ## Checkpoint CP-FUSION-003
