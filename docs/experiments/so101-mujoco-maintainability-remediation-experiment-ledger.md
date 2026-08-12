@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 8f71442ae6cff43e0770eec929b13211d2057628
+current_commit: b5c1c23f224e5bef9cd6b7e0a33bd1df8074dbf2
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-015
-next_experiment: NONE_PENDING_DOCUMENT_CHECKPOINT_COMMIT
+latest_checkpoint: MNT-CP-016
+next_experiment: EXP-110
 ```
 
 ## Checkpoint MNT-CP-001
@@ -2516,4 +2516,265 @@ next_experiment_new_information:
   new: EXP-110..114 will use a fixed instrumentation commit and frozen strategy to produce continuous 500 Hz raw evidence, replayable dynamic metrics, and a disabled diagnostic-only proposal.
 next_experiment: NONE_PENDING_DOCUMENT_CHECKPOINT_COMMIT
 next_command: Commit only the approved design, implementation plan, ledger checkpoint, frozen manifest, and manifest hash; then preregister EXP-110..114 before RED implementation.
+```
+
+## Checkpoint MNT-CP-016 — implementation and five-run preregistration
+
+```yaml
+checkpoint_id: MNT-CP-016
+recorded_at: 2026-08-12T17:32:00+08:00
+last_valid_experiment: EXP-109
+current_hypothesis: A plugin-owned per-physics-step queue plus typed transport phase policy can close the EXP-109 evidence gap without changing any frozen behavior input.
+document_checkpoint:
+  commit: b5c1c23f224e5bef9cd6b7e0a33bd1df8074dbf2
+  design: docs/superpowers/specs/2026-08-12-so101-mujoco-phase-aware-transport-evidence-design.md
+  implementation_plan: docs/superpowers/plans/2026-08-12-so101-mujoco-phase-aware-transport-evidence.md
+  frozen_behavior_manifest: docs/experiments/so101-mujoco-phase-aware-frozen-behavior-manifest.json
+  frozen_behavior_manifest_sha256: 912746ac6f6ac6589d5c11d7e9b9483e1ea4ebfeb3f6118a84ee0df48cd54195
+implementation_validation_preregistration:
+  single_active_change: Measurement, logging, typed force interpretation, validity analysis, durable raw evidence, and disabled proposal generation only.
+  predictions:
+    - A force spike on an intermediate 500 Hz physics step remains in a continuous chunk even though ordinary snapshots are 100 Hz.
+    - Failed trylock publication attempts are counted without discarding queued steps; queue loss/truncation is detectable and invalid.
+    - True physics_step and simulation_time remain continuous across chunk boundaries and reset exactly with reset_epoch.
+    - PRE_TRANSPORT_STATIC_HOLD remains fail-closed above 1.1579004532160448 N.
+    - DYNAMIC_TRANSPORT_SHADOW records the same crossing and does not cancel until global_max_single_contact_force_n >= 11.60 N.
+    - The first >=11.60 N latch is immutable and a live cancellation request is recorded within 25 physics steps / 0.050 s; no same-step-stop claim is made.
+    - Frozen behavior and protected Gazebo gates remain exactly equal.
+  red_before_green: Required for every C++ and Python production boundary.
+  live_gate: No stack starts until focused/full tests, Ruff, C++ checks, isolated three-package build/test, installed/runtime provenance, frozen manifest, and protected Gazebo checks all pass.
+experiment_state_contract:
+  legal_statuses: [PLANNED, RUNNING, VALID, INVALID]
+  safety_abort_encoding: {status: VALID, outcome_class: VALID_SAFETY_ABORT}
+  batch_stop: A valid safety abort, any other valid physical failure, or any invalid run stops the batch without replacement.
+working_tree_status:
+  tracked: Only this preregistration plus the status-word clarification in the approved design/plan are dirty after b5c1c23.
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+owned_processes: NONE
+preserved_processes: [tmux codex, idle historical codex-cua, historical so101-mujoco-gui]
+ros_domain_0_nodes: []
+next_experiment: EXP-110
+next_command: Write the C++ physics-step/chunk/latch RED tests without modifying production source.
+```
+
+## EXP-110 preregistration — dynamic transport descriptive run 1
+
+```yaml
+experiment_id: EXP-110
+registered_at: 2026-08-12T17:32:00+08:00
+status: PLANNED
+prior_experiment: EXP-109
+hypothesis: The frozen five-win strategy produces a complete replayable dynamic-transport force/compression trace below the unchanged 11.60 N diagnostic hard stop.
+prediction: One independent FULL_RESTART reaches the existing physical transport-success outcome; every 2 ms step is continuous and all diagnostic metrics recompute from raw chunks.
+single_variable: Independent run identity; all behavior, instrumentation, build, and policy fingerprints are fixed across EXP-110..114.
+lifecycle: FULL_RESTART
+qualification_counting: false
+statistical_role: descriptive_repeat_1_of_4
+preconditions:
+  - All automatic gates in MNT-CP-016 are green on one committed instrumentation source and isolated install.
+  - Domain 187, port 8027, partition so101-mnt-a-phase-exp110, session MNT-A-PHASE-exp110-full-01, evidence root, and owned tmux/process tree are absent before start.
+  - Reset returns epoch 1 / true physics_step 0 and the frozen behavior manifest verifies.
+success_criteria:
+  - Existing physical transport outcome is FORMAL_MOVE_ABOVE_PLACE_PROVED with all five waypoints in order.
+  - Raw chunks cover every dynamic physics step with closed typed boundaries, no duplicate/gap/reset crossing/truncation, and replay-identical summary hash.
+  - Static threshold crossings during dynamic transport are shadow-only and do not cancel.
+  - Clean cancellation ownership, ordered shutdown, empty owned ROS graph/process tree, and fresh visual corroboration are recorded.
+valid_safety_abort_criteria:
+  - First global tracked-contact maximum >=11.60 N is immutable with step/time/force and complete hashed raw prefix.
+  - Cancellation request occurs within 25 physics steps; status becomes VALID with outcome_class VALID_SAFETY_ABORT and the batch stops.
+failure_criteria:
+  - Any other valid physical transport failure stops the batch and remains in the denominator as a valid outcome.
+invalid_criteria:
+  - Fingerprint/install/runtime mismatch, missing/duplicate/reversed step, time inconsistency, reset crossing, truncation, evidence loss, unclosed boundary, late/missing hazard response, startup/control pollution, or unclean shutdown.
+provenance:
+  source_commit_at_preregistration: b5c1c23f224e5bef9cd6b7e0a33bd1df8074dbf2
+  required_runtime_source: One common post-TDD descendant commit recorded before RUNNING and unchanged through EXP-114.
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-build/install
+  runtime_executable: ros2 run so101_mujoco_demo_py run_qualification from the isolated install prefix
+  ros_domain_id: 187
+  gz_partition: so101-mnt-a-phase-exp110
+  simulation_session_id: MNT-A-PHASE-exp110-full-01
+  reset_epoch: 1
+commands:
+  - command: GZ_PARTITION=so101-mnt-a-phase-exp110 ros2 run so101_mujoco_demo_py run_qualification --batch-id MNT-A-PHASE-EXP110 --lifecycle FULL_RESTART --count 1 --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-runtime-fingerprint.json --evidence-root /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110 --base-domain-id 187 --base-port 8027 --no-headless
+    exit_code: PENDING
+observed: [NONE_BEFORE_RUN]
+inferred: [NONE]
+conclusion: PENDING
+evidence: [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110]
+decision: PENDING
+next_experiment: EXP-111_ON_SUCCESS_ONLY
+```
+
+## EXP-111 preregistration — dynamic transport descriptive run 2
+
+```yaml
+experiment_id: EXP-111
+registered_at: 2026-08-12T17:32:00+08:00
+status: PLANNED
+prior_experiment: EXP-110
+hypothesis: A second independent FULL_RESTART reproduces complete diagnostic evidence and the existing transport-success contract under the identical frozen build.
+prediction: Results remain replayable without treating waypoint rows as independent experiments or using their values as acceptance bounds.
+single_variable: Independent run identity only.
+lifecycle: FULL_RESTART
+qualification_counting: false
+statistical_role: descriptive_repeat_2_of_4
+preconditions:
+  - EXP-110 is VALID with outcome_class PHYSICAL_TRANSPORT_SUCCESS.
+  - Identical source/install/policy/manifest fingerprints; domain 188, port 8028, partition, session, evidence root, and owned process tree are absent before start.
+success_criteria:
+  - Existing five-waypoint physical transport outcome succeeds; continuous raw evidence and replay-identical summary are complete.
+  - Dynamic static-threshold crossings remain shadow-only; ordered shutdown and cleanup pass.
+valid_safety_abort_criteria:
+  - First >=11.60 N latch and cancellation request within 25 physics steps are complete; status VALID/outcome_class VALID_SAFETY_ABORT stops the batch.
+failure_criteria: Any other valid physical failure stops the batch.
+invalid_criteria: Any provenance, step/time/reset, truncation/loss, boundary, hazard-latency, startup/control, artifact, or cleanup invalidity stops the batch.
+provenance:
+  source_commit_at_preregistration: b5c1c23f224e5bef9cd6b7e0a33bd1df8074dbf2
+  required_runtime_source: Exactly the EXP-110 source/install/fingerprint.
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-build/install
+  runtime_executable: ros2 run so101_mujoco_demo_py run_qualification from the isolated install prefix
+  ros_domain_id: 188
+  gz_partition: so101-mnt-a-phase-exp111
+  simulation_session_id: MNT-A-PHASE-exp111-full-01
+  reset_epoch: 1
+commands:
+  - command: GZ_PARTITION=so101-mnt-a-phase-exp111 ros2 run so101_mujoco_demo_py run_qualification --batch-id MNT-A-PHASE-EXP111 --lifecycle FULL_RESTART --count 1 --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-runtime-fingerprint.json --evidence-root /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp111 --base-domain-id 188 --base-port 8028 --no-headless
+    exit_code: PENDING
+observed: [NONE_BEFORE_RUN]
+inferred: [NONE]
+conclusion: PENDING
+evidence: [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp111]
+decision: PENDING
+next_experiment: EXP-112_ON_SUCCESS_ONLY
+```
+
+## EXP-112 preregistration — dynamic transport descriptive run 3
+
+```yaml
+experiment_id: EXP-112
+registered_at: 2026-08-12T17:32:00+08:00
+status: PLANNED
+prior_experiment: EXP-111
+hypothesis: A third independent FULL_RESTART reproduces the same frozen physical contract with continuous diagnostic evidence.
+prediction: The run succeeds physically and remains replayable; dynamic values are descriptive only.
+single_variable: Independent run identity only.
+lifecycle: FULL_RESTART
+qualification_counting: false
+statistical_role: descriptive_repeat_3_of_4
+preconditions:
+  - EXP-110 and EXP-111 are VALID physical transport successes.
+  - Identical source/install/policy/manifest fingerprints; domain 189, port 8029, partition, session, evidence root, and owned process tree are absent.
+success_criteria:
+  - Five-waypoint physical transport success, continuous raw chunks, replay-identical summary, shadow-only static crossings, ordered shutdown, and cleanup.
+valid_safety_abort_criteria:
+  - Immutable first >=11.60 N latch, complete hashed prefix, and cancellation request within 25 steps; status VALID/outcome_class VALID_SAFETY_ABORT stops the batch.
+failure_criteria: Any other valid physical failure stops the batch.
+invalid_criteria: Any provenance, step/time/reset, truncation/loss, boundary, hazard-latency, startup/control, artifact, or cleanup invalidity stops the batch.
+provenance:
+  source_commit_at_preregistration: b5c1c23f224e5bef9cd6b7e0a33bd1df8074dbf2
+  required_runtime_source: Exactly the EXP-110 source/install/fingerprint.
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-build/install
+  runtime_executable: ros2 run so101_mujoco_demo_py run_qualification from the isolated install prefix
+  ros_domain_id: 189
+  gz_partition: so101-mnt-a-phase-exp112
+  simulation_session_id: MNT-A-PHASE-exp112-full-01
+  reset_epoch: 1
+commands:
+  - command: GZ_PARTITION=so101-mnt-a-phase-exp112 ros2 run so101_mujoco_demo_py run_qualification --batch-id MNT-A-PHASE-EXP112 --lifecycle FULL_RESTART --count 1 --fingerprint /tmp/so101-debug-mujoco-maintability-remediation/phase-aware-runtime-fingerprint.json --evidence-root /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp112 --base-domain-id 189 --base-port 8029 --no-headless
+    exit_code: PENDING
+observed: [NONE_BEFORE_RUN]
+inferred: [NONE]
+conclusion: PENDING
+evidence: [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp112]
+decision: PENDING
+next_experiment: EXP-113_ON_SUCCESS_ONLY
+```
+
+## EXP-113 preregistration — dynamic transport descriptive run 4
+
+```yaml
+experiment_id: EXP-113
+registered_at: 2026-08-12T17:32:00+08:00
+status: PLANNED
+prior_experiment: EXP-112
+hypothesis: A fourth independent FULL_RESTART completes the descriptive repeat set without changing or fitting the dynamic contract.
+prediction: The run succeeds physically and all raw/summary hashes remain independently replayable.
+single_variable: Independent run identity only.
+lifecycle: FULL_RESTART
+qualification_counting: false
+statistical_role: descriptive_repeat_4_of_4
+preconditions:
+  - EXP-110..112 are VALID physical transport successes.
+  - Identical source/install/policy/manifest fingerprints; domain 190, port 8030, partition, session, evidence root, and owned process tree are absent.
+success_criteria:
+  - Five-waypoint physical transport success, continuous raw chunks, replay-identical summary, shadow-only static crossings, ordered shutdown, and cleanup.
+valid_safety_abort_criteria:
+  - Immutable first >=11.60 N latch, complete hashed prefix, and cancellation request within 25 steps; status VALID/outcome_class VALID_SAFETY_ABORT stops the batch.
+failure_criteria: Any other valid physical failure stops the batch.
+invalid_criteria: Any provenance, step/time/reset, truncation/loss, boundary, hazard-latency, startup/control, artifact, or cleanup invalidity stops the batch.
+provenance:
+  source_commit_at_preregistration: b5c1c23f224e5bef9cd6b7e0a33bd1df8074dbf2
+  required_runtime_source: Exactly the EXP-110 source/install/fingerprint.
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-build/install
+  runtime_executable: ros2 run so101_mujoco_demo_py run_qualification from the isolated install prefix
+  ros_domain_id: 190
+  gz_partition: so101-mnt-a-phase-exp113
+  simulation_session_id: MNT-A-PHASE-exp113-full-01
+  reset_epoch: 1
+commands:
+  - command: GZ_PARTITION=so101-mnt-a-phase-exp113 ros2 run so101_mujoco_demo_py run_qualification --batch-id MNT-A-PHASE-EXP113 --lifecycle FULL_RESTART --count 1 --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-runtime-fingerprint.json --evidence-root /tmp/so101-debug-mujoco-maintability-remediation/phase-aware-exp113 --base-domain-id 190 --base-port 8030 --no-headless
+    exit_code: PENDING
+observed: [NONE_BEFORE_RUN]
+inferred: [NONE]
+conclusion: PENDING
+evidence: [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp113]
+decision: PENDING
+next_experiment: EXP-114_ON_SUCCESS_ONLY
+```
+
+## EXP-114 preregistration — dynamic transport independent replication
+
+```yaml
+experiment_id: EXP-114
+registered_at: 2026-08-12T17:32:00+08:00
+status: PLANNED
+prior_experiment: EXP-113
+hypothesis: A fifth independent FULL_RESTART replicates evidence completeness, the unchanged physical transport-success contract, and deterministic metric recomputation without using the first four runs as fitted limits.
+prediction: The run satisfies the preregistered integrity and physical contract; its dynamic metric values remain diagnostic-only regardless of empirical range.
+single_variable: Independent run identity only.
+lifecycle: FULL_RESTART
+qualification_counting: false
+statistical_role: preregistered_replication_not_holdout
+preconditions:
+  - EXP-110..113 are four VALID physical transport successes under one unchanged source/install/fingerprint.
+  - No dynamic threshold or empirical pass range has been generated from the first four runs.
+  - Domain 191, port 8031, partition, session, evidence root, and owned process tree are absent.
+success_criteria:
+  - Frozen behavior manifest, complete per-step evidence, existing five-waypoint physical transport success, deterministic recomputation, ordered shutdown, cleanup, and fresh visual evidence pass.
+  - Dynamic metrics are recorded without comparing them to a learned range.
+valid_safety_abort_criteria:
+  - Immutable first >=11.60 N latch, complete hashed prefix, and cancellation request within 25 steps; status VALID/outcome_class VALID_SAFETY_ABORT stops before proposal generation.
+failure_criteria: Any other valid physical failure stops before proposal generation.
+invalid_criteria: Any provenance, step/time/reset, truncation/loss, boundary, hazard-latency, startup/control, artifact, or cleanup invalidity stops before proposal generation.
+provenance:
+  source_commit_at_preregistration: b5c1c23f224e5bef9cd6b7e0a33bd1df8074dbf2
+  required_runtime_source: Exactly the EXP-110 source/install/fingerprint.
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-build/install
+  runtime_executable: ros2 run so101_mujoco_demo_py run_qualification from the isolated install prefix
+  ros_domain_id: 191
+  gz_partition: so101-mnt-a-phase-exp114
+  simulation_session_id: MNT-A-PHASE-exp114-full-01
+  reset_epoch: 1
+commands:
+  - command: GZ_PARTITION=so101-mnt-a-phase-exp114 ros2 run so101_mujoco_demo_py run_qualification --batch-id MNT-A-PHASE-EXP114 --lifecycle FULL_RESTART --count 1 --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-runtime-fingerprint.json --evidence-root /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp114 --base-domain-id 191 --base-port 8031 --no-headless
+    exit_code: PENDING
+observed: [NONE_BEFORE_RUN]
+inferred: [NONE]
+conclusion: PENDING
+evidence: [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp114]
+decision: PENDING
+next_experiment: NONE_GENERATE_DISABLED_PROPOSAL_ON_SUCCESS_ONLY
 ```

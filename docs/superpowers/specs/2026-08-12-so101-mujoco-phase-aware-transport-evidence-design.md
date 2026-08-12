@@ -103,8 +103,9 @@ makes the narrower claim that detection and notification publication are request
 breaching physics callback. The transport process requests trajectory cancellation when the typed
 hazard notification is received. The live contract records the cancellation-request physics step
 and requires it to be no more than 25 physics steps, or `0.050 s`, after the breach step. A breach
-within this bound produces `VALID_SAFETY_ABORT`, preserves partial evidence, and stops all five-run
-sampling. A later request, missing notification, or evidence gap is `INVALID`; it still triggers
+within this bound produces experiment `status: VALID` with
+`outcome_class: VALID_SAFETY_ABORT`, preserves partial evidence, and stops all five-run sampling. A
+later request, missing notification, or evidence gap is `status: INVALID`; it still triggers
 best-effort cancellation and stops the batch. No same-step-stop claim is permitted.
 
 ## 4. Typed phase boundary
@@ -211,8 +212,9 @@ Run 5 validates only:
 - the existing physical transport-success contract;
 - deterministic recomputation of every diagnostic metric.
 
-No empirical dynamic range accepts or rejects run 5. `VALID_SAFETY_ABORT` or `INVALID` stops the
-whole batch without retry, replacement, or hidden rerun.
+No empirical dynamic range accepts or rejects run 5. A valid experiment whose outcome class is
+`VALID_SAFETY_ABORT`, or any `INVALID` experiment, stops the whole batch without retry,
+replacement, or hidden rerun.
 
 ## 9. Proposal and approval boundary
 
