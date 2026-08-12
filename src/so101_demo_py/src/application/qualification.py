@@ -314,7 +314,10 @@ class ProductionQualificationRunner:
     @staticmethod
     def stop_stack(handle: StackHandle, *, timeout_s: float = 60.0) -> dict[str, Any]:
         if handle.process.poll() is None:
-            os.killpg(handle.process_group_id, signal.SIGINT)
+            # Signal only the supervisor. It forwards once to each launch owner;
+            # signaling the whole group makes launch forward a duplicate SIGINT
+            # to every ROS child and turns normal shutdown into exit code -2.
+            handle.process.send_signal(signal.SIGINT)
         try:
             returncode = handle.process.wait(timeout=timeout_s)
         except subprocess.TimeoutExpired:
