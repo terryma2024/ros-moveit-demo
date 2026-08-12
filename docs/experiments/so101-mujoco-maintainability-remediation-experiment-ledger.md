@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: a658736dd2dbbf04d00d0179fa9e4c462b5483c3
+current_commit: 6b687791cf97e94c0062a6343e75497c322266e7
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,8 +21,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-049
-next_experiment: NONE_STOPPED_EVIDENCE_POLLUTION
+latest_checkpoint: MNT-CP-052
+next_experiment: RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
 ```
 
 ## Checkpoint MNT-CP-001
@@ -5244,4 +5244,147 @@ acceptance_criteria:
 execution_status: WAITING_FOR_ORCHESTRATOR_DELETE_AUTHORIZATION
 next_experiment: NONE_STOPPED_EVIDENCE_POLLUTION
 next_command: NONE; do not delete or rerun until explicit authorization.
+```
+
+## Checkpoint MNT-CP-051 — architecture supersession: backend integration contract
+
+```yaml
+checkpoint_id: MNT-CP-051
+recorded_at: 2026-08-12T23:20:00+08:00
+supersedes: MNT-CP-050
+supersession_reason: User explicitly revoked the migration-era immutable Gazebo/protected-tree isolation architecture because Gazebo and MuJoCo backends will converge.
+historical_records_preserved:
+  - MNT-CP-049 remains the original final-gate evidence-pollution stop.
+  - MNT-CP-050 remains the planned 24-pyc deletion recovery record.
+  - No historical checkpoint or pyc artifact was deleted or rewritten.
+five_full_restart_results:
+  retained: true
+  counted_successes: [EXP-126_BY_USER_VISUAL_WAIVER, EXP-127, EXP-128, EXP-129, EXP-130]
+  qualification_claim: FINAL_GATES_MUST_BE_RERUN_UNDER_NEW_BACKEND_INTEGRATION_CONTRACT
+contract_change:
+  retired:
+    - protected Gazebo tree equality to historical main base
+    - protected tree clean worktree/status requirement
+    - protected_nontracked_baseline_sha256 and ignored-file manifest
+    - blanket prohibition on Gazebo namespace/import/resource references
+    - fixed branch and migration-base ancestry requirements
+  retained:
+    - explicit declared cross-package dependencies
+    - implementation symlink escape, .git entry, and cycle rejection
+    - approved Gitee fork URL and gitlink checks
+    - runtime/install provenance and artifact hash probes
+  compatibility_entrypoint: src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh
+  implementation: scripts/check_backend_integration.py
+  ordinary_pycache_policy: ignored; no baseline absorption and no deletion performed
+tests:
+  focused_contract: 9 passed
+  command: PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_repository_isolation_contract.py
+  live_checker: backend integration contract passed
+runtime_preservation:
+  prior_common_overlay_runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  current_registered_runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  strategy_threshold_motion_mjcf_scene_controller_grasp_changes: NONE
+  final_gate_requalification_required: true
+next_experiment: NONE_FINAL_GATES_AFTER_BACKEND_CONTRACT
+next_command: Run full Python pytest, Ruff, script contracts, runtime/install provenance probes, and remaining final gates with PYTHONDONTWRITEBYTECODE=1; do not start RESET_WORLD.
+```
+
+## Checkpoint MNT-CP-052 — backend integration gates complete; FULL_RESTART 5/5 restored
+
+```yaml
+checkpoint_id: MNT-CP-052
+recorded_at: 2026-08-13T00:13:39+08:00
+prior_checkpoint: MNT-CP-051
+contract_commit: 6b687791cf97e94c0062a6343e75497c322266e7
+status: COMPLETE
+architecture_result:
+  migration_isolation_contract: RETIRED
+  backend_integration_contract: ACTIVE
+  gazebo_source_immutable: false
+  cross_package_dependencies: ALLOWED_WHEN_EXPLICITLY_DECLARED
+  compatibility_entrypoints:
+    - scripts/check_migration_isolation.sh
+    - src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh
+  canonical_checker: scripts/check_backend_integration.py
+  ordinary_gazebo_pycache: IGNORED_WITHOUT_DELETION_OR_BASELINE_ABSORPTION
+retired_checks:
+  - fixed branch name
+  - pinned migration-base ancestry
+  - Gazebo tree equality to historical main
+  - Gazebo tracked/ignored worktree cleanliness
+  - protected_nontracked_baseline_sha256
+  - blanket Gazebo namespace/import/resource prohibition
+retained_checks:
+  - undeclared cross-package dependency rejection
+  - implementation symlink repository escape, Git metadata entry, and cycle rejection
+  - approved Gitee fork URL and gitlink
+  - strict provenance commits, fields, source paths, and Git-blob SHA-256 values
+  - fork/runtime/install prefix, interface, tag, source, and installed-file hashes
+  - frozen motion policy, contact policy, MJCF, URDF, scene, controller, planning, and transport semantics
+automated_gates:
+  focused_backend_and_frozen_contract:
+    result: PASS
+    summary: 17 passed
+  full_source_pytest:
+    result: PASS
+    summary: 517 passed, 4 skipped
+  ruff_0_15_20:
+    result: PASS
+    summary: All checks passed; 128 files already formatted
+  compatibility_checker:
+    result: PASS
+    output: backend integration contract passed
+  fresh_three_package_build:
+    result: PASS
+    packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+    evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/backend-integration-gate-20260813-002
+  fresh_three_package_test:
+    result: PASS
+    summary: 778 tests, 0 errors, 0 failures, 4 skipped
+  fork_runtime_probe:
+    result: PASS
+    fork_url: git@gitee.com:zjumty/mujoco_ros2_control.git
+    fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+    fork_tag_commit: 738e304551b4ea6db020b466086a13db71b65607
+    validation_errors: []
+  fresh_install_probe:
+    result: PASS
+    project_install: /tmp/so101-debug-mujoco-maintainability-remediation/backend-integration-gate-20260813-002/install
+    project_package_prefixes: ALL_MATCH_FRESH_INSTALL
+    fork_package_prefixes: ALL_MATCH_PINNED_FORK_INSTALL
+runtime_behavior_fingerprint:
+  prior_file: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-runtime-fingerprint.json
+  prior_file_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  compared_artifacts: 7
+  all_match: true
+  dependency_sha256: be6bc595cd71a10df32765e11884183c0096db765a5ee35c3ef6a0b109ef5a3a
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  robot_strategy_or_threshold_change: NONE
+  note: frozen_behavior.py and its manifest changed only to retire the obsolete Gazebo immutability engineering gate; no robot behavior/config artifact changed.
+non_product_invocation_characterization:
+  - A direct pytest invocation without a ROS/project overlay stopped during collection on missing rclpy, moveit_msgs, launch, and package imports; it was rerun under the qualified overlay and is not a product failure.
+  - The first build preflight named backend-integration-gate-20260813-001 referenced a nonexistent fork prefix and created no build; the correctly pinned -002 build is the accepted evidence.
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  user_untracked_documents_preserved_unstaged:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+execution_state:
+  owned_processes: NONE
+  reset_world_started: false
+  rebase_merge_push: false
+qualification:
+  full_restart_batch_id: MNT-Q-EXP126-130
+  counted_successes: [EXP-126_BY_USER_VISUAL_WAIVER, EXP-127, EXP-128, EXP-129, EXP-130]
+  consecutive_successes: 5
+  full_restart_status: QUALIFIED
+  overall_task_status: RESET_WORLD_CHALLENGE_PENDING
+next_experiment: RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
+next_command: Preregister five new RESET_WORLD experiment IDs against this exact runtime/config fingerprint and the unchanged successful strategy; do not start a run before preregistration.
 ```
