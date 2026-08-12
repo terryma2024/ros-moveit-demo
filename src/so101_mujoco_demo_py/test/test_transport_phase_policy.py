@@ -38,6 +38,19 @@ def test_dynamic_transport_records_static_crossing_without_canceling() -> None:
     assert decision.diagnostic_hazard_breached is False
 
 
+def test_dynamic_held_object_motion_preserves_qualified_force_without_canceling() -> None:
+    decision = check_force(
+        5.18,
+        ContactForceMode.DYNAMIC_HELD_OBJECT_MOTION,
+        static_threshold_n=STATIC_THRESHOLD_N,
+        diagnostic_stop_n=DIAGNOSTIC_STOP_N,
+    )
+
+    assert decision.cancel is False
+    assert decision.static_threshold_crossed is True
+    assert decision.diagnostic_hazard_breached is False
+
+
 @pytest.mark.parametrize("force_n", [DIAGNOSTIC_STOP_N, DIAGNOSTIC_STOP_N + 0.01])
 def test_dynamic_diagnostic_stop_is_inclusive_and_has_no_grace(force_n: float) -> None:
     decision = check_force(
@@ -85,3 +98,18 @@ def test_live_transport_wires_static_prehold_and_dynamic_postsettle_explicitly()
     assert "checkpoint_snapshot_session" in source
     assert '"publisher_provenance"' in source
     assert "force boundary exceeded during transport" not in source
+
+
+def test_post_transport_held_cup_phases_use_dynamic_mode_until_release() -> None:
+    phase_root = Path(__file__).parents[1] / "so101_mujoco_demo_py" / "live_phases"
+
+    for phase_name in ("descend.py", "place_alignment.py"):
+        source = (phase_root / phase_name).read_text(encoding="utf-8")
+        assert "ContactForceMode.DYNAMIC_HELD_OBJECT_MOTION" in source
+        assert "check_force(" in source
+
+    release_source = (phase_root / "release_retreat.py").read_text(encoding="utf-8")
+    assert "ContactForceMode.DYNAMIC_HELD_OBJECT_MOTION" in release_source
+    assert "ContactForceMode.PRE_TRANSPORT_STATIC_HOLD" in release_source
+    assert "force_mode=ContactForceMode.DYNAMIC_HELD_OBJECT_MOTION" in release_source
+    assert release_source.count("force_mode=ContactForceMode.PRE_TRANSPORT_STATIC_HOLD") >= 3

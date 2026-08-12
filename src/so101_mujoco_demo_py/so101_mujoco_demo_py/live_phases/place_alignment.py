@@ -19,6 +19,7 @@ from rclpy.time import Time
 from sensor_msgs.msg import JointState
 from tf2_ros import Buffer, TransformListener
 
+from so101_mujoco_demo_py.dynamic_transport_evidence import ContactForceMode
 from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
@@ -30,6 +31,7 @@ from so101_mujoco_demo_py.moveit.planning import (
     PosePlanRequest,
 )
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
+from so101_mujoco_demo_py.mujoco.transport_observer import check_force
 from so101_mujoco_demo_py.place_alignment import (
     align_cup_for_release,
     load_place_alignment_policy,
@@ -42,6 +44,7 @@ EVIDENCE_PATH = Path(os.environ["SO101_EVIDENCE_ROOT"]) / "place-alignment.json"
 POLICY_PATH = Path(os.environ["SO101_MOTION_POLICY"])
 PLACE_XYZ = (-0.080, -0.250, 0.165)
 ALL_JOINTS = ("1", "2", "3", "4", "5", "6")
+DIAGNOSTIC_HARD_STOP_FORCE_N = 11.60
 
 
 def atomic_write(document: dict) -> None:
@@ -129,8 +132,14 @@ def main() -> int:
     def validate(value) -> None:
         if value.paused or value.reset_epoch != EXPECTED_EPOCH:
             raise RuntimeError("MuJoCo pause/reset during place alignment")
-        if value.maximum_normal_force_n > maximum_safe_force_n:
-            raise RuntimeError("force boundary exceeded during place alignment")
+        decision = check_force(
+            value.maximum_normal_force_n,
+            ContactForceMode.DYNAMIC_HELD_OBJECT_MOTION,
+            static_threshold_n=maximum_safe_force_n,
+            diagnostic_stop_n=DIAGNOSTIC_HARD_STOP_FORCE_N,
+        )
+        if decision.cancel:
+            raise RuntimeError(f"{decision.reason} during place alignment")
 
     def stable_bilateral(duration_s: float = 0.20):
         started: float | None = None

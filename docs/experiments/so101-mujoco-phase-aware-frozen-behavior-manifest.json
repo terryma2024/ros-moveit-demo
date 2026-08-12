@@ -1,10 +1,10 @@
 {
   "schema": "so101-mujoco-frozen-behavior-manifest-v1",
-  "generated_at": "2026-08-12T20:25:00+08:00",
+  "generated_at": "2026-08-12T21:27:00+08:00",
   "behavior_baseline_commit": "8f71442ae6cff43e0770eec929b13211d2057628",
   "behavior_source_commit": "a172765e3b193bfccad9782d02e2745e70f1cbd2",
   "baseline_relation": "8f71442 differs from a172765 only in the maintainability ledger",
-  "scope": "phase-aware measurement and provenance separation may change instrumentation but none of these behavior inputs or call semantics",
+  "scope": "phase-aware measurement, provenance separation, and the EXP-125 post-transport force-mode correction may change instrumentation but none of the frozen motion inputs or call semantics",
   "approved_policy": {
     "proposal_sha256": "670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897",
     "contact_policy_sha256": "c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82",
@@ -134,9 +134,9 @@
     "policy_lift_waypoint1.py": "234dd2dbf4331e45470e48f5f4ef986b5419d7ca89c8be0226ec2cf67ec8ed2e",
     "remaining_lift.py": "0b5cd9639efb4daa1dc61c3a2d7592592170ec30240d424014bf78ff99f1bc1d",
     "transport.py": "d2edcb461416f462503ae5b4f31ae55579ae5882a0c6340467871c61015930cd",
-    "descend.py": "3b9baaa299b6b7ee31409478801b149f7d48baf86c503e5df3813d27eb4c1c74",
-    "place_alignment.py": "5d60a14067ae50be3c282db2cd676d5a1f6c09586418bc981057a2d8b2b4c190",
-    "release_retreat.py": "20fbfa2094cf1729a5a87d577f33f9cccadecf885a3df57512e100442bb65481"
+    "descend.py": "d9e9a94aa1a7e446fcdcf765a3b323dd09cf5bc03e74ba91d9cfa9ba219e1c13",
+    "place_alignment.py": "b39cd62cf5bf676b5bceea86451147c7556d690528aae54fbc61ca44039a4e0f",
+    "release_retreat.py": "869357a01607578a5ea397e007e9113fee8f627522ca27cb1ef19f3bede5d6b5"
   },
   "model_scene_geometry": {
     "scene_xml_sha256": "b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0",
@@ -174,6 +174,9 @@
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/dynamic_transport_evidence.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/mujoco/transport_observer.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_phases/transport.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_phases/descend.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_phases/place_alignment.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_phases/release_retreat.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_calibration.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_calibration_collector.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_policy.py",

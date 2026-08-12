@@ -27,6 +27,7 @@ from rclpy.time import Time
 from sensor_msgs.msg import JointState
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from so101_mujoco_demo_py.dynamic_transport_evidence import ContactForceMode
 from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
@@ -39,6 +40,7 @@ from so101_mujoco_demo_py.moveit.planning import (
     PosePlanRequest,
 )
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
+from so101_mujoco_demo_py.mujoco.transport_observer import check_force
 from so101_mujoco_demo_py.physical_outcome import (
     FinalPlacementSample,
     evaluate_final_placement,
@@ -65,6 +67,7 @@ RELEASE_TARGET_XYZ = tuple(
     value + compensation
     for value, compensation in zip(PLACE_XYZ, SETTLING_COMPENSATION, strict=True)
 )
+DIAGNOSTIC_HARD_STOP_FORCE_N = 11.60
 
 
 def atomic_write(document: dict) -> None:
@@ -271,6 +274,7 @@ def main() -> int:
     def stable_state(
         *,
         gripper_contact: bool,
+        force_mode: ContactForceMode,
         allow_residual_fixed_contact: bool = False,
         duration_s: float = 0.20,
     ):
@@ -286,8 +290,14 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != EXPECTED_EPOCH:
                 raise RuntimeError("MuJoCo pause/reset during stable gate")
-            if evidence.maximum_normal_force_n > maximum_safe_force_n:
-                raise RuntimeError("force boundary exceeded during stable gate")
+            decision = check_force(
+                evidence.maximum_normal_force_n,
+                force_mode,
+                static_threshold_n=maximum_safe_force_n,
+                diagnostic_stop_n=DIAGNOSTIC_HARD_STOP_FORCE_N,
+            )
+            if decision.cancel:
+                raise RuntimeError(f"{decision.reason} during stable gate")
             actual_gripper_contact = bool(
                 evidence.left_fingertip_contacts or evidence.right_fingertip_contacts
             )
@@ -390,7 +400,10 @@ def main() -> int:
         if not gripper_action.wait_for_server(timeout_sec=20.0):
             raise RuntimeError("gripper action unavailable")
         wait_for(lambda: len(latest_joint) == 6, 5.0, "joint state unavailable")
-        before = stable_state(gripper_contact=True)
+        before = stable_state(
+            gripper_contact=True,
+            force_mode=ContactForceMode.DYNAMIC_HELD_OBJECT_MOTION,
+        )
         before_joints = tuple(float(latest_joint[name]) for name in ALL_JOINTS)
         cup = tuple(before.object_state.position_world)
         error = tuple(
@@ -413,6 +426,7 @@ def main() -> int:
             raise RuntimeError(f"release failed: {gripper.failure.code}")
         released = stable_state(
             gripper_contact=False,
+            force_mode=ContactForceMode.PRE_TRANSPORT_STATIC_HOLD,
             allow_residual_fixed_contact=True,
         )
         result["released_joints_rad"] = [float(latest_joint[name]) for name in ALL_JOINTS]
@@ -554,7 +568,10 @@ def main() -> int:
                 10.0,
                 f"retreat segment {index} endpoint timeout",
             )
-            after = stable_state(gripper_contact=False)
+            after = stable_state(
+                gripper_contact=False,
+                force_mode=ContactForceMode.PRE_TRANSPORT_STATIC_HOLD,
+            )
             result["retreat_segments"].append(
                 {
                     "segment": index,
@@ -580,7 +597,10 @@ def main() -> int:
                 result["radial_acm_scope"]["restored_pair_allowed"] = False
             atomic_write(result)
 
-        terminal = stable_state(gripper_contact=False)
+        terminal = stable_state(
+            gripper_contact=False,
+            force_mode=ContactForceMode.PRE_TRANSPORT_STATIC_HOLD,
+        )
         result["planning_scene_readback"] = detach_and_sync(terminal)
 
         release_epoch_id = f"live-release-epoch-{EXPECTED_EPOCH}"

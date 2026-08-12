@@ -17,6 +17,7 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.dynamic_transport_evidence import ContactForceMode
 from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
@@ -29,6 +30,7 @@ from so101_mujoco_demo_py.moveit.planning import (
     make_get_motion_plan_request,
 )
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
+from so101_mujoco_demo_py.mujoco.transport_observer import check_force
 from so101_mujoco_demo_py.staged_approach import maximum_joint_error
 
 SESSION_ID = os.environ["SO101_SIMULATION_SESSION_ID"]
@@ -52,6 +54,7 @@ TARGETS = (
 CONTACT_LOSS_GRACE_S = 0.05
 RELEASE_TARGET_XYZ = (-0.0788, -0.2475, 0.1835)
 MAX_ALIGNMENT_CORRECTION_M = 0.030
+DIAGNOSTIC_HARD_STOP_FORCE_N = 11.60
 
 
 def atomic_write(document: dict) -> None:
@@ -132,6 +135,16 @@ def main() -> int:
         except EvidenceStale:
             return None
 
+    def validate_dynamic_force(evidence, context: str) -> None:
+        decision = check_force(
+            evidence.maximum_normal_force_n,
+            ContactForceMode.DYNAMIC_HELD_OBJECT_MOTION,
+            static_threshold_n=maximum_safe_force_n,
+            diagnostic_stop_n=DIAGNOSTIC_HARD_STOP_FORCE_N,
+        )
+        if decision.cancel:
+            raise RuntimeError(f"{decision.reason} during {context}")
+
     def stable_gate(epoch: int, *, require_support: bool):
         start: float | None = None
         last_sequence = -1
@@ -145,8 +158,7 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != epoch:
                 raise RuntimeError("MuJoCo pause/reset during stable gate")
-            if evidence.maximum_normal_force_n > maximum_safe_force_n:
-                raise RuntimeError("force boundary exceeded during stable gate")
+            validate_dynamic_force(evidence, "descend stable gate")
             bilateral = bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts)
             support_ok = has_table_contact(evidence) == require_support
             now = time.monotonic()
@@ -236,8 +248,7 @@ def main() -> int:
                     raise RuntimeError("stale MuJoCo evidence during descend")
                 if evidence.paused or evidence.reset_epoch != before.reset_epoch:
                     raise RuntimeError("MuJoCo pause/reset during descend")
-                if evidence.maximum_normal_force_n > maximum_safe_force_n:
-                    raise RuntimeError("force boundary exceeded during descend")
+                validate_dynamic_force(evidence, "descend")
                 contact_guard.require(
                     bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts),
                     "bilateral contact lost",

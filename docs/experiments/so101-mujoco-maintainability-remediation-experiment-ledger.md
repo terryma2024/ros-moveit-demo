@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: ee2f8ee022ca406e3175e49e9d1cfe27d39faa35
+current_commit: 7b23f4fd943301672581ab31dd1d3aabbefa6831
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -15,12 +15,13 @@ confirmed_conclusions:
   - AUDIT-002: execute bypasses StateMachineRunner and ignores public checkpoint controls.
   - EXP-109: the frozen five-win strategy passes MICRO_LIFT and all LIFT phases; transport crosses the static 1.1579004532160448 N threshold and shuts down cleanly.
   - USER-AUTH-2026-08-12-PHASE-AWARE: preserve the five-win strategy exactly; static contact and dynamic transport require separate evidence/acceptance semantics.
+  - EXP-124: lossless 500 Hz physics-step capture completed through physical transport on the qualification-provisioned NVMe evidence volume.
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
-  - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-031
-next_experiment: EXP-123
+  - The post-transport failure is caused by applying the 1.1579004532160448 N static-contact classifier to dynamic held-cup descend/alignment/release-handoff phases that the five-win strategy qualified under the unchanged 11.60 N diagnostic hard stop.
+latest_checkpoint: MNT-CP-034
+next_experiment: EXP-125
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3730,4 +3731,56 @@ protected_state:
 conclusion: The EXP-123 chunk-gap block was a storage-volume throughput mismatch, not a producer, controller, MuJoCo physics, or grasp-strategy defect. The formal qualification path now supplies the evidence volume, and EXP-124 proves lossless 500 Hz capture through a successful physical transport without changing the five-win strategy.
 next_experiment: NONE_STOP_AND_REPORT_BEFORE_ANY_FIVE_RUN_BATCH
 next_command: Report EXP-124 and the remaining post-transport PHASE_EXIT_NONZERO as a separate business-phase issue. Do not preregister or start a five-run batch in this checkpoint.
+```
+
+## Checkpoint MNT-CP-034 — post-transport first-bad-boundary diagnosis
+
+```yaml
+checkpoint_id: MNT-CP-034
+recorded_at: 2026-08-12T21:19:00+08:00
+last_valid_experiment: EXP-124
+current_hypothesis: Commit d03e48f mechanically mapped the approved 1.1579004532160448 N static-contact threshold onto dynamic held-cup phases, invalidating the already qualified force-mode semantics without changing motion.
+working_tree_status: Clean tracked tree at 7b23f4fd943301672581ab31dd1d3aabbefa6831; two protected unrelated untracked experiment documents remain preserved.
+owned_processes: NONE
+preserved_processes: Existing codex, codex-cua, and so101-mujoco-gui tmux sessions; no task-owned ROS or MuJoCo process is running.
+observed:
+  - EXP-124 transport returned exit 0 with FORMAL_MOVE_ABOVE_PLACE_PROVED; the next phase descend returned exit 1 before issuing any descend waypoint, at stable_gate with force boundary exceeded.
+  - EXP-124 final lossless transport samples measured approximately 4.93 to 5.01 N, above the static 1.1579004532160448 N threshold and below the unchanged 11.60 N diagnostic hard stop.
+  - Five frozen successful TASK15 FULL_RESTART runs entered descend at 4.00 to 4.12 N, completed descend at up to 4.84 N, completed place alignment at up to 5.18 N, and entered release at up to 5.03 N.
+  - Git history proves d03e48f replaced the previously qualified 11.60 N dynamic hard stop with maximum_safe_force_n in descend, place_alignment, and pre-release stable_state.
+disproven_routes:
+  - Transport evidence storage or r6 physics-hook instrumentation changed the physical strategy; EXP-124 endpoint force and pose match the historical successful transport population.
+  - A post-transport retry or stale manifest caused the failure; descend is the first uncompleted phase and its own evidence records the direct force-gate exception.
+open_risks:
+  - The same incorrect static-mode mapping exists in descend, place_alignment, and the gripper-contact=true pre-release state; fixing only the first observed line would merely move the deterministic failure downstream.
+next_command: Add RED contracts for typed dynamic-held-object force mode and post-transport phase wiring before implementation.
+```
+
+## EXP-125 preregistration — restore qualified post-transport force-mode semantics
+
+```yaml
+experiment_id: EXP-125
+recorded_at: 2026-08-12T21:19:00+08:00
+prior_experiment: EXP-124 VALID evidence diagnostic with separate business-phase failure.
+status: PLANNED
+lifecycle: FULL_RESTART
+qualification_counting: false
+purpose: Prove the production nine-phase workflow restores the previously qualified dynamic held-cup force semantics after transport while preserving every motion, controller, scene, model, contact-policy value, and evidence contract.
+source_commit_before_fix: 7b23f4fd943301672581ab31dd1d3aabbefa6831
+single_variable: Phase classification only. Descend, place alignment, and the pre-release gripper-contact state use the existing 11.60 N diagnostic hard stop with the 1.1579004532160448 N static threshold retained as shadow evidence; post-release support/settling continues to enforce the approved static threshold. No numeric threshold changes.
+preconditions:
+  - RED tests prove the current code cancels historical qualified 4 to 5 N held-cup samples solely because those phases are misclassified as static.
+  - Motion-policy hash, all target vectors, planner scalings, q6, MJCF, scene, controllers, thresholds, release/retreat behavior, and protected Gazebo package remain unchanged.
+  - Use one fresh isolated overlay, unique ROS domain/session/port, qualified NVMe evidence root, transactional ResetWorld, and exactly one natural workflow invocation.
+success_criteria:
+  - All nine production phases return their expected evidence statuses through RELEASE_RETREAT_FINAL_PLACEMENT_PROVED without retry, reset, pause, direct object write, simulator constraint, or hidden attachment.
+  - Dynamic held-cup samples below 11.60 N do not cancel solely for crossing the static shadow threshold; an inclusive 11.60 N sample still cancels immediately.
+  - Post-release final placement samples still require maximum_normal_force_n <= 1.1579004532160448 N plus the existing support, detachment, controller, scene, pose, and stability gates.
+  - Lossless transport evidence, ordered shutdown, domain/port/process cleanup, frozen-behavior manifest, package tests, Ruff, and Gazebo isolation all pass.
+  - Fresh CUA visual evidence shows the cup released stably inside the target ring and the arm/gripper clear.
+failure_criteria:
+  - Any phase or final physical/scene/visual gate fails under the single corrected phase classification.
+invalid_criteria:
+  - Any motion/threshold/model/scene/controller mutation, retry, lifecycle contamination, evidence gap, provenance mismatch, missing visual proof, or unclean shutdown.
+next_if_valid: Commit and report EXP-125. Do not start the five-run qualification batch without a new ledger preregistration.
 ```
