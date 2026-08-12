@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 49d498d25d1da345622fb40054036e64942c5fbd
+current_commit: bc54b1dc24b565ffd01acbb7d5497b0385ccb933
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-029
-next_experiment: EXP-121
+latest_checkpoint: MNT-CP-030
+next_experiment: EXP-122
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3400,4 +3400,83 @@ acceptance:
 failure_policy: Any failed identity, continuity, publisher, boundary, provenance, workflow-unwind, or shutdown condition makes EXP-121 INVALID_EVIDENCE and stops further batch work. EXP-121 is run exactly once.
 command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh; source /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-gate-install/setup.zsh; GZ_PARTITION=so101-mnt-a-exp121 PYTHONPATH=/data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_mujoco_demo_py python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp121_evidence_diagnostic.py
 next_if_valid: Stop and report EXP-121 before preregistering any new five-run batch.
+```
+
+## Checkpoint MNT-CP-030 — EXP-121 terminal pre-stack INVALID_EVIDENCE
+
+```yaml
+checkpoint_id: MNT-CP-030
+recorded_at: 2026-08-12T20:17:11+08:00
+terminal_experiment: EXP-121
+status: INVALID_EVIDENCE
+rerun_policy: EXP-121 is immutable and will not be rerun or reclassified.
+execution_boundary:
+  stack_ready: false
+  workflow_started: false
+  reset_started: false
+  motion_or_strategy_executed: false
+failure:
+  class: StackStartupError
+  message: stack exited during startup with 1
+  root_cause: The preregistered shell command overwrote PYTHONPATH with only the project source path. The child /opt/ros/jazzy/bin/ros2 process therefore could not discover the ros2cli distribution metadata and exited before launch.
+  launch_error: importlib.metadata.PackageNotFoundError: No package metadata was found for ros2cli
+  disposition: This is a diagnostic execution-wrapper defect, not a MuJoCo, ROS-control, evidence-hook, reset, or frozen-policy failure.
+evidence:
+  result: /tmp/so101-debug-mujoco-maintainability-remediation/exp121/exp121-diagnostic.json
+  result_sha256: 90f61229441615fc1865cb1397b2d82a49e635a2b40d5619f08711113b4415d9
+  launch_log: /tmp/so101-debug-mujoco-maintainability-remediation/exp121/run-01/launch.log
+  launch_log_sha256: 5f2da83e2a9ed5c3c1a43bcbb55c7b09a4aff240fa840aed448d53c92028f3b5
+  residue: No EXP-121 process, ROS Domain 193 node, or port 8033 listener remained.
+pre_dispatch_tmux_note: The first attempt to create a shell by respawning a dead historical pane inherited that pane's old Task14 /tmp/so101_exp115_run.bash start command. It was stopped by an exact tmux pane Ctrl-C before EXP-121 existed or was dispatched, used none of EXP-121's identity/root/domain/port, and is not classified as an EXP-121 execution. The replacement pane was created with explicit /bin/zsh -l before the actual EXP-121 dispatch.
+frozen_behavior: No q6, waypoint, trajectory, planner, speed/acceleration, controller, MJCF, scene, geometry, threshold, or phase behavior changed or ran.
+next_experiment: EXP-122_PENDING_PREREGISTRATION
+next_command: Remove the PYTHONPATH override, prove ros2cli plus the installed qualification module are both importable after sourcing the exact overlays, then preregister a new diagnostic ID and run it once.
+```
+
+## EXP-122 preregistration — corrected authoritative physics-step evidence diagnostic
+
+```yaml
+experiment_id: EXP-122
+recorded_at: 2026-08-12T20:17:11+08:00
+prior_experiment: EXP-121 remains permanently INVALID_EVIDENCE and is not rerun or reclassified.
+status: PLANNED
+purpose: Validate authoritative 500 Hz physics-step evidence identity, continuity, publisher provenance, typed boundary persistence, and clean lifecycle only; do not evaluate or tune grasp policy.
+lifecycle: FULL_RESTART
+behavior_source_commit: 49d498d25d1da345622fb40054036e64942c5fbd
+fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+fork_release_tag: so101-0.0.3-r6
+install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-gate-install
+runtime_fingerprint:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-runtime-fingerprint.json
+  sha256: 42dd62ef63c2719944dd96ca25adab2014e16f43880ba2ecd59f21a1ab8dac1f
+frozen_behavior_manifest_sha256: d5b6dbd747192592e5bc2ccf95521c2c665d1045bbfcb2147825c534f353561c
+harness:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp122_evidence_diagnostic.py
+  sha256: b18cb42fba9ff33470d85fd4467150210d04e370c6c8edeb625fc8774fc88374
+  delta_from_exp121: Identity/root/domain/port only; evidence and lifecycle assertions are unchanged.
+runtime_environment_gate:
+  command_contract: Source ROS Jazzy, the persistent r6 fork overlay, and the isolated project overlay. Do not overwrite PYTHONPATH.
+  proof: ros2cli distribution version 0.32.10 imports successfully; so101_mujoco_demo_py.qualification resolves from the isolated r6 gate build; ros2 --help exits zero.
+runtime_identity:
+  session: MNT-A-EXP122-full-01
+  ros_domain_id: 194
+  port: 8034
+  gz_partition: so101-mnt-a-exp122
+  evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/exp122
+single_variable: The execution wrapper no longer overwrites PYTHONPATH. Physics hook, evidence consumer, frozen strategy, model, scene, controller, thresholds, and lifecycle assertions are identical to EXP-121.
+procedure:
+  - Start exactly one fresh non-headless stack from the r6 isolated overlay and perform the existing transactional reset.
+  - Start the unchanged production workflow and observe the atomically checkpointed raw index.
+  - Record the first persisted typed boundary plus content-addressed physics-step chunk, send no cancellation or other command to the independent workflow owner, and wait for /workflow/run to return naturally.
+  - Only after a normal HTTP terminal response may ordered stop_stack run. A timeout preserves the owned stack and is INVALID_EVIDENCE.
+acceptance:
+  - Exactly one publisher exists on each evidence topic and publisher identities/GIDs persist.
+  - Expected, snapshot, chunk, and all five sample session IDs equal MNT-A-EXP122-full-01.
+  - The first chunk contains exactly five samples with strict physics_step +1, approximately 0.002 s time increments, zero failed publishes, and no evidence_loss.
+  - A typed boundary persists; identity_mismatch and later invalid_reason remain absent.
+  - Workflow naturally returns before teardown and ordered shutdown passes without owned process/domain/port residue.
+  - Grasp business outcome is not an acceptance signal.
+failure_policy: Any failed condition makes EXP-122 INVALID_EVIDENCE and stops further batch work. EXP-122 is run exactly once.
+command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh; source /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-gate-install/setup.zsh; GZ_PARTITION=so101-mnt-a-exp122 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp122_evidence_diagnostic.py
+next_if_valid: Stop and report EXP-122 before preregistering any new five-run batch.
 ```
