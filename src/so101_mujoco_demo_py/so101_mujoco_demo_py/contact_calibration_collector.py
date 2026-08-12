@@ -69,6 +69,7 @@ class CollectionRequest:
     maximum_pre_contact_displacement_m: float = 0.003
     maximum_diagnostic_force_n: float = 11.60
     wrong_side_limit: int = 1
+    stable_hold_preroll_s: float = 0.30
     table_only: bool = False
     post_release: bool = False
 
@@ -97,6 +98,7 @@ class CollectionRequest:
                 self.max_receipt_age_s,
                 self.maximum_pre_contact_displacement_m,
                 self.maximum_diagnostic_force_n,
+                self.stable_hold_preroll_s,
             ),
             "collection request",
         )
@@ -104,6 +106,8 @@ class CollectionRequest:
             raise ValueError("reference_object_position_m must contain three values")
         if self.max_receipt_age_s <= 0.0:
             raise ValueError("max_receipt_age_s must be positive")
+        if self.stable_hold_preroll_s < 0.0:
+            raise ValueError("stable_hold_preroll_s must be non-negative")
         output = self.output_path.resolve()
         if output == REPOSITORY_ROOT or output.is_relative_to(REPOSITORY_ROOT):
             raise ValueError("raw calibration evidence must be written outside the repository")
@@ -204,6 +208,7 @@ class ContactCalibrationCollector:
                 evidence = self._validated_evidence(request, received, previous_sequence)
                 previous_sequence = evidence.publisher_sequence
                 if not _contact_shape_matches(request.regime, evidence):
+                    first_contact_time_s = None
                     wrong_side_count += 1
                     if wrong_side_count >= request.wrong_side_limit:
                         raise CollectionAborted(
@@ -218,6 +223,11 @@ class ContactCalibrationCollector:
                 else:
                     first_contact_time_s = None
                     contact_duration_s = 0.0
+                if (
+                    request.regime == "stable_hold"
+                    and contact_duration_s < request.stable_hold_preroll_s
+                ):
+                    continue
                 samples.append(
                     self._sample_document(request, evidence, received, contact_duration_s)
                 )
@@ -404,6 +414,7 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--table-only", action="store_true")
     parser.add_argument("--post-release", action="store_true")
     parser.add_argument("--max-receipt-age-s", type=float, default=0.2)
+    parser.add_argument("--stable-hold-preroll-s", type=float, default=0.30)
     parser.add_argument("--timeout-s", type=float, default=30.0)
     return parser
 
@@ -493,6 +504,7 @@ def run_ros_collection(options: argparse.Namespace) -> dict[str, Any]:
         table_only=options.table_only,
         post_release=options.post_release,
         max_receipt_age_s=options.max_receipt_age_s,
+        stable_hold_preroll_s=options.stable_hold_preroll_s,
     )
     try:
         return ContactCalibrationCollector(
