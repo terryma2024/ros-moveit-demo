@@ -256,6 +256,131 @@ abort_criteria: any provenance/fingerprint mismatch, invalid evidence, phase or 
 expected: one non-counting VALID/SUCCESS nine-phase run with contiguous durable evidence and no owned orphan
 ```
 
+## Checkpoint CP-FUSION-024 — corrected asset-closure smoke
+
+```yaml
+checkpoint_id: CP-FUSION-024
+terminal_experiment: fusion-smoke-008
+status: VALID_SUCCESS_NONCOUNTING
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+model_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+physical_outcome: {primary_failure: null, intended_support_contact: true, moveit_attached: false, world_object_synchronized: true}
+final_cup_position_world_m: [-0.07810393667168251, -0.24872622672324962, 0.16549422441864312]
+clean_shutdown: PASS
+manifest_sha256: ee07c03add344364dea58a3324ec64d133acf846050e11606e1ff7e6118143b6
+independent_verifier: QUALIFIED
+owned_processes_after_smoke: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+decision: The corrected source-owned asset closure preserves the approved physical fingerprint and is eligible for replacement runtime evidence and counted batches.
+```
+
+## Planned experiment EXP-FUSION-007
+
+```yaml
+experiment_id: EXP-FUSION-007
+status: PLANNED
+task: 13 replacement evidence
+backend: gazebo
+counting_qualification_run: false
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+ros_domain_id: 202
+gz_partition: fusion-exp-007-e5e4d9b
+session_id: fusion-exp-007-e5e4d9b
+evidence_root: /data/work/so101-debug-fusion-gazebo-007
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+command: ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-007-e5e4d9b evidence_file:=/data/work/so101-debug-fusion-gazebo-007/result.json
+abort_criteria: INVALID result, missing direct source/install provenance, unowned cleanup target, or contaminated initial/runtime evidence
+cleanup_scope: only the exact launch process group and any conclusively identified orphan created by EXP-FUSION-007
+expected: valid FAILED or SUCCEEDED with direct source_commit, installed_prefix, first boundary, stable code, classification, and evidence references
+```
+
+## Planned batch FUSION-FULL-RESTART-004
+
+```yaml
+batch_id: fusion-full-restart-004
+status: PLANNED
+task: 17 replacement
+lifecycle: FULL_RESTART
+backend: mujoco
+required_consecutive_successes: 5
+reuse_previous_batch_results: false
+invalid_run_effect: invalidate_batch
+valid_failure_effect: break_streak
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+ros_domain_ids: [210, 211, 212, 213, 214]
+ports: [27850, 27851, 27852, 27853, 27854]
+evidence_root: /data/work/so101-debug-fusion-full-restart-004
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+abort_criteria: any provenance drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
+expected: exactly five independent VALID/SUCCESS records with unique sessions and clean ordered shutdown
+```
+
+## Planned batch FUSION-RESET-WORLD-003
+
+```yaml
+batch_id: fusion-reset-world-003
+status: PLANNED
+task: 18 replacement
+lifecycle: RESET_WORLD
+backend: mujoco
+required_consecutive_successes: 5
+reuse_full_restart_results: false
+invalid_run_effect: invalidate_batch
+valid_failure_effect: break_streak
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+ros_domain_id: 215
+port: 27860
+evidence_root: /data/work/so101-debug-fusion-reset-world-003
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+abort_criteria: any provenance/lifecycle/epoch drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
+expected: exactly five VALID/SUCCESS records in one session with reset epochs 1 through 5 and clean ordered shutdown
+```
+
+## Planned experiment FUSION-GUI-003
+
+```yaml
+experiment_id: fusion-gui-003
+status: PLANNED
+task: 18 replacement visual evidence
+lifecycle: GUI_MIRROR
+backend: mujoco
+counting_qualification_run: false
+source_commit: e5e4d9b21ea81488b553da250070ae546695f36f
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
+ros_domain_id: 216
+session_id: fusion-gui-003-e5e4d9b
+tmux_session: so101-fusion-gui-audit
+cua_session: so101-fusion-gui-audit
+evidence_root: /data/work/so101-debug-fusion-gui-003
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+inspection_contract: ai-station CUA fresh window-scoped snapshot, inspect, then fresh snapshot; record image path/hash plus terminal numeric evidence
+abort_criteria: any provenance drift, invalid evidence, phase or physical failure, or unowned cleanup target
+cleanup_scope: only the exact tmux session/process group created for FUSION-GUI-003
+expected: one visible non-counting nine-phase mirror with valid success, fresh screenshots, numeric evidence, and no owned orphan
+```
+
 ## Checkpoint CP-FUSION-016 — qualification runner and pinned-fork gate
 
 ```yaml
