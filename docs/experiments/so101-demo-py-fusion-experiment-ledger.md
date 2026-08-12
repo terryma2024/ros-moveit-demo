@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 703c765edd48d0a451179001ea343886d9ec11b8
+current_commit: 7574f2dca28126849f156230768204936a1e03fe
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -14,13 +14,14 @@ confirmed_conclusions:
   - The initialized clean-baseline MuJoCo Python suite passes 525 tests with 4 skips; CP-FUSION-001.
   - Tasks 2-5 preserve mapped identity, core/runtime parity, nine-phase order, and exact v1 simulator policy bytes; CP-FUSION-002.
   - Task 6 installs strict neutral world/lifecycle contracts and MuJoCo adapters with fresh-state validation; CP-FUSION-003.
+  - Task 7 installs typed robot/scene ports and removes direct ROS client construction from application; CP-FUSION-004.
 disproven_routes:
   - Historical TASK15-FULL-A is INVALID because headless execution could not satisfy the required viewer-camera readiness gate; CP-156.
   - Recreating or sourcing the removed migration worktree is unnecessary and would contradict the verified merged-main handoff; CP-FUSION-001.
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-003
+latest_checkpoint: CP-FUSION-004
 next_experiment: NONE
 ---
 
@@ -125,4 +126,33 @@ next_command: Write and run Task 7 PlanningScenePort and RobotControlPort RED co
 evidence:
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task6/contracts.log sha256=229e4533d1597c28d56b8b7c42e076151a9d019effe66ced40bfb2ba3347ae36
   - log/fusion-t6/latest_build
+```
+
+## Checkpoint CP-FUSION-004
+
+```yaml
+checkpoint_id: CP-FUSION-004
+last_valid_experiment: EXP-168 historical uncounted visual corroboration; no fusion live experiment has started
+current_hypothesis: MuJoCo physics-step diagnostics can become an optional capability-gated port without changing the qualified transport implementation.
+working_tree_status: HEAD 7574f2dca28126849f156230768204936a1e03fe; Task 7 ports, shared controls, concrete-phase relocation, tests, and this checkpoint are intentionally dirty before the scoped Task 7 commit.
+owned_processes: NONE
+preserved_processes: unchanged preserved tmux sessions and pre-existing ros2 daemons; no process or session was controlled.
+confirmed_conclusions:
+  - Planning Scene attachment is typed as planning shadow only and cannot claim physical-grasp proof.
+  - Temporary collision permission is represented by an auditable single-pair lease with an exact one-time restore operation.
+  - SharedRobotControl captures the plan start state and rejects execution after joint-state drift beyond tolerance.
+  - The application tree contains no create_client, ActionClient, or FollowJointTrajectory construction; qualified concrete ROS/MuJoCo entry points live under the MuJoCo adapter tree.
+  - The complete unified suite passes 37/37 after the fusion-t7 build, and the installed dry-run retains the exact 19-transition trace.
+  - The frozen MuJoCo policy remains aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356.
+disproven_routes:
+  - Protocol declarations alone were insufficient: the Task 7 source scan exposed direct application client creation until the qualified concrete entry points were moved behind the backend boundary.
+open_risks:
+  - The CLI still selects the MuJoCo lifecycle callback directly; Task 9 must make runtime composition the sole backend selector.
+  - The qualified concrete phase sequence still uses MuJoCo-specific trace observers; Task 8 must expose the diagnostic contract and enforce it only for the qualification profile.
+next_command: Write and run Task 8 PhaseEvidencePort and capability-requirement RED tests.
+evidence:
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task7/unified-tests.log sha256=bc3ccfa25decf36a5f93b78e8da1ae26ac0fb5b1312cb8711260a9c4900b4e7e
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task7/application-client-scan.log sha256=0aec8a871a5714aed65de820979bf5e9ad3ae180970168cec852b054c2e0d83b
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task7-dry-run.log sha256=ce72e16ecb692aa0a1555ea6a15834ab984c05495b6da872e76a7aa087c54074
+  - log/fusion-t7/latest_build
 ```

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from ..application.pick_place import LiveRuntimeConfig, run_live_workflow
+from ..backends.mujoco.lifecycle import resume_physics
 from ..core.domain import RunMode, RunRequest, RunStatus, State
 from ..core.runner import FileCheckpointStore, StateMachineRunner, dry_run_actions
 
@@ -94,7 +95,8 @@ def main(arguments: list[str] | None = None) -> int:
                 evidence_root=options.evidence_root,
                 motion_policy=options.motion_policy,
                 contact_policy=options.contact_policy,
-            )
+            ),
+            resume=resume_physics,
         )
         if result.success:
             print("status=DONE")

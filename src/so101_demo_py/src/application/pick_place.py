@@ -7,7 +7,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -100,7 +99,7 @@ def build_phase_specs(
             (
                 python,
                 "-m",
-                "so101_demo.application.staged_approach",
+                "so101_demo.backends.mujoco.qualified_phases.staged_approach",
                 "--policy",
                 str(config.motion_policy),
                 "--mode",
@@ -125,7 +124,7 @@ def build_phase_specs(
                 (
                     python,
                     "-m",
-                    f"so101_demo.application.phases.{phase}",
+                    f"so101_demo.backends.mujoco.qualified_phases.{phase}",
                 ),
                 evidence_root / f"{file_stem}.json",
                 _EXPECTED_STATUS[phase],
@@ -163,29 +162,6 @@ def _default_command_runner(
             check=False,
         )
     return int(completed.returncode)
-
-
-def _default_resume(config: LiveRuntimeConfig) -> bool:
-    import rclpy
-    from mujoco_ros2_control_msgs.srv import SetPause
-
-    rclpy.init()
-    node = rclpy.create_node("so101_live_runtime_resume")
-    try:
-        client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
-        if not client.wait_for_service(timeout_sec=5.0):
-            return False
-        request = SetPause.Request()
-        request.paused = False
-        future = client.call_async(request)
-        deadline = time.monotonic() + 5.0
-        while not future.done() and time.monotonic() < deadline:
-            rclpy.spin_once(node, timeout_sec=0.01)
-        response = future.result() if future.done() else None
-        return bool(response is not None and response.success)
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
 
 
 def _reset_epochs(value: object) -> set[int]:
@@ -424,7 +400,7 @@ def _atomic_manifest(path: Path, document: Mapping[str, object]) -> None:
 def run_live_workflow(
     config: LiveRuntimeConfig,
     *,
-    resume: Resume = _default_resume,
+    resume: Resume,
     command_runner: CommandRunner = _default_command_runner,
 ) -> LiveRuntimeResult:
     config.evidence_root.mkdir(parents=True, exist_ok=True)
