@@ -238,6 +238,53 @@ def test_pre_workflow_backend_failure_is_invalid(tmp_path) -> None:
         runner._post_command(handle, "/simulation/reset", "lease")
 
 
+def test_workflow_runtime_configuration_failure_is_invalid(tmp_path) -> None:
+    runner = ProductionQualificationRunner(evidence_root=tmp_path, fingerprint=FINGERPRINT)
+    responses = iter(
+        [
+            {"http": 200, "response": {"mode": "READY"}},
+            {"http": 200, "response": {"backend": "mujoco_py"}},
+            {"http": 200, "response": {"succeeded": True, "layers": {"lease_id": "one"}}},
+            {"http": 200, "response": {"succeeded": True}},
+            {
+                "http": 200,
+                "response": {
+                    "succeeded": True,
+                    "data": {
+                        "reset": {
+                            "simulation_session_id": "session",
+                            "simulation_step": 0,
+                            "old_epoch": 0,
+                            "new_epoch": 1,
+                        }
+                    },
+                },
+            },
+            {"http": 200, "response": {"succeeded": True, "layers": {"lease_id": "two"}}},
+            {
+                "http": 503,
+                "response": {
+                    "succeeded": False,
+                    "code": "BACKEND_OPERATION_FAILED",
+                    "layers": {"owner_failure_code": "LIVE_RUNTIME_CONFIG_REQUIRED"},
+                },
+            },
+        ]
+    )
+    runner._request = lambda *_args, **_kwargs: next(responses)
+    handle = StackHandle(
+        process=None,  # type: ignore[arg-type]
+        process_group_id=123,
+        log_path=tmp_path / "launch.log",
+        environment={},
+        base_url="http://127.0.0.1:1",
+        session_id="session",
+    )
+
+    with pytest.raises(InvalidRun, match="LIVE_RUNTIME_CONFIG_REQUIRED"):
+        runner.execute_workflow(handle, experiment_id="EXP", run_root=tmp_path)
+
+
 class ExitedProcess:
     returncode = 0
 

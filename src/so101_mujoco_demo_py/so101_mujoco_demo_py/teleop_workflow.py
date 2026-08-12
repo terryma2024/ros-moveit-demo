@@ -106,6 +106,8 @@ def production_arguments(
         str(evidence_root),
         "--motion-policy",
         str(package_share / "config/motion_policies/light_cup_wall_pick.yaml"),
+        "--contact-policy",
+        str(package_share / "config/contact_calibration.yaml"),
     ]
 
 

@@ -41,6 +41,16 @@ REQUIRED_PHASES = (
     "place_alignment",
     "release_retreat",
 )
+INVALID_WORKFLOW_FAILURE_CODES = frozenset(
+    {
+        "CONTACT_POLICY_NOT_APPROVED",
+        "EXPLICIT_EXECUTE_REQUIRED",
+        "LIVE_RUNTIME_CONFIG_REQUIRED",
+        "POLICY_FINGERPRINT_MISMATCH",
+        "STALE_OR_MISMATCHED_MUJOCO_EVIDENCE",
+        "TELEOP_WORKFLOW_EVIDENCE_INVALID",
+    }
+)
 
 
 class Lifecycle(StrEnum):
@@ -389,6 +399,9 @@ class ProductionQualificationRunner:
             "artifact_paths": {"actions": str(actions_path)},
         }
         if workflow.get("http") != 200 or not workflow["response"].get("succeeded", False):
+            owner_failure = workflow["response"].get("layers", {}).get("owner_failure_code")
+            if owner_failure in INVALID_WORKFLOW_FAILURE_CODES:
+                raise InvalidRun(f"workflow owner configuration failed: {owner_failure}")
             return {
                 **base_record,
                 "status": RunStatus.VALID_FAILURE.value,
