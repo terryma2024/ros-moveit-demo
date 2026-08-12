@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - A bounded MoveIt translation along the q6 moving-pad tangent can produce repeatable physical left_only evidence without changing geometry or simulator state.
 latest_checkpoint: MNT-CP-008
-next_experiment: EXP-062
+next_experiment: EXP-066
 ```
 
 ## Checkpoint MNT-CP-001
@@ -949,4 +949,41 @@ EXP-062:
     simulation_session_id: so101-mnt-align-001
     driver_sha256: 5a13574de22bbb7074be8b2f2c44881ab3ce5f6b9a7a72c4c77768926f673d32
   decision: PENDING before qualified reset epoch 11 to 12.
+```
+
+## Experiment EXP-062 success and exact-offset repeatability preregistration
+
+```yaml
+EXP-062:
+  status: VALID
+  behavioral_result: SUCCESS
+  lifecycle: RESET_WORLD_EPOCH_12
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0021 m with q6 step 0.00002 rad.
+  observed:
+    - Qualified reset 11 to 12, resume, and staged approach passed.
+    - GetCartesianPath returned SUCCESS, fraction=1.0, 8 trajectory points; ExecuteTrajectory and all monitors passed.
+    - Requested -0.0021 m produced projected TCP delta -0.0021818203 m with 0.0001714014 m orthogonal error.
+    - The first fine q6 step after coarse close produced physical left_only: left_count=1, left_force=0.0843368 N, right_count=0, maximum_force=0.179571 N.
+    - Total cup displacement was 0.00340763 m, below the 0.010 m terminal limit; the separately monitored pre-contact displacement stayed below 0.003 m.
+  conclusion: A physical left_only regime exists at the approved -2.1 mm Cartesian offset without model/state writes or hidden constraints.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-reset-EXP-062.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-062.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-062.log
+  decision: KEEP exact candidate; abandon unrun EXP-063 through EXP-065 per early stop and verify repeatability before calibration use.
+repeatability_batch:
+  status: PLANNED
+  prior_experiment: EXP-062
+  ordered_experiments: [EXP-066, EXP-067, EXP-068]
+  lifecycle: RESET_WORLD for every run.
+  single_variable: NONE; exact -0.0021 m offset, q6 step, driver hash, source, overlay, model, scene, and safety contract frozen.
+  success_contract: Three consecutive VALID trials each return complete Cartesian execution and physical left_force >=0.08 N with zero right contact.
+  invalid_contract: Any lifecycle/provenance/fraction/controller/convergence/safety failure stops and invalidates the batch; a valid right/bilateral-first result ends the streak.
+  frozen_driver_sha256: 5a13574de22bbb7074be8b2f2c44881ab3ce5f6b9a7a72c4c77768926f673d32
+EXP-066:
+  status: RUNNING
+  prior_experiment: EXP-062
+  lifecycle: RESET_WORLD
+  single_variable: NONE
+  decision: PENDING before qualified reset epoch 12 to 13.
 ```
