@@ -204,6 +204,22 @@ def test_failure_precedence_is_independent_of_fixture_order() -> None:
     assert result.failure_code == "GRASP_LEFT_CONTACT_MISSING"
 
 
+@pytest.mark.parametrize(
+    ("fault_injection", "expected_code"),
+    (
+        ({"right_force_n": None}, "GRASP_RIGHT_CONTACT_MISSING"),
+        ({"left_force_n": None}, "GRASP_LEFT_CONTACT_MISSING"),
+    ),
+)
+def test_unilateral_fault_injection_can_never_prove_stable_grasp(
+    fault_injection: dict[str, float | None], expected_code: str
+) -> None:
+    result = evaluate(five_bilateral_samples(**fault_injection))
+
+    assert result.success is False
+    assert result.failure_code == expected_code
+
+
 def test_rejects_latest_receipt_older_than_policy_age() -> None:
     result = evaluate_grasp(
         samples=five_bilateral_samples(),

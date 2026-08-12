@@ -21,9 +21,18 @@ from so101_mujoco_demo_py.contact_policy import (
     ApprovalRecord,
     approve_proposal,
     proposal_sha256,
+    validate_unilateral_rejection_contracts,
 )
 
-REGIMES = (
+PHYSICAL_REGIMES = (
+    "no_contact",
+    "bilateral_touch",
+    "over_compression",
+    "micro_lift_slip",
+    "stable_hold",
+)
+UNILATERAL_REGIMES = ("left_only", "right_only")
+CLASSIFICATION_LABELS = (
     "no_contact",
     "left_only",
     "right_only",
@@ -32,6 +41,8 @@ REGIMES = (
     "micro_lift_slip",
     "stable_hold",
 )
+# Archived schema-v1/v2 evidence used all seven labels as physical cohorts.
+REGIMES = CLASSIFICATION_LABELS
 REQUIRED_UNITS = {
     "signed_distance": "m",
     "normal_force": "N",
@@ -194,7 +205,7 @@ def validate_evidence(evidence_value: Any) -> dict[str, Any]:
     """Validate a complete, single-provenance raw calibration matrix."""
     evidence = _mapping(evidence_value, "evidence")
     schema_version = evidence.get("schema_version")
-    if schema_version not in {1, 2}:
+    if schema_version not in {1, 2, 3}:
         raise ValueError("unsupported schema_version")
     _validate_units(evidence.get("units"))
     legacy_fingerprint: dict[str, str] | None = None
@@ -224,12 +235,23 @@ def validate_evidence(evidence_value: Any) -> dict[str, Any]:
             for field in (*COMMIT_FIELDS, *V2_HASH_FIELDS)
         }
     regimes = _mapping(evidence.get("regimes"), "regimes")
-    if set(regimes) != set(REGIMES):
-        missing = sorted(set(REGIMES) - set(regimes))
+    required_regimes = PHYSICAL_REGIMES if schema_version == 3 else REGIMES
+    if set(regimes) != set(required_regimes):
+        missing = sorted(set(required_regimes) - set(regimes))
+        if schema_version == 3:
+            raise ValueError(
+                f"schema-v3 physical regimes must be exactly {list(PHYSICAL_REGIMES)}; "
+                f"missing={missing}"
+            )
         raise ValueError(f"missing regimes: {missing}")
+    unilateral_contracts = None
+    if schema_version == 3:
+        unilateral_contracts = validate_unilateral_rejection_contracts(
+            evidence.get("unilateral_rejection_contracts")
+        )
 
     samples: list[dict[str, Any]] = []
-    for regime in REGIMES:
+    for regime in required_regimes:
         regime_samples = _list(regimes[regime], regime)
         if len(regime_samples) < 20:
             raise ValueError(f"{regime} requires at least 20 valid samples")
@@ -261,6 +283,8 @@ def validate_evidence(evidence_value: Any) -> dict[str, Any]:
     normalized = copy.deepcopy(evidence)
     normalized["normalized_fingerprint"] = normalized_fingerprint
     normalized["source_schema_version"] = schema_version
+    if unilateral_contracts is not None:
+        normalized["unilateral_rejection_contracts"] = unilateral_contracts
     return normalized
 
 
@@ -307,7 +331,10 @@ def _thresholds(
     metrics = {
         name: [sample_metrics(sample) for sample in samples] for name, samples in regimes.items()
     }
-    unilateral = _flatten(metrics, ("no_contact", "left_only", "right_only"))
+    negative_names = tuple(
+        name for name in ("no_contact", "left_only", "right_only") if name in metrics
+    )
+    unilateral = _flatten(metrics, negative_names)
     bilateral = _flatten(
         metrics,
         ("bilateral_touch", "over_compression", "micro_lift_slip", "stable_hold"),
@@ -385,7 +412,7 @@ def classify(sample: dict[str, Any], thresholds: dict[str, float]) -> str:
 
 def _summaries(regimes: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str, Any]]:
     summaries: dict[str, dict[str, Any]] = {}
-    for regime in REGIMES:
+    for regime in regimes:
         values = [sample_metrics(sample) for sample in regimes[regime]]
         summaries[regime] = {
             "sample_count": len(values),
@@ -401,9 +428,10 @@ def _summaries(regimes: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str, 
 
 
 def validate_policy(policy_value: Any) -> dict[str, Any]:
-    """Validate a schema-v2 template, disabled proposal, or approved policy."""
+    """Validate a schema-v2/v3 template, disabled proposal, or approved policy."""
     policy = _mapping(policy_value, "policy")
-    if policy.get("schema_version") != 2:
+    schema_version = policy.get("schema_version")
+    if schema_version not in {2, 3}:
         raise ValueError("unsupported schema_version")
     if policy.get("policy_id") != "light_cup_wall_pick-contact":
         raise ValueError("unsupported policy_id")
@@ -436,21 +464,24 @@ def validate_policy(policy_value: Any) -> dict[str, Any]:
     allowed = _list(policy.get("allowed_other_contact_bodies"), "allowed_other_contact_bodies")
     if any(not isinstance(item, str) or not item for item in allowed):
         raise ValueError("allowed_other_contact_bodies must contain non-empty strings")
+    policy_regimes = PHYSICAL_REGIMES if schema_version == 3 else REGIMES
     regimes = _mapping(policy.get("regimes"), "regimes")
-    if set(regimes) != set(REGIMES):
+    if set(regimes) != set(policy_regimes):
         raise ValueError("policy must contain every calibration regime")
-    for regime in REGIMES:
+    for regime in policy_regimes:
         summary = _mapping(regimes[regime], regime)
         _integer(summary.get("sample_count"), f"{regime}.sample_count")
         quantiles = _mapping(summary.get("quantiles"), f"{regime}.quantiles")
         if set(quantiles) != {"p05", "p50", "p95"}:
             raise ValueError(f"{regime} quantiles must contain p05, p50, and p95")
+    if schema_version == 3:
+        validate_unilateral_rejection_contracts(policy.get("unilateral_rejection_contracts"))
     matrix = _mapping(policy.get("misclassification_matrix"), "confusion matrix")
-    if set(matrix) != set(REGIMES):
+    if set(matrix) != set(policy_regimes):
         raise ValueError("confusion matrix must contain every actual regime")
-    for actual in REGIMES:
+    for actual in policy_regimes:
         row = _mapping(matrix[actual], f"confusion matrix row {actual}")
-        if set(row) != set(REGIMES):
+        if set(row) != set(CLASSIFICATION_LABELS):
             raise ValueError(f"confusion matrix row {actual} has empty cells")
         for predicted, count in row.items():
             _integer(count, f"confusion matrix {actual}/{predicted}")
@@ -470,7 +501,7 @@ def validate_policy(policy_value: Any) -> dict[str, Any]:
     if status == "VALID":
         if source_hash is None:
             raise ValueError("VALID policy requires source_evidence_sha256")
-        if any(regimes[name]["sample_count"] < 20 for name in REGIMES):
+        if any(regimes[name]["sample_count"] < 20 for name in policy_regimes):
             raise ValueError("VALID policy requires at least 20 samples per regime")
         if any(
             isinstance(value, bool)
@@ -533,17 +564,21 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
     """Analyze raw JSON evidence and return a disabled proposal."""
     evidence = validate_evidence(json.loads(raw))
     all_regimes = evidence["regimes"]
+    analyzed_regimes = PHYSICAL_REGIMES if evidence["source_schema_version"] == 3 else REGIMES
     calibration = {
         name: [sample for sample in all_regimes[name] if sample["publisher_sequence"] % 5]
-        for name in REGIMES
+        for name in analyzed_regimes
     }
     evaluation = {
         name: [sample for sample in all_regimes[name] if sample["publisher_sequence"] % 5 == 0]
-        for name in REGIMES
+        for name in analyzed_regimes
     }
-    matrix = {actual: {predicted: 0 for predicted in REGIMES} for actual in REGIMES}
+    matrix = {
+        actual: {predicted: 0 for predicted in CLASSIFICATION_LABELS} for actual in analyzed_regimes
+    }
+    proposal_schema_version = 3 if evidence["source_schema_version"] == 3 else 2
     proposal: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": proposal_schema_version,
         "policy_id": "light_cup_wall_pick-contact",
         "source_schema_version": evidence["source_schema_version"],
         "calibration_status": "FAILED",
@@ -576,6 +611,10 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
             "proposal_sha256": None,
         },
     }
+    if proposal_schema_version == 3:
+        proposal["unilateral_rejection_contracts"] = copy.deepcopy(
+            evidence["unilateral_rejection_contracts"]
+        )
     try:
         thresholds, margins = _thresholds(calibration)
     except ValueError as error:
@@ -593,7 +632,7 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
     proposal["thresholds"] = thresholds
     proposal["safety_margins"] = margins
     errors = 0
-    for actual in REGIMES:
+    for actual in analyzed_regimes:
         for sample in evaluation[actual]:
             predicted = classify(sample, thresholds)
             matrix[actual][predicted] += 1

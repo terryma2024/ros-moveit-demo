@@ -13,16 +13,16 @@ from so101_mujoco_demo_py.contact_policy import proposal_sha256
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 CONFIG = PACKAGE_ROOT / "config/contact_calibration.yaml"
 ANALYZER = PACKAGE_ROOT / "scripts/analyze_contact_calibration.py"
-REGIMES = {
+PHYSICAL_REGIMES = {
     "no_contact",
-    "left_only",
-    "right_only",
     "bilateral_touch",
     "over_compression",
     "micro_lift_slip",
     "stable_hold",
 }
-ORDERED_REGIMES = tuple(sorted(REGIMES))
+UNILATERAL_REGIMES = {"left_only", "right_only"}
+CLASSIFICATION_LABELS = PHYSICAL_REGIMES | UNILATERAL_REGIMES
+ORDERED_REGIMES = tuple(sorted(CLASSIFICATION_LABELS))
 SOURCE_COMMIT = "1" * 40
 DEPENDENCY_COMMIT = "2" * 40
 MODEL_SHA256 = "a" * 64
@@ -148,6 +148,46 @@ def complete_evidence(*, overlapping: bool = False, schema_version: int = 2) -> 
     return common
 
 
+def unilateral_contracts() -> dict:
+    return {
+        "left_only": {
+            "stable_grasp_allowed": False,
+            "expected_failure_code": "GRASP_RIGHT_CONTACT_MISSING",
+            "physical_evidence": {
+                "disposition": "physical_unreachable",
+                "references": [
+                    {"experiment_id": "EXP-062", "artifact_sha256": "6" * 64},
+                    {"experiment_id": "EXP-066", "artifact_sha256": "7" * 64},
+                ],
+            },
+            "physical_calibration_sample_count": None,
+            "physical_evaluation_sample_count": None,
+            "physical_misclassification_rate": None,
+        },
+        "right_only": {
+            "stable_grasp_allowed": False,
+            "expected_failure_code": "GRASP_LEFT_CONTACT_MISSING",
+            "physical_evidence": {
+                "disposition": "observed",
+                "references": [
+                    {"experiment_id": "EXP-072", "artifact_sha256": "8" * 64},
+                ],
+            },
+            "physical_calibration_sample_count": None,
+            "physical_evaluation_sample_count": None,
+            "physical_misclassification_rate": None,
+        },
+    }
+
+
+def schema_v3_evidence(*, overlapping: bool = False) -> dict:
+    evidence = complete_evidence(overlapping=overlapping)
+    evidence["schema_version"] = 3
+    evidence["regimes"] = {name: evidence["regimes"][name] for name in sorted(PHYSICAL_REGIMES)}
+    evidence["unilateral_rejection_contracts"] = unilateral_contracts()
+    return evidence
+
+
 def run_analyzer(tmp_path: Path, evidence: dict) -> tuple[subprocess.CompletedProcess[str], Path]:
     tmp_path.mkdir(parents=True, exist_ok=True)
     source = tmp_path / "evidence.json"
@@ -162,10 +202,10 @@ def run_analyzer(tmp_path: Path, evidence: dict) -> tuple[subprocess.CompletedPr
     return result, output
 
 
-def test_checked_in_policy_is_schema_v2_planned_and_disabled() -> None:
+def test_checked_in_policy_is_schema_v3_planned_and_disabled() -> None:
     policy = load_policy()
 
-    assert policy["schema_version"] == 2
+    assert policy["schema_version"] == 3
     assert policy["policy_id"] == "light_cup_wall_pick-contact"
     assert policy["calibration_status"] == "PLANNED"
     assert policy["approval"] == {
@@ -179,7 +219,8 @@ def test_checked_in_policy_is_schema_v2_planned_and_disabled() -> None:
         "maximum_observation_age_s": 0.10,
         "minimum_consecutive_samples": 5,
     }
-    assert set(policy["regimes"]) == REGIMES
+    assert set(policy["regimes"]) == PHYSICAL_REGIMES
+    assert set(policy["unilateral_rejection_contracts"]) == UNILATERAL_REGIMES
     assert len(policy["fingerprint"]["source_commit"]) == 40
     assert len(policy["fingerprint"]["dependency_commit"]) == 40
     for field in ("model_sha256", "scene_sha256", "motion_policy_sha256"):
@@ -187,6 +228,33 @@ def test_checked_in_policy_is_schema_v2_planned_and_disabled() -> None:
         assert set(policy["fingerprint"][field]) != {"0"}
     assert policy["fingerprint"]["source_evidence_sha256"] is None
     assert all(value is None for value in policy["thresholds"].values())
+
+
+def test_analyzer_accepts_schema_v3_five_physical_regimes_and_contracts(
+    tmp_path: Path,
+) -> None:
+    result, output = run_analyzer(tmp_path, schema_v3_evidence())
+
+    assert result.returncode == 0, result.stderr
+    proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert proposal["schema_version"] == 3
+    assert proposal["source_schema_version"] == 3
+    assert set(proposal["regimes"]) == PHYSICAL_REGIMES
+    assert set(proposal["misclassification_matrix"]) == PHYSICAL_REGIMES
+    assert all(
+        set(proposal["misclassification_matrix"][actual]) == CLASSIFICATION_LABELS
+        for actual in PHYSICAL_REGIMES
+    )
+    assert proposal["calibration_sample_count"] == 100
+    assert proposal["evaluation_sample_count"] == 25
+    assert proposal["false_positive_count"] == 0
+    assert proposal["false_negative_count"] == 0
+    assert proposal["unilateral_rejection_contracts"] == unilateral_contracts()
+    for contract in proposal["unilateral_rejection_contracts"].values():
+        assert contract["stable_grasp_allowed"] is False
+        assert contract["physical_calibration_sample_count"] is None
+        assert contract["physical_evaluation_sample_count"] is None
+        assert contract["physical_misclassification_rate"] is None
 
 
 @pytest.mark.parametrize("schema_version", (1, 2))
@@ -245,6 +313,46 @@ def test_table_support_force_does_not_define_bilateral_fingertip_threshold(
     assert result.returncode == 0, result.stderr
     proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
     assert 0.22 < proposal["thresholds"]["minimum_bilateral_force_n"] < 1.0
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    (
+        (
+            lambda item: item["unilateral_rejection_contracts"]["left_only"].update(
+                physical_misclassification_rate=0.0
+            ),
+            "null",
+        ),
+        (
+            lambda item: item["unilateral_rejection_contracts"]["right_only"][
+                "physical_evidence"
+            ].update(disposition="missing"),
+            "disposition",
+        ),
+        (
+            lambda item: item["unilateral_rejection_contracts"]["left_only"][
+                "physical_evidence"
+            ].update(references=[]),
+            "reference",
+        ),
+        (
+            lambda item: item["regimes"].update(left_only=[]),
+            "physical regimes",
+        ),
+    ),
+)
+def test_schema_v3_rejects_fabricated_or_unbound_unilateral_statistics(
+    tmp_path: Path, mutate, message: str
+) -> None:
+    evidence = schema_v3_evidence()
+    mutate(evidence)
+
+    result, output = run_analyzer(tmp_path, evidence)
+
+    assert result.returncode != 0
+    assert message in result.stderr.lower()
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(

@@ -188,6 +188,9 @@ def implementation_files(
         logical_path = logical_directory / entry.name
         if logical_path == implementation_root / "test" or implementation_root / "test" in logical_path.parents:
             continue
+        pytest_cache = implementation_root / ".pytest_cache"
+        if logical_path == pytest_cache or pytest_cache in logical_path.parents:
+            continue
         physical_path = Path(entry.path)
         try:
             metadata = physical_path.lstat()

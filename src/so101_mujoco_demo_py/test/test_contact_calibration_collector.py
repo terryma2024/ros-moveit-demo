@@ -10,12 +10,14 @@ import pytest
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE_ROOT))
 
+from so101_mujoco_demo_py.contact_calibration import PHYSICAL_REGIMES  # noqa: E402
 from so101_mujoco_demo_py.contact_calibration_collector import (  # noqa: E402
     CalibrationReadinessPending,
     CollectionAborted,
     CollectionRequest,
     ContactCalibrationCollector,
     RobotCalibrationState,
+    _argument_parser,
 )
 from so101_mujoco_demo_py.simulation.types import (  # noqa: E402
     ContactEvidence,
@@ -128,6 +130,33 @@ def robot_state() -> RobotCalibrationState:
     )
 
 
+def unilateral_contracts() -> dict:
+    return {
+        "left_only": {
+            "stable_grasp_allowed": False,
+            "expected_failure_code": "GRASP_RIGHT_CONTACT_MISSING",
+            "physical_evidence": {
+                "disposition": "physical_unreachable",
+                "references": [{"experiment_id": "EXP-062", "artifact_sha256": "6" * 64}],
+            },
+            "physical_calibration_sample_count": None,
+            "physical_evaluation_sample_count": None,
+            "physical_misclassification_rate": None,
+        },
+        "right_only": {
+            "stable_grasp_allowed": False,
+            "expected_failure_code": "GRASP_LEFT_CONTACT_MISSING",
+            "physical_evidence": {
+                "disposition": "observed",
+                "references": [{"experiment_id": "EXP-072", "artifact_sha256": "8" * 64}],
+            },
+            "physical_calibration_sample_count": None,
+            "physical_evaluation_sample_count": None,
+            "physical_misclassification_rate": None,
+        },
+    }
+
+
 def request(tmp_path: Path, **changes) -> CollectionRequest:
     values = {
         "regime": "bilateral_touch",
@@ -140,6 +169,7 @@ def request(tmp_path: Path, **changes) -> CollectionRequest:
         "model_sha256": "a" * 64,
         "scene_sha256": "b" * 64,
         "motion_policy_sha256": "c" * 64,
+        "unilateral_rejection_contracts": unilateral_contracts(),
         "reference_object_position_m": (0.2, 0.0, 0.03),
     }
     values.update(changes)
@@ -170,7 +200,7 @@ def test_collector_writes_exact_bounded_count_with_atomic_replacement(tmp_path: 
 
     document = json.loads(output.read_text(encoding="utf-8"))
     assert result["status"] == "VALID"
-    assert document["schema_version"] == 2
+    assert document["schema_version"] == 3
     assert document["fingerprint"] == {
         "source_commit": "1" * 40,
         "dependency_commit": "2" * 40,
@@ -178,6 +208,8 @@ def test_collector_writes_exact_bounded_count_with_atomic_replacement(tmp_path: 
         "scene_sha256": "b" * 64,
         "motion_policy_sha256": "c" * 64,
     }
+    assert document["unilateral_rejection_contracts"] == unilateral_contracts()
+    assert set(document["regimes"]) == set(PHYSICAL_REGIMES)
     assert len(document["regimes"]["bilateral_touch"]) == 3
     assert [sample["publisher_sequence"] for sample in document["regimes"]["bilateral_touch"]] == [
         1,
@@ -185,6 +217,24 @@ def test_collector_writes_exact_bounded_count_with_atomic_replacement(tmp_path: 
         3,
     ]
     assert not list(tmp_path.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("regime", ("left_only", "right_only"))
+def test_collector_rejects_unilateral_contract_labels_before_observation(
+    tmp_path: Path, regime: str
+) -> None:
+    with pytest.raises(ValueError, match="unsupported calibration regime"):
+        request(tmp_path, regime=regime)
+
+
+def test_collector_cli_exposes_only_five_physical_regimes() -> None:
+    action = next(action for action in _argument_parser()._actions if action.dest == "regime")
+
+    assert set(action.choices) == set(PHYSICAL_REGIMES)
+    contracts = next(
+        action for action in _argument_parser()._actions if action.dest == "unilateral_contracts"
+    )
+    assert contracts.required is True
 
 
 def test_collector_waits_for_first_atomic_evidence_within_bounded_deadline(
@@ -276,7 +326,7 @@ def test_collection_request_rejects_placeholder_or_malformed_identity(
         request(tmp_path, **{field: value})
 
 
-def test_collector_rejects_existing_v2_matrix_fingerprint_drift(tmp_path: Path) -> None:
+def test_collector_rejects_existing_v3_matrix_fingerprint_drift(tmp_path: Path) -> None:
     first = collector([received(evidence(1))])
     first.collect(request(tmp_path, sample_count=1))
 
@@ -338,6 +388,47 @@ def test_collector_aborts_on_diagnostic_safety_boundaries(tmp_path: Path) -> Non
     hazardous = evidence(2, force_n=11.61)
     with pytest.raises(CollectionAborted, match="force"):
         collector([received(hazardous)]).collect(request(tmp_path))
+
+
+def test_pre_contact_and_terminal_total_displacement_use_independent_limits(
+    tmp_path: Path,
+) -> None:
+    four_mm = evidence(
+        1,
+        left=False,
+        right=False,
+        position=(0.204, 0.0, 0.03),
+    )
+    accepted = collector([received(four_mm)]).collect(
+        request(tmp_path, regime="no_contact", sample_count=1, pre_contact=False)
+    )
+    assert accepted["status"] == "VALID"
+
+    with pytest.raises(CollectionAborted, match="pre-contact"):
+        collector([received(four_mm)]).collect(
+            request(
+                tmp_path / "pre-contact",
+                regime="no_contact",
+                sample_count=1,
+                pre_contact=True,
+            )
+        )
+
+    eleven_mm = evidence(
+        2,
+        left=False,
+        right=False,
+        position=(0.211, 0.0, 0.03),
+    )
+    with pytest.raises(CollectionAborted, match="terminal total"):
+        collector([received(eleven_mm)]).collect(
+            request(
+                tmp_path / "terminal-total",
+                regime="no_contact",
+                sample_count=1,
+                pre_contact=False,
+            )
+        )
 
 
 def test_collector_cancellation_preserves_partial_metadata(tmp_path: Path) -> None:

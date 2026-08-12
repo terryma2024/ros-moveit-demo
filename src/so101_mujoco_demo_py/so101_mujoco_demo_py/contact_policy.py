@@ -35,6 +35,20 @@ _FINGERPRINT_KEYS = frozenset(
     }
 )
 _APPROVAL_KEYS = frozenset({"enabled", "approved", "approved_by", "approved_at", "proposal_sha256"})
+_UNILATERAL_CONTRACT_KEYS = frozenset(
+    {
+        "stable_grasp_allowed",
+        "expected_failure_code",
+        "physical_evidence",
+        "physical_calibration_sample_count",
+        "physical_evaluation_sample_count",
+        "physical_misclassification_rate",
+    }
+)
+_UNILATERAL_FAILURE_CODES = {
+    "left_only": "GRASP_RIGHT_CONTACT_MISSING",
+    "right_only": "GRASP_LEFT_CONTACT_MISSING",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +156,48 @@ def _timestamp(value: object) -> str:
     return result
 
 
+def validate_unilateral_rejection_contracts(value: object) -> dict[str, object]:
+    """Validate evidence-bound unilateral contracts as non-statistical metadata."""
+
+    source = _mapping(value, "unilateral_rejection_contracts")
+    _exact_keys(source, frozenset(_UNILATERAL_FAILURE_CODES), "unilateral contract")
+    for regime, expected_code in _UNILATERAL_FAILURE_CODES.items():
+        contract = _mapping(source[regime], f"{regime} contract")
+        _exact_keys(contract, _UNILATERAL_CONTRACT_KEYS, f"{regime} contract")
+        if contract["stable_grasp_allowed"] is not False:
+            raise ValueError(f"{regime}.stable_grasp_allowed must be false")
+        if contract["expected_failure_code"] != expected_code:
+            raise ValueError(f"{regime}.expected_failure_code is invalid")
+        for field in (
+            "physical_calibration_sample_count",
+            "physical_evaluation_sample_count",
+            "physical_misclassification_rate",
+        ):
+            if contract[field] is not None:
+                raise ValueError(f"{regime}.{field} must be null for a non-statistical contract")
+        physical = _mapping(contract["physical_evidence"], f"{regime}.physical_evidence")
+        _exact_keys(
+            physical,
+            frozenset({"disposition", "references"}),
+            f"{regime}.physical_evidence",
+        )
+        if physical["disposition"] not in {"observed", "physical_unreachable"}:
+            raise ValueError(f"{regime}.physical_evidence disposition is invalid")
+        references = physical["references"]
+        if not isinstance(references, list) or not references:
+            raise ValueError(f"{regime}.physical_evidence requires an authentic reference")
+        for index, reference_value in enumerate(references):
+            reference = _mapping(reference_value, f"{regime} reference {index}")
+            _exact_keys(
+                reference,
+                frozenset({"experiment_id", "artifact_sha256"}),
+                f"{regime} reference {index}",
+            )
+            _nonempty_string(reference["experiment_id"], f"{regime} reference experiment_id")
+            _identifier(reference["artifact_sha256"], f"{regime} artifact_sha256", 64)
+    return copy.deepcopy(dict(source))
+
+
 def proposal_sha256(document: Mapping[str, object]) -> str:
     """Hash every proposal field except activation/approval metadata."""
 
@@ -247,11 +303,14 @@ def _validate_proposal_content(
     ContactEvaluationPolicy,
     frozenset[str],
 ]:
-    if document.get("schema_version") != 2:
-        raise ValueError("contact policy schema_version must be 2")
+    schema_version = document.get("schema_version")
+    if schema_version not in {2, 3}:
+        raise ValueError("contact policy schema_version must be 2 or 3")
     _nonempty_string(document.get("policy_id"), "policy_id")
     if document.get("calibration_status") != "VALID":
         raise ValueError("approved contact policy requires calibration_status VALID")
+    if schema_version == 3:
+        validate_unilateral_rejection_contracts(document.get("unilateral_rejection_contracts"))
     return (
         _fingerprint(document),
         _thresholds(document),
