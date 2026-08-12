@@ -13,7 +13,7 @@ base_commit: 8d85205286d2635d4ddbc91431c933dafb4eb661
 current_commit: 60b89d76df7b1d451a0c2633f0cf3f148497338b
 last_verified_implementation_commit: 60b89d76df7b1d451a0c2633f0cf3f148497338b
 ledger_commit_pending: true
-task_status: TASK_15_QUALIFICATION_RUNNER_PENDING
+task_status: TASK_15_QUALIFICATION_RUNNER_PENDING_COMMIT
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -12396,4 +12396,29 @@ post_rebase_teleop_experiment: EXP-152
 post_rebase_teleop_status: VALID
 protected_gazebo_diff: zero
 decision: Task 15 is unblocked. Its two qualification series must freeze a commit that includes the qualification runner and must not count EXP-152.
+```
+
+## Task 15.1 Qualification Runner Gate
+
+```yaml
+recorded_at: 2026-08-12T09:03:00+08:00
+status: VALID
+implementation:
+  module: src/so101_mujoco_demo_py/so101_mujoco_demo_py/qualification.py
+  script: src/so101_mujoco_demo_py/scripts/run_qualification.py
+  console_entry: ros2 run so101_mujoco_demo_py run_qualification
+contracts:
+  lifecycle_isolation: [FULL_RESTART, RESET_WORLD]
+  hidden_retries: forbidden
+  threshold_mutation: forbidden
+  invalid_batch_termination: enforced
+  valid_failure_consecutive_reset: enforced
+  evidence_location: outside_repository
+gates:
+  qualification_contract: {passed: 12, failed: 0}
+  mujoco_package: {passed: 363, skipped: 4, failed: 0}
+  ruff: {checked_files: 109, formatted: 109, exit_code: 0}
+  package_build: passed
+  installed_console_entry: passed
+decision: Commit the runner, then freeze the resulting commit and exact model/config/policy hashes before registering either five-run series.
 ```

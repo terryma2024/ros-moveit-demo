@@ -444,10 +444,10 @@ feat(so101_mujoco): integrate refactored teleop runtime
 
 **Contract:** the runner never hides retries or changes thresholds. It accepts the frozen post-rebase, Teleop-integrated fingerprint, runs one lifecycle at a time through the same production entry point, resets the consecutive-success count on any valid failure, invalidates a contaminated batch, and records complete per-run provenance/evidence.
 
-- [ ] Write RED tests for exact count, reset-on-failure, invalid-run batch termination, mixed commit/model/config/policy rejection, duplicate session ID, non-incrementing reset epoch, missing clean-shutdown result, missing physical evidence, and truncated artifact hashes.
-- [ ] Implement one-run execution by invoking the production live entry point, not a qualification-only shortcut.
-- [ ] Emit a machine-readable manifest containing per run: experiment ID, lifecycle, source/dependency/model/config/policy hashes, session ID, reset epoch, ROS graph, MoveIt/controller results, grasp/micro-lift/transport/release/final summaries, exit codes, shutdown status, and artifact hashes.
-- [ ] Install `run_qualification` as a console entry point and keep evidence outside the repository.
+- [x] Write RED tests for exact count, reset-on-failure, invalid-run batch termination, mixed commit/model/config/policy rejection, duplicate session ID, non-incrementing reset epoch, missing clean-shutdown result, missing physical evidence, and truncated artifact hashes.
+- [x] Implement one-run execution by invoking the production live entry point, not a qualification-only shortcut.
+- [x] Emit a machine-readable manifest containing per run: experiment ID, lifecycle, source/dependency/model/config/policy hashes, session ID, reset epoch, ROS graph, MoveIt/controller results, grasp/micro-lift/transport/release/final summaries, exit codes, shutdown status, and artifact hashes.
+- [x] Install `run_qualification` as a console entry point and keep evidence outside the repository.
 
 ### Task 15.2: Run five consecutive `FULL_RESTART` successes
 

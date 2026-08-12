@@ -42,6 +42,7 @@ setup(
             "camera_preset = so101_mujoco_demo_py.camera_preset_cli:main",
             "collect_contact_calibration = so101_mujoco_demo_py.contact_calibration_collector:main",
             "pick_place_state_machine = so101_mujoco_demo_py.cli:main",
+            "run_qualification = so101_mujoco_demo_py.qualification:main",
             "headless_execution = so101_mujoco_demo_py.headless_execution:main",
             "scene_setup = so101_mujoco_demo_py.scene_setup:main",
             "staged_approach = so101_mujoco_demo_py.staged_approach:main",
