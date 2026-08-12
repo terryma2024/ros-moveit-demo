@@ -142,6 +142,15 @@ and the live grasp gate use the deepest left/right fingertip contact distance
 only; allowed other-contact penetration must never be interpreted as fingertip
 over-compression.
 
+Slip is a temporal window decision, matching the live grasp evaluator: both
+threshold fitting and held-out evaluation use the maximum object linear speed
+over their respective per-regime split windows. Raw quantiles still describe
+every atomic speed sample; no low-speed acceleration or decay sample is removed.
+Because speed is a strictly non-negative scale metric and physical slip can span
+orders of magnitude, its threshold is the geometric midpoint between the stable
+window edge and slip-window peak. Force, compression, and duration retain their
+linear separating thresholds.
+
 `left_only` and `right_only` are deterministic rejection contracts, not
 required physical calibration cohorts. Each contract records:
 
