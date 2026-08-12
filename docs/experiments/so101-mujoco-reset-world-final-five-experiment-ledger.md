@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-009
-next_experiment: EXP-142
+latest_checkpoint: RESET-FIVE-CP-010
+next_experiment: EXP-143
 ```
 
 ## Immutable challenge boundary
@@ -559,6 +559,35 @@ protected_user_state:
   protected_documents_byte_hashes_unchanged: true
 next_experiment: EXP-141
 next_command: Commit the frozen artifact registration, then preregister EXP-141 through EXP-145 before any stack startup.
+remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-010 — EXP-142 SUCCESS 2/5
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-010
+recorded_at: 2026-08-13T01:50:00+08:00
+prior_checkpoint: RESET-FIVE-CP-009
+status: COUNTING_BATCH_RUNNING_SUCCESS_2_OF_5
+experiment_id: EXP-142
+manifest_record_id: MNT-Q-RESET-EXP141-145-02
+result: VALID_SUCCESS
+reset: {old_epoch: 1, new_epoch: 2, simulation_step: 0, simulation_session_id: MNT-Q-RESET-EXP141-145-reset}
+trace: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+physical_outcome:
+  primary_failure: null
+  final_pose_m: [-0.07965199786686325, -0.24790753377045596, 0.16542986290351624]
+  final_upright_tilt_rad: 0.01728930998107127
+  intended_support_contact: true
+  gripper_contact: false
+planning_scene: {moveit_attached: false, world_object_synchronized: true}
+artifacts_sha256:
+  actions: 2cf00e6a14746570ff7a5c87a2e388adaae2525c1b933b0230b481aa807ff4e4
+  owner_manifest: 7e9110e7bc05ee4bf15559d08040ea11cd624d580a1ec225fd748d49985d35d5
+  raw_run_index: 5c5f8d8505aaf11dff1b308688bf5be839b5fb089496b4f1a82a4afe449da548
+  dynamic_summary: 89606ec7929198a382dd5b895d060a1fba9a8959f5822e117339ba5f96b64c9f
+  shared_launch_log: DEFERRED_UNTIL_CLEAN_SHUTDOWN
+next_experiment: EXP-143
 remote_push_state: FORBIDDEN
 ```
 
