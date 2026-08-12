@@ -19,7 +19,7 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-023
+latest_checkpoint: MNT-CP-024
 next_experiment: EXP-115
 ```
 
@@ -3135,4 +3135,23 @@ acceptance:
 failure_policy: Any failed condition makes EXP-115 INVALID_EVIDENCE, stops all further experiment work, preserves actual/expected/topic/GID/raw evidence, and forbids EXP-116..120.
 command: GZ_PARTITION=so101-mnt-a-exp115 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp115_identity_diagnostic.py
 next_if_valid: Preregister EXP-116..120 as new independent FULL_RESTART runs under the exact same behavior/install/fingerprint.
+```
+
+## Checkpoint MNT-CP-024 — EXP-115 RUNNING dispatch boundary
+
+```yaml
+checkpoint_id: MNT-CP-024
+recorded_at: 2026-08-12T19:19:49+08:00
+last_valid_experiment: EXP-109
+current_experiment: EXP-115
+current_status: RUNNING
+behavior_source_commit: 4f168ec2f15c297d0509f91e4bb88e5983a8ae3d
+ledger_head_before_dispatch: ddf5feb
+install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/session-unblock-gate-cae0b4d/install
+runtime_fingerprint_sha256: edcfa5067a2fe0fcd10d2d49617262b33180a6ea6c403d907bc74db8323e99f1
+harness_sha256: 1a92e6d5aec564f846d8e722909e32ebdcdc45b1eda9637a60830a0718673c95
+preflight: EXP-115 evidence root absent; ROS Domain 192 empty; port 8032 free; no task-owned stack exists.
+working_tree_status: Only the two protected unrelated untracked documents; no tracked change and no protected Gazebo change.
+stop_boundary: First atomically persisted typed transport boundary plus first accepted physics-step chunk, or any earlier identity/evidence failure.
+next_command: GZ_PARTITION=so101-mnt-a-exp115 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp115_identity_diagnostic.py
 ```
