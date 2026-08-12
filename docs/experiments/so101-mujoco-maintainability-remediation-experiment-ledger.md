@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 1174d7675b5881d87ec1f6a46c501a379eace019
+current_commit: 66210bedc4a1f5670608fc8fe39bfda503bd263c
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,8 +17,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
-latest_checkpoint: MNT-CP-011
-next_experiment: A8_UNILATERAL_CONTRACT_ARTIFACT
+latest_checkpoint: MNT-CP-012
+next_experiment: EXP-076
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1373,4 +1373,99 @@ checked_in_policy_state:
   approval_enabled: false
   approval_approved: false
 next_command: Generate and independently validate the external unilateral-contracts.json from the exact authentic hashes, then preregister only the five physical A8 collection experiments.
+```
+
+## Checkpoint MNT-CP-012 and EXP-076 through EXP-080 preregistration
+
+```yaml
+checkpoint_id: MNT-CP-012
+recorded_at: 2026-08-12T15:55:00+08:00
+source_commit: 66210bedc4a1f5670608fc8fe39bfda503bd263c
+dependency_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+model_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+collector_sha256: c1fafb18f5af74087a922b955da86a25655b575e50045380a85ef49c96ab915c
+driver:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/calibration_driver.py
+  sha256: 86b7884dc08a032a85374d1f6a9900aabe3410fbb8a97a6c655f4a26c8d2bf05
+unilateral_contract_artifact:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/unilateral-contracts.json
+  sha256: a949e8f44c41dfd14edf54d7a153acc9d53d5bab8f50496940b2c403b636eeae
+  validator_result: VALID
+build:
+  overlay: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build-v3-final/install
+  package_prefixes:
+    so101_mujoco_demo_py: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build-v3-final/install/so101_mujoco_demo_py
+    so101_mujoco_support: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build-v3-final/install/so101_mujoco_support
+  result: Two packages built; runtime lock validation_errors empty.
+run_identity:
+  ros_domain_id: 177
+  gz_partition: so101-mnt-cal-v3
+  simulation_session_id: so101-mnt-cal-v3
+  reset_epoch: 0
+  tmux_session: so101-mnt-cal-v3
+matrix_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3.json
+proposal_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal-v3.yaml
+preflight:
+  domain_177_nodes: NONE
+  task_tmux_session: NONE
+  matrix_exists: false
+  proposal_exists: false
+  owned_processes: NONE
+preserved_processes:
+  - tmux codex
+  - tmux codex-cua
+  - tmux so101-mujoco-gui
+safety_aborts:
+  - independently monitored pre-contact displacement >0.003 m only while --pre-contact is active
+  - terminal total displacement from reset reference >0.010 m at every collector sample and driver terminal readback
+  - maximum normal force >11.60 N
+  - stale/truncated/nonfinite/non-monotonic/session/reset/pause mismatch
+  - missing declared bilateral contact, controller failure, or incomplete motion
+frozen_scope:
+  - No left_only/right_only live action and no offset search.
+  - No axis, planner, q6 step, MJCF, scene, geometry, simulator state, waypoint, safety limit, or qualified grasp-strategy change.
+  - No object-state write, weld, equality, adhesion, mocap, teleport, hidden retry, or relabeling.
+common_stack_command: >-
+  ROS_DOMAIN_ID=177 GZ_PARTITION=so101-mnt-cal-v3 ros2 launch
+  so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=dry_run
+  execute:=false headless:=true start_simulation:=true launch_workflow:=false
+  simulation_session_id:=so101-mnt-cal-v3
+common_collector_identity: >-
+  --simulation-session-id so101-mnt-cal-v3 --reset-epoch 0
+  --output /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3.json
+  --source-commit 66210bedc4a1f5670608fc8fe39bfda503bd263c
+  --dependency-commit f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  --model-sha256 f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  --scene-sha256 b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  --motion-policy-sha256 aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  --unilateral-contracts /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/unilateral-contracts.json
+  --reference-object-position-m 0.020 -0.280 0.1649 --timeout-s 30
+ordered_experiments:
+  EXP-076:
+    regime: no_contact
+    sample_contract:
+      - Collect 13 CLOSE_READY table-only samples with --pre-contact --table-only.
+      - Use the frozen prepare-bilateral operation at 0.08 N per side, then the frozen open operation; after fresh zero-fingertip readback, append 12 samples with --post-release --append.
+    success: Exactly 25 no-contact samples, both subcohorts non-empty, zero fingertip contact in every admitted sample.
+    invalid: Any admitted fingertip contact, failed release, or explicit append/fingerprint/provenance guard.
+  EXP-077:
+    regime: bilateral_touch
+    single_variable: Frozen centered q6 close to minimum 0.08 N per side.
+    success: 25 fresh bilateral samples while cup remains table-supported and below all safety gates.
+  EXP-078:
+    regime: over_compression
+    single_variable: Frozen driver over-compress operation advances only q6 by 0.004 rad from EXP-077 bilateral touch.
+    success: 25 bilateral samples with compression/force distribution separated from acceptable cohorts but below 11.60 N and 0.010 m.
+  EXP-079:
+    regime: micro_lift_slip
+    single_variable: Frozen light 0.08 N bilateral preload plus the existing registered 2 mm MICRO_LIFT_ARM motion.
+    sampling_order: Start the 25-sample collector on verified bilateral preload, then execute the frozen 1.0 s micro-lift while collection remains active.
+    success: Bilateral continuity plus measured cup/TCP behavior that rejects causal stable carry and produces a slip-speed cohort; otherwise record a VALID behavioral failure and stop without relabeling.
+  EXP-080:
+    regime: stable_hold
+    single_variable: Frozen centered >=0.50 N bilateral preload plus the same registered micro-lift, followed by >=0.30 s continuous bilateral preroll.
+    success: Successful causal cup micro-lift, bilateral continuity, stable low-speed hold, and 25 post-preroll samples.
+decision: PLANNED. Start only after this preregistration commit; stop at the first INVALID or unavailable physical regime and do not analyze an incomplete matrix.
 ```
