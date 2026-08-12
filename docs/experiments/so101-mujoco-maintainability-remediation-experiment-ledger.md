@@ -7,18 +7,20 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 66210bedc4a1f5670608fc8fe39bfda503bd263c
+current_commit: a172765e3b193bfccad9782d02e2745e70f1cbd2
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
   - AUDIT-001: contact_calibration.yaml is PLANNED/disabled while production phases hard-code contact limits.
   - AUDIT-002: execute bypasses StateMachineRunner and ignores public checkpoint controls.
+  - EXP-109: the frozen five-win strategy passes MICRO_LIFT and all LIFT phases; transport crosses the static 1.1579004532160448 N threshold and shuts down cleanly.
+  - USER-AUTH-2026-08-12-PHASE-AWARE: preserve the five-win strategy exactly; static contact and dynamic transport require separate evidence/acceptance semantics.
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
-  - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
-latest_checkpoint: MNT-CP-012
-next_experiment: EXP-096
+  - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
+latest_checkpoint: MNT-CP-014
+next_experiment: NONE_PENDING_PHASE_AWARE_DESIGN_APPROVAL
 ```
 
 ## Checkpoint MNT-CP-001
@@ -2350,4 +2352,77 @@ checkpoint:
   blocked: Project-A requires one successful full physical cycle, but its approved force gate and frozen carry strategy are mutually incompatible.
   downstream_not_started: [Project B, Project C, Project D, formal nine-stage regression, RESET_WORLD five-win challenge, merge to main, remote push]
   required_authority: Either authorize redesign of the carry/gripper strategy to remain below the approved 1.1579004532160448 N gate, or authorize a new physical calibration/proposal cycle and later approve its exact hash. No option is self-approved.
+```
+
+## Checkpoint MNT-CP-014 — phase-aware calibration authorization
+
+```yaml
+checkpoint_id: MNT-CP-014
+recorded_at: 2026-08-12T16:34:33+08:00
+last_valid_experiment: EXP-109, VALID_FAILURE and excluded from qualification success counting
+current_hypothesis: A phase-aware evidence schema can retain the approved static-contact threshold while measuring frozen-strategy dynamic transport under the unchanged 11.60 N absolute diagnostic stop.
+working_tree_status:
+  source_commit: a172765e3b193bfccad9782d02e2745e70f1cbd2
+  branch: codex/so101-mujoco-ros2-teleop
+  tracked_changes_before_this_entry: NONE
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+provenance:
+  host: AI-STATION-001
+  worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
+  fork_submodule_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  fork_tag: so101-0.0.3-r5
+owned_processes: NONE
+preserved_processes:
+  - tmux codex remains attached and belongs to the current coding session.
+  - tmux codex-cua is idle after historical passive captures; it was inspected but not controlled.
+  - tmux so101-mujoco-gui contains historical windows; no MuJoCo, move_group, RViz, pick-place, Teleop server, or Gazebo process was observed by the scoped process probe.
+  - ROS domain 0 node probe returned no nodes.
+last_trusted_checkpoint: EXP-109 terminal record at commit a172765; clean shutdown passed and all owned domain-186/port-8026 processes were absent afterward.
+EXP-109_conclusion:
+  observed:
+    - Frozen preload target q6=-0.04850794875050089 was applied without changing the five-win strategy.
+    - CONTACT_HOLD, MICRO_LIFT, policy lift waypoint 1, and the remaining four LIFT segments passed.
+    - Transport waypoint 1 crossed 1.1579004532160448 N and the then-static hard monitor returned a clean VALID_FAILURE.
+    - Historical same-strategy transport terminal forces are 2.7456872063067905..4.9746674881770785 N, still below the unchanged 11.60 N absolute diagnostic stop.
+  correction_from_new_authorization: Exceeding 1.1579004532160448 N during transport is a shadow observation, not proof that the frozen strategy failed; static and dynamic phases must no longer share that hard-stop interpretation.
+user_authorization_verbatim: |-
+  你当前直接运行在 ai-station 上。不要 ssh 到 ai-station；仓库、tmux、进程、CUA 和截图命令都在当前主机直接执行。
+
+  用户现已明确批准新的 phase-aware 接触校准/提案周期，并再次强调：坚决不要改动之前成功的五连胜策略。
+
+  授权与硬边界：
+  1. 完全冻结此前五连胜策略及其全部行为参数和模型：固定预载 q6=-0.04850794875050089、所有 q6/waypoint/轨迹、规划器、速度/加速度、MJCF、scene、geometry、初始状态和运动阶段设计均不得修改，也不得用新补偿逻辑变相改变。
+  2. 当前已批准的 1.1579004532160448 N 继续作为静态接触阶段的正式阈值；运输阶段只把它作为 shadow 诊断观测，不得用它触发运输硬停止，也不得把运输超出它解释成策略失效。
+  3. 新鲜动态运输采样期间保留原 11.60 N 作为绝对硬停止，仅用于诊断采样安全保护；不得把 11.60 N 直接恢复成新的接受阈值，也不得用 grace period 绕过安全门。
+  4. 正式设计 phase-aware 契约：静态接触与动态运输分开；运输证据至少区分瞬时力峰/冲量、持续过压的时间窗口、压缩距离，并记录原始可复核样本。先预登记实验，引用 EXP-109，冻结唯一变量和判据，再执行。
+  5. 只允许为测量、日志、分析器、proposal 生成和对应 RED→GREEN 测试做最小代码修改；不得改变抓取/搬运策略本身。继续遵守 provenance、包级测试、运行时证据、干净 shutdown 和 ledger 状态机。
+  6. 生成新的 exact-hash proposal 后必须立即停止并请求用户审批；禁止自行批准、激活或把新阈值写入正式运行策略。
+  7. 在新 exact hash 获批前，不得继续 Project B/C/D、正式九阶段回归、RESET_WORLD 五连胜、merge 或 push。
+  8. 保留且不要提交两个无关未跟踪文档：
+     - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+     - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+phase_aware_authority:
+  static_contact:
+    formal_threshold_n: 1.1579004532160448
+    semantics: Existing approved hard acceptance/rejection threshold for static contact phases.
+  dynamic_transport:
+    shadow_threshold_n: 1.1579004532160448
+    semantics: Diagnostic crossing marker only; it never cancels transport and never classifies the frozen strategy as failed.
+    absolute_diagnostic_hard_stop_n: 11.60
+    required_metrics: [instantaneous_peak_force, force_impulse, sustained_overpressure_windows, compression_distance, raw_replayable_samples]
+  approval: A new disabled exact-hash proposal is authorized; activation or approval is not.
+disproven_routes:
+  - Modifying the successful five-win strategy to satisfy the static threshold during transport.
+  - Treating dynamic transport crossings of 1.1579004532160448 N as a hard failure.
+  - Restoring 11.60 N as a proposal acceptance threshold or bypassing it with a grace period.
+open_risks:
+  - The existing evidence schema has no explicit phase discriminator or dynamic force-time/compression aggregates.
+  - EXP-109 did not persist the exact aborting sample; a fresh preregistered diagnostic run is required after measurement RED-GREEN implementation.
+next_experiment_new_information:
+  prior: EXP-109 proves the frozen strategy reaches transport and that cancellation/cleanup are reliable, but only records a threshold crossing.
+  new: The next experiment will preserve every behavior input and add only raw phase-tagged measurement sufficient to derive peak, impulse, sustained-overpressure duration, and compression distributions under the 11.60 N absolute stop.
+next_experiment: NONE_PENDING_WRITTEN_DESIGN_APPROVAL
+next_command: Read and review the proposed phase-aware design; no code, build, stack, reset, controller, GUI, or experiment action precedes approval.
 ```
