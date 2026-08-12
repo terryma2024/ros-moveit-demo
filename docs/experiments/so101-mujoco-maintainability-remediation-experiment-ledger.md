@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
 latest_checkpoint: MNT-CP-012
-next_experiment: EXP-086
+next_experiment: EXP-091
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1574,4 +1574,52 @@ batch_3:
   EXP-089: Same concurrent micro_lift_slip method and acceptance as EXP-079.
   EXP-090: Same stable_hold method and acceptance as EXP-080.
 decision: PLANNED before batch-3 stack launch. The only changed setup choice is reuse of an already frozen motion target after release.
+```
+
+## EXP-086 terminal result and EXP-091 through EXP-095 preregistration
+
+```yaml
+EXP-086:
+  status: INVALID
+  admitted_samples: 13 table_only no_contact samples; excluded with batch 3.
+  observed:
+    - Frozen open plus the existing 2 mm MICRO_LIFT_ARM target reduced penetration but did not clear the fixed finger.
+    - Terminal readback remained left_count=1, left_force=0.111416 N, right_count=0; no post-release sample was appended.
+    - Cup position [0.0199998594, -0.2792522200, 0.1649654536] m remained inside the unchanged 0.010 m terminal-total gate.
+  decision: Exclude EXP-086-through-090 and stop the owned stack; do not continue micro-lift increments.
+  evidence:
+    partial_matrix_sha256: f24aab91bd3f388cfd25c235ce2b38971da7c80bab0c39e8dfd87d03a756ec26
+    staged_evidence_sha256: 7a226b04f72d894a28a4e8ba4c1f5b11f565c3990b47eb6063b757ae64ddb32c
+    stack_log_sha256: e464a2352909527f461d170d36d35b0b3db82bb23ef1fe5b85437d7a0c3b75d9
+  cleanup: Ordered shutdown complete; tmux so101-mnt-cal-v3c absent and domain 179 empty.
+revised_hypothesis: The first unchanged RECOVER_RETREAT/LIFT policy waypoint provides enough registered clearance to remove the open fixed finger from the table-supported cup.
+batch_4:
+  source_commit: 66210bedc4a1f5670608fc8fe39bfda503bd263c
+  dependency_model_scene_motion_contract_driver_build: Identical to MNT-CP-012.
+  ros_domain_id: 180
+  gz_partition: so101-mnt-cal-v3d
+  simulation_session_id: so101-mnt-cal-v3d
+  reset_epoch: 0
+  tmux_session: so101-mnt-cal-v3d
+  matrix_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3-batch4.json
+  proposal_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal-v3-batch4.yaml
+  frozen_release_retreat:
+    policy_state: RECOVER_RETREAT; waypoint index 0, identical to LIFT waypoint index 0.
+    target_rad: [-0.000284124852, 0.381814591288, 0.272246878070, 0.916741182602, -0.000291565154]
+    source: config/motion_policies/light_cup_wall_pick.yaml with sha256 aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+    execution: One direct arm_controller FollowJointTrajectory goal, 1.0 s, after frozen open; no waypoint or planner setting is changed.
+  safety_and_frozen_scope: Identical to MNT-CP-012; terminal fresh evidence must satisfy <=11.60 N and <=0.010 m before any append.
+  EXP-091:
+    regime: no_contact
+    ordered_actions:
+      - Collect 13 CLOSE_READY --pre-contact --table-only samples.
+      - Frozen centered 0.08 N bilateral touch, then frozen open.
+      - Execute exactly frozen_release_retreat once; require controller success and fresh zero-left/zero-right table-supported readback.
+      - Append 12 --post-release samples.
+    failure: Residual fingertip contact, unsupported/moved cup, controller failure, or safety/provenance violation stops the batch.
+  EXP-092: Frozen restore-close-ready plus the EXP-077 bilateral_touch method.
+  EXP-093: Same over_compression method and acceptance as EXP-078.
+  EXP-094: Same concurrent micro_lift_slip method and acceptance as EXP-079.
+  EXP-095: Same stable_hold method and acceptance as EXP-080.
+decision: PLANNED before batch-4 stack launch. No reachability boundary, offset, or new motion target is introduced.
 ```
