@@ -63,14 +63,30 @@ def test_mujoco_references_common_visuals_and_backend_collision_assets(request) 
         mesh.attrib["file"] for mesh in mjcf.findall(".//mesh[@file]")
     }
     assert mjcf_files == {
-        *(f"../common/visual/{name}" for name in visual_names),
-        *(f"collision/{name}" for name in collision_names),
+        *(f"assets/{name}" for name in visual_names),
+        *(f"assets/{name}" for name in collision_names),
     }
 
     scene = ET.parse(assets / "mujoco/scene.xml")
     assert {
         mesh.attrib["file"] for mesh in scene.findall(".//mesh[@file]")
-    } == {"../common/task_objects/target_landing_tolerance_ring.obj"}
+    } == {"assets/target_landing_tolerance_ring.obj"}
+
+    compatibility_assets = assets / "mujoco/assets"
+    canonical = {
+        **{name: assets / "common/visual" / name for name in visual_names},
+        **{name: assets / "mujoco/collision" / name for name in collision_names},
+        "target_landing_tolerance_ring.obj": (
+            assets / "common/task_objects/target_landing_tolerance_ring.obj"
+        ),
+    }
+    assert {path.name for path in compatibility_assets.iterdir()} == set(canonical)
+    for name, target in canonical.items():
+        reference = compatibility_assets / name
+        assert reference.read_bytes() == target.read_bytes()
+        if request.config.getoption("--installed-share") is None:
+            assert reference.is_symlink()
+            assert reference.resolve() == target.resolve()
 
     urdf = ET.parse(assets / "mujoco/so101.urdf")
     urdf_files = {
@@ -86,4 +102,3 @@ def test_mujoco_references_common_visuals_and_backend_collision_assets(request) 
             for name in collision_names
         ),
     }
-    assert not (assets / "mujoco/assets").exists()
