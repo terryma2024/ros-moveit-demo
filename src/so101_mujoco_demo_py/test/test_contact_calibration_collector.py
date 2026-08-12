@@ -104,6 +104,20 @@ class Observer:
         return next(self.snapshots)
 
 
+class InitiallyStaleObserver(Observer):
+    def __init__(self, snapshots: list[ReceivedSimulationEvidence]) -> None:
+        super().__init__(snapshots)
+        self.first = True
+
+    def snapshot_with_receipt(self) -> ReceivedSimulationEvidence:
+        if self.first:
+            self.first = False
+            from so101_mujoco_demo_py.mujoco.observer import EvidenceStale
+
+            raise EvidenceStale("no atomic evidence has been accepted")
+        return super().snapshot_with_receipt()
+
+
 def robot_state() -> RobotCalibrationState:
     return RobotCalibrationState(
         q6_rad=0.2,
@@ -170,6 +184,20 @@ def test_collector_writes_exact_bounded_count_with_atomic_replacement(tmp_path: 
         3,
     ]
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_collector_waits_for_first_atomic_evidence_within_bounded_deadline(
+    tmp_path: Path,
+) -> None:
+    target = ContactCalibrationCollector(
+        InitiallyStaleObserver([received(evidence(1))]),
+        robot_state,
+        monotonic=lambda: 10.0,
+    )
+
+    result = target.collect(request(tmp_path, sample_count=1))
+
+    assert result["collected_sample_count"] == 1
 
 
 def test_stable_hold_requires_continuous_bilateral_preroll_before_recording(

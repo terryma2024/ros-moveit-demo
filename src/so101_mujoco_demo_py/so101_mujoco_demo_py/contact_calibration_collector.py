@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from so101_mujoco_demo_py.contact_calibration import REGIMES, REQUIRED_UNITS
+from so101_mujoco_demo_py.mujoco.observer import EvidenceStale
 from so101_mujoco_demo_py.simulation.types import (
     ContactEvidence,
     ReceivedSimulationEvidence,
@@ -203,6 +204,8 @@ class ContactCalibrationCollector:
                 self._pump()
                 try:
                     received = self._observer.snapshot_with_receipt()
+                except EvidenceStale:
+                    continue
                 except StopIteration as error:
                     raise CollectionAborted("insufficient fresh samples") from error
                 evidence = self._validated_evidence(request, received, previous_sequence)
