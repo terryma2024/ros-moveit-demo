@@ -228,6 +228,18 @@ def test_collector_waits_for_first_robot_state_without_admitting_sample(
     assert sample["publisher_sequence"] == 2
 
 
+def test_collector_skips_repeated_snapshot_until_new_sequence(tmp_path: Path) -> None:
+    target = collector([received(evidence(1)), received(evidence(1)), received(evidence(2))])
+
+    result = target.collect(request(tmp_path, sample_count=2))
+
+    assert result["collected_sample_count"] == 2
+    samples = json.loads((tmp_path / "matrix.json").read_text(encoding="utf-8"))["regimes"][
+        "bilateral_touch"
+    ]
+    assert [sample["publisher_sequence"] for sample in samples] == [1, 2]
+
+
 def test_stable_hold_requires_continuous_bilateral_preroll_before_recording(
     tmp_path: Path,
 ) -> None:
@@ -278,7 +290,7 @@ def test_collector_rejects_existing_v2_matrix_fingerprint_drift(tmp_path: Path) 
     [
         ([received(evidence(1, session="wrong"))], "session"),
         ([received(evidence(1, epoch=5))], "reset"),
-        ([received(evidence(2)), received(evidence(2))], "sequence"),
+        ([received(evidence(2)), received(evidence(1))], "sequence"),
         ([received(evidence(1), at=9.0)], "stale"),
     ],
 )
