@@ -172,6 +172,27 @@ def test_collector_writes_exact_bounded_count_with_atomic_replacement(tmp_path: 
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_stable_hold_requires_continuous_bilateral_preroll_before_recording(
+    tmp_path: Path,
+) -> None:
+    target = collector([received(evidence(index)) for index in range(1, 34)])
+
+    target.collect(
+        request(
+            tmp_path,
+            regime="stable_hold",
+            sample_count=3,
+            stable_hold_preroll_s=0.30,
+        )
+    )
+
+    samples = json.loads((tmp_path / "matrix.json").read_text(encoding="utf-8"))["regimes"][
+        "stable_hold"
+    ]
+    assert [sample["publisher_sequence"] for sample in samples] == [31, 32, 33]
+    assert samples[0]["contact_duration_s"] == pytest.approx(0.30)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (
