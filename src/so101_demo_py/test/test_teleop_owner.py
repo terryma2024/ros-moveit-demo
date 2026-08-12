@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 
 from so101_demo.cli.teleop_reset import build_parser as reset_parser
-from so101_demo.cli.teleop_workflow import owner_result, production_arguments
+from so101_demo.cli.teleop_workflow import (
+    evidence_failure_code,
+    owner_result,
+    production_arguments,
+)
 
 
 def test_reset_cli_requires_physical_session() -> None:
@@ -70,3 +74,23 @@ def test_owner_result_exposes_physical_outcome(tmp_path: Path) -> None:
     assert result["trace"] == "staged_approach -> release_retreat"
     assert result["physical_outcome"]["primary_failure"] is None
     assert result["physical_outcome"]["world_object_synchronized"] is True
+
+
+def test_invalid_phase_evidence_is_propagated_to_qualification(tmp_path: Path) -> None:
+    (tmp_path / "live-runtime-manifest.json").write_text(
+        json.dumps({"failed_phase": "transport", "failure": "PHASE_EXIT_NONZERO"})
+    )
+    (tmp_path / "transport.json").write_text(
+        json.dumps(
+            {
+                "status": "FAILED",
+                "error": "EvidenceInvalid: chunk sequence mismatch",
+                "dynamic_raw_index": str(tmp_path / "run-index.json"),
+            }
+        )
+    )
+    (tmp_path / "run-index.json").write_text(
+        json.dumps({"outcome_class": "INVALID_EVIDENCE"})
+    )
+
+    assert evidence_failure_code(tmp_path) == "TELEOP_WORKFLOW_EVIDENCE_INVALID"

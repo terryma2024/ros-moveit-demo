@@ -97,6 +97,25 @@ def owner_result(evidence_root: Path) -> dict:
     }
 
 
+def evidence_failure_code(evidence_root: Path) -> str | None:
+    """Map lossless phase-evidence failures to a qualification-invalid code."""
+
+    try:
+        manifest = json.loads((evidence_root / "live-runtime-manifest.json").read_text())
+        phase = str(manifest["failed_phase"])
+        result = json.loads((evidence_root / f"{phase.replace('_', '-')}.json").read_text())
+        index_path = result.get("dynamic_raw_index")
+        if index_path:
+            index = json.loads(Path(str(index_path)).read_text())
+            if index.get("outcome_class") == "INVALID_EVIDENCE":
+                return "TELEOP_WORKFLOW_EVIDENCE_INVALID"
+        if "EvidenceInvalid" in str(result.get("error", "")):
+            return "TELEOP_WORKFLOW_EVIDENCE_INVALID"
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return None
+
+
 def production_arguments(
     *, session_id: str, reset_epoch: int, checkpoint: Path, package_share: Path
 ) -> list[str]:
@@ -139,6 +158,9 @@ def main(arguments: list[str] | None = None) -> int:
         )
     )
     if result != 0:
+        failure_code = evidence_failure_code(evidence_root_for(options.session_id, options.checkpoint))
+        if failure_code is not None:
+            print(f"failure={failure_code}")
         return result
     try:
         print(json.dumps(owner_result(evidence_root_for(options.session_id, options.checkpoint))))
