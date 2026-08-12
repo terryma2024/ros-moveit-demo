@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 120cefa069b96210db88a72678df10dc3983e380
+current_commit: b526f5167e996f2247b9577594a100b27a36c82b
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,7 +17,7 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - A fresh seven-regime fixed-fingerprint campaign can produce non-overlapping deterministic thresholds for the current model and motion policy.
-latest_checkpoint: MNT-CP-002
+latest_checkpoint: MNT-CP-003
 next_experiment: EXP-001
 ```
 
@@ -69,4 +69,31 @@ open_risks:
   - Contact calibration remains PLANNED and disabled; execute activation still requires exact hash-bound user approval.
   - The final RESET_WORLD challenge must not reuse historical qualification runs, and any INVALID or valid failure terminates its batch.
 next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_contact_policy.py src/so101_mujoco_demo_py/test/test_contact_calibration_contract.py src/so101_mujoco_demo_py/test/test_contact_calibration_collector.py src/so101_mujoco_demo_py/test/test_task_policy.py
+```
+
+## Checkpoint MNT-CP-003
+
+```yaml
+checkpoint_id: MNT-CP-003
+recorded_at: 2026-08-12T12:34:30+08:00
+last_valid_experiment: NONE
+current_hypothesis: A pure evaluator can distinguish a fresh bilateral stable grasp from every stale, unsafe, unilateral, slipping, or forbidden-contact window.
+working_tree_status: Clean at b526f5167e996f2247b9577594a100b27a36c82b after Project A Task 3.
+owned_processes: NONE
+preserved_processes:
+  - Existing codex, codex-cua, and so101-mujoco-gui tmux sessions remain untouched.
+confirmed_conclusions:
+  - OBSERVED: Proposal hashing excludes exactly the approval envelope; activating an exact proposal preserves its proposal_sha256 while threshold mutation changes it.
+  - OBSERVED: New collector raw output is schema v2 with source/dependency/model/scene/motion identities; malformed, placeholder, or changed identities fail closed.
+  - OBSERVED: Analyzer accepts archived schema-v1 raw data through an explicit adapter and emits schema-v2 proposals; new raw data follows the schema-v2 path.
+  - OBSERVED: Approval CLI writes atomically for an exact hash and refuses to overwrite an approved file with a different hash.
+  - OBSERVED: Fifty-seven focused tests and the full MuJoCo Python package gate of 388 passed plus 4 skipped completed without failures; Ruff lint/format passed.
+  - OBSERVED: Checked-in contact_calibration.yaml validates as PLANNED, unapproved, and disabled.
+disproven_routes:
+  - Keeping enabled outside the approval envelope; changing it during activation would invalidate the exact proposal hash.
+  - Accepting an approved_at timestamp without timezone; the new mutation test failed before validation was added and passes afterward.
+open_risks:
+  - The schema-v1 adapter maps its legacy config hash to scene and motion fields only for archived-read compatibility; live activation will use fresh schema-v2 evidence.
+  - Physical thresholds remain unavailable until the seven-regime campaign and exact user approval.
+next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_grasp_outcome.py
 ```
