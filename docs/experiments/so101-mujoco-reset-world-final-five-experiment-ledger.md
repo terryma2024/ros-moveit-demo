@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-016
-next_experiment: VISUAL-CORROBORATION-02-NONCOUNT
+latest_checkpoint: RESET-FIVE-CP-017
+next_experiment: LOCAL_MAIN_FETCH_REVIEW_AND_MERGE
 ```
 
 ## Immutable challenge boundary
@@ -559,6 +559,68 @@ protected_user_state:
   protected_documents_byte_hashes_unchanged: true
 next_experiment: EXP-141
 next_command: Commit the frozen artifact registration, then preregister EXP-141 through EXP-145 before any stack startup.
+remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-017 — visual corroboration passed
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-017
+recorded_at: 2026-08-13T02:07:00+08:00
+prior_checkpoint: RESET-FIVE-CP-016
+status: VISUAL_CORROBORATION_SUCCESS_LOCAL_MAIN_REVIEW_PENDING
+visual_cycle_id: VISUAL-CORROBORATION-02-NONCOUNT
+counting_status: EXCLUDED_FROM_EXP-141_THROUGH_EXP-145
+result: SUCCESS
+reset: {old_epoch: 0, new_epoch: 1, simulation_step: 0, simulation_session_id: MNT-Q-RESET-EXP141-145-visual02-noncount}
+workflow:
+  http: 200
+  succeeded: true
+  checkpoint_fresh: true
+  trace: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+physical_outcome:
+  primary_failure: null
+  final_pose_m: [-0.07959050894372394, -0.24669366980848542, 0.1654792312849524]
+  final_upright_tilt_rad: 0.017437829714222187
+  intended_support_contact: true
+  gripper_contact: false
+planning_scene: {moveit_attached: false, world_object_synchronized: true}
+helper_post_success_packaging_error: The helper lacked handle.environment only after actions and all owner evidence had been closed; this is transparently recorded in noncount-record.json and caused no workflow retry.
+rviz_start_boundary: AFTER_WORKFLOW_SUCCESS_AND_DYNAMIC_EVIDENCE_CLOSURE
+cua_contract:
+  session: codex-cua
+  initial_snapshot: cua-preaction-final.png
+  actions:
+    - CUA set_window_frame expanded RViz.
+    - Fresh snapshot obtained.
+    - CUA set_window_frame placed MuJoCo on the right half with confirmed readback.
+    - Fresh snapshot obtained.
+    - CUA bring_to_front refreshed RViz rendering.
+  final_fresh_snapshot: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration-02/cua-final-success-v4.png
+  final_fresh_snapshot_sha256: c6ced79e29500a676064d9d9d805d91a2a6235dd27bfc55f4463de2f608d3afe
+  visual_interpretation:
+    - MuJoCo Viewer visibly contains the SO-101 robot, gray base, brown table, orange cup, and red target ring.
+    - The orange cup is fully inside the red target ring in the final state.
+    - RViz RobotModel and MotionPlanning both report Status Ok and show the robot plus detached world cup in the corresponding final layout.
+artifacts_sha256:
+  actions: 93a49314c389972f8311d03826607c82dd35fdc9cf5448a0bb8220d1692821fb
+  noncount_record: fe7b3238b16c2b131cca4c4c18b6cc299ec8484971e588a4118bbc79f597be78
+  owner_manifest: 7c4b70ee25bae1abb98c0d97d97bc934791edd077c59bab6f6408235b2c4c87e
+  raw_run_index: d07c8dc5cf91a20c4f8dc4c4cb9d208cbd446b644357e02ee2f8d87b52a5d00b
+  dynamic_summary: 469ac6726367173a2d7a002b3753cfd283e674d1a9d3669fc16b4ac5650650c0
+  workflow_log: d91de015593768d9cfaf9479f087c96f10397d377d027c839627561c64709597
+  preaction_snapshot: 83083186bb9d67911d0bc612f403b65188c51c4386f8bc026c0fd1f52bca356e
+  launch_log: 35a308014c90d855e524965384a2d153199b38e23f173adb8f867fbd35026525
+shutdown:
+  ordered_shutdown_marker: true
+  process_died: false
+  fatal_signal: false
+  tcp_port_8047_listener_after_probe: NONE
+  owned_tmux_after_cleanup: NONE
+  cua_driver_session_after_cleanup: ENDED
+  preserved_codex_cua_tmux: true
+merge_state: AUTHORIZED_BY_QUALIFIED_5_OF_5_AND_VISUAL_GATE
+next_command: Fetch origin, review origin/main and /data/work/ws_moveit local main read-only, then merge only if local main is clean and safely updated.
 remote_push_state: FORBIDDEN
 ```
 
