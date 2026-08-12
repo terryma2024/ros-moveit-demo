@@ -2007,3 +2007,53 @@ remediation:
   verification: 473 package tests passed, 4 skipped; Ruff lint/format, migration isolation, and git diff check passed.
 decision: Commit the remediation, create a new unique three-package acceptance build, and preregister EXP-107 before any further live action.
 ```
+
+## EXP-107 preregistration
+
+```yaml
+registered_at: 2026-08-12T15:56:18+08:00
+experiment_id: EXP-107
+status: PLANNED
+lifecycle: FULL_RESTART
+qualification_counting: false
+purpose: Replacement Project-A acceptance after correcting only EXP-106's missing declared runtime dependency and startup-evidence finalization.
+source_commit: 90b6ff8631f8172a24a433af140759d43882faf6
+fresh_build:
+  root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-build-approved-90b6ff8
+  packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+  build_result: PASS; 3 packages finished
+  all_three_project_prefixes_exact: true
+  mujoco_runtime_check: PASS
+  reset_qualified_runtime_check: PASS
+fingerprint:
+  dependency_sha256: 1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  approved_proposal_sha256: 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897
+fingerprint_artifact:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp107-fingerprint.json
+  sha256: a4ac6cf1136fe6b622e5c9de7729b3eb877a308a8cc965e08c85b033ddbc5e03
+runtime:
+  evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp107
+  batch_id: MNT-A-EXP107
+  simulation_session_id: MNT-A-EXP107-full-01
+  ros_domain_id: 184
+  gz_partition: so101-mnt-a-exp107
+  teleop_port: 8024
+  headless: false
+  tmux_session: so101-mnt-a-exp107
+preflight:
+  - Domain 184 has no nodes, TCP port 8024 is not listening, and the evidence root, runner artifacts, and tmux session are absent.
+  - All three declared project runtime packages resolve to the unique fresh install; the fork commit/tag/files remain locked.
+success_contract:
+  - One new stack reaches READY, applies table_corner_nw, returns a fresh qualified epoch-1 step-0 reset, and completes exactly the nine production phases.
+  - Controller/action and joint/TCP convergence, exact approved fresh bilateral grasp, causal micro-lift/stable transport, MoveIt attach/detach readback, release settle, final target/support/twist, and world synchronization all pass.
+  - Ordered shutdown exits zero with its marker and leaves no owned process, node, listener, or tmux session.
+failure_contract: One VALID_FAILURE or INVALID result terminates this attempt; no automatic extra attempt or hidden retry.
+frozen_scope: Identical to EXP-106. No motion, contact threshold, safety gate, planner, model, scene, geometry, simulator-state, waypoint, or five-win strategy change is authorized.
+decision: PLANNED and committed before stack launch or controller action. Only the registered production runner may execute EXP-107.
+```
