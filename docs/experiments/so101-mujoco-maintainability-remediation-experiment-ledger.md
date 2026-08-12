@@ -2991,3 +2991,41 @@ next_experiment_new_information:
 next_experiment: NONE_PENDING_RED_DIAGNOSIS
 next_command: Write and run the minimum failing launch/plugin parameter-resolution and structured mismatch persistence tests.
 ```
+
+## Checkpoint MNT-CP-021 — evidence identity RED diagnosis
+
+```yaml
+checkpoint_id: MNT-CP-021
+recorded_at: 2026-08-12T19:02:11+08:00
+last_valid_experiment: EXP-109
+immutable_invalid_experiment: EXP-110 INVALID_EVIDENCE; not rerun or reclassified
+abandoned_unexecuted_ids: [EXP-111, EXP-112, EXP-113, EXP-114]
+phase: RED_DIAGNOSIS_COMPLETE
+red_results:
+  structured_mismatch_persistence:
+    status: RED
+    observed: DynamicTransportEvidenceObserver strictly rejects the wrong chunk session, but AtomicTransportEvidenceStore does not persist expected_session_id, actual_session_id, topic, or message_kind.
+  publisher_provenance:
+    status: RED
+    observed: No helper exists to persist publisher count, node name/namespace, and endpoint GID for the ordinary snapshot and physics-step chunk topics.
+  launch_binding:
+    status: RED
+    observed: so101_pick_place.launch.py has no single helper that binds the runtime session at both the root parameter name and the plugin subnode typed-lookup name.
+  unconfigured_session:
+    status: RED
+    observed: With otherwise valid plugin parameters and no session override, SimulationEvidencePlugin::init accepts the literal fallback unconfigured-session.
+parameter_resolution_facts:
+  upstream_call: MujocoSystemInterface passes get_node()->create_sub_node("simulation_evidence") to the plugin.
+  typed_subnode_lookup: get_parameter("simulation_session_id", value) expands to simulation_evidence/simulation_session_id; a dotted simulation_evidence.simulation_session_id override does not satisfy it.
+  actual_plugin_helper_lookup: The current helper calls has_parameter(name) and the non-template get_parameter(name); on the subnode this reads the root simulation_session_id rather than the typed slash-scoped parameter.
+  hypothesis_disposition: The strongest initial hypothesis is only partially supported. Subnode lookup overloads do differ, but the current plugin helper reads root scope. Therefore parameter scope alone is not yet a confirmed cause of EXP-110; duplicate/stale publishers, runtime provenance, and the actual received identity remain open until EXP-115.
+producer_code_facts:
+  ordinary_snapshot: SimulationEvidencePlugin/EvidenceBuilder publishes /so101/simulation/evidence from EvidenceState.simulation_session_id.
+  physics_chunk: The same plugin and EvidenceState build each PhysicsStepEvidence; PhysicsStepEvidenceBuffer copies the first sample session into the chunk header.
+  split_producer_status: No split producer exists in source, but live publisher count and GIDs were not captured in EXP-110 and must be proved in EXP-115.
+test_environment_note: The first aggregate CTest invocation omitted sourcing the just-built install and therefore produced unrelated missing-typesupport failures. Re-running the focused binaries with the isolated install sourced left the parameter-scope characterization green and the unconfigured-session acceptance as the intended RED. Those environment-induced failures are not product findings.
+frozen_behavior: No production behavior, strategy, MJCF, scene, geometry, controller, waypoint, q6, speed, or threshold was changed during RED.
+protected_documents: Both unrelated untracked documents remain untouched and untracked.
+next_experiment: NONE_UNTIL_GREEN_GATES
+next_command: Commit the RED diagnosis checkpoint and tests, then implement the minimum fail-fast session source, explicit launch binding, structured mismatch persistence, and publisher provenance without changing motion semantics.
+```

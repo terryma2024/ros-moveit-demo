@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -16,8 +17,10 @@ from so101_mujoco_demo_py.mujoco.transport_observer import (
     BoundaryActionClient,
     CancellationAck,
     DynamicTransportEvidenceObserver,
+    EvidenceInvalid,
     HazardLatch,
     ReactionLatencyInvalid,
+    publisher_provenance,
 )
 
 
@@ -94,6 +97,55 @@ def test_goal_dispatch_is_the_first_dynamic_boundary(tmp_path: Path) -> None:
     assert boundary.physics_step == 104
     assert value.boundaries[1].kind is TransportBoundaryKind.WAYPOINT_START
     assert value.boundaries[1].physics_step == 104
+
+
+def test_session_mismatch_is_rejected_with_structured_durable_identity(tmp_path: Path) -> None:
+    value = observer(tmp_path)
+    wrong_session = replace(chunk(100, 104), simulation_session_id="producer-fallback")
+
+    with pytest.raises(EvidenceInvalid, match="chunk simulation session mismatch") as caught:
+        value.accept_chunk(wrong_session)
+    index_path = value.close_invalid(caught.value)
+
+    document = json.loads(index_path.read_text(encoding="utf-8"))
+    assert document["outcome_class"] == "INVALID_EVIDENCE"
+    assert document["identity_mismatch"] == {
+        "actual_session_id": "producer-fallback",
+        "expected_session_id": "EXP-110-session",
+        "message_kind": "PhysicsStepEvidenceChunk",
+        "topic": "/so101/simulation/physics_step_chunks",
+    }
+    assert document["chunks"] == []
+    assert document["boundaries"] == []
+
+
+def test_publisher_provenance_records_count_node_and_gid() -> None:
+    class Endpoint:
+        node_name = "mujoco_ros2_control_node"
+        node_namespace = "/"
+        endpoint_gid = bytes.fromhex("001122aabb")
+
+    class Node:
+        def get_publishers_info_by_topic(self, topic: str):
+            assert topic == "/so101/simulation/physics_step_chunks"
+            return [Endpoint()]
+
+    assert publisher_provenance(
+        Node(),
+        topic="/so101/simulation/physics_step_chunks",
+        message_kind="PhysicsStepEvidenceChunk",
+    ) == {
+        "message_kind": "PhysicsStepEvidenceChunk",
+        "publisher_count": 1,
+        "publishers": [
+            {
+                "endpoint_gid": "001122aabb",
+                "node_name": "mujoco_ros2_control_node",
+                "node_namespace": "/",
+            }
+        ],
+        "topic": "/so101/simulation/physics_step_chunks",
+    }
 
 
 def test_action_proxy_observes_exact_dispatch_and_cancel_call_boundaries() -> None:
