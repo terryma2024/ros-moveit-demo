@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 2af3b51ff36d01291261762e9530b919a5ec71cb
+current_commit: 93beccf1e811a83c15586236a8d903f95ff03d7d
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -16,13 +16,14 @@ confirmed_conclusions:
   - Task 6 installs strict neutral world/lifecycle contracts and MuJoCo adapters with fresh-state validation; CP-FUSION-003.
   - Task 7 installs typed robot/scene ports and removes direct ROS client construction from application; CP-FUSION-004.
   - Task 8 makes lossless physics-step tracing optional for execute and mandatory for MuJoCo qualification; CP-FUSION-005.
+  - Task 9 centralizes backend composition and separates execution classification from qualification status; CP-FUSION-006.
 disproven_routes:
   - Historical TASK15-FULL-A is INVALID because headless execution could not satisfy the required viewer-camera readiness gate; CP-156.
   - Recreating or sourcing the removed migration worktree is unnecessary and would contradict the verified merged-main handoff; CP-FUSION-001.
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-005
+latest_checkpoint: CP-FUSION-006
 next_experiment: NONE
 ---
 
@@ -184,4 +185,32 @@ evidence:
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task8/unified-tests.log sha256=2f4732c586995104aa071102838621cbfe536f747d36a0e7427909f1c6593a0d
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task8/dry-run.log sha256=ce72e16ecb692aa0a1555ea6a15834ab984c05495b6da872e76a7aa087c54074
   - log/fusion-t8/latest_build
+```
+
+## Checkpoint CP-FUSION-006
+
+```yaml
+checkpoint_id: CP-FUSION-006
+last_valid_experiment: EXP-168 historical uncounted visual corroboration; no fusion live experiment has started
+current_hypothesis: Common visual/task geometry can be made single-source while preserving backend-specific collision and physics assets.
+working_tree_status: HEAD 93beccf1e811a83c15586236a8d903f95ff03d7d; Task 9 composition, result model, CLI routing, tests, and this checkpoint are intentionally dirty before the scoped Task 9 commit.
+owned_processes: NONE
+preserved_processes: unchanged preserved tmux sessions and pre-existing ros2 daemons; no process or session was controlled.
+confirmed_conclusions:
+  - Runtime composition selects exactly one backend, exact policy variant, explicit adapter set, capabilities, and deterministic qualification bundle without fallback.
+  - Core and application AST scans reject imports rooted at so101_demo.backends, mujoco, gazebo, or ros_gz.
+  - Valid policy/execution failures classify as FAILED; contaminated evidence classifies as INVALID; capability/safety refusal classifies as REJECTED.
+  - QualificationStatus is independent of execution status.
+  - The complete unified suite passes 47/47 after the fusion-t9 build, and the installed --backend mujoco --run-mode dry_run path retains the exact 19-transition trace.
+  - The frozen MuJoCo policy remains aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356.
+disproven_routes:
+  - Extending the frozen state-machine RunStatus enum breaks Task 3 public-domain parity; the new four-way execution classification therefore uses the separate ExecutionRunStatus enum while legacy RunStatus remains unchanged.
+open_risks:
+  - The composition bundle still lacks the unified asset closure that Task 10 must install and Task 16 must gate.
+  - Concrete runtime adapter construction needs the installed launch graph from Tasks 10-12; the adapter provider is intentionally explicit and fail-closed until then.
+next_command: Write and run Task 10 geometry-manifest and installed asset-closure RED tests.
+evidence:
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task9/unified-tests.log sha256=a40a1467baf3f2b62bc1f66d715e6cd7155b2eb4f4d52c5009bfa7b1b6be3805
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task9/dry-run.log sha256=ce72e16ecb692aa0a1555ea6a15834ab984c05495b6da872e76a7aa087c54074
+  - log/fusion-t9/latest_build
 ```
