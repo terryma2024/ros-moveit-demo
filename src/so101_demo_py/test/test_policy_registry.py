@@ -1,3 +1,4 @@
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -7,22 +8,15 @@ from so101_demo.core.policy_registry import PolicyValidationError, load_policy_v
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_ROOT = REPOSITORY_ROOT / "src" / "so101_demo_py"
-LEGACY_POLICY = (
-    REPOSITORY_ROOT
-    / "src"
-    / "so101_mujoco_demo_py"
-    / "config"
-    / "motion_policies"
-    / "light_cup_wall_pick.yaml"
-)
 POLICY_ROOT = PACKAGE_ROOT / "config" / "policies" / "light_cup_wall_pick" / "v1"
+FROZEN_POLICY_SHA256 = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 
 
 def test_v1_simulator_variants_are_exact_frozen_bytes() -> None:
     """Catch any edit, formatting pass, or backend tuning of either frozen v1 variant."""
 
-    frozen = LEGACY_POLICY.read_bytes()
-    assert (POLICY_ROOT / "mujoco.yaml").read_bytes() == frozen
+    frozen = (POLICY_ROOT / "mujoco.yaml").read_bytes()
+    assert hashlib.sha256(frozen).hexdigest() == FROZEN_POLICY_SHA256
     assert (POLICY_ROOT / "gazebo.yaml").read_bytes() == frozen
 
 
@@ -47,7 +41,7 @@ def test_loader_rejects_noncanonical_simulator_variant(tmp_path: Path, mutation:
     variant_root = package / "config" / "policies" / "light_cup_wall_pick" / "v1"
     variant_root.mkdir(parents=True)
     shutil.copyfile(POLICY_ROOT / "manifest.yaml", variant_root / "manifest.yaml")
-    document = yaml.safe_load(LEGACY_POLICY.read_bytes())
+    document = yaml.safe_load((POLICY_ROOT / "mujoco.yaml").read_bytes())
     if mutation == "unknown_field":
         document["unexpected"] = True
     elif mutation == "missing_field":

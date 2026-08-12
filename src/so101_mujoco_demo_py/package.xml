@@ -1,45 +1,14 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>so101_mujoco_demo_py</name>
-  <version>0.1.0</version>
-  <description>Independent Python SO-101 MuJoCo pick-place demonstration.</description>
+  <version>0.2.0</version>
+  <description>Deprecated MuJoCo compatibility forwarders for so101_demo_py.</description>
   <maintainer email="maintainer@example.com">SO-101 maintainers</maintainer>
   <license>Apache-2.0</license>
-
   <buildtool_depend>ament_python</buildtool_depend>
-
-  <depend>ament_index_python</depend>
-  <depend>geometry_msgs</depend>
-  <depend>builtin_interfaces</depend>
-  <depend>control_msgs</depend>
-  <depend>mujoco_ros2_control</depend>
-  <depend>mujoco_ros2_control_msgs</depend>
-  <depend>mujoco_ros2_control_plugins</depend>
-  <depend>mujoco_vendor</depend>
-  <depend>controller_manager</depend>
-  <depend>controller_manager_msgs</depend>
-  <depend>joint_state_broadcaster</depend>
-  <depend>joint_trajectory_controller</depend>
-  <depend>launch</depend>
-  <depend>launch_ros</depend>
-  <depend>moveit_msgs</depend>
-  <depend>robot_state_publisher</depend>
-  <depend>rclpy</depend>
-  <depend>sensor_msgs</depend>
-  <depend>shape_msgs</depend>
-  <depend>so101_mujoco_support</depend>
-  <depend>std_msgs</depend>
-  <depend>trajectory_msgs</depend>
-  <depend>tf2_ros</depend>
-  <exec_depend>python3-yaml</exec_depend>
-  <exec_depend>moveit_ros_move_group</exec_depend>
-  <exec_depend>moveit_simple_controller_manager</exec_depend>
-  <exec_depend>so101_teleop</exec_depend>
-
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>so101_demo_py</exec_depend>
   <test_depend>ament_pytest</test_depend>
-  <test_depend>python3-pytest</test_depend>
-
-  <export>
-    <build_type>ament_python</build_type>
-  </export>
+  <export><build_type>ament_python</build_type></export>
 </package>
