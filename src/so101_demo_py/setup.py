@@ -8,6 +8,15 @@ package_root = Path(__file__).resolve().parent
 subpackages = find_packages(where="src")
 
 
+def installed_resources() -> list[tuple[str, list[str]]]:
+    entries: list[tuple[str, list[str]]] = []
+    for path in sorted((package_root / "config").rglob("*")):
+        if path.is_file() and "__pycache__" not in path.parts:
+            relative = path.relative_to(package_root)
+            entries.append((f"share/{package_name}/{relative.parent}", [str(relative)]))
+    return entries
+
+
 setup(
     name=package_name,
     version="0.1.0",
@@ -20,7 +29,8 @@ setup(
             [f"resource/{package_name}"],
         ),
         (f"share/{package_name}", ["package.xml"]),
-    ],
+    ]
+    + installed_resources(),
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="SO-101 maintainers",
