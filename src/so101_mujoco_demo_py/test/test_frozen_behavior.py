@@ -45,7 +45,7 @@ def test_repository_frozen_behavior_and_backend_integration_contract_match() -> 
     report = verify_frozen_behavior(REPO_ROOT, MANIFEST_PATH)
 
     assert report["manifest_sha256"] == (
-        "2587388a204f58d12c072ede6005e45d167d2bd861135dcc1c3dadc13efa8dfd"
+        "d74395d79ea62246656f820abe0cba54b3f18cf8104e735e2c7b91e196dc2c5b"
     )
     assert report["backend_integration_contract"] == "ACTIVE_GAZEBO_NOT_FROZEN"
     assert report["instrumentation_diff_gate"] == "MATCH"
