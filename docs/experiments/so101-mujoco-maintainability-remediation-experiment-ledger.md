@@ -526,3 +526,15 @@ safety_aborts:
 early_stop: Stop the ordered scan at the first valid physical left_only result, then preregister independent RESET_WORLD repeatability trials at that exact offset before resuming the seven-regime matrix.
 decision: PENDING
 ```
+
+### Provenance correction before EXP-032 runtime start
+
+```yaml
+recorded_at: 2026-08-12T14:03:00+08:00
+scope: Historical MNT-CP-008, EXP-022-through-EXP-028, and the EXP-032-through-EXP-043 preregistration expanded short commit d325e2d to a nonexistent object.
+incorrect_text: d325e2d2e518553805a6850ca1c59e7e033b4a64
+correct_installed_source_commit: d325e2d98a75039e76b597d2ba1ef6484b752b64
+verification: git rev-parse d325e2d returned the corrected object; the isolated overlay was built after that implementation commit and before ledger-only commits.
+runtime_state: No stack, reset, controller, simulator, or object-state action had started when this correction was recorded.
+decision: Use the corrected object for EXP-032 and every later provenance comparison; retain the original text as auditable history.
+```
