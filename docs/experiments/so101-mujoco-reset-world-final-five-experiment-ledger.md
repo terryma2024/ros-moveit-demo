@@ -7,7 +7,7 @@ success_contract: Exactly five serial VALID SUCCESS records on one unchanged non
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 302c4ef9550e036f127111e473f44a823b1ab643
-current_commit: 34e2000b15227d1bcb6ec67d482d78e5354b0918
+current_commit: c9f3c990a635f4773613f5778150df5d504bb4c2
 evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
 confirmed_conclusions:
   - MNT-CP-057 terminated MNT-Q-RESET-EXP131-135 permanently after EXP-131 used high-rate evidence on the slow /tmp volume and the old runner continued into polluted EXP-132/133 attempts.
@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-017
-next_experiment: LOCAL_MAIN_FETCH_REVIEW_AND_MERGE
+latest_checkpoint: RESET-FIVE-CP-018
+next_experiment: NONE_REMOTE_PUSH_REVIEW_REQUIRED
 ```
 
 ## Immutable challenge boundary
@@ -560,6 +560,100 @@ protected_user_state:
 next_experiment: EXP-141
 next_command: Commit the frozen artifact registration, then preregister EXP-141 through EXP-145 before any stack startup.
 remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-018 — local main merged and verified
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-018
+recorded_at: 2026-08-13T02:14:00+08:00
+prior_checkpoint: RESET-FIVE-CP-017
+status: LOCAL_MAIN_MERGED_VERIFIED_REMOTE_PUSH_REVIEW_REQUIRED
+remote_review:
+  remote: origin
+  hosting: Gitee
+  fetch: PASS
+  origin_main_commit: 8d85205286d2635d4ddbc91431c933dafb4eb661
+  local_main_before_merge: 8d85205286d2635d4ddbc91431c933dafb4eb661
+  local_main_premerge_status: CLEAN
+  local_main_vs_origin_main_before_merge: {ahead: 0, behind: 0}
+merge:
+  source: codex/so101-mujoco-ros2-teleop
+  target: local main at /data/work/ws_moveit
+  method: FAST_FORWARD_ONLY
+  command: git merge --ff-only codex/so101-mujoco-ros2-teleop
+  merge_commit_created: false
+  conflicts: NONE
+  verified_merge_tip: c9f3c990a635f4773613f5778150df5d504bb4c2
+  local_main_final_commit: refs/heads/main after this ledger-closure commit
+  self_reference_note: A commit cannot embed its own SHA; resolve the exact closure SHA with git rev-parse refs/heads/main after this commit.
+postmerge_build:
+  source_order:
+    - /opt/ros/jazzy/setup.zsh
+    - /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh
+    - /data/work/ws_moveit/install/setup.zsh
+  packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+  result: PASS
+  summary: 3 packages finished
+  zero_package_run: false
+postmerge_pytest:
+  initial_result: 727 passed, 4 skipped, 11 failed
+  initial_failure_boundary: All 11 failures were fork-contract tests caused by the newly merged gitlink not yet being materialized in the local main worktree.
+  corrective_environment_action: git submodule update --init --recursive third_party/mujoco_ros2_control
+  submodule_after_init: {commit: 738e304551b4ea6db020b466086a13db71b65607, tag: so101-0.0.3-r6, status: CLEAN}
+  final_result: PASS
+  final_summary: 738 passed, 4 skipped
+  scope: [all so101_mujoco_demo_py tests, all so101_teleop tests]
+postmerge_ruff:
+  initial_invocation_error: The Bash gate was mistakenly invoked through zsh, so BASH_SOURCE was unset and no lint ran.
+  corrected_command: bash src/so101_mujoco_demo_py/scripts/check_ruff.sh
+  result: PASS
+  summary: All checks passed; 131 files already formatted
+postmerge_colcon_test:
+  packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+  result: PASS
+  package_count: 3
+  summary: 2390 tests, 0 errors, 0 failures, 96 skipped
+  support_cpp_tests: 19 passed
+  teleop_ctest_targets: 24 passed
+  mujoco_python_tests: 525 passed, 4 skipped
+  zero_test_run: false
+backend_integration:
+  result: PASS
+  output: backend integration contract passed
+migration_isolation:
+  result: PASS
+reset_qualified_runtime:
+  initial_invocation_error: The relocatable main checkout defaulted SO101_WORKSPACE_DIR to /data/work, so the checker could not match the user-required fork overlay path.
+  corrected_environment: SO101_WORKSPACE_DIR=/data/work/ws_moveit/.worktrees
+  result: PASS
+  fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_tag_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_status: CLEAN
+  fork_overlay_prefixes: ALL_/data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+  project_package_prefixes: ALL_/data/work/ws_moveit/install
+  required_runtime_file_hashes: MATCH
+frozen_behavior:
+  manifest_sha256: d74395d79ea62246656f820abe0cba54b3f18cf8104e735e2c7b91e196dc2c5b
+  dependency_sha256: be6bc595cd71a10df32765e11884183c0096db765a5ee35c3ef6a0b109ef5a3a
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+repository_gates:
+  git_diff_check: PASS
+  local_main_status_before_ledger_closure: CLEAN
+  force_or_history_rewrite: NONE
+protected_user_state:
+  documents_staged_or_committed: false
+  parity_ledger_sha256: fde9b64b7120ee49a16e2e001db348ff3eb1af2c4414d3d7437997779677a6b0
+  migration_summary_sha256: 903a5a753140a9ba1d1bdea8a8e240960f42c248c04267ec6e82043f6d7ac963
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+remote_push_performed: false
+next_state: REMOTE_PUSH_REVIEW_REQUIRED
 ```
 
 ## Checkpoint RESET-FIVE-CP-017 — visual corroboration passed
