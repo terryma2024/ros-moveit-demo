@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: b14f5c93552993b0bce97846d60ff34717d4f968
+current_commit: d4b1c00ccead4b3403753b5d5e936938a603ed9a
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,7 +21,7 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-046
+latest_checkpoint: MNT-CP-047
 next_experiment: EXP-130
 ```
 
@@ -4096,7 +4096,7 @@ experiments:
     decision: KEEP_VALID_SUCCESS_4_OF_5
     next_experiment: EXP-130_ON_SUCCESS_ONLY
   - experiment_id: EXP-130
-    status: PLANNED
+    status: RUNNING
     prior_experiment: EXP-129
     hypothesis: A fifth independent FULL_RESTART completes the unchanged streak.
     prediction: All common success criteria pass with consecutive_count 5 and qualifies the batch.
@@ -4565,6 +4565,53 @@ protected_state:
     - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
 next_experiment: EXP-130
 next_command: Run the complete EXP-130 preflight, transition EXP-130 from PLANNED to RUNNING in the ledger, commit the transition, and execute its preregistered command exactly once.
+```
+
+## Checkpoint MNT-CP-047 — EXP-130 RUNNING transition
+
+```yaml
+checkpoint_id: MNT-CP-047
+recorded_at: 2026-08-12T22:54:24+08:00
+experiment_id: EXP-130
+status_transition: PLANNED -> RUNNING
+prior_experiment: EXP-129
+consecutive_successes_before_run: 4
+waiver_inherited: false
+preregistered_identity:
+  simulation_session_id: MNT-Q-EXP130-full-01
+  ros_domain_id: 202
+  http_port: 8042
+  gz_partition: so101-mnt-q-exp130
+  evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp130
+lifecycle: FULL_RESTART
+workflow_invocations: 1
+reset_transactions: 1
+retry_count: 0
+pre_run_result_commit: d4b1c00ccead4b3403753b5d5e936938a603ed9a
+provenance:
+  fork_local_origin_main_and_remote_tag_peel: 738e304551b4ea6db020b466086a13db71b65607
+  fork_local_vs_origin_main: {ahead: 0, behind: 0}
+  fork_status: CLEAN
+  common_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install
+  package_prefixes: EXACT_COMMON_OVERLAY
+  runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  harness_sha256: b90ff4d8ccf4b87aef7796d4125a1c907e9321d2c6ad826c903807b79bf14054
+preflight:
+  root_status: Exactly the two protected untracked documents; index and all other tracked paths clean.
+  protected_gazebo_status: ZERO_STATUS_AND_DIFF
+  domain_202_nodes: NONE
+  port_8042_listener: NONE
+  tmux_session_so101_mnt_q_exp130: ABSENT
+  evidence_root: ABSENT
+  relevant_processes: NONE
+  codex_cua: IDLE_AT_ZSH_PROMPT
+  result: EXP130_PREFLIGHT_PASS
+visual_acceptance:
+  required_sequence: snapshot -> action -> fresh snapshot
+  persisted_png_required: true
+  independent_png_decode_before_acceptance: true
+  EXP_126_waiver_applies: false
+decision: RUN exactly one preregistered natural workflow and stop on any product, provenance, evidence, visual-integrity, or cleanup failure.
 ```
 
 ## EXP-128 — VALID FULL_RESTART success
