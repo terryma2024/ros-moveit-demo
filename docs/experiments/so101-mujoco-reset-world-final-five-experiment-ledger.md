@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-012
-next_experiment: EXP-145
+latest_checkpoint: RESET-FIVE-CP-013
+next_experiment: NON_COUNTING_VISUAL_CORROBORATION
 ```
 
 ## Immutable challenge boundary
@@ -646,6 +646,64 @@ artifacts_sha256:
   dynamic_summary: 5db5df62870593a4008294cae1eb774e38eb2b5c8092b87820dd5645853267c0
   shared_launch_log: DEFERRED_UNTIL_CLEAN_SHUTDOWN
 next_experiment: EXP-145
+remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-013 — exact RESET_WORLD 5/5 qualified
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-013
+recorded_at: 2026-08-13T01:56:00+08:00
+prior_checkpoint: RESET-FIVE-CP-012
+status: QUALIFIED_EXACT_SUCCESS_5_OF_5_VISUAL_PENDING
+experiment_id: EXP-145
+manifest_record_id: MNT-Q-RESET-EXP141-145-05
+result: VALID_SUCCESS
+reset: {old_epoch: 4, new_epoch: 5, simulation_step: 0, simulation_session_id: MNT-Q-RESET-EXP141-145-reset}
+trace: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+physical_outcome:
+  primary_failure: null
+  final_pose_m: [-0.07907027052823878, -0.24700594837789486, 0.16544850487073473]
+  final_upright_tilt_rad: 0.017240007958311918
+  intended_support_contact: true
+  gripper_contact: false
+planning_scene: {moveit_attached: false, world_object_synchronized: true}
+qualification_summary:
+  attempt_count: 5
+  consecutive_successes: 5
+  target_count: 5
+  qualified: true
+  batch_invalid: false
+  invalid_reason: null
+  statuses: [SUCCESS, SUCCESS, SUCCESS, SUCCESS, SUCCESS]
+  reset_epochs: [1, 2, 3, 4, 5]
+  simulation_session_ids: [MNT-Q-RESET-EXP141-145-reset]
+  exact_nine_phase_trace_all_records: true
+  physical_primary_failure_all_records: null
+  planning_scene_detached_world_synchronized_all_records: true
+  clean_shutdown_all_records: true
+  runner_exit_code: 0
+artifacts_sha256:
+  qualification_manifest: f18115c1d2caf104f9dbcc2b4eb91c3ef4b2a187c235fb9453334d8640a628b3
+  qualification_runner_log: a0cacce891db808a619cb6f3932801b2cc48efac605adb407e51346a66a30244
+  shared_launch_log: c60196c7f69cefdc6e139dfbe3ccfd73e55bdb7b98a0a988619215b1d864bd3e
+  EXP-141: {actions: fd4adf317913a44a3492cf41263a49084a86618cdec020f12e247b9ed80b0631, owner_manifest: f5b1552c79e891febec610712ff58abbe8b6784cbab00f9dff8d220d7d554b22, raw_run_index: cd24fad14e1d235674d74a1deb35bad2e3dc7d97987b24d53960f64624091f92, dynamic_summary: 49c8947bbe5c408ff360ff1de7767b6fb08f0ce4230e7351a309280476508a2f}
+  EXP-142: {actions: 2cf00e6a14746570ff7a5c87a2e388adaae2525c1b933b0230b481aa807ff4e4, owner_manifest: 7e9110e7bc05ee4bf15559d08040ea11cd624d580a1ec225fd748d49985d35d5, raw_run_index: 5c5f8d8505aaf11dff1b308688bf5be839b5fb089496b4f1a82a4afe449da548, dynamic_summary: 89606ec7929198a382dd5b895d060a1fba9a8959f5822e117339ba5f96b64c9f}
+  EXP-143: {actions: a434b1ed1d0d4a0aaed34f3af2d18d7ecb8c352a563a6b43250309588cde4542, owner_manifest: 4d56412770a894029d31b283dcbbc5bc0f0ec5a1402419704f65b92360e06234, raw_run_index: 9e1b0398027a46d082e18c99835dd63744881eebe549b0beb330c0ac1f3d6e18, dynamic_summary: 4520518565b344c53fcfa8db680828f630ad6335de1143e3a5dfed79f48dbcbe}
+  EXP-144: {actions: 9e454b7fb2a35e7100518c384f24b9f4dbd9ac21772a0cd53bcac0f6d4f43890, owner_manifest: ff6dc588c27f87bac287b1cf4b08a6cc5fdf645012f3917dda80bf2a8fe0432d, raw_run_index: 6923da88ed51fdafc3c3bf560f0992466ef37810af87b5cd808d884f092bddde, dynamic_summary: 5db5df62870593a4008294cae1eb774e38eb2b5c8092b87820dd5645853267c0}
+  EXP-145: {actions: 594448108c6d227530def67bda5e7ba678dd2fea545892ead4905a1973fb018b, owner_manifest: 6cf8b7ac7d66abe7402a2cee7689a60c889200ecbbbd2517ff47ca20cc8496c5, raw_run_index: 4f46c2d1e7e31d9cab0e9c3cbd3b79731821c05aa793d3fba8748ee9cfe8d27a, dynamic_summary: e5a3b8e5475a228fdc56f6d2492cd92a597f1a37a294c87f2d743073200dff11}
+shutdown_evidence:
+  ordered_shutdown_marker_all_records: true
+  fatal_signal_all_records: false
+  process_died_all_records: false
+  returncode_all_records: 0
+  ros_domain_205_nodes_after_probe: NONE
+  tcp_port_8045_listener_after_probe: NONE
+  owned_processes_after_probe: NONE
+  owned_tmux_session_after_cleanup: NONE
+counting_boundary_closed: true
+visual_corroboration_counting_status: EXCLUDED_PENDING
+merge_state: BLOCKED_ONLY_ON_VISUAL_AND_LOCAL_MAIN_GATES
 remote_push_state: FORBIDDEN
 ```
 
