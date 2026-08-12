@@ -19,7 +19,7 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-017
+latest_checkpoint: MNT-CP-018
 next_experiment: EXP-110
 ```
 
@@ -2564,7 +2564,23 @@ next_command: Write the C++ physics-step/chunk/latch RED tests without modifying
 ```yaml
 experiment_id: EXP-110
 registered_at: 2026-08-12T17:32:00+08:00
-status: PLANNED
+status: RUNNING
+running_checkpoint_at: 2026-08-12T18:25:15+08:00
+resolved_runtime_provenance:
+  implementation_source_commit: 368abe4d7388a15a9b18ef175b362e584f2812df
+  ledger_checkpoint_commit_before_running: b44234c
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-gate-368abe4/install
+  install_tree_sha256: d7e73684f99aaa10acb9a9bf64b0b3f13870bcf99dd55328ee5280cddd438dbd
+  runtime_fingerprint: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-runtime-fingerprint.json
+  runtime_fingerprint_sha256: 9a35d05fc4ad97a92757b28e7886e84e0461a7ffbcb908e1df6f55728028fa90
+running_preflight:
+  ros_domain_187_nodes: []
+  port_8027_listeners: []
+  gz_partition_processes: []
+  evidence_root_absent: true
+  tmux_session_absent: true
+  project_prefixes_exact: true
+  protected_gazebo_zero_diff: true
 prior_experiment: EXP-109
 hypothesis: The frozen five-win strategy produces a complete replayable dynamic-transport force/compression trace below the unchanged 11.60 N diagnostic hard stop.
 prediction: One independent FULL_RESTART reaches the existing physical transport-success outcome; every 2 ms step is continuous and all diagnostic metrics recompute from raw chunks.
@@ -2851,4 +2867,22 @@ open_risks:
   - Live physics-step continuity, cancellation latency, physical transport outcome, and fresh visual corroboration remain unproved until EXP-110.
 next_experiment: EXP-110
 next_command: Create and hash the fixed runtime fingerprint, then record EXP-110 RUNNING before its registered FULL_RESTART command.
+```
+
+## Checkpoint MNT-CP-018 — EXP-110 RUNNING dispatch boundary
+
+```yaml
+checkpoint_id: MNT-CP-018
+recorded_at: 2026-08-12T18:25:15+08:00
+last_valid_experiment: EXP-109
+current_experiment: EXP-110
+current_status: RUNNING
+behavior_source_commit: 368abe4d7388a15a9b18ef175b362e584f2812df
+install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-gate-368abe4/install
+runtime_fingerprint_sha256: 9a35d05fc4ad97a92757b28e7886e84e0461a7ffbcb908e1df6f55728028fa90
+preflight: Domain 187, port 8027, partition/session process selectors, evidence root, and owned tmux session are all empty or absent; all three package prefixes resolve to the isolated install.
+working_tree_status: Only the two protected untracked user documents plus this ledger update; no strategy, model, scene, geometry, policy, or source change.
+owned_processes: NONE before dispatch
+preserved_processes: [tmux codex, codex-cua, so101-mujoco-gui]
+next_command: GZ_PARTITION=so101-mnt-a-phase-exp110 ros2 run so101_mujoco_demo_py run_qualification --batch-id MNT-A-PHASE-EXP110 --lifecycle FULL_RESTART --count 1 --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-runtime-fingerprint.json --evidence-root /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110 --base-domain-id 187 --base-port 8027 --no-headless
 ```
