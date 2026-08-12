@@ -2096,3 +2096,45 @@ remediation:
   verification: 474 package tests passed, 4 skipped; Ruff lint/format, migration isolation, and git diff check passed.
 decision: Commit the remediation, create another unique complete runtime build, and preregister EXP-108 before any further live action.
 ```
+
+## EXP-108 preregistration
+
+```yaml
+registered_at: 2026-08-12T16:02:41+08:00
+experiment_id: EXP-108
+status: PLANNED
+lifecycle: FULL_RESTART
+qualification_counting: false
+purpose: Project-A acceptance of the production owner with the installed exact approved contact policy now bound into its argv.
+source_commit: 73ee752c02ba9c69fc1d11b81319733b61baf3e8
+fresh_build:
+  root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-build-approved-73ee752
+  packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+  build_and_three_prefixes: PASS
+  mujoco_runtime_check: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-build-73ee752-runtime-check.json, 7aafeb88b3169104bd1ae1e52f6650c8b4b0cb3d7ca7b936dd4df2f757c5fc8e]
+  reset_qualified_runtime_check: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-build-73ee752-reset-check.json, 6dfdf07333db31d09d301e5b98a677dd9890228e70a9259418a05b342544b087]
+fingerprint:
+  dependency_sha256: 1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  approved_proposal_sha256: 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897
+fingerprint_artifact: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp108-fingerprint.json, 3342dcafe80fb66170bec18484172e4097236261c6fbaa909dd5644b579728a2]
+runtime:
+  evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp108
+  batch_id: MNT-A-EXP108
+  simulation_session_id: MNT-A-EXP108-full-01
+  ros_domain_id: 185
+  gz_partition: so101-mnt-a-exp108
+  teleop_port: 8025
+  headless: false
+  tmux_session: so101-mnt-a-exp108
+preflight: Domain 185 empty; port 8025, evidence paths, and tmux session absent; complete fresh overlay and fingerprint validated.
+success_contract: Identical to EXP-107; one READY/reset/nine-phase physical success plus ordered exact cleanup is required.
+failure_contract: One VALID_FAILURE or INVALID terminates the attempt; no automatic extra attempt or hidden retry.
+frozen_scope: Identical to EXP-106/107; only the RED-GREEN owner argv/classification remediation differs.
+decision: PLANNED and committed before stack launch or controller action. Only the registered production runner may execute EXP-108.
+```
