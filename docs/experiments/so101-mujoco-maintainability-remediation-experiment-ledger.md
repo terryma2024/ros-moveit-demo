@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 540d51b2596cb441409d4545c298f153646c2a52
+current_commit: d325e2d2e518553805a6850ca1c59e7e033b4a64
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,8 +17,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - A fresh seven-regime fixed-fingerprint campaign can produce non-overlapping deterministic thresholds for the current model and motion policy.
-latest_checkpoint: MNT-CP-007
-next_experiment: EXP-001
+latest_checkpoint: MNT-CP-008
+next_experiment: NONE_PENDING_USER_DIRECTION
 ```
 
 ## Checkpoint MNT-CP-001
@@ -247,6 +247,126 @@ owned_processes: NONE before stack start; domain 176 no-daemon preflight was emp
 decision: PENDING
 ```
 
+## Experiment EXP-023 terminal result and registered recovery
+
+```yaml
+experiment_id: EXP-023
+status: INVALID
+observed:
+  - Centered q6 search physically reached right-only first, but the driver failed to terminate on the undeclared side and was externally bounded before emitting a terminal result.
+  - The resulting state is right-only but cannot be relabeled or used; q6 is approximately -0.04675 and cup displacement is approximately 1.02 mm.
+decision: Exclude EXP-022 through EXP-028, fix the task-external driver only, then run the production qualified teleop_reset transaction before a new full matrix.
+registered_recovery:
+  command: ROS_DOMAIN_ID=176 ros2 run so101_mujoco_demo_py teleop_reset --session-id so101-mnt-cal-001 --keyframe task_start
+  expected: epoch 0 to 1, controller/pause/reset/resume/feedback/re-pause proof, followed by explicit resume and staged approach.
+```
+
+## Experiment EXP-029
+
+```yaml
+experiment_id: EXP-029
+status: RUNNING
+lifecycle: RESET_WORLD_EPOCH_1_LEFT_ONLY_ALIGNMENT_DIAGNOSTIC
+precondition: Qualified reset 0 to 1 succeeded; explicit resume and production staged approach restored CLOSE_READY with no fingertip contact.
+single_variable: q1_offset_rad +0.003 while q6 follows the unchanged -0.040 to -0.059 bounded search.
+success: left force reaches 0.08 N while right contact remains absent.
+failure: right contact appears first; stop immediately without relabeling.
+safety: Common force, displacement, session, epoch, pause, and freshness aborts remain active.
+driver_sha256: 3a3736da369d4f744514f793c527f0bd88b571c3c15017b4f0f56bb7457e68ff
+decision: PENDING before first controller action.
+```
+
+## Experiment EXP-030 terminal result and EXP-031 plan
+
+```yaml
+EXP-030:
+  status: VALID
+  behavioral_result: FAILURE
+  observed: q1 -0.003 produced right contact before declared left-only; driver terminated itself before further closing.
+EXP-031:
+  status: PLANNED
+  lifecycle: RESET_WORLD_EPOCH_3_BILATERAL_THEN_MOVING_JAW_RELEASE_DIAGNOSTIC
+  single_variable: Centered q6 closes to >=0.08 N per side, then only q6 opens in 0.0001 rad steps until right is absent and left remains >=0.08 N.
+  success: Exact physical left-only shape; failure if both sides release or bounds are reached.
+  prerequisite: Qualified reset 2 to 3 and production staged approach CLOSE_READY.
+  driver_sha256: 86b7884dc08a032a85374d1f6a9900aabe3410fbb8a97a6c655f4a26c8d2bf05
+decision: Reset and CLOSE_READY passed; PENDING before first q6 action.
+```
+
+## Experiment EXP-031 terminal result
+
+```yaml
+experiment_id: EXP-031
+status: VALID
+behavioral_result: FAILURE
+terminal_time: 2026-08-12T13:36:00+08:00
+observed:
+  - Qualified ResetWorld advanced epoch 2 to 3, explicit resume succeeded, and the production 15-segment staged approach restored CLOSE_READY.
+  - Centered q6 close physically reached bilateral contact at or above 0.08 N per side within force/displacement bounds.
+  - Opening only q6 in 0.0001 rad steps released both sides without any sample where left remained at or above 0.08 N while right was absent.
+  - The driver emitted its own terminal failure; session, epoch, pause, force, freshness, and displacement safety gates remained valid.
+related_diagnostics:
+  - EXP-030 VALID failure proved q1 -0.003 reaches right contact before left-only.
+  - EXP-029 INVALID terminal readback at q1 +0.003 also showed right-only and supplies no counted conclusion.
+conclusion: The registered controller-only paths cannot populate the required left_only regime under the frozen geometry; the seven-regime matrix and proposal do not exist.
+decision: STOP per the approved campaign contract. Do not manufacture samples, relabel right-only evidence, analyze an incomplete matrix, approve policy, enter production execute, or proceed to Projects B/C/D.
+```
+
+## Checkpoint MNT-CP-008
+
+```yaml
+checkpoint_id: MNT-CP-008
+recorded_at: 2026-08-12T13:36:00+08:00
+last_valid_experiment: EXP-031
+current_hypothesis: A separately authorized bounded Cartesian alignment change may be required to produce physical fixed-finger-only evidence before calibration can resume.
+working_tree_status: Source clean at d325e2d2e518553805a6850ca1c59e7e033b4a64 before this ledger-only terminal record.
+owned_processes: NONE; task-owned tmux so101-mnt-cal-001 was terminated, domain 176 no-daemon postflight is empty, and no matching process remains.
+preserved_processes: Existing codex, codex-cua, and so101-mujoco-gui tmux sessions remain untouched.
+confirmed_conclusions:
+  - Isolated build and pinned fork provenance passed; three controllers and atomic evidence were ready.
+  - EXP-022 collected 25 valid no_contact samples, but its batch was invalidated by the later harness-invalid EXP-023 and is excluded.
+  - Calibration readiness bugs for first evidence, first robot state, and repeated snapshots were independently RED/GREEN fixed; table support force and stable-hold preroll statistics were also corrected before counted analysis.
+  - No complete seven-regime raw matrix, proposal, threshold activation, or user approval was produced.
+open_risks:
+  - Expanding the alignment search changes the approved campaign method and requires user direction.
+  - Execute remains correctly unavailable because contact_calibration.yaml is PLANNED, disabled, and unapproved.
+next_command: Wait for user direction on a broader bounded Cartesian alignment experiment; do not merge or push main.
+```
+
+## Experiment EXP-029 terminal result and epoch-2 recovery
+
+```yaml
+experiment_id: EXP-029
+status: INVALID
+observed: q1 +0.003 produced right-only at q6 approximately -0.04518, but the fine-step driver hit the outer bound before emitting its own terminal failure.
+decision: Do not infer a calibrated side alignment. Increase only the task-external diagnostic q6 step from 0.00002 to 0.0001 rad, retain all safety gates, run qualified reset 1 to 2, then test the opposite q1 direction as EXP-030.
+```
+
+## Experiment EXP-030
+
+```yaml
+experiment_id: EXP-030
+status: RUNNING
+precondition: Qualified reset 1 to 2 and production staged approach restored CLOSE_READY.
+single_variable: q1_offset_rad -0.003 with bounded q6 step 0.0001 rad; target left-only >=0.08 N and right absent.
+driver_sha256: 3c5b3454bfa76cd89727dc5639c966f78f97e6fc2d8c43454b127ec8aecedfea
+safety_and_terminal_contract: Identical to EXP-029.
+decision: PENDING before first controller action.
+```
+
+## EXP-022 result and EXP-023 exact action
+
+```yaml
+EXP-022:
+  status: VALID
+  result: 25 no_contact samples; table-only; matrix write succeeded with strict sequence/session/epoch provenance.
+EXP-023:
+  status: RUNNING
+  single_variable: q6 decreases from -0.040 in 0.00002 rad steps at q1_offset_rad 0.0 until left_force >= 0.08 N while right_count remains zero.
+  stop: Any right contact before the declared shape is a VALID behavioral failure; all common safety aborts remain active.
+decision: PENDING before first controller action.
+```
+
 ## Experiment EXP-008 terminal result
 
 ```yaml
@@ -282,6 +402,17 @@ observed:
   - No sample, controller command, reset, pause, or physical action occurred; CLOSE_READY remains unchanged.
 inference: NONE about physical distributions.
 decision: Exclude EXP-015 through EXP-021 and restart after equality is treated as bounded waiting while true sequence regression remains terminal.
+```
+
+## Experiments EXP-022 through EXP-028 preregistration
+
+```yaml
+status: PLANNED
+recorded_at: 2026-08-12T13:26:00+08:00
+ordered_experiments: [[EXP-022, no_contact], [EXP-023, left_only], [EXP-024, right_only], [EXP-025, bilateral_touch], [EXP-026, over_compression], [EXP-027, micro_lift_slip], [EXP-028, stable_hold]]
+source_commit: d325e2d2e518553805a6850ca1c59e7e033b4a64
+other_frozen_provenance_driver_commands_safety_and_terminal_contract: Identical to EXP-015 through EXP-021; live state remains unchanged CLOSE_READY.
+decision: PENDING
 ```
 
 ## Experiment EXP-001 terminal result
