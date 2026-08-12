@@ -7,7 +7,7 @@ success_contract: Exactly five serial VALID SUCCESS records on one unchanged non
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 302c4ef9550e036f127111e473f44a823b1ab643
-current_commit: a622f82ec331191363609e1b5a4a9d414862b232
+current_commit: 6783c8743114060a3f9f5e465fb25e05b373c7fd
 evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
 confirmed_conclusions:
   - MNT-CP-057 terminated MNT-Q-RESET-EXP131-135 permanently after EXP-131 used high-rate evidence on the slow /tmp volume and the old runner continued into polluted EXP-132/133 attempts.
@@ -18,7 +18,7 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-002
+latest_checkpoint: RESET-FIVE-CP-003
 next_experiment: EXP-136
 ```
 
@@ -288,4 +288,48 @@ protected_user_state:
   pyc_deleted: false
 next_experiment: EXP-136
 next_command: Start the preregistered run_qualification command once in tmux session MNT-Q-RESET-EXP136-140 with non-headless GUI environment.
+```
+
+## Checkpoint RESET-FIVE-CP-003 — wrapper nounset failures preserved
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-003
+recorded_at: 2026-08-13T01:29:00+08:00
+prior_checkpoint: RESET-FIVE-CP-002
+status: READY_AFTER_NON_PRODUCT_WRAPPER_CORRECTION
+non_product_wrapper_attempts:
+  count: 2
+  attempts:
+    - detached tmux wrapper start
+    - direct zsh trace mistakenly used for diagnosis and transparently counted here
+  common_output: Package 'so101_mujoco_demo_py' not found
+  first_bad_boundary: set -u caused gui-env/ROS/colcon setup scripts to encounter unset optional variables before complete project package registration.
+  runner_python_entered: false
+  stack_started: false
+  reset_world_called: false
+  experiment_id_consumed: false
+  shared_stack_directory_created: false
+  run_01_directory_created: false
+  qualification_manifest_created: false
+  hidden_retry: false
+  retained_log: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-runner.log
+  retained_log_size_bytes: 41
+  retained_log_sha256: bdc5f46bd641e1b4e3621b1376791ea578fb2b18821a03b01190ba8cfd33e383
+correction:
+  wrapper: /tmp/so101-reset-final-five-run.zsh
+  wrapper_sha256: e73592de360f6b6b026ef3e69e3f70c1e26d62e7717589773c305b394b2df8f3
+  change: Remove nounset, fail explicitly on each source error, preserve the existing log with tee append, and print the true runner exit code.
+  gui_shell_probe: PASS
+  project_prefix: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py
+  fork_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+batch_state:
+  batch_id: MNT-Q-RESET-EXP136-140
+  status: PLANNED_NOT_STARTED
+  actual_runner_entry_count: 0
+  experiments_consumed: []
+  ids_reusable_within_this_preregistered_batch: true
+  evidence_root_note: The root now contains only the preserved 41-byte wrapper failure log; the runner-owned shared-stack, run, and manifest paths remain absent.
+owned_processes: NONE
+next_experiment: EXP-136
+next_command: Start the corrected wrapper once in tmux; this is the first attempt that may enter ProductionQualificationRunner and consume EXP-136.
 ```
