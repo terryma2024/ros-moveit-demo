@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - A bounded MoveIt translation along the q6 moving-pad tangent can produce repeatable physical left_only evidence without changing geometry or simulator state.
 latest_checkpoint: MNT-CP-008
-next_experiment: EXP-069
+next_experiment: EXP-072
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1024,4 +1024,36 @@ EXP-069:
   lifecycle: RESET_WORLD
   single_variable: Native Cartesian corrected-axis TCP offset -0.0022 m.
   decision: PENDING before qualified reset epoch 13 to 14.
+```
+
+## Experiment EXP-069 invalid result and reachability-edge preregistration
+
+```yaml
+EXP-069:
+  status: INVALID
+  lifecycle: RESET_WORLD_EPOCH_14
+  observed:
+    - Qualified reset/resume/staged approach passed and left no-contact CLOSE_READY.
+    - The -0.0022 m native Cartesian request returned SUCCESS but fraction=0.956521739 with 8 points; no ExecuteTrajectory or q6 action occurred.
+  conclusion: The complete Cartesian reachability boundary lies between the full -2.1 mm path and partial -2.2 mm path.
+  decision: Exclude EXP-069 and abandon unrun EXP-070/071; stop batch.
+edge_batch:
+  status: PLANNED
+  prior_experiment: EXP-069
+  hypothesis: A point strictly inside the -2.1 to -2.2 mm reachability edge preserves fraction 1.0 while adding enough fixed-side bias to make left_only repeatable.
+  ordered_experiments:
+    - [EXP-072, -0.00212]
+    - [EXP-073, -0.00214]
+    - [EXP-074, -0.00216]
+    - [EXP-075, -0.00218]
+  lifecycle: RESET_WORLD per candidate.
+  frozen_method_and_safety: Identical native Cartesian and q6-step-0.00002 contract, driver SHA-256 5a13574de22bbb7074be8b2f2c44881ab3ce5f6b9a7a72c4c77768926f673d32.
+  invalid_criteria: Any fraction below 0.999 remains INVALID and stops this batch; no partial trajectory is executed.
+  early_stop: First valid left_only starts a separately preregistered exact-offset repeatability batch.
+EXP-072:
+  status: RUNNING
+  prior_experiment: EXP-069
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.00212 m.
+  decision: PENDING before qualified reset epoch 14 to 15.
 ```
