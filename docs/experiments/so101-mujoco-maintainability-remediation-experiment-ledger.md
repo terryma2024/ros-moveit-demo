@@ -16,9 +16,9 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
-  - A bounded MoveIt translation along the model-derived gripper closing axis can produce repeatable physical left_only evidence without changing geometry or simulator state.
+  - A bounded MoveIt translation along the q6 moving-pad tangent can produce repeatable physical left_only evidence without changing geometry or simulator state.
 latest_checkpoint: MNT-CP-008
-next_experiment: EXP-032
+next_experiment: EXP-044
 ```
 
 ## Checkpoint MNT-CP-001
@@ -537,4 +537,149 @@ correct_installed_source_commit: d325e2d98a75039e76b597d2ba1ef6484b752b64
 verification: git rev-parse d325e2d returned the corrected object; the isolated overlay was built after that implementation commit and before ledger-only commits.
 runtime_state: No stack, reset, controller, simulator, or object-state action had started when this correction was recorded.
 decision: Use the corrected object for EXP-032 and every later provenance comparison; retain the original text as auditable history.
+```
+
+## Experiment EXP-032 runtime start
+
+```yaml
+experiment_id: EXP-032
+status: RUNNING
+recorded_at: 2026-08-12T14:06:00+08:00
+prior_experiment: EXP-031
+single_variable: TCP closing-axis offset +0.0005 m.
+lifecycle: RESET_WORLD
+provenance:
+  worktree_commit_before_runtime: addef02
+  installed_source_commit: d325e2d98a75039e76b597d2ba1ef6484b752b64
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install
+  runtime_package_prefix: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install/so101_mujoco_demo_py
+  ros_domain_id: 176
+  gz_partition: so101-mnt-align-001
+  simulation_session_id: so101-mnt-align-001
+  driver_sha256: 352f451d5cbc5201235be2c710b3851e4b52d276d8f12800d1582b9c040a6e25
+observed:
+  - Domain 176 was empty before launch; one task-owned tmux session so101-mnt-align-001 started the registered command.
+  - MoveGroup, MuJoCo, robot_state_publisher, all three active controllers, and the pinned overlay prefixes passed readiness.
+commands:
+  - command: Registered isolated stack command from the EXP-032-through-EXP-043 plan.
+    exit_code: RUNNING
+decision: PENDING before the qualified reset transaction and first controller action.
+```
+
+## Experiment EXP-032 terminal result and EXP-033 runtime start
+
+```yaml
+EXP-032:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_1
+  single_variable: TCP closing-axis offset +0.0005 m.
+  commands:
+    reset_exit: 0
+    resume_exit: 0
+    staged_approach_exit: 0
+    alignment_driver_exit: 1
+    terminal_snapshot_exit: 0
+  observed:
+    - Qualified reset advanced epoch 0 to 1; explicit resume and all 15 production staged-approach segments reached CLOSE_READY.
+    - MoveIt pose planning and ExecuteTrajectory completed far enough for the driver convergence guards to pass and controller-only q6 closing to begin.
+    - Driver stopped itself when right contact appeared before left-only; terminal q6=-0.0456581 rad, right_count=1, right_force=0.0358439 N, left_count=0, maximum_force=0.144546 N.
+    - Terminal cup position [0.0199996921, -0.2794827542, 0.1648141980] m is approximately 0.000550 m from reset reference, inside all registered limits.
+    - The outer zsh wrapper used reserved variable name status only after the driver had already exited; this did not issue an action or alter the terminal evidence.
+  conclusion: A +0.5 mm closing-axis translation remains moving/right-pad-first and does not produce left_only.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-reset-EXP-032.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-032.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-032.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-032.log
+  decision: KEEP behavior conclusion; continue the preregistered ordered scan.
+EXP-033:
+  status: RUNNING
+  prior_experiment: EXP-032
+  lifecycle: RESET_WORLD
+  single_variable: TCP closing-axis offset +0.0010 m.
+  provenance_and_safety: Identical to the corrected EXP-032 registration; the outer wrapper variable is changed to rc.
+  decision: PENDING before qualified reset epoch 1 to 2.
+```
+
+## Experiment EXP-033 terminal result and EXP-034 runtime start
+
+```yaml
+EXP-033:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_2
+  single_variable: TCP closing-axis offset +0.0010 m.
+  observed:
+    - Qualified reset 1 to 2, resume, and the 15-segment staged approach passed.
+    - MoveIt planning/execution and TCP convergence guards passed; q6 closing stopped on right-first contact.
+    - Terminal q6=-0.0449584 rad, right_count=1, right_force=0.0314084 N, left_count=0, maximum_force=0.153841 N, cup displacement approximately 0.000477 m.
+  conclusion: +1.0 mm remains moving/right-pad-first.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-033.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-033.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-033.log
+  decision: KEEP behavior conclusion; continue ordered scan.
+EXP-034:
+  status: RUNNING
+  prior_experiment: EXP-033
+  lifecycle: RESET_WORLD
+  single_variable: TCP closing-axis offset +0.0015 m.
+  provenance_and_safety: Identical to corrected registration.
+  decision: PENDING before qualified reset epoch 2 to 3.
+```
+
+## Experiment EXP-034 invalid result and corrected-axis batch preregistration
+
+```yaml
+EXP-034:
+  status: INVALID
+  lifecycle: RESET_WORLD_EPOCH_3
+  observed:
+    - Qualified reset, resume, and 15-segment production staged approach passed and left fresh no-contact CLOSE_READY evidence.
+    - The pose request timed out after 8.0 s with MoveIt TIMED_OUT before ExecuteTrajectory, q6, contact, or object-state action.
+    - Geometry review then showed the registered [0.74107100, 0.00792509, -0.67137989] vector was a pad-centroid connecting line, not the q6 closing-motion tangent; its excessive vertical component explained the first planning divergence.
+  conclusion: No physical conclusion for +1.5 mm; the registered axis model was invalid for the user-approved closing-axis scan.
+  decision: Exclude EXP-034 through EXP-043 and stop that batch. Retain EXP-032/033 only as valid results for the explicitly different centroid-line diagnostic.
+correction:
+  physical_axis_definition: Unit derivative of the moving-pad centroid with respect to increasing q6 at q6=-0.045 rad; decreasing q6 is closing, so this derivative is fixed-to-moving.
+  closing_axis_tcp: [0.972175254, 0.000000860, -0.234254722]
+  derivation_inputs:
+    urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+    moving_pad_mesh_sha256: f33f0818f86177fbe2e12faf10c08b6eb48d8f39cd6b66c2e900268f0161995a
+  corrected_driver_sha256: b29da4e8e6a294ada7fcd656da70bab31259b3958ec9ad38be1eea50db4f7e87
+new_batch:
+  status: PLANNED
+  prior_experiment: EXP-034
+  ordered_experiments:
+    - [EXP-044, 0.0005]
+    - [EXP-045, 0.0010]
+    - [EXP-046, 0.0015]
+    - [EXP-047, 0.0020]
+    - [EXP-048, 0.0025]
+    - [EXP-049, 0.0030]
+    - [EXP-050, -0.0005]
+    - [EXP-051, -0.0010]
+    - [EXP-052, -0.0015]
+    - [EXP-053, -0.0020]
+    - [EXP-054, -0.0025]
+    - [EXP-055, -0.0030]
+  single_variable: Requested TCP translation along the corrected physical closing axis; one frozen scalar per experiment.
+  lifecycle: RESET_WORLD for every candidate; initial epoch for EXP-044 is qualified reset 3 to 4.
+  prediction: Positive fixed-to-moving translation delays moving/right contact and eventually makes fixed/left contact first; negative translation provides a registered sign check only if the positive range is exhausted.
+  success_failure_invalid_safety: Identical to the EXP-032-through-EXP-043 contract except the corrected axis and driver hash above replace the invalid centroid-line values.
+  early_stop: First valid left_only result stops the scan and triggers exact-offset RESET_WORLD repeatability preregistration.
+EXP-044:
+  status: RUNNING
+  single_variable: Corrected closing-axis TCP offset +0.0005 m.
+  lifecycle: RESET_WORLD
+  provenance:
+    installed_source_commit: d325e2d98a75039e76b597d2ba1ef6484b752b64
+    install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install
+    runtime_package_prefix: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install/so101_mujoco_demo_py
+    ros_domain_id: 176
+    gz_partition: so101-mnt-align-001
+    simulation_session_id: so101-mnt-align-001
+    driver_sha256: b29da4e8e6a294ada7fcd656da70bab31259b3958ec9ad38be1eea50db4f7e87
+  decision: PENDING before qualified reset epoch 3 to 4.
 ```
