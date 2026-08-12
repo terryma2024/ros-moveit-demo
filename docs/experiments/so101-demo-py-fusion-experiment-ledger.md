@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 17b2b924d4b5a87b65901967fdd3acfec97886ea
+current_commit: d78093cc6daa3c105383becf537cbb196e40bab7
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -25,8 +25,8 @@ disproven_routes:
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-017
-next_experiment: NONE_RUNNER_REPAIR_COMMIT
+latest_checkpoint: CP-FUSION-019
+next_experiment: NONE_TASK_18_PREREGISTRATION
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -110,6 +110,108 @@ repair_gates:
 owned_processes_after_batch: NONE
 preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
 decision: Preserve and reject the entire batch. Repair evidence handling, commit/rebuild a new immutable bundle, then preregister a fresh FULL_RESTART batch; no result from this batch may be reused.
+```
+
+## Planned experiment FUSION-SMOKE-006
+
+```yaml
+experiment_id: fusion-smoke-006
+status: PLANNED
+counting_qualification_run: false
+purpose: Validate the repaired reliable high-rate subscription and invalid-evidence propagation before a replacement counted batch.
+lifecycle: FULL_RESTART
+count: 1
+source_commit: d78093cc6daa3c105383becf537cbb196e40bab7
+bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+consumer_reliable_history_depth: 100
+producer_reliable_history_depth: 100
+ros_domain_id: 205
+port: 27750
+evidence_root: /data/work/so101-debug-fusion-smoke-006
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+abort_criteria: any provenance mismatch, invalid evidence, phase failure, physical failure, or unclean shutdown
+expected: one non-counting nine-phase success with a contiguous durable high-rate trace and clean shutdown
+```
+
+## Checkpoint CP-FUSION-018 — lossless subscriber repair smoke
+
+```yaml
+checkpoint_id: CP-FUSION-018
+terminal_experiment: fusion-smoke-006
+status: VALID_SUCCESS_NONCOUNTING
+source_commit: d78093cc6daa3c105383becf537cbb196e40bab7
+bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
+completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+physical_outcome: {primary_failure: null, intended_support_contact: true, moveit_attached: false, world_object_synchronized: true}
+final_cup_position_world_m: [-0.07884056814511638, -0.24853018789404183, 0.16549135282718114]
+clean_shutdown: PASS
+manifest_sha256: 0009592eac6c2c46c0c0853ad0d76ed1afa93d3e1b8ee0c908cfa629bd5e4055
+owned_processes_after_smoke: NONE
+decision: The repaired bundle is eligible for a new, independent counted FULL_RESTART batch.
+```
+
+## Planned batch FUSION-FULL-RESTART-002
+
+```yaml
+batch_id: fusion-full-restart-002
+status: PLANNED
+task: 17
+lifecycle: FULL_RESTART
+backend: mujoco
+required_consecutive_successes: 5
+reuse_previous_batch_results: false
+invalid_run_effect: invalidate_batch
+valid_failure_effect: break_streak
+source_commit: d78093cc6daa3c105383becf537cbb196e40bab7
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
+ros_domain_ids: [180, 181, 182, 183, 184]
+ports: [27500, 27501, 27502, 27503, 27504]
+evidence_root: /data/work/so101-debug-fusion-full-restart-002
+evidence_root_pre_registration_state: ABSENT
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+abort_criteria: any provenance drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
+expected: exactly five independent VALID/SUCCESS records with unique sessions and clean ordered shutdown
+```
+
+## Checkpoint CP-FUSION-019 — Task 17 FULL_RESTART qualified 5/5
+
+```yaml
+checkpoint_id: CP-FUSION-019
+terminal_batch: fusion-full-restart-002
+task: 17
+lifecycle: FULL_RESTART
+status: QUALIFIED
+source_commit: d78093cc6daa3c105383becf537cbb196e40bab7
+bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+attempt_count: 5
+consecutive_successes: 5
+sessions:
+  - fusion-full-restart-002-full-01
+  - fusion-full-restart-002-full-02
+  - fusion-full-restart-002-full-03
+  - fusion-full-restart-002-full-04
+  - fusion-full-restart-002-full-05
+reset_epochs: [1, 1, 1, 1, 1]
+statuses: [SUCCESS, SUCCESS, SUCCESS, SUCCESS, SUCCESS]
+clean_shutdown: [true, true, true, true, true]
+final_cup_positions_world_m:
+  - [-0.07839652287660405, -0.2494077730732194, 0.16547557013985514]
+  - [-0.07934040100239112, -0.24683916859051178, 0.1648814575197915]
+  - [-0.07894276934244655, -0.24617386104529929, 0.16543523761293064]
+  - [-0.07823654737235505, -0.24690575505336354, 0.1648062036113155]
+  - [-0.07980150520462817, -0.24845678697878107, 0.16549464379469261]
+manifest_sha256: bf6c113340b7b158a2714316b5cbe8c8d6e9464d9c66265b68efd2202bbff2e0
+independent_verifier: QUALIFIED
+owned_processes_after_batch: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+decision: Task 17 complete. Task 18 must use the exact same source, policy, installed dependency, and bundle in an independent RESET_WORLD batch.
 ```
 
 ## Planned batch FUSION-FULL-RESTART-001
