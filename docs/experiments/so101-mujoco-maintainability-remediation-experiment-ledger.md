@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: ad73015c80664b23f1f967fde6346a1b57e9bf5f
+current_commit: f1666cec5fe8e0ee3c09f53491416dca89f159a0
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,7 +17,7 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - A fresh seven-regime fixed-fingerprint campaign can produce non-overlapping deterministic thresholds for the current model and motion policy.
-latest_checkpoint: MNT-CP-004
+latest_checkpoint: MNT-CP-005
 next_experiment: EXP-001
 ```
 
@@ -120,4 +120,30 @@ disproven_routes:
 open_risks:
   - Grasp proof alone does not establish causal cup carry; micro-lift and every transport segment remain unproved.
 next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_micro_lift_outcome.py
+```
+
+## Checkpoint MNT-CP-005
+
+```yaml
+checkpoint_id: MNT-CP-005
+recorded_at: 2026-08-12T12:49:08+08:00
+last_valid_experiment: NONE
+current_hypothesis: A typed final-outcome evaluator can preserve strict legacy parity while consuming the canonical motion policy.
+working_tree_status: Clean at f1666cec5fe8e0ee3c09f53491416dca89f159a0 after Project A Task 5.
+owned_processes: NONE
+preserved_processes:
+  - Existing codex, codex-cua, and so101-mujoco-gui tmux sessions remain untouched.
+confirmed_conclusions:
+  - OBSERVED: CarrySample rejects invalid identity, time, pose, clearance, force, and boolean atoms at construction.
+  - OBSERVED: Micro-lift checks the maximum cup excursion over the full trace, correlated TCP/cup displacement, relative drift, post-boundary table separation, and stable dwell.
+  - OBSERVED: Transport requires ordered LIFT, MOVE_ABOVE_PLACE, and DESCEND_TO_PLACE segments with continuous bilateral force, clearance, workspace, and relative-pose bounds.
+  - OBSERVED: Atomic-data, intermediate-teleport, table-recontact, and policy-bound tests each failed before their corresponding minimal constraint was present; the bounds test also failed under an explicit implementation mutation.
+  - OBSERVED: The full Python package gate passed 439 tests with 4 skipped; Ruff lint/format and git diff checks passed.
+disproven_routes:
+  - Judging a micro-lift only from the final cup pose; an intermediate over-limit excursion can recover to an apparently valid endpoint.
+  - Accepting transport segments as an unordered set; the causal carry proof requires the declared state order.
+open_risks:
+  - The final-target evaluator and legacy parity boundary are still pending.
+  - Contact calibration remains PLANNED; its checked-in motion hash was refreshed for the new policy bytes but it is not executable or approved.
+next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_physical_outcome_policy.py src/so101_mujoco_demo_py/test/test_pick_place_outcome.py
 ```
