@@ -41,11 +41,11 @@ def test_transport_verifier_rejects_planner_scaling_mutation() -> None:
         verify_transport_semantics(source, manifest())
 
 
-def test_repository_frozen_behavior_and_protected_gazebo_tree_match() -> None:
+def test_repository_frozen_behavior_and_backend_integration_contract_match() -> None:
     report = verify_frozen_behavior(REPO_ROOT, MANIFEST_PATH)
 
     assert report["manifest_sha256"] == (
-        "eb42f058017252c8c9824f408982a5f29939bba41a27a32c8ad963aab61a90ed"
+        "0db33d29e866d7e9986269e201baa52eb264308dc45de11ad7dce6f8f1efbeb3"
     )
-    assert report["protected_gazebo"] == "MATCH"
+    assert report["backend_integration_contract"] == "ACTIVE_GAZEBO_NOT_FROZEN"
     assert report["instrumentation_diff_gate"] == "MATCH"

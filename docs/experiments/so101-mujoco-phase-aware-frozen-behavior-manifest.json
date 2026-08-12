@@ -159,13 +159,15 @@
     "planner_plugin": "ompl_interface/OMPLPlanner",
     "planner_config": "geometric::RRTConnect"
   },
-  "protected_gazebo": {
-    "path": "src/so101_gazebo_demo_py",
-    "git_tree_oid": "3158e296e2aad5d80dd3e484b87132c85b3832f7",
-    "working_tree_diff": "NONE"
+  "backend_integration_contract": {
+    "checker": "scripts/check_backend_integration.py",
+    "compatibility_entrypoint": "src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh",
+    "gazebo_source_frozen": false,
+    "cross_package_dependencies": "EXPLICIT_DECLARATION_REQUIRED"
   },
   "instrumentation_diff_gate": {
     "allowed_paths": [
+      "src/so101_gazebo_demo_py",
       "src/so101_mujoco_support/msg",
       "src/so101_mujoco_support/include/so101_mujoco_support/simulation_evidence_plugin.hpp",
       "src/so101_mujoco_support/src/simulation_evidence_plugin.cpp",
@@ -189,13 +191,15 @@
       "src/so101_mujoco_demo_py/config/dependency-lock.yaml",
       "src/so101_mujoco_demo_py/scripts/check_mujoco_runtime.py",
       "src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py",
+      "src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh",
+      "scripts/check_backend_integration.py",
+      "scripts/check_migration_isolation.sh",
       "third_party/mujoco_ros2_control",
       "docs/experiments",
       "docs/superpowers/specs",
       "docs/superpowers/plans"
     ],
     "protected_paths": [
-      "src/so101_gazebo_demo_py",
       "src/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml",
       "src/so101_mujoco_demo_py/config/contact_calibration.yaml",
       "src/so101_mujoco_demo_py/mjcf",
