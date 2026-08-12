@@ -1,14 +1,48 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from so101_mujoco_demo_py import teleop_runtime
 from so101_mujoco_demo_py.teleop_reset import build_parser as reset_parser
 from so101_mujoco_demo_py.teleop_workflow import (
     evidence_root_for,
     owner_result,
     production_arguments,
 )
+
+
+def test_pause_snapshot_waits_for_evidence_publisher_discovery(monkeypatch) -> None:
+    observer = SimpleNamespace(publisher_count=0, snapshot=lambda: "fresh-evidence")
+
+    class Future:
+        def done(self) -> bool:
+            return True
+
+        def result(self):
+            return SimpleNamespace(success=True)
+
+    class Client:
+        def wait_for_service(self, timeout_sec: float) -> bool:
+            return timeout_sec > 0.0
+
+        def call_async(self, _request):
+            assert observer.publisher_count > 0, "pause called before evidence discovery"
+            return Future()
+
+    class Node:
+        def create_client(self, _service_type, _service_name: str):
+            return Client()
+
+    def spin_once(_node, *, timeout_sec: float) -> None:
+        assert timeout_sec > 0.0
+        observer.publisher_count = 1
+
+    monkeypatch.setattr(teleop_runtime.rclpy, "spin_once", spin_once)
+    monkeypatch.setattr(teleop_runtime.rclpy, "ok", lambda: True)
+
+    assert teleop_runtime._pause_snapshot(Node(), observer, timeout_s=1.0) == "fresh-evidence"
 
 
 def test_workflow_evidence_root_keeps_legacy_default(monkeypatch) -> None:

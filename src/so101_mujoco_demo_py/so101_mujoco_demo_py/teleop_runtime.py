@@ -20,6 +20,13 @@ def _pause_snapshot(node, observer, timeout_s: float):
     client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
     if not client.wait_for_service(timeout_sec=timeout_s):
         raise RuntimeError("pause service unavailable")
+    discovery_deadline = time.monotonic() + timeout_s
+    while rclpy.ok() and time.monotonic() <= discovery_deadline:
+        if observer.publisher_count > 0:
+            break
+        rclpy.spin_once(node, timeout_sec=0.01)
+    else:
+        raise RuntimeError("atomic evidence publisher discovery timed out")
     request = SetPause.Request()
     request.paused = True
     future = client.call_async(request)

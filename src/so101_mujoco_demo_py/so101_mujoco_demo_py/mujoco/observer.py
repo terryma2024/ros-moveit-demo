@@ -144,6 +144,10 @@ class MujocoWorldObserver:
         with self._lock:
             return self._last_rejection
 
+    @property
+    def publisher_count(self) -> int:
+        return self._subscription.get_publisher_count()
+
     def accept(self, message: Any, *, received_at_s: float | None = None) -> None:
         evidence = convert_message(message)
         if evidence.simulation_session_id != self._session_id:
