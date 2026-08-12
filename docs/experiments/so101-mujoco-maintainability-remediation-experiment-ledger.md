@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: bc54b1dc24b565ffd01acbb7d5497b0385ccb933
+current_commit: ee2f8ee022ca406e3175e49e9d1cfe27d39faa35
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-030
-next_experiment: EXP-122
+latest_checkpoint: MNT-CP-031
+next_experiment: EXP-123
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3479,4 +3479,81 @@ acceptance:
 failure_policy: Any failed condition makes EXP-122 INVALID_EVIDENCE and stops further batch work. EXP-122 is run exactly once.
 command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh; source /tmp/so101-debug-mujoco-maintainability-remediation/physics-hook-r6-gate-install/setup.zsh; GZ_PARTITION=so101-mnt-a-exp122 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp122_evidence_diagnostic.py
 next_if_valid: Stop and report EXP-122 before preregistering any new five-run batch.
+```
+
+## Checkpoint MNT-CP-031 — EXP-122 terminal INVALID_EVIDENCE and provenance repair
+
+```yaml
+checkpoint_id: MNT-CP-031
+recorded_at: 2026-08-12T20:29:03+08:00
+terminal_experiment: EXP-122
+status: INVALID_EVIDENCE
+rerun_policy: EXP-122 is immutable and will not be rerun or reclassified.
+execution_boundary:
+  stack_ready: true
+  reset_status: SUCCEEDED
+  reset_session: MNT-A-EXP122-full-01
+  workflow_motion_started: false
+  policy_or_strategy_executed: false
+terminal_reason: The workflow owner rejected preflight with POLICY_FINGERPRINT_MISMATCH before RESUME_PHYSICS or any phase command.
+root_cause: dependency-lock fork.commit was correctly advanced from the r5 physical-policy baseline to the r6 runtime implementation, but live policy preflight overloaded that field as the approved contact policy's behavior-provenance commit. The unchanged approved policy correctly remained bound to r5 and therefore rejected the conflated r6 value.
+evidence:
+  result: /tmp/so101-debug-mujoco-maintainability-remediation/exp122/exp122-diagnostic.json
+  result_sha256: 99cfcb486aae1bcdda8ced77fad66b802115369fbc3fb6b12987d17b934f37da
+  launch_log: /tmp/so101-debug-mujoco-maintainability-remediation/exp122/run-01/launch.log
+  launch_log_sha256: 01b79f208cb963c13a4d89a707fa10690a68f22b37630020862033c10ddf410c
+  shutdown: PASS; ordered marker true, return code zero, no process_died or fatal signal, Domain 194 and port 8034 empty.
+repair:
+  commit: ee2f8ee022ca406e3175e49e9d1cfe27d39faa35
+  runtime_provenance: fork.commit remains exact r6 738e304 and exact r6 tag equality remains enforced.
+  policy_provenance: fork.policy_behavior_commit explicitly records r5 f42b7b3, the ancestor against which the unchanged approved physical policy was calibrated.
+  invariant: The policy behavior commit must be an ancestor of the locked runtime commit. It does not weaken exact r6 runtime provenance.
+  strategy_freeze: No contact policy, q6, waypoint, trajectory, planner, speed/acceleration, controller, MJCF, scene, geometry, threshold, or phase behavior changed.
+red_green:
+  RED: Two focused tests failed before policy_behavior_commit existed.
+  GREEN: 18 focused provenance tests passed, frozen behavior plus Ruff gate passed, and clean isolated three-package build/test completed with 794 tests, 0 errors, 0 failures, 4 skipped.
+  frozen_manifest_sha256: fa39a8b94071cf9e7aa6e800dbdfec77ed1d399bcd6b628000afeb373dc4e99f
+next_experiment: EXP-123_PENDING_PREREGISTRATION
+```
+
+## EXP-123 preregistration — authoritative physics-step evidence diagnostic
+
+```yaml
+experiment_id: EXP-123
+recorded_at: 2026-08-12T20:29:03+08:00
+prior_experiment: EXP-122 remains permanently INVALID_EVIDENCE and is not rerun or reclassified.
+status: PLANNED
+purpose: Validate authoritative 500 Hz physics-step evidence identity, continuity, publisher provenance, typed boundary persistence, and clean lifecycle only; do not evaluate or tune grasp policy.
+lifecycle: FULL_RESTART
+behavior_source_commit: ee2f8ee022ca406e3175e49e9d1cfe27d39faa35
+fork_runtime_commit: 738e304551b4ea6db020b466086a13db71b65607
+fork_policy_behavior_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/policy-provenance-r6-install
+runtime_fingerprint:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/policy-provenance-r6-runtime-fingerprint.json
+  sha256: a955bd250bcb0fec5dfd49c8dbe061d66858579ae380cb8c871109446282e6e9
+frozen_behavior_manifest_sha256: fa39a8b94071cf9e7aa6e800dbdfec77ed1d399bcd6b628000afeb373dc4e99f
+harness:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp123_evidence_diagnostic.py
+  sha256: 9bacf5156726ce7a55ab04a1386072441e0da7c554581c62c7d87620fc7ee718
+  static_checks: py_compile and Ruff PASS; no terminate(), kill(), or /execution/cancel path.
+runtime_identity:
+  session: MNT-A-EXP123-full-01
+  ros_domain_id: 195
+  port: 8035
+  gz_partition: so101-mnt-a-exp123
+  evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/exp123
+single_variable: Runtime and approved-policy provenance are represented separately. All motion, policy, model, scene, controller, threshold, evidence-hook, and lifecycle semantics remain unchanged from EXP-122.
+procedure:
+  - Start one fresh non-headless stack, perform the transactional reset, and run the unchanged production workflow.
+  - Persist the first typed boundary and content-addressed chunk, send no cancellation, wait for the independent workflow owner to return naturally, then perform ordered shutdown.
+acceptance:
+  - One publisher per evidence topic; expected/snapshot/chunk/all five sample session IDs match MNT-A-EXP123-full-01.
+  - First chunk has five samples, strict physics_step +1, approximately 0.002 s time increments, zero failed publishes, and no evidence_loss.
+  - A typed boundary persists with no identity_mismatch or invalid_reason.
+  - Workflow naturally returns before teardown; ordered shutdown and process/domain/port cleanup pass.
+  - Grasp business outcome is not an acceptance signal.
+failure_policy: Any failed condition makes EXP-123 INVALID_EVIDENCE and stops further batch work. Run exactly once.
+command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh; source /tmp/so101-debug-mujoco-maintainability-remediation/policy-provenance-r6-install/setup.zsh; GZ_PARTITION=so101-mnt-a-exp123 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp123_evidence_diagnostic.py
+next_if_valid: Stop and report EXP-123 before preregistering any new five-run batch.
 ```
