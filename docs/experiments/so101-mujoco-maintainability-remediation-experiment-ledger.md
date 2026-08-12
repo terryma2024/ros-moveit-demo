@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: f373df5a8de2db999ce2bb2cfaf99280d2691c66
+current_commit: a658736dd2dbbf04d00d0179fa9e4c462b5483c3
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,8 +21,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-048
-next_experiment: NONE_FINAL_GATES
+latest_checkpoint: MNT-CP-049
+next_experiment: NONE_STOPPED_EVIDENCE_POLLUTION
 ```
 
 ## Checkpoint MNT-CP-001
@@ -5076,4 +5076,76 @@ protected_state:
     - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
 next_experiment: NONE_FINAL_GATES
 next_command: Execute the existing final automated regression/frozen/provenance/isolation gates against the unchanged common overlay; checkpoint their exact results before beginning the next Task 13+ plan item.
+```
+
+## Checkpoint MNT-CP-049 — final gate stopped on protected-tree evidence pollution
+
+```yaml
+checkpoint_id: MNT-CP-049
+recorded_at: 2026-08-12T23:09:21+08:00
+last_physical_success: EXP-130
+batch_id: MNT-Q-EXP126-130
+batch_recorded_counted_successes: 5
+counted_successes: [EXP-126_BY_USER_VISUAL_WAIVER, EXP-127, EXP-128, EXP-129, EXP-130]
+waiver_scope: EXP-126_ONLY
+batch_status: FINAL_GATE_INVALID_EVIDENCE_POLLUTION
+final_qualification: NOT_ACHIEVED
+historical_records_preserved:
+  - EXP-126 original terminal record remains INVALID_SCREENSHOT_TRUNCATED.
+  - MNT-CP-039 remains INVALID_STOPPED.
+  - EXP-126 visual_artifact_integrity remains FAIL.
+  - The EXP-126-only user visual waiver and the EXP-127 through EXP-130 terminal records are not rewritten by this checkpoint.
+final_gate_results:
+  focused_pytest:
+    result: PASS
+    summary: 91 passed, 1 skipped in 1.53s
+    log: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/final-gates/focused-pytest.txt
+    log_sha256: fd06e34e8d7bad069183e719ba438c997af54f412474bd9fb97e8957ed553574
+  full_source_pytest:
+    result: FAIL_STOP
+    summary: 1 failed, 538 passed, 4 skipped in 27.91s
+    failing_test: test_repository_isolation_contract.py::test_gate_accepts_the_current_isolated_worktree
+    failure: protected nontracked filesystem differs from baseline; actual 0e1eff9bae0bb481fa89768fd85fd9de068399596d07ebd22e22d67e88975bcb, expected e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    log: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/final-gates/full-pytest.txt
+    log_sha256: 8775be1f9e87ebe165f9903650862bac743f3699e5df9841d6dc13f093770204
+  ruff: NOT_RUN_AFTER_FAIL_STOP
+  three_package_colcon: NOT_RUN_AFTER_FAIL_STOP
+  frozen_behavior_and_runtime_locks: NOT_RUN_AFTER_FAIL_STOP
+  remaining_evidence_integrity_and_isolation_gates: NOT_RUN_AFTER_FAIL_STOP
+protected_tree_forensics:
+  tracked_status_and_diff: CLEAN
+  expected_nontracked_manifest_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  actual_nontracked_manifest_sha256: 0e1eff9bae0bb481fa89768fd85fd9de068399596d07ebd22e22d67e88975bcb
+  nontracked_record_count: 24
+  entries: src/so101_gazebo_demo_py/src/**/__pycache__/*.cpython-312.pyc
+  earliest_mtime: 2026-08-12T22:51:51.152111005+08:00
+  latest_mtime: 2026-08-12T22:53:58.748340296+08:00
+  proven_path_chain:
+    bytecode_embedded_source_prefix: /tmp/so101-gazebo-policy-parity/GZ-POLICY-PARITY-001/build/so101_gazebo_demo_py/so101_gazebo_demo
+    symlink_target: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src
+  temporal_conclusion: The bytecode caches predate the final pytest logs at 23:02:59 through 23:03:27; the final isolation test detected rather than created this pollution.
+  unresolved_mechanism: The exact earlier command or inherited environment that imported through the old parity-overlay symlink is not yet proven.
+working_tree_status:
+  tracked_index_and_worktree: CLEAN_EXCEPT_THIS_LEDGER_CHECKPOINT_BEFORE_COMMIT
+  protected_user_untracked_documents:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+  protected_user_documents_staged: false
+owned_processes: NONE
+owned_ports_8038_through_8042: FREE
+owned_qualification_tmux_sessions: ABSENT
+preserved_unrelated_tmux_sessions:
+  - codex
+  - codex-cua
+  - so101-mujoco-gui
+  - so101-gz-causal-cold2
+stop_actions:
+  cleanup_performed: false
+  test_rerun_performed: false
+  reset_world_started: false
+  strategy_or_threshold_change: false
+  parent_rebase_merge_push: false
+decision: STOP. Preserve the 5 recorded physical outcomes but make no final qualification claim; do not clean the pollution, rerun gates, or begin RESET_WORLD without explicit user direction.
+next_experiment: NONE_STOPPED_EVIDENCE_POLLUTION
+next_command: NONE; await explicit direction for evidence-pollution disposition and final-gate recovery.
 ```
