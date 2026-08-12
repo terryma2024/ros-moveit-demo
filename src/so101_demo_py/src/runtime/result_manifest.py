@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..core.domain import ExecutionRunStatus, FailureCategory, QualificationStatus
 
@@ -74,3 +77,29 @@ def classify_run(
         error_code,
         evidence_refs,
     )
+
+
+def write_run_result(path: Path, result: RunResultManifest) -> Path:
+    """Atomically persist the stable, backend-neutral result wire schema."""
+
+    document = {
+        "backend": result.backend,
+        "bundle_sha256": result.bundle_sha256,
+        "error_code": result.error_code,
+        "evidence_refs": list(result.evidence_refs),
+        "failure_category": (
+            None if result.failure_category is None else result.failure_category.value
+        ),
+        "first_failed_phase": result.first_failed_phase,
+        "policy_sha256": result.policy_sha256,
+        "qualification_status": result.qualification_status.value,
+        "reset_epoch": result.reset_epoch,
+        "run_status": result.run_status.value,
+        "schema": "so101-run-result-v1",
+        "session_id": result.session_id,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+    os.replace(temporary, path)
+    return path

@@ -1,0 +1,40 @@
+gz_ros_control:
+  ros__parameters:
+    position_proportional_gain: 1.0
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+arm_controller:
+  ros__parameters:
+    joints: ["1", "2", "3", "4", "5"]
+    command_interfaces: [position]
+    state_interfaces: [position]
+    open_loop_control: false
+    allow_integration_in_goal_trajectories: true
+    constraints:
+      goal_time: 1.0
+      "1": {trajectory: 0.0080, goal: 0.002}
+      "2": {trajectory: 0.0080, goal: 0.002}
+      "3": {trajectory: 0.0080, goal: 0.002}
+      "4": {trajectory: 0.0080, goal: 0.002}
+      "5": {trajectory: 0.0080, goal: 0.002}
+
+gripper_controller:
+  ros__parameters:
+    joints: ["6"]
+    interface_name: position
+    command_interfaces: [position]
+    state_interfaces: [position]
+    open_loop_control: false
+    allow_integration_in_goal_trajectories: true
+    constraints:
+      goal_time: 1.0
+      "6": {trajectory: 0.05, goal: 0.001}
