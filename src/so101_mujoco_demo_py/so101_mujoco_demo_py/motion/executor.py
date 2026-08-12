@@ -52,10 +52,23 @@ class MoveItExecutionClient:
         client: Any,
         goal_factory: Callable[[Any], Any] | None = None,
         progress: Callable[[], None] = lambda: None,
+        cancellation_timeout_s: float = 5.0,
     ) -> None:
+        if cancellation_timeout_s < 0.0:
+            raise ValueError("cancellation_timeout_s must be non-negative")
         self._client = client
         self._goal_factory = goal_factory
         self._progress = progress
+        self._cancellation_timeout_s = cancellation_timeout_s
+
+    def _cancel_and_settle(self, goal_handle: Any, result_future: Any) -> bool:
+        """Boundedly release the owned action before its ROS node is destroyed."""
+
+        deadline = time.monotonic() + self._cancellation_timeout_s
+        cancel_future = goal_handle.cancel_goal_async()
+        cancel_acknowledged = _wait(cancel_future, deadline, self._progress)
+        result_settled = _wait(result_future, deadline, self._progress)
+        return cancel_acknowledged and result_settled
 
     def execute(
         self,
@@ -101,19 +114,21 @@ class MoveItExecutionClient:
                 try:
                     monitor()
                 except RuntimeError as error:
-                    goal_handle.cancel_goal_async()
+                    cancel_settled = self._cancel_and_settle(goal_handle, result_future)
                     return failure(
                         ActionStatus.FAILED,
                         "MOVEIT_EXECUTION_MONITOR_ABORTED",
                         str(error),
+                        cancel_settled=float(cancel_settled),
                     )
             time.sleep(0.001)
         if not result_future.done():
-            goal_handle.cancel_goal_async()
+            cancel_settled = self._cancel_and_settle(goal_handle, result_future)
             return failure(
                 ActionStatus.TIMED_OUT,
                 "MOVEIT_EXECUTION_TIMEOUT",
                 "execution timed out",
+                cancel_settled=float(cancel_settled),
             )
         wrapped = result_future.result()
         result = getattr(wrapped, "result", wrapped)

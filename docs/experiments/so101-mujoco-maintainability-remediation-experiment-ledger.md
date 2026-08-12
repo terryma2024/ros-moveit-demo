@@ -2138,3 +2138,95 @@ failure_contract: One VALID_FAILURE or INVALID terminates the attempt; no automa
 frozen_scope: Identical to EXP-106/107; only the RED-GREEN owner argv/classification remediation differs.
 decision: PLANNED and committed before stack launch or controller action. Only the registered production runner may execute EXP-108.
 ```
+
+## EXP-108 terminal result and frozen-strategy continuity audit
+
+```yaml
+recorded_at: 2026-08-12T16:10:33+08:00
+EXP-108:
+  raw_manifest_status: INVALID
+  corrected_audit_status: INVALID
+  behavioral_observation: MICRO_LIFT_MONITOR_ABORTED_AFTER_WEAK_CONTACT_HOLD
+  qualification_counting: false
+  attempts_started: 1
+  automatic_extra_attempts: 0
+  completed_boundaries:
+    stack_ready: true
+    viewer_preset: true
+    qualified_reset: {old_epoch: 0, new_epoch: 1, simulation_step: 0}
+    phases: [staged_approach, contact_hold]
+  failed_phase: micro_lift
+  owner_failure_code: PHASE_EXIT_NONZERO
+  contact_hold:
+    terminal_q6_rad: -0.04746121642596459
+    hold_sample_count: 201
+    left_force_n: {minimum: 0.12747616840546888, median: 0.12749057577425185, maximum: 0.1275179284008805}
+    right_force_n: {minimum: 0.2481112377685798, median: 0.24812448588628147, maximum: 0.24813107655140987}
+  micro_lift:
+    moveit_attachment_readback: true
+    trajectory_points: 6
+    plan_to_execute_drift_rad: 6.065419833056751e-09
+    pre_lift_bilateral: true
+    failure: MOVEIT_EXECUTION_MONITOR_ABORTED
+  clean_shutdown: {passed: false, returncode: 0, ordered_shutdown_marker: false, process_died: true, fatal_signal: false, signal: SIGINT}
+  lifecycle_audit: move_group required SIGTERM then SIGKILL after the monitor abort; regardless of the physical observation, failed ordered cleanup makes the attempt INVALID.
+  evidence:
+    qualification_manifest: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp108/qualification-manifest.json, facfab4bfc84a1bc6e9997f38e1962b63b8cc9821d3a16653617edb670a792f9]
+    actions: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp108/run-01/actions.json, 426d52de5e956ff63680e9aca700a68a013cd26793c527c5f657b5eaf121d8be]
+    launch_log: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp108/run-01/launch.log, cca38813713d61018cc3f4bcf891701cc685e560303ef781101079044317ade2]
+    runner_log: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp108-runner.log, 6a3bf6e490859eb4470991d733216a599c736da1008a82c068b1911d8d1cb762]
+    contact_hold: [/tmp/so101-teleop-evidence/MNT-A-EXP108-full-01/so101-teleop-workflow-cfbff2ca-439a-49fe-af1b-14010b0b48d8/contact-hold.json, c30dd6bd150e3a18a76bec4887ac398438eff855ca47a6b43406bcd037b10dae]
+    micro_lift: [/tmp/so101-teleop-evidence/MNT-A-EXP108-full-01/so101-teleop-workflow-cfbff2ca-439a-49fe-af1b-14010b0b48d8/micro-lift.json, eff8a07923d8032dab6413145f640c32536514a308a5e42d0384c3596932257b]
+    owner_manifest: [/tmp/so101-teleop-evidence/MNT-A-EXP108-full-01/so101-teleop-workflow-cfbff2ca-439a-49fe-af1b-14010b0b48d8/live-runtime-manifest.json, 8f16e4fbcd0abdbcf6942bf19ce18add1ba8476ce1420d8fa6e528f051a09ba5]
+  cleanup: {tmux_session_absent: true, domain_185_nodes: [], port_8025_listeners: [], owned_runtime_processes: []}
+  disposition: Excluded from Project-A acceptance and every later streak. No additional live attempt is authorized by this entry.
+continuity_audit:
+  approved_threshold_role: 0.05126429271696818 N is the calibrated bilateral contact/rejection boundary; it is not an actuator preload target.
+  migration_defect: Task 7 mechanically replaced the former 0.50 N contact-hold preload stop with minimum_bilateral_force_n, conflating contact classification with the already frozen five-win seating action.
+  frozen_five_win_evidence:
+    runs: [TASK15-FULL-B-full-01, TASK15-FULL-B-full-02, TASK15-FULL-B-full-03, TASK15-FULL-B-full-04, TASK15-FULL-B-full-05]
+    terminal_q6_range_rad: [-0.04852635062241919, -0.04850666907805639]
+    minimum_bilateral_force_range_n: [0.5054192607622616, 0.5187254499507077]
+    result: five PHYSICAL_MICRO_LIFT_PROVED outcomes on the frozen strategy
+  existing_strategy_identity:
+    micro_lift_preload_q6_rad: -0.04850794875050089
+    source: The value already gates MICRO_LIFT and matches the five-win contact-hold terminal range; restoring CONTACT_HOLD to this existing target changes no q6, waypoint, planner, threshold, model, scene, or simulator state.
+  cancellation_defect: MoveItExecutionClient sent cancel asynchronously and returned immediately; the phase then destroyed its node while move_group still owned the active trajectory, preventing ordered shutdown and erasing the monitor message from phase evidence.
+planned_red_green:
+  - Prove CONTACT_HOLD separates the approved contact-detection boundary from the existing frozen seating-preload target and never opens an already more-closed gripper.
+  - Prove CONTACT_HOLD and MICRO_LIFT consume one shared immutable frozen target rather than duplicated literals.
+  - Prove monitor abort and execution timeout await bounded cancel acknowledgement and terminal action result, retaining the causal monitor message.
+  - Keep all approved proposal bytes, policy hashes, safety gates, motion-policy bytes, MJCF, scene, geometry, planner, steps, and waypoints unchanged.
+decision: Implement only the RED-GREEN continuity and cleanup fixes; run no live action until they are committed, freshly built, and a new experiment is separately preregistered.
+```
+
+## EXP-108 RED-GREEN remediation result
+
+```yaml
+recorded_at: 2026-08-12T16:16:04+08:00
+source_commit_before_change: 3ba4b0d3ec8f95873a6164e8f2ea6b7549bd1eec
+red:
+  command: PYTHONPATH=$PWD/src/so101_mujoco_demo_py:$PYTHONPATH PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_live_grasp_strategy.py src/so101_mujoco_demo_py/test/test_moveit_boundary.py
+  observed: Collection failed because the shared frozen grasp-strategy module did not exist.
+green:
+  focused: 15 passed
+  complete_package: 478 passed, 4 skipped
+  lint: Ruff 0.15.20 check PASS
+  format: Ruff 0.15.20 format check PASS (120 files already formatted)
+  migration_isolation: PASS
+  git_diff_check: PASS
+immutable_fingerprint_recheck:
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+changes:
+  - Shared the already-existing five-win preload target between CONTACT_HOLD and MICRO_LIFT.
+  - Preserved the approved bilateral threshold solely as an observation/rejection boundary.
+  - Added bounded action cancellation settlement and retained the causal monitor message.
+  - Added the detected-contact q6 and applied preload target to contact-hold evidence.
+unchanged: [approved proposal, approved policy, motion policy, q6 target, q6 steps, arm waypoints, planner, safety gates, MJCF, scene, geometry, simulator state]
+live_actions_after_EXP-108: 0
+decision: Commit this lifecycle/continuity repair, then create a fresh three-package build. A further live acceptance requires separate preregistration.
+```

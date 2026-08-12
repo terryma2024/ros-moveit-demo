@@ -22,6 +22,9 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.live_phases.grasp_strategy import (
+    FIVE_WIN_SEATING_PRELOAD_Q6_RAD,
+)
 from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
@@ -47,7 +50,6 @@ LIFT_TARGET = (
     0.8648894480356747,
     0.0005764164414532356,
 )
-PRELOAD_Q6 = -0.04850794875050089
 
 
 def write_result(result: dict) -> None:
@@ -175,7 +177,7 @@ def main() -> int:
             > 0.01
         ):
             raise RuntimeError("robot is not at verified Close-ready arm state")
-        if abs(start_positions[-1] - PRELOAD_Q6) > 0.01:
+        if abs(start_positions[-1] - FIVE_WIN_SEATING_PRELOAD_Q6_RAD) > 0.01:
             raise RuntimeError("gripper is not holding the verified seating preload")
         contact_evidence, pre_lift_samples = stable_bilateral(before.reset_epoch)
         result["before_micro_lift_joints_rad"] = list(start_positions)
@@ -279,7 +281,9 @@ def main() -> int:
             progress=progress,
         ).execute(planned.trajectory, 45.0, monitor=monitor)
         if execution.failure is not None:
-            raise RuntimeError(f"LIFT execution failed: {execution.failure.code}")
+            raise RuntimeError(
+                f"LIFT execution failed: {execution.failure.code}: {execution.failure.message}"
+            )
         wait_for(
             lambda: (
                 tuple(float(latest_joint[name]) for name in ARM_JOINTS)
