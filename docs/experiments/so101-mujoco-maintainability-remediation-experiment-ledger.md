@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: b6b4a205545418531994a2e245fb899b70f48226
+current_commit: 5571004d75ec07b68e2f8f604c607b9ea6fa20ea
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,7 +21,7 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-040
+latest_checkpoint: MNT-CP-041
 next_experiment: EXP-127
 ```
 
@@ -4048,7 +4048,7 @@ experiments:
     decision: PENDING
     next_experiment: EXP-127_ON_SUCCESS_ONLY
   - experiment_id: EXP-127
-    status: PLANNED
+    status: RUNNING
     prior_experiment: EXP-126
     hypothesis: A second independent FULL_RESTART extends the unchanged streak.
     prediction: All common success criteria pass with consecutive_count 2.
@@ -4404,4 +4404,57 @@ runtime_preflight:
   preserved_tmux: [codex, codex-cua, so101-mujoco-gui]
 next_experiment: EXP-127
 next_command: Update EXP-127 to RUNNING after a fresh per-run provenance, dirty-state, process, domain, port, tmux, evidence-root, overlay, fingerprint, and harness preflight; commit that transition; then execute exactly its preregistered command once.
+```
+
+## Checkpoint MNT-CP-041 — EXP-127 RUNNING transition
+
+```yaml
+checkpoint_id: MNT-CP-041
+recorded_at: 2026-08-12T22:30:04+08:00
+experiment_id: EXP-127
+status_transition: PLANNED -> RUNNING
+prior_experiment: EXP-126_BY_USER_VISUAL_WAIVER
+consecutive_successes_before_run: 1
+waiver_inherited: false
+preregistered_identity:
+  simulation_session_id: MNT-Q-EXP127-full-01
+  ros_domain_id: 199
+  http_port: 8039
+  gz_partition: so101-mnt-q-exp127
+  evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp127
+lifecycle: FULL_RESTART
+workflow_invocations: 1
+reset_transactions: 1
+retry_count: 0
+pre_run_authorization_commit: 5571004d75ec07b68e2f8f604c607b9ea6fa20ea
+provenance:
+  fork_local_origin_main_and_remote_tag_peel: 738e304551b4ea6db020b466086a13db71b65607
+  fork_local_vs_origin_main: {ahead: 0, behind: 0}
+  fork_status: CLEAN
+  common_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install
+  project_package_prefixes:
+    so101_teleop: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install/so101_teleop
+    so101_mujoco_support: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install/so101_mujoco_support
+    so101_mujoco_demo_py: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install/so101_mujoco_demo_py
+  runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  harness_sha256: b90ff4d8ccf4b87aef7796d4125a1c907e9321d2c6ad826c903807b79bf14054
+preflight:
+  root_status: Exactly the two protected untracked documents; index and all other tracked paths clean.
+  protected_gazebo_status: ZERO_STATUS_AND_DIFF
+  domain_199_nodes: NONE
+  port_8039_listener: NONE
+  tmux_session_so101_mnt_q_exp127: ABSENT
+  evidence_root: ABSENT
+  relevant_processes: NONE
+  codex_cua: IDLE_AT_ZSH_PROMPT
+preflight_command_corrections:
+  - First read-only command stopped at a mistyped expected full HEAD value; no runtime action occurred.
+  - Second read-only command stopped because zsh reserves the variable name status; no runtime action occurred.
+  - Corrected read-only command passed every gate and printed EXP127_PREFLIGHT_PASS.
+visual_acceptance:
+  required_sequence: snapshot -> action -> fresh snapshot
+  persisted_png_required: true
+  independent_png_decode_before_acceptance: true
+  EXP_126_waiver_applies: false
+decision: RUN exactly one preregistered natural workflow and stop on any product, provenance, evidence, visual-integrity, or cleanup failure.
 ```
