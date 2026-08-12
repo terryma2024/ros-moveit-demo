@@ -10,10 +10,10 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2-teleop
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: 8d85205286d2635d4ddbc91431c933dafb4eb661
-current_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+current_commit: 02e98ca1641200c460423d30f876dddc49c2e78e
 last_verified_implementation_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
-ledger_commit_pending: true
-task_status: TASK_15_QUALIFICATION_PENDING_COMMIT
+ledger_commit_pending: false
+task_status: TASK_15_COMPLETE
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -12771,4 +12771,30 @@ open_risks:
   - Qualification covers simulation only; RGB-D perception, VLM localization, and real-hardware transfer remain out of scope.
   - GUI evidence is corroborative and does not replace typed physical or Planning Scene evidence.
 next_command: Commit with test(so101_mujoco): qualify restart and reset repeatability, push normally, then record the remote commit checkpoint.
+```
+
+## Task 15 Publication Checkpoint
+
+```yaml
+checkpoint_id: CP-156
+recorded_at: 2026-08-12T09:44:00+08:00
+branch: codex/so101-mujoco-ros2-teleop
+qualification_commit: 02e98ca1641200c460423d30f876dddc49c2e78e
+remote_ref: origin/codex/so101-mujoco-ros2-teleop
+remote_ref_verified_equal: true
+push_mode: normal
+force_push: false
+default_branch_pushed: false
+merge_performed: false
+last_valid_experiment: EXP-168 VALID uncounted visual corroboration
+working_tree_status: Clean immediately after qualification commit; this publication checkpoint is the only pending docs follow-up.
+owned_processes: NONE
+preserved_processes: All unrelated tmux sessions and processes remain untouched.
+confirmed_conclusions:
+  - TASK15-FULL-B is VALID with five consecutive FULL_RESTART successes.
+  - TASK15-RESET-A is VALID with five consecutive RESET_WORLD successes at epochs 1 through 5.
+  - Final clean gates, EXP-168 fresh CUA review, exact cleanup, and protected Gazebo zero-diff contract passed.
+open_risks:
+  - RGB-D perception, VLM localization, and real hardware transfer remain future work outside this simulation migration.
+next_command: Stop for human review of the pushed continuation branch; do not merge automatically.
 ```

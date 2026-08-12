@@ -494,13 +494,13 @@ git diff --check
 
 - [x] Use ai-station CUA for one fresh final MuJoCo GUI review with the robot, base, cup, target ring, and completed placement visible. Record the screenshot hash as visual corroboration only.
 - [x] Write the qualification report with both consecutive series, all invalid/failed batches, exact hashes, test/build counts, clean shutdown evidence, process cleanup, and unresolved risks.
-- [ ] Commit and push the qualification artifacts:
+- [x] Commit and push the qualification artifacts:
 
 ```text
 test(so101_mujoco): qualify restart and reset repeatability
 ```
 
-- [ ] Update the ledger with a final checkpoint and stop for review. Do not merge the branch or push a default branch.
+- [x] Update the ledger with a final checkpoint and stop for review. Do not merge the branch or push a default branch.
 
 ---
 
