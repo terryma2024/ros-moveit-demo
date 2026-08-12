@@ -20,7 +20,9 @@ import yaml
 from so101_mujoco_demo_py.contact_policy import (
     ApprovalRecord,
     approve_proposal,
+    dynamic_metric_definitions,
     proposal_sha256,
+    validate_dynamic_diagnostic_proposal,
     validate_unilateral_rejection_contracts,
 )
 
@@ -472,6 +474,8 @@ def validate_policy(policy_value: Any) -> dict[str, Any]:
     """Validate a schema-v2/v3 template, disabled proposal, or approved policy."""
     policy = _mapping(policy_value, "policy")
     schema_version = policy.get("schema_version")
+    if schema_version == 4:
+        return validate_dynamic_diagnostic_proposal(policy)
     if schema_version not in {2, 3}:
         raise ValueError("unsupported schema_version")
     if policy.get("policy_id") != "light_cup_wall_pick-contact":
@@ -599,6 +603,84 @@ def validate_policy(policy_value: Any) -> dict[str, Any]:
         elif approval["approved_by"] is not None or approval["approved_at"] is not None:
             raise ValueError("disabled proposal must not contain approval identity")
     return policy
+
+
+def build_dynamic_transport_proposal(
+    runs: list[dict[str, Any]],
+    *,
+    provenance: dict[str, Any],
+    frozen_behavior: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a deterministic disabled schema-v4 diagnostic-only proposal."""
+
+    copied_runs = copy.deepcopy(runs)
+    peak_forces = [float(item["peak_global_max_single_contact_force_n"]) for item in copied_runs]
+    exposures = [float(item["force_time_exposure_n_s"]) for item in copied_runs]
+    shadow_exposures = [
+        float(item["shadow_excess_force_time_exposure_n_s"]) for item in copied_runs
+    ]
+    proposal: dict[str, Any] = {
+        "schema_version": 4,
+        "proposal_kind": "phase_aware_dynamic_transport_diagnostic",
+        "policy_id": "light_cup_wall_pick-contact",
+        "acceptance_role": "diagnostic_only",
+        "independent_experiment_units": 5,
+        "statistical_design": {
+            "runs_1_to_4": "descriptive_repeats",
+            "run_5": "preregistered_replication",
+            "waypoint_role": "repeated_measure",
+            "fits_dynamic_threshold": False,
+        },
+        "static_contact_contract": {
+            "phase": "PRE_TRANSPORT_STATIC_HOLD",
+            "metric": "maximum_normal_force_n",
+            "comparison": ">",
+            "maximum_safe_force_n": 1.1579004532160448,
+            "role": "formal_hard_gate",
+        },
+        "dynamic_transport_contract": {
+            "phase": "DYNAMIC_TRANSPORT_SHADOW",
+            "shadow_metric": "maximum_normal_force_n",
+            "static_shadow_threshold_n": 1.1579004532160448,
+            "static_threshold_role": "shadow_only",
+            "hazard_metric": "global_max_single_contact_force_n",
+            "diagnostic_hard_stop_n": 11.60,
+            "hazard_comparison": ">=",
+            "diagnostic_hard_stop_role": "absolute_diagnostic_safety_stop_only",
+            "maximum_reaction_steps": 25,
+            "maximum_reaction_time_s": 0.050,
+            "reaction_bound_kind": "plugin_ack_upper_bound",
+        },
+        "metric_definitions": dynamic_metric_definitions(),
+        "provenance": copy.deepcopy(provenance),
+        "frozen_behavior": copy.deepcopy(frozen_behavior),
+        "runs": copied_runs,
+        "descriptive_results": {
+            "run_count": len(copied_runs),
+            "peak_force_range_n": [min(peak_forces), max(peak_forces)],
+            "force_time_exposure_range_n_s": [min(exposures), max(exposures)],
+            "shadow_excess_exposure_range_n_s": [
+                min(shadow_exposures),
+                max(shadow_exposures),
+            ],
+            "maximum_left_fingertip_compression_m": max(
+                float(item["maximum_left_fingertip_compression_m"]) for item in copied_runs
+            ),
+            "maximum_right_fingertip_compression_m": max(
+                float(item["maximum_right_fingertip_compression_m"]) for item in copied_runs
+            ),
+        },
+        "approval": {
+            "enabled": False,
+            "approved": False,
+            "approved_by": None,
+            "approved_at": None,
+            "proposal_sha256": None,
+        },
+    }
+    proposal["approval"]["proposal_sha256"] = proposal_sha256(proposal)
+    validate_dynamic_diagnostic_proposal(proposal)
+    return proposal
 
 
 def analyze_bytes(raw: bytes) -> dict[str, Any]:
@@ -740,6 +822,7 @@ def _atomic_yaml_write(path: Path, document: dict[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path)
+    parser.add_argument("--dynamic-input", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--validate", type=Path)
     parser.add_argument("--approve", type=Path)
@@ -748,7 +831,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--approved-at")
     args = parser.parse_args(argv)
     try:
-        if args.validate:
+        if args.dynamic_input and args.output:
+            dynamic_input = _mapping(
+                json.loads(args.dynamic_input.read_text(encoding="utf-8")),
+                "dynamic input",
+            )
+            if set(dynamic_input) != {"runs", "provenance", "frozen_behavior"}:
+                raise ValueError(
+                    "dynamic input must contain exact runs, provenance, and frozen_behavior keys"
+                )
+            proposal = build_dynamic_transport_proposal(
+                _list(dynamic_input["runs"], "runs"),
+                provenance=_mapping(dynamic_input["provenance"], "provenance"),
+                frozen_behavior=_mapping(dynamic_input["frozen_behavior"], "frozen_behavior"),
+            )
+            _atomic_yaml_write(args.output, proposal)
+        elif args.validate:
             validate_policy(yaml.safe_load(args.validate.read_text(encoding="utf-8")))
         elif args.approve and args.output:
             if not all((args.proposal_sha256, args.approved_by, args.approved_at)):
