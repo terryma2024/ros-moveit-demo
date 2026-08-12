@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...ports.lifecycle import LifecyclePort
+from ...ports.phase_evidence import PhaseEvidencePort
 from ...ports.planning_scene import PlanningScenePort
 from ...ports.robot_control import RobotControlPort
 from ...ports.world import WorldPort
@@ -16,7 +17,7 @@ class PhaseContext:
     planning_scene: PlanningScenePort
     world: WorldPort
     lifecycle: LifecyclePort
-    phase_evidence: object | None = None
+    phase_evidence: PhaseEvidencePort | None = None
 
 
 @dataclass(frozen=True, slots=True)

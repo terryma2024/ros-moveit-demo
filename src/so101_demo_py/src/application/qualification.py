@@ -18,6 +18,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from so101_demo.ports.capabilities import BackendCapabilities, CapabilityRequirements
+
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_FINGERPRINT_KEYS = (
@@ -74,6 +76,14 @@ class InvalidRun(QualificationError):
 
 class ValidRunFailure(QualificationError):
     """A qualified runtime failed its physical workflow contract."""
+
+
+def require_mujoco_qualification_capabilities(capabilities: BackendCapabilities) -> None:
+    """Reject qualification before execution when lossless evidence is unavailable."""
+
+    result = CapabilityRequirements.mujoco_qualification().validate(capabilities)
+    if not result.accepted:
+        raise InvalidRun(f"CAPABILITY_MISSING: {', '.join(result.missing)}")
 
 
 def sha256_file(path: Path) -> str:

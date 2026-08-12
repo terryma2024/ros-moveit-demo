@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 7574f2dca28126849f156230768204936a1e03fe
+current_commit: 2af3b51ff36d01291261762e9530b919a5ec71cb
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -15,13 +15,14 @@ confirmed_conclusions:
   - Tasks 2-5 preserve mapped identity, core/runtime parity, nine-phase order, and exact v1 simulator policy bytes; CP-FUSION-002.
   - Task 6 installs strict neutral world/lifecycle contracts and MuJoCo adapters with fresh-state validation; CP-FUSION-003.
   - Task 7 installs typed robot/scene ports and removes direct ROS client construction from application; CP-FUSION-004.
+  - Task 8 makes lossless physics-step tracing optional for execute and mandatory for MuJoCo qualification; CP-FUSION-005.
 disproven_routes:
   - Historical TASK15-FULL-A is INVALID because headless execution could not satisfy the required viewer-camera readiness gate; CP-156.
   - Recreating or sourcing the removed migration worktree is unnecessary and would contradict the verified merged-main handoff; CP-FUSION-001.
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-004
+latest_checkpoint: CP-FUSION-005
 next_experiment: NONE
 ---
 
@@ -155,4 +156,32 @@ evidence:
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task7/application-client-scan.log sha256=0aec8a871a5714aed65de820979bf5e9ad3ae180970168cec852b054c2e0d83b
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task7-dry-run.log sha256=ce72e16ecb692aa0a1555ea6a15834ab984c05495b6da872e76a7aa087c54074
   - log/fusion-t7/latest_build
+```
+
+## Checkpoint CP-FUSION-005
+
+```yaml
+checkpoint_id: CP-FUSION-005
+last_valid_experiment: EXP-168 historical uncounted visual corroboration; no fusion live experiment has started
+current_hypothesis: Runtime composition can become the sole backend selector while preserving the distinction between run validity and qualification outcome.
+working_tree_status: HEAD 2af3b51ff36d01291261762e9530b919a5ec71cb; Task 8 trace port, capability rules, adapter, tests, and this checkpoint are intentionally dirty before the scoped Task 8 commit.
+owned_processes: NONE
+preserved_processes: unchanged preserved tmux sessions and pre-existing ros2 daemons; no process or session was controlled.
+confirmed_conclusions:
+  - CapabilityRequirements.base_execute accepts a backend without lossless physics-step trace.
+  - CapabilityRequirements.mujoco_qualification rejects that same backend with CAPABILITY_MISSING and names lossless_physics_step_trace.
+  - PhaseEvidencePort exposes observation-only trace begin, boundary, and finish receipts bound to session and reset epoch.
+  - The MuJoCo phase-evidence adapter delegates only to trace observer/checkpoint methods and has no world, policy, trajectory, or pause mutation surface.
+  - The complete unified suite passes 41/41 after the fusion-t8 build, and the installed dry-run retains the exact 19-transition trace.
+  - The frozen MuJoCo policy remains aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356.
+disproven_routes:
+  - Treating the qualified MuJoCo trace as a universal simulator prerequisite would incorrectly reject the planned Gazebo v1 execute path.
+open_risks:
+  - Backend selection and live result classification are not yet centralized; the CLI still imports a MuJoCo lifecycle callback directly.
+  - The Task 6-9 live gate remains deferred until the unified package owns its installed assets and launch graph.
+next_command: Write and run Task 9 runtime-composition, result-classification, and AST import-boundary RED tests.
+evidence:
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task8/unified-tests.log sha256=2f4732c586995104aa071102838621cbfe536f747d36a0e7427909f1c6593a0d
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task8/dry-run.log sha256=ce72e16ecb692aa0a1555ea6a15834ab984c05495b6da872e76a7aa087c54074
+  - log/fusion-t8/latest_build
 ```
