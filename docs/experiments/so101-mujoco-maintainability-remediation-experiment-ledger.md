@@ -1786,3 +1786,81 @@ batch_6:
   stop_rule: Stop at the first INVALID experiment. If all five are VALID, run the installed analyzer and independent evidence audit; never self-approve.
 decision: PLANNED before the isolated build, stack launch, or any controller action.
 ```
+
+## EXP-101 through EXP-105 terminal results and USER_APPROVAL_REQUIRED checkpoint
+
+```yaml
+recorded_at: 2026-08-12T16:58:00+08:00
+batch_6:
+  status: VALID
+  lifecycle: FRESH_STACK_EPOCH_0
+  simulation_session_id: so101-mnt-cal-v3f
+  physical_results:
+    EXP-101:
+      status: VALID
+      regime: no_contact
+      observed: 25 samples; 13 table-only and 12 authentic post-release; every sample has zero left and zero right fingertip contact.
+      maximum_total_displacement_m: 0.0010716728622378918
+    EXP-102:
+      status: VALID
+      regime: micro_lift_slip
+      observed: 25 bilateral samples collected after controller action acceptance; speed range 3.9177127736293275e-07 through 0.002163806880191998 m/s; no side loss.
+      maximum_total_displacement_m: 0.0020618565020250304
+    EXP-103:
+      status: VALID
+      regime: bilateral_touch
+      observed: 25 bilateral samples; maximum force 0.2598167307265038 N.
+    EXP-104:
+      status: VALID
+      regime: over_compression
+      observed: 25 bilateral samples; fingertip compression 0.00018247585456424465 through 0.0001824817120959726 m; maximum force 1.7032279056003339 N.
+    EXP-105:
+      status: VALID
+      regime: stable_hold
+      observed: 25 bilateral samples after 0.60 s preroll; contact duration 0.6099999999999568 through 0.8499999999999659 s; maximum total displacement 0.0019991176850923356 m.
+  safety:
+    - All maximum forces remained below 11.60 N and all terminal total displacements remained below the independent 0.010 m limit.
+    - EXP-101 pre-contact collection used the independent 0.003 m pre-contact monitor. No conclusion was inferred by comparing terminal total displacement with 0.003 m.
+  raw_evidence:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3-batch6.json
+    sha256: 3610de6a81ad5b5babc9c1d1172509a46d270f48f925e61906b753776369aefb
+    collector_source_commit: 2253aef3d8fb7f839922d47cf1939ca0331f7963
+analyzer_corrections:
+  source_commit: c7afcd9ff149f83e58503848a5d7de6a19ded5ec
+  findings:
+    - Global minimum_signed_distance_m is a whole-scene diagnostic; fingertip compression now uses only left/right fingertip contact distances in both calibration and live grasp evaluation.
+    - The deterministic split is per-regime publisher-ordered index modulo five, so appended negative-control timing cannot change the required 20/5 allocation.
+    - Slip threshold fitting and held-out evaluation now use the same window-maximum speed contract as live evaluate_grasp; all atomic acceleration/decay samples remain in raw evidence and quantiles.
+    - The strictly positive cross-scale speed threshold uses the geometric midpoint; force, compression, and duration keep linear separating thresholds.
+  verification: 469 package tests passed, 4 skipped; Ruff and migration-isolation gates passed.
+proposal:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal-v3-batch6.yaml
+  file_sha256: 41fce814a2e15aa4ca843501e37efd9eb6fbb71dbe47ae6d2240401d544b08e5
+  proposal_sha256: 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897
+  calibration_status: VALID
+  approval: {enabled: false, approved: false, approved_by: null, approved_at: null}
+  counts: {calibration: 100, evaluation: 25, false_positive: 0, false_negative: 0}
+  thresholds:
+    minimum_bilateral_force_n: 0.05126429271696818
+    maximum_compression_distance_m: 0.00012528745142373227
+    maximum_safe_force_n: 1.1579004532160448
+    maximum_hold_linear_speed_m_s: 3.591036966769536e-05
+    minimum_stable_hold_duration_s: 0.4199999999999875
+  safety_margins:
+    bilateral_force_n: 0.10252858543393636
+    compression_distance_m: 0.00011437680628102478
+    safe_force_n: 1.0905530025699317
+    hold_linear_speed_m_s: 0.0021632109145069476
+    stable_hold_duration_s: 0.3799999999999386
+  held_out_matrix: Exactly 5/5 on the diagonal for each of no_contact, bilateral_touch, over_compression, micro_lift_slip, and stable_hold; every off-diagonal cell is zero.
+  unilateral_contracts:
+    left_only: physical_unreachable; GRASP_RIGHT_CONTACT_MISSING; stable_grasp_allowed false; all physical statistical fields null.
+    right_only: observed; GRASP_LEFT_CONTACT_MISSING; stable_grasp_allowed false; all physical statistical fields null.
+evidence_summary:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-evidence-summary-v3-batch6.yaml
+  sha256: 5a0e8d14e74c9c108e3d0d7dc1399d0490dfc7892d4fc7bbd9beb74a5507e861
+cleanup: Task-owned tmux so101-mnt-cal-v3f is absent and ROS_DOMAIN_ID 182 has no nodes.
+checked_in_policy: schema-v3 PLANNED, enabled false, approved false, proposal hash null; unchanged.
+state: USER_APPROVAL_REQUIRED
+next_step: Wait for the user to approve exact proposal_sha256 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897. Do not self-approve, activate policy, enter Task 9, run the nine-stage regression, run RESET_WORLD five-win qualification, merge, or push main before that exact-hash approval.
+```
