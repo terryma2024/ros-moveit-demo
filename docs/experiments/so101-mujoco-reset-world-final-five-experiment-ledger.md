@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-014
-next_experiment: VISUAL-CORROBORATION-01-NONCOUNT
+latest_checkpoint: RESET-FIVE-CP-016
+next_experiment: VISUAL-CORROBORATION-02-NONCOUNT
 ```
 
 ## Immutable challenge boundary
@@ -559,6 +559,68 @@ protected_user_state:
   protected_documents_byte_hashes_unchanged: true
 next_experiment: EXP-141
 next_command: Commit the frozen artifact registration, then preregister EXP-141 through EXP-145 before any stack startup.
+remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-015 — first non-counting visual cycle failed
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-015
+recorded_at: 2026-08-13T02:02:00+08:00
+prior_checkpoint: RESET-FIVE-CP-014
+status: VISUAL_CORROBORATION_FAILED_EXCLUDED_FROM_COUNTING
+visual_cycle_id: VISUAL-CORROBORATION-01-NONCOUNT
+counting_status: EXCLUDED_FROM_EXP-141_THROUGH_EXP-145
+reset: {old_epoch: 0, new_epoch: 1, simulation_step: 0, simulation_session_id: MNT-Q-RESET-EXP141-145-visual-noncount}
+result: VALID_FAILURE
+failed_phase: transport
+failure: EvidenceInvalid chunk sequence mismatch
+completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift]
+diagnosis:
+  first_bad_boundary: High-rate transport subscriber received only late chunk_sequence 5034 while RViz was running concurrently with the workflow.
+  differing_load_from_qualified_5_of_5: RViz was started before transport evidence collection.
+  robot_strategy_change: NONE
+  counting_batch_effect: NONE_ALREADY_CLOSED_AND_HASHED
+artifacts_sha256:
+  actions: 509dd9a7755310e70e8f25aee688920c50d2d1a2943650736f5cd0a922bcd2e8
+  noncount_record: a1637d0f5905573a4ce66b716537245b4ca6a0ce90d3ebb79856dc2af6209422
+  owner_manifest: fa83d7e66b457a58c6752595414f008b11e22bd617e9c475b33307f88a73a96d
+  transport_result: 1c62cfb171d0fb13e5d2d8c94d0b4e2f8cdfdffb48511f217a8bd6e074ec332e
+  raw_run_index: 9d3d0df1fe4a0a08abab2ee035104e88f3880f0dd4a63009c89ff6bac9b32196
+  launch_log: a13a85369f9ac4bef46898389089296f79e9dedd0d3ca824072baed686ba2f74
+  cua_initial: 2b8330169fa3580743b89951590cdde87a3bf3798dfd6bd8262f667ef1f38208
+owned_processes_after_cleanup: NONE
+next_experiment: VISUAL-CORROBORATION-02-NONCOUNT
+remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-016 — second non-counting visual cycle preregistered
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-016
+recorded_at: 2026-08-13T02:03:00+08:00
+prior_checkpoint: RESET-FIVE-CP-015
+status: VISUAL_CORROBORATION_PREREGISTERED_NOT_STARTED
+visual_cycle_id: VISUAL-CORROBORATION-02-NONCOUNT
+counting_status: EXCLUDED_FROM_EXP-141_THROUGH_EXP-145
+simulation_session_id: MNT-Q-RESET-EXP141-145-visual02-noncount
+ros_domain_id: 207
+teleop_port: 8047
+evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration-02
+evidence_root_pre_registration_state: ABSENT
+evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
+hypothesis: Running the exact workflow before launching RViz preserves the qualified evidence workload; RViz can then join the idle successful final state for Planning Scene corroboration.
+single_variable_from_VISUAL_01: RViz starts only after workflow SUCCESS and high-rate evidence closure.
+robot_strategy_changes: NONE
+runtime_fingerprint_file_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+required_order:
+  - Start non-headless MuJoCo/MoveIt/Teleop stack without RViz.
+  - Execute one same-fingerprint non-counting workflow to SUCCESS.
+  - Start RViz only after dynamic evidence and physical outcome are closed.
+  - Use codex-cua snapshot then CUA action then fresh snapshot.
+preflight: {evidence_root_absent: PASS, domain_207_nodes: NONE, port_8047_listener: NONE, owned_visual_tmux: ABSENT}
 remote_push_state: FORBIDDEN
 ```
 
