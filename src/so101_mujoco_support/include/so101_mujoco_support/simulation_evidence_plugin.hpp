@@ -113,6 +113,7 @@ class SimulationEvidencePlugin final
 public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel * model, mjData * data) override;
   void update(const mjModel * model, mjData * data) override;
+  void on_physics_step(const mjModel * model, const mjData * data) override;
   void on_reset() override;
   void on_pause(bool paused) override;
   void on_state_snapshot(const mjModel * model, const mjData * data, bool paused) override;
@@ -140,6 +141,7 @@ private:
   rclcpp::Publisher<msg::PhysicsCancellationAck>::SharedPtr cancellation_ack_publisher_;
   EvidenceBuilder builder_;
   EvidenceState state_;
+  EvidenceState physics_state_;
   std::unique_ptr<PhysicsStepEvidenceBuffer> physics_step_buffer_;
   double publish_period_s_{0.01};
   double last_publish_time_s_{0.0};

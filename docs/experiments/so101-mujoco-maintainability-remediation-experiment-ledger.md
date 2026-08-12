@@ -3278,3 +3278,33 @@ frozen_behavior: No strategy, controller command, model, scene, geometry, waypoi
 next_experiment: NONE_PENDING_PROJECT_PLUGIN_GREEN
 next_command: Commit the parent submodule pointer, then make SimulationEvidencePlugin the sole opt-in per-step producer while ordinary update remains snapshot-only.
 ```
+
+## Checkpoint MNT-CP-028 — SimulationEvidencePlugin per-step producer GREEN
+
+```yaml
+checkpoint_id: MNT-CP-028
+recorded_at: 2026-08-12T19:44:56+08:00
+last_valid_experiment: EXP-109
+immutable_invalid_experiments: EXP-110 and EXP-115 remain INVALID_EVIDENCE and are not rerun or reclassified.
+parent_fork_pointer_commit: e802380
+fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+red_evidence: The project test did not compile because SimulationEvidencePlugin lacked a dedicated physics_state_ and per-step override; the former update-only producer could not meet the new fork contract.
+green_implementation:
+  physics_producer: SimulationEvidencePlugin is the only plugin that overrides on_physics_step. It builds, validates, buffers, hazard-checks, and publishes diagnostic chunks from authoritative data after each successful MuJoCo step.
+  ordinary_update: Retains the 100 Hz ordinary SimulationEvidence snapshot path only and never appends a PhysicsStepEvidence sample.
+  identity: Snapshot state and physics state receive the same immutable simulation_session_id from the existing root-bound production parameter source.
+  reset_pause: A successful paused reset snapshot atomically consumes the new generation for both states, clears the physics buffer/hazard latch, establishes step zero at the reset simulation time, and makes the first resumed successful physics hook step one. Publisher contention leaves both states pending and fail-closed.
+  threading: Fork calls the physics hook under sim_mutex_ with authoritative mj_data_; controller update and paused snapshot hooks are already under the same mutex. The plugin adds no motion/control writes and no independent lock.
+  failure_semantics: Missing/duplicate/backward physics time still latches evidence loss; strict observer session/epoch/gap checks remain unchanged.
+verification:
+  focused: Three producer/cadence/reset tests passed at explicit timestep 0.002 s.
+  support_gtest: 19 SimulationEvidencePlugin tests passed; colcon reports 20 package test cases, 0 errors/failures/skips.
+  cxx_style: Changed project files pass read-only ament_uncrustify and ament_cpplint.
+  cppcheck: Header/source pass; cppcheck 2.13 cannot parse the GTest TEST_F macro and reports a parser syntaxError at the first unchanged TEST_F declaration, while the test translation unit compiles and all GTests pass.
+  diff_check: clean.
+protected_gazebo: src/so101_gazebo_demo_py remains clean.
+frozen_behavior: No q6, waypoint, trajectory, planner, speed/acceleration, controller command, MJCF, scene, geometry, initial pose, phase order, or normal transport behavior changed.
+runtime_state: No live stack or experiment started.
+next_experiment: NONE_PENDING_FULL_AUTOMATIC_GATES
+next_command: Commit this evidence-only producer change, rebuild the pinned fork overlay, then run clean isolated three-package build/test, Ruff, manifest/protected-tree/provenance gates before preregistering a new diagnostic ID.
+```

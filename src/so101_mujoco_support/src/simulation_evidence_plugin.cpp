@@ -438,6 +438,9 @@ bool SimulationEvidencePlugin::init(
       parameter<double>(node, "diagnostic_hard_stop_force_n", 11.60);
     state_.simulation_session_id =
       parameter<std::string>(node, "simulation_session_id", "unconfigured-session");
+    physics_state_.simulation_session_id = state_.simulation_session_id;
+    physics_state_.previous_time = data->time;
+    physics_state_.initialized = true;
     const auto topic = parameter<std::string>(node, "topic", "/so101/simulation/evidence");
     const auto chunk_topic = parameter<std::string>(
       node, "physics_step_topic", "/so101/simulation/physics_step_chunks");
@@ -495,9 +498,7 @@ bool SimulationEvidencePlugin::init(
 
 void SimulationEvidencePlugin::update(const mjModel * model, mjData * data)
 {
-  if (!realtime_publisher_ || !realtime_chunk_publisher_ || !physics_step_buffer_ ||
-    model == nullptr || data == nullptr || !std::isfinite(data->time))
-  {
+  if (!realtime_publisher_ || model == nullptr || data == nullptr || !std::isfinite(data->time)) {
     return;
   }
   const auto reset_generation = reset_generation_.load(std::memory_order_acquire);
@@ -512,7 +513,29 @@ void SimulationEvidencePlugin::update(const mjModel * model, mjData * data)
     }
     return;
   }
-  const auto step = builder_.build_step(model, data, paused, state_, reset_generation,
+  if (!published_ || data->time < last_publish_time_s_ ||
+    data->time - last_publish_time_s_ >= publish_period_s_)
+  {
+    try_publish_snapshot(model, data, paused, reset_generation, true);
+  }
+}
+
+void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjData * data)
+{
+  if (!realtime_chunk_publisher_ || !physics_step_buffer_ || model == nullptr || data == nullptr ||
+    !std::isfinite(data->time))
+  {
+    return;
+  }
+  const auto reset_generation = reset_generation_.load(std::memory_order_acquire);
+  if (reset_generation != physics_state_.consumed_reset_generation) {
+    return;
+  }
+  if (physics_state_.initialized && data->time == physics_state_.previous_time) {
+    return;
+  }
+  const bool paused = authoritative_paused_.load(std::memory_order_acquire);
+  const auto step = builder_.build_step(model, data, paused, physics_state_, reset_generation,
                                         static_shadow_force_n_, diagnostic_hard_stop_force_n_);
   current_reset_epoch_.store(step.reset_epoch, std::memory_order_release);
   current_physics_step_.store(step.physics_step, std::memory_order_release);
@@ -521,11 +544,6 @@ void SimulationEvidencePlugin::update(const mjModel * model, mjData * data)
   publish_hazard_if_needed();
   if (physics_step_buffer_->ready()) {
     try_publish_chunk();
-  }
-  if (!published_ || data->time < last_publish_time_s_ ||
-    data->time - last_publish_time_s_ >= publish_period_s_)
-  {
-    try_publish_snapshot(model, data, paused, reset_generation, false);
   }
 }
 
@@ -620,9 +638,18 @@ void SimulationEvidencePlugin::on_state_snapshot(
   const bool reset_pending = generation != state_.consumed_reset_generation;
   try_publish_snapshot(model, data, true, generation, true);
   if (reset_pending && generation == state_.consumed_reset_generation) {
+    physics_state_.publisher_sequence = 0;
+    physics_state_.simulation_step = 0;
+    physics_state_.reset_epoch = generation;
+    physics_state_.consumed_reset_generation = generation;
+    physics_state_.previous_time = data->time;
+    physics_state_.initialized = true;
     if (physics_step_buffer_) {
       physics_step_buffer_->reset();
     }
+    current_reset_epoch_.store(generation, std::memory_order_release);
+    current_physics_step_.store(0, std::memory_order_release);
+    current_simulation_time_s_.store(data->time, std::memory_order_release);
     hazard_published_ = false;
   }
 }
@@ -639,6 +666,7 @@ void SimulationEvidencePlugin::cleanup()
   publisher_.reset();
   node_.reset();
   state_ = EvidenceState{};
+  physics_state_ = EvidenceState{};
   publish_period_s_ = 0.01;
   last_publish_time_s_ = 0.0;
   static_shadow_force_n_ = 1.1579004532160448;

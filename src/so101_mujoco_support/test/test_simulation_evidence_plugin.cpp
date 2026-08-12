@@ -29,6 +29,7 @@ using so101_mujoco_support::make_physics_step_evidence;
 using so101_mujoco_support::make_cancellation_ack;
 using so101_mujoco_support::msg::ContactSample;
 using so101_mujoco_support::msg::PhysicsStepEvidence;
+using so101_mujoco_support::msg::PhysicsStepEvidenceChunk;
 using so101_mujoco_support::msg::SimulationEvidence;
 
 struct ModelDeleter
@@ -426,11 +427,24 @@ TEST_F(AtomicEvidenceTest,
   EXPECT_EQ(messages.back().reset_epoch, 1U);
   EXPECT_EQ(messages.back().simulation_step, 0U);
   EXPECT_TRUE(messages.back().paused);
+  EXPECT_EQ(plugin.physics_state_.reset_epoch, 1U);
+  EXPECT_EQ(plugin.physics_state_.consumed_reset_generation, 1U);
+  EXPECT_EQ(plugin.physics_state_.simulation_step, 0U);
+  EXPECT_DOUBLE_EQ(plugin.physics_state_.previous_time, 0.001);
   EXPECT_EQ(std::vector<mjtNum>(data_->qpos, data_->qpos + model_->nq), qpos);
   EXPECT_EQ(std::vector<mjtNum>(data_->qvel, data_->qvel + model_->nv), qvel);
   EXPECT_EQ(std::vector<mjtNum>(data_->ctrl, data_->ctrl + model_->nu), ctrl);
   EXPECT_EQ(std::vector<mjtNum>(data_->xfrc_applied, data_->xfrc_applied + 6 * model_->nbody),
             xfrc);
+
+  plugin.on_pause(false);
+  data_->time = 0.002;
+  plugin.on_physics_step(model_.get(), data_.get());
+  const auto first_post_reset_chunk = plugin.physics_step_buffer_->prepare_chunk();
+  ASSERT_EQ(first_post_reset_chunk.samples.size(), 1U);
+  EXPECT_EQ(first_post_reset_chunk.simulation_session_id, "snapshot-test");
+  EXPECT_EQ(first_post_reset_chunk.reset_epoch, 1U);
+  EXPECT_EQ(first_post_reset_chunk.first_physics_step, 1U);
 
   plugin.cleanup();
   executor.remove_node(observer_node);
@@ -641,11 +655,13 @@ TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFi
   EXPECT_FALSE(sample.diagnostic_hazard_breached);
 }
 
-TEST_F(AtomicEvidenceTest, PhysicsStepAdvancesAtFiveHundredHertzNotPublishCadence)
+TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCadence)
 {
   if (!rclcpp::ok()) {
     rclcpp::init(0, nullptr);
   }
+  model_->opt.timestep = 0.002;
+  const auto chunk_topic = "/test/so101/physics_step_chunks";
   auto options = rclcpp::NodeOptions().parameter_overrides({
       rclcpp::Parameter("object_body", "cup"),
       rclcpp::Parameter("left_fingertip_geom", "left_tip"),
@@ -654,23 +670,46 @@ TEST_F(AtomicEvidenceTest, PhysicsStepAdvancesAtFiveHundredHertzNotPublishCadenc
       rclcpp::Parameter("simulation_session_id", "physics-step-test"),
       rclcpp::Parameter("publish_rate", 100.0),
       rclcpp::Parameter("topic", "/test/so101/physics_step_snapshot"),
+      rclcpp::Parameter("physics_step_topic", chunk_topic),
   });
   auto node = std::make_shared<rclcpp::Node>("physics_step_plugin", options);
+  auto observer = std::make_shared<rclcpp::Node>("physics_step_observer");
+  std::vector<PhysicsStepEvidenceChunk> chunks;
+  const auto subscription = observer->create_subscription<PhysicsStepEvidenceChunk>(
+    chunk_topic, rclcpp::QoS(rclcpp::KeepLast(10)).reliable(),
+    [&chunks](const PhysicsStepEvidenceChunk & message) {chunks.push_back(message);});
+  (void)subscription;
   SimulationEvidencePlugin plugin;
   ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  executor.add_node(observer);
 
-  plugin.update(model_.get(), data_.get());
+  plugin.on_physics_step(model_.get(), data_.get());
   for (uint64_t step = 1; step <= 5; ++step) {
     data_->time = static_cast<double>(step) * model_->opt.timestep;
-    plugin.update(model_.get(), data_.get());
+    plugin.on_physics_step(model_.get(), data_.get());
   }
 
-  EXPECT_EQ(plugin.state_.simulation_step, 5U);
+  EXPECT_EQ(plugin.physics_state_.simulation_step, 5U);
+  EXPECT_FALSE(plugin.physics_step_buffer_->evidence_loss_latched());
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (chunks.empty() && std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  ASSERT_EQ(chunks.size(), 1U);
+  ASSERT_EQ(chunks.front().samples.size(), 5U);
+  EXPECT_EQ(chunks.front().first_physics_step, 1U);
+  EXPECT_EQ(chunks.front().last_physics_step, 5U);
+  EXPECT_EQ(chunks.front().simulation_session_id, "physics-step-test");
   plugin.cleanup();
+  executor.remove_node(observer);
+  executor.remove_node(node);
   rclcpp::shutdown();
 }
 
-TEST_F(AtomicEvidenceTest, RepeatedNonAdvancingUpdateDoesNotInventDuplicatePhysicsStep)
+TEST_F(AtomicEvidenceTest, ControllerUpdatesDoNotInventPhysicsStepEvidence)
 {
   if (!rclcpp::ok()) {
     rclcpp::init(0, nullptr);
@@ -689,10 +728,12 @@ TEST_F(AtomicEvidenceTest, RepeatedNonAdvancingUpdateDoesNotInventDuplicatePhysi
   ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
 
   plugin.update(model_.get(), data_.get());
+  data_->time = 0.02;
   plugin.update(model_.get(), data_.get());
 
-  EXPECT_EQ(plugin.state_.simulation_step, 0U);
+  EXPECT_EQ(plugin.physics_state_.simulation_step, 0U);
   ASSERT_NE(plugin.physics_step_buffer_, nullptr);
+  EXPECT_TRUE(plugin.physics_step_buffer_->prepare_chunk().samples.empty());
   EXPECT_FALSE(plugin.physics_step_buffer_->evidence_loss_latched());
   plugin.cleanup();
   rclcpp::shutdown();
