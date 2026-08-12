@@ -335,6 +335,48 @@ def test_collector_rejects_existing_v3_matrix_fingerprint_drift(tmp_path: Path) 
         second.collect(request(tmp_path, sample_count=1, scene_sha256="e" * 64))
 
 
+def test_collector_requires_explicit_append_and_preserves_negative_subcohorts(
+    tmp_path: Path,
+) -> None:
+    collector([received(evidence(1, left=False, right=False))]).collect(
+        request(
+            tmp_path,
+            regime="no_contact",
+            sample_count=1,
+            table_only=True,
+        )
+    )
+
+    with pytest.raises(CollectionAborted, match="already contains samples"):
+        collector([received(evidence(2, left=False, right=False))]).collect(
+            request(
+                tmp_path,
+                regime="no_contact",
+                sample_count=1,
+                post_release=True,
+            )
+        )
+
+    collector([received(evidence(2, left=False, right=False), at=9.96)]).collect(
+        request(
+            tmp_path,
+            regime="no_contact",
+            sample_count=1,
+            post_release=True,
+            append=True,
+        )
+    )
+
+    samples = json.loads((tmp_path / "matrix.json").read_text(encoding="utf-8"))["regimes"][
+        "no_contact"
+    ]
+    assert [sample["publisher_sequence"] for sample in samples] == [1, 2]
+    assert [sample["subcohorts"] for sample in samples] == [
+        {"table_only": True, "post_release": False},
+        {"table_only": False, "post_release": True},
+    ]
+
+
 @pytest.mark.parametrize(
     ("items", "message"),
     [
