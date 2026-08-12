@@ -80,6 +80,7 @@ class CollectionRequest:
     stable_hold_preroll_s: float = 0.30
     table_only: bool = False
     post_release: bool = False
+    append: bool = False
 
     def __post_init__(self) -> None:
         if self.regime not in PHYSICAL_REGIMES:
@@ -426,7 +427,24 @@ class ContactCalibrationCollector:
         regimes = document.get("regimes")
         if not isinstance(regimes, dict) or set(regimes) != set(PHYSICAL_REGIMES):
             raise CollectionAborted("existing matrix regimes are incomplete")
-        regimes[request.regime] = samples
+        existing_samples = regimes[request.regime]
+        if not isinstance(existing_samples, list):
+            raise CollectionAborted(f"existing matrix {request.regime} samples are invalid")
+        if existing_samples and not request.append:
+            raise CollectionAborted(
+                f"existing matrix {request.regime} already contains samples; use explicit append"
+            )
+        if existing_samples and samples:
+            previous = existing_samples[-1]
+            current = samples[0]
+            if (
+                current["publisher_sequence"] <= previous["publisher_sequence"]
+                or current["simulation_step"] < previous["simulation_step"]
+                or current["simulation_time_s"] < previous["simulation_time_s"]
+                or current["receipt_monotonic_s"] <= previous["receipt_monotonic_s"]
+            ):
+                raise CollectionAborted("appended samples are stale or non-monotonic")
+        regimes[request.regime] = [*existing_samples, *samples]
         return document
 
 
@@ -447,6 +465,7 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pre-contact", action="store_true")
     parser.add_argument("--table-only", action="store_true")
     parser.add_argument("--post-release", action="store_true")
+    parser.add_argument("--append", action="store_true")
     parser.add_argument("--max-receipt-age-s", type=float, default=0.2)
     parser.add_argument("--stable-hold-preroll-s", type=float, default=0.30)
     parser.add_argument("--timeout-s", type=float, default=30.0)
@@ -545,6 +564,7 @@ def run_ros_collection(options: argparse.Namespace) -> dict[str, Any]:
         pre_contact=options.pre_contact,
         table_only=options.table_only,
         post_release=options.post_release,
+        append=options.append,
         max_receipt_age_s=options.max_receipt_age_s,
         stable_hold_preroll_s=options.stable_hold_preroll_s,
     )
