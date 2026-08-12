@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 7b23f4fd943301672581ab31dd1d3aabbefa6831
+current_commit: 6bb9e20e7f749d51fe48eadfc75021188e4e92a1
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -16,12 +16,12 @@ confirmed_conclusions:
   - EXP-109: the frozen five-win strategy passes MICRO_LIFT and all LIFT phases; transport crosses the static 1.1579004532160448 N threshold and shuts down cleanly.
   - USER-AUTH-2026-08-12-PHASE-AWARE: preserve the five-win strategy exactly; static contact and dynamic transport require separate evidence/acceptance semantics.
   - EXP-124: lossless 500 Hz physics-step capture completed through physical transport on the qualification-provisioned NVMe evidence volume.
+  - EXP-125: the unchanged nine-phase production strategy completes in one FULL_RESTART when held-cup phases use the qualified 11.60 N dynamic hard stop and post-release support continues to use the 1.1579004532160448 N static limit.
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
-open_hypotheses:
-  - The post-transport failure is caused by applying the 1.1579004532160448 N static-contact classifier to dynamic held-cup descend/alignment/release-handoff phases that the five-win strategy qualified under the unchanged 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-034
-next_experiment: EXP-125
+open_hypotheses: []
+latest_checkpoint: MNT-CP-035
+next_experiment: NONE_STOP_BEFORE_FIVE_RUN_QUALIFICATION
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3795,4 +3795,120 @@ failure_criteria:
 invalid_criteria:
   - Any motion/threshold/model/scene/controller mutation, retry, lifecycle contamination, evidence gap, provenance mismatch, missing visual proof, or unclean shutdown.
 next_if_valid: Commit and report EXP-125. Do not start the five-run qualification batch without a new ledger preregistration.
+```
+
+## EXP-125 terminal — one-shot full workflow and visual validation
+
+```yaml
+experiment_id: EXP-125
+completed_at: 2026-08-12T21:29:30+08:00
+status: VALID_SUCCESS
+qualification_counting: false
+lifecycle: FULL_RESTART
+behavior_source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271
+ledger_runtime_commit: 6bb9e20e7f749d51fe48eadfc75021188e4e92a1
+single_variable_observed: Only the force-mode classification changed; all frozen motion, model, scene, controller, geometry, contact-policy values, and numeric thresholds retained their registered hashes.
+runtime_identity:
+  simulation_session_id: MNT-A-EXP125-full-01
+  reset_epoch: 1
+  ros_domain_id: 197
+  port: 8037
+  gz_partition: so101-mnt-a-exp125
+workflow:
+  http_status: 200
+  manifest_status: DONE
+  phases:
+    staged_approach: CLOSE_READY
+    contact_hold: CONTACT_ONLY_PROVED
+    micro_lift: PHYSICAL_MICRO_LIFT_PROVED
+    policy_lift_waypoint1: POLICY_LIFT_WAYPOINT1_PHYSICAL_TRANSFER_PROVED
+    remaining_lift: REMAINING_FORMAL_LIFT_PROVED
+    transport: FORMAL_MOVE_ABOVE_PLACE_PROVED
+    descend: FORMAL_DESCEND_TO_PRE_RELEASE_CLEARANCE_PROVED
+    place_alignment: PRE_RELEASE_ALIGNMENT_PROVED
+    release_retreat: RELEASE_RETREAT_FINAL_PLACEMENT_PROVED
+phase_force_evidence:
+  descend_observed_range_n: [1.7920740359451592, 4.790514754509598]
+  place_alignment_observed_range_n: [4.491798001059205, 4.99687211872404]
+  pre_release_gripper_held_n: 4.669717899673312
+  released_static_n: 0.23494367933416632
+  static_limit_n: 1.1579004532160448
+  dynamic_diagnostic_hard_stop_n: 11.60
+physical_outcome:
+  primary_failure: null
+  final_xyz_m: [-0.0788784507776764, -0.24664117745912967, 0.16504929906275206]
+  final_upright_tilt_rad: 0.010232942344296817
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0
+  support_contact: true
+  gripper_contact: false
+  moveit_attached: false
+  world_object_synchronized: true
+  direct_object_state_writes: 0
+  simulator_constraint_calls: 0
+  physics_pause_calls: 0
+transport_raw_evidence:
+  chunk_count: 746
+  sample_count: 3730
+  first_physics_step: 23731
+  last_physics_step: 27460
+  physics_timestep_s: 0.002
+  lossless: true
+  run_index_sha256: 13f02db3c9ef203f984f3471e72f8af08ed50452adec0b8a72b2dacd8728cd8c
+visual_acceptance:
+  required_mujoco_claims_passed: true
+  mujoco_status_running: true
+  cup_upright_inside_target_ring: true
+  open_gripper_and_arm_retired_clear: true
+  robot_pedestal_table_cup_ring_visible: true
+  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp125/cua-visual.png
+  screenshot_sha256: cebd657c3363df16d6d1bfaea55317e2e54beb98f6a6ed55d9234ac14acb0e85
+  auxiliary_rviz_window_available: false
+  note: The fresh CUA image proves the preregistered MuJoCo physical visual gate. This launch did not create an RViz window, so RViz-only auxiliary claims remain explicitly unsupported rather than inferred.
+gates:
+  focused_regression: 74 passed
+  full_source_pytest: 539 passed, 4 skipped
+  isolated_colcon_test_result: 800 tests, 0 errors, 0 failures, 4 skipped
+  ruff: PASS
+  frozen_behavior_manifest: PASS
+  runtime_source_lock: PASS
+  reset_source_lock: PASS
+  protected_gazebo_tree: NO_DIFF
+shutdown:
+  ordered_marker: true
+  returncode: 0
+  fatal_signal: false
+  process_died: false
+  domain_197_nodes_after_stop: NONE
+  port_8037_listener_after_stop: NONE
+  owned_process_residue: NONE
+artifacts:
+  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp125/exp125-result.json
+  result_sha256: 80a8c645603bdeac9c1f18bcfb4fc37621d99829e5eb701c6e3be5f57bd22d87
+  manifest_sha256: 7dca300dbefc11ed4472eb8d8ed2db06080ae0e0be3e053cd40a866b5e6dbc04
+protected_state:
+  src_so101_gazebo_demo_py_diff: NONE
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+conclusion: EXP-124's post-transport failure was a phase-classification regression, not a failed grasp strategy. Restoring the qualified dynamic held-cup force semantics allows the unchanged strategy to complete all nine phases and pass physical, lossless-evidence, visual, and shutdown gates in one natural workflow invocation.
+next_experiment: NONE_STOP_BEFORE_FIVE_RUN_QUALIFICATION
+next_command: Report EXP-125. If a new five-run qualification is authorized, preregister it separately without changing the now-proven strategy.
+```
+
+## Checkpoint MNT-CP-035 — post-transport regression closed
+
+```yaml
+checkpoint_id: MNT-CP-035
+recorded_at: 2026-08-12T21:29:30+08:00
+last_valid_experiment: EXP-125
+working_tree_status: Tracked tree clean after the EXP-125 result commit; two protected unrelated untracked experiment documents remain preserved.
+owned_processes: NONE
+preserved_processes: Existing codex, codex-cua, and so101-mujoco-gui tmux sessions only.
+resolved:
+  - Dynamic held-cup descend, place alignment, and pre-release state no longer fail solely for crossing the static shadow threshold.
+  - The inclusive 11.60 N diagnostic hard stop remains unchanged for held-cup motion.
+  - Released-cup static support still enforces 1.1579004532160448 N and passed at 0.23494367933416632 N.
+  - The unchanged production strategy completed all nine phases once without retry, reset, pause, direct object write, or simulator constraint.
+next_command: Stop. Do not start a five-run batch until its own ledger preregistration is reviewed.
 ```
