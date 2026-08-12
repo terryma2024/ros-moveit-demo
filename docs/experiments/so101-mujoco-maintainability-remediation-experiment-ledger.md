@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: d4b1c00ccead4b3403753b5d5e936938a603ed9a
+current_commit: f373df5a8de2db999ce2bb2cfaf99280d2691c66
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,8 +21,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-047
-next_experiment: EXP-130
+latest_checkpoint: MNT-CP-048
+next_experiment: NONE_FINAL_GATES
 ```
 
 ## Checkpoint MNT-CP-001
@@ -4096,7 +4096,7 @@ experiments:
     decision: KEEP_VALID_SUCCESS_4_OF_5
     next_experiment: EXP-130_ON_SUCCESS_ONLY
   - experiment_id: EXP-130
-    status: RUNNING
+    status: VALID
     prior_experiment: EXP-129
     hypothesis: A fifth independent FULL_RESTART completes the unchanged streak.
     prediction: All common success criteria pass with consecutive_count 5 and qualifies the batch.
@@ -4109,7 +4109,7 @@ experiments:
       gz_partition: so101-mnt-q-exp130
       evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp130
     command: GZ_PARTITION=so101-mnt-q-exp130 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-130 --session-id MNT-Q-EXP130-full-01 --domain-id 202 --port 8042 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp130
-    decision: PENDING
+    decision: KEEP_VALID_SUCCESS_5_OF_5
     next_experiment: NONE_FINALIZE_BATCH_ON_SUCCESS
 decision: PLANNED
 ```
@@ -4926,11 +4926,154 @@ preflight:
   evidence_root: ABSENT
   relevant_processes: NONE
   codex_cua: IDLE_AT_ZSH_PROMPT
-  result: EXP128_PREFLIGHT_PASS
+result: EXP128_PREFLIGHT_PASS
 visual_acceptance:
   required_sequence: snapshot -> action -> fresh snapshot
   persisted_png_required: true
   independent_png_decode_before_acceptance: true
   EXP_126_waiver_applies: false
 decision: RUN exactly one preregistered natural workflow and stop on any product, provenance, evidence, visual-integrity, or cleanup failure.
+```
+
+## EXP-130 — VALID FULL_RESTART success
+
+```yaml
+experiment_id: EXP-130
+recorded_at: 2026-08-12T23:01:27+08:00
+status: VALID
+behavioral_result: SUCCESS
+consecutive_successes: 5
+waiver_applied: false
+simulation_session_id: MNT-Q-EXP130-full-01
+ros_domain_id: 202
+http_port: 8042
+gz_partition: so101-mnt-q-exp130
+lifecycle: FULL_RESTART
+workflow_invocations: 1
+reset_transactions: 1
+retry_count: 0
+workflow:
+  reset_epoch: 1
+  simulation_step_after_reset: 0
+  owner_manifest_status: DONE
+  completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+  terminal_release_status: RELEASE_RETREAT_FINAL_PLACEMENT_PROVED
+  phase_exit_codes: ALL_ZERO
+phase_maximum_normal_force_n:
+  contact_hold: 0.6034387699388399
+  micro_lift: 0.6034458882367724
+  policy_lift_waypoint1: 0.7698548446224376
+  remaining_lift: 0.775105920519864
+  transport: 4.914460247103591
+  descend: 4.789249470658996
+  place_alignment: 5.496411372383959
+  release_retreat: 4.794628023732102
+  released_static_final: 0.2332022330621397
+physical_outcome:
+  primary_failure: null
+  final_xyz_m: [-0.07877472344232539, -0.24691137280158185, 0.16472600002621315]
+  final_upright_tilt_rad: 0.0020171496597214157
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.000003512237375907703
+  support_contact: true
+  gripper_contact: false
+  moveit_attached: false
+  world_object_synchronized: true
+  planning_scene_attached_object_ids: []
+  planning_scene_world_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  direct_object_state_writes: 0
+  physics_pause_calls: 0
+  simulator_constraint_calls: 0
+transport_raw_evidence:
+  chunk_count: 744
+  sample_count: 3720
+  first_physics_step: 26811
+  last_physics_step: 30530
+  physics_timestep_s: 0.002
+  lossless: true
+  run_index_sha256: 67091fad3ac8c5d453b6293167d6f21b0d3bb2a5158cda59fce3ce652e362f52
+visual_acceptance:
+  passed: true
+  required_claims_all_true: true
+  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp130/cua-visual.png
+  screenshot_sha256: 6a88007153d3bf483d07e5042756ab820742030f8de627826d53d4a94c38bb2c
+  screenshot_size_bytes: 779765
+  screenshot_dimensions: [5120, 2880]
+  cua_png_verify_and_load: PASS
+  independent_main_agent_png_verify_and_load: PASS
+  main_agent_visual_review: PASS; MuJoCo Running, full scene visible, cup upright in red ring, gripper open, arm retired clear.
+  auxiliary_rviz_window_available: false
+shutdown:
+  ordered_marker: true
+  returncode: 0
+  fatal_signal: false
+  process_died: false
+  domain_202_nodes_after_stop: NONE
+  port_8042_listener_after_stop: NONE
+  tmux_session_after_stop: NONE
+  owned_process_residue: NONE
+artifacts:
+  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp130/exp-130-result.json
+  result_sha256: 3b9ddc8461210eb97d6f9f173a0490f47ae8b2f5adaf43f7cb727a7656013a52
+  owner_manifest_sha256: 10c3a950bde7c103e317624671a0dbab39319255e4e43ce714f7a486467de4dd
+  release_retreat_sha256: 63bd2abe6ca4e5146e060ec4e3a17395cd02e875c0c65174db951a73520a8ebf
+  visual_verdict_sha256: c16d11206e21092812041fc5c29f14a43622202efd9985339f36dd9629378d6a
+decision: KEEP VALID success; the user-authorized MNT-Q-EXP126-130 FULL_RESTART batch reaches 5/5.
+next_experiment: NONE_FINAL_GATES
+```
+
+## MNT-Q-EXP126-130 batch terminal summary
+
+```yaml
+batch_id: MNT-Q-EXP126-130
+recorded_at: 2026-08-12T23:01:27+08:00
+status: QUALIFIED_PENDING_FINAL_GATES
+target: 5
+counted_successes: 5
+ordered_results:
+  - [EXP-126, MNT-Q-EXP126-full-01, domain_198, port_8038, VALID_SUCCESS_BY_USER_VISUAL_WAIVER]
+  - [EXP-127, MNT-Q-EXP127-full-01, domain_199, port_8039, VALID_SUCCESS]
+  - [EXP-128, MNT-Q-EXP128-full-01, domain_200, port_8040, VALID_SUCCESS]
+  - [EXP-129, MNT-Q-EXP129-full-01, domain_201, port_8041, VALID_SUCCESS]
+  - [EXP-130, MNT-Q-EXP130-full-01, domain_202, port_8042, VALID_SUCCESS]
+historical_and_waiver_boundary:
+  original_EXP_126_terminal_record: INVALID_SCREENSHOT_TRUNCATED
+  original_MNT_CP_039_batch_state: INVALID_STOPPED
+  visual_artifact_integrity_EXP_126: FAIL_PRESERVED
+  user_live_visual_attestation_EXP_126: ACCEPTED_FOR_THIS_BATCH_COUNT_ONLY
+  waiver_scope: EXP-126_ONLY
+  EXP_127_through_EXP_130_normal_visual_contract: PASS_WITH_INDEPENDENT_PNG_DECODE
+frozen_behavior_changed: false
+common_overlay_changed: false
+workflow_invocations_per_run: 1
+reset_transactions_per_run: 1
+retries_total: 0
+direct_object_state_writes_total: 0
+physics_pause_calls_total: 0
+simulator_constraint_calls_total: 0
+next_step: Run the final automated regression, frozen-behavior, fork/runtime lock, protected-Gazebo isolation, evidence integrity, and process-cleanup gates before declaring the batch final.
+```
+
+## Checkpoint MNT-CP-048 — five counted FULL_RESTART successes reached
+
+```yaml
+checkpoint_id: MNT-CP-048
+recorded_at: 2026-08-12T23:01:27+08:00
+last_valid_experiment: EXP-130
+batch_id: MNT-Q-EXP126-130
+batch_status: QUALIFIED_PENDING_FINAL_GATES
+consecutive_counted_successes: 5
+counted_successes: [EXP-126_BY_USER_VISUAL_WAIVER, EXP-127, EXP-128, EXP-129, EXP-130]
+waiver_scope: EXP-126_ONLY
+owned_processes: NONE
+domains_198_through_202: EMPTY
+ports_8038_through_8042: FREE
+qualification_tmux_sessions: ABSENT
+protected_state:
+  src_so101_gazebo_demo_py_diff: NONE
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+next_experiment: NONE_FINAL_GATES
+next_command: Execute the existing final automated regression/frozen/provenance/isolation gates against the unchanged common overlay; checkpoint their exact results before beginning the next Task 13+ plan item.
 ```
