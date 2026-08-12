@@ -154,7 +154,7 @@ the permanent experiment IDs below.
   next_experiment: EXP-138
 - experiment_id: EXP-138
   manifest_record_id: MNT-Q-RESET-EXP136-140-03
-  status: RUNNING
+  status: VALID
   prior_experiment: EXP-137
   hypothesis: The same shared stack repeats the frozen successful outcome after reset epoch 3 without accumulated runtime state.
   prediction: The third independent nine-phase workflow succeeds with the same session and strictly increasing epoch.
@@ -166,13 +166,21 @@ the permanent experiment IDs below.
   failure_criteria: [any valid physical or workflow failure]
   invalid_criteria: [any challenge contract contamination]
   provenance: {source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271, install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install, runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/run_qualification, ros_domain_id: 204, gz_partition: NOT_APPLICABLE_MUJOCO_RUNTIME}
-  observed: [PENDING]
-  conclusion: PENDING
-  decision: PENDING
+  observed:
+    - SUCCESS; reset epoch 3; unchanged simulation session; exact nine-phase trace and fresh checkpoint.
+    - Physical primary_failure null; moveit_attached false; world_object_synchronized true; intended support retained and gripper contact absent.
+    - Final cup pose [-0.07956426011483758, -0.2462792849843199, 0.1654739580668193] m; upright tilt 0.017368007192561315 rad.
+    - actions SHA-256 1e241904ef80f705a4d22e3a35909c36c7de6dc86c100a388bfeb29299dff09a.
+    - owner manifest SHA-256 8984a44b9df464ad79d006fe6c74bf19e68138741e38e0ba30c0a3ab9b1da849.
+    - raw run-index SHA-256 c16ab3137fdec7f52488fe12e4c64a261a84f434b30d99a6cd1d124b9e2ab973.
+    - dynamic summary SHA-256 0daebc24632e1e7a58675ad3135edf41af1b7315244ad6ec8a5561901b2905b6.
+    - Shared launch log SHA-256 is deferred until clean shutdown closes the common file.
+  conclusion: VALID SUCCESS 3/5 in the frozen RESET_WORLD batch.
+  decision: KEEP
   next_experiment: EXP-139
 - experiment_id: EXP-139
   manifest_record_id: MNT-Q-RESET-EXP136-140-04
-  status: PLANNED
+  status: RUNNING
   prior_experiment: EXP-138
   hypothesis: The same shared stack repeats the frozen successful outcome after reset epoch 4 without accumulated runtime state.
   prediction: The fourth independent nine-phase workflow succeeds with the same session and strictly increasing epoch.
