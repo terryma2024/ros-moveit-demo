@@ -19,7 +19,7 @@ FORK_PACKAGES = (
     "mujoco_ros2_control_msgs",
     "mujoco_ros2_control_plugins",
 )
-PROJECT_PACKAGES = ("so101_mujoco_support", "so101_mujoco_demo_py")
+PROJECT_PACKAGES = ("so101_mujoco_support", "so101_teleop", "so101_mujoco_demo_py")
 
 
 def resolved_prefixes(

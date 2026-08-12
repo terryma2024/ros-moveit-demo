@@ -4,6 +4,7 @@ import copy
 
 import pytest
 
+import so101_mujoco_demo_py.qualification as qualification_module
 from so101_mujoco_demo_py.qualification import (
     InvalidRun,
     Lifecycle,
@@ -134,6 +135,60 @@ class DummyRunner(ProductionQualificationRunner):
             "physical_outcome": {"primary_failure": None},
             "artifact_paths": {"actions": str(actions), "owner": str(owner)},
         }
+
+
+class StartupFailureRunner(DummyRunner):
+    def start_stack(self, *, session_id, domain_id, port, run_root):
+        self.starts.append((session_id, domain_id, port))
+        log_path = run_root / "launch.log"
+        log_path.write_text("stack exited during startup\n")
+        handle = StackHandle(
+            process=ExitedProcess(),  # type: ignore[arg-type]
+            process_group_id=123,
+            log_path=log_path,
+            environment={},
+            base_url=f"http://127.0.0.1:{port}",
+            session_id=session_id,
+        )
+        error_type = getattr(qualification_module, "StackStartupError", InvalidRun)
+        raise error_type("stack exited during startup with 1", handle)
+
+
+def test_full_restart_records_startup_invalid_and_stops_without_retry(tmp_path) -> None:
+    runner = StartupFailureRunner(tmp_path)
+
+    manifest = runner.run_batch(
+        batch_id="startup-failure",
+        lifecycle=Lifecycle.FULL_RESTART,
+        count=5,
+        base_domain_id=170,
+        base_port=8010,
+    )
+
+    assert manifest["summary"]["batch_invalid"] is True
+    assert manifest["summary"]["attempt_count"] == 1
+    assert len(runner.starts) == 1
+    assert manifest["records"][0]["status"] == RunStatus.INVALID.value
+    assert manifest["records"][0]["failure"] == "stack exited during startup with 1"
+    assert set(manifest["records"][0]["artifact_sha256"]) == {"failure", "launch_log"}
+
+
+def test_reset_world_records_startup_invalid_without_entering_workflow(tmp_path) -> None:
+    runner = StartupFailureRunner(tmp_path)
+
+    manifest = runner.run_batch(
+        batch_id="startup-failure",
+        lifecycle=Lifecycle.RESET_WORLD,
+        count=5,
+        base_domain_id=180,
+        base_port=8020,
+    )
+
+    assert manifest["summary"]["batch_invalid"] is True
+    assert manifest["summary"]["attempt_count"] == 1
+    assert len(runner.starts) == 1
+    assert runner.execution_count == 0
+    assert manifest["records"][0]["status"] == RunStatus.INVALID.value
 
 
 def test_full_restart_orchestration_creates_five_stacks(tmp_path) -> None:

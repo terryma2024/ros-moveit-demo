@@ -1218,13 +1218,14 @@ test ! -e "$acceptance_build"
 mkdir -p "$acceptance_build"
 colcon --log-base "$acceptance_build/log" build \
   --base-paths src \
-  --packages-select so101_mujoco_support so101_mujoco_demo_py \
+  --packages-up-to so101_mujoco_demo_py \
   --build-base "$acceptance_build/build" \
   --install-base "$acceptance_build/install" \
   --symlink-install
 source "$acceptance_build/install/setup.zsh"
 ros2 pkg prefix so101_mujoco_demo_py
 ros2 pkg prefix so101_mujoco_support
+ros2 pkg prefix so101_teleop
 python3 src/so101_mujoco_demo_py/scripts/check_mujoco_runtime.py \
   --lock src/so101_mujoco_demo_py/config/dependency-lock.yaml
 python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py \
@@ -1233,8 +1234,9 @@ python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py \
   --check-only
 ```
 
-Expected: build and both checks exit zero; package prefixes resolve to the
-fresh acceptance install and fork dependencies resolve to the pinned overlay.
+Expected: the demo, support, and declared Teleop runtime dependency build; both
+checks exit zero; package prefixes resolve to the fresh acceptance install and
+fork dependencies resolve to the pinned overlay.
 
 - [ ] **Step 3: Pre-register and run one FULL_RESTART policy acceptance**
 

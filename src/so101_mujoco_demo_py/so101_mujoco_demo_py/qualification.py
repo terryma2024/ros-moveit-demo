@@ -177,6 +177,14 @@ class StackHandle:
     session_id: str
 
 
+class StackStartupError(InvalidRun):
+    """A startup failure that retains the owned stack for exact cleanup."""
+
+    def __init__(self, message: str, handle: StackHandle) -> None:
+        super().__init__(message)
+        self.handle = handle
+
+
 class ProductionQualificationRunner:
     def __init__(
         self,
@@ -254,7 +262,10 @@ class ProductionQualificationRunner:
         deadline = time.monotonic() + self.startup_timeout_s
         while time.monotonic() < deadline:
             if process.poll() is not None:
-                raise InvalidRun(f"stack exited during startup with {process.returncode}")
+                raise StackStartupError(
+                    f"stack exited during startup with {process.returncode}",
+                    handle,
+                )
             try:
                 health = self._request(handle.base_url, "/health", timeout=2.0)
                 log_text = log_path.read_text(errors="replace")
@@ -273,7 +284,7 @@ class ProductionQualificationRunner:
             except (OSError, ValueError, json.JSONDecodeError):
                 pass
             time.sleep(0.5)
-        raise InvalidRun("Teleop health did not become READY before timeout")
+        raise StackStartupError("Teleop health did not become READY before timeout", handle)
 
     @staticmethod
     def stop_stack(handle: StackHandle, *, timeout_s: float = 60.0) -> dict[str, Any]:
@@ -468,8 +479,31 @@ class ProductionQualificationRunner:
         )
         if not shutdown.get("passed"):
             record["status"] = RunStatus.INVALID.value
-            record["failure"] = "clean shutdown contract failed"
+            record.setdefault("failure", "clean shutdown contract failed")
         return record
+
+    def _finalize_startup_failure(
+        self,
+        error: StackStartupError,
+        *,
+        experiment_id: str,
+        session_id: str,
+        lifecycle: Lifecycle,
+        run_root: Path,
+    ) -> dict[str, Any]:
+        shutdown = self.stop_stack(error.handle)
+        record = self._failure_record(
+            experiment_id=experiment_id,
+            session_id=session_id,
+            error=error,
+            run_root=run_root,
+        )
+        return self._finalize_record(
+            record,
+            lifecycle=lifecycle,
+            shutdown=shutdown,
+            launch_log=error.handle.log_path,
+        )
 
     def run_batch(
         self,
@@ -488,12 +522,24 @@ class ProductionQualificationRunner:
                 run_root = self.evidence_root / f"run-{index:02d}"
                 run_root.mkdir(parents=True, exist_ok=False)
                 session = f"{batch_id}-full-{index:02d}"
-                handle = self.start_stack(
-                    session_id=session,
-                    domain_id=base_domain_id + index - 1,
-                    port=base_port + index - 1,
-                    run_root=run_root,
-                )
+                try:
+                    handle = self.start_stack(
+                        session_id=session,
+                        domain_id=base_domain_id + index - 1,
+                        port=base_port + index - 1,
+                        run_root=run_root,
+                    )
+                except StackStartupError as error:
+                    records.append(
+                        self._finalize_startup_failure(
+                            error,
+                            experiment_id=f"{batch_id}-{index:02d}",
+                            session_id=session,
+                            lifecycle=lifecycle,
+                            run_root=run_root,
+                        )
+                    )
+                    break
                 try:
                     record = self.execute_workflow(
                         handle, experiment_id=f"{batch_id}-{index:02d}", run_root=run_root
@@ -520,44 +566,57 @@ class ProductionQualificationRunner:
         else:
             stack_root = self.evidence_root / "shared-stack"
             stack_root.mkdir(parents=True, exist_ok=False)
-            handle = self.start_stack(
-                session_id=f"{batch_id}-reset",
-                domain_id=base_domain_id,
-                port=base_port,
-                run_root=stack_root,
-            )
-            pending: list[tuple[dict[str, Any], Path]] = []
+            session = f"{batch_id}-reset"
             try:
-                for index in range(1, count + 1):
-                    run_root = self.evidence_root / f"run-{index:02d}"
-                    run_root.mkdir(parents=True, exist_ok=False)
-                    try:
-                        record = self.execute_workflow(
-                            handle,
-                            experiment_id=f"{batch_id}-{index:02d}",
-                            run_root=run_root,
-                        )
-                    except QualificationError as error:
-                        record = self._failure_record(
-                            experiment_id=f"{batch_id}-{index:02d}",
-                            session_id=handle.session_id,
-                            error=error,
-                            run_root=run_root,
-                        )
-                    pending.append((record, run_root))
-                    if record.get("status") == RunStatus.INVALID.value:
-                        break
-            finally:
-                shutdown = self.stop_stack(handle)
-            for record, _run_root in pending:
+                handle = self.start_stack(
+                    session_id=session,
+                    domain_id=base_domain_id,
+                    port=base_port,
+                    run_root=stack_root,
+                )
+            except StackStartupError as error:
                 records.append(
-                    self._finalize_record(
-                        record,
+                    self._finalize_startup_failure(
+                        error,
+                        experiment_id=f"{batch_id}-01",
+                        session_id=session,
                         lifecycle=lifecycle,
-                        shutdown=shutdown,
-                        launch_log=handle.log_path,
+                        run_root=stack_root,
                     )
                 )
+            else:
+                pending: list[tuple[dict[str, Any], Path]] = []
+                try:
+                    for index in range(1, count + 1):
+                        run_root = self.evidence_root / f"run-{index:02d}"
+                        run_root.mkdir(parents=True, exist_ok=False)
+                        try:
+                            record = self.execute_workflow(
+                                handle,
+                                experiment_id=f"{batch_id}-{index:02d}",
+                                run_root=run_root,
+                            )
+                        except QualificationError as error:
+                            record = self._failure_record(
+                                experiment_id=f"{batch_id}-{index:02d}",
+                                session_id=handle.session_id,
+                                error=error,
+                                run_root=run_root,
+                            )
+                        pending.append((record, run_root))
+                        if record.get("status") == RunStatus.INVALID.value:
+                            break
+                finally:
+                    shutdown = self.stop_stack(handle)
+                for record, _run_root in pending:
+                    records.append(
+                        self._finalize_record(
+                            record,
+                            lifecycle=lifecycle,
+                            shutdown=shutdown,
+                            launch_log=handle.log_path,
+                        )
+                    )
         summary = summarize_records(
             records,
             lifecycle=lifecycle,
