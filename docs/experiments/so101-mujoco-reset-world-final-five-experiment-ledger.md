@@ -7,7 +7,7 @@ success_contract: Exactly five serial VALID SUCCESS records on one unchanged non
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 302c4ef9550e036f127111e473f44a823b1ab643
-current_commit: 64e2c5ae35b83c680b2dcd84e662175d3d08fecd
+current_commit: c037845859448571991ec472d5c42ef3f5e86bad
 evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
 confirmed_conclusions:
   - MNT-CP-057 terminated MNT-Q-RESET-EXP131-135 permanently after EXP-131 used high-rate evidence on the slow /tmp volume and the old runner continued into polluted EXP-132/133 attempts.
@@ -18,7 +18,7 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-005
+latest_checkpoint: RESET-FIVE-CP-006
 next_experiment: NEW_BATCH_AFTER_EVIDENCE_DISCOVERY_FIX
 ```
 
@@ -460,4 +460,43 @@ merge_state: NOT_AUTHORIZED_BATCH_NOT_QUALIFIED
 remote_push_state: FORBIDDEN
 next_experiment: NEW_BATCH_AFTER_EVIDENCE_DISCOVERY_FIX
 next_command: Add a failing unit contract for pause-snapshot discovery, implement the minimum evidence-discovery synchronization, rebuild/test, then preregister fresh EXP-141 through EXP-145 on a new absent NVMe evidence root.
+```
+
+## Checkpoint RESET-FIVE-CP-006 — evidence discovery race fixed RED to GREEN
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-006
+recorded_at: 2026-08-13T01:43:00+08:00
+prior_checkpoint: RESET-FIVE-CP-005
+status: FIX_GREEN_PENDING_REBUILD_AND_NEW_BATCH_PREREGISTRATION
+root_cause:
+  classification: CONFIRMED
+  first_bad_boundary: A newly created best-effort volatile evidence subscription could trigger the one-shot paused snapshot before DDS publisher discovery, miss that publication, and then time out because physics remained paused.
+  excluded_alternatives:
+    - Robot strategy failure: EXP-136 through EXP-139 completed the unchanged nine-phase physical workflow successfully.
+    - Reset service failure: EXP-140 actions contain a successful epoch-4 to epoch-5 receipt at simulation_step 0.
+    - Slow evidence volume: all high-rate artifacts for the four workflows were lossless on /dev/nvme0n1p5; EXP-140 failed before high-rate collection.
+red_test:
+  name: test_pause_snapshot_waits_for_evidence_publisher_discovery
+  result: FAIL_AS_EXPECTED
+  first_failure: pause called before evidence discovery
+green_tests:
+  result: PASS
+  summary: 59 passed
+  scope: [Teleop owner, MuJoCo observer, MuJoCo reset, qualification]
+ruff: {result: PASS, summary: All checks passed; 131 files already formatted}
+change:
+  - Expose the live ROS subscription publisher count from MujocoWorldObserver.
+  - Before requesting the pause snapshot, spin only until the subscription has discovered its publisher or the existing timeout expires.
+fixed_sleep_added: false
+behavior_changes:
+  motion_policy: NONE
+  contact_policy: NONE
+  thresholds_targets_timing_speed_replanning_delay_grasp: NONE
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  protected_documents_byte_hashes_unchanged: true
+next_experiment: NEW_BATCH_AFTER_REBUILD_AND_PREREGISTRATION
+next_command: Commit this evidence-boundary fix, rebuild and probe the three packages, then preregister EXP-141 through EXP-145 with a new batch ID and absent NVMe evidence root before startup.
 ```
