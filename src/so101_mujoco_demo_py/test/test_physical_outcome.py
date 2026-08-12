@@ -12,8 +12,8 @@ def policy() -> PhysicalOutcomePolicy:
     return PhysicalOutcomePolicy(
         intended_support_collision="table_top",
         minimum_support_signed_distance_m=-1e-7,
-        final_target_min_xy_m=(-0.085, -0.255),
-        final_target_max_xy_m=(-0.075, -0.245),
+        final_target_min_xy_m=(-0.090, -0.260),
+        final_target_max_xy_m=(-0.070, -0.240),
         support_height_range_m=(0.155, 0.175),
         max_upright_tilt_rad=0.08726646259971647,
         max_linear_speed_m_s=0.001,
@@ -65,6 +65,24 @@ def test_accepts_five_stable_post_release_samples_with_preserved_schema() -> Non
     assert result.duration_s == 0.20
     assert result.max_linear_speed_m_s == 0.0
     assert result.max_angular_speed_rad_s == 0.0
+
+
+def test_approved_ten_mm_target_region_controls_boundary() -> None:
+    assert evaluate_final_placement(
+        tuple(sample(index, x=-0.089) for index in range(5)),
+        policy(),
+        "release-2",
+        100,
+    ).success
+    assert (
+        evaluate_final_placement(
+            tuple(sample(index, x=-0.091) for index in range(5)),
+            policy(),
+            "release-2",
+            100,
+        ).failure_code
+        == "FINAL_OUT_OF_REGION"
+    )
 
 
 def test_sample_preserves_frozen_gazebo_detached_wire_schema() -> None:
@@ -124,7 +142,7 @@ def test_failure_precedence_and_distinct_final_codes_are_preserved() -> None:
         ({"simulator_detached": False}, "FINAL_SAFETY_FAILURE"),
         ({"gripper_contact": True}, "FINAL_GRIPPER_CONTACT"),
         ({"support_contact": False}, "FINAL_UNSUPPORTED"),
-        ({"pose_xyz_xyzw": (-0.09, -0.25, 0.165, 0.0, 0.0, 0.0, 1.0)}, "FINAL_OUT_OF_REGION"),
+        ({"pose_xyz_xyzw": (-0.091, -0.25, 0.165, 0.0, 0.0, 0.0, 1.0)}, "FINAL_OUT_OF_REGION"),
         (
             {"pose_xyz_xyzw": (-0.08, -0.25, 0.165, 0.1, 0.0, 0.0, 0.994987437)},
             "FINAL_TIPPED",

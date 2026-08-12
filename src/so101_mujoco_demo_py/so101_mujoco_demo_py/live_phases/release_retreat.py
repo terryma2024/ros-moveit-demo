@@ -40,8 +40,6 @@ from so101_mujoco_demo_py.moveit.planning import (
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
 from so101_mujoco_demo_py.physical_outcome import (
     FinalPlacementSample,
-    PhysicalOutcomePolicy,
-    PlanningShadowPolicy,
     evaluate_final_placement,
 )
 from so101_mujoco_demo_py.planning_scene_acm import (
@@ -53,6 +51,7 @@ from so101_mujoco_demo_py.release_retreat import (
     release_retreat_translations,
     residual_contact_within_bounds,
 )
+from so101_mujoco_demo_py.task_policy import load_task_policy
 
 SESSION_ID = os.environ["SO101_SIMULATION_SESSION_ID"]
 EXPECTED_EPOCH = int(os.environ["SO101_EXPECTED_RESET_EPOCH"])
@@ -66,7 +65,6 @@ RELEASE_TARGET_XYZ = tuple(
     value + compensation
     for value, compensation in zip(PLACE_XYZ, SETTLING_COMPENSATION, strict=True)
 )
-MAX_FORCE_N = 11.60
 
 
 def atomic_write(document: dict) -> None:
@@ -186,30 +184,9 @@ def cup_collision_object(position, orientation):
     return result
 
 
-def outcome_policy() -> PhysicalOutcomePolicy:
-    return PhysicalOutcomePolicy(
-        intended_support_collision="table_collision",
-        minimum_support_signed_distance_m=-1e-7,
-        final_target_min_xy_m=(-0.085, -0.255),
-        final_target_max_xy_m=(-0.075, -0.245),
-        support_height_range_m=(0.155, 0.175),
-        max_upright_tilt_rad=0.08726646259971647,
-        max_linear_speed_m_s=0.001,
-        max_angular_speed_rad_s=0.05,
-        consecutive_samples=5,
-        minimum_stable_duration_s=0.20,
-        sample_interval_s=0.05,
-        settle_timeout_s=2.0,
-        max_observation_age_s=0.10,
-        max_telemetry_samples=40,
-        catastrophic_workspace_bounds_m=(-0.21, -0.46, 0.12, 0.21, 0.06, 0.30),
-        max_relative_position_drift_m=0.005,
-        max_relative_orientation_drift_rad=0.070,
-        planning_shadow=PlanningShadowPolicy(0.005, 0.070, 0.10),
-    )
-
-
 def main() -> int:
+    task_policy = load_task_policy(POLICY_PATH)
+    physical_outcome_policy = task_policy.physical_outcome
     retreat_policy = load_release_retreat_policy(POLICY_PATH)
     result: dict = {
         "schema": "so101-live-outcome-first-release-retreat-v1",
@@ -307,7 +284,7 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != EXPECTED_EPOCH:
                 raise RuntimeError("MuJoCo pause/reset during stable gate")
-            if evidence.maximum_normal_force_n > MAX_FORCE_N:
+            if evidence.maximum_normal_force_n > task_policy.maximum_diagnostic_force_n:
                 raise RuntimeError("force boundary exceeded during stable gate")
             actual_gripper_contact = bool(
                 evidence.left_fingertip_contacts or evidence.right_fingertip_contacts
@@ -605,10 +582,11 @@ def main() -> int:
         result["planning_scene_readback"] = detach_and_sync(terminal)
 
         release_epoch_id = f"live-release-epoch-{EXPECTED_EPOCH}"
+        result["release_epoch_id"] = release_epoch_id
         marker = int(result["release_marker_sequence"])
         samples: list[FinalPlacementSample] = []
         last_sequence = marker
-        deadline = time.monotonic() + 2.0
+        deadline = time.monotonic() + physical_outcome_policy.settle_timeout_s
         while time.monotonic() < deadline:
             progress()
             received = observer.snapshot_with_receipt()
@@ -636,20 +614,22 @@ def main() -> int:
                     safety_healthy=(
                         not evidence.paused
                         and evidence.reset_epoch == EXPECTED_EPOCH
-                        and evidence.maximum_normal_force_n <= MAX_FORCE_N
+                        and evidence.maximum_normal_force_n
+                        <= task_policy.maximum_diagnostic_force_n
                     ),
                     shadow_divergence_healthy=True,
                 )
             )
             evaluated = evaluate_final_placement(
-                tuple(samples), outcome_policy(), release_epoch_id, marker
+                tuple(samples), physical_outcome_policy, release_epoch_id, marker
             )
             if evaluated.success:
                 break
         else:
             evaluated = evaluate_final_placement(
-                tuple(samples), outcome_policy(), release_epoch_id, marker
+                tuple(samples), physical_outcome_policy, release_epoch_id, marker
             )
+        result["final_samples"] = [sample.as_dict() for sample in samples]
         result["final_evaluation"] = {
             "success": evaluated.success,
             "failure_code": evaluated.failure_code,

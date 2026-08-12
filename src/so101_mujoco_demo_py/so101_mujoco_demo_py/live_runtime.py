@@ -12,6 +12,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from so101_mujoco_demo_py.physical_outcome import (
+    FinalPlacementSample,
+    PhysicalOutcomePolicy,
+    evaluate_final_placement,
+)
+from so101_mujoco_demo_py.task_policy import load_task_policy
+
 LIVE_PHASES = (
     "staged_approach",
     "contact_hold",
@@ -183,28 +190,108 @@ def _reset_epochs(value: object) -> set[int]:
     return observed
 
 
-def _validate_final_release(document: Mapping[str, object]) -> bool:
-    evaluation = document.get("final_evaluation")
-    evidence = document.get("final_evidence")
+_FINAL_SAMPLE_KEYS = frozenset(
+    {
+        "release_epoch_id",
+        "receipt_sequence",
+        "source_timestamp_s",
+        "observed_monotonic_s",
+        "pose_xyz_xyzw",
+        "support_contact",
+        "gripper_contact",
+        "gazebo_detached",
+        "moveit_detached",
+        "controller_healthy",
+        "safety_healthy",
+        "shadow_divergence_healthy",
+    }
+)
+
+
+def _deserialize_final_samples(value: object) -> tuple[FinalPlacementSample, ...] | None:
+    if not isinstance(value, list) or not value:
+        return None
+    converted: list[FinalPlacementSample] = []
+    boolean_fields = (
+        "support_contact",
+        "gripper_contact",
+        "gazebo_detached",
+        "moveit_detached",
+        "controller_healthy",
+        "safety_healthy",
+        "shadow_divergence_healthy",
+    )
+    for item in value:
+        if not isinstance(item, dict) or set(item) != _FINAL_SAMPLE_KEYS:
+            return None
+        epoch = item["release_epoch_id"]
+        sequence = item["receipt_sequence"]
+        source_time = item["source_timestamp_s"]
+        observed_time = item["observed_monotonic_s"]
+        pose = item["pose_xyz_xyzw"]
+        if not isinstance(epoch, str) or not epoch:
+            return None
+        if isinstance(sequence, bool) or not isinstance(sequence, int):
+            return None
+        if any(
+            isinstance(number, bool) or not isinstance(number, (int, float))
+            for number in (source_time, observed_time)
+        ):
+            return None
+        if (
+            not isinstance(pose, list)
+            or len(pose) != 7
+            or any(
+                isinstance(number, bool) or not isinstance(number, (int, float)) for number in pose
+            )
+        ):
+            return None
+        if any(not isinstance(item[field], bool) for field in boolean_fields):
+            return None
+        converted.append(
+            FinalPlacementSample(
+                release_epoch_id=epoch,
+                receipt_sequence=sequence,
+                source_timestamp_s=float(source_time),
+                observed_monotonic_s=float(observed_time),
+                pose_xyz_xyzw=tuple(float(number) for number in pose),  # type: ignore[arg-type]
+                support_contact=item["support_contact"],
+                gripper_contact=item["gripper_contact"],
+                gazebo_detached=item["gazebo_detached"],
+                moveit_detached=item["moveit_detached"],
+                controller_healthy=item["controller_healthy"],
+                safety_healthy=item["safety_healthy"],
+                shadow_divergence_healthy=item["shadow_divergence_healthy"],
+            )
+        )
+    return tuple(converted)
+
+
+def _validate_final_release(document: Mapping[str, object], policy: PhysicalOutcomePolicy) -> bool:
+    samples = _deserialize_final_samples(document.get("final_samples"))
+    release_epoch_id = document.get("release_epoch_id")
+    release_marker_sequence = document.get("release_marker_sequence")
     acm = document.get("radial_acm_scope")
     scene = document.get("planning_scene_readback")
-    if not all(isinstance(item, dict) for item in (evaluation, evidence, acm, scene)):
+    if (
+        samples is None
+        or not isinstance(release_epoch_id, str)
+        or not release_epoch_id
+        or isinstance(release_marker_sequence, bool)
+        or not isinstance(release_marker_sequence, int)
+        or not isinstance(acm, dict)
+        or not isinstance(scene, dict)
+    ):
         return False
-    assert isinstance(evaluation, dict)
-    assert isinstance(evidence, dict)
-    assert isinstance(acm, dict)
-    assert isinstance(scene, dict)
-    position = evidence.get("cup_position_world_m")
+    evaluation = evaluate_final_placement(
+        samples,
+        policy,
+        release_epoch_id,
+        release_marker_sequence,
+    )
     primitives = scene.get("world_primitive_counts")
     return bool(
-        evaluation.get("success") is True
-        and isinstance(position, list)
-        and len(position) == 3
-        and -0.085 <= float(position[0]) <= -0.075
-        and -0.255 <= float(position[1]) <= -0.245
-        and evidence.get("table_contact") is True
-        and evidence.get("left_contact_count") == 0
-        and evidence.get("right_contact_count") == 0
+        evaluation.success
         and acm.get("moving_jaw_link_allowed") is False
         and acm.get("restored_before_vertical") is True
         and acm.get("restored_pair_allowed") is False
@@ -217,6 +304,7 @@ def _validate_phase_evidence(
     spec: PhaseSpec,
     document: Mapping[str, object],
     config: LiveRuntimeConfig,
+    physical_outcome_policy: PhysicalOutcomePolicy,
 ) -> str | None:
     if document.get("status") != spec.expected_status:
         return "EVIDENCE_STATUS_MISMATCH"
@@ -225,7 +313,9 @@ def _validate_phase_evidence(
     epochs = _reset_epochs(document)
     if epochs and epochs != {config.expected_reset_epoch}:
         return "EVIDENCE_PROVENANCE_REJECTED"
-    if spec.name == "release_retreat" and not _validate_final_release(document):
+    if spec.name == "release_retreat" and not _validate_final_release(
+        document, physical_outcome_policy
+    ):
         return "PHYSICAL_FINAL_EVIDENCE_REJECTED"
     return None
 
@@ -252,6 +342,7 @@ def run_live_workflow(
 ) -> LiveRuntimeResult:
     if not config.motion_policy.is_file():
         raise ValueError(f"motion policy does not exist: {config.motion_policy}")
+    task_policy = load_task_policy(config.motion_policy)
     config.evidence_root.mkdir(parents=True, exist_ok=True)
     manifest_path = config.evidence_root / "live-runtime-manifest.json"
     specs, environment = build_phase_specs(config)
@@ -290,7 +381,9 @@ def run_live_workflow(
                 failure = "EVIDENCE_INVALID"
                 failed_phase = spec.name
                 break
-            evidence_failure = _validate_phase_evidence(spec, document, config)
+            evidence_failure = _validate_phase_evidence(
+                spec, document, config, task_policy.physical_outcome
+            )
             if evidence_failure is not None:
                 failure = evidence_failure
                 failed_phase = spec.name

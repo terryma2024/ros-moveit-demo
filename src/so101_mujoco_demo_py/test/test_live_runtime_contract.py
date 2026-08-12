@@ -1,17 +1,24 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from so101_mujoco_demo_py.live_runtime import (
     LIVE_PHASES,
     LiveRuntimeConfig,
+    _validate_final_release,
     build_phase_specs,
     run_live_workflow,
+)
+from so101_mujoco_demo_py.task_policy import load_task_policy
+
+MOTION_POLICY = (
+    Path(__file__).parents[1] / "config" / "motion_policies" / "light_cup_wall_pick.yaml"
 )
 
 
 def config(tmp_path: Path) -> LiveRuntimeConfig:
     policy = tmp_path / "policy.yaml"
-    policy.write_text("release_retreat: {}\n", encoding="utf-8")
+    policy.write_bytes(MOTION_POLICY.read_bytes())
     return LiveRuntimeConfig(
         simulation_session_id="test-session",
         expected_reset_epoch=7,
@@ -28,8 +35,28 @@ def evidence_for(phase_name: str, status: str) -> dict:
         "reset_epoch": 7,
     }
     if phase_name == "release_retreat":
+        samples = [
+            {
+                "release_epoch_id": "live-release-epoch-7",
+                "receipt_sequence": 101 + index,
+                "source_timestamp_s": 10.0 + index * 0.05,
+                "observed_monotonic_s": 20.0 + index * 0.05,
+                "pose_xyz_xyzw": [-0.08, -0.25, 0.165, 0.0, 0.0, 0.0, 1.0],
+                "support_contact": True,
+                "gripper_contact": False,
+                "gazebo_detached": True,
+                "moveit_detached": True,
+                "controller_healthy": True,
+                "safety_healthy": True,
+                "shadow_divergence_healthy": True,
+            }
+            for index in range(5)
+        ]
         result.update(
             {
+                "release_epoch_id": "live-release-epoch-7",
+                "release_marker_sequence": 100,
+                "final_samples": samples,
                 "final_evaluation": {"success": True},
                 "final_evidence": {
                     "cup_position_world_m": [-0.08, -0.25, 0.165],
@@ -54,6 +81,33 @@ def evidence_for(phase_name: str, status: str) -> dict:
             }
         )
     return result
+
+
+def test_final_release_recomputes_samples_with_injected_policy() -> None:
+    document = evidence_for("release_retreat", "RELEASE_RETREAT_FINAL_PLACEMENT_PROVED")
+    document["final_evaluation"] = {"success": False}
+    physical = load_task_policy(MOTION_POLICY).physical_outcome
+
+    assert _validate_final_release(document, physical)
+    assert not _validate_final_release(
+        document,
+        replace(
+            physical,
+            final_target_min_xy_m=(-0.060, -0.260),
+            final_target_max_xy_m=(-0.050, -0.240),
+        ),
+    )
+
+
+def test_final_release_rejects_unreviewed_or_mistyped_sample_fields() -> None:
+    physical = load_task_policy(MOTION_POLICY).physical_outcome
+    document = evidence_for("release_retreat", "RELEASE_RETREAT_FINAL_PLACEMENT_PROVED")
+    document["final_samples"][0]["unreviewed"] = True
+    assert not _validate_final_release(document, physical)
+
+    document = evidence_for("release_retreat", "RELEASE_RETREAT_FINAL_PLACEMENT_PROVED")
+    document["final_samples"][0]["support_contact"] = 1
+    assert not _validate_final_release(document, physical)
 
 
 def test_phase_specs_use_one_production_entry_sequence_and_frozen_environment(tmp_path) -> None:
