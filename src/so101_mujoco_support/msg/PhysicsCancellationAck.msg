@@ -1,0 +1,6 @@
+string simulation_session_id
+uint64 reset_epoch
+uint64 hazard_physics_step
+uint64 request_sequence
+uint64 observed_physics_step
+float64 observed_simulation_time_s

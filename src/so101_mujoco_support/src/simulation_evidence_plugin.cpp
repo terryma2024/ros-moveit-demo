@@ -15,11 +15,11 @@ namespace so101_mujoco_support
 {
 namespace
 {
-template <typename T>
+template<typename T>
 T parameter(const rclcpp::Node::SharedPtr & node, const std::string & name, const T & fallback)
 {
-  return node->has_parameter(name) ? node->get_parameter(name).get_value<T>()
-                                   : node->declare_parameter<T>(name, fallback);
+  return node->has_parameter(name) ? node->get_parameter(name).get_value<T>() :
+         node->declare_parameter<T>(name, fallback);
 }
 
 std::string name(const mjModel * model, mjtObj type, int id)
@@ -37,20 +37,22 @@ bool finite_contact(const mjContact & contact)
 }
 }  // namespace
 
-bool EvidenceBuilder::configure(const mjModel * model, const std::string & object_body,
-                                const std::string & left_geom, const std::string & right_geom,
-                                const std::vector<std::string> & other_geoms,
-                                std::size_t max_contacts)
+bool EvidenceBuilder::configure(
+  const mjModel * model, const std::string & object_body,
+  const std::string & left_geom, const std::string & right_geom,
+  const std::vector<std::string> & other_geoms,
+  std::size_t max_contacts)
 {
   return configure(model, object_body, std::vector<std::string>{left_geom},
                    std::vector<std::string>{right_geom}, other_geoms, max_contacts);
 }
 
-bool EvidenceBuilder::configure(const mjModel * model, const std::string & object_body,
-                                const std::vector<std::string> & left_geoms,
-                                const std::vector<std::string> & right_geoms,
-                                const std::vector<std::string> & other_geoms,
-                                std::size_t max_contacts)
+bool EvidenceBuilder::configure(
+  const mjModel * model, const std::string & object_body,
+  const std::vector<std::string> & left_geoms,
+  const std::vector<std::string> & right_geoms,
+  const std::vector<std::string> & other_geoms,
+  std::size_t max_contacts)
 {
   if (model == nullptr || object_body.empty() || left_geoms.empty() || right_geoms.empty()) {
     return false;
@@ -81,15 +83,15 @@ bool EvidenceBuilder::configure(const mjModel * model, const std::string & objec
     }
   }
   const auto resolve = [model](const std::vector<std::string> & names, std::vector<int> & ids) {
-    for (const auto & geom : names) {
-      const int id = mj_name2id(model, mjOBJ_GEOM, geom.c_str());
-      if (id < 0) {
-        return false;
+      for (const auto & geom : names) {
+        const int id = mj_name2id(model, mjOBJ_GEOM, geom.c_str());
+        if (id < 0) {
+          return false;
+        }
+        ids.push_back(id);
       }
-      ids.push_back(id);
-    }
-    return true;
-  };
+      return true;
+    };
   if (!resolve(left_geoms, left_geom_ids_) || !resolve(right_geoms, right_geom_ids_)) {
     return false;
   }
@@ -109,10 +111,11 @@ bool EvidenceBuilder::object_geom(int geom_id) const
          object_geom_ids_.end();
 }
 
-msg::SimulationEvidence EvidenceBuilder::build(const mjModel * model, const mjData * data,
-                                               bool paused, EvidenceState & state,
-                                               uint64_t reset_generation,
-                                               bool advance_physics_step) const
+msg::SimulationEvidence EvidenceBuilder::build(
+  const mjModel * model, const mjData * data,
+  bool paused, EvidenceState & state,
+  uint64_t reset_generation,
+  bool advance_physics_step) const
 {
   msg::SimulationEvidence output;
   if (model == nullptr || data == nullptr || object_body_id_ < 0 || !std::isfinite(data->time)) {
@@ -211,12 +214,13 @@ msg::SimulationEvidence EvidenceBuilder::build(const mjModel * model, const mjDa
     output.minimum_signed_distance_m =
       std::min(output.minimum_signed_distance_m, sample.signed_distance_m);
     output.maximum_normal_force_n = std::max(output.maximum_normal_force_n, sample.normal_force_n);
-    if (left)
+    if (left) {
       output.left_fingertip_contacts.push_back(sample);
-    else if (right)
+    } else if (right) {
       output.right_fingertip_contacts.push_back(sample);
-    else
+    } else {
       output.other_object_contacts.push_back(sample);
+    }
   }
   if (!output.has_contact) {
     output.minimum_signed_distance_m = 0.0;
@@ -243,16 +247,16 @@ msg::PhysicsStepEvidence make_physics_step_evidence(
   output.right_fingertip_contacts = snapshot.right_fingertip_contacts;
   output.other_object_contacts = snapshot.other_object_contacts;
   const auto accumulate = [&output](const auto & contacts, double * total_force,
-                                    double * maximum_force, double * compression) {
-    for (const auto & contact : contacts) {
-      *total_force += contact.normal_force_n;
-      *maximum_force = std::max(*maximum_force, contact.normal_force_n);
-      *compression = std::max(*compression, std::max(0.0, -contact.signed_distance_m));
-      output.net_contact_force_world_n.x += contact.normal_world.x * contact.normal_force_n;
-      output.net_contact_force_world_n.y += contact.normal_world.y * contact.normal_force_n;
-      output.net_contact_force_world_n.z += contact.normal_world.z * contact.normal_force_n;
-    }
-  };
+    double * maximum_force, double * compression) {
+      for (const auto & contact : contacts) {
+        *total_force += contact.normal_force_n;
+        *maximum_force = std::max(*maximum_force, contact.normal_force_n);
+        *compression = std::max(*compression, std::max(0.0, -contact.signed_distance_m));
+        output.net_contact_force_world_n.x += contact.normal_world.x * contact.normal_force_n;
+        output.net_contact_force_world_n.y += contact.normal_world.y * contact.normal_force_n;
+        output.net_contact_force_world_n.z += contact.normal_world.z * contact.normal_force_n;
+      }
+    };
   accumulate(output.left_fingertip_contacts, &output.left_fingertip_total_normal_force_n,
              &output.fingertip_max_single_contact_force_n,
              &output.left_fingertip_compression_m);
@@ -266,6 +270,20 @@ msg::PhysicsStepEvidence make_physics_step_evidence(
   output.static_shadow_crossed = output.maximum_normal_force_n > static_shadow_force_n;
   output.diagnostic_hazard_breached =
     output.global_max_single_contact_force_n >= diagnostic_hard_stop_force_n;
+  return output;
+}
+
+msg::PhysicsCancellationAck make_cancellation_ack(
+  const msg::PhysicsCancellationRequest & request, uint64_t reset_epoch,
+  uint64_t observed_physics_step, double observed_simulation_time_s)
+{
+  msg::PhysicsCancellationAck output;
+  output.simulation_session_id = request.simulation_session_id;
+  output.reset_epoch = reset_epoch;
+  output.hazard_physics_step = request.hazard_physics_step;
+  output.request_sequence = request.request_sequence;
+  output.observed_physics_step = observed_physics_step;
+  output.observed_simulation_time_s = observed_simulation_time_s;
   return output;
 }
 
@@ -286,7 +304,8 @@ PhysicsStepEvidenceBuffer::PhysicsStepEvidenceBuffer(
   diagnostic_hard_stop_force_n_(diagnostic_hard_stop_force_n)
 {
   if (capacity_ == 0 || flush_step_count_ == 0 || flush_step_count_ > capacity_ ||
-      !std::isfinite(diagnostic_hard_stop_force_n_) || diagnostic_hard_stop_force_n_ <= 0.0) {
+    !std::isfinite(diagnostic_hard_stop_force_n_) || diagnostic_hard_stop_force_n_ <= 0.0)
+  {
     throw std::invalid_argument("invalid physics-step buffer configuration");
   }
 }
@@ -296,10 +315,11 @@ bool PhysicsStepEvidenceBuffer::append(const msg::PhysicsStepEvidence & sample)
   if (last_observed_.has_value()) {
     const auto & previous = *last_observed_;
     if (sample.simulation_session_id != previous.simulation_session_id ||
-        sample.reset_epoch != previous.reset_epoch ||
-        sample.physics_step != previous.physics_step + 1 ||
-        !std::isfinite(sample.simulation_time_s) ||
-        sample.simulation_time_s <= previous.simulation_time_s) {
+      sample.reset_epoch != previous.reset_epoch ||
+      sample.physics_step != previous.physics_step + 1 ||
+      !std::isfinite(sample.simulation_time_s) ||
+      sample.simulation_time_s <= previous.simulation_time_s)
+    {
       evidence_loss_ = true;
       return false;
     }
@@ -311,7 +331,8 @@ bool PhysicsStepEvidenceBuffer::append(const msg::PhysicsStepEvidence & sample)
   samples_.push_back(sample);
   last_observed_ = sample;
   if (!hazard_latch_.has_value() &&
-      sample.global_max_single_contact_force_n >= diagnostic_hard_stop_force_n_) {
+    sample.global_max_single_contact_force_n >= diagnostic_hard_stop_force_n_)
+  {
     msg::PhysicsHazardLatch hazard;
     hazard.simulation_session_id = sample.simulation_session_id;
     hazard.reset_epoch = sample.reset_epoch;
@@ -336,8 +357,9 @@ msg::PhysicsStepEvidenceChunk PhysicsStepEvidenceBuffer::prepare_chunk() const
   chunk.chunk_sequence = chunk_sequence_;
   chunk.failed_publish_attempts = failed_publish_attempts_;
   chunk.evidence_loss = evidence_loss_;
-  if (samples_.empty())
+  if (samples_.empty()) {
     return chunk;
+  }
   chunk.simulation_session_id = samples_.front().simulation_session_id;
   chunk.reset_epoch = samples_.front().reset_epoch;
   chunk.first_physics_step = samples_.front().physics_step;
@@ -380,12 +402,14 @@ void PhysicsStepEvidenceBuffer::reset()
   hazard_latch_.reset();
 }
 
-bool SimulationEvidencePlugin::init(rclcpp::Node::SharedPtr node, const mjModel * model,
-                                    mjData * data)
+bool SimulationEvidencePlugin::init(
+  rclcpp::Node::SharedPtr node, const mjModel * model,
+  mjData * data)
 {
   cleanup();
-  if (!node || model == nullptr || data == nullptr)
+  if (!node || model == nullptr || data == nullptr) {
     return false;
+  }
   try {
     const auto object = parameter<std::string>(node, "object_body", "task_object");
     auto left = parameter<std::vector<std::string>>(node, "left_fingertip_geoms", {});
@@ -413,17 +437,25 @@ bool SimulationEvidencePlugin::init(rclcpp::Node::SharedPtr node, const mjModel 
       node, "physics_step_topic", "/so101/simulation/physics_step_chunks");
     const auto hazard_topic =
       parameter<std::string>(node, "physics_hazard_topic", "/so101/simulation/physics_hazard");
+    const auto cancellation_request_topic = parameter<std::string>(
+      node, "physics_cancellation_request_topic",
+      "/so101/simulation/physics_cancellation_request");
+    const auto cancellation_ack_topic = parameter<std::string>(
+      node, "physics_cancellation_ack_topic", "/so101/simulation/physics_cancellation_ack");
     if (max_contacts < 0 || physics_step_buffer_capacity <= 0 || physics_step_chunk_size <= 0 ||
-        physics_step_chunk_size > physics_step_buffer_capacity || !std::isfinite(rate) ||
-        rate <= 0.0 || !std::isfinite(model->opt.timestep) || model->opt.timestep <= 0.0 ||
-        !std::isfinite(static_shadow_force_n_) || static_shadow_force_n_ <= 0.0 ||
-        !std::isfinite(diagnostic_hard_stop_force_n_) ||
-        diagnostic_hard_stop_force_n_ <= static_shadow_force_n_ || topic.empty() ||
-        chunk_topic.empty() || hazard_topic.empty() ||
-        state_.simulation_session_id.empty() ||
-        !builder_.configure(model, object, left, right, other,
-                            static_cast<std::size_t>(max_contacts)))
+      physics_step_chunk_size > physics_step_buffer_capacity || !std::isfinite(rate) ||
+      rate <= 0.0 || !std::isfinite(model->opt.timestep) || model->opt.timestep <= 0.0 ||
+      !std::isfinite(static_shadow_force_n_) || static_shadow_force_n_ <= 0.0 ||
+      !std::isfinite(diagnostic_hard_stop_force_n_) ||
+      diagnostic_hard_stop_force_n_ <= static_shadow_force_n_ || topic.empty() ||
+      chunk_topic.empty() || hazard_topic.empty() || cancellation_request_topic.empty() ||
+      cancellation_ack_topic.empty() ||
+      state_.simulation_session_id.empty() ||
+      !builder_.configure(model, object, left, right, other,
+        static_cast<std::size_t>(max_contacts)))
+    {
       return false;
+    }
     node_ = std::move(node);
     publisher_ = node_->create_publisher<Evidence>(topic, rclcpp::SensorDataQoS());
     realtime_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<Evidence>>(publisher_);
@@ -433,6 +465,16 @@ bool SimulationEvidencePlugin::init(rclcpp::Node::SharedPtr node, const mjModel 
       std::make_unique<realtime_tools::RealtimePublisher<EvidenceChunk>>(chunk_publisher_);
     hazard_publisher_ = node_->create_publisher<msg::PhysicsHazardLatch>(
       hazard_topic, rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local());
+    const auto cancellation_qos = rclcpp::QoS(rclcpp::KeepLast(5)).reliable();
+    cancellation_ack_publisher_ =
+      node_->create_publisher<msg::PhysicsCancellationAck>(cancellation_ack_topic,
+        cancellation_qos);
+    cancellation_request_subscription_ =
+      node_->create_subscription<msg::PhysicsCancellationRequest>(
+      cancellation_request_topic, cancellation_qos,
+      [this](const msg::PhysicsCancellationRequest & request) {
+        acknowledge_cancellation_request(request);
+        });
     physics_step_buffer_ = std::make_unique<PhysicsStepEvidenceBuffer>(
       static_cast<std::size_t>(physics_step_buffer_capacity),
       static_cast<std::size_t>(physics_step_chunk_size), diagnostic_hard_stop_force_n_);
@@ -448,36 +490,47 @@ bool SimulationEvidencePlugin::init(rclcpp::Node::SharedPtr node, const mjModel 
 void SimulationEvidencePlugin::update(const mjModel * model, mjData * data)
 {
   if (!realtime_publisher_ || !realtime_chunk_publisher_ || !physics_step_buffer_ ||
-      model == nullptr || data == nullptr || !std::isfinite(data->time))
+    model == nullptr || data == nullptr || !std::isfinite(data->time))
+  {
     return;
+  }
   const auto reset_generation = reset_generation_.load(std::memory_order_acquire);
   const bool reset_pending = reset_generation != state_.consumed_reset_generation;
-  if (reset_pending)
+  if (reset_pending) {
     return;
+  }
   const bool paused = authoritative_paused_.load(std::memory_order_acquire);
   if (state_.initialized && data->time == state_.previous_time) {
-    if (!published_)
+    if (!published_) {
       try_publish_snapshot(model, data, paused, reset_generation, false);
+    }
     return;
   }
   const auto step = builder_.build_step(model, data, paused, state_, reset_generation,
                                         static_shadow_force_n_, diagnostic_hard_stop_force_n_);
+  current_reset_epoch_.store(step.reset_epoch, std::memory_order_release);
+  current_physics_step_.store(step.physics_step, std::memory_order_release);
+  current_simulation_time_s_.store(step.simulation_time_s, std::memory_order_release);
   physics_step_buffer_->append(step);
   publish_hazard_if_needed();
-  if (physics_step_buffer_->ready())
+  if (physics_step_buffer_->ready()) {
     try_publish_chunk();
+  }
   if (!published_ || data->time < last_publish_time_s_ ||
-      data->time - last_publish_time_s_ >= publish_period_s_) {
+    data->time - last_publish_time_s_ >= publish_period_s_)
+  {
     try_publish_snapshot(model, data, paused, reset_generation, false);
   }
 }
 
-void SimulationEvidencePlugin::try_publish_snapshot(const mjModel * model, const mjData * data,
-                                                    bool paused, uint64_t reset_generation,
-                                                    bool advance_physics_step)
+void SimulationEvidencePlugin::try_publish_snapshot(
+  const mjModel * model, const mjData * data,
+  bool paused, uint64_t reset_generation,
+  bool advance_physics_step)
 {
-  if (!realtime_publisher_->trylock())
+  if (!realtime_publisher_->trylock()) {
     return;
+  }
   try {
     realtime_publisher_->msg_ =
       builder_.build(model, data, paused, state_, reset_generation, advance_physics_step);
@@ -491,8 +544,9 @@ void SimulationEvidencePlugin::try_publish_snapshot(const mjModel * model, const
 
 void SimulationEvidencePlugin::try_publish_chunk()
 {
-  if (!physics_step_buffer_ || !realtime_chunk_publisher_)
+  if (!physics_step_buffer_ || !realtime_chunk_publisher_) {
     return;
+  }
   if (!realtime_chunk_publisher_->trylock()) {
     physics_step_buffer_->mark_publish_failed();
     return;
@@ -509,13 +563,33 @@ void SimulationEvidencePlugin::try_publish_chunk()
 
 void SimulationEvidencePlugin::publish_hazard_if_needed()
 {
-  if (hazard_published_ || !physics_step_buffer_ || !hazard_publisher_)
+  if (hazard_published_ || !physics_step_buffer_ || !hazard_publisher_) {
     return;
+  }
   const auto hazard = physics_step_buffer_->hazard_latch();
-  if (!hazard.has_value())
+  if (!hazard.has_value()) {
     return;
+  }
   hazard_publisher_->publish(*hazard);
   hazard_published_ = true;
+}
+
+void SimulationEvidencePlugin::acknowledge_cancellation_request(
+  const msg::PhysicsCancellationRequest & request)
+{
+  if (!cancellation_ack_publisher_ ||
+    request.simulation_session_id != state_.simulation_session_id)
+  {
+    return;
+  }
+  const auto reset_epoch = current_reset_epoch_.load(std::memory_order_acquire);
+  const auto physics_step = current_physics_step_.load(std::memory_order_acquire);
+  if (request.reset_epoch != reset_epoch || request.hazard_physics_step > physics_step) {
+    return;
+  }
+  cancellation_ack_publisher_->publish(make_cancellation_ack(
+    request, reset_epoch, physics_step,
+    current_simulation_time_s_.load(std::memory_order_acquire)));
 }
 
 void SimulationEvidencePlugin::on_reset()
@@ -528,18 +602,21 @@ void SimulationEvidencePlugin::on_pause(bool paused)
   authoritative_paused_.store(paused, std::memory_order_release);
 }
 
-void SimulationEvidencePlugin::on_state_snapshot(const mjModel * model, const mjData * data,
-                                                 bool paused)
+void SimulationEvidencePlugin::on_state_snapshot(
+  const mjModel * model, const mjData * data,
+  bool paused)
 {
   authoritative_paused_.store(paused, std::memory_order_release);
-  if (!paused || model == nullptr || data == nullptr || !std::isfinite(data->time))
+  if (!paused || model == nullptr || data == nullptr || !std::isfinite(data->time)) {
     return;
+  }
   const auto generation = reset_generation_.load(std::memory_order_acquire);
   const bool reset_pending = generation != state_.consumed_reset_generation;
   try_publish_snapshot(model, data, true, generation, true);
   if (reset_pending && generation == state_.consumed_reset_generation) {
-    if (physics_step_buffer_)
+    if (physics_step_buffer_) {
       physics_step_buffer_->reset();
+    }
     hazard_published_ = false;
   }
 }
@@ -547,6 +624,8 @@ void SimulationEvidencePlugin::on_state_snapshot(const mjModel * model, const mj
 void SimulationEvidencePlugin::cleanup()
 {
   physics_step_buffer_.reset();
+  cancellation_request_subscription_.reset();
+  cancellation_ack_publisher_.reset();
   realtime_chunk_publisher_.reset();
   chunk_publisher_.reset();
   hazard_publisher_.reset();
@@ -558,6 +637,9 @@ void SimulationEvidencePlugin::cleanup()
   last_publish_time_s_ = 0.0;
   static_shadow_force_n_ = 1.1579004532160448;
   diagnostic_hard_stop_force_n_ = 11.60;
+  current_reset_epoch_.store(0, std::memory_order_release);
+  current_physics_step_.store(0, std::memory_order_release);
+  current_simulation_time_s_.store(0.0, std::memory_order_release);
   published_ = false;
   hazard_published_ = false;
   reset_generation_.store(0, std::memory_order_release);
