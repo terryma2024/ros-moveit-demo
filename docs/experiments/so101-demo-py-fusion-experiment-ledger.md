@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 616308b3bc24c4cc2c0d684a2aa2e6c8f503d3a7
+current_commit: 703c765edd48d0a451179001ea343886d9ec11b8
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -13,13 +13,14 @@ confirmed_conclusions:
   - Historical CP-156 records separate qualified FULL_RESTART EXP-158 through EXP-162 and RESET_WORLD EXP-163 through EXP-167 batches; CP-FUSION-001.
   - The initialized clean-baseline MuJoCo Python suite passes 525 tests with 4 skips; CP-FUSION-001.
   - Tasks 2-5 preserve mapped identity, core/runtime parity, nine-phase order, and exact v1 simulator policy bytes; CP-FUSION-002.
+  - Task 6 installs strict neutral world/lifecycle contracts and MuJoCo adapters with fresh-state validation; CP-FUSION-003.
 disproven_routes:
   - Historical TASK15-FULL-A is INVALID because headless execution could not satisfy the required viewer-camera readiness gate; CP-156.
   - Recreating or sourcing the removed migration worktree is unnecessary and would contradict the verified merged-main handoff; CP-FUSION-001.
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-002
+latest_checkpoint: CP-FUSION-003
 next_experiment: NONE
 ---
 
@@ -97,4 +98,31 @@ evidence:
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task4-unified-tests.log sha256=e9a40502bbab4cd186bd34f41859604522147a6b66ee852c24ddbc945d7e0a5a
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task4-legacy-selected.log sha256=7eb2a748ac180ba6cc281861db498e923702dc0a24152ca1c96addd88a16dcad
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task5-unified-tests.log sha256=f2a8ce02b42cc30701feff1a09e68203a567b1e4f46c1861cb179bdb4da53bd1
+```
+
+## Checkpoint CP-FUSION-003
+
+```yaml
+checkpoint_id: CP-FUSION-003
+last_valid_experiment: EXP-168 historical uncounted visual corroboration; no fusion live experiment has started
+current_hypothesis: Shared MoveIt and ros2_control behavior can be placed behind typed robot-control and planning-scene ports without changing the qualified phase semantics.
+working_tree_status: HEAD 703c765edd48d0a451179001ea343886d9ec11b8; Task 6 ports, adapters, tests, and this checkpoint are intentionally dirty before the scoped Task 6 commit.
+owned_processes: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemon processes only; no preserved session or daemon was controlled.
+confirmed_conclusions:
+  - WorldEvidence and receipt values are immutable, finite, backend-neutral, and retain MuJoCo-only quantities under backend_metadata.
+  - MuJoCo world adaptation rejects same-session/epoch publisher-sequence or simulation-step regression.
+  - MuJoCo reset and pause results require observed post-request world state; raw service acknowledgement alone is insufficient.
+  - Task 6 focused source/installed contracts pass 7/7 after the fusion-t6 build.
+  - The frozen MuJoCo policy remains aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356.
+disproven_routes:
+  - A zero-contact legacy SimulationEvidence fixture cannot carry a nonzero aggregate signed distance; the real value invariant correctly rejected that invalid test setup.
+  - Running the Task 6 live execute before unified assets and launch ownership exist would execute an old package's stack and produce falsely attributed fusion evidence.
+open_risks:
+  - Phase modules still construct concrete robot/scene clients and must be migrated through Tasks 7-9 before the application import-boundary gate is green.
+  - The deferred Task 6-9 installed live gate must be run from the unified launcher after Tasks 10-11, with a pre-registered isolated-stack experiment.
+next_command: Write and run Task 7 PlanningScenePort and RobotControlPort RED contracts.
+evidence:
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task6/contracts.log sha256=229e4533d1597c28d56b8b7c42e076151a9d019effe66ced40bfb2ba3347ae36
+  - log/fusion-t6/latest_build
 ```
