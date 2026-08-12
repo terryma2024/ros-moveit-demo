@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-011
-next_experiment: EXP-144
+latest_checkpoint: RESET-FIVE-CP-012
+next_experiment: EXP-145
 ```
 
 ## Immutable challenge boundary
@@ -617,6 +617,35 @@ artifacts_sha256:
   dynamic_summary: 4520518565b344c53fcfa8db680828f630ad6335de1143e3a5dfed79f48dbcbe
   shared_launch_log: DEFERRED_UNTIL_CLEAN_SHUTDOWN
 next_experiment: EXP-144
+remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-012 — EXP-144 SUCCESS 4/5
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-012
+recorded_at: 2026-08-13T01:54:00+08:00
+prior_checkpoint: RESET-FIVE-CP-011
+status: COUNTING_BATCH_RUNNING_SUCCESS_4_OF_5
+experiment_id: EXP-144
+manifest_record_id: MNT-Q-RESET-EXP141-145-04
+result: VALID_SUCCESS
+reset: {old_epoch: 3, new_epoch: 4, simulation_step: 0, simulation_session_id: MNT-Q-RESET-EXP141-145-reset}
+trace: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+physical_outcome:
+  primary_failure: null
+  final_pose_m: [-0.07994049779604624, -0.24684058468885794, 0.1654865169613108]
+  final_upright_tilt_rad: 0.01741301494549055
+  intended_support_contact: true
+  gripper_contact: false
+planning_scene: {moveit_attached: false, world_object_synchronized: true}
+artifacts_sha256:
+  actions: 9e454b7fb2a35e7100518c384f24b9f4dbd9ac21772a0cd53bcac0f6d4f43890
+  owner_manifest: ff6dc588c27f87bac287b1cf4b08a6cc5fdf645012f3917dda80bf2a8fe0432d
+  raw_run_index: 6923da88ed51fdafc3c3bf560f0992466ef37810af87b5cd808d884f092bddde
+  dynamic_summary: 5db5df62870593a4008294cae1eb774e38eb2b5c8092b87820dd5645853267c0
+  shared_launch_log: DEFERRED_UNTIL_CLEAN_SHUTDOWN
+next_experiment: EXP-145
 remote_push_state: FORBIDDEN
 ```
 
