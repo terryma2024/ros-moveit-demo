@@ -25,8 +25,8 @@ disproven_routes:
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-014
-next_experiment: NONE_TASK_14_IMPLEMENTATION
+latest_checkpoint: CP-FUSION-015
+next_experiment: NONE_TASK_17_PREREGISTRATION
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -34,6 +34,40 @@ next_experiment: NONE_TASK_14_IMPLEMENTATION
 Raw build, test, runtime, screenshot, video, and qualification evidence remains under the single
 task evidence root. This ledger stores checkpoints and conclusions only. Live experiments must be
 pre-registered here before any stack is launched.
+
+## Checkpoint CP-FUSION-015 — compatibility, real-stub, and installed static gates
+
+```yaml
+checkpoint_id: CP-FUSION-015
+status: COMPLETE
+tasks: [14, 15, 16]
+legacy_compatibility:
+  focused_test_result: 15 passed
+  full_unified_test_result_before_task_16: 88 passed
+  old_cli_exit_codes: {mujoco: 0, gazebo: 0}
+  deprecation_warning_count_per_command: 1
+  unified_forward_target: so101_demo/cli/pick_place.py
+  legacy_runtime_files_removed: 412
+  legacy_binary_assets_removed: 150
+  legacy_installed_runtime_assets: NONE
+real_stub:
+  focused_test_result: 10 passed
+  run_status: REJECTED
+  error_code: REAL_HARDWARE_NOT_CONFIGURED
+  io_symbols_present: false
+  real_launcher_present: false
+installed_gate:
+  overlay: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final
+  clean_dependency_closure_packages_built: 9
+  contract_test_result: 91 passed
+  collected_tests: 91
+  installed_provenance_test_result: 3 passed
+  installed_executables: [gazebo_execute, pick_place, run_qualification, scene_setup]
+  installed_launchers: [so101_gazebo.launch.py, so101_gazebo_pick_place.launch.py, so101_mujoco.launch.py, so101_mujoco_pick_place.launch.py]
+  policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  provisional_bundle_sha256: 55169154005eca4a06d479ac188baf179ce58f02b4e64f7f3660cef18cbea85c
+decision: Commit the static acceptance artifacts, rebuild the final overlay at that immutable commit, then preregister independent FULL_RESTART and RESET_WORLD qualification batches.
+```
 
 ## Baseline recovery
 
