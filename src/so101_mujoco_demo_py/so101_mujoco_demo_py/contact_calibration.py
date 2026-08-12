@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
+import os
 import sys
+import tempfile
 from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from so101_mujoco_demo_py.contact_policy import (
+    ApprovalRecord,
+    approve_proposal,
+    proposal_sha256,
+)
 
 REGIMES = (
     "no_contact",
@@ -30,7 +40,8 @@ REQUIRED_UNITS = {
     "simulation_time": "s",
     "receipt_time": "s",
 }
-HASH_FIELDS = ("model_sha256", "config_sha256")
+V1_HASH_FIELDS = ("model_sha256", "config_sha256")
+V2_HASH_FIELDS = ("model_sha256", "scene_sha256", "motion_policy_sha256")
 COMMIT_FIELDS = ("source_commit", "dependency_commit")
 CONTACT_FIELDS = (
     "left_fingertip_contacts",
@@ -136,7 +147,7 @@ def _validate_pose(value: Any, name: str) -> None:
 def _validate_sample(
     sample_value: Any,
     regime: str,
-    fingerprint: dict[str, str],
+    legacy_fingerprint: dict[str, str] | None,
 ) -> dict[str, Any]:
     sample = _mapping(sample_value, f"{regime} sample")
     if sample.get("regime") != regime:
@@ -146,11 +157,12 @@ def _validate_sample(
         not isinstance(value, bool) for value in subcohorts.values()
     ):
         raise ValueError("subcohorts must contain boolean table_only and post_release flags")
-    for field, expected in fingerprint.items():
-        length = 40 if field in COMMIT_FIELDS else 64
-        actual = _identifier(sample.get(field), field, length)
-        if actual != expected:
-            raise ValueError(f"mixed fingerprint data in {field}")
+    if legacy_fingerprint is not None:
+        for field, expected in legacy_fingerprint.items():
+            length = 40 if field in COMMIT_FIELDS else 64
+            actual = _identifier(sample.get(field), field, length)
+            if actual != expected:
+                raise ValueError(f"mixed fingerprint data in {field}")
     session = sample.get("simulation_session_id")
     if not isinstance(session, str) or not session:
         raise ValueError("simulation_session_id must be a non-empty string")
@@ -181,13 +193,36 @@ def _validate_sample(
 def validate_evidence(evidence_value: Any) -> dict[str, Any]:
     """Validate a complete, single-provenance raw calibration matrix."""
     evidence = _mapping(evidence_value, "evidence")
-    if evidence.get("schema_version") != 1:
+    schema_version = evidence.get("schema_version")
+    if schema_version not in {1, 2}:
         raise ValueError("unsupported schema_version")
     _validate_units(evidence.get("units"))
-    fingerprint = {
-        field: _identifier(evidence.get(field), field, 40 if field in COMMIT_FIELDS else 64)
-        for field in (*COMMIT_FIELDS, *HASH_FIELDS)
-    }
+    legacy_fingerprint: dict[str, str] | None = None
+    if schema_version == 1:
+        legacy_fingerprint = {
+            field: _identifier(evidence.get(field), field, 40 if field in COMMIT_FIELDS else 64)
+            for field in (*COMMIT_FIELDS, *V1_HASH_FIELDS)
+        }
+        normalized_fingerprint = {
+            "source_commit": legacy_fingerprint["source_commit"],
+            "dependency_commit": legacy_fingerprint["dependency_commit"],
+            "model_sha256": legacy_fingerprint["model_sha256"],
+            "scene_sha256": legacy_fingerprint["config_sha256"],
+            "motion_policy_sha256": legacy_fingerprint["config_sha256"],
+        }
+    else:
+        fingerprint_value = _mapping(evidence.get("fingerprint"), "fingerprint")
+        required = {*COMMIT_FIELDS, *V2_HASH_FIELDS}
+        if set(fingerprint_value) != required:
+            raise ValueError("fingerprint must contain exact schema-v2 artifact identities")
+        normalized_fingerprint = {
+            field: _identifier(
+                fingerprint_value.get(field),
+                field,
+                40 if field in COMMIT_FIELDS else 64,
+            )
+            for field in (*COMMIT_FIELDS, *V2_HASH_FIELDS)
+        }
     regimes = _mapping(evidence.get("regimes"), "regimes")
     if set(regimes) != set(REGIMES):
         missing = sorted(set(REGIMES) - set(regimes))
@@ -198,7 +233,9 @@ def validate_evidence(evidence_value: Any) -> dict[str, Any]:
         regime_samples = _list(regimes[regime], regime)
         if len(regime_samples) < 20:
             raise ValueError(f"{regime} requires at least 20 valid samples")
-        samples.extend(_validate_sample(sample, regime, fingerprint) for sample in regime_samples)
+        samples.extend(
+            _validate_sample(sample, regime, legacy_fingerprint) for sample in regime_samples
+        )
 
     sessions = {sample["simulation_session_id"] for sample in samples}
     if len(sessions) != 1:
@@ -206,6 +243,11 @@ def validate_evidence(evidence_value: Any) -> dict[str, Any]:
     reset_epochs = {sample["reset_epoch"] for sample in samples}
     if len(reset_epochs) != 1:
         raise ValueError("mixed reset epoch data")
+    if schema_version == 2:
+        if evidence.get("simulation_session_id") != next(iter(sessions)):
+            raise ValueError("top-level simulation session mismatch")
+        if evidence.get("reset_epoch") != next(iter(reset_epochs)):
+            raise ValueError("top-level reset epoch mismatch")
     ordered = sorted(samples, key=lambda sample: sample["publisher_sequence"])
     for previous, current in zip(ordered, ordered[1:], strict=False):
         if current["publisher_sequence"] <= previous["publisher_sequence"]:
@@ -216,7 +258,10 @@ def validate_evidence(evidence_value: Any) -> dict[str, Any]:
             raise ValueError("simulation time is stale or non-monotonic")
         if current["receipt_monotonic_s"] <= previous["receipt_monotonic_s"]:
             raise ValueError("receipt time is stale or non-monotonic")
-    return evidence
+    normalized = copy.deepcopy(evidence)
+    normalized["normalized_fingerprint"] = normalized_fingerprint
+    normalized["source_schema_version"] = schema_version
+    return normalized
 
 
 def _contact_force(sample: dict[str, Any], field: str) -> float:
@@ -353,26 +398,41 @@ def _summaries(regimes: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str, 
 
 
 def validate_policy(policy_value: Any) -> dict[str, Any]:
-    """Validate a disabled proposal without granting approval or enablement."""
+    """Validate a schema-v2 template, disabled proposal, or approved policy."""
     policy = _mapping(policy_value, "policy")
-    if policy.get("schema_version") != 1:
+    if policy.get("schema_version") != 2:
         raise ValueError("unsupported schema_version")
-    if policy.get("enabled") is not False:
-        if policy.get("approved_by_user") is not True:
-            raise ValueError(
-                "enabled policy requires approved_by_user, and this proposal must remain disabled"
-            )
-        raise ValueError("contact calibration proposal must remain disabled")
-    if policy.get("approved_by_user") is not False:
-        raise ValueError("approved_by_user must remain false pending the approval stop")
+    if policy.get("policy_id") != "light_cup_wall_pick-contact":
+        raise ValueError("unsupported policy_id")
     _validate_units(policy.get("units"))
+    fingerprint = _mapping(policy.get("fingerprint"), "fingerprint")
+    expected_fingerprint = {
+        "source_commit",
+        "dependency_commit",
+        "model_sha256",
+        "scene_sha256",
+        "motion_policy_sha256",
+        "source_evidence_sha256",
+    }
+    if set(fingerprint) != expected_fingerprint:
+        raise ValueError("fingerprint must contain exact policy artifact identities")
     for field in COMMIT_FIELDS:
-        _identifier(policy.get(field), field, 40)
-    for field in HASH_FIELDS:
-        _identifier(policy.get(field), field, 64)
-    source_hash = policy.get("source_evidence_sha256")
+        _identifier(fingerprint.get(field), f"fingerprint.{field}", 40)
+    for field in V2_HASH_FIELDS:
+        _identifier(fingerprint.get(field), f"fingerprint.{field}", 64)
+    source_hash = fingerprint.get("source_evidence_sha256")
     if source_hash is not None:
-        _identifier(source_hash, "source_evidence_sha256", 64)
+        _identifier(source_hash, "fingerprint.source_evidence_sha256", 64)
+    evaluation = _mapping(policy.get("evaluation"), "evaluation")
+    if set(evaluation) != {"maximum_observation_age_s", "minimum_consecutive_samples"}:
+        raise ValueError("evaluation controls are incomplete")
+    if _finite(evaluation["maximum_observation_age_s"], "maximum_observation_age_s") <= 0.0:
+        raise ValueError("maximum_observation_age_s must be positive")
+    if _integer(evaluation["minimum_consecutive_samples"], "minimum_consecutive_samples") <= 0:
+        raise ValueError("minimum_consecutive_samples must be positive")
+    allowed = _list(policy.get("allowed_other_contact_bodies"), "allowed_other_contact_bodies")
+    if any(not isinstance(item, str) or not item for item in allowed):
+        raise ValueError("allowed_other_contact_bodies must contain non-empty strings")
     regimes = _mapping(policy.get("regimes"), "regimes")
     if set(regimes) != set(REGIMES):
         raise ValueError("policy must contain every calibration regime")
@@ -394,14 +454,75 @@ def validate_policy(policy_value: Any) -> dict[str, Any]:
     status = policy.get("calibration_status")
     if status not in {"PLANNED", "FAILED", "VALID"}:
         raise ValueError("calibration_status must be PLANNED, FAILED, or VALID")
+    thresholds = _mapping(policy.get("thresholds"), "thresholds")
+    expected_thresholds = {
+        "minimum_bilateral_force_n",
+        "maximum_compression_distance_m",
+        "maximum_safe_force_n",
+        "maximum_hold_linear_speed_m_s",
+        "minimum_stable_hold_duration_s",
+    }
+    if set(thresholds) != expected_thresholds:
+        raise ValueError("thresholds are incomplete")
     if status == "VALID":
         if source_hash is None:
             raise ValueError("VALID policy requires source_evidence_sha256")
         if any(regimes[name]["sample_count"] < 20 for name in REGIMES):
             raise ValueError("VALID policy requires at least 20 samples per regime")
-        thresholds = _mapping(policy.get("thresholds"), "thresholds")
-        if not thresholds or any(not math.isfinite(float(value)) for value in thresholds.values()):
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or float(value) <= 0.0
+            for value in thresholds.values()
+        ):
             raise ValueError("VALID policy requires finite proposed thresholds")
+        if thresholds["minimum_bilateral_force_n"] >= thresholds["maximum_safe_force_n"]:
+            raise ValueError("minimum bilateral force must remain below maximum safe force")
+    elif status == "PLANNED" and any(value is not None for value in thresholds.values()):
+        raise ValueError("PLANNED policy thresholds must remain null")
+
+    approval = _mapping(policy.get("approval"), "approval")
+    expected_approval = {
+        "enabled",
+        "approved",
+        "approved_by",
+        "approved_at",
+        "proposal_sha256",
+    }
+    if set(approval) != expected_approval:
+        raise ValueError("approval envelope is incomplete")
+    enabled = approval["enabled"]
+    approved = approval["approved"]
+    if not isinstance(enabled, bool) or not isinstance(approved, bool):
+        raise ValueError("approval enabled/approved flags must be boolean")
+    if enabled != approved:
+        raise ValueError("enabled policy requires approved approval metadata")
+    proposal_hash = approval["proposal_sha256"]
+    if status == "PLANNED":
+        if enabled or approval["approved_by"] is not None or approval["approved_at"] is not None:
+            raise ValueError("PLANNED policy must remain disabled and unapproved")
+        if proposal_hash is not None:
+            raise ValueError("PLANNED policy must not claim a proposal hash")
+    else:
+        stored_hash = _identifier(proposal_hash, "approval.proposal_sha256", 64)
+        if stored_hash != proposal_sha256(policy):
+            raise ValueError("proposal hash mismatch")
+        if enabled:
+            if not isinstance(approval["approved_by"], str) or not approval["approved_by"]:
+                raise ValueError("approved policy requires approved_by")
+            if not isinstance(approval["approved_at"], str) or not approval["approved_at"]:
+                raise ValueError("approved policy requires approved_at")
+            try:
+                approved_at = datetime.fromisoformat(approval["approved_at"])
+            except ValueError as error:
+                raise ValueError(
+                    "approved_at must be an ISO-8601 timestamp with timezone"
+                ) from error
+            if approved_at.tzinfo is None or approved_at.utcoffset() is None:
+                raise ValueError("approved_at must include a timezone")
+        elif approval["approved_by"] is not None or approval["approved_at"] is not None:
+            raise ValueError("disabled proposal must not contain approval identity")
     return policy
 
 
@@ -419,17 +540,21 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
     }
     matrix = {actual: {predicted: 0 for predicted in REGIMES} for actual in REGIMES}
     proposal: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "policy_id": "light_cup_wall_pick-contact",
+        "source_schema_version": evidence["source_schema_version"],
         "calibration_status": "FAILED",
         "failure_reason": None,
-        "approved_by_user": False,
-        "enabled": False,
         "units": dict(REQUIRED_UNITS),
-        "source_commit": evidence["source_commit"],
-        "dependency_commit": evidence["dependency_commit"],
-        "model_sha256": evidence["model_sha256"],
-        "config_sha256": evidence["config_sha256"],
-        "source_evidence_sha256": hashlib.sha256(raw).hexdigest(),
+        "fingerprint": {
+            **evidence["normalized_fingerprint"],
+            "source_evidence_sha256": hashlib.sha256(raw).hexdigest(),
+        },
+        "evaluation": {
+            "maximum_observation_age_s": 0.10,
+            "minimum_consecutive_samples": 5,
+        },
+        "allowed_other_contact_bodies": ["table"],
         "split_method": "publisher_sequence_modulo_5",
         "calibration_sample_count": sum(map(len, calibration.values())),
         "evaluation_sample_count": sum(map(len, evaluation.values())),
@@ -440,11 +565,26 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
         "false_negative_count": 0,
         "misclassification_matrix": matrix,
         "negative_control_labels": {"table_only": {}, "post_release": {}},
+        "approval": {
+            "enabled": False,
+            "approved": False,
+            "approved_by": None,
+            "approved_at": None,
+            "proposal_sha256": None,
+        },
     }
     try:
         thresholds, margins = _thresholds(calibration)
     except ValueError as error:
         proposal["failure_reason"] = str(error)
+        proposal["thresholds"] = {
+            "minimum_bilateral_force_n": None,
+            "maximum_compression_distance_m": None,
+            "maximum_safe_force_n": None,
+            "maximum_hold_linear_speed_m_s": None,
+            "minimum_stable_hold_duration_s": None,
+        }
+        proposal["approval"]["proposal_sha256"] = proposal_sha256(proposal)
         validate_policy(proposal)
         return proposal
     proposal["thresholds"] = thresholds
@@ -465,6 +605,7 @@ def analyze_bytes(raw: bytes) -> dict[str, Any]:
         proposal["failure_reason"] = f"evaluation classification has {errors} errors"
     else:
         proposal["calibration_status"] = "VALID"
+    proposal["approval"]["proposal_sha256"] = proposal_sha256(proposal)
     validate_policy(proposal)
     return proposal
 
@@ -473,23 +614,69 @@ def analyze(source: Path) -> dict[str, Any]:
     return analyze_bytes(source.read_bytes())
 
 
+def _atomic_yaml_write(path: Path, document: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(document, stream, sort_keys=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--validate", type=Path)
+    parser.add_argument("--approve", type=Path)
+    parser.add_argument("--proposal-sha256")
+    parser.add_argument("--approved-by")
+    parser.add_argument("--approved-at")
     args = parser.parse_args(argv)
     try:
         if args.validate:
             validate_policy(yaml.safe_load(args.validate.read_text(encoding="utf-8")))
+        elif args.approve and args.output:
+            if not all((args.proposal_sha256, args.approved_by, args.approved_at)):
+                parser.error(
+                    "--approve requires proposal hash, approval identity, time, and output"
+                )
+            proposal = yaml.safe_load(args.approve.read_text(encoding="utf-8"))
+            activated = approve_proposal(
+                proposal,
+                ApprovalRecord(
+                    proposal_sha256=args.proposal_sha256,
+                    approved_by=args.approved_by,
+                    approved_at=args.approved_at,
+                ),
+            )
+            validate_policy(activated)
+            if args.output.is_file():
+                existing = yaml.safe_load(args.output.read_text(encoding="utf-8"))
+                existing_approval = _mapping(existing.get("approval"), "existing approval")
+                if (
+                    existing_approval.get("approved") is True
+                    and existing_approval.get("proposal_sha256")
+                    != activated["approval"]["proposal_sha256"]
+                ):
+                    raise ValueError("refusing to overwrite approved policy with different hash")
+            _atomic_yaml_write(args.output, activated)
         elif args.input and args.output:
             proposal = analyze(args.input)
-            args.output.write_text(yaml.safe_dump(proposal, sort_keys=False), encoding="utf-8")
+            _atomic_yaml_write(args.output, proposal)
             if proposal["calibration_status"] != "VALID":
                 print(proposal["failure_reason"], file=sys.stderr)
                 return 1
         else:
-            parser.error("choose --validate or --input with --output")
+            parser.error("choose --validate, --approve with --output, or --input with --output")
     except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError) as error:
         print(str(error), file=sys.stderr)
         return 1

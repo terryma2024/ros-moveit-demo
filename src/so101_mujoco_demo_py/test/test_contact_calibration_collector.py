@@ -123,7 +123,8 @@ def request(tmp_path: Path, **changes) -> CollectionRequest:
         "source_commit": "1" * 40,
         "dependency_commit": "2" * 40,
         "model_sha256": "a" * 64,
-        "config_sha256": "b" * 64,
+        "scene_sha256": "b" * 64,
+        "motion_policy_sha256": "c" * 64,
         "reference_object_position_m": (0.2, 0.0, 0.03),
     }
     values.update(changes)
@@ -154,6 +155,14 @@ def test_collector_writes_exact_bounded_count_with_atomic_replacement(tmp_path: 
 
     document = json.loads(output.read_text(encoding="utf-8"))
     assert result["status"] == "VALID"
+    assert document["schema_version"] == 2
+    assert document["fingerprint"] == {
+        "source_commit": "1" * 40,
+        "dependency_commit": "2" * 40,
+        "model_sha256": "a" * 64,
+        "scene_sha256": "b" * 64,
+        "motion_policy_sha256": "c" * 64,
+    }
     assert len(document["regimes"]["bilateral_touch"]) == 3
     assert [sample["publisher_sequence"] for sample in document["regimes"]["bilateral_touch"]] == [
         1,
@@ -161,6 +170,30 @@ def test_collector_writes_exact_bounded_count_with_atomic_replacement(tmp_path: 
         3,
     ]
     assert not list(tmp_path.glob("*.tmp"))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("source_commit", "0" * 40),
+        ("scene_sha256", "short"),
+        ("motion_policy_sha256", "0" * 64),
+    ),
+)
+def test_collection_request_rejects_placeholder_or_malformed_identity(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    with pytest.raises(ValueError, match=field):
+        request(tmp_path, **{field: value})
+
+
+def test_collector_rejects_existing_v2_matrix_fingerprint_drift(tmp_path: Path) -> None:
+    first = collector([received(evidence(1))])
+    first.collect(request(tmp_path, sample_count=1))
+
+    second = collector([received(evidence(2))])
+    with pytest.raises(CollectionAborted, match="scene_sha256 mismatch"):
+        second.collect(request(tmp_path, sample_count=1, scene_sha256="e" * 64))
 
 
 @pytest.mark.parametrize(

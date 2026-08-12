@@ -61,7 +61,8 @@ class CollectionRequest:
     source_commit: str
     dependency_commit: str
     model_sha256: str
-    config_sha256: str
+    scene_sha256: str
+    motion_policy_sha256: str
     reference_object_position_m: tuple[float, float, float]
     pre_contact: bool = False
     max_receipt_age_s: float = 0.2
@@ -82,6 +83,14 @@ class CollectionRequest:
             raise ValueError("reset_epoch must be non-negative")
         if self.wrong_side_limit <= 0:
             raise ValueError("wrong_side_limit must be positive")
+        for field, value, length in (
+            ("source_commit", self.source_commit, 40),
+            ("dependency_commit", self.dependency_commit, 40),
+            ("model_sha256", self.model_sha256, 64),
+            ("scene_sha256", self.scene_sha256, 64),
+            ("motion_policy_sha256", self.motion_policy_sha256, 64),
+        ):
+            _identifier(value, field, length)
         _finite_values(
             (
                 *self.reference_object_position_m,
@@ -108,6 +117,18 @@ def _finite_values(values: tuple[float, ...], name: str) -> None:
         for value in values
     ):
         raise ValueError(f"{name} must contain only finite numeric values")
+
+
+def _identifier(value: object, name: str, length: int) -> str:
+    if not isinstance(value, str) or len(value) != length:
+        raise ValueError(f"{name} must be a {length}-character hexadecimal identifier")
+    try:
+        int(value, 16)
+    except ValueError as error:
+        raise ValueError(f"{name} must be hexadecimal") from error
+    if set(value) == {"0"}:
+        raise ValueError(f"{name} uses a placeholder hash")
+    return value
 
 
 def _contact_document(item: ContactEvidence, side: str) -> dict[str, Any]:
@@ -279,10 +300,6 @@ class ContactCalibrationCollector:
                 "table_only": request.table_only,
                 "post_release": request.post_release,
             },
-            "source_commit": request.source_commit,
-            "dependency_commit": request.dependency_commit,
-            "model_sha256": request.model_sha256,
-            "config_sha256": request.config_sha256,
             "simulation_session_id": evidence.simulation_session_id,
             "reset_epoch": evidence.reset_epoch,
             "publisher_sequence": evidence.publisher_sequence,
@@ -324,31 +341,43 @@ class ContactCalibrationCollector:
         if request.output_path.is_file():
             try:
                 existing = json.loads(request.output_path.read_text(encoding="utf-8"))
-                if isinstance(existing, dict) and existing.get("schema_version") == 1:
+                if isinstance(existing, dict) and existing.get("schema_version") == 2:
                     document = existing
             except (OSError, json.JSONDecodeError):
                 document = None
         if document is None:
             document = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "units": dict(REQUIRED_UNITS),
-                "source_commit": request.source_commit,
-                "dependency_commit": request.dependency_commit,
-                "model_sha256": request.model_sha256,
-                "config_sha256": request.config_sha256,
+                "fingerprint": {
+                    "source_commit": request.source_commit,
+                    "dependency_commit": request.dependency_commit,
+                    "model_sha256": request.model_sha256,
+                    "scene_sha256": request.scene_sha256,
+                    "motion_policy_sha256": request.motion_policy_sha256,
+                },
                 "simulation_session_id": request.simulation_session_id,
                 "reset_epoch": request.reset_epoch,
                 "regimes": {regime: [] for regime in REGIMES},
             }
-        expected = {
+        fingerprint = document.get("fingerprint")
+        if not isinstance(fingerprint, dict):
+            raise CollectionAborted("existing matrix fingerprint is missing")
+        expected_fingerprint = {
             "source_commit": request.source_commit,
             "dependency_commit": request.dependency_commit,
             "model_sha256": request.model_sha256,
-            "config_sha256": request.config_sha256,
+            "scene_sha256": request.scene_sha256,
+            "motion_policy_sha256": request.motion_policy_sha256,
+        }
+        for field, value in expected_fingerprint.items():
+            if fingerprint.get(field) != value:
+                raise CollectionAborted(f"existing matrix {field} mismatch")
+        expected_run = {
             "simulation_session_id": request.simulation_session_id,
             "reset_epoch": request.reset_epoch,
         }
-        for field, value in expected.items():
+        for field, value in expected_run.items():
             if document.get(field) != value:
                 raise CollectionAborted(f"existing matrix {field} mismatch")
         regimes = document.get("regimes")
@@ -368,7 +397,8 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--dependency-commit", required=True)
     parser.add_argument("--model-sha256", required=True)
-    parser.add_argument("--config-sha256", required=True)
+    parser.add_argument("--scene-sha256", required=True)
+    parser.add_argument("--motion-policy-sha256", required=True)
     parser.add_argument("--reference-object-position-m", nargs=3, type=float, required=True)
     parser.add_argument("--pre-contact", action="store_true")
     parser.add_argument("--table-only", action="store_true")
@@ -456,7 +486,8 @@ def run_ros_collection(options: argparse.Namespace) -> dict[str, Any]:
         source_commit=options.source_commit,
         dependency_commit=options.dependency_commit,
         model_sha256=options.model_sha256,
-        config_sha256=options.config_sha256,
+        scene_sha256=options.scene_sha256,
+        motion_policy_sha256=options.motion_policy_sha256,
         reference_object_position_m=tuple(options.reference_object_position_m),
         pre_contact=options.pre_contact,
         table_only=options.table_only,
