@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: b5c1c23f224e5bef9cd6b7e0a33bd1df8074dbf2
+current_commit: 368abe4d7388a15a9b18ef175b362e584f2812df
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -19,7 +19,7 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-016
+latest_checkpoint: MNT-CP-017
 next_experiment: EXP-110
 ```
 
@@ -2777,4 +2777,78 @@ conclusion: PENDING
 evidence: [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp114]
 decision: PENDING
 next_experiment: NONE_GENERATE_DISABLED_PROPOSAL_ON_SUCCESS_ONLY
+```
+
+## Checkpoint MNT-CP-017 — automatic live-sampling gates green
+
+```yaml
+checkpoint_id: MNT-CP-017
+recorded_at: 2026-08-12T18:23:17+08:00
+last_valid_experiment: EXP-109
+current_hypothesis: The committed per-step evidence path can record the frozen strategy's dynamic transport without gaps and without changing its physical behavior.
+implementation_source_commit: 368abe4d7388a15a9b18ef175b362e584f2812df
+implementation_commits:
+  physics_step_plugin: cb7381c
+  raw_store_and_analyzer: 3acb85c
+  typed_phase_and_cancel_measurement: 49020bb
+  schema_v4_proposal: 3a4ce93
+  targeted_cpp_style: 368abe4
+automatic_gates:
+  python_package:
+    result: PASS
+    tests: 526 passed, 4 skipped
+    ruff_check: PASS
+    ruff_format_check: PASS; 128 files already formatted
+  proposal_and_legacy_focused: PASS; 48 tests
+  frozen_verifier_tests: PASS; 3 tests
+  cpp_changed_scope:
+    ament_uncrustify: PASS; read-only check only
+    ament_cpplint: PASS
+    ament_lint_cmake: PASS
+    support_gtests: PASS; 17 gtests in the isolated final report
+  cpp_full_tree_baseline_exception:
+    path: src/so101_mujoco_support/src/so101_move_group.cpp
+    observation: The whole-directory uncrustify check reports pre-existing broad style divergence in this file.
+    disposition: Outside the instrumentation allowlist and frozen behavior scope; deliberately unchanged. All changed C++ files pass the read-only format gate.
+  isolated_three_package_build:
+    result: PASS; 3 packages finished
+    packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+    root: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-gate-368abe4
+    build_log_sha256: ddd8cf0bc12edad6ffce29393016eca2061fe6c4c6e27a00b5ee6ca07d849bbf
+    test_result: PASS; 785 tests, 0 errors, 0 failures, 4 skipped
+    test_log_sha256: 4c8c7f83a8d399bfd38089cc49a4a15f26c59de5a10062fdae128aa1fd5333f4
+    install_tree_sha256: d7e73684f99aaa10acb9a9bf64b0b3f13870bcf99dd55328ee5280cddd438dbd
+    install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-gate-368abe4/install
+  installed_runtime:
+    project_prefixes_exact: true
+    so101_teleop: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-gate-368abe4/install/so101_teleop
+    so101_mujoco_support: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-gate-368abe4/install/so101_mujoco_support
+    so101_mujoco_demo_py: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-gate-368abe4/install/so101_mujoco_demo_py
+    fork_overlay: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+    fork_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+    mujoco_runtime_check: PASS
+    reset_qualified_runtime_check: PASS
+  frozen_behavior:
+    manifest_sha256: 912746ac6f6ac6589d5c11d7e9b9483e1ea4ebfeb3f6118a84ee0df48cd54195
+    instrumentation_diff_gate: MATCH
+    transport_semantics: MATCH
+    protected_gazebo_tree: MATCH; tree 3158e296e2aad5d80dd3e484b87132c85b3832f7 and zero worktree diff
+working_tree_status:
+  tracked: Clean at implementation source commit 368abe4 before this ledger checkpoint.
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+runtime_preflight:
+  host: AI-STATION-001; direct local execution, no SSH
+  owned_processes: NONE
+  ros_domain_0_nodes: []
+  preserved_tmux: [codex attached, codex-cua idle historical, so101-mujoco-gui historical]
+confirmed_conclusions:
+  - OBSERVED: Every automatic gate required by Task 7 passed on one committed instrumentation source and one clean isolated three-package overlay.
+  - OBSERVED: Frozen behavior, typed transport call semantics, and the protected Gazebo source remain equal to the registered baseline.
+  - OBSERVED: No task-owned runtime or ROS graph is active before EXP-110.
+open_risks:
+  - Live physics-step continuity, cancellation latency, physical transport outcome, and fresh visual corroboration remain unproved until EXP-110.
+next_experiment: EXP-110
+next_command: Create and hash the fixed runtime fingerprint, then record EXP-110 RUNNING before its registered FULL_RESTART command.
 ```
