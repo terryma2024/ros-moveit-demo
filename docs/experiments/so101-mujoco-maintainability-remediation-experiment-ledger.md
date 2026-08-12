@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: d68aaca8537b7fdf087580d8c7029ebd4bd7c43d
+current_commit: 4f168ec2f15c297d0509f91e4bb88e5983a8ae3d
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-022
-next_experiment: NONE_PENDING_OBSERVABILITY_GREEN
+latest_checkpoint: MNT-CP-023
+next_experiment: EXP-115
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3055,4 +3055,84 @@ production_revert: The uncommitted slash-scoped launch/session source changes we
 frozen_behavior: Strategy, motion parameters, models, controller, contact/grasp phases, and protected Gazebo source remain unchanged.
 next_experiment: NONE_PENDING_OBSERVABILITY_GREEN
 next_command: Remove obsolete launch/fallback RED expectations, implement only durable mismatch and producer provenance, then run the required automatic gates before preregistering EXP-115.
+```
+
+## Checkpoint MNT-CP-023 — observability GREEN and automatic gates
+
+```yaml
+checkpoint_id: MNT-CP-023
+recorded_at: 2026-08-12T19:18:00+08:00
+last_valid_experiment: EXP-109
+behavior_source_commit: 4f168ec2f15c297d0509f91e4bb88e5983a8ae3d
+implementation_commits:
+  - cae0b4d: Durable expected/actual/topic/message-kind mismatch evidence, first-value latching, publisher count/GID provenance, and root-scope characterization correction.
+  - 4f168ec: Ruff-only formatting of two changed Python files.
+green_scope:
+  session_equality: Unchanged and strict; no bypass or fallback acceptance was added.
+  launch_and_plugin_parameter_source: Unchanged root simulation_session_id binding.
+  durable_identity: First snapshot and first chunk sessions plus observer expected session are atomically checkpointed; first mismatch cannot be overwritten.
+  publisher_provenance: Ordinary snapshot and physics-step chunk topic publisher count, node name/namespace, and endpoint GID are persisted before motion dispatch.
+  message_construction_trace: Source characterization proves ordinary snapshots and chunks originate in one SimulationEvidencePlugin state; live equality remains for EXP-115 to prove.
+automatic_gates:
+  focused_python: 51 passed, 1 skipped before the package run; after formatting the instrumentation/frozen subset passed 21 tests.
+  isolated_build: Three packages built successfully in /tmp/so101-debug-mujoco-maintainability-remediation/session-unblock-gate-cae0b4d/install.
+  isolated_tests: 791 tests, 0 errors, 0 failures, 4 skipped.
+  ruff: check and format check passed after one RED formatting failure was corrected and the full package suite was rerun.
+  cpp_changed_scope: ament_uncrustify read-only, ament_cpplint, and ament_cppcheck passed for SimulationEvidencePlugin header/source and its test.
+  cpp_package_baseline: A whole-directory style probe reproduced 35 pre-existing so101_move_group.cpp uncrustify/cpplint findings; that unchanged file is outside this evidence-only repair and was not reformatted.
+  frozen_behavior: Manifest SHA-256 912746ac6f6ac6589d5c11d7e9b9483e1ea4ebfeb3f6118a84ee0df48cd54195; transport AST, fixed behavior files, instrumentation allowlist, and protected Gazebo tree all MATCH.
+  protected_gazebo: src/so101_gazebo_demo_py has zero diff/status.
+  installed_provenance:
+    prefixes: All three packages resolve to the isolated gate install.
+    dynamic_transport_evidence_sha256: 566c08d7ebcf7585d5d192109fb71cee865ad9c89aa849fdca646e832151a467 source=install.
+    transport_observer_sha256: ff90b385296b3fd6318b2ec80a11424727bbf80bf315170afdc555d4af41588b source=install.
+    transport_phase_sha256: db306bd47ea368ab4b71fb640158cf352c670a69df84a9c3789c73bc2e62cf9b source=install.
+runtime_fingerprint:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/session-unblock-runtime-fingerprint.json
+  sha256: edcfa5067a2fe0fcd10d2d49617262b33180a6ea6c403d907bc74db8323e99f1
+  validation: qualification.validate_fingerprint passed.
+runtime_state: No task-owned stack; Domain 192 empty, port 8032 free, EXP-115 evidence root absent.
+protected_documents: The two unrelated untracked documents remain untouched and untracked.
+next_experiment: EXP-115
+next_command: Execute the preregistered one-run identity diagnostic harness under the isolated install and stop the full stack at the first persisted transport boundary plus valid chunk.
+```
+
+## EXP-115 preregistration — FULL_RESTART evidence-identity plumbing diagnostic
+
+```yaml
+experiment_id: EXP-115
+prior_experiment: EXP-110 retained permanently as INVALID_EVIDENCE; EXP-111..114 remain abandoned and unexecuted.
+status: PLANNED
+purpose: Prove live snapshot/chunk session identity and publisher provenance only; do not evaluate or tune the grasp/transport strategy.
+lifecycle: FULL_RESTART
+behavior_source_commit: 4f168ec2f15c297d0509f91e4bb88e5983a8ae3d
+install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/session-unblock-gate-cae0b4d/install
+runtime_fingerprint_sha256: edcfa5067a2fe0fcd10d2d49617262b33180a6ea6c403d907bc74db8323e99f1
+frozen_behavior_manifest_sha256: 912746ac6f6ac6589d5c11d7e9b9483e1ea4ebfeb3f6118a84ee0df48cd54195
+harness:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp115_identity_diagnostic.py
+  sha256: 1a92e6d5aec564f846d8e722909e32ebdcdc45b1eda9637a60830a0718673c95
+runtime_identity:
+  session: MNT-A-EXP115-full-01
+  ros_domain_id: 192
+  port: 8032
+  gz_partition: so101-mnt-a-exp115
+  evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/exp115
+single_variable: Evidence observability added at behavior source 4f168ec; root session parameter binding, strategy, model, controller, thresholds, and execution inputs remain unchanged.
+procedure:
+  - Start exactly one fresh non-headless stack from the isolated overlay and perform the transactional reset.
+  - Capture one fresh local desktop image only as live-stack corroboration; it is not an acceptance signal.
+  - Start the unchanged production workflow.
+  - Poll the atomically checkpointed raw index; at the first persisted transport boundary and first accepted physics-step chunk, request ordered whole-stack SIGINT shutdown immediately.
+  - If identity_mismatch appears or the workflow ends before that boundary, stop without continuing or substituting another run.
+acceptance:
+  - Exactly one publisher exists on /so101/simulation/evidence and /so101/simulation/physics_step_chunks; both node identity and endpoint GID lists are persisted.
+  - observer expected session, first ordinary snapshot session, and first chunk session all equal MNT-A-EXP115-full-01.
+  - Raw store contains at least one content-addressed valid chunk and the first typed transport boundary; no identity_mismatch or evidence-loss marker exists.
+  - Reset receipt uses the preregistered session and a fresh epoch; source/install/runtime fingerprint matches this preregistration.
+  - Ordered shutdown marker is present, return code is zero, no fatal signal/process-died marker occurs, and owned processes/domain/port are empty afterward.
+  - Visual evidence only corroborates that the fresh stack was alive.
+failure_policy: Any failed condition makes EXP-115 INVALID_EVIDENCE, stops all further experiment work, preserves actual/expected/topic/GID/raw evidence, and forbids EXP-116..120.
+command: GZ_PARTITION=so101-mnt-a-exp115 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp115_identity_diagnostic.py
+next_if_valid: Preregister EXP-116..120 as new independent FULL_RESTART runs under the exact same behavior/install/fingerprint.
 ```
