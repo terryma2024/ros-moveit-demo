@@ -1681,3 +1681,108 @@ batch_5:
   safety_and_frozen_scope: Identical to MNT-CP-012; no q6 step, waypoint, planner, geometry, simulator-state, or threshold change.
 decision: PLANNED before batch-5 stack launch. The calibration order moves the unresolved physical regime immediately after the required pre-contact/post-release negative controls to avoid unnecessary later motion if it remains unavailable.
 ```
+
+## Superseding EXP-072/073/074 displacement audit correction
+
+```yaml
+recorded_at: 2026-08-12T16:24:00+08:00
+supersedes: The section titled EXP-072 safety-contract audit correction above.
+user_correction:
+  - maximum pre-contact displacement and terminal total cup displacement are independent driver/monitor fields.
+  - The pre-contact safety limit is 0.003 m and fails only when the independent pre-contact field exceeds it.
+  - The terminal total-displacement limit is 0.010 m; total displacement alone must not be compared with the 0.003 m pre-contact limit.
+corrected_audit:
+  EXP-072:
+    status: VALID
+    behavioral_result: FAILURE
+    route_disposition: ABANDONED_AND_EXCLUDED_FROM_CALIBRATION
+    total_cup_displacement_m: approximately 0.003473
+    total_displacement_contract: PASS because 0.003473 m is below 0.010 m.
+    pre_contact_displacement_contract: Use only the driver's independent pre-contact monitor result; total displacement supplies no contrary inference.
+  EXP-073:
+    status: VALID
+    behavioral_result: FAILURE
+    route_disposition: ABANDONED_AND_EXCLUDED_FROM_CALIBRATION
+  EXP-074:
+    status: VALID
+    behavioral_result: FAILURE
+    route_disposition: ABANDONED_AND_EXCLUDED_FROM_CALIBRATION
+prohibited_inference:
+  - Do not rewrite EXP-072, EXP-073, or EXP-074 as invalid merely because terminal total displacement exceeds 0.003 m.
+  - Do not use any of these abandoned offset-route results as a physical calibration cohort or KEEP candidate.
+```
+
+## EXP-096 through EXP-100 terminal results and offline analyzer diagnosis
+
+```yaml
+batch_5:
+  status: PHYSICAL_COHORTS_VALID_ANALYSIS_FAILED
+  lifecycle: FRESH_STACK_EPOCH_0
+  physical_results:
+    EXP-096: VALID; 25 no_contact samples, 13 table-only and 12 authentic post-release.
+    EXP-097: VALID; 25 bilateral micro_lift_slip samples at the preregistered 0.12 N preload; terminal total cup displacement approximately 0.00207 m.
+    EXP-098: VALID; 25 bilateral_touch samples.
+    EXP-099: VALID; 25 over_compression samples below the unchanged 11.60 N and 0.010 m gates.
+    EXP-100: VALID; 25 stable_hold samples after the preregistered 0.30 s preroll.
+  raw_evidence:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3-batch5.json
+    sha256: 3e9c05e3ecd7ff63660170e6cf1e542ec9bad2d62716ce2f75deb49046e667f0
+    immutable: true
+  unilateral_contracts_sha256: a949e8f44c41dfd14edf54d7a153acc9d53d5bab8f50496940b2c403b636eeae
+  analyzer_result:
+    status: FAILED
+    first_failure: The original analyzer used global minimum_signed_distance_m, so allowed table support penetration inverted the fingertip compression ordering.
+    post_fix_diagnostic_failure: The first micro_lift_slip sample preceded actual motion and had linear speed approximately 1.38e-08 m/s, overlapping the stable-hold cohort.
+    duration_observation: The 0.30 s stable preroll yields early stable samples that overlap the bilateral-touch collection duration; the next batch must use a longer preregistered preroll.
+  decision:
+    - Preserve batch 5 unchanged as physical and diagnostic evidence, but do not issue or approve its FAILED proposal.
+    - Correct fingertip compression semantics and the deterministic per-regime 20/5 split with RED-GREEN tests.
+    - Before any new live action, preregister a fresh-source batch that changes sampling timing only: begin slip collection after motion onset and use a 0.60 s stable preroll.
+cleanup: Task-owned domain 181 stack was shut down cleanly; no live action remains.
+```
+
+## Checkpoint MNT-CP-013 and EXP-101 through EXP-105 preregistration
+
+```yaml
+checkpoint_id: MNT-CP-013
+recorded_at: 2026-08-12T16:34:00+08:00
+last_valid_experiment: EXP-100; its immutable batch is diagnostic evidence, not an approvable proposal source.
+current_hypothesis: Sampling after actual micro-lift onset and extending only the stable-hold observation preroll to 0.60 s will yield five physically separable cohorts without changing motion, contact, simulator, or safety policy.
+implementation_source_commit: 2253aef3d8fb7f839922d47cf1939ca0331f7963
+verified_before_preregistration:
+  - RED-GREEN coverage proves allowed table penetration cannot define fingertip compression in the analyzer or live grasp evaluator.
+  - The split is per-regime publisher-ordered index modulo five, guaranteeing 20 calibration and 5 evaluation samples from each 25-sample cohort.
+  - Package test result: 468 passed, 4 skipped; Ruff lint/format and migration isolation gates passed.
+owned_processes: NONE
+batch_6:
+  ros_domain_id: 182
+  gz_partition: so101-mnt-cal-v3f
+  simulation_session_id: so101-mnt-cal-v3f
+  reset_epoch: 0
+  tmux_session: so101-mnt-cal-v3f
+  source_commit: 2253aef3d8fb7f839922d47cf1939ca0331f7963
+  dependency_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  model_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  calibration_driver_sha256: 86b7884dc08a032a85374d1f6a9900aabe3410fbb8a97a6c655f4a26c8d2bf05
+  unilateral_contracts_sha256: a949e8f44c41dfd14edf54d7a153acc9d53d5bab8f50496940b2c403b636eeae
+  matrix_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3-batch6.json
+  proposal_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal-v3-batch6.yaml
+  ordered_experiments:
+    - [EXP-101, no_contact, "Unchanged batch-5 method: 13 table-only plus authentic release/RECOVER_RETREAT[0] and 12 post-release samples"]
+    - [EXP-102, micro_lift_slip, "Unchanged 0.12 N preload and unchanged 1.0 s MICRO_LIFT_ARM action; start the collector 0.10 s after the controller action is accepted so every admitted sample is in the physical motion window"]
+    - [EXP-103, bilateral_touch, "Unchanged centered 0.08 N-per-side light touch"]
+    - [EXP-104, over_compression, "Unchanged q6 -0.004 rad increment"]
+    - [EXP-105, stable_hold, "Unchanged centered 0.50 N-per-side preload and MICRO_LIFT_ARM action; only observation preroll extends from 0.30 s to 0.60 s before collection"]
+  safety_contract:
+    maximum_normal_force_n: 11.60
+    maximum_pre_contact_displacement_m: 0.003; evaluate only the independent pre-contact monitor field while that monitor is active.
+    maximum_terminal_total_displacement_m: 0.010; do not compare this field with the pre-contact limit.
+    other_aborts: stale, truncated, nonfinite, non-monotonic, session/reset/pause mismatch, controller failure, missing declared bilateral contact, or incomplete motion.
+  frozen_scope:
+    - No unilateral/offset action and no axis, planner, q6 step, force threshold, MJCF, scene, geometry, simulator state, waypoint, or five-win grasp-strategy change.
+    - The only differences from batch 5 are admission timing inside the same motion and the stable observation preroll duration.
+  stop_rule: Stop at the first INVALID experiment. If all five are VALID, run the installed analyzer and independent evidence audit; never self-approve.
+decision: PLANNED before the isolated build, stack launch, or any controller action.
+```
