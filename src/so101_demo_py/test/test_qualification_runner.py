@@ -131,3 +131,35 @@ def test_headless_qualification_does_not_call_interactive_viewer() -> None:
         "skipped": True,
         "reason": "headless MuJoCo has no interactive viewer",
     }
+
+
+def test_ordered_shutdown_signals_only_stack_supervisor(tmp_path: Path) -> None:
+    class Process:
+        returncode = None
+
+        def __init__(self) -> None:
+            self.signals = []
+
+        def poll(self):
+            return None
+
+        def send_signal(self, value):
+            self.signals.append(value)
+
+        def wait(self, timeout):
+            self.returncode = 0
+            return 0
+
+    process = Process()
+    log = tmp_path / "launch.log"
+    log.write_text("SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK\n")
+    handle = type(
+        "Handle",
+        (),
+        {"process": process, "process_group_id": 999999, "log_path": log},
+    )()
+
+    result = ProductionQualificationRunner.stop_stack(handle)
+
+    assert process.signals == [2]
+    assert result["passed"] is True
