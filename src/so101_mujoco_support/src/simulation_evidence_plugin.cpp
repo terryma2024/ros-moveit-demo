@@ -1,3 +1,5 @@
+// Copyright 2026 SO-101 maintainers
+
 #include "so101_mujoco_support/simulation_evidence_plugin.hpp"
 
 #include <algorithm>
