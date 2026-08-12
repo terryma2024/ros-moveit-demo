@@ -79,6 +79,7 @@ def test_console_entry_point_preserves_ros_facing_executable_name() -> None:
             "headless_execution = so101_mujoco_demo_py.headless_execution:main",
             "scene_setup = so101_mujoco_demo_py.scene_setup:main",
             "staged_approach = so101_mujoco_demo_py.staged_approach:main",
+            "summarize_full_restart_baseline = so101_mujoco_demo_py.full_restart_baseline:main",
             "teleop_reset = so101_mujoco_demo_py.teleop_reset:main",
             "teleop_workflow = so101_mujoco_demo_py.teleop_workflow:main",
         ]
