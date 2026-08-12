@@ -609,6 +609,7 @@ Expected: missing `CarrySample` / `evaluate_micro_lift` failure.
 ```python
 @dataclass(frozen=True, slots=True)
 class CarrySample:
+    segment: str
     simulation_session_id: str
     reset_epoch: int
     publisher_sequence: int
@@ -617,6 +618,7 @@ class CarrySample:
     cup_pose_xyz_xyzw: Pose
     tcp_pose_xyz_xyzw: Pose
     table_contact: bool
+    table_clearance_m: float
     left_force_n: float
     right_force_n: float
     maximum_force_n: float
@@ -693,9 +695,9 @@ Expected: missing `evaluate_transport` or unimplemented segment validation.
 
 - [ ] **Step 7: Implement transport evaluation and run GREEN**
 
-Add `segment: str` to `CarrySample`; accept only the three policy segment names;
-require at least two fresh samples per segment and preserve the first physical
-failure as primary.
+Accept only the three policy segment names; require at least two fresh samples
+per segment, validate the typed table-clearance measurement against policy, and
+preserve the first physical failure as primary.
 
 Run:
 
