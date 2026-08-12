@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - A bounded MoveIt translation along the q6 moving-pad tangent can produce repeatable physical left_only evidence without changing geometry or simulator state.
 latest_checkpoint: MNT-CP-008
-next_experiment: EXP-056
+next_experiment: EXP-062
 ```
 
 ## Checkpoint MNT-CP-001
@@ -799,4 +799,154 @@ EXP-056:
     simulation_session_id: so101-mnt-align-001
     driver_sha256: b3a94d8a52f9b346d332fa29e1e5c1155240657638aa8f54c97554055da5bd99
   decision: PENDING before qualified reset epoch 6 to 7.
+```
+
+## Experiment EXP-056 terminal result and EXP-057 runtime start
+
+```yaml
+EXP-056:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_7
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0005 m.
+  observed:
+    - Reset/resume/staged approach passed; native Cartesian service returned a complete executable path and TCP convergence passed.
+    - Right contact still appeared first, but only at q6=-0.0467579 rad versus -0.0412587 at the opposite +0.5 mm sign.
+    - Terminal right_force=0.0469175 N, left_count=0, maximum_force=0.148200 N, cup displacement approximately 0.001738 m, inside the registered limit.
+  conclusion: Negative sign moves in the predicted direction and delays moving/right contact, but -0.5 mm is insufficient.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-056.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-056.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-056.log
+  decision: KEEP; continue ordered negative scan.
+EXP-057:
+  status: RUNNING
+  prior_experiment: EXP-056
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0010 m.
+  provenance_and_safety: Identical to EXP-056.
+  decision: PENDING before qualified reset epoch 7 to 8.
+```
+
+## Experiment EXP-057 terminal result and EXP-058 runtime start
+
+```yaml
+EXP-057:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_8
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0010 m.
+  observed:
+    - All reset, approach, Cartesian fraction, execution, and convergence gates passed; right contact still appeared first.
+    - Terminal q6=-0.0448590 rad, right_force=0.0304853 N, left_count=0, maximum_force=0.150998 N, cup displacement approximately 0.002116 m.
+  conclusion: -1.0 mm is insufficient for left_only.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-057.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-057.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-057.log
+  decision: KEEP; continue ordered scan.
+EXP-058:
+  status: RUNNING
+  prior_experiment: EXP-057
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0015 m.
+  provenance_and_safety: Identical to EXP-056.
+  decision: PENDING before qualified reset epoch 8 to 9.
+```
+
+## Experiment EXP-058 terminal result and EXP-059 runtime start
+
+```yaml
+EXP-058:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_9
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0015 m.
+  observed:
+    - All lifecycle, Cartesian, execution, and convergence gates passed; right contact appeared first.
+    - Terminal q6=-0.0463566 rad, right_force=0.0564620 N, left_count=0, maximum_force=0.148560 N, cup displacement approximately 0.002786 m.
+  conclusion: -1.5 mm remains right-first and is insufficient.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-058.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-058.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-058.log
+  decision: KEEP; continue ordered scan.
+EXP-059:
+  status: RUNNING
+  prior_experiment: EXP-058
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0020 m.
+  provenance_and_safety: Identical to EXP-056.
+  decision: PENDING before qualified reset epoch 9 to 10.
+```
+
+## Experiment EXP-059 terminal result and EXP-060 runtime start
+
+```yaml
+EXP-059:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_10
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0020 m.
+  observed:
+    - All lifecycle and Cartesian execution gates passed.
+    - The first sampled contact boundary was already bilateral, not left_only: q6=-0.0470597 rad, left_force=0.0129097 N and right_force=0.0452115 N.
+    - Maximum force=0.173157 N and total cup displacement approximately 0.003312 m remained inside the total diagnostic bound; the pre-contact monitor had passed its separate 0.003 m gate.
+  conclusion: -2.0 mm reaches the side-order crossover but not the declared left-only shape.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-059.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-059.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-059.log
+  decision: KEEP; continue ordered scan.
+EXP-060:
+  status: RUNNING
+  prior_experiment: EXP-059
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0025 m.
+  provenance_and_safety: Identical to EXP-056.
+  decision: PENDING before qualified reset epoch 10 to 11.
+```
+
+## Experiment EXP-060 invalid result and crossover-refinement preregistration
+
+```yaml
+EXP-060:
+  status: INVALID
+  lifecycle: RESET_WORLD_EPOCH_11
+  observed:
+    - Reset/resume/staged approach passed and current state remained open, no-contact CLOSE_READY.
+    - GetCartesianPath returned SUCCESS but only fraction=0.846153846 with 8 points for -0.0025 m; the driver rejected it before ExecuteTrajectory or q6 action.
+  conclusion: No physical result for -2.5 mm; collision-checked Cartesian reachability ends before the requested target.
+  decision: Exclude EXP-060 and unrun EXP-061; stop the batch.
+new_batch:
+  status: PLANNED
+  prior_experiment: EXP-060
+  hypothesis: EXP-059's first 0.0001-rad sample was bilateral because the side-order crossover occurred inside that q6 interval; a five-times finer q6 search plus 0.1 mm TCP refinement can resolve a physical left-only window before the -2.5 mm Cartesian reachability boundary.
+  frozen_method_change:
+    q6_step_rad: 0.00002
+    driver_sha256: 5a13574de22bbb7074be8b2f2c44881ab3ce5f6b9a7a72c4c77768926f673d32
+    all_native_cartesian_parameters_and_safety_limits: Unchanged from EXP-056-through-EXP-061.
+  ordered_experiments:
+    - [EXP-062, -0.0021]
+    - [EXP-063, -0.0022]
+    - [EXP-064, -0.0023]
+    - [EXP-065, -0.0024]
+  single_variable: TCP offset within this frozen fine-q6 batch; one value per RESET_WORLD experiment.
+  success_criteria: Complete collision-checked Cartesian execution followed by left force >=0.08 N with zero right contact.
+  failure_criteria: Complete execution followed by right-first/bilateral-first contact or q6 lower-bound exhaustion.
+  invalid_criteria: Identical readiness, provenance, Cartesian fraction, controller, convergence, and safety invalidators.
+  early_stop: First valid left_only result stops the scan and is followed by three independently preregistered exact-offset RESET_WORLD repeatability trials.
+EXP-062:
+  status: RUNNING
+  prior_experiment: EXP-060
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0021 m with frozen q6 step 0.00002 rad.
+  provenance:
+    installed_source_commit: d325e2d98a75039e76b597d2ba1ef6484b752b64
+    install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install
+    ros_domain_id: 176
+    gz_partition: so101-mnt-align-001
+    simulation_session_id: so101-mnt-align-001
+    driver_sha256: 5a13574de22bbb7074be8b2f2c44881ab3ce5f6b9a7a72c4c77768926f673d32
+  decision: PENDING before qualified reset epoch 11 to 12.
 ```
