@@ -97,7 +97,7 @@ def test_server_lifecycle_stops_ros_worker_when_uvicorn_returns(monkeypatch, tmp
         def stop(self):
             events.append(("stop",))
 
-    backend = object()
+    backend = SimpleNamespace(profile=SimpleNamespace(operations={}))
     monkeypatch.setenv("SO101_CAMERA_VIEWS", str(tmp_path / "camera.yaml"))
     monkeypatch.setattr(main_module, "validate_bind_address", lambda address: address)
     monkeypatch.setattr(main_module, "select_backend", lambda environment: backend)

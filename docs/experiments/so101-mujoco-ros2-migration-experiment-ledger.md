@@ -2,18 +2,18 @@
 task_id: so101-mujoco-ros2-migration
 goal: Replace the Gazebo Python demonstration with an independently packaged MuJoCo ROS 2 demonstration.
 success_contract: The MuJoCo implementation satisfies its ROS 2 and physical outcome contracts without changing or depending on the protected Gazebo Python tree.
-main_base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-task_base_commit: 45c6efc701b133c45875e86b0053cfc37dab7f4f
+main_base_commit: 8d85205286d2635d4ddbc91431c933dafb4eb661
+task_base_commit: 2f5ebda79f72b452329326a8fbf02057f75f9049
 behavior_source_commit: 8d7913e7f552a40ee627d65be8b873ac16748bc9
 rejected_backup_commit: 3add34f8390b78a1f4a13ff49aefb2dc87638245
 rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
-branch: codex/so101-mujoco-ros2
+branch: codex/so101-mujoco-ros2-teleop
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
-base_commit: d300e7a41fb274d6d7e120699b7040666ea61904
-current_commit: eabe88885bf802fb14968547634fd06c26c1b38a
-last_verified_implementation_commit: eabe88885bf802fb14968547634fd06c26c1b38a
+base_commit: 8d85205286d2635d4ddbc91431c933dafb4eb661
+current_commit: a925a6f6fa09f0059a395a61509becda20606d34
+last_verified_implementation_commit: a925a6f6fa09f0059a395a61509becda20606d34
 ledger_commit_pending: true
-task_status: TASK_14_CONTACT_STIFFNESS_CALIBRATION_PENDING_COMMIT
+task_status: TASK_14_TELEOP_INTEGRATION_PENDING_COMMIT
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -55,7 +55,7 @@ disproven_routes:
 open_hypotheses:
   - The MuJoCo fingertip contacts are too compliant because only friction parity was mapped; explicitly mapping Gazebo's 1000000 N/m stiffness and 100 N s/m damping through MuJoCo direct-format solref will raise bounded pad normal force enough to carry the 20 g cup.
 latest_checkpoint: CP-131
-next_experiment: EXP-097
+next_experiment: NONE
 ---
 
 # SO-101 MuJoCo ROS 2 Migration Experiment Ledger
@@ -11981,4 +11981,402 @@ pending_dirty_paths_before_checkpoint_commit:
   - src/so101_mujoco_demo_py/test/test_fork_dependency.py
   - docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md
 decision: Commit and push this bounded installer/checkpoint follow-up, verify a clean worktree, then create the continuation branch and rebase onto freshly fetched origin/main without rewriting the published physical-success branch.
+```
+
+## Task 14T Rebase and Refactored Teleop Contract Map
+
+```yaml
+recorded_at: 2026-08-12T07:35:00+08:00
+continuation_branch: codex/so101-mujoco-ros2-teleop
+fresh_origin_main: 8d85205286d2635d4ddbc91431c933dafb4eb661
+pre_rebase_feature_tip: 96bc75a7908c97efb22d87c0f543bf86c6e885d9
+post_rebase_tip_before_teleop_changes: a925a6f6fa09f0059a395a61509becda20606d34
+commit_mapping:
+  physical_implementation:
+    before: e5bbf25ec06459c7be3b19ea36167051317528c5
+    after: 2f5ebda79f72b452329326a8fbf02057f75f9049
+  pre_rebase_tip:
+    before: 96bc75a7908c97efb22d87c0f543bf86c6e885d9
+    after: a925a6f6fa09f0059a395a61509becda20606d34
+mujoco_fork:
+  commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  tag: so101-0.0.3-r5
+protected_gazebo_diff_against_origin_main: zero
+teleop_contract:
+  package: src/so101_teleop
+  public_api: src/so101_teleop/so101_teleop/api.py
+  service_boundary: src/so101_teleop/so101_teleop/server.py
+  backend_protocol: src/so101_teleop/so101_teleop/backends/protocol.py
+  profile_parser: src/so101_teleop/so101_teleop/backends/profile.py
+  cli_adapter: src/so101_teleop/so101_teleop/backends/cli_adapter.py
+  backend_profile: src/so101_teleop/config/backends/mujoco_py.yaml
+  camera_boundary: src/so101_teleop/so101_teleop/camera.py
+  lifecycle_entry: src/so101_teleop/so101_teleop/main.py
+  focused_tests:
+    - src/so101_teleop/test/backends
+    - src/so101_teleop/test/teleop
+findings:
+  - The latest Teleop owns a strict simulator-neutral backend profile and CLI adapter, but mujoco_py is intentionally probe-only.
+  - The generic workflow adapter does not yet pass the live MuJoCo reset epoch, evidence root, motion policy, or explicit execute acknowledgement.
+  - The current camera controller is Gazebo-specific and must gain a simulator-neutral backend operation before MuJoCo can route presets through the fork camera service.
+  - The qualified MuJoCo reset is a transaction owned by so101_mujoco_demo_py; Teleop must not call raw ResetWorld directly.
+decision: Run rebase-only gates, then add the smallest generic camera and owner-argument extension while keeping concrete reset, camera, and workflow policy in so101_mujoco_demo_py.
+```
+
+## Task 14T.2 Static Integration Gate
+
+```yaml
+recorded_at: 2026-08-12T07:52:58+08:00
+branch: codex/so101-mujoco-ros2-teleop
+base_head: a925a6f6fa09f0059a395a61509becda20606d34
+fork: {commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194, tag: so101-0.0.3-r5}
+integration:
+  launch: src/so101_mujoco_demo_py/launch/so101_mujoco_teleop.launch.py
+  owner_reset: so101_mujoco_demo_py/teleop_reset
+  owner_workflow: so101_mujoco_demo_py/teleop_workflow
+  owner_camera: so101_mujoco_demo_py/camera_preset
+  teleop_profile: src/so101_teleop/config/backends/mujoco_py.yaml
+capabilities:
+  enabled: [backend_probe, workflow_execute, workflow_run, reset_world, camera_presets]
+  disabled: [workflow_start, workflow_resume, workflow_stop, scene_operations, physical_observation, manual_joint_execute, manual_tcp_execute]
+gates:
+  package_build: {packages: 3, exit_code: 0}
+  colcon_test: {discovered: 840, errors: 0, failures: 0, skipped: 6}
+  mujoco_package_pytest: {passed: 349, skipped: 4}
+  mujoco_ruff: {checked_files: 106, exit_code: 0}
+  teleop_vitest: {files: 14, passed: 45, failed: 0}
+  isolation_root: passed
+  isolation_installed_copy: passed
+  protected_gazebo_diff_against_origin_main: zero
+  dependency_runtime_validation_errors: []
+tooling_note: Direct `bun test` is not the package contract and incorrectly collects Playwright e2e plus lacks Vitest jsdom; the declared `bun run test` command invokes Vitest and passed 45/45.
+decision: Static integration is eligible for one preregistered post-rebase FULL_RESTART Teleop physical experiment.
+```
+
+## Experiment EXP-150 Registration
+
+```yaml
+experiment_id: EXP-150
+registered_at: 2026-08-12T07:52:58+08:00
+lifecycle: FULL_RESTART
+purpose: Requalify one physical pick-place through the rebased standalone Teleop mujoco_py backend, including camera and transactional reset owner routing.
+source:
+  git_head: a925a6f6fa09f0059a395a61509becda20606d34
+  continuation_branch: codex/so101-mujoco-ros2-teleop
+  fork_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  fork_tag: so101-0.0.3-r5
+  integrated_launch_sha256: deee1be226e089e9acbb89c6467bb5edb572e26fde22a6f5e89be596a4beabe2
+  teleop_runtime_sha256: 2b59f227b25f11a178d4808bcf3d91cbafacdfd01e2c009519501c130d8249bc
+  mujoco_profile_sha256: ec98040503fa12af5af586b072b83164e3afafb891f94d0360385fe7e965af45
+  model_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808
+  contact_policy_sha256: 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1
+runtime:
+  ros_domain_id: 160
+  simulation_session_id: so101-teleop-exp150-domain160
+  gui_tmux: so101-mujoco-gui
+  cua_tmux: codex-cua
+  teleop_bind: 127.0.0.1
+  teleop_port: 8000
+state_action:
+  - Start the integrated non-headless MuJoCo, MoveIt, Planning Scene, and Teleop launch on a fresh process tree.
+  - Acquire a Teleop lease and apply table_corner_nw through the backend camera owner.
+  - Invoke simulation_reset through Teleop and require a qualified receipt with old_epoch+1, step zero, paused final evidence, active controllers, converged joints/cup, and the same physical session ID.
+  - Reacquire the revoked lease and invoke workflow_run through Teleop, which must obtain the fresh current epoch and enter the production pick_place_state_machine execute path.
+  - Open RViz and use CUA to corroborate the same Planning Scene/session alongside MuJoCo Viewer.
+success_criteria:
+  - Teleop reports backend mujoco_py and only the registered capability set.
+  - Camera set/get readback matches table_corner_nw without reset/session/controller drift.
+  - Transactional reset returns success, preserves simulation_session_id, increments reset_epoch exactly once, and visibly restores the canonical robot/cup start state.
+  - Workflow completes all nine production phases with a DONE manifest and the approved physical contact/final-placement evidence.
+  - Fresh CUA visual evidence shows the arm, cup, table, target ring, and final cup placement; RViz shows the full Planning Scene.
+  - Every owned process exits code zero with the ordered MoveIt shutdown marker and no residual process.
+failure_criteria: Any backend routing bypass, raw ResetWorld path, stale/mismatched evidence, reset non-convergence, camera mismatch, MoveIt/controller/physical phase failure, false DONE, crash, or residual process.
+invalid_criteria: Source/model/policy mutation after registration, wrong domain/session/fork/prefix, reused stack, missing CUA visual corroboration, broad process cleanup, or unregistered retry.
+evidence_root: /tmp/so101-teleop-exp150
+status: PLANNED
+next_experiment: NONE until EXP-150 is terminal.
+```
+
+## Experiment EXP-150 Terminal Result
+
+```yaml
+experiment_id: EXP-150
+status: INVALID_ENVIRONMENT
+terminal_time: 2026-08-12T08:14:19+08:00
+backend: mujoco_py
+camera:
+  api_result: OK
+  preset: table_corner_nw
+  independent_readback: {azimuth_deg: 135.0, elevation_deg: -20.0}
+reset:
+  first_api_result: BACKEND_OPERATION_FAILED
+  first_owner_failure: final transaction evidence is not paused
+  root_cause: The pause service completed before the observer drained the final running frame emitted by the bounded resume.
+  corrective_change: Wait boundedly for a fresh paused frame instead of treating the queued running frame as terminal.
+  regression_tests: {passed: 23, failed: 0}
+  retry_api_result: OK
+  preserved_session_id: so101-teleop-exp150-domain160
+  observed_epoch: 2
+  observed_paused: true
+workflow:
+  api_result: OK
+  phase_count: 9
+  manifest_status: DONE
+  final_status: RELEASE_RETREAT_FINAL_PLACEMENT_PROVED
+  final_success: true
+  final_pose_m: [-0.0787512700003094, -0.24850307559286205, 0.16550552658028728]
+  final_upright_tilt_rad: 0.017521917119616714
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0
+  forbidden_actions: {direct_object_state_writes: 0, physics_pause_calls: 0, simulator_constraint_calls: 0}
+visual:
+  reset: passed
+  rviz_mujoco_side_by_side: passed
+  planned_path_visible_as_translucent_robot_states: true
+  final_placement: passed
+clean_shutdown:
+  residual_owned_processes: []
+  ordered_shutdown_marker_in_launch_log: false
+invalid_reasons:
+  - Source was corrected after the preregistered first reset failure and before the physical workflow, so the registered fingerprint was not immutable.
+  - The tmux shell used a ros2-launch-to-tee pipeline; Ctrl-C terminated the capture pipeline before the ordered-shutdown marker could be retained.
+evidence_sha256:
+  live_runtime_manifest: e0ceb92bf7c3b9f46fadad2288669dab7e15a610560d41ab6be3cb72c3173ec0
+  workflow_api: 5b72128ffb320671e2c3d8fb4db2a14b038706a07ca915ba59eac9c72d655d50
+  reset_visual: a63ee3f9e47db590ac3565e7fb5d9b9c4193f1186001aed51d36bea4bee5f9d8
+  running_visual: 7dfd9e8d294bb831498b348fb09388c45158126cd789924e21e8f49e7e9bf476
+  final_visual: e29594811d61ccaedaadc9fc9ce9426548e121e44d3f37609aacb3f62313a4d5
+decision: Preserve the physical evidence as diagnostic proof only. Do not count EXP-150 for Task 14T or Task 15; rerun a fresh immutable FULL_RESTART with direct launch-process log capture.
+```
+
+## Experiment EXP-151 Registration
+
+```yaml
+experiment_id: EXP-151
+registered_at: 2026-08-12T08:14:19+08:00
+lifecycle: FULL_RESTART
+purpose: Repeat the post-rebase Teleop physical cycle on an immutable corrected fingerprint and retain the ordered MoveIt shutdown marker through direct process-group capture.
+source:
+  git_head: a925a6f6fa09f0059a395a61509becda20606d34
+  continuation_branch: codex/so101-mujoco-ros2-teleop
+  fork_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  integrated_launch_sha256: deee1be226e089e9acbb89c6467bb5edb572e26fde22a6f5e89be596a4beabe2
+  teleop_runtime_sha256: 2b59f227b25f11a178d4808bcf3d91cbafacdfd01e2c009519501c130d8249bc
+  teleop_workflow_sha256: 72810351ea2b8a819876d894f79c286b75021542c65d64bd8d614a11790d183d
+  reset_client_sha256: e46b459801d51288a17b2a3974661e911bcad919a6e686d36dd0d257c72ac511
+  teleop_server_sha256: a0805b9fe6ad690c2ce744c7c35eecf11eb71f01fe24ba2f5dc12492b76e4f51
+  mujoco_profile_sha256: ec98040503fa12af5af586b072b83164e3afafb891f94d0360385fe7e965af45
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808
+  contact_policy_sha256: 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1
+runtime:
+  ros_domain_id: 161
+  simulation_session_id: so101-teleop-exp151-domain161
+  evidence_root: /tmp/so101-teleop-exp151
+  launch_capture: direct subprocess stdout/stderr file, no tee pipeline
+state_action:
+  - Start a fresh GUI MuJoCo, MoveIt, Planning Scene, and Teleop process group on domain 161.
+  - Apply table_corner_nw, run the corrected transactional reset, then run all nine production phases through Teleop.
+  - Require the Teleop response to expose a fresh evidence manifest and typed physical outcome from the owner.
+  - Capture final RViz/MuJoCo corroboration with CUA, signal only the owned launch process group, and retain every exit code and the ordered shutdown marker.
+success_criteria:
+  - Camera, reset, workflow, physical evidence, Planning Scene, CUA, and session/epoch contracts all pass on the registered hashes.
+  - Teleop workflow response has checkpoint_fresh true, the exact evidence manifest path, and a successful typed physical_outcome.
+  - SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK is present; all owned processes exit zero; no residual owned process remains.
+failure_criteria: Any Task 14 physical or owner-routing failure, missing typed evidence, missing shutdown marker, nonzero exit, crash, or leak.
+invalid_criteria: Any source/model/policy mutation after this registration, wrong domain/session/prefix, reused stack, or broad cleanup.
+status: PLANNED
+next_experiment: NONE until EXP-151 is terminal.
+```
+
+## Experiment EXP-151 Terminal Result
+
+```yaml
+experiment_id: EXP-151
+status: VALID
+terminal_time: 2026-08-12T08:21:58+08:00
+fingerprint_unchanged_after_registration: true
+backend: mujoco_py
+camera: {preset: table_corner_nw, api_result: OK}
+reset:
+  api_result: OK
+  owner: teleop_reset
+  simulation_session_id: so101-teleop-exp151-domain161
+  old_epoch: 0
+  new_epoch: 1
+  simulation_step: 0
+  preserve_session: true
+workflow:
+  api_result: OK
+  completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+  checkpoint_fresh: true
+  evidence_manifest: /tmp/so101-teleop-evidence/so101-teleop-exp151-domain161/so101-teleop-workflow-c24d4027-4c59-4ef2-9971-44cf89a32d7b/live-runtime-manifest.json
+  release_epoch_id: so101-teleop-exp151-domain161:release:14517
+  physical_outcome:
+    primary_failure: null
+    sample_count: 21
+    duration_s: 0.2
+    final_pose_m: [-0.07997342168384546, -0.24701290506995735, 0.16486061417159756]
+    final_upright_tilt_rad: 0.005381469751181312
+    maximum_linear_speed_m_s: 0.0
+    maximum_angular_speed_rad_s: 0.0
+    intended_support_contact: true
+    gripper_contact: false
+    moveit_attached: false
+    world_object_synchronized: true
+visual:
+  rviz_mujoco_side_by_side: passed
+  final_cup_inside_target_ring: passed
+  open_gripper_and_arm_retreated_clear: passed
+clean_shutdown:
+  launch_returncode: 0
+  ordered_shutdown_marker: SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK
+  move_group_clean_exit: true
+  mujoco_ros2_control_clean_exit: true
+  robot_state_publisher_clean_exit: true
+  teleop_server_clean_exit: true
+  sigsegv_or_callback_group_fault: false
+  residual_owned_processes: []
+evidence_sha256:
+  actions: b9229ff575e2607c285d2fac86b01f1f4c2ac6aa8724ff9b6f01f4429de37de4
+  launch_log: 2c66cc4d13b9ca00293d780f442f5a32d255c843f620076dbfbf24cbb5747b02
+  live_runtime_manifest: 36f0a0eed7dab96fab6e42ec305f4705dfd38e38a6f00eeccee3b735e4608d70
+  running_visual: c8eff82e19d8fd32129c7215904c216287950d83249219eb44038737bbbfbbf2
+  final_visual: 6cc445031ed9913f8b0343399359016a243931448ba670431e76f2f5cee27d8a
+decision: Count EXP-151 as the required post-rebase Teleop physical cycle. Task 14T may be committed and normally pushed; Task 15 must freeze that published commit.
+```
+
+## Task 14T Completion Checkpoint
+
+```yaml
+recorded_at: 2026-08-12T08:21:58+08:00
+continuation_branch: codex/so101-mujoco-ros2-teleop
+pre_rebase_physical_success_sha: e5bbf25ec06459c7be3b19ea36167051317528c5
+rebased_physical_commit: 2f5ebda79f72b452329326a8fbf02057f75f9049
+post_rebase_teleop_physical_experiment: EXP-151
+post_rebase_teleop_physical_status: VALID
+reset_race_regression: fixed and covered
+owner_evidence_passthrough: qualified
+ordered_shutdown: qualified
+protected_gazebo_diff: zero
+protected_gazebo_status: clean
+next_step: Run complete Task 14T gates with an explicit Ruff PATH, commit feat(so101_mujoco): integrate refactored teleop runtime, normally push the continuation branch, then freeze that commit for Task 15.
+```
+
+## Experiment EXP-152 Registration
+
+```yaml
+experiment_id: EXP-152
+registered_at: 2026-08-12T08:27:09+08:00
+lifecycle: FULL_RESTART
+purpose: Qualify the exact Ruff-formatted final Task 14T source fingerprint before commit; formatting changed hashes after EXP-151 and therefore requires a fresh immutable run.
+source:
+  git_head: a925a6f6fa09f0059a395a61509becda20606d34
+  continuation_branch: codex/so101-mujoco-ros2-teleop
+  fork_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  integrated_launch_sha256: deee1be226e089e9acbb89c6467bb5edb572e26fde22a6f5e89be596a4beabe2
+  teleop_runtime_sha256: 2b59f227b25f11a178d4808bcf3d91cbafacdfd01e2c009519501c130d8249bc
+  teleop_workflow_sha256: e6632fb0b2a9f9aab576e34af958547260741391e82111e2d922c40d4d7e753f
+  reset_client_sha256: e46b459801d51288a17b2a3974661e911bcad919a6e686d36dd0d257c72ac511
+  teleop_server_sha256: a0805b9fe6ad690c2ce744c7c35eecf11eb71f01fe24ba2f5dc12492b76e4f51
+  mujoco_profile_sha256: ec98040503fa12af5af586b072b83164e3afafb891f94d0360385fe7e965af45
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808
+  contact_policy_sha256: 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1
+preflight:
+  mujoco_pytest: {passed: 351, skipped: 4}
+  ruff: {checked_files: 106, formatted: 106}
+  package_build: passed
+runtime:
+  ros_domain_id: 162
+  simulation_session_id: so101-teleop-exp152-domain162
+  evidence_root: /tmp/so101-teleop-exp152
+  teleop_port: 8002
+success_criteria:
+  - The same camera, transactional reset, nine-phase physical outcome, typed owner evidence, Planning Scene, CUA, and clean-shutdown contracts as EXP-151 pass.
+  - The registered hashes remain unchanged until terminal cleanup.
+invalid_criteria: Any post-registration source/model/policy mutation, wrong overlay/domain/session, reused stack, missing CUA, or broad cleanup.
+status: PLANNED
+next_experiment: NONE until EXP-152 is terminal.
+```
+
+## Experiment EXP-152 Terminal Result
+
+```yaml
+experiment_id: EXP-152
+status: VALID
+terminal_time: 2026-08-12T08:34:11+08:00
+fingerprint_unchanged_after_registration: true
+reset:
+  owner: teleop_reset
+  simulation_session_id: so101-teleop-exp152-domain162
+  old_epoch: 0
+  new_epoch: 1
+  simulation_step: 0
+  preserve_session: true
+workflow:
+  completed_phase_count: 9
+  checkpoint_fresh: true
+  evidence_manifest: /tmp/so101-teleop-evidence/so101-teleop-exp152-domain162/so101-teleop-workflow-610ecb51-1ec4-43e8-8ab3-3cf8260d28ad/live-runtime-manifest.json
+  release_epoch_id: so101-teleop-exp152-domain162:release:8119
+  physical_outcome:
+    primary_failure: null
+    sample_count: 18
+    duration_s: 0.204
+    final_pose_m: [-0.07837523618823686, -0.24761533470620783, 0.16532165033560678]
+    final_upright_tilt_rad: 0.017363413106213237
+    maximum_linear_speed_m_s: 0.0
+    maximum_angular_speed_rad_s: 0.0
+    intended_support_contact: true
+    gripper_contact: false
+    moveit_attached: false
+    world_object_synchronized: true
+visual:
+  planned_path_in_rviz: passed
+  final_cup_inside_target_ring: passed
+  open_gripper_and_arm_retreated_clear: passed
+clean_shutdown:
+  launch_returncode: 0
+  ordered_shutdown_marker: SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK
+  move_group_clean_exit: true
+  mujoco_ros2_control_clean_exit: true
+  robot_state_publisher_clean_exit: true
+  teleop_server_clean_exit: true
+  sigsegv_or_callback_group_fault: false
+  residual_owned_processes: []
+evidence_sha256:
+  actions: 6d68c3783014610aebec8e24be9593e53a64d802e71156dc597d7971c4d4a799
+  launch_log: dd2b02f1b84f16cc5c6c39e2aeea81d4d564d5070edfab33dc5f53ac538ab0e7
+  live_runtime_manifest: 3e486b1824860529999419272a808a24e0a666815b2741d49e734a0bd3707944
+  running_visual: 230fa99613434b8de7fea2e131ce4ef410ac923c53e5f54a8eb054d37b6cd4ee
+  final_visual: 8af76f07b8fede4f31f80e3312c34d63d59b54c0d3e89b9cb2358b0d47c7a981
+decision: EXP-152 is the qualifying Task 14T cycle for the final Ruff-formatted source fingerprint. Run final gates, commit, and normally push before Task 15.
+```
+
+## Task 14T Final Gate Result
+
+```yaml
+recorded_at: 2026-08-12T08:47:00+08:00
+status: VALID
+scope: exact EXP-152 source fingerprint before commit
+gates:
+  mujoco_pytest: {passed: 351, skipped: 4, exit_code: 0}
+  ruff: {checked_files: 106, formatted: 106, exit_code: 0}
+  teleop_vitest: {files_passed: 14, tests_passed: 45, exit_code: 0}
+  colcon: {tests: 843, errors: 0, failures: 0, skipped: 6, exit_code: 0}
+  build_packages: [so101_mujoco_support, so101_teleop, so101_mujoco_demo_py]
+  fork_runtime_probe: {exit_code: 0, commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194, validation_errors: []}
+  reset_runtime_probe: {exit_code: 0, fork_status: clean}
+  root_isolation: passed
+  package_isolation: passed
+  protected_gazebo_diff: zero
+  protected_gazebo_status: clean
+  git_diff_check: passed
+decision: Task 14T is eligible for the scoped feature commit and a normal push of the continuation branch.
 ```

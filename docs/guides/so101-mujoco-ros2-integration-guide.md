@@ -897,9 +897,10 @@ Task 13 不能复制 Gazebo 阈值，必须基于当前 MuJoCo geometry/dynamics
 | 补充 | detailed visual/collision geometry | 已通过，commit `79effd9` |
 | 补充 | home-pose self-contact jitter | 已通过，commit `2d39539` |
 | 补充 | Gazebo 对齐 TCP plan + execute | EXP-060 已通过 |
-| 13 | MuJoCo contact evidence calibration | **未完成**；旧数据因路径与几何变更无效 |
+| 13 | MuJoCo contact evidence calibration | 已完成并经用户批准；当前 policy hash 见 ledger |
 | 13 后 | clean shutdown / `move_group -11` | 已定位 apt MoveIt/rclcpp 析构缺陷；专用进程受控退出通过 |
-| 14 | 强制真实双指接触、抓取、最终放置 | **未开始** |
+| 14 | 强制真实双指接触、抓取、最终放置 | 已通过；EXP-139 为 pre-rebase，EXP-151 为 Teleop post-rebase VALID |
+| 14T | rebase 最新 main 并集成独立 Teleop | 已通过 EXP-151，待提交/推送 checkpoint |
 | 15 | 5 次 FULL_RESTART + 5 次 RESET_WORLD 重复性 | **未开始** |
 | 扩展 | RGB-D camera | 不在本轮核心迁移范围，尚未集成 |
 
@@ -927,6 +928,7 @@ Task 13 不能复制 Gazebo 阈值，必须基于当前 MuJoCo geometry/dynamics
 | 收到 callback 但 observer 判新鲜错误 | 一次 spin 读到旧帧、只数 callback | 检查 session/epoch/step/sequence/age/finite fields |
 | reset 时 pause 后 controller deactivate 卡住 | `/clock` 和 controller switch cycle 已停止 | running 时 deactivate，再 pause |
 | reset 后没有新的 joint state | resume 只有 3.57 ms，小于 10 ms broadcaster 周期 | 在原 deadline 内等待一帧新鲜完整 6-joint callback |
+| reset 的 service/epoch/controller 都成功但 owner 报 `final transaction evidence is not paused` | re-pause service 已完成，但 observer 队列里仍有 bounded resume 产生的最后一帧 `paused=false` | 在原 deadline 内排空 transient running frame，只允许后续 fresh `paused=true` evidence 通过；若始终没有 paused frame 仍 fail closed |
 | 用 StepSimulation 生成 reset evidence | 会推进物理并造成 reset 漂移 | 锁内只读 state snapshot hook，不 stepping |
 | running update 提前消费 reset generation | epoch 发布边界设计错误 | pending generation 只由 paused snapshot 消费 |
 | patch 脚本重复应用/误插入 | zero-context patch replay 不幂等 | 只接受 clean 或 exact approved diff；比较 patch hash |
@@ -938,6 +940,7 @@ Task 13 不能复制 Gazebo 阈值，必须基于当前 MuJoCo geometry/dynamics
 | node list 看见已退出节点 | ROS daemon 缓存陈旧 | `ROS2_DISABLE_DAEMON=1` 或 `ros2 node list --no-daemon` |
 | launch 把 `--ros-args` 传给 Python CLI 导致 argparse 失败 | ROS launch 自动追加参数 | Python entry point 在 `--ros-args` 前截断 app args |
 | shell `tee` 后错误被当成功 | pipeline 返回 `tee` 状态 | `set -o pipefail`/zsh `setopt PIPE_FAIL`，保留真实 exit status |
+| `ros2 launch | tee` 后 owned process 已退出但日志缺 ordered-shutdown marker | Ctrl-C 同时终止 capture pipeline，末尾 child output 可能来不及写入 | 资格化 runner 直接捕获 launch subprocess stdout/stderr，并只向已登记的 launch process group 发送 SIGINT；同时读回 launch return code、marker、各 child clean exit 和残留进程 |
 | wrapper 运行错误参数 | checker 必需 `--lock`，临时 wrapper 漏传 | 先跑 `--help`/检查 argparse，wrapper fail-fast |
 | 临时 wrapper 有 literal diff marker/source composition bug | 在线拼脚本未先静态检查 | 先离线 render、compile、diff，再 launch |
 | MuJoCo state bit 解析错 | 把 `mjSTATE_CTRL` 当 `1<<6` | 正确值是 `1<<5` |
@@ -969,7 +972,7 @@ Task 13 不能复制 Gazebo 阈值，必须基于当前 MuJoCo geometry/dynamics
 
 仓库只保存摘要、哈希、决定和 provenance。启动前记录现有 tmux/PID/PGID；结束时只停止任务自己创建且精确记录的进程，不使用 broad `pkill`，不干扰无关 Gazebo、RViz、MoveIt 或 CUA session。
 
-## 16. 接下来执行顺序
+## 16. 实施状态和后续顺序
 
 ### 16.1 Task 13：重新设计 approach 并重做接触标定
 
@@ -1008,6 +1011,59 @@ MuJoCo fork 另有一个独立 GUI 退出坑：GLFW/OpenGL context 在 render th
 - 每次都要有唯一 session/epoch 证据、clean shutdown、物理抓取和最终放置结果。
 - 任一失败必须记录 failure code 和 raw evidence hash，不能只重跑成功样本。
 
+### 16.5 Rebase 后的独立 Teleop 集成
+
+Task 14 首次物理抓取成功后，迁移分支没有重写已发布历史，而是创建
+`codex/so101-mujoco-ros2-teleop`，rebase 到当时最新的 `origin/main`。集成仍保持三个 owner
+边界：
+
+- `so101_teleop` 只负责通用 backend profile、命令租约、API/UI 和 subprocess envelope。
+- `so101_mujoco_demo_py` 负责 MuJoCo reset、atomic evidence、camera service 和生产抓取流程。
+- fork `mujoco_ros2_control` 负责 viewer camera 与 reset/pause/snapshot hooks。
+
+正式启动入口：
+
+```bash
+ros2 launch so101_mujoco_demo_py so101_mujoco_teleop.launch.py \
+  headless:=false \
+  simulation_session_id:=<unique-session> \
+  bind_address:=127.0.0.1 \
+  port:=8000
+```
+
+该 launch 使用同一个 `simulation_session_id` 启动 MuJoCo、controllers、MoveIt、Planning
+Scene 和 `SO101_TELEOP_BACKEND=mujoco_py` 的 Teleop。底层
+`so101_pick_place.launch.py` 使用 `launch_workflow:=false`，所以不会在 Web operator 发命令前抢跑
+headless workflow，也不会因 workflow 退出而关闭交互栈。
+
+`mujoco_py` profile 只开放已资格化操作：
+
+| Teleop 操作 | MuJoCo owner | 关键语义 |
+|---|---|---|
+| `workflow_run` | `teleop_workflow` | 先读取同 session 的 fresh atomic evidence，取得当前 reset epoch，再进入原生产 `pick_place_state_machine --mode execute --execute` |
+| `simulation_reset` | `teleop_reset` | 调用完整 controller deactivate → pause → ResetWorld → step-zero epoch snapshot → resume/activate → feedback converge → re-pause 事务 |
+| `camera_preset` | `camera_preset` | 经 fork 的 set/get viewer-camera service，包含四角视图和 `top_down` |
+
+reset 不生成假的物理 session ID。MuJoCo evidence stream 在同一 process lifetime 内继续使用原
+`simulation_session_id`，新鲜性由严格递增的 `reset_epoch` 和 step-zero snapshot 表示；Teleop
+只清空 lease、plan 和 workflow cache。workflow 每次都重新读取当前 epoch，因此连续
+`RESET_WORLD` 不能硬编码为 epoch 1。
+
+MuJoCo profile 继续禁用 manual joint/TCP、scene attach/detach 和 `physical_observation`。后者表示
+当前 Teleop telemetry worker 仍没有把 atomic MuJoCo object/contact message 映射进通用 snapshot；
+抓取成功必须以 production evidence manifest 为准，不能用 Web 状态、Planning Scene attachment 或
+截图替代。RGB-D/perception 仍不在本任务范围内。
+
+如果 owner 返回 stale/mismatched session evidence、事务 reset 不收敛、camera readback mismatch 或
+production phase failure，CLI adapter 必须以非零 exit 和标准 backend envelope fail closed；不得回退到
+raw ResetWorld、直接 qpos/qvel 写入或另写一套 Web 抓取状态机。
+
+EXP-151 还把 owner 证据正式传回 Teleop：`simulation_reset` 的 data 包含
+`old_epoch/new_epoch/simulation_step/preserve_session`；`workflow_run` 返回 production manifest 的绝对路径、
+九阶段 trace 和经过 Teleop `PhysicalOutcomeEvidence` schema 校验的最终结果。这里的
+`checkpoint_fresh=true` 只表示 owner manifest 确实存在，不把 Web/API 的成功响应替代为物理成功；最终
+结论仍由 manifest、原子 evidence、MoveIt/controller readback、clean shutdown 与 CUA corroboration 分层组成。
+
 ## 17. 参考文件
 
 - 设计：`docs/superpowers/specs/2026-08-09-so101-mujoco-ros2-migration-design.md`
@@ -1017,6 +1073,8 @@ MuJoCo fork 另有一个独立 GUI 退出坑：GLFW/OpenGL context 在 render th
 - reset patch：`src/so101_mujoco_demo_py/patches/mujoco_ros2_control-0.0.3-reset-hook.patch`
 - model/scene：`src/so101_mujoco_demo_py/mjcf/`
 - headless launch：`src/so101_mujoco_demo_py/launch/so101_pick_place.launch.py`
+- Teleop integrated launch：`src/so101_mujoco_demo_py/launch/so101_mujoco_teleop.launch.py`
+- Teleop owner adapter：`src/so101_mujoco_demo_py/so101_mujoco_demo_py/teleop_{reset,runtime,workflow}.py`
 - isolation gate：`src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh`
 - Ruff gate：`src/so101_mujoco_demo_py/scripts/check_ruff.sh`
 

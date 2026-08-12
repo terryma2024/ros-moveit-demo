@@ -46,25 +46,29 @@ def test_gazebo_py_profile_pins_python_cli_differences():
     assert profile.capabilities.workflow_run is True
 
 
-def test_mujoco_profile_exposes_probe_only():
+def test_mujoco_profile_exposes_only_qualified_live_boundaries():
     profile = load_backend_profile("mujoco_py", PACKAGE)
 
     assert profile.owner_package == "so101_mujoco_demo_py"
     assert profile.probe.executable == "pick_place_state_machine"
-    assert profile.operations == {}
+    assert set(profile.operations) == {
+        BackendOperation.WORKFLOW,
+        BackendOperation.RESET_WORLD,
+        BackendOperation.CAMERA_PRESET,
+    }
     assert profile.capabilities.as_dict() == {
         "backend_probe": True,
-        "workflow_execute": False,
+        "workflow_execute": True,
         "workflow_start": False,
-        "workflow_run": False,
+        "workflow_run": True,
         "workflow_resume": False,
         "workflow_stop": False,
-        "reset_world": False,
+        "reset_world": True,
         "scene_operations": False,
         "physical_observation": False,
         "manual_joint_execute": False,
         "manual_tcp_execute": False,
-        "camera_presets": False,
+        "camera_presets": True,
     }
 
 
