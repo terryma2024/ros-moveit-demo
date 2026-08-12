@@ -96,9 +96,9 @@ def test_probe_only_backend_rejects_every_live_operation_before_side_effects(
 def test_mujoco_profile_pins_formal_owner_operations():
     profile = load_backend_profile("mujoco_py", PACKAGE)
 
-    assert profile.owner_package == "so101_mujoco_demo_py"
-    assert profile.probe.package == "so101_mujoco_demo_py"
-    assert profile.probe.executable == "pick_place_state_machine"
+    assert profile.owner_package == "so101_demo_py"
+    assert profile.probe.package == "so101_demo_py"
+    assert profile.probe.executable == "pick_place"
     assert profile.capabilities.workflow_run is True
     assert profile.capabilities.reset_world is True
     assert profile.capabilities.camera_presets is True

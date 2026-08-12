@@ -1,7 +1,9 @@
 import importlib.util
+import inspect
 from pathlib import Path
 
 from launch.actions import DeclareLaunchArgument
+from so101_demo.runtime import launch_composition
 from so101_demo.runtime.launch_composition import COMMON_ARGUMENTS, build_launch_description
 
 PACKAGE_ROOT = Path(__file__).parents[1]
@@ -52,3 +54,9 @@ def test_pick_place_toggle_changes_only_workflow_launch() -> None:
     stack = _declared(build_launch_description(backend="mujoco", pick_place=False))
     workflow = _declared(build_launch_description(backend="mujoco", pick_place=True))
     assert stack == workflow
+
+
+def test_stack_launcher_does_not_embed_workflow_or_shutdown_handler() -> None:
+    source = inspect.getsource(launch_composition._configured_actions)
+
+    assert "include_workflow=pick_place" in source

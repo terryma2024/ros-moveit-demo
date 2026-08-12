@@ -90,7 +90,9 @@ def _advance_on_success(event, action, operation: str):
     ]
 
 
-def _mujoco_execute_actions(context, share: Path, policy, session_id: str):
+def _mujoco_execute_actions(
+    context, share: Path, policy, session_id: str, *, include_workflow: bool
+):
     scene = LaunchConfiguration("mujoco_scene").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
     timeout = LaunchConfiguration("readiness_timeout_s").perform(context)
@@ -181,15 +183,16 @@ def _mujoco_execute_actions(context, share: Path, policy, session_id: str):
             on_exit=[Shutdown(reason="SO-101 workflow complete")],
         )
     )
-    return [
+    actions = [
         robot_state_publisher,
         simulator,
         *spawners,
         move_group,
         scene_setup,
-        start_workflow,
-        shutdown,
     ]
+    if include_workflow:
+        actions.extend((start_workflow, shutdown))
+    return actions
 
 
 def _materialize_gazebo_model(context, share: Path):
@@ -378,7 +381,12 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
         )
         return [*messages, workflow]
     if backend == "mujoco":
-        return [*messages, *_mujoco_execute_actions(context, share, policy, session_id)]
+        return [
+            *messages,
+            *_mujoco_execute_actions(
+                context, share, policy, session_id, include_workflow=pick_place
+            ),
+        ]
     if backend == "gazebo":
         return [
             *messages,
