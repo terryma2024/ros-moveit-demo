@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-010
-next_experiment: EXP-143
+latest_checkpoint: RESET-FIVE-CP-011
+next_experiment: EXP-144
 ```
 
 ## Immutable challenge boundary
@@ -588,6 +588,35 @@ artifacts_sha256:
   dynamic_summary: 89606ec7929198a382dd5b895d060a1fba9a8959f5822e117339ba5f96b64c9f
   shared_launch_log: DEFERRED_UNTIL_CLEAN_SHUTDOWN
 next_experiment: EXP-143
+remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-011 — EXP-143 SUCCESS 3/5
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-011
+recorded_at: 2026-08-13T01:52:00+08:00
+prior_checkpoint: RESET-FIVE-CP-010
+status: COUNTING_BATCH_RUNNING_SUCCESS_3_OF_5
+experiment_id: EXP-143
+manifest_record_id: MNT-Q-RESET-EXP141-145-03
+result: VALID_SUCCESS
+reset: {old_epoch: 2, new_epoch: 3, simulation_step: 0, simulation_session_id: MNT-Q-RESET-EXP141-145-reset}
+trace: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+physical_outcome:
+  primary_failure: null
+  final_pose_m: [-0.07924126540054116, -0.24841937451444346, 0.16517423251534144]
+  final_upright_tilt_rad: 0.013428324691790349
+  intended_support_contact: true
+  gripper_contact: false
+planning_scene: {moveit_attached: false, world_object_synchronized: true}
+artifacts_sha256:
+  actions: a434b1ed1d0d4a0aaed34f3af2d18d7ecb8c352a563a6b43250309588cde4542
+  owner_manifest: 4d56412770a894029d31b283dcbbc5bc0f0ec5a1402419704f65b92360e06234
+  raw_run_index: 9e1b0398027a46d082e18c99835dd63744881eebe549b0beb330c0ac1f3d6e18
+  dynamic_summary: 4520518565b344c53fcfa8db680828f630ad6335de1143e3a5dfed79f48dbcbe
+  shared_launch_log: DEFERRED_UNTIL_CLEAN_SHUTDOWN
+next_experiment: EXP-144
 remote_push_state: FORBIDDEN
 ```
 
