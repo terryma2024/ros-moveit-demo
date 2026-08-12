@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-018
-next_experiment: EXP-110
+latest_checkpoint: MNT-CP-019
+next_experiment: NONE_BATCH_STOPPED_EXP110_INVALID
 ```
 
 ## Checkpoint MNT-CP-001
@@ -2564,8 +2564,11 @@ next_command: Write the C++ physics-step/chunk/latch RED tests without modifying
 ```yaml
 experiment_id: EXP-110
 registered_at: 2026-08-12T17:32:00+08:00
-status: RUNNING
+status: INVALID
 running_checkpoint_at: 2026-08-12T18:25:15+08:00
+terminal_at: 2026-08-12T18:30:38+08:00
+outcome_class: INVALID_EVIDENCE
+physical_transport_outcome: NOT_EVALUABLE
 resolved_runtime_provenance:
   implementation_source_commit: 368abe4d7388a15a9b18ef175b362e584f2812df
   ledger_checkpoint_commit_before_running: b44234c
@@ -2615,13 +2618,30 @@ provenance:
   reset_epoch: 1
 commands:
   - command: GZ_PARTITION=so101-mnt-a-phase-exp110 ros2 run so101_mujoco_demo_py run_qualification --batch-id MNT-A-PHASE-EXP110 --lifecycle FULL_RESTART --count 1 --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-runtime-fingerprint.json --evidence-root /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110 --base-domain-id 187 --base-port 8027 --no-headless
-    exit_code: PENDING
-observed: [NONE_BEFORE_RUN]
-inferred: [NONE]
-conclusion: PENDING
-evidence: [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110]
-decision: PENDING
-next_experiment: EXP-111_ON_SUCCESS_ONLY
+    exit_code: 1
+observed:
+  - OBSERVED: Reset advanced epoch 0 to 1; staged approach, static CONTACT_HOLD, MICRO_LIFT, policy lift waypoint 1, and the remaining four lift segments all completed successfully under the frozen strategy.
+  - OBSERVED: The transport phase rejected its first received per-physics-step chunk with EvidenceInvalid: chunk simulation session mismatch before any dynamic boundary or waypoint segment was persisted.
+  - OBSERVED: The partial raw index is PARTIAL_CLOSED with outcome_class INVALID_EVIDENCE, chunks [], boundaries [], and no hazard or cancellation-latency evidence.
+  - OBSERVED: transport.json contains zero segments and no dynamic summary; therefore no dynamic transport outcome or diagnostic distribution is available.
+  - OBSERVED: The outer qualification runner generalized the owner exit to status VALID_FAILURE, but the experiment's explicit session-mismatch invalid criterion takes precedence; this is not counted as a valid physical failure.
+  - OBSERVED: Ordered shutdown passed with SIGINT, no fatal signal, no SIGTERM/SIGKILL escalation, domain 187 and port 8027 are empty, and no owned runtime process remains.
+  - OBSERVED: A fresh mid-run screenshot shows the live MuJoCo scene and arm staged above the cup; the terminal screenshot shows the MuJoCo GUI closed after ordered shutdown. Neither screenshot is claimed as transport success evidence.
+inferred:
+  - INFERRED: The first bad boundary is the new chunk identity handoff between SimulationEvidencePlugin and DynamicTransportEvidenceObserver, before waypoint 1 ExecuteTrajectory dispatch.
+  - NOT_CONFIRMED: The actual mismatching chunk session value was not persisted by the invalid callback, so the exact producer-side cause cannot be proven from the closed artifacts without a separately authorized diagnostic/fix cycle.
+conclusion: INVALID. The evidence identity contract failed before dynamic transport sampling; stop EXP-110..114 as one batch and do not replace, retry, or generate a proposal.
+evidence:
+  - [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110/qualification-manifest.json, 34358908f15f4f16c35e695e929e07c5e1938843a32a5c1aeef1182b15a87844]
+  - [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110/run-01/actions.json, 3e2c324badceb6cbe4344a70e087f0613104fb1174224b557e12bd7475a28906]
+  - [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110/run-01/launch.log, fbede8e1fceca3c0dd3ad464880c92bac4589011b087783b2a62bbd3af2a3f44]
+  - [/tmp/so101-teleop-evidence/MNT-A-PHASE-EXP110-full-01/so101-teleop-workflow-a2652516-37cc-4376-99c7-175a19e463f0/transport.json, e39991ddc717208b987d2f516395add76942602625f134611d3c93244b79a2c7]
+  - [/tmp/so101-teleop-evidence/MNT-A-PHASE-EXP110-full-01/so101-teleop-workflow-a2652516-37cc-4376-99c7-175a19e463f0/transport-dynamic-raw/run-index.json, 883543a3d60dd725fbfd6c67ac725229f1fbc85e17562eaf81c048f8609bd652]
+  - [/tmp/so101-teleop-evidence/MNT-A-PHASE-EXP110-full-01/so101-teleop-workflow-a2652516-37cc-4376-99c7-175a19e463f0/live-runtime-manifest.json, 1761b931e3357ed27b4fbc973ed5edce6c00244a5bde7bb4221dbbaeaad6e5c6]
+  - [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110/captures-midrun/20260812T182640-e524cbb74282/desktop.png, b77c925929b7db4e48b6a581ade7163face7d1c9ab268589ecf6c9530b4c123d]
+  - [/tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110/captures-terminal/20260812T182754-f9b2f90de6ba/desktop.png, e5b72ef7aea99f872135ea74b85e09ad67adbcbcdc7a75f2261b245fb084720e]
+decision: ABANDON_BATCH
+next_experiment: NONE_BATCH_STOPPED_EXP110_INVALID
 ```
 
 ## EXP-111 preregistration — dynamic transport descriptive run 2
@@ -2885,4 +2905,42 @@ working_tree_status: Only the two protected untracked user documents plus this l
 owned_processes: NONE before dispatch
 preserved_processes: [tmux codex, codex-cua, so101-mujoco-gui]
 next_command: GZ_PARTITION=so101-mnt-a-phase-exp110 ros2 run so101_mujoco_demo_py run_qualification --batch-id MNT-A-PHASE-EXP110 --lifecycle FULL_RESTART --count 1 --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-runtime-fingerprint.json --evidence-root /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-exp110 --base-domain-id 187 --base-port 8027 --no-headless
+```
+
+## Checkpoint MNT-CP-019 — EXP-110 INVALID and batch stopped
+
+```yaml
+checkpoint_id: MNT-CP-019
+recorded_at: 2026-08-12T18:30:38+08:00
+last_valid_experiment: EXP-109
+terminal_experiment: EXP-110
+terminal_status: INVALID
+outcome_class: INVALID_EVIDENCE
+first_bad_boundary: The first per-physics-step chunk received by transport failed simulation-session identity before waypoint 1 goal dispatch; zero chunks, typed boundaries, and transport segments were accepted.
+physical_result: NOT_EVALUABLE; all pre-transport phases passed, but dynamic transport was never dispatched under a valid evidence stream.
+safety:
+  diagnostic_hazard_breached: false
+  safety_abort: false
+  note: No 11.60 N inference is possible because no valid dynamic raw sample was accepted.
+shutdown:
+  ordered_shutdown_marker: true
+  returncode: 0
+  signal: SIGINT
+  fatal_signal: false
+  owned_processes_after: []
+  ros_domain_187_nodes_after: []
+  port_8027_listeners_after: []
+visual:
+  midrun: Fresh MuJoCo desktop at step 15920 showed the arm staged above the cup; this corroborates live stack execution only.
+  terminal: Fresh desktop after shutdown showed no MuJoCo window, consistent with owned GUI cleanup.
+root_cause_status: NOT_CONFIRMED. Session inequality is directly observed, but the invalid callback retained only the reason and not the actual received session value; no producer-side value may be invented.
+batch_decision: Stop EXP-110..114. Do not start EXP-111, create replacement runs, generate a schema-v4 proposal, activate policy, enter Project B/C/D or formal regression, run RESET_WORLD challenge, merge, or push.
+working_tree_status: Tracked source unchanged from the tested implementation; only this ledger terminal update is dirty. The two protected user documents remain untracked and untouched.
+owned_processes: NONE
+preserved_processes: [tmux codex, codex-cua, so101-mujoco-gui]
+open_risks:
+  - The chunk producer/observer session-identity handoff lacks a live integration proof and currently omits actual-versus-expected identity from durable invalid evidence.
+  - A corrected implementation would require a new RED-GREEN gate and a newly preregistered five-run batch; EXP-110 cannot be relabeled or rerun.
+next_experiment: NONE_BATCH_STOPPED_EXP110_INVALID
+next_command: Wait for explicit user direction before any code change or new experiment batch.
 ```
