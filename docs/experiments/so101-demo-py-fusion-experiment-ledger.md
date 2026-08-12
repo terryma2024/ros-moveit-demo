@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: f184617805e551b92bc5773433244c6193442abc
+current_commit: 17b2b924d4b5a87b65901967fdd3acfec97886ea
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -25,8 +25,8 @@ disproven_routes:
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-015
-next_experiment: NONE_TASK_17_PREREGISTRATION
+latest_checkpoint: CP-FUSION-017
+next_experiment: NONE_RUNNER_REPAIR_COMMIT
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -34,6 +34,119 @@ next_experiment: NONE_TASK_17_PREREGISTRATION
 Raw build, test, runtime, screenshot, video, and qualification evidence remains under the single
 task evidence root. This ledger stores checkpoints and conclusions only. Live experiments must be
 pre-registered here before any stack is launched.
+
+## Checkpoint CP-FUSION-016 — qualification runner and pinned-fork gate
+
+```yaml
+checkpoint_id: CP-FUSION-016
+status: COMPLETE
+source_commit: 17b2b924d4b5a87b65901967fdd3acfec97886ea
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control:
+  gitlink_commit: 738e304551b4ea6db020b466086a13db71b65607
+  installed_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+  executable_sha256: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: d9a0206b7e1a36b75a0cc0240117d29966bfcf8a2b9bcf09c6146d73dfab7459
+static_gates:
+  unified_tests: 102 passed
+  teleop_profile_tests: 18 passed
+  installed_provenance: 3 passed
+  fusion_contract: PASS
+noncounting_smoke:
+  batch_id: fusion-smoke-005
+  lifecycle: FULL_RESTART
+  result: VALID_SUCCESS_NONCOUNTING
+  completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+  reset_epoch: 1
+  physical_outcome: {primary_failure: null, intended_support_contact: true, moveit_attached: false, world_object_synchronized: true}
+  final_cup_position_world_m: [-0.07915379018633091, -0.2490218766824613, 0.16547659376286236]
+  clean_shutdown: PASS
+  manifest_sha256: 21f0bd3ddd26d2ba774a79a7fa1426d19e304b83af9178463f67b054f0659aac
+diagnosis_closed:
+  - Two earlier non-counting native crashes resolved to the wrong /opt/ros/jazzy mujoco_ros2_control runtime; the bundle now hashes the pinned fork executable and rejects that provenance drift.
+  - Headless qualification no longer calls the unavailable interactive viewer.
+  - Ordered shutdown signals only the stack supervisor, avoiding duplicate SIGINT delivery through ROS launch.
+owned_processes_after_smoke: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+decision: Freeze this source, installed overlay, policy, pinned dependency, and bundle for both counted Task 17 and Task 18 batches.
+```
+
+## Checkpoint CP-FUSION-017 — first counted batch terminated on invalid evidence
+
+```yaml
+checkpoint_id: CP-FUSION-017
+terminal_batch: fusion-full-restart-001
+task: 17
+lifecycle: FULL_RESTART
+status: INVALID_BATCH
+source_commit: 17b2b924d4b5a87b65901967fdd3acfec97886ea
+bundle_sha256: d9a0206b7e1a36b75a0cc0240117d29966bfcf8a2b9bcf09c6146d73dfab7459
+attempt_count: 2
+run_01: {status: SUCCESS, reset_epoch: 1, physical_primary_failure: null, clean_shutdown: true}
+run_02:
+  runner_recorded_status: VALID_FAILURE
+  corrected_classification_from_raw_evidence: INVALID
+  failed_phase: transport
+  phase_exit_code: 1
+  evidence_outcome_class: INVALID_EVIDENCE
+  invalid_reason: EvidenceInvalid chunk sequence mismatch
+  persisted_chunk_sequence_range: [4974, 5667]
+  persisted_physics_step_range: [24871, 28340]
+  persisted_chunks_contiguous: true
+  producer_history_depth: 100
+  consumer_history_depth: 20
+  physical_policy_failure: false
+  clean_shutdown: true
+manifest_sha256: ea084fa0a2a15c7ae5eb15ddd182ef40f79bbf838bcc5f7e62e405e2e1856428
+diagnosis:
+  observed: The durable index has 694 consecutive chunks with no internal sequence or physics-step gap, then the observer latched the next-delivery sequence mismatch.
+  inference: The reliable high-rate consumer retained only 20 samples while the producer retained 100, allowing executor/storage scheduling to overrun subscriber history without a producer evidence_loss latch.
+  classification_defect: teleop_workflow returned only PHASE_EXIT_NONZERO, so the qualification runner incorrectly called invalid trace evidence a VALID_FAILURE.
+repair_gates:
+  - consumer reliable history depth must be at least producer depth 100
+  - INVALID_EVIDENCE must propagate as TELEOP_WORKFLOW_EVIDENCE_INVALID
+  - focused tests and complete installed gates must pass before committing a new source/bundle
+owned_processes_after_batch: NONE
+preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+decision: Preserve and reject the entire batch. Repair evidence handling, commit/rebuild a new immutable bundle, then preregister a fresh FULL_RESTART batch; no result from this batch may be reused.
+```
+
+## Planned batch FUSION-FULL-RESTART-001
+
+```yaml
+batch_id: fusion-full-restart-001
+status: PLANNED
+task: 17
+lifecycle: FULL_RESTART
+backend: mujoco
+required_consecutive_successes: 5
+invalid_run_effect: invalidate_batch
+valid_failure_effect: break_streak
+source_commit: 17b2b924d4b5a87b65901967fdd3acfec97886ea
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py
+mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+mujoco_ros2_control_gitlink: 738e304551b4ea6db020b466086a13db71b65607
+mujoco_ros2_control_executable_sha256: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
+policy_id: light_cup_wall_pick
+policy_version: v1
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: d9a0206b7e1a36b75a0cc0240117d29966bfcf8a2b9bcf09c6146d73dfab7459
+ros_domain_ids: [180, 181, 182, 183, 184]
+ports: [27500, 27501, 27502, 27503, 27504]
+evidence_root: /data/work/so101-debug-fusion-full-restart-001
+evidence_root_pre_registration_state: ABSENT
+evidence_filesystem: /data NVMe
+command: ros2 run so101_demo_py run_qualification --batch-id fusion-full-restart-001 --lifecycle FULL_RESTART --count 5 --fingerprint d9a0206b7e1a36b75a0cc0240117d29966bfcf8a2b9bcf09c6146d73dfab7459 --evidence-root /data/work/so101-debug-fusion-full-restart-001 --base-domain-id 180 --base-port 27500 --headless
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+abort_criteria:
+  - any source, installed-prefix, dependency, policy, bundle, session, lifecycle, or epoch mismatch
+  - any invalid run, valid physical failure, missing/truncated artifact hash, or unclean shutdown
+  - any unowned process selected for cleanup
+cleanup_scope: each independently created qualification supervisor and its exact child launch trees only
+expected: exactly five independent VALID/SUCCESS records with unique sessions and clean ordered shutdown
+```
 
 ## Checkpoint CP-FUSION-015 — compatibility, real-stub, and installed static gates
 

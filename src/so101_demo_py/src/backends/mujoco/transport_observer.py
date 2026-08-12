@@ -20,6 +20,8 @@ from so101_demo.application.dynamic_transport_evidence import (
     TransportBoundaryKind,
 )
 
+RELIABLE_QOS_DEPTH = 100
+
 
 class ReactionLatencyInvalid(EvidenceInvalid):
     """Raised when a diagnostic stop cannot meet its registered reaction bound."""
@@ -345,7 +347,9 @@ class DynamicTransportEvidenceObserver:
                 SimulationEvidence,
             )
 
-            reliable = QoSProfile(depth=20, reliability=ReliabilityPolicy.RELIABLE)
+            reliable = QoSProfile(
+                depth=RELIABLE_QOS_DEPTH, reliability=ReliabilityPolicy.RELIABLE
+            )
             self._subscriptions = [
                 node.create_subscription(
                     SimulationEvidence,
