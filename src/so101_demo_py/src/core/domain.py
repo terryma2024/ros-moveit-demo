@@ -47,6 +47,18 @@ class RunStatus(StrEnum):
     ERROR = "ERROR"
 
 
+class ExecutionRunStatus(StrEnum):
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    INVALID = "INVALID"
+    REJECTED = "REJECTED"
+
+
+class QualificationStatus(StrEnum):
+    QUALIFIED = "QUALIFIED"
+    NOT_QUALIFIED = "NOT_QUALIFIED"
+
+
 class RunMode(StrEnum):
     DRY_RUN = "dry_run"
     PLAN_ONLY = "plan_only"

@@ -5,9 +5,9 @@ import sys
 from pathlib import Path
 
 from ..application.pick_place import LiveRuntimeConfig, run_live_workflow
-from ..backends.mujoco.lifecycle import resume_physics
 from ..core.domain import RunMode, RunRequest, RunStatus, State
 from ..core.runner import FileCheckpointStore, StateMachineRunner, dry_run_actions
+from ..runtime.composition import resume_backend
 
 
 def _optional_bool(value: str) -> bool:
@@ -21,8 +21,11 @@ def _optional_bool(value: str) -> bool:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pick_place_state_machine")
+    parser.add_argument("--backend", choices=("mujoco", "gazebo", "real_stub"))
     parser.add_argument(
         "--mode",
+        "--run-mode",
+        dest="mode",
         choices=[mode.value for mode in RunMode],
         default=RunMode.DRY_RUN.value,
     )
@@ -78,7 +81,8 @@ def main(arguments: list[str] | None = None) -> int:
             print("failure=EXPLICIT_EXECUTE_REQUIRED")
             return 1
         if (
-            not options.session_id
+            not options.backend
+            or not options.session_id
             or options.expected_reset_epoch is None
             or options.evidence_root is None
             or options.motion_policy is None
@@ -96,7 +100,7 @@ def main(arguments: list[str] | None = None) -> int:
                 motion_policy=options.motion_policy,
                 contact_policy=options.contact_policy,
             ),
-            resume=resume_physics,
+            resume=lambda config: resume_backend(options.backend, config),
         )
         if result.success:
             print("status=DONE")
