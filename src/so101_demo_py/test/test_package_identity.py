@@ -21,7 +21,29 @@ def test_setup_installs_the_mapped_namespace(monkeypatch) -> None:
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(setuptools, "setup", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.chdir(PACKAGE_ROOT)
     runpy.run_path(str(PACKAGE_ROOT / "setup.py"), run_name="__main__")
 
-    assert captured["packages"] == ["so101_demo"]
+    packages = set(captured["packages"])
+    assert {
+        "so101_demo",
+        "so101_demo.application",
+        "so101_demo.backends.mujoco",
+        "so101_demo.control.moveit",
+    } <= packages
+    assert all(package == "so101_demo" or package.startswith("so101_demo.") for package in packages)
     assert captured["package_dir"] == {"so101_demo": "src"}
+
+
+def test_setup_publishes_unified_runtime_commands(monkeypatch) -> None:
+    """Catch an installed package that cannot run its migrated workflow or qualification CLI."""
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(setuptools, "setup", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.chdir(PACKAGE_ROOT)
+    runpy.run_path(str(PACKAGE_ROOT / "setup.py"), run_name="__main__")
+
+    assert set(captured["entry_points"]["console_scripts"]) >= {
+        "pick_place = so101_demo.cli.pick_place:main",
+        "run_qualification = so101_demo.cli.qualification:main",
+    }

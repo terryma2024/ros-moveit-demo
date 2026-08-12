@@ -28,4 +28,10 @@ setup(
     description="Unified SO-101 MuJoCo and Gazebo pick-place demonstration.",
     license="Apache-2.0",
     tests_require=["pytest"],
+    entry_points={
+        "console_scripts": [
+            "pick_place = so101_demo.cli.pick_place:main",
+            "run_qualification = so101_demo.cli.qualification:main",
+        ]
+    },
 )
