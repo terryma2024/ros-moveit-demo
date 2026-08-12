@@ -5,6 +5,7 @@ import copy
 import pytest
 
 from so101_mujoco_demo_py.qualification import (
+    InvalidRun,
     Lifecycle,
     ProductionQualificationRunner,
     RunStatus,
@@ -162,3 +163,49 @@ def test_reset_world_orchestration_reuses_one_stack_with_fresh_epochs(tmp_path) 
     assert manifest["summary"]["qualified"] is True
     assert len(runner.starts) == 1
     assert [item["reset_epoch"] for item in manifest["records"]] == [1, 2, 3, 4, 5]
+
+
+def test_pre_workflow_backend_failure_is_invalid(tmp_path) -> None:
+    runner = ProductionQualificationRunner(evidence_root=tmp_path, fingerprint=FINGERPRINT)
+    runner._request = lambda *args, **kwargs: {
+        "http": 503,
+        "response": {"succeeded": False, "code": "BACKEND_OPERATION_FAILED"},
+    }
+    handle = StackHandle(
+        process=None,  # type: ignore[arg-type]
+        process_group_id=123,
+        log_path=tmp_path / "launch.log",
+        environment={},
+        base_url="http://127.0.0.1:1",
+        session_id="session",
+    )
+    with pytest.raises(InvalidRun, match="BACKEND_OPERATION_FAILED"):
+        runner._post_command(handle, "/simulation/reset", "lease")
+
+
+class ExitedProcess:
+    returncode = 0
+
+    @staticmethod
+    def poll():
+        return 0
+
+    @staticmethod
+    def wait(timeout):
+        return 0
+
+
+def test_shutdown_rejects_child_process_death(tmp_path) -> None:
+    log_path = tmp_path / "launch.log"
+    log_path.write_text("SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK\nprocess has died [exit code -2]\n")
+    handle = StackHandle(
+        process=ExitedProcess(),  # type: ignore[arg-type]
+        process_group_id=123,
+        log_path=log_path,
+        environment={},
+        base_url="http://127.0.0.1:1",
+        session_id="session",
+    )
+    result = ProductionQualificationRunner.stop_stack(handle)
+    assert result["passed"] is False
+    assert result["process_died"] is True
