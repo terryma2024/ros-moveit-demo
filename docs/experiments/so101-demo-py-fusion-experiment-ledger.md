@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 61261b1bca2839d1d34927bf3b1266c624315137
+current_commit: 55cb1d05ab84359f268ff9e7b1a7310a326b6e2c
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -25,8 +25,8 @@ disproven_routes:
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-010
-next_experiment: NONE_TASK_12_RED
+latest_checkpoint: CP-FUSION-011
+next_experiment: NONE_TASK_13_RED
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -425,4 +425,32 @@ cleanup:
 confirmed_conclusion: The unified installed MuJoCo graph preserves the qualified nine-phase behavior. EXP-FUSION-001 was a storage-volume evidence failure, not a fusion behavior regression.
 plan_deviation: High-rate durable trace evidence must use /data NVMe despite the plan's illustrative /tmp paths; task metadata and ordinary logs remain under the task-specific debug roots.
 next_command: Start Task 12 with RED Gazebo world/lifecycle adapter contracts.
+```
+
+## Checkpoint CP-FUSION-011
+
+```yaml
+checkpoint_id: CP-FUSION-011
+last_valid_experiment: EXP-FUSION-002 valid unified MuJoCo execute
+current_hypothesis: The unified Gazebo launch can now run a normal execute and classify its first real policy boundary without pre-rejection.
+working_tree_status: HEAD 55cb1d05ab84359f268ff9e7b1a7310a326b6e2c; Task 12 Gazebo adapters, capability reporting, tests, and this checkpoint are intentionally dirty before the scoped Task 12 commit.
+owned_processes: NONE
+preserved_processes: unchanged tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons only.
+confirmed_conclusions:
+  - Gazebo observations convert to neutral immutable WorldEvidence while retaining contact_depth_m, contact force/collision identity, independent pose/contact receipt sequences, world stats, GZ partition, and bridge identity.
+  - Gazebo reset succeeds only after the observer reports the same session, an incremented epoch, and simulation step zero; transport acknowledgement alone is rejected.
+  - Gazebo readiness requires world, controllers, and bridge; pause is explicitly PAUSE_NOT_SUPPORTED and no lossless MuJoCo trace is claimed.
+  - Gazebo capabilities pass the base execute profile while failing the optional lossless trace capability honestly.
+  - Focused adapter/port tests pass 8/8; composition/capability tests pass 5/5; the complete unified suite passes 63/63.
+  - Installed Gazebo dry-run logs base_execute_capabilities=accepted and lossless_physics_step_trace=false, then completes the exact 19-transition trace.
+  - The frozen MuJoCo policy remains aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356.
+open_risks:
+  - Gazebo execute graph and common result manifest are not registered yet; Task 13 must launch the real simulator stack and produce a non-INVALID result.
+  - The legacy Gazebo workflow still owns runtime code until Task 14 replaces both old packages with audited forwarders.
+next_command: Write Task 13 RED result-classification tests, register the unified Gazebo execute graph, then pre-register one bounded installed execute.
+evidence:
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task12-unified-tests.log sha256=3d1115301a16d5f19f1ca224f7795d81dd6c5b0060fef2b2bc56413ebc13452d
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task12-build.log sha256=38e729dcf9f3e0ade5b8ff1b95e0acf10211c151b9a79c2b3a75a838d5641203
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task12-gazebo-dry-run.log sha256=2e007620cf557b5804917555966030101a25a0d9a10f033a0ded43dd46fbdb43
+  - log/fusion-t12/latest_build
 ```

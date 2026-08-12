@@ -59,16 +59,22 @@ _CAPABILITIES = {
 }
 
 
+def backend_capabilities(backend: str) -> BackendCapabilities:
+    """Return the immutable declared capability set for one explicit backend."""
+
+    try:
+        return _CAPABILITIES[backend]
+    except KeyError as error:
+        raise RuntimeCompositionError(f"unsupported backend: {backend}") from error
+
+
 def compose_backend(
     request: CompositionRequest,
     adapter_provider: Callable[[str], BackendAdapters] | None = None,
 ) -> BackendComposition:
     """Compose exactly one explicit backend without policy or adapter fallback."""
 
-    try:
-        capabilities = _CAPABILITIES[request.backend]
-    except KeyError as error:
-        raise RuntimeCompositionError(f"unsupported backend: {request.backend}") from error
+    capabilities = backend_capabilities(request.backend)
     if adapter_provider is None:
         raise RuntimeCompositionError("backend adapter context is required")
     policy = load_policy_variant(
