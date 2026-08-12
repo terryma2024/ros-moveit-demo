@@ -148,7 +148,7 @@
     "physics_timestep_s": 0.002
   },
   "planning_and_control": {
-    "dependency_lock_sha256": "1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d",
+    "dependency_lock_sha256": "2260d94fbd14c8b3ac37c4c07eff30254af449bc49161a0a4c3128ac298abef1",
     "ompl_planning_sha256": "87da57854e0ee318a5157d48a58f1145e7099f24c07d4277c1c7279b8f7cd364",
     "joint_limits_sha256": "210bb4792821bf081df092b11edc398050b1140cbef5c6f8f139687e87148973",
     "moveit_controllers_sha256": "4768fb786e33d89b9b145da34e7bbc2ff5f6841403c5ccedc00ab257446e3998",
@@ -180,6 +180,10 @@
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/simulation/types.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/frozen_behavior.py",
       "src/so101_mujoco_demo_py/test",
+      "src/so101_mujoco_demo_py/config/dependency-lock.yaml",
+      "src/so101_mujoco_demo_py/scripts/check_mujoco_runtime.py",
+      "src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py",
+      "third_party/mujoco_ros2_control",
       "docs/experiments",
       "docs/superpowers/specs",
       "docs/superpowers/plans"

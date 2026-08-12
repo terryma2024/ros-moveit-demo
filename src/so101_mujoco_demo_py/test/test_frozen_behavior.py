@@ -45,7 +45,7 @@ def test_repository_frozen_behavior_and_protected_gazebo_tree_match() -> None:
     report = verify_frozen_behavior(REPO_ROOT, MANIFEST_PATH)
 
     assert report["manifest_sha256"] == (
-        "912746ac6f6ac6589d5c11d7e9b9483e1ea4ebfeb3f6118a84ee0df48cd54195"
+        "d5b6dbd747192592e5bc2ccf95521c2c665d1045bbfcb2147825c534f353561c"
     )
     assert report["protected_gazebo"] == "MATCH"
     assert report["instrumentation_diff_gate"] == "MATCH"

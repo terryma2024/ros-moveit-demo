@@ -15,7 +15,7 @@ INSTALLER = PROJECT_ROOT / "scripts/install-mujoco-ros2-control.zsh"
 LOCK = PACKAGE_ROOT / "config/dependency-lock.yaml"
 OFFICIAL_BASE = "35ba8174b62d9560093614f981a3d4b978a96036"
 APPROVED_ORIGIN = "git@gitee.com:zjumty/mujoco_ros2_control.git"
-APPROVED_TAG = "so101-0.0.3-r5"
+APPROVED_TAG = "so101-0.0.3-r6"
 
 
 def run(*command: str | Path, cwd: Path = PROJECT_ROOT, env=None):

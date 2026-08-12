@@ -132,6 +132,7 @@ def main() -> int:
         "virtual void on_reset() {}",
         "virtual void on_pause(bool paused)",
         "virtual void on_state_snapshot(const mjModel* model, const mjData* data, bool paused)",
+        "virtual void on_physics_step(const mjModel* model, const mjData* data)",
     ):
         if hook not in plugin_source:
             fail(f"installed plugin base is missing hook: {hook}")
