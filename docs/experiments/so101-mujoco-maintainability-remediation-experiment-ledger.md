@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-024
-next_experiment: EXP-115
+latest_checkpoint: MNT-CP-025
+next_experiment: NONE_PENDING_POST_EXP115_RED
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3154,4 +3154,61 @@ preflight: EXP-115 evidence root absent; ROS Domain 192 empty; port 8032 free; n
 working_tree_status: Only the two protected unrelated untracked documents; no tracked change and no protected Gazebo change.
 stop_boundary: First atomically persisted typed transport boundary plus first accepted physics-step chunk, or any earlier identity/evidence failure.
 next_command: GZ_PARTITION=so101-mnt-a-exp115 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp115_identity_diagnostic.py
+```
+
+## Checkpoint MNT-CP-025 — EXP-115 terminal INVALID_EVIDENCE
+
+```yaml
+checkpoint_id: MNT-CP-025
+recorded_at: 2026-08-12T19:23:00+08:00
+last_valid_experiment: EXP-109
+terminal_experiment: EXP-115
+terminal_status: INVALID_EVIDENCE
+rerun_policy: EXP-115 is immutable and will not be rerun or reclassified.
+stop_reason: IDENTITY_MISMATCH before any transport boundary or accepted physics-step chunk.
+identity:
+  expected_session_id: MNT-A-EXP115-full-01
+  first_snapshot_session_id: MNT-A-EXP115-full-01
+  first_chunk_session_id: ""
+  mismatch_topic: /so101/simulation/physics_step_chunks
+  mismatch_message_kind: PhysicsStepEvidenceChunk
+publisher_provenance:
+  snapshot:
+    count: 1
+    node: /mujoco_ros2_control_node
+    endpoint_gid: 010ff4e9f6b2d1990000000000005903
+  physics_step_chunk:
+    count: 1
+    node: /mujoco_ros2_control_node
+    endpoint_gid: 010ff4e9f6b2d1990000000000005a03
+  conclusion: Duplicate, stale, and split-node publisher explanations are excluded for this run. Distinct GIDs are the expected distinct publisher endpoints on two topics from one node.
+parameter_scope_conclusion: Root simulation_session_id binding is live and correct for ordinary snapshots; EXP-115 disproves parameter scope as the common producer-session root cause.
+message_path_conclusion: Source shows build_step copies EvidenceState session into PhysicsStepEvidence and prepare_chunk copies the first sample session into the chunk header, yet the received chunk header is empty. The next RED must reproduce and characterize the empty/loss-sentinel chunk path before changing code.
+raw_evidence:
+  index: /tmp/so101-teleop-evidence/MNT-A-EXP115-full-01/so101-teleop-workflow-65d59393-7a90-4990-8649-8d5c8e0d8b55/transport-dynamic-raw/run-index.json
+  index_sha256: 8ad2c1b4dba4afbc5d39039a7e72e905dfb782b0e79d4471b062f2c100f9d361
+  chunks: 0
+  boundaries: 0
+  identity_mismatch_persisted: true
+experiment_artifacts:
+  diagnostic_sha256: f092c95699dfb81a2e42f6734f6b22365146a9b6012a5b980245af3c334d4af7
+  launch_log_sha256: 02e13a2ce2daef05b8f1f6611dbd6f64683ad8d6e738c08d51769f986869135e
+  screenshot_manifest_sha256: c32f50c80e4aa3b32ea361ee21781f135ea713a04daed8fdd90ec1eff672d5c2
+  desktop_sha256: e6fb2cb5f8d8cdd18c1c74fe78bf3dafbaf01767a999ecdb674fdaabb55485c4
+visual: Fresh desktop capture shows a running MuJoCo so101_task_scene at step 490 with the robot and cup visible; this corroborates a live fresh stack only and is not an acceptance result.
+reset: Fresh epoch 1 receipt exactly matched MNT-A-EXP115-full-01.
+shutdown:
+  ordered_shutdown_marker: true
+  returncode: 0
+  fatal_signal: false
+  process_died_marker: true
+  passed: false
+  audit: The diagnostic whole-stack SIGINT occurred while the HTTP workflow was still unwinding, so robot_state_publisher and ros2_control_node were logged with SIGINT exit -2. This independently fails EXP-115 clean-shutdown acceptance and must not be hidden.
+cleanup:
+  owned_processes_after: []
+  ros_domain_192_nodes_after: []
+  port_8032_listeners_after: []
+batch_decision: Do not start EXP-116..120. Continue a new RED-GREEN evidence-path cycle only; no Project B/C/D, formal regression, RESET_WORLD, proposal, merge, or push.
+next_experiment: NONE_PENDING_POST_EXP115_RED
+next_command: Add RED tests that retain the complete first chunk header and prove whether an empty evidence-loss sentinel loses session identity; then apply only the evidence-path fix justified by those tests.
 ```
