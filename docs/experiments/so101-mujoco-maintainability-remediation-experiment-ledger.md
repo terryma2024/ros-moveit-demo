@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: f2be505
+current_commit: 1174d7675b5881d87ec1f6a46c501a379eace019
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,8 +17,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
-latest_checkpoint: MNT-CP-010
-next_experiment: A8_SCHEMA_RED
+latest_checkpoint: MNT-CP-011
+next_experiment: A8_UNILATERAL_CONTRACT_ARTIFACT
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1319,4 +1319,58 @@ acceptance_boundary:
   - Checked-in contact policy remains disabled and unapproved.
   - Generate a complete disabled proposal/evidence packet, then stop at USER_APPROVAL_REQUIRED for the exact proposal hash.
 next_command: Write focused schema-v3 and unilateral fail-closed tests, run them to capture RED, then implement the smallest GREEN change.
+```
+
+## Checkpoint MNT-CP-011
+
+```yaml
+checkpoint_id: MNT-CP-011
+recorded_at: 2026-08-12T15:37:00+08:00
+implementation_commit: 1174d7675b5881d87ec1f6a46c501a379eace019
+owned_processes: NONE
+change_summary:
+  - schema-v3 separates five physical calibration cohorts from left_only/right_only deterministic rejection contracts.
+  - collector accepts only physical cohort labels and binds an external immutable unilateral-contract artifact into every raw matrix.
+  - analyzer derives thresholds, quantiles, and confusion rows only from five physical cohorts; unilateral statistical fields are null.
+  - approved-policy loading validates fail-closed contract codes and retains schema-v2 read compatibility.
+  - typed unilateral fault injection proves left_only and right_only cannot become stable-grasp success.
+  - collector independently enforces 0.003 m pre-contact and 0.010 m terminal-total displacement limits.
+  - migration isolation gate ignores only its package-root .pytest_cache, preventing second-run self-contamination while retaining hidden/ignored source scanning.
+red_evidence:
+  environment_invalid:
+    result: Initial pytest collection lacked the sourced so101_mujoco_support overlay; not counted as RED.
+  schema_red:
+    result: ImportError for missing PHYSICAL_REGIMES after correct isolated overlay provenance was sourced.
+  displacement_red:
+    result: 0.011 m terminal total displacement did not raise before the independent terminal-total guard was implemented.
+  repeatability_gate_red:
+    result: Second full package run failed because .pytest_cache/v/cache/nodeids was scanned as implementation evidence.
+green_evidence:
+  focused_suite: 76 passed in 3.17 s.
+  full_package: 464 passed, 4 skipped in 25.73 s.
+  ruff_gate: All checks passed; 118 files already formatted.
+  isolation_gate: Passed with a pre-existing pytest cache and with the new explicit cache regression test.
+  checked_in_policy_validation: analyze_contact_calibration --validate config/contact_calibration.yaml returned 0.
+  diff_check: Passed.
+unilateral_evidence:
+  left_only:
+    disposition: physical_unreachable
+    authentic_observation:
+      experiment_id: EXP-062
+      artifact_sha256: 30ded56e85ed3a89cf5e34711da2820d8f5652fe38851470dfe27d3f33d846a0
+    failed_exact_reset_repeat:
+      experiment_id: EXP-066
+      artifact_sha256: 085755077535972b10dd31ef18329bee8f7bc5a2b76da7ffd1bf523bb65be869
+  right_only:
+    disposition: observed
+    authentic_observation:
+      experiment_id: EXP-072
+      artifact_sha256: 87e4a5e22d3cb30bcdf739f596465cd09807d40a6c6244a4f5d04806aa0d24c2
+    audit_note: EXP-072 is a VALID behavioral failure and ABANDONED; terminal total approximately 0.003473 m is below 0.010 m and does not fail the separate 0.003 m pre-contact gate.
+checked_in_policy_state:
+  schema_version: 3
+  calibration_status: PLANNED
+  approval_enabled: false
+  approval_approved: false
+next_command: Generate and independently validate the external unilateral-contracts.json from the exact authentic hashes, then preregister only the five physical A8 collection experiments.
 ```
