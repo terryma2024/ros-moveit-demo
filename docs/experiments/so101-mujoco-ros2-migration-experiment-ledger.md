@@ -10,10 +10,10 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2-teleop
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: 8d85205286d2635d4ddbc91431c933dafb4eb661
-current_commit: a925a6f6fa09f0059a395a61509becda20606d34
-last_verified_implementation_commit: a925a6f6fa09f0059a395a61509becda20606d34
+current_commit: 60b89d76df7b1d451a0c2633f0cf3f148497338b
+last_verified_implementation_commit: 60b89d76df7b1d451a0c2633f0cf3f148497338b
 ledger_commit_pending: true
-task_status: TASK_14_TELEOP_INTEGRATION_PENDING_COMMIT
+task_status: TASK_15_QUALIFICATION_RUNNER_PENDING
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -12379,4 +12379,21 @@ gates:
   protected_gazebo_status: clean
   git_diff_check: passed
 decision: Task 14T is eligible for the scoped feature commit and a normal push of the continuation branch.
+```
+
+## Task 14T Publication Checkpoint
+
+```yaml
+recorded_at: 2026-08-12T08:51:00+08:00
+branch: codex/so101-mujoco-ros2-teleop
+commit: 60b89d76df7b1d451a0c2633f0cf3f148497338b
+remote_ref: origin/codex/so101-mujoco-ros2-teleop
+push_mode: normal new-branch push
+force_push: false
+pre_rebase_physical_success_sha: e5bbf25ec06459c7be3b19ea36167051317528c5
+rebased_physical_success_sha: 2f5ebda79f72b452329326a8fbf02057f75f9049
+post_rebase_teleop_experiment: EXP-152
+post_rebase_teleop_status: VALID
+protected_gazebo_diff: zero
+decision: Task 15 is unblocked. Its two qualification series must freeze a commit that includes the qualification runner and must not count EXP-152.
 ```

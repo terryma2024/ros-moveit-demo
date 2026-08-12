@@ -387,7 +387,7 @@ This task starts only after Task 14.4 has produced one fresh `VALID` physical pi
 - [x] Fetch `origin/main` and the published feature ref. Record `origin/main`, feature tip, and merge base. Review incoming Teleop changes before resolving any conflict.
 - [x] In the same worktree, create a new continuation branch `codex/so101-mujoco-ros2-teleop` at the preserved Task 14.4 tip, then rebase that continuation branch onto the freshly fetched `origin/main`.
 - [x] Resolve conflicts semantically: retain the independent `so101_mujoco_demo_py` package and current MuJoCo evidence/physics contracts, adopt the latest Teleop architecture from `main`, and do not restore deleted legacy Teleop code merely to make a textual conflict disappear.
-- [ ] Do not force-push `origin/codex/so101-mujoco-ros2`. Publish the rebased result only as the new continuation branch with a normal push, then record its new HEAD and the old-to-new commit mapping in the ledger.
+- [x] Do not force-push `origin/codex/so101-mujoco-ros2`. Publish the rebased result only as the new continuation branch with a normal push, then record its new HEAD and the old-to-new commit mapping in the ledger.
 - [x] Immediately rerun diff, isolation, dependency-lock, protected-Gazebo, Ruff, focused pytest, build, and nonzero package/test-discovery gates before adding Teleop integration code. If the rebase alone changes MuJoCo behavior, stop and diagnose that regression first.
 
 ### Task 14T.2: Integrate `so101_mujoco_demo_py` through the latest Teleop extension surface
@@ -421,13 +421,13 @@ This task starts only after Task 14.4 has produced one fresh `VALID` physical pi
 - [x] Pre-register a new `FULL_RESTART` experiment using the rebased continuation branch. The pre-rebase Task 14.4 result is comparison evidence only and cannot be counted for this new fingerprint.
 - [x] From Teleop, select the MuJoCo backend, start the owned stack, apply one camera preset, perform a transactional reset, and execute the same production physical pick-place workflow. Require all Task 14 physical, MoveIt, controller, Planning Scene, release/settle, and clean-shutdown facts.
 - [x] Open RViz and MuJoCo Viewer side-by-side through the supported GUI flow and use ai-station CUA for fresh visual corroboration. Confirm that Teleop status, RViz Planning Scene, and MuJoCo physical state refer to the same session/reset epoch.
-- [ ] Commit and normally push the Teleop integration to `origin/codex/so101-mujoco-ros2-teleop` only after this post-rebase experiment is `VALID`:
+- [x] Commit and normally push the Teleop integration to `origin/codex/so101-mujoco-ros2-teleop` only after this post-rebase experiment is `VALID`:
 
 ```text
 feat(so101_mujoco): integrate refactored teleop runtime
 ```
 
-- [ ] Task 15 remains blocked until the continuation branch is clean, pushed, and has one post-rebase `VALID` physical cycle. Task 15 must freeze the post-integration fingerprint, not the pre-rebase Task 14.4 fingerprint.
+- [x] Task 15 remains blocked until the continuation branch is clean, pushed, and has one post-rebase `VALID` physical cycle. Task 15 must freeze the post-integration fingerprint, not the pre-rebase Task 14.4 fingerprint.
 
 ---
 
