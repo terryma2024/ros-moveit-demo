@@ -283,6 +283,7 @@ def test_proposal_hash_excludes_only_approval_envelope() -> None:
     proposal = valid_disabled_proposal()
     first = proposal_sha256(proposal)
     proposal["approval"] = {
+        "enabled": False,
         "approved": False,
         "approved_by": None,
         "approved_at": None,
@@ -371,10 +372,11 @@ the computed hash inside `approval.proposal_sha256`.
 - [ ] **Step 4: Upgrade analyzer output and the checked-in template**
 
 Schema v2 contains literal `schema_version: 2`, policy ID
-`light_cup_wall_pick-contact`, calibration status, enabled flag, allowed other
+`light_cup_wall_pick-contact`, calibration status, allowed other
 contact bodies, calibrated thresholds, fixed evaluation controls
 `maximum_observation_age_s` and `minimum_consecutive_samples`, statistics, and
-an approval envelope. Its
+an approval envelope containing `enabled`, `approved`, approval identity/time,
+and `proposal_sha256`. Its
 fingerprint contains the recorded source/dependency commits and the exact
 model, scene, motion-policy, and source-evidence SHA-256 values. The checked-in
 pre-campaign file records hashes computed from the then-current repository
@@ -1004,7 +1006,7 @@ sha256sum /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibrat
   /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal.yaml
 ```
 
-Expected: `calibration_status: VALID`, `enabled: false`,
+Expected: `calibration_status: VALID`, `approval.enabled: false`,
 `approval.approved: false`, at least 25 samples per regime, zero evaluation
 misclassifications, positive safety margins, and a non-placeholder
 `approval.proposal_sha256`.

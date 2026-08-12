@@ -111,7 +111,12 @@ Activation is deliberately two-stage:
 2. Present the proposal, raw evidence hashes, distributions, safety margins,
    and misclassification results to the user. Only an explicit response that
    approves that exact proposal hash permits writing approval metadata and
-   setting `enabled: true`.
+   setting `approval.enabled: true`.
+
+Activation metadata, including `enabled`, lives inside the `approval` envelope.
+The proposal hash excludes that entire envelope and nothing else, so activating
+an exact proposal cannot invalidate its own hash while every policy,
+fingerprint, threshold, and statistical field remains hash-bound.
 
 Any model, scene, motion-policy, calibration-evidence, or proposal-hash change
 invalidates activation and fails execute closed. Plan-only loads motion policy
