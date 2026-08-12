@@ -2230,3 +2230,55 @@ unchanged: [approved proposal, approved policy, motion policy, q6 target, q6 ste
 live_actions_after_EXP-108: 0
 decision: Commit this lifecycle/continuity repair, then create a fresh three-package build. A further live acceptance requires separate preregistration.
 ```
+
+## EXP-109 preregistration
+
+```yaml
+registered_at: 2026-08-12T16:19:40+08:00
+experiment_id: EXP-109
+status: PLANNED
+lifecycle: FULL_RESTART
+qualification_counting: false
+purpose: Project-A acceptance of the approved policy with the frozen five-win seating action restored and bounded MoveIt cancellation settlement.
+source_commit: 4bade81c53390e6462ecc559e051ebdf3153c1cb
+fresh_build:
+  rejected_environment_attempt:
+    root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-build-approved-4bade81
+    result: BUILD_FAILED_BEFORE_RUNTIME
+    cause: The shell omitted the pinned fork overlay and resolved the older system mujoco_ros2_control plugin API.
+    evidence: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-build-approved-4bade81/log/latest_build/logger_all.log, 510116b5572102c746e211c782fd0dc70c02c358b91f897e6377bfade516e8f4]
+    disposition: Environment-only build attempt; no stack, reset, controller, or live action existed.
+  qualified:
+    root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-build-approved-4bade81b
+    packages: [so101_teleop, so101_mujoco_support, so101_mujoco_demo_py]
+    pinned_fork_overlay: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+    build_and_three_prefixes: PASS
+    mujoco_runtime_check: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-build-4bade81-runtime-check.json, 7aafeb88b3169104bd1ae1e52f6650c8b4b0cb3d7ca7b936dd4df2f757c5fc8e]
+    reset_qualified_runtime_check: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-build-4bade81-reset-check.json, 440b04337690f87c03ad7c31b0f3177de5e6ebb4bf40dd364c24fef5a405cb11]
+fingerprint:
+  dependency_sha256: 1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  approved_proposal_sha256: 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897
+fingerprint_artifact: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp109-fingerprint.json, 1422aeae4fd14757d691c86569a92855507e522dc8c1efec7f33bb70521102d1]
+runtime:
+  evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp109
+  batch_id: MNT-A-EXP109
+  simulation_session_id: MNT-A-EXP109-full-01
+  ros_domain_id: 186
+  gz_partition: so101-mnt-a-exp109
+  teleop_port: 8026
+  headless: false
+  tmux_session: so101-mnt-a-exp109
+preflight: Domain 186 empty; port 8026, evidence paths, and tmux session absent; complete fresh overlay and fingerprint validated.
+success_contract: One READY/viewer-preset/reset/nine-phase physical success plus ordered exact cleanup. This one-cycle Project-A gate cannot count toward later five-win batches.
+failure_contract: One VALID_FAILURE or INVALID terminates the attempt; no automatic extra attempt or hidden retry.
+frozen_scope:
+  changed: Only the restored, already-proven fixed seating action and bounded cancellation ownership from commit 4bade81.
+  unchanged: Approved proposal/policy, motion policy bytes, q6 target/steps, arm waypoints, planner, safety gates, MJCF, scene, geometry, simulator state, and all later phase actions.
+decision: PLANNED and committed before stack launch or controller action. Only the registered production runner may execute EXP-109.
+```
