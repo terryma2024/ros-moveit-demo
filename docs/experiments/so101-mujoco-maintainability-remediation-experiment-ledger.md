@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: efeb7bcb47bffacd3017b0770deb5ab5628a3365
+current_commit: 10d3fecb397968609539da2f7b9139ba013cf6cb
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,8 +21,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-054
-next_experiment: NONE_TASK9_STATIC_ANALYSIS_AUTHORIZED
+latest_checkpoint: MNT-CP-055
+next_experiment: NONE_USER_APPROVAL_REQUIRED
 ```
 
 ## Checkpoint MNT-CP-001
@@ -5509,4 +5509,96 @@ protected_user_state:
     - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
 next_experiment: NONE_TASK9_STATIC_ANALYSIS_AUTHORIZED
 next_command: Create the isolated phase-aware-proposal evidence directory and run the hash-recorded replay tool against EXP-126..130; no ROS or MuJoCo stack is required.
+```
+
+## Checkpoint MNT-CP-055 — phase-aware schema-v4 proposal generated; USER_APPROVAL_REQUIRED
+
+```yaml
+checkpoint_id: MNT-CP-055
+recorded_at: 2026-08-13T00:55:23+08:00
+prior_checkpoint: MNT-CP-054
+authorization_checkpoint_commit: 10d3fecb397968609539da2f7b9139ba013cf6cb
+status: USER_APPROVAL_REQUIRED
+task_9_result: COMPLETE_WITH_AUTHORIZED_SUBSTITUTE_INPUTS
+input_contract:
+  original_exp110_through_exp114_history_rewritten: false
+  authorized_substitute_inputs: [EXP-126, EXP-127, EXP-128, EXP-129, EXP-130]
+  independent_experiment_units: 5
+  lifecycle: FULL_RESTART
+  waypoint_role: repeated_measure
+  exp126_visual_evidence: USER_WAIVER_PRESERVED
+replay:
+  command_exit_code: 0
+  result: TASK9_REPLAY_OK
+  sample_count: 18575
+  shadow_force_n: 1.1579004532160448
+  every_content_addressed_chunk_hash_valid: true
+  every_run_summary_byte_identical: true
+  tool:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-proposal/replay_phase_aware_proposal_inputs.py
+    sha256: 48c82364313fd9a4ca4c19a114f7dcdc9578b4ad2c39a10adb43c51e50a5ef32
+    ruff_check: PASS
+    ruff_format_check: PASS
+  dynamic_input:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-proposal/dynamic-input-exp126-130.json
+    sha256: a0cb1a697d132f4747cfaa1ddeafa08d655d9132bc908bc3d1e307a45f974643
+  report:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-proposal/replay-report-exp126-130.json
+    sha256: 5a57b8608c2f464d43f917972c7cd02cace5a9016243b2d419b8f00ca96950b4
+  runs:
+    - [EXP-126, 741, 3705, c7853a24f84c3b4191768fe03bc6c45acb69d941be28318e99e4e40c8804419a, 77469eeb45edbe0e84e738d4a6ff752a218bf960f5b45141c5f506ad44c36fb5, 6.585691618115172]
+    - [EXP-127, 743, 3715, b2b79803342a1819387d57e00447587ef8a925f4be860b8e64c242ee1c21d148, 606083dfffbc22536bcde4f4381222bea8dc19844b852f182f51c406c547347a, 6.610766540615487]
+    - [EXP-128, 743, 3715, f8e3f043529be7eb8a69fd54a96594fdd17c7e9440bfe8bd9d540d1e812597a7, 754223d5cf0150d171752c2066c71fde55caf9233648d6005b7784f15ace3e8e, 6.605869241031424]
+    - [EXP-129, 744, 3720, 79ffb91ffe2846b2d5be9d043913846f5859885d3f4db189356d2f5aeab0ec60, b630c81f1d18504d42cebd664b5b9a25275e624a5baf3cd2310453aadeb3a403, 6.605648380531681]
+    - [EXP-130, 744, 3720, 67091fad3ac8c5d453b6293167d6f21b0d3bb2a5158cda59fce3ce652e362f52, 9c3be74e3d1388f4519bf7f9275c6f7dcafc6711c16cc02bf7eb791c2b795727, 6.565566498091873]
+  run_tuple_fields: [experiment_id, chunk_count, sample_count, raw_run_index_sha256, stored_and_replayed_summary_sha256, peak_global_max_single_contact_force_n]
+proposal:
+  primary_path: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-proposal/contact-calibration-v4-proposal.yaml
+  repeat_path: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-proposal/contact-calibration-v4-proposal-repeat.yaml
+  primary_file_sha256: 6131c4a23b6a3fb475f0932888ae59940615dce81d4a7645c812f3b66e06b3ff
+  repeat_file_sha256: 6131c4a23b6a3fb475f0932888ae59940615dce81d4a7645c812f3b66e06b3ff
+  byte_identical: true
+  proposal_sha256: 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f
+  schema_version: 4
+  proposal_kind: phase_aware_dynamic_transport_diagnostic
+  acceptance_role: diagnostic_only
+  approval: {enabled: false, approved: false, approved_by: null, approved_at: null}
+  fits_dynamic_threshold: false
+  dynamic_acceptance_threshold_present: false
+  static_shadow_threshold_n: 1.1579004532160448
+  diagnostic_hard_stop_n: 11.60
+  peak_global_max_single_contact_force_range_n: [6.565566498091873, 6.610766540615487]
+  force_time_exposure_range_n_s: [28.69053408357788, 28.739808658093143]
+  shadow_excess_exposure_range_n_s: [20.658994965926095, 20.706507050079544]
+validation:
+  source_analyzer_primary: PASS
+  source_analyzer_repeat: PASS
+  installed_analyzer_after_sourcing_fresh_overlay: PASS
+  focused_tests: 37 passed
+  embedded_proposal_hash_recomputed_equal: true
+  checked_in_contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  checked_in_contact_policy_diff: NONE
+non_product_invocation_characterization:
+  - The first installed-analyzer probe omitted the fresh-install /install directory level and found no executable.
+  - The next direct entrypoint invocation did not source the fresh overlay, so Python package metadata was unavailable; its trailing printf masked the shell status and the result was rejected.
+  - The accepted installed validation sourced /opt/ros/jazzy/setup.zsh and the fresh install/setup.zsh, then ros2 run exited 0.
+execution_state:
+  simulation_started: false
+  reset_world_started: false
+  strategy_or_threshold_change: NONE
+  checked_in_policy_activation: false
+  rebase_merge_push: false
+  owned_processes: NONE
+approval_boundary:
+  requested_exact_hash: 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f
+  approval_meaning: Accept this immutable diagnostic proposal and its five-run evidence packet; schema-v4 cannot be activated as a runtime contact-threshold policy.
+  exact_stop: Do not start RESET_WORLD, change runtime policy, merge, rebase, or push before the user's exact-hash response is recorded.
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  preserved_untracked_documents:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+next_experiment: NONE_USER_APPROVAL_REQUIRED
+next_command: Wait for the user to approve exact phase-aware proposal_sha256 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f; do not infer approval from the earlier substitute-input authorization.
 ```

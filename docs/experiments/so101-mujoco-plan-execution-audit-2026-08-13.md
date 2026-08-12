@@ -70,21 +70,19 @@ backend integration contract 通过；三个包 fresh build 通过；从 fresh i
 | 3. per-physics-step C++ 边界 | COMPLETE | `cb7381c` 增加每物理步 chunk/latch；后续 r6 fork `738e304` 修正到每 500 Hz physics step 采样，fork tag 已推送并通过 runtime probe。 | 已完成并经后续诊断加固。 |
 | 4. typed raw recording、validity、analysis | COMPLETE | `3acb85c` 实现 `dynamic_transport_evidence.py`；后续 qualified NVMe evidence path 解决无损存储问题。基线重新验证所有 chunk/hash/连续性。 | 已完成。 |
 | 5. phase-aware shadow 与 hazard cancellation | COMPLETE | `49020bb` 分离 static hard gate 与 dynamic shadow/hazard；`EXP-124` 验证无损运输，`EXP-125` 验证正确阶段分类。 | 已完成。 |
-| 6. schema-v4 diagnostic-only proposal generator | COMPLETE | `3a4ce93` 实现 deterministic schema-v4 builder/validator，禁止动态 acceptance threshold 并保持 approval disabled。 | 生成器与测试已完成，但没有终态 proposal 文件；终态文件属于 Task 9。 |
+| 6. schema-v4 diagnostic-only proposal generator | COMPLETE | `3a4ce93` 实现 deterministic schema-v4 builder/validator，禁止动态 acceptance threshold 并保持 approval disabled。 | 生成器与测试已完成；终态 proposal 已由 Task 9 生成。 |
 | 7. sampling 前自动门 | COMPLETE | `b44234c` 记录原批次 gate；当前更强的 `522 passed, 4 skipped`、Ruff、fresh build/install、fork/runtime、frozen/backend gates 全部通过。 | 已完成。 |
-| 8. 顺序执行 `EXP-110..114` | PARTIAL | `EXP-110` 启动后因 evidence session identity mismatch 被正确判为 `INVALID_EVIDENCE`；按预登记规则立即停止。`EXP-111..114` 永久未执行。之后 `EXP-126..130` 提供了五次独立、无损的 FULL_RESTART 动态证据，但它们不是原批次，不能重写历史。 | 原任务没有按原实验 ID 完成。功能所需五运行数据已由后续授权批次取得，可作为新的输入集合。 |
-| 9. 生成两次一致的 disabled proposal 并停在 `USER_APPROVAL_REQUIRED` | NOT_EXECUTED | 仓库和登记的 evidence root 均没有原计划指定的 `contact-calibration-v4-proposal.yaml`；ledger 明确记录 EXP-110 批次中止时禁止生成 proposal。当前只存在生成器和本次 FULL_RESTART 基线。 | 这是该计划唯一仍需实际产生的终态工件。 |
+| 8. 顺序执行 `EXP-110..114` | COMPLETE_WITH_APPROVED_SUPERSESSION | `EXP-110` 启动后因 evidence session identity mismatch 被正确判为 `INVALID_EVIDENCE`；按预登记规则立即停止，`EXP-111..114` 永久未执行。用户随后明确授权以 `EXP-126..130` 作为替代输入；五次运行均为独立、无损的 FULL_RESTART 动态证据，原实验历史保持不变。 | 没有按原实验 ID 完成，但用户授权的替代输入满足 Task 9 的五独立运行证据目标。 |
+| 9. 生成两次一致的 disabled proposal 并停在 `USER_APPROVAL_REQUIRED` | COMPLETE_WITH_APPROVED_SUPERSESSION | 五次 500 Hz 原始证据共 18,575 个样本全部重放；每个 stored summary 与 replay summary 字节一致。两次生成的 schema-v4 文件 SHA-256 均为 `6131c4a2...e06b3ff`，embedded `proposal_sha256` 为 `4391efe6...7c848f`；approval disabled、无 dynamic acceptance threshold。 | 已用用户授权的 `EXP-126..130` 替代输入完成，并停在 exact-hash `USER_APPROVAL_REQUIRED`。 |
 
-结论：计划二的基础设施 Tasks 1–7 完成；原始 Task 8 批次按 fail-closed 合同中止，后续
-`EXP-126..130` 已取得可替代的五运行原始证据；Task 9 尚未执行。因此，计划二不能标记为
-“全部完成”。
+结论：计划二 Tasks 1–7 严格完成；Tasks 8–9 通过用户明确授权的 `EXP-126..130`
+替代输入完成。原始 `EXP-110..114` 历史未被重写，当前终态为
+`USER_APPROVAL_REQUIRED`，等待用户确认 exact `proposal_sha256`。
 
 ## 尚未完成与下一步边界
 
-1. 若仍需要完成 phase-aware 计划的 proposal 目标，应新增一个显式 checkpoint，声明用
-   `EXP-126..130` 替代已永久关闭的 `EXP-110..114`，然后将五次 summary replay 两遍，
-   生成 byte-identical、disabled、无 dynamic acceptance threshold 的 schema-v4 proposal，
-   记录 exact SHA-256，并停在 `USER_APPROVAL_REQUIRED`。不得复用或重写 EXP-110..114。
+1. phase-aware proposal 已生成；下一步只能记录用户对 exact `proposal_sha256`
+   `4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f` 的决定。
 2. schema-v4 proposal 是诊断产物，不能自动替换当前已批准 schema-v3 运行策略，也不能
    从本基线自动推出“显著漂移”阈值。
 3. 整体 migration success contract 仍缺新的五次连续 RESET_WORLD challenge。五次
