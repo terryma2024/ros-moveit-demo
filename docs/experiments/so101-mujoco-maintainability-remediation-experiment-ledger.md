@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: f9c6fe6787d5c03c9835b5cf9c0f575deea4d1d0
+current_commit: 98a0689a2e587a1b6822ad6863b6f384fe32e30b
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -20,7 +20,7 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-037
+latest_checkpoint: MNT-CP-038
 next_experiment: EXP-126
 ```
 
@@ -3983,7 +3983,7 @@ next_command: Commit this preregistration, then create one fresh isolated three-
 
 ```yaml
 batch_id: MNT-Q-EXP126-130
-status: PLANNED
+status: RUNNING
 registered_at: 2026-08-12T21:45:00+08:00
 prior_experiment: EXP-125
 goal: Five consecutive VALID production nine-phase successes under independent FULL_RESTART lifecycles.
@@ -4031,7 +4031,7 @@ common_invalid_criteria:
   - Any source/install/fingerprint mismatch, initial-state pollution, missing visual proof, evidence identity/loss fault, unexpected retry/reset/pause/write/constraint, duplicate stack, or unclean cleanup is INVALID and stops the batch.
 experiments:
   - experiment_id: EXP-126
-    status: PLANNED
+    status: RUNNING
     prior_experiment: EXP-125
     hypothesis: The frozen production contract succeeds after one independent FULL_RESTART.
     prediction: All common success criteria pass with consecutive_count 1.
@@ -4181,4 +4181,36 @@ protected_state:
 owned_processes: NONE
 decision: PASS; EXP-126 may transition from PLANNED to RUNNING after this checkpoint is committed.
 next_experiment: EXP-126
+```
+
+## Checkpoint MNT-CP-038 — EXP-126 RUNNING transition
+
+```yaml
+checkpoint_id: MNT-CP-038
+recorded_at: 2026-08-12T22:08:12+08:00
+experiment_id: EXP-126
+status_transition: PLANNED -> RUNNING
+prior_experiment: EXP-125
+consecutive_successes_before_run: 0
+preregistered_identity:
+  simulation_session_id: MNT-Q-EXP126-full-01
+  ros_domain_id: 198
+  http_port: 8038
+  gz_partition: so101-mnt-q-exp126
+  evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp126
+lifecycle: FULL_RESTART
+workflow_invocations: 1
+reset_transactions: 1
+retry_count: 0
+pre_run_gate_commit: 98a0689a2e587a1b6822ad6863b6f384fe32e30b
+common_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install
+runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+harness_sha256: b90ff4d8ccf4b87aef7796d4125a1c907e9321d2c6ad826c903807b79bf14054
+preflight:
+  domain_198_nodes: NONE
+  port_8038_listener: NONE
+  tmux_session_so101_mnt_q_exp126: ABSENT
+  evidence_root: ABSENT
+  relevant_processes: NONE
+decision: RUN exactly one preregistered natural workflow and stop on any non-success terminal result.
 ```
