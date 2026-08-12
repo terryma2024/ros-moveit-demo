@@ -1229,6 +1229,7 @@ python3 src/so101_mujoco_demo_py/scripts/check_mujoco_runtime.py \
   --lock src/so101_mujoco_demo_py/config/dependency-lock.yaml
 python3 src/so101_mujoco_demo_py/scripts/check_reset_qualified_runtime.py \
   --lock src/so101_mujoco_demo_py/config/dependency-lock.yaml \
+  --project-install "$acceptance_build/install" \
   --check-only
 ```
 
