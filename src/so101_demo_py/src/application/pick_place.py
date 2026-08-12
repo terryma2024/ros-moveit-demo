@@ -317,7 +317,15 @@ def _sha256(path: Path) -> str:
 
 
 def _expected_contact_fingerprint(config: LiveRuntimeConfig) -> ContactPolicyFingerprint:
-    package_root = config.motion_policy.resolve().parents[2]
+    resolved_policy = config.motion_policy.resolve()
+    package_root = next(
+        (
+            parent
+            for parent in resolved_policy.parents
+            if (parent / "config/dependency-lock.yaml").is_file()
+        ),
+        resolved_policy.parents[2],
+    )
     lock = yaml.safe_load((package_root / "config" / "dependency-lock.yaml").read_bytes())
     contact = yaml.safe_load(config.contact_policy.read_bytes())
     try:
@@ -327,8 +335,16 @@ def _expected_contact_fingerprint(config: LiveRuntimeConfig) -> ContactPolicyFin
         raise ValueError("runtime policy fingerprint inputs are incomplete") from error
     return ContactPolicyFingerprint(
         dependency_commit=str(dependency_commit),
-        model_sha256=_sha256(package_root / "mjcf" / "so101.xml"),
-        scene_sha256=_sha256(package_root / "mjcf" / "scene.xml"),
+        model_sha256=_sha256(
+            package_root / "assets/mujoco/so101.xml"
+            if (package_root / "assets/mujoco/so101.xml").is_file()
+            else package_root / "mjcf/so101.xml"
+        ),
+        scene_sha256=_sha256(
+            package_root / "assets/mujoco/scene.xml"
+            if (package_root / "assets/mujoco/scene.xml").is_file()
+            else package_root / "mjcf/scene.xml"
+        ),
         motion_policy_sha256=_sha256(config.motion_policy),
         source_evidence_sha256=str(source_evidence_sha256),
     )
