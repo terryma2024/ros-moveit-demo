@@ -24,7 +24,6 @@ MOTION_POLICY = (
     Path(__file__).parents[1] / "config" / "motion_policies" / "light_cup_wall_pick.yaml"
 )
 PACKAGE_ROOT = MOTION_POLICY.parents[2]
-DISABLED_CONTACT_POLICY = PACKAGE_ROOT / "config" / "contact_calibration.yaml"
 
 
 def write_approved_contact_policy(
@@ -82,6 +81,19 @@ def write_approved_contact_policy(
     return path
 
 
+def write_disabled_contact_policy(tmp_path: Path) -> Path:
+    document = yaml.safe_load(write_approved_contact_policy(tmp_path).read_text(encoding="utf-8"))
+    document["approval"].update(
+        enabled=False,
+        approved=False,
+        approved_by=None,
+        approved_at=None,
+    )
+    path = tmp_path / "disabled-contact.yaml"
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def config(tmp_path: Path) -> LiveRuntimeConfig:
     return LiveRuntimeConfig(
         simulation_session_id="test-session",
@@ -94,7 +106,7 @@ def config(tmp_path: Path) -> LiveRuntimeConfig:
 
 
 def test_disabled_contact_policy_fails_before_resume_or_phase_commands(tmp_path) -> None:
-    runtime = replace(config(tmp_path), contact_policy=DISABLED_CONTACT_POLICY)
+    runtime = replace(config(tmp_path), contact_policy=write_disabled_contact_policy(tmp_path))
     observed = []
 
     result = run_live_workflow(
