@@ -265,17 +265,20 @@ def validate_evidence(evidence_value: Any) -> dict[str, Any]:
 
 
 def _contact_force(sample: dict[str, Any], field: str) -> float:
-    return max((float(item["normal_force_n"]) for item in sample[field]), default=0.0)
+    return sum(float(item["normal_force_n"]) for item in sample[field])
 
 
 def sample_metrics(sample: dict[str, Any]) -> dict[str, float]:
     linear = sample["object_twist_world"]["linear_m_s"]
+    left_force = _contact_force(sample, "left_fingertip_contacts")
+    right_force = _contact_force(sample, "right_fingertip_contacts")
     return {
         "minimum_signed_distance_m": float(sample["minimum_signed_distance_m"]),
         "maximum_normal_force_n": float(sample["maximum_normal_force_n"]),
         "linear_speed_m_s": math.sqrt(sum(float(value) ** 2 for value in linear)),
-        "left_normal_force_n": _contact_force(sample, "left_fingertip_contacts"),
-        "right_normal_force_n": _contact_force(sample, "right_fingertip_contacts"),
+        "left_normal_force_n": left_force,
+        "right_normal_force_n": right_force,
+        "bilateral_force_n": min(left_force, right_force),
         "other_normal_force_n": _contact_force(sample, "other_object_contacts"),
         "contact_duration_s": float(sample["contact_duration_s"]),
     }
@@ -310,8 +313,8 @@ def _thresholds(
         ("bilateral_touch", "over_compression", "micro_lift_slip", "stable_hold"),
     )
     minimum_force, force_margin = _separating_threshold(
-        [sample["maximum_normal_force_n"] for sample in unilateral],
-        [sample["maximum_normal_force_n"] for sample in bilateral],
+        [sample["bilateral_force_n"] for sample in unilateral],
+        [sample["bilateral_force_n"] for sample in bilateral],
         "bilateral force",
     )
     acceptable_compression = _flatten(
