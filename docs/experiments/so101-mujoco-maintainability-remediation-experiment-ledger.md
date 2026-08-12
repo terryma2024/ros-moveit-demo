@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: d53472262b77daf65e5b66547e1c3c01128577c0
+current_commit: b14f5c93552993b0bce97846d60ff34717d4f968
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,8 +21,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-045
-next_experiment: EXP-129
+latest_checkpoint: MNT-CP-046
+next_experiment: EXP-130
 ```
 
 ## Checkpoint MNT-CP-001
@@ -4080,7 +4080,7 @@ experiments:
     decision: KEEP_VALID_SUCCESS_3_OF_5
     next_experiment: EXP-129_ON_SUCCESS_ONLY
   - experiment_id: EXP-129
-    status: RUNNING
+    status: VALID
     prior_experiment: EXP-128
     hypothesis: A fourth independent FULL_RESTART extends the unchanged streak.
     prediction: All common success criteria pass with consecutive_count 4.
@@ -4093,7 +4093,7 @@ experiments:
       gz_partition: so101-mnt-q-exp129
       evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp129
     command: GZ_PARTITION=so101-mnt-q-exp129 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-129 --session-id MNT-Q-EXP129-full-01 --domain-id 201 --port 8041 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp129
-    decision: PENDING
+    decision: KEEP_VALID_SUCCESS_4_OF_5
     next_experiment: EXP-130_ON_SUCCESS_ONLY
   - experiment_id: EXP-130
     status: PLANNED
@@ -4457,6 +4457,114 @@ visual_acceptance:
   independent_png_decode_before_acceptance: true
   EXP_126_waiver_applies: false
 decision: RUN exactly one preregistered natural workflow and stop on any product, provenance, evidence, visual-integrity, or cleanup failure.
+```
+
+## EXP-129 — VALID FULL_RESTART success
+
+```yaml
+experiment_id: EXP-129
+recorded_at: 2026-08-12T22:53:05+08:00
+status: VALID
+behavioral_result: SUCCESS
+consecutive_successes: 4
+waiver_applied: false
+simulation_session_id: MNT-Q-EXP129-full-01
+ros_domain_id: 201
+http_port: 8041
+gz_partition: so101-mnt-q-exp129
+lifecycle: FULL_RESTART
+workflow_invocations: 1
+reset_transactions: 1
+retry_count: 0
+workflow:
+  reset_epoch: 1
+  simulation_step_after_reset: 0
+  owner_manifest_status: DONE
+  completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+  terminal_release_status: RELEASE_RETREAT_FINAL_PLACEMENT_PROVED
+  phase_exit_codes: ALL_ZERO
+phase_maximum_normal_force_n:
+  contact_hold: 0.6060929187611249
+  micro_lift: 0.6061013364855292
+  policy_lift_waypoint1: 0.774876082094659
+  remaining_lift: 0.7750797150784496
+  transport: 4.982986824474829
+  descend: 4.783932381405291
+  place_alignment: 4.497177699157209
+  release_retreat: 3.4766734127699293
+  released_static_final: 0.15105951830495978
+physical_outcome:
+  primary_failure: null
+  final_xyz_m: [-0.0792916959281965, -0.2481718428047334, 0.1654924856311975]
+  final_upright_tilt_rad: 0.017432376066860933
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.000008603189426505625
+  support_contact: true
+  gripper_contact: false
+  moveit_attached: false
+  world_object_synchronized: true
+  planning_scene_attached_object_ids: []
+  planning_scene_world_primitive_counts: {table: 1, pedestal: 1, plastic_cup: 13}
+  direct_object_state_writes: 0
+  physics_pause_calls: 0
+  simulator_constraint_calls: 0
+transport_raw_evidence:
+  chunk_count: 744
+  sample_count: 3720
+  first_physics_step: 26306
+  last_physics_step: 30025
+  physics_timestep_s: 0.002
+  lossless: true
+  run_index_sha256: 79ffb91ffe2846b2d5be9d043913846f5859885d3f4db189356d2f5aeab0ec60
+visual_acceptance:
+  passed: true
+  required_claims_all_true: true
+  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp129/cua-visual.png
+  screenshot_sha256: 3696fce78f366304486bc12c847cedd0506af13ae021480a1781176cc8dc4894
+  screenshot_size_bytes: 781561
+  screenshot_dimensions: [5120, 2880]
+  cua_png_verify_and_load: PASS
+  independent_main_agent_png_verify_and_load: PASS
+  main_agent_visual_review: PASS; MuJoCo Running, full scene visible, cup upright in red ring, gripper open, arm retired clear.
+  auxiliary_rviz_window_available: false
+shutdown:
+  ordered_marker: true
+  returncode: 0
+  fatal_signal: false
+  process_died: false
+  domain_201_nodes_after_stop: NONE
+  port_8041_listener_after_stop: NONE
+  tmux_session_after_stop: NONE
+  owned_process_residue: NONE
+artifacts:
+  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp129/exp-129-result.json
+  result_sha256: fcee547b94e507ad3a63053b445120c0529fa925891bc8a3312b51e49048e6d4
+  owner_manifest_sha256: 75b83416e533992fe818aca922c83e207e62f7d14e58b5ba9c758cd9f927ae8d
+  release_retreat_sha256: bd058fe1661a3acd28b128b795b616b10cd83599db5378b2afe53c9451eb77ca
+  visual_verdict_sha256: 5f8a75c2c47f3b7d008758131000befff2514fa0ceca97ca2d67888738a66d65
+decision: KEEP VALID success; continue only to EXP-130 after a fresh full preflight and RUNNING commit.
+next_experiment: EXP-130
+```
+
+## Checkpoint MNT-CP-046 — EXP-129 valid and clean
+
+```yaml
+checkpoint_id: MNT-CP-046
+recorded_at: 2026-08-12T22:53:05+08:00
+last_valid_experiment: EXP-129
+batch_id: MNT-Q-EXP126-130
+batch_status: AUTHORIZED_RUNNING
+consecutive_valid_successes: 4
+counted_successes: [EXP-126_BY_USER_VISUAL_WAIVER, EXP-127, EXP-128, EXP-129]
+waiver_scope: EXP-126_ONLY
+owned_processes: NONE
+protected_state:
+  src_so101_gazebo_demo_py_diff: NONE
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+next_experiment: EXP-130
+next_command: Run the complete EXP-130 preflight, transition EXP-130 from PLANNED to RUNNING in the ledger, commit the transition, and execute its preregistered command exactly once.
 ```
 
 ## EXP-128 — VALID FULL_RESTART success
