@@ -147,7 +147,8 @@ qualification_counting: false
 ```
 
 Runs 110..113 are descriptive repeats; EXP-114 is the preregistered replication. Record that
-`VALID_SAFETY_ABORT` or `INVALID` stops the batch and cannot be replaced.
+experiment `status: VALID` plus `outcome_class: VALID_SAFETY_ABORT`, or `status: INVALID`, stops the
+batch and cannot be replaced.
 
 - [ ] **Step 3: Commit the preregistration**
 
@@ -459,9 +460,10 @@ outcome is claimed.
 
 - [ ] **Step 3: Close the experiment before starting the next**
 
-Set exactly `VALID`, `VALID_SAFETY_ABORT`, or `INVALID`; record all evidence and cleanup. A safety
-abort or invalid record stops the batch immediately. Only a valid physical transport success
-permits the next preregistered experiment.
+Set experiment `status` exactly to `VALID` or `INVALID`. Under `VALID`, set `outcome_class` to
+`PHYSICAL_TRANSPORT_SUCCESS`, `VALID_SAFETY_ABORT`, or another preregistered valid physical
+failure. A safety abort or invalid record stops the batch immediately. Only a valid physical
+transport success permits the next preregistered experiment.
 
 - [ ] **Step 4: Repeat Steps 1-3 for the remaining registered IDs**
 
