@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: b526f5167e996f2247b9577594a100b27a36c82b
+current_commit: ad73015c80664b23f1f967fde6346a1b57e9bf5f
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,7 +17,7 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - A fresh seven-regime fixed-fingerprint campaign can produce non-overlapping deterministic thresholds for the current model and motion policy.
-latest_checkpoint: MNT-CP-003
+latest_checkpoint: MNT-CP-004
 next_experiment: EXP-001
 ```
 
@@ -96,4 +96,28 @@ open_risks:
   - The schema-v1 adapter maps its legacy config hash to scene and motion fields only for archived-read compatibility; live activation will use fresh schema-v2 evidence.
   - Physical thresholds remain unavailable until the seven-regime campaign and exact user approval.
 next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_grasp_outcome.py
+```
+
+## Checkpoint MNT-CP-004
+
+```yaml
+checkpoint_id: MNT-CP-004
+recorded_at: 2026-08-12T12:38:06+08:00
+last_valid_experiment: NONE
+current_hypothesis: Correlated cup/TCP motion plus table-clearance and relative-pose evidence can reject non-causal micro-lift and transport false positives.
+working_tree_status: Clean at ad73015c80664b23f1f967fde6346a1b57e9bf5f after Project A Task 4.
+owned_processes: NONE
+preserved_processes:
+  - Existing codex, codex-cua, and so101-mujoco-gui tmux sessions remain untouched.
+confirmed_conclusions:
+  - OBSERVED: A five-sample fresh bilateral window with allowed table evidence passes and returns immutable metrics/telemetry.
+  - OBSERVED: Stale, provenance, truncation, forbidden contact, missing side, low/high force, compression, slip, and dwell failures have stable distinct codes and declared precedence.
+  - OBSERVED: Receipt-age and reset-epoch fault injections each made their dedicated regression fail before restoring the checks.
+  - OBSERVED: Twenty-five grasp/contact focused tests and Ruff lint/format passed.
+disproven_routes:
+  - Treating evidence newer than the action sequence as automatically fresh regardless of callback receipt age.
+  - Checking session identity without independently checking reset epoch.
+open_risks:
+  - Grasp proof alone does not establish causal cup carry; micro-lift and every transport segment remain unproved.
+next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_micro_lift_outcome.py
 ```
