@@ -3653,3 +3653,81 @@ failure_policy: Any failed condition makes EXP-124 INVALID_EVIDENCE and stops fu
 command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh; source /tmp/so101-debug-mujoco-maintainability-remediation/storage-route-r7-install/setup.zsh; GZ_PARTITION=so101-mnt-a-exp124 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp124_evidence_diagnostic.py
 next_if_valid: Stop and report EXP-124 before preregistering any new five-run batch.
 ```
+
+## Checkpoint MNT-CP-033 — EXP-124 VALID qualified-volume evidence diagnostic
+
+```yaml
+checkpoint_id: MNT-CP-033
+recorded_at: 2026-08-12T20:53:02+08:00
+terminal_experiment: EXP-124
+status: VALID
+qualification_counting: false
+purpose_result: The 500 Hz physics-step evidence plumbing, strict continuity detector, typed transport boundaries, and lifecycle are valid when the qualification owner provisions a storage volume that can sustain the required durable writes.
+execution:
+  stack_ready: true
+  reset_status: SUCCEEDED
+  reset_session: MNT-A-EXP124-full-01
+  workflow_http_returned_naturally: true
+  workflow_business_terminal: HTTP 503 BACKEND_OPERATION_FAILED / PHASE_EXIT_NONZERO after transport; excluded by the preregistered diagnostic acceptance contract.
+  strategy_changed: false
+authoritative_raw_evidence:
+  index: /data/work/so101-debug-mujoco-maintainability-remediation/exp124/teleop-evidence/MNT-A-EXP124-full-01/so101-teleop-workflow-937f099c-1023-45c2-9822-5d936cf7de4c/transport-dynamic-raw/run-index.json
+  index_sha256: 8d51eb34fed9c2248618a80eba1acf5fffc0681899cfb6595da63f68b1c4be83
+  status: COMPLETE
+  outcome_class: PHYSICAL_TRANSPORT_SUCCESS
+  physical_transport_outcome: FORMAL_MOVE_ABOVE_PLACE_PROVED
+  chunk_count: 741
+  chunk_sequence_range: [4921, 5661]
+  physics_sample_count: 3705
+  physics_step_range: [24606, 28310]
+  typed_boundary_count: 12
+  independent_replay_checks:
+    content_hashes_match: true
+    chunk_sequence_and_physics_steps_continuous: true
+    simulation_time_increment_s: 0.002
+    session_ids_match: true
+    evidence_loss: false
+    failed_publish_attempts_total: 0
+acceptance_checks:
+  sessions_match: true
+  publisher_counts_match: true
+  first_chunk_present: true
+  first_chunk_has_five_samples: true
+  first_chunk_steps_are_consecutive: true
+  first_chunk_timestep_is_2ms: true
+  first_chunk_has_no_evidence_loss: true
+  first_chunk_sample_sessions_match: true
+  first_boundary_present: true
+  no_identity_mismatch: true
+  no_later_evidence_invalidity: true
+  workflow_http_returned: true
+  clean_shutdown: true
+evidence:
+  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp124/exp124-diagnostic.json
+  result_sha256: fe4d98ef2e738854ae415b431c40b3e8711b22710d215b6dc1136c798cc09038
+  launch_log: /data/work/so101-debug-mujoco-maintainability-remediation/exp124/run-01/launch.log
+  launch_log_sha256: 54affe710254524373634641242edd2e82f095217c45969be2c3bce22eee4e5a
+provenance:
+  behavior_source_commit: b0f83b67a1414f394ac5aeb8693acc74cf575bd4
+  preregistration_commit: 12007c4
+  runtime_fingerprint_sha256: b2fcf7c04882248de07ca6716f26097f550d76c7e210479fa51273a587363234
+  frozen_behavior_manifest_sha256: 737e303cc0d57d14e9cbf392191fc289ff1a9875458202e852c37a0bdfdadd49
+  fork_runtime_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_policy_behavior_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+shutdown:
+  ordered_marker: true
+  returncode: 0
+  fatal_signal: false
+  process_died: false
+  domain_196_nodes_after_stop: NONE
+  port_8036_listener_after_stop: NONE
+  owned_process_residue: NONE
+protected_state:
+  src_so101_gazebo_demo_py_diff: NONE
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+conclusion: The EXP-123 chunk-gap block was a storage-volume throughput mismatch, not a producer, controller, MuJoCo physics, or grasp-strategy defect. The formal qualification path now supplies the evidence volume, and EXP-124 proves lossless 500 Hz capture through a successful physical transport without changing the five-win strategy.
+next_experiment: NONE_STOP_AND_REPORT_BEFORE_ANY_FIVE_RUN_BATCH
+next_command: Report EXP-124 and the remaining post-transport PHASE_EXIT_NONZERO as a separate business-phase issue. Do not preregister or start a five-run batch in this checkpoint.
+```
