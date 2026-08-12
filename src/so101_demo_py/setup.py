@@ -10,10 +10,14 @@ subpackages = find_packages(where="src")
 
 def installed_resources() -> list[tuple[str, list[str]]]:
     entries: list[tuple[str, list[str]]] = []
-    for path in sorted((package_root / "config").rglob("*")):
-        if path.is_file() and "__pycache__" not in path.parts:
-            relative = path.relative_to(package_root)
-            entries.append((f"share/{package_name}/{relative.parent}", [str(relative)]))
+    for root_name in ("config", "assets", "launch"):
+        root = package_root / root_name
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and "__pycache__" not in path.parts:
+                relative = path.relative_to(package_root)
+                entries.append((f"share/{package_name}/{relative.parent}", [str(relative)]))
     return entries
 
 

@@ -93,6 +93,7 @@ def installed_bundle() -> QualificationBundle:
             "source_commit": _source_commit(),
             "package_prefix": str(prefix),
             "policy_registry": share / "config" / "policies",
+            "geometry_assets": share / "assets",
             "runner_version": "fusion-v1",
             "lifecycle_version": "fusion-v1",
         }
