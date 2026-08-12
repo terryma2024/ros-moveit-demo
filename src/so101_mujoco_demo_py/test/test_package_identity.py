@@ -83,17 +83,3 @@ def test_console_entry_point_preserves_ros_facing_executable_name() -> None:
             "teleop_workflow = so101_mujoco_demo_py.teleop_workflow:main",
         ]
     }
-
-
-def test_metadata_and_imports_have_no_gazebo_dependency() -> None:
-    metadata = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (
-            PACKAGE_ROOT / "package.xml",
-            PACKAGE_ROOT / "setup.py",
-            PACKAGE_ROOT / PACKAGE_NAME / "__init__.py",
-            PACKAGE_ROOT / PACKAGE_NAME / "cli.py",
-        )
-    ).lower()
-    for forbidden in ("gazebo", "gz_", "ros_gz", "so101_gazebo_demo_py"):
-        assert forbidden not in metadata

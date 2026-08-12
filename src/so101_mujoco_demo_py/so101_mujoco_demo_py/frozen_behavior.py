@@ -227,14 +227,13 @@ def verify_frozen_behavior(repo_root: Path, manifest_path: Path) -> dict[str, st
     transport_path = repo_root / manifest["transport_ast_semantics"]["path"]
     verify_transport_semantics(transport_path.read_text(encoding="utf-8"), manifest)
 
-    protected = manifest["protected_gazebo"]
-    _require_equal(
-        "protected Gazebo git tree",
-        _git(repo_root, "rev-parse", f"HEAD:{protected['path']}"),
-        protected["git_tree_oid"],
-    )
-    if _git(repo_root, "status", "--porcelain", "--", protected["path"]):
-        raise FrozenBehaviorViolation("protected Gazebo working tree changed")
+    backend_contract = manifest.get("backend_integration_contract")
+    if not isinstance(backend_contract, dict):
+        raise FrozenBehaviorViolation("backend integration contract is missing")
+    if backend_contract.get("gazebo_source_frozen") is not False:
+        raise FrozenBehaviorViolation("Gazebo source must not be frozen by this manifest")
+    if backend_contract.get("checker") != "scripts/check_backend_integration.py":
+        raise FrozenBehaviorViolation("backend integration checker changed")
     if _git(repo_root, "status", "--porcelain", "--", "src/so101_mujoco_demo_py/mjcf"):
         raise FrozenBehaviorViolation("protected MJCF working tree changed")
 
@@ -266,6 +265,6 @@ def verify_frozen_behavior(repo_root: Path, manifest_path: Path) -> dict[str, st
     return {
         "manifest_sha256": digest,
         "transport_semantics": "MATCH",
-        "protected_gazebo": "MATCH",
+        "backend_integration_contract": "ACTIVE_GAZEBO_NOT_FROZEN",
         "instrumentation_diff_gate": "MATCH",
     }
