@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - A bounded MoveIt translation along the q6 moving-pad tangent can produce repeatable physical left_only evidence without changing geometry or simulator state.
 latest_checkpoint: MNT-CP-008
-next_experiment: EXP-066
+next_experiment: EXP-069
 ```
 
 ## Checkpoint MNT-CP-001
@@ -986,4 +986,42 @@ EXP-066:
   lifecycle: RESET_WORLD
   single_variable: NONE
   decision: PENDING before qualified reset epoch 12 to 13.
+```
+
+## Experiment EXP-066 repeatability failure and finer-offset continuation
+
+```yaml
+EXP-066:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_13
+  single_variable: NONE; exact EXP-062 -0.0021 m candidate.
+  observed:
+    - Qualified reset/resume/staged approach and complete native Cartesian execution passed under the frozen driver.
+    - Right contact appeared before left_only; terminal q6=-0.0463152 rad, right_force=0.0272864 N, left_count=0, maximum_force=0.150246 N.
+    - Total cup displacement approximately 0.003373 m remained inside the registered total bound.
+  conclusion: The EXP-062 -2.1 mm success is not repeatable across ResetWorld and cannot seed calibration.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-066.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-066.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-066.log
+  decision: End repeatability batch; abandon unrun EXP-067 and EXP-068.
+continuation_batch:
+  status: PLANNED
+  prior_experiment: EXP-066
+  hypothesis: A slightly larger reachable negative offset creates a nonzero left-only margin robust to ResetWorld variation while remaining below the -2.5 mm partial-path boundary.
+  ordered_experiments:
+    - [EXP-069, -0.0022]
+    - [EXP-070, -0.0023]
+    - [EXP-071, -0.0024]
+  lifecycle: RESET_WORLD per candidate.
+  frozen_method: Native GetCartesianPath method and q6 step 0.00002 rad from EXP-062, driver SHA-256 5a13574de22bbb7074be8b2f2c44881ab3ce5f6b9a7a72c4c77768926f673d32.
+  success_failure_invalid_safety: Identical to the EXP-062 fine-search contract.
+  early_stop: First valid left_only candidate stops offset search and starts a fresh three-run exact-offset repeatability batch.
+EXP-069:
+  status: RUNNING
+  prior_experiment: EXP-066
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0022 m.
+  decision: PENDING before qualified reset epoch 13 to 14.
 ```
