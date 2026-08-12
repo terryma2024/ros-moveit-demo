@@ -3557,3 +3557,99 @@ failure_policy: Any failed condition makes EXP-123 INVALID_EVIDENCE and stops fu
 command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh; source /tmp/so101-debug-mujoco-maintainability-remediation/policy-provenance-r6-install/setup.zsh; GZ_PARTITION=so101-mnt-a-exp123 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp123_evidence_diagnostic.py
 next_if_valid: Stop and report EXP-123 before preregistering any new five-run batch.
 ```
+
+## Checkpoint MNT-CP-032 — EXP-123 terminal INVALID_EVIDENCE and storage-throughput repair
+
+```yaml
+checkpoint_id: MNT-CP-032
+recorded_at: 2026-08-12T20:48:54+08:00
+terminal_experiment: EXP-123
+status: INVALID_EVIDENCE
+rerun_policy: EXP-123 is immutable and will not be rerun or reclassified.
+execution_boundary:
+  stack_ready: true
+  reset_status: SUCCEEDED
+  reset_session: MNT-A-EXP123-full-01
+  workflow_http_status: 503 PHASE_EXIT_NONZERO
+  clean_shutdown: PASS; ordered marker true, return code zero, no process_died or fatal signal, Domain 195 and port 8035 empty.
+observed_authoritative_chunk:
+  chunk_sequence: 5113
+  physics_steps: [25566, 25567, 25568, 25569, 25570]
+  simulation_times_s: [55.70200000002211, 55.70400000002211, 55.70600000002211, 55.70800000002212, 55.71000000002212]
+  timestep_s: 0.002
+  failed_publish_attempts: 0
+  evidence_loss: false
+  session_identity: All chunk and sample session IDs matched MNT-A-EXP123-full-01.
+terminal_reason: The first chunk persisted, but the consumer later observed a nonconsecutive chunk sequence before the first typed transport boundary and closed INVALID_EVIDENCE.
+root_cause:
+  disproven: The consumer does not require the first observed global chunk sequence to be zero; sequence 5113 was accepted correctly.
+  measured_tmp_store: The existing required per-chunk atomic file plus run-index fsync path averaged 89.543 ms per chunk on /tmp (/dev/sda3), with all 100 measurements above 20 ms.
+  incoming_cadence: One five-step chunk every 10 ms (100 Hz).
+  conclusion: Synchronous durable persistence on the slow /tmp volume could service only about 11 Hz, so the reliable DDS history eventually evicted unread chunks and the strict continuity detector correctly failed closed.
+evidence:
+  result: /tmp/so101-debug-mujoco-maintainability-remediation/exp123/exp123-diagnostic.json
+  result_sha256: 16f4e1ee6d239c511ba596e3ed6a11604c7aaa294752471b8d72af0fa68c0015
+  launch_log: /tmp/so101-debug-mujoco-maintainability-remediation/exp123/run-01/launch.log
+  launch_log_sha256: 872ad6819ccd7c32c58094670a05f54a2fa20f71d183dd8189de2e1c3e7e800e
+  raw_index: /tmp/so101-teleop-evidence/MNT-A-EXP123-full-01/so101-teleop-workflow-02435a60-81e3-49d9-a7ee-9103a4f6d00b/transport-dynamic-raw/run-index.json
+  raw_index_sha256: f32ee31b0a09c9b91b5325e4b1d9f5706a2e73aa93f22e07dcadf828694e0195
+  first_chunk_sha256: 2310563733bf96ea20464c22bbd37b42b8985b25b2246c633a29f877f176fc7c
+repair:
+  commit: b0f83b67a1414f394ac5aeb8693acc74cf575bd4
+  contract: ProductionQualificationRunner binds SO101_TELEOP_EVIDENCE_BASE to its caller-provisioned evidence_root/teleop-evidence. Standalone Teleop retains the legacy default and accepts only an absolute explicit override.
+  durability: Atomic per-chunk file fsync, atomic run-index fsync, content hashes, strict sequence checks, five-sample chunk format, and producer QoS are unchanged.
+  measured_nvme_store: The identical synchronous persistence path averaged 2.136 ms per chunk on /data/work (/dev/nvme0n1p5), with one of 100 samples above 10 ms and DDS depth sufficient for that isolated spike.
+  strategy_freeze: No contact policy, q6, waypoint, trajectory, planner, speed/acceleration, controller, MJCF, scene, geometry, threshold, phase order, or producer hook changed.
+red_green:
+  RED: Three focused tests failed before the absolute evidence-base override and qualification-volume binding existed.
+  GREEN: 24 focused tests passed; full Python gate passed 537 with 4 skipped; Ruff and frozen-behavior gates passed.
+  isolated_gate: Fresh three-package build/test at storage-route-r7-install passed 798 tests, 0 errors, 0 failures, 4 skipped.
+  runtime_gate: Exact r6 fork/runtime and all three isolated project package prefixes passed; frozen manifest SHA-256 is 737e303cc0d57d14e9cbf392191fc289ff1a9875458202e852c37a0bdfdadd49.
+protected_gazebo: src/so101_gazebo_demo_py working-tree diff NONE.
+next_experiment: EXP-124_PENDING_PREREGISTRATION
+```
+
+## EXP-124 preregistration — qualified-volume physics-step evidence diagnostic
+
+```yaml
+experiment_id: EXP-124
+recorded_at: 2026-08-12T20:48:54+08:00
+prior_experiment: EXP-123 remains permanently INVALID_EVIDENCE and is not rerun or reclassified.
+status: PLANNED
+purpose: Validate authoritative 500 Hz physics-step evidence identity, continuity, typed boundary persistence, and clean lifecycle on caller-provisioned durable storage only; do not evaluate or tune grasp policy.
+lifecycle: FULL_RESTART
+behavior_source_commit: b0f83b67a1414f394ac5aeb8693acc74cf575bd4
+fork_runtime_commit: 738e304551b4ea6db020b466086a13db71b65607
+fork_policy_behavior_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/storage-route-r7-install
+runtime_fingerprint:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/storage-route-r7-runtime-fingerprint.json
+  sha256: b2fcf7c04882248de07ca6716f26097f550d76c7e210479fa51273a587363234
+frozen_behavior_manifest_sha256: 737e303cc0d57d14e9cbf392191fc289ff1a9875458202e852c37a0bdfdadd49
+harness:
+  path: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp124_evidence_diagnostic.py
+  sha256: 0411a5da59dc2d9ab2b1f7bf5e09080024fb6495b8a8e0d511d1828ae17c6281
+  static_checks: py_compile and Ruff PASS; no terminate(), kill(), or /execution/cancel path.
+runtime_identity:
+  session: MNT-A-EXP124-full-01
+  ros_domain_id: 196
+  port: 8036
+  gz_partition: so101-mnt-a-exp124
+  qualification_evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp124
+  teleop_evidence_base: /data/work/so101-debug-mujoco-maintainability-remediation/exp124/teleop-evidence
+single_variable: The qualification owner routes unchanged high-rate durable evidence writes from the slow /tmp filesystem to its explicit NVMe evidence volume. Physics hook, producer cadence/chunk size/QoS, consumer validation, storage durability, frozen strategy, model, scene, controller, thresholds, and lifecycle assertions are identical to EXP-123.
+procedure:
+  - Start exactly one fresh non-headless stack from the isolated storage-route-r7 overlay and perform the existing transactional ResetWorld.
+  - Run the unchanged production workflow, send no cancellation or other command, and wait for /workflow/run to return naturally.
+  - Observe at least one content-addressed five-sample chunk plus the first typed transport boundary on the qualification-provisioned evidence volume.
+  - Only after a normal HTTP terminal response perform ordered stop_stack. A timeout preserves the owned stack and is INVALID_EVIDENCE.
+acceptance:
+  - Exactly one publisher exists on each evidence topic; expected/snapshot/chunk/all five first-chunk sample session IDs equal MNT-A-EXP124-full-01.
+  - First chunk has exactly five consecutive physics steps, approximately 0.002 s time increments, zero failed publishes, and no evidence_loss.
+  - At least one typed boundary persists; identity_mismatch, invalid_reason, chunk gap, duplicate, or reversal remain absent through natural workflow return.
+  - The raw index and chunk paths resolve under the provisioned NVMe evidence base and retain their verified SHA-256 hashes.
+  - Ordered shutdown and owned process/domain/port cleanup pass. Grasp business outcome is not an acceptance signal.
+failure_policy: Any failed condition makes EXP-124 INVALID_EVIDENCE and stops further batch work. Run exactly once.
+command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh; source /tmp/so101-debug-mujoco-maintainability-remediation/storage-route-r7-install/setup.zsh; GZ_PARTITION=so101-mnt-a-exp124 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp124_evidence_diagnostic.py
+next_if_valid: Stop and report EXP-124 before preregistering any new five-run batch.
+```
