@@ -3242,3 +3242,39 @@ runtime_state: No task-owned processes; no new live experiment is preregistered.
 next_experiment: NONE_PENDING_PHYSICS_HOOK_GREEN
 next_command: Add RED coverage in the pinned mujoco_ros2_control fork for one read-independent callback after each successful mj_step, then route only diagnostic evidence sampling through that hook while retaining ordinary snapshots at controller cadence.
 ```
+
+## Checkpoint MNT-CP-027 — fork per-physics-step hook TDD checkpoint
+
+```yaml
+checkpoint_id: MNT-CP-027
+recorded_at: 2026-08-12T19:40:12+08:00
+last_valid_experiment: EXP-109
+immutable_invalid_experiments: EXP-110 and EXP-115 remain INVALID_EVIDENCE and are not rerun or reclassified.
+fork_before: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+fork_after: 738e304551b4ea6db020b466086a13db71b65607
+fork_commit: "feat: add per-physics-step plugin hook"
+red_evidence:
+  interface: SnapshotCountingPlugin could not override on_physics_step because the base API did not exist; MujocoSystemInterface had no notifying entry point.
+  path_audit: Source audit failed with three direct mj_step calls and zero uses of a shared notifying wrapper.
+source_confirmation:
+  controller_path: plugin->update(mj_model_, mj_data_control_) remains in MujocoSystemInterface::read at controller-manager cadence.
+  physics_paths:
+    - running timing-resynchronization single step
+    - running catch-up loop step
+    - paused StepSimulation/keyboard single step
+  lock: All three paths execute while sim_mutex_ protects authoritative mj_model_/mj_data_.
+green_contract:
+  - MuJoCoROS2ControlPluginBase adds a source-compatible default no-op on_physics_step hook.
+  - One step_authoritative_physics wrapper owns the only direct mj_step call, publishes clock, checks Diverged, and notifies plugins only when the step succeeds.
+  - The three original physics paths call that wrapper; other plugins retain their existing controller-cadence update behavior and receive only the default no-op hook unless they opt in.
+  - Hook callbacks receive authoritative mj_model_/mj_data_ under sim_mutex_.
+verification:
+  focused: Hook lock/identity, controller update cadence, and all-path source audit tests passed.
+  fork_suite: 133 tests, 0 errors, 0 failures, 0 skipped across the three fork packages.
+  diff_check: clean.
+  style_audit: Read-only ament_uncrustify reports the fork's broad pre-existing style baseline; no reformat was run, and new lines follow the surrounding fork style.
+parent_pointer: Will be committed as a dedicated parent checkpoint before the SimulationEvidencePlugin producer change.
+frozen_behavior: No strategy, controller command, model, scene, geometry, waypoint, q6, speed, acceleration, or phase behavior changed.
+next_experiment: NONE_PENDING_PROJECT_PLUGIN_GREEN
+next_command: Commit the parent submodule pointer, then make SimulationEvidencePlugin the sole opt-in per-step producer while ordinary update remains snapshot-only.
+```
