@@ -11,6 +11,7 @@ from pathlib import Path
 from ..core.domain import ExecutionRunStatus, FailureCategory, QualificationStatus
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_GIT_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +21,8 @@ class RunResultManifest:
     backend: str
     session_id: str
     reset_epoch: int
+    source_commit: str
+    installed_prefix: str
     policy_sha256: str
     bundle_sha256: str
     first_failed_phase: str | None
@@ -30,6 +33,10 @@ class RunResultManifest:
     def __post_init__(self) -> None:
         if not self.backend or not self.session_id or self.reset_epoch < 0:
             raise ValueError("run identity is invalid")
+        if not _GIT_COMMIT.fullmatch(self.source_commit):
+            raise ValueError("source commit must be a complete 40-character Git object ID")
+        if not self.installed_prefix or not Path(self.installed_prefix).is_absolute():
+            raise ValueError("installed prefix must be an absolute path")
         if not _SHA256.fullmatch(self.policy_sha256) or not _SHA256.fullmatch(
             self.bundle_sha256
         ):
@@ -41,6 +48,8 @@ def classify_run(
     backend: str,
     session_id: str,
     reset_epoch: int,
+    source_commit: str,
+    installed_prefix: str,
     policy_sha256: str,
     bundle_sha256: str,
     error_code: str | None,
@@ -70,6 +79,8 @@ def classify_run(
         backend,
         session_id,
         reset_epoch,
+        source_commit,
+        installed_prefix,
         policy_sha256,
         bundle_sha256,
         first_failed_phase,
@@ -91,12 +102,14 @@ def write_run_result(path: Path, result: RunResultManifest) -> Path:
             None if result.failure_category is None else result.failure_category.value
         ),
         "first_failed_phase": result.first_failed_phase,
+        "installed_prefix": result.installed_prefix,
         "policy_sha256": result.policy_sha256,
         "qualification_status": result.qualification_status.value,
         "reset_epoch": result.reset_epoch,
         "run_status": result.run_status.value,
         "schema": "so101-run-result-v1",
         "session_id": result.session_id,
+        "source_commit": result.source_commit,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")

@@ -22,6 +22,8 @@ def classify_execute_boundary(
     backend: str,
     session_id: str,
     reset_epoch: int,
+    source_commit: str,
+    installed_prefix: str,
     policy_sha256: str,
     bundle_sha256: str,
 ) -> RunResultManifest:
@@ -36,6 +38,8 @@ def classify_execute_boundary(
         backend=backend,
         session_id=session_id,
         reset_epoch=reset_epoch,
+        source_commit=source_commit,
+        installed_prefix=installed_prefix,
         policy_sha256=policy_sha256,
         bundle_sha256=bundle_sha256,
         error_code=error_code,
