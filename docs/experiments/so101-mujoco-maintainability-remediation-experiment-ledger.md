@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: ac9986cb96af6daac6459a404daa8b0aa08bc911
+current_commit: 3006938fdaf53004fd17c348751de9d9952e3f31
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -16,9 +16,9 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
-  - A bounded MoveIt translation along the q6 moving-pad tangent can produce repeatable physical left_only evidence without changing geometry or simulator state.
-latest_checkpoint: MNT-CP-008
-next_experiment: EXP-072
+  - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
+latest_checkpoint: MNT-CP-009
+next_experiment: A8_DESIGN_AND_TDD_ONLY
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1056,4 +1056,218 @@ EXP-072:
   lifecycle: RESET_WORLD
   single_variable: Native Cartesian corrected-axis TCP offset -0.00212 m.
   decision: PENDING before qualified reset epoch 14 to 15.
+```
+
+## Experiment EXP-072 terminal result and EXP-073 runtime start
+
+```yaml
+EXP-072:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_15
+  single_variable: Native Cartesian corrected-axis TCP offset -0.00212 m.
+  observed:
+    - Complete native Cartesian execution and all monitors passed; right contact still appeared before left_only.
+    - Terminal q6=-0.0468145 rad, right_force=0.0184047 N, left_count=0, maximum_force=0.173847 N, total cup displacement approximately 0.003473 m.
+  conclusion: -2.12 mm is fully reachable but not left_only in this ResetWorld trial.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-072.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-072.log
+  decision: KEEP; continue edge scan.
+EXP-073:
+  status: RUNNING
+  prior_experiment: EXP-072
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.00214 m.
+  provenance_and_safety: Identical to EXP-072.
+  decision: PENDING before qualified reset epoch 15 to 16.
+```
+
+## Experiment EXP-073 terminal result and EXP-074 runtime start
+
+```yaml
+EXP-073:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_16
+  single_variable: Native Cartesian corrected-axis TCP offset -0.00214 m.
+  observed:
+    - Full Cartesian execution passed; right contact appeared first at q6=-0.0468946 rad with right_force=0.0215051 N and no left contact.
+    - Maximum force=0.173762 N and total cup displacement approximately 0.003499 m remained within bounds.
+  conclusion: -2.14 mm is reachable but still right-first.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-073.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-073.log
+  decision: KEEP; continue edge scan.
+EXP-074:
+  status: RUNNING
+  prior_experiment: EXP-073
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.00216 m.
+  provenance_and_safety: Identical to EXP-072.
+  decision: PENDING before qualified reset epoch 16 to 17.
+```
+
+## Experiment EXP-074 terminal result and EXP-075 runtime start
+
+```yaml
+EXP-074:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_17
+  single_variable: Native Cartesian corrected-axis TCP offset -0.00216 m.
+  observed:
+    - Full Cartesian execution passed; right contact appeared first at q6=-0.0467749 rad with right_force=0.0170396 N and no left contact.
+    - Maximum force=0.174781 N and total cup displacement approximately 0.003493 m remained within limits.
+  conclusion: -2.16 mm remains right-first.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-074.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-074.log
+  decision: KEEP; run the last registered edge point.
+EXP-075:
+  status: RUNNING
+  prior_experiment: EXP-074
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.00218 m.
+  provenance_and_safety: Identical to EXP-072.
+  decision: PENDING before qualified reset epoch 17 to 18.
+```
+
+## User-directed A8 scope correction and Cartesian-route abandonment
+
+```yaml
+recorded_at: 2026-08-12T14:47:00+08:00
+directive:
+  - Stop all live work intended to manufacture left_only; do not create or execute any further offset batch.
+  - Do not modify the axis, planner, q6 step, 0.003 m/11.60 N safety gates, MJCF, scene, geometry, simulator state, motion waypoints, or the previously five-win grasp strategy.
+  - Abandon every EXP-069-and-later offset route after any already-running atomic action ends naturally.
+  - Revise A8 to keep physical no_contact, bilateral_touch, over_compression, micro_lift_slip, and stable_hold regimes; treat left_only/right_only as deterministic unilateral-rejection contracts.
+  - Reuse authentic unilateral evidence where available; an unsafe/unreachable side must be recorded as physical_unreachable, never fabricated or counted as zero misclassification.
+  - Schema/collector/analyzer changes require RED-GREEN typed sample and fault-injection tests; checked-in contact policy remains disabled.
+  - Stop at USER_APPROVAL_REQUIRED after generating the proposal and complete evidence summary; no self-approval and no Task 9/live nine-phase regression before exact-hash user approval.
+delivery_timing_correction:
+  - EXP-072 had already ended before this directive arrived.
+  - EXP-073 and EXP-074 had also ended before this directive was delivered to the active turn; their prior launches cannot be undone.
+  - EXP-075 had already entered its qualified reset/staged-approach/controller sequence when the previous wait was interrupted; it was allowed to terminate naturally and no new action followed.
+route_disposition:
+  EXP-069: ABANDON; INVALID partial Cartesian fraction already recorded.
+  EXP-070: ABANDON; never started.
+  EXP-071: ABANDON; never started.
+  EXP-072: ABANDON_AND_EXCLUDE_FROM_CALIBRATION.
+  EXP-073: ABANDON; completed right-first evidence is not a calibration input.
+  EXP-074: ABANDON; completed right-first evidence is not a calibration input.
+  EXP-075: ABANDON; completed right-first evidence is not a calibration input.
+  future_offsets: FORBIDDEN_BY_USER_DIRECTIVE.
+```
+
+## EXP-072 safety-contract audit correction
+
+```yaml
+experiment_id: EXP-072
+correction_recorded_at: 2026-08-12T14:47:00+08:00
+prior_terminal_text: VALID, all monitors passed, KEEP, total cup displacement approximately 0.003473 m.
+audit_finding:
+  - The durable result reports only terminal total displacement, not an independently serialized pre-contact displacement value.
+  - Terminal total displacement approximately 0.003473 m exceeds the registered 0.003 m pre-contact comparison gate.
+  - An internal monitor returning normally is insufficient evidence to retain the broad statement all monitors passed when the persisted metric cannot independently distinguish pre-contact from post-contact motion.
+corrected_classification: INVALID_FOR_CALIBRATION_AND_SAFETY_CONCLUSION
+corrected_decision: ABANDON
+prohibited_inference: Do not use EXP-072 as a KEEP candidate, a left_only calibration sample, or proof that the registered 0.003 m gate passed.
+evidence:
+  - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-072.log
+  - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-072.log
+```
+
+## Experiment EXP-075 natural terminal result
+
+```yaml
+experiment_id: EXP-075
+status: VALID
+behavioral_result: FAILURE
+lifecycle: RESET_WORLD_EPOCH_18
+single_variable: Native Cartesian corrected-axis TCP offset -0.00218 m.
+observed:
+  - The command was already in flight before the user stop directive was delivered; no interrupt or subsequent controller action was sent.
+  - Staged approach completed and the driver terminated itself on right-first contact.
+  - Fresh terminal snapshot: q6=-0.0466751 rad, right_count=1, right_force=0.0239958 N, left_count=0, maximum_force=0.150455 N.
+  - Cup position [0.0199989419, -0.2765083963, 0.1648048126] m; total displacement from reset is approximately 0.003492 m.
+  - No cartesian_alignment_driver or staged_approach process remained; all three controllers were active before stack shutdown.
+conclusion: Right-first behavioral failure; no left_only result and no calibration admission.
+decision: ABANDON per user directive; do not run any later offset.
+evidence:
+  - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-075.log
+  - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-075.log
+  - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-075.log
+```
+
+## Checkpoint MNT-CP-009
+
+```yaml
+checkpoint_id: MNT-CP-009
+recorded_at: 2026-08-12T14:47:00+08:00
+last_valid_experiment: EXP-075, behavioral failure and ABANDONED; no EXP-069+ result is admitted to calibration.
+current_hypothesis: Five reachable physical regimes plus deterministic unilateral-rejection contracts can satisfy A8 without manufacturing an unreachable side.
+working_tree_status: Only docs/experiments/so101-mujoco-maintainability-remediation-experiment-ledger.md modified before this checkpoint write; implementation HEAD 3006938fdaf53004fd17c348751de9d9952e3f31.
+owned_processes:
+  - One task-owned tmux stack so101-mnt-align-001 in ROS_DOMAIN_ID 176; no driver or staged-approach process remains and the stack is scheduled for immediate owned-session termination.
+preserved_processes:
+  - tmux codex
+  - tmux codex-cua
+  - tmux so101-mujoco-gui
+confirmed_conclusions:
+  - No repeatable safe left_only physical regime was established; EXP-062's one success failed its first exact ResetWorld repeat EXP-066.
+  - Authentic right-only evidence exists from multiple bounded trials, including EXP-030 and later abandoned diagnostics.
+  - EXP-072 is safety-evidence INVALID for calibration because persisted evidence did not independently prove the 0.003 m pre-contact bound and terminal total was approximately 0.003473 m.
+  - No physical sample may be fabricated and no missing class may be reported as zero misclassification.
+disproven_routes:
+  - Cartesian reachability-edge refinement after EXP-069 is ABANDONED by explicit user directive.
+  - Further axis/planner/step/offset refinement is forbidden.
+open_risks:
+  - The schema, collector, analyzer, proposal format, design, plan, and tests do not yet represent physical_unreachable plus deterministic unilateral rejection.
+  - contact_calibration.yaml remains PLANNED, disabled, and unapproved; execute remains unavailable.
+next_command: Terminate only tmux session so101-mnt-align-001, verify domain 176 is empty, then revise design/plan/A8 tests with RED first and no further live offset action.
+```
+
+### MNT-CP-009 owned-process cleanup completion
+
+```yaml
+recorded_at: 2026-08-12T14:49:00+08:00
+owned_processes: NONE
+observed:
+  - tmux session so101-mnt-align-001 was terminated after EXP-075 had naturally ended.
+  - No cartesian_alignment_driver, staged_approach, or session-owned launch process remains.
+  - ROS_DOMAIN_ID 176 no-daemon node list is empty.
+preserved_processes:
+  - tmux codex
+  - tmux codex-cua
+  - tmux so101-mujoco-gui
+next_command: Read the current A8 design, implementation plan, schema, collector, analyzer, and tests; revise documentation to the user-approved five-physical-plus-unilateral-contract boundary before writing RED tests.
+```
+
+## User correction to EXP-072 displacement audit
+
+```yaml
+recorded_at: 2026-08-12T14:51:00+08:00
+supersedes: EXP-072 safety-contract audit correction recorded at 2026-08-12T14:47:00+08:00.
+user_correction:
+  - Terminal total cup displacement and maximum pre-contact cup displacement are distinct metrics.
+  - The pre-contact limit remains 0.003 m and may only be failed by the independently monitored pre-contact displacement.
+  - The terminal total displacement limit remains 0.010 m; a terminal total above 0.003 m but below 0.010 m is not a safety-gate failure.
+audit_result:
+  EXP-072:
+    classification: VALID behavioral failure, as originally recorded before the erroneous audit correction.
+    pre_contact_gate: The driver passed its separate pre-contact monitor before q6 closing; no pre-contact threshold failure was emitted.
+    terminal_total_displacement_m: 0.003473 approximately, below 0.010.
+    decision: ABANDON per the later user scope directive; not admitted to calibration.
+  EXP-073:
+    classification: VALID behavioral failure; do not invalidate from terminal total displacement.
+    terminal_total_displacement_m: 0.003499 approximately, below 0.010.
+    decision: ABANDON; not admitted to calibration.
+  EXP-074:
+    classification: VALID behavioral failure; do not invalidate from terminal total displacement.
+    terminal_total_displacement_m: 0.003493 approximately, below 0.010.
+    decision: ABANDON; not admitted to calibration.
+checkpoint_correction:
+  - MNT-CP-009's statement that EXP-072 is safety-evidence INVALID is superseded and must not be used.
+  - The retained conclusion is only that EXP-069-and-later offset refinement is abandoned and none of those results is a calibration input.
 ```
