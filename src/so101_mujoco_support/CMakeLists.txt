@@ -15,6 +15,9 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ContactSample.msg"
+  "msg/PhysicsHazardLatch.msg"
+  "msg/PhysicsStepEvidence.msg"
+  "msg/PhysicsStepEvidenceChunk.msg"
   "msg/SimulationEvidence.msg"
   DEPENDENCIES geometry_msgs std_msgs)
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)

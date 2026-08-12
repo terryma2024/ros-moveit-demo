@@ -1,0 +1,7 @@
+string simulation_session_id
+uint64 reset_epoch
+uint64 physics_step
+float64 simulation_time_s
+float64 force_n
+float64 threshold_n
+bool evidence_loss
