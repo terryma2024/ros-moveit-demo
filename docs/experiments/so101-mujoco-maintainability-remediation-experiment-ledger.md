@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: f1666cec5fe8e0ee3c09f53491416dca89f159a0
+current_commit: 99801ba9c4e0a4ef4ac12eb0447c387bc28dfc5f
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,7 +17,7 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - A fresh seven-regime fixed-fingerprint campaign can produce non-overlapping deterministic thresholds for the current model and motion policy.
-latest_checkpoint: MNT-CP-005
+latest_checkpoint: MNT-CP-006
 next_experiment: EXP-001
 ```
 
@@ -146,4 +146,29 @@ open_risks:
   - The final-target evaluator and legacy parity boundary are still pending.
   - Contact calibration remains PLANNED; its checked-in motion hash was refreshed for the new policy bytes but it is not executable or approved.
 next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_physical_outcome_policy.py src/so101_mujoco_demo_py/test/test_pick_place_outcome.py
+```
+
+## Checkpoint MNT-CP-006
+
+```yaml
+checkpoint_id: MNT-CP-006
+recorded_at: 2026-08-12T12:53:36+08:00
+last_valid_experiment: NONE
+current_hypothesis: Execute can fail closed before orchestration unless one approved contact policy matches every runtime artifact fingerprint.
+working_tree_status: Clean at 99801ba9c4e0a4ef4ac12eb0447c387bc28dfc5f after Project A Task 6.
+owned_processes: NONE
+preserved_processes:
+  - Existing codex, codex-cua, and so101-mujoco-gui tmux sessions remain untouched.
+confirmed_conclusions:
+  - OBSERVED: The final placement target is loaded once from the typed motion policy; old production ±5 mm target-region literals were removed.
+  - OBSERVED: Live runtime strictly deserializes the recorded sample window and recomputes evaluate_final_placement; it does not trust serialized success or latest-position fields.
+  - OBSERVED: Unknown sample fields, mistyped booleans, changed injected bounds, ACM restoration failure, and Planning Scene readback mismatch fail closed.
+  - OBSERVED: A repository parity test binds MuJoCo final region, support height, tilt, and linear/angular settle limits to the read-only Gazebo policy reference.
+  - OBSERVED: Forty final-outcome, runtime, release, and policy tests passed; Ruff lint/format and diff checks passed.
+disproven_routes:
+  - Treating final_evaluation.success as authoritative evidence.
+  - Repeating final-region bounds in live orchestration after the typed policy has already loaded them.
+open_risks:
+  - Live execute still enters phase orchestration without an approved contact policy and several phase modules retain contact-limit literals.
+next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_pick_place_cli.py src/so101_mujoco_demo_py/test/test_live_runtime_contract.py
 ```
