@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 3
 policy_id: light_cup_wall_pick-contact
 calibration_status: PLANNED
 failure_reason: null
@@ -24,12 +24,35 @@ regimes:
   no_contact: &pending
     sample_count: 0
     quantiles: {p05: null, p50: null, p95: null}
-  left_only: *pending
-  right_only: *pending
   bilateral_touch: *pending
   over_compression: *pending
   micro_lift_slip: *pending
   stable_hold: *pending
+unilateral_rejection_contracts:
+  left_only:
+    stable_grasp_allowed: false
+    expected_failure_code: GRASP_RIGHT_CONTACT_MISSING
+    physical_evidence:
+      disposition: physical_unreachable
+      references:
+        - experiment_id: EXP-062
+          artifact_sha256: "30ded56e85ed3a89cf5e34711da2820d8f5652fe38851470dfe27d3f33d846a0"
+        - experiment_id: EXP-066
+          artifact_sha256: "085755077535972b10dd31ef18329bee8f7bc5a2b76da7ffd1bf523bb65be869"
+    physical_calibration_sample_count: null
+    physical_evaluation_sample_count: null
+    physical_misclassification_rate: null
+  right_only:
+    stable_grasp_allowed: false
+    expected_failure_code: GRASP_LEFT_CONTACT_MISSING
+    physical_evidence:
+      disposition: observed
+      references:
+        - experiment_id: EXP-072
+          artifact_sha256: "87e4a5e22d3cb30bcdf739f596465cd09807d40a6c6244a4f5d04806aa0d24c2"
+    physical_calibration_sample_count: null
+    physical_evaluation_sample_count: null
+    physical_misclassification_rate: null
 thresholds:
   minimum_bilateral_force_n: null
   maximum_compression_distance_m: null
@@ -46,8 +69,6 @@ misclassification_matrix:
     over_compression: 0
     micro_lift_slip: 0
     stable_hold: 0
-  left_only: *pending_confusion
-  right_only: *pending_confusion
   bilateral_touch: *pending_confusion
   over_compression: *pending_confusion
   micro_lift_slip: *pending_confusion

@@ -26,7 +26,7 @@ def fingerprint() -> ContactPolicyFingerprint:
 
 def valid_disabled_proposal() -> dict[str, object]:
     document: dict[str, object] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "policy_id": "light_cup_wall_pick-contact",
         "calibration_status": "VALID",
         "fingerprint": {
@@ -48,6 +48,30 @@ def valid_disabled_proposal() -> dict[str, object]:
             "maximum_safe_force_n": 5.0,
             "maximum_hold_linear_speed_m_s": 0.01,
             "minimum_stable_hold_duration_s": 0.30,
+        },
+        "unilateral_rejection_contracts": {
+            "left_only": {
+                "stable_grasp_allowed": False,
+                "expected_failure_code": "GRASP_RIGHT_CONTACT_MISSING",
+                "physical_evidence": {
+                    "disposition": "physical_unreachable",
+                    "references": [{"experiment_id": "EXP-062", "artifact_sha256": "6" * 64}],
+                },
+                "physical_calibration_sample_count": None,
+                "physical_evaluation_sample_count": None,
+                "physical_misclassification_rate": None,
+            },
+            "right_only": {
+                "stable_grasp_allowed": False,
+                "expected_failure_code": "GRASP_LEFT_CONTACT_MISSING",
+                "physical_evidence": {
+                    "disposition": "observed",
+                    "references": [{"experiment_id": "EXP-072", "artifact_sha256": "8" * 64}],
+                },
+                "physical_calibration_sample_count": None,
+                "physical_evaluation_sample_count": None,
+                "physical_misclassification_rate": None,
+            },
         },
         "approval": {
             "enabled": False,
@@ -203,3 +227,14 @@ def test_rejects_changed_expected_artifact_fingerprint(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="fingerprint mismatch"):
         load_approved_contact_policy(write_policy(tmp_path, approved_document()), changed)
+
+
+def test_rejects_unilateral_contract_that_can_claim_stable_grasp(tmp_path: Path) -> None:
+    document = approved_document()
+    document["unilateral_rejection_contracts"]["left_only"][  # type: ignore[index]
+        "stable_grasp_allowed"
+    ] = True
+    document["approval"]["proposal_sha256"] = proposal_sha256(document)  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="stable_grasp_allowed"):
+        load_approved_contact_policy(write_policy(tmp_path, document), fingerprint())

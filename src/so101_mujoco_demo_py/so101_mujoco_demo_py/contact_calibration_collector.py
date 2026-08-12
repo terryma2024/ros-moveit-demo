@@ -14,7 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from so101_mujoco_demo_py.contact_calibration import REGIMES, REQUIRED_UNITS
+from so101_mujoco_demo_py.contact_calibration import PHYSICAL_REGIMES, REQUIRED_UNITS
+from so101_mujoco_demo_py.contact_policy import validate_unilateral_rejection_contracts
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale
 from so101_mujoco_demo_py.simulation.types import (
     ContactEvidence,
@@ -68,10 +69,12 @@ class CollectionRequest:
     model_sha256: str
     scene_sha256: str
     motion_policy_sha256: str
+    unilateral_rejection_contracts: dict[str, Any]
     reference_object_position_m: tuple[float, float, float]
     pre_contact: bool = False
     max_receipt_age_s: float = 0.2
     maximum_pre_contact_displacement_m: float = 0.003
+    maximum_total_displacement_m: float = 0.010
     maximum_diagnostic_force_n: float = 11.60
     wrong_side_limit: int = 1
     stable_hold_preroll_s: float = 0.30
@@ -79,8 +82,9 @@ class CollectionRequest:
     post_release: bool = False
 
     def __post_init__(self) -> None:
-        if self.regime not in REGIMES:
+        if self.regime not in PHYSICAL_REGIMES:
             raise ValueError(f"unsupported calibration regime: {self.regime}")
+        validate_unilateral_rejection_contracts(self.unilateral_rejection_contracts)
         if self.sample_count <= 0:
             raise ValueError("sample_count must be positive")
         if not self.simulation_session_id:
@@ -102,6 +106,7 @@ class CollectionRequest:
                 *self.reference_object_position_m,
                 self.max_receipt_age_s,
                 self.maximum_pre_contact_displacement_m,
+                self.maximum_total_displacement_m,
                 self.maximum_diagnostic_force_n,
                 self.stable_hold_preroll_s,
             ),
@@ -111,6 +116,12 @@ class CollectionRequest:
             raise ValueError("reference_object_position_m must contain three values")
         if self.max_receipt_age_s <= 0.0:
             raise ValueError("max_receipt_age_s must be positive")
+        if self.maximum_pre_contact_displacement_m <= 0.0:
+            raise ValueError("maximum_pre_contact_displacement_m must be positive")
+        if self.maximum_total_displacement_m <= self.maximum_pre_contact_displacement_m:
+            raise ValueError(
+                "maximum_total_displacement_m must exceed the independent pre-contact limit"
+            )
         if self.stable_hold_preroll_s < 0.0:
             raise ValueError("stable_hold_preroll_s must be non-negative")
         output = self.output_path.resolve()
@@ -303,8 +314,10 @@ class ContactCalibrationCollector:
             raise CollectionAborted(str(error)) from error
         if evidence.maximum_normal_force_n > request.maximum_diagnostic_force_n:
             raise CollectionAborted("diagnostic force boundary exceeded")
+        displacement = math.dist(state.position_world, request.reference_object_position_m)
+        if displacement > request.maximum_total_displacement_m:
+            raise CollectionAborted("terminal total object displacement boundary exceeded")
         if request.pre_contact:
-            displacement = math.dist(state.position_world, request.reference_object_position_m)
             if displacement > request.maximum_pre_contact_displacement_m:
                 raise CollectionAborted("pre-contact object displacement boundary exceeded")
         return evidence
@@ -365,13 +378,13 @@ class ContactCalibrationCollector:
         if request.output_path.is_file():
             try:
                 existing = json.loads(request.output_path.read_text(encoding="utf-8"))
-                if isinstance(existing, dict) and existing.get("schema_version") == 2:
+                if isinstance(existing, dict) and existing.get("schema_version") == 3:
                     document = existing
             except (OSError, json.JSONDecodeError):
                 document = None
         if document is None:
             document = {
-                "schema_version": 2,
+                "schema_version": 3,
                 "units": dict(REQUIRED_UNITS),
                 "fingerprint": {
                     "source_commit": request.source_commit,
@@ -382,7 +395,10 @@ class ContactCalibrationCollector:
                 },
                 "simulation_session_id": request.simulation_session_id,
                 "reset_epoch": request.reset_epoch,
-                "regimes": {regime: [] for regime in REGIMES},
+                "regimes": {regime: [] for regime in PHYSICAL_REGIMES},
+                "unilateral_rejection_contracts": validate_unilateral_rejection_contracts(
+                    request.unilateral_rejection_contracts
+                ),
             }
         fingerprint = document.get("fingerprint")
         if not isinstance(fingerprint, dict):
@@ -404,8 +420,11 @@ class ContactCalibrationCollector:
         for field, value in expected_run.items():
             if document.get(field) != value:
                 raise CollectionAborted(f"existing matrix {field} mismatch")
+        existing_contracts = document.get("unilateral_rejection_contracts")
+        if existing_contracts != request.unilateral_rejection_contracts:
+            raise CollectionAborted("existing matrix unilateral rejection contracts mismatch")
         regimes = document.get("regimes")
-        if not isinstance(regimes, dict) or set(regimes) != set(REGIMES):
+        if not isinstance(regimes, dict) or set(regimes) != set(PHYSICAL_REGIMES):
             raise CollectionAborted("existing matrix regimes are incomplete")
         regimes[request.regime] = samples
         return document
@@ -413,7 +432,7 @@ class ContactCalibrationCollector:
 
 def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--regime", required=True, choices=REGIMES)
+    parser.add_argument("--regime", required=True, choices=PHYSICAL_REGIMES)
     parser.add_argument("--sample-count", type=int, default=20)
     parser.add_argument("--simulation-session-id", required=True)
     parser.add_argument("--reset-epoch", type=int, required=True)
@@ -423,6 +442,7 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-sha256", required=True)
     parser.add_argument("--scene-sha256", required=True)
     parser.add_argument("--motion-policy-sha256", required=True)
+    parser.add_argument("--unilateral-contracts", type=Path, required=True)
     parser.add_argument("--reference-object-position-m", nargs=3, type=float, required=True)
     parser.add_argument("--pre-contact", action="store_true")
     parser.add_argument("--table-only", action="store_true")
@@ -502,6 +522,13 @@ def run_ros_collection(options: argparse.Namespace) -> dict[str, Any]:
             ),
         )
 
+    contracts_document = json.loads(options.unilateral_contracts.read_text(encoding="utf-8"))
+    if (
+        isinstance(contracts_document, dict)
+        and "unilateral_rejection_contracts" in contracts_document
+    ):
+        contracts_document = contracts_document["unilateral_rejection_contracts"]
+    contracts = validate_unilateral_rejection_contracts(contracts_document)
     request = CollectionRequest(
         regime=options.regime,
         sample_count=options.sample_count,
@@ -513,6 +540,7 @@ def run_ros_collection(options: argparse.Namespace) -> dict[str, Any]:
         model_sha256=options.model_sha256,
         scene_sha256=options.scene_sha256,
         motion_policy_sha256=options.motion_policy_sha256,
+        unilateral_rejection_contracts=contracts,
         reference_object_position_m=tuple(options.reference_object_position_m),
         pre_contact=options.pre_contact,
         table_only=options.table_only,

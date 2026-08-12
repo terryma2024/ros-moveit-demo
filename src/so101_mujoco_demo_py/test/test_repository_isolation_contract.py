@@ -225,6 +225,16 @@ def test_gate_accepts_the_current_isolated_worktree() -> None:
     require_success(run(GATE_PATH))
 
 
+def test_gate_ignores_pytest_cache_created_by_a_previous_test_run(
+    isolated_checkout: Path,
+) -> None:
+    cache = isolated_checkout / IMPLEMENTATION_ROOT / ".pytest_cache/v/cache/nodeids"
+    cache.parent.mkdir(parents=True)
+    cache.write_text(f'["historical::{BACKUP_BRANCH}"]\n')
+
+    require_success(run(isolated_checkout / GATE_RELATIVE_PATH, cwd=isolated_checkout))
+
+
 def test_gate_does_not_require_origin_main(isolated_checkout: Path) -> None:
     require_success(
         run(
