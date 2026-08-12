@@ -20,6 +20,7 @@ class EvidenceInvalid(ValueError):
 class ContactForceMode(StrEnum):
     PRE_TRANSPORT_STATIC_HOLD = "PRE_TRANSPORT_STATIC_HOLD"
     DYNAMIC_TRANSPORT_SHADOW = "DYNAMIC_TRANSPORT_SHADOW"
+    DYNAMIC_HELD_OBJECT_MOTION = "DYNAMIC_HELD_OBJECT_MOTION"
 
 
 class TransportBoundaryKind(StrEnum):
