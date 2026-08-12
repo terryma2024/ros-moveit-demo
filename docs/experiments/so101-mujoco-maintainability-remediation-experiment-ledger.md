@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: a172765e3b193bfccad9782d02e2745e70f1cbd2
+current_commit: 8f71442ae6cff43e0770eec929b13211d2057628
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-014
-next_experiment: NONE_PENDING_PHASE_AWARE_DESIGN_APPROVAL
+latest_checkpoint: MNT-CP-015
+next_experiment: NONE_PENDING_DOCUMENT_CHECKPOINT_COMMIT
 ```
 
 ## Checkpoint MNT-CP-001
@@ -2425,4 +2425,95 @@ next_experiment_new_information:
   new: The next experiment will preserve every behavior input and add only raw phase-tagged measurement sufficient to derive peak, impulse, sustained-overpressure duration, and compression distributions under the 11.60 N absolute stop.
 next_experiment: NONE_PENDING_WRITTEN_DESIGN_APPROVAL
 next_command: Read and review the proposed phase-aware design; no code, build, stack, reset, controller, GUI, or experiment action precedes approval.
+```
+
+## Checkpoint MNT-CP-015 — reviewed phase-aware design and implementation authorization
+
+```yaml
+checkpoint_id: MNT-CP-015
+recorded_at: 2026-08-12T17:25:25+08:00
+last_valid_experiment: EXP-109, VALID_FAILURE under the superseded transport force interpretation
+current_hypothesis: Every 2 ms physics step can be recorded and replayed while typed phase semantics retain the approved static threshold and make the same value shadow-only after transport goal dispatch.
+authorization:
+  approval: The user explicitly approved the locally reviewed phase-aware design, implementation, and five independent FULL_RESTART dynamic-transport samples; no further design approval is required.
+  execution_host: Commands run directly on AI-STATION-001; SSH to ai-station is forbidden.
+  exact_stop: Generate one disabled exact-hash proposal, set USER_APPROVAL_REQUIRED, and stop without approval, activation, downstream projects, regression, merge, or push.
+  user_boundaries:
+    - Freeze q6=-0.04850794875050089, every q6/waypoint/trajectory, planner, velocity/acceleration, initial pose, MJCF, scene, geometry, phase order, and normal execution semantics.
+    - Do not introduce compensation, force filtering, delay, grace period, replanning, or another strategy mutation.
+    - Retain 1.1579004532160448 N as the formal static hard gate; after waypoint 1 goal dispatch it is shadow-only and cannot cancel transport or classify strategy failure.
+    - Retain 11.60 N only as a dynamic diagnostic absolute stop, using >= with no grace; never emit it as an acceptance threshold.
+    - Preserve and never stage docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md and docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md.
+review_amendments:
+  P0_physics_step_integrity:
+    observed_defect: scene.xml timestep is 0.002 s (500 Hz), ordinary evidence publishes at 100 Hz, trylock can skip a publish, and old simulation_step counts successful builds rather than physics steps.
+    required_change: Compute and latch true physics_step, raw tracked contacts, per-side forces/compression, force-time terms, threshold crossings, evidence loss, and the first >=11.60 N breach inside the plugin update boundary for every physics step.
+    transport: Keep ordinary 100 Hz snapshots, plus continuous-range lossless chunks that retain queued samples across failed trylock attempts and make any gap/overflow detectable.
+    claims: Do not call the old data an instantaneous physics peak or gap-free raw trace. Do not claim same-step stop.
+    reaction_contract: Latch and request hazard notification in the breaching callback; record cancellation-request step and require no more than 25 physics steps / 0.050 s live latency. A later/missing response is INVALID and stops the batch.
+    red_green: Cover a 500 Hz intermediate spike, detectable trylock failure, continuous true steps, equality at 11.60 N, and a non-overwritable first latch.
+  P1_typed_phase_boundary:
+    PRE_TRANSPORT_STATIC_HOLD: Stationary bilateral confirmation before waypoint 1 dispatch; >1.1579004532160448 N fails closed.
+    DYNAMIC_TRANSPORT_SHADOW: Begins at waypoint 1 ExecuteTrajectory goal dispatch and includes execution, settle/stable windows, inter-waypoint holds/planning, all later waypoints, and transport outcome; the static threshold is diagnostic only.
+    implementation: Split or explicitly parameterize the reused stable_bilateral helper with a typed policy; strings and implicit no-argument semantics are forbidden.
+  P1_metric_definitions:
+    maximum_normal_force_n: Preserve as the largest single normal force among all tracked cup contacts; only this same-semantics metric is compared with the static shadow threshold.
+    required_scalars: [left_fingertip_total_normal_force_n, right_fingertip_total_normal_force_n, fingertip_max_single_contact_force_n, global_max_single_contact_force_n]
+    scalar_integral: Name the maximum-single-contact time integral force_time_exposure_n_s; never call it object impulse.
+    physical_impulse: Sum each per-step contact force-on-cup vector, then integrate over simulation time as net_contact_impulse_vector_n_s.
+    compression: Use only cup-to-left/right-fingertip whitelist pairs; table and other contacts are excluded; truncation invalidates the run.
+  P1_time_and_validity:
+    clock: Integrate only with simulation time/physics timestep, never receipt wall time.
+    identity: session, reset_epoch, physics_step, and simulation_time must be strict and mutually consistent.
+    invalid: Missing, duplicate, reversed, cross-reset, truncated, gap-crossing, or unclosed phase/waypoint data invalidates the run and stops the batch.
+    boundaries: Do not connect integration across phase or waypoint boundaries; store explicit start/end samples.
+    overpressure_rule: A window is a maximal consecutive run of samples with maximum_normal_force_n > 1.1579004532160448; no interpolation or grace; duration is sample_count times 0.002 s.
+    durability: Atomically checkpoint content-addressed raw chunks and run index continuously, at least at every waypoint, so safety abort and abnormal shutdown retain a readable hashed prefix.
+  P1_statistics:
+    independent_units: Exactly five independent FULL_RESTART runs.
+    within_run: Waypoints are repeated measures / stratified detail, never 25 independent samples.
+    roles: Runs 1-4 are descriptive repeats; run 5 is preregistered replication, not training/holdout.
+    replication_criteria: Validate identical frozen strategy, complete/replayable data, existing physical transport-success contract, and deterministic metric recomputation only.
+    stopping: Every run transitions independently PLANNED->RUNNING->VALID/INVALID; VALID_SAFETY_ABORT or INVALID stops the batch with no replacement.
+  P1_frozen_behavior_manifest:
+    baseline: 8f71442/a172765 behavior is frozen before any source change.
+    manifest_path: docs/experiments/so101-mujoco-phase-aware-frozen-behavior-manifest.json
+    manifest_sha256: 912746ac6f6ac6589d5c11d7e9b9483e1ea4ebfeb3f6118a84ee0df48cd54195
+    supplied_hashes:
+      motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+      grasp_strategy_sha256: 8ae37f96c2408ca061ca5c87c41ff6d92f320e273b9a5a8c4bc778c46fda2239
+      transport_baseline_sha256: d2edcb461416f462503ae5b4f31ae55579ae5882a0c6340467871c61015930cd
+      scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+      robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+    enforcement: Compare typed policy fields and relevant Python AST call semantics after instrumentation, plus a restricted path diff; do not require unchanged whole transport.py bytes.
+    protected_gazebo: src/so101_gazebo_demo_py git tree 3158e296e2aad5d80dd3e484b87132c85b3832f7 and working-tree diff NONE.
+proposal_contract:
+  schema: v4 with read-only v1-v3 compatibility and v4-only new output
+  dynamic_acceptance_role: diagnostic_only
+  approval_enabled: false
+  dynamic_acceptance_threshold: ABSENT
+  contents: Static formal threshold, metric definitions, five run and waypoint repeated-measure summaries, raw/summary/strategy/provenance hashes, and diagnostic stop metadata.
+working_tree_status:
+  before_document_edits: tracked files clean at 8f71442
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+process_state:
+  owned_processes: NONE
+  ros_domain_0_nodes: []
+  preserved_tmux: [codex attached, codex-cua idle historical passive capture, so101-mujoco-gui historical windows]
+provenance:
+  host: AI-STATION-001
+  worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
+  branch: codex/so101-mujoco-ros2-teleop
+  source_commit_before_docs: 8f71442ae6cff43e0770eec929b13211d2057628
+  fork_submodule_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+design: docs/superpowers/specs/2026-08-12-so101-mujoco-phase-aware-transport-evidence-design.md
+implementation_plan: docs/superpowers/plans/2026-08-12-so101-mujoco-phase-aware-transport-evidence.md
+next_experiment_new_information:
+  prior: EXP-109 reached transport and proved clean cancellation, but its 100 Hz snapshot path did not persist the aborting physics-step peak and used the static threshold with the wrong phase semantics.
+  new: EXP-110..114 will use a fixed instrumentation commit and frozen strategy to produce continuous 500 Hz raw evidence, replayable dynamic metrics, and a disabled diagnostic-only proposal.
+next_experiment: NONE_PENDING_DOCUMENT_CHECKPOINT_COMMIT
+next_command: Commit only the approved design, implementation plan, ledger checkpoint, frozen manifest, and manifest hash; then preregister EXP-110..114 before RED implementation.
 ```
