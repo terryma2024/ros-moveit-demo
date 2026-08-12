@@ -7,7 +7,7 @@ success_contract: Exactly five serial VALID SUCCESS records on one unchanged non
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 302c4ef9550e036f127111e473f44a823b1ab643
-current_commit: 6783c8743114060a3f9f5e465fb25e05b373c7fd
+current_commit: eb7e3323cc7ab4cbf9d3cc34aa16ee4f80166a38
 evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
 confirmed_conclusions:
   - MNT-CP-057 terminated MNT-Q-RESET-EXP131-135 permanently after EXP-131 used high-rate evidence on the slow /tmp volume and the old runner continued into polluted EXP-132/133 attempts.
@@ -18,7 +18,7 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-003
+latest_checkpoint: RESET-FIVE-CP-004
 next_experiment: EXP-136
 ```
 
@@ -101,7 +101,7 @@ the permanent experiment IDs below.
 ```yaml
 - experiment_id: EXP-136
   manifest_record_id: MNT-Q-RESET-EXP136-140-01
-  status: PLANNED
+  status: RUNNING
   prior_experiment: EXP-131
   hypothesis: The frozen production workflow completes after transactional reset epoch 1 when lossless high-rate evidence is provisioned on the qualified NVMe volume.
   prediction: Nine phases complete; physical outcome succeeds; Gazebo/MuJoCo truth and the MoveIt Planning Scene end detached with the cup upright in the target ring.
@@ -332,4 +332,32 @@ batch_state:
 owned_processes: NONE
 next_experiment: EXP-136
 next_command: Start the corrected wrapper once in tmux; this is the first attempt that may enter ProductionQualificationRunner and consume EXP-136.
+```
+
+## Checkpoint RESET-FIVE-CP-004 — counting runner entered
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-004
+recorded_at: 2026-08-13T01:29:11+08:00
+prior_checkpoint: RESET-FIVE-CP-003
+status: RUNNING
+runner_entry_attempt: 1
+tmux_session: MNT-Q-RESET-EXP136-140
+wrapper_sha256: e73592de360f6b6b026ef3e69e3f70c1e26d62e7717589773c305b394b2df8f3
+simulation_session_id: MNT-Q-RESET-EXP136-140-reset
+ros_domain_id: 204
+teleop_port: 8044
+headless: false
+health: READY
+capability_owner: {backend: mujoco_py, package: so101_mujoco_demo_py, executable: pick_place_state_machine}
+runtime_processes:
+  qualification_entrypoint_pid: 2788356
+  launch_pid: 2788357
+  ros2_control_node_pid: 2788373
+  move_group_pid: 2788377
+first_experiment: EXP-136
+first_reset_epoch_started: 1
+evidence_volume: /dev/nvme0n1p5 mounted at /data
+owned_process_cleanup_rule: Only the qualification runner's own process group and tmux session may be stopped; historical sessions remain untouched.
+next_command: Monitor run-01 and owner evidence until the runner records SUCCESS or the first fail-fast terminal result.
 ```
