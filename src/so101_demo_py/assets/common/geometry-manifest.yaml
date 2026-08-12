@@ -1,0 +1,38 @@
+schema_version: 1
+stable_names:
+  tcp: so101_tcp
+  task_object: light_plastic_cup
+backends:
+  mujoco:
+    visual_source: assets/common/visual
+    collision_source: assets/mujoco/collision
+    scene: assets/mujoco/scene.xml
+  gazebo:
+    visual_source: assets/common/visual
+    collision_source: assets/gazebo/collision
+    world: assets/gazebo/world.sdf
+common_visuals:
+  base_motor_holder_so101_v1.stl: {format: stl, sha256: 8cd2f241037ea377af1191fffe0dd9d9006beea6dcc48543660ed41647072424}
+  base_so101_v2.stl: {format: stl, sha256: bb12b7026575e1f70ccc7240051f9d943553bf34e5128537de6cd86fae33924d}
+  fixed_fingertip_pad.stl: {format: stl, sha256: 0c707b10ba8fe5918431a3d42a764266440ac8fbe37a8e1e66496f288c4d3781}
+  motor_holder_so101_base_v1.stl: {format: stl, sha256: 31242ae6fb59d8b15c66617b88ad8e9bded62d57c35d11c0c43a70d2f4caa95b}
+  motor_holder_so101_wrist_v1.stl: {format: stl, sha256: 887f92e6013cb64ea3a1ab8675e92da1e0beacfd5e001f972523540545e08011}
+  moving_fingertip_pad.stl: {format: stl, sha256: f33f0818f86177fbe2e12faf10c08b6eb48d8f39cd6b66c2e900268f0161995a}
+  moving_jaw_so101_v1.stl: {format: stl, sha256: 785a9dded2f474bc1d869e0d3dae398a3dcd9c0c345640040472210d2861fa9d}
+  rotation_pitch_so101_v1.stl: {format: stl, sha256: 9be900cc2a2bf718102841ef82ef8d2873842427648092c8ed2ca1e2ef4ffa34}
+  sts3215_03a_no_horn_v1.stl: {format: stl, sha256: 75ef3781b752e4065891aea855e34dc161a38a549549cd0970cedd07eae6f887}
+  sts3215_03a_v1.stl: {format: stl, sha256: a37c871fb502483ab96c256baf457d36f2e97afc9205313d9c5ab275ef941cd0}
+  under_arm_so101_v1.stl: {format: stl, sha256: d01d1f2de365651dcad9d6669e94ff87ff7652b5bb2d10752a66a456a86dbc71}
+  upper_arm_so101_v1.stl: {format: stl, sha256: 475056e03a17e71919b82fd88ab9a0b898ab50164f2a7943652a6b2941bb2d4f}
+  waveshare_mounting_plate_so101_v2.stl: {format: stl, sha256: e197e24005a07d01bbc06a8c42311664eaeda415bf859f68fa247884d0f1a6e9}
+  wrist_roll_follower_so101_v1.stl: {format: stl, sha256: 4b17b410a12d64ec39554abc3e8054d8a97384b2dc4a8d95a5ecb2a93670f5f4}
+  wrist_roll_pitch_so101_v2.stl: {format: stl, sha256: 6c7ec5525b4d8b9e397a30ab4bb0037156a5d5f38a4adf2c7d943d6c56eda5ae}
+task_objects:
+  light_plastic_cup:
+    geometry: twelve wall boxes and one cylindrical bottom
+    dimensions_m: {outer_radius: 0.04, height: 0.09}
+    scale: [1.0, 1.0, 1.0]
+    initial_pose_xyz_m: [0.02, -0.28, 0.165]
+  target_landing_tolerance_ring:
+    obj_sha256: 81b7133bd49ddb8b89c871a40365408b0d792d16f6da9b95c736e99bf4d500e5
+    stl_sha256: 7650822c44a353967637f456440c1334f92b808c26c45b599a1b830a8417ff37

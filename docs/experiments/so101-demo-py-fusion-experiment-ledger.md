@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 93beccf1e811a83c15586236a8d903f95ff03d7d
+current_commit: fc0285d2280fd68f5cff8acb8a0bf0ebe2230209
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -17,13 +17,14 @@ confirmed_conclusions:
   - Task 7 installs typed robot/scene ports and removes direct ROS client construction from application; CP-FUSION-004.
   - Task 8 makes lossless physics-step tracing optional for execute and mandatory for MuJoCo qualification; CP-FUSION-005.
   - Task 9 centralizes backend composition and separates execution classification from qualification status; CP-FUSION-006.
+  - Task 10 installs common visual/task geometry with separate simulator collision/physics trees; CP-FUSION-007.
 disproven_routes:
   - Historical TASK15-FULL-A is INVALID because headless execution could not satisfy the required viewer-camera readiness gate; CP-156.
   - Recreating or sourcing the removed migration worktree is unnecessary and would contradict the verified merged-main handoff; CP-FUSION-001.
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-006
+latest_checkpoint: CP-FUSION-007
 next_experiment: NONE
 ---
 
@@ -213,4 +214,35 @@ evidence:
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task9/unified-tests.log sha256=a40a1467baf3f2b62bc1f66d715e6cd7155b2eb4f4d52c5009bfa7b1b6be3805
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task9/dry-run.log sha256=ce72e16ecb692aa0a1555ea6a15834ab984c05495b6da872e76a7aa087c54074
   - log/fusion-t9/latest_build
+```
+
+## Checkpoint CP-FUSION-007
+
+```yaml
+checkpoint_id: CP-FUSION-007
+last_valid_experiment: EXP-168 historical uncounted visual corroboration; no fusion live experiment has started
+current_hypothesis: Four explicit launch entry points can share argument/provenance composition while selecting distinct simulator graphs.
+working_tree_status: HEAD fc0285d2280fd68f5cff8acb8a0bf0ebe2230209; Task 10 assets, manifest, packaging, tests, and this checkpoint are intentionally dirty before the scoped Task 10 commit.
+owned_processes: NONE
+preserved_processes: unchanged preserved tmux sessions and pre-existing ros2 daemons; no process or session was controlled.
+confirmed_conclusions:
+  - Both simulator manifests point visual geometry to assets/common/visual while retaining separate assets/mujoco/collision and assets/gazebo/collision trees.
+  - Common visual meshes are byte-identical between the two legacy package sources and every installed common visual is SHA-256 enumerated.
+  - Unified MuJoCo scene.xml compiles successfully through the installed MuJoCo C library after path rewriting.
+  - Source asset tests pass 6/6; installed closure passes 3/3; the complete unified suite passes 53/53 after the fusion-t10 build.
+  - No unified installed asset text references so101_mujoco_demo_py or so101_gazebo_demo_py.
+  - The qualification bundle now hashes the complete installed assets tree.
+  - The frozen MuJoCo policy remains aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356.
+disproven_routes:
+  - Importing the pip-style mujoco Python module is unavailable in this environment; the repository's established ctypes compile gate against /opt/ros/jazzy/opt/mujoco_vendor/lib/libmujoco.so is the valid check.
+  - gz sdf -k is not a clean regression gate for this committed world because both the legacy and unified files report the same pre-existing non-unique cup link child names.
+open_risks:
+  - Launch composition and backend-specific installed environment variables are not yet owned by the unified package.
+  - The Gazebo model's semantic execution must be tested through the real Task 13 launch, not inferred from static SDF validation.
+next_command: Write and run Task 11 launch-composition argument and ownership RED tests.
+evidence:
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task10/unified-tests.log sha256=314da351f80066375fef750f2bb45e062edccfc46922f80c0f37e6208f792ccd
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task10/installed-closure.log sha256=e0a6ea218ea5d725ce7272da8d68d45a029e489423e03af6960c7bff0f7fe414
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task10/mujoco-compile.log sha256=4f876d366ffab84cd4db209096d5fc10b8be80890d82adf0204fafc5460996cd
+  - log/fusion-t10/latest_build
 ```
