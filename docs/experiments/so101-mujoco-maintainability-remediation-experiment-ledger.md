@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 99801ba9c4e0a4ef4ac12eb0447c387bc28dfc5f
+current_commit: d03e48f3ac294bb629daee3d1427aefcf08b9f0a
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,7 +17,7 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - A fresh seven-regime fixed-fingerprint campaign can produce non-overlapping deterministic thresholds for the current model and motion policy.
-latest_checkpoint: MNT-CP-006
+latest_checkpoint: MNT-CP-007
 next_experiment: EXP-001
 ```
 
@@ -171,4 +171,30 @@ disproven_routes:
 open_risks:
   - Live execute still enters phase orchestration without an approved contact policy and several phase modules retain contact-limit literals.
 next_command: PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test/test_pick_place_cli.py src/so101_mujoco_demo_py/test/test_live_runtime_contract.py
+```
+
+## Checkpoint MNT-CP-007
+
+```yaml
+checkpoint_id: MNT-CP-007
+recorded_at: 2026-08-12T13:01:36+08:00
+last_valid_experiment: NONE
+current_hypothesis: One isolated seven-regime campaign can produce separable physical thresholds without crossing the diagnostic safety ceiling.
+working_tree_status: Clean at d03e48f3ac294bb629daee3d1427aefcf08b9f0a after Project A Task 7.
+owned_processes: NONE
+preserved_processes:
+  - Existing codex, codex-cua, and so101-mujoco-gui tmux sessions remain untouched.
+confirmed_conclusions:
+  - OBSERVED: Disabled approval returns CONTACT_POLICY_NOT_APPROVED and changed model identity returns POLICY_FINGERPRINT_MISMATCH before resume, subprocess, or ROS side effects.
+  - OBSERVED: Live phase environment contains only motion/contact paths plus dependency, model, scene, motion, and source-evidence hashes; thresholds are not serialized through environment variables.
+  - OBSERVED: Every temporary phase loads the same immutable approved TaskPolicy; a 4.25 N fixture controls the observed maximum-safe-force value.
+  - OBSERVED: MAX_FORCE_N, MIN_SIDE_NORMAL_FORCE_N, and old ±5 mm target-region literals have zero matches in live phases/runtime.
+  - OBSERVED: The full Python package gate passed 446 tests with 4 skipped; Ruff lint/format and diff checks passed.
+disproven_routes:
+  - Entering physics resume before contact-policy approval and fingerprint verification.
+  - Retaining a diagnostic-force literal in each phase and assuming equal spelling proves equal policy consumption.
+open_risks:
+  - The checked-in contact policy remains PLANNED and deliberately makes execute unavailable.
+  - Temporary subprocess phases remain until the in-process state-action replacement passes parity in Task 9.
+next_command: colcon --log-base /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/log build --base-paths src --packages-select so101_mujoco_support so101_mujoco_demo_py --build-base /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/build --install-base /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install --symlink-install
 ```
