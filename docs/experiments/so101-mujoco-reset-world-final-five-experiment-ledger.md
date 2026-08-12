@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-013
-next_experiment: NON_COUNTING_VISUAL_CORROBORATION
+latest_checkpoint: RESET-FIVE-CP-014
+next_experiment: VISUAL-CORROBORATION-01-NONCOUNT
 ```
 
 ## Immutable challenge boundary
@@ -559,6 +559,37 @@ protected_user_state:
   protected_documents_byte_hashes_unchanged: true
 next_experiment: EXP-141
 next_command: Commit the frozen artifact registration, then preregister EXP-141 through EXP-145 before any stack startup.
+remote_push_state: FORBIDDEN
+```
+
+## Checkpoint RESET-FIVE-CP-014 — non-counting visual corroboration preregistered
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-014
+recorded_at: 2026-08-13T01:57:00+08:00
+prior_checkpoint: RESET-FIVE-CP-013
+status: VISUAL_CORROBORATION_PREREGISTERED_NOT_STARTED
+visual_cycle_id: VISUAL-CORROBORATION-01-NONCOUNT
+counting_status: EXCLUDED_FROM_EXP-141_THROUGH_EXP-145
+reason: The exact 5/5 runner shuts down its shared stack immediately after qualification, so a fresh same-fingerprint cycle is required to preserve a final-state GUI frame.
+simulation_session_id: MNT-Q-RESET-EXP141-145-visual-noncount
+ros_domain_id: 206
+teleop_port: 8046
+evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration
+evidence_root_pre_registration_state: ABSENT
+evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
+runtime_fingerprint_file_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+required_visuals:
+  mujoco_viewer: [robot, base, table, cup, red target ring, cup visibly in final target]
+  rviz: [Planning Scene visible, robot and world state consistent with detached cup in world]
+capture_contract:
+  driver: cua-driver
+  session: codex-cua
+  sequence: snapshot then action then fresh snapshot
+  forbidden: [ai-station-capture.sh, X11 input injection]
+preflight: {domain_206_nodes: NONE, port_8046_listener: NONE, owned_visual_tmux: ABSENT}
 remote_push_state: FORBIDDEN
 ```
 
