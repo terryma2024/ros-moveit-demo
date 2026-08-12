@@ -1901,3 +1901,73 @@ validation:
 decision: TASK_9_COMPLETE; the exact user-approved policy is active. No simulation, controller action, formal nine-stage regression, RESET_WORLD five-win challenge, merge, or push was performed in Task 9.
 next_step: Execute Task 10 automatic gates, fresh isolated build, and one preregistered FULL_RESTART Project-A physical acceptance cycle before entering Project B.
 ```
+
+## Task 10 automatic gates and EXP-106 preregistration
+
+```yaml
+recorded_at: 2026-08-12T15:46:43+08:00
+automatic_gates:
+  source_commit: 607d1301e535298e0099e02d5019fe6f0a2b7d1c
+  package_tests: 470 passed, 4 skipped
+  ruff_check: PASS
+  ruff_format_check_only: PASS; 118 files already formatted
+  migration_isolation: PASS
+  git_diff_check: PASS
+  diagnostic_build:
+    root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-build-approved-e7eb844
+    result: Build and fork runtime checker passed, but the reset-qualified checker rejected the non-default project install prefix.
+    disposition: Diagnostic only; never used for live acceptance.
+    root_cause: The checker had no explicit input for Task 10's required fresh project install root and could only enforce the canonical worktree install.
+    red_green_fix: A failing path-resolution test preceded the optional --project-install implementation; the default lock-derived behavior remains unchanged.
+  acceptance_build:
+    root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-build-approved-607d130
+    source_commit: 607d1301e535298e0099e02d5019fe6f0a2b7d1c
+    packages: [so101_mujoco_support, so101_mujoco_demo_py]
+    build_result: PASS; 2 packages finished
+    project_prefixes_exact: true
+    mujoco_runtime_check: PASS
+    reset_qualified_runtime_check: PASS with explicit acceptance project install
+    fork_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+EXP-106:
+  status: PLANNED
+  lifecycle: FULL_RESTART
+  qualification_counting: false
+  purpose: One Project-A acceptance of the exact user-approved contact policy before Project B; this run cannot count toward the final five-run qualification.
+  source_commit: 607d1301e535298e0099e02d5019fe6f0a2b7d1c
+  fingerprint:
+    dependency_sha256: 1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d
+    task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+    scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+    robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+    urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+    motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+    contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+    approved_proposal_sha256: 670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897
+  fingerprint_artifact:
+    path: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp106-fingerprint.json
+    sha256: 821988557d8c40f6b69cfc0665fa4abb9bcf335ba8688b5a84b6c31894fb56db
+  runtime:
+    evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp106
+    batch_id: MNT-A-EXP106
+    simulation_session_id: MNT-A-EXP106-full-01
+    ros_domain_id: 183
+    gz_partition: so101-mnt-a-exp106
+    teleop_port: 8023
+    headless: false
+    tmux_session: so101-mnt-a-exp106
+  preflight:
+    - Domain 183 has no nodes, TCP port 8023 is not listening, the evidence root and tmux session are absent, and DISPLAY is :1.
+    - The fresh acceptance overlay resolves both project packages and the exact pinned fork.
+    - No task-owned runtime process exists before registration.
+  success_contract:
+    - One new MuJoCo, MoveIt, controller, Planning Scene, and Teleop stack reaches READY, applies the viewer preset, and returns a fresh qualified reset receipt at epoch 1 step 0.
+    - All nine production phases complete once with controller/action success and joint/TCP convergence.
+    - The approved contact policy proves fresh bilateral grasp, causal micro-lift, and stable transport without hidden aid.
+    - MoveIt collision-shadow attach/detach readback, release-epoch settle, final target/support/twist, and world-object synchronization all succeed.
+    - Ordered shutdown returns zero with its marker and leaves no owned residual process.
+  failure_contract: A qualified physical/workflow failure is VALID_FAILURE; provenance, readiness, evidence, lifecycle, or cleanup contamination is INVALID. Either outcome stops after this one attempt.
+  frozen_scope:
+    - No automatic extra attempt or hidden retry.
+    - No axis, planner, q6 step, 3 mm pre-contact gate, 11.60 N safety gate, MJCF, scene, geometry, simulator state, motion waypoint, contact threshold, or five-win grasp-strategy change.
+decision: PLANNED and committed before stack launch or controller action. Only the registered production qualification runner may execute EXP-106.
+```
