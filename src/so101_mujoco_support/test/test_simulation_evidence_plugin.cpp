@@ -562,6 +562,24 @@ TEST(PhysicsStepEvidenceBufferTest, FailedPublishAttemptRetainsContinuousRangeAn
   }
 }
 
+TEST(PhysicsStepEvidenceBufferTest, EmptyLossSentinelRetainsTheLastObservedIdentity)
+{
+  PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
+  for (uint64_t step = 1; step <= 5; ++step) {
+    ASSERT_TRUE(buffer.append(physics_step_sample(step, 1.0)));
+  }
+  ASSERT_TRUE(buffer.ready());
+  buffer.mark_published();
+  ASSERT_FALSE(buffer.append(physics_step_sample(7, 1.0)));
+
+  const auto sentinel = buffer.prepare_chunk();
+
+  EXPECT_TRUE(sentinel.evidence_loss);
+  EXPECT_TRUE(sentinel.samples.empty());
+  EXPECT_EQ(sentinel.simulation_session_id, "phase-aware-test");
+  EXPECT_EQ(sentinel.reset_epoch, 3U);
+}
+
 TEST(PhysicsStepEvidenceBufferTest, EqualityBreachesAndFirstHazardLatchCannotBeOverwritten)
 {
   PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);

@@ -360,6 +360,10 @@ msg::PhysicsStepEvidenceChunk PhysicsStepEvidenceBuffer::prepare_chunk() const
   chunk.failed_publish_attempts = failed_publish_attempts_;
   chunk.evidence_loss = evidence_loss_;
   if (samples_.empty()) {
+    if (last_observed_.has_value()) {
+      chunk.simulation_session_id = last_observed_->simulation_session_id;
+      chunk.reset_epoch = last_observed_->reset_epoch;
+    }
     return chunk;
   }
   chunk.simulation_session_id = samples_.front().simulation_session_id;
