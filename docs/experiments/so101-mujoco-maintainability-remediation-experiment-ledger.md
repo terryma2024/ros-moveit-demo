@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: c8483fa6170e9517466b34e82365d6ebfe89a7de
+current_commit: b6b4a205545418531994a2e245fb899b70f48226
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,11 +17,12 @@ confirmed_conclusions:
   - USER-AUTH-2026-08-12-PHASE-AWARE: preserve the five-win strategy exactly; static contact and dynamic transport require separate evidence/acceptance semantics.
   - EXP-124: lossless 500 Hz physics-step capture completed through physical transport on the qualification-provisioned NVMe evidence volume.
   - EXP-125: the unchanged nine-phase production strategy completes in one FULL_RESTART when held-cup phases use the qualified 11.60 N dynamic hard stop and post-release support continues to use the 1.1579004532160448 N static limit.
+  - USER-AUTH-2026-08-12-EXP126-VISUAL-WAIVER: the user personally observed the EXP-126 terminal screen, accepted the visual outcome, and authorized only EXP-126 to count as batch success despite its preserved truncated PNG artifact.
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-039
-next_experiment: NONE_BATCH_STOPPED_INVALID
+latest_checkpoint: MNT-CP-040
+next_experiment: EXP-127
 ```
 
 ## Checkpoint MNT-CP-001
@@ -4314,4 +4315,93 @@ protected_state:
 owned_processes: NONE
 preserved_processes: Existing codex, idle codex-cua, and historical so101-mujoco-gui tmux sessions only.
 next_command: Stop and report the invalid batch. A new explicitly authorized preregistration is required before any further qualification run.
+```
+
+## Correction and authorization addendum — EXP-126 visual waiver and batch resumption
+
+```yaml
+addendum_id: USER-AUTH-2026-08-12-EXP126-VISUAL-WAIVER
+recorded_at: 2026-08-12T22:27:35+08:00
+type: CORRECTION_AND_EXPLICIT_USER_AUTHORIZATION
+historical_integrity:
+  preserved_records:
+    - EXP-126 remains historically recorded as INVALID at its original terminal decision.
+    - MNT-CP-039 remains historically recorded as INVALID_STOPPED with zero counted successes at that checkpoint.
+    - The EXP-126 screenshot remains truncated, independently undecodable, and unsuitable as a persisted visual artifact.
+  prohibited_reinterpretation: This addendum does not repair, replace, conceal, or retrospectively validate the damaged PNG.
+user_attestation:
+  observer: USER
+  observation_mode: Personal live observation of the EXP-126 terminal screen on ai-station.
+  accepted_claims:
+    - MuJoCo was Running.
+    - Robot, pedestal, table, cup, and target ring were visible.
+    - Cup was upright inside the target ring.
+    - Gripper was open and the arm was retired clear.
+  authorization: Skip only the damaged persisted screenshot requirement for EXP-126 and count the otherwise complete physical run as this batch's first VALID success.
+waiver:
+  waiver_scope: EXP-126_ONLY
+  visual_artifact_integrity: FAIL_PRESERVED
+  persisted_screenshot_accepted_as_evidence: false
+  human_live_visual_attestation_accepted_for_batch_count: true
+  rerun_EXP_126: PROHIBITED
+  inherited_by_EXP_127_through_EXP_130: false
+  expansion_without_new_user_authorization: PROHIBITED
+effective_batch_correction:
+  batch_id: MNT-Q-EXP126-130
+  prior_checkpoint: MNT-CP-039
+  prior_batch_state: INVALID_STOPPED
+  resumed_batch_state: AUTHORIZED_RESUMED
+  EXP_126_effective_result_for_this_batch_only: VALID_SUCCESS_BY_USER_VISUAL_WAIVER
+  consecutive_valid_successes: 1
+  target_consecutive_successes: 5
+  remaining_experiments: [EXP-127, EXP-128, EXP-129, EXP-130]
+  frozen_strategy_changed: false
+future_visual_contract:
+  experiments: [EXP-127, EXP-128, EXP-129, EXP-130]
+  required_sequence: snapshot -> action -> fresh snapshot
+  persisted_png_required: true
+  independent_png_decode_before_acceptance: true
+  new_damage_rule: Stop and report; do not inherit or expand the EXP-126 waiver.
+decision: Resume the original preregistered batch at EXP-127 without rerunning EXP-126 and without changing motion strategy, thresholds, code, configuration, control path, or experiment criteria.
+```
+
+## Checkpoint MNT-CP-040 — authorized resumption at EXP-127
+
+```yaml
+checkpoint_id: MNT-CP-040
+recorded_at: 2026-08-12T22:27:35+08:00
+last_valid_experiment_for_batch: EXP-126_BY_USER_VISUAL_WAIVER
+batch_id: MNT-Q-EXP126-130
+batch_status: AUTHORIZED_RESUMED
+consecutive_valid_successes: 1
+waiver_scope: EXP-126_ONLY
+execution_host: AI-STATION-001; direct local execution, no SSH
+worktree:
+  path: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
+  linked_worktree: true
+  branch: codex/so101-mujoco-ros2-teleop
+  head_before_addendum: b6b4a205545418531994a2e245fb899b70f48226
+  tracked_status: CLEAN
+  protected_gazebo_status: ZERO_STATUS_AND_DIFF
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+provenance:
+  fork_local_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_origin_main: 738e304551b4ea6db020b466086a13db71b65607
+  fork_remote_tag_peel: 738e304551b4ea6db020b466086a13db71b65607
+  fork_local_vs_origin_main: {ahead: 0, behind: 0}
+  fork_status: CLEAN
+  common_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install
+  runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  harness_sha256: b90ff4d8ccf4b87aef7796d4125a1c907e9321d2c6ad826c903807b79bf14054
+runtime_preflight:
+  relevant_processes: NONE
+  ros_domains_empty: [0, 198, 199, 200, 201, 202]
+  free_http_ports: [8038, 8039, 8040, 8041, 8042]
+  absent_evidence_roots: [exp127, exp128, exp129, exp130]
+  codex_cua: IDLE_AT_ZSH_PROMPT
+  preserved_tmux: [codex, codex-cua, so101-mujoco-gui]
+next_experiment: EXP-127
+next_command: Update EXP-127 to RUNNING after a fresh per-run provenance, dirty-state, process, domain, port, tmux, evidence-root, overlay, fingerprint, and harness preflight; commit that transition; then execute exactly its preregistered command once.
 ```
