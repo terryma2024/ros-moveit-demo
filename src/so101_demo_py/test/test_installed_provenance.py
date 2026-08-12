@@ -33,6 +33,9 @@ def test_manifest_matches_final_installed_prefix_and_source() -> None:
     manifest = installed_bundle().manifest["inputs"]
     assert manifest["package_prefix"] == str(prefix)
     assert manifest["source_commit"] == os.environ.get("SO101_SOURCE_COMMIT", _git_head())
+    dependency = manifest["mujoco_ros2_control"]
+    assert dependency["prefix"] != "/opt/ros/jazzy"
+    assert dependency["executable"]["sha256"]
 
 
 def test_final_install_contains_runtime_contract() -> None:

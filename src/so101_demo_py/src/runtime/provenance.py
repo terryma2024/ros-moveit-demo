@@ -88,12 +88,19 @@ def installed_bundle() -> QualificationBundle:
 
     share = Path(get_package_share_directory("so101_demo_py"))
     prefix = Path(get_package_prefix("so101_demo_py"))
+    mujoco_prefix = Path(get_package_prefix("mujoco_ros2_control"))
     return build_bundle_manifest(
         {
             "source_commit": _source_commit(),
             "package_prefix": str(prefix),
             "policy_registry": share / "config" / "policies",
             "geometry_assets": share / "assets",
+            "mujoco_ros2_control": {
+                "prefix": str(mujoco_prefix),
+                "executable": (
+                    mujoco_prefix / "lib/mujoco_ros2_control/ros2_control_node"
+                ),
+            },
             "runner_version": "fusion-v1",
             "lifecycle_version": "fusion-v1",
         }
