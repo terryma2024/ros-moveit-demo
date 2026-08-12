@@ -2057,3 +2057,42 @@ failure_contract: One VALID_FAILURE or INVALID result terminates this attempt; n
 frozen_scope: Identical to EXP-106. No motion, contact threshold, safety gate, planner, model, scene, geometry, simulator-state, waypoint, or five-win strategy change is authorized.
 decision: PLANNED and committed before stack launch or controller action. Only the registered production runner may execute EXP-107.
 ```
+
+## EXP-107 terminal result and owner-argument remediation
+
+```yaml
+recorded_at: 2026-08-12T16:00:08+08:00
+EXP-107:
+  raw_manifest_status: VALID_FAILURE
+  corrected_audit_status: INVALID
+  behavioral_result: NOT_STARTED
+  attempts_started: 1
+  automatic_extra_attempts: 0
+  completed_boundaries:
+    stack_ready: true
+    viewer_preset: true
+    qualified_reset: {old_epoch: 0, new_epoch: 1, simulation_step: 0}
+  workflow:
+    http_status: 503
+    owner_failure_code: LIVE_RUNTIME_CONFIG_REQUIRED
+    nine_phase_execution_started: false
+  classification_audit: LIVE_RUNTIME_CONFIG_REQUIRED is a production runtime-configuration defect, not a qualified physical outcome; preserve the raw manifest but exclude this run as INVALID.
+  clean_shutdown: {passed: true, returncode: 0, ordered_shutdown_marker: true, process_died: false, fatal_signal: false}
+  runner_exit_code: 1
+  evidence:
+    qualification_manifest: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp107/qualification-manifest.json, ea5edba919aa27e645b0eccd40ee32f4b96d13dad75445083d30fc45b867b47e]
+    actions: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp107/run-01/actions.json, 9194a823e441b37b5328b7cd2a23c5455f175d35f625bd060fecf264775a02c5]
+    launch_log: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp107/run-01/launch.log, 070341d3c7675fcb9f960e6610ad921ba5433238de9e629ed258d9e2c3e19f35]
+    runner_log: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp107-runner.log, 1ae7f459e47865b534a4976fc1e9c1e957f214c06fc4b2aa3261657d845f7b1e]
+    exit_code_file: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp107-exit-code.txt, 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865]
+  cleanup: {tmux_session_absent: true, domain_184_nodes: [], port_8024_listeners: [], owned_runtime_processes: []}
+  disposition: Excluded from Project-A physical acceptance and every later streak; never rewrite as a physical VALID_FAILURE.
+root_cause: teleop_workflow.production_arguments stopped after --motion-policy and did not pass the Task-8-required installed --contact-policy to the production CLI. Its existing test title promised the installed policy but lacked the corresponding assertion.
+remediation:
+  red_green_contracts:
+    - Teleop owner argv contains the installed config/contact_calibration.yaml path.
+    - LIVE_RUNTIME_CONFIG_REQUIRED and other enumerated owner configuration/provenance failures raise INVALID instead of entering physical-failure counting.
+  production_change: Add only the installed --contact-policy argument and fail-visible classification; no policy value, threshold, motion, planner, model, scene, or simulator state changed.
+  verification: 474 package tests passed, 4 skipped; Ruff lint/format, migration isolation, and git diff check passed.
+decision: Commit the remediation, create another unique complete runtime build, and preregister EXP-108 before any further live action.
+```

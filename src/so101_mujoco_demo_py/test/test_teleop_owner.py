@@ -26,6 +26,9 @@ def test_workflow_arguments_bind_current_epoch_and_installed_policy() -> None:
     assert values[values.index("--motion-policy") + 1] == (
         "/installed/share/so101_mujoco_demo_py/config/motion_policies/light_cup_wall_pick.yaml"
     )
+    assert values[values.index("--contact-policy") + 1] == (
+        "/installed/share/so101_mujoco_demo_py/config/contact_calibration.yaml"
+    )
 
 
 def test_workflow_owner_returns_manifest_bound_physical_outcome(tmp_path) -> None:
