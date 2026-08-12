@@ -579,7 +579,7 @@ class ProductionQualificationRunner:
                         launch_log=handle.log_path,
                     )
                 )
-                if record["status"] == RunStatus.INVALID.value:
+                if record["status"] != RunStatus.SUCCESS.value:
                     break
         else:
             stack_root = self.evidence_root / "shared-stack"
@@ -622,7 +622,7 @@ class ProductionQualificationRunner:
                                 run_root=run_root,
                             )
                         pending.append((record, run_root))
-                        if record.get("status") == RunStatus.INVALID.value:
+                        if record.get("status", RunStatus.SUCCESS.value) != RunStatus.SUCCESS.value:
                             break
                 finally:
                     shutdown = self.stop_stack(handle)

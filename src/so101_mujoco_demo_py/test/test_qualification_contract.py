@@ -165,6 +165,19 @@ class StartupFailureRunner(DummyRunner):
         raise error_type("stack exited during startup with 1", handle)
 
 
+class ValidFailureRunner(DummyRunner):
+    def execute_workflow(self, handle, *, experiment_id, run_root):
+        record = super().execute_workflow(
+            handle,
+            experiment_id=experiment_id,
+            run_root=run_root,
+        )
+        record["status"] = RunStatus.VALID_FAILURE.value
+        record["failure"] = "physical outcome failed"
+        record.pop("physical_outcome")
+        return record
+
+
 def test_full_restart_records_startup_invalid_and_stops_without_retry(tmp_path) -> None:
     runner = StartupFailureRunner(tmp_path)
 
@@ -200,6 +213,26 @@ def test_reset_world_records_startup_invalid_without_entering_workflow(tmp_path)
     assert len(runner.starts) == 1
     assert runner.execution_count == 0
     assert manifest["records"][0]["status"] == RunStatus.INVALID.value
+
+
+@pytest.mark.parametrize("lifecycle", [Lifecycle.FULL_RESTART, Lifecycle.RESET_WORLD])
+def test_fixed_target_batch_stops_after_first_valid_failure(tmp_path, lifecycle) -> None:
+    runner = ValidFailureRunner(tmp_path)
+
+    manifest = runner.run_batch(
+        batch_id=f"valid-failure-{lifecycle.value.lower()}",
+        lifecycle=lifecycle,
+        count=5,
+        base_domain_id=180,
+        base_port=8020,
+    )
+
+    assert manifest["summary"]["qualified"] is False
+    assert manifest["summary"]["batch_invalid"] is False
+    assert manifest["summary"]["attempt_count"] == 1
+    assert runner.execution_count == 1
+    assert len(runner.starts) == 1
+    assert manifest["records"][0]["status"] == RunStatus.VALID_FAILURE.value
 
 
 def test_full_restart_orchestration_creates_five_stacks(tmp_path) -> None:
