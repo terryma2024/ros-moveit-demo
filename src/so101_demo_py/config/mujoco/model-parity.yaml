@@ -1,0 +1,66 @@
+schema_version: 1
+urdf: assets/mujoco/so101.urdf
+mjcf: assets/mujoco/so101.xml
+position_tolerance_m: 0.0005
+orientation_tolerance_deg: 0.2
+bodies: [base, shoulder, upper_arm, lower_arm, wrist, gripper, jaw]
+q6_semantics:
+  preopen: 0.465038
+  grasp: -0.047608632840292
+  release: 0.75
+samples:
+  - [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  - [0.5, 0.0, 0.0, 0.0, 0.0, 0.0]
+  - [0.0, 0.5, 0.0, 0.0, 0.0, 0.0]
+  - [0.0, 0.0, 0.5, 0.0, 0.0, 0.0]
+  - [0.0, 0.0, 0.0, 0.5, 0.0, 0.0]
+  - [0.0, 0.0, 0.0, 0.0, 0.5, 0.0]
+  - [0.0, 0.0, 0.0, 0.0, 0.0, 0.5]
+  - [1.2, -1.0, 0.8, -0.7, 1.5, 0.465038]
+  - [-1.4, 1.2, -1.2, 1.1, -2.0, -0.047]
+  - [0.3, 0.7, 1.2, -1.4, 2.4, 0.75]
+  - [-0.6, -0.8, 0.2, 0.9, -0.5, 1.5]
+mesh_sha256:
+  base_motor_holder_so101_v1.stl: 8cd2f241037ea377af1191fffe0dd9d9006beea6dcc48543660ed41647072424
+  base_so101_v2.stl: bb12b7026575e1f70ccc7240051f9d943553bf34e5128537de6cd86fae33924d
+  fixed_finger_contact_convex_000.stl: 356a4fbde2290dba8c77eaf451003c75ad43801b84990c4b95ffe6bbb4a15faa
+  fixed_finger_contact_convex_001.stl: 6225c0c805a25a3cd41579bf66e99e51b176f774dcaa7bf612148e28e66d141d
+  fixed_finger_contact_convex_002.stl: 4ef849503979f9e2aad56f5ca0677fb1ac14ce2874b2ae02a2840265e66eb654
+  fixed_finger_contact_convex_003.stl: ae8444030b1fe97c8e62278267ec62e2e130286f1c84e075e3ee6a9d4055e053
+  fixed_finger_contact_convex_004.stl: 72727c81202d6fd5fbba7ed1018586c581dd5801694500cd2ffad360854c9c0a
+  fixed_finger_contact_convex_005.stl: dfc1231c29917de828a0178889a99cd8bf504d9b30ce7ec8c65792fa4cf8904c
+  fixed_finger_contact_convex_006.stl: f8cc7849cac358609eee695bc5876b7ec604dab60acd51d84711b15e4d4f2584
+  fixed_fingertip_pad.stl: 0c707b10ba8fe5918431a3d42a764266440ac8fbe37a8e1e66496f288c4d3781
+  fixed_fingertip_pad_collision_000.stl: 4ed2aaf97c3e3d0b81f09fd455a3d1fd15943bc9fc7f1c9b036055af3c8ac94f
+  fixed_fingertip_pad_collision_001.stl: da44c27835986cd33523119dfcb2ba19746fb03e0c5e32a6676f64c912e28e83
+  fixed_fingertip_pad_collision_002.stl: 6088659394460f8df1823f288a472cafd255e0647079b5d7a5097020fa3f9000
+  fixed_fingertip_pad_collision_003.stl: f7178f814128d3ace3e07ac187e3d9759e61a916f60d7052af01659c8fb877ae
+  fixed_fingertip_pad_collision_004.stl: 12fd4b9ba58aac4a5b9dc5b33ca7eb65ee3a73a3c0c7d3f34ac4ef800453fa3a
+  fixed_fingertip_pad_collision_005.stl: 237dc9e5b434bd27d612c8931c2798aac30fc4032504df30fed5f983e10e8f90
+  fixed_fingertip_pad_collision_006.stl: 4f0e8c155d53471d0054a49ef6d8e284df3f19106fb290742870b9404f542b95
+  motor_holder_so101_base_v1.stl: 31242ae6fb59d8b15c66617b88ad8e9bded62d57c35d11c0c43a70d2f4caa95b
+  motor_holder_so101_wrist_v1.stl: 887f92e6013cb64ea3a1ab8675e92da1e0beacfd5e001f972523540545e08011
+  moving_fingertip_pad.stl: f33f0818f86177fbe2e12faf10c08b6eb48d8f39cd6b66c2e900268f0161995a
+  moving_fingertip_pad_collision_000.stl: e6150b6802d3fca81fa00afc914c507b447e26ffdcb3d3576eb9c0cc4dc266f8
+  moving_fingertip_pad_collision_001.stl: 6f1f62636a5797541ec9ea9cfee93d5403ceeaba7be4d465a875a0c409435ffa
+  moving_fingertip_pad_collision_002.stl: f214afa2469ccd71f915633fe18c8ef5bbd218d50da5e83d72f759552413bcf8
+  moving_fingertip_pad_collision_003.stl: a62d1b03a6dfe1032071aefdaab6d7a44c4c4c6f6bd1ab0d69070562b81ddd36
+  moving_fingertip_pad_collision_004.stl: 715d97a2c93b97ed3e5136616c7a0a13978500910c3ca62c77f3c2e18654be08
+  moving_fingertip_pad_collision_005.stl: 81ec88739dfce54344f6bff1face0c4f466075711003c1637a460fb9a1a7027f
+  moving_jaw_contact_convex_000.stl: d55c654cef7aed25dc2f2330944f990d14689c10af538cf4ba724938fcc50622
+  moving_jaw_contact_convex_001.stl: 2aead51f6fa17127d3b7d1485ca477a1225a5e6724d1c216270ffed26ab15cb7
+  moving_jaw_contact_convex_002.stl: 3fa128ae37556a2d4b8a7369c73173c011a18be3d973a429749ebe719e737ad6
+  moving_jaw_contact_convex_003.stl: 7aa52d8a565ae045c6f924b8986563676cd101e825f2757bb562ca6ff0f75191
+  moving_jaw_contact_convex_004.stl: 749df2510e6665a506d4c89663fde3d2844cc13af1ce6c04f0986482f1a1c651
+  moving_jaw_contact_convex_005.stl: 8aba5ac2939e373118b3753ee0cae481a23fe15702297421ca1a2afe9d1bc642
+  moving_jaw_contact_convex_006.stl: 30f06b55dd0f3edf168cf40ed7a93ea510f81f329e0a070ecdb054f66b0911b9
+  moving_jaw_contact_convex_007.stl: 3b08255bdb4d34f1e3763ee9e8663d0d9c76e18f3615fe37159984745796bec8
+  moving_jaw_so101_v1.stl: 785a9dded2f474bc1d869e0d3dae398a3dcd9c0c345640040472210d2861fa9d
+  rotation_pitch_so101_v1.stl: 9be900cc2a2bf718102841ef82ef8d2873842427648092c8ed2ca1e2ef4ffa34
+  sts3215_03a_no_horn_v1.stl: 75ef3781b752e4065891aea855e34dc161a38a549549cd0970cedd07eae6f887
+  sts3215_03a_v1.stl: a37c871fb502483ab96c256baf457d36f2e97afc9205313d9c5ab275ef941cd0
+  under_arm_so101_v1.stl: d01d1f2de365651dcad9d6669e94ff87ff7652b5bb2d10752a66a456a86dbc71
+  upper_arm_so101_v1.stl: 475056e03a17e71919b82fd88ab9a0b898ab50164f2a7943652a6b2941bb2d4f
+  waveshare_mounting_plate_so101_v2.stl: e197e24005a07d01bbc06a8c42311664eaeda415bf859f68fa247884d0f1a6e9
+  wrist_roll_follower_so101_v1.stl: 4b17b410a12d64ec39554abc3e8054d8a97384b2dc4a8d95a5ecb2a93670f5f4
+  wrist_roll_pitch_so101_v2.stl: 6c7ec5525b4d8b9e397a30ab4bb0037156a5d5f38a4adf2c7d943d6c56eda5ae

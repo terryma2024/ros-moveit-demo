@@ -48,3 +48,13 @@ def test_task_object_dimensions_scale_and_initial_pose_are_explicit() -> None:
     assert cup["dimensions_m"] == {"outer_radius": 0.04, "height": 0.09}
     assert cup["scale"] == [1.0, 1.0, 1.0]
     assert cup["initial_pose_xyz_m"] == [0.02, -0.28, 0.165]
+
+
+def test_qualified_mujoco_model_and_scene_bytes_are_preserved() -> None:
+    assets = _share() / "assets/mujoco"
+    assert hashlib.sha256((assets / "so101.xml").read_bytes()).hexdigest() == (
+        "f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca"
+    )
+    assert hashlib.sha256((assets / "scene.xml").read_bytes()).hexdigest() == (
+        "b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0"
+    )

@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: fc0285d2280fd68f5cff8acb8a0bf0ebe2230209
+current_commit: 01b252a8b0d04c8f62ceaf052991b936b2723f25
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -18,13 +18,14 @@ confirmed_conclusions:
   - Task 8 makes lossless physics-step tracing optional for execute and mandatory for MuJoCo qualification; CP-FUSION-005.
   - Task 9 centralizes backend composition and separates execution classification from qualification status; CP-FUSION-006.
   - Task 10 installs common visual/task geometry with separate simulator collision/physics trees; CP-FUSION-007.
+  - Task 11 installs four explicit launchers and restores exact qualified MuJoCo model/scene fingerprints; CP-FUSION-008.
 disproven_routes:
   - Historical TASK15-FULL-A is INVALID because headless execution could not satisfy the required viewer-camera readiness gate; CP-156.
   - Recreating or sourcing the removed migration worktree is unnecessary and would contradict the verified merged-main handoff; CP-FUSION-001.
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-007
+latest_checkpoint: CP-FUSION-008
 next_experiment: NONE
 ---
 
@@ -245,4 +246,35 @@ evidence:
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task10/installed-closure.log sha256=e0a6ea218ea5d725ce7272da8d68d45a029e489423e03af6960c7bff0f7fe414
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task10/mujoco-compile.log sha256=4f876d366ffab84cd4db209096d5fc10b8be80890d82adf0204fafc5460996cd
   - log/fusion-t10/latest_build
+```
+
+## Checkpoint CP-FUSION-008
+
+```yaml
+checkpoint_id: CP-FUSION-008
+last_valid_experiment: EXP-168 historical uncounted visual corroboration; no fusion live experiment has started
+current_hypothesis: The unified installed MuJoCo launch graph can complete one isolated qualified execute without reading either legacy package.
+working_tree_status: HEAD 01b252a8b0d04c8f62ceaf052991b936b2723f25; Task 11 launch/config/runtime closure, tests, and this checkpoint are intentionally dirty before the scoped Task 11 commit.
+owned_processes: NONE
+preserved_processes: unchanged preserved tmux sessions and pre-existing ros2 daemons; no process or session was controlled.
+confirmed_conclusions:
+  - Four installed launchers exist for explicit MuJoCo/Gazebo stack and pick-place entry points; none declares a backend argument.
+  - Common launch arguments are run_mode, execute, headless, policy_id, policy_version, session_id, evidence_file, and readiness_timeout_s.
+  - MuJoCo declares only mujoco_scene and Gazebo declares only gazebo_world.
+  - Installed launch provenance logs backend, exact source commit, installed prefix, policy SHA-256, bundle SHA-256, execute state, session, ROS domain, and Gazebo partition where applicable.
+  - The complete unified suite passes 57/57; both --show-args gates pass; installed MuJoCo launch dry-run retains the exact 19-transition trace.
+  - Qualified MuJoCo XML was restored byte-for-byte after a path-only rewrite was found to break the approved contact fingerprint: model f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca and scene b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0.
+  - The frozen MuJoCo policy remains aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356.
+disproven_routes:
+  - Semantically equivalent XML path rewrites are not provenance-equivalent and cannot be used with the approved contact calibration fingerprint.
+open_risks:
+  - The newly owned MuJoCo execute graph has not yet been launched; it requires a pre-registered isolated-stack experiment after this commit and rebuild.
+  - Gazebo execute registration remains intentionally absent until Task 12 adapters are implemented.
+next_command: Commit Task 11, rebuild from the clean commit, pre-register EXP-FUSION-001, and run the deferred isolated MuJoCo execute gate.
+evidence:
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task11/unified-tests.log sha256=8a7c2bf4792044745a0bd452c6764604f458f985ef2a35df01ed50ddf9e87ec3
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task11/mujoco-show-args.log sha256=8a150c7dcade44efac9dc860f12a1465e41af6e51a3c88c55a812cf6b77e481e
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task11/gazebo-show-args.log sha256=84e10d1f45cbd7a78a1b24844013586504356fbb2e92a6e04be79ae58ff7bae6
+  - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task11/dry-run.log sha256=111caa2698bd02860b7ce95112ce36f6873ba7ebe3c558acee5eeee1099aa3ec
+  - log/fusion-t11/latest_build
 ```

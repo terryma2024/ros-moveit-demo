@@ -46,6 +46,7 @@ setup(
         "console_scripts": [
             "pick_place = so101_demo.cli.pick_place:main",
             "run_qualification = so101_demo.cli.qualification:main",
+            "scene_setup = so101_demo.backends.mujoco.qualified_phases.scene_setup:main",
         ]
     },
 )
