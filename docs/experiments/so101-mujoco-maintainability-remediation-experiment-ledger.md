@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: d325e2d2e518553805a6850ca1c59e7e033b4a64
+current_commit: ac9986cb96af6daac6459a404daa8b0aa08bc911
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -16,9 +16,9 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
-  - A fresh seven-regime fixed-fingerprint campaign can produce non-overlapping deterministic thresholds for the current model and motion policy.
+  - A bounded MoveIt translation along the model-derived gripper closing axis can produce repeatable physical left_only evidence without changing geometry or simulator state.
 latest_checkpoint: MNT-CP-008
-next_experiment: NONE_PENDING_USER_DIRECTION
+next_experiment: EXP-032
 ```
 
 ## Checkpoint MNT-CP-001
@@ -455,5 +455,74 @@ frozen_provenance:
 state_reuse_justification: EXP-001 executed no controller, reset, pause, or physical action; fresh atomic readback still matches CLOSE_READY with zero fingertip contacts.
 driver_and_commands: Identical reviewed driver and per-regime commands from the EXP-001 through EXP-007 registration except source_commit is d38d4be7c87958b0af182235083641032c804d57.
 safety_and_terminal_contract: Identical to the prior registration; any INVALID invalidates this full batch and any physically unavailable regime is a VALID behavioral failure that stops it.
+decision: PENDING
+```
+
+## Experiments EXP-032 through EXP-043 Cartesian alignment scan preregistration
+
+```yaml
+status: PLANNED
+recorded_at: 2026-08-12T14:00:00+08:00
+authorization: USER_APPROVED bounded MoveIt scan along the gripper closing axis, maximum +/-0.003 m, controller motions only.
+prior_experiment: EXP-031
+hypothesis: Translating the open gripper toward the moving-pad side along the physical fixed-pad-to-moving-pad closing axis will make the fixed/left pad contact first; the opposite sign distinguishes an incorrect axis/sign inference.
+prediction: At least one bounded offset reaches left force >=0.08 N with zero right-pad contact before the diagnostic force and displacement limits; if none does, Cartesian alignment is disproven for the approved range.
+ordered_experiments:
+  - [EXP-032, 0.0005]
+  - [EXP-033, 0.0010]
+  - [EXP-034, 0.0015]
+  - [EXP-035, 0.0020]
+  - [EXP-036, 0.0025]
+  - [EXP-037, 0.0030]
+  - [EXP-038, -0.0005]
+  - [EXP-039, -0.0010]
+  - [EXP-040, -0.0015]
+  - [EXP-041, -0.0020]
+  - [EXP-042, -0.0025]
+  - [EXP-043, -0.0030]
+single_variable: requested TCP translation in metres; one frozen value per experiment.
+lifecycle: RESET_WORLD; every candidate starts after a qualified teleop_reset transaction, explicit resume, and production staged approach to CLOSE_READY.
+preconditions:
+  - One isolated headless stack, no other ROS nodes in domain 176, simulation session so101-mnt-align-001, and partition so101-mnt-align-001.
+  - Fresh CLOSE_READY evidence has zero fingertip contact, the cup is at the reset reference within the production approach bound, and all three controllers plus MoveIt planning/execution are ready.
+  - Source worktree differs from installed source commit only by this experiment ledger and prior ledger checkpoint commits.
+success_criteria:
+  - MoveIt returns and executes a non-empty pose-constrained trajectory from fresh joint state while keeping the TCP orientation fixed.
+  - TCP projected displacement converges within 0.001 m of the requested scalar, orthogonal error is <=0.001 m, and pre-contact cup displacement is <=0.003 m.
+  - Controller-only q6 closing reaches physical left force >=0.08 N with no right contact; maximum force remains <=11.60 N and total cup displacement <=0.010 m.
+failure_criteria:
+  - Right contact appears before the declared left-only shape, the q6 lower bound is reached, or every registered offset is exhausted without success.
+invalid_criteria:
+  - Planning/execution/readiness/provenance failure, reset/session/pause/freshness mismatch, unexpected pre-close contact, or a diagnostic harness failure.
+frozen_provenance:
+  worktree_commit: ac9986cb96af6daac6459a404daa8b0aa08bc911
+  installed_source_commit: d325e2d2e518553805a6850ca1c59e7e033b4a64
+  dependency_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install
+  runtime_package_prefix: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install/so101_mujoco_demo_py
+  ros_domain_id: 176
+  gz_partition: so101-mnt-align-001
+  simulation_session_id: so101-mnt-align-001
+  driver: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/cartesian_alignment_driver.py
+  driver_sha256: 352f451d5cbc5201235be2c710b3851e4b52d276d8f12800d1582b9c040a6e25
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  fixed_pad_mesh_sha256: 0c707b10ba8fe5918431a3d42a764266440ac8fbe37a8e1e66496f288c4d3781
+  moving_pad_mesh_sha256: f33f0818f86177fbe2e12faf10c08b6eb48d8f39cd6b66c2e900268f0161995a
+  closing_axis_tcp_fixed_to_moving_at_q6_minus_0_045: [0.74107100, 0.00792509, -0.67137989]
+commands:
+  - command: ROS_DOMAIN_ID=176 GZ_PARTITION=so101-mnt-align-001 ros2 launch so101_mujoco_demo_py so101_pick_place.launch.py run_mode:=dry_run execute:=false headless:=true start_simulation:=true launch_workflow:=false simulation_session_id:=so101-mnt-align-001
+    exit_code: PENDING
+  - command: ROS_DOMAIN_ID=176 ros2 run so101_mujoco_demo_py teleop_reset --session-id so101-mnt-align-001 --keyframe task_start
+    exit_code: PENDING_PER_EXPERIMENT
+  - command: ROS_DOMAIN_ID=176 ros2 service call /mujoco_ros2_control_node/set_pause mujoco_ros2_control_msgs/srv/SetPause '{paused: false}'
+    exit_code: PENDING_PER_EXPERIMENT
+  - command: ROS_DOMAIN_ID=176 ros2 run so101_mujoco_demo_py staged_approach --mode execute --execute --stop-after DESCEND --simulation-session-id so101-mnt-align-001 --evidence-file /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-ID.json
+    exit_code: PENDING_PER_EXPERIMENT
+  - command: ROS_DOMAIN_ID=176 python3 /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/cartesian_alignment_driver.py --session-id so101-mnt-align-001 --epoch EPOCH --offset-m OFFSET --minimum-force-n 0.08
+    exit_code: PENDING_PER_EXPERIMENT
+safety_aborts:
+  - No model/scene/motion-policy change, no object-state write, no simulator constraint or attachment, and no hidden contact relabeling.
+  - Maximum normal force >11.60 N, pre-contact cup displacement >0.003 m, total diagnostic cup displacement >0.010 m, or any session/epoch/pause/freshness mismatch.
+early_stop: Stop the ordered scan at the first valid physical left_only result, then preregister independent RESET_WORLD repeatability trials at that exact offset before resuming the seven-regime matrix.
 decision: PENDING
 ```
