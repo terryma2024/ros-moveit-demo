@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 3006938fdaf53004fd17c348751de9d9952e3f31
+current_commit: f2be505
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -17,8 +17,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
-latest_checkpoint: MNT-CP-009
-next_experiment: A8_DESIGN_AND_TDD_ONLY
+latest_checkpoint: MNT-CP-010
+next_experiment: A8_SCHEMA_RED
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1270,4 +1270,53 @@ audit_result:
 checkpoint_correction:
   - MNT-CP-009's statement that EXP-072 is safety-evidence INVALID is superseded and must not be used.
   - The retained conclusion is only that EXP-069-and-later offset refinement is abandoned and none of those results is a calibration input.
+```
+
+## Checkpoint MNT-CP-010
+
+```yaml
+checkpoint_id: MNT-CP-010
+recorded_at: 2026-08-12T15:08:00+08:00
+last_valid_experiment: EXP-075, behavioral failure and ABANDONED; no EXP-069+ result is admitted to calibration.
+current_hypothesis: A schema-v3 five-physical-cohort proposal plus evidence-bound unilateral rejection contracts can satisfy A8 without fabricated samples or missing-class statistics.
+owned_processes: NONE
+preserved_processes:
+  - tmux codex
+  - tmux codex-cua
+  - tmux so101-mujoco-gui
+design_revision:
+  physical_regimes:
+    - no_contact
+    - bilateral_touch
+    - over_compression
+    - micro_lift_slip
+    - stable_hold
+  unilateral_contracts:
+    left_only:
+      stable_grasp_allowed: false
+      expected_failure_code: GRASP_RIGHT_CONTACT_MISSING
+      physical_disposition: physical_unreachable unless later authentic evidence changes only the evidence record, not the fail-closed rule.
+    right_only:
+      stable_grasp_allowed: false
+      expected_failure_code: GRASP_LEFT_CONTACT_MISSING
+      physical_disposition: observed from retained authentic evidence.
+  missing_class_statistics: null; never encode an unavailable physical cohort as zero misclassification.
+  threshold_input: Only the five physical cohorts; unilateral records are never threshold samples.
+safety_contract:
+  maximum_pre_contact_displacement_m: 0.003
+  maximum_terminal_total_displacement_m: 0.010
+  maximum_diagnostic_force_n: 11.60
+  displacement_audit: Only the independently monitored pre-contact field can fail the 0.003 m gate; terminal total is compared only with 0.010 m.
+frozen_scope:
+  - No new unilateral offset live experiment.
+  - No axis, planner, q6-step, MJCF, scene, geometry, simulator-state, waypoint, safety-gate, or qualified-grasp-strategy change.
+documents_revised:
+  - docs/superpowers/specs/2026-08-12-so101-mujoco-maintainability-remediation-design.md
+  - docs/superpowers/plans/2026-08-12-so101-mujoco-approved-policy-outcomes.md
+acceptance_boundary:
+  - RED must precede schema/collector/analyzer/runtime implementation.
+  - Typed/fault-injected unilateral windows prove deterministic rejection but are never serialized as physical calibration evidence.
+  - Checked-in contact policy remains disabled and unapproved.
+  - Generate a complete disabled proposal/evidence packet, then stop at USER_APPROVAL_REQUIRED for the exact proposal hash.
+next_command: Write focused schema-v3 and unilateral fail-closed tests, run them to capture RED, then implement the smallest GREEN change.
 ```
