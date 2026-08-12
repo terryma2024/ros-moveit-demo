@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: ab96a689f7c7db8c761d4bfb54b284ed3e1202ed
+current_commit: 61261b1bca2839d1d34927bf3b1266c624315137
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -25,8 +25,8 @@ disproven_routes:
 open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
-latest_checkpoint: CP-FUSION-008
-next_experiment: EXP-FUSION-001
+latest_checkpoint: CP-FUSION-010
+next_experiment: NONE_TASK_12_RED
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -378,4 +378,51 @@ abort_criteria:
   - any unowned process selected for cleanup
 cleanup_scope: only the launch process group created for EXP-FUSION-002; bounded launch shutdown, then exact owned-PID audit
 expected: one complete nine-phase success with lossless transport evidence on the qualified NVMe volume, valid installed evidence manifest, and no owned orphan
+```
+
+## Checkpoint CP-FUSION-010 — EXP-FUSION-002 valid unified execute
+
+```yaml
+checkpoint_id: CP-FUSION-010
+recorded_at: 2026-08-13T03:20:00+08:00
+terminal_experiment: EXP-FUSION-002
+status: VALID_SUCCESS_NONCOUNTING
+source_commit: ab96a689f7c7db8c761d4bfb54b284ed3e1202ed
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-t11-live/so101_demo_py
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: d48293fde8a37f9d8f3450564c297506091588f6aa92d72deaf40bb162197978
+simulation_session_id: fusion-exp-002-ab96a68
+reset_epoch: 0
+completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+phase_exit_codes: ALL_ZERO
+terminal_status: DONE
+transport_evidence:
+  status: COMPLETE
+  outcome_class: PHYSICAL_TRANSPORT_SUCCESS
+  chunk_count: 742
+  chunk_sequence_range: [5075, 5816]
+  physics_step_range: [25378, 29087]
+  independent_sequence_and_step_continuity_check: PASS
+physical_outcome:
+  release_retreat_status: RELEASE_RETREAT_FINAL_PLACEMENT_PROVED
+  final_cup_position_world_m: [-0.08016651017027784, -0.24779766303586345, 0.16538930960565074]
+  final_cup_linear_velocity_world_m_s: [3.5043346637442913e-19, 5.755666239085543e-19, 2.9274850782088535e-18]
+  final_left_contact_count: 0
+  final_right_contact_count: 0
+  final_table_contact: true
+artifacts_sha256:
+  live_runtime_manifest: e793b6f6f75060850ef9c5d63727b420e9b2cc730d7994c24d18812ba941e18e
+  transport_result: a0e267d88ba7ef15d59d616aaa4f8f4624f2ff47b23e5498cbe635ccddb60db9
+  raw_run_index: 7db96e86e0ff9ddd26ba024907c9c12140e7fd609823245c70b2ccc7b08425fd
+  dynamic_summary: b7df4b35234a10c79c701744ee2caf2b1164fe8d4badd5f9ac7092247fe64ba5
+  release_retreat: 38d1bbc0c03b21c7307ac1d70242d320c81511f51f34706945dfb8ce449a0314
+  launch_log: bf974d6558b332ecf06db10010bed68cf6ead79a011cffcf45371f2bc928561b
+cleanup:
+  launcher_exit_code: 0
+  ordered_move_group_shutdown_marker: true
+  owned_processes_after_probe: NONE
+  preserved_sessions_unchanged: [MNT-Q-RESET-EXP136-140, codex, codex-cua, so101-mujoco-gui]
+confirmed_conclusion: The unified installed MuJoCo graph preserves the qualified nine-phase behavior. EXP-FUSION-001 was a storage-volume evidence failure, not a fusion behavior regression.
+plan_deviation: High-rate durable trace evidence must use /data NVMe despite the plan's illustrative /tmp paths; task metadata and ordinary logs remain under the task-specific debug roots.
+next_command: Start Task 12 with RED Gazebo world/lifecycle adapter contracts.
 ```
