@@ -1,0 +1,523 @@
+{
+  "batch_id": "MNT-Q-EXP126-130",
+  "dynamic_transport_run_statistics": {
+    "force_time_exposure_n_s": {
+      "max": 28.739808658093143,
+      "min": 28.69053408357788,
+      "p50": 28.737420108962198,
+      "p95": 28.73970271767278,
+      "p99": 28.73978747000907
+    },
+    "maximum_left_fingertip_compression_m": {
+      "max": 0.0005139660261230933,
+      "min": 0.0005119947594166861,
+      "p50": 0.0005137430233552193,
+      "p95": 0.0005139233357550844,
+      "p99": 0.0005139574880494916
+    },
+    "maximum_right_fingertip_compression_m": {
+      "max": 0.00044399278364995763,
+      "min": 0.00044250207074731675,
+      "p50": 0.00044375655885850517,
+      "p95": 0.00044395102955520414,
+      "p99": 0.00044398443283100695
+    },
+    "peak_global_max_single_contact_force_n": {
+      "max": 6.610766540615487,
+      "min": 6.565566498091873,
+      "p50": 6.605648380531681,
+      "p95": 6.609787080698675,
+      "p99": 6.610570648632125
+    },
+    "shadow_excess_force_time_exposure_n_s": {
+      "max": 20.706507050079544,
+      "min": 20.658994965926095,
+      "p50": 20.704326749475293,
+      "p95": 20.70645993388767,
+      "p99": 20.70649762684117
+    }
+  },
+  "experiments": [
+    {
+      "clean_shutdown": true,
+      "dynamic_transport_summary": {
+        "force_time_exposure_n_s": 28.69053408357788,
+        "maximum_left_fingertip_compression_m": 0.0005128732975254466,
+        "maximum_right_fingertip_compression_m": 0.00044378401317619014,
+        "peak_global_max_single_contact_force_n": 6.585691618115172,
+        "sha256": "77469eeb45edbe0e84e738d4a6ff752a218bf960f5b45141c5f506ad44c36fb5",
+        "shadow_excess_force_time_exposure_n_s": 20.68703864571772
+      },
+      "experiment_id": "EXP-126",
+      "final_outcome": {
+        "final_upright_tilt_rad": 0.015663107523971126,
+        "final_x_m": -0.0801261296279476,
+        "final_y_m": -0.2479513821234971,
+        "final_z_m": 0.1652618054705255,
+        "maximum_angular_speed_rad_s": 0.0,
+        "maximum_linear_speed_m_s": 0.0
+      },
+      "forbidden_intervention_counters": {
+        "direct_object_state_writes": 0,
+        "physics_pause_calls": 0,
+        "simulator_constraint_calls": 0
+      },
+      "owner_manifest_sha256": "67dd97b3d30553342413a2e3a9aaa015e0b66dcefb4d7b63b872bb2b05a49439",
+      "phase_maximum_normal_force_n": {
+        "contact_hold": 0.6008949266901605,
+        "descend": 4.823626360889648,
+        "micro_lift": 0.6008976555167076,
+        "place_alignment": 4.51724862615292,
+        "policy_lift_waypoint1": 0.7617012402676289,
+        "release_retreat": 2.813190702498806,
+        "remaining_lift": 0.771285116053871,
+        "staged_approach": 0.15160054856895655,
+        "transport": 4.966139364918687
+      },
+      "raw_transport": {
+        "chunk_count": 741,
+        "first_physics_step": 25121,
+        "last_physics_step": 28825,
+        "lossless": true,
+        "physics_timestep_s": 0.002,
+        "run_index_sha256": "c7853a24f84c3b4191768fe03bc6c45acb69d941be28318e99e4e40c8804419a",
+        "sample_count": 3705
+      },
+      "released_static_final_maximum_normal_force_n": 0.2357763961159908,
+      "reset_epoch": 1,
+      "result_sha256": "26cd994123775e9b4be456c501243282a05ea8b9ddb2460405626d1ce76bd693",
+      "simulation_session_id": "MNT-Q-EXP126-full-01",
+      "visual_evidence": "USER_WAIVER"
+    },
+    {
+      "clean_shutdown": true,
+      "dynamic_transport_summary": {
+        "force_time_exposure_n_s": 28.739278955991335,
+        "maximum_left_fingertip_compression_m": 0.0005139660261230933,
+        "maximum_right_fingertip_compression_m": 0.00044375655885850517,
+        "peak_global_max_single_contact_force_n": 6.610766540615487,
+        "sha256": "606083dfffbc22536bcde4f4381222bea8dc19844b852f182f51c406c547347a",
+        "shadow_excess_force_time_exposure_n_s": 20.706271469120168
+      },
+      "experiment_id": "EXP-127",
+      "final_outcome": {
+        "final_upright_tilt_rad": 0.017010015335558515,
+        "final_x_m": -0.07897328681150646,
+        "final_y_m": -0.24783640578579427,
+        "final_z_m": 0.1653076033186954,
+        "maximum_angular_speed_rad_s": 0.0,
+        "maximum_linear_speed_m_s": 0.0
+      },
+      "forbidden_intervention_counters": {
+        "direct_object_state_writes": 0,
+        "physics_pause_calls": 0,
+        "simulator_constraint_calls": 0
+      },
+      "owner_manifest_sha256": "e50f7fe33bc13a74fed3d75a02d6ad5259f2553cae03664663164fc9f8ca6bd4",
+      "phase_maximum_normal_force_n": {
+        "contact_hold": 0.6075478496081999,
+        "descend": 4.782288947996148,
+        "micro_lift": 0.607562898992172,
+        "place_alignment": 4.727047822696706,
+        "policy_lift_waypoint1": 0.7749622486255126,
+        "release_retreat": 4.727262284792989,
+        "remaining_lift": 0.7751705610107509,
+        "staged_approach": 0.15160054856895655,
+        "transport": 4.9252519844336655
+      },
+      "raw_transport": {
+        "chunk_count": 743,
+        "first_physics_step": 25421,
+        "last_physics_step": 29135,
+        "lossless": true,
+        "physics_timestep_s": 0.002,
+        "run_index_sha256": "b2b79803342a1819387d57e00447587ef8a925f4be860b8e64c242ee1c21d148",
+        "sample_count": 3715
+      },
+      "released_static_final_maximum_normal_force_n": 0.24002329775729253,
+      "reset_epoch": 1,
+      "result_sha256": "08d5ab6029570c83fcfcfd5f970d5fac39739f5a7476101278b99765ca00f5c8",
+      "simulation_session_id": "MNT-Q-EXP127-full-01",
+      "visual_evidence": "VERIFIED"
+    },
+    {
+      "clean_shutdown": true,
+      "dynamic_transport_summary": {
+        "force_time_exposure_n_s": 28.692175594155312,
+        "maximum_left_fingertip_compression_m": 0.0005137525742830491,
+        "maximum_right_fingertip_compression_m": 0.00044399278364995763,
+        "peak_global_max_single_contact_force_n": 6.605869241031424,
+        "sha256": "754223d5cf0150d171752c2066c71fde55caf9233648d6005b7784f15ace3e8e",
+        "shadow_excess_force_time_exposure_n_s": 20.658994965926095
+      },
+      "experiment_id": "EXP-128",
+      "final_outcome": {
+        "final_upright_tilt_rad": 0.002588650646530664,
+        "final_x_m": -0.0781694718742764,
+        "final_y_m": -0.2475305265286221,
+        "final_z_m": 0.1647497292214586,
+        "maximum_angular_speed_rad_s": 0.0,
+        "maximum_linear_speed_m_s": 0.0
+      },
+      "forbidden_intervention_counters": {
+        "direct_object_state_writes": 0,
+        "physics_pause_calls": 0,
+        "simulator_constraint_calls": 0
+      },
+      "owner_manifest_sha256": "75c20a3d465f3a2839831462df96e7f33e7a310b1294949f156381826441d775",
+      "phase_maximum_normal_force_n": {
+        "contact_hold": 0.6035570268720367,
+        "descend": 4.773447924276285,
+        "micro_lift": 0.6035596066317152,
+        "place_alignment": 5.156712797643884,
+        "policy_lift_waypoint1": 0.770249905945176,
+        "release_retreat": 4.468524376644462,
+        "remaining_lift": 0.7706751108137844,
+        "staged_approach": 0.15160054856895655,
+        "transport": 4.913286473595916
+      },
+      "raw_transport": {
+        "chunk_count": 743,
+        "first_physics_step": 24366,
+        "last_physics_step": 28080,
+        "lossless": true,
+        "physics_timestep_s": 0.002,
+        "run_index_sha256": "f8e3f043529be7eb8a69fd54a96594fdd17c7e9440bfe8bd9d540d1e812597a7",
+        "sample_count": 3715
+      },
+      "released_static_final_maximum_normal_force_n": 0.2326773158056082,
+      "reset_epoch": 1,
+      "result_sha256": "40c328da1cc269c80585ab4092c533946c3fa83cc6eb590921675bfb0382a52a",
+      "simulation_session_id": "MNT-Q-EXP128-full-01",
+      "visual_evidence": "VERIFIED"
+    },
+    {
+      "clean_shutdown": true,
+      "dynamic_transport_summary": {
+        "force_time_exposure_n_s": 28.739808658093143,
+        "maximum_left_fingertip_compression_m": 0.0005137430233552193,
+        "maximum_right_fingertip_compression_m": 0.00044350320689856646,
+        "peak_global_max_single_contact_force_n": 6.605648380531681,
+        "sha256": "b630c81f1d18504d42cebd664b5b9a25275e624a5baf3cd2310453aadeb3a403",
+        "shadow_excess_force_time_exposure_n_s": 20.706507050079544
+      },
+      "experiment_id": "EXP-129",
+      "final_outcome": {
+        "final_upright_tilt_rad": 0.017432376066860933,
+        "final_x_m": -0.0792916959281965,
+        "final_y_m": -0.2481718428047334,
+        "final_z_m": 0.1654924856311975,
+        "maximum_angular_speed_rad_s": 8.603189426505625e-06,
+        "maximum_linear_speed_m_s": 0.0
+      },
+      "forbidden_intervention_counters": {
+        "direct_object_state_writes": 0,
+        "physics_pause_calls": 0,
+        "simulator_constraint_calls": 0
+      },
+      "owner_manifest_sha256": "75b83416e533992fe818aca922c83e207e62f7d14e58b5ba9c758cd9f927ae8d",
+      "phase_maximum_normal_force_n": {
+        "contact_hold": 0.6060929187611249,
+        "descend": 4.783932381405291,
+        "micro_lift": 0.6061013364855292,
+        "place_alignment": 4.497177699157209,
+        "policy_lift_waypoint1": 0.774876082094659,
+        "release_retreat": 3.4766734127699293,
+        "remaining_lift": 0.7750797150784496,
+        "staged_approach": 0.15160054856895655,
+        "transport": 4.982986824474829
+      },
+      "raw_transport": {
+        "chunk_count": 744,
+        "first_physics_step": 26306,
+        "last_physics_step": 30025,
+        "lossless": true,
+        "physics_timestep_s": 0.002,
+        "run_index_sha256": "79ffb91ffe2846b2d5be9d043913846f5859885d3f4db189356d2f5aeab0ec60",
+        "sample_count": 3720
+      },
+      "released_static_final_maximum_normal_force_n": 0.15105951830495978,
+      "reset_epoch": 1,
+      "result_sha256": "fcee547b94e507ad3a63053b445120c0529fa925891bc8a3312b51e49048e6d4",
+      "simulation_session_id": "MNT-Q-EXP129-full-01",
+      "visual_evidence": "VERIFIED"
+    },
+    {
+      "clean_shutdown": true,
+      "dynamic_transport_summary": {
+        "force_time_exposure_n_s": 28.737420108962198,
+        "maximum_left_fingertip_compression_m": 0.0005119947594166861,
+        "maximum_right_fingertip_compression_m": 0.00044250207074731675,
+        "peak_global_max_single_contact_force_n": 6.565566498091873,
+        "sha256": "9c3be74e3d1388f4519bf7f9275c6f7dcafc6711c16cc02bf7eb791c2b795727",
+        "shadow_excess_force_time_exposure_n_s": 20.704326749475293
+      },
+      "experiment_id": "EXP-130",
+      "final_outcome": {
+        "final_upright_tilt_rad": 0.0020171496597214157,
+        "final_x_m": -0.07877472344232539,
+        "final_y_m": -0.24691137280158185,
+        "final_z_m": 0.16472600002621315,
+        "maximum_angular_speed_rad_s": 3.512237375907703e-06,
+        "maximum_linear_speed_m_s": 0.0
+      },
+      "forbidden_intervention_counters": {
+        "direct_object_state_writes": 0,
+        "physics_pause_calls": 0,
+        "simulator_constraint_calls": 0
+      },
+      "owner_manifest_sha256": "10c3a950bde7c103e317624671a0dbab39319255e4e43ce714f7a486467de4dd",
+      "phase_maximum_normal_force_n": {
+        "contact_hold": 0.6034387699388399,
+        "descend": 4.789249470658996,
+        "micro_lift": 0.6034458882367724,
+        "place_alignment": 5.496411372383959,
+        "policy_lift_waypoint1": 0.7698548446224376,
+        "release_retreat": 4.794628023732102,
+        "remaining_lift": 0.775105920519864,
+        "staged_approach": 0.15160054856895655,
+        "transport": 4.914460247103591
+      },
+      "raw_transport": {
+        "chunk_count": 744,
+        "first_physics_step": 26811,
+        "last_physics_step": 30530,
+        "lossless": true,
+        "physics_timestep_s": 0.002,
+        "run_index_sha256": "67091fad3ac8c5d453b6293167d6f21b0d3bb2a5158cda59fce3ce652e362f52",
+        "sample_count": 3720
+      },
+      "released_static_final_maximum_normal_force_n": 0.2332022330621397,
+      "reset_epoch": 1,
+      "result_sha256": "3b9ddc8461210eb97d6f9f173a0490f47ae8b2f5adaf43f7cb727a7656013a52",
+      "simulation_session_id": "MNT-Q-EXP130-full-01",
+      "visual_evidence": "VERIFIED"
+    }
+  ],
+  "final_outcome": {
+    "final_upright_tilt_rad": {
+      "max": 0.017432376066860933,
+      "min": 0.0020171496597214157,
+      "p50": 0.015663107523971126,
+      "p95": 0.017347903920600448,
+      "p99": 0.017415481637608837
+    },
+    "final_x_m": {
+      "max": -0.0781694718742764,
+      "min": -0.0801261296279476,
+      "p50": -0.07897328681150646,
+      "p95": -0.07829052218788621,
+      "p99": -0.07819368193699837
+    },
+    "final_y_m": {
+      "max": -0.24691137280158185,
+      "min": -0.2481718428047334,
+      "p50": -0.24783640578579427,
+      "p95": -0.2470352035469899,
+      "p99": -0.24693613895066346
+    },
+    "final_z_m": {
+      "max": 0.1654924856311975,
+      "min": 0.16472600002621315,
+      "p50": 0.1652618054705255,
+      "p95": 0.16545550916869708,
+      "p99": 0.16548509033869743
+    },
+    "maximum_angular_speed_rad_s": {
+      "max": 8.603189426505625e-06,
+      "min": 0.0,
+      "p50": 0.0,
+      "p95": 7.5849990163860395e-06,
+      "p99": 8.399551344481709e-06
+    },
+    "maximum_linear_speed_m_s": {
+      "max": 0.0,
+      "min": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    }
+  },
+  "independent_experiment_units": 5,
+  "lifecycle": "FULL_RESTART",
+  "phase_maximum_normal_force_n": {
+    "contact_hold": {
+      "max": 0.6075478496081999,
+      "min": 0.6008949266901605,
+      "p50": 0.6035570268720367,
+      "p95": 0.6072568634387848,
+      "p99": 0.6074896523743168
+    },
+    "descend": {
+      "max": 4.823626360889648,
+      "min": 4.773447924276285,
+      "p50": 4.783932381405291,
+      "p95": 4.8167509828435175,
+      "p99": 4.822251285280422
+    },
+    "micro_lift": {
+      "max": 0.607562898992172,
+      "min": 0.6008976555167076,
+      "p50": 0.6035596066317152,
+      "p95": 0.6072705864908434,
+      "p99": 0.6075044364919062
+    },
+    "place_alignment": {
+      "max": 5.496411372383959,
+      "min": 4.497177699157209,
+      "p50": 4.727047822696706,
+      "p95": 5.428471657435944,
+      "p99": 5.482823429394356
+    },
+    "policy_lift_waypoint1": {
+      "max": 0.7749622486255126,
+      "min": 0.7617012402676289,
+      "p50": 0.770249905945176,
+      "p95": 0.7749450153193418,
+      "p99": 0.7749588019642784
+    },
+    "release_retreat": {
+      "max": 4.794628023732102,
+      "min": 2.813190702498806,
+      "p50": 4.468524376644462,
+      "p95": 4.78115487594428,
+      "p99": 4.791933394174538
+    },
+    "released_static_final": {
+      "max": 0.24002329775729253,
+      "min": 0.15105951830495978,
+      "p50": 0.2332022330621397,
+      "p95": 0.23917391742903218,
+      "p99": 0.23985342169164045
+    },
+    "remaining_lift": {
+      "max": 0.7751705610107509,
+      "min": 0.7706751108137844,
+      "p50": 0.7750797150784496,
+      "p95": 0.7751576329125736,
+      "p99": 0.7751679753911154
+    },
+    "staged_approach": {
+      "max": 0.15160054856895655,
+      "min": 0.15160054856895655,
+      "p50": 0.15160054856895655,
+      "p95": 0.15160054856895655,
+      "p99": 0.15160054856895655
+    },
+    "transport": {
+      "max": 4.982986824474829,
+      "min": 4.913286473595916,
+      "p50": 4.9252519844336655,
+      "p95": 4.979617332563601,
+      "p99": 4.982312926092583
+    }
+  },
+  "policy_effect": "NONE_READ_ONLY_BASELINE",
+  "raw_transport": {
+    "all_runs_lossless": true,
+    "metrics": {
+      "angular_speed_rad_s": {
+        "max": 0.09241770107362628,
+        "min": 2.543349063631315e-07,
+        "p50": 0.041119292936853055,
+        "p95": 0.08636397934336802,
+        "p99": 0.08940207981931482
+      },
+      "fingertip_max_single_contact_force_n": {
+        "max": 6.610766540615487,
+        "min": 0.7599841757027861,
+        "p50": 4.094264533954346,
+        "p95": 6.197460465366438,
+        "p99": 6.575667216058599
+      },
+      "global_max_single_contact_force_n": {
+        "max": 6.610766540615487,
+        "min": 0.7599841757027861,
+        "p50": 4.094264533954346,
+        "p95": 6.197460465366438,
+        "p99": 6.575667216058599
+      },
+      "left_fingertip_compression_m": {
+        "max": 0.0005139660261230933,
+        "min": 2.364420505623908e-05,
+        "p50": 0.0003796473474635423,
+        "p95": 0.0004956236446544365,
+        "p99": 0.0005124364824842904
+      },
+      "left_fingertip_total_normal_force_n": {
+        "max": 16.042927661234994,
+        "min": 0.627184181898298,
+        "p50": 10.521836379721318,
+        "p95": 15.064777440676506,
+        "p99": 15.963332307843528
+      },
+      "linear_speed_m_s": {
+        "max": 0.03329530243800338,
+        "min": 4.426726722867853e-07,
+        "p50": 0.012346115977119978,
+        "p95": 0.030715908805659466,
+        "p99": 0.0328560413431864
+      },
+      "maximum_normal_force_n": {
+        "max": 6.610766540615487,
+        "min": 0.7599841757027861,
+        "p50": 4.094264533954346,
+        "p95": 6.197460465366438,
+        "p99": 6.575667216058599
+      },
+      "object_x_m": {
+        "max": 0.02002618440633183,
+        "min": -0.07694302135957337,
+        "p50": -0.02273359643670277,
+        "p95": 0.02001224930014055,
+        "p99": 0.020026184216655172
+      },
+      "object_y_m": {
+        "max": -0.26432042335633016,
+        "min": -0.27230624301833595,
+        "p50": -0.27092880606827163,
+        "p95": -0.26463726134090765,
+        "p99": -0.26437338936904
+      },
+      "object_z_m": {
+        "max": 0.22660880464361646,
+        "min": 0.22450737038420784,
+        "p50": 0.225086115093353,
+        "p95": 0.22642990986848022,
+        "p99": 0.2265802239733771
+      },
+      "right_fingertip_compression_m": {
+        "max": 0.00044399278364995763,
+        "min": 8.590474476033841e-05,
+        "p50": 0.00030859725995169214,
+        "p95": 0.0004216561221204482,
+        "p99": 0.0004424461270780664
+      },
+      "right_fingertip_total_normal_force_n": {
+        "max": 16.075628069764726,
+        "min": 0.7599841757027861,
+        "p50": 10.527113477871481,
+        "p95": 15.096737976482736,
+        "p99": 15.996069277182759
+      }
+    },
+    "sample_count": 18575,
+    "sample_role": "repeated_measure_diagnostic"
+  },
+  "runtime_fingerprint": {
+    "contact_policy_sha256": "c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82",
+    "dependency_sha256": "be6bc595cd71a10df32765e11884183c0096db765a5ee35c3ef6a0b109ef5a3a",
+    "motion_policy_sha256": "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356",
+    "robot_mjcf_sha256": "f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca",
+    "scene_sha256": "b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0",
+    "source_commit": "d30bf2bd54ea9359d08b866cdda447dfe2a3c271",
+    "task_scene_sha256": "a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0",
+    "urdf_sha256": "0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a"
+  },
+  "schema": "so101-full-restart-baseline-v1",
+  "source_evidence_root": "/data/work/so101-debug-mujoco-maintainability-remediation",
+  "threshold_derivation": "NONE_DIAGNOSTIC_COMPARISON_ONLY",
+  "visual_waivers": [
+    "EXP-126"
+  ]
+}
