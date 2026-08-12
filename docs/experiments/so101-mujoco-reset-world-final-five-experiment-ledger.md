@@ -7,8 +7,8 @@ success_contract: Exactly five serial VALID SUCCESS records on one unchanged non
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 302c4ef9550e036f127111e473f44a823b1ab643
-current_commit: c037845859448571991ec472d5c42ef3f5e86bad
-evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
+current_commit: 34e2000b15227d1bcb6ec67d482d78e5354b0918
+evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
 confirmed_conclusions:
   - MNT-CP-057 terminated MNT-Q-RESET-EXP131-135 permanently after EXP-131 used high-rate evidence on the slow /tmp volume and the old runner continued into polluted EXP-132/133 attempts.
   - Commit 302c4ef9550e036f127111e473f44a823b1ab643 makes fixed target-count qualification stop after the first VALID_FAILURE or INVALID record; its 20 qualification contract tests and Ruff gate passed before this challenge.
@@ -18,8 +18,8 @@ disproven_routes:
   - High-rate lossless evidence under /tmp backed by /dev/sda3; EXP-131 observed a chunk sequence mismatch.
   - Continuing a fixed five-run batch after its first non-SUCCESS record; EXP-132/133 were polluted follow-on attempts and cannot count.
 open_hypotheses: []
-latest_checkpoint: RESET-FIVE-CP-006
-next_experiment: NEW_BATCH_AFTER_EVIDENCE_DISCOVERY_FIX
+latest_checkpoint: RESET-FIVE-CP-008
+next_experiment: EXP-141
 ```
 
 ## Immutable challenge boundary
@@ -559,5 +559,154 @@ protected_user_state:
   protected_documents_byte_hashes_unchanged: true
 next_experiment: EXP-141
 next_command: Commit the frozen artifact registration, then preregister EXP-141 through EXP-145 before any stack startup.
+remote_push_state: FORBIDDEN
+```
+
+## Fresh immutable challenge boundary — MNT-Q-RESET-EXP141-145
+
+```yaml
+batch_id: MNT-Q-RESET-EXP141-145
+experiments: [EXP-141, EXP-142, EXP-143, EXP-144, EXP-145]
+lifecycle: RESET_WORLD
+target_count: 5
+shared_stack_count: 1
+shared_simulation_session_id: MNT-Q-RESET-EXP141-145-reset
+ros_domain_id: 205
+teleop_port: 8045
+gz_partition: NOT_APPLICABLE_MUJOCO_RUNTIME
+expected_reset_epochs: [1, 2, 3, 4, 5]
+evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
+evidence_root_pre_registration_state: ABSENT
+evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
+engineering_source_commit: 34e2000b15227d1bcb6ec67d482d78e5354b0918
+evidence_discovery_fix_commit: 1b49979824b89fe7d333b393a02208ca7550219d
+runtime_fingerprint_file: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-runtime-fingerprint.json
+runtime_fingerprint_file_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+frozen_runtime_source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271
+fork_commit: 738e304551b4ea6db020b466086a13db71b65607
+fork_tag: so101-0.0.3-r6
+frozen_behavior_manifest_sha256: d74395d79ea62246656f820abe0cba54b3f18cf8104e735e2c7b91e196dc2c5b
+motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+diagnostic_only_proposal_sha256: 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f
+diagnostic_proposal_runtime_activation: FORBIDDEN
+single_variable_from_failed_batch: Synchronize evidence subscription discovery before the existing pause-snapshot transaction; runtime robot strategy and all behavior inputs remain unchanged.
+strategy_changes_forbidden: [thresholds, targets, timing, speed, replanning, delay, contact policy, grasp policy]
+failure_rule: The first non-SUCCESS record immediately terminates execution and makes this entire batch unqualified. EXP-141 through EXP-145 are never reused. Any later attempt requires new monotonically increasing IDs, a new batch ID, a new absent evidence directory, and prior ledger registration.
+counting_boundary: Only the one preregistered run_qualification invocation below may contribute to this 5/5. Visual corroboration is non-counting.
+remote_boundary: No remote push is authorized. Final state after a qualified local-main merge must be REMOTE_PUSH_REVIEW_REQUIRED.
+```
+
+## Preregistered counting command — MNT-Q-RESET-EXP141-145
+
+```yaml
+command: >-
+  ros2 run so101_mujoco_demo_py run_qualification
+  --batch-id MNT-Q-RESET-EXP141-145
+  --lifecycle RESET_WORLD
+  --count 5
+  --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-runtime-fingerprint.json
+  --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
+  --base-domain-id 205
+  --base-port 8045
+  --no-headless
+shell_contract:
+  - source ~/gui-env.zsh
+  - source /opt/ros/jazzy/setup.zsh
+  - source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh
+  - source /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/setup.zsh
+  - export PYTHONDONTWRITEBYTECODE=1
+tmux_session: MNT-Q-RESET-EXP141-145
+invocation_count: 1
+hidden_retries: FORBIDDEN
+```
+
+## Preregistered experiments EXP-141 through EXP-145
+
+The manifest ordinals `MNT-Q-RESET-EXP141-145-01` through `-05` map one-to-one to these permanent IDs.
+
+```yaml
+- experiment_id: EXP-141
+  manifest_record_id: MNT-Q-RESET-EXP141-145-01
+  status: PREREGISTERED
+  hypothesis: Publisher discovery synchronization lets the unchanged frozen workflow acquire the epoch-1 atomic snapshot and complete normally.
+  prediction: SUCCESS with reset epoch 1, the shared session ID, exact nine-phase trace, null physical primary_failure, and detached/world-synchronized Planning Scene.
+  lifecycle: RESET_WORLD
+  expected_reset_epoch: 1
+  preconditions: [fresh shared stack, absent NVMe evidence root, frozen fingerprint and policies, empty domain and port]
+  success_criteria: [SUCCESS, exact nine-phase trace, physical success, Planning Scene detached and world synchronized]
+  failure_criteria: [any valid physical or workflow failure]
+  invalid_criteria: [provenance mismatch, stale evidence, missing artifact, epoch or session mismatch, contamination]
+- experiment_id: EXP-142
+  manifest_record_id: MNT-Q-RESET-EXP141-145-02
+  status: PREREGISTERED
+  hypothesis: The same unchanged stack repeats successfully after reset epoch 2 without stale state.
+  prediction: SUCCESS with epoch 2 and the same complete physical and Planning Scene contract.
+  lifecycle: RESET_WORLD
+  expected_reset_epoch: 2
+  preconditions: [EXP-141 SUCCESS, same stack and session]
+  success_criteria: [SUCCESS, exact nine-phase trace, physical success, Planning Scene detached and world synchronized]
+  failure_criteria: [any valid physical or workflow failure]
+  invalid_criteria: [any challenge contract contamination]
+- experiment_id: EXP-143
+  manifest_record_id: MNT-Q-RESET-EXP141-145-03
+  status: PREREGISTERED
+  hypothesis: The same unchanged stack repeats successfully after reset epoch 3 without accumulated runtime state.
+  prediction: SUCCESS with epoch 3 and the same complete physical and Planning Scene contract.
+  lifecycle: RESET_WORLD
+  expected_reset_epoch: 3
+  preconditions: [EXP-141 and EXP-142 SUCCESS, same stack and session]
+  success_criteria: [SUCCESS, exact nine-phase trace, physical success, Planning Scene detached and world synchronized]
+  failure_criteria: [any valid physical or workflow failure]
+  invalid_criteria: [any challenge contract contamination]
+- experiment_id: EXP-144
+  manifest_record_id: MNT-Q-RESET-EXP141-145-04
+  status: PREREGISTERED
+  hypothesis: The same unchanged stack repeats successfully after reset epoch 4 without accumulated runtime state.
+  prediction: SUCCESS with epoch 4 and the same complete physical and Planning Scene contract.
+  lifecycle: RESET_WORLD
+  expected_reset_epoch: 4
+  preconditions: [EXP-141 through EXP-143 SUCCESS, same stack and session]
+  success_criteria: [SUCCESS, exact nine-phase trace, physical success, Planning Scene detached and world synchronized]
+  failure_criteria: [any valid physical or workflow failure]
+  invalid_criteria: [any challenge contract contamination]
+- experiment_id: EXP-145
+  manifest_record_id: MNT-Q-RESET-EXP141-145-05
+  status: PREREGISTERED
+  hypothesis: The fifth unchanged reset epoch completes the exact five-consecutive-success challenge after the evidence-discovery fix.
+  prediction: SUCCESS with epoch 5; qualification summary reports attempt_count 5, consecutive_successes 5, qualified true, and batch_invalid false.
+  lifecycle: RESET_WORLD
+  expected_reset_epoch: 5
+  preconditions: [EXP-141 through EXP-144 SUCCESS, same stack and session]
+  success_criteria: [SUCCESS, exact nine-phase trace, physical success, Planning Scene detached and world synchronized, exact qualified 5/5 summary]
+  failure_criteria: [any valid physical or workflow failure]
+  invalid_criteria: [any challenge contract contamination]
+```
+
+## Checkpoint RESET-FIVE-CP-008 — fresh batch preregistered
+
+```yaml
+checkpoint_id: RESET-FIVE-CP-008
+recorded_at: 2026-08-13T01:45:00+08:00
+prior_checkpoint: RESET-FIVE-CP-007
+status: PREREGISTERED_NOT_STARTED
+batch_id: MNT-Q-RESET-EXP141-145
+working_tree_status: Only the two byte-preserved user documents are untracked outside this ledger update.
+preflight:
+  evidence_root_absent: PASS
+  evidence_filesystem: /dev/nvme0n1p5 mounted at /data as ext4
+  ros_domain_205_nodes: NONE
+  tcp_port_8045_listener: NONE
+  tmux_session_MNT_Q_RESET_EXP141_145: ABSENT
+  owned_runtime_processes: NONE
+  runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  protected_documents_byte_hashes_unchanged: true
+next_experiment: EXP-141
+next_command: Commit this preregistration before creating the evidence root or starting the one counting invocation.
 remote_push_state: FORBIDDEN
 ```
