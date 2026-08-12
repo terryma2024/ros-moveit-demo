@@ -1,1 +1,1 @@
-"""Independent SO-101 MuJoCo ROS 2 demonstration package."""
+"""Deprecated MuJoCo compatibility package for :mod:`so101_demo`."""

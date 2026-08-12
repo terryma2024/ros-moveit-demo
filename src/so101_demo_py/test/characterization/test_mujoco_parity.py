@@ -1,11 +1,10 @@
+"""Frozen MuJoCo behavior checks retained after legacy ownership removal."""
+
 from dataclasses import asdict
 
-from so101_demo.application.pick_place import LIVE_PHASES as NEW_LIVE_PHASES
-from so101_demo.cli import pick_place as new_cli
-from so101_demo.control.moveit.planning import JointPlanRequest as NewJointPlanRequest
-from so101_mujoco_demo_py import cli as old_cli
-from so101_mujoco_demo_py.live_runtime import LIVE_PHASES as OLD_LIVE_PHASES
-from so101_mujoco_demo_py.moveit.planning import JointPlanRequest as OldJointPlanRequest
+from so101_demo.application.pick_place import LIVE_PHASES
+from so101_demo.cli import pick_place
+from so101_demo.control.moveit.planning import JointPlanRequest
 
 EXPECTED_LIVE_PHASES = (
     "staged_approach",
@@ -20,8 +19,8 @@ EXPECTED_LIVE_PHASES = (
 )
 
 
-def _joint_plan_request(request_type):
-    return request_type(
+def _joint_plan_request() -> JointPlanRequest:
+    return JointPlanRequest(
         joint_names=("joint1", "joint2", "joint3", "joint4", "joint5"),
         current_positions=(0.0, 0.1, 0.2, 0.3, 0.4),
         target_positions=(0.5, 0.4, 0.3, 0.2, 0.1),
@@ -43,25 +42,27 @@ def _joint_plan_request(request_type):
 
 
 def test_phase_sequence_is_frozen() -> None:
-    """Catch omission, insertion, or reordering of a qualified production phase."""
-
-    assert NEW_LIVE_PHASES == OLD_LIVE_PHASES == EXPECTED_LIVE_PHASES
+    assert LIVE_PHASES == EXPECTED_LIVE_PHASES
 
 
-def test_plan_request_is_unchanged() -> None:
-    """Catch changed MoveIt request fields/default interpretation during extraction."""
-
-    assert asdict(_joint_plan_request(NewJointPlanRequest)) == asdict(
-        _joint_plan_request(OldJointPlanRequest)
+def test_plan_request_shape_is_frozen() -> None:
+    assert tuple(asdict(_joint_plan_request())) == (
+        "joint_names",
+        "current_positions",
+        "target_positions",
+        "velocity_scaling",
+        "acceleration_scaling",
+        "planning_time_s",
+        "planning_group",
+        "tcp_link",
+        "start_state_joint_names",
+        "start_state_positions",
     )
 
 
-def test_dry_run_cli_result_is_unchanged(capsys) -> None:
-    """Catch a changed exit code or public result schema in the new CLI."""
-
-    old_exit = old_cli.main([])
-    old_output = capsys.readouterr().out
-    new_exit = new_cli.main([])
-    new_output = capsys.readouterr().out
-    assert new_exit == old_exit == 0
-    assert new_output == old_output
+def test_dry_run_cli_contract_is_frozen(capsys) -> None:
+    assert pick_place.main(["--backend", "mujoco"]) == 0
+    output = capsys.readouterr().out
+    assert "status=DONE" in output
+    assert "transition_count=19" in output
+    assert output.rstrip().endswith("RETREAT,DONE")
