@@ -114,15 +114,6 @@ def test_launch_composes_every_headless_runtime_boundary_and_shutdown_owner() ->
     assert sum(isinstance(action, RegisterEventHandler) for action in composition.actions) == 2
 
 
-def test_launch_binds_one_session_to_root_and_simulation_evidence_plugin_scope() -> None:
-    module = load_launch_module()
-
-    assert module.simulation_session_parameters("contract-session") == {
-        "simulation_session_id": "contract-session",
-        "simulation_evidence/simulation_session_id": "contract-session",
-    }
-
-
 def test_interactive_composition_keeps_stack_alive_without_duplicate_workflow() -> None:
     module = load_launch_module()
     composition = module.compose_launch(

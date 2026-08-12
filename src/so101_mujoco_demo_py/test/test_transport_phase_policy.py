@@ -81,4 +81,7 @@ def test_live_transport_wires_static_prehold_and_dynamic_postsettle_explicitly()
         "ContactForceMode.DYNAMIC_TRANSPORT_SHADOW",
     ]
     assert "on_goal_dispatched=goal_dispatched" in source
+    assert "checkpoint_producer_provenance" in source
+    assert "checkpoint_snapshot_session" in source
+    assert '"publisher_provenance"' in source
     assert "force boundary exceeded during transport" not in source

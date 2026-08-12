@@ -119,6 +119,37 @@ def test_session_mismatch_is_rejected_with_structured_durable_identity(tmp_path:
     assert document["boundaries"] == []
 
 
+def test_first_identity_mismatch_is_not_overwritten(tmp_path: Path) -> None:
+    value = observer(tmp_path)
+    errors = []
+    for actual in ("producer-first", "producer-later"):
+        with pytest.raises(EvidenceInvalid) as caught:
+            value.accept_chunk(replace(chunk(100, 104), simulation_session_id=actual))
+        errors.append(caught.value)
+        value.record_invalid(caught.value)
+
+    index_path = value.close_invalid(errors[-1])
+    document = json.loads(index_path.read_text(encoding="utf-8"))
+    assert document["first_chunk_session_id"] == "producer-first"
+    assert document["identity_mismatch"]["actual_session_id"] == "producer-first"
+
+
+def test_snapshot_identity_mismatch_uses_snapshot_topic_and_kind(tmp_path: Path) -> None:
+    value = observer(tmp_path)
+
+    with pytest.raises(EvidenceInvalid) as caught:
+        value.checkpoint_snapshot_session("snapshot-producer")
+    index_path = value.close_invalid(caught.value)
+
+    document = json.loads(index_path.read_text(encoding="utf-8"))
+    assert document["identity_mismatch"] == {
+        "actual_session_id": "snapshot-producer",
+        "expected_session_id": "EXP-110-session",
+        "message_kind": "SimulationEvidence",
+        "topic": "/so101/simulation/evidence",
+    }
+
+
 def test_publisher_provenance_records_count_node_and_gid() -> None:
     class Endpoint:
         node_name = "mujoco_ros2_control_node"
@@ -146,6 +177,29 @@ def test_publisher_provenance_records_count_node_and_gid() -> None:
         ],
         "topic": "/so101/simulation/physics_step_chunks",
     }
+
+
+def test_observer_checkpoints_both_topic_publishers_before_first_chunk(tmp_path: Path) -> None:
+    value = observer(tmp_path)
+    provenance = {
+        "snapshot": {"topic": "/so101/simulation/evidence", "publisher_count": 1},
+        "physics_step_chunk": {
+            "topic": "/so101/simulation/physics_step_chunks",
+            "publisher_count": 1,
+        },
+    }
+
+    value.checkpoint_producer_provenance(provenance)
+    value.checkpoint_snapshot_session("EXP-110-session")
+    value.accept_chunk(chunk(100, 104))
+
+    document = json.loads(
+        (tmp_path / "run-index.json").read_text(encoding="utf-8")
+    )
+    assert document["expected_session_id"] == "EXP-110-session"
+    assert document["first_chunk_session_id"] == "EXP-110-session"
+    assert document["first_snapshot_session_id"] == "EXP-110-session"
+    assert document["publisher_provenance"] == provenance
 
 
 def test_action_proxy_observes_exact_dispatch_and_cancel_call_boundaries() -> None:
