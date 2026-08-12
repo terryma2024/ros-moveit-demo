@@ -5149,3 +5149,99 @@ decision: STOP. Preserve the 5 recorded physical outcomes but make no final qual
 next_experiment: NONE_STOPPED_EVIDENCE_POLLUTION
 next_command: NONE; await explicit direction for evidence-pollution disposition and final-gate recovery.
 ```
+
+## Checkpoint MNT-CP-050 — planned read-only evidence-pollution recovery
+
+```yaml
+checkpoint_id: MNT-CP-050
+recorded_at: 2026-08-12T23:13:00+08:00
+prior_checkpoint: MNT-CP-049
+status: PLANNED
+operation_mode: READ_ONLY_AUDIT_COMPLETE_NO_RECOVERY_EXECUTED
+scope: protected src/so101_gazebo_demo_py/src/**/__pycache__/*.cpython-312.pyc only
+current_commit: fe4c9b8f3c0f1a8b37ef0da13bcd6f395c2c2d84
+protected_user_untracked_documents:
+  - path: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    staged: false
+  - path: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+    staged: false
+inventory:
+  count: 24
+  all_absolute_paths_under_whitelist: true
+  all_regular_files: true
+  all_untracked: true
+  git_check_ignore: all matched .gitignore:10:__pycache__/
+  other_protected_tree_nontracked_or_ignored_files: NONE
+  manifest_sha256: 0e1eff9bae0bb481fa89768fd85fd9de068399596d07ebd22e22d67e88975bcb
+  expected_empty_manifest_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  absolute_paths:
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/__init__.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/checkpoint.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/domain.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/live_execute.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/physical_outcome.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/policy_config.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/release_settle.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/runner.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/workflow.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/cli/__pycache__/__init__.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/cli/__pycache__/gazebo_attachment_state_relay.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/cli/__pycache__/pick_place_state_machine.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/gazebo/__pycache__/__init__.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/gazebo/__pycache__/attachment.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/gazebo/__pycache__/model_asset.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/gazebo/__pycache__/observer.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/gazebo/__pycache__/transport.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/motion/__pycache__/__init__.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/motion/__pycache__/executor.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/moveit/__pycache__/__init__.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/moveit/__pycache__/planning.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/test_support/__pycache__/__init__.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/test_support/__pycache__/live_attachment.cpython-312.pyc
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/test_support/__pycache__/ros_gazebo_backend.cpython-312.pyc
+  mtime_range: 2026-08-12T22:51:51.152111005+08:00 .. 2026-08-12T22:53:58.748340296+08:00
+provenance_audit:
+  shell_history:
+    observed: zsh history records the EXP-126..130 CUA wrappers at lines 3227-3231 and earlier parity/overlay commands, but no command explicitly names creation of these 24 caches.
+    result: NOT_CONFIRMED
+  pytest_and_launch_logs:
+    observed: final focused pytest began 23:02:59 and full pytest 23:03:27; pyc mtimes predate both. EXP-129/130 launch logs show MuJoCo launch only and do not identify pyc generation.
+    result: NOT_CONFIRMED
+  process_and_tmux_evidence:
+    observed: no owned qualification processes remain; historical tmux evidence does not expose the earlier importing shell command.
+    result: NOT_CONFIRMED
+  pyc_embedded_co_filename:
+    observed: all 24 code objects resolve to /tmp/so101-gazebo-policy-parity/GZ-POLICY-PARITY-001/build/so101_gazebo_demo_py/so101_gazebo_demo/*.py
+    result: CONFIRMED_PATH_PROVENANCE_NOT_GENERATING_COMMAND
+  symlink_provenance:
+    observed: old parity build package path resolves to /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src; separate main-workspace build path resolves to /data/work/ws_moveit/src/so101_gazebo_demo_py/src.
+    result: CONFIRMED_SYMLINK_CHAIN
+  first_generation_command: NOT_CONFIRMED
+minimal_recovery_plan:
+  deletion_authorization_required: true
+  deletion_whitelist:
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/__pycache__/
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/cli/__pycache__/
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/gazebo/__pycache__/
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/motion/__pycache__/
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/moveit/__pycache__/
+    - /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/src/so101_gazebo_demo_py/src/test_support/__pycache__/
+  future_python_gate_environment: PYTHONDONTWRITEBYTECODE=1
+  resume_command_after_authorization: Start again at full_source_pytest; then continue only the previously unrun final gates in order.
+  forbidden_changes: [strategy, thresholds, Gazebo tracked source, test assertions, isolation baseline]
+red_criteria:
+  - Any deletion target resolves outside the six exact whitelisted directories.
+  - Any protected tracked-file diff or either user document staged.
+  - Any non-pyc file appears under the protected tree.
+  - Any new pyc is generated after the recovery preflight.
+  - Any final gate fails for a reason other than the documented pollution disposition.
+acceptance_criteria:
+  - After authorized deletion, the six directories contain no files and the protected-tree manifest equals e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+  - src/so101_gazebo_demo_py tracked status and diff remain empty.
+  - Both protected user documents remain untracked and unstaged.
+  - Full source pytest passes, then all remaining final gates pass without strategy/config/source/test changes.
+  - No RESET_WORLD, rebase, merge, or push is performed in this recovery.
+execution_status: WAITING_FOR_ORCHESTRATOR_DELETE_AUTHORIZATION
+next_experiment: NONE_STOPPED_EVIDENCE_POLLUTION
+next_command: NONE; do not delete or rerun until explicit authorization.
+```
