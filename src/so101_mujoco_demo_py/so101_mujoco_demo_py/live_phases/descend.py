@@ -17,6 +17,7 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
     SustainedConditionGuard,
@@ -48,7 +49,6 @@ TARGETS = (
     (0.390581887491, 0.396495834720, 0.111832238686, 1.055724805729, 0.001868839753),
     (0.389633705130, 0.442941344113, 0.112383097091, 1.025984047022, 0.001939334047),
 )
-MAX_FORCE_N = 11.60
 CONTACT_LOSS_GRACE_S = 0.05
 RELEASE_TARGET_XYZ = (-0.0788, -0.2475, 0.1835)
 MAX_ALIGNMENT_CORRECTION_M = 0.030
@@ -84,6 +84,9 @@ def evidence_dict(value) -> dict:
 
 
 def main() -> int:
+    task_policy = load_live_task_policy()
+    assert task_policy.contact is not None
+    maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     result: dict = {
         "schema": "so101-live-noslip-descend-v1",
         "simulation_session_id": SESSION_ID,
@@ -142,7 +145,7 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != epoch:
                 raise RuntimeError("MuJoCo pause/reset during stable gate")
-            if evidence.maximum_normal_force_n > MAX_FORCE_N:
+            if evidence.maximum_normal_force_n > maximum_safe_force_n:
                 raise RuntimeError("force boundary exceeded during stable gate")
             bilateral = bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts)
             support_ok = has_table_contact(evidence) == require_support
@@ -233,7 +236,7 @@ def main() -> int:
                     raise RuntimeError("stale MuJoCo evidence during descend")
                 if evidence.paused or evidence.reset_epoch != before.reset_epoch:
                     raise RuntimeError("MuJoCo pause/reset during descend")
-                if evidence.maximum_normal_force_n > MAX_FORCE_N:
+                if evidence.maximum_normal_force_n > maximum_safe_force_n:
                     raise RuntimeError("force boundary exceeded during descend")
                 contact_guard.require(
                     bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts),

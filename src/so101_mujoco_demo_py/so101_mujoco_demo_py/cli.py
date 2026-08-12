@@ -37,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-reset-epoch", type=int)
     parser.add_argument("--evidence-root", type=Path)
     parser.add_argument("--motion-policy", type=Path)
+    parser.add_argument("--contact-policy", type=Path)
     parser.add_argument("--max-state-transitions", type=int, default=100)
     return parser
 
@@ -80,6 +81,7 @@ def main(arguments: list[str] | None = None) -> int:
             or options.expected_reset_epoch is None
             or options.evidence_root is None
             or options.motion_policy is None
+            or options.contact_policy is None
         ):
             print("status=ERROR")
             print("current_state=ERROR")
@@ -91,6 +93,7 @@ def main(arguments: list[str] | None = None) -> int:
                 expected_reset_epoch=options.expected_reset_epoch,
                 evidence_root=options.evidence_root,
                 motion_policy=options.motion_policy,
+                contact_policy=options.contact_policy,
             )
         )
         if result.success:

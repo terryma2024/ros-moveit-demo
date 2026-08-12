@@ -17,6 +17,7 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
     make_execute_goal,
@@ -48,7 +49,6 @@ TARGETS = (
     (-0.000276912349, 0.287984861834, 0.150788067636, 1.132029723496, -0.000284352650),
     (-0.000282114209, 0.200965792445, 0.129655454807, 1.240181404713, -0.000289555209),
 )
-MAX_FORCE_N = 11.60
 MAX_SEGMENT_CUP_DISPLACEMENT_M = 0.05
 MIN_TOTAL_LIFT_M = 0.03
 MAX_TOTAL_LIFT_M = 0.08
@@ -77,6 +77,9 @@ def evidence_dict(value) -> dict:
 
 
 def main() -> int:
+    task_policy = load_live_task_policy()
+    assert task_policy.contact is not None
+    maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     result = {
         "schema": "so101-live-noslip-remaining-lift-v1",
         "simulation_session_id": SESSION_ID,
@@ -134,7 +137,7 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != epoch:
                 raise RuntimeError("MuJoCo pause/reset during bilateral gate")
-            if evidence.maximum_normal_force_n > MAX_FORCE_N:
+            if evidence.maximum_normal_force_n > maximum_safe_force_n:
                 raise RuntimeError("force boundary exceeded during bilateral gate")
             if any(item.geom2 == "table_collision" for item in evidence.other_object_contacts):
                 raise RuntimeError("cup regained table support")
@@ -222,7 +225,7 @@ def main() -> int:
                     raise RuntimeError("stale MuJoCo evidence during LIFT")
                 if evidence.paused or evidence.reset_epoch != before.reset_epoch:
                     raise RuntimeError("MuJoCo pause/reset during LIFT")
-                if evidence.maximum_normal_force_n > MAX_FORCE_N:
+                if evidence.maximum_normal_force_n > maximum_safe_force_n:
                     raise RuntimeError("force boundary exceeded during LIFT")
                 if not (evidence.left_fingertip_contacts and evidence.right_fingertip_contacts):
                     raise RuntimeError("bilateral contact lost during LIFT")

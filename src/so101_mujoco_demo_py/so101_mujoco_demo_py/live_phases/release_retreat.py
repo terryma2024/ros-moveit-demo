@@ -27,6 +27,7 @@ from rclpy.time import Time
 from sensor_msgs.msg import JointState
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
     SustainedConditionGuard,
@@ -51,7 +52,6 @@ from so101_mujoco_demo_py.release_retreat import (
     release_retreat_translations,
     residual_contact_within_bounds,
 )
-from so101_mujoco_demo_py.task_policy import load_task_policy
 
 SESSION_ID = os.environ["SO101_SIMULATION_SESSION_ID"]
 EXPECTED_EPOCH = int(os.environ["SO101_EXPECTED_RESET_EPOCH"])
@@ -185,7 +185,9 @@ def cup_collision_object(position, orientation):
 
 
 def main() -> int:
-    task_policy = load_task_policy(POLICY_PATH)
+    task_policy = load_live_task_policy()
+    assert task_policy.contact is not None
+    maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     physical_outcome_policy = task_policy.physical_outcome
     retreat_policy = load_release_retreat_policy(POLICY_PATH)
     result: dict = {
@@ -284,7 +286,7 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != EXPECTED_EPOCH:
                 raise RuntimeError("MuJoCo pause/reset during stable gate")
-            if evidence.maximum_normal_force_n > task_policy.maximum_diagnostic_force_n:
+            if evidence.maximum_normal_force_n > maximum_safe_force_n:
                 raise RuntimeError("force boundary exceeded during stable gate")
             actual_gripper_contact = bool(
                 evidence.left_fingertip_contacts or evidence.right_fingertip_contacts
@@ -614,8 +616,7 @@ def main() -> int:
                     safety_healthy=(
                         not evidence.paused
                         and evidence.reset_epoch == EXPECTED_EPOCH
-                        and evidence.maximum_normal_force_n
-                        <= task_policy.maximum_diagnostic_force_n
+                        and evidence.maximum_normal_force_n <= maximum_safe_force_n
                     ),
                     shadow_divergence_healthy=True,
                 )

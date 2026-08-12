@@ -12,12 +12,15 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
+from so101_mujoco_demo_py.contact_policy import ContactPolicyFingerprint
 from so101_mujoco_demo_py.physical_outcome import (
     FinalPlacementSample,
     PhysicalOutcomePolicy,
     evaluate_final_placement,
 )
-from so101_mujoco_demo_py.task_policy import load_task_policy
+from so101_mujoco_demo_py.task_policy import TaskPolicy, load_task_policy
 
 LIVE_PHASES = (
     "staged_approach",
@@ -50,6 +53,7 @@ class LiveRuntimeConfig:
     expected_reset_epoch: int
     evidence_root: Path
     motion_policy: Path
+    contact_policy: Path
     python_executable: str = sys.executable
 
     def __post_init__(self) -> None:
@@ -84,7 +88,10 @@ Resume = Callable[[LiveRuntimeConfig], bool]
 
 def build_phase_specs(
     config: LiveRuntimeConfig,
+    fingerprint: ContactPolicyFingerprint | None = None,
 ) -> tuple[tuple[PhaseSpec, ...], dict[str, str]]:
+    if fingerprint is None:
+        fingerprint = _expected_contact_fingerprint(config)
     evidence_root = config.evidence_root
     python = config.python_executable
     staged_evidence = evidence_root / "staged-approach.json"
@@ -132,6 +139,12 @@ def build_phase_specs(
             "SO101_EXPECTED_RESET_EPOCH": str(config.expected_reset_epoch),
             "SO101_EVIDENCE_ROOT": str(config.evidence_root),
             "SO101_MOTION_POLICY": str(config.motion_policy),
+            "SO101_CONTACT_POLICY": str(config.contact_policy),
+            "SO101_DEPENDENCY_COMMIT": fingerprint.dependency_commit,
+            "SO101_MODEL_SHA256": fingerprint.model_sha256,
+            "SO101_SCENE_SHA256": fingerprint.scene_sha256,
+            "SO101_MOTION_POLICY_SHA256": fingerprint.motion_policy_sha256,
+            "SO101_SOURCE_EVIDENCE_SHA256": fingerprint.source_evidence_sha256,
         }
     )
     return tuple(specs), environment
@@ -328,6 +341,81 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _expected_contact_fingerprint(config: LiveRuntimeConfig) -> ContactPolicyFingerprint:
+    package_root = config.motion_policy.resolve().parents[2]
+    lock = yaml.safe_load((package_root / "config" / "dependency-lock.yaml").read_bytes())
+    contact = yaml.safe_load(config.contact_policy.read_bytes())
+    try:
+        dependency_commit = lock["fork"]["commit"]
+        source_evidence_sha256 = contact["fingerprint"]["source_evidence_sha256"]
+    except (KeyError, TypeError) as error:
+        raise ValueError("runtime policy fingerprint inputs are incomplete") from error
+    return ContactPolicyFingerprint(
+        dependency_commit=str(dependency_commit),
+        model_sha256=_sha256(package_root / "mjcf" / "so101.xml"),
+        scene_sha256=_sha256(package_root / "mjcf" / "scene.xml"),
+        motion_policy_sha256=_sha256(config.motion_policy),
+        source_evidence_sha256=str(source_evidence_sha256),
+    )
+
+
+def _preflight_task_policy(config: LiveRuntimeConfig) -> tuple[TaskPolicy | None, str | None]:
+    try:
+        document = yaml.safe_load(config.contact_policy.read_bytes())
+    except (OSError, yaml.YAMLError):
+        return None, "POLICY_FINGERPRINT_MISMATCH"
+    approval = document.get("approval") if isinstance(document, dict) else None
+    if (
+        not isinstance(approval, dict)
+        or approval.get("enabled") is not True
+        or approval.get("approved") is not True
+    ):
+        return None, "CONTACT_POLICY_NOT_APPROVED"
+    try:
+        fingerprint = _expected_contact_fingerprint(config)
+        task_policy = load_task_policy(
+            config.motion_policy,
+            config.contact_policy,
+            fingerprint,
+            require_approved_contact=True,
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return None, "POLICY_FINGERPRINT_MISMATCH"
+    return task_policy, None
+
+
+def load_live_task_policy(
+    environment: Mapping[str, str] = os.environ,
+) -> TaskPolicy:
+    """Load the immutable approved policy passed to a temporary live phase."""
+
+    required = (
+        "SO101_MOTION_POLICY",
+        "SO101_CONTACT_POLICY",
+        "SO101_DEPENDENCY_COMMIT",
+        "SO101_MODEL_SHA256",
+        "SO101_SCENE_SHA256",
+        "SO101_MOTION_POLICY_SHA256",
+        "SO101_SOURCE_EVIDENCE_SHA256",
+    )
+    missing = tuple(name for name in required if not environment.get(name))
+    if missing:
+        raise ValueError(f"missing live policy environment: {', '.join(missing)}")
+    fingerprint = ContactPolicyFingerprint(
+        dependency_commit=environment["SO101_DEPENDENCY_COMMIT"],
+        model_sha256=environment["SO101_MODEL_SHA256"],
+        scene_sha256=environment["SO101_SCENE_SHA256"],
+        motion_policy_sha256=environment["SO101_MOTION_POLICY_SHA256"],
+        source_evidence_sha256=environment["SO101_SOURCE_EVIDENCE_SHA256"],
+    )
+    return load_task_policy(
+        Path(environment["SO101_MOTION_POLICY"]),
+        Path(environment["SO101_CONTACT_POLICY"]),
+        fingerprint,
+        require_approved_contact=True,
+    )
+
+
 def _atomic_manifest(path: Path, document: Mapping[str, object]) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -340,12 +428,29 @@ def run_live_workflow(
     resume: Resume = _default_resume,
     command_runner: CommandRunner = _default_command_runner,
 ) -> LiveRuntimeResult:
-    if not config.motion_policy.is_file():
-        raise ValueError(f"motion policy does not exist: {config.motion_policy}")
-    task_policy = load_task_policy(config.motion_policy)
     config.evidence_root.mkdir(parents=True, exist_ok=True)
     manifest_path = config.evidence_root / "live-runtime-manifest.json"
-    specs, environment = build_phase_specs(config)
+    task_policy, preflight_failure = _preflight_task_policy(config)
+    if preflight_failure is not None or task_policy is None or task_policy.contact is None:
+        failure = preflight_failure or "CONTACT_POLICY_NOT_APPROVED"
+        _atomic_manifest(
+            manifest_path,
+            {
+                "schema": "so101-mujoco-live-runtime-v1",
+                "status": "FAILED",
+                "simulation_session_id": config.simulation_session_id,
+                "expected_reset_epoch": config.expected_reset_epoch,
+                "motion_policy": str(config.motion_policy),
+                "contact_policy": str(config.contact_policy),
+                "completed_phases": [],
+                "failed_phase": "preflight",
+                "failure": failure,
+                "phase_exit_codes": {},
+                "artifact_sha256": {},
+            },
+        )
+        return LiveRuntimeResult(False, "preflight", failure, (), manifest_path)
+    specs, environment = build_phase_specs(config, task_policy.contact.fingerprint)
     completed: list[str] = []
     exit_codes: dict[str, int] = {}
     failure: str | None = None
@@ -401,6 +506,9 @@ def run_live_workflow(
         "simulation_session_id": config.simulation_session_id,
         "expected_reset_epoch": config.expected_reset_epoch,
         "motion_policy": str(config.motion_policy),
+        "contact_policy": str(config.contact_policy),
+        "motion_policy_sha256": task_policy.fingerprint.motion_policy_sha256,
+        "contact_policy_sha256": task_policy.fingerprint.contact_policy_sha256,
         "completed_phases": completed,
         "failed_phase": failed_phase,
         "failure": failure,
