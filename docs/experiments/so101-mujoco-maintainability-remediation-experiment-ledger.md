@@ -21,8 +21,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-056
-next_experiment: EXP-131
+latest_checkpoint: MNT-CP-057
+next_experiment: NEW_RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
 ```
 
 ## Checkpoint MNT-CP-001
@@ -5669,4 +5669,96 @@ protected_user_state:
     - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
 next_experiment: EXP-131
 next_command: Commit this approval checkpoint, run the frozen build/provenance preflight, then start the one-stack RESET_WORLD qualification runner exactly once.
+```
+
+## Checkpoint MNT-CP-057 — MNT-Q-RESET-EXP131-135 terminal INVALID
+
+```yaml
+checkpoint_id: MNT-CP-057
+recorded_at: 2026-08-13T01:15:33+08:00
+prior_checkpoint: MNT-CP-056
+source_commit: 2bac99c3c14a1a67662a550e238fe859e78676f8
+status: TERMINAL_INVALID
+proposal_approval_preserved:
+  approved_exact_hash: 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f
+  runtime_activation: NONE
+preflight:
+  three_package_build: PASS
+  focused_reset_qualification_tests: 51 passed, 1 skipped
+  ruff: All checks passed; 131 files already formatted
+  backend_integration_contract: PASS
+  fork_runtime_probe: PASS
+  reset_qualified_runtime_probe: PASS
+  package_prefixes: PROJECT_AND_PINNED_FORK_OVERLAYS_MATCH
+  frozen_behavior_artifact_diff: NONE
+non_product_invocation_characterization:
+  - The first focused pytest command replaced the sourced ROS PYTHONPATH and failed collection on missing rclpy; appending the source package to the overlay PYTHONPATH passed 51 tests plus 1 skip.
+  - The first Ruff invocation lacked /home/lenovo/.local/bin in noninteractive SSH PATH; the pinned ruff 0.15.20 executable passed after the explicit path was restored.
+  - Two tmux wrapper attempts failed before run_qualification created its evidence root: first ros2 was absent from PATH, then set -u prevented complete project-overlay registration. Neither called ResetWorld or consumed an experiment ID.
+batch:
+  batch_id: MNT-Q-RESET-EXP131-135
+  preregistered_experiments: [EXP-131, EXP-132, EXP-133, EXP-134, EXP-135]
+  lifecycle: RESET_WORLD
+  common_simulation_session_id: MNT-Q-RESET-EXP131-135-reset
+  reset_epochs_observed: [1, 2]
+  attempt_count: 3
+  consecutive_successes: 0
+  qualified: false
+  batch_invalid: true
+  unexecuted_experiments: [EXP-134, EXP-135]
+  identifiers_reusable: false
+  manifest: /tmp/so101-debug-mujoco-maintainability-remediation/reset-world-exp131-135/qualification-manifest.json
+  manifest_sha256: cf9cce5bfc55964378f9380071b5e75ea8684140b8a8b4b86920e466170f6c73
+  runner_log_sha256: b9e693df89c9b04c3c19018796a52bab0de86b27a11ee1232e426ce544047f18
+  launch_log_sha256: c84b6c5a121f48f212796091314d2c123bd9342576dc54de83c1fec15a0842d3
+experiments:
+  EXP-131:
+    status: VALID_FAILURE
+    reset_epoch: 1
+    completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift]
+    failed_phase: transport
+    failure: EvidenceInvalid chunk sequence mismatch
+    transport_sha256: 5895a981b82f73f3934190ab4165f99628f8c85101e9689aef3dca62be5d902e
+    raw_index_sha256: fec0f5f7330b3e48a31c364ebe18d366ddbc3e30f43da266f9eac5807a4f993e
+    first_stored_chunk: {sequence: 4801, first_physics_step: 24006, last_physics_step: 24010, reset_epoch: 1}
+  EXP-132:
+    status: VALID_FAILURE
+    reset_epoch: 2
+    failed_phase: staged_approach
+    failure: Planning Scene geometry is incomplete
+    staged_approach_sha256: 6776d777f0e4f42f79f57a30a0c64358e11dce5c867693dbeb37c56f3f158351
+    interpretation: This attempt should not have started after EXP-131 made the fixed five-run batch impossible; it observed incomplete recovery after the failed attached-object workflow.
+  EXP-133:
+    status: INVALID
+    reset_epoch: -1
+    failure: control lease busy
+    interpretation: The runner again continued after a valid failure and reached the next lease before expiry.
+root_cause:
+  primary: The batch incorrectly provisioned high-rate lossless evidence on /tmp backed by /dev/sda3 instead of the already-qualified /data NVMe volume backed by /dev/nvme0n1p5.
+  prior_matching_evidence: EXP-123 established this exact slow-volume chunk-gap failure; EXP-124 and EXP-126..130 established lossless capture on caller-provisioned /data/work storage.
+  robot_strategy_defect: false
+  threshold_or_policy_defect: false
+  reset_service_defect: not established by this invalid batch
+  qualification_runner_defect: A valid failure did not terminate a fixed target-count batch, permitting contaminated follow-on attempts.
+cleanup:
+  clean_shutdown: true
+  ordered_shutdown_marker: true
+  launch_returncode: 0
+  child_process_died: false
+  fatal_signal: false
+  owned_processes_after_probe: NONE
+  task_tmux_session_after_probe: NONE
+frozen_behavior:
+  strategy_or_threshold_change: NONE
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  preserved_untracked_documents:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+merge_push_state: NOT_AUTHORIZED_BY_GATE_BATCH_FAILED
+next_experiment: NEW_RESET_WORLD_BATCH_PREREGISTRATION_REQUIRED
+next_command: Make the qualification runner fail immediately after any non-success record, validate that engineering-only change, then preregister fresh IDs on the qualified /data/work evidence volume with no strategy change.
 ```
