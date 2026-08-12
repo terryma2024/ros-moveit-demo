@@ -1,10 +1,10 @@
 {
   "schema": "so101-mujoco-frozen-behavior-manifest-v1",
-  "generated_at": "2026-08-12T17:25:25+08:00",
+  "generated_at": "2026-08-12T20:25:00+08:00",
   "behavior_baseline_commit": "8f71442ae6cff43e0770eec929b13211d2057628",
   "behavior_source_commit": "a172765e3b193bfccad9782d02e2745e70f1cbd2",
   "baseline_relation": "8f71442 differs from a172765 only in the maintainability ledger",
-  "scope": "phase-aware measurement may change instrumentation but none of these behavior inputs or call semantics",
+  "scope": "phase-aware measurement and provenance separation may change instrumentation but none of these behavior inputs or call semantics",
   "approved_policy": {
     "proposal_sha256": "670ffae8b5a1558c667376d62fab22011c65cca26b92b72565f08194fc1de897",
     "contact_policy_sha256": "c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82",
@@ -127,7 +127,7 @@
     ]
   },
   "phase_source_hashes": {
-    "live_runtime.py": "a59651a9baf74367fbbc0d81102502e4cbb84c806153c4ea2f051d6b72d806f0",
+    "live_runtime.py": "756b20fef4d86ce769c52d0708c2cf0f3dbe7690437cbffe720ae3d66ac8fbba",
     "staged_approach.py": "06e3b30ba0830e058eff42bd06010f842e57a9155729e148520bf414e4367a18",
     "contact_hold.py": "ead01c1ad46eba35845c3ce37e705a5b5a2fc5494d198bf79ee8adef384b63b7",
     "micro_lift.py": "e6cd9395f7fd0965e626b06a67c50a0981766bc545f1ab3a052381b13c79e8f7",
@@ -148,7 +148,7 @@
     "physics_timestep_s": 0.002
   },
   "planning_and_control": {
-    "dependency_lock_sha256": "2260d94fbd14c8b3ac37c4c07eff30254af449bc49161a0a4c3128ac298abef1",
+    "dependency_lock_sha256": "be6bc595cd71a10df32765e11884183c0096db765a5ee35c3ef6a0b109ef5a3a",
     "ompl_planning_sha256": "87da57854e0ee318a5157d48a58f1145e7099f24c07d4277c1c7279b8f7cd364",
     "joint_limits_sha256": "210bb4792821bf081df092b11edc398050b1140cbef5c6f8f139687e87148973",
     "moveit_controllers_sha256": "4768fb786e33d89b9b145da34e7bbc2ff5f6841403c5ccedc00ab257446e3998",
@@ -179,6 +179,7 @@
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/contact_policy.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/simulation/types.py",
       "src/so101_mujoco_demo_py/so101_mujoco_demo_py/frozen_behavior.py",
+      "src/so101_mujoco_demo_py/so101_mujoco_demo_py/live_runtime.py",
       "src/so101_mujoco_demo_py/test",
       "src/so101_mujoco_demo_py/config/dependency-lock.yaml",
       "src/so101_mujoco_demo_py/scripts/check_mujoco_runtime.py",

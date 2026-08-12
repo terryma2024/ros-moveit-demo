@@ -5,6 +5,7 @@ fork:
   url: git@gitee.com:zjumty/mujoco_ros2_control.git
   tag: so101-0.0.3-r6
   commit: 738e304551b4ea6db020b466086a13db71b65607
+  policy_behavior_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
 upstream:
   url: https://github.com/ros-controls/mujoco_ros2_control.git
   tag: 0.0.3
