@@ -5,7 +5,7 @@ success_contract: Complete approved Tasks 1-18; obtain separate fixed-bundle MuJ
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
-current_commit: 55cb1d05ab84359f268ff9e7b1a7310a326b6e2c
+current_commit: f184617805e551b92bc5773433244c6193442abc
 evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
@@ -26,7 +26,7 @@ open_hypotheses:
   - The strangler migration can preserve the qualified MuJoCo behavior while making the unified package the sole runtime owner.
   - The clean-main Gazebo installed-independence failure will become GREEN when Tasks 10 and 14 remove legacy runtime ownership.
 latest_checkpoint: CP-FUSION-011
-next_experiment: NONE_TASK_13_RED
+next_experiment: EXP-FUSION-003
 ---
 
 # SO-101 Demo Python Fusion Experiment Ledger
@@ -103,6 +103,43 @@ evidence:
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task4-unified-tests.log sha256=e9a40502bbab4cd186bd34f41859604522147a6b66ee852c24ddbc945d7e0a5a
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task4-legacy-selected.log sha256=7eb2a748ac180ba6cc281861db498e923702dc0a24152ca1c96addd88a16dcad
   - /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/task5-unified-tests.log sha256=f2a8ce02b42cc30701feff1a09e68203a567b1e4f46c1861cb179bdb4da53bd1
+```
+
+## Planned experiment EXP-FUSION-003
+
+```yaml
+experiment_id: EXP-FUSION-003
+status: PLANNED
+purpose: Task 13 one bounded installed Gazebo execute through the unified simulator/model/controller/MoveIt graph and common result classification.
+lifecycle: FULL_RESTART_SINGLE_RUN
+counting_qualification_run: false
+source_commit: f184617805e551b92bc5773433244c6193442abc
+installed_prefix: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-t13-live/so101_demo_py
+runtime_executable: /opt/ros/jazzy/bin/ros2
+backend: gazebo
+policy_id: light_cup_wall_pick
+policy_version: v1
+policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+bundle_sha256: 4edb642e4f152eb913fac5d2fecd2e6a969fad3a8774be72749c92e75092382f
+ros_domain_id: 173
+gz_partition: fusion-exp-003-f184617
+session_id: fusion-exp-003-f184617
+evidence_root: /tmp/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-003
+evidence_root_pre_registration_state: ABSENT
+command: ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py run_mode:=execute execute:=true headless:=true policy_id:=light_cup_wall_pick policy_version:=v1 session_id:=fusion-exp-003-f184617 evidence_file:=/tmp/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-003/result.json readiness_timeout_s:=60.0
+owned_processes_before_launch: NONE
+preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
+acceptance:
+  - result is FAILED or SUCCEEDED with evidence_valid semantics; INVALID cannot satisfy Task 13
+  - no SKIPPED or pre-rejected Gazebo path
+  - FAILED identifies the first real phase and stable action/planning error code
+  - source, prefix, policy, bundle, session, ROS domain, and GZ partition match registration
+abort_criteria:
+  - provenance or identity mismatch
+  - missing/contaminated initial world, joint, controller, bridge, or MoveIt evidence
+  - unowned process selected for control or cleanup
+cleanup_scope: only the launch process group and GZ partition created for EXP-FUSION-003; bounded shutdown followed by exact owned-PID/partition audit
+expected: a valid non-INVALID policy result at the first natural controller/MoveIt boundary, likely MOVE_ABOVE_OBJECT PATH_TOLERANCE_VIOLATED, with nonzero exit for FAILED
 ```
 
 ## Checkpoint CP-FUSION-003
