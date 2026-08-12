@@ -2282,3 +2282,72 @@ frozen_scope:
   unchanged: Approved proposal/policy, motion policy bytes, q6 target/steps, arm waypoints, planner, safety gates, MJCF, scene, geometry, simulator state, and all later phase actions.
 decision: PLANNED and committed before stack launch or controller action. Only the registered production runner may execute EXP-109.
 ```
+
+## EXP-109 terminal result and Project-A safety incompatibility
+
+```yaml
+recorded_at: 2026-08-12T16:23:53+08:00
+EXP-109:
+  status: VALID_FAILURE
+  qualification_counting: false
+  attempts_started: 1
+  automatic_extra_attempts: 0
+  completed_boundaries:
+    stack_ready: true
+    viewer_preset: true
+    qualified_reset: {old_epoch: 0, new_epoch: 1, simulation_step: 0}
+    phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift]
+  failed_phase: transport
+  owner_failure_code: PHASE_EXIT_NONZERO
+  physical_results:
+    contact_hold:
+      detected_contact_q6_rad: -0.047409064174229305
+      applied_frozen_preload_target_q6_rad: -0.04850794875050089
+      terminal_q6_rad: -0.0484552286503998
+      hold_sample_count: 202
+      left_force_n: {minimum: 0.44577264723800947, median: 0.48786628264273313, maximum: 0.4879654084905088}
+      right_force_n: {minimum: 0.5643542673147518, median: 0.6063307446047648, maximum: 0.6063390767054695}
+    micro_lift: {status: PHYSICAL_MICRO_LIFT_PROVED, lift_m: 0.001975099095001126, lateral_m: 0.00035462683844240803}
+    policy_lift_waypoint1: {status: POLICY_LIFT_WAYPOINT1_PHYSICAL_TRANSFER_PROVED, lift_m: 0.00806667112769921, lateral_m: 0.010690703094017297}
+    remaining_lift: {status: REMAINING_FORMAL_LIFT_PROVED, segments: 4}
+    transport:
+      before_maximum_normal_force_n: 0.7681921528117486
+      attempted_waypoint: 1
+      failure: MOVEIT_EXECUTION_MONITOR_ABORTED
+      cause: force boundary exceeded during transport
+      approved_limit_n: 1.1579004532160448
+      breach_observation: The live maximum exceeded 1.1579004532160448 N; the transitional phase did not persist the exact aborting sample, so no exact peak is claimed.
+  clean_shutdown: {passed: true, returncode: 0, ordered_shutdown_marker: true, process_died: false, fatal_signal: false, signal: SIGINT}
+  cancellation_fix_validation: PASS; the action canceled and settled, move_group emitted SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK, and no SIGTERM/SIGKILL escalation occurred.
+  evidence:
+    qualification_manifest: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp109/qualification-manifest.json, 746c945a0273414c45617930f6646f2ad085ac2af97f35406e08d0daf52fb7f0]
+    actions: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp109/run-01/actions.json, a52cdaba26e0cbc96d8ec079df2842bdb5d06d38a1d91cd3ab71e890d33a14e2]
+    launch_log: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp109/run-01/launch.log, 2145df627edf9de0590e332dc83a0c5dc5b775189c59f779f1d414fdc6685d8e]
+    runner_log: [/tmp/so101-debug-mujoco-maintainability-remediation/project-a-acceptance-exp109-runner.log, ae07180acc22488746813d95310973c5f3bf643b1386b726732b62d922920ca5]
+    owner_manifest: [/tmp/so101-teleop-evidence/MNT-A-EXP109-full-01/so101-teleop-workflow-da6ff72d-960d-409a-874e-9a2aa0bd4496/live-runtime-manifest.json, 7312e6190bc0f1a3286b56a4655297470342862c6594f8f8548bb7b72102c1de]
+    contact_hold: [/tmp/so101-teleop-evidence/MNT-A-EXP109-full-01/so101-teleop-workflow-da6ff72d-960d-409a-874e-9a2aa0bd4496/contact-hold.json, 0e3e6fabb17db2541dc34f9625078536ca9f234934efdcd2cfc2e715c86b613f]
+    micro_lift: [/tmp/so101-teleop-evidence/MNT-A-EXP109-full-01/so101-teleop-workflow-da6ff72d-960d-409a-874e-9a2aa0bd4496/micro-lift.json, ce5cfa63c5e6e0c172158d4df9eb09cd807113dca6f6e67a5bf43963fa384402]
+    transport: [/tmp/so101-teleop-evidence/MNT-A-EXP109-full-01/so101-teleop-workflow-da6ff72d-960d-409a-874e-9a2aa0bd4496/transport.json, d7f1ed211f6be656e02564ca1de41015b11a03c98985e79f2cf47a2341049301]
+  cleanup: {domain_186_nodes: [], port_8026_listeners: [], tmux_session_absent: true, owned_runtime_processes: []}
+  disposition: This valid physical safety failure terminates Project-A acceptance. Do not create EXP-110 or continue into Project B under the present frozen contract.
+safety_compatibility_audit:
+  approved_calibration:
+    stable_hold_p95_maximum_normal_force_n: 0.6125653910063235
+    over_compression_p05_maximum_normal_force_n: 1.7031795072193083
+    approved_maximum_safe_force_n: 1.1579004532160448
+  historical_same_strategy:
+    source: TASK15-FULL-B five consecutive successes
+    transport_waypoint1_terminal_force_range_n: [2.7456872063067905, 2.761349835927339]
+    transport_terminal_peak_range_n: [4.912516652001531, 4.9746674881770785]
+  conclusion: The unchanged five-win carry path exceeds the newly approved safety boundary deterministically; treating the boundary as a grace-timed warning or restoring the old 11.60 N runtime limit would weaken the approved gate, while altering q6/carry motion would change the user-frozen grasp strategy.
+  rejected_routes:
+    - Do not add a transient-force grace to bypass maximum_safe_force_n.
+    - Do not restore 11.60 N as the runtime acceptance limit or edit the approved proposal/policy without a new exact user approval.
+    - Do not modify q6, planner, velocity, waypoints, MJCF, scene, geometry, simulator state, or the five-win strategy without explicit new authority.
+checkpoint:
+  status: USER_DIRECTION_REQUIRED
+  completed: Approved-policy activation, RED-GREEN preload continuity, full 478-pass package gate, fresh three-package build, runtime provenance checks, and cleanly classified EXP-109.
+  blocked: Project-A requires one successful full physical cycle, but its approved force gate and frozen carry strategy are mutually incompatible.
+  downstream_not_started: [Project B, Project C, Project D, formal nine-stage regression, RESET_WORLD five-win challenge, merge to main, remote push]
+  required_authority: Either authorize redesign of the carry/gripper strategy to remain below the approved 1.1579004532160448 N gate, or authorize a new physical calibration/proposal cycle and later approve its exact hash. No option is self-approved.
+```
