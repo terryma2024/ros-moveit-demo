@@ -28,11 +28,20 @@ def _load(path: Path, name: str):
     modules["so101_demo.cli"].pick_place = pick_place
     modules["so101_demo.cli"].qualification = qualification
     modules["so101_demo.backends.mujoco.qualified_phases"].scene_setup = scene_setup
-    sys.modules.update(modules)
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    missing = object()
+    previous = {module_name: sys.modules.get(module_name, missing) for module_name in modules}
+    try:
+        sys.modules.update(modules)
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        for module_name, prior in previous.items():
+            if prior is missing:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = prior
     return module
 
 
@@ -55,9 +64,7 @@ def test_old_entry_forwards_to_unified_cli_once(path, backend, monkeypatch):
         assert module.main(["--mode", "dry_run", "--session-id", "compat"]) == 0
 
     assert len(warnings) == 1
-    assert received == [
-        ["--backend", backend, "--mode", "dry_run", "--session-id", "compat"]
-    ]
+    assert received == [["--backend", backend, "--mode", "dry_run", "--session-id", "compat"]]
 
 
 def test_gazebo_unmappable_argument_is_rejected():
