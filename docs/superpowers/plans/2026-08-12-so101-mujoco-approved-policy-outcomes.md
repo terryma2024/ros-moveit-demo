@@ -1109,8 +1109,8 @@ source /opt/ros/jazzy/setup.zsh
 source /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/setup.zsh
 source install/setup.zsh
 PYTHONNOUSERSITE=1 python3 -m pytest -q src/so101_mujoco_demo_py/test
-python3 -m ruff check src/so101_mujoco_demo_py
-python3 -m ruff format --check src/so101_mujoco_demo_py
+ruff check src/so101_mujoco_demo_py
+ruff format --check src/so101_mujoco_demo_py
 zsh src/so101_mujoco_demo_py/scripts/check_migration_isolation.sh
 git diff --check
 ```
