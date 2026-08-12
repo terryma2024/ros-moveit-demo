@@ -456,10 +456,10 @@ feat(so101_mujoco): integrate refactored teleop runtime
 - Update: `docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md`
 - Create: `docs/experiments/so101-mujoco-ros2-migration-qualification.md`
 
-- [ ] Freeze one commit/model/config/dependency/contact-policy fingerprint.
-- [ ] Pre-register the complete five-run batch, then execute each run in a fresh ROS domain with a newly created MuJoCo/MoveIt/controller stack.
-- [ ] Count a run only when the complete Task 14 physical contract and clean shutdown pass. A valid failure resets the consecutive count to zero; an invalid run ends that batch and requires a new batch ID.
-- [ ] Record task-owned process cleanup after every run. Preserve every unrelated session/process.
+- [x] Freeze one commit/model/config/dependency/contact-policy fingerprint.
+- [x] Pre-register the complete five-run batch, then execute each run in a fresh ROS domain with a newly created MuJoCo/MoveIt/controller stack.
+- [x] Count a run only when the complete Task 14 physical contract and clean shutdown pass. A valid failure resets the consecutive count to zero; an invalid run ends that batch and requires a new batch ID.
+- [x] Record task-owned process cleanup after every run. Preserve every unrelated session/process.
 
 ### Task 15.3: Run five consecutive `RESET_WORLD` successes
 
@@ -468,13 +468,13 @@ feat(so101_mujoco): integrate refactored teleop runtime
 - Update: `docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md`
 - Update: `docs/experiments/so101-mujoco-ros2-migration-qualification.md`
 
-- [ ] Use one qualified stack and the transactional reset service between runs.
-- [ ] Require a new reset epoch, fresh publisher sequence/step, reset joint/object keyframe, active controllers, planning-scene synchronization, and the complete physical pick-place contract for every run.
-- [ ] Keep this series separate from `FULL_RESTART`; apply the same failure/invalid-run rules.
+- [x] Use one qualified stack and the transactional reset service between runs.
+- [x] Require a new reset epoch, fresh publisher sequence/step, reset joint/object keyframe, active controllers, planning-scene synchronization, and the complete physical pick-place contract for every run.
+- [x] Keep this series separate from `FULL_RESTART`; apply the same failure/invalid-run rules.
 
 ### Task 15.4: Final verification and review checkpoint
 
-- [ ] Run from a clean isolated build and verify discovered package/test counts are nonzero:
+- [x] Run from a clean isolated build and verify discovered package/test counts are nonzero:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider \
@@ -492,8 +492,8 @@ test -z "$(git status --short -- src/so101_gazebo_demo_py)"
 git diff --check
 ```
 
-- [ ] Use ai-station CUA for one fresh final MuJoCo GUI review with the robot, base, cup, target ring, and completed placement visible. Record the screenshot hash as visual corroboration only.
-- [ ] Write the qualification report with both consecutive series, all invalid/failed batches, exact hashes, test/build counts, clean shutdown evidence, process cleanup, and unresolved risks.
+- [x] Use ai-station CUA for one fresh final MuJoCo GUI review with the robot, base, cup, target ring, and completed placement visible. Record the screenshot hash as visual corroboration only.
+- [x] Write the qualification report with both consecutive series, all invalid/failed batches, exact hashes, test/build counts, clean shutdown evidence, process cleanup, and unresolved risks.
 - [ ] Commit and push the qualification artifacts:
 
 ```text
