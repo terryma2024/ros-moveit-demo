@@ -285,7 +285,7 @@ def test_analyzer_reports_deterministic_quality_and_margins(tmp_path: Path) -> N
 
     assert result.returncode == 0, result.stderr
     proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
-    assert proposal["split_method"] == "publisher_sequence_modulo_5"
+    assert proposal["split_method"] == "per_regime_ordered_index_modulo_5"
     assert proposal["calibration_sample_count"] == 140
     assert proposal["evaluation_sample_count"] == 35
     assert proposal["false_positive_count"] == 0
@@ -296,6 +296,26 @@ def test_analyzer_reports_deterministic_quality_and_margins(tmp_path: Path) -> N
     assert all(
         sum(proposal["misclassification_matrix"][actual].values()) == 5
         for actual in ORDERED_REGIMES
+    )
+
+
+def test_split_is_per_regime_and_independent_of_publisher_sequence_residue(
+    tmp_path: Path,
+) -> None:
+    evidence = schema_v3_evidence()
+    for sample in (sample for regime in PHYSICAL_REGIMES for sample in evidence["regimes"][regime]):
+        sample["publisher_sequence"] = sample["publisher_sequence"] * 5 + 1
+
+    result, output = run_analyzer(tmp_path, evidence)
+
+    assert result.returncode == 0, result.stderr
+    proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert proposal["split_method"] == "per_regime_ordered_index_modulo_5"
+    assert proposal["calibration_sample_count"] == 100
+    assert proposal["evaluation_sample_count"] == 25
+    assert all(
+        sum(proposal["misclassification_matrix"][actual].values()) == 5
+        for actual in PHYSICAL_REGIMES
     )
 
 
@@ -313,6 +333,29 @@ def test_table_support_force_does_not_define_bilateral_fingertip_threshold(
     assert result.returncode == 0, result.stderr
     proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
     assert 0.22 < proposal["thresholds"]["minimum_bilateral_force_n"] < 1.0
+
+
+def test_table_support_penetration_does_not_define_fingertip_compression_threshold(
+    tmp_path: Path,
+) -> None:
+    evidence = schema_v3_evidence()
+    for regime in ("bilateral_touch", "micro_lift_slip", "stable_hold"):
+        for sample in evidence["regimes"][regime]:
+            sample["other_object_contacts"] = [contact("other", 0.1, -0.004)]
+            sample["minimum_signed_distance_m"] = -0.004
+
+    result, output = run_analyzer(tmp_path, evidence)
+
+    assert result.returncode == 0, result.stderr
+    proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
+    threshold = proposal["thresholds"]["maximum_compression_distance_m"]
+    assert 0.0007 < threshold < 0.0025
+    assert proposal["regimes"]["stable_hold"]["quantiles"]["p50"][
+        "minimum_signed_distance_m"
+    ] == pytest.approx(-0.004)
+    assert proposal["regimes"]["stable_hold"]["quantiles"]["p50"][
+        "minimum_fingertip_signed_distance_m"
+    ] == pytest.approx(-0.0007012)
 
 
 @pytest.mark.parametrize(

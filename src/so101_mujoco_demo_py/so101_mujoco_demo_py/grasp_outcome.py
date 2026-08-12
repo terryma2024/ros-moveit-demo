@@ -125,6 +125,14 @@ def _side_force(sample: ReceivedSimulationEvidence, side: str) -> float:
     return sum(float(item.normal_force_n) for item in contacts)
 
 
+def _fingertip_compression(sample: ReceivedSimulationEvidence) -> float:
+    contacts = (
+        *sample.evidence.left_fingertip_contacts,
+        *sample.evidence.right_fingertip_contacts,
+    )
+    return max((max(0.0, -contact.signed_distance_m) for contact in contacts), default=0.0)
+
+
 def _forbidden_contact(
     sample: ReceivedSimulationEvidence,
     allowed_names: frozenset[str],
@@ -155,7 +163,7 @@ def _evaluate_grasp_window(
         (sample.evidence.maximum_normal_force_n for sample in eligible), default=0.0
     )
     maximum_compression = max(
-        (max(0.0, -sample.evidence.minimum_signed_distance_m) for sample in eligible),
+        (_fingertip_compression(sample) for sample in eligible),
         default=0.0,
     )
     maximum_speed = max((_speed(sample) for sample in eligible), default=0.0)

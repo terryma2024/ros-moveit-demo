@@ -1040,8 +1040,9 @@ Each record freezes one source commit, dependency/model/scene/motion hashes,
 one `ROS_DOMAIN_ID`, one `GZ_PARTITION`, one session/reset epoch, exact command,
 single active motion/contact variable, safety aborts (`11.60 N`, independent
 `3 mm` pre-contact displacement, `10 mm` terminal total displacement,
-stale/truncated/reset mismatch), and minimum 25 raw samples so the modulo-five
-split leaves at least 20 calibration and 5 evaluation samples.
+stale/truncated/reset mismatch), and minimum 25 raw samples so the per-regime,
+publisher-ordered modulo-five split leaves at least 20 calibration and 5
+evaluation samples regardless of append timing.
 
 - [ ] **Step 6: Start one owned isolated stack and collect physical regimes**
 
