@@ -257,7 +257,18 @@ class ProductionQualificationRunner:
                 raise InvalidRun(f"stack exited during startup with {process.returncode}")
             try:
                 health = self._request(handle.base_url, "/health", timeout=2.0)
-                if health["http"] == 200 and health["response"].get("mode") == "READY":
+                log_text = log_path.read_text(errors="replace")
+                required_markers = (
+                    "Created viewer camera services",
+                    "Configured and activated arm_controller",
+                    "Configured and activated gripper_controller",
+                    "SCENE_SETUP_OK",
+                )
+                if (
+                    health["http"] == 200
+                    and health["response"].get("mode") == "READY"
+                    and all(marker in log_text for marker in required_markers)
+                ):
                     return handle
             except (OSError, ValueError, json.JSONDecodeError):
                 pass
@@ -275,10 +286,19 @@ class ProductionQualificationRunner:
             returncode = handle.process.wait(timeout=10.0)
         log_text = handle.log_path.read_text(errors="replace")
         marker = "SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK"
+        process_died = "process has died" in log_text
+        fatal_signal = any(
+            value in log_text for value in ("exit code -11", "Segmentation fault", "SIGSEGV")
+        )
         return {
-            "passed": returncode == 0 and marker in log_text,
+            "passed": returncode == 0
+            and marker in log_text
+            and not process_died
+            and not fatal_signal,
             "returncode": returncode,
             "ordered_shutdown_marker": marker in log_text,
+            "process_died": process_died,
+            "fatal_signal": fatal_signal,
             "signal": "SIGINT",
         }
 
@@ -304,7 +324,7 @@ class ProductionQualificationRunner:
         if not allow_failure and (
             result.get("http") != 200 or not response.get("succeeded", False)
         ):
-            raise ValidRunFailure(f"{path} failed: {json.dumps(result, sort_keys=True)}")
+            raise InvalidRun(f"{path} failed: {json.dumps(result, sort_keys=True)}")
         return result
 
     def execute_workflow(

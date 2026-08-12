@@ -10,10 +10,10 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2-teleop
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: 8d85205286d2635d4ddbc91431c933dafb4eb661
-current_commit: 60b89d76df7b1d451a0c2633f0cf3f148497338b
-last_verified_implementation_commit: 60b89d76df7b1d451a0c2633f0cf3f148497338b
+current_commit: 5639ce037ed86ca4f7b59ede2295312bbce6b70a
+last_verified_implementation_commit: 5639ce037ed86ca4f7b59ede2295312bbce6b70a
 ledger_commit_pending: true
-task_status: TASK_15_QUALIFICATION_RUNNER_PENDING_COMMIT
+task_status: TASK_15_FULL_RESTART_PENDING_COMMIT
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -12401,7 +12401,7 @@ decision: Task 15 is unblocked. Its two qualification series must freeze a commi
 ## Task 15.1 Qualification Runner Gate
 
 ```yaml
-recorded_at: 2026-08-12T09:03:00+08:00
+recorded_at: 2026-08-12T08:54:00+08:00
 status: VALID
 implementation:
   module: src/so101_mujoco_demo_py/so101_mujoco_demo_py/qualification.py
@@ -12421,4 +12421,69 @@ gates:
   package_build: passed
   installed_console_entry: passed
 decision: Commit the runner, then freeze the resulting commit and exact model/config/policy hashes before registering either five-run series.
+```
+
+## Task 15 FULL_RESTART Batch A Registration
+
+```yaml
+registered_at: 2026-08-12T08:55:34+08:00
+batch_id: TASK15-FULL-A
+lifecycle: FULL_RESTART
+status: PLANNED
+experiments: [EXP-153, EXP-154, EXP-155, EXP-156, EXP-157]
+target_consecutive_successes: 5
+automatic_extra_attempts: forbidden
+source_commit: 5639ce037ed86ca4f7b59ede2295312bbce6b70a
+fingerprint:
+  dependency_sha256: 1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808
+  contact_policy_sha256: 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1
+runtime:
+  evidence_root: /tmp/so101-task15-full-a
+  headless: true
+  base_ros_domain_id: 170
+  domains: [170, 171, 172, 173, 174]
+  base_teleop_port: 8010
+  session_ids:
+    - TASK15-FULL-A-full-01
+    - TASK15-FULL-A-full-02
+    - TASK15-FULL-A-full-03
+    - TASK15-FULL-A-full-04
+    - TASK15-FULL-A-full-05
+success_contract:
+  - Every run creates a new MuJoCo, MoveIt, controller, Planning Scene, and Teleop stack.
+  - Qualified reset, all nine production phases, typed physical outcome, artifact hashes, ordered clean shutdown, and exact process-group cleanup pass.
+  - A valid failure resets the consecutive count; an invalid run terminates this batch; no hidden retries are allowed.
+next_experiment: EXP-153 through the registered runner; no other state-changing command is authorized for this batch.
+```
+
+## Task 15 FULL_RESTART Batch A Terminal Result
+
+```yaml
+terminal_time: 2026-08-12T08:57:00+08:00
+batch_id: TASK15-FULL-A
+status: INVALID_ENVIRONMENT
+counted_successes: 0
+attempts_started: 5
+root_cause:
+  - The registered headless stack has no live MuJoCo Viewer, so the mandatory table_corner_nw viewer-camera operation returned HTTP 503 before transactional reset.
+  - The runner incorrectly classified pre-workflow infrastructure failures as VALID_FAILURE and therefore did not terminate Batch A after the first invalid attempt.
+  - The original shutdown predicate accepted the top-level return code and MoveGroup marker even though each launch log contained a ros2_control child `process has died` record with exit code -2.
+runner_reported_summary:
+  attempt_count: 5
+  consecutive_successes: 0
+  qualified: false
+  batch_invalid: false
+corrected_classification: The complete batch is invalid and none of EXP-153 through EXP-157 count toward Task 15.
+cleanup:
+  exact_process_groups_signaled: 5
+  residual_owned_processes: []
+evidence_sha256:
+  qualification_manifest: 2cbef9d4cfe41ea748605e41afadb0195a83323ef1e2b454aeb12cc466536301
+  runner_log: 1382fd3081302280a59da8b7003124be3de3e8db4e95dbcc5b9fe57afad40225
+decision: Fix invalid-run classification, readiness, and child-process shutdown validation under tests; commit a new fingerprint; then preregister a non-headless Batch B held by the approved GUI tmux flow.
 ```
