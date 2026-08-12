@@ -247,6 +247,19 @@ owned_processes: NONE before stack start; domain 176 no-daemon preflight was emp
 decision: PENDING
 ```
 
+## Experiment EXP-008 terminal result
+
+```yaml
+experiment_id: EXP-008
+status: INVALID
+terminal_time: 2026-08-12T13:19:30+08:00
+observed:
+  - Atomic simulation evidence was accepted, but sample serialization ran before the joint-state subscription received its first message and returned no joint state is available.
+  - No sample was written and no controller, reset, pause, or object-state action occurred; fresh readback remains CLOSE_READY.
+inference: NONE about physical distributions.
+decision: Exclude EXP-008 through EXP-014 and restart under new IDs only after readiness-pending is explicitly separated from terminal collection errors.
+```
+
 ## Experiment EXP-001 terminal result
 
 ```yaml
@@ -259,4 +272,33 @@ observed:
   - No controller command, reset, pause, object state write, or other physical action occurred during EXP-001; the stack remains at CLOSE_READY.
 inference: NONE about the no_contact distribution; zero samples were admitted.
 decision: Exclude EXP-001 through EXP-007 from all denominators and restart the full ordered batch under fresh experiment IDs after a TDD-covered readiness fix.
+```
+
+## Experiments EXP-008 through EXP-014 preregistration
+
+```yaml
+status: PLANNED
+recorded_at: 2026-08-12T13:18:00+08:00
+ordered_experiments:
+  - [EXP-008, no_contact]
+  - [EXP-009, left_only]
+  - [EXP-010, right_only]
+  - [EXP-011, bilateral_touch]
+  - [EXP-012, over_compression]
+  - [EXP-013, micro_lift_slip]
+  - [EXP-014, stable_hold]
+frozen_provenance:
+  source_commit: d38d4be7c87958b0af182235083641032c804d57
+  dependency_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  model_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  ros_domain_id: 176
+  gz_partition: so101-mnt-cal-001
+  simulation_session_id: so101-mnt-cal-001
+  reset_epoch: 0
+state_reuse_justification: EXP-001 executed no controller, reset, pause, or physical action; fresh atomic readback still matches CLOSE_READY with zero fingertip contacts.
+driver_and_commands: Identical reviewed driver and per-regime commands from the EXP-001 through EXP-007 registration except source_commit is d38d4be7c87958b0af182235083641032c804d57.
+safety_and_terminal_contract: Identical to the prior registration; any INVALID invalidates this full batch and any physically unavailable regime is a VALID behavioral failure that stops it.
+decision: PENDING
 ```

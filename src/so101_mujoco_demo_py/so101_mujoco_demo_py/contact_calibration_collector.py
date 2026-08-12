@@ -29,6 +29,10 @@ class CollectionAborted(RuntimeError):
     """Raised when a bounded collection cannot remain valid."""
 
 
+class CalibrationReadinessPending(RuntimeError):
+    """Raised while required ROS state has not published its first value."""
+
+
 @dataclass(frozen=True, slots=True)
 class RobotCalibrationState:
     q6_rad: float
@@ -231,9 +235,11 @@ class ContactCalibrationCollector:
                     and contact_duration_s < request.stable_hold_preroll_s
                 ):
                     continue
-                samples.append(
-                    self._sample_document(request, evidence, received, contact_duration_s)
-                )
+                try:
+                    sample = self._sample_document(request, evidence, received, contact_duration_s)
+                except CalibrationReadinessPending:
+                    continue
+                samples.append(sample)
             document = self._matrix_document(request, samples)
             _atomic_json_write(request.output_path, document)
             request.output_path.with_suffix(".partial.json").unlink(missing_ok=True)
@@ -464,7 +470,7 @@ def run_ros_collection(options: argparse.Namespace) -> dict[str, Any]:
     def state() -> RobotCalibrationState:
         message = latest_joint_state
         if message is None:
-            raise CollectionAborted("no joint state is available")
+            raise CalibrationReadinessPending("no joint state is available")
         positions = dict(zip(message.name, message.position, strict=True))
         missing = [name for name in ("1", "2", "3", "4", "5", "6") if name not in positions]
         if missing:
@@ -472,7 +478,7 @@ def run_ros_collection(options: argparse.Namespace) -> dict[str, Any]:
         try:
             transform = tf_buffer.lookup_transform("world", "so101_tcp", Time())
         except Exception as error:  # tf2 exception classes differ across ROS distributions.
-            raise CollectionAborted(f"TCP transform unavailable: {error}") from error
+            raise CalibrationReadinessPending(f"TCP transform unavailable: {error}") from error
         translation = transform.transform.translation
         rotation = transform.transform.rotation
         return RobotCalibrationState(
