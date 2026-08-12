@@ -177,26 +177,6 @@ TEST(SimulationEvidencePluginParameterScopeTest,
   rclcpp::shutdown();
 }
 
-TEST_F(AtomicEvidenceTest, PluginRejectsAnUnconfiguredSessionInsteadOfPublishingAPlaceholder)
-{
-  if (!rclcpp::ok()) {
-    rclcpp::init(0, nullptr);
-  }
-  auto options = rclcpp::NodeOptions().parameter_overrides({
-      rclcpp::Parameter("object_body", "cup"),
-      rclcpp::Parameter("left_fingertip_geom", "left_tip"),
-      rclcpp::Parameter("right_fingertip_geom", "right_tip"),
-      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
-  });
-  auto node = std::make_shared<rclcpp::Node>("unconfigured_session_plugin", options);
-  SimulationEvidencePlugin plugin;
-
-  EXPECT_FALSE(plugin.init(node, model_.get(), data_.get()));
-
-  plugin.cleanup();
-  rclcpp::shutdown();
-}
-
 TEST_F(AtomicEvidenceTest, ConsumesAllResetGenerationIncrementsWithoutLoss)
 {
   mj_forward(model_.get(), data_.get());

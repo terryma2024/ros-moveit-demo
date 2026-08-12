@@ -41,6 +41,7 @@ from so101_mujoco_demo_py.mujoco.transport_observer import (
     DynamicTransportEvidenceObserver,
     EvidenceInvalid,
     check_force,
+    publisher_provenance,
 )
 from so101_mujoco_demo_py.staged_approach import maximum_joint_error
 
@@ -204,8 +205,40 @@ def main() -> int:
                 raise RuntimeError(f"{name} unavailable")
         if not execute_action.wait_for_server(timeout_sec=20.0):
             raise RuntimeError("execute action unavailable")
+
+        def evidence_publishers():
+            provenance = {
+                "snapshot": publisher_provenance(
+                    node,
+                    topic="/so101/simulation/evidence",
+                    message_kind="SimulationEvidence",
+                ),
+                "physics_step_chunk": publisher_provenance(
+                    node,
+                    topic="/so101/simulation/physics_step_chunks",
+                    message_kind="PhysicsStepEvidenceChunk",
+                ),
+            }
+            if all(item["publisher_count"] > 0 for item in provenance.values()):
+                return provenance
+            return None
+
+        provenance = wait_for(
+            evidence_publishers,
+            5.0,
+            "simulation evidence publishers unavailable",
+        )
+        result["publisher_provenance"] = provenance
+        result["observer_expected_session_id"] = SESSION_ID
+        dynamic_observer.checkpoint_producer_provenance(provenance)
+        atomic_write(result)
+        if any(item["publisher_count"] != 1 for item in provenance.values()):
+            raise RuntimeError("simulation evidence publisher count is not exactly one per topic")
         wait_for(lambda: len(latest_joint) == 6, 5.0, "joint state unavailable")
         before = wait_for(snapshot, 5.0, "MuJoCo evidence unavailable")
+        result["first_snapshot_session_id"] = before.simulation_session_id
+        dynamic_observer.checkpoint_snapshot_session(before.simulation_session_id)
+        atomic_write(result)
         if before.paused or before.reset_epoch != EXPECTED_EPOCH:
             raise RuntimeError("unexpected initial MuJoCo provenance")
         start_positions = tuple(float(latest_joint[name]) for name in ALL_JOINTS)
@@ -432,6 +465,10 @@ def main() -> int:
     except Exception as error:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
+        result["observer_expected_session_id"] = SESSION_ID
+        result["observer_last_received_session_id"] = (
+            dynamic_observer.first_snapshot_session_id
+        )
         try:
             partial_index = dynamic_observer.close_invalid(error)
             result["dynamic_raw_index"] = str(partial_index)

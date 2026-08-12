@@ -25,6 +25,56 @@ class ReactionLatencyInvalid(EvidenceInvalid):
     """Raised when a diagnostic stop cannot meet its registered reaction bound."""
 
 
+class EvidenceIdentityMismatch(EvidenceInvalid):
+    """Strict identity rejection carrying durable producer/observer values."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        expected_session_id: str,
+        actual_session_id: str,
+        topic: str,
+        message_kind: str,
+    ) -> None:
+        super().__init__(reason)
+        self.detail = {
+            "actual_session_id": actual_session_id,
+            "expected_session_id": expected_session_id,
+            "message_kind": message_kind,
+            "topic": topic,
+        }
+
+
+def publisher_provenance(node: Any, *, topic: str, message_kind: str) -> dict[str, Any]:
+    """Return stable ROS graph identity fields for every publisher on one topic."""
+
+    publishers = []
+    for endpoint in node.get_publishers_info_by_topic(topic):
+        gid = endpoint.endpoint_gid
+        gid_bytes = gid if isinstance(gid, bytes) else bytes(gid)
+        publishers.append(
+            {
+                "endpoint_gid": gid_bytes.hex(),
+                "node_name": str(endpoint.node_name),
+                "node_namespace": str(endpoint.node_namespace),
+            }
+        )
+    publishers.sort(
+        key=lambda item: (
+            item["node_namespace"],
+            item["node_name"],
+            item["endpoint_gid"],
+        )
+    )
+    return {
+        "message_kind": message_kind,
+        "publisher_count": len(publishers),
+        "publishers": publishers,
+        "topic": topic,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class ForceDecision:
     cancel: bool
@@ -249,6 +299,7 @@ class DynamicTransportEvidenceObserver:
         store: AtomicTransportEvidenceStore,
         maximum_reaction_steps: int,
         node: Any | None = None,
+        snapshot_topic: str = "/so101/simulation/evidence",
         chunk_topic: str = "/so101/simulation/physics_step_chunks",
         hazard_topic: str = "/so101/simulation/physics_hazard",
         cancellation_request_topic: str = "/so101/simulation/physics_cancellation_request",
@@ -267,6 +318,8 @@ class DynamicTransportEvidenceObserver:
         self._lock = threading.Lock()
         self._last_step: int | None = None
         self._last_chunk_sequence: int | None = None
+        self._first_chunk_session_id: str | None = None
+        self._first_snapshot_session_id: str | None = None
         self._hazard: HazardLatch | None = None
         self._boundaries: list[TransportBoundary] = []
         self._chunks: list[PhysicsStepChunk] = []
@@ -276,18 +329,30 @@ class DynamicTransportEvidenceObserver:
         self._outstanding_request_sequence: int | None = None
         self._cancellation_request_publisher: Any | None = None
         self._invalid_reason: str | None = None
+        self._identity_mismatch: dict[str, str] | None = None
+        self._snapshot_topic = snapshot_topic
+        self._chunk_topic = chunk_topic
+        self._hazard_topic = hazard_topic
+        self._cancellation_ack_topic = cancellation_ack_topic
         self._subscriptions: list[Any] = []
         if node is not None:
-            from rclpy.qos import QoSProfile, ReliabilityPolicy
+            from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
             from so101_mujoco_support.msg import (
                 PhysicsCancellationAck,
                 PhysicsCancellationRequest,
                 PhysicsHazardLatch,
                 PhysicsStepEvidenceChunk,
+                SimulationEvidence,
             )
 
             reliable = QoSProfile(depth=20, reliability=ReliabilityPolicy.RELIABLE)
             self._subscriptions = [
+                node.create_subscription(
+                    SimulationEvidence,
+                    snapshot_topic,
+                    self._snapshot_callback,
+                    qos_profile_sensor_data,
+                ),
                 node.create_subscription(
                     PhysicsStepEvidenceChunk, chunk_topic, self._chunk_callback, reliable
                 ),
@@ -340,6 +405,46 @@ class DynamicTransportEvidenceObserver:
         with self._lock:
             if self._invalid_reason is None:
                 self._invalid_reason = f"{type(error).__name__}: {error}"
+            if self._identity_mismatch is None and isinstance(error, EvidenceIdentityMismatch):
+                self._identity_mismatch = dict(error.detail)
+
+    def checkpoint_producer_provenance(self, provenance: dict[str, Any]) -> Path:
+        with self._lock:
+            return self._store.checkpoint_metadata(
+                expected_session_id=self._session_id,
+                publisher_provenance=provenance,
+            )
+
+    def checkpoint_snapshot_session(self, actual_session_id: str) -> Path:
+        with self._lock:
+            if self._first_snapshot_session_id is None:
+                self._first_snapshot_session_id = actual_session_id
+                path = self._store.checkpoint_metadata(
+                    expected_session_id=self._session_id,
+                    first_snapshot_session_id=actual_session_id,
+                )
+            else:
+                path = self._store.root / "run-index.json"
+        if actual_session_id != self._session_id:
+            raise EvidenceIdentityMismatch(
+                "snapshot simulation session mismatch",
+                expected_session_id=self._session_id,
+                actual_session_id=actual_session_id,
+                topic=self._snapshot_topic,
+                message_kind="SimulationEvidence",
+            )
+        return path
+
+    @property
+    def first_snapshot_session_id(self) -> str | None:
+        with self._lock:
+            return self._first_snapshot_session_id
+
+    def _snapshot_callback(self, message: Any) -> None:
+        try:
+            self.checkpoint_snapshot_session(str(message.simulation_session_id))
+        except (EvidenceInvalid, TypeError, ValueError, AttributeError) as error:
+            self._record_invalid(error)
 
     def _chunk_callback(self, message: Any) -> None:
         try:
@@ -360,8 +465,21 @@ class DynamicTransportEvidenceObserver:
             self._record_invalid(error)
 
     def accept_chunk(self, chunk: PhysicsStepChunk) -> str:
+        with self._lock:
+            if self._first_chunk_session_id is None:
+                self._first_chunk_session_id = chunk.simulation_session_id
+                self._store.checkpoint_metadata(
+                    expected_session_id=self._session_id,
+                    first_chunk_session_id=chunk.simulation_session_id,
+                )
         if chunk.simulation_session_id != self._session_id:
-            raise EvidenceInvalid("chunk simulation session mismatch")
+            raise EvidenceIdentityMismatch(
+                "chunk simulation session mismatch",
+                expected_session_id=self._session_id,
+                actual_session_id=chunk.simulation_session_id,
+                topic=self._chunk_topic,
+                message_kind="PhysicsStepEvidenceChunk",
+            )
         if chunk.reset_epoch != self._reset_epoch:
             raise EvidenceInvalid("chunk reset epoch mismatch")
         if chunk.evidence_loss:
@@ -386,7 +504,13 @@ class DynamicTransportEvidenceObserver:
 
     def accept_hazard(self, hazard: HazardLatch) -> None:
         if hazard.simulation_session_id != self._session_id:
-            raise EvidenceInvalid("hazard simulation session mismatch")
+            raise EvidenceIdentityMismatch(
+                "hazard simulation session mismatch",
+                expected_session_id=self._session_id,
+                actual_session_id=hazard.simulation_session_id,
+                topic=self._hazard_topic,
+                message_kind="PhysicsHazardLatch",
+            )
         if hazard.reset_epoch != self._reset_epoch:
             raise EvidenceInvalid("hazard reset epoch mismatch")
         if hazard.evidence_loss:
@@ -463,7 +587,13 @@ class DynamicTransportEvidenceObserver:
             hazard = self._hazard
             expected_sequence = self._outstanding_request_sequence
         if ack.simulation_session_id != self._session_id:
-            raise EvidenceInvalid("cancellation ack simulation session mismatch")
+            raise EvidenceIdentityMismatch(
+                "cancellation ack simulation session mismatch",
+                expected_session_id=self._session_id,
+                actual_session_id=ack.simulation_session_id,
+                topic=self._cancellation_ack_topic,
+                message_kind="PhysicsCancellationAck",
+            )
         if ack.reset_epoch != self._reset_epoch:
             raise EvidenceInvalid("cancellation ack reset epoch mismatch")
         if hazard is None:
@@ -552,10 +682,13 @@ class DynamicTransportEvidenceObserver:
         with self._lock:
             invalid_reason = self._invalid_reason
             last_step = self._last_step
+            identity_mismatch = self._identity_mismatch
         assert invalid_reason is not None
         terminal: dict[str, Any] = {}
         if last_step is not None:
             terminal["last_physics_step"] = last_step
+        if identity_mismatch is not None:
+            terminal["identity_mismatch"] = identity_mismatch
         return self._store.close_invalid(
             invalid_reason=invalid_reason,
             **terminal,

@@ -19,8 +19,8 @@ disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses:
   - Frozen-strategy dynamic transport samples can quantify peak/impulse, sustained overpressure duration, and compression without exceeding the unchanged absolute 11.60 N diagnostic hard stop.
-latest_checkpoint: MNT-CP-020
-next_experiment: NONE_PENDING_RED_DIAGNOSIS
+latest_checkpoint: MNT-CP-022
+next_experiment: NONE_PENDING_OBSERVABILITY_GREEN
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3028,4 +3028,31 @@ frozen_behavior: No production behavior, strategy, MJCF, scene, geometry, contro
 protected_documents: Both unrelated untracked documents remain untouched and untracked.
 next_experiment: NONE_UNTIL_GREEN_GATES
 next_command: Commit the RED diagnosis checkpoint and tests, then implement the minimum fail-fast session source, explicit launch binding, structured mismatch persistence, and publisher provenance without changing motion semantics.
+```
+
+## Checkpoint MNT-CP-022 — parameter-scope review correction
+
+```yaml
+checkpoint_id: MNT-CP-022
+recorded_at: 2026-08-12T19:08:00+08:00
+last_valid_experiment: EXP-109
+immutable_invalid_experiment: EXP-110 INVALID_EVIDENCE; not rerun or reclassified
+review_correction:
+  authoritative_fact: The production parameter<T>() helper uses has_parameter(name) followed by the non-template get_parameter(name).get_value<T>(). The characterization probe proves this path reads the existing root simulation_session_id from the plugin subnode.
+  consequence: Do not add a simulation_evidence slash-scoped override, do not change launch parameter scope, and do not call scope mismatch the confirmed EXP-110 root cause.
+  characterization_only: The typed get_parameter(name, value) overload expands through the subnode slash namespace, but production does not use that overload for session initialization.
+withdrawn_red_targets:
+  - A launch helper that duplicates root and slash-scoped session parameters.
+  - A production check that requires or compares a slash-scoped session.
+  - Treating the existing placeholder fallback as the cause of EXP-110 without live producer evidence.
+green_scope:
+  - Preserve strict session equality rejection.
+  - Persist durable expected_session_id, actual_session_id, topic, and message_kind on identity mismatch.
+  - Persist publisher count, node name/namespace, and endpoint GID for both ordinary SimulationEvidence and PhysicsStepEvidenceChunk.
+  - Trace and record the observer expected SESSION_ID, actual first snapshot/chunk sessions, and the shared message-construction path.
+  - Use EXP-115 to locate the live cause before any parameter-binding fix.
+production_revert: The uncommitted slash-scoped launch/session source changes were fully removed before validation or commit.
+frozen_behavior: Strategy, motion parameters, models, controller, contact/grasp phases, and protected Gazebo source remain unchanged.
+next_experiment: NONE_PENDING_OBSERVABILITY_GREEN
+next_command: Remove obsolete launch/fallback RED expectations, implement only durable mismatch and producer provenance, then run the required automatic gates before preregistering EXP-115.
 ```

@@ -540,6 +540,7 @@ class AtomicTransportEvidenceStore:
         self.run_id = run_id
         self._chunks: list[dict[str, Any]] = []
         self._boundaries: list[dict[str, Any]] = []
+        self._metadata: dict[str, Any] = {}
         self._index_path = root / "run-index.json"
 
     def _write_index(self, **terminal: Any) -> Path:
@@ -550,9 +551,14 @@ class AtomicTransportEvidenceStore:
             "boundaries": list(self._boundaries),
             "status": "RUNNING",
         }
+        document.update(self._metadata)
         document.update(terminal)
         _atomic_write(self._index_path, _canonical_json(document))
         return self._index_path
+
+    def checkpoint_metadata(self, **metadata: Any) -> Path:
+        self._metadata.update(metadata)
+        return self._write_index()
 
     def checkpoint_chunk(self, chunk: PhysicsStepChunk) -> str:
         expected_sequence = (
