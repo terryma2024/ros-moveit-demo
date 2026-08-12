@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - A bounded MoveIt translation along the q6 moving-pad tangent can produce repeatable physical left_only evidence without changing geometry or simulator state.
 latest_checkpoint: MNT-CP-008
-next_experiment: EXP-044
+next_experiment: EXP-056
 ```
 
 ## Checkpoint MNT-CP-001
@@ -682,4 +682,121 @@ EXP-044:
     simulation_session_id: so101-mnt-align-001
     driver_sha256: b29da4e8e6a294ada7fcd656da70bab31259b3958ec9ad38be1eea50db4f7e87
   decision: PENDING before qualified reset epoch 3 to 4.
+```
+
+## Experiment EXP-044 terminal result and EXP-045 runtime start
+
+```yaml
+EXP-044:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_4
+  single_variable: Corrected closing-axis TCP offset +0.0005 m.
+  observed:
+    - Qualified reset 3 to 4, resume, staged approach, MoveIt plan/execute, and convergence guards passed.
+    - Right contact appeared first and stopped q6 at -0.0412587 rad; right_force=0.0348171 N, left_count=0, maximum_force=0.163345 N.
+    - Terminal cup position differed from reset only by normal vertical settling (approximately 0.000225 m); no safety boundary was approached.
+  conclusion: +0.5 mm on the q6-tangent axis makes the moving/right side contact substantially earlier and does not produce left_only.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-044.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-044.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-044.log
+  decision: KEEP; continue preregistered order without changing sign based on result.
+EXP-045:
+  status: RUNNING
+  prior_experiment: EXP-044
+  lifecycle: RESET_WORLD
+  single_variable: Corrected closing-axis TCP offset +0.0010 m.
+  provenance_and_safety: Identical to EXP-044.
+  decision: PENDING before qualified reset epoch 4 to 5.
+```
+
+## Experiment EXP-045 terminal result and EXP-046 runtime start
+
+```yaml
+EXP-045:
+  status: VALID
+  behavioral_result: FAILURE
+  lifecycle: RESET_WORLD_EPOCH_5
+  single_variable: Corrected closing-axis TCP offset +0.0010 m.
+  observed:
+    - Reset/resume/staged approach and MoveIt plan/execute/convergence passed; right contact again appeared first.
+    - Terminal q6=-0.0442580 rad, right_force=0.0202711 N, left_count=0, maximum_force=0.149774 N, cup displacement approximately 0.000197 m.
+  conclusion: +1.0 mm does not produce left_only.
+  evidence:
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-staged-EXP-045.json
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-driver-EXP-045.log
+    - /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/alignment-terminal-EXP-045.log
+  decision: KEEP; continue ordered scan.
+EXP-046:
+  status: RUNNING
+  prior_experiment: EXP-045
+  lifecycle: RESET_WORLD
+  single_variable: Corrected closing-axis TCP offset +0.0015 m.
+  provenance_and_safety: Identical to EXP-044.
+  decision: PENDING before qualified reset epoch 5 to 6.
+```
+
+## Experiment EXP-046 invalid result and native Cartesian batch preregistration
+
+```yaml
+EXP-046:
+  status: INVALID
+  lifecycle: RESET_WORLD_EPOCH_6
+  observed:
+    - Reset/resume/staged approach passed and left no-contact CLOSE_READY.
+    - The single-attempt OMPL pose request timed out before ExecuteTrajectory or any driver controller action; terminal state remained open and no-contact.
+  conclusion: No physical +1.5 mm result. The pose-goal method is not a robust Cartesian scan boundary at this offset.
+  decision: Exclude EXP-046 through EXP-055 and stop the second batch.
+new_method:
+  rationale: Use MoveIt's native GetCartesianPath straight-line service instead of stochastic pose-goal OMPL, retain collision checking, then execute the returned RobotTrajectory through ExecuteTrajectory.
+  service: /compute_cartesian_path
+  service_type: moveit_msgs/srv/GetCartesianPath
+  frozen_parameters:
+    group_name: arm
+    link_name: so101_tcp
+    frame_id: world
+    max_step_m: 0.0001
+    revolute_jump_threshold_rad: 0.02
+    avoid_collisions: true
+    velocity_scaling: 0.02
+    acceleration_scaling: 0.02
+    maximum_cartesian_speed_m_s: 0.005
+    required_fraction: 0.999
+  execute_boundary: /execute_trajectory with unchanged contact, provenance, TCP convergence, force, and cup-displacement monitors.
+  driver_sha256: b3a94d8a52f9b346d332fa29e1e5c1155240657638aa8f54c97554055da5bd99
+new_batch:
+  status: PLANNED
+  prior_experiment: EXP-046
+  ordered_experiments:
+    - [EXP-056, -0.0005]
+    - [EXP-057, -0.0010]
+    - [EXP-058, -0.0015]
+    - [EXP-059, -0.0020]
+    - [EXP-060, -0.0025]
+    - [EXP-061, -0.0030]
+  single_variable: Requested TCP translation along the frozen q6-tangent axis; one negative scalar per experiment.
+  lifecycle: RESET_WORLD for every candidate; EXP-056 begins with qualified reset 6 to 7.
+  prediction: The sign opposite EXP-044/045 moves the gripper away from the moving/right side; a bounded value will reach left-only before right contact.
+  success_criteria:
+    - GetCartesianPath returns error SUCCESS, fraction >=0.999, and a non-empty collision-checked trajectory; ExecuteTrajectory succeeds and the TCP convergence guards pass.
+    - q6 reaches left force >=0.08 N with zero right contact inside the unchanged 11.60 N, 0.003 m pre-contact, and 0.010 m total-displacement limits.
+  failure_criteria:
+    - Right contact appears first or q6 reaches its lower bound after a successfully executed full Cartesian path.
+  invalid_criteria:
+    - Reset/readiness/session/pause/freshness failure, incomplete Cartesian fraction, controller/trajectory/TCP convergence failure, or safety monitor abort.
+  early_stop: First valid left_only result stops the scan and triggers three exact-offset RESET_WORLD repeatability trials before matrix collection.
+EXP-056:
+  status: RUNNING
+  prior_experiment: EXP-046
+  lifecycle: RESET_WORLD
+  single_variable: Native Cartesian corrected-axis TCP offset -0.0005 m.
+  provenance:
+    installed_source_commit: d325e2d98a75039e76b597d2ba1ef6484b752b64
+    install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-build/install
+    ros_domain_id: 176
+    gz_partition: so101-mnt-align-001
+    simulation_session_id: so101-mnt-align-001
+    driver_sha256: b3a94d8a52f9b346d332fa29e1e5c1155240657638aa8f54c97554055da5bd99
+  decision: PENDING before qualified reset epoch 6 to 7.
 ```
