@@ -1,7 +1,7 @@
-schema_version: 1
+schema_version: 2
+policy_id: light_cup_wall_pick-contact
 calibration_status: PLANNED
-approved_by_user: false
-enabled: false
+failure_reason: null
 units:
   signed_distance: m
   normal_force: N
@@ -9,11 +9,17 @@ units:
   joint_position: rad
   simulation_time: s
   receipt_time: s
-source_commit: "1548acb20a2bd376e1bbe867603d824d26ddfb21"
-dependency_commit: "9f02f82aae2888d6e29c472c6dd64c34b38c5f93"
-model_sha256: "a87fb09459a75eb58d1077659fd67c3b8250226e8b22e05141c470a0423d5d28"
-config_sha256: "a787213d6c156581b7792d50146346c825fa7145a056242a01da802495a00e43"
-source_evidence_sha256: null
+fingerprint:
+  source_commit: "7181a1634d27232b549feaab5df33ff733ebc5f9"
+  dependency_commit: "f42b7b3d77288c2fee750fe53b0258e0a3d18194"
+  model_sha256: "f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca"
+  scene_sha256: "b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0"
+  motion_policy_sha256: "b5738b18ffc36f205c59eb06c7ca3f9ae173b4b63c0c59afaa06e13251a50136"
+  source_evidence_sha256: null
+evaluation:
+  maximum_observation_age_s: 0.10
+  minimum_consecutive_samples: 5
+allowed_other_contact_bodies: [table]
 regimes:
   no_contact: &pending
     sample_count: 0
@@ -46,3 +52,9 @@ misclassification_matrix:
   over_compression: *pending_confusion
   micro_lift_slip: *pending_confusion
   stable_hold: *pending_confusion
+approval:
+  enabled: false
+  approved: false
+  approved_by: null
+  approved_at: null
+  proposal_sha256: null

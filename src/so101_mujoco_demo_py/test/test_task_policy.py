@@ -5,6 +5,12 @@ from pathlib import Path
 import pytest
 import yaml
 
+from so101_mujoco_demo_py.contact_policy import (
+    ApprovalRecord,
+    ContactPolicyFingerprint,
+    approve_proposal,
+    proposal_sha256,
+)
 from so101_mujoco_demo_py.task_policy import load_task_policy
 
 MOTION_POLICY = (
@@ -31,6 +37,57 @@ def write_candidate(tmp_path: Path, change) -> Path:
     candidate = tmp_path / "candidate.yaml"
     candidate.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
     return candidate
+
+
+def write_approved_contact_policy(tmp_path: Path) -> tuple[Path, ContactPolicyFingerprint]:
+    fingerprint = ContactPolicyFingerprint(
+        dependency_commit="2" * 40,
+        model_sha256="a" * 64,
+        scene_sha256="b" * 64,
+        motion_policy_sha256=hashlib.sha256(MOTION_POLICY.read_bytes()).hexdigest(),
+        source_evidence_sha256="d" * 64,
+    )
+    document: dict[str, object] = {
+        "schema_version": 2,
+        "policy_id": "light_cup_wall_pick-contact",
+        "calibration_status": "VALID",
+        "fingerprint": {
+            "source_commit": "1" * 40,
+            "dependency_commit": fingerprint.dependency_commit,
+            "model_sha256": fingerprint.model_sha256,
+            "scene_sha256": fingerprint.scene_sha256,
+            "motion_policy_sha256": fingerprint.motion_policy_sha256,
+            "source_evidence_sha256": fingerprint.source_evidence_sha256,
+        },
+        "evaluation": {
+            "maximum_observation_age_s": 0.1,
+            "minimum_consecutive_samples": 5,
+        },
+        "allowed_other_contact_bodies": ["table"],
+        "thresholds": {
+            "minimum_bilateral_force_n": 0.5,
+            "maximum_compression_distance_m": 0.0015,
+            "maximum_safe_force_n": 5.0,
+            "maximum_hold_linear_speed_m_s": 0.01,
+            "minimum_stable_hold_duration_s": 0.3,
+        },
+        "approval": {
+            "enabled": False,
+            "approved": False,
+            "approved_by": None,
+            "approved_at": None,
+            "proposal_sha256": None,
+        },
+    }
+    proposal_hash = proposal_sha256(document)
+    document["approval"]["proposal_sha256"] = proposal_hash  # type: ignore[index]
+    approved = approve_proposal(
+        document,
+        ApprovalRecord(proposal_hash, "user", "2026-08-12T12:00:00+08:00"),
+    )
+    path = tmp_path / "approved-contact.yaml"
+    path.write_text(yaml.safe_dump(approved, sort_keys=False), encoding="utf-8")
+    return path, fingerprint
 
 
 def test_loads_single_source_motion_and_final_outcome_policy() -> None:
@@ -136,3 +193,40 @@ def test_rejects_unknown_planning_shadow_key(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="unknown planning_shadow keys: unreviewed"):
         load_task_policy(candidate)
+
+
+def test_loads_approved_contact_policy_into_one_task_boundary(tmp_path: Path) -> None:
+    contact_path, expected = write_approved_contact_policy(tmp_path)
+
+    policy = load_task_policy(
+        MOTION_POLICY,
+        contact_path,
+        expected,
+        require_approved_contact=True,
+    )
+
+    assert policy.contact is not None
+    assert policy.contact.thresholds.maximum_safe_force_n == 5.0
+    assert (
+        policy.fingerprint.contact_policy_sha256
+        == hashlib.sha256(contact_path.read_bytes()).hexdigest()
+    )
+
+
+def test_required_contact_policy_fails_closed_before_loading_motion_only() -> None:
+    with pytest.raises(ValueError, match="approved contact policy is required"):
+        load_task_policy(MOTION_POLICY, require_approved_contact=True)
+
+
+def test_rejects_contact_policy_bound_to_different_motion_bytes(tmp_path: Path) -> None:
+    contact_path, expected = write_approved_contact_policy(tmp_path)
+    changed = ContactPolicyFingerprint(
+        dependency_commit=expected.dependency_commit,
+        model_sha256=expected.model_sha256,
+        scene_sha256=expected.scene_sha256,
+        motion_policy_sha256="e" * 64,
+        source_evidence_sha256=expected.source_evidence_sha256,
+    )
+
+    with pytest.raises(ValueError, match="motion policy fingerprint mismatch"):
+        load_task_policy(MOTION_POLICY, contact_path, changed, require_approved_contact=True)

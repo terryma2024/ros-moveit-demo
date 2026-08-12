@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from so101_mujoco_demo_py.contact_policy import proposal_sha256
+
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 CONFIG = PACKAGE_ROOT / "config/contact_calibration.yaml"
 ANALYZER = PACKAGE_ROOT / "scripts/analyze_contact_calibration.py"
@@ -24,33 +26,12 @@ ORDERED_REGIMES = tuple(sorted(REGIMES))
 SOURCE_COMMIT = "1" * 40
 DEPENDENCY_COMMIT = "2" * 40
 MODEL_SHA256 = "a" * 64
-CONFIG_SHA256 = "b" * 64
+SCENE_SHA256 = "b" * 64
+MOTION_POLICY_SHA256 = "c" * 64
 
 
 def load_policy() -> dict:
     return yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
-
-
-def complete_policy() -> dict:
-    policy = load_policy()
-    policy["source_commit"] = SOURCE_COMMIT
-    policy["dependency_commit"] = DEPENDENCY_COMMIT
-    policy["model_sha256"] = MODEL_SHA256
-    policy["config_sha256"] = CONFIG_SHA256
-    policy["source_evidence_sha256"] = "c" * 64
-    policy["units"] = {
-        "signed_distance": "m",
-        "normal_force": "N",
-        "linear_speed": "m/s",
-        "joint_position": "rad",
-        "simulation_time": "s",
-        "receipt_time": "s",
-    }
-    policy["calibration_status"] = "PLANNED"
-    policy["misclassification_matrix"] = {
-        actual: {predicted: 0 for predicted in ORDERED_REGIMES} for actual in ORDERED_REGIMES
-    }
-    return policy
 
 
 def contact(side: str, force_n: float, distance_m: float) -> dict:
@@ -63,7 +44,7 @@ def contact(side: str, force_n: float, distance_m: float) -> dict:
     }
 
 
-def complete_evidence(*, overlapping: bool = False) -> dict:
+def complete_evidence(*, overlapping: bool = False, schema_version: int = 2) -> dict:
     profiles = {
         "no_contact": (0.0, 0.0010, 0.0005, 0.0, False, False),
         "left_only": (0.20, -0.0001, 0.0007, 0.05, True, False),
@@ -90,51 +71,51 @@ def complete_evidence(*, overlapping: bool = False) -> dict:
             speed_m_s = base_speed + sample_index * 1.0e-6
             left = [contact("left", force_n, distance_m)] if has_left else []
             right = [contact("right", force_n, distance_m)] if has_right else []
-            samples.append(
-                {
-                    "regime": regime,
-                    "subcohorts": {
-                        "table_only": regime == "no_contact" and sample_index % 2 == 0,
-                        "post_release": regime == "no_contact" and sample_index % 2 == 1,
-                    },
-                    "source_commit": SOURCE_COMMIT,
-                    "dependency_commit": DEPENDENCY_COMMIT,
-                    "model_sha256": MODEL_SHA256,
-                    "config_sha256": CONFIG_SHA256,
-                    "simulation_session_id": "calibration-session",
-                    "reset_epoch": 4,
-                    "publisher_sequence": sequence,
-                    "simulation_step": sequence * 10,
-                    "simulation_time_s": sequence * 0.01,
-                    "receipt_monotonic_s": 100.0 + sequence * 0.01,
-                    "object_pose_world": {
-                        "position_m": [0.20, 0.0, 0.03],
-                        "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
-                    },
-                    "object_twist_world": {
-                        "linear_m_s": [speed_m_s, 0.0, 0.0],
-                        "angular_rad_s": [0.0, 0.0, 0.0],
-                    },
-                    "left_fingertip_contacts": left,
-                    "right_fingertip_contacts": right,
-                    "other_object_contacts": [],
-                    "minimum_signed_distance_m": distance_m if left or right else 0.0,
-                    "maximum_normal_force_n": force_n if left or right else 0.0,
-                    "distance_m": distance_m if left or right else 0.0,
-                    "force_n": force_n if left or right else 0.0,
-                    "linear_speed_m_s": speed_m_s,
-                    "q6_rad": 0.20,
-                    "arm_joint_positions_rad": [0.0, -0.4, 0.8, 0.5, 0.0],
-                    "tcp_pose_world": {
-                        "position_m": [0.20, 0.0, 0.09],
-                        "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
-                    },
-                    "contact_duration_s": duration,
-                }
-            )
+            sample = {
+                "regime": regime,
+                "subcohorts": {
+                    "table_only": regime == "no_contact" and sample_index % 2 == 0,
+                    "post_release": regime == "no_contact" and sample_index % 2 == 1,
+                },
+                "simulation_session_id": "calibration-session",
+                "reset_epoch": 4,
+                "publisher_sequence": sequence,
+                "simulation_step": sequence * 10,
+                "simulation_time_s": sequence * 0.01,
+                "receipt_monotonic_s": 100.0 + sequence * 0.01,
+                "object_pose_world": {
+                    "position_m": [0.20, 0.0, 0.03],
+                    "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+                },
+                "object_twist_world": {
+                    "linear_m_s": [speed_m_s, 0.0, 0.0],
+                    "angular_rad_s": [0.0, 0.0, 0.0],
+                },
+                "left_fingertip_contacts": left,
+                "right_fingertip_contacts": right,
+                "other_object_contacts": [],
+                "minimum_signed_distance_m": distance_m if left or right else 0.0,
+                "maximum_normal_force_n": force_n if left or right else 0.0,
+                "q6_rad": 0.20,
+                "arm_joint_positions_rad": [0.0, -0.4, 0.8, 0.5, 0.0],
+                "tcp_pose_world": {
+                    "position_m": [0.20, 0.0, 0.09],
+                    "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+                },
+                "contact_duration_s": duration,
+            }
+            if schema_version == 1:
+                sample.update(
+                    source_commit=SOURCE_COMMIT,
+                    dependency_commit=DEPENDENCY_COMMIT,
+                    model_sha256=MODEL_SHA256,
+                    config_sha256=MOTION_POLICY_SHA256,
+                )
+            samples.append(sample)
         regimes[regime] = samples
-    return {
-        "schema_version": 1,
+
+    common = {
+        "schema_version": schema_version,
         "units": {
             "signed_distance": "m",
             "normal_force": "N",
@@ -143,15 +124,32 @@ def complete_evidence(*, overlapping: bool = False) -> dict:
             "simulation_time": "s",
             "receipt_time": "s",
         },
-        "source_commit": SOURCE_COMMIT,
-        "dependency_commit": DEPENDENCY_COMMIT,
-        "model_sha256": MODEL_SHA256,
-        "config_sha256": CONFIG_SHA256,
         "regimes": regimes,
     }
+    if schema_version == 1:
+        common.update(
+            source_commit=SOURCE_COMMIT,
+            dependency_commit=DEPENDENCY_COMMIT,
+            model_sha256=MODEL_SHA256,
+            config_sha256=MOTION_POLICY_SHA256,
+        )
+    else:
+        common.update(
+            fingerprint={
+                "source_commit": SOURCE_COMMIT,
+                "dependency_commit": DEPENDENCY_COMMIT,
+                "model_sha256": MODEL_SHA256,
+                "scene_sha256": SCENE_SHA256,
+                "motion_policy_sha256": MOTION_POLICY_SHA256,
+            },
+            simulation_session_id="calibration-session",
+            reset_epoch=4,
+        )
+    return common
 
 
 def run_analyzer(tmp_path: Path, evidence: dict) -> tuple[subprocess.CompletedProcess[str], Path]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     source = tmp_path / "evidence.json"
     output = tmp_path / "proposal.yaml"
     source.write_text(json.dumps(evidence), encoding="utf-8")
@@ -164,193 +162,115 @@ def run_analyzer(tmp_path: Path, evidence: dict) -> tuple[subprocess.CompletedPr
     return result, output
 
 
-def test_calibration_policy_is_complete_traceable_and_disabled() -> None:
+def test_checked_in_policy_is_schema_v2_planned_and_disabled() -> None:
     policy = load_policy()
 
-    assert policy["schema_version"] == 1
+    assert policy["schema_version"] == 2
+    assert policy["policy_id"] == "light_cup_wall_pick-contact"
+    assert policy["calibration_status"] == "PLANNED"
+    assert policy["approval"] == {
+        "enabled": False,
+        "approved": False,
+        "approved_by": None,
+        "approved_at": None,
+        "proposal_sha256": None,
+    }
+    assert policy["evaluation"] == {
+        "maximum_observation_age_s": 0.10,
+        "minimum_consecutive_samples": 5,
+    }
     assert set(policy["regimes"]) == REGIMES
-    assert policy["approved_by_user"] is False
-    assert policy["enabled"] is False
-    assert policy["units"] == {
-        "signed_distance": "m",
-        "normal_force": "N",
-        "linear_speed": "m/s",
-        "joint_position": "rad",
-        "simulation_time": "s",
-        "receipt_time": "s",
-    }
-    assert policy["model_sha256"] and len(policy["model_sha256"]) == 64
-    assert policy["config_sha256"] and len(policy["config_sha256"]) == 64
-    assert policy["source_evidence_sha256"] is None
-    assert policy["calibration_status"] in {"PLANNED", "VALID"}
-    assert set(policy["thresholds"]) == {
-        "minimum_bilateral_force_n",
-        "maximum_compression_distance_m",
-        "maximum_safe_force_n",
-        "maximum_hold_linear_speed_m_s",
-        "minimum_stable_hold_duration_s",
-    }
-    for regime in REGIMES:
-        result = policy["regimes"][regime]
-        assert result["sample_count"] >= 0
-        assert set(result["quantiles"]) == {"p05", "p50", "p95"}
-    assert set(policy["misclassification_matrix"]) == REGIMES
-    if policy["calibration_status"] == "VALID":
-        assert all(value is not None for value in policy["thresholds"].values())
-        assert all(policy["regimes"][regime]["sample_count"] >= 20 for regime in REGIMES)
+    assert len(policy["fingerprint"]["source_commit"]) == 40
+    assert len(policy["fingerprint"]["dependency_commit"]) == 40
+    for field in ("model_sha256", "scene_sha256", "motion_policy_sha256"):
+        assert len(policy["fingerprint"][field]) == 64
+        assert set(policy["fingerprint"][field]) != {"0"}
+    assert policy["fingerprint"]["source_evidence_sha256"] is None
+    assert all(value is None for value in policy["thresholds"].values())
 
 
-def test_enabled_policy_requires_explicit_user_approval(tmp_path: Path) -> None:
-    policy = load_policy()
-    policy["enabled"] = True
-    policy["approved_by_user"] = False
-    candidate = tmp_path / "candidate.yaml"
-    candidate.write_text(yaml.safe_dump(policy, sort_keys=False), encoding="utf-8")
-
-    result = subprocess.run(
-        [sys.executable, str(ANALYZER), "--validate", str(candidate)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode != 0
-    assert "approved_by_user" in result.stderr
-
-
-def test_analyzer_rejects_missing_regime_and_nonfinite_samples(tmp_path: Path) -> None:
-    evidence = complete_evidence()
-    evidence["regimes"].pop("right_only")
-    evidence["regimes"]["no_contact"][0]["maximum_normal_force_n"] = float("nan")
-    source = tmp_path / "invalid.json"
-    source.write_text(json.dumps(evidence), encoding="utf-8")
-
-    result = subprocess.run(
-        [sys.executable, str(ANALYZER), "--input", str(source), "--output", str(tmp_path / "x")],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode != 0
-    assert "right_only" in result.stderr or "nonfinite" in result.stderr
-
-
-def test_analyzer_builds_disabled_quantile_policy_from_complete_matrix(tmp_path: Path) -> None:
-    evidence = complete_evidence()
-    source = tmp_path / "matrix.json"
-    output = tmp_path / "policy.yaml"
-    source.write_text(json.dumps(evidence), encoding="utf-8")
-
-    subprocess.run(
-        [sys.executable, str(ANALYZER), "--input", str(source), "--output", str(output)],
-        check=True,
-    )
-    policy = yaml.safe_load(output.read_text(encoding="utf-8"))
-
-    assert policy["enabled"] is False
-    assert policy["approved_by_user"] is False
-    assert policy["regimes"]["stable_hold"]["sample_count"] == 25
-    assert policy["thresholds"]["maximum_safe_force_n"] > 0.0
-
-
-@pytest.mark.parametrize("approved", [False, True])
-def test_policy_remains_disabled_at_approval_stop(tmp_path: Path, approved: bool) -> None:
-    policy = load_policy()
-    policy["enabled"] = approved
-    policy["approved_by_user"] = approved
-    candidate = tmp_path / "candidate.yaml"
-    candidate.write_text(yaml.safe_dump(policy, sort_keys=False), encoding="utf-8")
-
-    result = subprocess.run(
-        [sys.executable, str(ANALYZER), "--validate", str(candidate)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert (result.returncode == 0) is not approved
-
-
-@pytest.mark.parametrize(
-    ("mutation", "message"),
-    [
-        (lambda policy: policy.__setitem__("model_sha256", "0" * 64), "placeholder"),
-        (lambda policy: policy.pop("units"), "units"),
-        (
-            lambda policy: policy["regimes"]["stable_hold"].pop("quantiles"),
-            "quantiles",
-        ),
-        (
-            lambda policy: policy["misclassification_matrix"]["stable_hold"].clear(),
-            "confusion",
-        ),
-        (
-            lambda policy: policy.update({"enabled": True, "approved_by_user": True}),
-            "disabled",
-        ),
-    ],
-)
-def test_policy_validation_rejects_incomplete_or_enabled_proposals(
-    tmp_path: Path, mutation, message: str
+@pytest.mark.parametrize("schema_version", (1, 2))
+def test_analyzer_accepts_archived_v1_and_current_v2_raw_evidence(
+    tmp_path: Path, schema_version: int
 ) -> None:
-    policy = complete_policy()
-    mutation(policy)
-    candidate = tmp_path / "candidate.yaml"
-    candidate.write_text(yaml.safe_dump(policy, sort_keys=False), encoding="utf-8")
+    result, output = run_analyzer(tmp_path, complete_evidence(schema_version=schema_version))
 
-    result = subprocess.run(
-        [sys.executable, str(ANALYZER), "--validate", str(candidate)],
-        capture_output=True,
-        text=True,
-        check=False,
+    assert result.returncode == 0, result.stderr
+    proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert proposal["schema_version"] == 2
+    assert proposal["calibration_status"] == "VALID"
+    assert proposal["approval"]["enabled"] is False
+    assert proposal["approval"]["approved"] is False
+    assert proposal["approval"]["proposal_sha256"] == proposal_sha256(proposal)
+    assert proposal["fingerprint"]["model_sha256"] == MODEL_SHA256
+    assert proposal["fingerprint"]["motion_policy_sha256"] == MOTION_POLICY_SHA256
+    if schema_version == 1:
+        assert proposal["fingerprint"]["scene_sha256"] == MOTION_POLICY_SHA256
+        assert proposal["source_schema_version"] == 1
+    else:
+        assert proposal["fingerprint"]["scene_sha256"] == SCENE_SHA256
+        assert proposal["source_schema_version"] == 2
+
+
+def test_analyzer_reports_deterministic_quality_and_margins(tmp_path: Path) -> None:
+    result, output = run_analyzer(tmp_path, complete_evidence())
+
+    assert result.returncode == 0, result.stderr
+    proposal = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert proposal["split_method"] == "publisher_sequence_modulo_5"
+    assert proposal["calibration_sample_count"] == 140
+    assert proposal["evaluation_sample_count"] == 35
+    assert proposal["false_positive_count"] == 0
+    assert proposal["false_negative_count"] == 0
+    assert proposal["regimes"]["stable_hold"]["sample_count"] == 25
+    assert proposal["thresholds"]["maximum_safe_force_n"] > 0.0
+    assert all(value > 0.0 for value in proposal["safety_margins"].values())
+    assert all(
+        sum(proposal["misclassification_matrix"][actual].values()) == 5
+        for actual in ORDERED_REGIMES
     )
-
-    assert result.returncode != 0
-    assert message in result.stderr.lower()
 
 
 @pytest.mark.parametrize(
     ("mutate", "message"),
-    [
+    (
+        (lambda item: item["regimes"].pop("right_only"), "right_only"),
         (
-            lambda evidence: evidence["regimes"]["stable_hold"].__setitem__(slice(19, None), []),
+            lambda item: item["regimes"]["stable_hold"].__setitem__(slice(19, None), []),
             "20",
         ),
         (
-            lambda evidence: evidence["regimes"]["stable_hold"][0].__setitem__(
+            lambda item: item["regimes"]["stable_hold"][0].__setitem__(
                 "simulation_session_id", "other-session"
             ),
             "session",
         ),
         (
-            lambda evidence: evidence["regimes"]["stable_hold"][0].__setitem__("reset_epoch", 5),
+            lambda item: item["regimes"]["stable_hold"][0].__setitem__("reset_epoch", 5),
             "reset",
         ),
         (
-            lambda evidence: evidence["regimes"]["stable_hold"][0].__setitem__(
-                "model_sha256", "d" * 64
-            ),
-            "fingerprint",
-        ),
-        (
-            lambda evidence: evidence["regimes"]["stable_hold"][1].__setitem__(
+            lambda item: item["regimes"]["stable_hold"][1].__setitem__(
                 "publisher_sequence",
-                evidence["regimes"]["stable_hold"][0]["publisher_sequence"],
+                item["regimes"]["stable_hold"][0]["publisher_sequence"],
             ),
             "sequence",
         ),
         (
-            lambda evidence: evidence["regimes"]["stable_hold"][0].pop("left_fingertip_contacts"),
+            lambda item: item["regimes"]["stable_hold"][0].pop("left_fingertip_contacts"),
             "left_fingertip_contacts",
         ),
         (
-            lambda evidence: evidence["regimes"]["stable_hold"][0].__setitem__(
+            lambda item: item["regimes"]["stable_hold"][0].__setitem__(
                 "maximum_normal_force_n", float("inf")
             ),
             "finite",
         ),
-    ],
+        (
+            lambda item: item["fingerprint"].update(scene_sha256="0" * 64),
+            "placeholder",
+        ),
+    ),
 )
 def test_analyzer_rejects_invalid_atomic_evidence(tmp_path: Path, mutate, message: str) -> None:
     evidence = complete_evidence()
@@ -363,9 +283,7 @@ def test_analyzer_rejects_invalid_atomic_evidence(tmp_path: Path, mutate, messag
     assert not output.exists()
 
 
-def test_analyzer_rejects_overlapping_distributions_without_manufactured_thresholds(
-    tmp_path: Path,
-) -> None:
+def test_analyzer_rejects_overlapping_distributions(tmp_path: Path) -> None:
     result, output = run_analyzer(tmp_path, complete_evidence(overlapping=True))
 
     assert result.returncode != 0
@@ -374,34 +292,126 @@ def test_analyzer_rejects_overlapping_distributions_without_manufactured_thresho
         assert yaml.safe_load(output.read_text(encoding="utf-8"))["calibration_status"] != "VALID"
 
 
-def test_analyzer_reports_deterministic_evaluation_quality_and_data_margins(
-    tmp_path: Path,
-) -> None:
+def test_validate_accepts_disabled_proposal_but_rejects_fake_activation(tmp_path: Path) -> None:
     result, output = run_analyzer(tmp_path, complete_evidence())
+    assert result.returncode == 0
 
-    assert result.returncode == 0, result.stderr
-    policy = yaml.safe_load(output.read_text(encoding="utf-8"))
-    assert policy["calibration_status"] == "VALID"
-    assert policy["approved_by_user"] is False
-    assert policy["enabled"] is False
-    assert policy["split_method"] == "publisher_sequence_modulo_5"
-    assert policy["calibration_sample_count"] == 140
-    assert policy["evaluation_sample_count"] == 35
-    assert policy["false_positive_count"] == 0
-    assert policy["false_negative_count"] == 0
-    assert all(
-        sum(policy["misclassification_matrix"][actual].values()) == 5 for actual in ORDERED_REGIMES
+    valid = subprocess.run(
+        [sys.executable, str(ANALYZER), "--validate", str(output)],
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    for regime in ORDERED_REGIMES:
-        summary = policy["regimes"][regime]
-        assert summary["sample_count"] == 25
-        assert set(summary["quantiles"]) == {"p05", "p50", "p95"}
-        assert "left_normal_force_n" in summary["quantiles"]["p50"]
-        assert "right_normal_force_n" in summary["quantiles"]["p50"]
-    assert set(policy["safety_margins"]) == {
-        "bilateral_force_n",
-        "compression_distance_m",
-        "safe_force_n",
-        "hold_linear_speed_m_s",
-        "stable_hold_duration_s",
-    }
+    assert valid.returncode == 0, valid.stderr
+
+    document = yaml.safe_load(output.read_text(encoding="utf-8"))
+    document["approval"]["enabled"] = True
+    fake = tmp_path / "fake.yaml"
+    fake.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    rejected = subprocess.run(
+        [sys.executable, str(ANALYZER), "--validate", str(fake)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert rejected.returncode != 0
+    assert "approved" in rejected.stderr.lower()
+
+
+def test_approval_cli_activates_exact_hash_and_refuses_different_overwrite(tmp_path: Path) -> None:
+    result, proposal_path = run_analyzer(tmp_path, complete_evidence())
+    assert result.returncode == 0
+    proposal = yaml.safe_load(proposal_path.read_text(encoding="utf-8"))
+    proposal_hash = proposal["approval"]["proposal_sha256"]
+    output = tmp_path / "approved.yaml"
+
+    approved = subprocess.run(
+        [
+            sys.executable,
+            str(ANALYZER),
+            "--approve",
+            str(proposal_path),
+            "--proposal-sha256",
+            proposal_hash,
+            "--approved-by",
+            "user",
+            "--approved-at",
+            "2026-08-12T12:00:00+08:00",
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert approved.returncode == 0, approved.stderr
+    activated = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert activated["approval"]["enabled"] is True
+    assert activated["approval"]["approved"] is True
+    assert activated["approval"]["proposal_sha256"] == proposal_hash
+
+    changed = complete_evidence()
+    changed["regimes"]["stable_hold"][0]["contact_duration_s"] = 0.55
+    changed_result, changed_path = run_analyzer(tmp_path / "changed", changed)
+    assert changed_result.returncode == 0
+    changed_proposal = yaml.safe_load(changed_path.read_text(encoding="utf-8"))
+    refused = subprocess.run(
+        [
+            sys.executable,
+            str(ANALYZER),
+            "--approve",
+            str(changed_path),
+            "--proposal-sha256",
+            changed_proposal["approval"]["proposal_sha256"],
+            "--approved-by",
+            "user",
+            "--approved-at",
+            "2026-08-12T12:01:00+08:00",
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert refused.returncode != 0
+    assert "different hash" in refused.stderr.lower()
+    assert yaml.safe_load(output.read_text(encoding="utf-8")) == activated
+
+
+def test_validate_rejects_approved_policy_without_timezone(tmp_path: Path) -> None:
+    result, proposal_path = run_analyzer(tmp_path, complete_evidence())
+    assert result.returncode == 0
+    proposal = yaml.safe_load(proposal_path.read_text(encoding="utf-8"))
+    proposal_hash = proposal["approval"]["proposal_sha256"]
+    output = tmp_path / "approved.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(ANALYZER),
+            "--approve",
+            str(proposal_path),
+            "--proposal-sha256",
+            proposal_hash,
+            "--approved-by",
+            "user",
+            "--approved-at",
+            "2026-08-12T12:00:00+08:00",
+            "--output",
+            str(output),
+        ],
+        check=True,
+    )
+    document = yaml.safe_load(output.read_text(encoding="utf-8"))
+    document["approval"]["approved_at"] = "2026-08-12T12:00:00"
+    output.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+
+    invalid = subprocess.run(
+        [sys.executable, str(ANALYZER), "--validate", str(output)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert invalid.returncode != 0
+    assert "timezone" in invalid.stderr.lower()

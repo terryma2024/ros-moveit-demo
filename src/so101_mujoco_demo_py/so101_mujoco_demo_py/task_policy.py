@@ -12,6 +12,11 @@ from typing import Any
 
 import yaml
 
+from so101_mujoco_demo_py.contact_policy import (
+    ApprovedContactPolicy,
+    ContactPolicyFingerprint,
+    load_approved_contact_policy,
+)
 from so101_mujoco_demo_py.physical_outcome import (
     PhysicalOutcomePolicy,
     PlanningShadowPolicy,
@@ -129,6 +134,7 @@ class TaskPolicy:
     states: Mapping[str, MotionStatePolicy]
     physical_outcome: PhysicalOutcomePolicy
     maximum_diagnostic_force_n: float
+    contact: ApprovedContactPolicy | None
     fingerprint: TaskPolicyFingerprint
 
 
@@ -354,10 +360,17 @@ def _physical_outcome(document: Mapping[str, Any]) -> PhysicalOutcomePolicy:
     )
 
 
-def load_task_policy(motion_path: Path) -> TaskPolicy:
+def load_task_policy(
+    motion_path: Path,
+    contact_path: Path | None = None,
+    expected_contact_fingerprint: ContactPolicyFingerprint | None = None,
+    *,
+    require_approved_contact: bool = False,
+) -> TaskPolicy:
     """Load a motion policy from exact bytes and reject untyped additions."""
 
     raw = motion_path.read_bytes()
+    motion_hash = hashlib.sha256(raw).hexdigest()
     document = _mapping(yaml.safe_load(raw), "task policy")
     _exact_keys(document, _ROOT_KEYS, "task policy")
     if document["schema_version"] != 1:
@@ -376,6 +389,19 @@ def load_task_policy(motion_path: Path) -> TaskPolicy:
         "safety_limits",
     )
 
+    contact: ApprovedContactPolicy | None = None
+    contact_hash: str | None = None
+    if contact_path is None:
+        if require_approved_contact:
+            raise ValueError("approved contact policy is required")
+    else:
+        if expected_contact_fingerprint is None:
+            raise ValueError("expected contact policy fingerprint is required")
+        if expected_contact_fingerprint.motion_policy_sha256 != motion_hash:
+            raise ValueError("motion policy fingerprint mismatch")
+        contact = load_approved_contact_policy(contact_path, expected_contact_fingerprint)
+        contact_hash = hashlib.sha256(contact_path.read_bytes()).hexdigest()
+
     return TaskPolicy(
         policy_id=_string(document["policy_id"], "policy_id"),
         object_id=_string(document["object_id"], "object_id"),
@@ -391,8 +417,9 @@ def load_task_policy(motion_path: Path) -> TaskPolicy:
             safety["maximum_diagnostic_force_n"],
             "safety_limits.maximum_diagnostic_force_n",
         ),
+        contact=contact,
         fingerprint=TaskPolicyFingerprint(
-            motion_policy_sha256=hashlib.sha256(raw).hexdigest(),
-            contact_policy_sha256=None,
+            motion_policy_sha256=motion_hash,
+            contact_policy_sha256=contact_hash,
         ),
     )
