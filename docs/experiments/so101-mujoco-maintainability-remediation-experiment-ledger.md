@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 10d3fecb397968609539da2f7b9139ba013cf6cb
+current_commit: 1c6b63563101f3517ec590cd4b581ff290138aaa
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -21,8 +21,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-055
-next_experiment: NONE_USER_APPROVAL_REQUIRED
+latest_checkpoint: MNT-CP-056
+next_experiment: EXP-131
 ```
 
 ## Checkpoint MNT-CP-001
@@ -5601,4 +5601,72 @@ protected_user_state:
     - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
 next_experiment: NONE_USER_APPROVAL_REQUIRED
 next_command: Wait for the user to approve exact phase-aware proposal_sha256 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f; do not infer approval from the earlier substitute-input authorization.
+```
+
+## Checkpoint MNT-CP-056 — exact proposal approval and RESET_WORLD batch preregistration
+
+```yaml
+checkpoint_id: MNT-CP-056
+recorded_at: 2026-08-13T01:06:51+08:00
+prior_checkpoint: MNT-CP-055
+source_commit: 1c6b63563101f3517ec590cd4b581ff290138aaa
+status: APPROVED_AND_PREREGISTERED
+user_authorization_verbatim: 批准 phase-aware proposal 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f；RESET_WORLD 5/5 后 merge 到 ai-station 本地 main，验证通过后 push main 到 Gitee
+proposal_approval:
+  requested_exact_hash: 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f
+  approved_exact_hash: 4391efe670f7c881667434706a2ed40b7d33ea6a8d7908c64796d01f177c848f
+  exact_hash_match: true
+  proposal_file: /tmp/so101-debug-mujoco-maintainability-remediation/phase-aware-proposal/contact-calibration-v4-proposal.yaml
+  proposal_file_sha256: 6131c4a23b6a3fb475f0932888ae59940615dce81d4a7645c812f3b66e06b3ff
+  meaning: Accept the immutable diagnostic proposal and its EXP-126..130 evidence packet.
+  runtime_activation: FORBIDDEN_SCHEMA_V4_DIAGNOSTIC_ONLY
+  checked_in_contact_policy_change: NONE
+reset_world_batch:
+  batch_id: MNT-Q-RESET-EXP131-135
+  lifecycle: RESET_WORLD
+  experiments: [EXP-131, EXP-132, EXP-133, EXP-134, EXP-135]
+  target_count: 5
+  common_stack_count: 1
+  common_simulation_session_id: MNT-Q-RESET-EXP131-135-reset
+  ros_domain_id: 203
+  teleop_port: 8043
+  evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/reset-world-exp131-135
+  runtime_fingerprint_file: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-runtime-fingerprint.json
+  runtime_fingerprint_file_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+  frozen_runtime_source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271
+  expected_reset_epochs: [1, 2, 3, 4, 5]
+  workflow: unchanged nine-phase production Teleop workflow
+  prediction: All five runs complete the physical pick-place outcome after a transactional reset on one unchanged stack.
+  failure_rule: Any INVALID run terminates the batch; any VALID_FAILURE makes this fixed five-run batch fail and later attempts cannot be counted into it.
+  retry_or_threshold_change: NONE
+  strategy_or_motion_change: NONE
+fixed_fingerprint:
+  dependency_sha256: be6bc595cd71a10df32765e11884183c0096db765a5ee35c3ef6a0b109ef5a3a
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+merge_push_authorization:
+  merge_target: ai-station local main
+  push_target: Gitee origin main
+  preconditions:
+    - This preregistered RESET_WORLD batch is exactly 5/5 qualified.
+    - The branch and local main are reviewed for drift and protected user state.
+    - Post-merge build, tests, backend integration, runtime provenance, and protected Gazebo gates pass.
+  force_push: false
+execution_state:
+  simulation_started: false
+  reset_world_started: false
+  merge_rebase_push: false
+  owned_processes: NONE
+protected_user_state:
+  ordinary_gazebo_pyc_count: 24
+  pyc_deleted: false
+  preserved_untracked_documents:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+next_experiment: EXP-131
+next_command: Commit this approval checkpoint, run the frozen build/provenance preflight, then start the one-stack RESET_WORLD qualification runner exactly once.
 ```
