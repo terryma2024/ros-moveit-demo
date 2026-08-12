@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 98a0689a2e587a1b6822ad6863b6f384fe32e30b
+current_commit: c8483fa6170e9517466b34e82365d6ebfe89a7de
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -20,8 +20,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-038
-next_experiment: EXP-126
+latest_checkpoint: MNT-CP-039
+next_experiment: NONE_BATCH_STOPPED_INVALID
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3983,7 +3983,7 @@ next_command: Commit this preregistration, then create one fresh isolated three-
 
 ```yaml
 batch_id: MNT-Q-EXP126-130
-status: RUNNING
+status: INVALID_STOPPED
 registered_at: 2026-08-12T21:45:00+08:00
 prior_experiment: EXP-125
 goal: Five consecutive VALID production nine-phase successes under independent FULL_RESTART lifecycles.
@@ -4031,7 +4031,7 @@ common_invalid_criteria:
   - Any source/install/fingerprint mismatch, initial-state pollution, missing visual proof, evidence identity/loss fault, unexpected retry/reset/pause/write/constraint, duplicate stack, or unclean cleanup is INVALID and stops the batch.
 experiments:
   - experiment_id: EXP-126
-    status: RUNNING
+    status: INVALID
     prior_experiment: EXP-125
     hypothesis: The frozen production contract succeeds after one independent FULL_RESTART.
     prediction: All common success criteria pass with consecutive_count 1.
@@ -4213,4 +4213,105 @@ preflight:
   evidence_root: ABSENT
   relevant_processes: NONE
 decision: RUN exactly one preregistered natural workflow and stop on any non-success terminal result.
+```
+
+## EXP-126 — physical success, INVALID visual artifact
+
+```yaml
+experiment_id: EXP-126
+recorded_at: 2026-08-12T22:17:30+08:00
+status: INVALID
+validity_reason: The persisted CUA file is truncated and cannot be decoded as a complete PNG, so the preregistered fresh visual proof is missing even though the CUA observer reported all required claims true.
+simulation_session_id: MNT-Q-EXP126-full-01
+ros_domain_id: 198
+http_port: 8038
+gz_partition: so101-mnt-q-exp126
+lifecycle: FULL_RESTART
+workflow_invocations: 1
+reset_transactions: 1
+retry_count: 0
+raw_harness_terminal_status: SUCCESS
+workflow:
+  reset_epoch: 1
+  simulation_step_after_reset: 0
+  owner_manifest_status: DONE
+  completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
+  phase_exit_codes: ALL_ZERO
+physical_outcome:
+  primary_failure: null
+  final_xyz_m: [-0.0801261296279476, -0.2479513821234971, 0.1652618054705255]
+  final_upright_tilt_rad: 0.015663107523971126
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0
+  support_contact: true
+  gripper_contact: false
+  moveit_attached: false
+  world_object_synchronized: true
+  direct_object_state_writes: 0
+  physics_pause_calls: 0
+  simulator_constraint_calls: 0
+transport_raw_evidence:
+  chunk_count: 741
+  sample_count: 3705
+  first_physics_step: 25121
+  last_physics_step: 28825
+  physics_timestep_s: 0.002
+  lossless: true
+  run_index_sha256: c7853a24f84c3b4191768fe03bc6c45acb69d941be28318e99e4e40c8804419a
+owner_evidence:
+  manifest_sha256: 67dd97b3d30553342413a2e3a9aaa015e0b66dcefb4d7b63b872bb2b05a49439
+  release_retreat_sha256: 5f79d825510d11f9e5bce484f9470a0337263df4f74eb64bb08e264693aafb5d
+visual_observer_report:
+  required_claims_reported_true: true
+  auxiliary_rviz_window_available: false
+  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp126/cua-visual.png
+  screenshot_sha256: 798b10ac412a161adf08c49eca57349ccdd0578ae048e4b71e5905ec9860ef93
+visual_artifact_integrity:
+  file_identification: PNG image data, 5120 x 2880, 8-bit/color RGBA, non-interlaced
+  file_size_bytes: 2304
+  independent_decode: FAIL
+  decoder_error: OSError; Truncated File Read
+  consequence: Hash agreement proves only byte identity with the verdict, not that the bytes form a complete inspectable image.
+shutdown:
+  ordered_marker: true
+  returncode: 0
+  fatal_signal: false
+  process_died: false
+  domain_198_nodes_after_stop: NONE
+  port_8038_listener_after_stop: NONE
+  tmux_session_after_stop: NONE
+  owned_process_residue: NONE
+artifacts:
+  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp126/exp-126-result.json
+  result_sha256: 26cd994123775e9b4be456c501243282a05ea8b9ddb2460405626d1ce76bd693
+  visual_verdict: /data/work/so101-debug-mujoco-maintainability-remediation/exp126/cua-visual-verdict.json
+  visual_verdict_sha256: 490b0849ca21d18c6776da85a8d0a4db4771cde5fe5ea16d02dea048e1f98cbf
+decision: INVALID; stop the five-run batch under the preregistered stop rule. Do not count the physical success and do not rerun EXP-126.
+next_experiment: NONE_BATCH_STOPPED_INVALID
+```
+
+## Checkpoint MNT-CP-039 — five-run batch stopped at EXP-126
+
+```yaml
+checkpoint_id: MNT-CP-039
+recorded_at: 2026-08-12T22:17:30+08:00
+last_valid_experiment: EXP-125
+batch_id: MNT-Q-EXP126-130
+batch_status: INVALID_STOPPED
+consecutive_valid_successes: 0
+terminal_experiment: EXP-126
+terminal_classification: INVALID
+stop_rule_applied: true
+not_started: [EXP-127, EXP-128, EXP-129, EXP-130]
+confirmed_new_information:
+  - The frozen strategy again completed all nine physical phases with lossless 500 Hz transport evidence and no forbidden intervention.
+  - The CUA persistence route can produce a hash-consistent but truncated PNG; independent image decoding is therefore required before accepting future visual evidence.
+protected_state:
+  src_so101_gazebo_demo_py_diff: NONE
+  preserved_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+owned_processes: NONE
+preserved_processes: Existing codex, idle codex-cua, and historical so101-mujoco-gui tmux sessions only.
+next_command: Stop and report the invalid batch. A new explicitly authorized preregistration is required before any further qualification run.
 ```
