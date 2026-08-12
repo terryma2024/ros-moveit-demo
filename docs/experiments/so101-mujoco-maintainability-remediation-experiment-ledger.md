@@ -3762,11 +3762,23 @@ next_command: Add RED contracts for typed dynamic-held-object force mode and pos
 experiment_id: EXP-125
 recorded_at: 2026-08-12T21:19:00+08:00
 prior_experiment: EXP-124 VALID evidence diagnostic with separate business-phase failure.
-status: PLANNED
+status: RUNNING
 lifecycle: FULL_RESTART
 qualification_counting: false
 purpose: Prove the production nine-phase workflow restores the previously qualified dynamic held-cup force semantics after transport while preserving every motion, controller, scene, model, contact-policy value, and evidence contract.
 source_commit_before_fix: 7b23f4fd943301672581ab31dd1d3aabbefa6831
+behavior_source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271
+runtime_identity:
+  simulation_session_id: MNT-A-EXP125-full-01
+  ros_domain_id: 197
+  port: 8037
+  gz_partition: so101-mnt-a-exp125
+isolated_install: /tmp/so101-debug-mujoco-maintainability-remediation/exp125-install
+qualified_evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp125
+runtime_fingerprint: /tmp/so101-debug-mujoco-maintainability-remediation/exp125-runtime-fingerprint.json
+runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
+run_harness: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp125_full.py
+run_harness_sha256: 80aba66689620c71952dd799b86b24cac3b7f29cb5ad143002875121160369de
 single_variable: Phase classification only. Descend, place alignment, and the pre-release gripper-contact state use the existing 11.60 N diagnostic hard stop with the 1.1579004532160448 N static threshold retained as shadow evidence; post-release support/settling continues to enforce the approved static threshold. No numeric threshold changes.
 preconditions:
   - RED tests prove the current code cancels historical qualified 4 to 5 N held-cup samples solely because those phases are misclassified as static.
