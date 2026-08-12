@@ -14,7 +14,7 @@ fingerprint:
   dependency_commit: "f42b7b3d77288c2fee750fe53b0258e0a3d18194"
   model_sha256: "f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca"
   scene_sha256: "b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0"
-  motion_policy_sha256: "b5738b18ffc36f205c59eb06c7ca3f9ae173b4b63c0c59afaa06e13251a50136"
+  motion_policy_sha256: "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
   source_evidence_sha256: null
 evaluation:
   maximum_observation_age_s: 0.10

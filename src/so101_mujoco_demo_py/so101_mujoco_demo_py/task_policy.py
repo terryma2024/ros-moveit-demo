@@ -17,6 +17,11 @@ from so101_mujoco_demo_py.contact_policy import (
     ContactPolicyFingerprint,
     load_approved_contact_policy,
 )
+from so101_mujoco_demo_py.grasp_outcome import (
+    CarryPolicy,
+    MicroLiftPolicy,
+    TransportPolicy,
+)
 from so101_mujoco_demo_py.physical_outcome import (
     PhysicalOutcomePolicy,
     PlanningShadowPolicy,
@@ -91,6 +96,8 @@ _OUTCOME_KEYS = frozenset(
         "catastrophic_workspace_bounds_m",
         "max_relative_position_drift_m",
         "max_relative_orientation_drift_rad",
+        "micro_lift",
+        "transport",
         "planning_shadow",
     }
 )
@@ -133,6 +140,7 @@ class TaskPolicy:
     gripper: GripperActions
     states: Mapping[str, MotionStatePolicy]
     physical_outcome: PhysicalOutcomePolicy
+    carry: CarryPolicy
     maximum_diagnostic_force_n: float
     contact: ApprovedContactPolicy | None
     fingerprint: TaskPolicyFingerprint
@@ -360,6 +368,75 @@ def _physical_outcome(document: Mapping[str, Any]) -> PhysicalOutcomePolicy:
     )
 
 
+def _carry_policy(
+    source: Mapping[str, Any], physical_outcome: PhysicalOutcomePolicy
+) -> CarryPolicy:
+    micro = _mapping(source["micro_lift"], "micro_lift")
+    _exact_keys(
+        micro,
+        frozenset(
+            {
+                "minimum_cup_lift_m",
+                "maximum_cup_lift_m",
+                "minimum_tcp_lift_m",
+                "maximum_lateral_drift_m",
+                "maximum_relative_position_drift_m",
+                "minimum_stable_duration_s",
+            }
+        ),
+        "micro_lift",
+    )
+    minimum_cup_lift = _positive(micro["minimum_cup_lift_m"], "minimum_cup_lift_m")
+    maximum_cup_lift = _positive(micro["maximum_cup_lift_m"], "maximum_cup_lift_m")
+    if minimum_cup_lift >= maximum_cup_lift:
+        raise ValueError("micro_lift cup lift bounds must be ordered")
+    transport = _mapping(source["transport"], "transport")
+    _exact_keys(
+        transport,
+        frozenset(
+            {
+                "maximum_relative_position_drift_m",
+                "maximum_relative_orientation_drift_rad",
+                "minimum_table_clearance_m",
+            }
+        ),
+        "transport",
+    )
+    return CarryPolicy(
+        micro_lift=MicroLiftPolicy(
+            minimum_cup_lift_m=minimum_cup_lift,
+            maximum_cup_lift_m=maximum_cup_lift,
+            minimum_tcp_lift_m=_positive(micro["minimum_tcp_lift_m"], "minimum_tcp_lift_m"),
+            maximum_lateral_drift_m=_positive(
+                micro["maximum_lateral_drift_m"], "maximum_lateral_drift_m"
+            ),
+            maximum_relative_position_drift_m=_positive(
+                micro["maximum_relative_position_drift_m"],
+                "micro_lift.maximum_relative_position_drift_m",
+            ),
+            minimum_stable_duration_s=_positive(
+                micro["minimum_stable_duration_s"], "micro_lift.minimum_stable_duration_s"
+            ),
+        ),
+        transport=TransportPolicy(
+            maximum_relative_position_drift_m=_positive(
+                transport["maximum_relative_position_drift_m"],
+                "transport.maximum_relative_position_drift_m",
+            ),
+            maximum_relative_orientation_drift_rad=_positive(
+                transport["maximum_relative_orientation_drift_rad"],
+                "transport.maximum_relative_orientation_drift_rad",
+            ),
+            minimum_table_clearance_m=_positive(
+                transport["minimum_table_clearance_m"],
+                "transport.minimum_table_clearance_m",
+            ),
+        ),
+        max_observation_age_s=physical_outcome.max_observation_age_s,
+        catastrophic_workspace_bounds_m=physical_outcome.catastrophic_workspace_bounds_m,
+    )
+
+
 def load_task_policy(
     motion_path: Path,
     contact_path: Path | None = None,
@@ -402,6 +479,7 @@ def load_task_policy(
         contact = load_approved_contact_policy(contact_path, expected_contact_fingerprint)
         contact_hash = hashlib.sha256(contact_path.read_bytes()).hexdigest()
 
+    physical_outcome = _physical_outcome(document)
     return TaskPolicy(
         policy_id=_string(document["policy_id"], "policy_id"),
         object_id=_string(document["object_id"], "object_id"),
@@ -412,7 +490,10 @@ def load_task_policy(
         arm_joints=arm_joints,
         gripper=_gripper(document),
         states=_states(document),
-        physical_outcome=_physical_outcome(document),
+        physical_outcome=physical_outcome,
+        carry=_carry_policy(
+            _mapping(document["physical_outcome"], "physical_outcome"), physical_outcome
+        ),
         maximum_diagnostic_force_n=_positive(
             safety["maximum_diagnostic_force_n"],
             "safety_limits.maximum_diagnostic_force_n",
