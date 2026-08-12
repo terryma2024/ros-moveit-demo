@@ -146,6 +146,57 @@ TEST(CancellationEvidenceTest, AckUsesPluginPhysicsStepAsConservativeRequestUppe
   EXPECT_EQ(ack.observed_physics_step - ack.hazard_physics_step, 23U);
 }
 
+TEST(SimulationEvidencePluginParameterScopeTest,
+     SubNodeTypedLookupUsesSlashScopedOverrideWhilePluginLookupReadsRoot)
+{
+  if (!rclcpp::ok()) {
+    rclcpp::init(0, nullptr);
+  }
+  auto root_only_options = rclcpp::NodeOptions()
+    .parameter_overrides({rclcpp::Parameter("simulation_session_id", "root-session")})
+    .automatically_declare_parameters_from_overrides(true);
+  auto root_only = std::make_shared<rclcpp::Node>("root_only_session", root_only_options);
+  auto root_only_plugin = root_only->create_sub_node("simulation_evidence");
+  std::string resolved;
+  EXPECT_EQ(root_only_plugin->get_sub_namespace(), "simulation_evidence");
+  EXPECT_FALSE(root_only_plugin->get_parameter("simulation_session_id", resolved));
+  ASSERT_TRUE(root_only_plugin->has_parameter("simulation_session_id"));
+  EXPECT_EQ(
+    root_only_plugin->get_parameter("simulation_session_id").as_string(), "root-session");
+
+  auto scoped_options = rclcpp::NodeOptions()
+    .parameter_overrides({
+      rclcpp::Parameter("simulation_session_id", "root-session"),
+      rclcpp::Parameter("simulation_evidence/simulation_session_id", "plugin-session"),
+    })
+    .automatically_declare_parameters_from_overrides(true);
+  auto scoped = std::make_shared<rclcpp::Node>("scoped_session", scoped_options);
+  auto scoped_plugin = scoped->create_sub_node("simulation_evidence");
+  ASSERT_TRUE(scoped_plugin->get_parameter("simulation_session_id", resolved));
+  EXPECT_EQ(resolved, "plugin-session");
+  rclcpp::shutdown();
+}
+
+TEST_F(AtomicEvidenceTest, PluginRejectsAnUnconfiguredSessionInsteadOfPublishingAPlaceholder)
+{
+  if (!rclcpp::ok()) {
+    rclcpp::init(0, nullptr);
+  }
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+      rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+  });
+  auto node = std::make_shared<rclcpp::Node>("unconfigured_session_plugin", options);
+  SimulationEvidencePlugin plugin;
+
+  EXPECT_FALSE(plugin.init(node, model_.get(), data_.get()));
+
+  plugin.cleanup();
+  rclcpp::shutdown();
+}
+
 TEST_F(AtomicEvidenceTest, ConsumesAllResetGenerationIncrementsWithoutLoss)
 {
   mj_forward(model_.get(), data_.get());
