@@ -18,7 +18,7 @@ disproven_routes:
 open_hypotheses:
   - Five reachable physical regimes plus deterministic unilateral rejection contracts can yield an honest proposal without fabricating an unreachable physical side.
 latest_checkpoint: MNT-CP-012
-next_experiment: EXP-076
+next_experiment: EXP-081
 ```
 
 ## Checkpoint MNT-CP-001
@@ -1483,4 +1483,51 @@ owned_processes: NONE before registered stack launch.
 unrelated_worktree_state:
   - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md appeared untracked after preregistration; it is preserved, excluded from task commits, and not present in the already built overlay.
 decision: PENDING before stack launch and before any controller action.
+```
+
+## EXP-076 terminal result and EXP-081 through EXP-085 preregistration
+
+```yaml
+EXP-076:
+  status: INVALID
+  lifecycle: FRESH_STACK_EPOCH_0
+  admitted_samples: 13 table_only no_contact samples; excluded with the batch.
+  observed:
+    - Production staged approach reached CLOSE_READY with zero fingertip contacts.
+    - The schema-v3 collector atomically stored 13 table-only samples and passed the independent pre-contact monitor.
+    - Frozen centered prepare-bilateral reached left_force=0.0811509 N and right_force=0.211059 N.
+    - Frozen open released the moving/right side but left/fixed contact persisted: left_count=1, left_force=0.0773804 N, right_count=0.
+    - Cup position [0.0199998203, -0.2789368471, 0.1648296520] m was approximately 0.001068 m from reset, below the 0.010 m terminal-total limit; no pre-contact comparison was made after contact.
+  decision: Do not append a false post-release no_contact label. Exclude the entire EXP-076-through-080 batch, stop the owned stack, and preserve the partial matrix only as invalid evidence.
+  evidence:
+    partial_matrix_sha256: 2f88f8760d960fc38c5cd2d2a481445a7ab034c8af59ba6965614df0d9a2d704
+    staged_evidence_sha256: 8f39b8b49a37b5a864d474004d89ffbb8f7c7776f29993ff55a72bfe03fe27ec
+    stack_log_sha256: 32729251fc39639953a21b7e1808a28234e0b6946fecfc527349917835e59d6c
+  cleanup: Ordered controller/MoveGroup shutdown completed; tmux so101-mnt-cal-v3 absent and domain 177 empty.
+revised_hypothesis: The unchanged production MOVE_ABOVE_OBJECT path can provide a real post-release arm retreat after frozen open, eliminating residual fixed-finger contact without changing any waypoint.
+batch_2:
+  source_commit: 66210bedc4a1f5670608fc8fe39bfda503bd263c
+  dependency_model_scene_motion_contract_driver_build: Identical to MNT-CP-012.
+  ros_domain_id: 178
+  gz_partition: so101-mnt-cal-v3b
+  simulation_session_id: so101-mnt-cal-v3b
+  reset_epoch: 0
+  tmux_session: so101-mnt-cal-v3b
+  matrix_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-raw-v3-batch2.json
+  proposal_output: /tmp/so101-debug-mujoco-maintainability-remediation/project-a-calibration/contact-calibration-proposal-v3-batch2.yaml
+  safety_and_frozen_scope: Identical to MNT-CP-012; pre-contact and terminal-total displacement fields remain independent.
+  EXP-081:
+    regime: no_contact
+    ordered_actions:
+      - Production staged approach to CLOSE_READY; collect 13 --pre-contact --table-only samples.
+      - Frozen centered prepare-bilateral at 0.08 N per side, then frozen open.
+      - Execute the unchanged production staged approach only through MOVE_ABOVE_OBJECT as the registered release retreat.
+      - Require fresh zero-left/zero-right readback, then append 12 --post-release samples.
+    success: Exactly 25 no-contact samples with both subcohorts and no admitted fingertip contact.
+    failure: Any residual contact after the registered retreat, motion failure, or safety/provenance violation stops the batch.
+  EXP-082: Same bilateral_touch method and acceptance as EXP-077 after the unchanged production staged approach returns from MOVE_ABOVE_OBJECT to CLOSE_READY.
+  EXP-083: Same over_compression method and acceptance as EXP-078.
+  EXP-084: Same concurrent micro_lift_slip method and acceptance as EXP-079.
+  EXP-085: Same stable_hold method and acceptance as EXP-080.
+decision: PLANNED before any batch-2 stack launch or controller action. No new waypoint or offset is introduced.
 ```
