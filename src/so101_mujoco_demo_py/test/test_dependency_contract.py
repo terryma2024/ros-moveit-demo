@@ -82,7 +82,23 @@ def test_lock_pins_exact_qualified_fork() -> None:
         "url": FORK_URL,
         "tag": FORK_TAG,
         "commit": submodule_head,
+        "policy_behavior_commit": "f42b7b3d77288c2fee750fe53b0258e0a3d18194",
     }
+    assert (
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(SUBMODULE),
+                "merge-base",
+                "--is-ancestor",
+                lock["fork"]["policy_behavior_commit"],
+                submodule_head,
+            ],
+            check=False,
+        ).returncode
+        == 0
+    )
     assert lock["upstream"] == {
         "url": "https://github.com/ros-controls/mujoco_ros2_control.git",
         "tag": "0.0.3",

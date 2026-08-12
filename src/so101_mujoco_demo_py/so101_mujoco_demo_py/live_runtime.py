@@ -346,7 +346,7 @@ def _expected_contact_fingerprint(config: LiveRuntimeConfig) -> ContactPolicyFin
     lock = yaml.safe_load((package_root / "config" / "dependency-lock.yaml").read_bytes())
     contact = yaml.safe_load(config.contact_policy.read_bytes())
     try:
-        dependency_commit = lock["fork"]["commit"]
+        dependency_commit = lock["fork"]["policy_behavior_commit"]
         source_evidence_sha256 = contact["fingerprint"]["source_evidence_sha256"]
     except (KeyError, TypeError) as error:
         raise ValueError("runtime policy fingerprint inputs are incomplete") from error

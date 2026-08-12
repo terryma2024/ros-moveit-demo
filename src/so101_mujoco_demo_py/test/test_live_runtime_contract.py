@@ -13,6 +13,7 @@ from so101_mujoco_demo_py.contact_policy import (
 from so101_mujoco_demo_py.live_runtime import (
     LIVE_PHASES,
     LiveRuntimeConfig,
+    _preflight_task_policy,
     _validate_final_release,
     build_phase_specs,
     load_live_task_policy,
@@ -34,7 +35,7 @@ def write_approved_contact_policy(
 ) -> Path:
     dependency = yaml.safe_load(
         (PACKAGE_ROOT / "config" / "dependency-lock.yaml").read_text(encoding="utf-8")
-    )["fork"]["commit"]
+    )["fork"]["policy_behavior_commit"]
     document: dict[str, object] = {
         "schema_version": 2,
         "policy_id": "light_cup_wall_pick-contact",
@@ -138,6 +139,22 @@ def test_changed_physical_fingerprint_fails_before_side_effects(tmp_path) -> Non
     assert result.failure == "POLICY_FINGERPRINT_MISMATCH"
     assert result.failed_phase == "preflight"
     assert observed == []
+
+
+def test_checked_in_policy_targets_explicit_dependency_behavior_commit(tmp_path) -> None:
+    lock = yaml.safe_load(
+        (PACKAGE_ROOT / "config" / "dependency-lock.yaml").read_text(encoding="utf-8")
+    )
+    contact_path = PACKAGE_ROOT / "config" / "contact_calibration.yaml"
+    contact = yaml.safe_load(contact_path.read_text(encoding="utf-8"))
+    runtime = replace(config(tmp_path), contact_policy=contact_path)
+
+    task_policy, failure = _preflight_task_policy(runtime)
+
+    assert failure is None
+    assert task_policy is not None
+    assert lock["fork"]["policy_behavior_commit"] == contact["fingerprint"]["dependency_commit"]
+    assert lock["fork"]["commit"] != lock["fork"]["policy_behavior_commit"]
 
 
 def evidence_for(phase_name: str, status: str) -> dict:
