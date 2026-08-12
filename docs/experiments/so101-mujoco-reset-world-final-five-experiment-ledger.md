@@ -101,7 +101,7 @@ the permanent experiment IDs below.
 ```yaml
 - experiment_id: EXP-136
   manifest_record_id: MNT-Q-RESET-EXP136-140-01
-  status: RUNNING
+  status: VALID
   prior_experiment: EXP-131
   hypothesis: The frozen production workflow completes after transactional reset epoch 1 when lossless high-rate evidence is provisioned on the qualified NVMe volume.
   prediction: Nine phases complete; physical outcome succeeds; Gazebo/MuJoCo truth and the MoveIt Planning Scene end detached with the cup upright in the target ring.
@@ -113,13 +113,22 @@ the permanent experiment IDs below.
   failure_criteria: [any valid physical or workflow failure]
   invalid_criteria: [provenance mismatch, stale evidence, missing artifact, epoch/session mismatch, incomplete clean shutdown, evidence-volume or process contamination]
   provenance: {source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271, install_overlay: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install, runtime_executable: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2/install/so101_mujoco_demo_py/lib/so101_mujoco_demo_py/run_qualification, ros_domain_id: 204, gz_partition: NOT_APPLICABLE_MUJOCO_RUNTIME}
-  observed: [PENDING]
-  conclusion: PENDING
-  decision: PENDING
+  observed:
+    - SUCCESS; reset epoch 1; simulation_session_id MNT-Q-RESET-EXP136-140-reset.
+    - Exact nine-phase trace completed and checkpoint_fresh was true.
+    - Physical primary_failure was null; moveit_attached false; world_object_synchronized true; intended_support_contact true; gripper_contact false.
+    - Final cup pose was [-0.0795477441285091, -0.24844227651236556, 0.16532876395858584] m with upright tilt 0.01749758371864703 rad.
+    - actions SHA-256 ebbb44abbf98b80d877dc69b77d01333f16a460377c6ecd324d9efefa1a62fe6.
+    - owner manifest SHA-256 9de471de921f6e15ec68d95402488c0f4b147b9a5235e094a408a3eab7566be3.
+    - raw run-index SHA-256 86345dbd2e8df2f10677fe59b09f5d243cae5549bf81fd4f153b8c0a0f58e73e.
+    - dynamic summary SHA-256 a8c51bd110f25f831e4cbf664c12072fa2ded0b961ae8fa52cfb522a3a06101b.
+    - Shared launch log SHA-256 is deferred until clean shutdown closes the common file.
+  conclusion: VALID SUCCESS 1/5 in the frozen RESET_WORLD batch.
+  decision: KEEP
   next_experiment: EXP-137
 - experiment_id: EXP-137
   manifest_record_id: MNT-Q-RESET-EXP136-140-02
-  status: PLANNED
+  status: RUNNING
   prior_experiment: EXP-136
   hypothesis: The same shared stack repeats the frozen successful outcome after reset epoch 2 without stale attachment, checkpoint, lease, or evidence state.
   prediction: The second independent nine-phase workflow succeeds with the same session and strictly increasing epoch.
