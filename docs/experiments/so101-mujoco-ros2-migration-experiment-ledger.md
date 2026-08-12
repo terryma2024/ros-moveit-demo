@@ -10,10 +10,10 @@ rejected_backup_branch: codex/so101-mujoco-ros2-pre-isolation-20260810
 branch: codex/so101-mujoco-ros2-teleop
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 base_commit: 8d85205286d2635d4ddbc91431c933dafb4eb661
-current_commit: 5639ce037ed86ca4f7b59ede2295312bbce6b70a
-last_verified_implementation_commit: 5639ce037ed86ca4f7b59ede2295312bbce6b70a
+current_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+last_verified_implementation_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
 ledger_commit_pending: true
-task_status: TASK_15_FULL_RESTART_PENDING_COMMIT
+task_status: TASK_15_QUALIFICATION_PENDING_COMMIT
 evidence_root: /tmp/so101-debug-mujoco-migration/
 protected_nontracked_baseline_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 strict_physics_contract: The successful positive path must use physical contact and grasp forces with no weld, no equality constraint, no adhesion or adhesive actuator, no mocap body, no teleport or set-pose, no direct object qpos writes, and no direct object qvel writes.
@@ -12486,4 +12486,289 @@ evidence_sha256:
   qualification_manifest: 2cbef9d4cfe41ea748605e41afadb0195a83323ef1e2b454aeb12cc466536301
   runner_log: 1382fd3081302280a59da8b7003124be3de3e8db4e95dbcc5b9fe57afad40225
 decision: Fix invalid-run classification, readiness, and child-process shutdown validation under tests; commit a new fingerprint; then preregister a non-headless Batch B held by the approved GUI tmux flow.
+```
+
+## Task 15 FULL_RESTART Batch B Registration
+
+```yaml
+registered_at: 2026-08-12T09:00:00+08:00
+batch_id: TASK15-FULL-B
+lifecycle: FULL_RESTART
+status: PLANNED
+experiments: [EXP-158, EXP-159, EXP-160, EXP-161, EXP-162]
+target_consecutive_successes: 5
+automatic_extra_attempts: forbidden
+source_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+fingerprint:
+  dependency_sha256: 1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808
+  contact_policy_sha256: 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1
+runtime:
+  evidence_root: /tmp/so101-task15-full-b
+  headless: false
+  gui_holder: so101-mujoco-gui:task15-full-b
+  base_ros_domain_id: 175
+  domains: [175, 176, 177, 178, 179]
+  base_teleop_port: 8015
+  session_ids:
+    - TASK15-FULL-B-full-01
+    - TASK15-FULL-B-full-02
+    - TASK15-FULL-B-full-03
+    - TASK15-FULL-B-full-04
+    - TASK15-FULL-B-full-05
+success_contract:
+  - Every run creates a new non-headless stack through the GUI tmux environment, reaches controller and Planning Scene readiness, applies the viewer preset, resets transactionally, completes the nine-phase physical workflow, and shuts down cleanly.
+  - Any infrastructure/provenance failure is INVALID and ends the batch; any valid workflow failure resets the consecutive count; no hidden retry occurs.
+next_experiment: EXP-158 through the registered runner only.
+```
+
+## Task 15 FULL_RESTART Batch B Terminal Result
+
+```yaml
+terminal_time: 2026-08-12T09:09:41+08:00
+batch_id: TASK15-FULL-B
+status: VALID
+experiments: [EXP-158, EXP-159, EXP-160, EXP-161, EXP-162]
+attempt_count: 5
+consecutive_successes: 5
+counted_successes: 5
+batch_invalid: false
+source_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+per_run:
+  - {experiment: EXP-158, session: TASK15-FULL-B-full-01, domain: 175, reset_epoch: 1, final_pose_m: [-0.07870902904183748, -0.2480152757580445, 0.1651051008820567], final_tilt_rad: 0.011637771848987144}
+  - {experiment: EXP-159, session: TASK15-FULL-B-full-02, domain: 176, reset_epoch: 1, final_pose_m: [-0.0794816129735275, -0.24792933214016125, 0.1651371022885015], final_tilt_rad: 0.012468145324530113}
+  - {experiment: EXP-160, session: TASK15-FULL-B-full-03, domain: 177, reset_epoch: 1, final_pose_m: [-0.0791739346760244, -0.24816909315023863, 0.16550294259752052], final_tilt_rad: 0.01747587406144718}
+  - {experiment: EXP-161, session: TASK15-FULL-B-full-04, domain: 178, reset_epoch: 1, final_pose_m: [-0.07886853205275962, -0.24808143591355455, 0.1654872575903621], final_tilt_rad: 0.01753673431632128}
+  - {experiment: EXP-162, session: TASK15-FULL-B-full-05, domain: 179, reset_epoch: 1, final_pose_m: [-0.07933956514285001, -0.24811325995470807, 0.1654883825112271], final_tilt_rad: 0.017397149731080738}
+shared_physical_contract:
+  sample_count_each: 18
+  intended_support_contact: true
+  gripper_contact: false
+  moveit_attached: false
+  world_object_synchronized: true
+  primary_failure: null
+clean_shutdown_each:
+  launch_returncode: 0
+  ordered_shutdown_marker: true
+  process_died: false
+  fatal_signal: false
+  residual_owned_processes: []
+evidence_sha256:
+  qualification_manifest: 98c29b847cd40c5ca2061596739f8d66eaf96d3b4b1c707048371fb9773b6f11
+  runner_log: ac07e1163af6959620fb660c11334d0d62799638a15d6e5cf56e185f4c3176ac
+decision: Task 15.2 passed. Keep this lifecycle separate and preregister one shared-stack RESET_WORLD batch at the same frozen fingerprint.
+```
+
+## Task 15 RESET_WORLD Batch A Registration
+
+```yaml
+registered_at: 2026-08-12T09:13:00+08:00
+batch_id: TASK15-RESET-A
+lifecycle: RESET_WORLD
+status: PLANNED
+experiments: [EXP-163, EXP-164, EXP-165, EXP-166, EXP-167]
+target_consecutive_successes: 5
+automatic_extra_attempts: forbidden
+source_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+fingerprint:
+  dependency_sha256: 1df4cf0677b1d92ae1c64d2e2064fd4dd88d7e92111c74320e7170dd431fde6d
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  motion_policy_sha256: d39bbbed69c2376ddfb816a51bd8fd720dd82c55b17b1340f13e0d5d02b93808
+  contact_policy_sha256: 3b857d9663953a8f41382061b1c068798e3c54bc6d478eceebab0989ae331db1
+runtime:
+  evidence_root: /tmp/so101-task15-reset-a
+  headless: false
+  gui_holder: so101-mujoco-gui:task15-reset-a
+  ros_domain_id: 180
+  teleop_port: 8020
+  simulation_session_id: TASK15-RESET-A-reset
+  expected_reset_epochs: [1, 2, 3, 4, 5]
+success_contract:
+  - One qualified MuJoCo, MoveIt, controller, Planning Scene, and Teleop stack is reused for all five runs.
+  - Every run applies the viewer preset, completes the full transactional reset to step 0 with a strictly increasing epoch, and executes the same nine production phases with typed physical outcome.
+  - The batch uses the same fail-visible rules as FULL_RESTART, but cannot mix its successes with that lifecycle.
+  - The shared stack has one ordered clean shutdown after the fifth success and leaves no owned processes.
+next_experiment: EXP-163 through the registered RESET_WORLD runner only.
+```
+
+## Task 15 RESET_WORLD Batch A Terminal Result
+
+```yaml
+terminal_time: 2026-08-12T09:28:01+08:00
+batch_id: TASK15-RESET-A
+status: VALID
+experiments: [EXP-163, EXP-164, EXP-165, EXP-166, EXP-167]
+attempt_count: 5
+consecutive_successes: 5
+counted_successes: 5
+batch_invalid: false
+source_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+shared_runtime:
+  ros_domain_id: 180
+  simulation_session_id: TASK15-RESET-A-reset
+  stack_restarts_between_runs: 0
+  reset_epochs: [1, 2, 3, 4, 5]
+  simulation_steps_after_reset: [0, 0, 0, 0, 0]
+per_run:
+  - {experiment: EXP-163, reset_epoch: 1, final_pose_m: [-0.07925339504477642, -0.24840156502196592, 0.16550458539277604], final_tilt_rad: 0.017662482620740078, maximum_angular_speed_rad_s: 0.0}
+  - {experiment: EXP-164, reset_epoch: 2, final_pose_m: [-0.08038700141786004, -0.24825951332423854, 0.16550596842309984], final_tilt_rad: 0.017556463472106425, maximum_angular_speed_rad_s: 0.00001032382731181653}
+  - {experiment: EXP-165, reset_epoch: 3, final_pose_m: [-0.07982376333502826, -0.24719319867378764, 0.16497968443900188], final_tilt_rad: 0.008406987281163883, maximum_angular_speed_rad_s: 0.000011151007970504}
+  - {experiment: EXP-166, reset_epoch: 4, final_pose_m: [-0.07868100596353607, -0.24799007032048384, 0.16549354115837442], final_tilt_rad: 0.01748144202874028, maximum_angular_speed_rad_s: 0.0}
+  - {experiment: EXP-167, reset_epoch: 5, final_pose_m: [-0.07982486742431817, -0.2481017843207424, 0.165487299198285], final_tilt_rad: 0.017521160997625542, maximum_angular_speed_rad_s: 0.0000029802322387722418}
+shared_physical_contract:
+  completed_phase_count_each: 9
+  intended_support_contact: true
+  gripper_contact: false
+  moveit_attached: false
+  world_object_synchronized: true
+  primary_failure: null
+  maximum_linear_speed_m_s: 0.0
+clean_shutdown:
+  launch_returncode: 0
+  ordered_shutdown_marker: true
+  process_died: false
+  fatal_signal: false
+  residual_owned_processes: []
+evidence_sha256:
+  qualification_manifest: e49a6d2a4256c10d5a4d901620fc24429ea58a511f320f3178d857860e7e59dc
+  runner_log: bc7eecbf54d0e1a08989a82e03fc8dd072d220a709524f7184f251303cde8246
+decision: Task 15.3 passed independently of FULL_RESTART. Proceed to the clean final gates and one uncounted fresh CUA visual corroboration.
+```
+
+## Task 15 Final Clean Gate
+
+```yaml
+recorded_at: 2026-08-12T09:33:00+08:00
+status: VALID
+source_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+gates:
+  mujoco_pytest: {passed: 365, skipped: 4, failures: 0, exit_code: 0}
+  ruff: {checked_files: 109, formatted: 109, exit_code: 0}
+  teleop_vitest: {files_passed: 14, tests_passed: 45, exit_code: 0}
+  colcon: {tests: 857, errors: 0, failures: 0, skipped: 6, exit_code: 0}
+  packages: [so101_mujoco_support, so101_teleop, so101_mujoco_demo_py]
+  fork_runtime_probe: passed
+  reset_runtime_probe: passed
+  root_isolation: passed
+  package_isolation: passed
+  protected_gazebo_diff: zero
+  protected_gazebo_status: clean
+  git_diff_check: passed
+evidence_sha256:
+  pytest: 4aef85af170dcca447b8a7c4a737430c430a74aaf17541e827b5d0a2d19aeb14
+  ruff: 4a4814071a4c256e300d4487eea7b43e8b0417f5a3ebd5b93a008fbaf2911b6b
+  vitest: 3ef56f06fa0419de469a87cc61304e72685d07236d9acc73b3e1e97952f92f55
+  build: df253323c5766b99b41f9bab773dbe9a2e344538e23d58c48244ecc97be71829
+  colcon_test: be301ea3c04fa2f063f999c48896262ca5df2aea953d4f7195ea56c00ba00b61
+  test_result: 199cd2e6ac756d2a95be2034e0dc862747de382aec4e8a9fa4863406184eb712
+  runtime_probe: 7aafeb88b3169104bd1ae1e52f6650c8b4b0cb3d7ca7b936dd4df2f757c5fc8e
+  reset_runtime_probe: d08113b313ff169296dcb4a5d1657ca2f824704b25b98bf61273133a7faad55e
+decision: The frozen implementation is eligible for a fresh uncounted visual corroboration and final documentation commit.
+```
+
+## Experiment EXP-168 Registration
+
+```yaml
+registered_at: 2026-08-12T09:34:00+08:00
+experiment_id: EXP-168
+lifecycle: FULL_RESTART_VISUAL_REVIEW
+qualification_counting: false
+purpose: Fresh CUA corroboration of the frozen qualified implementation after all 5+5 counted runs and final clean gates.
+source_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+fingerprint: identical to TASK15-FULL-B and TASK15-RESET-A
+runtime:
+  ros_domain_id: 181
+  simulation_session_id: TASK15-FINAL-VISUAL-domain181
+  teleop_port: 8021
+  evidence_root: /tmp/so101-task15-final-visual
+  stack_holder: so101-mujoco-gui:task15-final-visual
+  rviz_holder: so101-mujoco-gui:task15-final-rviz
+success_criteria:
+  - One production Teleop reset/workflow returns a complete typed physical outcome and leaves the final state live for review.
+  - Fresh cua-driver evidence shows RViz left and MuJoCo right with robot, base, table, cup, target ring, and completed placement visible; the gripper is open and arm retreated clear.
+  - The exact owned stack and RViz processes then exit cleanly with no residual processes.
+invalid_criteria: Any source/fingerprint change, reused counted evidence, missing fresh CUA, hidden GUI control, or broad cleanup.
+status: PLANNED
+next_experiment: EXP-168 only; this visual review never increments either qualification series.
+```
+
+## Experiment EXP-168 Terminal Result
+
+```yaml
+terminal_time: 2026-08-12T09:40:43+08:00
+experiment_id: EXP-168
+status: VALID
+qualification_counting: false
+source_commit: 279e5b381406e09cae34ccbcef39ef7d63f00c0b
+reset:
+  simulation_session_id: TASK15-FINAL-VISUAL-domain181
+  old_epoch: 0
+  new_epoch: 1
+  simulation_step: 0
+workflow:
+  completed_phase_count: 9
+  checkpoint_fresh: true
+  primary_failure: null
+  sample_count: 18
+  final_pose_m: [-0.07913905766012944, -0.24796878767406802, 0.16537073628120882]
+  final_upright_tilt_rad: 0.015552708794640963
+  maximum_linear_speed_m_s: 0.0
+  maximum_angular_speed_rad_s: 0.0000043015947132528125
+  intended_support_contact: true
+  gripper_contact: false
+  moveit_attached: false
+  world_object_synchronized: true
+visual:
+  route: codex-cua loaded cua-driver
+  fresh_snapshot: true
+  gui_actions_performed: false
+  rviz_left_mujoco_right: passed
+  mujoco_status_running: passed
+  robot_base_table_cup_ring_visible: passed
+  cup_inside_target_ring: passed
+  gripper_open_arm_retreated_clear: passed
+  rviz_planning_scene_objects_visible: passed
+  local_agent_original_image_review: passed
+clean_shutdown:
+  stack_signal: exact process-group SIGINT
+  stack_returncode: 0
+  ordered_shutdown_marker: true
+  process_died: false
+  fatal_signal: false
+  rviz_owned_process_exited: true
+  residual_owned_processes: []
+evidence_sha256:
+  actions: d90acc6cd83917f895ad0d8cb838785ce6253d6b18742d9104d06a5eb19e280c
+  launch_log: 6751063a690271764f66f34d321755cb719a18bf729b4f12bb3cd816c105e596
+  final_cua: c5ffd4865cd33966f3f888513ad362572af76c5d3bb9e2f13fab0b11d7b936a0
+decision: Fresh visual corroboration agrees with typed physical and Planning Scene evidence. Commit and push the Task 15 qualification artifacts.
+```
+
+## Task 15 Final Checkpoint
+
+```yaml
+checkpoint_id: CP-155
+recorded_at: 2026-08-12T09:41:00+08:00
+last_valid_experiment: EXP-168 VALID uncounted visual corroboration
+qualified_series:
+  full_restart: TASK15-FULL-B, 5 consecutive successes
+  reset_world: TASK15-RESET-A, 5 consecutive successes
+working_tree_status: Only Task 15 plan, ledger, and qualification-report paths are intentionally dirty before the required qualification commit.
+owned_processes: NONE
+preserved_processes: All unrelated tmux sessions and processes remain untouched.
+confirmed_conclusions:
+  - The frozen post-rebase Teleop-integrated production path passes both separately counted repeatability lifecycles.
+  - Transactional ResetWorld is valid across epochs 1 through 5 on one live stack.
+  - Final clean gates and fresh CUA corroboration passed without changing protected Gazebo Python sources.
+open_risks:
+  - Qualification covers simulation only; RGB-D perception, VLM localization, and real-hardware transfer remain out of scope.
+  - GUI evidence is corroborative and does not replace typed physical or Planning Scene evidence.
+next_command: Commit with test(so101_mujoco): qualify restart and reset repeatability, push normally, then record the remote commit checkpoint.
 ```
