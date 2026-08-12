@@ -19,6 +19,7 @@ def test_setup_maps_so101_demo_namespace_to_src(monkeypatch) -> None:
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(setuptools, "setup", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.chdir(PACKAGE_ROOT)
     runpy.run_path(str(PACKAGE_ROOT / "setup.py"), run_name="__main__")
 
     assert captured["name"] == "so101_demo_py"
