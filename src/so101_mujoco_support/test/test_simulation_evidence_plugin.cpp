@@ -22,7 +22,11 @@ namespace
 {
 using so101_mujoco_support::EvidenceBuilder;
 using so101_mujoco_support::EvidenceState;
+using so101_mujoco_support::PhysicsStepEvidenceBuffer;
 using so101_mujoco_support::SimulationEvidencePlugin;
+using so101_mujoco_support::make_physics_step_evidence;
+using so101_mujoco_support::msg::ContactSample;
+using so101_mujoco_support::msg::PhysicsStepEvidence;
 using so101_mujoco_support::msg::SimulationEvidence;
 
 struct ModelDeleter
@@ -450,5 +454,169 @@ TEST_F(AtomicEvidenceTest, SeparatesOtherObjectContactAndHonorsGlobalBound)
   const auto truncated = bounded.build(model_.get(), data_.get(), false, bounded_state);
   EXPECT_TRUE(truncated.truncated);
   EXPECT_TRUE(truncated.other_object_contacts.empty());
+}
+
+PhysicsStepEvidence physics_step_sample(uint64_t step, double force_n)
+{
+  PhysicsStepEvidence sample;
+  sample.simulation_session_id = "phase-aware-test";
+  sample.reset_epoch = 3;
+  sample.physics_step = step;
+  sample.simulation_time_s = static_cast<double>(step) * 0.002;
+  sample.maximum_normal_force_n = force_n;
+  sample.global_max_single_contact_force_n = force_n;
+  return sample;
+}
+
+TEST(PhysicsStepEvidenceBufferTest, KeepsIntermediateFiveHundredHertzSpikeInHundredHertzChunk)
+{
+  PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
+  const std::vector<double> forces{1.0, 2.0, 12.0, 2.0, 1.0};
+  for (std::size_t index = 0; index < forces.size(); ++index) {
+    ASSERT_TRUE(buffer.append(physics_step_sample(index + 1, forces[index])));
+  }
+
+  ASSERT_TRUE(buffer.ready());
+  const auto chunk = buffer.prepare_chunk();
+  ASSERT_EQ(chunk.samples.size(), 5U);
+  EXPECT_EQ(chunk.first_physics_step, 1U);
+  EXPECT_EQ(chunk.last_physics_step, 5U);
+  EXPECT_DOUBLE_EQ(chunk.samples[2].global_max_single_contact_force_n, 12.0);
+  EXPECT_FALSE(chunk.evidence_loss);
+}
+
+TEST(PhysicsStepEvidenceBufferTest, FailedPublishAttemptRetainsContinuousRangeAndIsDetectable)
+{
+  PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
+  for (uint64_t step = 1; step <= 5; ++step) {
+    ASSERT_TRUE(buffer.append(physics_step_sample(step, static_cast<double>(step))));
+  }
+  const auto first_attempt = buffer.prepare_chunk();
+  buffer.mark_publish_failed();
+  const auto retry = buffer.prepare_chunk();
+
+  ASSERT_EQ(first_attempt.samples.size(), retry.samples.size());
+  EXPECT_EQ(retry.first_physics_step, 1U);
+  EXPECT_EQ(retry.last_physics_step, 5U);
+  EXPECT_EQ(retry.failed_publish_attempts, 1U);
+  for (std::size_t index = 0; index < retry.samples.size(); ++index) {
+    EXPECT_EQ(retry.samples[index].physics_step, index + 1);
+  }
+}
+
+TEST(PhysicsStepEvidenceBufferTest, EqualityBreachesAndFirstHazardLatchCannotBeOverwritten)
+{
+  PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
+  ASSERT_TRUE(buffer.append(physics_step_sample(1, 11.59)));
+  ASSERT_TRUE(buffer.append(physics_step_sample(2, 11.60)));
+  ASSERT_TRUE(buffer.append(physics_step_sample(3, 15.0)));
+  ASSERT_TRUE(buffer.append(physics_step_sample(4, 1.0)));
+
+  const auto hazard = buffer.hazard_latch();
+  ASSERT_TRUE(hazard.has_value());
+  EXPECT_EQ(hazard->physics_step, 2U);
+  EXPECT_DOUBLE_EQ(hazard->simulation_time_s, 0.004);
+  EXPECT_DOUBLE_EQ(hazard->force_n, 11.60);
+  EXPECT_EQ(hazard->simulation_session_id, "phase-aware-test");
+  EXPECT_EQ(hazard->reset_epoch, 3U);
+}
+
+TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFingertipOnly)
+{
+  SimulationEvidence snapshot;
+  snapshot.simulation_session_id = "metric-test";
+  snapshot.reset_epoch = 4;
+  snapshot.simulation_step = 10;
+  snapshot.has_contact = true;
+  snapshot.maximum_normal_force_n = 5.0;
+  const auto contact = [](double force, double distance, double nx, double ny, double nz) {
+    ContactSample sample;
+    sample.normal_force_n = force;
+    sample.signed_distance_m = distance;
+    sample.normal_world.x = nx;
+    sample.normal_world.y = ny;
+    sample.normal_world.z = nz;
+    return sample;
+  };
+  snapshot.left_fingertip_contacts = {
+    contact(2.0, -0.001, 1.0, 0.0, 0.0),
+    contact(3.0, -0.002, 1.0, 0.0, 0.0),
+  };
+  snapshot.right_fingertip_contacts = {
+    contact(4.0, -0.003, 0.0, 1.0, 0.0),
+  };
+  snapshot.other_object_contacts = {
+    contact(5.0, -0.010, 0.0, 0.0, 1.0),
+  };
+
+  const auto sample = make_physics_step_evidence(snapshot, 0.020, 1.1579004532160448, 11.60);
+
+  EXPECT_DOUBLE_EQ(sample.maximum_normal_force_n, 5.0);
+  EXPECT_DOUBLE_EQ(sample.global_max_single_contact_force_n, 5.0);
+  EXPECT_DOUBLE_EQ(sample.left_fingertip_total_normal_force_n, 5.0);
+  EXPECT_DOUBLE_EQ(sample.right_fingertip_total_normal_force_n, 4.0);
+  EXPECT_DOUBLE_EQ(sample.fingertip_max_single_contact_force_n, 4.0);
+  EXPECT_DOUBLE_EQ(sample.left_fingertip_compression_m, 0.002);
+  EXPECT_DOUBLE_EQ(sample.right_fingertip_compression_m, 0.003);
+  EXPECT_DOUBLE_EQ(sample.net_contact_force_world_n.x, 5.0);
+  EXPECT_DOUBLE_EQ(sample.net_contact_force_world_n.y, 4.0);
+  EXPECT_DOUBLE_EQ(sample.net_contact_force_world_n.z, 5.0);
+  EXPECT_TRUE(sample.static_shadow_crossed);
+  EXPECT_FALSE(sample.diagnostic_hazard_breached);
+}
+
+TEST_F(AtomicEvidenceTest, PhysicsStepAdvancesAtFiveHundredHertzNotPublishCadence)
+{
+  if (!rclcpp::ok())
+    rclcpp::init(0, nullptr);
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+    rclcpp::Parameter("object_body", "cup"),
+    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+    rclcpp::Parameter("simulation_session_id", "physics-step-test"),
+    rclcpp::Parameter("publish_rate", 100.0),
+    rclcpp::Parameter("topic", "/test/so101/physics_step_snapshot"),
+  });
+  auto node = std::make_shared<rclcpp::Node>("physics_step_plugin", options);
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+
+  plugin.update(model_.get(), data_.get());
+  for (uint64_t step = 1; step <= 5; ++step) {
+    data_->time = static_cast<double>(step) * model_->opt.timestep;
+    plugin.update(model_.get(), data_.get());
+  }
+
+  EXPECT_EQ(plugin.state_.simulation_step, 5U);
+  plugin.cleanup();
+  rclcpp::shutdown();
+}
+
+TEST_F(AtomicEvidenceTest, RepeatedNonAdvancingUpdateDoesNotInventDuplicatePhysicsStep)
+{
+  if (!rclcpp::ok())
+    rclcpp::init(0, nullptr);
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+    rclcpp::Parameter("object_body", "cup"),
+    rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+    rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+    rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+    rclcpp::Parameter("simulation_session_id", "non-advancing-test"),
+    rclcpp::Parameter("publish_rate", 100.0),
+    rclcpp::Parameter("topic", "/test/so101/non_advancing_snapshot"),
+  });
+  auto node = std::make_shared<rclcpp::Node>("non_advancing_plugin", options);
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+
+  plugin.update(model_.get(), data_.get());
+  plugin.update(model_.get(), data_.get());
+
+  EXPECT_EQ(plugin.state_.simulation_step, 0U);
+  ASSERT_NE(plugin.physics_step_buffer_, nullptr);
+  EXPECT_FALSE(plugin.physics_step_buffer_->evidence_loss_latched());
+  plugin.cleanup();
+  rclcpp::shutdown();
 }
 }  // namespace
