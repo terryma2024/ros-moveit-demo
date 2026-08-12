@@ -7,7 +7,7 @@ success_contract: All seven audit findings pass automated gates plus independent
 worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 70bece06e008b27da8f0923472668e95a369309e
-current_commit: 6bb9e20e7f749d51fe48eadfc75021188e4e92a1
+current_commit: e18aedcbb593842553655df5b0070f6e2df3b2ff
 evidence_root: /tmp/so101-debug-mujoco-maintainability-remediation/
 confirmed_conclusions:
   - CP-156: prior implementation passed the published five FULL_RESTART plus five RESET_WORLD simulation qualification.
@@ -20,8 +20,8 @@ confirmed_conclusions:
 disproven_routes:
   - Treating the prior 857-result colcon summary as a clean three-package result; it included 240 stale Gazebo tests.
 open_hypotheses: []
-latest_checkpoint: MNT-CP-035
-next_experiment: NONE_STOP_BEFORE_FIVE_RUN_QUALIFICATION
+latest_checkpoint: MNT-CP-036
+next_experiment: EXP-126
 ```
 
 ## Checkpoint MNT-CP-001
@@ -3911,4 +3911,204 @@ resolved:
   - Released-cup static support still enforces 1.1579004532160448 N and passed at 0.23494367933416632 N.
   - The unchanged production strategy completed all nine phases once without retry, reset, pause, direct object write, or simulator constraint.
 next_command: Stop. Do not start a five-run batch until its own ledger preregistration is reviewed.
+```
+
+## Checkpoint MNT-CP-036 — five-run qualification recovery and preregistration
+
+```yaml
+checkpoint_id: MNT-CP-036
+recorded_at: 2026-08-12T21:45:00+08:00
+last_valid_experiment: EXP-125
+recovery_status: COMPLETE
+execution_host: AI-STATION-001; direct local execution, no SSH
+worktree:
+  path: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
+  linked_worktree: true
+  branch: codex/so101-mujoco-ros2-teleop
+  head_before_preregistration: e18aedcbb593842553655df5b0070f6e2df3b2ff
+  tracked_status: CLEAN
+  protected_untracked_user_files:
+    - docs/experiments/so101-gazebo-mujoco-policy-parity-solver-iters-ledger.md
+    - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md
+  protected_gazebo_status: src/so101_gazebo_demo_py has zero status, unstaged diff, and staged diff.
+fork_provenance:
+  local_commit: 738e304551b4ea6db020b466086a13db71b65607
+  local_tag: so101-0.0.3-r6; annotated and peels to the local commit
+  gitee_origin_main: 738e304551b4ea6db020b466086a13db71b65607
+  gitee_remote_tag: so101-0.0.3-r6; annotated and peels to 738e304551b4ea6db020b466086a13db71b65607
+  local_vs_origin_main: {ahead: 0, behind: 0}
+  submodule_status: CLEAN
+runtime_preflight:
+  owned_processes: NONE
+  relevant_processes: NONE
+  ros_domains_empty: [0, 198, 199, 200, 201, 202]
+  free_http_ports: [8038, 8039, 8040, 8041, 8042]
+  absent_tmux_sessions: [so101-mnt-q-exp126, so101-mnt-q-exp127, so101-mnt-q-exp128, so101-mnt-q-exp129, so101-mnt-q-exp130]
+  absent_evidence_roots:
+    - /data/work/so101-debug-mujoco-maintainability-remediation/exp126
+    - /data/work/so101-debug-mujoco-maintainability-remediation/exp127
+    - /data/work/so101-debug-mujoco-maintainability-remediation/exp128
+    - /data/work/so101-debug-mujoco-maintainability-remediation/exp129
+    - /data/work/so101-debug-mujoco-maintainability-remediation/exp130
+  preserved_tmux: [codex attached, codex-cua idle at zsh prompt, so101-mujoco-gui historical windows]
+recovered_EXP_125:
+  behavior_source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271
+  result_commit: e18aedcbb593842553655df5b0070f6e2df3b2ff
+  simulation_session_id: MNT-A-EXP125-full-01
+  ros_domain_id: 197
+  http_port: 8037
+  gz_partition: so101-mnt-a-exp125
+  result: VALID_SUCCESS; HTTP 200; manifest DONE; all nine phases passed.
+  transport: 746 chunks, 3730 consecutive samples, 0.002 s timestep, run-index sha256 13f02db3c9ef203f984f3471e72f8af08ed50452adec0b8a72b2dacd8728cd8c.
+  physical: Final cup upright and supported inside target, gripper contact false, MoveIt detached/world synchronized, arm clear.
+  visual_sha256: cebd657c3363df16d6d1bfaea55317e2e54beb98f6a6ed55d9234ac14acb0e85
+  shutdown: Ordered shutdown, Domain 197, port 8037, and owned-process cleanup passed.
+confirmed_conclusions:
+  - EXP-125 proves the unchanged strategy completes all nine phases when held-cup descend, alignment, and pre-release use the inclusive 11.60 N dynamic diagnostic hard stop while released static support retains 1.1579004532160448 N.
+  - EXP-124 proves lossless 500 Hz evidence on the qualification-provisioned NVMe volume; its earlier post-transport failure was not an evidence or grasp-strategy defect.
+  - The r6 fork commit/tag is now published and exactly synchronized with the local submodule.
+disproven_routes:
+  - Treating dynamic held-cup crossings of the static threshold as strategy failure.
+  - Attributing EXP-124's post-transport failure to storage, the r6 physics hook, retry, stale manifests, or changed physical strategy.
+  - Reusing stale installs or mixing FULL_RESTART with RESET_WORLD evidence.
+next_experiment_new_information:
+  prior: EXP-125 is one non-counting FULL_RESTART success under the frozen production contract.
+  new: EXP-126 through EXP-130 will test whether the exact same behavior and one fresh common overlay produce five consecutive independent FULL_RESTART successes.
+owned_processes: NONE
+next_experiment: EXP-126
+next_command: Commit this preregistration, then create one fresh isolated three-package build/test overlay before EXP-126 can transition to RUNNING.
+```
+
+## EXP-126 through EXP-130 — five consecutive FULL_RESTART qualification preregistration
+
+```yaml
+batch_id: MNT-Q-EXP126-130
+status: PLANNED
+registered_at: 2026-08-12T21:45:00+08:00
+prior_experiment: EXP-125
+goal: Five consecutive VALID production nine-phase successes under independent FULL_RESTART lifecycles.
+qualification_contract:
+  lifecycle: FULL_RESTART
+  target_consecutive_successes: 5
+  workflow_invocations_per_run: 1
+  reset_transactions_per_run: 1
+  retry_count: 0
+  forbidden_actions: [second reset, physics pause, direct object write, simulator constraint, hidden attachment, strategy tuning]
+  stop_rule: Any VALID business failure ends the streak and batch; any INVALID run invalidates and stops the batch.
+frozen_behavior:
+  behavior_source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271
+  parent_result_commit_before_preregistration: e18aedcbb593842553655df5b0070f6e2df3b2ff
+  fork_runtime_commit: 738e304551b4ea6db020b466086a13db71b65607
+  fork_release_tag: so101-0.0.3-r6
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  contact_policy_sha256: c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82
+  dependency_lock_sha256: be6bc595cd71a10df32765e11884183c0096db765a5ee35c3ef6a0b109ef5a3a
+  task_scene_sha256: a2a49391e52d1f885e8ebb4c85fd282d1e83f0ce82eb63e83bac645343b1f9a0
+  scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
+  robot_mjcf_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
+  urdf_sha256: 0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a
+  frozen_manifest_file_sha256: eb42f058017252c8c9824f408982a5f29939bba41a27a32c8ad963aab61a90ed
+  static_threshold_n: 1.1579004532160448
+  dynamic_diagnostic_hard_stop_n: 11.60; inclusive
+common_provenance:
+  install_overlay: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install
+  runtime_package_prefix: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-gate/install/so101_mujoco_demo_py
+  runtime_fingerprint: /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-runtime-fingerprint.json
+  run_harness: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py
+  source_contract: Build from the committed preregistration source; record the exact preregistration commit, install tree hash, runtime fingerprint hash, package prefixes, and harness hash before EXP-126 RUNNING.
+common_success_criteria:
+  - Fresh transactional ResetWorld receipt matches the run session, simulation step 0, and an increasing epoch.
+  - One natural /workflow/run returns HTTP 200 with the exact nine-phase trace and terminal statuses through RELEASE_RETREAT_FINAL_PLACEMENT_PROVED; manifest status is DONE.
+  - MuJoCo proves table support, upright cup inside target, no gripper contact, open gripper and clear arm, and bounded terminal twist.
+  - MoveIt proves detached cup synchronized as a world object with correct table, pedestal, and cup primitives; controllers, action results, and joint feedback are healthy.
+  - Transport evidence has one publisher per topic, exact session identity, consecutive 0.002 s physics steps, valid content hashes, and no truncation, loss, gap, duplicate, reversal, or identity mismatch.
+  - Direct object writes, physics pause calls, simulator constraint calls, retries, and hidden attachments remain zero.
+  - A fresh existing-codex-cua snapshot visibly proves MuJoCo Running, robot/pedestal/table/cup/ring visible, upright cup in ring, gripper open, and arm clear.
+  - Ordered shutdown passes and the registered domain, port, tmux/process ownership set are empty before the next run.
+common_failure_criteria:
+  - Any fresh, provenance-valid business/physical/scene/controller/visual failure is VALID and ends the batch.
+common_invalid_criteria:
+  - Any source/install/fingerprint mismatch, initial-state pollution, missing visual proof, evidence identity/loss fault, unexpected retry/reset/pause/write/constraint, duplicate stack, or unclean cleanup is INVALID and stops the batch.
+experiments:
+  - experiment_id: EXP-126
+    status: PLANNED
+    prior_experiment: EXP-125
+    hypothesis: The frozen production contract succeeds after one independent FULL_RESTART.
+    prediction: All common success criteria pass with consecutive_count 1.
+    single_variable: NONE
+    lifecycle: FULL_RESTART
+    provenance:
+      simulation_session_id: MNT-Q-EXP126-full-01
+      ros_domain_id: 198
+      http_port: 8038
+      gz_partition: so101-mnt-q-exp126
+      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp126
+    command: GZ_PARTITION=so101-mnt-q-exp126 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-126 --session-id MNT-Q-EXP126-full-01 --domain-id 198 --port 8038 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp126
+    decision: PENDING
+    next_experiment: EXP-127_ON_SUCCESS_ONLY
+  - experiment_id: EXP-127
+    status: PLANNED
+    prior_experiment: EXP-126
+    hypothesis: A second independent FULL_RESTART extends the unchanged streak.
+    prediction: All common success criteria pass with consecutive_count 2.
+    single_variable: NONE
+    lifecycle: FULL_RESTART
+    provenance:
+      simulation_session_id: MNT-Q-EXP127-full-01
+      ros_domain_id: 199
+      http_port: 8039
+      gz_partition: so101-mnt-q-exp127
+      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp127
+    command: GZ_PARTITION=so101-mnt-q-exp127 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-127 --session-id MNT-Q-EXP127-full-01 --domain-id 199 --port 8039 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp127
+    decision: PENDING
+    next_experiment: EXP-128_ON_SUCCESS_ONLY
+  - experiment_id: EXP-128
+    status: PLANNED
+    prior_experiment: EXP-127
+    hypothesis: A third independent FULL_RESTART extends the unchanged streak.
+    prediction: All common success criteria pass with consecutive_count 3.
+    single_variable: NONE
+    lifecycle: FULL_RESTART
+    provenance:
+      simulation_session_id: MNT-Q-EXP128-full-01
+      ros_domain_id: 200
+      http_port: 8040
+      gz_partition: so101-mnt-q-exp128
+      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp128
+    command: GZ_PARTITION=so101-mnt-q-exp128 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-128 --session-id MNT-Q-EXP128-full-01 --domain-id 200 --port 8040 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp128
+    decision: PENDING
+    next_experiment: EXP-129_ON_SUCCESS_ONLY
+  - experiment_id: EXP-129
+    status: PLANNED
+    prior_experiment: EXP-128
+    hypothesis: A fourth independent FULL_RESTART extends the unchanged streak.
+    prediction: All common success criteria pass with consecutive_count 4.
+    single_variable: NONE
+    lifecycle: FULL_RESTART
+    provenance:
+      simulation_session_id: MNT-Q-EXP129-full-01
+      ros_domain_id: 201
+      http_port: 8041
+      gz_partition: so101-mnt-q-exp129
+      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp129
+    command: GZ_PARTITION=so101-mnt-q-exp129 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-129 --session-id MNT-Q-EXP129-full-01 --domain-id 201 --port 8041 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp129
+    decision: PENDING
+    next_experiment: EXP-130_ON_SUCCESS_ONLY
+  - experiment_id: EXP-130
+    status: PLANNED
+    prior_experiment: EXP-129
+    hypothesis: A fifth independent FULL_RESTART completes the unchanged streak.
+    prediction: All common success criteria pass with consecutive_count 5 and qualifies the batch.
+    single_variable: NONE
+    lifecycle: FULL_RESTART
+    provenance:
+      simulation_session_id: MNT-Q-EXP130-full-01
+      ros_domain_id: 202
+      http_port: 8042
+      gz_partition: so101-mnt-q-exp130
+      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp130
+    command: GZ_PARTITION=so101-mnt-q-exp130 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-130 --session-id MNT-Q-EXP130-full-01 --domain-id 202 --port 8042 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp130
+    decision: PENDING
+    next_experiment: NONE_FINALIZE_BATCH_ON_SUCCESS
+decision: PLANNED
 ```
