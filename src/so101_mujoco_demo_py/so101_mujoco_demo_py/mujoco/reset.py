@@ -180,6 +180,7 @@ class MujocoResetClient:
                     raise self._failure("fresh joint feedback timeout")
                 self._progress()
             self._require(self._services.pause(True), "re-pause")
+            saw_expected_epoch_unpaused = False
             while self._monotonic() <= deadline:
                 self._progress()
                 try:
@@ -193,7 +194,13 @@ class MujocoResetClient:
                     raise self._failure("reset epoch mismatch")
                 if current.reset_epoch == expected_epoch:
                     if not current.paused:
-                        raise self._failure("final transaction evidence is not paused")
+                        # The pause service can complete before the observer
+                        # drains the last running frame emitted after the
+                        # bounded resume.  That frame is expected and must not
+                        # turn an otherwise valid transaction into a failure;
+                        # only a fresh, authoritatively paused frame may pass.
+                        saw_expected_epoch_unpaused = True
+                        continue
                     if not self._services.controllers_active(self._controllers):
                         raise self._failure("controller convergence failed")
                     if not self._services.joints_converged(
@@ -213,4 +220,6 @@ class MujocoResetClient:
             raise
         except Exception as error:
             raise self._failure(f"reset transaction error: {error}") from error
+        if saw_expected_epoch_unpaused:
+            raise self._failure("final transaction evidence is not paused")
         raise self._failure("reset timeout waiting for epoch and state convergence")

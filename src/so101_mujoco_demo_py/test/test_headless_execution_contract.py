@@ -114,6 +114,27 @@ def test_launch_composes_every_headless_runtime_boundary_and_shutdown_owner() ->
     assert sum(isinstance(action, RegisterEventHandler) for action in composition.actions) == 2
 
 
+def test_interactive_composition_keeps_stack_alive_without_duplicate_workflow() -> None:
+    module = load_launch_module()
+    composition = module.compose_launch(
+        PACKAGE_ROOT,
+        run_mode="dry_run",
+        execute=False,
+        headless=False,
+        start_simulation=True,
+        simulation_session_id="teleop-session",
+        evidence_file="/tmp/unused.json",
+        safe_pose="task12_safe",
+        readiness_timeout_s=30.0,
+        launch_workflow=False,
+    )
+
+    assert not composition.includes_workflow
+    assert not composition.shutdown_on_workflow_exit
+    assert ("so101_mujoco_demo_py", "headless_execution") not in (composition.node_executables)
+    assert not any(isinstance(action, RegisterEventHandler) for action in composition.actions)
+
+
 def test_ordered_move_group_stops_workers_before_controlled_process_exit() -> None:
     source = ORDERED_MOVE_GROUP_SOURCE.read_text(encoding="utf-8")
 

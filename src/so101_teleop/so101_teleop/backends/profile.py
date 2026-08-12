@@ -23,6 +23,7 @@ class ExecutableSpec:
     timeout_s: float
     fixed_args: tuple[str, ...] = ()
     scene_style: Literal["positional", "flag"] | None = None
+    session_style: Literal["flag"] | None = None
 
 
 @dataclass(frozen=True)
@@ -32,10 +33,17 @@ class BackendProfile:
     probe: ExecutableSpec
     capabilities: BackendCapabilities
     operations: Mapping[BackendOperation, ExecutableSpec]
+    camera_presets: tuple[str, ...]
 
 
-_PROFILE_FIELDS = {"backend", "owner_package", "probe", "capabilities", "operations"}
-_SPEC_FIELDS = {"package", "executable", "timeout_s", "fixed_args", "scene_style"}
+_PROFILE_FIELDS = {
+    "backend", "owner_package", "probe", "capabilities", "operations",
+    "camera_presets",
+}
+_SPEC_FIELDS = {
+    "package", "executable", "timeout_s", "fixed_args", "scene_style",
+    "session_style",
+}
 _CAPABILITY_FIELDS = set(BackendCapabilities.__dataclass_fields__)
 
 
@@ -62,6 +70,7 @@ def _parse_spec(value, label: str) -> ExecutableSpec:
     timeout_s = data["timeout_s"]
     fixed_args = data["fixed_args"]
     scene_style = data["scene_style"]
+    session_style = data["session_style"]
     if not isinstance(package, str) or not package:
         raise _schema_error(f"{label}.package must be a non-empty string")
     if not isinstance(executable, str) or not executable:
@@ -72,12 +81,15 @@ def _parse_spec(value, label: str) -> ExecutableSpec:
         raise _schema_error(f"{label}.fixed_args must be a string list")
     if scene_style not in (None, "positional", "flag"):
         raise _schema_error(f"{label}.scene_style is invalid")
+    if session_style not in (None, "flag"):
+        raise _schema_error(f"{label}.session_style is invalid")
     return ExecutableSpec(
         package=package,
         executable=executable,
         timeout_s=float(timeout_s),
         fixed_args=tuple(fixed_args),
         scene_style=scene_style,
+        session_style=session_style,
     )
 
 
@@ -116,6 +128,16 @@ def load_profile_file(path: Path, expected_backend: str) -> BackendProfile:
             raise _schema_error(f"unknown operation {name!r}") from error
         operations[operation] = _parse_spec(value, f"operations.{name}")
 
+    camera_presets = data["camera_presets"]
+    if (
+        not isinstance(camera_presets, list)
+        or not all(isinstance(name, str) and name for name in camera_presets)
+        or len(camera_presets) != len(set(camera_presets))
+    ):
+        raise _schema_error("camera_presets must be a unique non-empty string list")
+    if capabilities.camera_presets != bool(camera_presets):
+        raise _schema_error("camera_presets capability and configured names differ")
+
     probe = _parse_spec(data["probe"], "probe")
     specs = (probe, *operations.values())
     if any(spec.package != owner_package for spec in specs):
@@ -126,4 +148,5 @@ def load_profile_file(path: Path, expected_backend: str) -> BackendProfile:
         probe=probe,
         capabilities=capabilities,
         operations=MappingProxyType(operations),
+        camera_presets=tuple(camera_presets),
     )

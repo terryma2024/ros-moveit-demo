@@ -3,7 +3,7 @@ import subprocess
 from unittest.mock import Mock
 
 from so101_teleop.backends.cli_adapter import CliBackendAdapter, build_scene_args
-from so101_teleop.backends.protocol import BackendOperation
+from so101_teleop.backends.protocol import BackendOperation, CameraPresetRequest
 from so101_teleop.backends.protocol import ResetRequest, SceneRequest, WorkflowRequest
 from so101_teleop.backends.registry import load_backend_profile
 
@@ -166,14 +166,40 @@ def test_reset_accepts_owner_exit_success_without_stdout(tmp_path):
     assert runner.call_args.args[0][-1].endswith("reset_so101_world")
 
 
-def test_unsupported_operation_does_not_call_subprocess(tmp_path):
+def test_mujoco_routes_workflow_reset_session_and_camera_to_owner(tmp_path):
     adapter, runner = adapter_for(tmp_path, "mujoco_py")
 
     workflow = adapter.run_workflow(workflow_request("run"))
+    assert workflow.ok is True
+    assert runner.call_args.args[0][0].endswith("/teleop_workflow")
     reset = adapter.reset_world(ResetRequest("session-a"))
+    assert reset.ok is True
+    assert runner.call_args.args[0][-2:] == ["--session-id", "session-a"]
+    camera = adapter.apply_camera_preset(
+        CameraPresetRequest("table_corner_nw", "session-a")
+    )
+    assert camera.ok is True
+    assert runner.call_args.args[0][0].endswith("/camera_preset")
+    assert runner.call_args.args[0][-1] == "table_corner_nw"
+
+
+def test_mujoco_unsupported_operations_do_not_call_subprocess(tmp_path):
+    adapter, runner = adapter_for(tmp_path, "mujoco_py")
+
+    start = adapter.run_workflow(workflow_request("start"))
     scene = adapter.scene_operation(SceneRequest("observe", "session-a"))
 
-    assert {workflow.error.code, reset.error.code, scene.error.code} == {
+    assert {start.error.code, scene.error.code} == {
         "BACKEND_CAPABILITY_UNAVAILABLE"
     }
+    runner.assert_not_called()
+
+
+def test_unknown_camera_preset_fails_before_subprocess(tmp_path):
+    adapter, runner = adapter_for(tmp_path, "mujoco_py")
+
+    result = adapter.apply_camera_preset(CameraPresetRequest("unknown"))
+
+    assert result.ok is False
+    assert result.error.code == "CAMERA_PRESET_NOT_FOUND"
     runner.assert_not_called()

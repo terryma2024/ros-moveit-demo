@@ -46,7 +46,7 @@ from .backends.protocol import (
     SceneRequest,
     WorkflowRequest,
 )
-from .camera import CameraController
+from .camera import CameraControl
 from .control import CommandCoordinator, CommandIdReused, PlanRejected, PlanStore
 from .models import (CommandResult, JointPlanRequest, JointSample, PhysicalOutcomeEvidence,
                      PlanSummary, Pose6D, ServerMode, TcpPlanRequest, TelemetrySnapshot)
@@ -546,8 +546,9 @@ class RosTelemetryWorker:
         self.execute_plan(stored.summary.plan_id)
         self.gripper(-0.059600220867817)
 
-    def invalidate_session(self) -> str:
-        self._plans.clear(); self._active_goal=None; self._attached=None; self._session_id=f"reset-{uuid.uuid4()}"
+    def invalidate_session(self, preserved_session_id: str | None = None) -> str:
+        self._plans.clear(); self._active_goal=None; self._attached=None
+        self._session_id = preserved_session_id or f"reset-{uuid.uuid4()}"
         # /snapshot is served from the telemetry cache; update that cache in
         # the same critical section so a successful reset never exposes the
         # prior session to a command racing the next timer tick.
@@ -560,7 +561,7 @@ class TeleopService:
     def __init__(
         self,
         worker: RosTelemetryWorker,
-        camera: CameraController | None = None,
+        camera: CameraControl | None = None,
         *,
         backend: BackendProtocol,
     ) -> None:
@@ -720,10 +721,10 @@ class TeleopService:
                     path=await asyncio.to_thread(self._worker.capture_gazebo); return self._result(body,True,"OK","Gazebo window PNG captured",data={"url":"/captures/"+path.name})
                 if name == "camera_preset":
                     if gate:=self._mutation_gate(body): return gate
-                    if self._camera is None: return self._result(body,False,"GAZEBO_CAMERA_NOT_CONFIGURED","camera presets are unavailable")
+                    if self._camera is None: return self._result(body,False,"CAMERA_NOT_CONFIGURED","camera presets are unavailable")
                     preset = str(body.get("preset", ""))
                     await asyncio.to_thread(self._camera.apply, preset)
-                    return self._result(body,True,"OK",f"Gazebo camera moved to {preset}",data={"preset":preset})
+                    return self._result(body,True,"OK",f"camera preset applied: {preset}",data={"preset":preset})
                 if name == "parameters_save":
                     if gate:=self._mutation_gate(body): return gate
                     payload={"target_joints_rad":body.get("target_joints_rad",{}),"target_tcp":body.get("target_tcp"),"saved_session_id":self._worker.snapshot().simulation_session_id}
@@ -749,8 +750,19 @@ class TeleopService:
                         )
                         if failure := self._backend_result(body, envelope):
                             return failure
-                        new_session=self._worker.invalidate_session(); self._plans.clear(); self._lease=None; self._workflow.clear(); self._commands.clear()
-                        return self._result(body,True,"OK","backend reset owner converged and prior session invalidated",layers={"owner":envelope.owner_executable,"session_id":new_session})
+                        result = dict(envelope.result or {})
+                        preserved = (
+                            self._worker.snapshot().simulation_session_id
+                            if result.get("preserve_session") is True
+                            else None
+                        )
+                        new_session = (
+                            self._worker.invalidate_session()
+                            if preserved is None
+                            else self._worker.invalidate_session(preserved)
+                        )
+                        self._plans.clear(); self._lease=None; self._workflow.clear(); self._commands.clear()
+                        return self._result(body,True,"OK","backend reset owner converged and prior session invalidated",layers={"owner":envelope.owner_executable,"session_id":new_session},data={"reset":result})
                     envelope = await asyncio.to_thread(
                         self._backend.scene_operation,
                         SceneRequest("upsert", self._worker.snapshot().simulation_session_id),
@@ -795,6 +807,17 @@ class TeleopService:
                     trace=output.removeprefix("trace=")
                     states=[state.strip() for state in trace.split("->") if state.strip()]
                     physical_outcome = None
+                    owner_result = dict(envelope.result or {})
+                    owner_physical_outcome = owner_result.get("physical_outcome")
+                    if owner_physical_outcome is not None:
+                        if not isinstance(owner_physical_outcome, Mapping):
+                            return self._result(body,False,"BACKEND_OUTPUT_INVALID","backend physical outcome is not an object")
+                        try:
+                            physical_outcome = PhysicalOutcomeEvidence.parse_obj(
+                                owner_physical_outcome
+                            )
+                        except ValueError:
+                            return self._result(body,False,"BACKEND_OUTPUT_INVALID","backend physical outcome failed validation")
                     if checkpoint.is_file():
                         checkpoint_data = json.loads(checkpoint.read_text())
                         if checkpoint_data.get("last_completed_state") in {
@@ -802,7 +825,14 @@ class TeleopService:
                                 "SYNC_WORLD_OBJECT"}:
                             physical_outcome = physical_outcome_from_checkpoint(checkpoint_data)
                             self._worker._physical_outcome = physical_outcome
-                    return self._result(body,True,"OK","backend checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file(),"physical_outcome":physical_outcome.dict() if physical_outcome else None}})
+                    if physical_outcome is not None:
+                        self._worker._physical_outcome = physical_outcome
+                    evidence_manifest = owner_result.get("evidence_manifest")
+                    manifest_fresh = (
+                        isinstance(evidence_manifest, str)
+                        and Path(evidence_manifest).is_file()
+                    )
+                    return self._result(body,True,"OK","backend checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file() or manifest_fresh,"evidence_manifest":evidence_manifest if manifest_fresh else None,"physical_outcome":physical_outcome.dict() if physical_outcome else None}})
                 return self._result(body,False,"READINESS_NOT_SATISFIED",f"{name} requires a live dedicated gateway")
             except (RuntimeError, PlanRejected, KeyError, ValueError) as error:
                 layers = dict(getattr(self._worker, "_attachment_evidence", {})) if name.startswith("attachment_") else {}

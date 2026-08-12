@@ -10,7 +10,8 @@ from .api import create_app, validate_bind_address
 from .backends.cli_adapter import CliBackendAdapter
 from .backends.protocol import BackendProtocol
 from .backends.registry import load_backend_profile
-from .camera import CameraController, load_camera_presets
+from .backends.protocol import BackendOperation
+from .camera import BackendCameraController, CameraController, load_camera_presets
 from .server import RosTelemetryWorker
 from .service import TeleopService
 from .web_bundle import WebBundleError, validate_web_bundle
@@ -61,11 +62,14 @@ def main() -> None:
     worker = RosTelemetryWorker(backend)
     try:
         worker.start()
-        camera_config = os.environ.get("SO101_CAMERA_VIEWS")
-        if camera_config is None:
-            from ament_index_python.packages import get_package_share_directory
-            camera_config = str(Path(get_package_share_directory("so101_teleop")) / "config" / "camera_views.yaml")
-        camera = CameraController(load_camera_presets(camera_config))
+        if BackendOperation.CAMERA_PRESET in backend.profile.operations:
+            camera = BackendCameraController(backend.profile.camera_presets, backend)
+        else:
+            camera_config = os.environ.get("SO101_CAMERA_VIEWS")
+            if camera_config is None:
+                from ament_index_python.packages import get_package_share_directory
+                camera_config = str(Path(get_package_share_directory("so101_teleop")) / "config" / "camera_views.yaml")
+            camera = CameraController(load_camera_presets(camera_config))
         captures = Path(os.environ.get("SO101_TELEOP_CAPTURE_DIR", "/tmp/so101-teleop-captures"))
         uvicorn.run(
             create_app(

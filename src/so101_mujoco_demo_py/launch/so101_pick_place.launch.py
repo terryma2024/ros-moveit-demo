@@ -102,6 +102,7 @@ def compose_launch(
     evidence_file: str,
     safe_pose: str,
     readiness_timeout_s: float,
+    launch_workflow: bool = True,
 ) -> LaunchComposition:
     if run_mode not in {"dry_run", "execute"}:
         raise RuntimeError(f"unsupported run_mode: {run_mode}")
@@ -199,26 +200,29 @@ def compose_launch(
         parameters=[{"use_sim_time": True}],
         output="both",
     )
-    all_nodes = (*nodes, workflow)
-    start_workflow_after_scene = RegisterEventHandler(
-        OnProcessExit(
-            target_action=scene_setup,
-            on_exit=lambda event, context: actions_after_success_or_shutdown(
-                event,
-                [workflow],
-                "SO-101 MuJoCo Planning Scene setup",
-            ),
+    all_nodes = (*nodes, workflow) if launch_workflow else tuple(nodes)
+    if launch_workflow:
+        start_workflow_after_scene = RegisterEventHandler(
+            OnProcessExit(
+                target_action=scene_setup,
+                on_exit=lambda event, context: actions_after_success_or_shutdown(
+                    event,
+                    [workflow],
+                    "SO-101 MuJoCo Planning Scene setup",
+                ),
+            )
         )
-    )
-    shutdown = RegisterEventHandler(
-        OnProcessExit(
-            target_action=workflow,
-            on_exit=[Shutdown(reason="headless workflow complete")],
+        shutdown = RegisterEventHandler(
+            OnProcessExit(
+                target_action=workflow,
+                on_exit=[Shutdown(reason="headless workflow complete")],
+            )
         )
-    )
-    # workflow is intentionally absent from the root actions: the scene setup
-    # process owns the gate and emits it only after apply + readback succeeds.
-    actions = (*nodes, start_workflow_after_scene, shutdown)
+        # The workflow is absent from root actions: scene setup owns its gate.
+        actions = (*nodes, start_workflow_after_scene, shutdown)
+    else:
+        # Interactive owners keep the stack alive after scene setup exits.
+        actions = tuple(nodes)
     return LaunchComposition(
         actions=actions,
         node_executables={(node.node_package, node.node_executable) for node in all_nodes},
@@ -230,8 +234,8 @@ def compose_launch(
         ),
         includes_observer=start_simulation,
         includes_reset_services=start_simulation,
-        includes_workflow=True,
-        shutdown_on_workflow_exit=True,
+        includes_workflow=launch_workflow,
+        shutdown_on_workflow_exit=launch_workflow,
     )
 
 
@@ -251,6 +255,7 @@ def launch_setup(context):
         evidence_file=LaunchConfiguration("evidence_file").perform(context),
         safe_pose=LaunchConfiguration("safe_pose").perform(context),
         readiness_timeout_s=float(LaunchConfiguration("readiness_timeout_s").perform(context)),
+        launch_workflow=(LaunchConfiguration("launch_workflow").perform(context).lower() == "true"),
     )
     return list(composition.actions)
 
@@ -266,6 +271,9 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("headless", default_value="true", choices=["true", "false"]),
             DeclareLaunchArgument(
                 "start_simulation", default_value="true", choices=["true", "false"]
+            ),
+            DeclareLaunchArgument(
+                "launch_workflow", default_value="true", choices=["true", "false"]
             ),
             DeclareLaunchArgument("safe_pose", default_value="task12_safe"),
             DeclareLaunchArgument("readiness_timeout_s", default_value="30.0"),

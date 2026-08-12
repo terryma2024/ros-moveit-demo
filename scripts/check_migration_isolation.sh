@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly expected_branch="codex/so101-mujoco-ros2"
-readonly main_base_commit="d300e7a41fb274d6d7e120699b7040666ea61904"
-readonly task_base_commit="45c6efc701b133c45875e86b0053cfc37dab7f4f"
+readonly expected_branch="codex/so101-mujoco-ros2-teleop"
+readonly main_base_commit="8d85205286d2635d4ddbc91431c933dafb4eb661"
+readonly task_base_commit="2f5ebda79f72b452329326a8fbf02057f75f9049"
 readonly protected_tree="src/so101_gazebo_"'demo_py'
 readonly ledger="docs/experiments/so101-mujoco-ros2-migration-experiment-ledger.md"
 readonly control_submodule="third_party/mujoco_ros2_control"

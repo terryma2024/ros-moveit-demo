@@ -176,6 +176,23 @@ def test_bounded_resume_waits_for_post_reset_joint_callback_before_repause() -> 
     )
 
 
+def test_final_verification_drains_transient_running_frame_after_repause() -> None:
+    services = FakeServices()
+    observer = FakeObserver(
+        [
+            evidence(),
+            evidence(epoch=1, step=0, paused=True),
+            evidence(epoch=1, step=1, paused=False),
+            evidence(epoch=1, step=1, paused=True),
+        ]
+    )
+
+    receipt = resetter(services, observer, [0.0]).reset("task_start")
+
+    assert receipt.new_epoch == 1
+    assert services.operations.count(("pause", True)) == 2
+
+
 @pytest.mark.parametrize("operation", ["deactivate", "reset", "activate"])
 def test_failure_is_explicit_and_leaves_world_paused(operation) -> None:
     services = FakeServices()
