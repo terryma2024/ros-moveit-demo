@@ -17,6 +17,7 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
     SustainedConditionGuard,
@@ -50,7 +51,6 @@ TARGETS = (
     (0.315443271594, 0.208767394607, 0.113634135017, 1.187786553390, 0.001211579022),
     (0.394374618045, 0.210717795147, 0.109628805069, 1.174687840559, 0.001586862580),
 )
-MAX_FORCE_N = 11.60
 CONTACT_LOSS_GRACE_S = 0.05
 MAX_SEGMENT_CUP_DISPLACEMENT_M = 0.04
 MIN_TOTAL_LATERAL_M = 0.06
@@ -80,6 +80,9 @@ def evidence_dict(value) -> dict:
 
 
 def main() -> int:
+    task_policy = load_live_task_policy()
+    assert task_policy.contact is not None
+    maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     result = {
         "schema": "so101-live-noslip-transport-v1",
         "simulation_session_id": SESSION_ID,
@@ -137,7 +140,7 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != epoch:
                 raise RuntimeError("MuJoCo pause/reset during bilateral gate")
-            if evidence.maximum_normal_force_n > MAX_FORCE_N:
+            if evidence.maximum_normal_force_n > maximum_safe_force_n:
                 raise RuntimeError("force boundary exceeded during bilateral gate")
             if any(item.geom2 == "table_collision" for item in evidence.other_object_contacts):
                 raise RuntimeError("cup regained table support")
@@ -227,7 +230,7 @@ def main() -> int:
                     raise RuntimeError("stale MuJoCo evidence during transport")
                 if evidence.paused or evidence.reset_epoch != before.reset_epoch:
                     raise RuntimeError("MuJoCo pause/reset during transport")
-                if evidence.maximum_normal_force_n > MAX_FORCE_N:
+                if evidence.maximum_normal_force_n > maximum_safe_force_n:
                     raise RuntimeError("force boundary exceeded during transport")
                 contact_guard.require(
                     bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts),

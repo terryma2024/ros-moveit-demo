@@ -31,6 +31,8 @@ def test_execute_uses_the_production_live_runtime(monkeypatch, capsys, tmp_path)
     policy = tmp_path / "policy.yaml"
     policy.write_text("release_retreat: {}\n", encoding="utf-8")
     evidence_root = tmp_path / "evidence"
+    contact_policy = tmp_path / "contact.yaml"
+    contact_policy.write_text("approval: {}\n", encoding="utf-8")
     manifest = evidence_root / "live-runtime-manifest.json"
     observed = []
 
@@ -60,6 +62,8 @@ def test_execute_uses_the_production_live_runtime(monkeypatch, capsys, tmp_path)
                 str(evidence_root),
                 "--motion-policy",
                 str(policy),
+                "--contact-policy",
+                str(contact_policy),
             ]
         )
         == 0
@@ -68,6 +72,7 @@ def test_execute_uses_the_production_live_runtime(monkeypatch, capsys, tmp_path)
     assert len(observed) == 1
     assert observed[0].simulation_session_id == "live-session"
     assert observed[0].expected_reset_epoch == 4
+    assert observed[0].contact_policy == contact_policy
     output = capsys.readouterr().out
     assert "status=DONE" in output
     assert "current_state=DONE" in output
@@ -77,6 +82,8 @@ def test_execute_uses_the_production_live_runtime(monkeypatch, capsys, tmp_path)
 def test_execute_propagates_live_failure(monkeypatch, capsys, tmp_path) -> None:
     policy = tmp_path / "policy.yaml"
     policy.write_text("release_retreat: {}\n", encoding="utf-8")
+    contact_policy = tmp_path / "contact.yaml"
+    contact_policy.write_text("approval: {}\n", encoding="utf-8")
 
     monkeypatch.setattr(
         cli,
@@ -104,6 +111,8 @@ def test_execute_propagates_live_failure(monkeypatch, capsys, tmp_path) -> None:
                 str(tmp_path / "evidence"),
                 "--motion-policy",
                 str(policy),
+                "--contact-policy",
+                str(contact_policy),
             ]
         )
         == 1

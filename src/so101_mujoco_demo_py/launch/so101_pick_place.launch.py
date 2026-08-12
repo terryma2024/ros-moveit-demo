@@ -276,6 +276,7 @@ def generate_launch_description() -> LaunchDescription:
                 "launch_workflow", default_value="true", choices=["true", "false"]
             ),
             DeclareLaunchArgument("safe_pose", default_value="task12_safe"),
+            DeclareLaunchArgument("contact_policy", default_value=""),
             DeclareLaunchArgument("readiness_timeout_s", default_value="30.0"),
             DeclareLaunchArgument("simulation_session_id", default_value=unique),
             DeclareLaunchArgument(

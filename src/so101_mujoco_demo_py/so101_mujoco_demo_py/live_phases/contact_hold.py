@@ -15,6 +15,7 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.gripper import GripperClient
 from so101_mujoco_demo_py.mujoco.observer import EvidenceStale, MujocoWorldObserver
 from so101_mujoco_demo_py.staged_approach import maximum_joint_error
@@ -35,8 +36,6 @@ NOMINAL_CONTACT_Q6 = -0.047608632840292
 SAFE_Q6_LOWER = -0.059600220867817
 COARSE_STEP_RAD = 0.0005
 CONTACT_STEP_RAD = 0.00002
-MAX_FORCE_N = 11.60
-MIN_SIDE_NORMAL_FORCE_N = 0.50
 MAX_CUP_DISPLACEMENT_M = 0.003
 STABLE_HOLD_S = 2.0
 
@@ -68,6 +67,9 @@ def contact_snapshot(evidence, q6: float) -> dict:
 
 
 def main() -> int:
+    task_policy = load_live_task_policy()
+    assert task_policy.contact is not None
+    contact_thresholds = task_policy.contact.thresholds
     result = {
         "schema": "so101-live-noslip-contact-hold-v1",
         "simulation_session_id": SESSION_ID,
@@ -119,7 +121,7 @@ def main() -> int:
     def validate(evidence) -> tuple[float, float]:
         if evidence.paused or evidence.reset_epoch != EXPECTED_EPOCH:
             raise RuntimeError("pause/reset provenance changed during contact calibration")
-        if evidence.maximum_normal_force_n > MAX_FORCE_N:
+        if evidence.maximum_normal_force_n > contact_thresholds.maximum_safe_force_n:
             raise RuntimeError(f"force boundary exceeded: {evidence.maximum_normal_force_n:.6f} N")
         if reference_position is None:
             raise RuntimeError("reference cup position unavailable")
@@ -172,7 +174,7 @@ def main() -> int:
 
         while True:
             left, right = validate(evidence)
-            if bilateral and min(left, right) >= MIN_SIDE_NORMAL_FORCE_N:
+            if bilateral and min(left, right) >= contact_thresholds.minimum_bilateral_force_n:
                 break
             if q6 <= SAFE_Q6_LOWER + CONTACT_STEP_RAD:
                 raise RuntimeError("safe q6 lower bound reached without sufficient bilateral force")
@@ -194,7 +196,7 @@ def main() -> int:
             left, right = validate(evidence)
             if not evidence.left_fingertip_contacts or not evidence.right_fingertip_contacts:
                 raise RuntimeError("bilateral contact lost during contact-only hold")
-            if min(left, right) < MIN_SIDE_NORMAL_FORCE_N:
+            if min(left, right) < contact_thresholds.minimum_bilateral_force_n:
                 raise RuntimeError("bilateral normal force fell below carry threshold")
             hold_samples.append(contact_snapshot(evidence, float(latest_joint["6"])))
 

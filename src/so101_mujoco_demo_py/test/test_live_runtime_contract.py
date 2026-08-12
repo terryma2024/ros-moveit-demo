@@ -1,12 +1,21 @@
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
 
+import yaml
+
+from so101_mujoco_demo_py.contact_policy import (
+    ApprovalRecord,
+    approve_proposal,
+    proposal_sha256,
+)
 from so101_mujoco_demo_py.live_runtime import (
     LIVE_PHASES,
     LiveRuntimeConfig,
     _validate_final_release,
     build_phase_specs,
+    load_live_task_policy,
     run_live_workflow,
 )
 from so101_mujoco_demo_py.task_policy import load_task_policy
@@ -14,18 +23,109 @@ from so101_mujoco_demo_py.task_policy import load_task_policy
 MOTION_POLICY = (
     Path(__file__).parents[1] / "config" / "motion_policies" / "light_cup_wall_pick.yaml"
 )
+PACKAGE_ROOT = MOTION_POLICY.parents[2]
+DISABLED_CONTACT_POLICY = PACKAGE_ROOT / "config" / "contact_calibration.yaml"
+
+
+def write_approved_contact_policy(
+    tmp_path: Path,
+    *,
+    model_sha256: str | None = None,
+    maximum_safe_force_n: float = 5.0,
+) -> Path:
+    dependency = yaml.safe_load(
+        (PACKAGE_ROOT / "config" / "dependency-lock.yaml").read_text(encoding="utf-8")
+    )["fork"]["commit"]
+    document: dict[str, object] = {
+        "schema_version": 2,
+        "policy_id": "light_cup_wall_pick-contact",
+        "calibration_status": "VALID",
+        "fingerprint": {
+            "source_commit": "1" * 40,
+            "dependency_commit": dependency,
+            "model_sha256": model_sha256
+            or hashlib.sha256((PACKAGE_ROOT / "mjcf" / "so101.xml").read_bytes()).hexdigest(),
+            "scene_sha256": hashlib.sha256(
+                (PACKAGE_ROOT / "mjcf" / "scene.xml").read_bytes()
+            ).hexdigest(),
+            "motion_policy_sha256": hashlib.sha256(MOTION_POLICY.read_bytes()).hexdigest(),
+            "source_evidence_sha256": "d" * 64,
+        },
+        "evaluation": {
+            "maximum_observation_age_s": 0.1,
+            "minimum_consecutive_samples": 5,
+        },
+        "allowed_other_contact_bodies": ["table_collision"],
+        "thresholds": {
+            "minimum_bilateral_force_n": 0.5,
+            "maximum_compression_distance_m": 0.0015,
+            "maximum_safe_force_n": maximum_safe_force_n,
+            "maximum_hold_linear_speed_m_s": 0.01,
+            "minimum_stable_hold_duration_s": 0.3,
+        },
+        "approval": {
+            "enabled": False,
+            "approved": False,
+            "approved_by": None,
+            "approved_at": None,
+            "proposal_sha256": None,
+        },
+    }
+    proposal_hash = proposal_sha256(document)
+    document["approval"]["proposal_sha256"] = proposal_hash  # type: ignore[index]
+    approved = approve_proposal(
+        document,
+        ApprovalRecord(proposal_hash, "user", "2026-08-12T12:00:00+08:00"),
+    )
+    path = tmp_path / "approved-contact.yaml"
+    path.write_text(yaml.safe_dump(approved, sort_keys=False), encoding="utf-8")
+    return path
 
 
 def config(tmp_path: Path) -> LiveRuntimeConfig:
-    policy = tmp_path / "policy.yaml"
-    policy.write_bytes(MOTION_POLICY.read_bytes())
     return LiveRuntimeConfig(
         simulation_session_id="test-session",
         expected_reset_epoch=7,
         evidence_root=tmp_path / "evidence",
-        motion_policy=policy,
+        motion_policy=MOTION_POLICY,
+        contact_policy=write_approved_contact_policy(tmp_path),
         python_executable="python-under-test",
     )
+
+
+def test_disabled_contact_policy_fails_before_resume_or_phase_commands(tmp_path) -> None:
+    runtime = replace(config(tmp_path), contact_policy=DISABLED_CONTACT_POLICY)
+    observed = []
+
+    result = run_live_workflow(
+        runtime,
+        resume=lambda _config: observed.append("resume") or True,
+        command_runner=lambda *_args: observed.append("phase") or 0,
+    )
+
+    assert not result.success
+    assert result.failure == "CONTACT_POLICY_NOT_APPROVED"
+    assert result.failed_phase == "preflight"
+    assert observed == []
+
+
+def test_changed_physical_fingerprint_fails_before_side_effects(tmp_path) -> None:
+    runtime = replace(
+        config(tmp_path),
+        contact_policy=write_approved_contact_policy(tmp_path, model_sha256="f" * 64),
+    )
+    observed = []
+
+    result = run_live_workflow(
+        runtime,
+        resume=lambda _config: observed.append("resume") or True,
+        command_runner=lambda *_args: observed.append("phase") or 0,
+    )
+
+    assert not result.success
+    assert result.failure == "POLICY_FINGERPRINT_MISMATCH"
+    assert result.failed_phase == "preflight"
+    assert observed == []
 
 
 def evidence_for(phase_name: str, status: str) -> dict:
@@ -130,6 +230,29 @@ def test_phase_specs_use_one_production_entry_sequence_and_frozen_environment(tm
     assert environment["SO101_EXPECTED_RESET_EPOCH"] == "7"
     assert environment["SO101_EVIDENCE_ROOT"] == str(runtime.evidence_root)
     assert environment["SO101_MOTION_POLICY"] == str(runtime.motion_policy)
+    assert environment["SO101_CONTACT_POLICY"] == str(runtime.contact_policy)
+    assert (
+        environment["SO101_MODEL_SHA256"]
+        == hashlib.sha256((PACKAGE_ROOT / "mjcf" / "so101.xml").read_bytes()).hexdigest()
+    )
+
+
+def test_temporary_live_phases_receive_one_hash_bound_changed_threshold(tmp_path) -> None:
+    runtime = replace(
+        config(tmp_path),
+        contact_policy=write_approved_contact_policy(tmp_path, maximum_safe_force_n=4.25),
+    )
+    _, environment = build_phase_specs(runtime)
+
+    loaded = load_live_task_policy(environment)
+
+    assert loaded.contact is not None
+    assert loaded.contact.thresholds.maximum_safe_force_n == 4.25
+    phase_root = PACKAGE_ROOT / "so101_mujoco_demo_py" / "live_phases"
+    for phase in LIVE_PHASES[1:]:
+        source = (phase_root / f"{phase}.py").read_text(encoding="utf-8")
+        assert "load_live_task_policy()" in source
+        assert "maximum_safe_force_n" in source
 
 
 def test_live_runtime_runs_once_in_order_and_writes_fail_visible_manifest(tmp_path) -> None:

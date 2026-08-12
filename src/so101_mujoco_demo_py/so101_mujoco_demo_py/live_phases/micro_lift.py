@@ -22,6 +22,7 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
     make_execute_goal,
@@ -46,10 +47,6 @@ LIFT_TARGET = (
     0.8648894480356747,
     0.0005764164414532356,
 )
-MAX_FORCE_N = 11.60
-MIN_MICRO_LIFT_M = 0.0015
-MAX_MICRO_LIFT_M = 0.0025
-MAX_LATERAL_DRIFT_M = 0.001
 PRELOAD_Q6 = -0.04850794875050089
 
 
@@ -75,6 +72,10 @@ def evidence_dict(value) -> dict:
 
 
 def main() -> int:
+    task_policy = load_live_task_policy()
+    assert task_policy.contact is not None
+    maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
+    micro_lift_policy = task_policy.carry.micro_lift
     result = {
         "schema": "so101-live-noslip-micro-lift-v1",
         "simulation_session_id": SESSION_ID,
@@ -133,7 +134,7 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != epoch:
                 raise RuntimeError("MuJoCo pause/reset during bilateral gate")
-            if evidence.maximum_normal_force_n > MAX_FORCE_N:
+            if evidence.maximum_normal_force_n > maximum_safe_force_n:
                 raise RuntimeError("force boundary exceeded during bilateral gate")
             bilateral = bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts)
             now = time.monotonic()
@@ -267,7 +268,7 @@ def main() -> int:
                 raise RuntimeError("stale MuJoCo evidence during LIFT")
             if evidence.paused or evidence.reset_epoch != before.reset_epoch:
                 raise RuntimeError("MuJoCo pause/reset during LIFT")
-            if evidence.maximum_normal_force_n > MAX_FORCE_N:
+            if evidence.maximum_normal_force_n > maximum_safe_force_n:
                 raise RuntimeError("force boundary exceeded during LIFT")
             if not (evidence.left_fingertip_contacts and evidence.right_fingertip_contacts):
                 raise RuntimeError("bilateral fingertip contact lost during MICRO_LIFT")
@@ -302,9 +303,13 @@ def main() -> int:
         )
         lateral = math.hypot(displacement[0], displacement[1])
         cup_lift_m = displacement[2]
-        if not MIN_MICRO_LIFT_M <= cup_lift_m <= MAX_MICRO_LIFT_M:
+        if not (
+            micro_lift_policy.minimum_cup_lift_m
+            <= cup_lift_m
+            <= micro_lift_policy.maximum_cup_lift_m
+        ):
             raise RuntimeError(f"physical micro-lift outside gate: {cup_lift_m}")
-        if lateral > MAX_LATERAL_DRIFT_M:
+        if lateral > micro_lift_policy.maximum_lateral_drift_m:
             raise RuntimeError(f"physical lateral drift outside gate: {lateral}")
         if "table_collision" in evidence_dict(after)["other_contact_geoms"]:
             raise RuntimeError("cup remains table-supported after MICRO_LIFT")

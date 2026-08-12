@@ -17,6 +17,7 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
+from so101_mujoco_demo_py.live_runtime import load_live_task_policy
 from so101_mujoco_demo_py.motion.executor import (
     MoveItExecutionClient,
     make_execute_goal,
@@ -41,7 +42,6 @@ LIFT_TARGET = (
     0.916741182602,
     -0.000291565154,
 )
-MAX_FORCE_N = 11.60
 MIN_PHYSICAL_LIFT_M = 0.005
 MAX_PHYSICAL_LIFT_M = 0.10
 MAX_LATERAL_DISPLACEMENT_M = 0.03
@@ -77,6 +77,9 @@ def evidence_dict(value) -> dict:
 
 
 def main() -> int:
+    task_policy = load_live_task_policy()
+    assert task_policy.contact is not None
+    maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     result = {
         "schema": "so101-live-noslip-policy-lift-waypoint1-v1",
         "simulation_session_id": SESSION_ID,
@@ -134,7 +137,7 @@ def main() -> int:
             last_sequence = evidence.publisher_sequence
             if evidence.paused or evidence.reset_epoch != epoch:
                 raise RuntimeError("MuJoCo pause/reset during bilateral gate")
-            if evidence.maximum_normal_force_n > MAX_FORCE_N:
+            if evidence.maximum_normal_force_n > maximum_safe_force_n:
                 raise RuntimeError("force boundary exceeded during bilateral gate")
             bilateral = bool(evidence.left_fingertip_contacts and evidence.right_fingertip_contacts)
             now = time.monotonic()
@@ -247,7 +250,7 @@ def main() -> int:
                 raise RuntimeError("stale MuJoCo evidence during LIFT")
             if evidence.paused or evidence.reset_epoch != before.reset_epoch:
                 raise RuntimeError("MuJoCo pause/reset during LIFT")
-            if evidence.maximum_normal_force_n > MAX_FORCE_N:
+            if evidence.maximum_normal_force_n > maximum_safe_force_n:
                 raise RuntimeError("force boundary exceeded during LIFT")
             if not (evidence.left_fingertip_contacts and evidence.right_fingertip_contacts):
                 raise RuntimeError("bilateral fingertip contact lost during policy LIFT")
