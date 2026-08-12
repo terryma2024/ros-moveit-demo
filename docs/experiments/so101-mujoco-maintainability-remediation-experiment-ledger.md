@@ -1469,3 +1469,18 @@ ordered_experiments:
     success: Successful causal cup micro-lift, bilateral continuity, stable low-speed hold, and 25 post-preroll samples.
 decision: PLANNED. Start only after this preregistration commit; stop at the first INVALID or unavailable physical regime and do not analyze an incomplete matrix.
 ```
+
+## EXP-076 runtime start
+
+```yaml
+experiment_id: EXP-076
+status: RUNNING
+recorded_at: 2026-08-12T16:01:00+08:00
+regime: no_contact
+source_commit: 66210bedc4a1f5670608fc8fe39bfda503bd263c
+preregistration_commit: bcf0c5a
+owned_processes: NONE before registered stack launch.
+unrelated_worktree_state:
+  - docs/experiments/so101-mujoco-ros2-migration-experiment-summary.md appeared untracked after preregistration; it is preserved, excluded from task commits, and not present in the already built overlay.
+decision: PENDING before stack launch and before any controller action.
+```
