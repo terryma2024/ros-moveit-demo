@@ -24,7 +24,7 @@ resolve_project_root() {
   local physical_script_dir
   physical_script_dir=$(cd -- "$(dirname -- "${installer_path}")" && pwd -P)
   project_root=$(cd -- "${physical_script_dir}/.." && pwd -P)
-  lock_file=${project_root}/src/so101_mujoco_demo_py/config/dependency-lock.yaml
+  lock_file=${project_root}/src/so101_demo_py/config/mujoco/dependency-lock.yaml
   [[ -f ${lock_file} ]] || fail "dependency lock is missing: ${lock_file}"
 
   local -a values

@@ -68,8 +68,8 @@ def test_selected_backend_is_frozen_after_successful_probe():
         backend="gazebo_py",
         operation="backend_probe",
         session_id=None,
-        owner_package="so101_gazebo_demo_py",
-        owner_executable="pick_place_state_machine",
+        owner_package="so101_demo_py",
+        owner_executable="pick_place",
         exit_code=0,
         result={"status": "available"},
     ))
