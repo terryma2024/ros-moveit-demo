@@ -762,7 +762,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-020 --lifecycle FULL_RESTART -
 
 ## CP-GZPY-FULL-RESTART-021 through 025 — ordered-async-evidence fixed-bundle preregistration
 
-batch_status: PLANNED
+batch_status: QUALIFIED
 backend: mujoco
 lifecycle: FULL_RESTART
 supersedes_invalid_batches: `[001..005, 006..010, 011..015, 016..020]`
@@ -796,50 +796,94 @@ batch at one.
 
 ### CP-GZPY-FULL-RESTART-021
 
-status: PLANNED
-outcome: PENDING
+status: VALID
+outcome: SUCCEEDED
 ros_domain_id: `205`
 port: `28120`
 simulation_session_id: `cp-gzpy-fr-021-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-021`
 command: `run_qualification --batch-id cp-gzpy-fr-021 --lifecycle FULL_RESTART --count 1 --fingerprint 438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-021 --base-domain-id 205 --base-port 28120 --headless`
 
+Terminal review: independent `verify-batch` returned `QUALIFIED`. Exact fixed provenance,
+reset epoch `1`, all nine ordered phases, workflow success, synchronized unattached world
+object, intended support contact, null primary failure, complete artifact hashes, and
+ordered clean shutdown all passed. The lossless raw index is `COMPLETE` with outcome
+`PHYSICAL_TRANSPORT_SUCCESS`: 82 consecutive fifty-step chunks `482..563`, physics
+steps `24101..28200`, twelve ordered boundaries, and no invalid reason. Manifest
+SHA-256: `25dd6a49bebdb6b87729ce1b707f8c65562ecf32f3c781696900d29e0477464a`.
+
 ### CP-GZPY-FULL-RESTART-022
 
-status: PLANNED
-outcome: PENDING
+status: VALID
+outcome: SUCCEEDED
 ros_domain_id: `206`
 port: `28121`
 simulation_session_id: `cp-gzpy-fr-022-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-022`
 command: `run_qualification --batch-id cp-gzpy-fr-022 --lifecycle FULL_RESTART --count 1 --fingerprint 438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-022 --base-domain-id 206 --base-port 28121 --headless`
 
+Terminal review: independent `verify-batch` returned `QUALIFIED`; exact provenance,
+reset epoch `1`, nine phases, physical success, artifact hashes, and clean shutdown all
+passed. The lossless raw index is `COMPLETE/PHYSICAL_TRANSPORT_SUCCESS` with 85
+consecutive chunks `489..573`, physics steps `24451..28700`, twelve boundaries, and no
+invalid reason. Manifest SHA-256:
+`fc3e1a12c19679dd63f1d839a8af1e6cec16a4e90780135a2fae4b93adecfc17`.
+
 ### CP-GZPY-FULL-RESTART-023
 
-status: PLANNED
-outcome: PENDING
+status: VALID
+outcome: SUCCEEDED
 ros_domain_id: `207`
 port: `28122`
 simulation_session_id: `cp-gzpy-fr-023-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-023`
 command: `run_qualification --batch-id cp-gzpy-fr-023 --lifecycle FULL_RESTART --count 1 --fingerprint 438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-023 --base-domain-id 207 --base-port 28122 --headless`
 
+Terminal review: independent `verify-batch` returned `QUALIFIED`; all fixed provenance,
+reset, nine-phase workflow, physical outcome, artifact hashes, and shutdown gates passed.
+The raw index is `COMPLETE/PHYSICAL_TRANSPORT_SUCCESS` with 82 consecutive chunks
+`463..544`, physics steps `23151..27250`, twelve boundaries, and no invalid reason.
+Manifest SHA-256:
+`0da61cc8b4c16e79691b4e7a69078e679a6c93fa8cd676b50300954313bb8fa5`.
+
 ### CP-GZPY-FULL-RESTART-024
 
-status: PLANNED
-outcome: PENDING
+status: VALID
+outcome: SUCCEEDED
 ros_domain_id: `208`
 port: `28123`
 simulation_session_id: `cp-gzpy-fr-024-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-024`
 command: `run_qualification --batch-id cp-gzpy-fr-024 --lifecycle FULL_RESTART --count 1 --fingerprint 438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-024 --base-domain-id 208 --base-port 28123 --headless`
 
+Terminal review: independent `verify-batch` returned `QUALIFIED`; all fixed provenance,
+reset, workflow, physical, artifact, and shutdown gates passed. The raw index is
+`COMPLETE/PHYSICAL_TRANSPORT_SUCCESS` with 82 consecutive chunks `492..573`, physics
+steps `24601..28700`, twelve boundaries, and no invalid reason. Manifest SHA-256:
+`b14c9338998a27d6e09848757ac0956bc3602a048afe3a11f0d4440f012f2766`.
+
 ### CP-GZPY-FULL-RESTART-025
 
-status: PLANNED
-outcome: PENDING
+status: VALID
+outcome: SUCCEEDED
 ros_domain_id: `209`
 port: `28124`
 simulation_session_id: `cp-gzpy-fr-025-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-025`
 command: `run_qualification --batch-id cp-gzpy-fr-025 --lifecycle FULL_RESTART --count 1 --fingerprint 438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-025 --base-domain-id 209 --base-port 28124 --headless`
+
+Terminal review: independent `verify-batch` returned `QUALIFIED`; all fixed provenance,
+reset, workflow, physical, artifact, and shutdown gates passed. The raw index is
+`COMPLETE/PHYSICAL_TRANSPORT_SUCCESS` with 82 consecutive chunks `492..573`, physics
+steps `24601..28700`, twelve boundaries, and no invalid reason. Manifest SHA-256:
+`ddfaf9e9df89308d9441ac4a87ff8b0961f61fcdcae606be4c5c015e27276246`.
+
+Batch terminal review: experiments `cp-gzpy-fr-021-01` through
+`cp-gzpy-fr-025-01` are five consecutive, independently started and stopped
+`VALID/SUCCEEDED` FULL_RESTART runs on exact source
+`213ac0da3b4f2a756c2c4e66e8e6c28af9e2168a`, installed bundle
+`438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd`, and frozen
+policy `aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356`.
+Every attempt independently returned `QUALIFIED`, reset epoch `1`, all nine phases,
+successful physical outcome, complete lossless raw evidence, artifact hashes, and clean
+ordered shutdown. No old or invalid result contributes to this streak.
