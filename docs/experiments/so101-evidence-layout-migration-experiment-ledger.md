@@ -7,7 +7,7 @@ success_contract: Every declared source moves once on the same ext4 filesystem; 
 worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-canonical
 branch: codex/so101-demo-py-canonical
 base_commit: d20f12ae465f409f1d88e655367eebb48c57cef2
-current_commit: d20f12ae465f409f1d88e655367eebb48c57cef2
+current_commit: 399fcbf34d34952b80eb9babff10f385315576d5
 evidence_root: /tmp/so101-debug-evidence-layout-q2GDCm/
 confirmed_conclusions:
   - PRECHECK-001: feature and main worktrees are clean; all 18 sources share device 66309 with /data/work; destination root is absent; no source-path process or open file was found.
@@ -149,6 +149,7 @@ working_tree_status: Task-owned documentation, instructions, path references, an
 owned_processes: NONE
 preserved_processes: Existing MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui tmux sessions remain untouched; ROS graph remains empty.
 confirmed_conclusions:
+  - Migration and repository policy update commit: 399fcbf34d34952b80eb9babff10f385315576d5.
   - Retained: four fusion qualification roots and one maintainability root.
   - Archived: thirteen superseded fusion roots.
   - Deletion candidates: NONE identified or authorized; no content was deleted.
