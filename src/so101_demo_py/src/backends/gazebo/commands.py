@@ -98,6 +98,44 @@ class GazeboCommandAdapter:
             require_ack=False,
         )
 
+    def observe_attachment(
+        self,
+        *,
+        parent_entity_id: int,
+        child_entity_id: int,
+    ) -> ResetStepReceipt:
+        receipt = self._run(
+            [
+                "gz",
+                "service",
+                "-s",
+                "/world/so101_pick_place/state",
+                "--reqtype",
+                "gz.msgs.Empty",
+                "--reptype",
+                "gz.msgs.SerializedStepMap",
+                "--timeout",
+                str(self._service_timeout_ms),
+                "--req",
+                "",
+            ],
+            require_ack=False,
+        )
+        if not receipt.success:
+            return receipt
+        joint = f'component: "{parent_entity_id} {child_entity_id} fixed"'
+        return ResetStepReceipt(
+            True,
+            None,
+            {
+                **receipt.evidence,
+                "parent_entity_id": parent_entity_id,
+                "child_entity_id": child_entity_id,
+                "joint_component": joint,
+                "attached": joint in str(receipt.evidence["stdout"]),
+            },
+        )
+
     def set_task_object_pose(self, pose: Pose7) -> ResetStepReceipt:
         x, y, z, qx, qy, qz, qw = pose.values
         request = (

@@ -49,6 +49,49 @@ class GazeboAttachmentMonitor:
         self._node.unsubscribe(self._topic)
 
 
+def record_gazebo_pose_vector(state: GazeboResetState, message: Any) -> None:
+    """Project named Gazebo Pose_V entities without the lossy ROS TF bridge."""
+
+    with state._lock:
+        for item in message.pose:
+            name = str(item.name)
+            if name in {"plastic_cup", "body", "gripper"}:
+                state.entity_ids[name] = int(item.id)
+            if name != "plastic_cup":
+                continue
+            state.cup_pose = Pose7(
+                (
+                    float(item.position.x),
+                    float(item.position.y),
+                    float(item.position.z),
+                    float(item.orientation.x),
+                    float(item.orientation.y),
+                    float(item.orientation.z),
+                    float(item.orientation.w),
+                )
+            )
+
+
+class GazeboPoseMonitor:
+    """Durable named Gazebo entity projection used by Reset verification."""
+
+    def __init__(self, state: GazeboResetState, topic: str) -> None:
+        from gz.msgs10.pose_v_pb2 import Pose_V
+        from gz.transport13 import Node
+
+        self._state = state
+        self._node = Node()
+        self._topic = topic
+        self._node.subscribe(
+            Pose_V,
+            topic,
+            lambda message: record_gazebo_pose_vector(self._state, message),
+        )
+
+    def close(self) -> None:
+        self._node.unsubscribe(self._topic)
+
+
 class RosGoalCancellationPort:
     _ACTIVE = {1, 2, 3}
 
@@ -160,6 +203,7 @@ class RosGazeboResetRuntime:
         from moveit_msgs.action import ExecuteTrajectory
         from moveit_msgs.srv import GetMotionPlan
         from rclpy.action import ActionClient
+        from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
         from sensor_msgs.msg import JointState
         from tf2_msgs.msg import TFMessage
 
@@ -195,34 +239,24 @@ class RosGazeboResetRuntime:
                     else {}
                 )
 
-        def pose_info(message: TFMessage) -> None:
-            for item in message.transforms:
-                if "plastic_cup" not in item.child_frame_id:
-                    continue
-                value = item.transform
-                pose = Pose7(
-                    (
-                        float(value.translation.x),
-                        float(value.translation.y),
-                        float(value.translation.z),
-                        float(value.rotation.x),
-                        float(value.rotation.y),
-                        float(value.rotation.z),
-                        float(value.rotation.w),
-                    )
-                )
-                with self.state._lock:
-                    self.state.cup_pose = pose
-
         def transforms(message: TFMessage) -> None:
             with self.state._lock:
                 self.state.tf_frames.update(item.child_frame_id for item in message.transforms)
 
+        static_tf_qos = QoSProfile(
+            depth=100,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=ReliabilityPolicy.RELIABLE,
+        )
+
         self._subscriptions = [
             self.node.create_subscription(JointState, config["topics"]["joints"], joints, 100),
-            self.node.create_subscription(TFMessage, config["topics"]["pose"], pose_info, 100),
             self.node.create_subscription(TFMessage, config["topics"]["tf"], transforms, 100),
+            self.node.create_subscription(TFMessage, "/tf_static", transforms, static_tf_qos),
         ]
+        self._pose = GazeboPoseMonitor(
+            self.state, "/world/so101_pick_place/pose/info"
+        )
         self._attachment = GazeboAttachmentMonitor(
             self.state, config["topics"]["attachment_state"]
         )
@@ -233,6 +267,30 @@ class RosGazeboResetRuntime:
             process_timeout_s=min(5.0, self.timeout_s),
             service_timeout_ms=int(self.timeout_s * 1000),
         )
+        deadline = time.monotonic() + self.timeout_s
+        entity_ids: dict[str, int] = {}
+        while time.monotonic() < deadline:
+            entity_ids = self.state.snapshot()["entity_ids"]  # type: ignore[assignment]
+            if {"gripper", "body"} <= set(entity_ids):
+                break
+            self.progress()
+        if {"gripper", "body"} <= set(entity_ids):
+            attachment_probe = commands.observe_attachment(
+                parent_entity_id=entity_ids["gripper"],
+                child_entity_id=entity_ids["body"],
+            )
+            with self.state._lock:
+                self.state.attachment_probe = dict(attachment_probe.evidence)
+                if attachment_probe.success:
+                    self.state.attached = bool(
+                        attachment_probe.evidence["attached"]
+                    )
+        else:
+            with self.state._lock:
+                self.state.attachment_probe = {
+                    "failure_code": "RESET_GAZEBO_ENTITY_IDS_UNAVAILABLE",
+                    "entity_ids": entity_ids,
+                }
         self.physical = GazeboPhysicalResetPort(
             commands,
             observe_attachment=self._observe_attachment,
@@ -343,6 +401,7 @@ class RosGazeboResetRuntime:
 
     def close(self) -> None:
         self._attachment.close()
+        self._pose.close()
         self.node.destroy_node()
         if self._owns_rclpy and self._rclpy.ok():
             self._rclpy.shutdown()
