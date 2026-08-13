@@ -24,6 +24,26 @@ The Gazebo path runs the common application and reports the phase at which the p
 controller succeeds or fails. Gazebo is not a qualification backend because it does not
 provide the lossless physics-step evidence required by the MuJoCo gate.
 
+## Shared operator commands
+
+Planning Scene, camera, and reset use one public command per operation. Select the
+simulator explicitly; omitting `--backend` retains the MuJoCo-compatible behavior.
+
+```bash
+ros2 run so101_demo_py scene_setup --backend gazebo setup
+ros2 run so101_demo_py scene_setup --backend gazebo observe
+ros2 run so101_demo_py camera_preset --backend gazebo overview
+ros2 run so101_demo_py teleop_reset --backend gazebo --session-id operator-reset-001
+```
+
+The common geometry manifest is the only table/pedestal/plastic-cup contract. Both
+Planning Scene backends apply it and require independent read-back with primitive counts
+`1/1/13`. Gazebo camera commands require a positive `/gui/move_to/pose` acknowledgement.
+Gazebo reset is a complete first-failure transaction: it cancels goals, verifies physical
+and MoveIt detach, parks and restores the cup, synchronizes the scene, opens the gripper,
+plans and executes the exact `home` plan, and verifies Gazebo, MoveIt, controllers, joints,
+velocities, and TF before returning success.
+
 ## Evidence and lifecycle
 
 Pass `evidence_file:=/absolute/path/result.json` for an execute launch. The common manifest

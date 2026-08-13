@@ -12,6 +12,7 @@ from so101_demo.runtime.provenance import installed_bundle
 EXPECTED_EXECUTABLES = {
     "camera_preset",
     "gazebo_execute",
+    "gazebo_ready",
     "pick_place",
     "run_qualification",
     "scene_setup",

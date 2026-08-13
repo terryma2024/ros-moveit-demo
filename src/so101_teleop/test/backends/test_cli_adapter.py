@@ -96,7 +96,7 @@ def test_cpp_scene_style_is_positional(tmp_path):
     assert cpp_runner.call_args.args[0][-1:] == ["observe"]
 
 
-def test_gazebo_python_run_uses_canonical_execute_and_other_operations_fail_closed(
+def test_gazebo_python_routes_all_operations_to_canonical_shared_clis(
     tmp_path,
 ):
     adapter, runner = adapter_for(tmp_path)
@@ -111,18 +111,25 @@ def test_gazebo_python_run_uses_canonical_execute_and_other_operations_fail_clos
         "--session-id", "session-a",
     ]
 
-    runner.reset_mock()
-    results = (
-        adapter.run_workflow(workflow_request("start")),
-        adapter.reset_world(ResetRequest("session-a")),
-        adapter.scene_operation(SceneRequest("observe", "session-a")),
-        adapter.apply_camera_preset(CameraPresetRequest("overview", "session-a")),
+    assert adapter.run_workflow(workflow_request("start")).error.code == (
+        "BACKEND_CAPABILITY_UNAVAILABLE"
     )
 
-    assert {result.error.code for result in results} == {
-        "BACKEND_CAPABILITY_UNAVAILABLE"
-    }
-    runner.assert_not_called()
+    reset = adapter.reset_world(ResetRequest("session-a"))
+    assert reset.ok is True
+    assert runner.call_args.args[0][1:] == [
+        "--backend", "gazebo", "--session-id", "session-a"
+    ]
+
+    scene = adapter.scene_operation(SceneRequest("observe", "session-a"))
+    assert scene.ok is True
+    assert runner.call_args.args[0][1:] == ["--backend", "gazebo", "observe"]
+
+    camera = adapter.apply_camera_preset(
+        CameraPresetRequest("overview", "session-a")
+    )
+    assert camera.ok is True
+    assert runner.call_args.args[0][1:] == ["--backend", "gazebo", "overview"]
 
 
 def test_nonzero_owner_result_preserves_sanitized_failure_code(tmp_path):

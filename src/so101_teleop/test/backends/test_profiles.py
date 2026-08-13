@@ -2,11 +2,13 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
+import yaml
 from so101_teleop.backends.profile import ProfileError, load_profile_file
 from so101_teleop.backends.protocol import BackendOperation
 from so101_teleop.backends.registry import BACKEND_IDS, load_backend_profile
 
 PACKAGE = Path(__file__).resolve().parents[2]
+DEMO_PACKAGE = PACKAGE.parent / "so101_demo_py"
 
 
 def test_registry_accepts_only_fixed_backend_ids():
@@ -37,9 +39,30 @@ def test_gazebo_py_profile_routes_run_to_canonical_bounded_execute():
 
     assert profile.owner_package == "so101_demo_py"
     assert profile.probe.executable == "pick_place"
-    assert set(profile.operations) == {BackendOperation.WORKFLOW}
+    assert set(profile.operations) == {
+        BackendOperation.WORKFLOW,
+        BackendOperation.RESET_WORLD,
+        BackendOperation.SCENE,
+        BackendOperation.CAMERA_PRESET,
+    }
     assert profile.operations[BackendOperation.WORKFLOW].executable == "gazebo_execute"
-    assert profile.camera_presets == ()
+    reset = profile.operations[BackendOperation.RESET_WORLD]
+    assert (reset.package, reset.executable, reset.fixed_args, reset.session_style) == (
+        "so101_demo_py", "teleop_reset", ("--backend", "gazebo"), "flag"
+    )
+    scene = profile.operations[BackendOperation.SCENE]
+    assert (scene.package, scene.executable, scene.fixed_args, scene.scene_style) == (
+        "so101_demo_py", "scene_setup", ("--backend", "gazebo"), "positional"
+    )
+    camera = profile.operations[BackendOperation.CAMERA_PRESET]
+    assert (camera.package, camera.executable, camera.fixed_args) == (
+        "so101_demo_py", "camera_preset", ("--backend", "gazebo")
+    )
+    assert profile.camera_presets == ("overview", "top", "side", "gripper", "cup")
+    camera_config = yaml.safe_load(
+        (DEMO_PACKAGE / "config/gazebo/camera_views.yaml").read_text()
+    )
+    assert profile.camera_presets == tuple(camera_config["presets"])
     assert profile.capabilities.as_dict() == {
         "backend_probe": True,
         "workflow_execute": True,
@@ -47,12 +70,12 @@ def test_gazebo_py_profile_routes_run_to_canonical_bounded_execute():
         "workflow_run": True,
         "workflow_resume": False,
         "workflow_stop": False,
-        "reset_world": False,
-        "scene_operations": False,
+        "reset_world": True,
+        "scene_operations": True,
         "physical_observation": True,
         "manual_joint_execute": True,
         "manual_tcp_execute": True,
-        "camera_presets": False,
+        "camera_presets": True,
     }
 
 

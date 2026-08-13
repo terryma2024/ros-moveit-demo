@@ -67,6 +67,19 @@
       "raw_evidence": "13a494bd75dd63588a82b9ff12955922bf44c0eae292b658a43aeb2456c1d63f"
     }
   },
+  "gazebo_python_capabilities": {
+    "status": "IMPLEMENTED_PENDING_LIVE_ACCEPTANCE",
+    "owner_package": "so101_demo_py",
+    "public_clis": ["scene_setup", "camera_preset", "teleop_reset"],
+    "backend_selector": ["--backend", "gazebo"],
+    "geometry_contract": "assets/common/geometry-manifest.yaml",
+    "primitive_counts": {"table": 1, "pedestal": 1, "plastic_cup": 13},
+    "teleop_capabilities": {
+      "scene_operations": true,
+      "reset_world": true,
+      "camera_presets": true
+    }
+  },
   "gui_numeric_review": {
     "experiment_id": "fusion-gui-003",
     "counting_qualification_run": false,
