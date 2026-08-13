@@ -1,4 +1,4 @@
-"""Acceptance checks that must run from the clean fusion-final overlay."""
+"""Acceptance checks that must run from a clean isolated project overlay."""
 
 from __future__ import annotations
 
@@ -9,7 +9,15 @@ from pathlib import Path
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from so101_demo.runtime.provenance import installed_bundle
 
-EXPECTED_EXECUTABLES = {"gazebo_execute", "pick_place", "run_qualification", "scene_setup"}
+EXPECTED_EXECUTABLES = {
+    "camera_preset",
+    "gazebo_execute",
+    "pick_place",
+    "run_qualification",
+    "scene_setup",
+    "teleop_reset",
+    "teleop_workflow",
+}
 EXPECTED_LAUNCHERS = {
     "so101_gazebo.launch.py",
     "so101_gazebo_pick_place.launch.py",
@@ -27,9 +35,15 @@ def _git_head() -> str:
     ).stdout.strip()
 
 
-def test_manifest_matches_final_installed_prefix_and_source() -> None:
+def test_manifest_matches_selected_installed_prefix_and_source() -> None:
     prefix = Path(get_package_prefix("so101_demo_py")).resolve()
-    assert prefix.parent.name == "fusion-final"
+    expected = os.environ.get("SO101_DEMO_EXPECTED_PREFIX")
+    if expected is not None:
+        assert prefix == Path(expected).resolve()
+    assert prefix.name == "so101_demo_py"
+    assert Path(get_package_share_directory("so101_demo_py")).resolve() == (
+        prefix / "share/so101_demo_py"
+    )
     manifest = installed_bundle().manifest["inputs"]
     assert manifest["package_prefix"] == str(prefix)
     assert manifest["source_commit"] == os.environ.get("SO101_SOURCE_COMMIT", _git_head())
