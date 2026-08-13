@@ -515,7 +515,7 @@
     "urdf_sha256": "0646707fbfb8fdfea5076afbf89f297027c0324465ab7ebe8129fc36c0445f4a"
   },
   "schema": "so101-full-restart-baseline-v1",
-  "source_evidence_root": "/data/work/so101-debug-mujoco-maintainability-remediation",
+  "source_evidence_root": "/data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation",
   "threshold_derivation": "NONE_DIAGNOSTIC_COMPARISON_ONLY",
   "visual_waivers": [
     "EXP-126"

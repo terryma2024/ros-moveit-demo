@@ -54,8 +54,8 @@
       "attempts": 5,
       "session_id": "fusion-reset-world-003-reset",
       "reset_epochs": [1, 2, 3, 4, 5],
-      "evidence_root": "/data/work/so101-debug-fusion-reset-world-003",
-      "manifest": "/data/work/so101-debug-fusion-reset-world-003/qualification-manifest.json",
+      "evidence_root": "/data/work/so101-evidence/fusion/so101-debug-fusion-reset-world-003",
+      "manifest": "/data/work/so101-evidence/fusion/so101-debug-fusion-reset-world-003/qualification-manifest.json",
       "manifest_sha256": "0a0445b64558de7661cfe9c4ff1dccc3ffb189b15da306f922b147195fb73bec",
       "independent_verifier_log_sha256": "e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37"
     }
@@ -72,7 +72,7 @@
     "source_commit": "e5e4d9b21ea81488b553da250070ae546695f36f",
     "installed_prefix": "/data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py",
     "bundle_sha256": "40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743",
-    "evidence_root": "/data/work/so101-debug-fusion-gazebo-007",
+    "evidence_root": "/data/work/so101-evidence/fusion/so101-debug-fusion-gazebo-007",
     "artifact_sha256": {
       "launch_log": "3357d1ebcfbba712f7387574f45cd6fde6366d37a86285a7942bae6119961bfe",
       "result_manifest": "fb6f930c8bd7e60c3ab93922b65a8d7dbf2fc5398466395233ab7ba577a8b2e6",
@@ -130,15 +130,15 @@
       "place_alignment",
       "release_retreat"
     ],
-    "evidence_root": "/data/work/so101-debug-fusion-gui-003",
+    "evidence_root": "/data/work/so101-evidence/fusion/so101-debug-fusion-gui-003",
     "visual_evidence": [
       {
-        "path": "/data/work/so101-debug-fusion-gui-003/cua-snapshot-01.png",
+        "path": "/data/work/so101-evidence/fusion/so101-debug-fusion-gui-003/cua-snapshot-01.png",
         "sha256": "e92cab9317bae61ba887e6c91394604e034b4b2a4c68a8d1f538f89710bc2707",
         "observation": "Running MuJoCo task scene with the articulated SO-101, cup, table, pedestal, and target marker visible."
       },
       {
-        "path": "/data/work/so101-debug-fusion-gui-003/cua-snapshot-02.png",
+        "path": "/data/work/so101-evidence/fusion/so101-debug-fusion-gui-003/cua-snapshot-02.png",
         "sha256": "2b0ea691d81a44cb5122b2189d0a4215a4fe8eafee9549b5993594a9f3d2e4bb",
         "observation": "Fresh follow-up snapshot shows the live arm moved into the cup with the gripper aligned at the rim."
       }

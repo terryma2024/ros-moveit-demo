@@ -82,7 +82,7 @@ From the worktree root on ai-station:
 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 \
   PYTHONPATH=src/so101_mujoco_demo_py \
   python3 src/so101_mujoco_demo_py/scripts/summarize_full_restart_baseline.py \
-  --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation \
+  --evidence-root /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation \
   --experiment EXP-126 --experiment EXP-127 --experiment EXP-128 \
   --experiment EXP-129 --experiment EXP-130 \
   --visual-waiver EXP-126 \
