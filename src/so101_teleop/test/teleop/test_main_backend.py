@@ -3,10 +3,8 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-
 from so101_teleop.backends.protocol import BackendEnvelope, BackendError
 from so101_teleop.main import select_backend
-
 
 main_module = importlib.import_module("so101_teleop.main")
 
