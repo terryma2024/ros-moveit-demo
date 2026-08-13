@@ -36,5 +36,7 @@
       - moving_fingertip_pad_collision_005
     other_contact_geoms: [table_collision]
     max_contacts: 128
+    physics_step_buffer_capacity: 5000
+    physics_step_chunk_size: 50
     publish_rate: 100.0
     topic: /so101/simulation/evidence
