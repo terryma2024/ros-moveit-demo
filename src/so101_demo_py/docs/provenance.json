@@ -68,12 +68,20 @@
     }
   },
   "gazebo_python_capabilities": {
-    "status": "IMPLEMENTED_PENDING_LIVE_ACCEPTANCE",
+    "status": "LIVE_ACCEPTED_PENDING_FINAL_QUALIFICATION",
     "owner_package": "so101_demo_py",
     "public_clis": ["scene_setup", "camera_preset", "teleop_reset"],
     "backend_selector": ["--backend", "gazebo"],
     "geometry_contract": "assets/common/geometry-manifest.yaml",
+    "geometry_sha256": "6dc64c197a82316c4ac856530c6caf5d905ffd2b0ea2778d85d87b9a3e89b235",
     "primitive_counts": {"table": 1, "pedestal": 1, "plastic_cup": 13},
+    "live_acceptance": {
+      "scene_experiment": "CP-GZPY-SCENE-002",
+      "camera_experiment": "CP-GZPY-CAMERA-001",
+      "reset_experiment": "CP-GZPY-RESET-005",
+      "evidence_root": "/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live",
+      "reset_completed_phases": 13
+    },
     "teleop_capabilities": {
       "scene_operations": true,
       "reset_world": true,
