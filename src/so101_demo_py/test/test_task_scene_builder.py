@@ -56,6 +56,22 @@ def test_scene_verifier_proves_full_contract() -> None:
     assert verification.evidence["attached_ids"] == []
 
 
+def test_scene_verifier_accepts_equivalent_quaternion_sign_from_moveit() -> None:
+    from so101_demo.control.planning_scene.task_scene import verify_task_scene
+
+    scene = _readback_scene()
+    pose = scene.world.collision_objects[2].primitive_poses[4]
+    pose.orientation.x *= -1.0
+    pose.orientation.y *= -1.0
+    pose.orientation.z *= -1.0
+    pose.orientation.w *= -1.0
+
+    verification = verify_task_scene(scene, _geometry())
+
+    assert verification.success
+    assert verification.evidence["mismatches"] == []
+
+
 def test_scene_verifier_rejects_pose_count_color_and_attachment_mismatches() -> None:
     from moveit_msgs.msg import AttachedCollisionObject
     from so101_demo.control.planning_scene.task_scene import verify_task_scene

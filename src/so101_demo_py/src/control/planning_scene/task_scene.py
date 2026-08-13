@@ -107,6 +107,19 @@ def _close(expected: tuple[float, ...], actual: tuple[float, ...]) -> bool:
     )
 
 
+def _pose_close(expected: tuple[float, ...], actual: tuple[float, ...]) -> bool:
+    if len(expected) != 7 or len(actual) != 7:
+        return False
+    if not _close(expected[:3], actual[:3]):
+        return False
+    expected_orientation = expected[3:]
+    actual_orientation = actual[3:]
+    return _close(expected_orientation, actual_orientation) or _close(
+        expected_orientation,
+        tuple(-value for value in actual_orientation),
+    )
+
+
 def verify_task_scene(
     scene,
     geometry: TaskGeometry,
@@ -149,7 +162,7 @@ def verify_task_scene(
         primitive_counts[expected.object_id] = len(observed.primitives)
         if observed.header.frame_id != geometry.frame_id:
             mismatches.append(f"{expected.object_id}.frame")
-        if not _close(expected.pose.values, _pose_values(observed.pose)):
+        if not _pose_close(expected.pose.values, _pose_values(observed.pose)):
             mismatches.append(f"{expected.object_id}.pose")
         if len(observed.primitives) != len(expected.primitives):
             mismatches.append(f"{expected.object_id}.primitive_count")
@@ -164,7 +177,7 @@ def verify_task_scene(
                 mismatches.append(f"{expected.object_id}.primitive[{index}].type")
             if not _close(primitive.dimensions, tuple(actual_primitive.dimensions)):
                 mismatches.append(f"{expected.object_id}.primitive[{index}].dimensions")
-            if not _close(
+            if not _pose_close(
                 primitive.pose.values,
                 _pose_values(observed.primitive_poses[index]),
             ):
