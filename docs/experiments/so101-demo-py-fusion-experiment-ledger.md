@@ -6,7 +6,9 @@ worktree: /data/work/ws_moveit/.worktrees/so101-demo-py-fusion
 branch: codex/so101-demo-py-fusion
 base_commit: 866656b217eff4c57eade161c94ea0cef326d13d
 current_commit: e5e4d9b21ea81488b553da250070ae546695f36f
-evidence_root: /data/work/so101-debug-fusion-*
+evidence_roots:
+  - /data/work/so101-evidence/fusion/so101-debug-fusion-*
+  - /data/work/so101-evidence/archived/fusion/so101-debug-fusion-*
 confirmed_conclusions:
   - Clean main at 866656b contains the qualified migration and is the selected implementation base; CP-FUSION-001.
   - The frozen MuJoCo policy SHA-256 is aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356; CP-FUSION-001.
@@ -89,7 +91,7 @@ bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
 policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 ros_domain_id: 192
 port: 27800
-evidence_root: /data/work/so101-debug-fusion-smoke-007
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-smoke-007
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 abort_criteria: any provenance mismatch, invalid evidence, phase or physical failure, or unclean shutdown
@@ -111,10 +113,10 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 ros_domain_id: 193
 gz_partition: fusion-exp-006-ba1ab5f
 session_id: fusion-exp-006-ba1ab5f
-evidence_root: /data/work/so101-debug-fusion-gazebo-006
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-gazebo-006
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
-command: ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-006-ba1ab5f evidence_file:=/data/work/so101-debug-fusion-gazebo-006/result.json
+command: ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-006-ba1ab5f evidence_file:=/data/work/so101-evidence/archived/fusion/so101-debug-fusion-gazebo-006/result.json
 abort_criteria: INVALID result, missing direct source/install provenance, unowned cleanup target, or contaminated initial/runtime evidence
 cleanup_scope: only the exact launch process group and any conclusively identified orphan created by EXP-FUSION-006
 expected: valid FAILED or SUCCEEDED with direct source_commit, installed_prefix, first boundary, stable code, classification, and evidence references
@@ -139,7 +141,7 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
 ros_domain_ids: [194, 195, 196, 197, 198]
 ports: [27810, 27811, 27812, 27813, 27814]
-evidence_root: /data/work/so101-debug-fusion-full-restart-003
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-full-restart-003
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 abort_criteria: any provenance drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
@@ -165,7 +167,7 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 bundle_sha256: 073519b95acb05105885330288a96019b3a559f7c63b7c37d701b9d579e48215
 ros_domain_id: 199
 port: 27820
-evidence_root: /data/work/so101-debug-fusion-reset-world-002
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-reset-world-002
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 abort_criteria: any provenance/lifecycle/epoch drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
@@ -190,7 +192,7 @@ ros_domain_id: 200
 session_id: fusion-gui-002-ba1ab5f
 tmux_session: so101-fusion-gui-audit
 cua_session: so101-fusion-gui-audit
-evidence_root: /data/work/so101-debug-fusion-gui-002
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-gui-002
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 inspection_contract: ai-station CUA fresh window-scoped snapshot, inspect, then fresh snapshot; record image path/hash plus terminal numeric evidence
@@ -250,7 +252,7 @@ model_sha256: f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca
 scene_sha256: b98eca6f2ae8547b8b7213625512ef360c5496c7ea2d124535698ea58b24e7c0
 ros_domain_id: 201
 port: 27840
-evidence_root: /data/work/so101-debug-fusion-smoke-008
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-smoke-008
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 abort_criteria: any provenance/fingerprint mismatch, invalid evidence, phase or physical failure, or unclean shutdown
@@ -294,10 +296,10 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 ros_domain_id: 202
 gz_partition: fusion-exp-007-e5e4d9b
 session_id: fusion-exp-007-e5e4d9b
-evidence_root: /data/work/so101-debug-fusion-gazebo-007
+evidence_root: /data/work/so101-evidence/fusion/so101-debug-fusion-gazebo-007
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
-command: ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-007-e5e4d9b evidence_file:=/data/work/so101-debug-fusion-gazebo-007/result.json
+command: ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-007-e5e4d9b evidence_file:=/data/work/so101-evidence/fusion/so101-debug-fusion-gazebo-007/result.json
 abort_criteria: INVALID result, missing direct source/install provenance, unowned cleanup target, or contaminated initial/runtime evidence
 cleanup_scope: only the exact launch process group and any conclusively identified orphan created by EXP-FUSION-007
 expected: valid FAILED or SUCCEEDED with direct source_commit, installed_prefix, first boundary, stable code, classification, and evidence references
@@ -322,7 +324,7 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
 ros_domain_ids: [210, 211, 212, 213, 214]
 ports: [27850, 27851, 27852, 27853, 27854]
-evidence_root: /data/work/so101-debug-fusion-full-restart-004
+evidence_root: /data/work/so101-evidence/fusion/so101-debug-fusion-full-restart-004
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 abort_criteria: any provenance drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
@@ -348,7 +350,7 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 bundle_sha256: 40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743
 ros_domain_id: 215
 port: 27860
-evidence_root: /data/work/so101-debug-fusion-reset-world-003
+evidence_root: /data/work/so101-evidence/fusion/so101-debug-fusion-reset-world-003
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 abort_criteria: any provenance/lifecycle/epoch drift, invalid evidence, valid failure, missing artifact, or unclean shutdown
@@ -373,7 +375,7 @@ ros_domain_id: 216
 session_id: fusion-gui-003-e5e4d9b
 tmux_session: so101-fusion-gui-audit
 cua_session: so101-fusion-gui-audit
-evidence_root: /data/work/so101-debug-fusion-gui-003
+evidence_root: /data/work/so101-evidence/fusion/so101-debug-fusion-gui-003
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 inspection_contract: ai-station CUA fresh window-scoped snapshot, inspect, then fresh snapshot; record image path/hash plus terminal numeric evidence
@@ -400,7 +402,7 @@ simulation_session_id: fusion-exp-007-e5e4d9b
 first_failed_phase: MOVE_ABOVE_OBJECT
 error_code: PATH_TOLERANCE_VIOLATED
 failure_category: EXECUTION
-evidence_root: /data/work/so101-debug-fusion-gazebo-007
+evidence_root: /data/work/so101-evidence/fusion/so101-debug-fusion-gazebo-007
 artifacts_sha256:
   result_manifest: fb6f930c8bd7e60c3ab93922b65a8d7dbf2fc5398466395233ab7ba577a8b2e6
   raw_evidence: 13a494bd75dd63588a82b9ff12955922bf44c0eae292b658a43aeb2456c1d63f
@@ -437,7 +439,7 @@ final_cup_positions_world_m:
   - [-0.08001397604556273, -0.2477560114245982, 0.1650046757431374]
   - [-0.07783297232130451, -0.2475437199345982, 0.16548776973562837]
   - [-0.07793536623543336, -0.24853611640939705, 0.16548355927049258]
-evidence_root: /data/work/so101-debug-fusion-full-restart-004
+evidence_root: /data/work/so101-evidence/fusion/so101-debug-fusion-full-restart-004
 manifest_sha256: 98e98b96959bf20591bf268d8452383fc9dce045e6346e5b37642acb4a4bc810
 independent_verifier: QUALIFIED
 independent_verifier_log_sha256: e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37
@@ -470,7 +472,7 @@ final_cup_positions_world_m:
   - [-0.07938944189962344, -0.24901961906169562, 0.1654861923702452]
   - [-0.07881753165954725, -0.2475221045956349, 0.16507803747757804]
   - [-0.0792330496299509, -0.2469499387342337, 0.16513009744534393]
-evidence_root: /data/work/so101-debug-fusion-reset-world-003
+evidence_root: /data/work/so101-evidence/fusion/so101-debug-fusion-reset-world-003
 manifest_sha256: 0a0445b64558de7661cfe9c4ff1dccc3ffb189b15da306f922b147195fb73bec
 independent_verifier: QUALIFIED
 independent_verifier_log_sha256: e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37
@@ -479,7 +481,7 @@ gui_mirror:
   status: VALID_SUCCESS_NONCOUNTING
   simulation_session_id: fusion-gui-003-e5e4d9b
   completed_phases: [staged_approach, contact_hold, micro_lift, policy_lift_waypoint1, remaining_lift, transport, descend, place_alignment, release_retreat]
-  evidence_root: /data/work/so101-debug-fusion-gui-003
+  evidence_root: /data/work/so101-evidence/fusion/so101-debug-fusion-gui-003
   screenshots_sha256:
     - e92cab9317bae61ba887e6c91394604e034b4b2a4c68a8d1f538f89710bc2707
     - 2b0ea691d81a44cb5122b2189d0a4215a4fe8eafee9549b5993594a9f3d2e4bb
@@ -616,7 +618,7 @@ consumer_reliable_history_depth: 100
 producer_reliable_history_depth: 100
 ros_domain_id: 205
 port: 27750
-evidence_root: /data/work/so101-debug-fusion-smoke-006
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-smoke-006
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 abort_criteria: any provenance mismatch, invalid evidence, phase failure, physical failure, or unclean shutdown
@@ -659,7 +661,7 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
 ros_domain_ids: [180, 181, 182, 183, 184]
 ports: [27500, 27501, 27502, 27503, 27504]
-evidence_root: /data/work/so101-debug-fusion-full-restart-002
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-full-restart-002
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
@@ -724,7 +726,7 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 bundle_sha256: 8ddd2c1682d5e22707bf59db2547dbc5426cbcfd296aea7c9bb65666cdaf9388
 ros_domain_id: 190
 port: 27600
-evidence_root: /data/work/so101-debug-fusion-reset-world-001
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-reset-world-001
 evidence_root_pre_registration_state: ABSENT
 evidence_filesystem: /data NVMe
 owned_processes_before_launch: NONE
@@ -786,11 +788,11 @@ ros_domain_id: 191
 session_id: fusion-gui-001-d78093c
 tmux_session: so101-fusion-gui-final
 cua_session: so101-fusion-gui-final
-evidence_root: /data/work/so101-debug-fusion-gui-001
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-gui-001
 evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
-command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=false session_id:=fusion-gui-001-d78093c evidence_file:=/data/work/so101-debug-fusion-gui-001/result.json
+command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=false session_id:=fusion-gui-001-d78093c evidence_file:=/data/work/so101-evidence/archived/fusion/so101-debug-fusion-gui-001/result.json
 inspection_contract: ai-station CUA fresh window-scoped snapshot, inspect, then fresh snapshot; record image path/hash plus terminal numeric evidence
 abort_criteria:
   - any source, installed-prefix, dependency, policy, bundle, or session mismatch
@@ -818,8 +820,8 @@ terminal_status: DONE
 visual_review:
   cua_contract: snapshot, inspect, fresh snapshot
   window: "MuJoCo : so101_task_scene"
-  first_snapshot: {path: /data/work/so101-debug-fusion-gui-001/cua-snapshot-01.png, sha256: b888827857d6abec9da21207042c5ee7e77f5816f74980b3c5af7866b76823bc}
-  fresh_snapshot: {path: /data/work/so101-debug-fusion-gui-001/cua-snapshot-02.png, sha256: c717912bc82c55306410c90f4008e98f1685030004a2cfd59cd19568a54332e2}
+  first_snapshot: {path: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-gui-001/cua-snapshot-01.png, sha256: b888827857d6abec9da21207042c5ee7e77f5816f74980b3c5af7866b76823bc}
+  fresh_snapshot: {path: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-gui-001/cua-snapshot-02.png, sha256: c717912bc82c55306410c90f4008e98f1685030004a2cfd59cd19568a54332e2}
   observed_change: The first image shows the running loaded task scene; the fresh image shows the arm moved into the cup with the gripper aligned at its rim.
 numeric_review:
   final_cup_position_world_m: [-0.07973180070562448, -0.24808909440122215, 0.1655015459302394]
@@ -868,10 +870,10 @@ policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
 bundle_sha256: d9a0206b7e1a36b75a0cc0240117d29966bfcf8a2b9bcf09c6146d73dfab7459
 ros_domain_ids: [180, 181, 182, 183, 184]
 ports: [27500, 27501, 27502, 27503, 27504]
-evidence_root: /data/work/so101-debug-fusion-full-restart-001
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-fusion-full-restart-001
 evidence_root_pre_registration_state: ABSENT
 evidence_filesystem: /data NVMe
-command: ros2 run so101_demo_py run_qualification --batch-id fusion-full-restart-001 --lifecycle FULL_RESTART --count 5 --fingerprint d9a0206b7e1a36b75a0cc0240117d29966bfcf8a2b9bcf09c6146d73dfab7459 --evidence-root /data/work/so101-debug-fusion-full-restart-001 --base-domain-id 180 --base-port 27500 --headless
+command: ros2 run so101_demo_py run_qualification --batch-id fusion-full-restart-001 --lifecycle FULL_RESTART --count 5 --fingerprint d9a0206b7e1a36b75a0cc0240117d29966bfcf8a2b9bcf09c6146d73dfab7459 --evidence-root /data/work/so101-evidence/archived/fusion/so101-debug-fusion-full-restart-001 --base-domain-id 180 --base-port 27500 --headless
 owned_processes_before_launch: NONE
 preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
 abort_criteria:
@@ -1412,10 +1414,10 @@ behavior_changes: NONE
 ros_domain_id: 172
 gz_partition: NOT_APPLICABLE
 session_id: fusion-exp-002-ab96a68
-evidence_root: /data/work/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-002
+evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-002
 evidence_root_pre_registration_state: ABSENT
 evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
-command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-002-ab96a68 evidence_file:=/data/work/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-002/result.json
+command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-002-ab96a68 evidence_file:=/data/work/so101-evidence/archived/fusion/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-002/result.json
 owned_processes_before_launch: NONE
 preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
 abort_criteria:

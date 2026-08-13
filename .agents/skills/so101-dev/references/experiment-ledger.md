@@ -9,7 +9,7 @@
 - 任务可能跨上下文压缩、goal 暂停或 agent 交接；
 - 已有多轮 `/tmp` 证据，或用户要求避免重复已验证路线。
 
-单轮、不会交接的最小复现继续只用本轮 `/tmp` 证据目录。
+单轮、不会交接的普通低速最小复现继续只用唯一的 `/tmp/so101-debug-<task-id>/` 证据目录。
 
 ## 恢复任务时的硬门槛
 
@@ -25,9 +25,17 @@
 ## 文件位置与证据边界
 
 - 账本：当前实现 worktree 的 `docs/experiments/<task-slug>-experiment-ledger.md`。
-- 原始证据：唯一的 `/tmp/so101-debug-<task-id>/` 根目录。
+- 每个 task 只能登记一个原始证据根：
+  - 普通低速日志、截图、检查和临时构建证据：`/tmp/so101-debug-<task-id>/`；
+  - 高频无损或明确要求持久保留的证据：`/data/work/so101-evidence/<task-family>/<run-id>/`；
+  - 已被替代但仍需审计的批次：`/data/work/so101-evidence/archived/<task-family>/<run-id>/`。
+- 禁止直接创建 `/data/work/so101-debug-*`，也不得把一个 task 分散到多个 evidence root。
 - 账本只保存关键数值、退出码、摘要、证据路径和必要哈希；日志、截图、视频、rosbag 和构建产物不得复制进账本或源码目录。
 - `/tmp` 不是长期结论的唯一保存位置。证据已丢失时必须标记 `evidence_unavailable`，不得假装仍可复核。
+- 完成 checkpoint 必须分类报告 retained、archived 和可删除候选。未获用户明确授权不得删除；
+  “可删除候选”不等于删除许可。
+- 迁移或归档证据时，先记录 source-to-target 清单和相对文件 SHA256/大小/数量；移动后逐项复核，
+  更新 tracked ledger/provenance/docs 绝对路径，但不回写或改变历史实验结论。
 - 工程调试账本不默认写入学习者 session，也不改变个人学习进度。
 
 同一任务只允许一个账本写入者。其他 agent 返回只读分析，由主执行者落账，避免并发改写历史。
@@ -44,7 +52,7 @@ worktree: <absolute-path>
 branch: <branch-name>
 base_commit: <commit>
 current_commit: <commit>
-evidence_root: /tmp/so101-debug-<task-id>/
+evidence_root: <the-one-approved-/tmp-or-/data/work/so101-evidence-root>
 confirmed_conclusions:
   - <结论及其 experiment_id>
 disproven_routes:

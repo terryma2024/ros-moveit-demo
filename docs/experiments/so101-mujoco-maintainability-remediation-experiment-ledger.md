@@ -3637,8 +3637,8 @@ runtime_identity:
   ros_domain_id: 196
   port: 8036
   gz_partition: so101-mnt-a-exp124
-  qualification_evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp124
-  teleop_evidence_base: /data/work/so101-debug-mujoco-maintainability-remediation/exp124/teleop-evidence
+  qualification_evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp124
+  teleop_evidence_base: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp124/teleop-evidence
 single_variable: The qualification owner routes unchanged high-rate durable evidence writes from the slow /tmp filesystem to its explicit NVMe evidence volume. Physics hook, producer cadence/chunk size/QoS, consumer validation, storage durability, frozen strategy, model, scene, controller, thresholds, and lifecycle assertions are identical to EXP-123.
 procedure:
   - Start exactly one fresh non-headless stack from the isolated storage-route-r7 overlay and perform the existing transactional ResetWorld.
@@ -3673,7 +3673,7 @@ execution:
   workflow_business_terminal: HTTP 503 BACKEND_OPERATION_FAILED / PHASE_EXIT_NONZERO after transport; excluded by the preregistered diagnostic acceptance contract.
   strategy_changed: false
 authoritative_raw_evidence:
-  index: /data/work/so101-debug-mujoco-maintainability-remediation/exp124/teleop-evidence/MNT-A-EXP124-full-01/so101-teleop-workflow-937f099c-1023-45c2-9822-5d936cf7de4c/transport-dynamic-raw/run-index.json
+  index: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp124/teleop-evidence/MNT-A-EXP124-full-01/so101-teleop-workflow-937f099c-1023-45c2-9822-5d936cf7de4c/transport-dynamic-raw/run-index.json
   index_sha256: 8d51eb34fed9c2248618a80eba1acf5fffc0681899cfb6595da63f68b1c4be83
   status: COMPLETE
   outcome_class: PHYSICAL_TRANSPORT_SUCCESS
@@ -3705,9 +3705,9 @@ acceptance_checks:
   workflow_http_returned: true
   clean_shutdown: true
 evidence:
-  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp124/exp124-diagnostic.json
+  result: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp124/exp124-diagnostic.json
   result_sha256: fe4d98ef2e738854ae415b431c40b3e8711b22710d215b6dc1136c798cc09038
-  launch_log: /data/work/so101-debug-mujoco-maintainability-remediation/exp124/run-01/launch.log
+  launch_log: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp124/run-01/launch.log
   launch_log_sha256: 54affe710254524373634641242edd2e82f095217c45969be2c3bce22eee4e5a
 provenance:
   behavior_source_commit: b0f83b67a1414f394ac5aeb8693acc74cf575bd4
@@ -3775,7 +3775,7 @@ runtime_identity:
   port: 8037
   gz_partition: so101-mnt-a-exp125
 isolated_install: /tmp/so101-debug-mujoco-maintainability-remediation/exp125-install
-qualified_evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp125
+qualified_evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp125
 runtime_fingerprint: /tmp/so101-debug-mujoco-maintainability-remediation/exp125-runtime-fingerprint.json
 runtime_fingerprint_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
 run_harness: /tmp/so101-debug-mujoco-maintainability-remediation/run_exp125_full.py
@@ -3862,7 +3862,7 @@ visual_acceptance:
   cup_upright_inside_target_ring: true
   open_gripper_and_arm_retired_clear: true
   robot_pedestal_table_cup_ring_visible: true
-  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp125/cua-visual.png
+  screenshot: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp125/cua-visual.png
   screenshot_sha256: cebd657c3363df16d6d1bfaea55317e2e54beb98f6a6ed55d9234ac14acb0e85
   auxiliary_rviz_window_available: false
   note: The fresh CUA image proves the preregistered MuJoCo physical visual gate. This launch did not create an RViz window, so RViz-only auxiliary claims remain explicitly unsupported rather than inferred.
@@ -3884,7 +3884,7 @@ shutdown:
   port_8037_listener_after_stop: NONE
   owned_process_residue: NONE
 artifacts:
-  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp125/exp125-result.json
+  result: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp125/exp125-result.json
   result_sha256: 80a8c645603bdeac9c1f18bcfb4fc37621d99829e5eb701c6e3be5f57bd22d87
   manifest_sha256: 7dca300dbefc11ed4472eb8d8ed2db06080ae0e0be3e053cd40a866b5e6dbc04
 protected_state:
@@ -3946,11 +3946,11 @@ runtime_preflight:
   free_http_ports: [8038, 8039, 8040, 8041, 8042]
   absent_tmux_sessions: [so101-mnt-q-exp126, so101-mnt-q-exp127, so101-mnt-q-exp128, so101-mnt-q-exp129, so101-mnt-q-exp130]
   absent_evidence_roots:
-    - /data/work/so101-debug-mujoco-maintainability-remediation/exp126
-    - /data/work/so101-debug-mujoco-maintainability-remediation/exp127
-    - /data/work/so101-debug-mujoco-maintainability-remediation/exp128
-    - /data/work/so101-debug-mujoco-maintainability-remediation/exp129
-    - /data/work/so101-debug-mujoco-maintainability-remediation/exp130
+    - /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp126
+    - /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp127
+    - /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp128
+    - /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp129
+    - /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp130
   preserved_tmux: [codex attached, codex-cua idle at zsh prompt, so101-mujoco-gui historical windows]
 recovered_EXP_125:
   behavior_source_commit: d30bf2bd54ea9359d08b866cdda447dfe2a3c271
@@ -4043,8 +4043,8 @@ experiments:
       ros_domain_id: 198
       http_port: 8038
       gz_partition: so101-mnt-q-exp126
-      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp126
-    command: GZ_PARTITION=so101-mnt-q-exp126 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-126 --session-id MNT-Q-EXP126-full-01 --domain-id 198 --port 8038 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp126
+      evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp126
+    command: GZ_PARTITION=so101-mnt-q-exp126 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-126 --session-id MNT-Q-EXP126-full-01 --domain-id 198 --port 8038 --evidence-root /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp126
     decision: PENDING
     next_experiment: EXP-127_ON_SUCCESS_ONLY
   - experiment_id: EXP-127
@@ -4059,8 +4059,8 @@ experiments:
       ros_domain_id: 199
       http_port: 8039
       gz_partition: so101-mnt-q-exp127
-      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp127
-    command: GZ_PARTITION=so101-mnt-q-exp127 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-127 --session-id MNT-Q-EXP127-full-01 --domain-id 199 --port 8039 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp127
+      evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp127
+    command: GZ_PARTITION=so101-mnt-q-exp127 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-127 --session-id MNT-Q-EXP127-full-01 --domain-id 199 --port 8039 --evidence-root /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp127
     decision: KEEP_VALID_SUCCESS_2_OF_5
     next_experiment: EXP-128_ON_SUCCESS_ONLY
   - experiment_id: EXP-128
@@ -4075,8 +4075,8 @@ experiments:
       ros_domain_id: 200
       http_port: 8040
       gz_partition: so101-mnt-q-exp128
-      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp128
-    command: GZ_PARTITION=so101-mnt-q-exp128 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-128 --session-id MNT-Q-EXP128-full-01 --domain-id 200 --port 8040 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp128
+      evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp128
+    command: GZ_PARTITION=so101-mnt-q-exp128 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-128 --session-id MNT-Q-EXP128-full-01 --domain-id 200 --port 8040 --evidence-root /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp128
     decision: KEEP_VALID_SUCCESS_3_OF_5
     next_experiment: EXP-129_ON_SUCCESS_ONLY
   - experiment_id: EXP-129
@@ -4091,8 +4091,8 @@ experiments:
       ros_domain_id: 201
       http_port: 8041
       gz_partition: so101-mnt-q-exp129
-      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp129
-    command: GZ_PARTITION=so101-mnt-q-exp129 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-129 --session-id MNT-Q-EXP129-full-01 --domain-id 201 --port 8041 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp129
+      evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp129
+    command: GZ_PARTITION=so101-mnt-q-exp129 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-129 --session-id MNT-Q-EXP129-full-01 --domain-id 201 --port 8041 --evidence-root /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp129
     decision: KEEP_VALID_SUCCESS_4_OF_5
     next_experiment: EXP-130_ON_SUCCESS_ONLY
   - experiment_id: EXP-130
@@ -4107,8 +4107,8 @@ experiments:
       ros_domain_id: 202
       http_port: 8042
       gz_partition: so101-mnt-q-exp130
-      evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp130
-    command: GZ_PARTITION=so101-mnt-q-exp130 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-130 --session-id MNT-Q-EXP130-full-01 --domain-id 202 --port 8042 --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/exp130
+      evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp130
+    command: GZ_PARTITION=so101-mnt-q-exp130 python3 /tmp/so101-debug-mujoco-maintainability-remediation/run_exp126_five_run.py --experiment-id EXP-130 --session-id MNT-Q-EXP130-full-01 --domain-id 202 --port 8042 --evidence-root /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp130
     decision: KEEP_VALID_SUCCESS_5_OF_5
     next_experiment: NONE_FINALIZE_BATCH_ON_SUCCESS
 decision: PLANNED
@@ -4198,7 +4198,7 @@ preregistered_identity:
   ros_domain_id: 198
   http_port: 8038
   gz_partition: so101-mnt-q-exp126
-  evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp126
+  evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp126
 lifecycle: FULL_RESTART
 workflow_invocations: 1
 reset_transactions: 1
@@ -4265,7 +4265,7 @@ owner_evidence:
 visual_observer_report:
   required_claims_reported_true: true
   auxiliary_rviz_window_available: false
-  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp126/cua-visual.png
+  screenshot: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp126/cua-visual.png
   screenshot_sha256: 798b10ac412a161adf08c49eca57349ccdd0578ae048e4b71e5905ec9860ef93
 visual_artifact_integrity:
   file_identification: PNG image data, 5120 x 2880, 8-bit/color RGBA, non-interlaced
@@ -4283,9 +4283,9 @@ shutdown:
   tmux_session_after_stop: NONE
   owned_process_residue: NONE
 artifacts:
-  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp126/exp-126-result.json
+  result: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp126/exp-126-result.json
   result_sha256: 26cd994123775e9b4be456c501243282a05ea8b9ddb2460405626d1ce76bd693
-  visual_verdict: /data/work/so101-debug-mujoco-maintainability-remediation/exp126/cua-visual-verdict.json
+  visual_verdict: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp126/cua-visual-verdict.json
   visual_verdict_sha256: 490b0849ca21d18c6776da85a8d0a4db4771cde5fe5ea16d02dea048e1f98cbf
 decision: INVALID; stop the five-run batch under the preregistered stop rule. Do not count the physical success and do not rerun EXP-126.
 next_experiment: NONE_BATCH_STOPPED_INVALID
@@ -4421,7 +4421,7 @@ preregistered_identity:
   ros_domain_id: 199
   http_port: 8039
   gz_partition: so101-mnt-q-exp127
-  evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp127
+  evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp127
 lifecycle: FULL_RESTART
 workflow_invocations: 1
 reset_transactions: 1
@@ -4519,7 +4519,7 @@ transport_raw_evidence:
 visual_acceptance:
   passed: true
   required_claims_all_true: true
-  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp129/cua-visual.png
+  screenshot: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp129/cua-visual.png
   screenshot_sha256: 3696fce78f366304486bc12c847cedd0506af13ae021480a1781176cc8dc4894
   screenshot_size_bytes: 781561
   screenshot_dimensions: [5120, 2880]
@@ -4537,7 +4537,7 @@ shutdown:
   tmux_session_after_stop: NONE
   owned_process_residue: NONE
 artifacts:
-  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp129/exp-129-result.json
+  result: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp129/exp-129-result.json
   result_sha256: fcee547b94e507ad3a63053b445120c0529fa925891bc8a3312b51e49048e6d4
   owner_manifest_sha256: 75b83416e533992fe818aca922c83e207e62f7d14e58b5ba9c758cd9f927ae8d
   release_retreat_sha256: bd058fe1661a3acd28b128b795b616b10cd83599db5378b2afe53c9451eb77ca
@@ -4582,7 +4582,7 @@ preregistered_identity:
   ros_domain_id: 202
   http_port: 8042
   gz_partition: so101-mnt-q-exp130
-  evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp130
+  evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp130
 lifecycle: FULL_RESTART
 workflow_invocations: 1
 reset_transactions: 1
@@ -4674,7 +4674,7 @@ transport_raw_evidence:
 visual_acceptance:
   passed: true
   required_claims_all_true: true
-  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp128/cua-visual.png
+  screenshot: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp128/cua-visual.png
   screenshot_sha256: da9dbacc2d9005088a467503120e4ae0b5d17302e9ecd36d37ccce4f695fc3d8
   screenshot_size_bytes: 780802
   screenshot_dimensions: [5120, 2880]
@@ -4692,7 +4692,7 @@ shutdown:
   tmux_session_after_stop: NONE
   owned_process_residue: NONE
 artifacts:
-  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp128/exp-128-result.json
+  result: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp128/exp-128-result.json
   result_sha256: 40c328da1cc269c80585ab4092c533946c3fa83cc6eb590921675bfb0382a52a
   owner_manifest_sha256: 75c20a3d465f3a2839831462df96e7f33e7a310b1294949f156381826441d775
   release_retreat_sha256: 887b2c963c4cc0885757a3a6c648957c7c25791d103211d557e6df52abc1a13b
@@ -4737,7 +4737,7 @@ preregistered_identity:
   ros_domain_id: 201
   http_port: 8041
   gz_partition: so101-mnt-q-exp129
-  evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp129
+  evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp129
 lifecycle: FULL_RESTART
 workflow_invocations: 1
 reset_transactions: 1
@@ -4840,7 +4840,7 @@ transport_raw_evidence:
 visual_acceptance:
   passed: true
   required_claims_all_true: true
-  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp127/cua-visual.png
+  screenshot: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp127/cua-visual.png
   screenshot_sha256: 862fbe5acd34aae7242d84b6490698d8c1f58d16ddf418469d43c3fd21a80df9
   screenshot_size_bytes: 781131
   screenshot_dimensions: [5120, 2880]
@@ -4858,7 +4858,7 @@ shutdown:
   tmux_session_after_stop: NONE
   owned_process_residue: NONE
 artifacts:
-  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp127/exp-127-result.json
+  result: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp127/exp-127-result.json
   result_sha256: 08d5ab6029570c83fcfcfd5f970d5fac39739f5a7476101278b99765ca00f5c8
   owner_manifest_sha256: e50f7fe33bc13a74fed3d75a02d6ad5259f2553cae03664663164fc9f8ca6bd4
   release_retreat_sha256: c9be89201260ce54736c868e9de004282eb230ad8e4c17ef56c0ded92de27754
@@ -4903,7 +4903,7 @@ preregistered_identity:
   ros_domain_id: 200
   http_port: 8040
   gz_partition: so101-mnt-q-exp128
-  evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/exp128
+  evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp128
 lifecycle: FULL_RESTART
 workflow_invocations: 1
 reset_transactions: 1
@@ -4995,7 +4995,7 @@ transport_raw_evidence:
 visual_acceptance:
   passed: true
   required_claims_all_true: true
-  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/exp130/cua-visual.png
+  screenshot: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp130/cua-visual.png
   screenshot_sha256: 6a88007153d3bf483d07e5042756ab820742030f8de627826d53d4a94c38bb2c
   screenshot_size_bytes: 779765
   screenshot_dimensions: [5120, 2880]
@@ -5013,7 +5013,7 @@ shutdown:
   tmux_session_after_stop: NONE
   owned_process_residue: NONE
 artifacts:
-  result: /data/work/so101-debug-mujoco-maintainability-remediation/exp130/exp-130-result.json
+  result: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/exp130/exp-130-result.json
   result_sha256: 3b9ddc8461210eb97d6f9f173a0490f47ae8b2f5adaf43f7cb727a7656013a52
   owner_manifest_sha256: 10c3a950bde7c103e317624671a0dbab39319255e4e43ce714f7a486467de4dd
   release_retreat_sha256: 63bd2abe6ca4e5146e060ec4e3a17395cd02e875c0c65174db951a73520a8ebf

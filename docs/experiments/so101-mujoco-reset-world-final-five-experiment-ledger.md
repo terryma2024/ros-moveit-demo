@@ -8,7 +8,7 @@ worktree: /data/work/ws_moveit/.worktrees/so101-mujoco-ros2
 branch: codex/so101-mujoco-ros2-teleop
 base_commit: 302c4ef9550e036f127111e473f44a823b1ab643
 current_commit: c9f3c990a635f4773613f5778150df5d504bb4c2
-evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
+evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
 confirmed_conclusions:
   - MNT-CP-057 terminated MNT-Q-RESET-EXP131-135 permanently after EXP-131 used high-rate evidence on the slow /tmp volume and the old runner continued into polluted EXP-132/133 attempts.
   - Commit 302c4ef9550e036f127111e473f44a823b1ab643 makes fixed target-count qualification stop after the first VALID_FAILURE or INVALID record; its 20 qualification contract tests and Ruff gate passed before this challenge.
@@ -35,7 +35,7 @@ ros_domain_id: 204
 teleop_port: 8044
 gz_partition: NOT_APPLICABLE_MUJOCO_RUNTIME
 expected_reset_epochs: [1, 2, 3, 4, 5]
-evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
+evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
 evidence_root_pre_registration_state: ABSENT
 evidence_filesystem:
   source: /dev/nvme0n1p5
@@ -74,7 +74,7 @@ command: >-
   --lifecycle RESET_WORLD
   --count 5
   --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-runtime-fingerprint.json
-  --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
+  --evidence-root /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140
   --base-domain-id 204
   --base-port 8044
   --no-headless
@@ -88,7 +88,7 @@ tmux_session: MNT-Q-RESET-EXP136-140
 invocation_count: 1
 hidden_retries: FORBIDDEN
 exit_code: 1
-manifest: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-manifest.json
+manifest: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-manifest.json
 manifest_sha256: cdd932110c84eb67fcd77f185490a081b4a273b8a66d9aa21727633edb969ffa
 ```
 
@@ -352,7 +352,7 @@ non_product_wrapper_attempts:
   run_01_directory_created: false
   qualification_manifest_created: false
   hidden_retry: false
-  retained_log: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-runner.log
+  retained_log: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-runner.log
   retained_log_size_bytes: 41
   retained_log_sha256: bdc5f46bd641e1b4e3621b1376791ea578fb2b18821a03b01190ba8cfd33e383
 correction:
@@ -425,7 +425,7 @@ batch:
   manifest_secondary_invalid_reason: run 5 reset epoch did not increase
   primary_invalid_reason: The workflow owner could not acquire a fresh atomic MuJoCo snapshot after the successful epoch-5 reset.
   simulation_session_id: MNT-Q-RESET-EXP136-140-reset
-  manifest: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-manifest.json
+  manifest: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/qualification-manifest.json
   manifest_sha256: cdd932110c84eb67fcd77f185490a081b4a273b8a66d9aa21727633edb969ffa
   runner_log_sha256: d796644c256d69bb3fdf04001f1e7ad6921be53ae83a0046e6471565ad53d09c
   shared_launch_log_sha256: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4
@@ -441,7 +441,7 @@ artifact_contract:
   EXP-139: {actions: dd101000a3d8ea1a7a4a14263299acda990eca40ad1e8847e805572e1be7619f, owner_manifest: 7730c49326663423592fa9200d7696acc54785d0b669d8788161bcc28b982a4b, raw_run_index: 3e92965a395b0a650eda5067b8bd2346e3aeeff66dbbd86831d74718948a254a, dynamic_summary: 1be12fda32c1608c21d8ca21f64e7ac356eafd30184c44f6663aa00d8cf3b235, launch_log: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4}
   EXP-140: {actions: 4ebebc5ba31d0eaab2ff83c7094131b54916b174822ff730625eb62cda4a160b, owner_manifest: ABSENT_PREPHASE_INVALID, raw_run_index: ABSENT_PREPHASE_INVALID, dynamic_summary: ABSENT_PREPHASE_INVALID, failure: 20041322d0d39188491472913071065fef2a14f6b5d18b6effff198100e44b56, owner_diagnostic: 912579658d5da94c90116cfb0cd28a81916e6174f82d5a4dfab6059dd7a8f6e2, launch_log: 03360c7ecc49728ea435b5b2d546f255ed2400487fa0ab2847b897e267705cf4}
 visual_process_evidence:
-  screenshot: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/cua-run4-baseline.png
+  screenshot: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp136-140/cua-run4-baseline.png
   screenshot_sha256: 8c39212ad1ba6769abdc629befe08620508e12ee64fd714edda83b9999e63d43
   interpretation: Fresh CUA process frame during EXP-139 showed the running MuJoCo Viewer with robot, pedestal, table, cup, and red ring; it is not a final-success acceptance image and does not count toward 5/5.
 first_bad_boundary:
@@ -690,7 +690,7 @@ cua_contract:
     - CUA set_window_frame placed MuJoCo on the right half with confirmed readback.
     - Fresh snapshot obtained.
     - CUA bring_to_front refreshed RViz rendering.
-  final_fresh_snapshot: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration-02/cua-final-success-v4.png
+  final_fresh_snapshot: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration-02/cua-final-success-v4.png
   final_fresh_snapshot_sha256: c6ced79e29500a676064d9d9d805d91a2a6235dd27bfc55f4463de2f608d3afe
   visual_interpretation:
     - MuJoCo Viewer visibly contains the SO-101 robot, gray base, brown table, orange cup, and red target ring.
@@ -762,7 +762,7 @@ counting_status: EXCLUDED_FROM_EXP-141_THROUGH_EXP-145
 simulation_session_id: MNT-Q-RESET-EXP141-145-visual02-noncount
 ros_domain_id: 207
 teleop_port: 8047
-evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration-02
+evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration-02
 evidence_root_pre_registration_state: ABSENT
 evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
 hypothesis: Running the exact workflow before launching RViz preserves the qualified evidence workload; RViz can then join the idle successful final state for Planning Scene corroboration.
@@ -793,7 +793,7 @@ reason: The exact 5/5 runner shuts down its shared stack immediately after quali
 simulation_session_id: MNT-Q-RESET-EXP141-145-visual-noncount
 ros_domain_id: 206
 teleop_port: 8046
-evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration
+evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145/visual-corroboration
 evidence_root_pre_registration_state: ABSENT
 evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
 runtime_fingerprint_file_sha256: 76d232a44949c1750a771a57d3f1026c8321637e9d41fe110fc3d72e88f4867c
@@ -969,7 +969,7 @@ ros_domain_id: 205
 teleop_port: 8045
 gz_partition: NOT_APPLICABLE_MUJOCO_RUNTIME
 expected_reset_epochs: [1, 2, 3, 4, 5]
-evidence_root: /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
+evidence_root: /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
 evidence_root_pre_registration_state: ABSENT
 evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
 engineering_source_commit: 34e2000b15227d1bcb6ec67d482d78e5354b0918
@@ -1000,7 +1000,7 @@ command: >-
   --lifecycle RESET_WORLD
   --count 5
   --fingerprint /tmp/so101-debug-mujoco-maintainability-remediation/exp126-five-run-runtime-fingerprint.json
-  --evidence-root /data/work/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
+  --evidence-root /data/work/so101-evidence/maintainability/so101-debug-mujoco-maintainability-remediation/reset-world-exp141-145
   --base-domain-id 205
   --base-port 8045
   --no-headless
