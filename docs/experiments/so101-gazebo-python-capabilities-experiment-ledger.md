@@ -564,7 +564,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-010 --lifecycle FULL_RESTART -
 
 ## CP-GZPY-FULL-RESTART-011 through 015 — evidence-classified fixed-bundle preregistration
 
-batch_status: PLANNED
+batch_status: INVALID
 backend: mujoco
 lifecycle: FULL_RESTART
 supersedes_invalid_batches: `[001..005, 006..010]`
@@ -593,18 +593,34 @@ stops the batch, and any behavior/config/contract change requires a new batch at
 
 ### CP-GZPY-FULL-RESTART-011
 
-status: PLANNED
-outcome: PENDING
+status: INVALID
+outcome: NOT_COUNTED
 ros_domain_id: `210`
 port: `28110`
 simulation_session_id: `cp-gzpy-fr-011-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-011`
 command: `run_qualification --batch-id cp-gzpy-fr-011 --lifecycle FULL_RESTART --count 1 --fingerprint 920e81fea7e2fbcd2800ac847402bd6df9ebaf650f4c6032ecf8ee6f8e910f03 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-011 --base-domain-id 210 --base-port 28110 --headless`
 
+Terminal review: the fixed source, installed prefix, bundle, frozen policy, geometry,
+and pinned controller executable all matched. Reset completed at epoch `1`, scene setup
+succeeded, and the production workflow completed through `remaining_lift`. At
+`transport`, the owner correctly surfaced `TELEOP_WORKFLOW_EVIDENCE_INVALID` after the
+lossless observer detected `EvidenceInvalid: chunk sequence mismatch`. The first raw
+chunk was sequence `4783` for physics steps `23916..23920`, followed by a sequence gap;
+the raw index and phase evidence are retained. This is incomplete lossless evidence, so
+the attempt is `INVALID` and cannot count. Ordered shutdown passed with no residual
+task process. Manifest SHA-256:
+`a10bc5668ca225a1855c960ccfbe0f23bb1346921a928473826177205fab6b1d`.
+The repeated gap on the `/tmp` evidence volume is traced to synchronous per-chunk file,
+directory, and index fsync work at the default 100 chunks/second. Attempts 012 through
+015 are canceled before start; a TDD configuration fix requires a new fixed bundle and
+new batch.
+
 ### CP-GZPY-FULL-RESTART-012
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `211`
 port: `28111`
 simulation_session_id: `cp-gzpy-fr-012-full-01`
@@ -615,6 +631,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-012 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `212`
 port: `28112`
 simulation_session_id: `cp-gzpy-fr-013-full-01`
@@ -625,6 +642,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-013 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `213`
 port: `28113`
 simulation_session_id: `cp-gzpy-fr-014-full-01`
@@ -635,6 +653,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-014 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `214`
 port: `28114`
 simulation_session_id: `cp-gzpy-fr-015-full-01`
