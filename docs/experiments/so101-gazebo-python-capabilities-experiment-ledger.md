@@ -561,3 +561,82 @@ port: `28109`
 simulation_session_id: `cp-gzpy-fr-010-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-010`
 command: `run_qualification --batch-id cp-gzpy-fr-010 --lifecycle FULL_RESTART --count 1 --fingerprint 3beaed4cf9101dc3304dfb8f83ad44198c9c806a9483872fdb290eab7f776b61 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-010 --base-domain-id 229 --base-port 28109 --headless`
+
+## CP-GZPY-FULL-RESTART-011 through 015 — evidence-classified fixed-bundle preregistration
+
+batch_status: PLANNED
+backend: mujoco
+lifecycle: FULL_RESTART
+supersedes_invalid_batches: `[001..005, 006..010]`
+qualification_source_commit: `25f9e4b202f069127919649614ea0ff3628c339d`
+registration_parent_commit: `2321ede1`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/final-candidate-003-install/so101_demo_py`
+bundle_sha256: `920e81fea7e2fbcd2800ac847402bd6df9ebaf650f4c6032ecf8ee6f8e910f03`
+policy_sha256: `aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356`
+geometry_sha256: `6dc64c197a82316c4ac856530c6caf5d905ffd2b0ea2778d85d87b9a3e89b235`
+mujoco_ros2_control_prefix: `/data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install`
+mujoco_ros2_control_gitlink: `738e304551b4ea6db020b466086a13db71b65607`
+mujoco_ros2_control_executable_sha256: `9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e`
+required_consecutive_successes: 5
+reuse_old_or_invalid_results: false
+invalid_effect: stop and invalidate this batch
+valid_failure_effect: stop and break the streak
+
+Fixed acceptance contract: each attempt uses a new evidence directory, unique ROS domain,
+port, and simulation session, and independently creates and destroys its complete stack.
+Every terminal record must bind the exact fixed source/install/bundle/policy/geometry and
+pinned controller executable; prove reset epoch `1`, all nine ordered production phases,
+fresh lossless evidence, successful physical outcome, complete artifact hashes, and clean
+ordered shutdown. The final specific owner failure code governs evidence classification.
+Only `VALID/SUCCEEDED/QUALIFIED` advances the streak; drift, `INVALID`, or a valid failure
+stops the batch, and any behavior/config/contract change requires a new batch at one.
+
+### CP-GZPY-FULL-RESTART-011
+
+status: PLANNED
+outcome: PENDING
+ros_domain_id: `210`
+port: `28110`
+simulation_session_id: `cp-gzpy-fr-011-full-01`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-011`
+command: `run_qualification --batch-id cp-gzpy-fr-011 --lifecycle FULL_RESTART --count 1 --fingerprint 920e81fea7e2fbcd2800ac847402bd6df9ebaf650f4c6032ecf8ee6f8e910f03 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-011 --base-domain-id 210 --base-port 28110 --headless`
+
+### CP-GZPY-FULL-RESTART-012
+
+status: PLANNED
+outcome: PENDING
+ros_domain_id: `211`
+port: `28111`
+simulation_session_id: `cp-gzpy-fr-012-full-01`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-012`
+command: `run_qualification --batch-id cp-gzpy-fr-012 --lifecycle FULL_RESTART --count 1 --fingerprint 920e81fea7e2fbcd2800ac847402bd6df9ebaf650f4c6032ecf8ee6f8e910f03 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-012 --base-domain-id 211 --base-port 28111 --headless`
+
+### CP-GZPY-FULL-RESTART-013
+
+status: PLANNED
+outcome: PENDING
+ros_domain_id: `212`
+port: `28112`
+simulation_session_id: `cp-gzpy-fr-013-full-01`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-013`
+command: `run_qualification --batch-id cp-gzpy-fr-013 --lifecycle FULL_RESTART --count 1 --fingerprint 920e81fea7e2fbcd2800ac847402bd6df9ebaf650f4c6032ecf8ee6f8e910f03 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-013 --base-domain-id 212 --base-port 28112 --headless`
+
+### CP-GZPY-FULL-RESTART-014
+
+status: PLANNED
+outcome: PENDING
+ros_domain_id: `213`
+port: `28113`
+simulation_session_id: `cp-gzpy-fr-014-full-01`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-014`
+command: `run_qualification --batch-id cp-gzpy-fr-014 --lifecycle FULL_RESTART --count 1 --fingerprint 920e81fea7e2fbcd2800ac847402bd6df9ebaf650f4c6032ecf8ee6f8e910f03 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-014 --base-domain-id 213 --base-port 28113 --headless`
+
+### CP-GZPY-FULL-RESTART-015
+
+status: PLANNED
+outcome: PENDING
+ros_domain_id: `214`
+port: `28114`
+simulation_session_id: `cp-gzpy-fr-015-full-01`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-015`
+command: `run_qualification --batch-id cp-gzpy-fr-015 --lifecycle FULL_RESTART --count 1 --fingerprint 920e81fea7e2fbcd2800ac847402bd6df9ebaf650f4c6032ecf8ee6f8e910f03 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-015 --base-domain-id 214 --base-port 28114 --headless`
