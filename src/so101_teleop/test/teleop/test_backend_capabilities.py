@@ -7,7 +7,6 @@ from so101_teleop.backends.registry import load_backend_profile
 from so101_teleop.models import PlanSummary, ServerMode, TelemetrySnapshot
 from so101_teleop.server import StoredTrajectory, TeleopService
 
-
 PACKAGE = Path(__file__).resolve().parents[2]
 
 

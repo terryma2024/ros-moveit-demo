@@ -1,12 +1,15 @@
-from pathlib import Path
 import subprocess
+from pathlib import Path
 from unittest.mock import Mock
 
 from so101_teleop.backends.cli_adapter import CliBackendAdapter
-from so101_teleop.backends.protocol import CameraPresetRequest
-from so101_teleop.backends.protocol import ResetRequest, SceneRequest, WorkflowRequest
+from so101_teleop.backends.protocol import (
+    CameraPresetRequest,
+    ResetRequest,
+    SceneRequest,
+    WorkflowRequest,
+)
 from so101_teleop.backends.registry import load_backend_profile
-
 
 PACKAGE = Path(__file__).resolve().parents[2]
 

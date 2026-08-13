@@ -201,7 +201,7 @@ python3 scripts/check_backend_integration.py
 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider -q \
   src/so101_demo_py/test
 
-ruff check src/so101_demo_py src/so101_teleop
+ruff check --config src/so101_demo_py/ruff.toml src/so101_demo_py
 git diff --check
 
 SO101_DEMO_EXPECTED_PREFIX="$(ros2 pkg prefix so101_demo_py)" \

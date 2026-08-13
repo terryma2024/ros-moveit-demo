@@ -2,11 +2,9 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
-
 from so101_teleop.backends.profile import ProfileError, load_profile_file
 from so101_teleop.backends.protocol import BackendOperation
 from so101_teleop.backends.registry import BACKEND_IDS, load_backend_profile
-
 
 PACKAGE = Path(__file__).resolve().parents[2]
 
