@@ -468,7 +468,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-005 --lifecycle FULL_RESTART -
 
 ## CP-GZPY-FULL-RESTART-006 through 010 — replacement fixed-bundle preregistration
 
-batch_status: PLANNED
+batch_status: INVALID
 backend: mujoco
 lifecycle: FULL_RESTART
 supersedes_invalid_batch: `CP-GZPY-FULL-RESTART-001 through 005`
@@ -497,18 +497,32 @@ new batch beginning at one.
 
 ### CP-GZPY-FULL-RESTART-006
 
-status: PLANNED
-outcome: PENDING
+status: INVALID
+outcome: NOT_COUNTED
 ros_domain_id: `225`
 port: `28105`
 simulation_session_id: `cp-gzpy-fr-006-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-006`
 command: `run_qualification --batch-id cp-gzpy-fr-006 --lifecycle FULL_RESTART --count 1 --fingerprint 3beaed4cf9101dc3304dfb8f83ad44198c9c806a9483872fdb290eab7f776b61 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-006 --base-domain-id 225 --base-port 28105 --headless`
 
+Terminal review: readiness used the shared scene JSON receipt successfully, the reset
+receipt bound epoch `1`, and the production workflow completed through
+`remaining_lift`. At `transport`, its lossless execution monitor failed closed with
+`EvidenceInvalid: chunk sequence mismatch`; the phase artifact and raw index are
+present, so the cause is attributable but the physical run is not valid qualification
+evidence. The outer adapter incorrectly selected the earlier generic
+`PHASE_EXIT_NONZERO` instead of the final emitted
+`TELEOP_WORKFLOW_EVIDENCE_INVALID`; terminal review therefore classifies this attempt
+`INVALID`, and a focused RED/GREEN cycle repairs that propagation before any retry.
+Ordered shutdown passed with return code zero and no died/fatal process. Manifest
+SHA-256: `1722a598c63ef7591e0926a25109d5dbd2b3eda49aee8784af824b2b56f28c57`.
+Attempts 007 through 010 are not executed because this batch is invalid.
+
 ### CP-GZPY-FULL-RESTART-007
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `226`
 port: `28106`
 simulation_session_id: `cp-gzpy-fr-007-full-01`
@@ -519,6 +533,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-007 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `227`
 port: `28107`
 simulation_session_id: `cp-gzpy-fr-008-full-01`
@@ -529,6 +544,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-008 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `228`
 port: `28108`
 simulation_session_id: `cp-gzpy-fr-009-full-01`
@@ -539,6 +555,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-009 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `229`
 port: `28109`
 simulation_session_id: `cp-gzpy-fr-010-full-01`
