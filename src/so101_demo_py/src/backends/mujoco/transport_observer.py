@@ -339,7 +339,6 @@ class DynamicTransportEvidenceObserver:
         self._subscriptions: list[Any] = []
         if node is not None:
             from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
-
             from so101_mujoco_support.msg import (
                 PhysicsCancellationAck,
                 PhysicsCancellationRequest,
