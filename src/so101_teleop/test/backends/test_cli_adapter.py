@@ -148,6 +148,24 @@ def test_nonzero_owner_result_preserves_sanitized_failure_code(tmp_path):
     assert "environment" not in diagnostic.read_text().casefold()
 
 
+def test_nonzero_owner_result_prefers_final_specific_failure_code(tmp_path):
+    completed = subprocess.CompletedProcess(
+        ["owner"],
+        1,
+        (
+            "failure=PHASE_EXIT_NONZERO\n"
+            "failure=TELEOP_WORKFLOW_EVIDENCE_INVALID\n"
+        ),
+        "",
+    )
+    adapter, _runner = adapter_for(tmp_path, "mujoco_py", completed)
+
+    result = adapter.run_workflow(workflow_request("run"))
+
+    assert result.ok is False
+    assert result.error.owner_failure_code == "TELEOP_WORKFLOW_EVIDENCE_INVALID"
+
+
 def test_unparseable_owner_output_returns_backend_output_invalid(tmp_path):
     completed = subprocess.CompletedProcess(["owner"], 0, "unstructured", "")
     adapter, _runner = adapter_for(tmp_path, "gazebo_cpp", completed)
