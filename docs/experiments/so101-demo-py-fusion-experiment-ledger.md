@@ -793,6 +793,7 @@ evidence_root_pre_registration_state: ABSENT
 owned_processes_before_launch: NONE
 preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
 command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=false session_id:=fusion-gui-001-d78093c evidence_file:=/data/work/so101-evidence/archived/fusion/so101-debug-fusion-gui-001/result.json
+command_evidence_file_retention_state: EVIDENCE_UNAVAILABLE_BEFORE_MIGRATION
 inspection_contract: ai-station CUA fresh window-scoped snapshot, inspect, then fresh snapshot; record image path/hash plus terminal numeric evidence
 abort_criteria:
   - any source, installed-prefix, dependency, policy, bundle, or session mismatch
@@ -1418,6 +1419,7 @@ evidence_root: /data/work/so101-evidence/archived/fusion/so101-debug-so101-demo-
 evidence_root_pre_registration_state: ABSENT
 evidence_filesystem: {source: /dev/nvme0n1p5, mount_target: /data, filesystem: ext4}
 command: ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py run_mode:=execute execute:=true headless:=true session_id:=fusion-exp-002-ab96a68 evidence_file:=/data/work/so101-evidence/archived/fusion/so101-debug-so101-demo-py-fusion-SyIBjl/exp-fusion-002/result.json
+command_evidence_file_retention_state: EVIDENCE_UNAVAILABLE_BEFORE_MIGRATION
 owned_processes_before_launch: NONE
 preserved_processes: tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui; pre-existing ros2 daemons
 abort_criteria:

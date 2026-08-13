@@ -162,5 +162,6 @@ disproven_routes:
 open_risks:
   - The migration audit root is in /tmp and is not itself a durable evidence batch; the durable mapping and hashes are preserved in this ledger.
   - Four older historical fusion roots were already absent before this migration; their ledger paths were normalized to the archive namespace without fabricating evidence.
+  - Those four planned roots remain explicitly marked pre-registration ABSENT; two historical command result files already missing inside migrated roots are explicitly marked EVIDENCE_UNAVAILABLE_BEFORE_MIGRATION.
 next_command: Run final verification, commit locally, and keep the feature branch/worktree in place without push or merge.
 ```
