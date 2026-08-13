@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -332,6 +333,13 @@ class DynamicTransportEvidenceObserver:
         self._cancellation_request_publisher: Any | None = None
         self._invalid_reason: str | None = None
         self._identity_mismatch: dict[str, str] | None = None
+        self._persistence_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="so101-transport-evidence",
+        )
+        self._persistence_futures: list[Future[Any]] = []
+        self._persistence_error: EvidenceInvalid | None = None
+        self._persistence_closed = False
         self._snapshot_topic = snapshot_topic
         self._chunk_topic = chunk_topic
         self._hazard_topic = hazard_topic
@@ -387,6 +395,7 @@ class DynamicTransportEvidenceObserver:
 
     @property
     def invalid_reason(self) -> str | None:
+        self._harvest_persistence()
         with self._lock:
             return self._invalid_reason
 
@@ -412,23 +421,79 @@ class DynamicTransportEvidenceObserver:
             if self._identity_mismatch is None and isinstance(error, EvidenceIdentityMismatch):
                 self._identity_mismatch = dict(error.detail)
 
-    def checkpoint_producer_provenance(self, provenance: dict[str, Any]) -> Path:
+    def _submit_persistence(self, operation, /, *args, **kwargs) -> None:
         with self._lock:
-            return self._store.checkpoint_metadata(
-                expected_session_id=self._session_id,
-                publisher_provenance=provenance,
-            )
+            if self._persistence_closed:
+                raise EvidenceInvalid("evidence persistence is already closed")
+            future = self._persistence_executor.submit(operation, *args, **kwargs)
+            self._persistence_futures.append(future)
+
+    def _persistence_failure(self, error: Exception) -> EvidenceInvalid:
+        failure = EvidenceInvalid(
+            f"persistence failed: {type(error).__name__}: {error}"
+        )
+        with self._lock:
+            if self._persistence_error is None:
+                self._persistence_error = failure
+            recorded = self._persistence_error
+        self._record_invalid(recorded)
+        return recorded
+
+    def _harvest_persistence(self) -> EvidenceInvalid | None:
+        with self._lock:
+            completed = [future for future in self._persistence_futures if future.done()]
+            self._persistence_futures = [
+                future for future in self._persistence_futures if not future.done()
+            ]
+        failure = None
+        for future in completed:
+            try:
+                future.result()
+            except Exception as error:
+                if failure is None:
+                    failure = self._persistence_failure(error)
+        return failure
+
+    def _drain_persistence(self) -> EvidenceInvalid | None:
+        self._harvest_persistence()
+        with self._lock:
+            pending = list(self._persistence_futures)
+            self._persistence_futures.clear()
+        for future in pending:
+            try:
+                future.result()
+            except Exception as error:
+                self._persistence_failure(error)
+        with self._lock:
+            return self._persistence_error
+
+    def _shutdown_persistence(self) -> None:
+        with self._lock:
+            if self._persistence_closed:
+                return
+            self._persistence_closed = True
+        self._persistence_executor.shutdown(wait=True)
+
+    def checkpoint_producer_provenance(self, provenance: dict[str, Any]) -> Path:
+        self._submit_persistence(
+            self._store.checkpoint_metadata,
+            expected_session_id=self._session_id,
+            publisher_provenance=provenance,
+        )
+        return self._store.root / "run-index.json"
 
     def checkpoint_snapshot_session(self, actual_session_id: str) -> Path:
         with self._lock:
             if self._first_snapshot_session_id is None:
                 self._first_snapshot_session_id = actual_session_id
-                path = self._store.checkpoint_metadata(
+                metadata = dict(
                     expected_session_id=self._session_id,
                     first_snapshot_session_id=actual_session_id,
                 )
             else:
-                path = self._store.root / "run-index.json"
+                metadata = None
+        if metadata is not None:
+            self._submit_persistence(self._store.checkpoint_metadata, **metadata)
         if actual_session_id != self._session_id:
             raise EvidenceIdentityMismatch(
                 "snapshot simulation session mismatch",
@@ -437,7 +502,7 @@ class DynamicTransportEvidenceObserver:
                 topic=self._snapshot_topic,
                 message_kind="SimulationEvidence",
             )
-        return path
+        return self._store.root / "run-index.json"
 
     @property
     def first_snapshot_session_id(self) -> str | None:
@@ -468,11 +533,12 @@ class DynamicTransportEvidenceObserver:
         except (EvidenceInvalid, TypeError, ValueError, AttributeError) as error:
             self._record_invalid(error)
 
-    def accept_chunk(self, chunk: PhysicsStepChunk) -> str:
+    def accept_chunk(self, chunk: PhysicsStepChunk) -> None:
+        first_chunk_header = None
         with self._lock:
             if self._first_chunk_session_id is None:
                 self._first_chunk_session_id = chunk.simulation_session_id
-                self._store.checkpoint_metadata(
+                first_chunk_header = dict(
                     expected_session_id=self._session_id,
                     first_chunk_header={
                         "chunk_sequence": chunk.chunk_sequence,
@@ -512,11 +578,15 @@ class DynamicTransportEvidenceObserver:
                 raise EvidenceInvalid("chunk sequence mismatch")
             if self._last_step is not None and chunk.first_physics_step != self._last_step + 1:
                 raise EvidenceInvalid("physics-step chunk gap")
-            digest = self._store.checkpoint_chunk(chunk)
             self._chunks.append(chunk)
             self._last_chunk_sequence = chunk.chunk_sequence
             self._last_step = chunk.last_physics_step
-            return digest
+        if first_chunk_header is not None:
+            self._submit_persistence(
+                self._store.checkpoint_metadata,
+                **first_chunk_header,
+            )
+        self._submit_persistence(self._store.checkpoint_chunk, chunk)
 
     def accept_hazard(self, hazard: HazardLatch) -> None:
         if hazard.simulation_session_id != self._session_id:
@@ -542,9 +612,9 @@ class DynamicTransportEvidenceObserver:
             if self._last_step is None:
                 raise EvidenceInvalid("cannot bind boundary before a physics-step chunk")
             boundary = TransportBoundary(kind, waypoint, self._last_step)
-            self._store.checkpoint_boundary(boundary)
             self._boundaries.append(boundary)
-            return boundary
+        self._submit_persistence(self._store.checkpoint_boundary, boundary)
+        return boundary
 
     def mark_goal_dispatched(self, *, waypoint: int) -> TransportBoundary:
         with self._lock:
@@ -626,6 +696,9 @@ class DynamicTransportEvidenceObserver:
     def build_run(
         self, *, physics_timestep_s: float, physical_transport_outcome: str
     ) -> DynamicTransportRun:
+        persistence_failure = self._drain_persistence()
+        if persistence_failure is not None:
+            raise persistence_failure
         with self._lock:
             chunks = tuple(self._chunks)
             boundaries = tuple(self._boundaries)
@@ -643,58 +716,78 @@ class DynamicTransportEvidenceObserver:
         )
 
     def close_success(self, *, physical_transport_outcome: str) -> Path:
-        return self._store.close_complete(
-            physical_transport_outcome=physical_transport_outcome,
-        )
+        try:
+            persistence_failure = self._drain_persistence()
+            if persistence_failure is not None:
+                raise persistence_failure
+            return self._store.close_complete(
+                physical_transport_outcome=physical_transport_outcome,
+            )
+        finally:
+            self._shutdown_persistence()
 
     def close_safety_abort(self) -> Path:
-        with self._lock:
-            hazard = self._hazard
-            cancellation = self._cancellation_request_step
-        if hazard is None or cancellation is None:
-            raise EvidenceInvalid("safety abort is missing hazard or cancellation evidence")
-        with self._lock:
-            last_step = self._last_step
-        if last_step is None or last_step < hazard.physics_step:
-            raise EvidenceInvalid("safety abort raw evidence does not include the trigger step")
-        return self._store.close_partial(
-            outcome_class="VALID_SAFETY_ABORT",
-            trigger_physics_step=hazard.physics_step,
-            trigger_simulation_time_s=hazard.simulation_time_s,
-            trigger_force_n=hazard.force_n,
-            cancellation_request_physics_step=cancellation,
-            reaction_steps=cancellation - hazard.physics_step,
-            reaction_bound_kind="plugin_ack_upper_bound",
-            maximum_reaction_steps=self._maximum_reaction_steps,
-        )
+        try:
+            persistence_failure = self._drain_persistence()
+            if persistence_failure is not None:
+                raise persistence_failure
+            with self._lock:
+                hazard = self._hazard
+                cancellation = self._cancellation_request_step
+                last_step = self._last_step
+            if hazard is None or cancellation is None:
+                raise EvidenceInvalid("safety abort is missing hazard or cancellation evidence")
+            if last_step is None or last_step < hazard.physics_step:
+                raise EvidenceInvalid(
+                    "safety abort raw evidence does not include the trigger step"
+                )
+            return self._store.close_partial(
+                outcome_class="VALID_SAFETY_ABORT",
+                trigger_physics_step=hazard.physics_step,
+                trigger_simulation_time_s=hazard.simulation_time_s,
+                trigger_force_n=hazard.force_n,
+                cancellation_request_physics_step=cancellation,
+                reaction_steps=cancellation - hazard.physics_step,
+                reaction_bound_kind="plugin_ack_upper_bound",
+                maximum_reaction_steps=self._maximum_reaction_steps,
+            )
+        finally:
+            self._shutdown_persistence()
 
     def close_invalid_abort(self) -> Path:
-        with self._lock:
-            hazard = self._hazard
-            cancellation = self._cancellation_request_step
-            invalid_reason = self._invalid_reason
-        if hazard is None or invalid_reason is None:
-            raise EvidenceInvalid("invalid abort is missing hazard or invalid reason")
-        terminal: dict[str, Any] = {
-            "invalid_reason": invalid_reason,
-            "maximum_reaction_steps": self._maximum_reaction_steps,
-            "reaction_bound_kind": "plugin_ack_upper_bound",
-        }
-        if cancellation is not None:
-            terminal.update(
-                {
-                    "cancellation_request_physics_step": cancellation,
-                    "reaction_steps": cancellation - hazard.physics_step,
-                }
+        try:
+            persistence_failure = self._drain_persistence()
+            if persistence_failure is not None:
+                raise persistence_failure
+            with self._lock:
+                hazard = self._hazard
+                cancellation = self._cancellation_request_step
+                invalid_reason = self._invalid_reason
+            if hazard is None or invalid_reason is None:
+                raise EvidenceInvalid("invalid abort is missing hazard or invalid reason")
+            terminal: dict[str, Any] = {
+                "invalid_reason": invalid_reason,
+                "maximum_reaction_steps": self._maximum_reaction_steps,
+                "reaction_bound_kind": "plugin_ack_upper_bound",
+            }
+            if cancellation is not None:
+                terminal.update(
+                    {
+                        "cancellation_request_physics_step": cancellation,
+                        "reaction_steps": cancellation - hazard.physics_step,
+                    }
+                )
+            return self._store.close_partial(
+                outcome_class="INVALID_EVIDENCE",
+                trigger_physics_step=hazard.physics_step,
+                **terminal,
             )
-        return self._store.close_partial(
-            outcome_class="INVALID_EVIDENCE",
-            trigger_physics_step=hazard.physics_step,
-            **terminal,
-        )
+        finally:
+            self._shutdown_persistence()
 
     def close_invalid(self, error: Exception) -> Path:
         self._record_invalid(error)
+        persistence_failure = self._drain_persistence()
         with self._lock:
             invalid_reason = self._invalid_reason
             last_step = self._last_step
@@ -705,7 +798,12 @@ class DynamicTransportEvidenceObserver:
             terminal["last_physics_step"] = last_step
         if identity_mismatch is not None:
             terminal["identity_mismatch"] = identity_mismatch
-        return self._store.close_invalid(
-            invalid_reason=invalid_reason,
-            **terminal,
-        )
+        if persistence_failure is not None:
+            terminal["persistence_error"] = str(persistence_failure)
+        try:
+            return self._store.close_invalid(
+                invalid_reason=invalid_reason,
+                **terminal,
+            )
+        finally:
+            self._shutdown_persistence()
