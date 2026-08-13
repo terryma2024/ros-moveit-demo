@@ -7,19 +7,22 @@ import hashlib
 import json
 import os
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from ament_index_python.packages import get_package_share_directory
+
 from ...application.backend_execute import ExecuteBoundary, classify_execute_boundary
-from ...control.moveit.planning import (
-    JointPlanRequest,
-    MoveItPlanningClient,
-    make_get_motion_plan_request,
-)
-from ...control.trajectory.executor import MoveItExecutionClient, make_execute_goal
+from ...control.planning_scene.task_scene import RosTaskScenePort
+from ...control.trajectory.reset_control import GazeboAttachmentMonitor
 from ...core.domain import ActionResult, ActionStatus, Failure, FailureCategory
 from ...core.policy import load_task_policy
+from ...core.task_geometry import Pose7, load_task_geometry
 from ...runtime.result_manifest import write_run_result
+from .commands import GazeboCommandAdapter
+from .reset import GazeboResetState
+from .workflow import execute_gazebo_workflow
 
 
 def _sha256(path: Path) -> str:
@@ -105,8 +108,6 @@ def main(arguments: list[str] | None = None) -> int:
 
     import rclpy
     from control_msgs.action import FollowJointTrajectory
-    from moveit_msgs.action import ExecuteTrajectory
-    from moveit_msgs.srv import GetMotionPlan
     from rclpy.action import ActionClient
     from ros_gz_interfaces.msg import WorldStatistics
     from sensor_msgs.msg import JointState
@@ -164,8 +165,6 @@ def main(arguments: list[str] | None = None) -> int:
     gripper = ActionClient(
         node, FollowJointTrajectory, "/gripper_controller/follow_joint_trajectory"
     )
-    plan_client = node.create_client(GetMotionPlan, "/plan_kinematic_path")
-    execute_client = ActionClient(node, ExecuteTrajectory, "/execute_trajectory")
 
     def progress() -> None:
         rclpy.spin_once(node, timeout_sec=0.01)
@@ -227,8 +226,6 @@ def main(arguments: list[str] | None = None) -> int:
                 and bool(latest_stats)
                 and arm.server_is_ready()
                 and gripper.server_is_ready()
-                and plan_client.service_is_ready()
-                and execute_client.server_is_ready()
             ),
             options.readiness_timeout_s,
         )
@@ -239,53 +236,132 @@ def main(arguments: list[str] | None = None) -> int:
                 "joint, world, controller, bridge, or MoveIt readiness timed out",
             )
         else:
-            evidence_valid = True
             initial_joint = [float(latest_joint[name]) for name in policy.all_joints]
-            phase = "PREPARE_OPEN_GRIPPER"
-            action = send_trajectory(
-                gripper,
-                (policy.gripper_joint,),
-                ((policy.gripper.preopen_q6,),),
-                5,
+            share = Path(get_package_share_directory("so101_demo_py"))
+            geometry = load_task_geometry(
+                share / "assets/common/geometry-manifest.yaml"
             )
-            if action.status is ActionStatus.SUCCEEDED:
-                phase = "MOVE_ABOVE_OBJECT"
-                waypoints = policy.states["MOVE_ABOVE_OBJECT"].waypoints
-                action = send_trajectory(arm, policy.arm_joints, waypoints[:-1], 2)
-                if action.status is ActionStatus.SUCCEEDED:
-                    current = tuple(float(latest_joint[name]) for name in policy.all_joints)
-                    planning = MoveItPlanningClient(
-                        plan_client,
-                        request_factory=make_get_motion_plan_request,
-                        progress=progress,
-                    ).plan_joint_path(
-                        JointPlanRequest(
-                            policy.arm_joints,
-                            current[:5],
-                            waypoints[-1],
-                            0.03,
-                            0.03,
-                            8.0,
-                            start_state_joint_names=policy.all_joints,
-                            start_state_positions=current,
-                        ),
-                        15.0,
+            scene = RosTaskScenePort(node, "gazebo", options.readiness_timeout_s)
+            commands = GazeboCommandAdapter()
+            attachment_state = GazeboResetState()
+            attachment = GazeboAttachmentMonitor(
+                attachment_state, "/so101/object_attached_event"
+            )
+
+            class Operations:
+                def __init__(self) -> None:
+                    self.receipts: list[dict[str, object]] = []
+
+                def _record(self, phase_name: str, result: ActionResult) -> ActionResult:
+                    self.receipts.append(
+                        {
+                            "phase": phase_name,
+                            "status": result.status.value,
+                            "failure_code": None
+                            if result.failure is None
+                            else result.failure.code,
+                        }
                     )
-                    if planning.failure is not None or planning.trajectory is None:
-                        failure = planning.failure
-                        action = _failure(
-                            FailureCategory.PLANNING,
-                            "PLANNING_FAILED" if failure is None else failure.code,
-                            "MoveIt returned no trajectory"
-                            if failure is None
-                            else failure.message,
+                    return result
+
+                def arm(self, phase_name: str, state) -> ActionResult:
+                    return self._record(
+                        phase_name,
+                        send_trajectory(
+                            arm,
+                            policy.arm_joints,
+                            state.waypoints,
+                            2,
+                        ),
+                    )
+
+                def gripper(self, phase_name: str, target: float) -> ActionResult:
+                    return self._record(
+                        phase_name,
+                        send_trajectory(
+                            gripper,
+                            (policy.gripper_joint,),
+                            ((target,),),
+                            2,
+                        ),
+                    )
+
+                def physical(self, phase_name: str, attach_value: bool) -> ActionResult:
+                    receipt = (
+                        commands.request_attach()
+                        if attach_value
+                        else commands.request_detach()
+                    )
+                    if not receipt.success:
+                        result = _failure(
+                            FailureCategory.EXECUTION,
+                            receipt.failure_code or "GAZEBO_ATTACHMENT_COMMAND_FAILED",
+                            "Gazebo attachment command failed",
                         )
                     else:
-                        action = MoveItExecutionClient(
-                            execute_client,
-                            goal_factory=make_execute_goal,
-                            progress=progress,
-                        ).execute(planning.trajectory, 45.0)
+                        converged = wait_for(
+                            lambda: attachment_state.snapshot()["attached"]
+                            is attach_value,
+                            5.0,
+                        )
+                        result = (
+                            ActionResult(ActionStatus.SUCCEEDED)
+                            if converged
+                            else _failure(
+                                FailureCategory.OBSERVATION,
+                                "GAZEBO_ATTACHMENT_VERIFY_FAILED",
+                                f"attachment did not converge to {attach_value}",
+                            )
+                        )
+                    return self._record(phase_name, result)
+
+                def scene(self, phase_name: str, attach_value: bool) -> ActionResult:
+                    current_geometry = geometry
+                    if not attach_value:
+                        pose_values = latest_pose.get("plastic_cup_pose_xyz_xyzw")
+                        if isinstance(pose_values, list) and len(pose_values) == 7:
+                            cup = replace(
+                                geometry.object("plastic_cup"),
+                                pose=Pose7(tuple(float(value) for value in pose_values)),
+                            )
+                            current_geometry = replace(
+                                geometry,
+                                objects=tuple(
+                                    cup if item.object_id == "plastic_cup" else item
+                                    for item in geometry.objects
+                                ),
+                            )
+                    receipt = (
+                        scene.attach_task_object(
+                            current_geometry, "plastic_cup", "gripper"
+                        )
+                        if attach_value
+                        else scene.detach_task_object(current_geometry, "plastic_cup")
+                    )
+                    if receipt.success:
+                        receipt = scene.observe_task_scene(
+                            current_geometry,
+                            expected_cup_attachment="gripper"
+                            if attach_value
+                            else None,
+                        )
+                    result = (
+                        ActionResult(ActionStatus.SUCCEEDED)
+                        if receipt.success
+                        else _failure(
+                            FailureCategory.MOVEIT_SCENE,
+                            receipt.failure_code or "MOVEIT_SCENE_FAILED",
+                            f"Planning Scene phase {phase_name} failed",
+                        )
+                    )
+                    return self._record(phase_name, result)
+
+            operations = Operations()
+            boundary = execute_gazebo_workflow(policy, operations)
+            phase = boundary.phase
+            action = boundary.action
+            evidence_valid = boundary.evidence_valid
+            attachment.close()
             _atomic_json(
                 evidence_path,
                 {
@@ -299,6 +375,7 @@ def main(arguments: list[str] | None = None) -> int:
                     else None,
                     "gz_partition": os.environ.get("GZ_PARTITION", ""),
                     "initial_joints_rad": initial_joint,
+                    "phase_receipts": operations.receipts,
                     "policy_sha256": options.policy_sha256,
                     "ros_domain_id": os.environ.get("ROS_DOMAIN_ID", ""),
                     "session_id": options.session_id,
@@ -328,15 +405,6 @@ def main(arguments: list[str] | None = None) -> int:
         node.destroy_node()
         rclpy.shutdown()
 
-    # A successful first boundary is not a completed nine-phase run; its evidence is
-    # valid, but Task 13 must continue before it can claim SUCCEEDED.
-    if action.status is ActionStatus.SUCCEEDED:
-        action = _failure(
-            FailureCategory.INTERNAL,
-            "GAZEBO_EXECUTE_INCOMPLETE",
-            "MOVE_ABOVE_OBJECT succeeded but the remaining common phases are not complete",
-        )
-        evidence_valid = False
     result = classify_execute_boundary(
         ExecuteBoundary(phase, action, evidence_valid, (str(evidence_path),)),
         backend="gazebo",

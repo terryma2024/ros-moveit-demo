@@ -1,5 +1,6 @@
 import argparse
 import json
+from pathlib import Path
 
 from so101_demo.application.backend_execute import ExecuteBoundary, classify_execute_boundary
 from so101_demo.backends.gazebo.execute import _complete_runtime_options
@@ -114,3 +115,10 @@ def test_invalid_evidence_is_not_a_policy_failure() -> None:
 
 def test_skipped_is_not_a_run_status() -> None:
     assert "SKIPPED" not in {value.value for value in ExecutionRunStatus}
+
+
+def test_execute_source_has_no_synthetic_incomplete_failure() -> None:
+    source = Path("src/so101_demo_py/src/backends/gazebo/execute.py").read_text(
+        encoding="utf-8"
+    )
+    assert "GAZEBO_EXECUTE_INCOMPLETE" not in source
