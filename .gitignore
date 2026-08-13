@@ -69,3 +69,5 @@ assets/captures
 **/test-results/
 **/playwright-report/
 **/blob-report/
+
+.envrc
