@@ -376,7 +376,7 @@ and the cup restored at canonical spawn:
 
 ## CP-GZPY-FULL-RESTART-001 through 005 — final fixed-bundle preregistration
 
-batch_status: PLANNED
+batch_status: INVALID
 backend: mujoco
 lifecycle: FULL_RESTART
 qualification_source_commit: `615dd8bdc104f4405125e03762e41f58eeb1bb00`
@@ -403,18 +403,30 @@ attempt advances the streak.
 
 ### CP-GZPY-FULL-RESTART-001
 
-status: PLANNED
-outcome: PENDING
+status: INVALID
+outcome: NOT_COUNTED
 ros_domain_id: `220`
 port: `28100`
 simulation_session_id: `cp-gzpy-fr-001-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-001`
 command: `run_qualification --batch-id cp-gzpy-fr-001 --lifecycle FULL_RESTART --count 1 --fingerprint f8a2910a945c72fa8f08f889589f52f9944b4382a7d4d27e4c873852a2f08725 --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-001 --base-domain-id 220 --base-port 28100 --headless`
 
+Terminal review: the stack, controller manager, MoveIt, public scene setup, and Teleop
+health all started successfully. Public scene setup returned a successful `READ_BACK`
+receipt with exact `1/13/1`; however, the qualification runner still waited for the
+removed legacy stdout token `SCENE_SETUP_OK` and timed out before starting workflow.
+The run is therefore `INVALID`, not a product failure and not countable. It preserved
+complete failure and launch-log hashes, and ordered shutdown passed with return code
+zero and no died/fatal process. Manifest SHA-256:
+`85b5c72162b7ea878c4b5df6546ed508afc9f632d2ae44baa782eabc596b0df5`.
+Per the preregistered rule, this batch stops immediately and attempts 002 through 005
+below are permanently unexecuted in this batch.
+
 ### CP-GZPY-FULL-RESTART-002
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `221`
 port: `28101`
 simulation_session_id: `cp-gzpy-fr-002-full-01`
@@ -425,6 +437,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-002 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `222`
 port: `28102`
 simulation_session_id: `cp-gzpy-fr-003-full-01`
@@ -435,6 +448,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-003 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `223`
 port: `28103`
 simulation_session_id: `cp-gzpy-fr-004-full-01`
@@ -445,6 +459,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-004 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `224`
 port: `28104`
 simulation_session_id: `cp-gzpy-fr-005-full-01`
