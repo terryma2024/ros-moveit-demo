@@ -48,6 +48,7 @@ setup(
             "run_qualification = so101_demo.cli.qualification:main",
             "scene_setup = so101_demo.cli.scene_setup:main",
             "gazebo_execute = so101_demo.backends.gazebo.execute:main",
+            "gazebo_ready = so101_demo.cli.gazebo_ready:main",
             "camera_preset = so101_demo.cli.camera_preset:main",
             "teleop_reset = so101_demo.cli.teleop_reset:main",
             "teleop_workflow = so101_demo.cli.teleop_workflow:main",

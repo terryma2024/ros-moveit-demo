@@ -8,7 +8,6 @@ from pathlib import Path
 
 import yaml
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
-from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     EmitEvent,
@@ -26,6 +25,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterFile, ParameterValue
+
+from launch import LaunchDescription
 
 from ..core.policy_registry import load_policy_variant
 from ..ports.capabilities import CapabilityRequirements
@@ -214,7 +215,15 @@ def _materialize_gazebo_model(context, share: Path):
     ]
 
 
-def _gazebo_execute_actions(context, share: Path, policy, bundle, session_id: str):
+def _gazebo_execute_actions(
+    context,
+    share: Path,
+    policy,
+    bundle,
+    session_id: str,
+    *,
+    include_workflow: bool,
+):
     world = LaunchConfiguration("gazebo_world").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
     timeout = LaunchConfiguration("readiness_timeout_s").perform(context)
@@ -315,20 +324,50 @@ def _gazebo_execute_actions(context, share: Path, policy, bundle, session_id: st
         ],
         output="both",
     )
-    run = TimerAction(period=12.0, actions=[workflow])
+    readiness = Node(
+        package="so101_demo_py",
+        executable="gazebo_ready",
+        arguments=["--timeout-s", timeout],
+        output="both",
+    )
+    delayed_readiness = TimerAction(period=8.0, actions=[readiness])
+    scene_setup = Node(
+        package="so101_demo_py",
+        executable="scene_setup",
+        arguments=["--backend", "gazebo"],
+        parameters=[{"readiness_timeout_s": float(timeout)}],
+        output="both",
+    )
+    start_scene = RegisterEventHandler(
+        OnProcessExit(
+            target_action=readiness,
+            on_exit=lambda event, context: _advance_on_success(
+                event, scene_setup, "Gazebo readiness"
+            ),
+        )
+    )
+    start_workflow = RegisterEventHandler(
+        OnProcessExit(
+            target_action=scene_setup,
+            on_exit=lambda event, context: _advance_on_success(
+                event, workflow, "Gazebo Planning Scene setup"
+            ),
+        )
+    )
     shutdown = RegisterEventHandler(
         OnProcessExit(target_action=workflow, on_exit=[Shutdown(reason="Gazebo execute complete")])
     )
-    return [
+    actions = [
         SetEnvironmentVariable("GZ_SIM_RESOURCE_PATH", str(share.parent)),
         simulator,
         robot_state_publisher,
         spawn,
         controllers,
         move_group,
-        run,
-        shutdown,
     ]
+    if include_workflow:
+        actions.extend((delayed_readiness, start_scene, start_workflow, shutdown))
+    return actions
 
 
 def _configured_actions(context, *, backend: str, pick_place: bool):
@@ -393,7 +432,14 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
     if backend == "gazebo":
         return [
             *messages,
-            *_gazebo_execute_actions(context, share, policy, bundle, session_id),
+            *_gazebo_execute_actions(
+                context,
+                share,
+                policy,
+                bundle,
+                session_id,
+                include_workflow=pick_place,
+            ),
         ]
     raise RuntimeError(f"{backend} execute graph is not registered")
 

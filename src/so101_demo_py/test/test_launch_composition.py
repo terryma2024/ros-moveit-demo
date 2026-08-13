@@ -60,3 +60,24 @@ def test_stack_launcher_does_not_embed_workflow_or_shutdown_handler() -> None:
     source = inspect.getsource(launch_composition._configured_actions)
 
     assert "include_workflow=pick_place" in source
+
+
+def test_gazebo_workflow_is_event_gated_by_readiness_and_scene() -> None:
+    source = inspect.getsource(launch_composition._gazebo_execute_actions)
+    assert 'executable="gazebo_ready"' in source
+    assert 'executable="scene_setup"' in source
+    assert 'executable="gazebo_execute"' in source
+    assert source.count("OnProcessExit(") >= 3
+    assert "TimerAction(period=12.0" not in source
+
+
+def test_gazebo_stack_without_pick_place_has_no_workflow_gate() -> None:
+    source = inspect.getsource(launch_composition._configured_actions)
+    assert "include_workflow=pick_place" in source
+
+
+def test_launch_source_reports_first_gazebo_phase_failure() -> None:
+    source = inspect.getsource(launch_composition._gazebo_execute_actions)
+    assert '"Gazebo readiness"' in source
+    assert '"Gazebo Planning Scene setup"' in source
+    assert "TimerAction(period=12.0" not in source
