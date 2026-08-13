@@ -1,4 +1,5 @@
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 from so101_demo.ports.reset import ResetStepReceipt
@@ -60,6 +61,71 @@ def test_command_adapter_sets_full_named_pose_and_requires_boolean_ack() -> None
     assert 'name: "plastic_cup"' in argv[-1]
     assert "x: 0.45" in argv[-1]
     assert "w: 1.0" in argv[-1]
+
+
+@pytest.mark.parametrize(
+    ("world_state", "expected"),
+    [
+        ('component: "94 18 fixed"\n', True),
+        ('component: "93 18 fixed"\n', False),
+    ],
+)
+def test_command_adapter_reads_attachment_from_exact_ecs_joint(
+    world_state: str, expected: bool
+) -> None:
+    from so101_demo.backends.gazebo.commands import GazeboCommandAdapter
+
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, world_state, "")
+
+    receipt = GazeboCommandAdapter(runner=run).observe_attachment(
+        parent_entity_id=94,
+        child_entity_id=18,
+    )
+
+    assert receipt.success
+    assert receipt.evidence["attached"] is expected
+    argv, kwargs = calls[0]
+    assert argv[:4] == [
+        "gz",
+        "service",
+        "-s",
+        "/world/so101_pick_place/state",
+    ]
+    assert "gz.msgs.SerializedStepMap" in argv
+    assert kwargs["shell"] is False
+
+
+def test_gazebo_pose_vector_preserves_named_pose_and_entity_ids() -> None:
+    from so101_demo.backends.gazebo.reset import GazeboResetState
+    from so101_demo.control.trajectory.reset_control import record_gazebo_pose_vector
+
+    state = GazeboResetState()
+    vector = SimpleNamespace(
+        pose=[
+            SimpleNamespace(
+                name="plastic_cup",
+                id=17,
+                position=SimpleNamespace(x=0.35, y=0.15, z=0.045),
+                orientation=SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0),
+            ),
+            SimpleNamespace(name="body", id=18),
+            SimpleNamespace(name="gripper", id=94),
+        ]
+    )
+
+    record_gazebo_pose_vector(state, vector)
+
+    snapshot = state.snapshot()
+    assert snapshot["cup_pose"].values == (0.35, 0.15, 0.045, 0.0, 0.0, 0.0, 1.0)
+    assert snapshot["entity_ids"] == {
+        "plastic_cup": 17,
+        "body": 18,
+        "gripper": 94,
+    }
 
 
 @pytest.mark.parametrize(

@@ -278,6 +278,8 @@ class GazeboResetState:
         self.velocities: dict[str, float] = {}
         self.tf_frames: set[str] = set()
         self.controllers: dict[str, str] = {}
+        self.entity_ids: dict[str, int] = {}
+        self.attachment_probe: dict[str, object] = {}
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
@@ -288,6 +290,8 @@ class GazeboResetState:
                 "velocities": dict(self.velocities),
                 "tf_frames": sorted(self.tf_frames),
                 "controllers": dict(self.controllers),
+                "entity_ids": dict(self.entity_ids),
+                "attachment_probe": dict(self.attachment_probe),
             }
 
 
