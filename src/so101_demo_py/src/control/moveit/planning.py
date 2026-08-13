@@ -121,7 +121,7 @@ class MoveItPlanningClient:
         elif isinstance(request, PosePlanRequest):
             wire_request = make_get_motion_plan_pose_request(request)
         else:
-            wire_request = request
+            wire_request = make_get_motion_plan_request(request)
         future = self._client.call_async(wire_request)
         deadline = time.monotonic() + timeout_s
         while not future.done() and time.monotonic() < deadline:
