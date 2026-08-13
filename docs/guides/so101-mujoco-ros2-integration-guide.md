@@ -262,6 +262,16 @@ ros2 run so101_demo_py camera_preset --current --format yaml
 
 GUI 只用于观察和数值复核；计数的接触/放置结论必须来自 headless 权威证据链。
 
+Gazebo 使用同一个 CLI 和错误合同，但由 package-owned preset 与 `/gui/move_to/pose` adapter 实现：
+
+```zsh
+ros2 run so101_demo_py camera_preset --backend gazebo --list
+ros2 run so101_demo_py camera_preset --backend gazebo overview
+```
+
+成功必须包含 transport 的 positive acknowledgement；Teleop 的 `gazebo_py` profile 也通过固定
+`--backend gazebo` 参数调用这一公共 owner。
+
 ## 7. ResetWorld 事务
 
 合格 reset 不是单个 service 成功，而是带 epoch 和 controller 收敛的事务：
@@ -277,6 +287,17 @@ GUI 只用于观察和数值复核；计数的接触/放置结论必须来自 he
 
 不要用 `StepSimulation` 伪造 reset snapshot：它会真的推进物理。不要 pause-first 再 deactivate：
 controller switch 依赖的时钟可能已停止。
+
+Gazebo reset 使用同一公共入口，但不是 MuJoCo reset 的包装：
+
+```zsh
+ros2 run so101_demo_py teleop_reset --backend gazebo --session-id reset-001
+```
+
+它独立观察 Gazebo/MoveIt/joints，取消并等待 arm/gripper goals，分别验证物理与 Planning Scene
+detach，停车/同步/恢复杯子，完全打开夹爪，按 SRDF `home` 精确 plan 并执行返回的同一 trajectory，
+最后独立验证 Gazebo pose/attachment、Planning Scene membership/pose/`1/1/13`、controller、joint
+position/velocity 与 TF。任一步 non-zero，不存在 partial-success receipt。
 
 ## 8. MoveIt、Planning Scene 与物理真值
 

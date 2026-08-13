@@ -107,6 +107,7 @@ MuJoCo 与 Gazebo 可以有不同 variant；当前 `light_cup_wall_pick/v1` 两�
 |---|---|---|
 | `RobotControlPort` | `src/ports/robot_control.py` | joint/TCP plan、execute、gripper、stop、fresh joint state |
 | `PlanningScenePort` | `src/ports/planning_scene.py` | world object、attach/detach shadow、pose sync、临时 ACM |
+| `Reset*Port` | `src/ports/reset.py` | backend-neutral 事务 reset 的观测、取消、scene、robot 与最终验证边界 |
 | `WorldPort` | `src/ports/world.py` | 原子 world snapshot、带 receipt 的 snapshot、reset epoch receipt |
 | `LifecyclePort` | `src/ports/lifecycle.py` | readiness、pause、shutdown 等生命周期控制 |
 | `PhaseEvidencePort` | `src/ports/phase_evidence.py` | 开始/完成 phase evidence window |
@@ -121,7 +122,7 @@ MuJoCo 与 Gazebo 可以有不同 variant；当前 `light_cup_wall_pick/v1` 两�
 | snapshot with receipt | 是 | 是 | 否 |
 | reset epoch | 是 | 是 | 否 |
 | pause | 是 | 否 | 否 |
-| viewer camera | 是 | 否 | 否 |
+| viewer/GUI camera preset | 是 | 是 | 否 |
 | physical contact force | 是 | 是 | 否 |
 | lossless physics-step trace | 是 | 否 | 否 |
 
@@ -201,18 +202,27 @@ pose、速度和支撑证据证明。
 
 ### 7.2 Gazebo
 
-`src/backends/gazebo/` 提供 world/observer/lifecycle/reset/transport adapter 和 runtime SDF
-materialization。`execute.py` 是当前有界执行链：
+`src/backends/gazebo/` 提供 world/observer/lifecycle/reset/camera/transport adapter 和 runtime SDF
+materialization。`execute.py` 执行完整的有界策略链：
 
 1. 等待 joint state、Gazebo pose/stats、arm/gripper controller 与 MoveIt readiness；
 2. 执行 `PREPARE_OPEN_GRIPPER`；
-3. 进入 `MOVE_ABOVE_OBJECT` 的 controller waypoints 与 MoveIt planning/execution；
+3. 依次执行 approach、grasp、attach、lift、transport、place、detach、retreat 全部阶段；
 4. 写 `gazebo-execute-evidence.json` 和统一 result manifest；
 5. 失败时报告当前 phase 与真实 error code。
 
-如果第一个边界成功，当前代码会返回 `GAZEBO_EXECUTE_INCOMPLETE`，因为剩余九阶段链尚未实现；
-它不会把 partial success 冒充完整 pick-place。Gazebo 不被默认拒绝，也不被跳过，只是不作为
-MuJoCo 五连胜的 RED→GREEN 门。
+成功返回 `SUCCEEDED/NOT_QUALIFIED`；任何有效产品失败在实际首个失败阶段返回
+`FAILED/NOT_QUALIFIED`，只有证据基础设施本身失败才是 `INVALID`。Gazebo 不被默认拒绝、不被
+跳过，也不作为 MuJoCo 五连胜的 RED→GREEN 门。
+
+`assets/common/geometry-manifest.yaml` 是 table、pedestal、plastic_cup 的唯一几何合同；MoveIt
+builder 与 Gazebo SDF parity test 共同约束 ID、尺寸、局部/世界 6D pose、颜色和 `1/1/13` primitive
+counts。公共 `scene_setup`、`camera_preset`、`teleop_reset` CLI 以 `--backend mujoco|gazebo` 分派，
+Gazebo adapter 独立实现，不读取或调用 C++ demo 的 executable/config。
+
+Gazebo reset 由 application 的十三阶段 transaction 编排。任何阶段失败都会停止后续动作，并输出
+稳定 phase、failure code 与累积 evidence；只有杯子 Gazebo/Planning Scene pose 与 attachment、world
+membership、`1/1/13`、controller、joint position/velocity 和 TF 全部收敛才提交成功 receipt。
 
 ### 7.3 Real stub
 
@@ -247,7 +257,9 @@ flowchart LR
     G1["gz_sim"] --> G2["materialized SDF"]
     G2 --> G3["ros_gz_bridge + controllers"]
     G3 --> G4["move_group"]
-    G4 --> G5["gazebo_execute"]
+    G4 --> G5["gazebo_ready"]
+    G5 --> G6["scene_setup --backend gazebo"]
+    G6 --> G7["gazebo_execute"]
   end
 ```
 

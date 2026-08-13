@@ -7,7 +7,7 @@ probe:
   fixed_args: []
   scene_style: null
   session_style: null
-camera_presets: []
+camera_presets: [overview, top, side, gripper, cup]
 capabilities:
   backend_probe: true
   workflow_execute: true
@@ -15,17 +15,38 @@ capabilities:
   workflow_run: true
   workflow_resume: false
   workflow_stop: false
-  reset_world: false
-  scene_operations: false
+  reset_world: true
+  scene_operations: true
   physical_observation: true
   manual_joint_execute: true
   manual_tcp_execute: true
-  camera_presets: false
+  camera_presets: true
 operations:
   workflow:
     package: so101_demo_py
     executable: gazebo_execute
     timeout_s: 120
     fixed_args: []
+    scene_style: null
+    session_style: null
+  reset_world:
+    package: so101_demo_py
+    executable: teleop_reset
+    timeout_s: 180
+    fixed_args: [--backend, gazebo]
+    scene_style: null
+    session_style: flag
+  scene:
+    package: so101_demo_py
+    executable: scene_setup
+    timeout_s: 60
+    fixed_args: [--backend, gazebo]
+    scene_style: positional
+    session_style: null
+  camera_preset:
+    package: so101_demo_py
+    executable: camera_preset
+    timeout_s: 10
+    fixed_args: [--backend, gazebo]
     scene_style: null
     session_style: null

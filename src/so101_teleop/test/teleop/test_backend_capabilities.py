@@ -94,7 +94,9 @@ def test_capabilities_include_frozen_owner_provenance():
     assert payload["backend"] == "gazebo_py"
     assert payload["owner_package"] == "so101_demo_py"
     assert payload["capabilities"]["workflow_run"] is True
-    assert payload["capabilities"]["scene_operations"] is False
+    assert payload["capabilities"]["scene_operations"] is True
+    assert payload["capabilities"]["reset_world"] is True
+    assert payload["capabilities"]["camera_presets"] is True
 
 
 def test_unsupported_workflow_fails_before_run_or_checkpoint():
@@ -251,7 +253,11 @@ def test_mujoco_workflow_preserves_owner_manifest_and_physical_outcome(tmp_path)
     assert worker._physical_outcome.release_epoch_id == "sim-a:release:10"
 
 
-def test_unsupported_scene_repair_does_not_clear_plans():
+def test_gazebo_python_scene_repair_calls_owner_and_clears_stale_plans(monkeypatch):
+    async def call_inline(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(asyncio, "to_thread", call_inline)
     adapter = FakeAdapter("gazebo_py")
     worker = Worker()
     service = TeleopService(worker, backend=adapter)
@@ -273,8 +279,9 @@ def test_unsupported_scene_repair_does_not_clear_plans():
         "confirmation": "CONFIRM SCENE_REPAIR",
     }))
 
-    assert result.succeeded is False
-    assert result.code == "BACKEND_CAPABILITY_UNAVAILABLE"
-    assert service._plans._latest.plan_id == "existing-plan"
-    assert "existing-plan" in worker._plans
-    assert adapter.calls == []
+    assert result.succeeded is True
+    assert result.code == "OK"
+    assert service._plans._latest is None
+    assert worker._plans == {}
+    assert adapter.calls[0][0] == "scene"
+    assert adapter.calls[0][1].operation == "upsert"
