@@ -65,8 +65,9 @@ def test_final_install_contains_runtime_contract() -> None:
 
 
 def test_pytest_collection_is_nonzero() -> None:
+    test_root = Path(__file__).resolve().parent
     completed = subprocess.run(
-        ["python3", "-m", "pytest", "--collect-only", "-q", "src/so101_demo_py/test"],
+        ["python3", "-m", "pytest", "--collect-only", "-q", str(test_root)],
         check=True,
         capture_output=True,
         text=True,
