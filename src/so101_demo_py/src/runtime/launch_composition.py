@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
+from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     EmitEvent,
@@ -25,8 +26,6 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterFile, ParameterValue
-
-from launch import LaunchDescription
 
 from ..core.policy_registry import load_policy_variant
 from ..ports.capabilities import CapabilityRequirements
