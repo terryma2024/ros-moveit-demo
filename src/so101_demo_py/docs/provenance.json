@@ -174,6 +174,8 @@
   "final_acceptance": {
     "fresh_nonsymlink_build": true,
     "installed_module_under_final_prefix": true,
+    "verification_prefix": "/tmp/so101-debug-gazebo-python-capabilities-boWK6J/final-verification/install/so101_demo_py",
+    "verification_bundle_sha256": "f269f0a55f356b4f51afb8247843cc4273825c0fc2aae850c51fb0c0aca428de",
     "unified_tests_passed": 185,
     "compatibility_profile_tests_passed": 21,
     "affected_teleop_tests_passed": 5,
@@ -181,12 +183,14 @@
     "installed_provenance_tests_passed": 3,
     "ruff_passed": true,
     "fusion_contract_passed": true,
-    "source_asset_symlinks": 44,
-    "build_log_sha256": "e4039dc8945b59a1c472a18a13cf8daabd74277b2bc52ac0c01e8afa7504c026",
-    "fusion_contract_log_sha256": "64be94471f74d3addf3d7629545a3f4b2d12b8e52e412e753309bbf4ae4ca547",
-    "installed_provenance_log_sha256": "db58d0792e021e6c3fb7e4cdfd186077e8b54fd1fe8f52d4871d055bffbca88b",
+    "install_symlinks": 0,
+    "build_log_sha256": "e164684ffb88bfe09a7e143e0461bc24641db3d05e0bf90c1b4c1b2681f43c5b",
+    "fusion_contract_log_sha256": "618823d860928a81ceb249a0fe9b7d7699077992bfcabf40ab151cd8536b4a19",
+    "installed_provenance_log_sha256": "c69b8aca4c7fecb6b04161c76c5abcd40b2a41ecf4e5419302cadf88471a09c9",
     "ruff_log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
-    "static_fingerprint_log_sha256": "aa1c75b74382a1465bf76f54301057bb74eb6b9c30156b5224d1e7f74bd88032"
+    "unified_test_log_sha256": "cb011afae7de6e0ecbad7e5f676c64df7a534893b40559beceb8e6022edd3c6f",
+    "compatibility_profile_test_log_sha256": "1ec840be86d2f3ce43fb882050d57ebc3c230073592856de71ae211ffb005568",
+    "affected_teleop_test_log_sha256": "b06acb3f9b38335db0209c5a6ed8e65ca702012d5080b4bebf4eced263667382"
   },
   "preserved_external_state": {
     "owned_processes_after_final_review": "NONE",

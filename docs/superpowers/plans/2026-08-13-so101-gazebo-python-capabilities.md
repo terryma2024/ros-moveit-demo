@@ -243,8 +243,8 @@ For each RED/GREEN task, preserve the command, collected-test count, exit status
 
 ### Task 12: Verify completion and finish the branch safely
 
-- [ ] Invoke `superpowers:verification-before-completion`; rerun the final scoped tests/static/build/provenance/policy checks from fresh state and inspect outputs before any success claim.
-- [ ] Invoke `superpowers:finishing-a-development-branch`; use its no-push/no-merge handoff path because integration was explicitly forbidden.
-- [ ] Verify target worktree clean; verify main HEAD/status, other worktrees, tmux sessions, and unrelated processes are unchanged/preserved.
-- [ ] Mark the `/goal` complete only after every required artifact and live gate is satisfied.
-- [ ] Final report: all commits, test collection/pass counts, exact policy hash, Gazebo scene/camera/reset evidence by layer, five FULL_RESTART experiment IDs, absolute screenshot paths, preserved state, and remaining risks.
+- [x] Invoke `superpowers:verification-before-completion`; rerun the final scoped tests/static/build/provenance/policy checks from fresh state and inspect outputs before any success claim.
+- [x] Invoke `superpowers:finishing-a-development-branch`; use its no-push/no-merge handoff path because integration was explicitly forbidden.
+- [x] Verify target worktree clean; verify main HEAD/status, other worktrees, tmux sessions, and unrelated processes are unchanged/preserved.
+- [x] Mark the `/goal` complete only after every required artifact and live gate is satisfied.
+- [x] Final report: all commits, test collection/pass counts, exact policy hash, Gazebo scene/camera/reset evidence by layer, five FULL_RESTART experiment IDs, absolute screenshot paths, preserved state, and remaining risks.
