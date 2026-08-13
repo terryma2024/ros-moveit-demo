@@ -33,8 +33,8 @@ live_state_values: [PLANNED, RUNNING, VALID, INVALID]
 
 ## CP-GZPY-001 — Verified baseline
 
-status: VALID  
-outcome: BASELINE_ACCEPTED  
+status: VALID
+outcome: BASELINE_ACCEPTED
 recorded_at: 2026-08-13 Asia/Shanghai
 
 ### Provenance

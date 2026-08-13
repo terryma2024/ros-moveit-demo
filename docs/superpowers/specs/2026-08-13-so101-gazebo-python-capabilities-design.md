@@ -1,7 +1,7 @@
 # SO-101 Gazebo Python Capabilities Design
 
-**Date:** 2026-08-13  
-**Status:** Approved for inline execution  
+**Date:** 2026-08-13
+**Status:** Approved for inline execution
 **Scope:** `so101_demo_py` Gazebo Planning Scene, camera presets, transactional reset, and normal workflow execution
 
 ## Objective
