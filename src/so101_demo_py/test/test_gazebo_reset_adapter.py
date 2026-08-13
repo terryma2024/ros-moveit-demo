@@ -1,7 +1,9 @@
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from so101_demo.ports.reset import ResetStepReceipt
 
 
@@ -88,6 +90,9 @@ def test_command_adapter_reads_attachment_from_exact_ecs_joint(
 
     assert receipt.success
     assert receipt.evidence["attached"] is expected
+    assert "stdout" not in receipt.evidence
+    assert receipt.evidence["world_state_bytes"] == len(world_state.encode())
+    assert len(receipt.evidence["world_state_sha256"]) == 64
     argv, kwargs = calls[0]
     assert argv[:4] == [
         "gz",
@@ -126,6 +131,22 @@ def test_gazebo_pose_vector_preserves_named_pose_and_entity_ids() -> None:
         "body": 18,
         "gripper": 94,
     }
+
+
+def test_gazebo_parking_pose_is_stable_on_the_ground_plane() -> None:
+    config = yaml.safe_load(
+        Path("src/so101_demo_py/config/gazebo/reset.yaml").read_bytes()
+    )
+
+    assert config["parking_pose_xyz_xyzw"] == [
+        0.45,
+        0.25,
+        0.045,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    ]
 
 
 @pytest.mark.parametrize(

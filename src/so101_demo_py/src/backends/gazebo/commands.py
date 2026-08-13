@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
@@ -123,16 +124,22 @@ class GazeboCommandAdapter:
         )
         if not receipt.success:
             return receipt
+        world_state = str(receipt.evidence["stdout"])
+        command_evidence = {
+            key: value for key, value in receipt.evidence.items() if key != "stdout"
+        }
         joint = f'component: "{parent_entity_id} {child_entity_id} fixed"'
         return ResetStepReceipt(
             True,
             None,
             {
-                **receipt.evidence,
+                **command_evidence,
                 "parent_entity_id": parent_entity_id,
                 "child_entity_id": child_entity_id,
                 "joint_component": joint,
-                "attached": joint in str(receipt.evidence["stdout"]),
+                "world_state_bytes": len(world_state.encode()),
+                "world_state_sha256": hashlib.sha256(world_state.encode()).hexdigest(),
+                "attached": joint in world_state,
             },
         )
 

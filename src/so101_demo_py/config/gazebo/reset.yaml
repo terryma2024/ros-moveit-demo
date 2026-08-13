@@ -6,7 +6,7 @@ arm_joints: ["1", "2", "3", "4", "5"]
 home_positions: [0.0, 0.0, 0.0, 0.0, 0.0]
 gripper_joint: "6"
 gripper_open_position: -0.059600220867817
-parking_pose_xyz_xyzw: [0.45, 0.25, 0.08, 0.0, 0.0, 0.0, 1.0]
+parking_pose_xyz_xyzw: [0.45, 0.25, 0.045, 0.0, 0.0, 0.0, 1.0]
 position_tolerance: 0.002
 velocity_tolerance: 0.01
 operation_timeout_s: 15.0
