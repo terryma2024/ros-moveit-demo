@@ -83,6 +83,21 @@ class GazeboCommandAdapter:
             require_ack=False,
         )
 
+    def request_attach(self) -> ResetStepReceipt:
+        return self._run(
+            [
+                "gz",
+                "topic",
+                "-t",
+                "/so101/attach_object",
+                "-m",
+                "gz.msgs.Empty",
+                "-p",
+                "",
+            ],
+            require_ack=False,
+        )
+
     def set_task_object_pose(self, pose: Pose7) -> ResetStepReceipt:
         x, y, z, qx, qy, qz, qw = pose.values
         request = (
