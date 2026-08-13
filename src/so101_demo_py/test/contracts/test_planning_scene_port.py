@@ -50,3 +50,14 @@ def test_planning_scene_port_exposes_complete_shadow_contract() -> None:
         "mesh",
     )
     assert request.object_id == "plastic_cup"
+
+
+def test_task_scene_port_exposes_apply_readback_and_attachment_operations() -> None:
+    from so101_demo.ports.planning_scene import TaskScenePort
+
+    assert set(TaskScenePort.__protocol_attrs__) >= {
+        "apply_task_scene",
+        "observe_task_scene",
+        "attach_task_object",
+        "detach_task_object",
+    }

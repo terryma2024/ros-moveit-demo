@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from .evidence import PoseEvidence
 
@@ -30,6 +30,21 @@ class SceneResult:
             raise ValueError("Planning Scene state cannot prove a physical grasp")
 
 
+@dataclass(frozen=True, slots=True)
+class SceneCommandReceipt:
+    backend: str
+    phase: str
+    success: bool
+    failure_code: str | None
+    evidence: dict[str, object]
+
+    def __post_init__(self) -> None:
+        if not self.backend or not self.phase:
+            raise ValueError("scene command backend and phase must be non-empty")
+        if self.success == (self.failure_code is not None):
+            raise ValueError("successful scene commands cannot carry a failure code")
+
+
 class SceneLease(Protocol):
     pair: tuple[str, str]
     acquired: bool
@@ -49,3 +64,28 @@ class PlanningScenePort(Protocol):
     def synchronize_object_pose(self, object_id: str, pose: PoseEvidence) -> SceneResult: ...
 
     def temporary_allow_collision(self, pair: tuple[str, str]) -> SceneLease: ...
+
+
+@runtime_checkable
+class TaskScenePort(Protocol):
+    def apply_task_scene(self, geometry: Any) -> SceneCommandReceipt: ...
+
+    def observe_task_scene(
+        self,
+        geometry: Any,
+        *,
+        expected_cup_attachment: str | None,
+    ) -> SceneCommandReceipt: ...
+
+    def attach_task_object(
+        self,
+        geometry: Any,
+        object_id: str,
+        link_name: str,
+    ) -> SceneCommandReceipt: ...
+
+    def detach_task_object(
+        self,
+        geometry: Any,
+        object_id: str,
+    ) -> SceneCommandReceipt: ...
