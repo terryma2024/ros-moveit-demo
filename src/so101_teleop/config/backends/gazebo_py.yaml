@@ -1,45 +1,31 @@
 backend: gazebo_py
-owner_package: so101_gazebo_demo_py
+owner_package: so101_demo_py
 probe:
-  package: so101_gazebo_demo_py
-  executable: pick_place_state_machine
+  package: so101_demo_py
+  executable: pick_place
   timeout_s: 10
   fixed_args: []
   scene_style: null
   session_style: null
-camera_presets: [overview, top, side, gripper, cup]
+camera_presets: []
 capabilities:
   backend_probe: true
   workflow_execute: true
-  workflow_start: true
+  workflow_start: false
   workflow_run: true
-  workflow_resume: true
+  workflow_resume: false
   workflow_stop: false
-  reset_world: true
+  reset_world: false
   scene_operations: false
   physical_observation: true
   manual_joint_execute: true
   manual_tcp_execute: true
-  camera_presets: true
+  camera_presets: false
 operations:
   workflow:
-    package: so101_gazebo_demo_py
-    executable: pick_place_state_machine
-    timeout_s: 120
-    fixed_args: [--live-runtime]
-    scene_style: null
-    session_style: null
-  reset_world:
-    package: so101_gazebo_demo_py
-    executable: reset_so101_world
+    package: so101_demo_py
+    executable: gazebo_execute
     timeout_s: 120
     fixed_args: []
     scene_style: null
-    session_style: null
-  scene:
-    package: so101_gazebo_demo_py
-    executable: so101_moveit_scene
-    timeout_s: 20
-    fixed_args: []
-    scene_style: flag
     session_style: null

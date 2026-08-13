@@ -1,6 +1,8 @@
+import argparse
 import json
 
 from so101_demo.application.backend_execute import ExecuteBoundary, classify_execute_boundary
+from so101_demo.backends.gazebo.execute import _complete_runtime_options
 from so101_demo.core.domain import (
     ActionResult,
     ActionStatus,
@@ -10,6 +12,28 @@ from so101_demo.core.domain import (
     QualificationStatus,
 )
 from so101_demo.runtime.result_manifest import write_run_result
+
+
+def test_teleop_request_derives_result_from_checkpoint(tmp_path) -> None:
+    policy = tmp_path / "policy.yaml"
+    policy.write_text("policy: test\n")
+    checkpoint = tmp_path / "session" / "checkpoint.json"
+    options = argparse.Namespace(
+        session_id="gazebo-session",
+        checkpoint=checkpoint,
+        result=None,
+        policy=policy,
+        source_commit="c" * 40,
+        installed_prefix="/opt/so101/fusion-final",
+        policy_sha256="a" * 64,
+        bundle_sha256="b" * 64,
+    )
+
+    _complete_runtime_options(options)
+
+    assert options.result == checkpoint.with_name("gazebo-run-result.json")
+    assert options.policy == policy
+    assert options.source_commit == "c" * 40
 
 
 def test_policy_failure_reports_real_boundary(tmp_path) -> None:

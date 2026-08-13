@@ -34,16 +34,28 @@ def test_gazebo_cpp_profile_pins_installed_owners():
     )
 
 
-def test_gazebo_py_profile_pins_python_cli_differences():
+def test_gazebo_py_profile_routes_run_to_canonical_bounded_execute():
     profile = load_backend_profile("gazebo_py", PACKAGE)
 
-    workflow = profile.operations[BackendOperation.WORKFLOW]
-    scene = profile.operations[BackendOperation.SCENE]
-    assert profile.owner_package == "so101_gazebo_demo_py"
-    assert workflow.fixed_args == ("--live-runtime",)
-    assert scene.scene_style == "flag"
-    assert profile.capabilities.scene_operations is False
-    assert profile.capabilities.workflow_run is True
+    assert profile.owner_package == "so101_demo_py"
+    assert profile.probe.executable == "pick_place"
+    assert set(profile.operations) == {BackendOperation.WORKFLOW}
+    assert profile.operations[BackendOperation.WORKFLOW].executable == "gazebo_execute"
+    assert profile.camera_presets == ()
+    assert profile.capabilities.as_dict() == {
+        "backend_probe": True,
+        "workflow_execute": True,
+        "workflow_start": False,
+        "workflow_run": True,
+        "workflow_resume": False,
+        "workflow_stop": False,
+        "reset_world": False,
+        "scene_operations": False,
+        "physical_observation": True,
+        "manual_joint_execute": True,
+        "manual_tcp_execute": True,
+        "camera_presets": False,
+    }
 
 
 def test_mujoco_profile_exposes_only_qualified_live_boundaries():

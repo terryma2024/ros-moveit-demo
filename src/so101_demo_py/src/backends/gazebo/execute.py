@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import time
@@ -19,6 +20,42 @@ from ...control.trajectory.executor import MoveItExecutionClient, make_execute_g
 from ...core.domain import ActionResult, ActionStatus, Failure, FailureCategory
 from ...core.policy import load_task_policy
 from ...runtime.result_manifest import write_run_result
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _complete_runtime_options(options: argparse.Namespace) -> None:
+    """Fill Teleop's bounded request from the installed immutable bundle."""
+
+    if options.result is None:
+        checkpoint = options.checkpoint or (
+            Path(os.environ.get("SO101_TELEOP_EVIDENCE_BASE", "/tmp/so101-teleop"))
+            / options.session_id
+            / "checkpoint.json"
+        )
+        options.result = checkpoint.with_name("gazebo-run-result.json")
+    if options.policy is None:
+        from ament_index_python.packages import get_package_share_directory
+
+        share = Path(get_package_share_directory("so101_demo_py"))
+        options.policy = (
+            share / "config/policies/light_cup_wall_pick/v1/gazebo.yaml"
+        )
+    options.policy_sha256 = options.policy_sha256 or _sha256(options.policy)
+    if (
+        options.source_commit is None
+        or options.installed_prefix is None
+        or options.bundle_sha256 is None
+    ):
+        from ...runtime.provenance import installed_bundle
+
+        bundle = installed_bundle()
+        inputs = bundle.manifest["inputs"]
+        options.source_commit = options.source_commit or inputs["source_commit"]
+        options.installed_prefix = options.installed_prefix or inputs["package_prefix"]
+        options.bundle_sha256 = options.bundle_sha256 or bundle.bundle_sha256
 
 
 def _failure(category: FailureCategory, code: str, message: str) -> ActionResult:
@@ -54,14 +91,17 @@ def _atomic_json(path: Path, document: dict[str, object]) -> Path:
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--session-id", required=True)
-    parser.add_argument("--policy", type=Path, required=True)
-    parser.add_argument("--result", type=Path, required=True)
-    parser.add_argument("--source-commit", required=True)
-    parser.add_argument("--installed-prefix", required=True)
-    parser.add_argument("--policy-sha256", required=True)
-    parser.add_argument("--bundle-sha256", required=True)
+    parser.add_argument("--mode", choices=("execute",), default="execute")
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--policy", type=Path)
+    parser.add_argument("--result", type=Path)
+    parser.add_argument("--source-commit")
+    parser.add_argument("--installed-prefix")
+    parser.add_argument("--policy-sha256")
+    parser.add_argument("--bundle-sha256")
     parser.add_argument("--readiness-timeout-s", type=float, default=60.0)
     options, _ = parser.parse_known_args(arguments)
+    _complete_runtime_options(options)
 
     import rclpy
     from control_msgs.action import FollowJointTrajectory
@@ -311,6 +351,8 @@ def main(arguments: list[str] | None = None) -> int:
     print(f"run_status={result.run_status.value}", flush=True)
     print(f"first_failed_phase={result.first_failed_phase}", flush=True)
     print(f"error_code={result.error_code}", flush=True)
+    if result.error_code is not None:
+        print(f"failure_code={result.error_code}", flush=True)
     print(f"evidence_file={options.result}", flush=True)
     return 0 if result.run_status.value == "SUCCEEDED" else 1
 

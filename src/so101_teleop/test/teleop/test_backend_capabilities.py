@@ -93,7 +93,7 @@ def test_capabilities_include_frozen_owner_provenance():
     payload = asyncio.run(service.capabilities())
 
     assert payload["backend"] == "gazebo_py"
-    assert payload["owner_package"] == "so101_gazebo_demo_py"
+    assert payload["owner_package"] == "so101_demo_py"
     assert payload["capabilities"]["workflow_run"] is True
     assert payload["capabilities"]["scene_operations"] is False
 

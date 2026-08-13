@@ -2,8 +2,8 @@ from pathlib import Path
 import subprocess
 from unittest.mock import Mock
 
-from so101_teleop.backends.cli_adapter import CliBackendAdapter, build_scene_args
-from so101_teleop.backends.protocol import BackendOperation, CameraPresetRequest
+from so101_teleop.backends.cli_adapter import CliBackendAdapter
+from so101_teleop.backends.protocol import CameraPresetRequest
 from so101_teleop.backends.protocol import ResetRequest, SceneRequest, WorkflowRequest
 from so101_teleop.backends.registry import load_backend_profile
 
@@ -63,22 +63,19 @@ def test_probe_normalizes_missing_package(tmp_path):
     runner.assert_not_called()
 
 
-def test_adapter_never_uses_shell_or_request_selected_program(tmp_path):
+def test_gazebo_python_probe_uses_canonical_owner(tmp_path):
     adapter, runner = adapter_for(tmp_path)
 
-    adapter.run_workflow(workflow_request("run"))
+    result = adapter.probe()
 
-    argv = runner.call_args.args[0]
-    assert runner.call_args.kwargs["shell"] is False
-    assert argv[0].endswith("/lib/so101_gazebo_demo_py/pick_place_state_machine")
-    assert argv[1:] == [
-        "--live-runtime", "--mode", "execute", "--checkpoint",
-        "/tmp/checkpoint.json", "--session-id", "session-a",
-    ]
+    assert result.ok is True
+    assert result.owner_package == "so101_demo_py"
+    assert result.owner_executable == "pick_place"
+    runner.assert_not_called()
 
 
 def test_workflow_operation_mapping_is_fixed(tmp_path):
-    adapter, runner = adapter_for(tmp_path)
+    adapter, runner = adapter_for(tmp_path, "gazebo_cpp")
 
     adapter.run_workflow(workflow_request("start"))
     assert runner.call_args.args[0][-1] == "--step"
@@ -88,17 +85,41 @@ def test_workflow_operation_mapping_is_fixed(tmp_path):
     assert runner.call_args.args[0][-3:] == ["--resume", "true", "--force-continue"]
 
 
-def test_scene_styles_do_not_drift_between_owners(tmp_path):
+def test_cpp_scene_style_is_positional(tmp_path):
     cpp, cpp_runner = adapter_for(tmp_path / "cpp", "gazebo_cpp")
-    py_profile = load_backend_profile("gazebo_py", PACKAGE)
 
     cpp.scene_operation(SceneRequest("observe", "session-a"))
 
     assert cpp_runner.call_args.args[0][-1:] == ["observe"]
-    assert build_scene_args(
-        py_profile.operations[BackendOperation.SCENE],
-        SceneRequest("observe", "session-a"),
-    ) == ["--operation", "observe"]
+
+
+def test_gazebo_python_run_uses_canonical_execute_and_other_operations_fail_closed(
+    tmp_path,
+):
+    adapter, runner = adapter_for(tmp_path)
+
+    run = adapter.run_workflow(workflow_request("run"))
+    argv = runner.call_args.args[0]
+    assert run.ok is True
+    assert runner.call_args.kwargs["shell"] is False
+    assert argv[0].endswith("/lib/so101_demo_py/gazebo_execute")
+    assert argv[1:] == [
+        "--mode", "execute", "--checkpoint", "/tmp/checkpoint.json",
+        "--session-id", "session-a",
+    ]
+
+    runner.reset_mock()
+    results = (
+        adapter.run_workflow(workflow_request("start")),
+        adapter.reset_world(ResetRequest("session-a")),
+        adapter.scene_operation(SceneRequest("observe", "session-a")),
+        adapter.apply_camera_preset(CameraPresetRequest("overview", "session-a")),
+    )
+
+    assert {result.error.code for result in results} == {
+        "BACKEND_CAPABILITY_UNAVAILABLE"
+    }
+    runner.assert_not_called()
 
 
 def test_nonzero_owner_result_preserves_sanitized_failure_code(tmp_path):
@@ -142,12 +163,12 @@ def test_cpp_owner_trace_preserves_every_state(tmp_path):
     )
 
 
-def test_python_owner_state_trace_is_normalized_to_backend_trace(tmp_path):
+def test_mujoco_owner_state_trace_is_normalized_to_backend_trace(tmp_path):
     completed = subprocess.CompletedProcess(
         ["owner"], 0,
         "status=SUCCEEDED\nstate_trace=IDLE,PREPARE_OPEN_GRIPPER,DONE\n", "",
     )
-    adapter, _runner = adapter_for(tmp_path, "gazebo_py", completed)
+    adapter, _runner = adapter_for(tmp_path, "mujoco_py", completed)
 
     result = adapter.run_workflow(workflow_request("run"))
 

@@ -3,7 +3,9 @@ from pathlib import Path
 
 import yaml
 
-LEGACY_NAMES = ("so101_mujoco_demo_py", "so101_gazebo_demo_py")
+REMOVED_PACKAGE_NAMES = tuple(
+    f"so101_{backend}_demo_py" for backend in ("mujoco", "gazebo")
+)
 TEXT_SUFFIXES = {".xml", ".sdf", ".xacro", ".urdf", ".yaml", ".json", ".md"}
 
 
@@ -24,13 +26,13 @@ def test_assets_have_backend_entrypoints_and_resolve_locally(request) -> None:
     assert all((share / relative).is_file() for relative in required)
 
 
-def test_installed_assets_do_not_reference_legacy_packages(request) -> None:
+def test_installed_assets_reference_only_the_canonical_package(request) -> None:
     share = _share(request)
     violations = []
     for path in (share / "assets").rglob("*"):
         if path.is_file() and path.suffix in TEXT_SUFFIXES:
             text = path.read_text(encoding="utf-8")
-            if any(name in text for name in LEGACY_NAMES):
+            if any(name in text for name in REMOVED_PACKAGE_NAMES):
                 violations.append(str(path.relative_to(share)))
     assert violations == []
 
