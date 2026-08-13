@@ -49,5 +49,28 @@ remain under `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live`.
   `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-005/gui-final-fallback/20260813T122713-02e1b84358e8/desktop.png`
   (`b419ee89fbdfc017e8ec7f7300d0eab959c1a38d8428cb66a147e1eaea14d00d`)
 
-The final MuJoCo five-run FULL_RESTART qualification is intentionally recorded as a
-separate fixed-bundle batch after this capability checkpoint is committed and rebuilt.
+## Final fixed-bundle MuJoCo qualification
+
+The behavior source commit
+`213ac0da3b4f2a756c2c4e66e8e6c28af9e2168a`, fresh installed prefix
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/final-candidate-005-install/so101_demo_py`,
+bundle `438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd`,
+and frozen policy were identical across five consecutive independently started and
+stopped FULL_RESTART experiments:
+
+- `cp-gzpy-fr-021-01` — manifest SHA-256
+  `25dd6a49bebdb6b87729ce1b707f8c65562ecf32f3c781696900d29e0477464a`
+- `cp-gzpy-fr-022-01` — manifest SHA-256
+  `fc3e1a12c19679dd63f1d839a8af1e6cec16a4e90780135a2fae4b93adecfc17`
+- `cp-gzpy-fr-023-01` — manifest SHA-256
+  `0da61cc8b4c16e79691b4e7a69078e679a6c93fa8cd676b50300954313bb8fa5`
+- `cp-gzpy-fr-024-01` — manifest SHA-256
+  `b14c9338998a27d6e09848757ac0956bc3602a048afe3a11f0d4440f012f2766`
+- `cp-gzpy-fr-025-01` — manifest SHA-256
+  `ddfaf9e9df89308d9441ac4a87ff8b0961f61fcdcae606be4c5c015e27276246`
+
+Each independently returned `QUALIFIED` under `verify-batch`, reset at epoch `1`, ran
+all nine production phases, proved successful physical placement with no primary
+failure, closed gap-free lossless transport evidence as
+`COMPLETE/PHYSICAL_TRANSPORT_SUCCESS`, and performed ordered clean shutdown. Earlier
+invalid batches are retained in the ledger and do not contribute to this streak.

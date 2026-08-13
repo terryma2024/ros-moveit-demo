@@ -2,10 +2,10 @@
   "schema_version": 1,
   "qualification_status": "QUALIFIED",
   "qualified_source": {
-    "commit": "e5e4d9b21ea81488b553da250070ae546695f36f",
-    "branch": "codex/so101-demo-py-fusion",
-    "base_commit": "866656b217eff4c57eade161c94ea0cef326d13d",
-    "installed_prefix": "/data/work/ws_moveit/.worktrees/so101-demo-py-fusion/install/fusion-final/so101_demo_py"
+    "commit": "213ac0da3b4f2a756c2c4e66e8e6c28af9e2168a",
+    "branch": "codex/so101-demo-py-canonical",
+    "base_commit": "1fa155e1524fc24b7059e76eb88540abda327ba6",
+    "installed_prefix": "/tmp/so101-debug-gazebo-python-capabilities-boWK6J/final-candidate-005-install/so101_demo_py"
   },
   "policy": {
     "id": "light_cup_wall_pick",
@@ -21,18 +21,30 @@
     "executable": "/data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install/lib/mujoco_ros2_control/ros2_control_node",
     "executable_sha256": "9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e"
   },
-  "installed_bundle_sha256": "40256ffeb8028663c29420722670c6726f73aff0bac1c559ca6caa80eddc2743",
+  "installed_bundle_sha256": "438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd",
   "mujoco_qualification": {
     "full_restart": {
-      "batch_id": "fusion-full-restart-004",
+      "batch_id": "cp-gzpy-fr-021-through-025",
       "lifecycle": "FULL_RESTART",
       "status": "QUALIFIED",
       "valid_successes": 5,
       "attempts": 5,
-      "evidence_root": "/data/work/so101-debug-fusion-full-restart-004",
-      "manifest": "/data/work/so101-debug-fusion-full-restart-004/qualification-manifest.json",
-      "manifest_sha256": "98e98b96959bf20591bf268d8452383fc9dce045e6346e5b37642acb4a4bc810",
-      "independent_verifier_log_sha256": "e35dca51c92971ab28b1eb39c55dcc1eda602a350e0ccd00ee12c96ee710ab37"
+      "evidence_root": "/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification",
+      "experiment_ids": [
+        "cp-gzpy-fr-021-01",
+        "cp-gzpy-fr-022-01",
+        "cp-gzpy-fr-023-01",
+        "cp-gzpy-fr-024-01",
+        "cp-gzpy-fr-025-01"
+      ],
+      "manifest_sha256": [
+        "25dd6a49bebdb6b87729ce1b707f8c65562ecf32f3c781696900d29e0477464a",
+        "fc3e1a12c19679dd63f1d839a8af1e6cec16a4e90780135a2fae4b93adecfc17",
+        "0da61cc8b4c16e79691b4e7a69078e679a6c93fa8cd676b50300954313bb8fa5",
+        "b14c9338998a27d6e09848757ac0956bc3602a048afe3a11f0d4440f012f2766",
+        "ddfaf9e9df89308d9441ac4a87ff8b0961f61fcdcae606be4c5c015e27276246"
+      ],
+      "independently_verified": true
     },
     "reset_world": {
       "batch_id": "fusion-reset-world-003",
@@ -68,7 +80,7 @@
     }
   },
   "gazebo_python_capabilities": {
-    "status": "LIVE_ACCEPTED_PENDING_FINAL_QUALIFICATION",
+    "status": "FINAL_QUALIFIED",
     "owner_package": "so101_demo_py",
     "public_clis": ["scene_setup", "camera_preset", "teleop_reset"],
     "backend_selector": ["--backend", "gazebo"],
@@ -81,6 +93,19 @@
       "reset_experiment": "CP-GZPY-RESET-005",
       "evidence_root": "/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live",
       "reset_completed_phases": 13
+    },
+    "final_mujoco_full_restart": {
+      "source_commit": "213ac0da3b4f2a756c2c4e66e8e6c28af9e2168a",
+      "installed_prefix": "/tmp/so101-debug-gazebo-python-capabilities-boWK6J/final-candidate-005-install/so101_demo_py",
+      "bundle_sha256": "438f968141ff3b3999799b8dc06d36c386950eed335a82e314a2fe2e050119dd",
+      "valid_consecutive_successes": 5,
+      "experiment_ids": [
+        "cp-gzpy-fr-021-01",
+        "cp-gzpy-fr-022-01",
+        "cp-gzpy-fr-023-01",
+        "cp-gzpy-fr-024-01",
+        "cp-gzpy-fr-025-01"
+      ]
     },
     "teleop_capabilities": {
       "scene_operations": true,
@@ -149,8 +174,10 @@
   "final_acceptance": {
     "fresh_nonsymlink_build": true,
     "installed_module_under_final_prefix": true,
-    "unified_tests_passed": 105,
-    "compatibility_profile_tests_passed": 17,
+    "unified_tests_passed": 185,
+    "compatibility_profile_tests_passed": 21,
+    "affected_teleop_tests_passed": 5,
+    "mujoco_support_tests_passed": 19,
     "installed_provenance_tests_passed": 3,
     "ruff_passed": true,
     "fusion_contract_passed": true,
