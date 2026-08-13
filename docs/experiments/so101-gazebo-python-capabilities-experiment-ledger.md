@@ -662,7 +662,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-015 --lifecycle FULL_RESTART -
 
 ## CP-GZPY-FULL-RESTART-016 through 020 — durable-evidence fixed-bundle preregistration
 
-batch_status: PLANNED
+batch_status: INVALID
 backend: mujoco
 lifecycle: FULL_RESTART
 supersedes_invalid_batches: `[001..005, 006..010, 011..015]`
@@ -694,18 +694,33 @@ stops the batch; any behavior/config/policy/contract change requires a new batch
 
 ### CP-GZPY-FULL-RESTART-016
 
-status: PLANNED
-outcome: PENDING
+status: INVALID
+outcome: NOT_COUNTED
 ros_domain_id: `200`
 port: `28115`
 simulation_session_id: `cp-gzpy-fr-016-full-01`
 evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-016`
 command: `run_qualification --batch-id cp-gzpy-fr-016 --lifecycle FULL_RESTART --count 1 --fingerprint 4d1a717e780df30180d2fca018d7c31e838bf9d1de31700b953e7551daeb816a --evidence-root /tmp/so101-debug-gazebo-python-capabilities-boWK6J/qualification/cp-gzpy-fr-016 --base-domain-id 200 --base-port 28115 --headless`
 
+Terminal review: fixed source/install/bundle/policy/geometry/controller provenance and the
+installed `5000/50` lossless chunk configuration matched. The observer retained twelve
+strictly consecutive chunks `483..494`, each with fifty consecutive samples, eliminating
+the prior sequence-gap failure. A durable chunk checkpoint nevertheless took about
+`0.532s`, longer than the independent atomic snapshot freshness bound of `0.500s` on the
+same single-threaded ROS executor. The monitor correctly canceled waypoint 1 for stale
+evidence, while the hazard-only cancellation recorder then failed closed with
+`EvidenceInvalid: cancellation request has no hazard latch`; the owner surfaced
+`TELEOP_WORKFLOW_EVIDENCE_INVALID`. This is incomplete physical evidence and therefore
+`INVALID`, not a policy failure. Ordered shutdown passed. Manifest SHA-256:
+`48d29b3309ff890dc10d4ebbcdfc29701379a9f0f06e32576bf7b79640b6b49b`.
+Attempts 017 through 020 are canceled before start. The next TDD change must decouple
+durable checkpoint latency from ROS safety/snapshot callbacks and requires a new bundle.
+
 ### CP-GZPY-FULL-RESTART-017
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `201`
 port: `28116`
 simulation_session_id: `cp-gzpy-fr-017-full-01`
@@ -716,6 +731,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-017 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `202`
 port: `28117`
 simulation_session_id: `cp-gzpy-fr-018-full-01`
@@ -726,6 +742,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-018 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `203`
 port: `28118`
 simulation_session_id: `cp-gzpy-fr-019-full-01`
@@ -736,6 +753,7 @@ command: `run_qualification --batch-id cp-gzpy-fr-019 --lifecycle FULL_RESTART -
 
 status: PLANNED
 outcome: PENDING
+batch_invalid_before_start: true
 ros_domain_id: `204`
 port: `28119`
 simulation_session_id: `cp-gzpy-fr-020-full-01`
