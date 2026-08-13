@@ -123,6 +123,8 @@ class GazeboRobotResetPort:
         position_tolerance: float,
         velocity_tolerance: float,
         timeout_s: float,
+        clock=time.monotonic,
+        wait=time.sleep,
     ) -> None:
         self._planner = planner
         self._executor = executor
@@ -133,29 +135,42 @@ class GazeboRobotResetPort:
         self._position_tolerance = position_tolerance
         self._velocity_tolerance = velocity_tolerance
         self._timeout_s = timeout_s
+        self._clock = clock
+        self._wait = wait
 
     def _verify(self, targets: dict[str, float]) -> ResetStepReceipt:
-        positions, velocities = self._observe_joints()
-        errors = {
-            name: abs(float(positions.get(name, math.inf)) - target)
-            for name, target in targets.items()
-        }
-        speeds = {
-            name: abs(float(velocities.get(name, math.inf))) for name in targets
-        }
-        success = all(value <= self._position_tolerance for value in errors.values()) and all(
-            value <= self._velocity_tolerance for value in speeds.values()
-        )
-        return ResetStepReceipt(
-            success,
-            None if success else "RESET_JOINT_VERIFY_FAILED",
-            {
-                "targets": targets,
-                "positions": positions,
-                "velocities": velocities,
-                "position_errors": errors,
-                "absolute_velocities": speeds,
-            },
+        deadline = self._clock() + self._timeout_s
+        latest: ResetStepReceipt | None = None
+        while self._clock() < deadline:
+            positions, velocities = self._observe_joints()
+            errors = {
+                name: abs(float(positions.get(name, math.inf)) - target)
+                for name, target in targets.items()
+            }
+            speeds = {
+                name: abs(float(velocities.get(name, math.inf))) for name in targets
+            }
+            success = all(
+                value <= self._position_tolerance for value in errors.values()
+            ) and all(value <= self._velocity_tolerance for value in speeds.values())
+            latest = ResetStepReceipt(
+                success,
+                None if success else "RESET_JOINT_VERIFY_FAILED",
+                {
+                    "targets": targets,
+                    "positions": positions,
+                    "velocities": velocities,
+                    "position_errors": errors,
+                    "absolute_velocities": speeds,
+                },
+            )
+            if success:
+                return latest
+            self._wait(min(0.01, self._timeout_s))
+        return latest or ResetStepReceipt(
+            False,
+            "RESET_JOINT_VERIFY_FAILED",
+            {"targets": targets, "observation": "unavailable"},
         )
 
     def open_gripper(self) -> ResetStepReceipt:

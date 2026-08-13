@@ -251,3 +251,30 @@ def test_robot_adapter_executes_the_exact_planned_trajectory() -> None:
     assert plan.success and plan.plan is trajectory
     assert port.execute_home_and_verify(plan.plan).success
     assert executor.received is trajectory
+
+
+def test_robot_adapter_waits_for_gripper_position_and_velocity_convergence() -> None:
+    from so101_demo.backends.gazebo.reset import GazeboRobotResetPort
+
+    observations = iter(
+        (
+            ({"6": -0.0567}, {"6": -0.0298}),
+            ({"6": -0.059600220867817}, {"6": 0.0}),
+        )
+    )
+    calls = []
+    port = GazeboRobotResetPort(
+        planner=object(),
+        executor=object(),
+        command_gripper=lambda _target: ResetStepReceipt(True, None, {}),
+        observe_joints=lambda: calls.append(True) or next(observations),
+        home_positions=(0.0, 0.0, 0.0, 0.0, 0.0),
+        gripper_open_position=-0.059600220867817,
+        position_tolerance=0.002,
+        velocity_tolerance=0.01,
+        timeout_s=0.1,
+        wait=lambda _seconds: None,
+    )
+
+    assert port.open_gripper().success
+    assert len(calls) == 2
