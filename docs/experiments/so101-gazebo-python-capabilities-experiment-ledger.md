@@ -75,4 +75,301 @@ recorded_at: 2026-08-13 Asia/Shanghai
 
 ## Live experiment queue
 
-No live experiment has started. The next live experiment must be appended here with an immutable hypothesis and acceptance contract in `PLANNED` before any simulator command is run. Its state must then transition `PLANNED -> RUNNING -> VALID|INVALID`.
+## CP-GZPY-SCENE-001 — Manifest-driven Planning Scene
+
+status: VALID
+outcome: FAILED
+lifecycle: GAZEBO_SHARED_STACK
+source_commit: `68c590a6b21ac39244232df5f1f98ed902882531`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/task-09-final-install/so101_demo_py`
+bundle_sha256: `c55d43be8f3e78d5ceeebb429e36d37e03f426bcd5dce4c5bd0d5e0a1ae1d062`
+geometry_manifest_sha256: `6dc64c197a82316c4ac856530c6caf5d905ffd2b0ea2778d85d87b9a3e89b235`
+policy_sha256: `aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356`
+ros_domain_id: `187`
+gz_partition: `cp-gzpy-001`
+simulation_session_id: `cp-gzpy-shared-001`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/scene-001`
+
+Hypothesis: the installed Python-owned Gazebo stack becomes ready and the public
+`scene_setup --backend gazebo setup` applies the canonical manifest to MoveIt.
+
+Acceptance contract: require a zero owner receipt plus an independent
+`/get_planning_scene` observation with exact world IDs `table`, `pedestal`,
+`plastic_cup`; no attached task object; canonical 6D object and primitive-local
+poses/colors/dimensions; and exact primitive counts `1/1/13`. Record stack supervisor
+PID/PGID and every task-owned child before review. Any missing read-back field is
+`INVALID`; a complete nonconvergent product receipt is `VALID` with `outcome: FAILED`.
+
+Terminal review: readiness proved all three controllers active and all required
+MoveIt services/actions available. Apply/read-back returned complete evidence with exact
+world IDs and primitive counts `1/1/13`, but failed `READ_BACK / SCENE_READBACK_MISMATCH`
+for `plastic_cup.primitive[4].pose` and `plastic_cup.primitive[5].pose`. This is a valid
+product failure. Evidence:
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/scene-001/readiness.log`,
+`scene-setup.log`, `controllers-before.txt`, and `owned-processes-before.txt`.
+
+## CP-GZPY-SCENE-002 — Quaternion-invariant Planning Scene read-back
+
+status: VALID
+outcome: SUCCEEDED
+lifecycle: GAZEBO_SHARED_STACK
+source_commit: `9c38547bdc0675a6197ee374be0ef923cfdfd40b`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/task-10-candidate-install/so101_demo_py`
+bundle_sha256: `6e6d59611b485699896db5a850eb919b5729fb6f041a30f4a54a5183ccadf51b`
+geometry_manifest_sha256: `6dc64c197a82316c4ac856530c6caf5d905ffd2b0ea2778d85d87b9a3e89b235`
+policy_sha256: `aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356`
+ros_domain_id: `188`
+gz_partition: `cp-gzpy-002`
+simulation_session_id: `cp-gzpy-shared-002`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/scene-002`
+
+Hypothesis: after the focused quaternion-double-cover fix, the installed Python-owned
+scene client accepts MoveIt's equivalent `q`/`-q` representation without weakening any
+position, geometry, color, membership, or count check.
+
+Acceptance contract: require readiness, zero apply/read-back receipt, exact world IDs,
+no MoveIt attachment, canonical 6D geometry modulo quaternion sign only, and primitive
+counts `1/1/13`. Retain independent raw `/get_planning_scene` values and provenance.
+Incomplete evidence is `INVALID`; a complete mismatch is `VALID`/`FAILED`.
+
+Terminal review: readiness proved the required services/actions and exact active
+controller set. The shared CLI returned `success: true`, `phase: READ_BACK`, exact world
+IDs, no attachments, no mismatches, and counts table/pedestal/plastic_cup `1/1/13`.
+Independent `/get_planning_scene` raw JSON retained every world/object/primitive 6D pose,
+dimension, type, color, and empty attachment list. Evidence directory:
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/scene-002`.
+
+## CP-GZPY-CAMERA-001 — Gazebo GUI camera preset
+
+status: VALID
+outcome: SUCCEEDED
+lifecycle: GAZEBO_SHARED_STACK
+source_commit: `9c38547bdc0675a6197ee374be0ef923cfdfd40b`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/task-10-candidate-install/so101_demo_py`
+bundle_sha256: `6e6d59611b485699896db5a850eb919b5729fb6f041a30f4a54a5183ccadf51b`
+ros_domain_id: `188`
+gz_partition: `cp-gzpy-002`
+simulation_session_id: `cp-gzpy-shared-002`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/camera-001`
+
+Hypothesis: the Python-owned `overview` then `top` preset calls
+`/gui/move_to/pose`, receives positive acknowledgement, and changes the real Gazebo
+viewpoint.
+
+Acceptance contract: use one declared CUA session and exact Gazebo window; capture and
+inspect a fresh pre-action window snapshot, invoke the public CLI only after it exists,
+capture and inspect a fresh post-action snapshot, and retain both absolute PNG paths and
+SHA-256 values. The adapter receipt must contain the positive transport acknowledgement.
+Missing/stale/uninspected imagery is `INVALID`; a complete negative acknowledgement is
+`VALID` with `outcome: FAILED`.
+
+Terminal review: CUA session `cp-gzpy-camera-001` was scoped to Gazebo window
+`35651598` owned by PID `3386274`. Snapshot `s00000005` was captured before the action,
+inspected, and showed the angled overview; its PNG is
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/camera-001/cua-before-overview.png`
+with SHA-256 `d147aff37abba509a2a6a1a7f6d3207843febbdd3f51f2c4096c9527c3e1d730`.
+The public `camera_preset --backend gazebo top` receipt records service
+`/gui/move_to/pose`, `acknowledged: true`, and transport output `data: true`.
+Fresh post-action snapshot `s00000006` was inspected and showed the true top-down view;
+its PNG is
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/camera-001/cua-after-top.png`
+with SHA-256 `631bf5d93d9eec90069c21d74a2b4a649093b509ab1b10be50ab53b6bd4882f6`.
+The two snapshots also show the GUI pose controls changing from the overview values to
+the configured top preset. The complete receipt is retained as
+`camera-top-receipt.log` in the experiment evidence directory.
+
+## CP-GZPY-RESET-001 — Disturbed transactional Reset
+
+status: VALID
+outcome: FAILED
+lifecycle: GAZEBO_SHARED_STACK
+source_commit: `9c38547bdc0675a6197ee374be0ef923cfdfd40b`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/task-10-candidate-install/so101_demo_py`
+bundle_sha256: `6e6d59611b485699896db5a850eb919b5729fb6f041a30f4a54a5183ccadf51b`
+ros_domain_id: `188`
+gz_partition: `cp-gzpy-002`
+simulation_session_id: `cp-gzpy-shared-002`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-001`
+
+Hypothesis: after independently recorded arm and cup disturbance, the public
+`teleop_reset --backend gazebo` completes all thirteen phases as one transaction.
+
+Acceptance contract: prove the disturbance before Reset, then require a zero complete
+transaction receipt and independent final observations for Gazebo cup 6D pose and
+physical attachment, MoveIt world membership/attachment/6D pose and `1/1/13`, exact
+active controller set, arm/gripper joint positions and velocities, required TF, plus a
+fresh inspected visual convergence snapshot. A first phase failure with complete
+evidence is `VALID`/`FAILED`; missing independent evidence is `INVALID`; partial success
+is never accepted.
+
+Terminal review: the disturbance was independently proven before Reset. Gazebo emitted
+`{"data":"detached"}`; native pose read-back placed `plastic_cup` at approximately
+`(0.3500013, 0.1500003, 0.0449999)`; `/joint_states` placed arm joints at approximately
+`[0.30, -0.30, 0.25, -0.20, 0.15]`; and all three required controllers remained active.
+The public Reset returned nonzero with first phase `OBSERVE_INITIAL`, failure code
+`RESET_OBSERVE_INITIAL_FAILED`, and no completed phases. Its evidence showed
+`cup_pose: null`, `attached: null`, and TF frames `wrist/gripper/jaw/...` rather than
+the adapter's hard-coded `so101_tcp`. The raw bridge observation independently shows
+that converting Gazebo `Pose_V` to `TFMessage` loses entity names, while the
+detachable-joint state is an edge-triggered Gazebo `StringMsg`. This is a complete,
+attributable product failure, not missing evidence. The inspected ai-station-gui
+fallback image shows the disturbed arm and cup separated from canonical spawn at
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-001/gui-disturbed-fallback/20260813T115614-22f187bb601b/desktop.png`.
+All raw receipts and observations are retained in the experiment evidence directory.
+
+## CP-GZPY-RESET-002 — Direct Gazebo state transactional Reset
+
+status: VALID
+outcome: FAILED
+lifecycle: GAZEBO_SHARED_STACK
+source_commit: `cd48cd1663d7e884c6a1adb2288feb4508fa05b0`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/task-11-install/so101_demo_py`
+bundle_sha256: `2d4c97282788b057bcb2fec7df6d3d6d0aab994661bb6ab2f1d859a7c3df2008`
+geometry_sha256: `6dc64c197a82316c4ac856530c6caf5d905ffd2b0ea2778d85d87b9a3e89b235`
+ros_domain_id: `188`
+gz_partition: `cp-gzpy-002`
+simulation_session_id: `cp-gzpy-shared-002`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-002`
+
+Hypothesis: direct named Gazebo `Pose_V` observation, ECS detachable-joint read-back,
+and transient-local static TF observation allow the same public Reset transaction to
+complete after a fresh independently recorded arm and cup disturbance.
+
+Acceptance contract: independently reapply and prove both disturbances after this
+entry becomes `RUNNING`; require all thirteen public Reset phases, then independently
+read back native Gazebo cup 6D pose and physical detachment, MoveIt world membership,
+attachment, pose and `1/1/13`, all required active controllers, joint positions and
+velocities, canonical TCP TF, plus a fresh inspected visual convergence image. Any
+complete first-phase failure is `VALID`/`FAILED`; missing evidence is `INVALID`.
+
+Terminal review: the fresh arm goal reached approximately
+`[0.20, -0.25, 0.30, -0.15, 0.10]`; native Gazebo read-back placed the detached cup at
+approximately `(0.3200, 0.1400, 0.0450)` and proved the exact detachable joint absent.
+Reset then completed `OBSERVE_INITIAL`, both cancellation phases, `DETACH_PHYSICAL`,
+and `DETACH_MOVEIT`. Initial evidence now included the named cup pose, exact Gazebo
+entity IDs, `attached: false`, canonical `so101_tcp`, all joints/velocities, and all
+required active controllers. It failed at `PARK_CUP` with
+`RESET_GAZEBO_POSE_VERIFY_FAILED`: the command received `data: true`, but the configured
+table-exterior pose `(0.45, 0.25, 0.08)` falls under gravity to the ground-rest height
+near `0.045`, so exact physical convergence is impossible. This is a complete,
+attributable product failure. The inspected disturbed image is
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-002/gui-disturbed-fallback/20260813T120617-2ef193be5a72/desktop.png`.
+
+## CP-GZPY-RESET-003 — Stable parking transactional Reset
+
+status: VALID
+outcome: FAILED
+lifecycle: GAZEBO_SHARED_STACK
+source_commit: `f00ce7f1025fc37cbaf29e5988c4f67161c05813`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/task-12-install/so101_demo_py`
+bundle_sha256: `93e64010fe6e9ea26d6409b11a8600bc4d7a9c0804abb2a5f5b47066f5d0efcf`
+geometry_sha256: `6dc64c197a82316c4ac856530c6caf5d905ffd2b0ea2778d85d87b9a3e89b235`
+ros_domain_id: `188`
+gz_partition: `cp-gzpy-002`
+simulation_session_id: `cp-gzpy-shared-002`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-003`
+
+Hypothesis: the ground-stable parking pose `(0.45, 0.25, 0.045)` allows the full
+thirteen-phase transaction to complete without weakening physical pose verification.
+
+Acceptance contract: independently reapply and prove fresh arm/cup disturbance after
+transition to `RUNNING`; require all thirteen phases and the same independent final
+Gazebo, MoveIt, controller, joints/velocities, TF, and inspected visual gates declared
+for Reset-002. Any complete first-phase failure is `VALID`/`FAILED`; missing evidence is
+`INVALID`.
+
+Terminal review: the fresh disturbed arm reached approximately
+`[0.25, -0.20, 0.20, -0.25, 0.20]`, while native Gazebo placed the detached cup near
+`(0.30, 0.12, 0.045)`. Reset completed initial observation, both goal cancellations,
+both detach phases, stable physical parking, and parked Planning Scene synchronization.
+At `OPEN_GRIPPER`, the action returned `SUCCEEDED`, but the single immediate verification
+sample still had joint 6 at `-0.0567392` with velocity `-0.0297988`; it therefore failed
+closed with `RESET_JOINT_VERIFY_FAILED`. This is an attributable settle-timing defect:
+position and velocity must converge together within the existing bounded timeout rather
+than weakening either tolerance. The inspected disturbed image is
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-003/gui-disturbed-fallback/20260813T121133-f38986eab733/desktop.png`.
+
+## CP-GZPY-RESET-004 — Bounded joint-settle transactional Reset
+
+status: VALID
+outcome: FAILED
+lifecycle: GAZEBO_SHARED_STACK
+source_commit: `53b648a9a0cd239c7ab57a3e673b2289ba431a98`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/task-13-install/so101_demo_py`
+bundle_sha256: `33493d524b14a8cda8ba252970679020f8b97ddc15e72a04fcc730dcfd90edb8`
+geometry_sha256: `6dc64c197a82316c4ac856530c6caf5d905ffd2b0ea2778d85d87b9a3e89b235`
+ros_domain_id: `188`
+gz_partition: `cp-gzpy-002`
+simulation_session_id: `cp-gzpy-shared-002`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-004`
+
+Hypothesis: bounded joint position-and-velocity convergence after each successful action
+allows the full transaction to complete while retaining the exact tolerances.
+
+Acceptance contract: independently reapply and prove fresh arm/cup disturbance after
+transition to `RUNNING`; require all thirteen phases and independent final Gazebo,
+MoveIt, controller, joints/velocities, TF, and inspected visual gates. A complete
+first-phase failure is `VALID`/`FAILED`; missing evidence is `INVALID`.
+
+Terminal review: the fresh disturbance placed the arm near
+`[0.20, -0.15, 0.25, -0.20, 0.15]` and the physically detached cup near
+`(0.3012, 0.1003, 0.0450)`. Reset completed initial observation, cancellations,
+physical and MoveIt detach, physical and MoveIt parking, and bounded gripper opening;
+the final gripper sample was within both exact position and velocity tolerances. It
+then failed at `PLAN_HOME` with stable code `RESET_PLAN_HOME_FAILED` and exception type
+`TypeError`. The empty exception message requires a traceback-preserving diagnostic
+before changing planning behavior. The inspected disturbed image is
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-004/gui-disturbed-fallback/20260813T121549-d71d7dcb2d5a/desktop.png`.
+
+## CP-GZPY-RESET-005 — MoveIt wire-request transactional Reset
+
+status: VALID
+outcome: SUCCEEDED
+lifecycle: GAZEBO_SHARED_STACK
+source_commit: `615dd8bdc104f4405125e03762e41f58eeb1bb00`
+installed_prefix: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/task-14-install/so101_demo_py`
+bundle_sha256: `56c074a10bef879a7b190b8628522b2e184a35343720199b2e4369ff6a4c5cff`
+geometry_sha256: `6dc64c197a82316c4ac856530c6caf5d905ffd2b0ea2778d85d87b9a3e89b235`
+ros_domain_id: `188`
+gz_partition: `cp-gzpy-002`
+simulation_session_id: `cp-gzpy-shared-002`
+evidence_dir: `/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-005`
+
+Hypothesis: converting the reset application's joint-domain request into a native
+`GetMotionPlan.Request` allows the exact Home plan and all remaining transaction phases
+to complete after an independently proven fresh arm and cup disturbance.
+
+Acceptance contract: transition to `RUNNING` before disturbance; independently prove
+fresh arm and cup disturbance; require all thirteen phases and independent final Gazebo
+cup 6D pose/physical detachment, MoveIt membership/pose/attachment and `1/1/13`, all
+required active controllers, joint positions and velocities, canonical TCP TF, and a
+fresh inspected convergence image. A complete first-phase failure is `VALID`/`FAILED`;
+missing independent evidence is `INVALID`.
+
+Terminal review: the fresh arm action reached approximately
+`[0.15, -0.20, 0.20, -0.15, 0.10]`, native Gazebo read-back placed the detached cup at
+approximately `(0.28, 0.14, 0.045)`, and the exact ECS detachable-joint component was
+absent before Reset. The public Reset returned zero and completed all thirteen phases:
+initial observation, both cancellations, both detach operations, physical and Planning
+Scene parking, bounded gripper opening, exact MoveIt Home plan and execute, physical cup
+restore, final Planning Scene synchronization, and final verification.
+
+Independent post-transaction evidence confirms native Gazebo cup pose
+`(0.01999999, -0.28000072, 0.16499963, 0.00000008, 0.00000008,
+0.00000190, 1.0)` and no `component: "94 18 fixed"` in the ECS snapshot (snapshot
+SHA-256 `c51749ca59948a17e96e382c6b90f1b6456c0223082eba8ffd60aa9de10cc904`).
+The raw `/get_planning_scene` response has world IDs `pedestal`, `plastic_cup`, and
+`table`, zero attached objects, exact object poses/colors, and primitive counts
+`1/13/1`. Independent `/joint_states` has arm errors below `0.0001`, gripper at
+`-0.05959819`, and all velocities below `4.1e-7`; the exact three controllers are
+active. Reliable `/tf_static` and `/tf` samples prove `world -> base`, the complete
+dynamic arm chain, and `gripper -> so101_tcp`; bounded `tf2_echo` resolves
+`world -> so101_tcp` repeatedly.
+
+The freshly captured disturbed image was inspected at
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-005/gui-disturbed-fallback/20260813T122142-2c279c838b8a/desktop.png`
+(SHA-256 `3f09ca90bcd719c89bbe5787737a51b53b8c0a82eb8c6cce5d80a06a3f726576`).
+The fresh post-Reset image was separately inspected and shows the arm converged to Home
+and the cup restored at canonical spawn:
+`/tmp/so101-debug-gazebo-python-capabilities-boWK6J/live/reset-005/gui-final-fallback/20260813T122713-02e1b84358e8/desktop.png`
+(SHA-256 `b419ee89fbdfc017e8ec7f7300d0eab959c1a38d8428cb66a147e1eaea14d00d`).
