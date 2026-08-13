@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from so101_demo.application import qualification as qualification_module
 from so101_demo.application.qualification import (
     Lifecycle,
     ProductionQualificationRunner,
@@ -14,6 +15,21 @@ from so101_demo.application.qualification import (
 )
 
 BUNDLE = "a" * 64
+
+
+def test_scene_readiness_accepts_shared_cli_json_receipt() -> None:
+    success = (
+        '[scene_setup-7] {"backend": "mujoco", "evidence": '
+        '{"primitive_counts": {"pedestal": 1, "plastic_cup": 13, "table": 1}}, '
+        '"failure_code": null, "phase": "READ_BACK", "success": true}'
+    )
+    failed = success.replace('"success": true', '"success": false')
+    unrelated = success.replace("[scene_setup-7]", "[another_process-7]")
+
+    assert qualification_module._scene_setup_succeeded(success)
+    assert qualification_module._scene_setup_succeeded("SCENE_SETUP_OK")
+    assert not qualification_module._scene_setup_succeeded(failed)
+    assert not qualification_module._scene_setup_succeeded(unrelated)
 
 
 def _record(index: int, lifecycle: Lifecycle) -> dict:

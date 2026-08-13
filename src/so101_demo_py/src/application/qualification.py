@@ -45,6 +45,31 @@ INVALID_WORKFLOW_FAILURE_CODES = frozenset(
 )
 
 
+def _scene_setup_succeeded(log_text: str) -> bool:
+    """Recognize the current JSON receipt while retaining legacy log compatibility."""
+
+    if "SCENE_SETUP_OK" in log_text:
+        return True
+    for line in log_text.splitlines():
+        if "[scene_setup-" not in line:
+            continue
+        json_start = line.find("{")
+        if json_start < 0:
+            continue
+        try:
+            receipt = json.loads(line[json_start:])
+        except json.JSONDecodeError:
+            continue
+        if (
+            receipt.get("backend") == "mujoco"
+            and receipt.get("phase") == "READ_BACK"
+            and receipt.get("success") is True
+            and receipt.get("failure_code") is None
+        ):
+            return True
+    return False
+
+
 class Lifecycle(StrEnum):
     FULL_RESTART = "FULL_RESTART"
     RESET_WORLD = "RESET_WORLD"
@@ -298,12 +323,12 @@ class ProductionQualificationRunner:
                     "Created viewer camera services",
                     "Configured and activated arm_controller",
                     "Configured and activated gripper_controller",
-                    "SCENE_SETUP_OK",
                 )
                 if (
                     health["http"] == 200
                     and health["response"].get("mode") == "READY"
                     and all(marker in log_text for marker in required_markers)
+                    and _scene_setup_succeeded(log_text)
                 ):
                     return handle
             except (OSError, ValueError, json.JSONDecodeError):
