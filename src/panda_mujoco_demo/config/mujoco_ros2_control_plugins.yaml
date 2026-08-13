@@ -1,0 +1,12 @@
+/**:
+  ros__parameters:
+    mujoco_plugins:
+      mujoco_camera_plugin:
+        type: "mujoco_ros2_control_plugins/CameraPlugin"
+        camera_publish_rate: 10.0
+        camera:
+          policy: streaming
+          frame_name: camera_link
+          info_topic: /camera/camera_info
+          image_topic: /camera
+          depth_topic: /camera/depth
