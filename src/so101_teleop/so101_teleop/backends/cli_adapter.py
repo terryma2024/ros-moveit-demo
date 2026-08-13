@@ -219,7 +219,7 @@ class CliBackendAdapter:
         stderr = completed.stderr or ""
         if completed.returncode:
             combined = f"{stdout}\n{stderr}"
-            match = _FAILURE_CODE.search(combined)
+            failure_codes = _FAILURE_CODE.findall(combined)
             self._write_diagnostic(
                 operation, session_id, argv, completed.returncode, stdout, stderr
             )
@@ -229,7 +229,7 @@ class CliBackendAdapter:
                 error=BackendError(
                     "BACKEND_OPERATION_FAILED",
                     f"owner exited with {completed.returncode}",
-                    match.group(1) if match else None,
+                    failure_codes[-1] if failure_codes else None,
                 ),
             )
         result = _parse_result(stdout, allow_empty)
