@@ -46,7 +46,7 @@ setup(
         "console_scripts": [
             "pick_place = so101_demo.cli.pick_place:main",
             "run_qualification = so101_demo.cli.qualification:main",
-            "scene_setup = so101_demo.backends.mujoco.qualified_phases.scene_setup:main",
+            "scene_setup = so101_demo.cli.scene_setup:main",
             "gazebo_execute = so101_demo.backends.gazebo.execute:main",
             "camera_preset = so101_demo.cli.camera_preset:main",
             "teleop_reset = so101_demo.cli.teleop_reset:main",
