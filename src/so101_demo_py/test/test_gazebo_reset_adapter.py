@@ -278,3 +278,44 @@ def test_robot_adapter_waits_for_gripper_position_and_velocity_convergence() -> 
 
     assert port.open_gripper().success
     assert len(calls) == 2
+
+
+def test_moveit_planning_client_converts_joint_domain_request_to_wire_request() -> None:
+    from moveit_msgs.srv import GetMotionPlan
+    from so101_demo.control.moveit.planning import JointPlanRequest, MoveItPlanningClient
+
+    class Future:
+        def done(self):
+            return True
+
+        def result(self):
+            trajectory = SimpleNamespace(
+                joint_trajectory=SimpleNamespace(points=[object()])
+            )
+            return SimpleNamespace(
+                motion_plan_response=SimpleNamespace(
+                    error_code=SimpleNamespace(val=1), trajectory=trajectory
+                )
+            )
+
+    class Client:
+        def wait_for_service(self, timeout_sec):
+            return True
+
+        def call_async(self, request):
+            self.request = request
+            if not isinstance(request, GetMotionPlan.Request):
+                raise TypeError()
+            return Future()
+
+    client = Client()
+    outcome = MoveItPlanningClient(client).plan_joint_path(
+        JointPlanRequest(
+            joint_names=("1", "2", "3", "4", "5"),
+            current_positions=(0.2, -0.15, 0.25, -0.2, 0.15),
+            target_positions=(0.0, 0.0, 0.0, 0.0, 0.0),
+        )
+    )
+
+    assert outcome.failure is None
+    assert isinstance(client.request, GetMotionPlan.Request)
