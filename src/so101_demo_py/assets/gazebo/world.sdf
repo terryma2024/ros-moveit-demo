@@ -164,7 +164,7 @@
       </link>
     </model>
 
-    <model name="base_pedestal">
+    <model name="pedestal">
       <static>true</static>
       <pose>0 0 0.17 0 0 0</pose>
       <link name="pedestal_link">

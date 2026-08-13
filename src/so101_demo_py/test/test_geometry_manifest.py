@@ -1,6 +1,7 @@
 import hashlib
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -48,6 +49,68 @@ def test_task_object_dimensions_scale_and_initial_pose_are_explicit() -> None:
     assert cup["dimensions_m"] == {"outer_radius": 0.04, "height": 0.09}
     assert cup["scale"] == [1.0, 1.0, 1.0]
     assert cup["initial_pose_xyz_m"] == [0.02, -0.28, 0.165]
+
+
+def test_task_scene_is_the_exact_typed_geometry_contract() -> None:
+    from so101_demo.core.task_geometry import load_task_geometry
+
+    scene = load_task_geometry(_share() / "assets/common/geometry-manifest.yaml")
+
+    assert scene.frame_id == "world"
+    assert scene.object_ids == ("table", "pedestal", "plastic_cup")
+    assert scene.primitive_counts == {"table": 1, "pedestal": 1, "plastic_cup": 13}
+
+    table = scene.object("table")
+    assert table.pose.values == (0.0, -0.2, 0.1, 0.0, 0.0, 0.0, 1.0)
+    assert table.color_rgba == (0.36, 0.24, 0.14, 1.0)
+    assert table.primitives[0].kind == "box"
+    assert table.primitives[0].dimensions == (0.5, 0.6, 0.04)
+
+    pedestal = scene.object("pedestal")
+    assert pedestal.pose.values == (0.0, 0.0, 0.17, 0.0, 0.0, 0.0, 1.0)
+    assert pedestal.color_rgba == (0.3, 0.3, 0.32, 1.0)
+    assert pedestal.primitives[0].dimensions == (0.18, 0.18, 0.1)
+
+    cup = scene.object("plastic_cup")
+    assert cup.pose.values == (0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)
+    assert cup.color_rgba == (1.0, 0.55, 0.12, 1.0)
+    assert [primitive.kind for primitive in cup.primitives].count("box") == 12
+    assert [primitive.kind for primitive in cup.primitives].count("cylinder") == 1
+    assert cup.primitives[0].name == "wall_near"
+    assert cup.primitives[0].dimensions == (0.020705524, 0.002, 0.088)
+    assert cup.primitives[-1].name == "bottom"
+    assert cup.primitives[-1].dimensions == (0.002, 0.04)
+    assert cup.primitives[-1].pose.values == (
+        0.0,
+        0.0,
+        -0.044,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    )
+
+
+def test_task_scene_loader_rejects_unknown_fields_and_wrong_counts(tmp_path: Path) -> None:
+    from so101_demo.core.task_geometry import GeometryContractError, load_task_geometry
+
+    manifest = yaml.safe_load(
+        (_share() / "assets/common/geometry-manifest.yaml").read_bytes()
+    )
+    manifest["task_scene"]["unexpected"] = True
+    invalid = tmp_path / "unknown.yaml"
+    invalid.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    with pytest.raises(GeometryContractError, match="SCENE_MANIFEST_INVALID"):
+        load_task_geometry(invalid)
+
+    manifest = yaml.safe_load(
+        (_share() / "assets/common/geometry-manifest.yaml").read_bytes()
+    )
+    manifest["task_scene"]["objects"]["plastic_cup"]["primitives"].pop()
+    invalid = tmp_path / "wrong-count.yaml"
+    invalid.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    with pytest.raises(GeometryContractError, match="SCENE_MANIFEST_INVALID"):
+        load_task_geometry(invalid)
 
 
 def test_qualified_mujoco_model_and_scene_bytes_remain_pinned() -> None:
