@@ -85,7 +85,7 @@ def validate_dependency_lock(repository: Path) -> None:
     require(lock.get("schema_version") == 3, "dependency lock schema drift")
     require(lock.get("provider") == "gitee_fork_submodule", "dependency provider drift")
     require(lock["fork"]["url"] == APPROVED_URL, "fork URL is not approved")
-    require(lock["fork"]["tag"] == "so101-0.0.3-r6", "fork release tag drift")
+    require(lock["fork"]["tag"] == "so101-0.0.3-r7", "fork release tag drift")
     submodule_path = lock["submodule_path"]
     configured_url = git(
         repository,
