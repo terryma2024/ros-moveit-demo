@@ -12,6 +12,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from ..backends.mujoco.teleop_runtime import transactional_reset
 from ..ports.reset import TransactionalResetReceipt
+from .scene_setup import execute_scene_operation
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,11 +38,26 @@ def execute_gazebo_reset(session_id: str) -> TransactionalResetReceipt:
     return run_gazebo_reset(share, session_id)
 
 
+def execute_mujoco_reset(session_id: str, *, keyframe: str):
+    """Reset physical state, then restore MoveIt's canonical scene shadow."""
+
+    receipt = transactional_reset(session_id, keyframe=keyframe)
+    scene_receipt = execute_scene_operation("mujoco", "setup")
+    if not scene_receipt.success:
+        raise RuntimeError(
+            "planning scene synchronization failed: "
+            f"{scene_receipt.failure_code or scene_receipt.phase}"
+        )
+    return receipt, scene_receipt
+
+
 def main(arguments: list[str] | None = None) -> int:
     options = build_parser().parse_args(arguments)
     if options.backend == "mujoco":
         try:
-            receipt = transactional_reset(options.session_id, keyframe=options.keyframe)
+            receipt, scene_receipt = execute_mujoco_reset(
+                options.session_id, keyframe=options.keyframe
+            )
         except Exception as error:
             document: dict[str, object] = {
                 "backend": "mujoco",
@@ -64,6 +80,7 @@ def main(arguments: list[str] | None = None) -> int:
             "new_epoch": receipt.new_epoch,
             "simulation_step": receipt.simulation_step,
             "keyframe": receipt.keyframe,
+            "planning_scene": asdict(scene_receipt),
         }
     else:
         receipt = execute_gazebo_reset(options.session_id)

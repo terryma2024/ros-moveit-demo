@@ -1,0 +1,19 @@
+diff --git a/mujoco_ros2_control/CMakeLists.txt b/mujoco_ros2_control/CMakeLists.txt
+index a57ed5d..9dc5b52 100644
+--- a/mujoco_ros2_control/CMakeLists.txt
++++ b/mujoco_ros2_control/CMakeLists.txt
+@@ -103,8 +103,13 @@ if(mujoco_simulate_lib AND NOT EXISTS "${MUJOCO_SIMULATE_DIR}/simulate.cc")
+   set_target_properties(mujoco_simulate PROPERTIES
+     IMPORTED_LOCATION "${mujoco_simulate_lib}"
+   )
+   target_include_directories(mujoco_simulate INTERFACE ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+-  target_link_libraries(mujoco_simulate INTERFACE ${MUJOCO_LIB} glfw)
++  if(APPLE)
++    target_link_libraries(mujoco_simulate INTERFACE
++      ${MUJOCO_LIB} glfw "-framework Cocoa" "-framework CoreVideo")
++  else()
++    target_link_libraries(mujoco_simulate INTERFACE ${MUJOCO_LIB} glfw)
++  endif()
+ else()
+   message(STATUS "No linkable simulate application available, compiling from source")
+   add_library(platform_ui_adapter OBJECT)

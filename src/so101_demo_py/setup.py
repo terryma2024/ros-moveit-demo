@@ -35,7 +35,7 @@ setup(
         (f"share/{package_name}", ["package.xml"]),
     ]
     + installed_resources(),
-    install_requires=["setuptools"],
+    install_requires=["setuptools", "typing_extensions"],
     zip_safe=True,
     maintainer="SO-101 maintainers",
     maintainer_email="maintainer@example.com",

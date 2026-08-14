@@ -4,6 +4,17 @@ set -euo pipefail
 script_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 workspace_root="$(realpath "${script_dir}/../../..")"
 expected_prefix="${SO101_DEMO_EXPECTED_PREFIX:-${workspace_root}/install/fusion-final/so101_demo_py}"
+ros2_command=(ros2)
+if [[ "$(uname -s)" == Darwin ]]; then
+  dyld_library_path=""
+  while IFS= read -r prefix; do
+    if [[ -d "${prefix}/lib" ]]; then
+      dyld_library_path="${dyld_library_path:+${dyld_library_path}:}${prefix}/lib"
+    fi
+  done < <(printf '%s' "${AMENT_PREFIX_PATH:-}" | tr ':' '\n')
+  export DYLD_LIBRARY_PATH="${dyld_library_path}"
+  ros2_command=(python3 "$(command -v ros2)")
+fi
 
 cd "${workspace_root}"
 
@@ -15,17 +26,17 @@ for backend in mujoco gazebo; do
   test ! -e "src/${removed}"
 done
 
-actual_prefix="$(ros2 pkg prefix so101_demo_py)"
+actual_prefix="$("${ros2_command[@]}" pkg prefix so101_demo_py)"
 test "${actual_prefix}" = "${expected_prefix}"
 
-executables="$(ros2 pkg executables so101_demo_py)"
+executables="$("${ros2_command[@]}" pkg executables so101_demo_py)"
 for executable in \
   camera_preset gazebo_execute gazebo_ready pick_place run_qualification scene_setup \
   teleop_reset teleop_workflow; do
   printf '%s\n' "${executables}" | rg "^so101_demo_py ${executable}$"
 done
 
-share="$(ros2 pkg prefix --share so101_demo_py)"
+share="$("${ros2_command[@]}" pkg prefix --share so101_demo_py)"
 for launcher in \
   so101_gazebo.launch.py \
   so101_gazebo_pick_place.launch.py \
@@ -39,7 +50,14 @@ test -f "${share}/config/policies/light_cup_wall_pick/v1/mujoco.yaml"
 test -f "${share}/config/policies/light_cup_wall_pick/v1/gazebo.yaml"
 test -f "${share}/config/policies/light_cup_wall_pick/v1/real_stub.yaml"
 
-policy_sha256="$(sha256sum "${share}/config/policies/light_cup_wall_pick/v1/mujoco.yaml" | cut -d' ' -f1)"
+policy_sha256="$(python3 - "${share}/config/policies/light_cup_wall_pick/v1/mujoco.yaml" <<'PY'
+from pathlib import Path
+import hashlib
+import sys
+
+print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
 test "${policy_sha256}" = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 cmp -s \
   "${share}/config/policies/light_cup_wall_pick/v1/mujoco.yaml" \

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from launch import LaunchDescription
@@ -73,6 +74,7 @@ def launch_setup(context):
             "Provide web_source_dir:=/path/to/so101_teleop/web or a valid installed bundle."
         ) from error
 
+    node_options = {"prefix": [sys.executable]} if sys.platform == "darwin" else {}
     return [Node(
         package="so101_teleop",
         executable="so101_teleop_server.py",
@@ -87,6 +89,7 @@ def launch_setup(context):
             "SO101_TELEOP_BACKEND": backend,
             "GZ_PARTITION": LaunchConfiguration("gz_partition"),
         },
+        **node_options,
     )]
 
 

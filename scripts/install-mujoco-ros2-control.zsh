@@ -2,7 +2,8 @@
 set -euo pipefail
 
 readonly installer_path=${0:A}
-readonly ros_underlay=/opt/ros/jazzy
+readonly ros_underlay=${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}
+readonly ros_dependency_overlay=${SO101_ROS_DEPENDENCY_OVERLAY:-${ros_underlay}}
 readonly -a fork_packages=(
   mujoco_ros2_control_msgs
   mujoco_ros2_control_plugins
@@ -77,6 +78,16 @@ PY
   install_base=${workspace_dir}/${fork_install_relative}
   log_base=${fork_workspace}/log
   source_dir=${project_root}/${submodule_path}
+  build_source_dir=${fork_workspace}/src/mujoco_ros2_control
+  macos_patches=(
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-platform.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-headless.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-main-thread-ui.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-frameworks.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-test-runtime.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-test-rmw.patch
+  )
 }
 
 initialize_submodule() {
@@ -130,10 +141,43 @@ verify_source_identity() {
   [[ ${tagged_commit} == ${fork_commit} ]] || fail "fork release tag does not resolve to locked commit"
 }
 
+prepare_build_source() {
+  if [[ ! -e ${build_source_dir}/.git ]]; then
+    mkdir -p "${build_source_dir:h}"
+    git clone --shared --no-checkout "${source_dir}" "${build_source_dir}"
+    git -C "${build_source_dir}" checkout --detach "${fork_commit}"
+  fi
+  [[ $(git -C "${build_source_dir}" rev-parse HEAD) == ${fork_commit} ]] ||
+    fail "build source is not at locked commit: ${build_source_dir}"
+
+  if [[ $(uname -s) == Darwin ]]; then
+    local macos_patch patch_index
+    for (( patch_index=${#macos_patches}; patch_index >= 1; --patch_index )); do
+      if git -C "${build_source_dir}" apply --reverse --check "${macos_patches[patch_index]}" 2>/dev/null; then
+        git -C "${build_source_dir}" apply --reverse "${macos_patches[patch_index]}"
+      fi
+    done
+    [[ -z $(git -C "${build_source_dir}" status --porcelain --untracked-files=all) ]] ||
+      fail "build source contains changes outside the approved macOS patch series: ${build_source_dir}"
+    for macos_patch in "${macos_patches[@]}"; do
+      [[ -f ${macos_patch} ]] || fail "macOS patch is missing: ${macos_patch}"
+      git -C "${build_source_dir}" apply --check "${macos_patch}" ||
+        fail "macOS patch does not apply cleanly: ${macos_patch}"
+      git -C "${build_source_dir}" apply "${macos_patch}"
+    done
+  else
+    [[ -z $(git -C "${build_source_dir}" status --porcelain --untracked-files=all) ]] ||
+      fail "dirty build source is not buildable: ${build_source_dir}"
+  fi
+}
+
 build_and_test_overlay() {
   source_setup "${ros_underlay}/setup.zsh"
+  if [[ ${ros_dependency_overlay:A} != ${ros_underlay:A} ]]; then
+    source_setup "${ros_dependency_overlay}/setup.zsh"
+  fi
   colcon --log-base "${log_base}" build \
-    --base-paths "${source_dir}" \
+    --base-paths "${build_source_dir}" \
     --build-base "${build_base}" \
     --install-base "${install_base}" \
     --merge-install \
@@ -142,7 +186,7 @@ build_and_test_overlay() {
     --packages-select "${fork_packages[@]}"
   source_setup "${install_base}/setup.zsh"
   colcon --log-base "${log_base}" test \
-    --base-paths "${source_dir}" \
+    --base-paths "${build_source_dir}" \
     --build-base "${build_base}" \
     --install-base "${install_base}" \
     --merge-install \
@@ -153,14 +197,17 @@ build_and_test_overlay() {
 
 verify_installed_overlay() {
   source_setup "${ros_underlay}/setup.zsh"
+  if [[ ${ros_dependency_overlay:A} != ${ros_underlay:A} ]]; then
+    source_setup "${ros_dependency_overlay}/setup.zsh"
+  fi
   source_setup "${install_base}/setup.zsh"
   local package_name
   for package_name in "${fork_packages[@]}"; do
     [[ $(ros2 pkg prefix "${package_name}") == ${install_base} ]] ||
       fail "installed prefix mismatch for ${package_name}"
   done
-  [[ $(ros2 pkg prefix mujoco_vendor) == ${ros_underlay} ]] ||
-    fail "mujoco_vendor must continue to resolve from ${ros_underlay}"
+  [[ $(ros2 pkg prefix mujoco_vendor) == ${ros_dependency_overlay} ]] ||
+    fail "mujoco_vendor must continue to resolve from ${ros_dependency_overlay}"
   local interface_name
   for interface_name in \
     mujoco_ros2_control_msgs/msg/ViewerCamera \
@@ -173,12 +220,18 @@ verify_installed_overlay() {
   done
   python3 - "${lock_file}" "${install_base}" <<'PY'
 from pathlib import Path
+import platform
 import sys
 import yaml
 
 lock = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
 prefix = Path(sys.argv[2])
-missing = [path for path in lock["required_files"] if not (prefix / path).is_file()]
+suffix = ".dylib" if platform.system() == "Darwin" else ".so"
+required = [
+    path.removesuffix(".so") + suffix if path.endswith(".so") else path
+    for path in lock["required_files"]
+]
+missing = [path for path in required if not (prefix / path).is_file()]
 if missing:
     raise SystemExit("missing installed files: " + ", ".join(missing))
 PY
@@ -204,6 +257,7 @@ main() {
     fi
   fi
   verify_source_identity
+  prepare_build_source
   build_and_test_overlay
   verify_installed_overlay
 }
