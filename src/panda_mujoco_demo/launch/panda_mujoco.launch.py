@@ -114,6 +114,19 @@ def launch_setup(context, *args, **kwargs):
     moveit_parameters = moveit_config.to_dict()
     moveit_parameters.update(robot_description)
 
+    # Relax the trajectory start-point tolerance. The default 0.01 rad (from
+    # moveit_resources_panda_moveit_config) is too strict for back-to-back
+    # moves: after MOVE_ABOVE executes, the PlanningSceneMonitor has not yet
+    # absorbed the new joint_state when DESCEND is planned, so the validated
+    # trajectory start (stale scene state) deviates from the live ros2_control
+    # state and MoveIt rejects it with CONTROL_FAILED. 0.05 rad (~2.9 deg) is
+    # still tight enough to catch a genuinely wrong start state while tolerating
+    # this transient desync. See pick_place_state_machine.py for the matching
+    # post-move settle delay.
+    moveit_parameters.setdefault("trajectory_execution", {})[
+        "allowed_start_tolerance"
+    ] = 0.05
+
     nodes.append(
         Node(
             package="moveit_ros_move_group",
