@@ -41,7 +41,8 @@ git rev-parse HEAD | tee /tmp/so101-debug-mujoco-portable-patch-series/main-head
 git status --short | tee /tmp/so101-debug-mujoco-portable-patch-series/main-status.txt
 git -C third_party/mujoco_ros2_control rev-parse HEAD \
   | tee /tmp/so101-debug-mujoco-portable-patch-series/submodule-head.txt
-git -C third_party/mujoco_ros2_control diff --binary \
+git -C /Users/matianyi/Projects/robot_demo_001/moveit-demo/third_party/mujoco_ros2_control \
+  diff --binary \
   > /tmp/so101-debug-mujoco-portable-patch-series/submodule-before.patch
 shasum -a 256 /tmp/so101-debug-mujoco-portable-patch-series/submodule-before.patch \
   | tee /tmp/so101-debug-mujoco-portable-patch-series/submodule-before.sha256
@@ -275,17 +276,22 @@ shasum -a 256 /tmp/so101-debug-mujoco-portable-patch-series/new-series.patch \
   | tee /tmp/so101-debug-mujoco-portable-patch-series/new-series.sha256
 ```
 
-- [ ] **Step 6: Remove the duplicate source and restore the submodule reversibly**
+- [ ] **Step 6: Remove the duplicate source while preserving the original worktree**
 
-First reverse the exact tracked legacy patch from the submodule, then verify zero diff:
+The isolated implementation worktree already has a clean submodule. Verify it remains clean, then
+delete the duplicate tracked patch from the feature branch. Do not alter the original main worktree's
+submodule during implementation:
 
 ```zsh
-git -C third_party/mujoco_ros2_control apply --reverse \
-  "$PWD/patches/mujoco_ros2_control/macos-format-uint64.patch"
 test -z "$(git -C third_party/mujoco_ros2_control status --porcelain --untracked-files=all)"
+cmp -s \
+  /tmp/so101-debug-mujoco-portable-patch-series/submodule-before.patch \
+  patches/mujoco_ros2_control/macos-format-uint64.patch
 ```
 
-Delete the ten legacy `scripts/patches/mujoco-ros2-control-macos*.patch` files and the duplicate root patch only after the zero-diff assertion succeeds.
+Delete the ten legacy `scripts/patches/mujoco-ros2-control-macos*.patch` files and the duplicate root
+patch only after both assertions succeed. After cross-platform validation and local branch integration,
+the original main worktree can reverse that exact tracked patch to restore its submodule without loss.
 
 - [ ] **Step 7: Run the authority and round-trip tests**
 
@@ -426,7 +432,9 @@ git commit -m "build: apply mujoco patches on every platform"
 
 **Interfaces:**
 - Consumes: clean submodule, series, and cross-platform installer from Tasks 2–3.
-- Produces: macOS build/test evidence and a verified fork overlay at `~/ros2_jazzy/ws_mujoco_ros2_control_fork/install`.
+- Produces: macOS build/test evidence and a candidate fork overlay at
+  `~/ros2_jazzy/portable_patch_candidate/ws_mujoco_ros2_control_fork/install` without replacing the
+  previously qualified overlay.
 
 - [ ] **Step 1: Verify clean inputs**
 
@@ -438,10 +446,10 @@ direnv exec . python -m pytest -q src/so101_demo_py/test/test_macos_install_cont
 
 Expected: locked commit, zero submodule diff, all contracts PASS.
 
-- [ ] **Step 2: Run the macOS installer into the existing qualified workspace**
+- [ ] **Step 2: Run the macOS installer into an isolated candidate workspace**
 
 ```zsh
-SO101_WORKSPACE_DIR=~/ros2_jazzy \
+SO101_WORKSPACE_DIR=~/ros2_jazzy/portable_patch_candidate \
 SO101_ROS_UNDERLAY=/opt/ros/jazzy \
 SO101_ROS_DEPENDENCY_OVERLAY=~/ros2_jazzy/extra_ws/install \
 ./scripts/install-mujoco-ros2-control.zsh \
@@ -455,9 +463,9 @@ Expected: three fork packages build; all fork tests pass; installer prefix check
 ```zsh
 source /opt/ros/jazzy/setup.zsh
 source ~/ros2_jazzy/extra_ws/install/setup.zsh
-source ~/ros2_jazzy/ws_mujoco_ros2_control_fork/install/setup.zsh
+source ~/ros2_jazzy/portable_patch_candidate/ws_mujoco_ros2_control_fork/install/setup.zsh
 ros2 pkg prefix mujoco_ros2_control
-otool -L ~/ros2_jazzy/ws_mujoco_ros2_control_fork/install/lib/libmujoco_ros2_control.dylib
+otool -L ~/ros2_jazzy/portable_patch_candidate/ws_mujoco_ros2_control_fork/install/lib/libmujoco_ros2_control.dylib
 ros2 interface show mujoco_ros2_control_msgs/srv/ResetWorld
 ros2 interface show mujoco_ros2_control_msgs/srv/SetPause
 ros2 interface show mujoco_ros2_control_msgs/srv/StepSimulation
