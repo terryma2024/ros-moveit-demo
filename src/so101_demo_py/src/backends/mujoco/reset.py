@@ -175,10 +175,19 @@ class MujocoResetClient:
                 self._services.switch_controllers(activate=self._controllers, deactivate=()),
                 "activate",
             )
-            while self._services.joint_callback_count <= joint_callback_count_after_reset:
-                if self._monotonic() > deadline:
-                    raise self._failure("fresh joint feedback timeout")
+            while self._monotonic() <= deadline:
                 self._progress()
+                if (
+                    self._services.joint_callback_count > joint_callback_count_after_reset
+                    and self._services.joints_converged(
+                        self._expected_joints,
+                        self._joint_tolerance,
+                        after_callback_count=joint_callback_count_after_reset,
+                    )
+                ):
+                    break
+            else:
+                raise self._failure("fresh joint convergence timeout")
             self._require(self._services.pause(True), "re-pause")
             saw_expected_epoch_unpaused = False
             while self._monotonic() <= deadline:

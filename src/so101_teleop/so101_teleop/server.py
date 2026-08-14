@@ -640,17 +640,19 @@ class TeleopService:
         if envelope.ok:
             return None
         error = envelope.error
+        layers = {
+            "backend": envelope.backend,
+            "owner_package": envelope.owner_package,
+            "owner_executable": envelope.owner_executable,
+        }
+        if error is not None and error.owner_failure_code is not None:
+            layers["owner_failure_code"] = error.owner_failure_code
         return self._result(
             body,
             False,
             error.code if error is not None else "BACKEND_OPERATION_FAILED",
             error.message if error is not None else "backend operation failed",
-            layers={
-                "backend": envelope.backend,
-                "owner_package": envelope.owner_package,
-                "owner_executable": envelope.owner_executable,
-                "owner_failure_code": error.owner_failure_code if error else None,
-            },
+            layers=layers,
         )
     async def execute_plan(self, plan_id: str, body: dict):
         return await self.command("execute", {**body, "plan_id": plan_id})
