@@ -145,23 +145,17 @@ def test_mujoco_installer_validates_platform_library_names() -> None:
     assert 'suffix = ".dylib" if platform.system() == "Darwin" else ".so"' in installer
 
 
-def test_mujoco_installer_applies_macos_patch_to_build_copy() -> None:
+def test_mujoco_installer_applies_portable_series_to_build_copy() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
 
-    assert "mujoco-ros2-control-macos.patch" in installer
-    assert "mujoco-ros2-control-macos-platform.patch" in installer
-    assert "mujoco-ros2-control-macos-headless.patch" in installer
-    assert "mujoco-ros2-control-macos-main-thread-ui.patch" in installer
-    assert "mujoco-ros2-control-macos-frameworks.patch" in installer
-    assert "mujoco-ros2-control-macos-test-runtime.patch" in installer
-    assert "mujoco-ros2-control-macos-test-rmw.patch" in installer
-    assert "mujoco-ros2-control-macos-cxx17.patch" in installer
-    assert "mujoco-ros2-control-macos-conversion-warnings.patch" in installer
-    assert "mujoco-ros2-control-macos-test-backward.patch" in installer
+    assert "patch_series_file=" in installer
+    assert "load_patch_series" in installer
+    assert 'apply_patch_series "${build_source_dir}"' in installer
+    assert "if [[ $(uname -s) == Darwin ]]" not in installer
     assert '--base-paths "${build_source_dir}"' in installer
-    assert 'for (( patch_index=${#macos_patches}; patch_index >= 1; --patch_index ))' in installer
-    assert 'apply --reverse "${macos_patches[patch_index]}"' in installer
-    assert 'for macos_patch in "${macos_patches[@]}"' in installer
+    assert 'for (( patch_index=${#portable_patches}; patch_index >= 1; --patch_index ))' in installer
+    assert 'apply --reverse "${portable_patch}"' in installer
+    assert 'for portable_patch in "${portable_patches[@]}"' in installer
 
 
 def test_fusion_contract_uses_portable_sha256() -> None:
