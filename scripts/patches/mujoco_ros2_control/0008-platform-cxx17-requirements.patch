@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "zjumty@aliyun.com" <zjumty@aliyun.com>
+Date: Fri, 14 Aug 2026 16:33:38 +0800
+Subject: [PATCH 08/11] platform C++17 requirements
+
+
 diff --git a/mujoco_ros2_control/CMakeLists.txt b/mujoco_ros2_control/CMakeLists.txt
-index 9dc5b52..a43b22e 100644
+index 00a13b5..57a5bc1 100644
 --- a/mujoco_ros2_control/CMakeLists.txt
 +++ b/mujoco_ros2_control/CMakeLists.txt
 @@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.16)

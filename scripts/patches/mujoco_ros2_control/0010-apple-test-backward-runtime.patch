@@ -1,7 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "zjumty@aliyun.com" <zjumty@aliyun.com>
+Date: Fri, 14 Aug 2026 16:33:38 +0800
+Subject: [PATCH 10/11] Apple test backward runtime
+
+
 diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/tests/CMakeLists.txt
+index d425652..8c25f49 100644
 --- a/mujoco_ros2_control/tests/CMakeLists.txt
 +++ b/mujoco_ros2_control/tests/CMakeLists.txt
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,7 @@ find_package(ament_cmake_pytest REQUIRED)
  find_package(rcl_logging_spdlog REQUIRED)
  find_package(rmw_fastrtps_cpp REQUIRED)
  find_package(rmw_dds_common REQUIRED)
@@ -9,7 +16,7 @@ diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/test
  get_filename_component(RCL_LOGGING_SPDLOG_PREFIX
    "${rcl_logging_spdlog_DIR}/../../.." ABSOLUTE)
  set(RCL_LOGGING_SPDLOG_LIBRARY_DIR "${RCL_LOGGING_SPDLOG_PREFIX}/lib")
-@@ -12,12 +13,16 @@
+@@ -12,12 +13,16 @@ set(RMW_FASTRTPS_CPP_LIBRARY_DIR "${RMW_FASTRTPS_CPP_PREFIX}/lib")
  get_filename_component(RMW_DDS_COMMON_PREFIX
    "${rmw_dds_common_DIR}/../../.." ABSOLUTE)
  set(RMW_DDS_COMMON_LIBRARY_DIR "${RMW_DDS_COMMON_PREFIX}/lib")
@@ -27,7 +34,7 @@ diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/test
  target_link_libraries(test_plugin
    mujoco_ros2_control
    rclcpp::rclcpp
-@@ -27,7 +32,8 @@
+@@ -27,7 +32,8 @@ ament_add_gtest(test_headless_init test_headless_init.cpp
    APPEND_LIBRARY_DIRS
      "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
      "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
@@ -37,7 +44,7 @@ diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/test
  target_link_libraries(test_headless_init
    mujoco_ros2_control
    rclcpp::rclcpp
-@@ -38,7 +44,8 @@
+@@ -38,7 +44,8 @@ ament_add_gtest(test_viewer_camera test_viewer_camera.cpp
    APPEND_LIBRARY_DIRS
      "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
      "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
@@ -47,7 +54,7 @@ diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/test
  target_link_libraries(test_viewer_camera
    mujoco_ros2_control
  )
-@@ -47,4 +54,5 @@
+@@ -47,4 +54,5 @@ ament_add_pytest_test(test_urdf_to_mujoco_utils test_urdf_to_mujoco_utils.py
    APPEND_LIBRARY_DIRS
      "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
      "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
@@ -55,9 +62,10 @@ diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/test
 +    "${RMW_DDS_COMMON_LIBRARY_DIR}"
 +    "${BACKWARD_ROS_LIBRARY_DIR}")
 diff --git a/mujoco_ros2_control_plugins/CMakeLists.txt b/mujoco_ros2_control_plugins/CMakeLists.txt
+index e2adde1..ce86e1c 100644
 --- a/mujoco_ros2_control_plugins/CMakeLists.txt
 +++ b/mujoco_ros2_control_plugins/CMakeLists.txt
-@@ -65,6 +65,7 @@
+@@ -65,6 +65,7 @@ if(BUILD_TESTING)
    find_package(rcl_logging_spdlog REQUIRED)
    find_package(rmw_fastrtps_cpp REQUIRED)
    find_package(rmw_dds_common REQUIRED)
@@ -65,7 +73,7 @@ diff --git a/mujoco_ros2_control_plugins/CMakeLists.txt b/mujoco_ros2_control_pl
    get_filename_component(RCL_LOGGING_SPDLOG_PREFIX
      "${rcl_logging_spdlog_DIR}/../../.." ABSOLUTE)
    set(RCL_LOGGING_SPDLOG_LIBRARY_DIR "${RCL_LOGGING_SPDLOG_PREFIX}/lib")
-@@ -74,6 +75,9 @@
+@@ -74,6 +75,9 @@ if(BUILD_TESTING)
    get_filename_component(RMW_DDS_COMMON_PREFIX
      "${rmw_dds_common_DIR}/../../.." ABSOLUTE)
    set(RMW_DDS_COMMON_LIBRARY_DIR "${RMW_DDS_COMMON_PREFIX}/lib")
@@ -75,7 +83,7 @@ diff --git a/mujoco_ros2_control_plugins/CMakeLists.txt b/mujoco_ros2_control_pl
  
    ament_add_gtest(test_external_wrench_plugin
      test/test_external_wrench_plugin.cpp
-@@ -81,6 +85,7 @@
+@@ -81,6 +85,7 @@ if(BUILD_TESTING)
        "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
        "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
        "${RMW_DDS_COMMON_LIBRARY_DIR}"

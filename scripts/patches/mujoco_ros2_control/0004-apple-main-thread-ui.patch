@@ -1,7 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "zjumty@aliyun.com" <zjumty@aliyun.com>
+Date: Fri, 14 Aug 2026 16:33:38 +0800
+Subject: [PATCH 04/11] Apple main thread UI
+
+
 diff --git a/mujoco_ros2_control/CMakeLists.txt b/mujoco_ros2_control/CMakeLists.txt
+index cea45d8..5ad75e9 100644
 --- a/mujoco_ros2_control/CMakeLists.txt
 +++ b/mujoco_ros2_control/CMakeLists.txt
-@@ -232,6 +232,9 @@ add_executable(ros2_control_node src/mujoco_ros2_control_node.cpp)
+@@ -230,6 +230,9 @@ add_executable(ros2_control_node src/mujoco_ros2_control_node.cpp)
  target_link_libraries(ros2_control_node PUBLIC
    controller_manager::controller_manager
  )
@@ -12,6 +19,7 @@ diff --git a/mujoco_ros2_control/CMakeLists.txt b/mujoco_ros2_control/CMakeLists
    TARGETS ros2_control_node
    RUNTIME DESTINATION lib/${PROJECT_NAME}
 diff --git a/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp b/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp
+index a887d6c..e7323a8 100644
 --- a/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp
 +++ b/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp
 @@ -20,6 +20,7 @@
@@ -37,6 +45,7 @@ diff --git a/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_inter
  {
  public:
 diff --git a/mujoco_ros2_control/src/mujoco_ros2_control_node.cpp b/mujoco_ros2_control/src/mujoco_ros2_control_node.cpp
+index c0daa6d..f731c23 100644
 --- a/mujoco_ros2_control/src/mujoco_ros2_control_node.cpp
 +++ b/mujoco_ros2_control/src/mujoco_ros2_control_node.cpp
 @@ -22,6 +22,9 @@
@@ -71,6 +80,7 @@ diff --git a/mujoco_ros2_control/src/mujoco_ros2_control_node.cpp b/mujoco_ros2_
    rclcpp::shutdown();
    return 0;
 diff --git a/mujoco_ros2_control/src/mujoco_system_interface.cpp b/mujoco_ros2_control/src/mujoco_system_interface.cpp
+index cb1e749..33797c5 100644
 --- a/mujoco_ros2_control/src/mujoco_system_interface.cpp
 +++ b/mujoco_ros2_control/src/mujoco_system_interface.cpp
 @@ -110,6 +110,75 @@ bool is_mimic_joint(const std::string& joint_name, const hardware_interface::Har
@@ -149,7 +159,7 @@ diff --git a/mujoco_ros2_control/src/mujoco_system_interface.cpp b/mujoco_ros2_c
  template <typename T>
  void add_items(std::vector<T>& vector, const std::vector<T>& items)
  {
-@@ -827,6 +896,12 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
+@@ -823,6 +892,12 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
    disable_rendering_ =
        hardware_interface::parse_bool(get_hardware_parameter(get_hardware_info(), "disable_rendering").value_or("false"));
    RCLCPP_INFO_EXPRESSION(get_logger(), disable_rendering_, "Camera and lidar rendering is disabled.");
@@ -162,7 +172,7 @@ diff --git a/mujoco_ros2_control/src/mujoco_system_interface.cpp b/mujoco_ros2_c
  
    // We essentially reconstruct the 'simulate.cc::main()' function here, and
    // launch a Simulate object with all necessary rendering process/options
-@@ -859,8 +934,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
+@@ -855,8 +930,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
    }
    else
    {
@@ -172,7 +182,7 @@ diff --git a/mujoco_ros2_control/src/mujoco_system_interface.cpp b/mujoco_ros2_c
        sim_ = std::make_unique<mj::Simulate>(std::make_unique<ROS2ControlGlfwAdapter>(keyboard_step_requested_), &cam_,
                                              &opt_, &pert_,
                                              /* is_passive = */ false);
-@@ -902,6 +976,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
+@@ -898,6 +972,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
        RCLCPP_INFO(get_logger(), "Starting the MuJoCo rendering thread...");
        sim_->RenderLoop();
  
@@ -180,7 +190,7 @@ diff --git a/mujoco_ros2_control/src/mujoco_system_interface.cpp b/mujoco_ros2_c
        // The GLFW/OpenGL context belongs to this thread. Wait until the physics
        // loop has stopped, then destroy Simulate here so its graphics resources
        // are released by the context-owning thread.
-@@ -910,7 +985,20 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
+@@ -906,7 +981,20 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
          destroy_sim_cv_.wait(lock, [this]() { return destroy_sim_on_render_thread_; });
        }
        sim_.reset();
@@ -203,6 +213,7 @@ diff --git a/mujoco_ros2_control/src/mujoco_system_interface.cpp b/mujoco_ros2_c
  
    if (sim_ready_future.wait_for(10s) == std::future_status::timeout)
 diff --git a/mujoco_ros2_control/tests/test_headless_init.cpp b/mujoco_ros2_control/tests/test_headless_init.cpp
+index a3fcef6..7225e81 100644
 --- a/mujoco_ros2_control/tests/test_headless_init.cpp
 +++ b/mujoco_ros2_control/tests/test_headless_init.cpp
 @@ -633,6 +633,22 @@ TEST_F(HeadlessInitTest, ViewerCameraSetWaitsForViewerMutex)

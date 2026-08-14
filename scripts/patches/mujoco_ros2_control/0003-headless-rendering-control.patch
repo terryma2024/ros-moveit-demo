@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "zjumty@aliyun.com" <zjumty@aliyun.com>
+Date: Fri, 14 Aug 2026 16:33:38 +0800
+Subject: [PATCH 03/11] headless rendering control
+
+
 diff --git a/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp b/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp
 index c1cc93e..a887d6c 100644
 --- a/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp

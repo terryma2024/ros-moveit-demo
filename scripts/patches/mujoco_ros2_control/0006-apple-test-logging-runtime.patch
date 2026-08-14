@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "zjumty@aliyun.com" <zjumty@aliyun.com>
+Date: Fri, 14 Aug 2026 16:33:38 +0800
+Subject: [PATCH 06/11] Apple test logging runtime
+
+
 diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/tests/CMakeLists.txt
 index ef9f0b7..028655d 100644
 --- a/mujoco_ros2_control/tests/CMakeLists.txt
@@ -38,7 +44,7 @@ index ef9f0b7..028655d 100644
 +ament_add_pytest_test(test_urdf_to_mujoco_utils test_urdf_to_mujoco_utils.py
 +  APPEND_LIBRARY_DIRS "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}")
 diff --git a/mujoco_ros2_control_plugins/CMakeLists.txt b/mujoco_ros2_control_plugins/CMakeLists.txt
-index 5800ce3..3866f01 100644
+index dec0e4a..c8d03ec 100644
 --- a/mujoco_ros2_control_plugins/CMakeLists.txt
 +++ b/mujoco_ros2_control_plugins/CMakeLists.txt
 @@ -62,9 +62,14 @@ install(TARGETS mujoco_ros2_control_plugins
