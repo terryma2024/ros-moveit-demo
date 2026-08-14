@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -16,6 +17,17 @@ def start_children(commands: list[list[str]]) -> list[subprocess.Popen]:
     return [subprocess.Popen(command, start_new_session=True) for command in commands]
 
 
+def ros2_command(*arguments: str) -> list[str]:
+    """Preserve DYLD variables across the ros2 script boundary on macOS."""
+
+    if sys.platform != "darwin":
+        return ["ros2", *arguments]
+    executable = shutil.which("ros2")
+    if executable is None:
+        raise RuntimeError("ros2 executable is not available")
+    return [sys.executable, executable, *arguments]
+
+
 def signal_child_group(child: subprocess.Popen, value: signal.Signals) -> None:
     """Signal launch and its descendants together on platforms with POSIX groups."""
 
@@ -23,6 +35,14 @@ def signal_child_group(child: subprocess.Popen, value: signal.Signals) -> None:
         os.killpg(child.pid, value)
     except ProcessLookupError:
         pass
+
+
+def request_graceful_shutdown(children: list[subprocess.Popen]) -> None:
+    """Ask each launch owner to forward one SIGINT to its children."""
+
+    for child in children:
+        if child.poll() is None:
+            child.send_signal(signal.SIGINT)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,8 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(arguments: list[str] | None = None) -> int:
     options = build_parser().parse_args(arguments)
     commands = [
-        [
-            "ros2",
+        ros2_command(
             "launch",
             "so101_demo_py",
             "so101_mujoco.launch.py",
@@ -45,9 +64,8 @@ def main(arguments: list[str] | None = None) -> int:
             "execute:=true",
             f"headless:={options.headless}",
             f"session_id:={options.session_id}",
-        ],
-        [
-            "ros2",
+        ),
+        ros2_command(
             "launch",
             "so101_teleop",
             "so101_teleop.launch.py",
@@ -56,7 +74,7 @@ def main(arguments: list[str] | None = None) -> int:
             f"port:={options.port}",
             f"simulation_session_id:={options.session_id}",
             "build_web_if_needed:=false",
-        ],
+        ),
     ]
     children = start_children(commands)
     interrupted = False
@@ -71,9 +89,7 @@ def main(arguments: list[str] | None = None) -> int:
             time.sleep(0.2)
     finally:
         signal.signal(signal.SIGINT, previous)
-        for child in children:
-            if child.poll() is None:
-                signal_child_group(child, signal.SIGINT)
+        request_graceful_shutdown(children)
         returncodes = []
         for child in children:
             try:

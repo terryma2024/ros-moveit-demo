@@ -1,0 +1,16 @@
+diff --git a/mujoco_ros2_control/CMakeLists.txt b/mujoco_ros2_control/CMakeLists.txt
+index a43b22e..0b96ac2 100644
+--- a/mujoco_ros2_control/CMakeLists.txt
++++ b/mujoco_ros2_control/CMakeLists.txt
+@@ -166,6 +166,11 @@ add_library(mujoco_ros2_control SHARED
+     src/mujoco_lidar.cpp
+     src/viewer_camera.cpp
+ )
++if(APPLE)
++  target_compile_options(mujoco_ros2_control PRIVATE
++    -Wno-error=sign-conversion
++    -Wno-error=float-conversion)
++endif()
+ # Ensure MuJoCo library can be found at runtime regardless of how it was installed above.
+ # mujoco_vendor installs libmujoco.so under opt/mujoco_vendor/lib/ relative to the
+ # install prefix, so that directory must be in the RPATH alongside the standard lib/.

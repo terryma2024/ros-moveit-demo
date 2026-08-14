@@ -9,6 +9,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -213,6 +214,22 @@ class StackStartupError(InvalidRun):
         self.handle = handle
 
 
+def stack_supervisor_command(*, session_id: str, port: int, headless: bool) -> list[str]:
+    """Run the supervisor with the interpreter that owns the installed environment."""
+
+    return [
+        sys.executable,
+        "-m",
+        "so101_demo.application.qualification_stack",
+        "--session-id",
+        session_id,
+        "--port",
+        str(port),
+        "--headless",
+        "true" if headless else "false",
+    ]
+
+
 class ProductionQualificationRunner:
     def __init__(
         self,
@@ -280,17 +297,9 @@ class ProductionQualificationRunner:
     ) -> StackHandle:
         environment = self._stack_environment(domain_id=domain_id)
         log_path = run_root / "launch.log"
-        command = [
-            "python3",
-            "-m",
-            "so101_demo.application.qualification_stack",
-            "--session-id",
-            session_id,
-            "--port",
-            str(port),
-            "--headless",
-            "true" if self.headless else "false",
-        ]
+        command = stack_supervisor_command(
+            session_id=session_id, port=port, headless=self.headless
+        )
         log_stream = log_path.open("w")
         process = subprocess.Popen(
             command,

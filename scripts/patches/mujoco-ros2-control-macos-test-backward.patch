@@ -1,0 +1,85 @@
+diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/tests/CMakeLists.txt
+--- a/mujoco_ros2_control/tests/CMakeLists.txt
++++ b/mujoco_ros2_control/tests/CMakeLists.txt
+@@ -3,6 +3,7 @@
+ find_package(rcl_logging_spdlog REQUIRED)
+ find_package(rmw_fastrtps_cpp REQUIRED)
+ find_package(rmw_dds_common REQUIRED)
++find_package(backward_ros REQUIRED)
+ get_filename_component(RCL_LOGGING_SPDLOG_PREFIX
+   "${rcl_logging_spdlog_DIR}/../../.." ABSOLUTE)
+ set(RCL_LOGGING_SPDLOG_LIBRARY_DIR "${RCL_LOGGING_SPDLOG_PREFIX}/lib")
+@@ -12,12 +13,16 @@
+ get_filename_component(RMW_DDS_COMMON_PREFIX
+   "${rmw_dds_common_DIR}/../../.." ABSOLUTE)
+ set(RMW_DDS_COMMON_LIBRARY_DIR "${RMW_DDS_COMMON_PREFIX}/lib")
++get_filename_component(BACKWARD_ROS_PREFIX
++  "${backward_ros_DIR}/../../.." ABSOLUTE)
++set(BACKWARD_ROS_LIBRARY_DIR "${BACKWARD_ROS_PREFIX}/lib")
+ 
+ ament_add_gtest(test_plugin test_plugin.cpp
+   APPEND_LIBRARY_DIRS
+     "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
+     "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
+-    "${RMW_DDS_COMMON_LIBRARY_DIR}")
++    "${RMW_DDS_COMMON_LIBRARY_DIR}"
++    "${BACKWARD_ROS_LIBRARY_DIR}")
+ target_link_libraries(test_plugin
+   mujoco_ros2_control
+   rclcpp::rclcpp
+@@ -27,7 +32,8 @@
+   APPEND_LIBRARY_DIRS
+     "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
+     "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
+-    "${RMW_DDS_COMMON_LIBRARY_DIR}")
++    "${RMW_DDS_COMMON_LIBRARY_DIR}"
++    "${BACKWARD_ROS_LIBRARY_DIR}")
+ target_link_libraries(test_headless_init
+   mujoco_ros2_control
+   rclcpp::rclcpp
+@@ -38,7 +44,8 @@
+   APPEND_LIBRARY_DIRS
+     "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
+     "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
+-    "${RMW_DDS_COMMON_LIBRARY_DIR}")
++    "${RMW_DDS_COMMON_LIBRARY_DIR}"
++    "${BACKWARD_ROS_LIBRARY_DIR}")
+ target_link_libraries(test_viewer_camera
+   mujoco_ros2_control
+ )
+@@ -47,4 +54,5 @@
+   APPEND_LIBRARY_DIRS
+     "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
+     "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
+-    "${RMW_DDS_COMMON_LIBRARY_DIR}")
++    "${RMW_DDS_COMMON_LIBRARY_DIR}"
++    "${BACKWARD_ROS_LIBRARY_DIR}")
+diff --git a/mujoco_ros2_control_plugins/CMakeLists.txt b/mujoco_ros2_control_plugins/CMakeLists.txt
+--- a/mujoco_ros2_control_plugins/CMakeLists.txt
++++ b/mujoco_ros2_control_plugins/CMakeLists.txt
+@@ -65,6 +65,7 @@
+   find_package(rcl_logging_spdlog REQUIRED)
+   find_package(rmw_fastrtps_cpp REQUIRED)
+   find_package(rmw_dds_common REQUIRED)
++  find_package(backward_ros REQUIRED)
+   get_filename_component(RCL_LOGGING_SPDLOG_PREFIX
+     "${rcl_logging_spdlog_DIR}/../../.." ABSOLUTE)
+   set(RCL_LOGGING_SPDLOG_LIBRARY_DIR "${RCL_LOGGING_SPDLOG_PREFIX}/lib")
+@@ -74,6 +75,9 @@
+   get_filename_component(RMW_DDS_COMMON_PREFIX
+     "${rmw_dds_common_DIR}/../../.." ABSOLUTE)
+   set(RMW_DDS_COMMON_LIBRARY_DIR "${RMW_DDS_COMMON_PREFIX}/lib")
++  get_filename_component(BACKWARD_ROS_PREFIX
++    "${backward_ros_DIR}/../../.." ABSOLUTE)
++  set(BACKWARD_ROS_LIBRARY_DIR "${BACKWARD_ROS_PREFIX}/lib")
+ 
+   ament_add_gtest(test_external_wrench_plugin
+     test/test_external_wrench_plugin.cpp
+@@ -81,6 +85,7 @@
+       "${RCL_LOGGING_SPDLOG_LIBRARY_DIR}"
+       "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
+       "${RMW_DDS_COMMON_LIBRARY_DIR}"
++      "${BACKWARD_ROS_LIBRARY_DIR}"
+   )
+   target_link_libraries(test_external_wrench_plugin
+     mujoco_ros2_control_plugins

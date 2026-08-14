@@ -87,6 +87,9 @@ PY
     ${project_root}/scripts/patches/mujoco-ros2-control-macos-frameworks.patch
     ${project_root}/scripts/patches/mujoco-ros2-control-macos-test-runtime.patch
     ${project_root}/scripts/patches/mujoco-ros2-control-macos-test-rmw.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-cxx17.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-conversion-warnings.patch
+    ${project_root}/scripts/patches/mujoco-ros2-control-macos-test-backward.patch
   )
 }
 

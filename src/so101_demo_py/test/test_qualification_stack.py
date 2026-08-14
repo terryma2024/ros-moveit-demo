@@ -37,3 +37,35 @@ def test_signal_child_targets_its_whole_process_group(monkeypatch) -> None:
     qualification_stack.signal_child_group(child, signal.SIGINT)
 
     assert signals == [(4321, signal.SIGINT)]
+
+
+def test_graceful_shutdown_signals_only_launch_owners() -> None:
+    signals = []
+
+    class Child:
+        def poll(self):
+            return None
+
+        def send_signal(self, value):
+            signals.append(value)
+
+    qualification_stack.request_graceful_shutdown([Child(), Child()])
+
+    assert signals == [signal.SIGINT, signal.SIGINT]
+
+
+def test_macos_ros2_launch_uses_current_python_to_preserve_dyld(monkeypatch) -> None:
+    monkeypatch.setattr(qualification_stack.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        qualification_stack.shutil,
+        "which",
+        lambda executable: "/ros/install/ros2" if executable == "ros2" else None,
+    )
+
+    assert qualification_stack.ros2_command("launch", "pkg", "file") == [
+        qualification_stack.sys.executable,
+        "/ros/install/ros2",
+        "launch",
+        "pkg",
+        "file",
+    ]

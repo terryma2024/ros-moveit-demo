@@ -10,7 +10,8 @@
 ├── install/                       # ROS 2 Jazzy 源码 underlay
 ├── extra_ws/install/              # MoveIt、ros2_control、MuJoCo vendor、OMPL 等依赖
 ├── ws_mujoco_ros2_control_fork/   # 锁定 fork 的源码、build、install
-└── so101_isolated_ws/             # 本工程隔离 build/install
+├── so101_isolated_ws/             # 本工程隔离 build/install
+└── macos_dylib_farm/current       # 源码 overlay 的聚合 dylib 软链接
 ```
 
 每个新 shell 按下列顺序加载：
@@ -21,7 +22,12 @@ source ~/ros2_jazzy/install/setup.zsh
 source ~/ros2_jazzy/extra_ws/install/setup.zsh
 source ~/ros2_jazzy/ws_mujoco_ros2_control_fork/install/setup.zsh
 source ~/ros2_jazzy/so101_isolated_ws/install/setup.zsh
+export DYLD_LIBRARY_PATH="$HOME/ros2_jazzy/macos_dylib_farm/current${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 ```
+
+仓库根目录可复制 `.envrc.example` 为 `.envrc` 并执行 `direnv allow`。该配置还会
+source 当前目录的 `install/setup.bash`，随后重新覆盖为已验证的依赖、fork 和隔离项目
+overlay，避免旧 build 抢占 package prefix。
 
 重建锁定的 `mujoco_ros2_control` fork：
 
@@ -48,7 +54,7 @@ SO101_ROS_DEPENDENCY_OVERLAY=~/ros2_jazzy/extra_ws/install \
   ```
 
 - Python 使用 `~/ros2_jazzy/.venv`；当前测试环境固定兼容的 `pytest 8.4.2`，避免系统 Python 与 ROS 生成包混用。
-- macOS SIP 会过滤由脚本间接传递的 `DYLD_LIBRARY_PATH`。launch 文件在 Darwin 上显式用当前 Python 解释器启动 Python 节点，C++ 目标则通过 install rpath 解析 dylib。
+- macOS SIP 会过滤由脚本间接传递的 `DYLD_LIBRARY_PATH`。launch 文件在 Darwin 上显式用当前 Python 解释器启动 Python 节点；源码 ROS 的分散 dylib 由 `scripts/setup-macos-ros-dylib-farm.zsh` 聚合，C++ 目标同时保留 install rpath。
 - Finder/浏览器来源文件可能带 `com.apple.provenance` xattr，使 `--symlink-install` 无法替换旧 build 路径。保留旧目录后改用全新 package build 目录；不要用管理员权限覆盖源码。
 
 ## macOS 兼容补丁
@@ -57,7 +63,7 @@ fork 补丁覆盖 Apple Clang 的 `PRIu64`、Mach-O install name/rpath、`@execu
 
 MuJoCo 原实现会从 worker thread 创建 GLFW/AppKit 窗口，在 macOS 上触发 Cocoa 主线程异常。现在原生 viewer 由 `ros2_control_node` 主线程执行，ROS executor 在后台线程运行；退出时按顺序停止 viewer 和 ROS。SO-101 在 macOS GUI 模式下禁用会另开 worker GLFW window 的离屏 camera/lidar 渲染，但保留原生 MuJoCo viewer。headless 模式禁用全部渲染。
 
-项目侧还有三项必要适配：reset 后重新写入并读回 Planning Scene；launch 子进程使用独立 process group 以保证 SIGINT 有序退出；源码栈首次启动的 readiness budget 为 90 秒，并传给会接收 launch 注入 ROS 参数的 `scene_setup`。
+项目侧还有三项必要适配：reset 后重新写入并读回 Planning Scene；launch 子进程使用独立 process group，但正常关停只向 launch owner 发一次 SIGINT，避免重复转发；源码栈首次启动的 readiness budget 为 90 秒，并传给会接收 launch 注入 ROS 参数的 `scene_setup`。
 
 ## 运行与验证
 

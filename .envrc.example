@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# macOS ROS 2 Jazzy environment. Copy to .envrc, then run: direnv allow
+
+project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ros_root="${SO101_ROS_ROOT:-$HOME/ros2_jazzy}"
+
+export VIRTUAL_ENV="$ros_root/.venv"
+unset PYTHONHOME
+export PATH="$VIRTUAL_ENV/bin:$PATH"
+
+for setup in \
+  "$ros_root/install/setup.bash" \
+  "$project_root/install/setup.bash" \
+  "$ros_root/extra_ws/install/setup.bash" \
+  "$ros_root/ws_mujoco_ros2_control_fork/install/setup.bash" \
+  "$ros_root/so101_isolated_ws/install/setup.bash"; do
+  if [[ -f "$setup" ]]; then
+    watch_file "$setup"
+    source_env "$setup"
+  fi
+done
+
+dylib_farm="$ros_root/macos_dylib_farm/current"
+if [[ -d "$dylib_farm" ]]; then
+  export DYLD_LIBRARY_PATH="$dylib_farm${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+fi
+
+if command -v brew >/dev/null 2>&1; then
+  llvm_prefix="$(brew --prefix llvm@19 2>/dev/null || true)"
+  [[ -n "$llvm_prefix" ]] && export PATH="$llvm_prefix/bin:$PATH"
+
+  qt5_prefix="$(brew --prefix qt@5 2>/dev/null || true)"
+  if [[ -n "$qt5_prefix" ]]; then
+    export CMAKE_PREFIX_PATH="$qt5_prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+  fi
+fi
