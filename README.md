@@ -54,7 +54,7 @@ ws_moveit/
 
 ## 环境要求
 
-- Ubuntu 24.04 与 ROS 2 Jazzy
+- Ubuntu 24.04 与 ROS 2 Jazzy；Apple Silicon macOS 使用 `~/ros2_jazzy` 源码安装
 - MoveIt 2
 - Gazebo Harmonic 及 ROS 2 bridge/control 组件
 - `colcon`、`rosdep` 和 Zsh
@@ -159,6 +159,8 @@ ros2 launch fixed_pose_goal fixed_pose_goal.launch.py
 ## 文档索引
 
 - [统一 SO-101 Python 包](src/so101_demo_py/README.md)
+- [Apple Silicon ROS 2 Jazzy 环境](docs/guides/macos-apple-silicon-ros2-jazzy.md)
+- [macOS MuJoCo RESET_WORLD 适配经验](docs/guides/macos-so101-mujoco-reset-world-experience.md)
 - [Python pick-place 架构](docs/pick-place-python-architecture.md)
 - [SO-101 MuJoCo ROS 2 集成指南](docs/guides/so101-mujoco-ros2-integration-guide.md)
 - [C++ pick-place 架构](docs/pick-place-architecture.md)

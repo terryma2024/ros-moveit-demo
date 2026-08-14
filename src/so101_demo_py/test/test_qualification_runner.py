@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,18 @@ from so101_demo.application.qualification import (
 )
 
 BUNDLE = "a" * 64
+
+
+def test_stack_supervisor_uses_current_python_environment() -> None:
+    command = qualification_module.stack_supervisor_command(
+        session_id="session", port=28793, headless=True
+    )
+
+    assert command[:3] == [
+        sys.executable,
+        "-m",
+        "so101_demo.application.qualification_stack",
+    ]
 
 
 def test_scene_readiness_accepts_shared_cli_json_receipt() -> None:

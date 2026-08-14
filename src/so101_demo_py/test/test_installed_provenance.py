@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
@@ -68,7 +69,7 @@ def test_final_install_contains_runtime_contract() -> None:
 def test_pytest_collection_is_nonzero() -> None:
     test_root = Path(__file__).resolve().parent
     completed = subprocess.run(
-        ["python3", "-m", "pytest", "--collect-only", "-q", str(test_root)],
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", str(test_root)],
         check=True,
         capture_output=True,
         text=True,
