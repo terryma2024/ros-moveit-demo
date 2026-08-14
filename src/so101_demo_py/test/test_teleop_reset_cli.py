@@ -3,6 +3,7 @@ import json
 
 def test_cli_defaults_to_compatible_mujoco(monkeypatch, capsys) -> None:
     from so101_demo.cli import teleop_reset
+    from so101_demo.ports.planning_scene import SceneCommandReceipt
 
     receipt = type(
         "Receipt",
@@ -15,11 +16,20 @@ def test_cli_defaults_to_compatible_mujoco(monkeypatch, capsys) -> None:
             "keyframe": "task_start",
         },
     )()
+    scene_receipt = SceneCommandReceipt(
+        backend="mujoco",
+        phase="READ_BACK",
+        success=True,
+        failure_code=None,
+        evidence={"world_ids": ["pedestal", "plastic_cup", "table"]},
+    )
     calls = []
     monkeypatch.setattr(
         teleop_reset,
-        "transactional_reset",
-        lambda session_id, keyframe: calls.append((session_id, keyframe)) or receipt,
+        "execute_mujoco_reset",
+        lambda session_id, keyframe: (
+            calls.append((session_id, keyframe)) or (receipt, scene_receipt)
+        ),
     )
 
     assert teleop_reset.main(["--session-id", "session-a"]) == 0

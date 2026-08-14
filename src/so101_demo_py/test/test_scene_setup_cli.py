@@ -30,6 +30,29 @@ def test_cli_defaults_to_compatible_mujoco_setup(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out)["success"] is True
 
 
+def test_cli_removes_launch_injected_ros_parameter_arguments(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    from so101_demo.cli import scene_setup
+
+    params = tmp_path / "params.yaml"
+    params.write_text(
+        "/**:\n  ros__parameters:\n    readiness_timeout_s: 90.0\n",
+        encoding="utf-8",
+    )
+    calls = []
+    monkeypatch.setattr(
+        scene_setup,
+        "execute_scene_operation",
+        lambda backend, operation: calls.append((backend, operation))
+        or _receipt(backend=backend),
+    )
+
+    assert scene_setup.main(["--ros-args", "--params-file", str(params)]) == 0
+    assert calls == [("mujoco", "setup")]
+    assert json.loads(capsys.readouterr().out)["success"] is True
+
+
 def test_cli_dispatches_every_gazebo_scene_operation(monkeypatch) -> None:
     from so101_demo.cli import scene_setup
 

@@ -61,7 +61,13 @@ def execute_scene_operation(backend: str, operation: str) -> SceneCommandReceipt
 
 
 def main(arguments: list[str] | None = None) -> int:
-    options, _ros_arguments = build_parser().parse_known_args(arguments)
+    from rclpy.utilities import remove_ros_args
+
+    if arguments is None:
+        application_arguments = remove_ros_args()[1:]
+    else:
+        application_arguments = remove_ros_args(args=["scene_setup", *arguments])[1:]
+    options = build_parser().parse_args(application_arguments)
     receipt = execute_scene_operation(options.backend, options.operation)
     print(json.dumps(asdict(receipt), sort_keys=True), flush=True)
     return 0 if receipt.success else 1

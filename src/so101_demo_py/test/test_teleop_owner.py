@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+from so101_demo.cli import teleop_reset
 from so101_demo.cli.teleop_reset import build_parser as reset_parser
 from so101_demo.cli.teleop_workflow import (
     evidence_failure_code,
@@ -16,6 +18,35 @@ def test_reset_cli_requires_physical_session() -> None:
 
     assert options.session_id == "sim-a"
     assert options.keyframe == "task_start"
+
+
+def test_mujoco_reset_reapplies_and_verifies_canonical_planning_scene(monkeypatch) -> None:
+    reset_receipt = SimpleNamespace(
+        simulation_session_id="sim-a",
+        old_epoch=4,
+        new_epoch=5,
+        simulation_step=0,
+        keyframe="task_start",
+    )
+    scene_receipt = SimpleNamespace(
+        backend="mujoco",
+        phase="READ_BACK",
+        success=True,
+        failure_code=None,
+        evidence={"mismatches": []},
+    )
+    calls = []
+    monkeypatch.setattr(teleop_reset, "transactional_reset", lambda *_args, **_kwargs: reset_receipt)
+    monkeypatch.setattr(
+        teleop_reset,
+        "execute_scene_operation",
+        lambda backend, operation: calls.append((backend, operation)) or scene_receipt,
+    )
+
+    result = teleop_reset.execute_mujoco_reset("sim-a", keyframe="task_start")
+
+    assert calls == [("mujoco", "setup")]
+    assert result == (reset_receipt, scene_receipt)
 
 
 def test_workflow_arguments_bind_unified_policy_and_epoch() -> None:
