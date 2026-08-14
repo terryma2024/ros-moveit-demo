@@ -128,3 +128,5 @@ verification。两端 `ros2 pkg prefix` 必须指向本轮候选 install，不�
 - `moveit-demo` 依赖权威迁移提交为
   `3630a5d852c605858344ee78b7ea49c57b79e321`：gitlink 与两份 lock 指向 r7，安装器要求
   clean r7 build source，主仓活动 patch series 已移除。
+- 发布后的隔离 overlay 中，安装契约 10 项、`so101_demo_py` 完整套件 214 项均零失败。
+  完整套件比迁移前少 1 项，是因为 11 项 patch-replay 契约被 10 项 clean-fork 权威契约替代。
