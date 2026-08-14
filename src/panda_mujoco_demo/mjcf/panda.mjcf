@@ -37,7 +37,7 @@
         <geom type="mesh" contype="0" conaffinity="0" group="2"/>
       </default>
       <default class="collision">
-        <geom type="mesh" group="3"/>
+        <geom type="mesh" group="3" friction="3 0.1 0.1"/>
         <default class="fingertip_pad_collision_1">
           <geom type="box" size="0.0085 0.004 0.0085" pos="0 0.0055 0.0445"/>
         </default>
@@ -177,7 +177,7 @@
             <body name="panda_link4" pos="0.0825 0 0" quat="1 1 0 0">
               <inertial mass="3.587895" pos="-5.317e-2 1.04419e-1 2.7454e-2"
                 fullinertia="2.5853e-2 1.9552e-2 2.8323e-2 7.796e-3 -1.332e-3 8.641e-3"/>
-              <joint name="panda_joint4" range="-3.1416 0.0873"/>
+              <joint name="panda_joint4" range="-3.2 0.0873"/>
               <geom mesh="link4_0" material="white" class="visual"/>
               <geom mesh="link4_1" material="white" class="visual"/>
               <geom mesh="link4_2" material="black" class="visual"/>
@@ -292,7 +292,7 @@
     <general class="panda" name="actuator3" joint="panda_joint3" gainprm="3500" biasprm="0 -3500 -350"
       ctrlrange="-2.9671 2.9671"/>
     <general class="panda" name="actuator4" joint="panda_joint4" gainprm="3500" biasprm="0 -3500 -350"
-      ctrlrange="-3.1416 0.0873"/>
+      ctrlrange="-3.2 0.0873"/>
     <general class="panda" name="actuator5" joint="panda_joint5" gainprm="2000" biasprm="0 -2000 -200"
       forcerange="-12 12" ctrlrange="-2.9671 2.9671"/>
     <general class="panda" name="actuator6" joint="panda_joint6" gainprm="2000" biasprm="0 -2000 -200"
