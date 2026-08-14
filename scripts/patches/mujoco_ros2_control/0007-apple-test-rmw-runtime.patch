@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "zjumty@aliyun.com" <zjumty@aliyun.com>
+Date: Fri, 14 Aug 2026 16:33:38 +0800
+Subject: [PATCH 07/11] Apple test RMW runtime
+
+
 diff --git a/mujoco_ros2_control/tests/CMakeLists.txt b/mujoco_ros2_control/tests/CMakeLists.txt
 index 028655d..d425652 100644
 --- a/mujoco_ros2_control/tests/CMakeLists.txt
@@ -58,7 +64,7 @@ index 028655d..d425652 100644
 +    "${RMW_FASTRTPS_CPP_LIBRARY_DIR}"
 +    "${RMW_DDS_COMMON_LIBRARY_DIR}")
 diff --git a/mujoco_ros2_control_plugins/CMakeLists.txt b/mujoco_ros2_control_plugins/CMakeLists.txt
-index 31317fb..175a54a 100644
+index c8d03ec..e2adde1 100644
 --- a/mujoco_ros2_control_plugins/CMakeLists.txt
 +++ b/mujoco_ros2_control_plugins/CMakeLists.txt
 @@ -63,13 +63,24 @@ install(TARGETS mujoco_ros2_control_plugins

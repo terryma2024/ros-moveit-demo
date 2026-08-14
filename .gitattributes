@@ -1,1 +1,2 @@
 scripts/patches/*.patch -whitespace
+scripts/patches/mujoco_ros2_control/*.patch -whitespace
