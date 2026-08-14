@@ -29,9 +29,30 @@ foreach(config_file IN ITEMS "${WORKSPACE_ROOT}/.clang-tidy" "${WORKSPACE_ROOT}/
     message(FATAL_ERROR "Required quality-gate configuration is missing: ${config_file}")
   endif()
 endforeach()
+
+# On macOS, Homebrew clang-tidy does not query the Apple compiler driver for
+# its SDK C++ standard-library paths.  Supplying them explicitly keeps the
+# analysis environment consistent with the compile commands produced by Xcode.
+set(clang_tidy_platform_arguments)
+if(APPLE)
+  execute_process(
+    COMMAND xcrun --show-sdk-path
+    OUTPUT_VARIABLE macos_sdk_path
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE macos_sdk_result)
+  if(NOT macos_sdk_result EQUAL 0 OR "${macos_sdk_path}" STREQUAL "")
+    message(FATAL_ERROR "Unable to determine the macOS SDK path for clang-tidy")
+  endif()
+  list(APPEND clang_tidy_platform_arguments
+    -extra-arg=-isysroot
+    "-extra-arg=${macos_sdk_path}"
+    "-extra-arg=-isystem${macos_sdk_path}/usr/include/c++/v1")
+endif()
+
 message(STATUS "C++ quality gate: running clang-tidy")
 execute_process(COMMAND "${RUN_CLANG_TIDY_EXECUTABLE}" -p "${COMPILATION_DATABASE_DIR}"
-  -warnings-as-errors=* -config-file "${WORKSPACE_ROOT}/.clang-tidy" ${QUALITY_SOURCE_FILES}
+  -warnings-as-errors=* -config-file "${WORKSPACE_ROOT}/.clang-tidy"
+  ${clang_tidy_platform_arguments} ${QUALITY_SOURCE_FILES}
   RESULT_VARIABLE clang_tidy_result)
 if(NOT clang_tidy_result EQUAL 0)
   message(FATAL_ERROR "clang-tidy failed with exit code ${clang_tidy_result}")

@@ -2,9 +2,10 @@
 
 set -euo pipefail
 
-readonly ros_root="${SO101_ROS_ROOT:-${HOME}/ros2_jazzy}"
-readonly farm_root="${SO101_DYLIB_FARM_ROOT:-${ros_root}/macos_dylib_farm}"
-readonly default_prefixes="${ros_root}/install:${ros_root}/extra_ws/install:${ros_root}/ws_mujoco_ros2_control_fork/install:${ros_root}/so101_isolated_ws/install"
+readonly ros_workspace="${SO101_ROS_WORKSPACE:-${SO101_ROS_ROOT:-${HOME}/ros2_jazzy}}"
+readonly ros_underlay="${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}"
+readonly farm_root="${SO101_DYLIB_FARM_ROOT:-${ros_workspace}/macos_dylib_farm}"
+readonly default_prefixes="${ros_underlay}:${ros_workspace}/extra_ws/install:${ros_workspace}/ws_mujoco_ros2_control_fork/install:${ros_workspace}/so101_isolated_ws/install"
 readonly prefix_spec="${SO101_ROS_PREFIXES:-${default_prefixes}}"
 
 mkdir -p "${farm_root}/runs"

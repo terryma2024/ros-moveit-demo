@@ -1247,6 +1247,7 @@ MoveItJointPlanningBoundary::search(const Vec3 & target_position, const Vec3 & l
   };
   for (std::size_t i = 1; i <= seed_count; ++i) {
     std::vector<double> joints;
+    joints.reserve(bounds.size());
     for (std::size_t j = 0; j < bounds.size(); ++j) {
       joints.push_back(bounds[j].first +
                        halton(i, primes[j]) * (bounds[j].second - bounds[j].first));
