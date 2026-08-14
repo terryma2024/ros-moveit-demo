@@ -1074,7 +1074,9 @@ direnv exec . python -m pytest -q src/so101_demo_py/test \
   |& tee /tmp/so101-debug-mujoco-fork-r7/final/so101-demo-py-tests.log
 ```
 
-Expected: zero failures and the current baseline of 215 passing tests. If the count changes, identify added/removed/skipped tests before accepting.
+Verified result: 214 tests pass with zero failures. The count is one below the prior
+215-test baseline because the r7 migration replaces 11 patch-replay installer contract
+tests with 10 clean-fork authority contract tests; no unrelated test disappeared.
 
 - [ ] **Step 3: Run final source/provenance checks**
 
