@@ -20,10 +20,10 @@ namespace panda_gazebo_demo::pick_place
 
 struct MotionPlanningRequest
 {
-  State state;
-  State next_state;
-  MotionKind kind;
-  bool carrying;
+  State state{};
+  State next_state{};
+  MotionKind kind{};
+  bool carrying{};
   Pose3d target_pose;
 };
 

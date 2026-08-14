@@ -19,6 +19,8 @@ paths:
   project_install: install
 source_order:
   - ros_underlay
+  - transmission_interface_overlay
+  - mujoco_vendor_overlay
   - fork_overlay
   - project_overlay
 interface_sha256:

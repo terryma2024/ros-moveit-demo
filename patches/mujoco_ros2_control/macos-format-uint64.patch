@@ -1,0 +1,128 @@
+diff --git a/mujoco_ros2_control/CMakeLists.txt b/mujoco_ros2_control/CMakeLists.txt
+index a57ed5d..0b96ac2 100644
+--- a/mujoco_ros2_control/CMakeLists.txt
++++ b/mujoco_ros2_control/CMakeLists.txt
+@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.16)
+ 
+ project(mujoco_ros2_control)
+ 
++if(APPLE)
++  enable_language(OBJCXX)
++endif()
++
+ find_package(ros2_control_cmake REQUIRED)
+ 
+ # find dependencies
+@@ -111,11 +115,18 @@ else()
+   set_target_properties(platform_ui_adapter PROPERTIES
+   POSITION_INDEPENDENT_CODE ON
+   )
++  target_compile_features(platform_ui_adapter PUBLIC cxx_std_17)
+   target_sources(
+     platform_ui_adapter
+     PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.h ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.h ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.h
+     PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_adapter.cc ${MUJOCO_SIMULATE_DIR}/glfw_dispatch.cc ${MUJOCO_SIMULATE_DIR}/platform_ui_adapter.cc
+   )
++  if(APPLE)
++    target_sources(platform_ui_adapter
++      PUBLIC ${MUJOCO_SIMULATE_DIR}/glfw_corevideo.h
++      PRIVATE ${MUJOCO_SIMULATE_DIR}/glfw_corevideo.mm)
++    target_link_libraries(platform_ui_adapter PUBLIC "-framework CoreVideo")
++  endif()
+   target_include_directories(platform_ui_adapter PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+   target_link_libraries(platform_ui_adapter PRIVATE ${MUJOCO_LIB} glfw)
+   target_compile_options(platform_ui_adapter PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
+@@ -126,10 +137,15 @@ else()
+     OUTPUT_NAME simulate
+     POSITION_INDEPENDENT_CODE ON
+   )
++  target_compile_features(mujoco_simulate PUBLIC cxx_std_17)
+   target_sources(mujoco_simulate
+     PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.h
+     PRIVATE ${MUJOCO_SIMULATE_DIR}/simulate.cc ${MUJOCO_SIMULATE_DIR}/array_safety.h
+   )
++  if(APPLE)
++    target_sources(mujoco_simulate PRIVATE ${MUJOCO_SIMULATE_DIR}/macos_gui.mm)
++    target_link_libraries(mujoco_simulate PUBLIC "-framework Cocoa")
++  endif()
+   target_include_directories(mujoco_simulate PUBLIC ${MUJOCO_SIMULATE_DIR} ${MUJOCO_INCLUDE_DIR})
+   target_link_libraries(mujoco_simulate PRIVATE lodepng mujoco::platform_ui_adapter ${MUJOCO_LIB})
+   target_compile_options(mujoco_simulate PRIVATE ${MUJOCO_SILENCE_COMPILER_WARNINGS})
+@@ -150,6 +166,11 @@ add_library(mujoco_ros2_control SHARED
+     src/mujoco_lidar.cpp
+     src/viewer_camera.cpp
+ )
++if(APPLE)
++  target_compile_options(mujoco_ros2_control PRIVATE
++    -Wno-error=sign-conversion
++    -Wno-error=float-conversion)
++endif()
+ # Ensure MuJoCo library can be found at runtime regardless of how it was installed above.
+ # mujoco_vendor installs libmujoco.so under opt/mujoco_vendor/lib/ relative to the
+ # install prefix, so that directory must be in the RPATH alongside the standard lib/.
+@@ -161,11 +182,13 @@ set_target_properties(mujoco_ros2_control PROPERTIES
+ # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
+ # TODO: Remove this after the following is resolved and the next ROS sync
+ # https://github.com/pal-robotics/mujoco_vendor/issues/2
+-target_link_options(mujoco_ros2_control PUBLIC
+-  "LINKER:--push-state,--no-as-needed"
+-  "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+-  "LINKER:--pop-state"
+-)
++if(NOT APPLE)
++  target_link_options(mujoco_ros2_control PUBLIC
++    "LINKER:--push-state,--no-as-needed"
++    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
++    "LINKER:--pop-state"
++  )
++endif()
+ target_link_libraries(mujoco_ros2_control
+ PUBLIC
+   hardware_interface::hardware_interface
+diff --git a/mujoco_ros2_control_plugins/CMakeLists.txt b/mujoco_ros2_control_plugins/CMakeLists.txt
+index 5800ce3..dec0e4a 100644
+--- a/mujoco_ros2_control_plugins/CMakeLists.txt
++++ b/mujoco_ros2_control_plugins/CMakeLists.txt
+@@ -76,11 +76,13 @@ if(BUILD_TESTING)
+   # Force tinyxml2 to appear first in the DT_NEEDED entries by using LINK_OPTIONS.
+   # TODO: Remove this after the following is resolved and the next ROS sync
+   # https://github.com/pal-robotics/mujoco_vendor/issues/2
+-  target_link_options(test_external_wrench_plugin PUBLIC
+-    "LINKER:--push-state,--no-as-needed"
+-    "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
+-    "LINKER:--pop-state"
+-  )
++  if(NOT APPLE)
++    target_link_options(test_external_wrench_plugin PUBLIC
++      "LINKER:--push-state,--no-as-needed"
++      "$<TARGET_LINKER_FILE:tinyxml2::tinyxml2>"
++      "LINKER:--pop-state"
++    )
++  endif()
+ 
+ endif()
+ 
+diff --git a/mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp b/mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp
+index 2f0e15d..3b34993 100644
+--- a/mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp
++++ b/mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp
+@@ -50,7 +50,8 @@ void HeartbeatPublisherPlugin::update(const mjModel* /*model*/, mjData* data)
+ 
+     heartbeat_publisher_->publish(message);
+ 
+-    RCLCPP_DEBUG(logger_, "Published heartbeat #%lu at simulation time %.3f", message_count_, data->time);
++    RCLCPP_DEBUG(logger_, "Published heartbeat #%llu at simulation time %.3f",
++                 static_cast<unsigned long long>(message_count_), data->time);
+ 
+     message_count_++;
+     last_publish_time_ = current_time;
+@@ -59,7 +60,8 @@ void HeartbeatPublisherPlugin::update(const mjModel* /*model*/, mjData* data)
+ 
+ void HeartbeatPublisherPlugin::cleanup()
+ {
+-  RCLCPP_INFO(logger_, "HeartbeatPublisherPlugin cleanup. Published %lu messages total.", message_count_);
++  RCLCPP_INFO(logger_, "HeartbeatPublisherPlugin cleanup. Published %llu messages total.",
++              static_cast<unsigned long long>(message_count_));
+ 
+   heartbeat_publisher_.reset();
+   node_.reset();

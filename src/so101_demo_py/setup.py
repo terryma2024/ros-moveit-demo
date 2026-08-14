@@ -17,7 +17,9 @@ def installed_resources() -> list[tuple[str, list[str]]]:
         for path in sorted(root.rglob("*")):
             if path.is_file() and "__pycache__" not in path.parts:
                 relative = path.relative_to(package_root)
-                entries.append((f"share/{package_name}/{relative.parent}", [str(relative)]))
+                entries.append(
+                    (f"share/{package_name}/{relative.parent}", [str(relative)])
+                )
     return entries
 
 
@@ -38,7 +40,7 @@ setup(
     install_requires=["setuptools", "typing_extensions"],
     zip_safe=True,
     maintainer="SO-101 maintainers",
-    maintainer_email="maintainer@example.com",
+    maintainer_email="zjumty@gmail.com",
     description="Unified SO-101 MuJoCo and Gazebo pick-place demonstration.",
     license="Apache-2.0",
     tests_require=["pytest"],
@@ -49,6 +51,7 @@ setup(
             "scene_setup = so101_demo.cli.scene_setup:main",
             "gazebo_execute = so101_demo.backends.gazebo.execute:main",
             "gazebo_ready = so101_demo.cli.gazebo_ready:main",
+            "coke_pose_subscriber = so101_demo.cli.coke_pose_subscriber:main",
             "camera_preset = so101_demo.cli.camera_preset:main",
             "teleop_reset = so101_demo.cli.teleop_reset:main",
             "teleop_workflow = so101_demo.cli.teleop_workflow:main",

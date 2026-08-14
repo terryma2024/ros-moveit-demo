@@ -11,6 +11,17 @@ FUSION_CHECK = (
 )
 MACOS_VENDOR = REPOSITORY_ROOT / "tools" / "mujoco_vendor_macos"
 DYLIB_FARM = REPOSITORY_ROOT / "scripts" / "setup-macos-ros-dylib-farm.zsh"
+ENVRC_EXAMPLE = REPOSITORY_ROOT / ".envrc.example"
+
+
+def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:
+    envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
+    dylib_farm = DYLIB_FARM.read_text(encoding="utf-8")
+
+    assert 'ros_underlay="${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}"' in envrc
+    assert '"$ros_underlay/setup.bash"' in envrc
+    assert 'ros_underlay="${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}"' in dylib_farm
+    assert 'default_prefixes="${ros_underlay}:' in dylib_farm
 
 
 def test_mujoco_installer_accepts_source_overlay_underlay() -> None:
