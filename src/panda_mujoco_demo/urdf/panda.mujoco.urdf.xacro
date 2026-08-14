@@ -5,6 +5,20 @@
         default="$(find panda_mujoco_demo)/config/initial_positions.yaml" />
     <xacro:arg name="headless" default="false" />
 
+    <!-- Provide the `world` frame the SRDF virtual_joint expects
+         (parent_frame="world", child_link="panda_link0"). Unlike the Gazebo
+         URDF, where world sits on the floor and panda_link0 is offset z=0.775
+         to the table top, the MuJoCo scene already centers panda_link0 at the
+         world origin (see README 5.2), so the fixed joint here is a zero-offset
+         identity transform. This only publishes TF world->panda_link0 for
+         MoveIt's PlanningSceneMonitor; it does not move the MuJoCo body. -->
+    <link name="world" />
+    <joint name="world_to_panda" type="fixed">
+        <parent link="world" />
+        <child link="panda_link0" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </joint>
+
     <!-- Import the kinematic/visual description (links + joints), verbatim from
          the Gazebo package so MoveIt and robot_state_publisher see identical
          link names (panda_link0..8, panda_hand, panda_leftfinger/rightfinger,
