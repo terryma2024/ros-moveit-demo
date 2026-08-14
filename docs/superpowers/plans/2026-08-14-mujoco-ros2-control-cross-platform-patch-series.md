@@ -1,5 +1,7 @@
 # `mujoco_ros2_control` Cross-Platform Patch Series Implementation Plan
 
+> Superseded on 2026-08-14 by `so101-0.0.3-r7`. This document records the validated migration input; active builds consume the clean fork and do not replay this series.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Linux and macOS apply the same ordered patch series to the locked `mujoco_ros2_control` commit and prove that both platforms build and test successfully.

@@ -72,7 +72,7 @@ OMPL 2.0.1 需要 Homebrew `libomp`。配置源码构建时使用：
 -DOpenMP_omp_LIBRARY=/opt/homebrew/opt/libomp/lib/libomp.dylib
 ```
 
-## 构建与跨平台补丁
+## 构建与跨平台 fork
 
 重建聚合 dylib 目录：
 
@@ -95,27 +95,25 @@ SO101_ROS_DEPENDENCY_OVERLAY=~/ros2_jazzy/extra_ws/install \
 ./scripts/install-mujoco-ros2-control.zsh
 ```
 
-fork 固定在提交 `738e304...`。安装器在 Linux 和 macOS 上都对独立 build source 重放
-同一个 `scripts/patches/mujoco_ros2_control/series`，随后清缓存构建、运行包测试，并检查
-package prefix 和动态库。平台差异只由补丁后源码中的 `APPLE` / `__APPLE__` 条件分支
-控制；安装器不按操作系统跳过补丁。`third_party/mujoco_ros2_control` 必须保持 clean。
+fork 固定为 tag `so101-0.0.3-r7`、commit
+`6fa4485f1032dafdc76a515ddde8dd8bd6ccc23b`。11 项 macOS/Linux 兼容修改已经成为 fork 中
+11 个可审计 commit；fork Git 历史是唯一源码权威，主仓不再保存补丁文件，也不在构建时
+修改 fork source。安装器从 clean submodule 创建独立 build source，校验其 HEAD 和 clean
+状态后清缓存构建、运行包测试，再检查 package prefix、接口和动态库。
 
-当前 series 含 11 个按原验证顺序保留的 patch：portable heartbeat、平台 build/rpath、
-headless 渲染、Apple 主线程 UI、Apple framework、三项 Apple 测试运行库适配、C++17、
-转换告警，以及最后一个 Apple 测试依赖 guard。`series` 是唯一顺序来源，目录中不得存在
-未登记 patch，也不再保留第二套 `mujoco-ros2-control-macos*.patch`。
+不要复用带 r6 patch 的旧 `ws_mujoco_ros2_control_fork/src/mujoco_ros2_control`。安装器会对
+dirty 或非 r7 build source fail closed，不会 reset、clean 或反向移除用户文件；显式选择新的
+`SO101_WORKSPACE_DIR`，或先自行归档旧 workspace。
 
-维护 patch 时，从锁定的 clean commit 创建补丁并追加到 `series`，然后依次运行：正向应用、
-逆序移除后零 diff 的 round-trip contract，macOS build/test，以及 ai-station Linux
-build/test。单平台通过不能替代另一平台；Linux 侧还要确认 ELF 没有 Cocoa、CoreVideo 或
-AppKit 依赖，并保留 tinyxml2 的 `--push-state,--no-as-needed` link option。
+2026-08-14 的 r7 隔离验证中，两端使用同一 commit，且 r6→r7 组合 diff SHA-256 为
+`56b2f1033ccf48b44be6db8daee800f3f4d463048bd6cf2a7f8e58549ebde2f5`：macOS 通过 135 项测试，
+Linux 通过 134 项测试；macOS 多出的 1 项是 Apple 主线程 UI 专项测试。两端的 headless
+pause/reset/step smoke 均成功；这些 smoke 只验证跨平台运行边界，不计作新的资格批次。
+Linux ELF 不含 Cocoa、CoreVideo 或 AppKit，并保留 tinyxml2 的
+`--push-state,--no-as-needed` link option。
 
-2026-08-14 的隔离验证中，两端使用相同 candidate HEAD `13b1e9a`、fork commit、patch
-SHA-256 和 patched-tree SHA-256 `56b2f103...de2f5`：macOS 通过 135 项测试，Linux 通过 134 项测试；
-macOS 多出的 1 项是 Apple 主线程 UI 专项测试。两端的 headless reset/pause/step smoke
-均成功；这些 smoke 只验证跨平台运行边界，不计作新的资格批次。
-
-不要手工修改 submodule 或生成目录中的源码；所有适配必须能由该 series 重放。
+后续平台修复应作为普通 fork commit 提交；macOS 和 Linux 都通过后发布新的 `rN` tag，再
+更新主仓 gitlink 与 lock。不要手工修改 submodule 或生成目录中的源码。
 
 主要兼容修改如下：
 

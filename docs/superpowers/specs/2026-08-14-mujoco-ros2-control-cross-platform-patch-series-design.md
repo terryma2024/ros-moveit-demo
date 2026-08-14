@@ -1,5 +1,7 @@
 # `mujoco_ros2_control` 跨平台 Patch Series 设计
 
+> Superseded on 2026-08-14 by `so101-0.0.3-r7`. This document records the validated migration input; active builds consume the clean fork and do not replay this series.
+
 ## 目标
 
 仓库固定 `third_party/mujoco_ros2_control` 在提交

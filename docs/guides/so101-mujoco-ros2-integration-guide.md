@@ -41,14 +41,14 @@ URDF/SRDF 提供关节语义、TF、MoveIt group 和 controller 映射；MJCF �
 
 ## 2. 固定的 `mujoco_ros2_control` 依赖
 
-项目把 fork 作为 Git submodule 提交，而不是在构建时重放 patch：
+项目把 fork 作为 Git submodule 提交，并直接构建锁定的 clean fork source：
 
 | 项目 | 固定值 |
 |---|---|
 | submodule | `third_party/mujoco_ros2_control` |
 | fork | `git@gitee.com:zjumty/mujoco_ros2_control.git` |
-| release | `so101-0.0.3-r6` |
-| gitlink commit | `738e304551b4ea6db020b466086a13db71b65607` |
+| release | `so101-0.0.3-r7` |
+| gitlink commit | `6fa4485f1032dafdc76a515ddde8dd8bd6ccc23b` |
 | upstream tag | `0.0.3` |
 | upstream commit | `35ba8174b62d9560093614f981a3d4b978a96036` |
 | lock | `src/so101_demo_py/config/mujoco/dependency-lock.yaml` |
@@ -71,11 +71,13 @@ zsh scripts/install-mujoco-ros2-control.zsh --init-submodule
 1. 当前 checkout 是含已提交 gitlink 的 superproject；
 2. `.gitmodules`、lock、gitlink、submodule `HEAD` 四者一致；
 3. submodule clean，origin URL 正确，官方 0.0.3 是 fork commit 的祖先；
-4. r6 tag 精确解析到 locked commit；
-5. 三个 fork package 实际被发现、构建并测试。
+4. r7 tag 精确解析到 locked commit；
+5. 独立 build source 位于 locked commit 且保持 clean；
+6. 三个 fork package 实际被发现、构建并测试。
 
 默认输出位于 `$SO101_WORKSPACE_DIR/ws_mujoco_ros2_control_fork/{build,install,log}`。
-`mujoco_vendor` 继续来自 ROS underlay。
+`mujoco_vendor` 继续来自 ROS underlay。旧版本或 dirty build source 会 fail closed；选择新的
+`SO101_WORKSPACE_DIR` 或先显式归档旧 workspace，安装器不会自动清理用户文件。
 
 ### 2.2 source 顺序
 
@@ -97,7 +99,7 @@ ros2 pkg prefix so101_demo_py
 `so101_demo_py` 必须落在本次项目 install。切换 provider 后应使用新的 build/install 目录或
 `--cmake-clean-cache`，避免 CMake cache 继续引用 apt header。
 
-## 3. r1–r6 变更账本
+## 3. r1–r7 变更账本
 
 fork 从官方 0.0.3 依次增加以下发布能力：
 
@@ -109,9 +111,10 @@ fork 从官方 0.0.3 依次增加以下发布能力：
 | r4 | `20c77cd` | reset 后发布 authoritative snapshot，使新 epoch 有锁内权威帧。 |
 | r5 | `f42b7b3` | viewer 在创建 OpenGL context 的 render thread 上销毁，修复 GUI clean shutdown。 |
 | r6 | `738e304` | 增加每个成功 physics step 后的 plugin hook，覆盖全部 stepping path。 |
+| r7 | `6fa4485` | 纳入 11 个跨平台 build/runtime commit，移除主仓补丁层，Linux 与 macOS 直接构建同一 clean fork。 |
 
 r1 之前的 fork commits `07550eb` 与 `138e79b` 分别引入 reset/pause/snapshot hooks 和 viewer
-camera state model；它们也是 r1–r6 历史的祖先。
+camera state model；它们也是 r1–r7 历史的祖先。
 
 ## 4. r6：逐 physics-step 权威证据
 
