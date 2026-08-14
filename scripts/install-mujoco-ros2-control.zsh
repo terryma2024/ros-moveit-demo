@@ -79,30 +79,6 @@ PY
   log_base=${fork_workspace}/log
   source_dir=${project_root}/${submodule_path}
   build_source_dir=${fork_workspace}/src/mujoco_ros2_control
-  patch_series_dir=${project_root}/scripts/patches/mujoco_ros2_control
-  patch_series_file=${patch_series_dir}/series
-}
-
-load_patch_series() {
-  [[ -f ${patch_series_file} ]] || fail "patch series is missing: ${patch_series_file}"
-  portable_patches=()
-  local entry portable_patch
-  while IFS= read -r entry || [[ -n ${entry} ]]; do
-    [[ -z ${entry} || ${entry} == \#* ]] && continue
-    [[ ${entry} != /* && ${entry} != */* && ${entry} != *..* && ${entry} == *.patch ]] ||
-      fail "invalid patch series entry: ${entry}"
-    portable_patch=${patch_series_dir}/${entry}
-    [[ -f ${portable_patch} ]] || fail "series patch is missing: ${entry}"
-    (( ${portable_patches[(Ie)${portable_patch}]} == 0 )) ||
-      fail "duplicate patch series entry: ${entry}"
-    portable_patches+=("${portable_patch}")
-  done < "${patch_series_file}"
-  (( ${#portable_patches} > 0 )) || fail "patch series is empty"
-
-  for portable_patch in ${patch_series_dir}/*.patch(N); do
-    (( ${portable_patches[(Ie)${portable_patch}]} > 0 )) ||
-      fail "patch is not registered in series: ${portable_patch:t}"
-  done
 }
 
 initialize_submodule() {
@@ -156,24 +132,6 @@ verify_source_identity() {
   [[ ${tagged_commit} == ${fork_commit} ]] || fail "fork release tag does not resolve to locked commit"
 }
 
-apply_patch_series() {
-  local source_dir=$1 patch_index portable_patch
-  for (( patch_index=${#portable_patches}; patch_index >= 1; --patch_index )); do
-    portable_patch=${portable_patches[patch_index]}
-    if git -C "${source_dir}" apply --reverse --check "${portable_patch}" 2>/dev/null; then
-      git -C "${source_dir}" apply --reverse "${portable_patch}"
-    fi
-  done
-  [[ -z $(git -C "${source_dir}" status --porcelain --untracked-files=all) ]] ||
-    fail "build source contains changes outside the approved patch series: ${source_dir}"
-
-  for portable_patch in "${portable_patches[@]}"; do
-    git -C "${source_dir}" apply --check "${portable_patch}" ||
-      fail "portable patch does not apply cleanly: ${portable_patch}"
-    git -C "${source_dir}" apply "${portable_patch}"
-  done
-}
-
 prepare_build_source() {
   if [[ ! -e ${build_source_dir}/.git ]]; then
     mkdir -p "${build_source_dir:h}"
@@ -182,8 +140,10 @@ prepare_build_source() {
   fi
   [[ $(git -C "${build_source_dir}" rev-parse HEAD) == ${fork_commit} ]] ||
     fail "build source is not at locked commit: ${build_source_dir}"
-
-  apply_patch_series "${build_source_dir}"
+  local build_source_changes
+  build_source_changes=$(git -C "${build_source_dir}" status --porcelain --untracked-files=all)
+  [[ -z ${build_source_changes} ]] ||
+    fail "build source must be clean at locked fork commit: ${build_source_dir}"
 }
 
 build_and_test_overlay() {
@@ -263,7 +223,6 @@ main() {
   done
 
   resolve_project_root
-  load_patch_series
   verify_superproject_gitlink
   if [[ ! -e ${source_dir}/.git ]]; then
     if [[ ${init_submodule} == true ]]; then
