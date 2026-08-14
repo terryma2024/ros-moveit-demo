@@ -12,6 +12,111 @@ FUSION_CHECK = (
 MACOS_VENDOR = REPOSITORY_ROOT / "tools" / "mujoco_vendor_macos"
 DYLIB_FARM = REPOSITORY_ROOT / "scripts" / "setup-macos-ros-dylib-farm.zsh"
 ENVRC_EXAMPLE = REPOSITORY_ROOT / ".envrc.example"
+PATCH_SERIES_DIR = REPOSITORY_ROOT / "scripts" / "patches" / "mujoco_ros2_control"
+PATCH_SERIES_FILE = PATCH_SERIES_DIR / "series"
+SUBMODULE = REPOSITORY_ROOT / "third_party" / "mujoco_ros2_control"
+LOCKED_FORK_COMMIT = "738e304551b4ea6db020b466086a13db71b65607"
+
+
+def _patch_series_entries() -> list[str]:
+    return [
+        line.strip()
+        for line in PATCH_SERIES_FILE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def test_cross_platform_patch_series_is_the_only_authority() -> None:
+    entries = _patch_series_entries()
+
+    assert entries
+    assert len(entries) == len(set(entries))
+    assert all(Path(entry).name == entry and ".." not in entry for entry in entries)
+    assert {path.name for path in PATCH_SERIES_DIR.glob("*.patch")} == set(entries)
+    assert not (
+        REPOSITORY_ROOT / "patches/mujoco_ros2_control/macos-format-uint64.patch"
+    ).exists()
+    attributes = (REPOSITORY_ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "scripts/patches/mujoco_ros2_control/*.patch -whitespace" in attributes
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "scripts/patches/mujoco_ros2_control"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert {str(PATCH_SERIES_FILE.relative_to(REPOSITORY_ROOT))} | {
+        str((PATCH_SERIES_DIR / entry).relative_to(REPOSITORY_ROOT))
+        for entry in entries
+    } <= set(tracked)
+
+
+def test_cross_platform_patch_series_round_trips_locked_commit(
+    tmp_path: Path,
+) -> None:
+    checkout = tmp_path / "fork"
+    subprocess.run(
+        ["git", "clone", "--shared", "--no-checkout", str(SUBMODULE), str(checkout)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(checkout), "checkout", "--detach", LOCKED_FORK_COMMIT],
+        check=True,
+    )
+    entries = _patch_series_entries()
+    for entry in entries:
+        patch = PATCH_SERIES_DIR / entry
+        subprocess.run(
+            ["git", "-C", str(checkout), "apply", "--check", str(patch)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(checkout), "apply", str(patch)], check=True
+        )
+
+    heartbeat = (
+        checkout
+        / "mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp"
+    ).read_text(encoding="utf-8")
+    assert "PRIu64" in heartbeat
+    assert "Published heartbeat #%llu" not in heartbeat
+
+    for entry in reversed(entries):
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(checkout),
+                "apply",
+                "--reverse",
+                str(PATCH_SERIES_DIR / entry),
+            ],
+            check=True,
+        )
+    status = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(checkout),
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert status.stdout == ""
+
+
+def test_installer_applies_the_same_series_on_every_platform() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert "patch_series_file=" in installer
+    assert "load_patch_series" in installer
+    assert 'apply_patch_series "${build_source_dir}"' in installer
+    assert "if [[ $(uname -s) == Darwin ]]" not in installer
 
 
 def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:
