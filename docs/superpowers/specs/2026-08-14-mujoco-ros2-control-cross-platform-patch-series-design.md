@@ -42,13 +42,19 @@ scripts/patches/mujoco_ros2_control/
 ├── series
 ├── 0001-portable-heartbeat-format.patch
 ├── 0002-platform-build-and-rpath.patch
-├── 0003-headless-rendering.patch
+├── 0003-headless-rendering-control.patch
 ├── 0004-apple-main-thread-ui.patch
-├── 0005-apple-frameworks.patch
-└── 0006-test-runtime-paths.patch
+├── 0005-apple-framework-linkage.patch
+├── 0006-apple-test-logging-runtime.patch
+├── 0007-apple-test-rmw-runtime.patch
+├── 0008-platform-cxx17-requirements.patch
+├── 0009-apple-conversion-warnings.patch
+├── 0010-apple-test-backward-runtime.patch
+└── 0011-guard-apple-test-runtime-dependencies.patch
 ```
 
-最终文件数可以根据 hunk 依赖微调，但必须遵守以下规则：
+实施时保留原 10 个已验证 patch 的相对顺序，并追加第 11 个 guard patch，将 Apple 测试
+依赖和 `APPEND_LIBRARY_DIRS` 收紧到 `APPLE` 分支。所有文件必须遵守以下规则：
 
 - `series` 是唯一顺序来源，每行一个相对 patch 文件名；
 - 文件名使用数字前缀，应用顺序不依赖 glob 或文件系统排序；

@@ -141,10 +141,15 @@ git commit -m "test: require portable mujoco patch series"
 - Create: `scripts/patches/mujoco_ros2_control/series`
 - Create: `scripts/patches/mujoco_ros2_control/0001-portable-heartbeat-format.patch`
 - Create: `scripts/patches/mujoco_ros2_control/0002-platform-build-and-rpath.patch`
-- Create: `scripts/patches/mujoco_ros2_control/0003-headless-rendering.patch`
+- Create: `scripts/patches/mujoco_ros2_control/0003-headless-rendering-control.patch`
 - Create: `scripts/patches/mujoco_ros2_control/0004-apple-main-thread-ui.patch`
-- Create: `scripts/patches/mujoco_ros2_control/0005-apple-frameworks.patch`
-- Create: `scripts/patches/mujoco_ros2_control/0006-test-runtime-paths.patch`
+- Create: `scripts/patches/mujoco_ros2_control/0005-apple-framework-linkage.patch`
+- Create: `scripts/patches/mujoco_ros2_control/0006-apple-test-logging-runtime.patch`
+- Create: `scripts/patches/mujoco_ros2_control/0007-apple-test-rmw-runtime.patch`
+- Create: `scripts/patches/mujoco_ros2_control/0008-platform-cxx17-requirements.patch`
+- Create: `scripts/patches/mujoco_ros2_control/0009-apple-conversion-warnings.patch`
+- Create: `scripts/patches/mujoco_ros2_control/0010-apple-test-backward-runtime.patch`
+- Create: `scripts/patches/mujoco_ros2_control/0011-guard-apple-test-runtime-dependencies.patch`
 - Modify: `.gitattributes`
 - Delete: `scripts/patches/mujoco-ros2-control-macos*.patch`
 - Delete: `patches/mujoco_ros2_control/macos-format-uint64.patch`
@@ -152,7 +157,7 @@ git commit -m "test: require portable mujoco patch series"
 
 **Interfaces:**
 - Consumes: the ten legacy patches in their current installer order and the saved submodule diff from Task 1.
-- Produces: one `series` manifest whose six patch files apply cleanly to `LOCKED_FORK_COMMIT` on every OS.
+- Produces: one `series` manifest whose eleven patch files apply cleanly to `LOCKED_FORK_COMMIT` on every OS.
 
 - [ ] **Step 1: Create a clean scratch repository and apply the legacy stack**
 
@@ -205,56 +210,37 @@ endfunction()
 
 The plugins test CMake uses the same pattern for `test_external_wrench_plugin`. Preserve all existing `target_link_libraries` calls.
 
-- [ ] **Step 3: Split the final diff into six topic commits in the scratch repository**
+- [ ] **Step 3: Preserve the ten verified topic boundaries and add one guard topic**
 
-Use `git add -p` so each commit contains only its named responsibility:
+Keep the ten legacy patches in their already-verified relative order. Rename them into the portable
+series namespace without squashing, then add one final topic commit that moves Apple-only test
+dependencies and `APPEND_LIBRARY_DIRS` behind `if(APPLE)`. This minimizes semantic drift while making
+the complete sequence valid on Linux.
 
-```zsh
-git -C "$scratch" add -p mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp
-git -C "$scratch" commit -m "portable heartbeat format"
-git -C "$scratch" add -p mujoco_ros2_control/CMakeLists.txt \
-  mujoco_ros2_control/src/mujoco_system_interface.cpp \
-  mujoco_ros2_control_plugins/CMakeLists.txt
-git -C "$scratch" commit -m "platform build and rpath"
-git -C "$scratch" add -p mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp \
-  mujoco_ros2_control/src/mujoco_system_interface.cpp \
-  mujoco_ros2_control/tests/test_headless_init.cpp
-git -C "$scratch" commit -m "headless rendering control"
-git -C "$scratch" add -p mujoco_ros2_control/CMakeLists.txt \
-  mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp \
-  mujoco_ros2_control/src/mujoco_ros2_control_node.cpp \
-  mujoco_ros2_control/src/mujoco_system_interface.cpp \
-  mujoco_ros2_control/tests/test_headless_init.cpp
-git -C "$scratch" commit -m "Apple main thread UI"
-git -C "$scratch" add -p mujoco_ros2_control/CMakeLists.txt
-git -C "$scratch" commit -m "Apple framework linkage"
-git -C "$scratch" add mujoco_ros2_control/tests/CMakeLists.txt \
-  mujoco_ros2_control_plugins/CMakeLists.txt
-git -C "$scratch" commit -m "platform test runtime paths"
-```
-
-For files shared by multiple commits, accept only the hunks named by the current commit. After the
-sixth commit, require `git -C "$scratch" status --short` to be empty; otherwise move each remaining
-hunk into its owning topic before export.
-
-Before exporting, require exactly six commits above the locked base:
+Before exporting, require exactly eleven commits above the locked base and an empty scratch status:
 
 ```zsh
-test "$(git -C "$scratch" rev-list --count 738e304551b4ea6db020b466086a13db71b65607..HEAD)" -eq 6
+test "$(git -C "$scratch" rev-list --count 738e304551b4ea6db020b466086a13db71b65607..HEAD)" -eq 11
+test -z "$(git -C "$scratch" status --short)"
 ```
 
 - [ ] **Step 4: Export the series and add its manifest**
 
 Run `git format-patch --no-signature --zero-commit --no-stat` into
-`scripts/patches/mujoco_ros2_control/`, then rename the generated files to the six exact names in the Files section. Add `series` with this exact order:
+`scripts/patches/mujoco_ros2_control/`, then rename the generated files to the eleven exact names in the Files section. Add `series` with this exact order:
 
 ```text
 0001-portable-heartbeat-format.patch
 0002-platform-build-and-rpath.patch
-0003-headless-rendering.patch
+0003-headless-rendering-control.patch
 0004-apple-main-thread-ui.patch
-0005-apple-frameworks.patch
-0006-test-runtime-paths.patch
+0005-apple-framework-linkage.patch
+0006-apple-test-logging-runtime.patch
+0007-apple-test-rmw-runtime.patch
+0008-platform-cxx17-requirements.patch
+0009-apple-conversion-warnings.patch
+0010-apple-test-backward-runtime.patch
+0011-guard-apple-test-runtime-dependencies.patch
 ```
 
 Add this exact `.gitattributes` rule:
@@ -561,7 +547,7 @@ SO101_ROS_DEPENDENCY_OVERLAY=/opt/ros/jazzy \
   |& tee /tmp/so101-debug-mujoco-portable-patch-series/linux-installer.log
 ```
 
-Expected: the installer logs the same six series entries, builds the three packages, and reports all package tests passing.
+Expected: the installer applies the same eleven series entries, builds the three packages, and reports all package tests passing.
 
 - [ ] **Step 5: Verify Linux linkage and behavior boundary**
 
@@ -629,7 +615,7 @@ Expected: all tests PASS, syntax and diff checks pass, submodule is clean.
 
 - [ ] **Step 3: Compare final platform evidence**
 
-Require both platform reports to contain the same candidate HEAD, fork commit, `series` SHA-256 list, and six entries. Record macOS and Linux build/test counts separately; do not infer one from the other.
+Require both platform reports to contain the same candidate HEAD, fork commit, `series` SHA-256 list, eleven entries, and patched-tree SHA-256. Record macOS and Linux build/test counts separately; do not infer one from the other. The accepted 2026-08-14 run produced 135 macOS tests and 134 Linux tests; the one-test difference is the `APPLE`-only main-thread UI test.
 
 - [ ] **Step 4: Commit documentation**
 
