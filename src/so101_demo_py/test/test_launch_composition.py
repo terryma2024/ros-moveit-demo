@@ -2,6 +2,7 @@ import importlib.util
 import inspect
 from pathlib import Path
 
+from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument
 from so101_demo.runtime import launch_composition
 from so101_demo.runtime.launch_composition import COMMON_ARGUMENTS, build_launch_description
@@ -50,6 +51,24 @@ def test_common_arguments_and_backend_specific_asset_arguments() -> None:
             assert "mujoco_scene" not in declared
 
 
+def test_default_readiness_budget_covers_macos_source_build_startup() -> None:
+    description = build_launch_description(backend="mujoco", pick_place=False)
+    argument = next(
+        action
+        for action in description.entities
+        if isinstance(action, DeclareLaunchArgument)
+        and action.name == "readiness_timeout_s"
+    )
+
+    assert float(argument.default_value[0].perform(LaunchContext())) >= 90.0
+
+
+def test_mujoco_scene_setup_receives_the_launch_readiness_budget() -> None:
+    source = inspect.getsource(launch_composition._mujoco_execute_actions)
+
+    assert 'parameters=[{"readiness_timeout_s": float(timeout)}]' in source
+
+
 def test_pick_place_toggle_changes_only_workflow_launch() -> None:
     stack = _declared(build_launch_description(backend="mujoco", pick_place=False))
     workflow = _declared(build_launch_description(backend="mujoco", pick_place=True))
@@ -81,3 +100,21 @@ def test_launch_source_reports_first_gazebo_phase_failure() -> None:
     assert '"Gazebo readiness"' in source
     assert '"Gazebo Planning Scene setup"' in source
     assert "TimerAction(period=12.0" not in source
+
+
+def test_mujoco_rendering_avoids_worker_thread_glfw_windows_on_macos() -> None:
+    share = PACKAGE_ROOT
+
+    headless = launch_composition._render_mujoco_robot_description(
+        share, "scene.xml", headless=True, platform_name="linux"
+    )
+    linux_interactive = launch_composition._render_mujoco_robot_description(
+        share, "scene.xml", headless=False, platform_name="linux"
+    )
+    macos_interactive = launch_composition._render_mujoco_robot_description(
+        share, "scene.xml", headless=False, platform_name="darwin"
+    )
+
+    assert '<param name="disable_rendering">true</param>' in headless
+    assert '<param name="disable_rendering">false</param>' in linux_interactive
+    assert '<param name="disable_rendering">true</param>' in macos_interactive

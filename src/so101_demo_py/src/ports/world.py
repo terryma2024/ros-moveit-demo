@@ -1,7 +1,7 @@
 """Physical-world observation and reset boundary."""
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing_extensions import Protocol, runtime_checkable
 
 from .evidence import ReceivedWorldEvidence, WorldEvidence
 

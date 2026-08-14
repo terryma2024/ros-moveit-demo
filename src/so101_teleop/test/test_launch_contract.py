@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,12 @@ from launch_ros.actions import Node
 
 PACKAGE = Path(__file__).resolve().parents[1]
 LAUNCH = PACKAGE / "launch" / "so101_teleop.launch.py"
+
+
+def test_macos_ctest_preserves_ros_dylib_search_paths():
+    cmake = (PACKAGE / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert 'string(REPLACE ":" ";" so101_ament_prefixes' in cmake
+    assert "APPEND_LIBRARY_DIRS ${so101_test_library_dirs}" in cmake
 
 
 def load_launch_module():
@@ -63,6 +70,8 @@ def test_launch_starts_new_package_and_freezes_backend_environment(
     assert node.node_package == "so101_teleop"
     assert node.node_executable == "so101_teleop_server.py"
     process = vars(node)["_ExecuteLocal__process_description"]
+    if sys.platform == "darwin":
+        assert perform_substitutions(context, vars(process)["_Executable__prefix"]) == sys.executable
     environment = {
         perform_substitutions(context, key): perform_substitutions(context, value)
         for key, value in vars(process)["_Executable__additional_env"]

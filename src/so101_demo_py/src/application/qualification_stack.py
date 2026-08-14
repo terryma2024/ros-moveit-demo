@@ -3,10 +3,26 @@
 from __future__ import annotations
 
 import argparse
+import os
 import signal
 import subprocess
 import sys
 import time
+
+
+def start_children(commands: list[list[str]]) -> list[subprocess.Popen]:
+    """Give each ros2 launch owner a group that includes all of its ROS children."""
+
+    return [subprocess.Popen(command, start_new_session=True) for command in commands]
+
+
+def signal_child_group(child: subprocess.Popen, value: signal.Signals) -> None:
+    """Signal launch and its descendants together on platforms with POSIX groups."""
+
+    try:
+        os.killpg(child.pid, value)
+    except ProcessLookupError:
+        pass
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +58,7 @@ def main(arguments: list[str] | None = None) -> int:
             "build_web_if_needed:=false",
         ],
     ]
-    children = [subprocess.Popen(command) for command in commands]
+    children = start_children(commands)
     interrupted = False
 
     def on_interrupt(_signum, _frame) -> None:
@@ -57,13 +73,13 @@ def main(arguments: list[str] | None = None) -> int:
         signal.signal(signal.SIGINT, previous)
         for child in children:
             if child.poll() is None:
-                child.send_signal(signal.SIGINT)
+                signal_child_group(child, signal.SIGINT)
         returncodes = []
         for child in children:
             try:
                 returncodes.append(child.wait(timeout=60.0))
             except subprocess.TimeoutExpired:
-                child.terminate()
+                signal_child_group(child, signal.SIGTERM)
                 returncodes.append(child.wait(timeout=10.0))
     return 0 if interrupted and all(code == 0 for code in returncodes) else 1
 
