@@ -1,7 +1,10 @@
+import hashlib
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+import yaml
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -13,110 +16,119 @@ MACOS_VENDOR = REPOSITORY_ROOT / "tools" / "mujoco_vendor_macos"
 DYLIB_FARM = REPOSITORY_ROOT / "scripts" / "setup-macos-ros-dylib-farm.zsh"
 ENVRC_EXAMPLE = REPOSITORY_ROOT / ".envrc.example"
 PATCH_SERIES_DIR = REPOSITORY_ROOT / "scripts" / "patches" / "mujoco_ros2_control"
-PATCH_SERIES_FILE = PATCH_SERIES_DIR / "series"
 SUBMODULE = REPOSITORY_ROOT / "third_party" / "mujoco_ros2_control"
-LOCKED_FORK_COMMIT = "738e304551b4ea6db020b466086a13db71b65607"
+LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco/dependency-lock.yaml"
+RUNTIME_LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/dependency-lock.yaml"
+R6_FORK_COMMIT = "738e304551b4ea6db020b466086a13db71b65607"
+EXPECTED_PORTABLE_DIFF_SHA256 = (
+    "56b2f1033ccf48b44be6db8daee800f3f4d463048bd6cf2a7f8e58549ebde2f5"
+)
 
 
-def _patch_series_entries() -> list[str]:
-    return [
-        line.strip()
-        for line in PATCH_SERIES_FILE.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
+def test_r7_fork_is_the_only_portable_source_authority() -> None:
+    lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+    runtime_lock = yaml.safe_load(RUNTIME_LOCK.read_text(encoding="utf-8"))
 
-
-def test_cross_platform_patch_series_is_the_only_authority() -> None:
-    entries = _patch_series_entries()
-
-    assert entries
-    assert len(entries) == len(set(entries))
-    assert all(Path(entry).name == entry and ".." not in entry for entry in entries)
-    assert {path.name for path in PATCH_SERIES_DIR.glob("*.patch")} == set(entries)
-    assert not (
-        REPOSITORY_ROOT / "patches/mujoco_ros2_control/macos-format-uint64.patch"
-    ).exists()
+    assert lock["fork"]["tag"] == "so101-0.0.3-r7"
+    assert runtime_lock["fork"]["tag"] == "so101-0.0.3-r7"
+    assert runtime_lock["fork"]["commit"] == lock["fork"]["commit"]
+    assert (
+        runtime_lock["fork"]["policy_behavior_commit"]
+        == lock["fork"]["policy_behavior_commit"]
+    )
+    assert not PATCH_SERIES_DIR.exists()
     attributes = (REPOSITORY_ROOT / ".gitattributes").read_text(encoding="utf-8")
-    assert "scripts/patches/mujoco_ros2_control/*.patch -whitespace" in attributes
+    assert "scripts/patches/mujoco_ros2_control" not in attributes
 
-    tracked = subprocess.run(
-        ["git", "ls-files", "scripts/patches/mujoco_ros2_control"],
+
+def test_r7_gitlink_history_and_portable_bytes_are_exact() -> None:
+    lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+    locked_commit = lock["fork"]["commit"]
+    gitlink = subprocess.run(
+        ["git", "ls-files", "--stage", "--", "third_party/mujoco_ros2_control"],
         cwd=REPOSITORY_ROOT,
         check=True,
         capture_output=True,
         text=True,
-    ).stdout.splitlines()
-    assert {str(PATCH_SERIES_FILE.relative_to(REPOSITORY_ROOT))} | {
-        str((PATCH_SERIES_DIR / entry).relative_to(REPOSITORY_ROOT))
-        for entry in entries
-    } <= set(tracked)
-
-
-def test_cross_platform_patch_series_round_trips_locked_commit(
-    tmp_path: Path,
-) -> None:
-    checkout = tmp_path / "fork"
-    subprocess.run(
-        ["git", "clone", "--shared", "--no-checkout", str(SUBMODULE), str(checkout)],
-        check=True,
-    )
-    subprocess.run(
-        ["git", "-C", str(checkout), "checkout", "--detach", LOCKED_FORK_COMMIT],
-        check=True,
-    )
-    entries = _patch_series_entries()
-    for entry in entries:
-        patch = PATCH_SERIES_DIR / entry
+    ).stdout.split()[1]
+    assert gitlink == locked_commit
+    assert (
         subprocess.run(
-            ["git", "-C", str(checkout), "apply", "--check", str(patch)],
+            ["git", "-C", str(SUBMODULE), "rev-parse", "HEAD"],
             check=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(checkout), "apply", str(patch)], check=True
-        )
-
-    heartbeat = (
-        checkout
-        / "mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp"
-    ).read_text(encoding="utf-8")
-    assert "PRIu64" in heartbeat
-    assert "Published heartbeat #%llu" not in heartbeat
-
-    for entry in reversed(entries):
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        == locked_commit
+    )
+    assert (
         subprocess.run(
             [
                 "git",
                 "-C",
-                str(checkout),
-                "apply",
-                "--reverse",
-                str(PATCH_SERIES_DIR / entry),
+                str(SUBMODULE),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
             ],
             check=True,
-        )
-    status = subprocess.run(
+            capture_output=True,
+            text=True,
+        ).stdout
+        == ""
+    )
+    subprocess.run(
         [
             "git",
             "-C",
-            str(checkout),
-            "status",
-            "--porcelain",
-            "--untracked-files=all",
+            str(SUBMODULE),
+            "merge-base",
+            "--is-ancestor",
+            R6_FORK_COMMIT,
+            locked_commit,
+        ],
+        check=True,
+    )
+    subjects = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(SUBMODULE),
+            "log",
+            "--format=%s",
+            "--reverse",
+            f"{R6_FORK_COMMIT}..{locked_commit}",
         ],
         check=True,
         capture_output=True,
         text=True,
-    )
-    assert status.stdout == ""
-
-
-def test_installer_applies_the_same_series_on_every_platform() -> None:
-    installer = INSTALLER.read_text(encoding="utf-8")
-
-    assert "patch_series_file=" in installer
-    assert "load_patch_series" in installer
-    assert 'apply_patch_series "${build_source_dir}"' in installer
-    assert "if [[ $(uname -s) == Darwin ]]" not in installer
+    ).stdout.splitlines()
+    assert subjects == [
+        "portable heartbeat format",
+        "platform build and rpath",
+        "headless rendering control",
+        "Apple main thread UI",
+        "Apple framework linkage",
+        "Apple test logging runtime",
+        "Apple test RMW runtime",
+        "platform C++17 requirements",
+        "Apple conversion warnings",
+        "Apple test backward runtime",
+        "guard Apple test runtime dependencies",
+    ]
+    portable_diff = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(SUBMODULE),
+            "diff",
+            "--binary",
+            f"{R6_FORK_COMMIT}..{locked_commit}",
+        ],
+        check=True,
+        capture_output=True,
+    ).stdout
+    assert hashlib.sha256(portable_diff).hexdigest() == EXPECTED_PORTABLE_DIFF_SHA256
 
 
 def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:
@@ -145,17 +157,20 @@ def test_mujoco_installer_validates_platform_library_names() -> None:
     assert 'suffix = ".dylib" if platform.system() == "Darwin" else ".so"' in installer
 
 
-def test_mujoco_installer_applies_portable_series_to_build_copy() -> None:
+def test_installer_builds_a_clean_locked_fork_without_patch_application() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
 
-    assert "patch_series_file=" in installer
-    assert "load_patch_series" in installer
-    assert 'apply_patch_series "${build_source_dir}"' in installer
-    assert "if [[ $(uname -s) == Darwin ]]" not in installer
+    for forbidden in (
+        "patch_series",
+        "portable_patches",
+        "apply_patch_series",
+        "git apply",
+        "if [[ $(uname -s) == Darwin ]]",
+    ):
+        assert forbidden not in installer
     assert '--base-paths "${build_source_dir}"' in installer
-    assert 'for (( patch_index=${#portable_patches}; patch_index >= 1; --patch_index ))' in installer
-    assert 'apply --reverse "${portable_patch}"' in installer
-    assert 'for portable_patch in "${portable_patches[@]}"' in installer
+    assert "status --porcelain --untracked-files=all" in installer
+    assert "build source must be clean" in installer
 
 
 def test_fusion_contract_uses_portable_sha256() -> None:
