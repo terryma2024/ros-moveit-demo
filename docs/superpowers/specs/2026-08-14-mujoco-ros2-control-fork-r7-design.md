@@ -116,3 +116,15 @@ verification。两端 `ros2 pkg prefix` 必须指向本轮候选 install，不�
 - `moveit-demo` gitlink、lock、installer、contract 和指南都改为 r7 单一权威；
 - feature worktree clean，原 main worktree 的用户改动未被覆盖；
 - retained、archived 和 deletion candidates 已分别报告。
+
+## 实施状态（2026-08-14）
+
+- r7 commit 为 `6fa4485f1032dafdc76a515ddde8dd8bd6ccc23b`；Gitee `main`、annotated
+  tag `so101-0.0.3-r7` 的 peeled commit 和 Gitee API 回读均解析到该 commit。
+- macOS 从 clean candidate 构建 3 个 fork package，135 项测试零失败；Linux 构建相同
+  3 个 package，134 项测试零失败。两端 package prefix、接口和平台链接边界均通过。
+- macOS 与 Linux 的隔离 headless smoke 均完成 controller deactivate、pause、
+  `ResetWorld(task_start)` 和单步推进，所有服务返回成功；这些 smoke 不构成新的五连胜资格。
+- `moveit-demo` 依赖权威迁移提交为
+  `3630a5d852c605858344ee78b7ea49c57b79e321`：gitlink 与两份 lock 指向 r7，安装器要求
+  clean r7 build source，主仓活动 patch series 已移除。
