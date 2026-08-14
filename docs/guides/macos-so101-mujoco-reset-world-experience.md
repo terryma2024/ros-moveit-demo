@@ -18,6 +18,7 @@
 - 源码 ROS underlay 有大量分散的 dylib 目录。`scripts/setup-macos-ros-dylib-farm.zsh` 将同名且内容一致的库合并为原子 symlink farm；发现同名异内容时直接失败。当前 `current` 包含 877 个 dylib。
 - macOS SIP 会在 `#!/usr/bin/env` 和间接脚本边界过滤 `DYLD_LIBRARY_PATH`。资格栈在 Darwin 上用当前 Python 显式执行 `ros2`，资格 supervisor 也使用 `sys.executable`，保证 `.venv` 和 dylib 环境不漂移。
 - 正常关停只能向两个 `ros2 launch` owner 各发送一次 SIGINT；不能 `killpg(SIGINT)`，否则 launch 再转发一次，`ros2_control_node` 会以 `-2` 退出并出现 `process has died`。超时兜底仍可终止整个进程组。
+- 多轮 `RESET_WORLD` 不能在控制器激活后的第一帧 joint state 到达时立即 pause；该帧可能仍是瞬态。现在先等待新反馈进入关节容差，再 pause 并复核最终状态。Teleop 的失败 layer 也会省略空的 `owner_failure_code`，避免响应模型掩盖真实 owner 错误。
 
 ## 环境与验证
 
