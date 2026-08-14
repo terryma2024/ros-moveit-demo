@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from pathlib import Path
 
@@ -47,10 +48,16 @@ COMMON_ARGUMENTS = {
 _CONTROLLERS = ("joint_state_broadcaster", "arm_controller", "gripper_controller")
 
 
-def _render_mujoco_robot_description(share: Path, scene: str, *, headless: bool) -> str:
+def _render_mujoco_robot_description(
+    share: Path, scene: str, *, headless: bool, platform_name: str | None = None
+) -> str:
     description = (share / "assets/mujoco/so101.urdf").read_text(encoding="utf-8")
     description = description.replace("@SO101_MUJOCO_SCENE@", scene)
     description = description.replace("@SO101_MUJOCO_HEADLESS@", str(headless).lower())
+    disable_rendering = headless or (platform_name or sys.platform) == "darwin"
+    description = description.replace(
+        "@SO101_MUJOCO_DISABLE_RENDERING@", str(disable_rendering).lower()
+    )
     if "@SO101_" in description:
         raise RuntimeError("unresolved SO-101 URDF launch token")
     return description
@@ -145,6 +152,7 @@ def _mujoco_execute_actions(
     scene_setup = Node(
         package="so101_demo_py",
         executable="scene_setup",
+        parameters=[{"readiness_timeout_s": float(timeout)}],
         output="both",
     )
     workflow = Node(
@@ -459,7 +467,7 @@ def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescrip
         DeclareLaunchArgument("policy_version", default_value="v1"),
         DeclareLaunchArgument("session_id", default_value=unique),
         DeclareLaunchArgument("evidence_file", default_value=f"/tmp/so101-{unique}.json"),
-        DeclareLaunchArgument("readiness_timeout_s", default_value="30.0"),
+        DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
     ]
     if backend == "mujoco":
         arguments.append(

@@ -46,7 +46,20 @@ target_link_libraries(so101_move_group
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_simulation_evidence_plugin test/test_simulation_evidence_plugin.cpp)
+  set(so101_test_library_dirs)
+  if(APPLE)
+    find_package(rcl_logging_spdlog REQUIRED)
+    find_package(rmw_dds_common REQUIRED)
+    find_package(rmw_fastrtps_cpp REQUIRED)
+    foreach(package_name rcl_logging_spdlog rmw_dds_common rmw_fastrtps_cpp)
+      get_filename_component(package_prefix
+        "${${package_name}_DIR}/../../.." ABSOLUTE)
+      list(APPEND so101_test_library_dirs "${package_prefix}/lib")
+    endforeach()
+  endif()
+  ament_add_gtest(test_simulation_evidence_plugin
+    test/test_simulation_evidence_plugin.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
   target_compile_features(test_simulation_evidence_plugin PRIVATE cxx_std_17)
   target_include_directories(test_simulation_evidence_plugin PRIVATE include)
   target_link_libraries(test_simulation_evidence_plugin so101_simulation_evidence_plugin)

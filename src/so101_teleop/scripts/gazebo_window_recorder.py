@@ -12,6 +12,7 @@ never audio. Evidence files are never overwritten.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -45,26 +46,44 @@ POLL_INTERVAL_SEC = 0.1
 
 
 class ProcReader:
-    """Minimal /proc reader used to pin supervisor and ffmpeg identity."""
+    """Minimal process reader used to pin supervisor and ffmpeg identity."""
 
     def __init__(self, proc_root='/proc'):
         self.proc_root = Path(proc_root)
 
     def start_ticks(self, pid):
-        return parse_start_ticks(
-            (self.proc_root / str(pid) / 'stat').read_text()
+        stat = self.proc_root / str(pid) / 'stat'
+        if stat.is_file():
+            return parse_start_ticks(stat.read_text())
+        started = default_runner(['ps', '-o', 'lstart=', '-p', str(pid)]).strip()
+        if not started:
+            raise ProcessLookupError(pid)
+        return int.from_bytes(
+            hashlib.sha256(started.encode('utf-8')).digest()[:8], 'big'
         )
 
     def cmdline(self, pid):
-        raw = (self.proc_root / str(pid) / 'cmdline').read_bytes()
-        return ' '.join(
-            part
-            for part in raw.decode('utf-8', 'replace').split('\0')
-            if part
-        )
+        cmdline = self.proc_root / str(pid) / 'cmdline'
+        if cmdline.is_file():
+            raw = cmdline.read_bytes()
+            return ' '.join(
+                part
+                for part in raw.decode('utf-8', 'replace').split('\0')
+                if part
+            )
+        command = default_runner(['ps', '-o', 'command=', '-p', str(pid)]).strip()
+        if not command:
+            raise ProcessLookupError(pid)
+        return command
 
     def is_alive(self, pid):
-        return (self.proc_root / str(pid)).is_dir()
+        if self.proc_root.is_dir():
+            return (self.proc_root / str(pid)).is_dir()
+        try:
+            os.kill(pid, 0)
+        except (OSError, ValueError):
+            return False
+        return True
 
 
 def default_runner(arguments, env=None, timeout=COMMAND_TIMEOUT_SEC):
@@ -426,6 +445,14 @@ def run_supervisor(state_path, output, display, geometry, window_id, encoder,
             stdout=log_file,
             stderr=subprocess.STDOUT,
         )
+        # Do not advertise a recording process before it has initialized the
+        # output. On macOS a Python/ffmpeg child can spend noticeable time in
+        # dyld; an immediate SIGINT would still hit its default signal handler.
+        ready_deadline = monotonic() + START_TIMEOUT_SEC
+        while process.poll() is None and monotonic() < ready_deadline:
+            if output.is_file() and output.stat().st_size > 0:
+                break
+            sleep(POLL_INTERVAL_SEC)
         state['ffmpeg_pid'] = process.pid
         state['phase'] = 'recording'
         atomic_write_json(state_path, state)
