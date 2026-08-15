@@ -29,9 +29,10 @@
     <!-- Coke can: cylinder r=0.033, length=0.122, resting on the table top.
          Center at z = 0.061 (half-length). -->
     <body name="coke" pos="0.3 0 0.061">
-      <freejoint/>
+      <joint type="free" damping="1.0"/>
       <inertial mass="0.1" pos="0 0 0" diaginertia="0.0005294 0.0005294 0.0001906"/>
-      <geom name="coke_body" type="cylinder" size="0.033 0.061" material="coke_mat" friction="3 0.1 0.1"/>
+      <geom name="coke_visual" type="cylinder" size="0.033 0.061" material="coke_mat" contype="0" conaffinity="0"/>
+      <geom name="coke_body" type="box" size="0.033 0.033 0.061" friction="3 0.1 3" group="3"/>
     </body>
 
     <!--
