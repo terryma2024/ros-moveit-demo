@@ -13,15 +13,18 @@
   <statistic center="0.1 0 0.35" extent="0.75"/>
 
   <!--
-    Rotate the viewer's default free camera so the gripper fingers (which open
-    along the world +Y axis) are seen side-by-side instead of end-on. Default
-    azimuth=90 puts the camera on +Y, collinear with the finger opening, so the
-    fingers overlap. azimuth=180 moves the camera to -X (behind the base) so the
-    fingers spread left/right and the coke sits up-front. You can still rotate
-    with left-drag in the viewer.
+    Viewer default free camera, tuned so the gripper stays visible (mirrors
+    so101_demo_py/assets/mujoco/scene.xml). This arm reaches +X toward the coke
+    and its fingers open along +Y. azimuth=90 (MuJoCo default) puts the camera on
+    +Y, collinear with the finger opening, so the two fingers overlap end-on.
+    azimuth=180 puts it on -X, collinear with the arm's reach, so the gripper
+    hides behind the arm. azimuth=135 + elevation=-20 looks diagonally from
+    behind the base and nearly level, keeping both +X (reach) and +Y (fingers)
+    off-axis so the fingers are seen side-by-side. Still rotatable with
+    left-drag in the viewer.
   -->
   <visual>
-    <global azimuth="180" elevation="-45"/>
+    <global azimuth="135" elevation="-20"/>
   </visual>
 
   <asset>
