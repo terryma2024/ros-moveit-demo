@@ -313,12 +313,14 @@
       panda_finger_joint1 so mujoco_ros2_control resolves it to that joint (see
       register_mujoco_actuators: a tendon actuator must share its name with the
       joint it controls). ctrlrange 0..0.04 is the real finger position, matching
-      the URDF panda_finger_joint1 limit. kp + dampratio give a critically-damped
-      (overdamped, 3.0) grip; forcerange bounds the tendon force so the fingers
-      squeeze but don't launch the coke.
+      the URDF panda_finger_joint1 limit. kp=10000 + dampratio=1.0 give a
+      critically-damped grip; at the coke surface (q=0.033, target=0.030) the
+      servo pushes kp*0.003 = 30N so the fingers squeeze ~3mm instead of just
+      touching. forcerange -40..40 bounds the tendon force so the fingers squeeze
+      firmly but don't launch the coke.
     -->
-    <position name="panda_finger_joint1" tendon="split" kp="1000" dampratio="1.0"
-      forcelimited="true" forcerange="-10 10" ctrlrange="0 0.04"/>
+    <position name="panda_finger_joint1" tendon="split" kp="10000" dampratio="1.0"
+      forcelimited="true" forcerange="-40 40" ctrlrange="0 0.04"/>
   </actuator>
 
 </mujoco>
