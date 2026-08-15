@@ -59,19 +59,19 @@
 
   <asset>
     <!--
-      High-visibility color scheme (demo tuning): the production Panda's white /
-      off-white links are hard to make out against the pale floor/table, so the
-      arm is recolored bright orange, with the dark joint/trim pieces kept
-      near-black for contrast. green / light_blue accents are folded into the
-      orange so the arm reads as one bold, easy-to-follow unit. Visual-only:
-      collision meshes (group 3) don't use these materials, so physics and
-      grasping are unchanged.
+      Original Franka Panda material palette (from mujoco_menagerie), restored so
+      the arm reads with its real layered look: white/off-white links, dark-grey
+      joint & trim pieces, and the green / light-blue accent strips on the wrist.
+      Keeping these five materials distinct (instead of folding them all into one
+      orange) makes each joint's boundary visible again. Visual-only: collision
+      meshes (group 3) don't use these materials, so physics and grasping are
+      unchanged.
     -->
-    <material class="panda" name="white" rgba="1 0.55 0.1 1"/>
-    <material class="panda" name="off_white" rgba="1 0.68 0.25 1"/>
-    <material class="panda" name="black" rgba="0.12 0.12 0.12 1"/>
-    <material class="panda" name="green" rgba="1 0.55 0.1 1"/>
-    <material class="panda" name="light_blue" rgba="1 0.55 0.1 1"/>
+    <material class="panda" name="white" rgba="1 1 1 1"/>
+    <material class="panda" name="off_white" rgba="0.901961 0.921569 0.929412 1"/>
+    <material class="panda" name="black" rgba="0.25 0.25 0.25 1"/>
+    <material class="panda" name="green" rgba="0 1 0 1"/>
+    <material class="panda" name="light_blue" rgba="0.039216 0.541176 0.780392 1"/>
 
     <!-- Collision meshes -->
     <mesh name="link0_c" file="link0.stl"/>
