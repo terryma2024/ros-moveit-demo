@@ -1,12 +1,23 @@
 <mujoco model="scene">
   <include file="panda.mjcf"/>
 
+  <!--
+    Tighten the viewer's auto-fitted default camera onto the arm + coke so the
+    demo is easier to inspect up close. This only affects the interactive viewer
+    (headless=false); the fixed "camera" (perception) keeps its explicit pose and
+    is untouched. `extent` shrinks the fit radius so the arm/coke fill more of
+    the window; `center` anchors the look-at point between arm (origin) and coke
+    (0.3, 0). You can still zoom/pan/rotate with mouse scroll / right-drag /
+    left-drag in the viewer.
+  -->
+  <statistic center="0.2 0 0.3" extent="0.55"/>
+
   <asset>
     <texture name="floor_tex" type="2d" builtin="checker" rgb1="0.2 0.3 0.4" rgb2="0.9 0.9 0.9"
       width="512" height="512"/>
     <material name="floor_mat" texture="floor_tex" texrepeat="5 5" reflectance="0.2"/>
     <material name="table_mat" rgba="0.6 0.45 0.3 1"/>
-    <material name="coke_mat" rgba="0.8 0.1 0.1 1"/>
+    <material name="coke_mat" rgba="1 0.08 0.08 1"/>
   </asset>
 
   <worldbody>
