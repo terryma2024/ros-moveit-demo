@@ -39,19 +39,19 @@
       <default class="collision">
         <geom type="mesh" group="3" friction="3 0.1 0.1"/>
         <default class="fingertip_pad_collision_1">
-          <geom type="box" size="0.0085 0.004 0.0085" pos="0 0.0055 0.0445"/>
+          <geom type="box" size="0.0085 0.008 0.0085" pos="0 0.0055 0.0445" friction="3 0.1 0.1"/>
         </default>
         <default class="fingertip_pad_collision_2">
-          <geom type="box" size="0.003 0.002 0.003" pos="0.0055 0.002 0.05"/>
+          <geom type="box" size="0.003 0.002 0.003" pos="0.0055 0.002 0.05" friction="3 0.1 0.1"/>
         </default>
         <default class="fingertip_pad_collision_3">
-          <geom type="box" size="0.003 0.002 0.003" pos="-0.0055 0.002 0.05"/>
+          <geom type="box" size="0.003 0.002 0.003" pos="-0.0055 0.002 0.05" friction="3 0.1 0.1"/>
         </default>
         <default class="fingertip_pad_collision_4">
-          <geom type="box" size="0.003 0.002 0.0035" pos="0.0055 0.002 0.0395"/>
+          <geom type="box" size="0.003 0.002 0.0035" pos="0.0055 0.002 0.0395" friction="3 0.1 0.1"/>
         </default>
         <default class="fingertip_pad_collision_5">
-          <geom type="box" size="0.003 0.002 0.0035" pos="-0.0055 0.002 0.0395"/>
+          <geom type="box" size="0.003 0.002 0.0035" pos="-0.0055 0.002 0.0395" friction="3 0.1 0.1"/>
         </default>
       </default>
     </default>
@@ -235,7 +235,7 @@
                       <geom mesh="hand_2" material="black" class="visual"/>
                       <geom mesh="hand_3" material="white" class="visual"/>
                       <geom mesh="hand_4" material="off_white" class="visual"/>
-                      <geom mesh="hand_c" class="collision"/>
+                      <geom mesh="hand_c" pos="0 0 -0.035" class="collision"/>
                       <!-- Nominal grasp TCP: center between the closed fingertips. -->
                       <site name="panda_tcp" pos="0 0 0.1034"/>
                       <body name="panda_leftfinger" pos="0 0 0.0584">
@@ -243,7 +243,7 @@
                         <joint name="panda_finger_joint1" class="finger"/>
                         <geom mesh="finger_0" material="off_white" class="visual"/>
                         <geom mesh="finger_1" material="black" class="visual"/>
-                        <geom mesh="finger_0" class="collision"/>
+                        <geom mesh="finger_0" class="collision" contype="0" conaffinity="0"/>
                         <geom class="fingertip_pad_collision_1"/>
                         <geom class="fingertip_pad_collision_2"/>
                         <geom class="fingertip_pad_collision_3"/>
@@ -255,7 +255,7 @@
                         <joint name="panda_finger_joint2" class="finger"/>
                         <geom mesh="finger_0" material="off_white" class="visual"/>
                         <geom mesh="finger_1" material="black" class="visual"/>
-                        <geom mesh="finger_0" class="collision"/>
+                        <geom mesh="finger_0" class="collision" contype="0" conaffinity="0"/>
                         <geom class="fingertip_pad_collision_1"/>
                         <geom class="fingertip_pad_collision_2"/>
                         <geom class="fingertip_pad_collision_3"/>
@@ -308,8 +308,8 @@
       (overdamped, 3.0) grip; forcerange bounds the tendon force so the fingers
       squeeze but don't launch the coke.
     -->
-    <position name="panda_finger_joint1" tendon="split" kp="1000" dampratio="3.0"
-      forcerange="-20 20" ctrlrange="0 0.04"/>
+    <position name="panda_finger_joint1" tendon="split" kp="1000" dampratio="1.0"
+      forcelimited="true" forcerange="-10 10" ctrlrange="0 0.04"/>
   </actuator>
 
 </mujoco>
