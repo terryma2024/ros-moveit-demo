@@ -15,6 +15,7 @@ from .protocol import (
     BackendEnvelope,
     BackendError,
     BackendOperation,
+    CameraPresetRequest,
     ResetRequest,
     SceneRequest,
     WorkflowRequest,
@@ -218,7 +219,7 @@ class CliBackendAdapter:
         stderr = completed.stderr or ""
         if completed.returncode:
             combined = f"{stdout}\n{stderr}"
-            match = _FAILURE_CODE.search(combined)
+            failure_codes = _FAILURE_CODE.findall(combined)
             self._write_diagnostic(
                 operation, session_id, argv, completed.returncode, stdout, stderr
             )
@@ -228,7 +229,7 @@ class CliBackendAdapter:
                 error=BackendError(
                     "BACKEND_OPERATION_FAILED",
                     f"owner exited with {completed.returncode}",
-                    match.group(1) if match else None,
+                    failure_codes[-1] if failure_codes else None,
                 ),
             )
         result = _parse_result(stdout, allow_empty)
@@ -268,8 +269,13 @@ class CliBackendAdapter:
         spec = self.profile.operations.get(BackendOperation.RESET_WORLD)
         if not self.profile.capabilities.reset_world or spec is None:
             return self._unsupported("reset_world", request.session_id)
+        arguments = (
+            ["--session-id", request.session_id]
+            if spec.session_style == "flag"
+            else []
+        )
         return self._invoke(
-            "reset_world", spec, request.session_id, [], allow_empty=True
+            "reset_world", spec, request.session_id, arguments, allow_empty=True
         )
 
     def scene_operation(self, request: SceneRequest) -> BackendEnvelope:
@@ -279,4 +285,21 @@ class CliBackendAdapter:
         return self._invoke(
             f"scene_{request.operation}", spec, request.session_id,
             build_scene_args(spec, request),
+        )
+
+    def apply_camera_preset(self, request: CameraPresetRequest) -> BackendEnvelope:
+        spec = self.profile.operations.get(BackendOperation.CAMERA_PRESET)
+        if not self.profile.capabilities.camera_presets or spec is None:
+            return self._unsupported("camera_preset", request.session_id)
+        if request.preset not in self.profile.camera_presets:
+            return self._envelope(
+                "camera_preset", spec, request.session_id, ok=False,
+                error=BackendError(
+                    "CAMERA_PRESET_NOT_FOUND",
+                    f"unknown preset {request.preset!r} for {self.profile.backend}",
+                ),
+            )
+        return self._invoke(
+            "camera_preset", spec, request.session_id, [request.preset],
+            allow_empty=True,
         )

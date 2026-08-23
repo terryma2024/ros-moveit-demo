@@ -1,0 +1,283 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+  <world name="so101_pick_place">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-contact-system"
+            name="gz::sim::systems::Contact"/>
+    <gui fullscreen="0">
+      <plugin filename="MinimalScene" name="3D View">
+        <gz-gui>
+          <title>3D View</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">docked</property>
+        </gz-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.4 0.4 0.4</ambient_light>
+        <background_color>0.8 0.8 0.8</background_color>
+        <camera_pose>0.4281 0.2175 0.4608 0 0.4 -2.3</camera_pose>
+      </plugin>
+
+      <plugin filename="GzSceneManager" name="Scene Manager">
+        <gz-gui>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="width">5</property>
+          <property type="double" key="height">5</property>
+          <property type="string" key="state">floating</property>
+          <property type="bool" key="showTitleBar">false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename="InteractiveViewControl" name="Interactive view control">
+        <gz-gui>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="width">5</property>
+          <property type="double" key="height">5</property>
+          <property type="string" key="state">floating</property>
+          <property type="bool" key="showTitleBar">false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename="CameraTracking" name="Camera Tracking">
+        <gz-gui>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="width">5</property>
+          <property type="double" key="height">5</property>
+          <property type="string" key="state">floating</property>
+          <property type="bool" key="showTitleBar">false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename="SelectEntities" name="Select Entities">
+        <gz-gui>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="width">5</property>
+          <property type="double" key="height">5</property>
+          <property type="string" key="state">floating</property>
+          <property type="bool" key="showTitleBar">false</property>
+        </gz-gui>
+      </plugin>
+
+      <plugin filename="WorldControl" name="World control">
+        <gz-gui>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="height">72</property>
+          <property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="left" target="left"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </gz-gui>
+        <play_pause>true</play_pause>
+        <step>true</step>
+        <start_paused>false</start_paused>
+        <use_event>true</use_event>
+      </plugin>
+
+      <plugin filename="WorldStats" name="World stats">
+        <gz-gui>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="height">110</property>
+          <property type="double" key="width">290</property>
+          <property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="right" target="right"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </gz-gui>
+        <sim_time>true</sim_time>
+        <real_time>true</real_time>
+        <real_time_factor>true</real_time_factor>
+        <iterations>true</iterations>
+      </plugin>
+
+      <plugin filename="EntityTree" name="Entity tree">
+        <gz-gui>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">docked_collapsed</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename="ViewAngle" name="View angle">
+        <gz-gui>
+          <property type="string" key="state">docked_collapsed</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename="Screenshot" name="Screenshot">
+        <gz-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">50</property>
+          <property key="height" type="double">50</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </gz-gui>
+      </plugin>
+    </gui>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>1 1 1 1</diffuse>
+      <specular>0.5 0.5 0.5 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="ground_link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>10 10</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>10 10</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.35 0.35 0.35 1</ambient>
+            <diffuse>0.45 0.45 0.45 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pedestal">
+      <static>true</static>
+      <pose>0 0 0.17 0 0 0</pose>
+      <link name="pedestal_link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.18 0.18 0.10</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.18 0.18 0.10</size></box>
+          </geometry>
+          <material>
+            <ambient>0.20 0.20 0.22 1</ambient>
+            <diffuse>0.30 0.30 0.32 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="table">
+      <static>true</static>
+      <pose>0 -0.20 0.10 0 0 0</pose>
+      <link name="table_top">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.50 0.60 0.04</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.50 0.60 0.04</size></box>
+          </geometry>
+          <material>
+            <ambient>0.18 0.12 0.07 1</ambient>
+            <diffuse>0.36 0.24 0.14 1</diffuse>
+          </material>
+        </visual>
+        <visual name="target_landing_tolerance_ring">
+          <!--
+            World center (-0.080, -0.250) matches scene.place_pose.
+            The flat annulus inner radius is cup radius 40 mm plus the
+            conservative 5 mm center tolerance inscribed in the accepted box.
+          -->
+          <pose>-0.080 -0.050 0.0201 0 0 0</pose>
+          <cast_shadows>false</cast_shadows>
+          <geometry>
+            <mesh>
+              <uri>model://so101_demo_py/assets/common/task_objects/target_landing_tolerance_ring.stl</uri>
+            </mesh>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>
+            <diffuse>1 0 0 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="plastic_cup">
+      <pose>0.02 -0.28 0.165 0 0 0</pose>
+      <link name="body">
+        <inertial>
+          <mass>0.020</mass>
+          <inertia>
+            <ixx>0.0000295</ixx>
+            <iyy>0.0000295</iyy>
+            <izz>0.0000320</izz>
+          </inertia>
+        </inertial>
+        <collision name="wall_near"><pose>0 0.039 0.001 0 0 0</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_01"><pose>0.0195 0.033775 0.001 0 0 -0.523598776</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_02"><pose>0.033775 0.0195 0.001 0 0 -1.047197551</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_03"><pose>0.039 0 0.001 0 0 -1.570796327</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_04"><pose>0.033775 -0.0195 0.001 0 0 -2.094395102</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_05"><pose>0.0195 -0.033775 0.001 0 0 -2.617993878</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_opposite"><pose>0 -0.039 0.001 0 0 3.141592654</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_07"><pose>-0.0195 -0.033775 0.001 0 0 2.617993878</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_08"><pose>-0.033775 -0.0195 0.001 0 0 2.094395102</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_09"><pose>-0.039 0 0.001 0 0 1.570796327</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_10"><pose>-0.033775 0.0195 0.001 0 0 1.047197551</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="wall_11"><pose>-0.0195 0.033775 0.001 0 0 0.523598776</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><surface><friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode><bullet><friction>1.2</friction><friction2>1.2</friction2></bullet></friction><contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.0001</min_depth></ode></contact></surface></collision>
+        <collision name="bottom"><pose>0 0 -0.044 0 0 0</pose><geometry><cylinder><radius>0.040</radius><length>0.002</length></cylinder></geometry></collision>
+
+        <sensor name="task_object_contact_wall_near" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_near</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_01" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_01</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_02" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_02</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_03" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_03</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_04" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_04</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_05" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_05</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_opposite" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_opposite</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_07" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_07</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_08" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_08</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_09" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_09</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_10" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_10</collision></contact></sensor>
+        <sensor name="task_object_contact_wall_11" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>wall_11</collision></contact></sensor>
+        <sensor name="task_object_contact_bottom" type="contact"><always_on>true</always_on><update_rate>200</update_rate><contact><collision>bottom</collision></contact></sensor>
+
+        <visual name="wall_near"><pose>0 0.039 0.001 0 0 0</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_01"><pose>0.0195 0.033775 0.001 0 0 -0.523598776</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_02"><pose>0.033775 0.0195 0.001 0 0 -1.047197551</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_03"><pose>0.039 0 0.001 0 0 -1.570796327</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_04"><pose>0.033775 -0.0195 0.001 0 0 -2.094395102</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_05"><pose>0.0195 -0.033775 0.001 0 0 -2.617993878</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_opposite"><pose>0 -0.039 0.001 0 0 3.141592654</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_07"><pose>-0.0195 -0.033775 0.001 0 0 2.617993878</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_08"><pose>-0.033775 -0.0195 0.001 0 0 2.094395102</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_09"><pose>-0.039 0 0.001 0 0 1.570796327</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_10"><pose>-0.033775 0.0195 0.001 0 0 1.047197551</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="wall_11"><pose>-0.0195 0.033775 0.001 0 0 0.523598776</pose><geometry><box><size>0.020705524 0.002 0.088</size></box></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+        <visual name="bottom"><pose>0 0 -0.044 0 0 0</pose><geometry><cylinder><radius>0.040</radius><length>0.002</length></cylinder></geometry><material><ambient>0.75 0.30 0.05 1</ambient><diffuse>1.0 0.55 0.12 1</diffuse><specular>0.20 0.20 0.20 1</specular></material></visual>
+      </link>
+    </model>
+  </world>
+</sdf>

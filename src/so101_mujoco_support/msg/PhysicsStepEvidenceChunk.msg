@@ -1,0 +1,10 @@
+uint64 chunk_sequence
+string simulation_session_id
+uint64 reset_epoch
+uint64 first_physics_step
+uint64 last_physics_step
+float64 first_simulation_time_s
+float64 last_simulation_time_s
+uint64 failed_publish_attempts
+bool evidence_loss
+PhysicsStepEvidence[] samples

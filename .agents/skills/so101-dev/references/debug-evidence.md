@@ -41,7 +41,8 @@
 
 1. 记录当前相关 PID、tmux session、ROS nodes、`GZ_PARTITION` 和 `ROS_DOMAIN_ID`。
 2. 优先复用用户指定 stack；若需全新 stack，先确认不会影响既有进程。
-3. 为本轮设置唯一日志目录，例如：
+3. 普通低速复现为整个 task 设置唯一 `/tmp` 日志目录；高频无损或需持久保留时改用
+   `experiment-ledger.md` 规定的唯一 `/data/work/so101-evidence/...` 根目录。例如：
 
 ```bash
 debug_dir=/tmp/so101-debug-$(date +%Y%m%d-%H%M%S)

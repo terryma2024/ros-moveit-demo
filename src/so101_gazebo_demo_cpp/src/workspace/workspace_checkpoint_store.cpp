@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <system_error>
 #include <unistd.h>

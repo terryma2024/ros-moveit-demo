@@ -1,8 +1,16 @@
 # SO-101 + MuJoCo + ROS 2 迁移设计
 
-**状态：** 设计冻结，已授权启动实施
+**状态：** 2026-08-10 用户已批准；允许按配套实施计划执行
+
+**Atomic schema 裁决：** 2026-08-10 用户批准扩展 schema；以 §10.1 的 session/reset/step/左右指尖原子证据字段为准
+
+**Snapshot-hook architecture amendment：** 2026-08-10 用户已批准 dedicated post-pause state snapshot hook；CP-036/EXP-030 是修订依据。Task 10 reset 资格路径不得再用 `StepSimulation(1)` 唤醒证据，必须按 §10.2 与 §12 使用成功/幂等 `SetPause(true)` 在 `sim_mutex_` 下取得权威只读 snapshot。
 
 **设计基线：** `codex/so101-gazebo-demo-py` @ `8d7913e7f552a40ee627d65be8b873ac16748bc9`
+
+**实现 main 基线：** `d300e7a41fb274d6d7e120699b7040666ea61904`
+
+**历史 kickoff（仅审计）：** `8464038e7cc13f638e2e336c625ed6677fa7db22`
 
 **目标平台：** ai-station，Ubuntu 24.04，ROS 2 Jazzy
 
@@ -15,10 +23,11 @@
 本迁移采用“保留 ROS 2 / MoveIt 2 / Python 任务层，只替换仿真后端”的方案：
 
 - ROS 2 Jazzy、`ros2_control`、现有 JointTrajectoryController、MoveIt 2 服务/action、TF、Planning Scene、Python 状态机与最终物理结果判据继续使用。
-- Gazebo Harmonic、`gz_ros2_control`、`ros_gz_bridge`、Gazebo pose/contact topic 和 Gazebo reset/transport 适配器替换为 MuJoCo、官方 `mujoco_ros2_control` 0.0.3、MuJoCo reset/step 服务与项目自有的只读原子仿真证据插件。
+- Gazebo Harmonic、`gz_ros2_control`、`ros_gz_bridge`、Gazebo pose/contact topic 和 Gazebo reset/transport 适配器替换为 MuJoCo、固定官方 `mujoco_ros2_control` 0.0.3 commit 加最小可审计 reset hook patch 的隔离 overlay、MuJoCo reset/step 服务与项目自有的只读原子仿真证据插件。
 - 机器人和任务场景使用仓库内受版本控制的 MJCF；URDF 继续作为 MoveIt、TF 与语义模型的来源。两者通过自动几何一致性测试约束，而不是运行时临时转换。
 - 抓取主链保持纯物理：不使用 weld/equality 约束，不把物体 teleport 当作搬运，不把 Planning Scene attachment 当成物理抓取成功。
-- 迁移期间在同一 Python 包中建立 backend-neutral 边界并保留 Gazebo 对照；通过验收后删除 Gazebo 资产并把公开包名改为 `so101_mujoco_demo_py`。
+- 从第一步创建独立 `ament_python` package `src/so101_mujoco_demo_py/`；backend-neutral domain、workflow、MoveIt adapter 和物理结果语义只迁入这个新 package，不在 `so101_gazebo_demo_py` 内建立中间层。
+- `src/so101_gazebo_demo_py/**` 是只读行为基线，正式迁移分支必须始终与本次 rebase 的 main 基线 `d300e7a` 中该目录字节级一致；新 package 不导入、不依赖、不读取其 installed assets。
 - MuJoCo 接触数值必须重新标定。Gazebo 的 penetration/depth 数值不跨引擎复用，但“真实双侧接触、微抬后杯子实际随动、无禁碰、最终稳定放置”的断言语义保持不变。
 
 ## 2. 背景与当前证据
@@ -45,6 +54,16 @@
 - EXP-073 只有 RED/GREEN、全量 pytest、colcon build/test 证据，尚无 live runtime 或连续资格验证。因此新基线仍是未完成资格验证的行为对照，Task 12–14 的 MuJoCo 标定和连续成功门槛不放宽。
 - 上述 delta 不改变 ROS 2、MoveIt、控制器、状态机、原子物理证据、纯物理抓取和 reset 架构决策。
 
+#### 2.1.2 2026-08-10 package 隔离修正
+
+初版设计曾要求先在 `so101_gazebo_demo_py` 内建立 backend-neutral 层，最后再改名。该路线已被用户明确否决。修正后的边界是：
+
+- 正式分支先从历史 kickoff `8464038` 严格重建，再将独立 package spec 单独重放到 `main@d300e7a`；`src/so101_gazebo_demo_py/**` 从第一项任务到最终验收均不得变化。
+- 旧路线的 committed/dirty 状态已保存到 ai-station 备份分支 `codex/so101-mujoco-ros2-pre-isolation-20260810` @ `3add34f8390b78a1f4a13ff49aefb2dc87638245`，只用于审计和选择性重写，不允许整体 cherry-pick 回正式分支。
+- Python 实现、测试、配置、launch、MJCF 和 package metadata 全部新建在 `src/so101_mujoco_demo_py/**`。
+- C++ message/plugin/parity 支持继续独立位于 `src/so101_mujoco_support/**`。
+- 可以从 Gazebo 基线逐文件移植 ROS-free 行为，但目标文件必须使用新 import namespace，并在 provenance manifest 中记录源 commit、源路径和目标路径；运行时不得回退导入旧 package。
+
 ### 2.2 ai-station 当前依赖状态
 
 2026-08-09 的只读核对结果：
@@ -56,12 +75,16 @@
 
 用户已授权后续实施时升级 ai-station 版本，或从 GitHub 最新稳定版构建；本文仍不执行安装或构建。2026-08-09 核对到的最新稳定 tag 仍是 `0.0.3`（commit `35ba8174b62d9560093614f981a3d4b978a96036`），没有更新的 GitHub release/tag。`main` 虽然包含更新接口，但仍声明 0.0.3 且没有稳定 tag，因此属于未发布快照，不进入默认依赖链。
 
-依赖选择顺序固定为：
+Task 10 的 live 证据确认 apt 0.0.3 的 `ResetWorld` 保留 simulation time，而原 evidence plugin 只能从 time decrease 推断 reset；两者无法产生权威 `reset_epoch`。因此 reset-qualified runtime 的依赖选择已由用户裁决为：
 
-1. 优先使用 ROS apt 的 0.0.3 binary；
-2. 若 binary 缺少构建自有 plugin 所需的 headers/CMake export，或 package test 证明 binary 组合不可用，则从上述稳定 tag/commit 构建到独立 overlay `/data/work/ws_mujoco_ros2_control_003/install`；
-3. 不覆盖 `/opt/ros/jazzy`，不从 floating `main` 构建；
-4. 若实施时出现更新的稳定 tag，先做设计/API delta review，再决定是否升级。
+1. apt 0.0.3 只作为 underlay 和未涉及 reset 资格门的历史探测结果，不再是 reset-qualified runtime；
+2. 必须从官方上游 <https://github.com/ros-controls/mujoco_ros2_control> 的稳定 tag `0.0.3`、精确 commit `35ba8174b62d9560093614f981a3d4b978a96036` 构建最小 patched source overlay 到 `/data/work/ws_mujoco_ros2_control_003/install`；
+3. patch、build 脚本和 provenance 验证器保存在 `src/so101_mujoco_demo_py/**`，必须能从精确 commit checkout 重放，并固定 upstream URL、commit、patch SHA-256、构建命令和四个 MuJoCo package prefix；专用 source checkout 若已存在则必须验证 remote、HEAD、clean status 和 patch state 并 fail closed，不得用 reset/clean 覆盖现场；
+4. shell/source 顺序固定为 `/opt/ros/jazzy/setup.zsh` → `/data/work/ws_mujoco_ros2_control_003/install/setup.zsh` → project `install/setup.zsh`。`mujoco_ros2_control`、`mujoco_ros2_control_msgs`、`mujoco_ros2_control_plugins` 必须解析到 dependency overlay，`mujoco_vendor` 必须解析到 `/opt/ros/jazzy` underlay，项目两包必须解析到 project install；
+5. 不覆盖 `/opt/ros/jazzy`，不从 floating `main` 构建，不把 `/data/work/so_arm_ws` 或其他 checkout 当作运行依赖；
+6. 若实施时出现更新的稳定 tag，仍不得自动升级，必须先做设计/API delta review 和新的用户裁决。
+
+最小 upstream patch 只扩展 reset/pause 证据生命周期。插件基类新增默认空实现的 `virtual void on_reset()`、`virtual void on_pause(bool paused)` 与 `virtual void on_state_snapshot(const mjModel * model, const mjData * data, bool paused)`，保持普通第三方 plugin 源码兼容。central `reset_simulation_state` 成功尾部对每个 initialized plugin 恰好调用一次 `on_reset()`；非法 keyframe 调用零次。每次成功 `SetPause(paused=true)`（包括已经 paused 的幂等请求）在 `on_pause(true)` 之后、持有 `sim_mutex_` 且传入 authoritative `mj_data_` 时，对每个 initialized plugin 恰好调用一次 `on_state_snapshot(model, data, true)`；`pause=false` 或失败请求调用零次 snapshot hook。
 
 ## 3. 目标与非目标
 
@@ -73,7 +96,8 @@
 4. 建立可审计的 URDF ↔ MJCF 几何、关节方向、零位和 limit 一致性证明。
 5. 建立来自同一 MuJoCo simulation step 的物体 pose、twist、contact distance、contact force 和 reset 证据链。
 6. 在 headless 与 GUI 两种模式下完成分层验收，并分别完成连续 5 次完整重启和连续 5 次世界重置成功。
-7. 最终 package 独立，不在运行时依赖 Gazebo package、Gazebo binary 或原 package 的 installed assets。
+7. 从第一项实现任务起 package 即独立，不在 build、test 或 runtime 中依赖 `so101_gazebo_demo_py`、Gazebo binary 或原 package 的 installed assets。
+8. 在每个 task 和最终验收中证明 `git diff --quiet d300e7a -- src/so101_gazebo_demo_py`。
 
 ### 3.2 非目标
 
@@ -84,6 +108,8 @@
 - 软体杯、可变形物体；
 - 为“提高成功率”引入 weld、equality、mocap 跟随、循环 teleport 或隐藏的外力；
 - 在迁移同时重写 MoveIt 接口、状态机或业务策略；
+- 修改、格式化、删除或向 `src/so101_gazebo_demo_py/**` 添加任何文件；
+- 新建需要 Gazebo package 同步修改才能工作的共享 common package；
 - 把 Menagerie 的 SO-ARM100 模型直接当作 SO-101 的正确模型。
 
 ## 4. 方案选择
@@ -119,27 +145,33 @@
 | 直接采用 Menagerie SO-ARM100 | 它是 5DOF SO-ARM100 的简化模型，只能借鉴建模方法，不能证明 SO-101 link/joint/夹爪几何一致 |
 | MuJoCo weld/equality 代替抓取 | 绕过物理抓取验收，无法证明摩擦与夹持产生了真实搬运 |
 | 保留 Gazebo contact bridge，同时只换动力学 | 两套仿真 source of truth 冲突，接触与 pose 不再属于同一物理世界 |
+| 先在 `so101_gazebo_demo_py` 内抽象、最后改名 | 违反 package 隔离和 Gazebo 基线零差异要求，已于 2026-08-10 废止 |
+| 抽取 `so101_demo_common_py` 并让两包共同依赖 | 会要求修改 Gazebo package 或产生双包同步发布面；当前范围不需要第三个 Python package |
+| 整包复制后逐步删除 Gazebo 文件 | 起步快但容易残留 Gazebo import、package metadata 和 installed-asset 依赖；采用逐边界移植与显式 provenance 代替 |
 
 ## 5. 总体架构
 
 ```mermaid
 flowchart LR
-    CLI["pick_place CLI / launch"] --> Runner["Python workflow + recovery"]
+    subgraph PY["so101_mujoco_demo_py (independent ament_python package)"]
+      CLI["pick_place CLI / launch"] --> Runner["Python workflow + recovery"]
+      Observer["MujocoWorldObserver"] --> Runner
+      Runner --> Reset["MujocoResetClient"]
+    end
     Runner --> MoveIt["MoveIt 2 services/actions"]
     MoveIt --> CM["mujoco_ros2_control node + controller_manager"]
     CM --> MJ["MuJoCo MJCF physics"]
     MJ --> JS["/joint_states + /clock"]
-    MJ --> SEP["SO101 SimulationEvidencePlugin"]
-    SEP --> Observer["MujocoWorldObserver"]
-    Observer --> Runner
+    MJ --> SEP["so101_mujoco_support::SimulationEvidencePlugin"]
+    SEP --> Observer
     Runner --> Scene["MoveIt Planning Scene shadow"]
-    Runner --> Reset["MujocoResetClient"]
     Reset --> CM
+    GZ["so101_gazebo_demo_py read-only baseline"] -. "no import / no dependency / no file change" .-> PY
 ```
 
 ### 5.1 保留层
 
-除 backend-neutral 命名调整外，以下层不重写：
+以下行为从 `8d7913e` 逐边界移植到新 namespace；保持外部契约，但不修改或运行时导入原文件：
 
 - `domain.py`、`workflow.py`、`runner.py`；
 - `motion/`；
@@ -162,14 +194,16 @@ flowchart LR
 
 ## 6. 包与文件边界
 
-### 6.1 迁移期
+### 6.1 独立 Python package
 
-迁移期继续使用源目录 `src/so101_gazebo_demo_py`，先建立 backend-neutral 端口，再加入 MuJoCo backend。这样每一步都能用现有 Gazebo tests 做 characterization，避免大爆炸式重写。
-
-新增主要结构：
+正式实现从第一项任务就使用下面的 package 和 import namespace：
 
 ```text
-src/so101_gazebo_demo_py/
+src/so101_mujoco_demo_py/
+  package.xml
+  setup.py
+  setup.cfg
+  resource/so101_mujoco_demo_py
   mjcf/
     so101.xml
     scene.xml
@@ -178,15 +212,33 @@ src/so101_gazebo_demo_py/
     mujoco_plugins.yaml
   launch/
     so101_mujoco.launch.py
-  so101_gazebo_demo_py/
+    so101_pick_place.launch.py
+  so101_mujoco_demo_py/
+    domain.py
+    workflow.py
+    runner.py
     simulation/
-      evidence.py
+      types.py
       protocols.py
     mujoco/
       client.py
       observer.py
       reset.py
+    moveit/
+    motion/
+    recovery/
+  test/
 ```
+
+隔离规则：
+
+- `package.xml`、`setup.py`、Python import、launch substitution 和 runtime resource lookup 不得出现 `so101_gazebo_demo_py`；
+- 新 package 可以拥有从 `8d7913e` 移植的 ROS-free 代码副本，但必须在 `docs/provenance.json` 记录 source commit/path、destination path 和 SHA-256；
+- characterization test 必须复制到新 package 并针对新 namespace 运行，不能通过修改原测试获得通过；
+- 不创建跨 package symlink，不从原 package install/share 读取 URDF、mesh、config、launch 或 policy；所需资产进入新 package 并记录 provenance；
+- 公开 ROS graph 契约可以相同，Python package/import/resource identity 必须不同。
+
+### 6.2 独立 C++ 支持 package
 
 新增一个最小 `ament_cmake` 支持包：
 
@@ -202,67 +254,97 @@ src/so101_mujoco_support/
   test/
 ```
 
-### 6.2 切换后
+### 6.3 Gazebo package 完整性门
 
-全部资格验证通过后：
+`src/so101_gazebo_demo_py/**` 在正式分支上是不可写基线。每个 task 提交前和最终验收必须运行：
 
-- package 和 Python import namespace 改名为 `so101_mujoco_demo_py`；
-- `so101_pick_place.launch.py`、`pick_place_state_machine` 等公开入口保持；
-- 删除 `gazebo/`、Gazebo launch/world、`ros_gz_*` 和 `gz_ros2_control` 依赖；
-- 保留迁移 provenance 与结果摘要；
-- 原 Gazebo 分支保留为历史行为基线，不成为新 package 的 runtime 依赖。
+```bash
+git diff --quiet d300e7a41fb274d6d7e120699b7040666ea61904 -- src/so101_gazebo_demo_py
+test -z "$(git status --short -- src/so101_gazebo_demo_py)"
+```
+
+任一命令失败即停止，不允许用 allowlist、生成文件例外或后续恢复提交继续该 task。全部资格验证通过后只发布 `so101_mujoco_demo_py` 与 `so101_mujoco_support`；Gazebo package 不删除、不改名、不成为新 package 依赖。
 
 ## 7. Backend-neutral Python 合约
 
 ### 7.1 证据类型
 
-`simulation/evidence.py` 负责与引擎无关的值对象：
+`simulation/types.py` 负责与引擎无关的值对象：
 
 ```python
 @dataclass(frozen=True, slots=True)
-class ContactPointEvidence:
+class ContactEvidence:
+    body1_id: int
+    geom1_id: int
+    body1: str
+    geom1: str
+    body2_id: int
+    geom2_id: int
+    body2: str
+    geom2: str
+    side: Literal["left_fingertip", "right_fingertip", "other"]
+    position_world: tuple[float, float, float]
+    normal_world: tuple[float, float, float]
     signed_distance_m: float
-    penetration_m: float
-    normal_force_n: float | None
+    normal_force_n: float
 
 @dataclass(frozen=True, slots=True)
-class ContactPair:
-    object_collision: str
-    other_collision: str
-    points: tuple[ContactPointEvidence, ...]
+class ObjectState:
+    body_id: int
+    body_name: str
+    pose_world: tuple[float, float, float, float, float, float, float]
+    twist_world: tuple[float, float, float, float, float, float]
 
 @dataclass(frozen=True, slots=True)
-class SimulationObservation:
+class SimulationEvidence:
     source_timestamp_s: float
-    receipt_sequence: int
-    object_pose_world: tuple[float, float, float, float, float, float, float]
-    object_twist_world: tuple[float, float, float, float, float, float]
-    contacts: tuple[ContactPair, ...]
+    publisher_sequence: int
+    simulation_step: int
+    reset_epoch: int
+    simulation_session_id: str
+    paused: bool
+    object_state: ObjectState
+    has_contact: bool
+    minimum_signed_distance_m: float
+    maximum_normal_force_n: float
+    truncated: bool
+    left_fingertip_contacts: tuple[ContactEvidence, ...]
+    right_fingertip_contacts: tuple[ContactEvidence, ...]
+    other_object_contacts: tuple[ContactEvidence, ...]
+
+@dataclass(frozen=True, slots=True)
+class ResetReceipt:
+    old_epoch: int
+    new_epoch: int
+    keyframe: str
+    simulation_step: int
+    simulation_session_id: str
 ```
 
 约束：
 
 - 所有数值必须有限；
-- `penetration_m` 是跨引擎统一的非负几何量；Gazebo depth 映射为 `signed_distance_m=-depth`，MuJoCo 使用原生 signed distance 并令 `penetration_m=max(0, -signed_distance_m)`；
-- Gazebo 没有可靠 force 时 `normal_force_n=None`，MuJoCo 必须提供有限且非负的 normal force；
+- MuJoCo 原生 signed distance 保持原符号；业务层需要 penetration 时使用 `max(0, -signed_distance_m)` 派生，不在证据对象中保存第二份数值；
+- `normal_force_n` 必须有限且非负；新 package 不实现 Gazebo 的 nullable-force 兼容 adapter；
 - quaternion 采用 ROS 顺序 `x, y, z, w`，MJCF 的 `w, x, y, z` 只允许在 adapter 边界转换；
 - `source_timestamp_s` 使用 simulation time；
-- `receipt_sequence` 单调递增；
+- `publisher_sequence` 单调递增；同一 `reset_epoch` 内 `simulation_step` 单调不减；
+- `simulation_session_id`、`reset_epoch` 与 `simulation_step` 的组合必须与 ROS message 完全一致；
 - 空 contact snapshot 必须作为显式消息发布，不能把“没收到消息”解释成“没有接触”。
 
 ### 7.2 协议
 
 ```python
-class SimulationObserver(Protocol):
-    def observe(self, *, freshness_s: float) -> SimulationObservation:
+class WorldObserver(Protocol):
+    def snapshot(self) -> SimulationEvidence:
         raise NotImplementedError
 
-class SimulationResetter(Protocol):
-    def reset_and_prove(self, request: ResetRequest) -> ResetEvidence:
+class WorldReset(Protocol):
+    def reset(self, keyframe: str) -> ResetReceipt:
         raise NotImplementedError
 ```
 
-业务层只依赖这两个协议，不导入 Gazebo 或 MuJoCo message/service 类型。
+freshness timeout 与期望的 `simulation_session_id` 在 observer 构造时注入。新 package 的业务层只依赖这两个协议，不导入 Gazebo message/service 类型；MuJoCo message/service 类型只允许出现在 `so101_mujoco_demo_py.mujoco` adapter 边界。
 
 ### 7.3 命名迁移
 
@@ -325,7 +407,7 @@ URDF 中的 simulation hardware 配置为：
 
 ```xml
 <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
-<param name="mujoco_model">$(find so101_gazebo_demo_py)/mjcf/scene.xml</param>
+<param name="mujoco_model">$(find so101_mujoco_demo_py)/mjcf/scene.xml</param>
 ```
 
 使用 `mujoco_ros2_control` 自带的 `ros2_control_node`。MJCF 中每个关节使用 position actuator，并映射到现有 position command interface；controller YAML 中的 controller 名和 joint 列表保持不变。
@@ -356,14 +438,20 @@ URDF 中的 simulation hardware 配置为：
 
 这里存在必须显式处理的版本差异：Jazzy 在线文档和未发布 `main` 已经描述/实现 `FreeJointStatePublisherPlugin` 和 `set_free_joint_state`，但最新稳定 tag 0.0.3（`35ba8174b62d9560093614f981a3d4b978a96036`）中没有对应 message/service。稳定 0.0.3 只有 `ResetWorld`、`SetPause`、`StepSimulation`，但已有自定义 plugin base。
 
-因此本设计固定使用稳定 0.0.3（apt binary 优先，固定 tag 的隔离 source overlay 作为 fallback），不从 main 追未发布功能；新增只读 `so101_mujoco_support/SimulationEvidencePlugin`，在同一个 simulation step 中发布 task-object pose/twist 与 contact，避免跨 topic 拼接时间不一致的证据。
+因此本设计固定使用稳定 0.0.3 commit `35ba8174b62d9560093614f981a3d4b978a96036` 加上述最小 reset/pause/snapshot hook patch 的隔离 source overlay，不从 main 追未发布功能；新增只读 `so101_mujoco_support/SimulationEvidencePlugin`，在同一个锁定 physics snapshot 中发布 task-object pose/twist 与 contact，避免跨 topic 拼接时间不一致的证据。apt binary 不包含这些 qualification hooks，不能通过 reset qualification。
 
 ### 10.1 消息
 
 `ContactSample.msg`：
 
 ```text
+int32 body1_id
+int32 geom1_id
+string body1
 string geom1
+int32 body2_id
+int32 geom2_id
+string body2
 string geom2
 geometry_msgs/Point position_world
 geometry_msgs/Vector3 normal_world
@@ -375,21 +463,52 @@ float64 normal_force_n
 
 ```text
 std_msgs/Header header
-uint64 sequence
+uint64 publisher_sequence
+uint64 simulation_step
+uint64 reset_epoch
+string simulation_session_id
+bool paused
+int32 object_body_id
 string object_body
 geometry_msgs/Pose object_pose_world
 geometry_msgs/Twist object_twist_world
+bool has_contact
+float64 minimum_signed_distance_m
+float64 maximum_normal_force_n
 bool truncated
-ContactSample[] contacts
+ContactSample[] left_fingertip_contacts
+ContactSample[] right_fingertip_contacts
+ContactSample[] other_object_contacts
 ```
+
+字段语义固定如下：
+
+- `header.stamp` 是与该 `mjData` snapshot 对应的 MuJoCo simulation time，`header.frame_id` 固定为 `world`；
+- `publisher_sequence` 在同一 publisher 生命周期内严格单调递增；`simulation_step` 是当前 world epoch 内的 step id，reset 后允许从零重新开始；
+- `reset_epoch` 的唯一权威来源是 patched runtime 在成功 central reset 后调用的 `on_reset()`。evidence plugin 的 `on_reset()` 只对 atomic reset generation 加一。普通 `update()` 在 generation pending 且 `authoritative_paused=false` 时不得消费 generation，也不得发布携带新 epoch 的 running 消息；pending generation 保留到 `on_state_snapshot(..., true)` 成功取得 publisher lock 后，由共享 builder 消费并发布 `reset_epoch=old+1`、`simulation_step=0`、`paused=true`。time decrease、pose jump、keyframe 名称或 Python 侧计数均不得作为 epoch 权威；
+- `simulation_session_id` 从 launch 注入并在进程生命周期内不可变；消费方使用 `(simulation_session_id, reset_epoch, simulation_step)` 拒绝跨会话、跨 reset 或倒序证据；
+- `left_fingertip_contacts` 与 `right_fingertip_contacts` 只包含 task object 与对应指尖 geom 的接触，`other_object_contacts` 保存 task object 与 table 或其他受监控 geom 的接触；每个样本同时保留 MuJoCo 数字 ID 和稳定名称；
+- `minimum_signed_distance_m` 与 `maximum_normal_force_n` 对消息内全部 task-object contact 聚合；零 contact 时 `has_contact=false`、三个数组为空、两个聚合值均为 `0.0`；
+- `paused`、object pose/twist、聚合值和三个 contact 数组必须来自同一次锁定的 `mjData` snapshot。
 
 ### 10.2 行为
 
 - `init` 时解析 task-object body 和受监控 geom 名称，任一名称不存在即启动失败；
+- `on_reset()` 不读取或修改 MuJoCo state，只对 atomic generation 执行一次 increment；每次成功 `ResetWorld` 必须恰好触发一次，非法 keyframe 和失败 reset 必须触发零次；
+- pinned 0.0.3 plugin base 额外提供默认 no-op `on_pause(bool paused)`。每次成功的 `SetPause` 请求（包括目标状态已满足的幂等请求）必须对每个 plugin 恰好调用一次，失败请求调用零次；evidence plugin 的实现只把该权威值写入 atomic bool；
+- pinned base 还提供向后源码兼容的默认 no-op `virtual void on_state_snapshot(const mjModel * model, const mjData * data, bool paused)`；参数只读，普通第三方 plugin 无需修改；
+- 每次成功 `SetPause(paused=true)`，包括已经 paused 的幂等请求，必须在 `on_pause(true)` 之后、`sim_mutex_` 保护下，对每个 initialized plugin 恰好调用一次 `on_state_snapshot(model_, mj_data_, true)`；`pause=false` 与失败请求调用零次 snapshot hook；
+- snapshot hook 不是普通 `update()`：set-pause 路径不得调用所有 plugin 的 `update()`，不得推进 physics，也不得写 `qpos`、`qvel`、`ctrl`、`xfrc` 或 constraint；传入 authoritative `mj_data_` 使 pose、twist、contact 来自同一锁定 snapshot；
 - `update` 中只读 `mjModel`/`mjData`，先读取同一步的 object world pose/twist，再筛选与 task object、两侧 fingertip、table 有关的 contact；
 - `signed_distance_m` 来自 MuJoCo contact distance；
 - `normal_force_n` 由 `mj_contactForce` 的 contact-frame normal 分量得到；
 - 每个 publish tick 都发消息，包括零 contact；pose/twist 与 contacts 必须来自同一个 `mjData` step；
+- reset 后第一条可接受消息必须由成功的 paused snapshot hook 携带新 `reset_epoch`、`simulation_step=0`、`paused=true`；消费者不得把旧 epoch 或 running epoch 消息用于 reset postcondition；
+- `on_state_snapshot(..., true)` 与普通 `update()` 使用同一个 publish helper。只有成功取得 publisher lock 后 builder 才消费 pending generation；锁竞争时 generation 保持 pending，Python 只可因 typed `EvidenceStale` 在原 10 s deadline 内重发幂等 `SetPause(true)`；
+- 无 pending reset 时普通 `update()` 的发布节奏不变；snapshot hook 不调用普通 `update()`，也不改变 plugin force buffer；
+- `paused` 只来自 `on_pause(bool)` 保存的 atomic 权威状态；普通周期消息由同一次 `update()` snapshot 发布，reset qualification 消息由同一次 `on_state_snapshot(..., true)` 锁定 snapshot 发布。两条路径都必须使 paused、object pose/twist/contact 属于同一 snapshot；禁止再以 simulation time 是否变化推断 pause；
+- 删除以 simulation time decrease 或 pose jump 推断 epoch 的路径；time 仍可连续，幂等 reset 仍必须产生一个且仅一个新 epoch；
+- 左右指尖分类使用启动时解析并冻结的 geom id，不使用运行时字符串模糊匹配；
 - 使用非阻塞 realtime publisher，最大样本数固定为 128；溢出时 `truncated=true`，业务硬门拒绝该样本；
 - 插件不得修改 `qpos`、`qvel`、`ctrl`、constraint、body pose 或 contact 参数。
 
@@ -428,29 +547,33 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 ### 12.1 reset 顺序
 
-每次 `RESET_WORLD` 执行：
+Task 10 reset-qualified transaction 执行：
 
 1. 停止新的 trajectory goal，等待已有 action 结束或 cancel 结果；
 2. deactivate `arm_controller` 与 `gripper_controller`；
 3. 调用 `set_pause(paused=true)`；
-4. 调用 `reset_world(keyframe="home")`；
-5. `home` keyframe 必须同时恢复 robot qpos/qvel/ctrl 与 `plastic_cup` free-joint pose/velocity；该 pose 由自动测试证明与 task-object config 一致；
-6. 在 pause 状态调用 `step_simulation(steps=250)` 让接触收敛；
-7. 恢复 MoveIt Planning Scene 为 world-only object；
-8. activate controllers；
-9. 调用 `set_pause(paused=false)`；
-10. 从新的原子 simulation evidence 证明 reset postcondition。
+4. 调用 `reset_world(keyframe="task_start")`；
+5. `task_start` keyframe 必须同时恢复 robot qpos/qvel/ctrl 与 `plastic_cup` free-joint pose/velocity；该 pose 由自动测试证明与 task-object config 一致；
+6. bounded resume：调用 `set_pause(paused=false)`，只给 controller state/interface 恢复所需的既有有界运行窗口；
+7. strict activate `arm_controller` 与 `gripper_controller`；
+8. 调用 `set_pause(paused=true)`；成功或幂等 pause true 在 `sim_mutex_` 下触发 dedicated state snapshot hook；
+9. 从该 hook 发布的 `step=0, paused=true` atomic object evidence，以及独立且 fresh 的 `/joint_states` 与 controller state，证明 reset postcondition；
+10. 恢复 MoveIt Planning Scene 为 world-only object。
+
+资格路径不得调用 `StepSimulation(1)` 或其他 paused stepping 来“唤醒证据”；snapshot hook 本身不推进 physics。若 publisher lock 竞争导致 typed `EvidenceStale`，只允许在同一个原 10 s deadline 内重发幂等 `set_pause(paused=true)`，不得重做 reset、增加 step、延长 timeout 或放宽阈值。
 
 0.0.3 路径不实现 task-object mutation service。任务状态进入 `DESCEND` 后到最终结果 epoch 结束前，除 actuator command 外不得存在任何对 object qpos/qvel/body pose/constraint 的写入。
 
 ### 12.2 reset postcondition
 
-- 6 个 joint 与 home 的最大误差 `<= 0.001 rad`；
-- cup 初始位置误差 `<= 0.001 m`，姿态误差 `<= 0.5 deg`；
+- Task 10 qualification：6 个 joint 各自与 `task_start` 的误差 `<= 0.002 rad`，来自独立 fresh `/joint_states`，不是 atomic evidence message 字段；
+- Task 10 qualification：cup 初始位置误差 `<= 0.003 m`，来自 paused step-zero atomic snapshot；
+- final-release 阶段仍要求 cup 位置误差 `<= 0.001 m`、姿态误差 `<= 0.5 deg`；该更严格门属于后续最终发布 postcondition，不被 Task 10 qualification 阈值覆盖或放宽；
 - cup linear speed `<= 0.001 m/s`，angular speed `<= 0.01 rad/s`；
 - 只有预期 table support contact，无 gripper contact；
 - Planning Scene 包含 world object，attached set 不含该 object；
-- simulation service、controller、joint state、atomic simulation evidence 均新鲜；
+- simulation session/epoch/sequence 正确，新 epoch 精确 `old+1`，atomic evidence 为 `simulation_step=0` 且 `paused=true`；controller state 与六关节反馈独立新鲜、controllers active，不能拼入或宣称与 atomic tuple 同一消息边界；
+- 连续两次 `task_start` reset 每次 epoch 精确 `+1`；非法 keyframe epoch 不变；成功与失败最终均 paused；
 - 任一不满足则 reset 失败，不进入 execute。
 
 ### 12.3 恢复
@@ -466,7 +589,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 
 ## 13. Launch 与公开行为
 
-迁移期新增 `so101_mujoco.launch.py`，并让 `so101_pick_place.launch.py` 通过 backend 参数选择对照后端。切换完成后只保留 MuJoCo。
+独立 package 从创建时就同时提供 `so101_mujoco.launch.py` 和 `so101_pick_place.launch.py`。前者启动 MuJoCo/control 基础栈，后者组合 MoveIt、任务层与可选 MuJoCo 启动；不增加 Gazebo backend selector，也不修改原 package 的同名 launch。
 
 需要保持：
 
@@ -484,11 +607,15 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 ### P0：冻结 Gazebo 对照
 
 - 冻结 source commit、installed package、policy fingerprint 和现有资格验证状态；
+- 严格重建正式分支并保存旧路线到独立备份分支；
+- 建立 `git diff --quiet d300e7a -- src/so101_gazebo_demo_py` 零差异门；
 - 建立独立 MuJoCo 迁移账本；
 - 不把后续 Gazebo 实验结果静默混入迁移基线。
 
-### P1：最小控制 PoC
+### P1：独立 package 与最小控制 PoC
 
+- 创建 `so101_mujoco_demo_py`/`so101_mujoco_support` package metadata 和独立 namespace；
+- 逐边界移植最小 ROS-free contract 与 provenance，禁止依赖原 package；
 - 安装并探测 `mujoco_ros2_control`；
 - 用 1 个关节和现有 controller 名称证明 MoveIt/trajectory/controller boundary；
 - 验证 `/clock`、pause、step、reset。
@@ -499,16 +626,17 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 - 加入 table/cup/keyframe/actuator；
 - 通过 compile 与 URDF ↔ MJCF 几何一致性门槛。
 
-### P3：状态、接触与 deterministic reset
+### P3：状态、接触与 dedicated post-pause deterministic reset
 
+- 从官方稳定 0.0.3 commit 重放最小 reset/pause/state-snapshot hook patch，构建并验证隔离 dependency overlay；
 - 只读 atomic simulation evidence plugin；
 - Python observer/reset adapter；
 - reset postcondition 与服务调用边界测试。
 
 ### P4：Python runtime 后端迁移
 
-- Gazebo adapter 先收敛到 backend-neutral protocol；
-- 接入 MuJoCo observer/reset；
+- 在新 package 内建立 backend-neutral protocol，并直接接入 MuJoCo observer/reset；
+- 逐文件移植 domain/workflow/MoveIt/motion/recovery/physical-outcome 行为和 tests，不修改 Gazebo adapter 或原测试；
 - checkpoint v5 与 profile 命名迁移；
 - 保持 MoveIt、状态机与最终结果层不变。
 
@@ -519,20 +647,22 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 - 输出 force/distance/friction 建议与误判矩阵；
 - 等待用户确认后再固化阈值。
 
-### P6：资格验证与切换
+### P6：资格验证与独立发布
 
 - headless contract；
 - GUI + RViz 视觉验收；
 - 连续 5 次 `FULL_RESTART`；
 - 连续 5 次 `RESET_WORLD`；
-- 删除 Gazebo backend、改 package 名和 README；
+- 证明新 package metadata/import/install/share/runtime 全部独立；
+- 再次证明 Gazebo package 相对 kickoff 零差异；
 - 从干净 install overlay 复验。
 
 ## 15. 验收矩阵
 
 | 层 | 必须证明 |
 |---|---|
-| Provenance | source commit、MJCF SHA-256、installed prefix、MuJoCo/package 版本、PID/cmdline、ROS domain/service prefix 一致 |
+| Package isolation | `src/so101_gazebo_demo_py/**` 相对 `d300e7a` 零差异；新 package metadata/import/resource/runtime 不依赖旧 package |
+| Provenance | upstream URL/tag/commit、patch SHA-256、build script、三个 dependency-overlay package prefix、`mujoco_vendor` underlay prefix、project prefix、source 顺序、MJCF SHA-256、PID/cmdline、ROS domain/service prefix 一致 |
 | Model | MJCF compile；home + 10 poses 几何门槛；joint limit/direction/q6 语义一致 |
 | ROS graph | 单套 control node；`/clock`、controller、service/action、topic 类型正确 |
 | Controller | arm/gripper trajectory result 成功；joint feedback 到达目标且无 limit violation |
@@ -540,7 +670,7 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 | MuJoCo pose | cup pose/twist 来自 fresh atomic simulation evidence，不来自 command 或 Planning Scene |
 | Contact | contact snapshot 非 stale、非 truncated；geom pair、distance、force 可解释 |
 | Physical grasp | 无 simulator constraint；微抬时 cup 实际随动；禁碰为空 |
-| Reset | controllers 先 deactivate；服务顺序正确；postcondition 全部满足 |
+| Reset | running strict deactivate → pause → ResetWorld → bounded resume → strict activate → re-pause snapshot；无 StepSimulation qualification call；epoch 精确 +1、step0/paused atomic object evidence、独立 fresh joints/controllers、failure paused 与 invalid-keyframe epoch unchanged 全部满足 |
 | Final outcome | in-region、upright、stable、table-supported、detached、无 gripper contact、controller healthy |
 | Runtime stability | 固定 commit/policy，连续 5 次 FULL_RESTART + 连续 5 次 RESET_WORLD，分别计数 |
 | Visual | 本轮新 MuJoCo/RViz 截图，机械臂、杯子、夹爪和 Planning Scene 与数值证据一致 |
@@ -553,6 +683,9 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 |---|---|
 | URDF/MJCF 关节轴或零位不一致 | 在任何物理调参前执行 home + 10 poses 自动 transform 对比 |
 | controller reset 后 snap 回旧 command | reset 前 deactivate controllers，reset 后从新 state 激活 |
+| reset generation 在 activate 的 running update 被提前消费 | pending generation 且 authoritative_paused=false 时禁止消费；只由成功 paused snapshot hook 在 publisher lock 成功后消费 |
+| re-pause 时 realtime publisher lock 竞争 | generation 保持 pending；Python 只因 typed `EvidenceStale` 在原 deadline 内重发幂等 pause true |
+| 为唤醒证据推进 paused physics 导致 joint drift | Task 10 qualification 删除 `StepSimulation(1)`；dedicated snapshot hook 在 `sim_mutex_` 下只读发布且不推进 physics |
 | contact publisher 在实时线程阻塞 | fixed capacity + non-blocking realtime publisher + truncated hard failure |
 | 把 message silence 当 no-contact | 每 tick 显式空 snapshot，freshness/sequence 双门槛 |
 | Gazebo 参数机械复制导致错误物理 | 只迁移语义，MuJoCo 参数重新实验标定 |
@@ -560,17 +693,25 @@ MuJoCo 阈值必须通过专门标定实验生成建议报告。未经用户确�
 | 通过 weld/teleport 获得假成功 | runtime interface/write audit；forward phase 无 object mutation API；MJCF 禁止 equality/adhesion |
 | GUI 与 headless 物理配置不一致 | 同一 MJCF/policy/hash，只改变 headless renderer flag |
 | 迁移与当前 Gazebo worker 冲突 | 独立 worktree/branch，不复用或清理现有 tmux/process |
-| 依赖版本升级导致接口漂移 | 固定稳定 tag/commit；apt binary 与 source fallback 都写入 preflight/provenance；更新 tag 先做 delta review |
+| 新实现再次渗入 Gazebo package | 每个 task 提交前执行 kickoff tree/status 双门；失败立即停止，不允许例外路径 |
+| 复制行为代码造成 provenance 丢失 | 新 package `docs/provenance.json` 记录源 commit/path、目标 path 与 SHA-256，测试只运行新 namespace |
+| 依赖版本升级导致接口漂移 | 固定稳定 tag/commit；记录 apt underlay probe 与强制 pinned patched source overlay provenance；更新 tag 先做 delta review |
+| reset 保持 simulation time 导致 epoch 不可观察 | reset-qualified runtime 强制使用 pinned patched overlay；central reset 成功后产生 generation，成功/幂等 re-pause 的 snapshot hook 在锁定 authoritative data 上发布并消费，atomic generation 是唯一 epoch 权威 |
 
 ## 17. 实施停止条件
 
 出现任一条件必须停止并报告，不得继续调参或绕过：
 
 - `mujoco_ros2_control` 实际接口与本 spec 固定接口不一致；
+- pinned patch 不能从干净 `35ba8174b62d9560093614f981a3d4b978a96036` checkout 重放；或三个 `mujoco_ros2_control*` package 未解析到 `/data/work/ws_mujoco_ros2_control_003/install`；或 `mujoco_vendor` 未解析到 `/opt/ros/jazzy`；
+- 成功 reset 的 `on_reset()` 调用次数不是每 plugin 恰好一次，非法 keyframe 触发 hook，成功/幂等 pause true 的 snapshot 次数不是每 initialized plugin 恰好一次，pause false/失败请求触发 snapshot，snapshot 不在 `sim_mutex_` 下使用 authoritative `mj_data_`，或 evidence epoch 仍依赖 time decrease/pose jump；
+- generic update 被 set-pause 路径调用、snapshot hook 推进/写入 physics state、running update 消费 pending generation，或 publisher contention 丢失 pending generation；
 - MJCF 与 URDF 几何门槛不通过；
 - contact plugin 需要修改 MuJoCo state 才能提供证据；
 - 只能通过 weld、teleport、禁碰或放宽最终结果阈值才能完成 pick-place；
 - 当前 ai-station worktree、tmux 或 ROS domain 与其他 worker 冲突；
+- `src/so101_gazebo_demo_py/**` 相对 kickoff 出现任何 tracked 或 untracked 变化；
+- 新 package 的 metadata、import、launch 或 resource lookup 引用 `so101_gazebo_demo_py`；
 - 新的 MuJoCo force/distance 门槛尚未获得用户确认；
 - 现有物理/安全断言与新实现发生不可解释冲突。
 

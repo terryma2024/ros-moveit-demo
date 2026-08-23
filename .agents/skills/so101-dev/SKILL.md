@@ -24,13 +24,30 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
    - 多轮实验、生命周期比较、上下文压缩或 agent 交接：[`references/experiment-ledger.md`](references/experiment-ledger.md)
 3. 从当前 orchestrator 和 ai-station 分别记录 `pwd`、commit、branch、submodule 和 `git status --short`；已经位于 ai-station 的 coding agent 直接在本机取证，不再 SSH 自身。已有改动均视为用户工作，不能覆盖、清理或夹带。
 4. 检查现有进程、ROS graph 和 `codex-cua` tmux 状态。不得在不知情时启动第二套 `/move_group`、RViz 或 Gazebo。
-5. 给本轮建立一个 `/tmp/so101-debug-<时间或短ID>/` 证据目录；不要把日志、截图或构建产物写进源码目录。
+5. 按下述统一布局给整个 task 建立并登记唯一 evidence root；不要把日志、截图或构建产物写进源码目录。
+
+## 证据存储布局
+
+每个 task 只能有一个已在实验账本登记的 evidence root：
+
+| 证据类型 | 唯一路径 |
+|---|---|
+| 普通低速日志、截图、检查与临时构建证据 | `/tmp/so101-debug-<task-id>/` |
+| 高频无损证据或必须持久保留的证据 | `/data/work/so101-evidence/<task-family>/<run-id>/` |
+| 已被替代但必须保留审计链的批次 | `/data/work/so101-evidence/archived/<task-family>/<run-id>/` |
+
+禁止直接创建 `/data/work/so101-debug-*`。不得把同一 task 分散到多个临时或持久根目录。
+任务完成时必须分别报告 retained、archived 和可删除候选；“可删除候选”只是报告分类，未获
+用户明确授权不得删除任何证据。迁移或归档前后必须核验相对文件路径、SHA256、大小和数量，
+并更新账本/provenance 中的 tracked 绝对路径而不改写历史结论。持久布局说明位于
+`/data/work/so101-evidence/README.md`；完整账本字段见
+[`references/experiment-ledger.md`](references/experiment-ledger.md)。
 
 ## 长程任务实验账本
 
 预计需要两轮以上实验、需要比较环境生命周期或连续成功、任务可能跨上下文压缩/goal 暂停/agent 交接，或用户要求避免重复路线时，必须在当前实现 worktree 建立并持续更新 `docs/experiments/<task-slug>-experiment-ledger.md`。详细状态机、字段和模板见 [`references/experiment-ledger.md`](references/experiment-ledger.md)。
 
-恢复任务时必须先读账本，复述最后可信 checkpoint、已确认结论、已证伪路线和下一条实验引用；完成前不得启动 stack、调参、操作 GUI 或清理进程。原始日志和截图继续放在唯一的 `/tmp` 证据根目录，不能让 `/tmp` 或聊天成为长期结论的唯一载体。
+恢复任务时必须先读账本，复述最后可信 checkpoint、已确认结论、已证伪路线和下一条实验引用；完成前不得启动 stack、调参、操作 GUI 或清理进程。原始日志和截图继续放在本 task 登记的唯一 evidence root：普通低速证据使用 `/tmp`，高频无损或需持久保留的证据使用 `/data/work/so101-evidence`。不能让 `/tmp` 或聊天成为长期结论的唯一载体。
 
 每条实验记录必须显式写出 source commit、install overlay、runtime executable 或 package prefix、`ROS_DOMAIN_ID` 和 `GZ_PARTITION`；不得只写笼统的 “provenance 已确认”。每轮结束、上下文压缩、暂停或交接前，必须先更新账本 checkpoint，再发送聊天或 tmux 摘要。
 
@@ -105,7 +122,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 - 看到成功日志就直接改物理或视觉层。先定位成功只覆盖了哪一层。
 - 修改 source 后直接 `ros2 run`。必须 build、source，再验证 package prefix/产物。
 - 用 GUI 截图代替状态查询，或用状态查询代替 GUI 验收。两者都要有。
-- 为获得“干净环境”清理用户 worktree。用独立 `/tmp` 证据目录和最小补丁隔离。
+- 为获得“干净环境”清理用户 worktree。用该 task 已登记的单一 evidence root 和最小补丁隔离。
 - 只在聊天、tmux 或 `/tmp` 中保存长程实验结论。先更新持久账本和 checkpoint，再交接或继续下一轮。
 
 ## Physical-outcome evidence boundary

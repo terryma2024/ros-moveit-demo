@@ -14,7 +14,7 @@ const snapshot = { mode: "READY", revision: 9, simulation_session_id: "e2e-sessi
 const gazeboCapabilities = {
   backend: "gazebo_cpp",
   owner_package: "so101_gazebo_demo_cpp",
-  owner_executable: "pick_place_state_machine",
+  owner_executable: "pick_place",
   capabilities: {
     backend_probe: true, workflow_execute: true, workflow_start: true,
     workflow_run: true, workflow_resume: true, workflow_stop: false, reset_world: true,
@@ -24,7 +24,7 @@ const gazeboCapabilities = {
 };
 const probeOnlyCapabilities = {
   backend: "mujoco_py",
-  owner_package: "so101_mujoco_demo_py",
+  owner_package: "so101_demo_py",
   owner_executable: "pick_place_state_machine",
   capabilities: Object.fromEntries(Object.keys(gazeboCapabilities.capabilities).map((key) => [key, key === "backend_probe"])),
 };
@@ -57,7 +57,7 @@ test("probe-only backend stays visible while every live control is disabled", as
   await expect(page.getByRole("button", { name: "Run" })).toBeDisabled();
   await page.getByRole("tab", { name: "Environment" }).click();
   await expect(page.getByText("mujoco_py", { exact: true })).toBeVisible();
-  await expect(page.getByText("so101_mujoco_demo_py", { exact: true })).toBeVisible();
+  await expect(page.getByText("so101_demo_py", { exact: true })).toBeVisible();
 });
 
 test("runtime environment is visible, bounded and copyable", async ({ page }) => {

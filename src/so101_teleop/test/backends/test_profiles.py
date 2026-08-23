@@ -2,13 +2,13 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
-
+import yaml
 from so101_teleop.backends.profile import ProfileError, load_profile_file
 from so101_teleop.backends.protocol import BackendOperation
 from so101_teleop.backends.registry import BACKEND_IDS, load_backend_profile
 
-
 PACKAGE = Path(__file__).resolve().parents[2]
+DEMO_PACKAGE = PACKAGE.parent / "so101_demo_py"
 
 
 def test_registry_accepts_only_fixed_backend_ids():
@@ -34,37 +34,74 @@ def test_gazebo_cpp_profile_pins_installed_owners():
     )
 
 
-def test_gazebo_py_profile_pins_python_cli_differences():
+def test_gazebo_py_profile_routes_run_to_canonical_bounded_execute():
     profile = load_backend_profile("gazebo_py", PACKAGE)
 
-    workflow = profile.operations[BackendOperation.WORKFLOW]
+    assert profile.owner_package == "so101_demo_py"
+    assert profile.probe.executable == "pick_place"
+    assert set(profile.operations) == {
+        BackendOperation.WORKFLOW,
+        BackendOperation.RESET_WORLD,
+        BackendOperation.SCENE,
+        BackendOperation.CAMERA_PRESET,
+    }
+    assert profile.operations[BackendOperation.WORKFLOW].executable == "gazebo_execute"
+    reset = profile.operations[BackendOperation.RESET_WORLD]
+    assert (reset.package, reset.executable, reset.fixed_args, reset.session_style) == (
+        "so101_demo_py", "teleop_reset", ("--backend", "gazebo"), "flag"
+    )
     scene = profile.operations[BackendOperation.SCENE]
-    assert profile.owner_package == "so101_gazebo_demo_py"
-    assert workflow.fixed_args == ("--live-runtime",)
-    assert scene.scene_style == "flag"
-    assert profile.capabilities.scene_operations is False
-    assert profile.capabilities.workflow_run is True
-
-
-def test_mujoco_profile_exposes_probe_only():
-    profile = load_backend_profile("mujoco_py", PACKAGE)
-
-    assert profile.owner_package == "so101_mujoco_demo_py"
-    assert profile.probe.executable == "pick_place_state_machine"
-    assert profile.operations == {}
+    assert (scene.package, scene.executable, scene.fixed_args, scene.scene_style) == (
+        "so101_demo_py", "scene_setup", ("--backend", "gazebo"), "positional"
+    )
+    camera = profile.operations[BackendOperation.CAMERA_PRESET]
+    assert (camera.package, camera.executable, camera.fixed_args) == (
+        "so101_demo_py", "camera_preset", ("--backend", "gazebo")
+    )
+    assert profile.camera_presets == ("overview", "top", "side", "gripper", "cup")
+    camera_config = yaml.safe_load(
+        (DEMO_PACKAGE / "config/gazebo/camera_views.yaml").read_text()
+    )
+    assert profile.camera_presets == tuple(camera_config["presets"])
     assert profile.capabilities.as_dict() == {
         "backend_probe": True,
-        "workflow_execute": False,
+        "workflow_execute": True,
         "workflow_start": False,
-        "workflow_run": False,
+        "workflow_run": True,
         "workflow_resume": False,
         "workflow_stop": False,
-        "reset_world": False,
+        "reset_world": True,
+        "scene_operations": True,
+        "physical_observation": True,
+        "manual_joint_execute": True,
+        "manual_tcp_execute": True,
+        "camera_presets": True,
+    }
+
+
+def test_mujoco_profile_exposes_only_qualified_live_boundaries():
+    profile = load_backend_profile("mujoco_py", PACKAGE)
+
+    assert profile.owner_package == "so101_demo_py"
+    assert profile.probe.executable == "pick_place"
+    assert set(profile.operations) == {
+        BackendOperation.WORKFLOW,
+        BackendOperation.RESET_WORLD,
+        BackendOperation.CAMERA_PRESET,
+    }
+    assert profile.capabilities.as_dict() == {
+        "backend_probe": True,
+        "workflow_execute": True,
+        "workflow_start": False,
+        "workflow_run": True,
+        "workflow_resume": False,
+        "workflow_stop": False,
+        "reset_world": True,
         "scene_operations": False,
         "physical_observation": False,
         "manual_joint_execute": False,
         "manual_tcp_execute": False,
-        "camera_presets": False,
+        "camera_presets": True,
     }
 
 

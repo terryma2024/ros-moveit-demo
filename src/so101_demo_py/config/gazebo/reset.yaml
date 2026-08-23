@@ -1,0 +1,23 @@
+schema_version: 1
+world_name: so101_pick_place
+task_object: plastic_cup
+named_home_state: home
+arm_joints: ["1", "2", "3", "4", "5"]
+home_positions: [0.0, 0.0, 0.0, 0.0, 0.0]
+gripper_joint: "6"
+gripper_open_position: -0.059600220867817
+parking_pose_xyz_xyzw: [0.45, 0.25, 0.045, 0.0, 0.0, 0.0, 1.0]
+position_tolerance: 0.002
+velocity_tolerance: 0.01
+operation_timeout_s: 15.0
+required_controllers: [joint_state_broadcaster, arm_controller, gripper_controller]
+topics:
+  detach: /so101/detach_object
+  attachment_state: /so101/object_attached_event
+  pose: /so101/gazebo_pose_info
+  joints: /joint_states
+  tf: /tf
+services:
+  set_pose: /world/so101_pick_place/set_pose
+  apply_scene: /apply_planning_scene
+  get_scene: /get_planning_scene

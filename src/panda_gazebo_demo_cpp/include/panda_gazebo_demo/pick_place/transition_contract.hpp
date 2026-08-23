@@ -15,19 +15,20 @@ using pick_place_common::ValidationResult;
 class PandaBoundaryMetricsDecorator final : public pick_place_common::ITransitionValidationDecorator
 {
 public:
-  ValidationResult decoratePrecondition(TransitionKey, const WorldSnapshot &,
-                                        ValidationResult) const override;
-  ValidationResult decoratePostcondition(TransitionKey, const WorldSnapshot &,
-                                         const WorldSnapshot &, const ActionResult &,
-                                         ValidationResult) const override;
-  ValidationResult decorateResume(TransitionKey, const WorldSnapshot &, const WorldSnapshot &,
-                                  ValidationResult) const override;
+  [[nodiscard]] ValidationResult decoratePrecondition(TransitionKey, const WorldSnapshot &,
+                                                      ValidationResult) const override;
+  [[nodiscard]] ValidationResult decoratePostcondition(TransitionKey, const WorldSnapshot &,
+                                                       const WorldSnapshot &, const ActionResult &,
+                                                       ValidationResult) const override;
+  [[nodiscard]] ValidationResult decorateResume(TransitionKey, const WorldSnapshot &,
+                                                const WorldSnapshot &,
+                                                ValidationResult) const override;
 };
 class TransitionContractRegistry : public pick_place_common::TransitionContractRegistry
 {
 public:
   TransitionContractRegistry();
-  std::optional<Failure> validateExecuteCoverage() const
+  [[nodiscard]] std::optional<Failure> validateExecuteCoverage() const
   {
     return pick_place_common::TransitionContractRegistry::validateExecuteCoverage(
       pandaWorkflowDefinition());

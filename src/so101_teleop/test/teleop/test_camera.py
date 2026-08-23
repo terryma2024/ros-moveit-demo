@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from so101_teleop.camera import CameraController, CameraPreset, load_camera_presets
+from so101_teleop.camera import (
+    BackendCameraController,
+    CameraController,
+    CameraPreset,
+    load_camera_presets,
+)
 
 
 def test_load_camera_presets_rejects_unknown_fields(tmp_path: Path):
@@ -46,3 +51,21 @@ def test_controller_reports_missing_gui_service_without_false_success():
 
     with pytest.raises(RuntimeError, match="GAZEBO_CAMERA_SERVICE_UNAVAILABLE"):
         controller.apply("overview")
+
+
+def test_backend_camera_controller_routes_only_named_owner_preset():
+    class Backend:
+        def __init__(self):
+            self.requests = []
+
+        def apply_camera_preset(self, request):
+            self.requests.append(request)
+            return type("Envelope", (), {"ok": True, "error": None})()
+
+    backend = Backend()
+    controller = BackendCameraController(("top_down",), backend)
+
+    controller.apply("top_down")
+
+    assert controller.names == ["top_down"]
+    assert backend.requests[0].preset == "top_down"

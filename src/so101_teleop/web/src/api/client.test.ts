@@ -6,7 +6,7 @@ describe("Execute All", () => {
   it("loads the immutable backend capability snapshot with GET", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       backend: "mujoco_py",
-      owner_package: "so101_mujoco_demo_py",
+      owner_package: "so101_demo_py",
       capabilities: { backend_probe: true, workflow_run: false },
     })));
     const client = new TeleopApiClient(fetcher, () => "command-id");
