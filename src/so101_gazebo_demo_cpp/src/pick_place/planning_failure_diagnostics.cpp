@@ -16,7 +16,9 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#if defined(__linux__)
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 
 namespace so101_gazebo_demo::pick_place
@@ -398,8 +400,16 @@ bool writeAll(int descriptor, std::string_view bytes)
 
 int renameWithoutReplacement(const std::filesystem::path & from, const std::filesystem::path & to)
 {
+#if defined(__linux__)
   return static_cast<int>(
     ::syscall(SYS_renameat2, AT_FDCWD, from.c_str(), AT_FDCWD, to.c_str(), RENAME_NOREPLACE));
+#else
+  // link(2) atomically fails with EEXIST and both paths are in directory_,
+  // so it provides the same no-replace publish guarantee on macOS.
+  if (::link(from.c_str(), to.c_str()) != 0)
+    return -1;
+  return ::unlink(from.c_str());
+#endif
 }
 
 }  // namespace

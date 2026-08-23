@@ -6,6 +6,8 @@ probe:
   timeout_s: 10
   fixed_args: []
   scene_style: null
+  session_style: null
+camera_presets: [overview, top, side, gripper, cup]
 capabilities:
   backend_probe: true
   workflow_execute: true
@@ -26,15 +28,18 @@ operations:
     timeout_s: 120
     fixed_args: []
     scene_style: null
+    session_style: null
   reset_world:
     package: so101_gazebo_demo_cpp
     executable: reset_so101_world
     timeout_s: 120
     fixed_args: []
     scene_style: null
+    session_style: null
   scene:
     package: so101_gazebo_demo_cpp
     executable: so101_moveit_scene
     timeout_s: 20
     fixed_args: []
     scene_style: positional
+    session_style: null

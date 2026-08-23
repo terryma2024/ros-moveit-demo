@@ -7,7 +7,9 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Protocol
+
+from .backends.protocol import BackendProtocol, CameraPresetRequest
 
 import yaml
 
@@ -105,3 +107,28 @@ class CameraController:
             raise RuntimeError("GAZEBO_CAMERA_SERVICE_UNAVAILABLE") from error
         if result.returncode != 0 or "data: true" not in result.stdout:
             raise RuntimeError("GAZEBO_CAMERA_SERVICE_UNAVAILABLE")
+
+
+class CameraControl(Protocol):
+    @property
+    def names(self) -> list[str]: ...
+
+    def apply(self, name: str) -> None: ...
+
+
+class BackendCameraController:
+    """Route a named preset through the selected simulator owner."""
+
+    def __init__(self, names: tuple[str, ...], backend: BackendProtocol) -> None:
+        self._names = tuple(names)
+        self._backend = backend
+
+    @property
+    def names(self) -> list[str]:
+        return list(self._names)
+
+    def apply(self, name: str) -> None:
+        envelope = self._backend.apply_camera_preset(CameraPresetRequest(name))
+        if not envelope.ok:
+            code = envelope.error.code if envelope.error is not None else "CAMERA_PRESET_FAILED"
+            raise RuntimeError(code)

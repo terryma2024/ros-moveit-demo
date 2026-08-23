@@ -15,6 +15,7 @@ class BackendOperation(str, Enum):
     WORKFLOW = "workflow"
     RESET_WORLD = "reset_world"
     SCENE = "scene"
+    CAMERA_PRESET = "camera_preset"
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,12 @@ class SceneRequest:
     session_id: str
 
 
+@dataclass(frozen=True)
+class CameraPresetRequest:
+    preset: str
+    session_id: str | None = None
+
+
 class BackendProtocol(Protocol):
     profile: Any
 
@@ -89,3 +96,5 @@ class BackendProtocol(Protocol):
     def reset_world(self, request: ResetRequest) -> BackendEnvelope: ...
 
     def scene_operation(self, request: SceneRequest) -> BackendEnvelope: ...
+
+    def apply_camera_preset(self, request: CameraPresetRequest) -> BackendEnvelope: ...

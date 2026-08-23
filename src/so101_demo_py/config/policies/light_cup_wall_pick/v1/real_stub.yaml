@@ -1,0 +1,8 @@
+schema_version: 1
+policy_id: light_cup_wall_pick
+backend: real_stub
+execution_allowed: false
+readiness_error_code: REAL_HARDWARE_NOT_CONFIGURED
+safety:
+  device_access_allowed: false
+  ros_control_io_allowed: false

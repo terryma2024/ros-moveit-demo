@@ -1,22 +1,50 @@
 backend: mujoco_py
-owner_package: so101_mujoco_demo_py
+owner_package: so101_demo_py
 probe:
-  package: so101_mujoco_demo_py
-  executable: pick_place_state_machine
+  package: so101_demo_py
+  executable: pick_place
   timeout_s: 10
   fixed_args: []
   scene_style: null
+  session_style: null
+camera_presets:
+  - table_corner_nw
+  - table_corner_ne
+  - table_corner_se
+  - table_corner_sw
+  - top_down
 capabilities:
   backend_probe: true
-  workflow_execute: false
+  workflow_execute: true
   workflow_start: false
-  workflow_run: false
+  workflow_run: true
   workflow_resume: false
   workflow_stop: false
-  reset_world: false
+  reset_world: true
   scene_operations: false
   physical_observation: false
   manual_joint_execute: false
   manual_tcp_execute: false
-  camera_presets: false
-operations: {}
+  camera_presets: true
+operations:
+  workflow:
+    package: so101_demo_py
+    executable: teleop_workflow
+    timeout_s: 300
+    fixed_args: []
+    scene_style: null
+    session_style: null
+  reset_world:
+    package: so101_demo_py
+    executable: teleop_reset
+    timeout_s: 30
+    fixed_args: []
+    scene_style: null
+    session_style: flag
+  camera_preset:
+    package: so101_demo_py
+    executable: camera_preset
+    timeout_s: 10
+    fixed_args: []
+    scene_style: null
+    session_style: null

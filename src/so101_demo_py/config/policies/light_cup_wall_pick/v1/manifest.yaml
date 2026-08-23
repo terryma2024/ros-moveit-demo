@@ -1,0 +1,19 @@
+schema_version: 1
+policy_id: light_cup_wall_pick
+version: v1
+variants:
+  mujoco:
+    backend: mujoco
+    filename: mujoco.yaml
+    policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+    qualification_status: PENDING_REQUALIFICATION
+  gazebo:
+    backend: gazebo
+    filename: gazebo.yaml
+    policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+    qualification_status: NOT_QUALIFIED
+  real_stub:
+    backend: real_stub
+    filename: real_stub.yaml
+    policy_sha256: e5a96cc1c78049095415c3569c1fd153585188451b6a62230c10a3ecd7a4be62
+    qualification_status: NOT_QUALIFIED

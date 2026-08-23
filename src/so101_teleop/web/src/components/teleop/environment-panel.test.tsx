@@ -35,11 +35,11 @@ describe("EnvironmentPanel", () => {
   it("shows immutable backend provenance separately from the environment", () => {
     render(<TooltipProvider><EnvironmentPanel
       environment={{}}
-      backend={{ backend: "gazebo_py", owner_package: "so101_gazebo_demo_py" }}
+      backend={{ backend: "gazebo_py", owner_package: "so101_demo_py" }}
     /></TooltipProvider>);
 
     expect(screen.getByText("gazebo_py")).toBeTruthy();
-    expect(screen.getByText("so101_gazebo_demo_py")).toBeTruthy();
+    expect(screen.getByText("so101_demo_py")).toBeTruthy();
   });
 
   it("copies the complete value even when the visible cell is bounded", async () => {

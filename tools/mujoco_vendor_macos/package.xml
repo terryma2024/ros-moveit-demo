@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mujoco_vendor</name>
+  <version>0.0.9</version>
+  <description>macOS ROS 2 vendor overlay for source-built MuJoCo 3.4.0.</description>
+  <maintainer email="maintainer@example.com">SO-101 maintainers</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

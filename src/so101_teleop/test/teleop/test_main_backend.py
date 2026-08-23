@@ -3,10 +3,8 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-
-from so101_teleop.backends.protocol import BackendEnvelope, BackendError
+from so101_teleop.backends.protocol import BackendEnvelope, BackendError, BackendOperation
 from so101_teleop.main import select_backend
-
 
 main_module = importlib.import_module("so101_teleop.main")
 
@@ -68,8 +66,8 @@ def test_selected_backend_is_frozen_after_successful_probe():
         backend="gazebo_py",
         operation="backend_probe",
         session_id=None,
-        owner_package="so101_gazebo_demo_py",
-        owner_executable="pick_place_state_machine",
+        owner_package="so101_demo_py",
+        owner_executable="pick_place",
         exit_code=0,
         result={"status": "available"},
     ))
@@ -82,6 +80,43 @@ def test_selected_backend_is_frozen_after_successful_probe():
 
     assert selected is adapter
     assert selected.profile.backend == "gazebo_py"
+
+
+def test_gazebo_python_camera_uses_profile_allowlist(monkeypatch, tmp_path):
+    events = []
+    profile = SimpleNamespace(
+        backend="gazebo_py",
+        operations={BackendOperation.CAMERA_PRESET: object()},
+        camera_presets=("overview", "top", "side", "gripper", "cup"),
+    )
+    backend = SimpleNamespace(profile=profile)
+
+    class Worker:
+        def __init__(self, selected):
+            events.append(("worker", selected))
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(main_module, "validate_bind_address", lambda address: address)
+    monkeypatch.setattr(main_module, "select_backend", lambda environment: backend)
+    monkeypatch.setattr(main_module, "RosTelemetryWorker", Worker)
+    monkeypatch.setattr(
+        main_module,
+        "BackendCameraController",
+        lambda names, selected: events.append(("camera", names, selected)) or object(),
+    )
+    monkeypatch.setattr(main_module, "TeleopService", lambda *args, **kwargs: object())
+    monkeypatch.setattr(main_module, "installed_web_assets", lambda: tmp_path)
+    monkeypatch.setattr(main_module, "create_app", lambda *args, **kwargs: "app")
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *args, **kwargs: None))
+
+    main_module.main()
+
+    assert ("camera", profile.camera_presets, backend) in events
 
 
 def test_server_lifecycle_stops_ros_worker_when_uvicorn_returns(monkeypatch, tmp_path):
@@ -97,7 +132,7 @@ def test_server_lifecycle_stops_ros_worker_when_uvicorn_returns(monkeypatch, tmp
         def stop(self):
             events.append(("stop",))
 
-    backend = object()
+    backend = SimpleNamespace(profile=SimpleNamespace(operations={}))
     monkeypatch.setenv("SO101_CAMERA_VIEWS", str(tmp_path / "camera.yaml"))
     monkeypatch.setattr(main_module, "validate_bind_address", lambda address: address)
     monkeypatch.setattr(main_module, "select_backend", lambda environment: backend)

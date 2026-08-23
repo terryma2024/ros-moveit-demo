@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>so101_demo_py</name>
+  <version>0.1.0</version>
+  <description>Unified SO-101 MuJoCo and Gazebo pick-place demonstration.</description>
+  <maintainer email="maintainer@example.com">SO-101 maintainers</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>ament_index_python</depend>
+  <depend>action_msgs</depend>
+  <depend>builtin_interfaces</depend>
+  <depend>control_msgs</depend>
+  <depend>controller_manager</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>joint_state_broadcaster</depend>
+  <depend>joint_trajectory_controller</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>moveit_msgs</depend>
+  <depend>mujoco_ros2_control</depend>
+  <depend>mujoco_ros2_control_msgs</depend>
+  <depend>mujoco_ros2_control_plugins</depend>
+  <depend>mujoco_vendor</depend>
+  <depend>rclpy</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>ros_gz_interfaces</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>shape_msgs</depend>
+  <depend>so101_mujoco_support</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>trajectory_msgs</depend>
+  <exec_depend>python3-typing-extensions</exec_depend>
+  <depend>xacro</depend>
+
+  <exec_depend>gz_ros2_control</exec_depend>
+  <exec_depend>moveit_configs_utils</exec_depend>
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>moveit_simple_controller_manager</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>so101_teleop</exec_depend>
+
+  <test_depend>ament_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
