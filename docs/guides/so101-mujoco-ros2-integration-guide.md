@@ -47,8 +47,8 @@ URDF/SRDF 提供关节语义、TF、MoveIt group 和 controller 映射；MJCF �
 |---|---|
 | submodule | `third_party/mujoco_ros2_control` |
 | fork | `git@gitee.com:zjumty/mujoco_ros2_control.git` |
-| release | `so101-0.0.3-r7` |
-| gitlink commit | `6fa4485f1032dafdc76a515ddde8dd8bd6ccc23b` |
+| release | `so101-0.0.3-r8` |
+| gitlink commit | `78758d5becf1829e611da1dafb201fa018ddbe7b` |
 | upstream tag | `0.0.3` |
 | upstream commit | `35ba8174b62d9560093614f981a3d4b978a96036` |
 | lock | `src/so101_demo_py/config/mujoco/dependency-lock.yaml` |
@@ -71,7 +71,7 @@ zsh scripts/install-mujoco-ros2-control.zsh --init-submodule
 1. 当前 checkout 是含已提交 gitlink 的 superproject；
 2. `.gitmodules`、lock、gitlink、submodule `HEAD` 四者一致；
 3. submodule clean，origin URL 正确，官方 0.0.3 是 fork commit 的祖先；
-4. r7 tag 精确解析到 locked commit；
+4. r8 tag 精确解析到 locked commit；
 5. 独立 build source 位于 locked commit 且保持 clean；
 6. 三个 fork package 实际被发现、构建并测试。
 

@@ -86,7 +86,21 @@ OMPL 2.0.1 需要 Homebrew `libomp`。配置源码构建时使用：
 ABI。资格通过时的 farm 含 877 个 dylib。项目 C++ 目标仍需保留 install rpath；farm
 不是 rpath 的替代品。
 
-重建固定的 `mujoco_ros2_control` fork：
+先从 clean MuJoCo 3.4.0 authority 重放并安装 macOS vendor 修复：
+
+```zsh
+SO101_ROS_WORKSPACE=~/ros2_jazzy \
+SO101_MUJOCO_SOURCE_ROOT=~/Projects/robot_demo_001/ws_mujoco_vendor/src/mujoco \
+SO101_MUJOCO_VENDOR_WORKSPACE=~/ros2_jazzy/mujoco_vendor_macos_ws \
+SO101_MUJOCO_VENDOR_INSTALL_PREFIX=~/ros2_jazzy/extra_ws/install \
+./scripts/install-mujoco-vendor-macos.zsh
+```
+
+安装器会校验 MuJoCo commit、patch SHA-256 和应用后的 `glfw_adapter.cc` SHA-256，并在独立
+detached source 中先执行 `git apply --check` 再应用补丁。它不会修改 authority checkout，
+也不会把 MuJoCo 源码补丁写进 `mujoco_ros2_control` fork。
+
+再重建固定的 `mujoco_ros2_control` fork：
 
 ```zsh
 SO101_WORKSPACE_DIR=~/ros2_jazzy \
@@ -95,14 +109,14 @@ SO101_ROS_DEPENDENCY_OVERLAY=~/ros2_jazzy/extra_ws/install \
 ./scripts/install-mujoco-ros2-control.zsh
 ```
 
-fork 固定为 tag `so101-0.0.3-r7`、commit
-`6fa4485f1032dafdc76a515ddde8dd8bd6ccc23b`。11 项 macOS/Linux 兼容修改已经成为 fork 中
-11 个可审计 commit；fork Git 历史是唯一源码权威，主仓不再保存补丁文件，也不在构建时
-修改 fork source。安装器从 clean submodule 创建独立 build source，校验其 HEAD 和 clean
-状态后清缓存构建、运行包测试，再检查 package prefix、接口和动态库。
+fork 固定为 tag `so101-0.0.3-r8`、commit
+`78758d5becf1829e611da1dafb201fa018ddbe7b`。r8 在 r7 的 11 项 macOS/Linux 兼容修改之后增加
+GLFW primary monitor/video mode 空指针保护；fork Git 历史仍是 `mujoco_ros2_control` 源码的
+唯一权威。安装器从 clean submodule 创建独立 build source，校验其 HEAD 和 clean 状态后清
+缓存构建、运行包测试，再检查 package prefix、接口和动态库。
 
 不要复用带 r6 patch 的旧 `ws_mujoco_ros2_control_fork/src/mujoco_ros2_control`。安装器会对
-dirty 或非 r7 build source fail closed，不会 reset、clean 或反向移除用户文件；显式选择新的
+dirty 或非 r8 build source fail closed，不会 reset、clean 或反向移除用户文件；显式选择新的
 `SO101_WORKSPACE_DIR`，或先自行归档旧 workspace。
 
 2026-08-14 的 r7 隔离验证中，两端使用同一 commit，且 r6→r7 组合 diff SHA-256 为
@@ -111,6 +125,10 @@ Linux 通过 134 项测试；macOS 多出的 1 项是 Apple 主线程 UI 专项�
 pause/reset/step smoke 均成功；这些 smoke 只验证跨平台运行边界，不计作新的资格批次。
 Linux ELF 不含 Cocoa、CoreVideo 或 AppKit，并保留 tinyxml2 的
 `--push-state,--no-as-needed` link option。
+
+2026-08-24 的 r8 本机隔离验证中，MuJoCo vendor 与 fork 构建成功，fork 核心包 124 项测试
+全部通过。该次验证不冒充新的 Linux 运行资格；r7 的双平台结果仍作为未改动平台边界的既有
+证据。
 
 后续平台修复应作为普通 fork commit 提交；macOS 和 Linux 都通过后发布新的 `rN` tag，再
 更新主仓 gitlink 与 lock。不要手工修改 submodule 或生成目录中的源码。

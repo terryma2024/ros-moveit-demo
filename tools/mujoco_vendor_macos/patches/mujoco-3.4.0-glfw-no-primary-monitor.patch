@@ -1,0 +1,56 @@
+diff --git a/simulate/glfw_adapter.cc b/simulate/glfw_adapter.cc
+index 6bae882..a7c3c73 100644
+--- a/simulate/glfw_adapter.cc
++++ b/simulate/glfw_adapter.cc
+@@ -57 +57,15 @@ GlfwAdapter::GlfwAdapter() {
+-  vidmode_ = *Glfw().glfwGetVideoMode(Glfw().glfwGetPrimaryMonitor());
++  GLFWmonitor* primary_monitor = Glfw().glfwGetPrimaryMonitor();
++  const GLFWvidmode* primary_mode =
++      primary_monitor ? Glfw().glfwGetVideoMode(primary_monitor) : nullptr;
++  if (primary_mode) {
++    vidmode_ = *primary_mode;
++  } else {
++    // Cocoa can transiently report no primary monitor while a non-bundled
++    // command-line process is attaching to the WindowServer. A windowed
++    // context does not require a monitor, so use a conservative default.
++    vidmode_ = {};
++    vidmode_.width = 1200;
++    vidmode_.height = 900;
++    vidmode_.redBits = vidmode_.greenBits = vidmode_.blueBits = 8;
++    vidmode_.refreshRate = 60;
++  }
+@@ -125,4 +139,10 @@ double GlfwAdapter::GetDisplayPixelsPerInch() const {
+-  int width_mm, height_mm;
+-  Glfw().glfwGetMonitorPhysicalSize(
+-      Glfw().glfwGetPrimaryMonitor(), &width_mm, &height_mm);
+-  return 25.4 * vidmode_.width / width_mm;
++  GLFWmonitor* primary_monitor = Glfw().glfwGetPrimaryMonitor();
++  if (primary_monitor) {
++    int width_mm = 0;
++    int height_mm = 0;
++    Glfw().glfwGetMonitorPhysicalSize(primary_monitor, &width_mm, &height_mm);
++    if (width_mm > 0) {
++      return 25.4 * vidmode_.width / width_mm;
++    }
++  }
++  return 96.0;
+@@ -158 +178,5 @@ void GlfwAdapter::SetVSync(bool enabled){
+-  if (enabled && !core_video_.has_value()) {
++  // CoreVideo never signals a refresh when Cocoa has not exposed a primary
++  // monitor. Enabling it in that state deadlocks SwapBuffers while the render
++  // loop owns the Simulate mutex, which also blocks model loading.
++  const bool core_video_available = Glfw().glfwGetPrimaryMonitor() != nullptr;
++  if (enabled && core_video_available && !core_video_.has_value()) {
+@@ -160 +184 @@ void GlfwAdapter::SetVSync(bool enabled){
+-  } else if (!enabled && core_video_.has_value()) {
++  } else if ((!enabled || !core_video_available) && core_video_.has_value()) {
+@@ -201,3 +225,6 @@ void GlfwAdapter::ToggleFullscreen() {
+-    Glfw().glfwSetWindowMonitor(window_, Glfw().glfwGetPrimaryMonitor(), 0,
+-                                0, vidmode_.width, vidmode_.height,
+-                                vidmode_.refreshRate);
++    GLFWmonitor* primary_monitor = Glfw().glfwGetPrimaryMonitor();
++    if (primary_monitor) {
++      Glfw().glfwSetWindowMonitor(window_, primary_monitor, 0, 0,
++                                  vidmode_.width, vidmode_.height,
++                                  vidmode_.refreshRate);
++    }
