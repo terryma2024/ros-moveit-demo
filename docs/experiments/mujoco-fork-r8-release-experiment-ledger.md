@@ -18,8 +18,8 @@ disproven_routes:
 open_hypotheses:
   - A source contract can prevent removal of the r8 guard without requiring a real missing-monitor GLFW session.
   - A clean detached MuJoCo 3.4.0 build source can receive the pinned patch idempotently and supply the macOS vendor package without mutating the authority checkout.
-latest_checkpoint: CP-003
-next_experiment: EXP-005
+latest_checkpoint: CP-004
+next_experiment: NONE
 ```
 
 ## EXP-001
@@ -288,6 +288,76 @@ open_risks:
   - The superproject integration commit and remote read-back are pending.
   - The existing external dirty r6 fork source workspace remains intentionally untouched; active fork overlay replacement is a separate operation.
 next_command: Re-stage this ledger, run final staged diff checks, commit the scoped superproject integration, then push and read back origin.
+```
+
+## EXP-006
+
+```yaml
+experiment_id: EXP-006
+status: VALID
+prior_experiment: EXP-005
+hypothesis: The persistent fork overlay used by .envrc can be replaced from clean r8 submodule bytes without touching the preserved dirty external fork source.
+prediction: An independent persistent build finishes three packages, installs into ws_mujoco_ros2_control_fork/install, and the core package repeats 124 passing tests from that build.
+single_variable: Build the locked clean submodule into the persistent fork install using a separate r8 build directory.
+lifecycle: FULL_RESTART
+preconditions:
+  - No ROS, MuJoCo, MoveIt, fixed, or dynamic executable process is active.
+  - Existing ws_mujoco_ros2_control_fork/src/mujoco_ros2_control remains untouched.
+success_criteria:
+  - Three packages build and install; package prefix resolves to the persistent fork overlay; 124 core tests pass.
+failure_criteria:
+  - Build/test fails or active prefix resolves elsewhere.
+invalid_criteria:
+  - The preserved external dirty source is reset, cleaned, or used as build authority.
+provenance:
+  source_commit: 78758d5becf1829e611da1dafb201fa018ddbe7b
+  install_overlay: /Users/matianyi/ros2_jazzy/ws_mujoco_ros2_control_fork/install
+  runtime_executable: /Users/matianyi/ros2_jazzy/ws_mujoco_ros2_control_fork/install/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 192
+  gz_partition: NONE
+commands:
+  - command: isolated persistent colcon build of msgs, plugins, and core from third_party/mujoco_ros2_control
+    exit_code: 0
+  - command: persistent core colcon test and verbose test-result
+    exit_code: 0
+  - command: ros2 pkg prefix and executable SHA-256 read-back
+    exit_code: 0
+observed:
+  - OBSERVED: three packages built and installed successfully; warnings were non-fatal compiler/deprecation/rpath diagnostics.
+  - OBSERVED: the persistent core result is 124 tests, 0 errors, 0 failures, 0 skipped.
+  - OBSERVED: mujoco_ros2_control resolves to /Users/matianyi/ros2_jazzy/ws_mujoco_ros2_control_fork/install.
+  - OBSERVED: the persistent ros2_control_node SHA-256 is deeeb169e4acc54d286ea62dffbc64afbeaf99350316c507f3c59cf779777f94.
+inferred:
+  - The next direnv shell will consume the r8 fork overlay while retaining the separately patched vendor overlay.
+conclusion: The local persistent runtime dependencies now match the published r8 lock and replayed MuJoCo vendor patch.
+evidence:
+  - /Users/matianyi/ros2_jazzy/ws_mujoco_ros2_control_r8_build
+  - /Users/matianyi/ros2_jazzy/ws_mujoco_ros2_control_fork/install
+  - /tmp/so101-debug-mujoco-fork-r8-release-20260824/persistent-r8-ros-log
+decision: KEEP
+next_experiment: NONE
+```
+
+## CP-004
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: EXP-006
+current_hypothesis: NONE; the requested r8 release, superproject integration, replayable vendor patch, and local persistent installation are complete.
+working_tree_status: Published r8 integration commits are clean relative to their scoped paths; unrelated pre-existing dynamic cup and AMENT ordering work remains untouched and unstaged.
+owned_processes: NONE
+preserved_processes: NONE
+confirmed_conclusions:
+  - Gitee fork main and peeled r8 tag resolve to 78758d5becf1829e611da1dafb201fa018ddbe7b.
+  - Gitee superproject main contains the r8 gitlink, both locks, installer, zero-context patch, tests, and guide updates.
+  - Local persistent vendor and fork overlays match the replayed patch and r8 source respectively.
+  - Full package pytest has 252 passing tests; persistent fork core has 124 passing tests.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - Linux runtime was not repeated for r8; the source-only null guard preserves the previously qualified r7 platform boundary, but no new Linux qualification is claimed.
+  - A full pick-place was not repeated after dependency-only r8 installation; this release gate used package build/test and installed provenance, not a new workflow qualification.
+next_command: NONE
 ```
 
 ## CP-001
