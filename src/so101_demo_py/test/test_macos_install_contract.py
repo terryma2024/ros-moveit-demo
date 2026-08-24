@@ -13,6 +13,10 @@ FUSION_CHECK = (
     REPOSITORY_ROOT / "src" / "so101_demo_py" / "scripts" / "check_fusion_contract.sh"
 )
 MACOS_VENDOR = REPOSITORY_ROOT / "tools" / "mujoco_vendor_macos"
+MACOS_VENDOR_INSTALLER = REPOSITORY_ROOT / "scripts" / "install-mujoco-vendor-macos.zsh"
+MUJOCO_GLFW_PATCH = (
+    MACOS_VENDOR / "patches" / "mujoco-3.4.0-glfw-no-primary-monitor.patch"
+)
 DYLIB_FARM = REPOSITORY_ROOT / "scripts" / "setup-macos-ros-dylib-farm.zsh"
 ENVRC_EXAMPLE = REPOSITORY_ROOT / ".envrc.example"
 PATCH_SERIES_DIR = REPOSITORY_ROOT / "scripts" / "patches" / "mujoco_ros2_control"
@@ -21,16 +25,20 @@ LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco/dependency-lock.yaml"
 RUNTIME_LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/dependency-lock.yaml"
 R6_FORK_COMMIT = "738e304551b4ea6db020b466086a13db71b65607"
 EXPECTED_PORTABLE_DIFF_SHA256 = (
-    "56b2f1033ccf48b44be6db8daee800f3f4d463048bd6cf2a7f8e58549ebde2f5"
+    "f57e9dea368a15edd881887f24ac56c5bbdb4d57194233d7faea79ca87c9358c"
+)
+MUJOCO_340_COMMIT = "e55fff5dea6f1d5dd7963ca52eecc41d05ad0922"
+MUJOCO_GLFW_PATCH_SHA256 = (
+    "aa506e126cf8bec3bcc60a961fbe457e056d2aeb1838bb6c67c7584d7ac5264e"
 )
 
 
-def test_r7_fork_is_the_only_portable_source_authority() -> None:
+def test_r8_fork_is_the_only_portable_source_authority() -> None:
     lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
     runtime_lock = yaml.safe_load(RUNTIME_LOCK.read_text(encoding="utf-8"))
 
-    assert lock["fork"]["tag"] == "so101-0.0.3-r7"
-    assert runtime_lock["fork"]["tag"] == "so101-0.0.3-r7"
+    assert lock["fork"]["tag"] == "so101-0.0.3-r8"
+    assert runtime_lock["fork"]["tag"] == "so101-0.0.3-r8"
     assert runtime_lock["fork"]["commit"] == lock["fork"]["commit"]
     assert (
         runtime_lock["fork"]["policy_behavior_commit"]
@@ -41,7 +49,7 @@ def test_r7_fork_is_the_only_portable_source_authority() -> None:
     assert "scripts/patches/mujoco_ros2_control" not in attributes
 
 
-def test_r7_gitlink_history_and_portable_bytes_are_exact() -> None:
+def test_r8_gitlink_history_and_portable_bytes_are_exact() -> None:
     lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
     locked_commit = lock["fork"]["commit"]
     gitlink = subprocess.run(
@@ -115,6 +123,7 @@ def test_r7_gitlink_history_and_portable_bytes_are_exact() -> None:
         "Apple conversion warnings",
         "Apple test backward runtime",
         "guard Apple test runtime dependencies",
+        "fix: guard unavailable GLFW primary monitor",
     ]
     portable_diff = subprocess.run(
         [
@@ -223,6 +232,40 @@ def test_macos_mujoco_vendor_installs_source_build_with_linux_compatible_layout(
     assert (vendor_root / "include/simulate/simulate.h").read_text() == "/* fixture */\n"
     assert (vendor_root / "lib/libmujoco.dylib").read_bytes() == b"fixture"
     assert (install / "share/mujoco_vendor/cmake/mujoco_vendorConfig.cmake").is_file()
+
+
+def test_macos_mujoco_vendor_patch_is_pinned_and_auditable() -> None:
+    assert MUJOCO_GLFW_PATCH.is_file()
+    assert hashlib.sha256(MUJOCO_GLFW_PATCH.read_bytes()).hexdigest() == (
+        MUJOCO_GLFW_PATCH_SHA256
+    )
+    patch = MUJOCO_GLFW_PATCH.read_text(encoding="utf-8")
+    assert "primary_monitor ? Glfw().glfwGetVideoMode(primary_monitor) : nullptr" in patch
+    assert "const bool core_video_available" in patch
+    assert "if (primary_monitor)" in patch
+
+
+def test_macos_mujoco_vendor_installer_replays_patch_from_clean_340_source() -> None:
+    installer = MACOS_VENDOR_INSTALLER.read_text(encoding="utf-8")
+
+    assert f"readonly mujoco_commit={MUJOCO_340_COMMIT}" in installer
+    assert f"readonly patch_sha256={MUJOCO_GLFW_PATCH_SHA256}" in installer
+    assert "SO101_MUJOCO_SOURCE_ROOT" in installer
+    assert "SO101_MUJOCO_VENDOR_WORKSPACE" in installer
+    assert "SO101_MUJOCO_VENDOR_INSTALL_PREFIX" in installer
+    assert 'status --porcelain --untracked-files=all' in installer
+    assert 'apply --unidiff-zero --check "${patch_file}"' in installer
+    assert 'apply --unidiff-zero "${patch_file}"' in installer
+    assert 'observed_patch_sha256' in installer
+    assert '--prepare-only' in installer
+    assert 'colcon_command=${SO101_COLCON:-${ros_workspace}/.venv/bin/colcon}' in installer
+    assert '[[ -x ${colcon_command} ]]' in installer
+    assert '"${colcon_command}" --log-base' in installer
+    assert 'python_command=${SO101_PYTHON:-${ros_workspace}/.venv/bin/python}' in installer
+    assert '[[ -x ${python_command} ]]' in installer
+    assert '"${python_command}" -c "import catkin_pkg"' in installer
+    assert 'PATH="${python_command:h}:${PATH}" "${colcon_command}"' in installer
+    assert '-DPython3_EXECUTABLE="${python_command}"' in installer
 
 
 def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
