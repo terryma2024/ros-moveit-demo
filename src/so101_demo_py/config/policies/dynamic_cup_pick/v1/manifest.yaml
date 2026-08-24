@@ -1,0 +1,14 @@
+schema_version: 2
+policy_id: dynamic_cup_pick
+version: v1
+supported_backends: [gazebo, mujoco]
+execution_allowed_backends: [mujoco]
+variants:
+  gazebo:
+    filename: gazebo.yaml
+    sha256: f1d47b8780dce642d78b8de00865cb66b1fdbea5ce076bfb71805f5c82842d19
+    qualification_status: CALIBRATION_REQUIRED
+  mujoco:
+    filename: mujoco.yaml
+    sha256: 1685caef958580c206c63acb1569cecca2a485535355f46c938cd8d6d027fb79
+    qualification_status: LOCAL_E2E_CANDIDATE

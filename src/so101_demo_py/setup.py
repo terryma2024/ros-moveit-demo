@@ -43,10 +43,11 @@ setup(
     maintainer_email="zjumty@gmail.com",
     description="Unified SO-101 MuJoCo and Gazebo pick-place demonstration.",
     license="Apache-2.0",
-    tests_require=["pytest"],
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
-            "pick_place = so101_demo.cli.pick_place:main",
+            "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main",
+            "dynamic_cup_pick_place = so101_demo.cli.dynamic_cup_pick_place:main",
             "run_qualification = so101_demo.cli.qualification:main",
             "scene_setup = so101_demo.cli.scene_setup:main",
             "gazebo_execute = so101_demo.backends.gazebo.execute:main",

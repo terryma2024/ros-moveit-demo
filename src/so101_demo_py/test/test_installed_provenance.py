@@ -12,9 +12,10 @@ from so101_demo.runtime.provenance import installed_bundle
 
 EXPECTED_EXECUTABLES = {
     "camera_preset",
+    "dynamic_cup_pick_place",
+    "fixed_cup_pick_place",
     "gazebo_execute",
     "gazebo_ready",
-    "pick_place",
     "run_qualification",
     "scene_setup",
     "teleop_reset",
@@ -57,13 +58,19 @@ def test_manifest_matches_selected_installed_prefix_and_source() -> None:
 def test_final_install_contains_runtime_contract() -> None:
     prefix = Path(get_package_prefix("so101_demo_py")).resolve()
     share = Path(get_package_share_directory("so101_demo_py")).resolve()
-    assert {path.name for path in (prefix / "lib/so101_demo_py").iterdir()} >= EXPECTED_EXECUTABLES
+    installed_executables = {
+        path.name for path in (prefix / "lib/so101_demo_py").iterdir()
+    }
+    assert installed_executables >= EXPECTED_EXECUTABLES
+    assert "pick_place" not in installed_executables
     assert {path.name for path in (share / "launch").glob("*.launch.py")} == EXPECTED_LAUNCHERS
     assert (share / "assets/mujoco/scene.xml").is_file()
     assert (share / "assets/gazebo/world.sdf").is_file()
     assert (share / "config/policies/light_cup_wall_pick/v1/mujoco.yaml").is_file()
     assert (share / "config/policies/light_cup_wall_pick/v1/gazebo.yaml").is_file()
     assert (share / "config/policies/light_cup_wall_pick/v1/real_stub.yaml").is_file()
+    assert (share / "config/policies/dynamic_cup_pick/v1/gazebo.yaml").is_file()
+    assert (share / "config/policies/dynamic_cup_pick/v1/manifest.yaml").is_file()
 
 
 def test_pytest_collection_is_nonzero() -> None:

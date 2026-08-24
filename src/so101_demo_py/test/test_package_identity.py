@@ -44,6 +44,7 @@ def test_setup_publishes_unified_runtime_commands(monkeypatch) -> None:
     runpy.run_path(str(PACKAGE_ROOT / "setup.py"), run_name="__main__")
 
     assert set(captured["entry_points"]["console_scripts"]) >= {
-        "pick_place = so101_demo.cli.pick_place:main",
+        "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main",
+        "dynamic_cup_pick_place = so101_demo.cli.dynamic_cup_pick_place:main",
         "run_qualification = so101_demo.cli.qualification:main",
     }

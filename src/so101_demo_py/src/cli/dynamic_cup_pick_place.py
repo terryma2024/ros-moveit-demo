@@ -1,0 +1,55 @@
+"""V2.1 perception-driven plan-only composition root."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="dynamic_cup_pick_place")
+    parser.add_argument("--backend", default="gazebo")
+    parser.add_argument("--mode", choices=("plan_only", "execute"), default="plan_only")
+    parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--plan-only-state")
+    parser.add_argument("--cup-pose-timeout-s", type=float, default=5.0)
+    parser.add_argument("--scene-source", default="observe_only")
+    parser.add_argument("--dynamic-policy")
+    parser.add_argument("--evidence-file")
+    parser.add_argument("--source-commit", default="UNRECORDED_SOURCE")
+    parser.add_argument("--installed-prefix")
+    parser.add_argument("--session-id", default="")
+    parser.add_argument("--expected-reset-epoch", type=int)
+    parser.add_argument("--evidence-root", type=Path)
+    return parser
+
+
+def main(arguments: list[str] | None = None) -> int:
+    options = build_parser().parse_args(arguments)
+    execute_requested = options.mode == "execute" or options.execute
+    if execute_requested:
+        if options.mode != "execute" or not options.execute:
+            print("status=ERROR failure=EXPLICIT_EXECUTE_REQUIRED")
+            return 1
+        if options.backend != "mujoco":
+            print("status=ERROR failure=DYNAMIC_EXECUTION_NOT_QUALIFIED")
+            return 1
+        if options.scene_source != "observe_only":
+            print("status=ERROR failure=DYNAMIC_SCENE_SOURCE_UNSUPPORTED")
+            return 1
+        from ..ros.dynamic_runtime import run_dynamic_execute
+
+        return run_dynamic_execute(options)
+    if options.backend != "gazebo":
+        print("status=ERROR failure=DYNAMIC_BACKEND_UNSUPPORTED")
+        return 1
+    if options.scene_source != "observe_only":
+        print("status=ERROR failure=DYNAMIC_SCENE_SOURCE_UNSUPPORTED")
+        return 1
+    from ..ros.dynamic_runtime import run_dynamic_plan_only
+
+    return run_dynamic_plan_only(options)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

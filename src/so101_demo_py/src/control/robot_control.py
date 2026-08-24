@@ -53,12 +53,25 @@ class SharedRobotControl:
         return PlanResult(True, start, trajectory)
 
     def plan_tcp_motion(self, request: TcpMotionRequest) -> PlanResult:
-        start = self.current_joint_state(request.timeout_s)
+        start = request.start_state or self.current_joint_state(request.timeout_s)
         try:
-            trajectory = self._tcp_planner(request, start)
+            planned = self._tcp_planner(request, start)
         except Exception:
             return PlanResult(False, start_state=start, error_code="PLANNING_FAILED")
-        return PlanResult(True, start, trajectory)
+        terminal = None
+        trajectory = planned
+        if (
+            isinstance(planned, tuple)
+            and len(planned) == 2
+            and isinstance(planned[1], JointStateEvidence)
+        ):
+            trajectory, terminal = planned
+        return PlanResult(
+            True,
+            start_state=start,
+            trajectory=trajectory,
+            terminal_state=terminal,
+        )
 
     def execute(self, plan: PlanResult) -> ExecutionResult:
         if not plan.accepted or plan.start_state is None or plan.trajectory is None:

@@ -1,0 +1,31 @@
+schema_version: 2
+policy_id: dynamic_cup_pick
+backend: gazebo
+execution_allowed: false
+planning:
+  frame: world
+  group: arm
+  arm_joint_names: ["1", "2", "3", "4", "5"]
+  tcp_link: so101_tcp
+  planning_timeout_s: 5.0
+  position_tolerance_m: 0.002
+  orientation_tolerance_rad: [0.10, 0.10, 0.10]
+  velocity_scaling: 0.03
+  acceleration_scaling: 0.03
+object:
+  object_id: plastic_cup
+  cup_to_tcp_grasp_xyz_xyzw: [0.0, 0.0, 0.035, 0.0, 0.0, 0.0, 1.0]
+pick:
+  pregrasp_world_z_clearance_m: 0.08
+  micro_lift_world_z_clearance_m: 0.02
+  lift_world_z_clearance_m: 0.10
+place:
+  tcp_world_xyz_xyzw: [0.19, -0.18, 0.20, 0.0, 0.0, 0.0, 1.0]
+  approach_world_z_clearance_m: 0.08
+  retreat_world_z_clearance_m: 0.10
+safety:
+  workspace_bounds_m: [-0.30, -0.50, 0.10, 0.35, 0.20, 0.50]
+  maximum_source_age_s: 0.20
+  maximum_future_skew_s: 0.02
+  scene_position_tolerance_m: 0.01
+  scene_orientation_tolerance_rad: 0.10
