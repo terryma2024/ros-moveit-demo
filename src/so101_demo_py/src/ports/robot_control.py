@@ -48,10 +48,29 @@ class JointWaypointRequest:
 class TcpMotionRequest:
     target_pose: PoseEvidence
     timeout_s: float = 10.0
+    planning_frame: str = "world"
+    planning_group: str = "arm"
+    tcp_link: str = "so101_tcp"
+    position_tolerance_m: float = 0.001
+    orientation_tolerance_rad: tuple[float, float, float] = (0.1, 0.1, 0.1)
+    velocity_scaling: float = 0.05
+    acceleration_scaling: float = 0.05
+    start_state: JointStateEvidence | None = None
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.timeout_s) or self.timeout_s <= 0.0:
-            raise ValueError("timeout_s must be finite and positive")
+        if not self.planning_frame or not self.planning_group or not self.tcp_link:
+            raise ValueError("TCP planning identifiers must be non-empty")
+        values = (
+            self.timeout_s,
+            self.position_tolerance_m,
+            *self.orientation_tolerance_rad,
+            self.velocity_scaling,
+            self.acceleration_scaling,
+        )
+        if any(not math.isfinite(value) or value <= 0.0 for value in values):
+            raise ValueError("TCP planning constraints must be finite and positive")
+        if self.velocity_scaling > 1.0 or self.acceleration_scaling > 1.0:
+            raise ValueError("TCP planning scaling must not exceed 1.0")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +79,7 @@ class PlanResult:
     start_state: JointStateEvidence | None = None
     trajectory: object | None = None
     error_code: str | None = None
+    terminal_state: JointStateEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)

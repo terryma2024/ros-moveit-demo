@@ -157,7 +157,7 @@ def _mujoco_execute_actions(
     )
     workflow = Node(
         package="so101_demo_py",
-        executable="pick_place",
+        executable="fixed_cup_pick_place",
         arguments=[
             "--backend",
             "mujoco",
@@ -424,7 +424,7 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
             return messages
         workflow = Node(
             package="so101_demo_py",
-            executable="pick_place",
+            executable="fixed_cup_pick_place",
             arguments=["--backend", backend, "--run-mode", "dry_run"],
             output="both",
             on_exit=Shutdown(reason="SO-101 dry run complete"),

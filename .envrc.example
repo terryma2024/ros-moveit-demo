@@ -21,6 +21,13 @@ for setup in \
   fi
 done
 
+# A project install can contain stale dependency package prefixes. Keep the
+# separately pinned macOS fork authoritative for ros2 pkg/run resolution.
+mujoco_fork_prefix="$ros_workspace/ws_mujoco_ros2_control_fork/install"
+if [[ -d "$mujoco_fork_prefix" ]]; then
+  export AMENT_PREFIX_PATH="$mujoco_fork_prefix${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"
+fi
+
 dylib_farm="$ros_workspace/macos_dylib_farm/current"
 if [[ -d "$dylib_farm" ]]; then
   export DYLD_LIBRARY_PATH="$dylib_farm${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"

@@ -1,0 +1,31 @@
+schema_version: 2
+policy_id: dynamic_cup_pick
+backend: mujoco
+execution_allowed: true
+planning:
+  frame: world
+  group: arm
+  arm_joint_names: ["1", "2", "3", "4", "5"]
+  tcp_link: so101_tcp
+  planning_timeout_s: 8.0
+  position_tolerance_m: 0.002
+  orientation_tolerance_rad: [0.10, 0.10, 0.10]
+  velocity_scaling: 0.03
+  acceleration_scaling: 0.03
+object:
+  object_id: plastic_cup
+  cup_to_tcp_grasp_xyz_xyzw: [0.000676684, 0.017178979, 0.035829044, -0.010265991, -0.010262987, -0.706752687, 0.707311756]
+pick:
+  pregrasp_world_z_clearance_m: 0.059162
+  micro_lift_world_z_clearance_m: 0.002
+  lift_world_z_clearance_m: 0.060
+place:
+  tcp_world_xyz_xyzw: [-0.073711568, -0.232465520, 0.217634413, 0.004365887, 0.002920039, -0.830063261, 0.557644506]
+  approach_world_z_clearance_m: 0.045930
+  retreat_world_z_clearance_m: 0.060
+safety:
+  workspace_bounds_m: [-0.30, -0.50, 0.10, 0.35, 0.20, 0.50]
+  maximum_source_age_s: 0.50
+  maximum_future_skew_s: 0.05
+  scene_position_tolerance_m: 0.01
+  scene_orientation_tolerance_rad: 0.10

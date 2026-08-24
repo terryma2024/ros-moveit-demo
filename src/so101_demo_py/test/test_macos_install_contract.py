@@ -150,6 +150,16 @@ def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:
     assert 'default_prefixes="${ros_underlay}:' in dylib_farm
 
 
+def test_macos_environment_keeps_pinned_mujoco_fork_first_in_ament_path() -> None:
+    envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
+
+    assert 'mujoco_fork_prefix="$ros_workspace/ws_mujoco_ros2_control_fork/install"' in envrc
+    assert (
+        'export AMENT_PREFIX_PATH="$mujoco_fork_prefix'
+        '${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"'
+    ) in envrc
+
+
 def test_mujoco_installer_accepts_source_overlay_underlay() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
 

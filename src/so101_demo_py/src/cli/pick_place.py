@@ -19,8 +19,8 @@ def _optional_bool(value: str) -> bool:
     raise argparse.ArgumentTypeError("expected true or false")
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="pick_place_state_machine")
+def build_parser(prog: str = "pick_place_state_machine") -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog=prog)
     parser.add_argument("--backend", choices=("mujoco", "gazebo", "real_stub"))
     parser.add_argument(
         "--mode",
@@ -68,12 +68,12 @@ def print_result(result) -> None:
             print(f"failure_metrics {metrics}")
 
 
-def main(arguments: list[str] | None = None) -> int:
+def main(arguments: list[str] | None = None, *, prog: str = "pick_place_state_machine") -> int:
     if arguments is None:
         arguments = sys.argv[1:]
         if "--ros-args" in arguments:
             arguments = arguments[: arguments.index("--ros-args")]
-    options = build_parser().parse_args(arguments)
+    options = build_parser(prog).parse_args(arguments)
     if options.mode == RunMode.EXECUTE.value:
         if not options.execute:
             print("status=ERROR")

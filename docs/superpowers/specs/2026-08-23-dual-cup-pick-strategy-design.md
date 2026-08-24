@@ -1,274 +1,184 @@
 # SO-101 固定与感知 Cup Pick 双策略设计
 
 **日期：** 2026-08-23
-**状态：** 已批准实施边界；动态路径仅允许 `plan_only`，尚未获得 execute qualification
-**源码基线：** `moveit-demo/main@e34bf2b8eea55c44b24b32ff6521887cad0abca4`
 
-## 1. 背景
+**当前修订：** V2.2，MuJoCo 感知位置可执行版
+**源码基线：** `moveit-demo/main@5407592100823bcfa43138611f8de6b0de0c93f8`
 
-当前 Python package 同时具备两种尚未连通的能力：
+## 1. 目标与结论
 
-- `cup_pose_subscriber` 可以持续订阅 `/cup_pose`，校验非空 `frame_id`、有限位置/四元数和非零四元数；
-- `pick_place` 的 live 路径从完整 motion-policy YAML 读取固定 joint waypoints，后端按这些 waypoint 发送轨迹。
-
-两者不能通过“替换 YAML 中的一个数”连通。`TaskPolicy.states[*].waypoints` 的值是预先为一个固定杯位求出的关节轨迹；外部 cup Pose 改变后，机器人必须重新求 IK 和轨迹。仅移动 Gazebo 或 Planning Scene 中的杯子也不会让固定关节轨迹跟随它。
-
-本设计引入两个明确、可并存的 public executable：
+同一个 `so101_demo_py` package 发布两个明确分工的 executable：
 
 ```text
-fixed_cup_pick_place   # V1：固定 cup 位、固定 joint waypoint
-dynamic_cup_pick_place # V2：/cup_pose 驱动的运行时 TCP 目标与规划
+fixed_cup_pick_place    # V1：固定 cup 位 + 固定 joint waypoint
+dynamic_cup_pick_place  # V2：/cup_pose + 动态解析目标 + MuJoCo 物理执行
 ```
 
-它们共享状态机的夹爪、物理 attachment、Planning Scene、恢复和证据规则，但不共享运动目标来源。V2 无有效感知输入时必须失败，禁止回退到 V1。
+V1 保留原行为和 policy，不依赖视觉输入。V2 在状态机开始前冻结一条合法 `/cup_pose`，由模板解析整条状态机的 TCP 目标，并在 MuJoCo 中执行完整 pick-place。两者共享仓库唯一的 `StateMachineRunner + SO101_WORKFLOW`，不复制状态转移，也不允许 V2 在任何失败路径回退到 V1 固定 pick waypoint。
 
-## 2. 目标、非目标与安全边界
+Gazebo 的 V2 仍只允许 `plan_only`；MuJoCo 是当前唯一允许动态 execute 的 backend。真实硬件不在本设计的执行范围。
 
-### 2.1 目标
-
-1. V1 在新名称 `fixed_cup_pick_place` 下保持现有固定 motion-policy 语义和结果。
-2. V2 在 `dynamic_cup_pick_place` 启动状态机前读取一条合格 `/cup_pose`，冻结为本次运行输入。
-3. V2 根据 cup Pose 和固定抓取几何生成 pregrasp、grasp、lift TCP 目标，由 MoveIt 在运行时规划。
-4. V2 对无消息、坏输入、过期输入、TF 不可用、工作区越界、场景分叉和规划失败全部 fail-closed。
-5. 每次运行记录 `strategy=fixed|dynamic`、静态模板 hash、输入 Pose、场景读回和规划证据，禁止混算两条路径的结果。
-
-### 2.2 非目标
-
-- 不改变 V1 的 YAML waypoint、夹爪值、接触阈值或已有 qualification 结论。
-- 不在 V2 里实现“执行中目标持续移动”的视觉伺服；本设计只在状态机开始前获取并冻结 Pose。
-- 不把动态路径的 `plan_only` 成功宣称为 Gazebo 或真实硬件 execute 成功。
-- 不授权真实硬件；`real_stub` 继续 fail-closed。
-- 不隐式移动 Gazebo/MuJoCo cup；场景写入必须是显式模式并且有读回。
-
-## 3. 当前代码边界
-
-| 位置 | 当前职责 | 设计处理 |
-|---|---|---|
-| `src/so101_demo_py/src/cli/cup_pose_subscriber.py` | ROS 2 持续监听与输入校验 | 保留为诊断 CLI；抽取无 ROS 的校验逻辑供 V2 复用 |
-| `src/so101_demo_py/src/cli/pick_place.py` | ROS-free 固定策略入口 | 不直接引入 `rclpy`；迁移为 V1 内部实现 |
-| `src/so101_demo_py/src/core/policy.py` | 严格加载固定 `states[*].waypoints` | 保留 schema v1；新增独立 dynamic template schema |
-| `src/so101_demo_py/src/backends/gazebo/workflow.py` | 用 policy state 执行固定 waypoint | 保留为 V1；新增 V2 dynamic workflow |
-| `src/so101_demo_py/src/ports/robot_control.py` | 定义 `TcpMotionRequest` 与规划/执行端口 | V2 的唯一运动规划接口 |
-
-V2 不得修改 V1 的 `execute_gazebo_workflow()` 行为来实现“兼容”。两条路径的入口、motion provider 和 manifest 必须可区分。
-
-## 4. 总体架构
+## 2. 总体数据流
 
 ```text
-                                  ┌───────────────────────┐
-fixed motion-policy YAML ───────►│ FixedMotionProvider     │
-                                  │ joint waypoints         │
-                                  └───────────┬───────────┘
-                                              │
-fixed_cup_pick_place ────────────────────────┼──► fixed workflow
-                                              │
-/cup_pose ─► ROS CupPoseSource ─► preflight ─┴──► DynamicMotionProvider
-                 │                  │                TCP pose targets
-                 │                  └─ scene/TF gate          │
-dynamic_cup_pick_place ──────────────────────────────────────┴──► dynamic workflow
-                                                                    │
-                                     shared gripper / attach / scene / recovery / evidence
+/cup_pose (PoseStamped)
+  -> 一次性输入与时间校验
+  -> frozen CupPoseSample
+  -> DynamicPickTemplate
+  -> ResolvedMotionTargets
+  -> DynamicStateAction
+  -> StateMachineRunner + SO101_WORKFLOW
+  -> MuJoCo controller / Planning Scene / physical gates
 ```
 
-`fixed_cup_pick_place` 只创建固定 provider；`dynamic_cup_pick_place` 只创建动态 provider。它们不能因缺少参数、topic 或 policy 而互相切换。
-
-## 5. 领域模型
-
-### 5.1 感知输入
-
-新增纯领域对象 `CupPoseSample`：
-
-```python
-@dataclass(frozen=True, slots=True)
-class CupPoseSample:
-    frame_id: str
-    source_stamp_ns: int
-    received_monotonic_s: float
-    pose_world: Pose7
-```
-
-`Pose7` 是 `(x, y, z, qx, qy, qz, qw)`。输入必须已在规划 frame 中；V2 第一版的 planning frame 固定为 `world`。
-
-接收器对每条消息执行现有有限数/非零四元数检查；无效消息记录后继续等候有效消息。第一条通过全部 preflight 的消息被冻结，后续 topic 消息不改变本次运行目标。
-
-### 5.2 DynamicPickTemplate
-
-`DynamicPickTemplate` 表示稳定、经版本控制的“如何抓”，不表示“杯子在哪里”：
-
-```python
-@dataclass(frozen=True, slots=True)
-class DynamicPickTemplate:
-    planning_frame: str
-    cup_to_tcp_grasp: Pose7
-    pregrasp_world_z_clearance_m: float
-    lift_world_z_clearance_m: float
-    workspace_bounds_m: tuple[float, float, float, float, float, float]
-    maximum_source_age_s: float
-    planning_timeout_s: float
-    velocity_scaling: float
-    acceleration_scaling: float
-```
-
-它保留 cup-to-gripper 相对抓取姿态、预抓取/抬升高度和安全约束。它不得包含 cup 的固定 world Pose、固定抓取 joint waypoint 或运行期消息。
-
-### 5.3 DynamicPickPlan
-
-```python
-@dataclass(frozen=True, slots=True)
-class DynamicPickPlan:
-    input_pose: CupPoseSample
-    pregrasp_tcp_world: Pose7
-    grasp_tcp_world: Pose7
-    lift_tcp_world: Pose7
-```
-
-计算规则：
+cup 的 Planning Scene object Pose 和机器人运动目标是两条不同数据流。更新 cup object 不会让固定 joint waypoint 自动跟随；V2 必须显式计算：
 
 ```text
-T_world_tcp_grasp    = T_world_cup × T_cup_tcp_grasp
-T_world_tcp_pregrasp = Translate(world_z, pregrasp_clearance) × T_world_tcp_grasp
-T_world_tcp_lift     = Translate(world_z, lift_clearance) × T_world_tcp_grasp
+T_world_tcp_grasp = T_world_cup * T_cup_tcp_grasp
 ```
 
-四元数必须按刚体变换合成并正规化；不得把 cup 四元数直接复制为 TCP 四元数，也不得对四元数分量做加法。
+四元数先归一化，再按刚体变换组合；禁止逐分量相加，也禁止把 cup quaternion 直接复制成 TCP quaternion。
 
-## 6. 配置与版本策略
+## 3. 输入契约
 
-保持现有 `light_cup_wall_pick/v1` 不变。新增独立 policy ID，例如：
+`CupPoseSample` 保存 `frame_id`、`source_stamp_ns`、`received_monotonic_s` 和 `pose_world`。输入必须满足：
+
+- topic 为 `/cup_pose`，类型为 `geometry_msgs/msg/PoseStamped`；
+- `frame_id == "world"`，当前版本不做隐式 TF 转换；
+- position 和 quaternion 的全部分量为有限数；
+- quaternion norm 大于最小阈值，并在使用前归一化；
+- source stamp 非零，未超过 maximum age，也不超出 future skew；
+- 输入 cup origin 与 canonical `plastic_cup` geometry manifest 一致。
+
+获取使用绝对 monotonic deadline。非法消息输出一行 `CUP_POSE_INVALID` 并继续监听，且不延长 deadline。deadline 前无消息为 `CUP_POSE_TIMEOUT`；仅收到非法消息为 `CUP_POSE_INVALID`。第一条完全合法的消息被冻结，后续状态机使用同一份样本。
+
+持续诊断 executable `cup_pose_subscriber` 与一次性状态机输入 source 相互独立；前者持续监听至 SIGINT 或 inter-message timeout，后者只冻结一个合格样本。
+
+## 4. DynamicPickTemplate 的职责
+
+模板描述“如何抓、如何放、如何验证”，不保存运行时 cup world Pose。主要字段包括：
+
+- identity：schema、policy、backend、execution allowance；
+- planning：frame、group、joint names、TCP link、timeout、容差、速度/加速度 scaling；
+- object：`plastic_cup` 和 `T_cup_tcp_grasp`；
+- pick：pregrasp、micro-lift、lift 的 world-Z clearance；
+- place：固定 place TCP、approach、retreat clearance；
+- safety：workspace、source freshness、scene comparison tolerance。
+
+模板不得包含固定 cup world Pose、固定 V1 pick joint waypoint 或隐藏 fallback。V1 的 `light_cup_wall_pick/v1` 文件和 hash 保持不变；V2 使用独立的 `dynamic_cup_pick/v1` schema v2。
+
+## 5. 目标解析
+
+`ResolvedMotionTargets` 覆盖全部 forward 和 recovery motion state：
+
+| State | V2 target source |
+|---|---|
+| `MOVE_ABOVE_OBJECT` | perception grasp + pregrasp world-Z |
+| `DESCEND` | perception grasp |
+| `MICRO_LIFT` | perception grasp + micro-lift world-Z |
+| `LIFT` | perception grasp + lift world-Z |
+| `MOVE_ABOVE_PLACE` | template place + approach world-Z |
+| `DESCEND_TO_PLACE` | template place |
+| `RETREAT` | template place + retreat world-Z |
+| recovery motion states | 显式映射到本次 resolved target |
+
+所有目标必须在 workspace 内。两条相差 0.1 m 的合法输入应产生相差 0.1 m 的 pick-family target，证明位置来自感知而不是固定 waypoint。
+
+## 6. 唯一状态机
 
 ```text
-config/policies/dynamic_cup_pick/v1/
-├── manifest.yaml
-├── gazebo.yaml
-├── mujoco.yaml
-└── real_stub.yaml
+Fixed actions  --------------------+
+                                   +-> StateMachineRunner -> SO101_WORKFLOW
+DynamicStateAction + target source-+
 ```
 
-动态 YAML 使用 `schema_version: 2`，示例：
+`DynamicStateAction` 只负责把当前 `State` 映射为动态目标并调用 execution port。状态顺序、成功转移、失败转移和 recovery 都来自 `SO101_WORKFLOW`。V2 不建立并列 workflow。
 
-```yaml
-schema_version: 2
-policy_id: dynamic_cup_pick
-planning_frame: world
-object_id: plastic_cup
-cup_to_tcp_grasp:
-  xyz_m: [0.0, 0.0, 0.035]
-  xyzw: [0.0, 0.0, 0.0, 1.0]
-pick:
-  pregrasp_world_z_clearance_m: 0.08
-  lift_world_z_clearance_m: 0.10
-  maximum_source_age_s: 0.20
-  workspace_bounds_m: [-0.21, -0.46, 0.12, 0.21, 0.06, 0.30]
-motion:
-  planning_timeout_s: 5.0
-  velocity_scaling: 0.03
-  acceleration_scaling: 0.03
-```
-
-固定 placement region、夹爪目标和接触/物理 outcome policy 可作为动态模板的静态部分复用，但须由动态 schema 显式加载，不能从 v1 固定 joint-policy 隐式取值。
-
-## 7. 运行契约
-
-### 7.1 V1：`fixed_cup_pick_place`
-
-- 使用现有完整 motion-policy v1 和固定 `MotionStatePolicy.waypoints`。
-- 不创建 `/cup_pose` subscription，也不等待 topic。
-- 当前 `pick_place` 的行为成为 V1 回归基线；公共 entry point 改名后必须通过同样的 fixed policy 测试。
-- manifest 写入 `strategy=fixed` 和 fixed policy SHA-256。
-
-### 7.2 V2：`dynamic_cup_pick_place`
-
-新增 ROS-aware composition root，顺序严格为：
+完整成功轨迹为：
 
 ```text
-parse CLI
-→ acquire one valid /cup_pose
-→ transform/require world frame
-→ freshness + workspace validation
-→ scene authority check and readback
-→ DynamicPickPlan resolution
-→ plan each dynamic pick motion
-→ start state-machine side effects
+IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND
+-> CLOSE_GRIPPER -> WAIT_GRASP_STABLE -> MICRO_LIFT
+-> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP -> ATTACH_MOVEIT
+-> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> DETACH_MOVEIT
+-> OPEN_GRIPPER -> WAIT_RELEASE_SETTLE -> VALIDATE_FINAL_PLACEMENT
+-> SYNC_WORLD_OBJECT -> RETREAT -> DONE
 ```
 
-读取 Pose、TF、场景检查、动态 plan 任一失败，状态机不得进入 `PREPARE_OPEN_GRIPPER`，不得发送 arm/gripper/attachment 命令。
+## 7. MuJoCo 动态运动实现
 
-V2 使用 `RobotControlPort.plan_tcp_motion(TcpMotionRequest(...))` 和 `execute()`；`MOVE_ABOVE_OBJECT`、`DESCEND`、`LIFT` 分别消费 dynamic plan 的三个 TCP Pose。其余状态必须在实施时显式决定使用动态 TCP goal 或固定安全 template，不得偷偷访问 V1 的 pick waypoint。
+SO-101 arm 只有 5 个独立关节，不能把通用 6-DoF IK 的任意结果当作可执行解。V2 使用 `UnderactuatedPoseIk`：
 
-## 8. Frame、时间与场景权威
+- 从安装的 URDF 构建 FK chain；
+- 以实际 joint state 为 seed；
+- 使用 damped least-squares 同时收敛位置与姿态；
+- 解后重新计算 FK，超过 position/orientation residual 门槛则 fail-closed；
+- 不读取 V1 waypoint 作为 seed 或替代解。
 
-### 8.1 V2.1 frame 策略
+为避免长距离关节插值扫到 cup 或桌面，`DESCEND`、`MOVE_ABOVE_PLACE` 和 `DESCEND_TO_PLACE` 采用 perception-derived Pose interpolation，并对每个中间 Pose 独立求解。每段执行后读取 MuJoCo lossless evidence，校验 cup 位姿、速度、触点和力。
 
-V2.1 仅接受 `header.frame_id == "world"`。其它合法但非 world 的消息返回 `CUP_POSE_TF_UNAVAILABLE`，而不是假设其坐标正确。
+## 8. 碰撞与 Planning Scene
 
-V2.2 才接入 `tf2_ros.Buffer`：按 `PoseStamped.header.stamp` 转换到 world，并把 source frame、target frame、stamp 和变换结果写入 manifest。
+默认 Planning Scene 保持严格碰撞。仅在两个物理边界临时允许 `jaw/gripper <-> plastic_cup` 的窄 ACM pair：抓取 `DESCEND` 前应用并在 attach 完成后恢复；释放并把 cup 恢复成 world object 后，在 `RETREAT/RECOVER_RETREAT` 规划与执行期间应用，并在退离完成后立即恢复。这样既允许 gripper 从保守 cup 碰撞体中物理分离，又不扩大到其他 link、object 或状态；不允许全局关闭碰撞。
 
-### 8.2 时间策略
-
-使用 receipt monotonic time 判断等待超时；使用 ROS message stamp 判断 source age。若仿真时钟尚不可用或 stamp 为零，默认拒绝动态 execute，并在 plan-only 中明确报告 `CUP_POSE_STALE` 或 `CUP_POSE_CLOCK_UNAVAILABLE`。
-
-### 8.3 场景权威模式
-
-默认 `--scene-source=observe_only`：
+物理顺序必须是：
 
 ```text
-/cup_pose world pose ≈ simulator cup pose ≈ MoveIt world object pose
+真实闭爪和 micro-lift 成功
+-> MuJoCo 证据证明 cup 随夹爪离桌
+-> MoveIt shadow attach
+-> 搬运
+-> MoveIt detach/world sync
+-> 开爪 -> release settle -> 最终放置验证
 ```
 
-任何一对超过 position/orientation tolerance 即 `CUP_POSE_SCENE_DIVERGENCE`。
+正常 forward 不创建 MuJoCo 虚拟 attachment。MoveIt attach 只是规划场景 shadow，不能替代物理抓取证明。
 
-可选的 `--scene-source=topic` 只允许在显式 reset/preflight 事务中使用：先写 simulator cup Pose，再读回；随后 upsert MoveIt Scene，再读回；三方相同后才允许规划。禁止在正常执行中隐式 teleport cup。
+## 9. 物理证据门禁
 
-## 9. 失败模型
+每个关键 state 都保存 before/after evidence sample。至少检查：
 
-| 失败码 | 触发条件 | side effect |
-|---|---|---|
-| `CUP_POSE_TIMEOUT` | 等待窗口内没有任何消息 | 无状态机动作 |
-| `CUP_POSE_INVALID` | 收到消息但均不满足输入契约 | 无状态机动作 |
-| `CUP_POSE_STALE` | 有效消息超过允许 age | 无状态机动作 |
-| `CUP_POSE_TF_UNAVAILABLE` | frame 不等于 world 或 TF 无法转换 | 无状态机动作 |
-| `CUP_POSE_OUT_OF_WORKSPACE` | cup/pregrasp/grasp/lift 超出模板边界 | 无状态机动作 |
-| `CUP_POSE_SCENE_DIVERGENCE` | topic、simulator、MoveIt Scene 不一致 | 无状态机动作 |
-| `CUP_POSE_PLAN_FAILED` | IK、碰撞检查或 trajectory planning 失败 | 不 execute 该段 |
+- descent 前 cup 未被推走，且没有过早接触/超力；
+- close 后触点和力在允许范围；
+- micro-lift 后 cup 随 gripper 上升并满足离桌语义；
+- transport 中 cup 持续随夹爪运动；
+- release 后 cup 稳定落桌，指尖触点为零；
+- final cup XY 在 place tolerance 内，线速度/角速度低于稳定阈值；
+- upright tilt 只计算 cup 轴线相对 world-Z 的倾角，不把圆柱自身 yaw 当作倾倒；
+- 最终 Planning Scene 无 attached cup，world 中 canonical cup 唯一且 geometry 完整；
+- 三个 controller 在结束后仍为 active。
 
-V2 失败不得调用 `fixed_cup_pick_place`，不得载入 V1 抓取 waypoint 作为默认值。
+任何门禁失败进入状态机 recovery，并生成稳定 `DYNAMIC_*` failure code，不得改走 fixed 策略。
 
-## 10. 证据与 qualification
+## 10. Backend 与模式矩阵
 
-V1 与 V2 使用独立 `strategy` 字段、独立 policy/template hash 和独立 run ID。V1 历史 fixed-trajectory success 不构成 V2 qualification。
+| backend | plan_only | execute |
+|---|---:|---:|
+| Gazebo | 支持，observe-only | 拒绝 `DYNAMIC_EXECUTION_NOT_QUALIFIED` |
+| MuJoCo | 不作为当前验收入口 | 支持，必须同时给 `--mode execute --execute` |
+| real / unknown | 拒绝 | 拒绝 |
 
-每个 V2 run manifest 至少包含：
+MuJoCo execute 还要求 `scene_source=observe_only`、session id/reset epoch 一致、policy manifest 对 MuJoCo 显式 `execution_allowed: true`。
 
-- strategy、backend、source commit、installed prefix、ROS domain、Gazebo partition；
-- 输入 Pose 原始 frame/stamp、receipt time、转换后的 world Pose；
-- dynamic template path/SHA-256；
-- pregrasp/grasp/lift TCP target；
-- MoveIt plan result、trajectory summary 和 execute result；
-- simulator pose、MoveIt Scene pose 及其差值；
-- 状态 trace、失败码和创建证据的绝对路径。
+## 11. 测试用感知桥
 
-V2 实施顺序为 pure unit → ROS input contract → Gazebo+MoveIt plan-only → headless execute → GUI execute。动态 execute 在完成独立 physical qualification 前保持禁止。
+本地 E2E 使用 `mujoco_cup_pose_bridge` 把 MuJoCo lossless ground truth 转成 `/cup_pose`，仅用于验证消费链路，不属于生产视觉节点。它证明 dynamic executable 的输入确实走 ROS topic、校验、冻结和动态解析；不能被表述为视觉算法准确率验证。
 
-## 11. 兼容性与迁移
+## 12. Evidence 与成功定义
 
-- 新 public executable 是 `fixed_cup_pick_place` 和 `dynamic_cup_pick_place`。
-- `fixed_cup_pick_place` 替换 generic `pick_place` 的 public 用法；实施时须明确是否保留 legacy alias。默认建议删除 alias，避免用户误以为它会读取感知 topic。
-- `cup_pose_subscriber` 保留为观测/调试工具，不能作为 V2 到 V1 的跨进程数据桥。
-- V1 与 V2 的 policy registry 条目、test fixture、manifest schema 和 qualification ledger 分开维护。
+动态执行写入 `so101-dynamic-mujoco-execute-v1` manifest，包含 source/session/reset/policy path 与 SHA、frozen `/cup_pose`、全部 targets、精确 state trace、state before/after physical sample、release marker、final samples、Planning Scene readback 和 failure/DONE。
 
-## 12. 验收标准
+一次成功必须同时满足：进程 exit 0、state trace 到 `DONE`、物理门禁通过、最终 cup 稳定落在目标区、Planning Scene 同步正确、controller readback active。只看到 topic、只完成规划、只保存截图或只打印 `DONE` 都不够。
 
-### V1 回归
+## 13. 可执行与兼容性
 
-同一 fixed policy 输入产生与迁移前相同的 waypoint、state trace、failure contract 和 manifest strategy；V1 完全不订阅 `/cup_pose`。
+- public executable 为 `fixed_cup_pick_place`、`dynamic_cup_pick_place`；
+- generic `pick_place` console entry point 移除；
+- launch composition 的固定路径调用 `fixed_cup_pick_place`；
+- fixed executable 不 import dynamic ROS composition；
+- dynamic executable 不读取 fixed pick/recovery waypoint；
+- 两者都从 build 后 source 的 installed overlay 发现和运行。
 
-### V2 输入和规划
+## 14. 当前验收范围
 
-1. 两条 `/cup_pose` 相差 0.1 m 的消息分别产生相差 0.1 m 的 pregrasp/grasp/lift target。
-2. 无消息、非法消息、错误 frame、过期消息和 scene divergence 都不发送 arm/gripper/attach 命令。
-3. `plan_only` 的 MoveIt trajectory 起点与当前 joint state 一致，目标为对应 dynamic TCP Pose，并通过碰撞检查。
-4. V2 manifest 记录输入、转换、模板 hash、目标和规划读回。
-
-### Execute 前门槛
-
-V2 只有在独立 Gazebo 物理、MoveIt Scene、controller/joint/TF、cup pose/contact 和新鲜 GUI 证据均通过后才允许 `--mode execute --execute`。真实硬件不在本设计授权范围内。
+V1 和 V2 都必须在本机 MuJoCo 环境各完成一次单杯 pick-place。V1 保留三阶段视觉证据；V2 至少保留 headless 数值成功证据，并在可见、已解锁的 macOS desktop session 中保留下降、搬运、最终状态截图。Gazebo 不在本轮验收范围。
