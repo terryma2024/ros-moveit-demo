@@ -24,6 +24,9 @@ PATCH_SERIES_DIR = REPOSITORY_ROOT / "scripts" / "patches" / "mujoco_ros2_contro
 SUBMODULE = REPOSITORY_ROOT / "third_party" / "mujoco_ros2_control"
 LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco/dependency-lock.yaml"
 RUNTIME_LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/dependency-lock.yaml"
+INTEGRATION_GUIDE = (
+    REPOSITORY_ROOT / "docs/guides/so101-mujoco-ros2-integration-guide.md"
+)
 UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
 LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
 CANDIDATE_COMMIT = "0ed759a7198e76be847e163673782b1d2cbacf26"
@@ -125,6 +128,44 @@ def test_installer_builds_exact_upgrade_package_set_and_checks_new_artifacts() -
     ):
         assert required_interface in installer
     assert "mujoco_ros2_control_plugins/CameraPlugin" in installer
+
+
+def test_integration_guide_uses_the_optional_observer_abi_and_authoritative_order() -> None:
+    guide = INTEGRATION_GUIDE.read_text(encoding="utf-8")
+    evidence_section = guide.split("## 4.", maxsplit=1)[1].split("## 5.", maxsplit=1)[0]
+
+    assert "plugin base 新增" not in evidence_section
+    assert "MujocoSystemInterface::step_authoritative_physics()" not in evidence_section
+    assert "MuJoCoROS2ControlPluginBase" in evidence_section
+    assert "不属于 base" in evidence_section
+    assert "MuJoCoROS2ControlSimulationObserver" in evidence_section
+    assert "SimulationObserverDispatcher" in evidence_section
+
+    authoritative_order = (
+        "`apply_staged_control_inputs()`",
+        "`pre_step_callback_(mj_data_)`",
+        "`mj_step(mj_model_, mj_data_)`",
+        "`Diverged(...)`",
+        "`observer_dispatcher_.on_physics_step(...)`",
+        "`publish_control_state()`",
+        "`refresh_data_snapshot()`",
+        "`publish_clock()`",
+    )
+    assert all(token in evidence_section for token in authoritative_order)
+    positions = [evidence_section.index(token) for token in authoritative_order]
+    assert positions == sorted(positions)
+
+
+def test_integration_guide_reads_back_all_four_fork_package_prefixes() -> None:
+    guide = INTEGRATION_GUIDE.read_text(encoding="utf-8")
+
+    for package in (
+        "mujoco_3d_lidar",
+        "mujoco_ros2_control_msgs",
+        "mujoco_ros2_control_plugins",
+        "mujoco_ros2_control",
+    ):
+        assert f"ros2 pkg prefix {package}" in guide
 
 
 def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:

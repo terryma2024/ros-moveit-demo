@@ -93,6 +93,7 @@ source /path/to/so101-mujoco-ros2/install/setup.zsh
 ros2 pkg prefix mujoco_ros2_control
 ros2 pkg prefix mujoco_ros2_control_plugins
 ros2 pkg prefix mujoco_ros2_control_msgs
+ros2 pkg prefix mujoco_3d_lidar
 ros2 pkg prefix mujoco_vendor
 ros2 pkg prefix so101_demo_py
 ```
@@ -123,32 +124,53 @@ plugin ABI 为主体。SO-101 physics/reset/pause/snapshot 通过独立 optional
 接入，不再向 upstream base class 添加虚函数；viewer-camera、macOS 主线程 context 和 CameraPlugin
 生命周期在新架构上迁移保留。
 
-## 4. r6：逐 physics-step 权威证据
+## 4. 0.1.0 optional observer：逐 physics-step 权威证据
 
 ### 4.1 新接口
 
-plugin base 新增：
+0.1.0 保持 upstream `MuJoCoROS2ControlPluginBase` ABI：`init()`、controller-rate `update()`、
+physics-thread `pre_step()` 和 `cleanup()`。`on_physics_step`、reset、pause 与 snapshot 不属于 base；
+需要这些只读仿真生命周期通知的 plugin 额外实现 optional capability：
 
 ```cpp
-virtual void on_physics_step(const mjModel* model, const mjData* data)
-{
-  (void)model;
-  (void)data;
-}
+class MuJoCoROS2ControlSimulationObserver {
+public:
+  virtual void on_physics_step(const mjModel*, const mjData*);
+  virtual void on_reset();
+  virtual void on_pause(bool);
+  virtual void on_state_snapshot(const mjModel*, const mjData*, bool);
+};
 ```
 
-默认 no-op 保持已有 plugin 的源码兼容性。需要逐步观察的 plugin 可以 override；实现必须
-non-blocking，因为 hook 位于 physics loop 且调用时 `sim_mutex_` 仍被持有。参数是刚完成成功
-step 的 authoritative `mj_model_` 和 `mj_data_`，不是 control-thread copy。
+SO-101 的 `SimulationEvidencePlugin` 同时继承 base 与
+`MuJoCoROS2ControlSimulationObserver`。`MujocoSystemInterface` 仍通过 base 加载、初始化和持有
+plugin；初始化成功后，`SimulationObserverDispatcher::add()` 用 `dynamic_pointer_cast` 只登记实现
+observer capability 的实例。普通 upstream plugin 不会收到 observer 回调，base vtable 也没有新增
+SO-101 专用虚函数。
+
+`SimulationObserverDispatcher` 按 plugin load order 分发 physics/reset/pause/snapshot；单个 observer
+抛异常时只禁用该 observer，后续 observer 继续运行。observer 必须 non-blocking，因为 physics-step
+回调位于持有 simulation mutex 的 physics loop。参数是通过 divergence gate 的 authoritative
+`mj_model_`/`mj_data_`，不是 control-thread snapshot。observer 是只读后置通知；需要在积分前修改
+live `mjData` 的 upstream 行为继续使用 base `pre_step(mjData*)`。
 
 ### 4.2 唯一 stepping wrapper
 
-`MujocoSystemInterface::step_authoritative_physics()` 固定顺序为：
+`MujocoSimulation::step_authoritative_physics()` 固定顺序为：
 
-1. `mj_step(mj_model_, mj_data_)`；
-2. `publish_clock()`；
-3. `Diverged(...)` 检查；
-4. 仅当未 divergence 时调用 `notify_plugins_after_physics_step()`。
+1. `apply_staged_control_inputs()` 把 control-thread staging 合并进 live data；
+2. `pre_step_callback_(mj_data_)` 执行既有 base `pre_step()` fan-out；
+3. `mj_step(mj_model_, mj_data_)` 完成一次积分；
+4. `Diverged(...)` 检查结果，失败时立即 latch 并返回；
+5. 仅对未 divergence 的权威状态调用
+   `observer_dispatcher_.on_physics_step(...)`；
+6. `publish_control_state()` 更新 controller-facing double buffer；
+7. `refresh_data_snapshot()` 更新 plugin/read-side physics snapshot；
+8. `publish_clock()` 最后发布与上述状态一致的时钟。
+
+因此权威数据流是 control staging/base pre-step -> `mj_step` -> divergence gate -> optional observer ->
+control/data snapshots -> clock。divergent step 已经可能修改 live `mj_data_`，但不会通知 observer，
+也不会覆盖最后一个合格 snapshot 或发布 clock。
 
 所有三条实际 stepping 路径都必须经过该 wrapper：
 
@@ -156,8 +178,8 @@ step 的 authoritative `mj_model_` 和 `mj_data_`，不是 control-thread copy�
 - running catch-up 循环中的 step；
 - paused 状态下 `StepSimulation` 请求产生的 pending step。
 
-因此“一个成功 physics step”与“一次 plugin 回调”可以建立一一对应。若发生 divergence，hook
-不会把失败后的状态伪装成有效样本。
+因此对仍启用的 observer，“一个通过 divergence gate 的 physics step”与“一次
+`on_physics_step()` 回调”可以建立一一对应；普通 base-only plugin 不参与这条后置通知链。
 
 ### 4.3 为什么不能继续复用 `update()`
 
@@ -166,7 +188,7 @@ plugin 的 `update()` 随 `ros2_control` read/controller-manager 周期运行；
 只在 `update()` 采样会天然漏掉中间四个 step，无法证明接触峰值、短暂脱离、速度突变和
 release settle 窗口完整。
 
-`on_physics_step()` 解决的是 cadence 与 authority 两个问题：
+optional observer 的 `on_physics_step()` 解决的是 cadence 与 authority 两个问题：
 
 - cadence：每个成功 physics step 都调用；
 - authority：在 simulation mutex 内读取真实 step 后数据。
@@ -178,13 +200,21 @@ session、reset epoch、step/sequence、时间新鲜度、字段有限性与连�
 
 fork test 验证：
 
-- hook 收到的 model/data 正是 interface 的 authoritative pointers；
-- hook 执行期间竞争线程不能取得 `sim_mutex_`；
-- physics-step 通知不会顺带调用 `update()`；
-- 源码中 raw `mj_step(mj_model_, mj_data_)` 只能出现一次；
-- `step_authoritative_physics()` 出现四次：一个定义加三条调用路径。
+- compile-time signature checks 固定 base 仅有 `init/update/pre_step/cleanup`，observer capability 独立拥有
+  physics/reset/pause/snapshot signatures；
+- `SimulationObserverDispatcher` 只发现 opt-in capability，保持 load order 和参数 identity；某个 observer
+  抛出标准或未知异常时只禁用该实例；
+- 初始化成功的 plugin 才注册 observer，teardown 在 plugin `cleanup()` 前停止 dispatch；
+- paused authoritative step 的事件顺序精确为 staged control、pre-step、`mj_step`、observer、control
+  state、data snapshot、clock，且 pre-step 可观察到本轮 staged control；
+- divergence gate 失败时 observer、control/data snapshots 与 clock 均不发布，最后一个合格 snapshot
+  保持不变，catch-up batch 也在首个 divergent step 停止；
+- running resync、running catch-up 和 paused `StepSimulation` 三条积分路径统一调用
+  `MujocoSimulation::step_authoritative_physics()`。
 
-这类 source audit 是防止未来新增第四条 direct `mj_step` 绕过证据 hook 的结构门。
+项目侧另用 `static_assert` 证明 `SimulationEvidencePlugin` 实现
+`MuJoCoROS2ControlSimulationObserver`，并以 19 个 GTest 保持原 evidence schema、chunk、hazard、reset
+epoch 和 session-id 语义。
 
 ## 5. 项目构建与静态门
 
@@ -352,9 +382,9 @@ fork runtime，必须重新判断是否需要跑完整资格化，不能沿用�
 | reset service 成功但 evidence 仍 running | 队列残留 resume 帧 | 排空 transient frame，只接受随后 fresh paused evidence。 |
 | 证据 topic 存在但无 callback | QoS 不兼容 | 使用匹配 QoS，要求实际消息而非只看 graph。 |
 | MoveIt 显示 attached 但杯子没移动 | 把规划 shadow 当物理约束 | 分开验证 simulator contact/pose 与 Planning Scene。 |
-| controller 读 MuJoCo 时崩溃/竞争 | 未持有 simulation mutex | 使用 r2+ 同步路径；逐步证据使用 r6 hook。 |
-| GUI 退出崩溃 | OpenGL context 跨线程析构 | 确认运行 r5+，viewer 由 render thread 销毁。 |
-| 500 Hz 证据只有约 100 Hz | 用 plugin `update()` 采样 | override r6 `on_physics_step()` 并做逐 step 序列验证。 |
+| controller/plugin 读取 MuJoCo 时崩溃或竞争 | 绕过 0.1.0 double buffer，跨线程读取 live `mj_data_` | controller 使用 control-state copy，普通 plugin 使用 data snapshot；逐步只读证据实现 optional observer。 |
+| GUI 退出崩溃 | viewer/CameraPlugin context 的创建、使用或析构跨线程 | macOS 确认 main-thread UI/context 路径；worker 只消费已注册 context，并走 rendering capability cleanup。 |
+| 500 Hz 证据只有约 100 Hz | 只用 base `update()` 的 controller cadence 采样 | 让证据 plugin 额外实现 `MuJoCoROS2ControlSimulationObserver::on_physics_step()` 并验证逐 step 序列。 |
 | Gazebo execute 失败 | 策略/控制链的实际失败 | 保留第一失败 phase 和 evidence；不跳过，也不计入 MuJoCo 门控。 |
 
 ## 11. 关键文件
