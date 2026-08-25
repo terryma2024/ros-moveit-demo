@@ -388,6 +388,20 @@ def test_open3d_absence_is_an_actionable_preflight_error(monkeypatch) -> None:
         rgbd_cup_pose_node._require_open3d(1.0)
 
 
+def test_open3d_discoverable_but_import_broken_fails_preflight() -> None:
+    from so101_demo.ros import rgbd_cup_pose_node
+
+    def broken_import(_name: str):
+        raise ImportError("dlopen native library failed")
+
+    with pytest.raises(RuntimeError, match="Open3D is unusable.*dlopen"):
+        rgbd_cup_pose_node._require_open3d(
+            1.0,
+            find_spec=lambda _name: object(),
+            importer=broken_import,
+        )
+
+
 def test_startup_deadline_is_monotonic_and_fails_after_only_invalid_frames(capsys) -> None:
     from so101_demo.ros.rgbd_cup_pose_node import (
         CupPoseFrameProcessor,
@@ -571,6 +585,35 @@ def test_context_shutdown_before_first_valid_pose_is_nonzero(capsys) -> None:
     assert "RGBD_CUP_POSE_SHUTDOWN_BEFORE_FIRST_VALID" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("interrupt_phase", ["preflight", "construction"])
+def test_setup_sigint_is_actionable_nonzero_without_traceback(interrupt_phase, capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    def preflight(_remaining_s: float) -> None:
+        if interrupt_phase == "preflight":
+            raise KeyboardInterrupt
+
+    def construct(_options, _deadline, _monotonic):
+        if interrupt_phase == "construction":
+            raise KeyboardInterrupt
+        pytest.fail("preflight interrupt reached construction")
+
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=construct,
+        monotonic=lambda: 10.0,
+        open3d_preflight=preflight,
+    )
+
+    assert result != 0
+    output = capsys.readouterr().out
+    assert "RGBD_CUP_POSE_INTERRUPTED_BEFORE_FIRST_VALID" in output
+    assert "Traceback" not in output
+
+
 def test_sigint_before_first_valid_pose_is_nonzero(capsys) -> None:
     from so101_demo.ros.rgbd_cup_pose_node import (
         RgbdCupPoseOptions,
@@ -692,6 +735,166 @@ def test_node_construction_failure_after_init_shuts_down_owned_context() -> None
         )
 
     assert fake_rclpy.shutdown_calls == 1
+
+
+def test_cleanup_attempts_every_resource_in_reverse_order_and_aggregates_failures() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import CleanupError, RosResourceCleanup
+
+    calls = []
+
+    def fail(name):
+        def operation(_resource=None):
+            calls.append(name)
+            raise RuntimeError(f"{name} failed")
+
+        return operation
+
+    node = SimpleNamespace(
+        destroy_subscription=lambda subscription: fail(f"subscription-{subscription}")(),
+        destroy_publisher=fail("publisher"),
+        destroy_node=fail("node"),
+    )
+    listener = SimpleNamespace(unregister=fail("listener"))
+    rclpy = SimpleNamespace(ok=lambda: True, shutdown=fail("context"))
+    cleanup = RosResourceCleanup(
+        ros_api=SimpleNamespace(rclpy=rclpy),
+        node=node,
+        tf_listener=listener,
+        publisher="pose-publisher",
+        subscriptions=["first", "second"],
+        initialized_here=True,
+    )
+
+    with pytest.raises(CleanupError) as captured:
+        cleanup.close()
+
+    assert calls == [
+        "subscription-second",
+        "subscription-first",
+        "publisher",
+        "listener",
+        "node",
+        "context",
+    ]
+    assert len(captured.value.failures) == 6
+
+
+def test_cleanup_is_idempotent_and_preserves_external_context() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import RosResourceCleanup
+
+    calls = []
+    node = SimpleNamespace(
+        destroy_subscription=lambda subscription: calls.append(f"subscription-{subscription}"),
+        destroy_publisher=lambda _publisher: calls.append("publisher"),
+        destroy_node=lambda: calls.append("node"),
+    )
+    listener = SimpleNamespace(unregister=lambda: calls.append("listener"))
+    rclpy = SimpleNamespace(
+        ok=lambda: True,
+        shutdown=lambda: calls.append("context"),
+    )
+    cleanup = RosResourceCleanup(
+        ros_api=SimpleNamespace(rclpy=rclpy),
+        node=node,
+        tf_listener=listener,
+        publisher="pose-publisher",
+        subscriptions=["only"],
+        initialized_here=False,
+    )
+
+    cleanup.close()
+    cleanup.close()
+
+    assert calls == ["subscription-only", "publisher", "listener", "node"]
+
+
+def test_failed_cleanup_is_idempotent_and_rethrows_without_repeating_actions() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import CleanupError, RosResourceCleanup
+
+    calls = []
+
+    def fail_node() -> None:
+        calls.append("node")
+        raise RuntimeError("node cleanup failed")
+
+    cleanup = RosResourceCleanup(
+        ros_api=SimpleNamespace(rclpy=SimpleNamespace(shutdown=lambda: None)),
+        node=SimpleNamespace(destroy_node=fail_node),
+        initialized_here=False,
+    )
+
+    with pytest.raises(CleanupError) as first:
+        cleanup.close()
+    with pytest.raises(CleanupError) as second:
+        cleanup.close()
+
+    assert first.value is second.value
+    assert calls == ["node"]
+
+
+def test_partial_construction_cleanup_failure_is_actionable_and_continues(capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        _create_ros_runtime,
+        run_rgbd_cup_pose,
+    )
+
+    api, fake_rclpy, node, listener = _fake_ros_api(fail_subscription_number=2)
+
+    def fail_subscription_cleanup(subscription) -> None:
+        node.destroyed_subscriptions.append(subscription)
+        raise RuntimeError("subscription cleanup failed")
+
+    node.destroy_subscription = fail_subscription_cleanup
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda options, deadline, clock: _create_ros_runtime(
+            options,
+            deadline,
+            clock,
+            ros_api=api,
+        ),
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result != 0
+    assert "RGBD_CUP_POSE_CLEANUP_FAILED" in capsys.readouterr().out
+    assert node.destroyed_publishers == [node.publisher_calls[0][3]]
+    assert listener.unregister_calls == 1
+    assert node.destroyed
+    assert fake_rclpy.shutdown_calls == 1
+
+
+def test_post_success_cleanup_failure_forces_actionable_nonzero(capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = True
+
+        def spin_once(self, _timeout_s: float) -> None:
+            pytest.fail("stopped runtime reached spin")
+
+        def ok(self) -> bool:
+            return False
+
+        def close(self) -> None:
+            raise RuntimeError("publisher cleanup failed")
+
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda _options, _deadline, _monotonic: FakeRuntime(),
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result != 0
+    output = capsys.readouterr().out
+    assert "RGBD_CUP_POSE_CLEANUP_FAILED" in output
+    assert "publisher cleanup failed" in output
 
 
 def test_run_continues_after_first_valid_frame_until_orderly_shutdown() -> None:
