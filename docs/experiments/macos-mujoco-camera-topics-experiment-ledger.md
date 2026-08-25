@@ -556,7 +556,7 @@ next_command: NONE. Retain the registered evidence root; do not push or delete e
 checkpoint_id: CP-011
 last_valid_experiment: EXP-008
 current_hypothesis: NONE; direnv runtime-provenance regression is fixed and live RGB-D acceptance passed.
-working_tree_status: Environment fix and regression tests are locally committed as 9bf4c86; this completed ledger is pending its local documentation commit. The ignored primary .envrc contains the same fix and has been re-authorized with direnv. No push was performed.
+working_tree_status: Environment fix 9bf4c86 and acceptance ledger 6a71ea6 are reachable from local main; the ignored primary .envrc contains the same fix and is authorized with direnv. Primary and fork worktrees are clean; no push was performed.
 owned_processes: NONE; the no-daemon ROS_DOMAIN_ID 148 graph is empty after launch exit 0.
 preserved_processes: No pre-existing stack was stopped; parent learners/zjumty/progress.yaml remains untouched.
 confirmed_conclusions:
@@ -567,5 +567,5 @@ disproven_routes:
   - Rebuilding the already accepted r11 binaries is unnecessary for this incident; runtime overlay ordering is the first bad boundary.
 open_risks:
   - The dylib farm still contains historical symlinks to the old fork, but it is now a fallback after primary library paths and the stale prefix is filtered. Regenerating that shared farm is outside this scoped fix.
-next_command: Commit this ledger and fast-forward the feature branch into primary main; retain the active ignored .envrc and evidence root.
+next_command: NONE. Retain the active ignored .envrc and evidence root; do not push or delete evidence without user authorization.
 ```
