@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
 from ..application.dynamic_plan_only import (
     DynamicPlanningOptions,
@@ -153,7 +154,36 @@ def run_dynamic_plan_only(options) -> int:
             rclpy.shutdown()
 
 
-def run_dynamic_execute(options) -> int:
+def _dynamic_execute_runtime():
+    """Load ROS adapters lazily and expose a narrow orchestration test seam."""
+
+    import rclpy
+    from ament_index_python.packages import get_package_share_directory
+    from rclpy.parameter import Parameter
+
+    from ..application.dynamic_execute import build_dynamic_actions
+    from ..control.planning_scene.task_scene import RosTaskScenePort
+    from ..core.task_geometry import load_task_geometry
+    from .cup_scene_observer import RosMujocoCupSceneObserver
+    from .dynamic_mujoco_execution import RosDynamicMujocoExecution
+
+    return SimpleNamespace(
+        rclpy=rclpy,
+        parameter=Parameter,
+        get_package_share_directory=get_package_share_directory,
+        load_policy=load_dynamic_policy_variant,
+        load_geometry=load_task_geometry,
+        cup_pose_source=RosCupPoseSource,
+        cup_scene_observer=RosMujocoCupSceneObserver,
+        task_scene_port=RosTaskScenePort,
+        resolve_motion_targets=resolve_motion_targets,
+        execution=RosDynamicMujocoExecution,
+        build_actions=build_dynamic_actions,
+        runner=StateMachineRunner,
+    )
+
+
+def run_dynamic_execute(options, *, _runtime=None) -> int:
     """Run the MuJoCo dynamic strategy through the shared state machine."""
 
     if (
@@ -164,40 +194,57 @@ def run_dynamic_execute(options) -> int:
         print("status=ERROR failure=DYNAMIC_LIVE_RUNTIME_CONFIG_REQUIRED")
         return 1
 
-    import rclpy
-    from ament_index_python.packages import get_package_share_directory
-    from rclpy.parameter import Parameter
-
     from ..application.cup_pose_preflight import validate_cup_scene
-    from ..application.dynamic_execute import build_dynamic_actions
-    from .cup_scene_observer import RosMujocoCupSceneObserver
-    from .dynamic_mujoco_execution import RosDynamicMujocoExecution
+    from ..application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
-    share_dir = Path(get_package_share_directory("so101_demo_py"))
+    runtime = _dynamic_execute_runtime() if _runtime is None else _runtime
+    share_dir = Path(runtime.get_package_share_directory("so101_demo_py"))
     try:
-        loaded = load_dynamic_policy_variant(share_dir, backend="mujoco")
+        loaded = runtime.load_policy(share_dir, backend="mujoco")
     except Exception as error:
         print(status_line("ERROR", failure=_failure_code(error), message=error))
         return 1
     if not loaded.execution_allowed:
         print("status=ERROR failure=DYNAMIC_EXECUTION_NOT_QUALIFIED")
         return 1
+    try:
+        geometry = runtime.load_geometry(
+            share_dir / "assets" / "common" / "geometry-manifest.yaml"
+        )
+    except Exception as error:
+        print(status_line("ERROR", failure=_failure_code(error), message=error))
+        return 1
 
-    rclpy.init()
-    node = rclpy.create_node(
+    runtime.rclpy.init()
+    node = runtime.rclpy.create_node(
         "so101_dynamic_cup_pick_place",
-        parameter_overrides=[Parameter("use_sim_time", value=True)],
+        parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
     )
-    scene = None
+    truth_observer = None
+    task_scene = None
     execution = None
     try:
-        sample = RosCupPoseSource(node, loaded.template).get_one(options.cup_pose_timeout_s)
-        targets = resolve_motion_targets(sample, loaded.template)
-        scene = RosMujocoCupSceneObserver(node, options.session_id)
-        validate_cup_scene(sample, scene.observe(5.0), loaded.template)
-        validate_cup_scene(sample, scene.observe(5.0), loaded.template)
+        source = runtime.cup_pose_source(node, loaded.template)
+        sample = source.get_one(options.cup_pose_timeout_s)
+        truth_observer = runtime.cup_scene_observer(node, options.session_id)
+        initial = truth_observer.observe(5.0)
+        task_scene = runtime.task_scene_port(
+            node,
+            "mujoco",
+            loaded.template.planning_timeout_s,
+        )
+        prepare_dynamic_cup_scene(
+            sample,
+            initial,
+            loaded.template,
+            geometry,
+            task_scene,
+        )
+        validate_cup_scene(sample, truth_observer.observe(5.0), loaded.template)
+        validate_cup_scene(sample, truth_observer.observe(5.0), loaded.template)
+        targets = runtime.resolve_motion_targets(sample, loaded.template)
         evidence_file = Path(options.evidence_root) / "dynamic-execute-manifest.json"
-        execution = RosDynamicMujocoExecution(
+        execution = runtime.execution(
             node,
             loaded.template,
             targets,
@@ -208,8 +255,8 @@ def run_dynamic_execute(options) -> int:
             policy_path=loaded.path,
             policy_sha256=loaded.sha256,
         )
-        runner = StateMachineRunner(
-            build_dynamic_actions(execution, targets),
+        runner = runtime.runner(
+            runtime.build_actions(execution, targets),
             session_id=options.session_id,
             policy_bundle_sha256=loaded.sha256,
             world_observer=execution.observer,
@@ -246,8 +293,12 @@ def run_dynamic_execute(options) -> int:
     finally:
         if execution is not None:
             execution.close()
-        if scene is not None:
-            scene.close()
+        if task_scene is not None:
+            close_task_scene = getattr(task_scene, "close", None)
+            if close_task_scene is not None:
+                close_task_scene()
+        if truth_observer is not None:
+            truth_observer.close()
         node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        if runtime.rclpy.ok():
+            runtime.rclpy.shutdown()
