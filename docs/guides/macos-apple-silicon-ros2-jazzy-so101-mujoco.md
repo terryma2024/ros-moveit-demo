@@ -109,14 +109,16 @@ SO101_ROS_DEPENDENCY_OVERLAY=~/ros2_jazzy/extra_ws/install \
 ./scripts/install-mujoco-ros2-control.zsh
 ```
 
-fork 固定为 tag `so101-0.0.3-r8`、commit
-`78758d5becf1829e611da1dafb201fa018ddbe7b`。r8 在 r7 的 11 项 macOS/Linux 兼容修改之后增加
-GLFW primary monitor/video mode 空指针保护；fork Git 历史仍是 `mujoco_ros2_control` 源码的
-唯一权威。安装器从 clean submodule 创建独立 build source，校验其 HEAD 和 clean 状态后清
-缓存构建、运行包测试，再检查 package prefix、接口和动态库。
+fork 当前固定为候选标签 `so101-0.1.0-r1-candidate`、commit
+`0ed759a7198e76be847e163673782b1d2cbacf26`。该 commit 同时包含官方 0.1.0
+`57fc6744844902d4532160b403fa95840c1d6f96` 与本地 r11
+`f19a8cc3af61feccacb22a9f0d16cc972e3b2c08` 的 Git 祖先。候选标签不是 release tag；只有
+macOS 与 Linux 运行时验收完成后才创建 `so101-0.1.0-r1`。安装器从 clean submodule 创建独立
+build source，构建 `mujoco_3d_lidar`、msgs、plugins 和 core 四个包，再检查 package prefix、
+free-joint/reset/pause/viewer-camera 接口以及 CameraPlugin 安装产物。
 
 不要复用带 r6 patch 的旧 `ws_mujoco_ros2_control_fork/src/mujoco_ros2_control`。安装器会对
-dirty 或非 r8 build source fail closed，不会 reset、clean 或反向移除用户文件；显式选择新的
+ dirty 或非 locked-candidate build source fail closed，不会 reset、clean 或反向移除用户文件；显式选择新的
 `SO101_WORKSPACE_DIR`，或先自行归档旧 workspace。
 
 2026-08-14 的 r7 隔离验证中，两端使用同一 commit，且 r6→r7 组合 diff SHA-256 为
@@ -139,9 +141,12 @@ Linux ELF 不含 Cocoa、CoreVideo 或 AppKit，并保留 tinyxml2 的
 - Mach-O：修正 install name、`@executable_path`、install rpath，并链接 GLFW 所需的
   Cocoa、IOKit、CoreFoundation、CoreVideo framework；CTest 补齐 RMW 和日志 dylib
   查找路径。
-- AppKit 主线程：原生 MuJoCo viewer 由 `ros2_control_node` 主线程创建，ROS executor
-  放到后台线程。GUI 模式禁用会在 worker thread 新建 GLFW window 的离屏 camera/lidar，
-  但保留原生 viewer；headless 模式禁用全部渲染。
+- AppKit 主线程：原生 MuJoCo viewer 与 CameraPlugin 的 macOS render context 都由主线程
+  创建，ROS executor 放到后台线程；camera worker 只消费已注册 context，不自行创建 Cocoa
+  window。headless 模式禁用全部渲染。
+- RGB-D 验收：`/task_camera/{camera_info,color,depth}` 必须持续发送 640 x 480、10 Hz
+  （允许 8–12 Hz）、`task_camera_frame` 数据；color 为 `rgb8`，depth 为 `32FC1`，且三者时间戳
+  对齐、payload 非空、depth 含有限正值。
 - SIP/Python：Darwin 上用当前 `sys.executable` 显式执行 `ros2` 和 Python 节点，避免
   shebang 跨进程后丢失 `.venv` 与 dylib 环境。
 - 正常关停：只向两个 `ros2 launch` owner 各发送一次 SIGINT。不能对整个进程组发送
