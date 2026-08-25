@@ -7,19 +7,20 @@ success_contract: With headless=false on Darwin, rendering remains enabled and t
 worktree: /Users/matianyi/.codex/worktrees/c727/moveit-demo
 branch: codex/macos-mujoco-camera-topics
 base_commit: 842fb05041d4ba487354cf0c6f9668db6e65a9fb
-current_commit: fork=44c4fb3ce4cd4706a6c0c179b86c48550a408c86 (so101-0.0.3-r10); project=PENDING_LOCAL_COMMIT
+current_commit: project=1c36e0e8ebd5b25d345cb5655068b0ef20417590; fork=f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 (so101-0.0.3-r11)
 evidence_root: /tmp/so101-debug-v4-t005-macos-camera-topics/
 confirmed_conclusions:
   - The Darwin launch guard deterministically sets disable_rendering=true for interactive launches, suppressing the camera worker despite publisher registration.
-  - Cocoa UI-task dispatch reaches the process main thread; the current desktop execution environment blocks inside upstream mj::Simulate GUI construction before camera activation.
+  - EXP-005 confirms the post-migration SIGBUS was an ABI mismatch in the legacy plugin base vtable, not a MuJoCo GL-context failure.
+  - EXP-005 receives aligned valid 640x480 RGB-D samples in the logged-in Aqua session and shuts down cleanly.
 disproven_routes:
   - Removing the Darwin condition without changing GLFW ownership is not an acceptable repair.
 open_hypotheses:
   - H1: the Darwin launch guard deliberately prevents GLFW/Cocoa window-context creation from the existing background rendering thread; it also disables all camera publishers.
   - H2: a main-thread-owned macOS rendering context can preserve camera publication without relaxing the Cocoa constraint.
   - H3: a headless/offscreen MuJoCo context can publish camera images on Darwin without a GLFW window, but must be verified against the pinned MuJoCo API.
-latest_checkpoint: CP-006
-next_experiment: BLOCKED-MACOS-GL-CONTEXT-HANDOFF
+latest_checkpoint: CP-007
+next_experiment: NONE
 ```
 
 ## Baseline / competing hypotheses
@@ -36,6 +37,71 @@ have publishers but no frames.
 | H3 — offscreen rendering | MuJoCo can create a non-GLFW offscreen context on Darwin that supports readpixels for cameras. | Pinned MuJoCo build/API inspection plus end-to-end image/depth samples. |
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-005
+status: VALID
+prior_experiment: EXP-004
+hypothesis: SIGBUS is an ABI mismatch caused by adding rendering virtuals to MuJoCoROS2ControlPluginBase while the installed simulation_evidence plugin still has the r9 vtable.
+prediction: The macOS crash report shows CameraPlugin initialized and waiting, while the faulting executor thread calls set_rendering_enabled on the next legacy plugin; preserving the base vtable and moving rendering controls to an optional interface will remove this crash without requiring all legacy plugins to rebuild.
+single_variable: Rendering lifecycle methods move from the existing plugin base vtable to a separately cast optional capability interface.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Project source commit is 1c36e0e8ebd5b25d345cb5655068b0ef20417590 and fork source commit is 44c4fb3ce4cd4706a6c0c179b86c48550a408c86.
+  - No process from EXP-004 is owned by this task.
+  - Live runtime intentionally includes the r9-built simulation_evidence plugin to exercise backwards compatibility.
+success_criteria:
+  - A source contract first fails because the base vtable contains the new rendering virtuals.
+  - Rebuilt r10 loads CameraPlugin plus the existing legacy simulation_evidence plugin without SIGBUS.
+  - The three task_camera topics deliver valid aligned samples and shutdown exits without crash or unjoined thread.
+failure_criteria:
+  - Crash remains at the same base virtual dispatch boundary or any camera payload contract fails.
+invalid_criteria:
+  - Runtime resolves a different fork library, project YAML or ROS domain than recorded.
+provenance:
+  source_commit: project=1c36e0e8ebd5b25d345cb5655068b0ef20417590; fork=44c4fb3ce4cd4706a6c0c179b86c48550a408c86
+  install_overlay: /tmp/so101-debug-v4-t005-macos-camera-topics/fork-install-py311 and /tmp/so101-debug-v4-t005-macos-camera-topics/project-install-r10-isolated
+  runtime_executable: /tmp/so101-debug-v4-t005-macos-camera-topics/fork-install-py311/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 145
+  gz_partition: NOT_APPLICABLE_MUJOCO
+commands:
+  - command: python3 -m pytest -q test_primary_monitor_guard.py -k optional_capability
+    exit_code: 1 (expected RED)
+  - command: colcon build --merge-install --packages-up-to mujoco_ros2_control mujoco_ros2_control_plugins
+    exit_code: 0
+  - command: ctest -R 'test_headless_init|test_primary_monitor_guard'
+    exit_code: 0 (2/2)
+  - command: colcon test --packages-select mujoco_ros2_control_plugins mujoco_ros2_control; colcon test-result --verbose
+    exit_code: 0 (139 tests, 0 errors, 0 failures, 0 skipped)
+  - command: launchctl asuser 501 ... ros2 launch so101_demo_py so101_mujoco.launch.py headless:=false run_mode:=execute execute:=true
+    exit_code: 0 after bounded probe and SIGINT
+  - command: macos_camera_topic_probe.py --timeout-s 25
+    exit_code: 0
+observed:
+  - macOS crash report ros2_control_node-2026-08-25-105801.ips records EXC_BAD_ACCESS/SIGBUS, faulting thread 26 at MujocoSystemInterface::load_mujoco_plugins line 3558.
+  - The same report shows CameraPlugin::update_loop already waiting at camera_plugin.cpp:556, so GL initialization completed before the fault.
+  - RED fails specifically because the legacy base contains set_macos_render_context; GREEN passes after rendering lifecycle moves to an independent optional capability.
+  - The installed r11 fork loads CameraPlugin and the pre-r11 simulation_evidence binary together, completes hardware activation, and publishes all three task_camera topics without SIGBUS.
+  - Probe samples camera_info=23, color=3, depth=23; dimensions=640x480; frame_id=task_camera_frame; encodings rgb8 and 32FC1; RGB bytes=921600; depth bytes=1228800; finite positive depth values=307200.
+  - CameraInfo, RGB and depth share stamp 55888000000 ns. The bounded subscriber observed RGB at 1.3333333333333333 Hz; the configured publisher rate remains 10 Hz.
+  - SIGINT shutdown returns launch exit 0; ros2_control_node, robot_state_publisher and move_group all finish cleanly, and ROS_DOMAIN_ID 145 has no remaining nodes.
+  - The preliminary launch using a nonexistent venv ros2 path exited 2 before starting a process; a dry-run launch exited 0 without starting the stack. Neither was counted as runtime acceptance.
+inferred:
+  - CONFIRMED: the next plugin is simulation_evidence, built against the r9 base vtable; calling the newly appended base virtual dispatched outside its legacy vtable.
+conclusion: PASS. The optional rendering capability preserves legacy plugin ABI and macOS live RGB-D plus clean shutdown acceptance passes.
+evidence:
+  - /Users/matianyi/Library/Logs/DiagnosticReports/ros2_control_node-2026-08-25-105801.ips
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-040-red-plugin-abi-capability.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-041-green-plugin-abi-capability.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-042-fork-r11-build.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-043-fork-r11-directed-tests.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-047-camera-topic-samples.json
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-048-fork-r11-package-tests.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-049-fork-r11-test-results.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-050-post-shutdown-node-list.log
+decision: KEEP
+next_experiment: NONE
+```
 
 ```yaml
 experiment_id: EXP-004
@@ -193,4 +259,22 @@ open_risks:
   - SIGBUS in CameraPlugin's worker-side MuJoCo GL context initialization prevents first frames, aligned timestamps, rate evidence, and clean-shutdown acceptance.
   - Current Computer Use policy permits desktop inspection but not typing in the logged-in terminal; GUI-domain launchctl replay was used instead.
 next_command: Design and validate a main-thread rendering dispatch or an actually supported macOS offscreen context before claiming RGB-D runtime success.
+```
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-005
+current_hypothesis: NONE; macOS RGB-D acceptance passed.
+working_tree_status: Fork r11 is locally committed; project r11 lock, gitlink and this ledger are pending the final local project commit.
+owned_processes: NONE; ROS_DOMAIN_ID 145 node list is empty after launch exit 0.
+preserved_processes: No pre-existing ROS/MuJoCo process was stopped.
+confirmed_conclusions:
+  - The SIGBUS root cause was legacy plugin ABI corruption from extending MuJoCoROS2ControlPluginBase, not worker-side OpenGL rendering.
+  - An independent MuJoCoROS2ControlRenderingPlugin capability preserves the legacy base vtable and supports CameraPlugin lifecycle dispatch.
+  - Logged-in Aqua runtime publishes aligned valid 640x480 rgb8/32FC1 data and shuts down without crash or deadlock.
+disproven_routes:
+  - Moving camera rendering itself to the process main thread is not required for this failure; the GL render worker had already initialized and was waiting when the ABI crash occurred.
+open_risks:
+  - The bounded Python subscriber observed RGB at 1.33 Hz rather than the configured 10 Hz; payload validity and repeated publication passed, but performance tuning is outside this correctness fix.
+next_command: Commit the r11 project gitlink, dependency locks and completed experiment ledger; do not push.
 ```

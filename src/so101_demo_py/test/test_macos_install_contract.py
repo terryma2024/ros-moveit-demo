@@ -25,7 +25,7 @@ LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco/dependency-lock.yaml"
 RUNTIME_LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/dependency-lock.yaml"
 R6_FORK_COMMIT = "738e304551b4ea6db020b466086a13db71b65607"
 EXPECTED_PORTABLE_DIFF_SHA256 = (
-    "6fbb5f79f725f809858bf1546399b5b64c1fc572f2bf479bedc3ce836c4da725"
+    "38a3382e4a05a5eb960be8f05c020f7aa62590eb369deb80bb4a5168eb90de00"
 )
 MUJOCO_340_COMMIT = "e55fff5dea6f1d5dd7963ca52eecc41d05ad0922"
 MUJOCO_GLFW_PATCH_SHA256 = (
@@ -33,12 +33,12 @@ MUJOCO_GLFW_PATCH_SHA256 = (
 )
 
 
-def test_r10_fork_is_the_only_portable_source_authority() -> None:
+def test_r11_fork_is_the_only_portable_source_authority() -> None:
     lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
     runtime_lock = yaml.safe_load(RUNTIME_LOCK.read_text(encoding="utf-8"))
 
-    assert lock["fork"]["tag"] == "so101-0.0.3-r10"
-    assert runtime_lock["fork"]["tag"] == "so101-0.0.3-r10"
+    assert lock["fork"]["tag"] == "so101-0.0.3-r11"
+    assert runtime_lock["fork"]["tag"] == "so101-0.0.3-r11"
     assert runtime_lock["fork"]["commit"] == lock["fork"]["commit"]
     assert (
         runtime_lock["fork"]["policy_behavior_commit"]
@@ -49,7 +49,7 @@ def test_r10_fork_is_the_only_portable_source_authority() -> None:
     assert "scripts/patches/mujoco_ros2_control" not in attributes
 
 
-def test_r10_gitlink_history_and_portable_bytes_are_exact() -> None:
+def test_r11_gitlink_history_and_portable_bytes_are_exact() -> None:
     lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
     locked_commit = lock["fork"]["commit"]
     gitlink = subprocess.run(
@@ -126,6 +126,7 @@ def test_r10_gitlink_history_and_portable_bytes_are_exact() -> None:
         "fix: guard unavailable GLFW primary monitor",
         "fix: prepare macos camera context on main thread",
         "feat: migrate cameras to plugin",
+        "fix: preserve plugin ABI for camera lifecycle",
     ]
     portable_diff = subprocess.run(
         [
