@@ -47,12 +47,27 @@ COMMON_ARGUMENTS = {
 
 _CONTROLLERS = ("joint_state_broadcaster", "arm_controller", "gripper_controller")
 
+MUJOCO_CUP_KEYFRAMES = (
+    "task_start",
+    "cup_test_forward_5cm",
+    "cup_test_left_5cm",
+    "cup_test_right_5cm",
+)
+
 
 def _render_mujoco_robot_description(
-    share: Path, scene: str, *, headless: bool, platform_name: str | None = None
+    share: Path,
+    scene: str,
+    *,
+    headless: bool,
+    initial_keyframe: str = "task_start",
+    platform_name: str | None = None,
 ) -> str:
+    if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
+        raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
     description = (share / "assets/mujoco/so101.urdf").read_text(encoding="utf-8")
     description = description.replace("@SO101_MUJOCO_SCENE@", scene)
+    description = description.replace("@SO101_MUJOCO_INITIAL_KEYFRAME@", initial_keyframe)
     description = description.replace("@SO101_MUJOCO_HEADLESS@", str(headless).lower())
     # Interactive Darwin launches use the fork's main-thread-owned GLFW context
     # path.  Only an explicitly headless launch suppresses camera rendering.
@@ -103,11 +118,17 @@ def _mujoco_execute_actions(
     context, share: Path, policy, session_id: str, *, include_workflow: bool
 ):
     scene = LaunchConfiguration("mujoco_scene").perform(context)
+    initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
     timeout = LaunchConfiguration("readiness_timeout_s").perform(context)
     evidence_file = Path(LaunchConfiguration("evidence_file").perform(context))
     evidence_root = evidence_file.parent / f"{evidence_file.stem}.d"
-    robot_description = _render_mujoco_robot_description(share, scene, headless=headless)
+    robot_description = _render_mujoco_robot_description(
+        share,
+        scene,
+        headless=headless,
+        initial_keyframe=initial_keyframe,
+    )
     config = share / "config/mujoco"
     controllers = str(config / "ros2_controllers.yaml")
     parameters = [
@@ -472,9 +493,16 @@ def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescrip
         DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
     ]
     if backend == "mujoco":
-        arguments.append(
-            DeclareLaunchArgument(
-                "mujoco_scene", default_value=str(share / "assets/mujoco/scene.xml")
+        arguments.extend(
+            (
+                DeclareLaunchArgument(
+                    "mujoco_scene", default_value=str(share / "assets/mujoco/scene.xml")
+                ),
+                DeclareLaunchArgument(
+                    "mujoco_initial_keyframe",
+                    default_value="task_start",
+                    choices=MUJOCO_CUP_KEYFRAMES,
+                ),
             )
         )
     else:

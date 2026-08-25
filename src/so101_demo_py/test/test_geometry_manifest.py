@@ -119,8 +119,8 @@ def test_qualified_mujoco_model_and_scene_bytes_remain_pinned() -> None:
         "f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca"
     )
     assert hashlib.sha256((assets / "scene.xml").read_bytes()).hexdigest() == (
-        "f93e2934a0ac38c1bdd1c2f94f6ac3c83f1dabd688178bad4b6c403f712f089a"
+        "fec97df90ada01bed12e09110986caac52881312360c5549763dcb2a02d99d9c"
     )
     assert hashlib.sha256((assets / "so101.urdf").read_bytes()).hexdigest() == (
-        "a8b8f61c0c19640ee62d77653bb0258ed9a2a7e7ec73322ff93bf2cd99c05eb5"
+        "044066f20cb88a5f282d3b0cbbc406bb298039a4e75e7f2638d7b418d52bc79b"
     )
