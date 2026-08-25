@@ -535,3 +535,58 @@ deletion_candidates:
 ```
 
 The accepted count increase from 22 to 23 registered wrappers is intentional: Fix Round 2 adds one registered four-case rangefinder boundary target. The production bound is derived from the number of same-name, resolvable rangefinders in the loaded MuJoCo model and is checked before the first input-derived `size_t` conversion or allocation. Invalid huge finite configurations return `false`; the real 24-ray configuration remains accepted. Task 6 must pin this exact candidate and label it `so101-0.1.0-r1-candidate`; no final tag is authorized until both platform runtime qualifications pass.
+
+### EXP-007: Task 6 project adapter and candidate pin
+
+```yaml
+parent_base: 3096db0
+implementation_candidate: 62da4a7b98e384377fd5ca7170b8ab56618d9a3a
+fork_gitlink: 0ed759a7198e76be847e163673782b1d2cbacf26 unchanged
+changed_files: 11 planned paths
+focused_contracts: 18/18 passed
+support_gtests: 19/19 passed
+demo_pytest: 261/261 passed
+aggregate: 281 tests, 0 failures, 0 errors, 0 skips
+review_spec_compliance: FAIL
+critical: 0
+important:
+  - integration guide still assigns on_physics_step to the base ABI and documents the obsolete owner and authoritative-step ordering
+minor:
+  - four-package provenance example omits ros2 pkg prefix mujoco_3d_lidar
+review_verdict: Rejected
+fix_round: 1/5 IN_PROGRESS
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/project-adapter-worktree
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task6-parent.md
+archived_runs: []
+deletion_candidates: []
+```
+
+The implementation, lock, installer, camera-probe, isolated build, and test-shim boundaries passed review. Fix Round 1 is documentation-scoped: register a contract that rejects the obsolete base-hook text; migrate guide sections 4.1, 4.2, 4.4, and the related fault-table entry to the optional `MuJoCoROS2ControlSimulationObserver`, `SimulationObserverDispatcher`, and actual control/pre-step -> `mj_step` -> divergence -> observer -> snapshot/clock flow; and add the lidar package-prefix read-back. No production-code change is justified by this review.
+
+Task 6 fix round 1 implementation and scoped re-review:
+
+```yaml
+parent_candidate: 42e2d87838347a4c0bd496828eec000dbd683535
+fork_gitlink: 0ed759a7198e76be847e163673782b1d2cbacf26 unchanged and clean
+fix_changed_files: 2 planned paths
+production_code_changes: 0
+red_contracts: 2 expected failures
+focused_contracts: 20/20 passed
+demo_pytest: 263/263 passed
+support_gtests: 19/19 passed
+aggregate: 283 tests, 0 failures, 0 errors, 0 skips
+review_spec_compliance: PASS
+review_verdict: Approved
+critical: 0
+important: 0
+minor: 0
+task_state: COMPLETE
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/project-adapter-worktree/fix-round-1
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task6-fix1-parent.md
+archived_runs: []
+deletion_candidates: []
+```
+
+The guide now matches the implemented optional-observer architecture and dispatcher ownership, states the actual authoritative ordering, and reads back all four installed fork packages including `mujoco_3d_lidar`. The registered documentation contracts prevent the obsolete base-hook guidance from returning. Task 7 consumes this exact parent and fork candidate in an isolated macOS runtime overlay.
