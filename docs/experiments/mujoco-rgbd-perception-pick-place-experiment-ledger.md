@@ -23,7 +23,7 @@ disproven_routes:
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
-latest_checkpoint: CP-013
+latest_checkpoint: CP-014
 next_experiment: EXP-006
 ```
 
@@ -847,4 +847,65 @@ open_risks:
   - Controller activation, timeout90 production, RGB-D/pose/truth, Viewer action, and all downstream product gates remain unrun.
   - Existing evidence is retained; nothing was archived or deleted.
 next_command: In a new turn only, re-read EXP-006, capture normal HOME/lock/provenance/domain/Viewer preflight, then request require_escalated for the exact read-only isolation probe; do not start observers or stack unless it exits 0 with zero conflicts.
+```
+
+```yaml
+correction_id: CORR-EXP-006-001
+applies_to: EXP-006
+status: PLANNED
+recorded_after_commit: 999f7bf713a725100babcb2da8d6409ce4b67572
+reason: EXP-006 originally preregistered the elevated read-only process-isolation probe only before observers/RUNNING while its cleanup command still ambiguously required an empty process result in normal scope, which EXP-005 proved unavailable.
+correction_scope: Measurement-only; no runtime, elevation, process probe, test, build, ROS command, GUI action, signal, or cleanup was performed while recording this correction.
+single_variable_effect: NONE; the identical exact elevated read-only targeted process probe is now required at both the pre-observers/pre-RUNNING and post-normal-cleanup boundaries, while timeout90 and all robot/perception behavior remain unchanged.
+canonical_probe_contract:
+  executable: /bin/ps
+  arguments: -axo pid=,ppid=,pgid=,comm=,args=
+  bounded_targets:
+    - rgbd_cup_pose
+    - dynamic_cup_pick_place
+    - so101_mujoco.launch.py
+    - ros2_control_node
+    - static_transform_publisher
+    - rgbd-perception-gate-exp006-20260826
+  self_exclusion: Exclude only the exactly recorded probe wrapper, `/bin/ps` child, bounded matcher PID, and their explicitly recorded tool-runner parent PID; every excluded PID/PGID/command must be retained in the phase owner sidecar, and no target process may be excluded by name, session, or ownership assumption.
+  output_rule: Retain only rows matching the bounded target list after exact self-exclusion; zero bytes means no conflict only when the ps command, matcher, HOME check, command comparison, and aggregate phase exit are all 0.
+  safety_rule: The probe is read-only. It may not signal, stop, inspect file contents, change priority, attach, mutate environment outside its wrapper, or modify any process or system state.
+identical_boundary_contract:
+  - Write one canonical probe command text under `exp-006/isolation/canonical-probe-command.txt` and its SHA-256 before either invocation. Both elevated tool calls execute that exact body with only a phase argument of `pre` or `post`; retain each rendered command plus SHA-256 and byte-compare the invariant body to the canonical file.
+  - The pre probe runs after normal HOME/lock/provenance/domain/Viewer preflight and before any observer starts or PLANNED transitions to RUNNING. Retain `isolation/pre.home.txt`, `.owner`, `.command.txt`, `.command.sha256`, `.start.wall_ns`, `.start.monotonic_ns`, `.targeted.txt`, `.stderr`, `.end.wall_ns`, `.end.monotonic_ns`, and `.exit`.
+  - The post probe runs only after normal-scope SIGINT has been sent to every exact owned remaining observer/static-TF/production/stack session or PGID and their wrapper exits have been retained. Retain the identical `isolation/post.*` evidence set.
+  - Both probes require `$HOME` to equal `/Users/matianyi` and to byte-match normal-before HOME. Each phase requires `/bin/ps` exit 0, matcher exit 0, canonical command comparison exit 0, zero-byte targeted output, and aggregate phase exit 0.
+  - Compare the pre and post invariant command text/SHA-256 and bounded target list exactly; retain `isolation/pre-vs-post-command.compare.txt` and `.exit`. Only the phase label, phase-specific output filenames, owner PIDs/PGIDs, and timestamps may differ.
+cleanup_order:
+  - In normal scope record cleanup begin wall/monotonic timestamps and the exact owned session/PID/PGID set.
+  - In normal scope send SIGINT only to those exact owned sessions/PGIDs, wait for every wrapper exit sidecar, and prove no owned wrapper remains using its exact owner records. No cleanup signal may be elevated.
+  - Run the canonical post elevated read-only probe and require zero bounded matches with complete sidecars.
+  - In normal scope capture empty domain 180 with an evidence-local ROS_LOG_DIR, normal-after HOME/lock exact comparisons, cleanup end timestamps, and aggregate cleanup exit.
+invalid_criteria:
+  - Either boundary does not run the canonical exact elevated read-only probe, runs a different target list/body, lacks HOME/command/owner/wall/monotonic/output/exit evidence, returns nonzero, or retains any conflicting target row.
+  - The post probe runs before all normal-scope exact-owned SIGINT/wrapper-exit evidence is complete, cleanup signaling is elevated, any unowned process is signaled, or the probe itself signals or mutates state.
+  - Any self-exclusion is not tied to an exactly recorded probe/tool PID or hides a bounded target process; any command/body/target comparison is nonzero or missing.
+  - All existing EXP-006 provenance, observer, controller, perception, Viewer, HOME/lock, domain, evidence, no-dynamic/no-motion, and cleanup invalid criteria remain in force.
+decision: CORR-EXP-006-001 is part of EXP-006's effective PLANNED measurement contract and must pass at both boundaries; it does not start EXP-006.
+```
+
+```yaml
+checkpoint_id: CP-014
+last_valid_experiment: EXP-002
+current_hypothesis: EXP-006 may reach the still-unmeasured timeout90 production boundary only if the same bounded elevated read-only process probe proves isolation both before observers/RUNNING and after normal-scope exact-owned cleanup.
+working_tree_status: At correction authoring, only the experiment ledger is tracked dirty from clean head 999f7bf713a725100babcb2da8d6409ce4b67572; Task 7 report remains ignored and the correction must be committed ledger-only.
+owned_processes: NONE_STARTED_OR_INSPECTED_BY_CORR-EXP-006-001
+preserved_processes: No process probe, elevation, signal, runtime, test, build, ROS command, GUI action, HOME/lock operation, or evidence deletion occurred.
+confirmed_conclusions:
+  - CORR-EXP-006-001 closes EXP-006's cleanup observability gap by requiring one canonical elevated read-only targeted probe at both pre-RUNNING and post-normal-cleanup boundaries.
+  - Cleanup signaling remains normal-scope and exact-owned only; elevation is measurement-only after cleanup and cannot broaden signal authority.
+  - A zero-byte targeted output is accepted only with complete command/owner/HOME/timestamp/comparison sidecars and aggregate exit 0; either a conflicting row or nonzero/missing evidence makes EXP-006 INVALID.
+disproven_routes:
+  - A pre-RUNNING process probe cannot substitute for the post-cleanup process boundary.
+  - Empty ROS graph, exact wrapper exits, or unchanged HOME/lock cannot substitute for the canonical post-cleanup targeted process probe.
+open_risks:
+  - Both elevated read-only probe approvals and the separate owned-stack approval remain external preconditions; denial makes the run invalid without workaround.
+  - EXP-006 controller, timeout90 perception, /cup_pose, truth error, Viewer sequence, and downstream product gates remain unrun.
+  - Existing evidence remains retained; nothing was archived or deleted.
+next_command: In a new turn only, re-read EXP-006 plus CORR-EXP-006-001, capture normal preflight and canonical probe command evidence, then request require_escalated for the pre probe; do not start observers unless it exits 0 with zero targeted rows.
 ```
