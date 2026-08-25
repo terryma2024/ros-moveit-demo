@@ -3,8 +3,8 @@ provider: gitee_fork_submodule
 release: 0.0.3
 fork:
   url: git@gitee.com:zjumty/mujoco_ros2_control.git
-  tag: so101-0.0.3-r9
-  commit: 1ef550cbbcbbcf8c0e5784648f81545724d5f90f
+  tag: so101-0.0.3-r10
+  commit: 44c4fb3ce4cd4706a6c0c179b86c48550a408c86
   policy_behavior_commit: 1ef550cbbcbbcf8c0e5784648f81545724d5f90f
 upstream:
   url: https://github.com/ros-controls/mujoco_ros2_control.git
@@ -31,8 +31,8 @@ interface_sha256:
   mujoco_ros2_control_msgs/srv/SetPause: e1d7d41a86128a75126500d61236cc1325c706bedc875f76f5a72746e04cc9a5
   mujoco_ros2_control_msgs/srv/StepSimulation: 443fed7fb261958fc2e735ea99cca30f1c3385288b7be0eba52877bdc2b4f5d8
 required_files:
-  include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: c0b92492693d1211c2959fc7a7a1ca8804419131799e53fd8fe817c690b87916
+  include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: 4014cd76862b0460d98bfb2cd812a9f47e89463b06b8c693c160dfc818718675
   include/mujoco_ros2_control/viewer_camera.hpp: 488364d11a6d591438bda116831e111b9fdb7934146117af2a8106120efae6ed
-  lib/libmujoco_ros2_control_plugins.so: 04060ef6205a87c5e9dfa448e5482e4ebf56c4b196af8288ad09b57af430d461
-  lib/libmujoco_ros2_control.so: df6398499ec0055658c4759a824bfd205926eb4618f7603ff63ba930645a3087
-  lib/mujoco_ros2_control/ros2_control_node: 9fd047eaae7ed2eff3f49aeb42880f88019ccf84787ecd5183ee5de78d73506e
+  lib/libmujoco_ros2_control_plugins.so: b0076352407cfea0728d3c89ce360c56baa0304154d575d08c1e36a9943b7a58
+  lib/libmujoco_ros2_control.so: 09a6293709e559e8a169639b2d99bddff5f6158871ea95038df393af1c354e86
+  lib/mujoco_ros2_control/ros2_control_node: 8cc82f166833d4bf726957c51d71c7db2e9ecd7f9378fe5dc7df252ec8c77f03
