@@ -3,9 +3,9 @@ provider: gitee_fork_submodule
 release: 0.0.3
 fork:
   url: git@gitee.com:zjumty/mujoco_ros2_control.git
-  tag: so101-0.0.3-r8
-  commit: 78758d5becf1829e611da1dafb201fa018ddbe7b
-  policy_behavior_commit: f42b7b3d77288c2fee750fe53b0258e0a3d18194
+  tag: so101-0.0.3-r9
+  commit: 1ef550cbbcbbcf8c0e5784648f81545724d5f90f
+  policy_behavior_commit: 1ef550cbbcbbcf8c0e5784648f81545724d5f90f
 upstream:
   url: https://github.com/ros-controls/mujoco_ros2_control.git
   tag: 0.0.3

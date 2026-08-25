@@ -102,7 +102,7 @@ def test_launch_source_reports_first_gazebo_phase_failure() -> None:
     assert "TimerAction(period=12.0" not in source
 
 
-def test_mujoco_rendering_avoids_worker_thread_glfw_windows_on_macos() -> None:
+def test_mujoco_rendering_is_enabled_for_interactive_macos_camera_stack() -> None:
     share = PACKAGE_ROOT
 
     headless = launch_composition._render_mujoco_robot_description(
@@ -117,4 +117,4 @@ def test_mujoco_rendering_avoids_worker_thread_glfw_windows_on_macos() -> None:
 
     assert '<param name="disable_rendering">true</param>' in headless
     assert '<param name="disable_rendering">false</param>' in linux_interactive
-    assert '<param name="disable_rendering">true</param>' in macos_interactive
+    assert '<param name="disable_rendering">false</param>' in macos_interactive

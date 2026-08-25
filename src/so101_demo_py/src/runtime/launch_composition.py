@@ -54,7 +54,9 @@ def _render_mujoco_robot_description(
     description = (share / "assets/mujoco/so101.urdf").read_text(encoding="utf-8")
     description = description.replace("@SO101_MUJOCO_SCENE@", scene)
     description = description.replace("@SO101_MUJOCO_HEADLESS@", str(headless).lower())
-    disable_rendering = headless or (platform_name or sys.platform) == "darwin"
+    # Interactive Darwin launches use the fork's main-thread-owned GLFW context
+    # path.  Only an explicitly headless launch suppresses camera rendering.
+    disable_rendering = headless
     description = description.replace(
         "@SO101_MUJOCO_DISABLE_RENDERING@", str(disable_rendering).lower()
     )
