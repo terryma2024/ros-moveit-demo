@@ -404,3 +404,134 @@ task_state: COMPLETE_WITH_3_DEFERRED_MINORS
 ```
 
 The suspected discard-versus-context race was adjudicated not reachable in the production macOS topology: failed-init rollback runs synchronously inside `on_init`, and the external-initialization completion guard prevents main-thread context destruction until it returns; if shutdown owns the lifecycle first, discard waits for renderer shutdown completion.
+
+### EXP-006: Task 5 full fork candidate gate
+
+```yaml
+fork_base: ff4aa7db2d92cef56b69d6d5243dd507a4a2b1dc
+fork_candidate: 5d94c8d4c44128da427aea027ba7cdf2cd109283
+parent_base: 64099931c5aaf1b3d3d21a872bd62eacacf1cf67
+parent_gitlink_commit: e02735e744fa402d3fadbc5bedd436357a466528
+implementer: /root/task5_fork_gate
+state: REVIEW_IN_PROGRESS
+packages_discovered: 6
+packages_built: 6/6
+registered_wrappers: 22/22 passed
+tests_total: 301
+tests_passed: 282
+tests_skipped: 19
+tests_failed: 0
+test_errors: 0
+normal_camera_plugin: 6/6 passed
+registered_pykdl_pytest: 101/101 passed
+source_less_wrappers: 9/9 passed
+source_less_tests: 174/174 passed
+upstream_ancestor: 57fc6744844902d4532160b403fa95840c1d6f96 PASS
+r11_ancestor: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 PASS
+plugin_base_abi: exact upstream byte hash retained
+viewer_interfaces: exact r11 byte hashes retained
+bundle: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/fork-gate-worktree/final-candidate/mujoco_ros2_control-0.1.0-r1.bundle
+bundle_sha256: bd28ae42c8c9100162dbcb19963ff51d9dc72ed26bf92c330402f392acb0d127
+bundle_verify: complete history and exact branch ref PASS
+final_tag_created: false
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/fork-gate-worktree
+archived_runs: []
+deletion_candidates:
+  - superseded RED, setup, environment, and focused diagnostic directories retained under the Task 5 evidence root
+```
+
+Task 5 closed the prior full-overlay boundaries: the ordinary CameraPlugin registered wrapper passed 6/6, and the PyKDL-dependent registered pytest wrapper passed 101/101. The authoritative count supersedes an earlier non-authoritative skip undercount. The source-backed candidate contains Simulate and macOS UI objects; the forced source-less branch contains no `simulate.cc` object and passes its complete 174-case core suite.
+
+Task 5 independent review:
+
+```yaml
+spec_compliance: FAIL
+verdict: Needs fixes
+critical: 0
+important:
+  - Apple conversion warning demotions are target-wide and hide unrelated or future conversion regressions
+  - installed core dylib contains 52 build-host/evidence/user-specific LC_RPATH entries through INSTALL_RPATH_USE_LINK_PATH
+  - launch camera integration can be skipped by unrestricted ambient SKIP_CAMERA_TESTS on every platform
+minor:
+  - site-velocity service wait is 45 seconds on Linux although only Darwin required the cold-start accommodation
+fix_round: 1/5 IN_PROGRESS
+implementer: /root/task5_fork_gate
+```
+
+The candidate commit and bundle above remain immutable evidence of the rejected first candidate; they are superseded for acceptance and must not be presented as final after Fix Round 1 produces new hashes.
+
+Task 5 fix round 1 implementation and scoped re-review:
+
+```yaml
+fork_candidate: 715c4bc4e80297045e46d78ce3585ae7ef76ba2d
+parent_gitlink_commit: f92c8602ae485965b166064f0393226da90e3a57
+packages_built: 6/6 fresh compile followed by non-symlink production copy-install
+registered_wrappers: 22/22 passed
+tests_total: 323
+tests_skipped: 19 deterministic
+tests_failed: 0
+test_errors: 0
+source_less_wrappers: 9/9 passed
+source_less_tests: 177/177 passed
+installed_macho: 18
+installed_lc_rpath: exactly one @loader_path and zero forbidden paths
+relocation_load: PASS
+bundle_sha256: 2f0b3440cdec40ee47e8c8211f0ffec238b56b9b49a45580772d33b2f2e6774c
+original_important_findings: 3/3 CLOSED
+original_minor: CLOSED
+new_important:
+  - rangefinder interval conversion compares against rounded double(SIZE_MAX - 1), allowing an out-of-range float-to-size_t conversion or resource-unbounded vector allocation
+new_minor:
+  - report points the controller startup runtime RED at an AttributeError probe instead of the retained candidate-2 launch failure
+review_verdict: REJECT
+fix_round: 2/5 IN_PROGRESS
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/fork-gate-worktree
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task5-fix1-parent.md
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task5-fix1-fork.md
+archived_runs: []
+deletion_candidates:
+  - superseded candidates 1-6 and failed intermediate audits retained pending explicit authorization
+```
+
+Fix round 2 requires an explicit pre-allocation bound tied to the model-provided rangefinder count or another documented practical implementation limit, with overflow-safe `+1`. Registered RED/GREEN coverage must include `range=1, increment=2^-64`, a second finite-but-huge count, and a normal valid configuration, and must prove invalid configurations return `false` without exception or large allocation. Afterward the full fresh-build, 22-wrapper, source-less, copy-install/RPATH/relocation, ancestry/ABI/interface, and bundle gates must be repeated. No final tag is authorized.
+
+Task 5 fix round 2 implementation and scoped re-review:
+
+```yaml
+fork_candidate: 0ed759a7198e76be847e163673782b1d2cbacf26
+parent_gitlink_commit: 3419f40888bce1e15c84620b66a92d40fc53dec0
+fork_changed_files: 3
+parent_change: nested gitlink only
+packages_built: 6/6 fresh
+registered_wrappers: 23/23 passed
+tests_total: 327
+tests_skipped: 16 XML testcase skips
+tests_failed: 0
+test_errors: 0
+rangefinder_boundary: 4/4 passed including 2^-64, finite million-ray, normal 3-ray, and production 24-ray
+camera_plugin: 6/6 passed
+registered_pykdl: 101/101 passed
+source_less_wrappers: 9/9 passed
+source_less_tests: 177/177 passed
+copy_install: 18 Mach-O, exactly one @loader_path, zero forbidden paths, relocated load PASS
+bundle_sha256: 1a184391050b0e55af7e90ccdc9f457adbbd376c8595e761da0bd45e47e769d3
+bundle_verify_clone_fsck_ref: PASS
+final_tag_created: false
+review_spec_compliance: PASS
+review_verdict: Approved
+critical: 0
+important: 0
+minor: 0
+task_state: COMPLETE
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/fork-gate-worktree/fix-round-2
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task5-fix2-parent.md
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task5-fix2-fork.md
+archived_runs: []
+deletion_candidates:
+  - superseded candidates and probes remain retained pending explicit authorization
+```
+
+The accepted count increase from 22 to 23 registered wrappers is intentional: Fix Round 2 adds one registered four-case rangefinder boundary target. The production bound is derived from the number of same-name, resolvable rangefinders in the loaded MuJoCo model and is checked before the first input-derived `size_t` conversion or allocation. Invalid huge finite configurations return `false`; the real 24-ray configuration remains accepted. Task 6 must pin this exact candidate and label it `so101-0.1.0-r1-candidate`; no final tag is authorized until both platform runtime qualifications pass.
