@@ -66,6 +66,91 @@ def _valid_frame(*, stamp_ns: int = 20):
     )
 
 
+class _FakeRclpy:
+    def __init__(self) -> None:
+        self.initialized = False
+        self.shutdown_calls = 0
+
+    def ok(self) -> bool:
+        return self.initialized
+
+    def init(self) -> None:
+        self.initialized = True
+
+    def shutdown(self) -> None:
+        self.shutdown_calls += 1
+        self.initialized = False
+
+    def spin_once(self, _node, *, timeout_sec: float) -> None:
+        assert timeout_sec >= 0.0
+
+
+class _FakeNode:
+    def __init__(self, *, fail_subscription_number: int | None = None) -> None:
+        self.fail_subscription_number = fail_subscription_number
+        self.publisher_calls = []
+        self.subscription_calls = []
+        self.destroyed_publishers = []
+        self.destroyed_subscriptions = []
+        self.destroyed = False
+
+    def create_publisher(self, message_type, topic, qos):
+        publisher = SimpleNamespace(publish=lambda _message: None)
+        self.publisher_calls.append((message_type, topic, qos, publisher))
+        return publisher
+
+    def create_subscription(self, message_type, topic, callback, qos):
+        number = len(self.subscription_calls) + 1
+        if number == self.fail_subscription_number:
+            raise RuntimeError("subscription construction failed")
+        subscription = object()
+        self.subscription_calls.append((message_type, topic, callback, qos, subscription))
+        return subscription
+
+    def destroy_publisher(self, publisher) -> None:
+        self.destroyed_publishers.append(publisher)
+
+    def destroy_subscription(self, subscription) -> None:
+        self.destroyed_subscriptions.append(subscription)
+
+    def destroy_node(self) -> None:
+        self.destroyed = True
+
+    def get_logger(self):
+        return SimpleNamespace(error=lambda _message: None, info=lambda _message: None)
+
+
+def _fake_ros_api(*, fail_subscription_number: int | None = None):
+    fake_rclpy = _FakeRclpy()
+    node = _FakeNode(fail_subscription_number=fail_subscription_number)
+    listener = SimpleNamespace(unregister_calls=0)
+
+    def unregister() -> None:
+        listener.unregister_calls += 1
+
+    listener.unregister = unregister
+    fake_rclpy.create_node = lambda *_args, **_kwargs: node
+    api = SimpleNamespace(
+        rclpy=fake_rclpy,
+        PoseStamped=object,
+        ClockType=SimpleNamespace(ROS_TIME="ros-time"),
+        Duration=lambda *, seconds: ("duration", seconds),
+        ExternalShutdownException=type("ExternalShutdownException", (Exception,), {}),
+        Parameter=lambda *args, **kwargs: (args, kwargs),
+        DurabilityPolicy=SimpleNamespace(VOLATILE="volatile"),
+        QoSProfile=lambda **kwargs: SimpleNamespace(**kwargs),
+        ReliabilityPolicy=SimpleNamespace(RELIABLE="reliable"),
+        qos_profile_sensor_data=object(),
+        Time=SimpleNamespace(from_msg=lambda stamp: stamp),
+        CameraInfo=type("CameraInfo", (), {}),
+        Image=type("Image", (), {}),
+        Buffer=lambda: SimpleNamespace(lookup_transform=lambda *_args, **_kwargs: None),
+        TransformException=type("TransformException", (Exception,), {}),
+        TransformListener=lambda _buffer, _node: listener,
+    )
+    return api, fake_rclpy, node, listener
+
+
 def test_transform_points_applies_rotation_before_translation() -> None:
     from so101_demo.cli.rgbd_cup_pose import transform_points
 
@@ -130,6 +215,55 @@ def test_estimate_world_cup_pose_transforms_points_before_circle_fit() -> None:
 
     np.testing.assert_allclose(estimate.center_world_xyz, (0.02, -0.28, 0.165), atol=1e-6)
     assert estimate.fitted_radius_m == pytest.approx(0.04, abs=1e-6)
+
+
+def test_frame_estimator_uses_exact_source_stamp_and_bounded_tf_lookup() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        estimate_cup_pose_frame,
+    )
+
+    cloud = _cloud(stamp_ns=20_000_000)
+    source_stamp = SimpleNamespace(sec=0, nanosec=20_000_000)
+    aligned = (
+        SimpleNamespace(header=SimpleNamespace(stamp=source_stamp)),
+        object(),
+        object(),
+    )
+    lookup_calls = []
+
+    def lookup(target_frame, source_frame, query_time, timeout_s):
+        lookup_calls.append((target_frame, source_frame, query_time, timeout_s))
+        return _transform(translation=(0.0, 0.0, 0.0), rotation_xyzw=(0.0, 0.0, 0.0, 1.0))
+
+    frame = estimate_cup_pose_frame(
+        aligned,
+        RgbdCupPoseOptions(),
+        build_cloud=lambda *_args, **_kwargs: cloud,
+        lookup_transform=lookup,
+        stamp_to_time=lambda stamp: (stamp.sec, stamp.nanosec),
+        tf_timeout_budget=lambda: 0.07,
+    )
+
+    assert lookup_calls == [("world", "task_camera_frame", (0, 20_000_000), 0.07)]
+    assert frame.stamp_ns == 20_000_000
+
+
+def test_prevalid_tf_timeout_is_capped_by_remaining_startup_budget() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import bounded_tf_timeout_s
+
+    assert bounded_tf_timeout_s(
+        0.2,
+        first_valid_published=False,
+        startup_deadline=10.05,
+        monotonic=lambda: 10.0,
+    ) == pytest.approx(0.05)
+    assert bounded_tf_timeout_s(
+        0.2,
+        first_valid_published=True,
+        startup_deadline=10.05,
+        monotonic=lambda: 20.0,
+    ) == 0.2
 
 
 def test_failed_frame_never_republishes_last_valid_pose() -> None:
@@ -248,13 +382,10 @@ def test_evidence_failure_is_fatal_and_prevents_publication() -> None:
 def test_open3d_absence_is_an_actionable_preflight_error(monkeypatch) -> None:
     from so101_demo.ros import rgbd_cup_pose_node
 
-    def missing(_name: str):
-        raise ModuleNotFoundError("No module named 'open3d'")
-
-    monkeypatch.setattr(rgbd_cup_pose_node.importlib, "import_module", missing)
+    monkeypatch.setattr(rgbd_cup_pose_node.importlib.util, "find_spec", lambda _name: None)
 
     with pytest.raises(RuntimeError, match="python3 -m pip install open3d"):
-        rgbd_cup_pose_node._require_open3d()
+        rgbd_cup_pose_node._require_open3d(1.0)
 
 
 def test_startup_deadline_is_monotonic_and_fails_after_only_invalid_frames(capsys) -> None:
@@ -287,17 +418,280 @@ def test_startup_deadline_is_monotonic_and_fails_after_only_invalid_frames(capsy
         def close(self) -> None:
             return None
 
-    monotonic_values = iter((10.0, 10.25, 10.50, 11.01))
+    monotonic_values = iter((10.0, 10.05, 10.10, 10.15, 10.25, 10.50, 11.01))
     result = run_rgbd_cup_pose(
         RgbdCupPoseOptions(startup_timeout_s=1.0),
-        runtime_factory=lambda _options: FakeRuntime(),
+        runtime_factory=lambda _options, _deadline, _monotonic: FakeRuntime(),
         monotonic=lambda: next(monotonic_values),
-        open3d_preflight=lambda: None,
+        open3d_preflight=lambda _remaining_s: None,
     )
 
     assert result != 0
     assert len(errors) == 2
     assert "RGBD_CUP_POSE_TIMEOUT" in capsys.readouterr().out
+
+
+def test_startup_budget_begins_before_preflight_and_runtime_construction(capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = False
+        closed = False
+
+        def spin_once(self, _timeout_s: float) -> None:
+            pytest.fail("expired startup budget reached spin")
+
+        def ok(self) -> bool:
+            return True
+
+        def close(self) -> None:
+            self.closed = True
+
+    times = iter((10.0, 10.4, 11.1))
+    observed_preflight_budgets = []
+
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda *_args: pytest.fail("expired preflight reached construction"),
+        monotonic=lambda: next(times),
+        open3d_preflight=observed_preflight_budgets.append,
+    )
+
+    assert result != 0
+    assert observed_preflight_budgets == [pytest.approx(0.6)]
+    assert "RGBD_CUP_POSE_TIMEOUT" in capsys.readouterr().out
+
+
+def test_runtime_construction_overrun_is_closed_before_spin(capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = False
+        closed = False
+
+        def spin_once(self, _timeout_s: float) -> None:
+            pytest.fail("expired construction reached spin")
+
+        def ok(self) -> bool:
+            return True
+
+        def close(self) -> None:
+            self.closed = True
+
+    runtime = FakeRuntime()
+    times = iter((10.0, 10.1, 10.2, 10.3, 11.1))
+
+    def construct(_options, _deadline, construction_clock):
+        assert construction_clock() == 10.3
+        return runtime
+
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=construct,
+        monotonic=lambda: next(times),
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result != 0
+    assert runtime.closed
+    assert "RGBD_CUP_POSE_TIMEOUT" in capsys.readouterr().out
+
+
+def test_prevalid_spin_wait_cannot_exceed_remaining_startup_budget() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = False
+
+        def __init__(self) -> None:
+            self.running = True
+            self.spin_timeouts = []
+
+        def spin_once(self, timeout_s: float) -> None:
+            self.spin_timeouts.append(timeout_s)
+            self.running = False
+
+        def ok(self) -> bool:
+            return self.running
+
+        def close(self) -> None:
+            return None
+
+    runtime = FakeRuntime()
+    times = iter((10.0, 10.1, 10.2, 10.3, 10.98))
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda _options, _deadline, _monotonic: runtime,
+        monotonic=lambda: next(times),
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result != 0
+    assert runtime.spin_timeouts == [pytest.approx(0.02)]
+
+
+def test_context_shutdown_before_first_valid_pose_is_nonzero(capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = False
+        closed = False
+
+        def spin_once(self, _timeout_s: float) -> None:
+            pytest.fail("stopped runtime reached spin")
+
+        def ok(self) -> bool:
+            return False
+
+        def close(self) -> None:
+            self.closed = True
+
+    runtime = FakeRuntime()
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda _options, _deadline, _monotonic: runtime,
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result != 0
+    assert runtime.closed
+    assert "RGBD_CUP_POSE_SHUTDOWN_BEFORE_FIRST_VALID" in capsys.readouterr().out
+
+
+def test_sigint_before_first_valid_pose_is_nonzero(capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = False
+
+        def spin_once(self, _timeout_s: float) -> None:
+            raise KeyboardInterrupt
+
+        def ok(self) -> bool:
+            return True
+
+        def close(self) -> None:
+            return None
+
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda _options, _deadline, _monotonic: FakeRuntime(),
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result != 0
+    assert "RGBD_CUP_POSE_INTERRUPTED_BEFORE_FIRST_VALID" in capsys.readouterr().out
+
+
+def test_sigint_after_first_valid_pose_is_orderly(capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = True
+
+        def spin_once(self, _timeout_s: float) -> None:
+            raise KeyboardInterrupt
+
+        def ok(self) -> bool:
+            return True
+
+        def close(self) -> None:
+            return None
+
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda _options, _deadline, _monotonic: FakeRuntime(),
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result == 0
+    assert '"status": "STOPPED"' in capsys.readouterr().out
+
+
+def test_ros_runtime_uses_sensor_qos_and_reliable_depth_one_publisher() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+
+    api, _rclpy, node, _listener = _fake_ros_api()
+    runtime = _create_ros_runtime(
+        RgbdCupPoseOptions(),
+        startup_deadline=11.0,
+        monotonic=lambda: 10.0,
+        ros_api=api,
+    )
+    try:
+        assert len(node.publisher_calls) == 1
+        publisher_qos = node.publisher_calls[0][2]
+        assert publisher_qos.depth == 1
+        assert publisher_qos.reliability == "reliable"
+        assert [call[3] for call in node.subscription_calls] == [
+            api.qos_profile_sensor_data,
+            api.qos_profile_sensor_data,
+            api.qos_profile_sensor_data,
+        ]
+    finally:
+        runtime.close()
+
+
+def test_partial_ros_runtime_construction_cleans_every_created_resource() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+
+    api, fake_rclpy, node, listener = _fake_ros_api(fail_subscription_number=2)
+
+    with pytest.raises(RuntimeError, match="subscription construction failed"):
+        _create_ros_runtime(
+            RgbdCupPoseOptions(),
+            startup_deadline=11.0,
+            monotonic=lambda: 10.0,
+            ros_api=api,
+        )
+
+    assert node.destroyed_subscriptions == [node.subscription_calls[0][4]]
+    assert node.destroyed_publishers == [node.publisher_calls[0][3]]
+    assert listener.unregister_calls == 1
+    assert node.destroyed
+    assert fake_rclpy.shutdown_calls == 1
+
+
+def test_node_construction_failure_after_init_shuts_down_owned_context() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+
+    api, fake_rclpy, _node, _listener = _fake_ros_api()
+
+    def fail_node(*_args, **_kwargs):
+        raise RuntimeError("node construction failed")
+
+    fake_rclpy.create_node = fail_node
+
+    with pytest.raises(RuntimeError, match="node construction failed"):
+        _create_ros_runtime(
+            RgbdCupPoseOptions(),
+            startup_deadline=11.0,
+            monotonic=lambda: 10.0,
+            ros_api=api,
+        )
+
+    assert fake_rclpy.shutdown_calls == 1
 
 
 def test_run_continues_after_first_valid_frame_until_orderly_shutdown() -> None:
@@ -327,9 +721,9 @@ def test_run_continues_after_first_valid_frame_until_orderly_shutdown() -> None:
     runtime = FakeRuntime()
     result = run_rgbd_cup_pose(
         RgbdCupPoseOptions(startup_timeout_s=1.0),
-        runtime_factory=lambda _options: runtime,
+        runtime_factory=lambda _options, _deadline, _monotonic: runtime,
         monotonic=lambda: 10.0,
-        open3d_preflight=lambda: None,
+        open3d_preflight=lambda _remaining_s: None,
     )
 
     assert result == 0
@@ -359,9 +753,9 @@ def test_runtime_evidence_io_failure_returns_explicit_nonzero(capsys) -> None:
     runtime = FakeRuntime()
     result = run_rgbd_cup_pose(
         RgbdCupPoseOptions(startup_timeout_s=1.0),
-        runtime_factory=lambda _options: runtime,
+        runtime_factory=lambda _options, _deadline, _monotonic: runtime,
         monotonic=lambda: 10.0,
-        open3d_preflight=lambda: None,
+        open3d_preflight=lambda _remaining_s: None,
     )
 
     assert result != 0
