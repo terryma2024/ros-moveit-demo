@@ -15,13 +15,14 @@ confirmed_conclusions:
   - EXP-005 receives aligned valid 640x480 RGB-D samples in the logged-in Aqua session and shuts down cleanly.
   - EXP-006 builds and tests r11 on ai-station Linux, receives aligned valid 640x480 RGB-D samples in the logged-in X11 session, and shuts down cleanly.
   - EXP-007 rebuilds the primary macOS workspace's default install, passes affected tests, receives aligned valid 640x480 RGB-D samples from that install, and leaves no ROS node or task process after an exit-0 full-ready shutdown.
+  - EXP-008 removes the stale standalone fork from the direnv runtime chain; a normal Aqua launch now resolves the primary r11 executable/library and publishes valid RGB-D samples without the Cocoa background-window crash.
 disproven_routes:
   - Removing the Darwin condition without changing GLFW ownership is not an acceptable repair.
 open_hypotheses:
   - H1: the Darwin launch guard deliberately prevents GLFW/Cocoa window-context creation from the existing background rendering thread; it also disables all camera publishers.
   - H2: a main-thread-owned macOS rendering context can preserve camera publication without relaxing the Cocoa constraint.
   - H3: a headless/offscreen MuJoCo context can publish camera images on Darwin without a GLFW window, but must be verified against the pinned MuJoCo API.
-latest_checkpoint: CP-010
+latest_checkpoint: CP-011
 next_experiment: NONE
 ```
 
@@ -39,6 +40,72 @@ have publishers but no frames.
 | H3 — offscreen rendering | MuJoCo can create a non-GLFW offscreen context on Darwin that supports readpixels for cameras. | Pinned MuJoCo build/API inspection plus end-to-end image/depth samples. |
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-008
+status: VALID
+prior_experiment: EXP-007
+hypothesis: The user crash is caused by the primary .envrc selecting the obsolete standalone fork and its dylib-farm libraries ahead of the accepted r11 packages in the primary install.
+prediction: Making the primary install authoritative, filtering the exact stale fork prefix after setup-chain evaluation, and retaining the dylib farm only as a fallback removes MujocoCameras::update_loop from runtime provenance and restores CameraPlugin RGB-D publication from a normal direnv shell.
+single_variable: Runtime overlay ordering in .envrc changes; source commits, installed binaries, camera configuration, and macOS Aqua session remain fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - User crash reports resolve ros2_control_node from /Users/matianyi/ros2_jazzy/ws_mujoco_ros2_control_fork/install and abort in MujocoCameras::update_loop while creating an NSWindow off the main thread.
+  - Primary project and fork installs remain the EXP-007 accepted artifacts at db1b658b4bc34f11c923640e1d188cf11aeebc1b and f19a8cc3af61feccacb22a9f0d16cc972e3b2c08.
+success_criteria:
+  - Automated environment tests demonstrate RED for stale AMENT precedence and dylib-farm precedence, then GREEN after the minimal .envrc change.
+  - A real direnv hook resolves all three packages and libmujoco_ros2_control.dylib from the primary install with no stale-fork path entry.
+  - A normal Aqua launch using the direnv hook loads CameraPlugin, receives valid camera topics, and does not abort in MujocoCameras::update_loop.
+failure_criteria:
+  - Any package/library resolves from the obsolete standalone fork, ROS CLI loses required dylibs, or the original Cocoa-thread exception remains.
+invalid_criteria:
+  - direnv exec through a SIP-protected shell strips DYLD_LIBRARY_PATH, another stack shares the ROS domain, or runtime provenance differs from the primary install.
+provenance:
+  source_commit: envrc fix=9bf4c86; primary installed runtime=db1b658b4bc34f11c923640e1d188cf11aeebc1b; fork=f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/mujoco_ros2_control/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 148
+  gz_partition: NOT_APPLICABLE_MUJOCO
+commands:
+  - command: pytest -q test_macos_install_contract.py -k project_install_authoritative; pytest -q ... -k dylib_farm_as_fallback
+    exit_code: 1 RED for stale AMENT authority and 1 RED for dylib-farm precedence
+  - command: pytest -q test_macos_install_contract.py -k 'project_install_authoritative or dylib_farm_as_fallback'; pytest -q test_macos_install_contract.py
+    exit_code: 0 (2 directed passed; 14 file tests passed)
+  - command: ROS_LOG_DIR=<evidence> pytest -q src/so101_demo_py/test
+    exit_code: 0 (260 passed)
+  - command: eval "$(direnv export bash)"; assert package prefixes, path filtering and DYLD ordering
+    exit_code: 0
+  - command: launchctl asuser 501 ... eval "$(direnv export bash)"; ros2 launch so101_demo_py so101_mujoco.launch.py run_mode:=execute execute:=true headless:=false
+    exit_code: 0 after full-ready SIGINT shutdown
+  - command: macos_camera_topic_probe.py --timeout-s 30
+    exit_code: 0
+observed:
+  - Both user crash reports abort in the obsolete standalone fork's MujocoCameras::update_loop while GLFW creates an NSWindow on a worker thread; the process command names /Users/matianyi/ros2_jazzy/ws_mujoco_ros2_control_fork/install.
+  - RED proves the old .envrc makes the standalone fork the first AMENT prefix and makes the dylib farm (whose MuJoCo symlinks target that old fork) the first DYLD path.
+  - The fixed .envrc sources auxiliary overlays before the primary project install, filters the exact stale fork prefix and descendants from runtime path variables, and appends the dylib farm only as fallback.
+  - The real direnv hook resolves mujoco_ros2_control, mujoco_ros2_control_plugins and so101_demo_py below /Users/matianyi/Projects/robot_demo_001/moveit-demo/install; the stale fork is absent from runtime path variables. A ctypes/dyld probe loads libmujoco_ros2_control.dylib from the primary install.
+  - The Aqua launch logs project source db1b658, prepares the macOS main-thread GLFW context, loads CameraPlugin, and starts the rendering loop. It logs neither MujocoCameras nor the NSWindow exception nor a process death.
+  - Probe samples camera_info=8, color=3, depth=7; dimensions=640x480; frame_id=task_camera_frame; encodings rgb8 and 32FC1; RGB bytes=921600; depth bytes=1228800; finite positive depth values=307200; aligned stamp=87991999999 ns; observed RGB rate=3.3333333333333335 Hz.
+  - Full-ready SIGINT launch exits 0, RobotSystem deactivates/shuts down, MoveGroup records ordered shutdown, all stack nodes exit cleanly, and domain 148 is empty.
+  - A direnv exec attempt is INVALID because macOS SIP strips DYLD_LIBRARY_PATH when starting protected /bin/bash; its printed PASS is explicitly rejected. The accepted check uses the same in-process eval hook used by Ghostty.
+inferred:
+  - CONFIRMED: the reported regression was environmental provenance drift, not a defect in the accepted r11 CameraPlugin binary.
+conclusion: PASS. The tracked envrc template and active primary .envrc keep the primary install authoritative; the user's original launch now publishes valid RGB-D data without the Cocoa worker-thread crash.
+evidence:
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-envrc-red.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-envrc-dylib-red.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-envrc-stale-chain-red.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-envrc-green-final.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-macos-install-contract-green.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-project-tests-green-final.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-direnv-hook-contract.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-dyld-library-resolution.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-live-launch.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-camera-topic-samples.json
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-008-camera-probe.log
+decision: KEEP
+next_experiment: NONE
+```
 
 ```yaml
 experiment_id: EXP-007
@@ -483,4 +550,22 @@ open_risks:
   - The primary macOS probe observes 1.54 Hz instead of the configured 10 Hz; correctness passes, but render/publication performance remains a tuning item.
   - ros2 launch escalates full-ready shutdown to SIGTERM after the 5-second SIGINT grace period, and controller_manager emits PAL statistics invalid-context warnings during exit; all processes nevertheless report clean exit with no SIGKILL or residue.
 next_command: NONE. Retain the registered evidence root; do not push or delete evidence without user authorization.
+```
+
+```yaml
+checkpoint_id: CP-011
+last_valid_experiment: EXP-008
+current_hypothesis: NONE; direnv runtime-provenance regression is fixed and live RGB-D acceptance passed.
+working_tree_status: Environment fix and regression tests are locally committed as 9bf4c86; this completed ledger is pending its local documentation commit. The ignored primary .envrc contains the same fix and has been re-authorized with direnv. No push was performed.
+owned_processes: NONE; the no-daemon ROS_DOMAIN_ID 148 graph is empty after launch exit 0.
+preserved_processes: No pre-existing stack was stopped; parent learners/zjumty/progress.yaml remains untouched.
+confirmed_conclusions:
+  - The user crash selected the obsolete standalone fork through .envrc and its dylib farm, re-entering worker-thread MujocoCameras window creation.
+  - The real Ghostty-style direnv hook now selects the primary r11 packages and library with no stale-fork runtime path entry.
+  - Project tests pass 260/260 and a fresh Aqua launch publishes valid aligned task_camera RGB-D samples before clean shutdown.
+disproven_routes:
+  - Rebuilding the already accepted r11 binaries is unnecessary for this incident; runtime overlay ordering is the first bad boundary.
+open_risks:
+  - The dylib farm still contains historical symlinks to the old fork, but it is now a fallback after primary library paths and the stale prefix is filtered. Regenerating that shared farm is outside this scoped fix.
+next_command: Commit this ledger and fast-forward the feature branch into primary main; retain the active ignored .envrc and evidence root.
 ```
