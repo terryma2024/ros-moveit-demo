@@ -26,6 +26,7 @@ EXPECTED_LAUNCHERS = {
     "so101_gazebo.launch.py",
     "so101_gazebo_pick_place.launch.py",
     "so101_mujoco.launch.py",
+    "so101_mujoco_perception_pick_place.launch.py",
     "so101_mujoco_pick_place.launch.py",
 }
 
