@@ -55,6 +55,7 @@ setup(
             "cup_pose_subscriber = so101_demo.cli.cup_pose_subscriber:main",
             "cup_pose_tf_demo = so101_demo.cli.cup_pose_tf_demo:main",
             "rgbd_point_cloud = so101_demo.cli.rgbd_point_cloud:main",
+            "rgbd_cup_pose = so101_demo.cli.rgbd_cup_pose:main",
             "camera_preset = so101_demo.cli.camera_preset:main",
             "teleop_reset = so101_demo.cli.teleop_reset:main",
             "teleop_workflow = so101_demo.cli.teleop_workflow:main",
