@@ -13,9 +13,9 @@ archived_runs: []
 deletion_candidates: []
 
 latest_checkpoint:
-  state: PLANNED
-  hypothesis: A true two-parent upstream-first merge can preserve r11 lineage while adopting the 0.1.0 architecture.
-  next_command: Create the fork branch at the exact upstream target and merge r11 without committing conflict resolutions prematurely.
+  state: TASK_1_RE_REVIEW
+  hypothesis: The two-parent baseline and the migrated primary-monitor guard now satisfy Task 1; a scoped re-review must verify the code fix and completed ledger.
+  next_command: Review the fork fix range 6c562f8..102aba3 and parent/ledger fix range 34c87e4..ledger-commit against the two original findings.
 ```
 
 ## Controller rulings
@@ -46,4 +46,86 @@ base: 453faaddcca6468bc0d68cb5dbc81cd7bb773e34
 implementer: /root/task1_merge_baseline
 brief: .superpowers/sdd/2026-08-25-mujoco-ros2-control-0-1-upgrade/task-1-brief.md
 state: IN_PROGRESS
+```
+
+### EXP-001: upstream-first fork merge baseline
+
+```yaml
+scope: Git history and resolved source-tree provenance; no runtime
+fork_merge_commit: 6c562f861e09394ba631fa7dc4e63ea98f95e04c
+merge_parents:
+  - 57fc6744844902d4532160b403fa95840c1d6f96
+  - f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+parent_commit: 34c87e4bd2e1e826f142a6417fe941679bc33ae2
+ancestry_checks: PASS
+diff_checks: PASS
+upstream_surface_checks: PASS
+contract_tests:
+  passed: 15
+  failed: 1
+  expected_failure: test_r11_gitlink_history_and_portable_bytes_are_exact because Task 6 has not updated the r11 dependency lock yet
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/upstream
+archived_runs: []
+deletion_candidates: []
+review_state: FIX_ROUND_1_COMPLETE_RE_REVIEW_PENDING
+```
+
+Conflict resolution retained upstream ownership for the new simulation and plugin architecture, removed the legacy core camera implementation, retained viewer-camera sources/interfaces/tests as later migration inputs, kept upstream camera streaming/polled/disabled behavior, and preserved only the macOS compile boundary in the baseline camera plugin. Exact conflict rationale and commands are in the SDD Task 1 report.
+
+Merge conflicts resolved:
+
+1. `mujoco_ros2_control/CMakeLists.txt`
+2. `mujoco_ros2_control/include/mujoco_ros2_control/mujoco_cameras.hpp`
+3. `mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp`
+4. `mujoco_ros2_control/src/mujoco_cameras.cpp`
+5. `mujoco_ros2_control/src/mujoco_system_interface.cpp`
+6. `mujoco_ros2_control/tests/CMakeLists.txt`
+7. `mujoco_ros2_control/tests/test_headless_init.cpp`
+8. `mujoco_ros2_control_msgs/CMakeLists.txt`
+9. `mujoco_ros2_control_plugins/CMakeLists.txt`
+10. `mujoco_ros2_control_plugins/mujoco_ros2_control_plugins.xml`
+11. `mujoco_ros2_control_plugins/src/camera_plugin.cpp`
+12. `mujoco_ros2_control_plugins/src/camera_plugin.hpp`
+13. `mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp`
+
+Provenance commands and observed results:
+
+```text
+git -C third_party/mujoco_ros2_control merge-base --is-ancestor 57fc6744844902d4532160b403fa95840c1d6f96 HEAD
+exit 0
+
+git -C third_party/mujoco_ros2_control merge-base --is-ancestor f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 HEAD
+exit 0
+
+git -C third_party/mujoco_ros2_control rev-list --parents -n 1 HEAD
+6c562f861e09394ba631fa7dc4e63ea98f95e04c 57fc6744844902d4532160b403fa95840c1d6f96 f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+
+git -C third_party/mujoco_ros2_control diff --check
+exit 0
+
+test -f third_party/mujoco_ros2_control/mujoco_ros2_control/include/mujoco_ros2_control/mujoco_simulation.hpp
+test -f third_party/mujoco_ros2_control/mujoco_extensions/mujoco_3d_lidar/package.xml
+test -f third_party/mujoco_ros2_control/mujoco_ros2_control_plugins/src/base_velocity_plugin.cpp
+test -f third_party/mujoco_ros2_control/mujoco_ros2_control_msgs/srv/SetFreeJointState.srv
+all exit 0
+```
+
+### EXP-002: Task 1 fix round 1 primary-monitor guard
+
+```yaml
+finding: The upstream 0.1.0 owner dereferenced primary monitor and video mode without null checks, while the retained regression test still targeted the removed r11 owner.
+red_command: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /Users/matianyi/ros2_jazzy/.venv/bin/python -m pytest -p no:cacheprovider third_party/mujoco_ros2_control/mujoco_ros2_control/tests/test_primary_monitor_guard.py -q
+red_result: 1 failed because MujocoSimulation lacked the required GLFWmonitor guard
+fork_fix_commit: 102aba33f7566918a884aef3a57eefdf892cd56f
+parent_gitlink_commit: dadeb5c413cde9d50177612ecba67690cc7c99fc
+green_direct: 1 passed
+green_registered_ctest: 1/1 passed
+ancestry_checks: PASS
+diff_checks: PASS
+full_build_observation: Upstream mujoco_3d_lidar did not compile because its target lacks the C++17 requirement for std::byte; this is a downstream full-fork gate issue, not claimed passing here.
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/task1-fix-round-1
+archived_runs: []
+deletion_candidates: []
 ```
