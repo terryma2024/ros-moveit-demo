@@ -39,13 +39,9 @@ def validate_cup_scene(
     observation: CupSceneObservation,
     template: DynamicPickTemplate,
 ) -> None:
-    if observation.moveit_attached:
-        raise CupPosePreflightError(
-            "CUP_POSE_SCENE_DIVERGENCE", "plastic_cup must be a MoveIt world object"
-        )
+    validate_cup_against_simulator(sample, observation, template)
     topic = PoseEvidence(sample.pose_world.values[:3], sample.pose_world.values[3:])
     pairs = (
-        ("topic_vs_simulator", topic, observation.simulator_pose_world),
         ("topic_vs_moveit", topic, observation.moveit_pose_world),
         ("simulator_vs_moveit", observation.simulator_pose_world, observation.moveit_pose_world),
     )
@@ -57,3 +53,27 @@ def validate_cup_scene(
             raise CupPosePreflightError(
                 "CUP_POSE_SCENE_DIVERGENCE", f"{name} exceeds configured tolerance"
             )
+
+
+def validate_cup_against_simulator(
+    sample: CupPoseSample,
+    observation: CupSceneObservation,
+    template: DynamicPickTemplate,
+) -> None:
+    """Reject perception that cannot be confirmed by simulator truth."""
+
+    if observation.moveit_attached:
+        raise CupPosePreflightError(
+            "CUP_POSE_SCENE_DIVERGENCE", "plastic_cup must be a MoveIt world object"
+        )
+    topic = PoseEvidence(sample.pose_world.values[:3], sample.pose_world.values[3:])
+    if (
+        _position_distance(topic, observation.simulator_pose_world)
+        > template.scene_position_tolerance_m
+        or _orientation_distance(topic, observation.simulator_pose_world)
+        > template.scene_orientation_tolerance_rad
+    ):
+        raise CupPosePreflightError(
+            "CUP_POSE_SCENE_DIVERGENCE",
+            "topic_vs_simulator exceeds configured tolerance",
+        )
