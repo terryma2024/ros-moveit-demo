@@ -14,14 +14,14 @@ confirmed_conclusions:
   - Existing dynamic MuJoCo execution accepts one fresh world-frame /cup_pose and has already completed a canonical physical demonstration with a truth-only test bridge.
   - Tasks 2-5 established code-owned static camera TF, exact-stamp RGB-D localization, a fail-closed /cup_pose producer, and perception-confirmed MoveIt cup-shadow synchronization at source level.
   - Task 6 installed a dedicated behavior-tested fail-closed perception launch while preserving the fixed MuJoCo workflow composition (EXP-002).
-  - EXP-003 is a valid perception-only runtime failure: the production rgbd_cup_pose process published no /cup_pose and exited 1 at its 30 s startup deadline, although an extended diagnostic later captured and segmented an exact-stamp RGB-D triple.
+  - EXP-003 is audit-invalid and non-counting because its production attempt has no durable stdout/stderr plus exit sidecar and no retained RUNNING-transition snapshot; a later independent diagnostic remains useful only as non-counting evidence.
 disproven_routes:
   - Publishing MuJoCo truth as /cup_pose does not validate production camera perception.
   - Routing production through cup_pose_tf_demo duplicates the selected world-point transform boundary.
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
-  - The Mac production startup/readiness boundary must be instrumented or extended so delayed first RGB-D and world TF availability cannot consume the complete 30 s pose deadline.
-latest_checkpoint: CP-008
+  - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
+latest_checkpoint: CP-009
 next_experiment: EXP-004
 ```
 
@@ -239,8 +239,9 @@ next_command: Create PLANNED EXP-003 from Task 7 before starting the local Mac p
 
 ```yaml
 experiment_id: EXP-003
-status: VALID
-result: FAILURE
+status: INVALID
+result: NON_COUNTING_AUDIT_INVALID
+audit_correction: CORR-EXP-003-002
 prior_experiment: EXP-002
 hypothesis: The current installed Mac runtime can produce real aligned RGB-D and a fresh perception-owned world /cup_pose within 0.01 m of MuJoCo truth before any robot motion.
 prediction: An isolated task_start MuJoCo stack publishes exact-stamp 640x480 rgb8 and 32FC1 samples with finite positive depth; production rgbd_cup_pose emits a nonempty segmented cloud, PLY, JSON receipt, and finite fresh world pose whose Euclidean error from MuJoCo cup truth is at most 0.01 m.
@@ -281,27 +282,29 @@ commands:
   - command: ROS_DOMAIN_ID=180 GZ_PARTITION=rgbd-perception-gate-20260826 ROS_LOG_DIR=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/ros ros2 launch so101_demo_py so101_mujoco.launch.py run_mode:=execute execute:=true headless:=false session_id:=rgbd-perception-gate-20260826 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/stack.json
     exit_code: 0
   - command: start the two approved static_transform_publisher processes in domain 180, then ROS_DOMAIN_ID=180 ros2 run so101_demo_py rgbd_cup_pose --startup-timeout-s 30 --output-topic /cup_pose --output-ply /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/cup.ply --evidence-json /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/perception.json
-    exit_code: 1
+    exit_code: EVIDENCE_UNAVAILABLE
   - command: capture bounded one-shot RGB-D, TF, /cup_pose, publisher, MuJoCo truth, process, and Computer Use visual evidence; then SIGINT only owned process groups and verify cleanup
-    exit_code: 1
+    exit_code: EVIDENCE_INCOMPLETE
 observed:
   - OBSERVED: CORR-EXP-003-001 cleared the historical preflight block at effective source ef6175dd146275d56979ad2860f1f3a6f94dbf79; the complete package suite passed 369 tests, the package rebuilt with exit 0, and runtime imports and installed so101_demo_py artifacts resolved to this worktree.
   - OBSERVED: The immediate pre-launch graph in ROS domain 180 and the owned-process target set were empty; the isolated task_start/headless=false execute stack started its real MuJoCo camera rendering loop at 640x480 and activated all controllers without starting dynamic_cup_pick_place or commanding motion.
   - OBSERVED: Real CameraInfo was 640x480 at stamp 220.322000000; real color was 640x480 rgb8 with step 1920 and 921600 bytes at stamp 279.248000000; real depth was 640x480 32FC1 with step 2560 and 1228800 bytes at stamp 275.534000000. These separate one-shot samples prove message contents but are not an aligned triple.
-  - OBSERVED: Production rgbd_cup_pose exited 1 after `RGBD_CUP_POSE_TIMEOUT: no valid RGB-D cup pose was published within 30.000 seconds`; /cup_pose never appeared and production cup.ply and perception.json were absent.
+  - OBSERVED: During the observed 30 s production attempt, aggregate valid-pose readiness did not produce an acceptable /cup_pose. The transient PTY showed an aggregate timeout, but no durable production stdout/stderr log or exit-code sidecar survives, so the exact production exit is not auditable and is not reconstructed here.
   - OBSERVED: A bounded 90 s rgbd_point_cloud diagnostic then exited 0 with one exact aligned triple at stamp_ns 337986000000 in task_camera_frame; it accepted 640x480 rgb8/32FC1, retained 98082 finite positive-depth points, selected 259 orange candidates, segmented 141 cup points, and wrote a 4013-byte diagnostic PLY.
   - OBSERVED: world to task_camera_frame initially reported that frame `world` did not exist, then became stable at translation [0.650, -0.650, 0.550] and quaternion [0.799, 0.331, -0.192, -0.465]. The first fresh MuJoCo truth sample was world [0.020000000000000018, -0.28, 0.16480156647042168].
   - OBSERVED: Computer Use application discovery reported org.mujoco.mujoco isRunning=false, so no causally attributable Viewer snapshot-action-fresh-snapshot sequence could be captured without launching an unrelated app; the visual gate failed.
-  - OBSERVED: The two owned static-TF sessions received SIGINT; their remaining exact owned process groups 69568 and 70363 also received SIGINT. The owned launch session then received Ctrl-C and returned 0 after ordered MoveGroup, controller, robot-state-publisher, and MuJoCo shutdown. The final targeted process scan and ROS domain 180 graph were empty.
+  - OBSERVED: The retained final targeted process scan contains only its own scan command. The zero-byte domain-180-after-cleanup.txt has no exit-code sidecar, so it cannot prove a successful empty ROS graph check. Transient PTY shutdown observations are retained in the audit narrative but are not promoted to durable cleanup-exit evidence.
 inferred:
-  - INFERRED: The first production boundary is startup/readiness, not topic registration or point-cloud segmentation: no valid world pose completed inside 30 s, while extended evidence proves the same live stack can later deliver valid aligned RGB-D, segmentation, and TF. Because production emitted only its aggregate timeout, this experiment does not distinguish whether delayed first aligned input, delayed world TF, or both consumed the deadline.
-  - INFERRED: No perception-vs-truth error can be accepted because production never published a pose. Diagnostic camera-frame center and MuJoCo truth are retained only for the next instrumented experiment, not substituted for production output.
-conclusion: EXP-003 is a valid failed perception-only gate. Production /cup_pose, production PLY/JSON, truth-error, publisher/sample provenance, and Viewer visual evidence did not meet acceptance; no robot-motion workflow was started.
+  - INFERRED: The only supported production conclusion is that aggregate valid-pose readiness did not produce an acceptable /cup_pose within the observed 30 s attempt. The later independent diagnostic proves exact RGB-D, segmentation, and TF availability, but does not exclude segmentation, radius fit, QoS/callback delivery, TF timing, or another production-only pipeline cause during the production attempt.
+  - INFERRED: No perception-vs-truth error can be accepted because no durable acceptable production pose sample exists. Diagnostic camera-frame center and MuJoCo truth are retained only for the next controlled experiment, not substituted for production output.
+conclusion: EXP-003 is audit-invalid and cannot count as product success or failure. The observed 30 s production attempt produced no acceptable /cup_pose; later independent exact-RGB-D, segmentation, and TF observations are retained only as non-counting diagnostic evidence.
 evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/
-decision: KEEP_VALID_FAILURE_EVIDENCE_AND_FIX_FIRST_BOUNDARY
+decision: REPEAT_WITH_COMPLETE_EVIDENCE
 next_experiment: EXP-004
-preflight_status: BLOCKED_BEFORE_RUNTIME
+preflight_status: HISTORICAL_SUPERSEDED
+preflight_historical_status: BLOCKED_BEFORE_RUNTIME
+preflight_superseded_by: CORR-EXP-003-001
 preflight_commands:
   - command: source documented ROS Jazzy runtime; colcon build --packages-select mujoco_vendor so101_mujoco_support so101_demo_py --symlink-install --event-handlers console_direct+
     exit_code: 2
@@ -317,7 +320,7 @@ preflight_observed:
   - OBSERVED: A no-fetch submodule update could not read locked commit f19a8cc from its newly created object store; the failed checkout was retained under EXP-003 and replaced by a linked worktree from the existing local main-checkout submodule repository.
   - OBSERVED: After local submodule repair, the full suite passed 368 tests and failed only test_final_install_contains_runtime_contract because the old EXPECTED_LAUNCHERS set rejects installed so101_mujoco_perception_pick_place.launch.py.
   - OBSERVED: The focused affected suite passed 99 tests. Domain 180 remained empty and no Task 7 live stack or owned background process was started.
-preflight_conclusion: EXP-003 remains PLANNED and no runtime sample may be counted until the Task 6 installed-provenance regression is fixed and the full suite is rerun.
+preflight_conclusion: HISTORICAL_ONLY; the original preflight block was cleared by CORR-EXP-003-001 before the runtime attempt and is not a current EXP-003 state.
 preflight_evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/tests/colcon-build-final.log
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/tests/pytest-after-submodule-repair.log
@@ -399,6 +402,7 @@ next_command: Rebuild and re-source so101_demo_py at ef6175d, verify installed p
 
 ```yaml
 checkpoint_id: CP-008
+checkpoint_status: SUPERSEDED_BY_CORR-EXP-003-002
 last_valid_experiment: EXP-003
 current_hypothesis: Production rgbd_cup_pose misses its 30 s Mac startup/readiness deadline before a first valid aligned RGB-D plus world-TF pose can complete; an instrumented fix must preserve fail-closed behavior and prove the first delayed boundary.
 working_tree_status: source commit ef6175dd146275d56979ad2860f1f3a6f94dbf79 is unchanged; only this persistent ledger is tracked dirty and the Task 7 scratch report is ignored
@@ -427,4 +431,109 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/owned-processes-after-cleanup.txt
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-003/domain-180-after-cleanup.txt
 next_command: Start a new Task 7 fix loop for EXP-004 that adds focused readiness diagnostics or a justified startup-boundary fix, then rerun the same perception-only gate before any motion task.
+```
+
+```yaml
+correction_id: CORR-EXP-003-002
+applies_to:
+  - EXP-003
+  - CP-008
+  - task-7-report.md written from ledger commit 83a3033e51c6f6d47b1c4164be29252e8a929221
+recorded_at: 2026-08-26T05:20:00+08:00
+review_verdict: NEEDS_DOCUMENTATION_AND_EVIDENCE_BOUNDARY_FIXES
+reason: The prior record promoted transient PTY observations into a countable VALID failure without a durable production stdout/stderr log, production exit-code sidecar, or retained snapshot proving the PLANNED to RUNNING transition.
+history_preserved:
+  - Commit 83a3033 retains the earlier VALID-failure wording and CP-008 as the reviewed historical record.
+  - This correction does not fabricate or reconstruct missing production or cleanup evidence and does not discard the later independent diagnostic artifacts.
+effective_status: INVALID
+counting_effect: EXP-003 is excluded from product success and failure denominators and last_valid_experiment remains EXP-002.
+supported_conclusion:
+  - Aggregate production valid-pose readiness did not produce an acceptable /cup_pose within the observed 30 s attempt.
+  - A later independent diagnostic proved exact-stamp RGB-D, segmentation, and world-TF availability, but cannot exclude segmentation, fit, QoS/callback, TF timing, or another production-only pipeline cause during the production attempt.
+durable_evidence_present:
+  - Separate real CameraInfo, rgb8 color, and 32FC1 depth payload captures.
+  - Later independent exact-stamp rgbd_point_cloud diagnostic log and nonempty PLY.
+  - Later tf2_echo log, MuJoCo truth sample, Viewer discovery JSON, and exact targeted process scan.
+critical_evidence_missing:
+  - Production rgbd_cup_pose complete stdout/stderr.
+  - Production rgbd_cup_pose exit-code sidecar.
+  - Durable EXP-003 RUNNING-transition snapshot with timestamp and provenance.
+  - Cleanup ROS graph command exit-code sidecar; domain-180-after-cleanup.txt is zero bytes and therefore does not prove command success.
+cleanup_correction: The final targeted process scan is durable and shows no owned target process beyond the scan itself; ROS graph emptiness remains an audit gap.
+decision: REPEAT_AS_EXP-004_WITH_COMPLETE_CAPTURE
+next_experiment: EXP-004
+```
+
+```yaml
+experiment_id: EXP-004
+status: PLANNED
+prior_experiment: EXP-003
+hypothesis: The observed 30 s aggregate valid-pose readiness failure is a bounded startup delay; increasing only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds will yield a fresh acceptable /cup_pose without changing code, topics, TF, segmentation, fit, QoS, or scene configuration.
+prediction: With otherwise identical task_start perception-only conditions, production rgbd_cup_pose publishes its first finite fresh world /cup_pose before the 90 s deadline; if it still fails, complete production evidence will preserve the first auditable failure for a subsequent instrumentation task.
+single_variable: production rgbd_cup_pose --startup-timeout-s changes from 30 to 90 seconds
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Runtime source remains ef6175dd146275d56979ad2860f1f3a6f94dbf79 and installed source/package/runtime provenance is freshly read back before launch.
+  - No production code, topic, TF, color mask, DBSCAN, radius fit, QoS, scene, keyframe, camera, or controller configuration changes between EXP-003 and EXP-004.
+  - ROS_DOMAIN_ID 180 is empty immediately before launch or EXP-004 is amended before RUNNING with a newly verified empty domain; session and partition are unique to EXP-004.
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/ exists before launch and every long-lived command has a predetermined complete stdout/stderr path, monotonic start/end timestamp path, and exit-code sidecar.
+  - A durable RUNNING snapshot is written after provenance/isolation checks and before any stack process starts; missing this snapshot makes EXP-004 INVALID.
+  - dynamic_cup_pick_place is never started and no robot motion is commanded.
+success_criteria:
+  - Production rgbd_cup_pose complete stdout/stderr, monotonic start/end timestamps, PID/process ownership, and exit sidecar are retained.
+  - The first production-owned /cup_pose sample and verbose publisher provenance are retained; the pose is finite, world-frame, fresh, and carries the exact aligned RGB-D source stamp.
+  - Exact-stamp 640x480 rgb8/32FC1, finite positive depth, production PLY/JSON, valid fitted radius, static TF, and perception-vs-MuJoCo truth error at most 0.01 m all pass.
+  - Cleanup begin/end monotonic timestamps, every owned process exit sidecar, final exact targeted process scan, and ROS domain command output plus exit sidecar are retained.
+failure_criteria:
+  - Complete evidence shows production emits no acceptable /cup_pose within 90 s or fails any sample, segmentation, fit, TF, publisher, freshness, truth-error, visual, or cleanup gate.
+invalid_criteria:
+  - Any production stdout/stderr, start/end timestamp, exit sidecar, RUNNING snapshot, ownership record, or cleanup output/exit sidecar is missing or ambiguous.
+  - Provenance, initial state, domain/session isolation, or causality is contaminated; an unowned process is reused or stopped; or robot motion starts.
+provenance:
+  source_commit: ef6175dd146275d56979ad2860f1f3a6f94dbf79
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-perception-pick-place/install
+  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-perception-pick-place/install/so101_demo_py/lib/so101_demo_py/rgbd_cup_pose
+  ros_domain_id: 180
+  gz_partition: rgbd-perception-gate-exp004-20260826
+commands:
+  - command: capture current commit/status, installed prefixes/imports, domain/process isolation, exact shell environment, and monotonic_ns into /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/running-snapshot.txt; write command exit to running-snapshot.exit; only after exit 0 update status PLANNED to RUNNING
+    exit_code: PENDING
+  - command: ROS_DOMAIN_ID=180 GZ_PARTITION=rgbd-perception-gate-exp004-20260826 ROS_LOG_DIR=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/ros/stack ros2 launch so101_demo_py so101_mujoco.launch.py run_mode:=execute execute:=true headless:=false session_id:=rgbd-perception-gate-exp004-20260826 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/stack.json > /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/stack.log 2>&1; record monotonic start/end and exact exit sidecars
+    exit_code: PENDING
+  - command: start the two approved static_transform_publisher commands unchanged in domain 180, each with complete stdout/stderr, monotonic start/end, PID/PGID ownership, and exit sidecars below /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/
+    exit_code: PENDING
+  - command: ROS_DOMAIN_ID=180 ROS_LOG_DIR=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/ros/perception ros2 run so101_demo_py rgbd_cup_pose --startup-timeout-s 90 --output-topic /cup_pose --output-ply /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/cup.ply --evidence-json /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/perception.json > /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/production.log 2>&1; record monotonic start/end, PID/PGID, first /cup_pose or failure, and exact exit sidecars
+    exit_code: PENDING
+  - command: before signaling, record cleanup-begin monotonic_ns and exact owned PID/PGID set; SIGINT only those owned sessions/process groups; record every exit, cleanup-end monotonic_ns, final targeted process scan plus exit sidecar, and ROS_DOMAIN_ID=180 ros2 node list --no-daemon output plus exit sidecar
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/
+decision: PENDING
+next_experiment: EXP-005
+post_failure_rule: Only if this timeout-only A/B remains a fully evidenced VALID failure may EXP-005 instrument production readiness boundaries; do not instrument before completing EXP-004.
+```
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-002
+current_hypothesis: A timeout-only 30 to 90 second A/B must run before production readiness instrumentation; EXP-003 cannot determine which production boundary failed.
+working_tree_status: runtime source remains ef6175dd146275d56979ad2860f1f3a6f94dbf79; audit correction prepared from ledger commit 83a3033e51c6f6d47b1c4164be29252e8a929221 with only this ledger tracked dirty and the Task 7 report ignored
+owned_processes: NONE_STARTED_BY_THIS_DOCUMENTATION_CORRECTION
+preserved_processes: No process inspection, signal, live stack, test, build, or production command was run by this correction task
+confirmed_conclusions:
+  - EXP-003 is INVALID and non-counting because critical production stdout/stderr, exit sidecar, and RUNNING-transition evidence are missing.
+  - The observed 30 s production attempt supports only the aggregate no-acceptable-/cup_pose statement; later independent exact-RGB-D, segmentation, and TF evidence does not isolate the production cause.
+  - The retained targeted cleanup process scan is auditable; ROS graph emptiness is not because its zero-byte output lacks an exit sidecar.
+disproven_routes:
+  - EXP-003 cannot be used as a countable VALID failure or as proof that segmentation, fit, QoS/callback, TF timing, or another production-only stage was not the cause.
+open_risks:
+  - EXP-004 must retain every production and cleanup evidence boundary before it can be VALID.
+  - Production pose, radius fit, publisher provenance, truth error, and Viewer visual acceptance remain unverified.
+  - Existing retained and deletion-candidate evidence is unchanged; no artifact was deleted or archived.
+next_command: After an implementer rechecks ledger, provenance, and isolation, write EXP-004 running-snapshot.txt plus running-snapshot.exit and only then transition EXP-004 from PLANNED to RUNNING before launching any process.
 ```
