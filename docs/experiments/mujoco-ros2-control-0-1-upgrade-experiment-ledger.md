@@ -280,3 +280,73 @@ deletion_candidates: []
 ```
 
 The scoped round-4 re-review was intentionally interrupted before changing the main checkout. It must be restarted from the isolated upgrade worktree before Task 3 is accepted.
+
+### Worktree migration checkpoint
+
+```yaml
+requested_isolation: true
+main_checkout:
+  path: /Users/matianyi/Projects/robot_demo_001/moveit-demo
+  branch: main
+  commit: db1b658b4bc34f11c923640e1d188cf11aeebc1b
+  submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  status: clean
+upgrade_worktree:
+  path: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/mujoco-ros2-control-0-1-upgrade
+  branch: codex/mujoco-ros2-control-0-1-upgrade
+  commit: fea6dfbfc5d43fd34cad6676bf97d41ad867ac15
+  fork_branch: codex/upstream-0.1.0-so101-r1
+  fork_commit: 2e6875feaa745995188ff3e83bbdb3324b833242
+  status: clean_before_ledger_update
+test_isolation: all future build/install/log paths remain under the registered task-specific evidence root; main checkout build/install/log are out of scope
+migration_baseline: 15/16 passed
+known_baseline_failure: gitlink is 2e6875f while the candidate lock intentionally remains f19a8cc until Task 6
+evidence: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/worktree-migration/baseline-contracts.txt
+```
+
+The parent repository is itself a submodule and has a shared `core.worktree`. The isolated linked worktree therefore uses a worktree-local `core.worktree` override. The nested fork was populated from the existing local fork branch because `2e6875f` has not yet been published; no early push was performed.
+
+Task 3 fix round 4 scoped re-review:
+
+```yaml
+original_history_scrub_critical: ADDRESSED_ON_SOURCE_BACKED_PATH
+critical: 0
+important:
+  - source-less Conda/pixi prebuilt-libsimulate interactive initialization is rejected even though upstream supports it and interactive mode is the default
+minor:
+  - installed source-backed libsimulate.a has an undefined dependency on the project-private reset notifier
+verdict: REJECT
+fix_round: 5/5 IN_PROGRESS
+implementer: /root/task3_fix4
+```
+
+Round 5 hypothesis to test: `ROS2ControlGlfwAdapter::PollEvents()` executes under the render loop's simulation mutex after MuJoCo's UI callback sets `pending_.reset` and before `Sync()`. A focused project-owned adapter seam may therefore consume only that exact reset request, reproduce the pinned upstream reset block, align/publish the reset-specific event, and clear the pending flag without wrapping vendor `simulate.cc`. This must preserve all upstream reset bookkeeping, source-less/source-backed interactive initialization, history/keyframe behavior, and installed archive linkability; otherwise the hypothesis is rejected rather than silently degrading UI reset semantics.
+
+Task 3 fix round 5 implementation and scoped re-review:
+
+```yaml
+fork_commit: 9ba53fa90d7bbeb6e49539b7d971d8ac466100a9
+parent_gitlink_commit: fd9aced65409feabd92dc724a4fb82e782171c44
+source_backed_simulation: 32/32 passed
+focused_ctest: 2/2 passed
+source_contract: 2/2 passed
+forced_source_less_reset_history: 2/2 passed
+full_build_install: passed
+archive_audit: one direct simulate.cc object and no project-private reset symbol
+plugin_base_abi: exact upstream byte hash retained
+authoritative_mj_step: sole production call retained
+round_4_source_less_important: ADDRESSED
+round_4_archive_minor: ADDRESSED
+new_important: coalesced reset plus later history/keyframe/zero-control is fully processed by inner Sync, but the adapter still publishes common-reset recovery and can overwrite the winning later state
+review_verdict: REJECT
+fix_round: 5/5 COMPLETE
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/task3/fix-round-5-worktree
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task3-rereview5-worktree
+archived_runs: []
+deletion_candidates: []
+```
+
+Breaker ruling: the coalesced-event finding is real and affects viewer state semantics. It is carried into Task 4 because Task 4 immediately owns the same `ROS2ControlGlfwAdapter`, `MujocoSimulation`, viewer lifecycle, and test surfaces. Task 4 must begin with RED regressions for actual PollEvents batches containing `reset + load_from_history`, `reset + load_key`, and `reset + zero_ctrl`, then publish common-reset generation only when reset remains the winning state transaction after the complete upstream `Sync()`. A sixth Task 3 fix round is prohibited by the approved SDD process.
+
+Task 3 is complete with one breaker-carried finding. No live Cocoa RenderLoop launch or Linux runtime claim is made here; those remain explicit Task 4/7/8 gates.
