@@ -7,7 +7,7 @@ success_contract: With headless=false on Darwin, rendering remains enabled and t
 worktree: /Users/matianyi/.codex/worktrees/c727/moveit-demo
 branch: codex/macos-mujoco-camera-topics
 base_commit: 842fb05041d4ba487354cf0c6f9668db6e65a9fb
-current_commit: 85b0c9bd6013935b1cc42a38741a2ce9cb2afc45
+current_commit: fork=44c4fb3ce4cd4706a6c0c179b86c48550a408c86 (so101-0.0.3-r10); project=PENDING_LOCAL_COMMIT
 evidence_root: /tmp/so101-debug-v4-t005-macos-camera-topics/
 confirmed_conclusions:
   - The Darwin launch guard deterministically sets disable_rendering=true for interactive launches, suppressing the camera worker despite publisher registration.
@@ -18,8 +18,8 @@ open_hypotheses:
   - H1: the Darwin launch guard deliberately prevents GLFW/Cocoa window-context creation from the existing background rendering thread; it also disables all camera publishers.
   - H2: a main-thread-owned macOS rendering context can preserve camera publication without relaxing the Cocoa constraint.
   - H3: a headless/offscreen MuJoCo context can publish camera images on Darwin without a GLFW window, but must be verified against the pinned MuJoCo API.
-latest_checkpoint: CP-004
-next_experiment: BLOCKED-LOCAL-GUI
+latest_checkpoint: CP-006
+next_experiment: BLOCKED-MACOS-GL-CONTEXT-HANDOFF
 ```
 
 ## Baseline / competing hypotheses
@@ -36,6 +36,50 @@ have publishers but no frames.
 | H3 — offscreen rendering | MuJoCo can create a non-GLFW offscreen context on Darwin that supports readpixels for cameras. | Pinned MuJoCo build/API inspection plus end-to-end image/depth samples. |
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-004
+status: PARTIAL
+prior_experiment: EXP-003
+hypothesis: The upstream CameraPlugin ownership model can replace r9's hard-wired MujocoCameras path while retaining the Darwin main-thread GLFW-window handoff.
+single_variable: Camera publication lifecycle is loaded through mujoco_plugins.task_camera rather than MujocoSystemInterface::cameras_.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - No ROS or MuJoCo process is owned by this task.
+  - Fork is at local r9 commit 1ef550cbbcbbcf8c0e5784648f81545724d5f90f.
+  - Current project branch is codex/macos-mujoco-camera-topics at dc224b5.
+success_criteria:
+  - A RED regression test proves current r9 lacks the task_camera plugin configuration.
+  - The installed fork discovers CameraPlugin and current SO-101 parameters load it.
+  - A logged-in macOS desktop launch yields valid aligned task-camera RGB-D samples and clean shutdown.
+failure_criteria:
+  - The worker creates or destroys a Cocoa GLFW window off the process main thread.
+  - Camera rendering shares mutable authoritative mjData without a snapshot boundary.
+invalid_criteria:
+  - Source-only test or build is reported as installed runtime verification.
+evidence:
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/
+observed:
+  - RED proved r9 lacked both the task_camera plugin configuration and camera_plugin.cpp build target.
+  - GREEN configuration tests prove the installed project selects CameraPlugin, 10 Hz streaming, task_camera RGB-D topics, and a 640x480 MJCF camera resolution.
+  - The built and installed fork exports CameraPlugin; final directed headless and Darwin primary-monitor tests pass 2/2 under the complete ROS overlay.
+  - The installed r10 project overlay resolves `so101_demo_py` from `project-install-r10-isolated`; its plugin YAML, r10 lock and 640x480 task camera bytes are verified in-place. Launch/plugin tests pass 13/13 and r10 lock/plugin-contract tests pass 5/5.
+  - GUI-domain live launch proves headless=false does not emit the rendering-disabled branch, creates the hidden GLFW window on the process main thread, loads CameraPlugin, and starts its rendering worker.
+  - The process receives SIGBUS (-10) while the worker creates its MuJoCo rendering context after glfwMakeContextCurrent on the hidden main-thread-created window. No RGB-D samples can be claimed.
+  - Earlier GUI launch provenance initially selected an old primary-checkout dylib; explicit fork-first DYLD_LIBRARY_PATH corrected this and is recorded in EXP-019 through EXP-027 logs.
+inferred: Upstream's background GLFW render-worker architecture needs a macOS-specific context-initialization/render-execution design beyond window creation handoff.
+conclusion: PARTIAL. Plugin migration compiles and loads; macOS RGB-D functional/shutdown acceptance remains blocked by SIGBUS before the first render.
+evidence:
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-004-red-camera-plugin-contract.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-012-directed-ctest-complete-overlay.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-023-desktop-live-after-resize-guard.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-027-desktop-live-resolution.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-028-final-directed-ctest.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-036-project-reinstall-r10-isolated.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-037-r10-lock-and-camera-contract-tests.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-039-project-tests-r10-installed-overlay.log
+next_experiment: Make the macOS MuJoCo rendering context on the process main thread and schedule camera rendering there, or replace GLFW with a verified macOS offscreen backend; retain snapshot/timestamp semantics.
+```
 
 ```yaml
 experiment_id: EXP-001
@@ -134,4 +178,19 @@ open_risks:
   - Live RGB-D samples and clean shutdown require a graphical macOS session; neither is verified in this Codex process.
   - The local r9 fork tag and commit are intentionally unpushed.
 next_command: Run the installed launch from a logged-in GUI terminal, then invoke src/so101_demo_py/test/macos_camera_topic_probe.py with the same ROS domain.
+```
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-004-PARTIAL
+working_tree_status: Pending local commits for the plugin migration; no push or merge performed.
+owned_processes: NONE (each failed GUI-domain launch was terminated by launch after ros2_control_node exited)
+preserved_processes: No pre-existing ROS/MuJoCo process was intentionally stopped.
+confirmed_conclusions:
+  - Pluginlib discovers and enters CameraPlugin from the installed fork and installed SO-101 YAML.
+  - macOS viewer resize is now skipped while Linux retains the guarded primary-monitor sizing path.
+open_risks:
+  - SIGBUS in CameraPlugin's worker-side MuJoCo GL context initialization prevents first frames, aligned timestamps, rate evidence, and clean-shutdown acceptance.
+  - Current Computer Use policy permits desktop inspection but not typing in the logged-in terminal; GUI-domain launchctl replay was used instead.
+next_command: Design and validate a main-thread rendering dispatch or an actually supported macOS offscreen context before claiming RGB-D runtime success.
 ```
