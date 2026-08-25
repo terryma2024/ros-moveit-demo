@@ -7,7 +7,7 @@ success_contract: With headless=false on Darwin, rendering remains enabled and t
 worktree: /Users/matianyi/.codex/worktrees/c727/moveit-demo
 branch: codex/macos-mujoco-camera-topics
 base_commit: 842fb05041d4ba487354cf0c6f9668db6e65a9fb
-current_commit: 842fb05041d4ba487354cf0c6f9668db6e65a9fb
+current_commit: 85b0c9bd6013935b1cc42a38741a2ce9cb2afc45
 evidence_root: /tmp/so101-debug-v4-t005-macos-camera-topics/
 confirmed_conclusions:
   - The Darwin launch guard deterministically sets disable_rendering=true for interactive launches, suppressing the camera worker despite publisher registration.
