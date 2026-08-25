@@ -22,7 +22,7 @@ disproven_routes:
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
-latest_checkpoint: CP-011
+latest_checkpoint: CP-012
 next_experiment: EXP-005
 ```
 
@@ -701,4 +701,67 @@ open_risks:
   - The timeout-90 production, Viewer, and all downstream acceptance gates remain unmeasured.
   - Existing retained/deletion-candidate evidence is unchanged; nothing was deleted or archived.
 next_command: In a new turn, re-read EXP-005, capture fresh clean provenance/domain/prelaunch Viewer evidence, start the explicit PoseStamped and provenance observers, then launch only the owned stack with require_escalated; do not start production until controllers are active.
+```
+
+```yaml
+correction_id: CORR-EXP-005-001
+applies_to: EXP-005
+status: PLANNED
+recorded_after_commit: 3918f9d
+reason: The original EXP-005 environment correction prohibited HOME and lock mutation but did not freeze durable before/elevated/after evidence sufficient to prove that require_escalated preserved the existing controller-spawner lock identity, metadata, and content digest.
+correction_scope: Measurement-only preregistration; no runtime, build, test, production, GUI, permission escalation, HOME change, or lock operation occurred while recording this correction.
+single_variable_effect: NONE; production startup_timeout_s remains 90 and all stack, TF, camera, perception, QoS, Viewer, scene, keyframe, and controller behavior remains unchanged.
+lock_path: /Users/matianyi/.ros/locks/ros2-control-controller-spawner.lock
+expected_home: /Users/matianyi
+expected_mutable_lock_fields: NONE
+prohibited_actions:
+  - Do not assign, unset, override, or redirect HOME; do not use an alternate HOME or alternate ROS lock directory in either the normal shell or elevated wrapper.
+  - Do not copy, move, replace, chmod, chown, truncate, delete, recreate, repair, or otherwise mutate the controller-spawner lock or its parent lock directory.
+  - Do not read, print, parse, or retain lock contents. SHA-256 is computed mechanically with `shasum -a 256`; only its digest and path may be retained.
+pre_run_evidence_contract:
+  - In the normal preflight shell, write `$HOME` and its command exit to `environment/home-normal-before.txt` and `.exit`; require the value to be exactly `/Users/matianyi`.
+  - Before requesting elevation, require the exact lock path to exist as a regular file; use `os.lstat` to retain path, `os.path.realpath`, raw lstat mode, and `is_symlink=0` in `environment/lock-normal-before.lstat.txt`, with an exit sidecar that is nonzero for missing, non-regular, or symlinked input.
+  - Mechanically hash the exact lock with `shasum -a 256` into `environment/lock-normal-before.sha256`, then capture device, inode, uid, gid, mode, size, atime, mtime, and ctime using Darwin `/usr/bin/stat -f` into `environment/lock-normal-before.metadata.txt`; retain separate exact exit sidecars. Hash precedes metadata so the canonical before metadata includes any access-time effect caused by measurement itself.
+  - The require_escalated stack wrapper must first record its own `$HOME` in `environment/home-elevated-before.txt`, prove exact equality with the normal-shell HOME using `cmp -s`, and retain both command and comparison exit sidecars before any ROS launch child starts.
+  - Still inside the elevated wrapper and before any ROS launch child, repeat the same lstat/realpath/no-symlink gate, mechanical SHA-256, and Darwin stat capture as `lock-elevated-before.*`; compare the normal and elevated resolved path, lstat, digest, and metadata files byte-for-byte with `cmp -s`, retain each comparison exit, and refuse to launch on any nonzero result.
+post_cleanup_evidence_contract:
+  - After every owned process has exited and before concluding EXP-005, the unchanged normal shell must record `home-normal-after.txt`, repeat the same missing/non-regular/symlink lstat gate, hash-first SHA-256, and Darwin stat metadata capture as `lock-after.*`, with complete exit sidecars.
+  - Compare normal-before, elevated-before, and after HOME byte-for-byte; compare the canonical elevated-before resolved path, lstat, SHA-256, and every metadata field against after cleanup byte-for-byte. Retain each `cmp -s` result plus `environment-preservation.compare.txt` and `.exit` aggregating all required checks.
+  - Exact preservation is preregistered: no atime, mtime, ctime, size, mode, ownership, inode, device, path, lstat type, or digest difference is expected. Any difference makes EXP-005 INVALID rather than being explained after seeing the result.
+exact_commands:
+  - command: In the normal shell, set the task-specific non-exported variable `exp005_evidence=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-005`, create only its `environment` evidence directory, run `printf '%s\n' "$HOME" > "$exp005_evidence/environment/home-normal-before.txt"; printf '%s\n' "$?" > "$exp005_evidence/environment/home-normal-before.exit"`, require the file to contain exactly `/Users/matianyi`, then use `/usr/bin/python3 -c 'import os,stat,sys; p=sys.argv[1]; s=os.lstat(p); print(f"path={p}\\nrealpath={os.path.realpath(p)}\\nmode={oct(s.st_mode)}\\nis_regular={int(stat.S_ISREG(s.st_mode))}\\nis_symlink={int(stat.S_ISLNK(s.st_mode))}"); raise SystemExit(0 if stat.S_ISREG(s.st_mode) and not stat.S_ISLNK(s.st_mode) else 1)' /Users/matianyi/.ros/locks/ros2-control-controller-spawner.lock` into `lock-normal-before.lstat.txt` plus its exact exit sidecar.
+    exit_code: PENDING
+  - command: In the normal shell, run `/usr/bin/shasum -a 256 /Users/matianyi/.ros/locks/ros2-control-controller-spawner.lock` into `lock-normal-before.sha256` plus exit sidecar, then `/usr/bin/stat -f 'device=%d inode=%i uid=%u gid=%g mode=%p size=%z atime=%a mtime=%m ctime=%c' /Users/matianyi/.ros/locks/ros2-control-controller-spawner.lock` into `lock-normal-before.metadata.txt` plus exit sidecar; do not otherwise open or inspect the file.
+    exit_code: PENDING
+  - command: As the first statements inside the require_escalated stack wrapper, capture `$HOME` as `home-elevated-before.txt`, repeat the exact lstat, SHA-256-then-stat commands as `lock-elevated-before.*`, and use `/usr/bin/cmp -s` to require normal-before versus elevated-before HOME, lstat/resolved path, digest, and metadata equality; write every exit and aggregate `elevated-prelaunch.compare.exit`, and start `ros2 launch` only when all are 0.
+    exit_code: PENDING
+  - command: After cleanup, capture `home-normal-after.txt`, repeat the exact lstat, SHA-256-then-stat commands as `lock-after.*`, use `/usr/bin/cmp -s` for all preregistered HOME/path/lstat/digest/metadata comparisons, and write every exit plus human-readable `environment-preservation.compare.txt` and aggregate `environment-preservation.compare.exit`; any nonzero makes EXP-005 INVALID.
+    exit_code: PENDING
+invalid_criteria:
+  - Either HOME value differs from `/Users/matianyi` or differs between normal-before, elevated-before, and normal-after evidence.
+  - The exact lock is missing, is not a regular file, is a symlink, resolves to another path, or any required lstat/metadata/hash/comparison/exit sidecar is missing or nonzero.
+  - Any lock device, inode, uid, gid, mode, size, atime, mtime, ctime, resolved path, lstat type, or SHA-256 value differs between the canonical elevated-before and after-cleanup records; no field exception is preregistered.
+  - Any prohibited HOME/lock/lock-directory action occurs, even if later evidence appears equal.
+decision: This correction is part of EXP-005's effective PLANNED contract and must be satisfied before PLANNED transitions to RUNNING; it does not start EXP-005.
+```
+
+```yaml
+checkpoint_id: CP-012
+last_valid_experiment: EXP-002
+current_hypothesis: EXP-005 may remove only EXP-004's sandbox lock denial by elevating the owned stack while preserving the exact existing HOME and controller-spawner lock identity, metadata, and digest; the timeout-90 production A/B remains unmeasured.
+working_tree_status: At correction authoring, only the experiment ledger is tracked dirty from clean documentation head 3918f9d; the Task 7 report remains ignored and the correction must be committed ledger-only.
+owned_processes: NONE_STARTED_OR_INSPECTED_BY_CORR-EXP-005-001
+preserved_processes: No runtime, process scan, signal, build, test, production command, GUI action, or permission escalation was performed; existing HOME, lock, evidence, and unowned processes were untouched.
+confirmed_conclusions:
+  - CORR-EXP-005-001 adds measurement-only HOME and exact lock-preservation gates without changing EXP-005's timeout90 behavior variable.
+  - The elevated wrapper must fail closed before ROS launch if HOME, regular-file/no-symlink, resolved path, hash, metadata, or comparison evidence is absent or nonzero.
+  - Post-cleanup exact comparison has no preregistered mutable lock field; any difference makes the run INVALID and may not be retrospectively justified.
+disproven_routes:
+  - Elevation alone is not evidence that HOME and the existing controller-spawner lock were preserved.
+  - Copying, moving, replacing, permission-changing, truncating, deleting, recreating, or redirecting the lock/HOME to make the stack launch is prohibited and invalidates EXP-005.
+open_risks:
+  - The unchanged controller spawners may themselves change a lock field; because no expected mutation is preregistered, such a result will invalidate EXP-005 and require a separately planned investigation.
+  - EXP-005 runtime, timeout90 production, Viewer, pose/truth, and downstream acceptance remain unrun.
+  - Existing retained/deletion-candidate evidence remains unchanged; nothing was deleted or archived.
+next_command: In a new turn only, re-read EXP-005 plus CORR-EXP-005-001, create its registered evidence directories, capture the normal-shell HOME and lock gates plus existing provenance/domain/Viewer preflight, then start observers and request require_escalated only for the owned wrapper that rechecks HOME/lock before launching the stack.
 ```
