@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 from ..core.dynamic_pick import CupPoseSample, DynamicPickTemplate
@@ -12,6 +13,19 @@ from .cup_pose_preflight import (
     CupPosePreflightError,
     validate_cup_against_simulator,
 )
+
+
+def _scene_failure_message(label: str, receipt) -> str:
+    evidence = json.dumps(
+        receipt.evidence,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=repr,
+    )
+    return (
+        f"{label}: failure_code={receipt.failure_code or 'unknown failure'} "
+        f"evidence={evidence}"
+    )
 
 
 def geometry_with_cup_pose(geometry: TaskGeometry, pose: Pose7) -> TaskGeometry:
@@ -45,12 +59,12 @@ def prepare_dynamic_cup_scene(
     if not applied.success:
         raise CupPosePreflightError(
             "CUP_POSE_SCENE_DIVERGENCE",
-            f"scene apply failed: {applied.failure_code or 'unknown failure'}",
+            _scene_failure_message("scene apply failed", applied),
         )
     observed = scene.observe_task_scene(updated, expected_cup_attachment=None)
     if not observed.success:
         raise CupPosePreflightError(
             "CUP_POSE_SCENE_DIVERGENCE",
-            f"scene readback failed: {observed.failure_code or 'unknown failure'}",
+            _scene_failure_message("scene readback failed", observed),
         )
     return updated
