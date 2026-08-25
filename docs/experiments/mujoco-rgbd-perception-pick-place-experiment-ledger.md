@@ -7,7 +7,7 @@ success_contract: Four independent FULL_RESTART runs each use real aligned RGB-D
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-perception-pick-place
 branch: codex/rgbd-perception-pick-place
 base_commit: a7e3745f13b892a8b7501980fdaf87436392ad50
-current_commit: bccd6e9e18e3a882962e7e880140d52a0d98c86f
+current_commit: 66b436578081cdf9638e0c4fe4efd04eb78cab6b
 evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/
 confirmed_conclusions:
   - Existing macOS CameraPlugin acceptance proves real aligned RGB-D is available only from a correctly sourced interactive runtime; topic names alone are insufficient.
@@ -19,7 +19,7 @@ disproven_routes:
   - Routing production through cup_pose_tf_demo duplicates the selected world-point transform boundary.
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
-latest_checkpoint: CP-004
+latest_checkpoint: CP-006
 next_experiment: EXP-003
 ```
 
@@ -232,5 +232,31 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix/final-source-tests.txt
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix/package-build.txt
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix/installed-launch-discovery-final.txt
+next_command: Create PLANNED EXP-003 from Task 7 before starting the local Mac perception-only runtime gate.
+```
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-002
+current_hypothesis: Task 7 EXP-003 must verify real aligned RGB-D and /cup_pose before any motion.
+working_tree_status: production re-review fix committed at 66b436578081cdf9638e0c4fe4efd04eb78cab6b; this ledger correction is the only subsequent tracked change
+owned_processes: NONE
+preserved_processes: Task 6 re-review used only short-lived Python children in test-owned LaunchService instances; no live ROS graph or simulator was started
+confirmed_conclusions:
+  - Recorded nonzero child status wins exactly; recorded zero or absent child status defers to LaunchService status, so teardown failure cannot be masked as success.
+  - Real LaunchService tests retain scene 12 to 12 and workflow 23 to 23 and additionally prove recorded clean child plus LaunchService failure returns 1.
+  - Preflight now creates and validates resolved perception and dynamic directories before Node construction, rejecting symlink, non-directory, and simulated foreign-owner children.
+  - The final affected source suite passed 55 tests; one-package build and installed runner/public-launch discovery passed from reviewer-fix-2.
+disproven_routes:
+  - A recorded clean child exit is not sufficient to declare the owned graph successful when LaunchService reports teardown or handler failure.
+  - Validating only the session directory does not prevent final perception or dynamic path symlink escape.
+open_risks:
+  - No live RGB-D, ROS graph, MuJoCo, controller, MoveIt, motion, or visual acceptance was run in Task 6.
+  - Full package collection still has the previously recorded generated so101_mujoco_support environment gap.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix-2/red-review-findings.txt
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix-2/final-source-tests.txt
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix-2/package-build.txt
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix-2/installed-launch-discovery.txt
 next_command: Create PLANNED EXP-003 from Task 7 before starting the local Mac perception-only runtime gate.
 ```
