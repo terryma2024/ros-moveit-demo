@@ -21,7 +21,7 @@ disproven_routes:
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
-latest_checkpoint: CP-009
+latest_checkpoint: CP-010
 next_experiment: EXP-004
 ```
 
@@ -467,6 +467,7 @@ next_experiment: EXP-004
 ```yaml
 experiment_id: EXP-004
 status: PLANNED
+pre_run_amendment: CORR-EXP-004-001
 prior_experiment: EXP-003
 hypothesis: The observed 30 s aggregate valid-pose readiness failure is a bounded startup delay; increasing only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds will yield a fresh acceptable /cup_pose without changing code, topics, TF, segmentation, fit, QoS, or scene configuration.
 prediction: With otherwise identical task_start perception-only conditions, production rgbd_cup_pose publishes its first finite fresh world /cup_pose before the 90 s deadline; if it still fails, complete production evidence will preserve the first auditable failure for a subsequent instrumentation task.
@@ -478,16 +479,22 @@ preconditions:
   - ROS_DOMAIN_ID 180 is empty immediately before launch or EXP-004 is amended before RUNNING with a newly verified empty domain; session and partition are unique to EXP-004.
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/ exists before launch and every long-lived command has a predetermined complete stdout/stderr path, monotonic start/end timestamp path, and exit-code sidecar.
   - A durable RUNNING snapshot is written after provenance/isolation checks and before any stack process starts; missing this snapshot makes EXP-004 INVALID.
+  - Before production starts, a dedicated owned `/cup_pose` one-shot sample observer and a dedicated owned `/cup_pose` publisher-provenance observer are both running, their PID/PGID and wall/monotonic start timestamps are retained, and a readiness probe proves the sample observer subscription exists.
+  - Prelaunch Computer Use discovery proves org.mujoco.mujoco is not already running; after the owned stack starts, the same app identity must become attributable to the owned session before any Viewer image can count.
   - dynamic_cup_pick_place is never started and no robot motion is commanded.
 success_criteria:
   - Production rgbd_cup_pose complete stdout/stderr, monotonic start/end timestamps, PID/process ownership, and exit sidecar are retained.
   - The first production-owned /cup_pose sample and verbose publisher provenance are retained; the pose is finite, world-frame, fresh, and carries the exact aligned RGB-D source stamp.
   - Exact-stamp 640x480 rgb8/32FC1, finite positive depth, production PLY/JSON, valid fitted radius, static TF, and perception-vs-MuJoCo truth error at most 0.01 m all pass.
+  - The sample observer was ready before production start and retains the first `/cup_pose` sample; the concurrent provenance observer retains a publisher count of 1, node name rgbd_cup_pose, namespace, endpoint GID, topic type, and QoS before it exits.
+  - A causally attributable MuJoCo Viewer baseline is saved, a Computer Use camera-view-only action is recorded, and a fresh post-action snapshot is saved and actually inspected; attribution, wall/monotonic timestamps, action coordinates, image paths, sizes, SHA-256 values, and inspection findings are retained.
   - Cleanup begin/end monotonic timestamps, every owned process exit sidecar, final exact targeted process scan, and ROS domain command output plus exit sidecar are retained.
 failure_criteria:
   - Complete evidence shows production emits no acceptable /cup_pose within 90 s or fails any sample, segmentation, fit, TF, publisher, freshness, truth-error, visual, or cleanup gate.
 invalid_criteria:
   - Any production stdout/stderr, start/end timestamp, exit sidecar, RUNNING snapshot, ownership record, or cleanup output/exit sidecar is missing or ambiguous.
+  - Either observer starts after production, is not proven ready/owned, lacks its complete log/timestamps/exit sidecar, or remains running after first evidence or production exit.
+  - The Viewer baseline -> Computer Use action -> fresh snapshot sequence is missing, stale, uninspected, or cannot be causally attributed to the owned MuJoCo stack and EXP-004 session.
   - Provenance, initial state, domain/session isolation, or causality is contaminated; an unowned process is reused or stopped; or robot motion starts.
 provenance:
   source_commit: ef6175dd146275d56979ad2860f1f3a6f94dbf79
@@ -496,13 +503,21 @@ provenance:
   ros_domain_id: 180
   gz_partition: rgbd-perception-gate-exp004-20260826
 commands:
-  - command: capture current commit/status, installed prefixes/imports, domain/process isolation, exact shell environment, and monotonic_ns into /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/running-snapshot.txt; write command exit to running-snapshot.exit; only after exit 0 update status PLANNED to RUNNING
+  - command: capture current commit/status, installed prefixes/imports, domain/process isolation, exact shell environment, wall time, monotonic_ns, and Computer Use sky.list_apps prelaunch discovery into /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/running-snapshot.txt and visual/viewer-prelaunch.json; require org.mujoco.mujoco isRunning=false; write command exit to running-snapshot.exit; only after exit 0 update status PLANNED to RUNNING
     exit_code: PENDING
   - command: ROS_DOMAIN_ID=180 GZ_PARTITION=rgbd-perception-gate-exp004-20260826 ROS_LOG_DIR=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/ros/stack ros2 launch so101_demo_py so101_mujoco.launch.py run_mode:=execute execute:=true headless:=false session_id:=rgbd-perception-gate-exp004-20260826 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/stack.json > /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/stack.log 2>&1; record monotonic start/end and exact exit sidecars
     exit_code: PENDING
   - command: start the two approved static_transform_publisher commands unchanged in domain 180, each with complete stdout/stderr, monotonic start/end, PID/PGID ownership, and exit sidecars below /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/
     exit_code: PENDING
+  - command: BEFORE production, in a dedicated owned PTY/session run `ROS_DOMAIN_ID=180 ros2 topic echo /cup_pose --once` with output at exp-004/observers/cup-pose-first.log; wrapper installs INT/TERM traps that write cup-pose-first.end.wall_ns, .end.monotonic_ns, and .exit, and records cup-pose-first.start.wall_ns, .start.monotonic_ns, and .owner PID/PGID/session; poll `ROS_DOMAIN_ID=180 ros2 topic info /cup_pose --verbose` into cup-pose-subscriber-ready.log until Subscription count is at least 1, then write readiness exit sidecar
+    exit_code: PENDING
+  - command: BEFORE production, in a second dedicated owned PTY/session poll `ROS_DOMAIN_ID=180 ros2 topic info /cup_pose --verbose` every 0.1 s into exp-004/observers/cup-pose-publisher-provenance.log and exit 0 only after one attempt records Publisher count 1 and Node name rgbd_cup_pose; wrapper installs INT/TERM traps and writes wall/monotonic start/end, owner PID/PGID/session, and exact exit sidecars on success, production-first exit, or signal
+    exit_code: PENDING
   - command: ROS_DOMAIN_ID=180 ROS_LOG_DIR=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/ros/perception ros2 run so101_demo_py rgbd_cup_pose --startup-timeout-s 90 --output-topic /cup_pose --output-ply /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/cup.ply --evidence-json /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/perception.json > /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/production.log 2>&1; record monotonic start/end, PID/PGID, first /cup_pose or failure, and exact exit sidecars
+    exit_code: PENDING
+  - command: after owned-stack attribution succeeds, use only node_repl plus @oai/sky to call sky.get_app_state for org.mujoco.mujoco and save visual/viewer-baseline.png plus baseline state/timestamps; derive a small camera-view-only sky.drag from that fresh baseline and save visual/viewer-action.json; immediately call sky.get_app_state again and save visual/viewer-fresh.png plus fresh state/timestamps; record sizes/SHA-256 and write visual/viewer-inspection.md describing the canonical cup, active owned scene, and visible post-action view change
+    exit_code: PENDING
+  - command: when the first sample and provenance observers have both exited, or immediately when production exits first, write observers/stop.wall_ns and stop.monotonic_ns, SIGINT only any still-running exact owned observer PTY/session or PID/PGID, wait for both wrappers to write end timestamps and exit sidecars, and prove neither observer remains before general cleanup
     exit_code: PENDING
   - command: before signaling, record cleanup-begin monotonic_ns and exact owned PID/PGID set; SIGINT only those owned sessions/process groups; record every exit, cleanup-end monotonic_ns, final targeted process scan plus exit sidecar, and ROS_DOMAIN_ID=180 ros2 node list --no-daemon output plus exit sidecar
     exit_code: PENDING
@@ -520,6 +535,7 @@ post_failure_rule: Only if this timeout-only A/B remains a fully evidenced VALID
 
 ```yaml
 checkpoint_id: CP-009
+checkpoint_status: SUPERSEDED_BY_CORR-EXP-004-001
 last_valid_experiment: EXP-002
 current_hypothesis: A timeout-only 30 to 90 second A/B must run before production readiness instrumentation; EXP-003 cannot determine which production boundary failed.
 working_tree_status: runtime source remains ef6175dd146275d56979ad2860f1f3a6f94dbf79; audit correction prepared from ledger commit 83a3033e51c6f6d47b1c4164be29252e8a929221 with only this ledger tracked dirty and the Task 7 report ignored
@@ -536,4 +552,65 @@ open_risks:
   - Production pose, radius fit, publisher provenance, truth error, and Viewer visual acceptance remain unverified.
   - Existing retained and deletion-candidate evidence is unchanged; no artifact was deleted or archived.
 next_command: After an implementer rechecks ledger, provenance, and isolation, write EXP-004 running-snapshot.txt plus running-snapshot.exit and only then transition EXP-004 from PLANNED to RUNNING before launching any process.
+```
+
+```yaml
+correction_id: CORR-EXP-004-001
+applies_to:
+  - EXP-004 PLANNED measurement contract committed at 440dbbcbefcdbb69bb429329ac1b8239a4611e40
+  - CP-009
+recorded_at: 2026-08-26T05:35:00+08:00
+reason: Final pre-run review required lossless first-publish observation and a causally attributable, inspected MuJoCo Viewer baseline-action-fresh-snapshot sequence before EXP-004 can transition to RUNNING.
+history_preserved: The original EXP-004 hypothesis, prediction, lifecycle, behavior configuration, and timeout-only single variable remain unchanged; this amendment tightens measurement and validity gates before any process starts.
+single_variable_unchanged: production rgbd_cup_pose --startup-timeout-s changes from 30 to 90 seconds
+observer_contract:
+  ordering:
+    - Start the owned `/cup_pose` one-shot sample observer before production.
+    - Prove its subscription is registered and retain the readiness log/exit sidecar.
+    - Start the owned publisher-provenance polling observer before production.
+    - Only after both owners, start timestamps, and readiness are durable may production start.
+  sample_mechanism: ROS_DOMAIN_ID=180 ros2 topic echo /cup_pose --once
+  provenance_mechanism: Poll ROS_DOMAIN_ID=180 ros2 topic info /cup_pose --verbose every 0.1 s and retain the first attempt with Publisher count 1 and Node name rgbd_cup_pose, including namespace, endpoint GID, type, and QoS.
+  per_observer_evidence:
+    - Complete stdout/stderr log.
+    - Wall-clock and monotonic start/end timestamps.
+    - Owned PTY/session plus wrapper PID and PGID.
+    - Exact exit-code sidecar and observer-readiness evidence.
+  termination:
+    - Each observer exits itself after its first required evidence.
+    - If production exits first, record stop wall/monotonic timestamps, SIGINT only the still-running exact owned observer session or PID/PGID, wait for trap-written end/exit sidecars, and prove no observer remains.
+  validity_rule: Starting either observer after production, failing to prove readiness/ownership, missing any sidecar, or leaving an observer running makes EXP-004 INVALID.
+visual_contract:
+  attribution:
+    - Before stack launch, Computer Use sky.list_apps must retain visual/viewer-prelaunch.json showing org.mujoco.mujoco isRunning=false; an already-running Viewer makes the run contaminated.
+    - After the owned headless=false stack starts, retain visual/viewer-attribution.json with app identity, owned session/stack PID-PGID reference, wall/monotonic timestamps, and fresh accessibility/window state that ties the Viewer to EXP-004.
+    - If org.mujoco.mujoco never becomes running or the owned session cannot be tied to it, do not launch another app and mark EXP-004 INVALID.
+  sequence:
+    - Save a full fresh baseline from sky.get_app_state to visual/viewer-baseline.png and visual/viewer-baseline.json.
+    - Derive a small camera-view-only drag from the fresh baseline, perform it with sky.drag, and save app id, from/to coordinates, wall/monotonic timestamps, and purpose in visual/viewer-action.json.
+    - Immediately call sky.get_app_state again and save visual/viewer-fresh.png and visual/viewer-fresh.json.
+    - Record both image sizes and SHA-256 values and write visual/viewer-inspection.md describing the canonical cup, active owned MuJoCo scene, and visible view change actually inspected.
+  validity_rule: Missing, stale, identical-without-explained-change, uninspected, or unattributable baseline-action-fresh evidence makes EXP-004 INVALID.
+decision: KEEP_EXP-004_PLANNED_WITH_STRICTER_MEASUREMENT_CONTRACT
+next_experiment: EXP-004
+```
+
+```yaml
+checkpoint_id: CP-010
+last_valid_experiment: EXP-002
+current_hypothesis: EXP-004 must test only timeout 30 to 90 while pre-start observers prevent loss of the first production sample/provenance and Computer Use proves a causally attributable Viewer sequence.
+working_tree_status: runtime source remains ef6175dd146275d56979ad2860f1f3a6f94dbf79; final pre-run measurement amendment prepared from ledger commit 440dbbcbefcdbb69bb429329ac1b8239a4611e40 with only this ledger tracked dirty and Task 7 report ignored
+owned_processes: NONE_STARTED_BY_THIS_DOCUMENTATION_CORRECTION
+preserved_processes: No process inspection, signal, live stack, test, build, production command, or Computer Use action was run by this correction task
+confirmed_conclusions:
+  - EXP-003 remains INVALID and non-counting; EXP-004 remains PLANNED with timeout 30 to 90 as its only behavior variable.
+  - The sample and publisher-provenance observers are measurement-only and must be running before production, with complete ordering, ownership, timestamps, logs, and exit evidence.
+  - Viewer acceptance requires owned-stack attribution plus an actually inspected Computer Use baseline, camera-view-only action, and fresh snapshot; missing or unattributable visual evidence invalidates the run.
+disproven_routes:
+  - Starting `/cup_pose` observers after production can miss a transient first publish and cannot satisfy EXP-004.
+  - A Viewer screenshot without prelaunch/postlaunch attribution, recorded Computer Use action, fresh post-action image, and inspection record cannot satisfy visual acceptance.
+open_risks:
+  - The Mac GLFW Viewer may not surface as org.mujoco.mujoco to Computer Use; if attribution cannot be established, EXP-004 must be INVALID rather than using an unrelated launched app.
+  - Production pose, fit, publisher, truth-error, cleanup, and visual gates remain unrun.
+next_command: Before any process, create EXP-004 evidence directories and complete running-snapshot plus prelaunch Viewer discovery; after the stack and static TF start, pre-start both owned `/cup_pose` observers and prove readiness before launching production with timeout 90.
 ```
