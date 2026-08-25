@@ -13,9 +13,9 @@ archived_runs: []
 deletion_candidates: []
 
 latest_checkpoint:
-  state: TASK_1_QUALIFIED
-  hypothesis: A separate optional capability interface can preserve the exact upstream plugin base ABI while supporting ordered, fault-isolated SO-101 lifecycle observers.
-  next_command: Add RED capability/dispatcher tests for Task 2 without modifying MuJoCoROS2ControlPluginBase.
+  state: TASK_2_QUALIFIED
+  hypothesis: The reviewed optional observer dispatcher can now be wired only at upstream 0.1.0's authoritative physics, pause, reset, and snapshot transition points.
+  next_command: Add Task 3 RED transition-order and reset-atomicity tests before wiring the dispatcher into MujocoSimulation.
 ```
 
 ## Controller rulings
@@ -137,4 +137,47 @@ primary_monitor_guard: ADDRESSED
 ledger_completion: ADDRESSED
 new_breakage: none
 verdict: ACCEPTED
+```
+
+### Task 2 dispatch
+
+```yaml
+parent_base: e265dde
+fork_base: 102aba33f7566918a884aef3a57eefdf892cd56f
+implementer: /root/task2_capabilities
+state: COMPLETE
+scope: Optional plugin capability header, fault-isolated observer dispatcher, focused tests, and unchanged upstream base ABI.
+ruling: The upstream mujoco_3d_lidar C++17 defect remains outside Task 2 and is a mandatory Task 5 full-fork gate item.
+```
+
+### EXP-003: Task 2 optional capabilities and dispatcher
+
+```yaml
+fork_commit: 65d60eab9f23ea30cbbf1f73ae4a81ee1ce6c899
+parent_gitlink_commit: 7154a17df27e1abce18f2924d994bb2e264b6974
+focused_gtests: 3/3 passed
+abi_base_header_diff: empty
+abi_base_header_sha256: e4bb0f69a48fd9686a1cd50e7e064cae0bdfc011b09576b91d6945b8f5d8b5ee
+ancestry_checks: PASS
+format_check: PASS
+full_package_gate: NOT_CLAIMED
+full_package_blockers:
+  - upstream mujoco_3d_lidar missing C++17 target requirement for std::byte
+  - upstream plugin/core AppleClang -Werror sign/float conversion diagnostics
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/task2
+archived_runs: []
+deletion_candidates: []
+review_state: ACCEPTED
+```
+
+Task 2 independent review:
+
+```yaml
+spec_compliance: PASS
+task_quality: Approved
+critical: 0
+important: 0
+minor: 0
+package_full_fork_green: not established and explicitly deferred to Task 5
 ```
