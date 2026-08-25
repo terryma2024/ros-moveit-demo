@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import math
+import os
 from pathlib import Path
 
 import pytest
@@ -43,7 +44,7 @@ def _default(argument: DeclareLaunchArgument) -> str:
     return perform_substitutions(LaunchContext(), argument.default_value)
 
 
-def _materialize(**overrides):
+def _materialize(*, evidence_file=None, **overrides):
     description = _builder()()
     declared = _declared(description)
     context = LaunchContext()
@@ -56,7 +57,13 @@ def _materialize(**overrides):
             "run_mode": "execute",
             "execute": "true",
             "session_id": "session-123",
-            "evidence_file": "/tmp/launch-run.json",
+            "evidence_file": str(
+                evidence_file
+                or Path(
+                    "/tmp/so101-debug-rgbd-perception-pick-place-20260826/"
+                    "task-6/reviewer-fix/launch-run.json"
+                )
+            ),
             **{key: str(value) for key, value in overrides.items()},
         }
     )
@@ -165,8 +172,11 @@ def test_invalid_execute_inputs_fail_before_actions_are_materialized(overrides, 
         _materialize(**overrides)
 
 
-def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_args() -> None:
-    context, actions = _materialize()
+def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_args(
+    tmp_path: Path,
+) -> None:
+    evidence_file = tmp_path / "launch-run.json"
+    context, actions = _materialize(evidence_file=evidence_file)
     initial_executables = [node.node_executable for node in _nodes(actions)]
 
     assert initial_executables[:2] == [
@@ -193,9 +203,9 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
         "--output-topic",
         "/cup_pose",
         "--output-ply",
-        "/tmp/launch-run.d/session-123/perception/cup.ply",
+        str(tmp_path / "launch-run.d/session-123/perception/cup.ply"),
         "--evidence-json",
-        "/tmp/launch-run.d/session-123/perception/summary.json",
+        str(tmp_path / "launch-run.d/session-123/perception/summary.json"),
     ]
     assert evaluate_parameters(context, perception._Node__parameters) == (
         {"use_sim_time": True},
@@ -217,7 +227,7 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
         "--expected-reset-epoch",
         "0",
         "--evidence-root",
-        "/tmp/launch-run.d/session-123/dynamic",
+        str(tmp_path / "launch-run.d/session-123/dynamic"),
     ]
 
     all_executables = initial_executables + [
@@ -226,6 +236,75 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
     assert all_executables.count("rgbd_cup_pose") == 1
     assert "cup_pose_tf_demo" not in all_executables
     assert "mujoco_cup_pose_bridge" not in all_executables
+
+
+def test_evidence_preflight_creates_owned_run_directory_before_nodes(
+    tmp_path: Path,
+) -> None:
+    evidence_file = tmp_path / "result.json"
+
+    _context, actions = _materialize(evidence_file=evidence_file)
+
+    run_root = tmp_path / "result.d/session-123"
+    assert run_root.is_dir()
+    assert run_root.resolve().is_relative_to(tmp_path.resolve())
+    assert run_root.stat().st_uid == os.geteuid()
+    assert _nodes(actions)
+
+
+def test_evidence_preflight_keeps_valid_preexisting_run_directory(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "result.d/session-123"
+    run_root.mkdir(parents=True)
+
+    _context, actions = _materialize(evidence_file=tmp_path / "result.json")
+
+    assert run_root.is_dir()
+    assert _nodes(actions)
+
+
+@pytest.mark.parametrize("component", ("base", "session"))
+def test_evidence_preflight_rejects_symlink_components(
+    tmp_path: Path, component: str
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    base = tmp_path / "result.d"
+    if component == "base":
+        base.symlink_to(outside, target_is_directory=True)
+    else:
+        base.mkdir()
+        (base / "session-123").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(RuntimeError, match="symlink"):
+        _materialize(evidence_file=tmp_path / "result.json")
+
+
+@pytest.mark.parametrize("component", ("base", "session"))
+def test_evidence_preflight_rejects_non_directory_components(
+    tmp_path: Path, component: str
+) -> None:
+    base = tmp_path / "result.d"
+    if component == "base":
+        base.write_text("conflict", encoding="utf-8")
+    else:
+        base.mkdir()
+        (base / "session-123").write_text("conflict", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="directory"):
+        _materialize(evidence_file=tmp_path / "result.json")
+
+
+def test_evidence_preflight_rejects_conflicting_directory_owner(
+    tmp_path: Path, monkeypatch
+) -> None:
+    base = tmp_path / "result.d"
+    base.mkdir()
+    monkeypatch.setattr(os, "geteuid", lambda: base.stat().st_uid + 1)
+
+    with pytest.raises(RuntimeError, match="owned"):
+        _materialize(evidence_file=tmp_path / "result.json")
 
 
 def test_scene_failure_starts_no_sensor_or_workflow_and_fails_launch() -> None:
