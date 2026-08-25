@@ -48,3 +48,10 @@ def test_setup_publishes_unified_runtime_commands(monkeypatch) -> None:
         "dynamic_cup_pick_place = so101_demo.cli.dynamic_cup_pick_place:main",
         "run_qualification = so101_demo.cli.qualification:main",
     }
+
+    installed_files = {
+        source
+        for _destination, sources in captured["data_files"]
+        for source in sources
+    }
+    assert "launch/so101_mujoco_perception_pick_place.launch.py" in installed_files
