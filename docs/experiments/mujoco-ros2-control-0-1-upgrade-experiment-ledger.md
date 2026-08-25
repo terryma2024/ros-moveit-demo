@@ -181,3 +181,102 @@ important: 0
 minor: 0
 package_full_fork_green: not established and explicitly deferred to Task 5
 ```
+
+### Task 3 dispatch
+
+```yaml
+parent_base: 9decd7a
+fork_base: 65d60eab9f23ea30cbbf1f73ae4a81ee1ce6c899
+implementer: /root/task3_lifecycle
+state: IN_PROGRESS
+scope: Register observers and wire authoritative post-step, paused atomic reset, pause, and state-snapshot transitions without moving ordinary update or pre_step ownership.
+ruling: Every actual upstream successful mj_step path must implement the approved semantic order even when plan pseudocode helper names differ.
+```
+
+### EXP-004: Task 3 authoritative lifecycle transitions
+
+```yaml
+fork_commit: e6702bbb335ee3f9ce0dc5987fcdb7689ede2b3b
+parent_gitlink_commit: f7ad56ba287d1912381eb314b12e0c519d8ccd5b
+focused_real_source_ctest: 2/2 passed
+simulation_tests: 25/25 passed
+system_interface_tests: 4/4 passed
+full_package_ctest: 4/7 passed and NOT_CLAIMED
+full_package_boundaries:
+  - focused plugin install lacks ament resource index for test_plugin
+  - focused core install lacks Python package exposure for two Python tests
+format_check: uncrustify executable unavailable; no format pass claimed
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/task3
+archived_runs: []
+deletion_candidates: []
+review_state: IN_PROGRESS
+```
+
+Task 3 first review findings:
+
+```yaml
+spec_compliance: FAIL
+task_quality: Needs fixes
+critical:
+  - Observer callbacks can race with or execute after plugin cleanup.
+  - Divergent catch-up/paused steps can continue integration or publish non-authoritative state; successful paused steps can publish twice.
+important:
+  - StepSimulation paused-state check and queue setup race SetPause.
+  - Protected registration test seam permits unsafe runtime mutation and bypasses loader semantics.
+fix_round: 1/5 IN_PROGRESS
+```
+
+Task 3 fix round 1 scoped re-review:
+
+```yaml
+observer_cleanup_race: ADDRESSED
+failed_step_publication_and_continued_integration: NOT_ADDRESSED
+step_pause_race: ADDRESSED
+unsafe_registration_seam: ADDRESSED
+remaining_critical: SetPause(false) can resume a divergence-latched simulation and trigger another integration attempt before reset.
+fix_round: 2/5 IN_PROGRESS
+```
+
+Task 3 fix round 2 scoped re-review:
+
+```yaml
+service_reset_resume_gate: ADDRESSED
+new_critical: Early UI reset can bypass common reset recovery because time-based reset detection requires prevSimTime > 0.1, leaving divergence latched after a first-step failure.
+fix_round: 3/5 IN_PROGRESS
+```
+
+Task 3 fix round 3 scoped re-review:
+
+```yaml
+early_ui_reset_recovery: NOT_ACCEPTED
+critical_regression: Strict backward-time detection misclassifies viewer history scrub or other backward state restoration as reset and overwrites the selected state.
+required_architecture: Reset-specific durable signal from the actual Simulate Sync reset operation, plus actual reset versus history-backward regression coverage.
+fix_round: 4/5 IN_PROGRESS
+implementer: /root/task3_fix4
+```
+
+Ruling: `Simulate::Sync()` is non-virtual; actual reset and history paths clear their pending flags before releasing the shared mutex, leaving no reliable post-lock discriminator. A project-owned wrapper translation unit may instrument the actual installed `simulate.cc` reset call with a per-`mjData` durable reset callback/generation. It must not edit vendor sources and must be guarded by real Sync reset/history tests. Cost if wrong: this seam is coupled to the installed Simulate source structure and must be revisited when the vendor source changes.
+
+Task 3 fix round 4 implementation checkpoint:
+
+```yaml
+fork_commit: 2e6875feaa745995188ff3e83bbdb3324b833242
+parent_gitlink_commit: 0fa52c9d1aed76f1cd8003f2c96bcace826161ec
+actual_sync_red: 0/2 passed
+actual_sync_green: 2/2 passed
+simulation_tests: 32/32 passed
+focused_ctest: 2/2 passed
+build_and_audits: passed
+review_state: INTERRUPTED_FOR_WORKTREE_MIGRATION
+remaining_review_focus:
+  - wrapper compatibility with the pinned Simulate source on macOS and Linux
+  - registry lifetime and concurrency
+  - installed static-library and source-less interactive behavior
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/task3
+archived_runs: []
+deletion_candidates: []
+```
+
+The scoped round-4 re-review was intentionally interrupted before changing the main checkout. It must be restarted from the isolated upgrade worktree before Task 3 is accepted.
