@@ -70,6 +70,7 @@ class _FakeRclpy:
     def __init__(self) -> None:
         self.initialized = False
         self.shutdown_calls = 0
+        self.try_shutdown_calls = 0
 
     def ok(self) -> bool:
         return self.initialized
@@ -79,6 +80,12 @@ class _FakeRclpy:
 
     def shutdown(self) -> None:
         self.shutdown_calls += 1
+        if not self.initialized:
+            raise RuntimeError("rclpy context is already shut down")
+        self.initialized = False
+
+    def try_shutdown(self) -> None:
+        self.try_shutdown_calls += 1
         self.initialized = False
 
     def spin_once(self, _node, *, timeout_sec: float) -> None:
@@ -713,7 +720,8 @@ def test_partial_ros_runtime_construction_cleans_every_created_resource() -> Non
     assert node.destroyed_publishers == [node.publisher_calls[0][3]]
     assert listener.unregister_calls == 1
     assert node.destroyed
-    assert fake_rclpy.shutdown_calls == 1
+    assert fake_rclpy.shutdown_calls == 0
+    assert fake_rclpy.try_shutdown_calls == 1
 
 
 def test_node_construction_failure_after_init_shuts_down_owned_context() -> None:
@@ -734,7 +742,8 @@ def test_node_construction_failure_after_init_shuts_down_owned_context() -> None
             ros_api=api,
         )
 
-    assert fake_rclpy.shutdown_calls == 1
+    assert fake_rclpy.shutdown_calls == 0
+    assert fake_rclpy.try_shutdown_calls == 1
 
 
 def test_cleanup_attempts_every_resource_in_reverse_order_and_aggregates_failures() -> None:
@@ -755,7 +764,7 @@ def test_cleanup_attempts_every_resource_in_reverse_order_and_aggregates_failure
         destroy_node=fail("node"),
     )
     listener = SimpleNamespace(unregister=fail("listener"))
-    rclpy = SimpleNamespace(ok=lambda: True, shutdown=fail("context"))
+    rclpy = SimpleNamespace(ok=lambda: True, try_shutdown=fail("context"))
     cleanup = RosResourceCleanup(
         ros_api=SimpleNamespace(rclpy=rclpy),
         node=node,
@@ -863,7 +872,8 @@ def test_partial_construction_cleanup_failure_is_actionable_and_continues(capsys
     assert node.destroyed_publishers == [node.publisher_calls[0][3]]
     assert listener.unregister_calls == 1
     assert node.destroyed
-    assert fake_rclpy.shutdown_calls == 1
+    assert fake_rclpy.shutdown_calls == 0
+    assert fake_rclpy.try_shutdown_calls == 1
 
 
 def test_post_success_cleanup_failure_forces_actionable_nonzero(capsys) -> None:
@@ -895,6 +905,48 @@ def test_post_success_cleanup_failure_forces_actionable_nonzero(capsys) -> None:
     output = capsys.readouterr().out
     assert "RGBD_CUP_POSE_CLEANUP_FAILED" in output
     assert "publisher cleanup failed" in output
+
+
+def test_post_success_close_accepts_owned_context_already_shut_down(capsys) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        RosResourceCleanup,
+        run_rgbd_cup_pose,
+    )
+
+    api, fake_rclpy, node, listener = _fake_ros_api()
+    subscription = object()
+    publisher = object()
+    cleanup = RosResourceCleanup(
+        ros_api=api,
+        initialized_here=True,
+        node=node,
+        tf_listener=listener,
+        publisher=publisher,
+        subscriptions=[subscription],
+    )
+    fake_rclpy.initialized = False
+
+    runtime = SimpleNamespace(
+        first_valid_published=True,
+        ok=lambda: False,
+        close=cleanup.close,
+    )
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda _options, _deadline, _monotonic: runtime,
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result == 0
+    assert "RGBD_CUP_POSE_CLEANUP_FAILED" not in capsys.readouterr().out
+    assert node.destroyed_subscriptions == [subscription]
+    assert node.destroyed_publishers == [publisher]
+    assert listener.unregister_calls == 1
+    assert node.destroyed
+    assert fake_rclpy.shutdown_calls == 0
+    assert fake_rclpy.try_shutdown_calls == 1
 
 
 def test_run_continues_after_first_valid_frame_until_orderly_shutdown() -> None:
