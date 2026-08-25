@@ -118,3 +118,17 @@ def test_mujoco_rendering_is_enabled_for_interactive_macos_camera_stack() -> Non
     assert '<param name="disable_rendering">true</param>' in headless
     assert '<param name="disable_rendering">false</param>' in linux_interactive
     assert '<param name="disable_rendering">false</param>' in macos_interactive
+
+
+def test_mujoco_launch_declares_and_renders_selected_initial_keyframe() -> None:
+    description = build_launch_description(backend="mujoco", pick_place=False)
+    declared = _declared(description)
+    assert "mujoco_initial_keyframe" in declared
+
+    rendered = launch_composition._render_mujoco_robot_description(
+        PACKAGE_ROOT,
+        str(PACKAGE_ROOT / "assets/mujoco/scene.xml"),
+        headless=False,
+        initial_keyframe="cup_test_left_5cm",
+    )
+    assert '<param name="initial_keyframe">cup_test_left_5cm</param>' in rendered
