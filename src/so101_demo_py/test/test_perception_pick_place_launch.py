@@ -249,6 +249,8 @@ def test_evidence_preflight_creates_owned_run_directory_before_nodes(
     assert run_root.is_dir()
     assert run_root.resolve().is_relative_to(tmp_path.resolve())
     assert run_root.stat().st_uid == os.geteuid()
+    assert (run_root / "perception").is_dir()
+    assert (run_root / "dynamic").is_dir()
     assert _nodes(actions)
 
 
@@ -262,6 +264,26 @@ def test_evidence_preflight_keeps_valid_preexisting_run_directory(
 
     assert run_root.is_dir()
     assert _nodes(actions)
+
+
+def test_evidence_preflight_passes_resolved_child_paths_to_nodes(
+    tmp_path: Path,
+) -> None:
+    real_parent = tmp_path / "real"
+    real_parent.mkdir()
+    alias_parent = tmp_path / "alias"
+    alias_parent.symlink_to(real_parent, target_is_directory=True)
+
+    context, actions = _materialize(evidence_file=alias_parent / "result.json")
+    started = _dispatch_process_exit(
+        actions, _node(actions, "scene_setup"), 0, context
+    )
+    perception = _node(started, "rgbd_cup_pose")
+    workflow = _node(started, "dynamic_cup_pick_place")
+
+    resolved_run = real_parent.resolve() / "result.d/session-123"
+    assert str(resolved_run / "perception/cup.ply") in perception._Node__arguments
+    assert str(resolved_run / "dynamic") in workflow._Node__arguments
 
 
 @pytest.mark.parametrize("component", ("base", "session"))
@@ -281,6 +303,20 @@ def test_evidence_preflight_rejects_symlink_components(
         _materialize(evidence_file=tmp_path / "result.json")
 
 
+@pytest.mark.parametrize("component", ("perception", "dynamic"))
+def test_evidence_preflight_rejects_symlink_final_directories(
+    tmp_path: Path, component: str
+) -> None:
+    run_root = tmp_path / "result.d/session-123"
+    run_root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (run_root / component).symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(RuntimeError, match=f"{component}.*symlink"):
+        _materialize(evidence_file=tmp_path / "result.json")
+
+
 @pytest.mark.parametrize("component", ("base", "session"))
 def test_evidence_preflight_rejects_non_directory_components(
     tmp_path: Path, component: str
@@ -296,6 +332,18 @@ def test_evidence_preflight_rejects_non_directory_components(
         _materialize(evidence_file=tmp_path / "result.json")
 
 
+@pytest.mark.parametrize("component", ("perception", "dynamic"))
+def test_evidence_preflight_rejects_non_directory_final_paths(
+    tmp_path: Path, component: str
+) -> None:
+    run_root = tmp_path / "result.d/session-123"
+    run_root.mkdir(parents=True)
+    (run_root / component).write_text("conflict", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match=f"{component}.*directory"):
+        _materialize(evidence_file=tmp_path / "result.json")
+
+
 def test_evidence_preflight_rejects_conflicting_directory_owner(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -304,6 +352,30 @@ def test_evidence_preflight_rejects_conflicting_directory_owner(
     monkeypatch.setattr(os, "geteuid", lambda: base.stat().st_uid + 1)
 
     with pytest.raises(RuntimeError, match="owned"):
+        _materialize(evidence_file=tmp_path / "result.json")
+
+
+@pytest.mark.parametrize("component", ("perception", "dynamic"))
+def test_evidence_preflight_rejects_foreign_owned_final_directories(
+    tmp_path: Path, monkeypatch, component: str
+) -> None:
+    run_root = tmp_path / "result.d/session-123"
+    (run_root / "perception").mkdir(parents=True)
+    (run_root / "dynamic").mkdir()
+    target = run_root / component
+    original_lstat = Path.lstat
+
+    def foreign_child_lstat(path):
+        metadata = original_lstat(path)
+        if path == target:
+            fields = list(metadata)
+            fields[4] = os.geteuid() + 1
+            return os.stat_result(fields)
+        return metadata
+
+    monkeypatch.setattr(Path, "lstat", foreign_child_lstat)
+
+    with pytest.raises(RuntimeError, match=f"{component}.*owned"):
         _materialize(evidence_file=tmp_path / "result.json")
 
 

@@ -4,7 +4,7 @@ import importlib
 import sys
 
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess
+from launch.actions import ExecuteProcess, OpaqueFunction
 
 from so101_demo.runtime import launch_composition
 
@@ -59,3 +59,19 @@ def test_real_launch_service_preserves_workflow_failure_exit_code() -> None:
     result = _runner_module().run_launch_description(description, exit_status)
 
     assert result == 23
+
+
+def test_clean_child_status_does_not_mask_launch_service_failure() -> None:
+    exit_status = _exit_status()
+
+    def record_clean_then_fail(_context):
+        exit_status.record(0)
+        raise RuntimeError("teardown handler failed")
+
+    description = LaunchDescription(
+        [OpaqueFunction(function=record_clean_then_fail)]
+    )
+
+    result = _runner_module().run_launch_description(description, exit_status)
+
+    assert result == 1

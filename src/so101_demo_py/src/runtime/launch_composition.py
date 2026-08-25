@@ -67,6 +67,13 @@ class _MujocoStackActions:
     scene_setup: Node
 
 
+@dataclass(frozen=True, slots=True)
+class _PerceptionEvidencePaths:
+    run_root: Path
+    perception: Path
+    dynamic: Path
+
+
 @dataclass(slots=True)
 class PerceptionLaunchExitStatus:
     """First terminal child status observed by the perception launch graph."""
@@ -78,7 +85,7 @@ class PerceptionLaunchExitStatus:
             self.returncode = returncode
 
     def resolve(self, launch_service_returncode: int) -> int:
-        if self.returncode is None:
+        if self.returncode in {None, 0}:
             return launch_service_returncode
         return self.returncode
 
@@ -331,7 +338,7 @@ def _mujoco_perception_execute_actions(
     share: Path,
     session_id: str,
     *,
-    evidence_root: Path,
+    evidence_paths: _PerceptionEvidencePaths,
     perception_timeout: str,
     cup_pose_timeout: str,
     exit_status: PerceptionLaunchExitStatus,
@@ -346,9 +353,9 @@ def _mujoco_perception_execute_actions(
             "--output-topic",
             "/cup_pose",
             "--output-ply",
-            str(evidence_root / "perception/cup.ply"),
+            str(evidence_paths.perception / "cup.ply"),
             "--evidence-json",
-            str(evidence_root / "perception/summary.json"),
+            str(evidence_paths.perception / "summary.json"),
         ],
         parameters=[{"use_sim_time": True}],
         output="both",
@@ -371,7 +378,7 @@ def _mujoco_perception_execute_actions(
             "--expected-reset-epoch",
             "0",
             "--evidence-root",
-            str(evidence_root / "dynamic"),
+            str(evidence_paths.dynamic),
         ],
         output="both",
     )
@@ -665,7 +672,7 @@ def _owned_directory(path: Path, label: str) -> Path:
 
 def _prepare_perception_evidence_root(
     evidence_file: Path, session_id: str
-) -> Path:
+) -> _PerceptionEvidencePaths:
     try:
         evidence_parent = evidence_file.parent.resolve(strict=True)
     except FileNotFoundError as error:
@@ -682,7 +689,22 @@ def _prepare_perception_evidence_root(
     resolved_run_root = _owned_directory(run_root, "session evidence root")
     if resolved_run_root.parent != resolved_base:
         raise RuntimeError("session evidence root escapes derived evidence root")
-    return resolved_run_root
+
+    perception = _owned_directory(
+        resolved_run_root / "perception", "perception evidence directory"
+    )
+    if perception.parent != resolved_run_root:
+        raise RuntimeError("perception evidence directory escapes session root")
+    dynamic = _owned_directory(
+        resolved_run_root / "dynamic", "dynamic evidence directory"
+    )
+    if dynamic.parent != resolved_run_root:
+        raise RuntimeError("dynamic evidence directory escapes session root")
+    return _PerceptionEvidencePaths(
+        run_root=resolved_run_root,
+        perception=perception,
+        dynamic=dynamic,
+    )
 
 
 def _configured_perception_pick_place_actions(
@@ -727,12 +749,12 @@ def _configured_perception_pick_place_actions(
         raise RuntimeError(f"mujoco_scene does not exist: {scene}")
 
     share = Path(get_package_share_directory("so101_demo_py"))
-    evidence_root = _prepare_perception_evidence_root(evidence_file, session_id)
+    evidence_paths = _prepare_perception_evidence_root(evidence_file, session_id)
     return _mujoco_perception_execute_actions(
         context,
         share,
         session_id,
-        evidence_root=evidence_root,
+        evidence_paths=evidence_paths,
         perception_timeout=perception_timeout,
         cup_pose_timeout=cup_pose_timeout,
         exit_status=exit_status,
