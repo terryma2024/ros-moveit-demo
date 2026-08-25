@@ -16,6 +16,7 @@ EXPECTED_EXECUTABLES = {
     "fixed_cup_pick_place",
     "gazebo_execute",
     "gazebo_ready",
+    "rgbd_cup_pose",
     "run_qualification",
     "scene_setup",
     "teleop_reset",
