@@ -4,23 +4,24 @@
 task_id: so101-v4-t005-macos-camera-topics
 goal: Restore non-headless MuJoCo RGB-D camera publication on macOS while preserving Linux and headless behavior.
 success_contract: With headless=false on Darwin, rendering remains enabled and task_camera CameraInfo, RGB, and floating-point depth messages contain aligned valid samples; shutdown joins rendering resources.
-worktree: /Users/matianyi/.codex/worktrees/c727/moveit-demo
-branch: codex/macos-mujoco-camera-topics
+worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
+branch: main
 base_commit: 842fb05041d4ba487354cf0c6f9668db6e65a9fb
-current_commit: project=e0c5b05ef21683ae292a94fad8297e54885bb148; fork=f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 (so101-0.0.3-r11)
+current_commit: project=db1b658b4bc34f11c923640e1d188cf11aeebc1b; fork=f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 (so101-0.0.3-r11)
 evidence_root: /tmp/so101-debug-v4-t005-macos-camera-topics/
 confirmed_conclusions:
   - The Darwin launch guard deterministically sets disable_rendering=true for interactive launches, suppressing the camera worker despite publisher registration.
   - EXP-005 confirms the post-migration SIGBUS was an ABI mismatch in the legacy plugin base vtable, not a MuJoCo GL-context failure.
   - EXP-005 receives aligned valid 640x480 RGB-D samples in the logged-in Aqua session and shuts down cleanly.
   - EXP-006 builds and tests r11 on ai-station Linux, receives aligned valid 640x480 RGB-D samples in the logged-in X11 session, and shuts down cleanly.
+  - EXP-007 rebuilds the primary macOS workspace's default install, passes affected tests, receives aligned valid 640x480 RGB-D samples from that install, and leaves no ROS node or task process after an exit-0 full-ready shutdown.
 disproven_routes:
   - Removing the Darwin condition without changing GLFW ownership is not an acceptable repair.
 open_hypotheses:
   - H1: the Darwin launch guard deliberately prevents GLFW/Cocoa window-context creation from the existing background rendering thread; it also disables all camera publishers.
   - H2: a main-thread-owned macOS rendering context can preserve camera publication without relaxing the Cocoa constraint.
   - H3: a headless/offscreen MuJoCo context can publish camera images on Darwin without a GLFW window, but must be verified against the pinned MuJoCo API.
-latest_checkpoint: CP-008
+latest_checkpoint: CP-010
 next_experiment: NONE
 ```
 
@@ -38,6 +39,79 @@ have publishers but no frames.
 | H3 — offscreen rendering | MuJoCo can create a non-GLFW offscreen context on Darwin that supports readpixels for cameras. | Pinned MuJoCo build/API inspection plus end-to-end image/depth samples. |
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-007
+status: VALID
+prior_experiment: EXP-005
+hypothesis: The accepted r11 source and CameraPlugin runtime remain functional when built and launched entirely from the primary moveit-demo workspace's default isolated build/install layout.
+prediction: Rebuilding the fork and so101_demo_py into the primary install produces current binaries and installed assets; a logged-in Aqua launch from only that overlay publishes valid aligned task_camera CameraInfo, RGB8, and 32FC1 depth samples and shuts down cleanly.
+single_variable: Install/runtime target changes from the EXP-005 temporary isolated overlays to /Users/matianyi/Projects/robot_demo_001/moveit-demo/{build,install}; source commits and camera configuration remain fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Primary moveit-demo main is clean at db1b658b4bc34f11c923640e1d188cf11aeebc1b and the fork checkout is clean at f19a8cc3af61feccacb22a9f0d16cc972e3b2c08.
+  - Parent-repository changes to learners/zjumty/progress.yaml and the moveit-demo gitlink are preserved and not staged or modified by this experiment.
+  - No existing MuJoCo, ros2_control_node, move_group, RViz, or robot_state_publisher process is present; ROS_DOMAIN_ID 147 has an empty no-daemon graph.
+success_criteria:
+  - Primary fork and so101_demo_py builds exit 0; affected package tests and the 259-project-test contract have no failures.
+  - ros2 package prefixes resolve mujoco_ros2_control, mujoco_ros2_control_plugins, and so101_demo_py exclusively below the primary workspace install directory.
+  - Installed plugin XML and dylib both expose CameraPlugin; installed launch renders disable_rendering=false for Darwin headless=false.
+  - /task_camera/camera_info, /task_camera/color, and /task_camera/depth each receive messages within a bounded timeout.
+  - One aligned batch is 640x480 with task_camera_frame; RGB is rgb8 and non-empty; depth is 32FC1 with finite positive values; CameraInfo/RGB/depth timestamps satisfy the probe contract; publication frequency is observed.
+  - Task-owned launch exits 0 after SIGINT, logs hardware/plugin shutdown, and leaves domain 147 plus the task process scan empty.
+failure_criteria:
+  - Any runtime package resolves outside the primary install, rendering is disabled, payload validation fails, or shutdown crashes/deadlocks/leaks a task-owned process.
+invalid_criteria:
+  - Source/installed commits differ from the recorded pair, another stack appears in domain 147, or the launch is not executed in the logged-in Aqua session.
+provenance:
+  source_commit: project=db1b658b4bc34f11c923640e1d188cf11aeebc1b; fork=f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/mujoco_ros2_control/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 147
+  gz_partition: NOT_APPLICABLE_MUJOCO
+commands:
+  - command: colcon build --base-paths third_party/mujoco_ros2_control --packages-up-to mujoco_ros2_control mujoco_ros2_control_plugins --build-base build --install-base install --symlink-install
+    exit_code: 0 (3 packages finished)
+  - command: colcon build --base-paths src/so101_demo_py --packages-select so101_demo_py --build-base build --install-base install --symlink-install
+    exit_code: 0 (1 package finished)
+  - command: colcon test --base-paths third_party/mujoco_ros2_control --packages-select mujoco_ros2_control mujoco_ros2_control_plugins; colcon test-result --verbose
+    exit_code: 0 (core 126 tests and plugins 13 tests; 0 errors, failures, or skips)
+  - command: python -m pytest -q src/so101_demo_py/test
+    exit_code: 0 (259 passed)
+  - command: launchctl asuser 501 ... ros2 launch so101_demo_py so101_mujoco.launch.py headless:=false run_mode:=execute execute:=true
+    exit_code: 0 for the full-ready foreground launch after SIGINT and bounded SIGTERM escalation
+  - command: python src/so101_demo_py/test/macos_camera_topic_probe.py --timeout-s 30 --output <evidence>/main-workspace-camera-topic-samples.json
+    exit_code: 0
+  - command: capture_main_workspace_rgb.py; sips -s format png <ppm> --out <png>
+    exit_code: 0
+observed:
+  - Package prefixes for mujoco_ros2_control, mujoco_ros2_control_plugins, and so101_demo_py all resolve below /Users/matianyi/Projects/robot_demo_001/moveit-demo/install; launch reports source commit db1b658b4bc34f11c923640e1d188cf11aeebc1b.
+  - The Aqua launch logs the macOS main-thread GLFW preparation, loads mujoco_camera_plugin, starts the camera rendering loop, resizes the offscreen target to 640x480, and never logs Camera and lidar rendering is disabled.
+  - Probe samples camera_info=19, color=3, depth=19; dimensions=640x480; frame_id=task_camera_frame; encodings rgb8 and 32FC1; RGB bytes=921600; depth bytes=1228800; finite positive depth values=307200.
+  - CameraInfo, RGB and depth share stamp 62334000000 ns. The bounded subscriber observes RGB at 1.5384615384615383 Hz while the configured publisher rate is 10 Hz.
+  - A directly captured RGB topic frame at stamp 159818000000 ns has 921600 bytes. Visual inspection shows the table, plastic_cup, tolerance ring, SO-101 arm and scene lighting; the PNG SHA-256 is 7fbeafbb00b1167e8d6a3d8d3531bbf1a48ac48763458196f45dfd8d53ed164a.
+  - The final shutdown waits until all three controllers, scene_setup and MoveGroup are ready. Launch returns 0; ros2_control_node deactivates and shuts down RobotSystem, and all remaining nodes report clean exit. Launch escalates from SIGINT to SIGTERM after its 5-second grace period, but uses no SIGKILL, logs no process death, and leaves the domain-147 graph plus targeted PID scan empty.
+  - A preceding background-launch shutdown attempt is INVALID because the shell background job inherited ignored SIGINT. A startup-phase foreground diagnostic is not counted because sibling processes had not finished initialization; both batches were terminated and leave no process.
+inferred:
+  - CONFIRMED: the primary default install contains and executes the same accepted r11 CameraPlugin architecture as the isolated macOS acceptance overlay.
+  - The 5-second SIGINT grace-period escalation and controller_manager PAL statistics context warnings are shutdown-path noise outside the camera payload contract; CameraPlugin's owning ros2_control_node still completes deactivate/shutdown and exits cleanly with no leaked process.
+conclusion: PASS. The primary macOS workspace builds and tests from current source, its installed runtime publishes validated aligned RGB-D payloads, and the full-ready launch exits 0 without crash, deadlock, SIGKILL, or residual task process.
+evidence:
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-fork-build.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-project-build.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-fork-tests.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-core-test-result.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-plugin-test-result.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-project-tests.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-live-launch.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-camera-topic-samples.json
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-camera-probe.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-task-camera-color.png
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-rgb-capture.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/main-workspace-ready-shutdown.log
+decision: KEEP
+next_experiment: NONE
+```
 
 ```yaml
 experiment_id: EXP-006
@@ -373,4 +447,40 @@ disproven_routes:
 open_risks:
   - Native GPU acceleration should be rechecked after the ai-station NVIDIA driver state is repaired. The accepted software GLX run observed 6.62 Hz versus the configured 10 Hz.
 next_command: Commit this completed ledger locally; retain the registered evidence root and do not push.
+```
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-006
+current_hypothesis: EXP-007 will determine whether the primary default install has the same accepted RGB-D behavior as the isolated r11 overlay.
+working_tree_status: Primary moveit-demo main and fork are clean; this ledger has a PLANNED EXP-007 update in the Codex-managed ledger writer worktree.
+owned_processes: NONE; ROS_DOMAIN_ID 147 is empty and the system process scan found no existing MuJoCo/ROS stack.
+preserved_processes: NONE; parent learners/zjumty/progress.yaml and the parent moveit-demo gitlink modification are preserved.
+confirmed_conclusions:
+  - EXP-005 and EXP-006 remain the accepted macOS and Linux functional baselines at the same fork commit.
+  - The primary CameraPlugin dylib has current camera symbols, while the primary ros2_control_node and so101_demo_py install still need a fresh complete rebuild.
+disproven_routes:
+  - Source or symlinked XML alone is insufficient provenance for the primary installed runtime.
+open_risks:
+  - Main-workspace build may expose stale CMake or overlay ordering not present in the isolated acceptance build.
+next_command: Build the primary fork packages and so101_demo_py into /Users/matianyi/Projects/robot_demo_001/moveit-demo/install, then verify installed provenance before launching domain 147.
+```
+
+```yaml
+checkpoint_id: CP-010
+last_valid_experiment: EXP-007
+current_hypothesis: NONE; primary macOS default-install RGB-D acceptance passed.
+working_tree_status: Primary moveit-demo main remains clean at db1b658b4bc34f11c923640e1d188cf11aeebc1b with its default build/install refreshed; this completed ledger is task-owned in the Codex ledger-writer worktree. No push was performed.
+owned_processes: NONE; the no-daemon ROS_DOMAIN_ID 147 graph and targeted launch/PID scan are empty after the full-ready launch exits 0.
+preserved_processes: No pre-existing process was stopped; parent learners/zjumty/progress.yaml and the parent moveit-demo gitlink modification remain untouched.
+confirmed_conclusions:
+  - Primary fork and project builds exit 0; fork test results contain 139 tests with no errors/failures/skips, and project tests pass 259/259.
+  - The primary installed overlay loads CameraPlugin without the Darwin rendering-disabled branch and publishes validated aligned 640x480 rgb8/32FC1 task_camera payloads.
+  - The accepted RGB frame is visually non-empty, and the full-ready launch completes hardware shutdown with clean core-process exits and no residual ROS node or task PID.
+disproven_routes:
+  - A shell-background launch cannot validate SIGINT because the job inherits ignored SIGINT; that invalid batch is retained only for audit.
+open_risks:
+  - The primary macOS probe observes 1.54 Hz instead of the configured 10 Hz; correctness passes, but render/publication performance remains a tuning item.
+  - ros2 launch escalates full-ready shutdown to SIGTERM after the 5-second SIGINT grace period, and controller_manager emits PAL statistics invalid-context warnings during exit; all processes nevertheless report clean exit with no SIGKILL or residue.
+next_command: NONE. Retain the registered evidence root; do not push or delete evidence without user authorization.
 ```
