@@ -448,7 +448,7 @@ class RosResourceCleanup:
         if self.node is not None:
             attempt("node", self.node.destroy_node)
         if self.initialized_here:
-            attempt("rclpy_context", self.ros_api.rclpy.shutdown)
+            attempt("rclpy_context", self.ros_api.rclpy.try_shutdown)
 
         if failures:
             self._error = CleanupError(failures)
