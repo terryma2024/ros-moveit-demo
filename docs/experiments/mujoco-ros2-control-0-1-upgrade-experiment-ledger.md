@@ -13,9 +13,9 @@ archived_runs: []
 deletion_candidates: []
 
 latest_checkpoint:
-  state: TASK_1_RE_REVIEW
-  hypothesis: The two-parent baseline and the migrated primary-monitor guard now satisfy Task 1; a scoped re-review must verify the code fix and completed ledger.
-  next_command: Review the fork fix range 6c562f8..102aba3 and parent/ledger fix range 34c87e4..ledger-commit against the two original findings.
+  state: TASK_1_QUALIFIED
+  hypothesis: A separate optional capability interface can preserve the exact upstream plugin base ABI while supporting ordered, fault-isolated SO-101 lifecycle observers.
+  next_command: Add RED capability/dispatcher tests for Task 2 without modifying MuJoCoROS2ControlPluginBase.
 ```
 
 ## Controller rulings
@@ -45,7 +45,7 @@ No runtime experiment has started. All ordinary logs and artifacts for this task
 base: 453faaddcca6468bc0d68cb5dbc81cd7bb773e34
 implementer: /root/task1_merge_baseline
 brief: .superpowers/sdd/2026-08-25-mujoco-ros2-control-0-1-upgrade/task-1-brief.md
-state: IN_PROGRESS
+state: COMPLETE
 ```
 
 ### EXP-001: upstream-first fork merge baseline
@@ -68,7 +68,7 @@ retained_evidence:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/upstream
 archived_runs: []
 deletion_candidates: []
-review_state: FIX_ROUND_1_COMPLETE_RE_REVIEW_PENDING
+review_state: ACCEPTED_AFTER_FIX_ROUND_1
 ```
 
 Conflict resolution retained upstream ownership for the new simulation and plugin architecture, removed the legacy core camera implementation, retained viewer-camera sources/interfaces/tests as later migration inputs, kept upstream camera streaming/polled/disabled behavior, and preserved only the macOS compile boundary in the baseline camera plugin. Exact conflict rationale and commands are in the SDD Task 1 report.
@@ -128,4 +128,13 @@ retained_evidence:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/task1-fix-round-1
 archived_runs: []
 deletion_candidates: []
+```
+
+Task 1 scoped re-review verdict:
+
+```yaml
+primary_monitor_guard: ADDRESSED
+ledger_completion: ADDRESSED
+new_breakage: none
+verdict: ACCEPTED
 ```
