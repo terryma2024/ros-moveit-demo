@@ -31,6 +31,7 @@ from launch import LaunchDescription
 
 from ..core.policy_registry import load_policy_variant
 from ..ports.capabilities import CapabilityRequirements
+from .camera_tf import camera_static_transform_nodes
 from .composition import backend_capabilities
 from .provenance import installed_bundle
 
