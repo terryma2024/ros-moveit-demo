@@ -11,26 +11,47 @@ export PATH="$VIRTUAL_ENV/bin:$PATH"
 
 for setup in \
   "$ros_underlay/setup.bash" \
-  "$project_root/install/setup.bash" \
   "$ros_workspace/extra_ws/install/setup.bash" \
-  "$ros_workspace/ws_mujoco_ros2_control_fork/install/setup.bash" \
-  "$ros_workspace/so101_isolated_ws/install/setup.bash"; do
+  "$ros_workspace/so101_isolated_ws/install/setup.bash" \
+  "$project_root/install/setup.bash"; do
   if [[ -f "$setup" ]]; then
     watch_file "$setup"
     source_env "$setup"
   fi
 done
 
-# A project install can contain stale dependency package prefixes. Keep the
-# separately pinned macOS fork authoritative for ros2 pkg/run resolution.
-mujoco_fork_prefix="$ros_workspace/ws_mujoco_ros2_control_fork/install"
-if [[ -d "$mujoco_fork_prefix" ]]; then
-  export AMENT_PREFIX_PATH="$mujoco_fork_prefix${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"
-fi
+# The project install contains the locked MuJoCo fork packages and is sourced
+# last so ros2 pkg/run cannot select a stale standalone fork workspace.
+stale_mujoco_fork_prefix="$ros_workspace/ws_mujoco_ros2_control_fork/install"
+remove_stale_mujoco_fork() {
+  local path_list="$1"
+  local filtered=""
+  local entry
+  local path_entries=()
+  IFS=: read -r -a path_entries <<< "$path_list"
+  for entry in "${path_entries[@]}"; do
+    if [[ "$entry" == "$stale_mujoco_fork_prefix" || \
+          "$entry" == "$stale_mujoco_fork_prefix/"* ]]; then
+      continue
+    fi
+    filtered="${filtered:+$filtered:}$entry"
+  done
+  printf '%s' "$filtered"
+}
+for path_variable in \
+  AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH \
+  PATH PYTHONPATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH; do
+  path_value="${!path_variable:-}"
+  if [[ -n "$path_value" ]]; then
+    export "$path_variable=$(remove_stale_mujoco_fork "$path_value")"
+  fi
+done
+unset -f remove_stale_mujoco_fork
+unset path_variable path_value stale_mujoco_fork_prefix
 
 dylib_farm="$ros_workspace/macos_dylib_farm/current"
 if [[ -d "$dylib_farm" ]]; then
-  export DYLD_LIBRARY_PATH="$dylib_farm${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+  export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:+$DYLD_LIBRARY_PATH:}$dylib_farm"
 fi
 
 if command -v brew >/dev/null 2>&1; then
