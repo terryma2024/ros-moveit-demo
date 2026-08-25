@@ -7,19 +7,20 @@ success_contract: With headless=false on Darwin, rendering remains enabled and t
 worktree: /Users/matianyi/.codex/worktrees/c727/moveit-demo
 branch: codex/macos-mujoco-camera-topics
 base_commit: 842fb05041d4ba487354cf0c6f9668db6e65a9fb
-current_commit: project=1c36e0e8ebd5b25d345cb5655068b0ef20417590; fork=f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 (so101-0.0.3-r11)
+current_commit: project=e0c5b05ef21683ae292a94fad8297e54885bb148; fork=f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 (so101-0.0.3-r11)
 evidence_root: /tmp/so101-debug-v4-t005-macos-camera-topics/
 confirmed_conclusions:
   - The Darwin launch guard deterministically sets disable_rendering=true for interactive launches, suppressing the camera worker despite publisher registration.
   - EXP-005 confirms the post-migration SIGBUS was an ABI mismatch in the legacy plugin base vtable, not a MuJoCo GL-context failure.
   - EXP-005 receives aligned valid 640x480 RGB-D samples in the logged-in Aqua session and shuts down cleanly.
+  - EXP-006 builds and tests r11 on ai-station Linux, receives aligned valid 640x480 RGB-D samples in the logged-in X11 session, and shuts down cleanly.
 disproven_routes:
   - Removing the Darwin condition without changing GLFW ownership is not an acceptable repair.
 open_hypotheses:
   - H1: the Darwin launch guard deliberately prevents GLFW/Cocoa window-context creation from the existing background rendering thread; it also disables all camera publishers.
   - H2: a main-thread-owned macOS rendering context can preserve camera publication without relaxing the Cocoa constraint.
   - H3: a headless/offscreen MuJoCo context can publish camera images on Darwin without a GLFW window, but must be verified against the pinned MuJoCo API.
-latest_checkpoint: CP-007
+latest_checkpoint: CP-008
 next_experiment: NONE
 ```
 
@@ -37,6 +38,83 @@ have publishers but no frames.
 | H3 — offscreen rendering | MuJoCo can create a non-GLFW offscreen context on Darwin that supports readpixels for cameras. | Pinned MuJoCo build/API inspection plus end-to-end image/depth samples. |
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-006
+status: VALID
+prior_experiment: EXP-005
+hypothesis: The r11 optional rendering capability compiles and runs unchanged on Linux, retaining the upstream GLFW/EGL backend and publishing the same valid RGB-D contract.
+prediction: An isolated ai-station checkout of the r11 project and fork builds without Apple-only symbol leakage; headless=false loads CameraPlugin, publishes valid aligned task-camera samples, and exits cleanly.
+single_variable: Runtime platform changes from macOS arm64/Aqua to ai-station Linux x86_64/GNOME; source commits and camera configuration remain fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - ai-station /data/work/ws_moveit main is clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+  - ai-station has no running ros2_control_node, MuJoCo, move_group or RViz process before this experiment.
+  - Existing ai-station source, install and tmux sessions are preserved; r11 is cloned only below the registered evidence root.
+success_criteria:
+  - Fork and affected project packages build from the exact r11 commits and affected package tests pass.
+  - Installed prefixes point to the experiment overlay, not /data/work/ws_moveit/install or its old fork overlay.
+  - headless=false does not log rendering disabled; camera_info, RGB and depth pass the same dimensions/frame/encoding/data/depth/timestamp/rate checks used on macOS.
+  - Task-owned launch exits without crash/deadlock and leaves ROS_DOMAIN_ID 146 empty.
+failure_criteria:
+  - Linux build changes are required, EGL/GLFW selection regresses, payload validation fails, or shutdown leaks a task-owned process.
+invalid_criteria:
+  - Any runtime package resolves outside the isolated r11 overlay, an unrelated stack appears in domain 146, or remote source provenance differs from the bundles.
+provenance:
+  source_commit: project=e0c5b05ef21683ae292a94fad8297e54885bb148; fork=f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  install_overlay: ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/project-install-isolated/so101_demo_py and fork-install
+  runtime_executable: ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/fork-install/lib/mujoco_ros2_control/ros2_control_node
+  ros_domain_id: 146
+  gz_partition: NOT_APPLICABLE_MUJOCO
+commands:
+  - command: Create and verify local Git bundles; clone exact commits into the remote registered evidence root.
+    exit_code: 0 (local and remote SHA-256 values match)
+  - command: colcon build --merge-install --packages-select mujoco_ros2_control_msgs mujoco_ros2_control mujoco_ros2_control_plugins
+    exit_code: 0
+  - command: colcon test --base-paths <fork> --merge-install --packages-select mujoco_ros2_control mujoco_ros2_control_plugins; colcon test-result --verbose
+    exit_code: 0 (138 tests, 0 errors, 0 failures, 0 skipped)
+  - command: colcon build --symlink-install --packages-select so101_demo_py
+    exit_code: 0 (isolated package-prefix layout)
+  - command: python3 -m pytest -q src/so101_demo_py/test
+    exit_code: 1 RED (258 passed, one stale scene.xml hash), then 0 GREEN (259 passed)
+  - command: ros2 launch so101_demo_py so101_mujoco.launch.py headless:=false run_mode:=execute execute:=true
+    exit_code: native NVIDIA path could not create the viewer because the installed 595.84 user library does not match the loaded driver; Mesa software GLX acceptance launch exited 0
+  - command: macos_camera_topic_probe.py --timeout-s 30
+    exit_code: 0
+  - command: capture-ai-station.sh --remote; task-owned tmux Ctrl-C; ROS2CLI_NO_DAEMON=1 ros2 node list
+    exit_code: 0
+observed:
+  - ai-station builds project e0c5b05 and fork f19a8cc from isolated Git bundles; /data/work/ws_moveit remains clean at b377036.
+  - CMake finds Linux OpenGL/EGL and compiles camera_plugin.cpp, the upstream GLFW path, and the independent rendering capability without Apple-only symbol leakage.
+  - Fork package tests pass 138/138. Project repository-root tests first fail only because the 640x480 camera edit changed scene.xml bytes; updating that regression pin produces 259/259 passing tests.
+  - The updated scene-byte pin also passes the installed macOS overlay geometry suite 6/6, so the Linux-discovered test correction is cross-platform.
+  - Installed prefixes resolve so101_demo_py to project-install-isolated/so101_demo_py and both fork packages to fork-install. The installed plugin XML exports CameraPlugin, the installed YAML registers task_camera, and the installed scene contains resolution 640 480.
+  - The native NVIDIA viewer cannot create a window. xdpyinfo and xrandr succeed, while nvidia-smi exits 18 with Driver/library version mismatch (user library 595.84); this is host GPU state, not a source failure.
+  - With the installed Mesa GLX fallback selected, the logged-in X11 launch starts the viewer, does not log Camera and lidar rendering is disabled, loads CameraPlugin plus the pre-r11 simulation_evidence binary, selects GLFW rendering, and resizes the offscreen buffer to 640x480.
+  - Probe samples camera_info=3, color=3, depth=3; dimensions=640x480; frame_id=task_camera_frame; encodings rgb8 and 32FC1; RGB bytes=921600; depth bytes=1228800; finite positive depth values=307200.
+  - CameraInfo, RGB and depth share stamp 27541999999 ns. The bounded subscriber observes RGB at 6.622516556291391 Hz while the configured publisher rate is 10 Hz.
+  - A fresh screenshot was visually inspected and shows the running MuJoCo so101_task_scene viewer with the robot, table and plastic_cup.
+  - The final direct-log launch handles SIGINT with exit 0, deactivates RobotSystem, records ordered MoveGroup shutdown, and reports ros2_control_node, robot_state_publisher and MoveGroup clean exits. A no-daemon domain-146 graph and task process scan are empty.
+inferred:
+  - CONFIRMED: r11 retains Linux GLFW rendering and ABI compatibility while adding the macOS-specific ownership path only behind platform guards.
+  - The ai-station native NVIDIA launch remains dependent on repairing the host driver installation or rebooting into the matching kernel module; software GLX provides a complete functional Linux acceptance path meanwhile.
+conclusion: PASS. Linux build, package tests, installed provenance, true RGB-D payloads, GUI evidence and clean shutdown pass on ai-station; native NVIDIA acceleration is an external host-state caveat.
+evidence:
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-fork-build.log
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-fork-test-result-final.log
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-project-root-pytest-red.log
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-project-root-pytest-green.log
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/exp-051-geometry-pin-green.log
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-installed-provenance.log
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-gui-diagnostics.log
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-live-launch-swgl.log
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-camera-topic-samples.json
+  - /tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/captures/20260825T115718-dJwtW1NT/desktop.png
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-live-cleanexit.log
+  - ai-station:/tmp/so101-debug-v4-t005-macos-camera-topics/linux-r11-17dcf1f/linux-cleanexit-fresh-graph.log
+decision: KEEP
+next_experiment: NONE
+```
 
 ```yaml
 experiment_id: EXP-005
@@ -277,4 +355,22 @@ disproven_routes:
 open_risks:
   - The bounded Python subscriber observed RGB at 1.33 Hz rather than the configured 10 Hz; payload validity and repeated publication passed, but performance tuning is outside this correctness fix.
 next_command: Commit the r11 project gitlink, dependency locks and completed experiment ledger; do not push.
+```
+
+```yaml
+checkpoint_id: CP-008
+last_valid_experiment: EXP-006
+current_hypothesis: NONE; macOS and Linux RGB-D functional acceptance passed.
+working_tree_status: Project test-pin commit e0c5b05 is local; the completed ledger is pending the final local documentation commit. No push or merge was performed.
+owned_processes: NONE; the no-daemon ROS_DOMAIN_ID 146 graph and task PID scan are empty after launch exit 0.
+preserved_processes: ai-station /data/work/ws_moveit remains clean at b377036; no pre-existing process or tmux session was stopped.
+confirmed_conclusions:
+  - Linux GCC/OpenGL/EGL build succeeds and affected fork/project package tests pass 138/138 and 259/259.
+  - Installed ai-station r11 runtime publishes aligned valid 640x480 rgb8/32FC1 data from CameraPlugin while loading the existing simulation_evidence plugin.
+  - Direct-log SIGINT shutdown exits 0 with hardware deactivation, ordered MoveGroup shutdown and no remaining task process or ROS node.
+disproven_routes:
+  - The current ai-station native NVIDIA path cannot be used for acceptance while its 595.84 user library and loaded kernel driver are mismatched; X11 itself is healthy.
+open_risks:
+  - Native GPU acceleration should be rechecked after the ai-station NVIDIA driver state is repaired. The accepted software GLX run observed 6.62 Hz versus the configured 10 Hz.
+next_command: Commit this completed ledger locally; retain the registered evidence root and do not push.
 ```
