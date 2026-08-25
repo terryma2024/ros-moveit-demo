@@ -16,14 +16,15 @@ confirmed_conclusions:
   - Task 6 installed a dedicated behavior-tested fail-closed perception launch while preserving the fixed MuJoCo workflow composition (EXP-002).
   - EXP-003 is audit-invalid and non-counting because its production attempt has no durable stdout/stderr plus exit sidecar and no retained RUNNING-transition snapshot; a later independent diagnostic remains useful only as non-counting evidence.
   - EXP-004 is environment-invalid and non-counting: after complete RUNNING/observer readiness evidence, all three controller spawners failed before static TF or production because the sandbox denied the ROS controller-spawner lock under ~/.ros/locks.
+  - EXP-005 is pre-RUNNING environment-invalid and non-counting: normal-scope process isolation could not be audited because `ps` was denied and targeted `pgrep` returned rc3, so observers, elevation, stack, production, Viewer action, and motion never started.
 disproven_routes:
   - Publishing MuJoCo truth as /cup_pose does not validate production camera perception.
   - Routing production through cup_pose_tf_demo duplicates the selected world-point transform boundary.
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
-latest_checkpoint: CP-012
-next_experiment: EXP-005
+latest_checkpoint: CP-013
+next_experiment: EXP-006
 ```
 
 ```yaml
@@ -634,7 +635,9 @@ next_command: Before any process, create EXP-004 evidence directories and comple
 
 ```yaml
 experiment_id: EXP-005
-status: PLANNED
+status: INVALID
+result: ENVIRONMENT_INVALID_BEFORE_RUNNING
+running_transition: NOT_REACHED
 prior_experiment: EXP-004
 hypothesis: Repeating the still-unmeasured production timeout-90 A/B with the owned MuJoCo stack launched through require_escalated will remove only the sandbox lock denial and allow the experiment to reach the production perception boundary without changing behavior.
 prediction: The same task_start/headless=false stack reaches active controllers when run outside the filesystem sandbox, both pre-production observers are ready, and production rgbd_cup_pose either yields an acceptable /cup_pose within 90 s or provides a fully evidenced VALID product failure.
@@ -662,23 +665,29 @@ provenance:
   gz_partition: rgbd-perception-gate-exp005-20260826
 commands:
   - command: create /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-005; capture clean head, exact package/import/runtime provenance, empty domain/process set, prelaunch Viewer=false, wall/monotonic timestamps, and exit sidecars before RUNNING
-    exit_code: PENDING
+    exit_code: 1
   - command: start and prove ready the explicit-type first-sample observer and publisher-provenance observer before production, retaining complete CORR-EXP-004-001 logs/owners/timestamps/exits
-    exit_code: PENDING
+    exit_code: NOT_STARTED_AFTER_PREFLIGHT_INVALID
   - command: with sandbox_permissions=require_escalated and unchanged HOME, run the same ROS_DOMAIN_ID=180 GZ_PARTITION=rgbd-perception-gate-exp005-20260826 ros2 launch so101_demo_py so101_mujoco.launch.py run_mode:=execute execute:=true headless:=false session_id:=rgbd-perception-gate-exp005-20260826 mujoco_initial_keyframe:=task_start command with complete stack log/owner/timestamp/exit evidence
-    exit_code: PENDING
+    exit_code: NOT_REQUESTED_AFTER_PREFLIGHT_INVALID
   - command: after controllers are active, start the two unchanged approved static_transform_publisher commands, then production rgbd_cup_pose with --startup-timeout-s 90 and all sample/provenance/PLY/JSON/TF/truth/Viewer evidence captures
-    exit_code: PENDING
+    exit_code: NOT_STARTED_AFTER_PREFLIGHT_INVALID
   - command: stop only exact owned observer/static-TF/production/stack sessions or PID/PGIDs with SIGINT and retain cleanup begin/end, each exit sidecar, empty targeted process output, and empty domain output plus command exit sidecars
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - OBSERVED: At clean head ba70eac01f8b5a0aabd96c0616417547f4ef2c76, the normal HOME/lock gate passed. HOME was `/Users/matianyi`; the exact lock resolved to itself, was regular and not a symlink, and canonical before metadata was device 16777233, inode 13891096, uid 501, gid 20, mode 100644, size 0, atime 1787694630, mtime 1787691140, ctime 1787691140, SHA-256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+  - OBSERVED: Current-worktree so101_demo_py/support/vendor and main-repository mujoco_ros2_control/plugins provenance, clean source, production-source diff empty, and prelaunch `org.mujoco.mujoco isRunning=false` all passed.
+  - OBSERVED: The first normal-scope isolation attempt failed before RUNNING. `ps -axo ...` was denied with `operation not permitted` and rc127. The initial domain probe also returned rc1 only because it attempted to write `/Users/matianyi/.ros/log/...`; this was retained rather than called a graph result.
+  - OBSERVED: A normal-scope retry redirected ROS_LOG_DIR into the registered evidence root and proved ROS domain 180 empty with command rc0 and zero-byte output. All six targeted read-only `pgrep -lf` scans returned rc3, so process isolation remained unauditable and the aggregate retry exited 1.
+  - OBSERVED: Because isolation never passed, observers were not started, PLANNED never transitioned to RUNNING, require_escalated was not requested, and no stack, static TF, production rgbd_cup_pose, Viewer baseline/action/fresh sequence, dynamic workflow, or robot motion started.
+  - OBSERVED: Normal-shell after evidence exactly matched normal-before HOME, lstat/resolved path, SHA-256, and every metadata field; each comparison exit was 0. Elevated-before evidence is correctly absent because no elevated wrapper ran, so the aggregate environment-preservation sidecar is 1 rather than fabricated success.
+  - OBSERVED: Final normal-scope ROS domain 180 output is empty with command rc0, and Computer Use again reported `org.mujoco.mujoco isRunning=false`. Final process cleanup cannot be claimed because the same six `pgrep` probes returned rc3; cleanup sidecar is 1. No long-lived owned process or session was ever started.
 inferred:
-  - PENDING
-conclusion: PENDING
+  - INFERRED: EXP-005 measures only a normal-scope sandbox observability failure. It provides no evidence about controller activation, the 90-second production timeout, RGB-D, TF, segmentation/fit, /cup_pose, truth error, or Viewer acceptance.
+conclusion: EXP-005 is INVALID and non-counting before RUNNING because its required process-isolation and cleanup process scans were unavailable in normal scope. HOME and the existing lock were demonstrably preserved, but that does not cure the missing isolation boundary. The timeout-90 A/B remains unmeasured.
 evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-005/
-decision: PENDING
+decision: REPEAT_WITH_ELEVATED_READ_ONLY_ISOLATION_PROBES
 next_experiment: EXP-006
 ```
 
@@ -707,6 +716,8 @@ next_command: In a new turn, re-read EXP-005, capture fresh clean provenance/dom
 correction_id: CORR-EXP-005-001
 applies_to: EXP-005
 status: PLANNED
+effective_status: SATISFIED_ONLY_FOR_NORMAL_BEFORE_AFTER; EXP-005 INVALID before elevated wrapper
+outcome: Normal HOME/lock before-versus-after comparisons passed exactly, but elevated-before evidence is absent by design because process isolation failed and no elevation was requested; aggregate environment-preservation exit is 1.
 recorded_after_commit: 3918f9d
 reason: The original EXP-005 environment correction prohibited HOME and lock mutation but did not freeze durable before/elevated/after evidence sufficient to prove that require_escalated preserved the existing controller-spawner lock identity, metadata, and content digest.
 correction_scope: Measurement-only preregistration; no runtime, build, test, production, GUI, permission escalation, HOME change, or lock operation occurred while recording this correction.
@@ -764,4 +775,76 @@ open_risks:
   - EXP-005 runtime, timeout90 production, Viewer, pose/truth, and downstream acceptance remain unrun.
   - Existing retained/deletion-candidate evidence remains unchanged; nothing was deleted or archived.
 next_command: In a new turn only, re-read EXP-005 plus CORR-EXP-005-001, create its registered evidence directories, capture the normal-shell HOME and lock gates plus existing provenance/domain/Viewer preflight, then start observers and request require_escalated only for the owned wrapper that rechecks HOME/lock before launching the stack.
+```
+
+```yaml
+experiment_id: EXP-006
+status: PLANNED
+prior_experiment: EXP-005
+hypothesis: EXP-005's only unresolved preflight contamination was the filesystem sandbox blocking read-only process enumeration; permitting only the exact read-only isolation probes plus the already approved owned stack wrapper through require_escalated will reach the still-unmeasured production timeout-90 boundary without changing robot or perception behavior.
+prediction: Elevated read-only process probes prove no conflicting stack, the unchanged elevated owned stack reaches active controllers while preserving HOME/lock, and normal-scope observers plus production either yield an acceptable /cup_pose within 90 s or retain a fully evidenced VALID product failure.
+single_variable: Relative to EXP-005, allow require_escalated for exact read-only process-isolation probes; the owned stack remains require_escalated as already planned, while timeout90 and all behavior remain unchanged.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Reprove clean current-worktree so101_demo_py/support/vendor and main-repository mujoco_ros2_control/plugins provenance, empty ROS domain 180 with ROS_LOG_DIR under the registered evidence root, unique EXP-006 session/partition, and prelaunch Viewer=false in normal scope.
+  - Reuse CORR-EXP-005-001 unchanged: normal-before, elevated-wrapper-before, and normal-after HOME plus exact lock lstat/path/hash/stat evidence and comparisons are mandatory; expected mutable lock fields remain NONE and all prohibited HOME/lock operations remain prohibited.
+  - Only two tool-call classes may use require_escalated: exact read-only process-isolation probes and the exact owned `ros2 launch so101_demo_py so101_mujoco.launch.py ...` stack wrapper. Observers, ROS graph probes, TF, production, Computer Use, samples, truth, evidence capture, and cleanup signaling remain normal scope.
+  - The elevated process probe may only execute `/bin/ps -axo pid=,ppid=,pgid=,comm=,args=` and targeted read-only matching into the registered evidence root; it must record HOME, wall/monotonic start/end, command, exit, and zero conflicting matches, and may not signal or mutate any process.
+  - The explicit PoseStamped first-sample observer and publisher-provenance observer are started and proven ready before RUNNING. Production remains `rgbd_cup_pose --startup-timeout-s 90`; task_start, TF, camera, mask, DBSCAN, fit, QoS, Viewer, scene, and controllers remain unchanged.
+  - dynamic_cup_pick_place is never started and no robot motion is commanded.
+success_criteria:
+  - Every EXP-005 provenance, observer, stack/controller, static TF, production sample/provenance, aligned RGB-D, PLY/JSON, world TF, truth error at most 0.01 m, causally attributed Viewer baseline/action/fresh inspection, HOME/lock, and cleanup gate passes with complete sidecars.
+  - Production's sole acceptable world /cup_pose is observed within 90 s and owned publisher provenance is complete.
+failure_criteria:
+  - With clean elevated read-only isolation, active controllers, exact environment preservation, and complete valid evidence, production emits no acceptable /cup_pose within 90 s or fails a product acceptance gate.
+invalid_criteria:
+  - Any command other than the exact read-only isolation probe and exact owned stack wrapper is elevated; a probe mutates/signals state; HOME/lock differs; process/domain/provenance/session/Viewer/observer/evidence/cleanup gates are absent or nonzero; an unowned process is reused/stopped; or dynamic/motion starts.
+provenance:
+  source_commit: ef6175dd146275d56979ad2860f1f3a6f94dbf79
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-perception-pick-place/install
+  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-perception-pick-place/install/so101_demo_py/lib/so101_demo_py/rgbd_cup_pose
+  ros_domain_id: 180
+  gz_partition: rgbd-perception-gate-exp006-20260826
+commands:
+  - command: In normal scope create `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-006/`, capture CORR-EXP-005-001 normal-before HOME/lock, clean provenance, empty domain180 with evidence-local ROS_LOG_DIR, and Viewer prelaunch=false.
+    exit_code: PENDING
+  - command: With require_escalated, run only the owned read-only process-isolation wrapper containing `/bin/ps -axo pid=,ppid=,pgid=,comm=,args=` plus targeted matching, capture unchanged HOME/timestamps/command/exit, require zero conflicts, and make no signal or mutation.
+    exit_code: PENDING
+  - command: In normal scope start and prove ready the explicit PoseStamped first-sample and publisher-provenance observers, then retain the RUNNING transition snapshot.
+    exit_code: PENDING
+  - command: With require_escalated, run only the exact owned task_start/headless=false `ros2 launch so101_demo_py so101_mujoco.launch.py` stack wrapper after its independent CORR-EXP-005-001 elevated HOME/lock equality gate; require all controllers active.
+    exit_code: PENDING
+  - command: In normal scope start the exact two static TFs and production `rgbd_cup_pose --startup-timeout-s 90`, capture all production/sample/TF/truth/Viewer evidence, then SIGINT only exact owned sessions/PGIDs and retain empty domain/process plus after HOME/lock comparisons.
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-006/
+decision: PENDING
+next_experiment: EXP-007
+```
+
+```yaml
+checkpoint_id: CP-013
+last_valid_experiment: EXP-002
+current_hypothesis: The timeout-90 production A/B remains unmeasured; EXP-005 was invalid only because normal-scope process enumeration was unavailable, while source/runtime, domain, Viewer prelaunch, and normal HOME/lock preservation passed.
+working_tree_status: EXP-005 outcome plus EXP-006 plan are the only tracked ledger edits from clean head ba70eac01f8b5a0aabd96c0616417547f4ef2c76; Task 7 report is ignored.
+owned_processes: NONE; EXP-005 never started any long-lived observer, stack, TF, production, Viewer action, dynamic workflow, or motion process.
+preserved_processes: No signal was sent. No elevated runtime command was requested. HOME and the exact existing controller-spawner lock matched byte-for-byte before versus after in normal scope.
+confirmed_conclusions:
+  - EXP-005 is INVALID before RUNNING and contributes no product result; normal `ps` was denied rc127 and targeted `pgrep` returned rc3.
+  - Domain 180 was proven empty after moving only ROS logging into the registered evidence root; the initial ROS-log write failure is retained as a superseded probe attempt, not a graph result.
+  - Normal-before versus normal-after HOME, resolved path/lstat, SHA-256, and all lock metadata fields matched exactly; no elevated-before evidence exists because elevation was never requested.
+  - MuJoCo Viewer was not running both before and after the invalid attempt; no Computer Use action occurred.
+disproven_routes:
+  - Normal-scope process enumeration in the current sandbox cannot satisfy the isolation or cleanup-process gate.
+  - Proven empty ROS graph or unchanged lock cannot substitute for an auditable process scan.
+open_risks:
+  - EXP-006 elevated read-only probes require explicit approval and must be limited to read-only enumeration; denial or any wider command makes the next attempt invalid.
+  - Controller activation, timeout90 production, RGB-D/pose/truth, Viewer action, and all downstream product gates remain unrun.
+  - Existing evidence is retained; nothing was archived or deleted.
+next_command: In a new turn only, re-read EXP-006, capture normal HOME/lock/provenance/domain/Viewer preflight, then request require_escalated for the exact read-only isolation probe; do not start observers or stack unless it exits 0 with zero conflicts.
 ```
