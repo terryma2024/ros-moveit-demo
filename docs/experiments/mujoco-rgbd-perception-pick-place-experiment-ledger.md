@@ -208,3 +208,29 @@ open_risks:
   - Full package collection still has the previously recorded generated so101_mujoco_support environment gap.
 next_command: Create PLANNED EXP-003 from Task 7 before starting the local Mac perception-only runtime gate.
 ```
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-002
+current_hypothesis: Task 7 EXP-003 must verify real aligned RGB-D and /cup_pose before any motion.
+working_tree_status: production review fix committed at e586686; this ledger checkpoint is the only subsequent tracked change
+owned_processes: NONE
+preserved_processes: Task 6 reviewer-fix tests used only short-lived Python child processes under LaunchService; no live ROS graph or simulator was started
+confirmed_conclusions:
+  - Reviewer correction supersedes the earlier claim that Shutdown plus OpaqueFunction preserves an arbitrary child status through LaunchService.
+  - The installed so101_mujoco_perception_pick_place runner executes the public builder with a shared first-terminal status and real LaunchService tests prove scene 12 maps to 12 and workflow 23 maps to 23.
+  - Derived evidence root preflight creates and contains <evidence-stem>.d/<session> and rejects symlink, non-directory, and conflicting-owner components before node construction.
+  - The final affected source suite passed 47 tests; one-package build and installed runner/public-launch discovery passed from the reviewer-fix overlay.
+disproven_routes:
+  - Direct OpaqueFunction exception execution is not sufficient proof of shell-status preservation.
+  - Standard LaunchService return status alone cannot carry arbitrary child codes; the installed status-aware command is the exact-status boundary.
+open_risks:
+  - No live RGB-D, ROS graph, MuJoCo, controller, MoveIt, motion, or visual acceptance was run in Task 6.
+  - Full package collection still has the previously recorded generated so101_mujoco_support environment gap.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix/red-review-findings.txt
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix/final-source-tests.txt
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix/package-build.txt
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/task-6/reviewer-fix/installed-launch-discovery-final.txt
+next_command: Create PLANNED EXP-003 from Task 7 before starting the local Mac perception-only runtime gate.
+```
