@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import math
 import time
@@ -193,14 +193,32 @@ def _status_line(status: str, **fields: Any) -> str:
     return json.dumps({"status": status, **fields}, sort_keys=True)
 
 
-def _require_open3d(remaining_startup_s: float) -> None:
+def _require_open3d(
+    remaining_startup_s: float,
+    *,
+    find_spec: Callable[[str], Any] | None = None,
+    importer: Callable[[str], Any] | None = None,
+) -> None:
     if not math.isfinite(remaining_startup_s) or remaining_startup_s <= 0.0:
         raise TimeoutError("startup deadline expired before Open3D preflight")
-    if importlib.util.find_spec("open3d") is None:
+    find_spec = find_spec or importlib.util.find_spec
+    importer = importer or importlib.import_module
+    try:
+        spec = find_spec("open3d")
+    except Exception as error:
+        raise RuntimeError(f"Open3D usability check failed: {error}") from error
+    if spec is None:
         raise RuntimeError(
             "Open3D is missing; install it in the ROS Python environment with "
             "python3 -m pip install open3d"
         )
+    try:
+        importer("open3d")
+    except Exception as error:
+        raise RuntimeError(
+            "Open3D is unusable; import failed: "
+            f"{error}. Reinstall Open3D in the active ROS Python environment"
+        ) from error
 
 
 def _evidence_record(frame: CupPoseFrame, options: RgbdCupPoseOptions) -> dict[str, Any]:
@@ -352,43 +370,89 @@ def _load_ros_api() -> Any:
     )
 
 
-def _cleanup_ros_resources(
-    *,
-    ros_api: Any,
-    node: Any | None,
-    tf_listener: Any | None,
-    publisher: Any | None,
-    subscriptions: list[Any],
-    initialized_here: bool,
-) -> None:
-    if node is not None:
-        for subscription in reversed(subscriptions):
+@dataclass(frozen=True, slots=True)
+class CleanupFailure:
+    resource: str
+    error: BaseException
+
+
+class CleanupError(RuntimeError):
+    def __init__(self, failures: list[CleanupFailure]) -> None:
+        self.failures = tuple(failures)
+        details = "; ".join(
+            f"{failure.resource}: {failure.error}" for failure in self.failures
+        )
+        super().__init__(f"ROS resource cleanup failed: {details}")
+
+
+class ResourceConstructionError(RuntimeError):
+    def __init__(self, primary: BaseException, cleanup_error: CleanupError) -> None:
+        self.primary = primary
+        self.cleanup_error = cleanup_error
+        super().__init__(f"construction failed ({primary}); {cleanup_error}")
+
+
+class RosResourceCleanup:
+    """Idempotently unwind every owned ROS resource in reverse creation order."""
+
+    def __init__(
+        self,
+        *,
+        ros_api: Any,
+        initialized_here: bool,
+        node: Any | None = None,
+        tf_listener: Any | None = None,
+        publisher: Any | None = None,
+        subscriptions: list[Any] | None = None,
+    ) -> None:
+        self.ros_api = ros_api
+        self.initialized_here = initialized_here
+        self.node = node
+        self.tf_listener = tf_listener
+        self.publisher = publisher
+        self.subscriptions = subscriptions if subscriptions is not None else []
+        self._completed = False
+        self._error: CleanupError | None = None
+
+    def close(self) -> None:
+        if self._completed:
+            if self._error is not None:
+                raise self._error
+            return
+        self._completed = True
+        failures: list[CleanupFailure] = []
+
+        def attempt(resource: str, operation: Callable[[], None]) -> None:
             try:
-                node.destroy_subscription(subscription)
-            except Exception:
-                pass
-        if publisher is not None:
-            try:
-                node.destroy_publisher(publisher)
-            except Exception:
-                pass
-    if tf_listener is not None:
-        unregister = getattr(tf_listener, "unregister", None)
-        if unregister is not None:
-            try:
-                unregister()
-            except Exception:
-                pass
-    if node is not None:
-        try:
-            node.destroy_node()
-        except Exception:
-            pass
-    if initialized_here and ros_api.rclpy.ok():
-        try:
-            ros_api.rclpy.shutdown()
-        except Exception:
-            pass
+                operation()
+            except BaseException as error:
+                failures.append(CleanupFailure(resource, error))
+
+        if self.node is not None:
+            for index, subscription in reversed(list(enumerate(self.subscriptions))):
+                attempt(
+                    f"subscription[{index}]",
+                    lambda subscription=subscription: self.node.destroy_subscription(
+                        subscription
+                    ),
+                )
+            if self.publisher is not None:
+                attempt(
+                    "publisher",
+                    lambda: self.node.destroy_publisher(self.publisher),
+                )
+        if self.tf_listener is not None:
+            unregister = getattr(self.tf_listener, "unregister", None)
+            if unregister is not None:
+                attempt("tf_listener", unregister)
+        if self.node is not None:
+            attempt("node", self.node.destroy_node)
+        if self.initialized_here:
+            attempt("rclpy_context", self.ros_api.rclpy.shutdown)
+
+        if failures:
+            self._error = CleanupError(failures)
+            raise self._error
 
 
 def _create_ros_runtime(
@@ -407,6 +471,11 @@ def _create_ros_runtime(
     tf_listener = None
     publisher = None
     subscriptions: list[Any] = []
+    cleanup = RosResourceCleanup(
+        ros_api=ros,
+        initialized_here=initialized_here,
+        subscriptions=subscriptions,
+    )
     try:
         if initialized_here:
             ros.rclpy.init()
@@ -415,8 +484,10 @@ def _create_ros_runtime(
             parameter_overrides=[ros.Parameter("use_sim_time", value=True)],
             automatically_declare_parameters_from_overrides=True,
         )
+        cleanup.node = node
         tf_buffer = ros.Buffer()
         tf_listener = ros.TransformListener(tf_buffer, node)
+        cleanup.tf_listener = tf_listener
         pose_qos = ros.QoSProfile(
             depth=1,
             reliability=ros.ReliabilityPolicy.RELIABLE,
@@ -425,13 +496,13 @@ def _create_ros_runtime(
         publisher = node.create_publisher(
             ros.PoseStamped, options.output_topic, pose_qos
         )
+        cleanup.publisher = publisher
 
         class RosRuntime:
             def __init__(self) -> None:
                 self._buffer = AlignedRgbdBuffer()
                 self._fresh_frames = FreshFrameGate()
                 self._subscriptions = subscriptions
-                self._closed = False
                 self._evidence_publisher = FirstValidEvidencePublisher(
                     write_ply=lambda frame: write_cup_point_cloud(
                         frame.cloud, options.output_ply
@@ -581,29 +652,14 @@ def _create_ros_runtime(
                 return ros.rclpy.ok()
 
             def close(self) -> None:
-                if self._closed:
-                    return
-                self._closed = True
-                _cleanup_ros_resources(
-                    ros_api=ros,
-                    node=node,
-                    tf_listener=tf_listener,
-                    publisher=publisher,
-                    subscriptions=self._subscriptions,
-                    initialized_here=initialized_here,
-                )
-                self._subscriptions.clear()
+                cleanup.close()
 
         return RosRuntime()
-    except BaseException:
-        _cleanup_ros_resources(
-            ros_api=ros,
-            node=node,
-            tf_listener=tf_listener,
-            publisher=publisher,
-            subscriptions=subscriptions,
-            initialized_here=initialized_here,
-        )
+    except BaseException as primary:
+        try:
+            cleanup.close()
+        except CleanupError as cleanup_error:
+            raise ResourceConstructionError(primary, cleanup_error) from primary
         raise
 
 
@@ -619,6 +675,7 @@ def run_rgbd_cup_pose(
     """Run until orderly shutdown, failing if startup never publishes a valid frame."""
     deadline = monotonic() + options.startup_timeout_s
     runtime: _Runtime | None = None
+    setup_failed = False
     try:
         remaining_startup_s = deadline - monotonic()
         if remaining_startup_s <= 0.0:
@@ -636,9 +693,27 @@ def run_rgbd_cup_pose(
             ),
             flush=True,
         )
-        if runtime is not None:
-            runtime.close()
-        return 1
+        setup_failed = True
+    except KeyboardInterrupt:
+        print(
+            _status_line(
+                "ERROR",
+                failure="RGBD_CUP_POSE_INTERRUPTED_BEFORE_FIRST_VALID",
+                message="SIGINT arrived during RGB-D cup-pose setup",
+            ),
+            flush=True,
+        )
+        setup_failed = True
+    except ResourceConstructionError as error:
+        print(
+            _status_line(
+                "ERROR",
+                failure="RGBD_CUP_POSE_CLEANUP_FAILED",
+                message=str(error),
+            ),
+            flush=True,
+        )
+        setup_failed = True
     except (OSError, RuntimeError, ValueError) as error:
         print(
             _status_line(
@@ -646,10 +721,24 @@ def run_rgbd_cup_pose(
             ),
             flush=True,
         )
+        setup_failed = True
+
+    if setup_failed:
         if runtime is not None:
-            runtime.close()
+            try:
+                runtime.close()
+            except BaseException as cleanup_error:
+                print(
+                    _status_line(
+                        "ERROR",
+                        failure="RGBD_CUP_POSE_CLEANUP_FAILED",
+                        message=str(cleanup_error),
+                    ),
+                    flush=True,
+                )
         return 1
 
+    result = 1
     try:
         while runtime.ok():
             now = monotonic()
@@ -665,35 +754,41 @@ def run_rgbd_cup_pose(
                     ),
                     flush=True,
                 )
-                return 1
+                result = 1
+                break
             timeout_s = 0.05
             if not runtime.first_valid_published:
                 timeout_s = min(timeout_s, max(0.0, deadline - now))
             runtime.spin_once(timeout_s)
-        if runtime.first_valid_published:
-            return 0
-        print(
-            _status_line(
-                "ERROR",
-                failure="RGBD_CUP_POSE_SHUTDOWN_BEFORE_FIRST_VALID",
-                message="ROS context shut down before a valid RGB-D cup pose was published",
-            ),
-            flush=True,
-        )
-        return 1
+        else:
+            if runtime.first_valid_published:
+                result = 0
+            else:
+                print(
+                    _status_line(
+                        "ERROR",
+                        failure="RGBD_CUP_POSE_SHUTDOWN_BEFORE_FIRST_VALID",
+                        message=(
+                            "ROS context shut down before a valid RGB-D cup pose was published"
+                        ),
+                    ),
+                    flush=True,
+                )
+                result = 1
     except KeyboardInterrupt:
         if runtime.first_valid_published:
             print(_status_line("STOPPED", reason="SIGINT"), flush=True)
-            return 0
-        print(
-            _status_line(
-                "ERROR",
-                failure="RGBD_CUP_POSE_INTERRUPTED_BEFORE_FIRST_VALID",
-                message="SIGINT arrived before a valid RGB-D cup pose was published",
-            ),
-            flush=True,
-        )
-        return 1
+            result = 0
+        else:
+            print(
+                _status_line(
+                    "ERROR",
+                    failure="RGBD_CUP_POSE_INTERRUPTED_BEFORE_FIRST_VALID",
+                    message="SIGINT arrived before a valid RGB-D cup pose was published",
+                ),
+                flush=True,
+            )
+            result = 1
     except (OSError, RuntimeError, TimeoutError, ValueError) as error:
         print(
             _status_line(
@@ -701,6 +796,18 @@ def run_rgbd_cup_pose(
             ),
             flush=True,
         )
-        return 1
+        result = 1
     finally:
-        runtime.close()
+        try:
+            runtime.close()
+        except BaseException as cleanup_error:
+            print(
+                _status_line(
+                    "ERROR",
+                    failure="RGBD_CUP_POSE_CLEANUP_FAILED",
+                    message=str(cleanup_error),
+                ),
+                flush=True,
+            )
+            result = 1
+    return result
