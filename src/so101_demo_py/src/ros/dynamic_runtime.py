@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Callable
 
 from ..application.dynamic_plan_only import (
     DynamicPlanningOptions,
     plan_dynamic_state_with_scene_gates,
 )
 from ..cli.cup_pose_subscriber import status_line
-from ..core.domain import State
-from ..core.domain import RunMode, RunRequest
+from ..core.domain import RunMode, RunRequest, State
 from ..core.dynamic_pick import resolve_motion_targets
 from ..core.runner import StateMachineRunner
 from ..core.dynamic_pick_policy import (
@@ -176,11 +177,72 @@ def _dynamic_execute_runtime():
         cup_pose_source=RosCupPoseSource,
         cup_scene_observer=RosMujocoCupSceneObserver,
         task_scene_port=RosTaskScenePort,
+        cleanup_task_scene=lambda _scene: None,
         resolve_motion_targets=resolve_motion_targets,
         execution=RosDynamicMujocoExecution,
         build_actions=build_dynamic_actions,
         runner=StateMachineRunner,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _CleanupFailure:
+    resource: str
+    error: BaseException
+
+
+@dataclass(frozen=True, slots=True)
+class _CleanupOutcome:
+    failures: tuple[_CleanupFailure, ...]
+
+    @property
+    def message(self) -> str:
+        return "; ".join(
+            f"{failure.resource}: {failure.error}" for failure in self.failures
+        )
+
+
+def _cleanup_dynamic_execute(
+    *,
+    runtime: Any,
+    initialized_here: bool,
+    node: Any | None,
+    execution: Any | None,
+    task_scene: Any | None,
+    truth_observer: Any | None,
+) -> _CleanupOutcome:
+    """Attempt every owned cleanup operation and retain all failures."""
+
+    failures: list[_CleanupFailure] = []
+
+    def attempt(resource: str, operation: Callable[[], None]) -> None:
+        try:
+            operation()
+        except BaseException as error:
+            failures.append(_CleanupFailure(resource, error))
+
+    if execution is not None:
+        attempt("execution", execution.close)
+    if task_scene is not None:
+        attempt("task_scene", lambda: runtime.cleanup_task_scene(task_scene))
+    if truth_observer is not None:
+        attempt("truth_observer", truth_observer.close)
+    if node is not None:
+        attempt("node", node.destroy_node)
+    if initialized_here:
+        attempt("rclpy_context", runtime.rclpy.shutdown)
+    return _CleanupOutcome(tuple(failures))
+
+
+def _finish_failed_execution(execution: Any, error: Exception) -> None:
+    class FailedResult:
+        status = type("Status", (), {"value": "ERROR"})()
+        current_state = State.ERROR
+        transition_count = 0
+        state_trace = (State.ERROR,)
+        failure = type("Failure", (), {"code": _failure_code(error)})()
+
+    execution.finish(FailedResult())
 
 
 def run_dynamic_execute(options, *, _runtime=None) -> int:
@@ -215,15 +277,23 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
         print(status_line("ERROR", failure=_failure_code(error), message=error))
         return 1
 
-    runtime.rclpy.init()
-    node = runtime.rclpy.create_node(
-        "so101_dynamic_cup_pick_place",
-        parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
-    )
+    initialized_here = False
+    node = None
     truth_observer = None
     task_scene = None
     execution = None
+    result = None
+    evidence_file = Path(options.evidence_root) / "dynamic-execute-manifest.json"
+    primary_failure = None
+    primary_message = None
+    secondary_failures: list[tuple[str, BaseException]] = []
     try:
+        runtime.rclpy.init()
+        initialized_here = True
+        node = runtime.rclpy.create_node(
+            "so101_dynamic_cup_pick_place",
+            parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
+        )
         source = runtime.cup_pose_source(node, loaded.template)
         sample = source.get_one(options.cup_pose_timeout_s)
         truth_observer = runtime.cup_scene_observer(node, options.session_id)
@@ -243,7 +313,6 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
         validate_cup_scene(sample, truth_observer.observe(5.0), loaded.template)
         validate_cup_scene(sample, truth_observer.observe(5.0), loaded.template)
         targets = runtime.resolve_motion_targets(sample, loaded.template)
-        evidence_file = Path(options.evidence_root) / "dynamic-execute-manifest.json"
         execution = runtime.execution(
             node,
             loaded.template,
@@ -262,43 +331,78 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
             world_observer=execution.observer,
         )
         result = runner.run(RunRequest(mode=RunMode.EXECUTE))
-        execution.finish(result)
-        if result.status.value == "DONE":
+    except Exception as error:
+        primary_failure = _failure_code(error)
+        primary_message = error
+        if execution is not None:
+            try:
+                _finish_failed_execution(execution, error)
+            except BaseException as finish_error:
+                secondary_failures.append(
+                    ("DYNAMIC_EXECUTION_FINISH_FAILED", finish_error)
+                )
+    else:
+        try:
+            execution.finish(result)
+        except BaseException as finish_error:
+            if result.status.value == "DONE":
+                primary_failure = "DYNAMIC_EXECUTION_FINISH_FAILED"
+                primary_message = finish_error
+            else:
+                secondary_failures.append(
+                    ("DYNAMIC_EXECUTION_FINISH_FAILED", finish_error)
+                )
+        if result.status.value != "DONE":
+            primary_failure = "DYNAMIC_EXECUTION_FAILED"
+            if result.failure is not None and result.failure.code:
+                primary_failure = result.failure.code
+    finally:
+        cleanup = _cleanup_dynamic_execute(
+            runtime=runtime,
+            initialized_here=initialized_here,
+            node=node,
+            execution=execution,
+            task_scene=task_scene,
+            truth_observer=truth_observer,
+        )
+
+    if primary_failure is not None:
+        fields = {"failure": primary_failure}
+        if result is not None:
+            fields["evidence"] = evidence_file
+        if primary_message is not None:
+            fields["message"] = primary_message
+        print(status_line("ERROR", **fields))
+        for failure, error in secondary_failures:
+            print(status_line("ERROR", failure=failure, message=error, secondary=True))
+        if cleanup.failures:
             print(
                 status_line(
-                    "DONE",
-                    strategy="dynamic",
-                    evidence=evidence_file,
-                    transition_count=result.transition_count,
+                    "ERROR",
+                    failure="DYNAMIC_EXECUTION_CLEANUP_FAILED",
+                    message=cleanup.message,
+                    secondary=True,
                 )
             )
-            return 0
-        code = "DYNAMIC_EXECUTION_FAILED"
-        if result.failure is not None and result.failure.code:
-            code = result.failure.code
-        print(status_line("ERROR", failure=code, evidence=evidence_file))
         return 1
-    except Exception as error:
-        if execution is not None:
-            class FailedResult:
-                status = type("Status", (), {"value": "ERROR"})()
-                current_state = State.ERROR
-                transition_count = 0
-                state_trace = (State.ERROR,)
-                failure = type("Failure", (), {"code": _failure_code(error)})()
 
-            execution.finish(FailedResult())
-        print(status_line("ERROR", failure=_failure_code(error), message=error))
+    if cleanup.failures:
+        print(
+            status_line(
+                "ERROR",
+                failure="DYNAMIC_EXECUTION_CLEANUP_FAILED",
+                message=cleanup.message,
+                workflow_status="DONE",
+            )
+        )
         return 1
-    finally:
-        if execution is not None:
-            execution.close()
-        if task_scene is not None:
-            close_task_scene = getattr(task_scene, "close", None)
-            if close_task_scene is not None:
-                close_task_scene()
-        if truth_observer is not None:
-            truth_observer.close()
-        node.destroy_node()
-        if runtime.rclpy.ok():
-            runtime.rclpy.shutdown()
+
+    print(
+        status_line(
+            "DONE",
+            strategy="dynamic",
+            evidence=evidence_file,
+            transition_count=result.transition_count,
+        )
+    )
+    return 0
