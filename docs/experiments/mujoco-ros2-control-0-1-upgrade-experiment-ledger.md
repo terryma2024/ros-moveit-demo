@@ -350,3 +350,57 @@ deletion_candidates: []
 Breaker ruling: the coalesced-event finding is real and affects viewer state semantics. It is carried into Task 4 because Task 4 immediately owns the same `ROS2ControlGlfwAdapter`, `MujocoSimulation`, viewer lifecycle, and test surfaces. Task 4 must begin with RED regressions for actual PollEvents batches containing `reset + load_from_history`, `reset + load_key`, and `reset + zero_ctrl`, then publish common-reset generation only when reset remains the winning state transaction after the complete upstream `Sync()`. A sixth Task 3 fix round is prohibited by the approved SDD process.
 
 Task 3 is complete with one breaker-carried finding. No live Cocoa RenderLoop launch or Linux runtime claim is made here; those remain explicit Task 4/7/8 gates.
+
+### EXP-005: Task 4 viewer camera and rendering lifecycle migration
+
+```yaml
+parent_base: c44404e08d022eb8359cb5b11909547f57dc3c08
+fork_base: 9ba53fa90d7bbeb6e49539b7d971d8ac466100a9
+fork_commit: ff4aa7db2d92cef56b69d6d5243dd507a4a2b1dc
+parent_gitlink_commit: 64ee1d7b57e5a0ade2774247f4cead30a068c87a
+implementer: /root/task4_viewer_camera
+state: REVIEW_IN_PROGRESS
+breaker_red: 0/3 passed
+breaker_green: 5/5 passed
+source_backed_build_install: passed
+simulation: 44/44 passed
+system_interface: 6/6 passed
+viewer: 7/7 passed
+registered_core_ctest: 4/4 passed
+source_contracts: 7/7 passed
+camera_modes: 6/6 passed
+fake_apple_lifecycle: 5/5 passed
+registered_camera_lifecycle_ctest: 1/1 passed
+forced_source_less_reset_history: 2/2 passed
+forced_source_less_adapter_contract: 2/2 passed
+plugin_base_abi: exact upstream byte hash retained
+viewer_interfaces: exact r11 byte hashes retained
+authoritative_mj_step: sole production call retained
+node_linkage: shared macOS UI dispatcher only; hardware-plugin DSO not preloaded
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/task4-worktree
+archived_runs: []
+deletion_candidates:
+  - invalid or interrupted Task 4 setup diagnostics retained in place
+  - failed registered pytest-wrapper attempts retained in place
+  - superseded focused build attempts retained in place
+```
+
+Known non-passing boundaries are not promoted to success: the combined registered ament pytest wrappers collect sibling PyKDL-dependent tests in the focused macOS environment, and the normal CameraPlugin target still encounters the pre-existing source-tree heartbeat installed-header boundary. The exact requested source contracts and real CameraPlugin sources were exercised through focused registered harnesses. No live Cocoa/OpenGL, Linux, ai-station, or dynamic pick-place claim is made in Task 4.
+
+Task 4 independent review:
+
+```yaml
+spec_compliance: PASS
+verdict: Approved
+critical: 0
+important: 0
+minor:
+  - teardown completion is released after a future nonconforming renderer throws from close before worker join is proven
+  - failed rendering-plugin init rollback lacks a direct blocking-worker plus concurrent-shutdown regression
+  - Task 4 report lifecycle prose reverses the production renderer-stop and runtime-use-drain order
+review_evidence: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task4-review-worktree
+task_state: COMPLETE_WITH_3_DEFERRED_MINORS
+```
+
+The suspected discard-versus-context race was adjudicated not reachable in the production macOS topology: failed-init rollback runs synchronously inside `on_init`, and the external-initialization completion guard prevents main-thread context destruction until it returns; if shutdown owns the lifecycle first, discard waits for renderer shutdown completion.
