@@ -5,6 +5,7 @@ readonly installer_path=${0:A}
 readonly ros_underlay=${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}
 readonly ros_dependency_overlay=${SO101_ROS_DEPENDENCY_OVERLAY:-${ros_underlay}}
 readonly -a fork_packages=(
+  mujoco_3d_lidar
   mujoco_ros2_control_msgs
   mujoco_ros2_control_plugins
   mujoco_ros2_control
@@ -41,6 +42,7 @@ for value in (
     lock["fork"]["url"],
     lock["fork"]["tag"],
     lock["fork"]["commit"],
+    lock["fork"]["lineage_commit"],
     lock["upstream"]["commit"],
     lock["submodule_path"],
     lock["paths"]["workspace_env"],
@@ -51,16 +53,17 @@ for value in (
     print(value)
 PY
   )}")
-  (( ${#values} == 9 )) || fail "dependency lock fields are incomplete"
+  (( ${#values} == 10 )) || fail "dependency lock fields are incomplete"
   fork_url=${values[1]}
   fork_tag=${values[2]}
   fork_commit=${values[3]}
-  upstream_commit=${values[4]}
-  submodule_path=${values[5]}
-  workspace_env=${values[6]}
-  workspace_default=${values[7]}
-  fork_workspace_relative=${values[8]}
-  fork_install_relative=${values[9]}
+  lineage_commit=${values[4]}
+  upstream_commit=${values[5]}
+  submodule_path=${values[6]}
+  workspace_env=${values[7]}
+  workspace_default=${values[8]}
+  fork_workspace_relative=${values[9]}
+  fork_install_relative=${values[10]}
   [[ ${workspace_env} == SO101_WORKSPACE_DIR ]] || fail "unsupported workspace environment: ${workspace_env}"
   [[ ${workspace_default} == repo_parent ]] || fail "unsupported workspace default: ${workspace_default}"
   [[ ${fork_install_relative} == ${fork_workspace_relative}/install ]] ||
@@ -125,11 +128,19 @@ verify_source_identity() {
   [[ ${observed_commit} == ${fork_commit} && ${observed_commit} == ${gitlink_commit} ]] ||
     fail "wrong fork commit: ${observed_commit} (expected lock/gitlink ${fork_commit})"
   git -C "${source_dir}" merge-base --is-ancestor "${upstream_commit}" HEAD ||
-    fail "official 0.0.3 commit is not an ancestor of fork HEAD"
-  local tagged_commit
-  tagged_commit=$(git -C "${source_dir}" rev-list -n 1 "${fork_tag}") ||
-    fail "fork release tag is unavailable: ${fork_tag}"
-  [[ ${tagged_commit} == ${fork_commit} ]] || fail "fork release tag does not resolve to locked commit"
+    fail "official 0.1.0 commit is not an ancestor of fork HEAD"
+  git -C "${source_dir}" merge-base --is-ancestor "${lineage_commit}" HEAD ||
+    fail "local r11 lineage is not an ancestor of fork HEAD"
+  if [[ ${fork_tag} == *-candidate ]]; then
+    git -C "${source_dir}" show-ref --verify --quiet "refs/tags/${fork_tag}" &&
+      fail "candidate label must not resolve as a release tag"
+  else
+    local tagged_commit
+    tagged_commit=$(git -C "${source_dir}" rev-list -n 1 "${fork_tag}") ||
+      fail "fork release tag is unavailable: ${fork_tag}"
+    [[ ${tagged_commit} == ${fork_commit} ]] ||
+      fail "fork release tag does not resolve to locked commit"
+  fi
 }
 
 prepare_build_source() {
@@ -188,6 +199,7 @@ verify_installed_overlay() {
     mujoco_ros2_control_msgs/msg/ViewerCamera \
     mujoco_ros2_control_msgs/srv/SetViewerCamera \
     mujoco_ros2_control_msgs/srv/GetViewerCamera \
+    mujoco_ros2_control_msgs/srv/SetFreeJointState \
     mujoco_ros2_control_msgs/srv/ResetWorld \
     mujoco_ros2_control_msgs/srv/SetPause \
     mujoco_ros2_control_msgs/srv/StepSimulation; do
@@ -209,6 +221,10 @@ required = [
 missing = [path for path in required if not (prefix / path).is_file()]
 if missing:
     raise SystemExit("missing installed files: " + ", ".join(missing))
+
+plugin_manifest = prefix / "share/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins.xml"
+if "mujoco_ros2_control_plugins/CameraPlugin" not in plugin_manifest.read_text(encoding="utf-8"):
+    raise SystemExit("installed CameraPlugin registration is missing")
 PY
 }
 

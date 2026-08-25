@@ -60,8 +60,12 @@ def summarize(probe: CameraTopicProbe) -> dict:
         color.height,
     ) != (depth.width, depth.height):
         raise RuntimeError("camera_info/color/depth dimensions differ")
+    if (color.width, color.height) != (640, 480):
+        raise RuntimeError(f"unexpected dimensions: {color.width}x{color.height}")
     if not (info.header.frame_id and info.header.frame_id == color.header.frame_id == depth.header.frame_id):
         raise RuntimeError("camera_info/color/depth frame_id is empty or inconsistent")
+    if color.header.frame_id != "task_camera_frame":
+        raise RuntimeError(f"unexpected frame_id: {color.header.frame_id}")
 
     depth_values = struct.iter_unpack("<f", bytes(depth.data))
     finite_positive_depth = sum(1 for (value,) in depth_values if math.isfinite(value) and value > 0.0)
@@ -83,6 +87,8 @@ def summarize(probe: CameraTopicProbe) -> dict:
             frequency_hz = (len(color_stamps_sorted) - 1) / elapsed_s
     if frequency_hz <= 0.0:
         raise RuntimeError("color publication frequency was not observable")
+    if not 8.0 <= frequency_hz <= 12.0:
+        raise RuntimeError(f"unexpected color frequency: {frequency_hz}")
 
     return {
         "camera_info_samples": len(probe.camera_infos),

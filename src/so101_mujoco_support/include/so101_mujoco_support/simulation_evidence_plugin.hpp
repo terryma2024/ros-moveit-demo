@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp>
 #include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <realtime_tools/realtime_publisher.hpp>
@@ -108,7 +109,8 @@ private:
 };
 
 class SimulationEvidencePlugin final
-  : public mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase
+  : public mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase,
+    public mujoco_ros2_control_plugins::MuJoCoROS2ControlSimulationObserver
 {
 public:
   bool init(rclcpp::Node::SharedPtr node, const mjModel * model, mjData * data) override;

@@ -47,14 +47,16 @@ URDF/SRDF 提供关节语义、TF、MoveIt group 和 controller 映射；MJCF �
 |---|---|
 | submodule | `third_party/mujoco_ros2_control` |
 | fork | `git@gitee.com:zjumty/mujoco_ros2_control.git` |
-| release | `so101-0.0.3-r8` |
-| gitlink commit | `78758d5becf1829e611da1dafb201fa018ddbe7b` |
-| upstream tag | `0.0.3` |
-| upstream commit | `35ba8174b62d9560093614f981a3d4b978a96036` |
+| candidate label | `so101-0.1.0-r1-candidate` |
+| gitlink commit | `0ed759a7198e76be847e163673782b1d2cbacf26` |
+| upstream tag | `0.1.0` |
+| upstream commit | `57fc6744844902d4532160b403fa95840c1d6f96` |
+| local lineage | `f19a8cc3af61feccacb22a9f0d16cc972e3b2c08` (`so101-0.0.3-r11`) |
 | lock | `src/so101_demo_py/config/mujoco/dependency-lock.yaml` |
 
-lock 同时固定接口和安装文件的 SHA-256。`scripts/check_backend_integration.py` 验证
-`.gitmodules` URL、gitlink mode/commit、release tag、policy bytes 与 canonical package contract。
+lock 同时固定接口 SHA-256 与跨平台安装产物清单。`scripts/check_backend_integration.py` 验证
+两份 lock 一致、`.gitmodules`/origin URL、clean submodule、gitlink/HEAD/commit，以及 upstream
+0.1.0 与本地 r11 双祖先。candidate label 不创建 Git tag；跨平台验收后才切换到最终 release tag。
 不要跟随浮动 branch，不要覆盖 `/opt/ros/jazzy`，也不要仅凭包名存在就宣称 provenance 成立。
 
 ### 2.1 安装 fork overlay
@@ -70,10 +72,10 @@ zsh scripts/install-mujoco-ros2-control.zsh --init-submodule
 
 1. 当前 checkout 是含已提交 gitlink 的 superproject；
 2. `.gitmodules`、lock、gitlink、submodule `HEAD` 四者一致；
-3. submodule clean，origin URL 正确，官方 0.0.3 是 fork commit 的祖先；
-4. r8 tag 精确解析到 locked commit；
+3. submodule clean，origin URL 正确，官方 0.1.0 与本地 r11 都是 fork commit 的祖先；
+4. candidate 阶段不存在同名 release tag；最终阶段 tag 精确解析到 locked commit；
 5. 独立 build source 位于 locked commit 且保持 clean；
-6. 三个 fork package 实际被发现、构建并测试。
+6. `mujoco_3d_lidar`、msgs、plugins、core 四个 fork package 实际被发现、构建并测试。
 
 默认输出位于 `$SO101_WORKSPACE_DIR/ws_mujoco_ros2_control_fork/{build,install,log}`。
 `mujoco_vendor` 继续来自 ROS underlay。旧版本或 dirty build source 会 fail closed；选择新的
@@ -95,7 +97,7 @@ ros2 pkg prefix mujoco_vendor
 ros2 pkg prefix so101_demo_py
 ```
 
-前三个 fork package 必须落在 fork install，`mujoco_vendor` 必须落在 `/opt/ros/jazzy`，
+四个 fork package 必须落在 fork install，`mujoco_vendor` 必须落在 dependency overlay，
 `so101_demo_py` 必须落在本次项目 install。切换 provider 后应使用新的 build/install 目录或
 `--cmake-clean-cache`，避免 CMake cache 继续引用 apt header。
 
@@ -115,6 +117,11 @@ fork 从官方 0.0.3 依次增加以下发布能力：
 
 r1 之前的 fork commits `07550eb` 与 `138e79b` 分别引入 reset/pause/snapshot hooks 和 viewer
 camera state model；它们也是 r1–r7 历史的祖先。
+
+当前 0.1.0 候选以官方 `MujocoSimulation`、double-buffer snapshot、free-joint reset 与 upstream
+plugin ABI 为主体。SO-101 physics/reset/pause/snapshot 通过独立 optional observer capability
+接入，不再向 upstream base class 添加虚函数；viewer-camera、macOS 主线程 context 和 CameraPlugin
+生命周期在新架构上迁移保留。
 
 ## 4. r6：逐 physics-step 权威证据
 
@@ -264,6 +271,11 @@ ros2 run so101_demo_py camera_preset --current --format yaml
 ```
 
 GUI 只用于观察和数值复核；计数的接触/放置结论必须来自 headless 权威证据链。
+
+固定 task camera 另有跨平台 topic 合同：`/task_camera/camera_info`、`/task_camera/color`、
+`/task_camera/depth` 必须为 640 x 480、10 Hz（8–12 Hz 容差）、frame
+`task_camera_frame`；color encoding 为 `rgb8`、depth encoding 为 `32FC1`，三者必须有对齐时间戳、
+非空 payload，depth 至少包含一个有限正值。
 
 Gazebo 使用同一个 CLI 和错误合同，但由 package-owned preset 与 `/gui/move_to/pose` adapter 实现：
 
