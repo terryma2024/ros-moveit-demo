@@ -15,14 +15,15 @@ confirmed_conclusions:
   - Tasks 2-5 established code-owned static camera TF, exact-stamp RGB-D localization, a fail-closed /cup_pose producer, and perception-confirmed MoveIt cup-shadow synchronization at source level.
   - Task 6 installed a dedicated behavior-tested fail-closed perception launch while preserving the fixed MuJoCo workflow composition (EXP-002).
   - EXP-003 is audit-invalid and non-counting because its production attempt has no durable stdout/stderr plus exit sidecar and no retained RUNNING-transition snapshot; a later independent diagnostic remains useful only as non-counting evidence.
+  - EXP-004 is environment-invalid and non-counting: after complete RUNNING/observer readiness evidence, all three controller spawners failed before static TF or production because the sandbox denied the ROS controller-spawner lock under ~/.ros/locks.
 disproven_routes:
   - Publishing MuJoCo truth as /cup_pose does not validate production camera perception.
   - Routing production through cup_pose_tf_demo duplicates the selected world-point transform boundary.
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
-latest_checkpoint: CP-010
-next_experiment: EXP-004
+latest_checkpoint: CP-011
+next_experiment: EXP-005
 ```
 
 ```yaml
@@ -466,8 +467,19 @@ next_experiment: EXP-004
 
 ```yaml
 experiment_id: EXP-004
-status: PLANNED
+status: INVALID
+result: ENVIRONMENT_INVALID_BEFORE_PRODUCTION
 pre_run_amendment: CORR-EXP-004-001
+running_transition:
+  wall_time_ns: 1787693709792530000
+  monotonic_ns: 1486256726203291
+  source_head: 83a6e8c828e1483c9d6e367e728120bbf03b91e2
+  running_snapshot: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/running-snapshot.txt
+  running_snapshot_exit: 0
+  observer_readiness_snapshot: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/observers/observers-ready-snapshot.txt
+  observer_readiness_exit: 0
+  sample_observer_session: 21199
+  publisher_provenance_observer_session: 87454
 prior_experiment: EXP-003
 hypothesis: The observed 30 s aggregate valid-pose readiness failure is a bounded startup delay; increasing only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds will yield a fresh acceptable /cup_pose without changing code, topics, TF, segmentation, fit, QoS, or scene configuration.
 prediction: With otherwise identical task_start perception-only conditions, production rgbd_cup_pose publishes its first finite fresh world /cup_pose before the 90 s deadline; if it still fails, complete production evidence will preserve the first auditable failure for a subsequent instrumentation task.
@@ -504,33 +516,38 @@ provenance:
   gz_partition: rgbd-perception-gate-exp004-20260826
 commands:
   - command: capture current commit/status, installed prefixes/imports, domain/process isolation, exact shell environment, wall time, monotonic_ns, and Computer Use sky.list_apps prelaunch discovery into /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/running-snapshot.txt and visual/viewer-prelaunch.json; require org.mujoco.mujoco isRunning=false; write command exit to running-snapshot.exit; only after exit 0 update status PLANNED to RUNNING
-    exit_code: PENDING
+    exit_code: 0
   - command: ROS_DOMAIN_ID=180 GZ_PARTITION=rgbd-perception-gate-exp004-20260826 ROS_LOG_DIR=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/ros/stack ros2 launch so101_demo_py so101_mujoco.launch.py run_mode:=execute execute:=true headless:=false session_id:=rgbd-perception-gate-exp004-20260826 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/stack.json > /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/stack.log 2>&1; record monotonic start/end and exact exit sidecars
-    exit_code: PENDING
+    exit_code: 130
   - command: start the two approved static_transform_publisher commands unchanged in domain 180, each with complete stdout/stderr, monotonic start/end, PID/PGID ownership, and exit sidecars below /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/
-    exit_code: PENDING
+    exit_code: NOT_STARTED_AFTER_INVALID_BOUNDARY
   - command: BEFORE production, in a dedicated owned PTY/session run `ROS_DOMAIN_ID=180 ros2 topic echo /cup_pose --once` with output at exp-004/observers/cup-pose-first.log; wrapper installs INT/TERM traps that write cup-pose-first.end.wall_ns, .end.monotonic_ns, and .exit, and records cup-pose-first.start.wall_ns, .start.monotonic_ns, and .owner PID/PGID/session; poll `ROS_DOMAIN_ID=180 ros2 topic info /cup_pose --verbose` into cup-pose-subscriber-ready.log until Subscription count is at least 1, then write readiness exit sidecar
-    exit_code: PENDING
+    exit_code: 130
   - command: BEFORE production, in a second dedicated owned PTY/session poll `ROS_DOMAIN_ID=180 ros2 topic info /cup_pose --verbose` every 0.1 s into exp-004/observers/cup-pose-publisher-provenance.log and exit 0 only after one attempt records Publisher count 1 and Node name rgbd_cup_pose; wrapper installs INT/TERM traps and writes wall/monotonic start/end, owner PID/PGID/session, and exact exit sidecars on success, production-first exit, or signal
-    exit_code: PENDING
+    exit_code: 130
   - command: ROS_DOMAIN_ID=180 ROS_LOG_DIR=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/ros/perception ros2 run so101_demo_py rgbd_cup_pose --startup-timeout-s 90 --output-topic /cup_pose --output-ply /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/cup.ply --evidence-json /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/perception.json > /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/production.log 2>&1; record monotonic start/end, PID/PGID, first /cup_pose or failure, and exact exit sidecars
-    exit_code: PENDING
+    exit_code: NOT_STARTED_AFTER_INVALID_BOUNDARY
   - command: after owned-stack attribution succeeds, use only node_repl plus @oai/sky to call sky.get_app_state for org.mujoco.mujoco and save visual/viewer-baseline.png plus baseline state/timestamps; derive a small camera-view-only sky.drag from that fresh baseline and save visual/viewer-action.json; immediately call sky.get_app_state again and save visual/viewer-fresh.png plus fresh state/timestamps; record sizes/SHA-256 and write visual/viewer-inspection.md describing the canonical cup, active owned scene, and visible post-action view change
-    exit_code: PENDING
+    exit_code: NOT_STARTED_AFTER_INVALID_BOUNDARY
   - command: when the first sample and provenance observers have both exited, or immediately when production exits first, write observers/stop.wall_ns and stop.monotonic_ns, SIGINT only any still-running exact owned observer PTY/session or PID/PGID, wait for both wrappers to write end timestamps and exit sidecars, and prove neither observer remains before general cleanup
-    exit_code: PENDING
+    exit_code: 0
   - command: before signaling, record cleanup-begin monotonic_ns and exact owned PID/PGID set; SIGINT only those owned sessions/process groups; record every exit, cleanup-end monotonic_ns, final targeted process scan plus exit sidecar, and ROS_DOMAIN_ID=180 ros2 node list --no-daemon output plus exit sidecar
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - PENDING
+  - OBSERVED: The first running-snapshot attempt was rejected before RUNNING because direnv placed `/Users/matianyi/ros2_jazzy/ws_mujoco_ros2_control_fork/install` ahead of the EXP-003 main-repository runtime. The retained final snapshot removed only that conflicting prefix from ROS/runtime path variables and proved current-worktree demo/support/vendor plus main-repository mujoco_ros2_control/plugins, domain 180 empty, prelaunch org.mujoco.mujoco not running, clean head 83a6e8c, and no production-source diff.
+  - OBSERVED: The initially preregistered untyped `ros2 topic echo /cup_pose --once` observer exited 1 before RUNNING because no publisher existed to provide a topic type. The attempt is retained. A replacement observer explicitly supplied the already fixed geometry_msgs/msg/PoseStamped type, registered one subscription, and was recorded as owned session 21199 before RUNNING; this measurement-command deviation is another reason EXP-004 cannot count.
+  - OBSERVED: The publisher-provenance observer was recorded as owned session 87454 and polled publisher count 0 before RUNNING. The durable RUNNING transition at wall_time_ns 1787693709792530000 retained both live observer PID/PGID/session records and readiness exit 0.
+  - OBSERVED: The owned stack session 34760 started task_start/headless=false, but joint_state_broadcaster, arm_controller, and gripper_controller spawners each raised PermissionError for `/Users/matianyi/.ros/locks/ros2-control-controller-spawner.lock` and died with child exit 1. Controllers therefore never reached the preregistered initial state.
+  - OBSERVED: After the first invalid boundary, no static TF, production rgbd_cup_pose timeout-90 command, Viewer attribution/action, dynamic_cup_pick_place, or robot motion was started.
+  - OBSERVED: Exact owned sessions 87454, 21199, and 34760 received SIGINT; their wrapper sidecars are 130. Final targeted process output and ROS domain 180 output are both zero bytes with exit sidecars proving command exit 0 and empty results; cleanup exit is 0.
 inferred:
-  - PENDING
-conclusion: PENDING
+  - INFERRED: EXP-004 contains no information about whether increasing production startup_timeout_s from 30 to 90 seconds changes perception behavior because production never started. The first bad boundary is sandbox denial of the controller-spawner lock, plus the pre-RUNNING observer command deviation; neither is the registered timeout variable.
+conclusion: EXP-004 is INVALID and excluded from product success/failure denominators. The timeout-only A/B remains unmeasured; a new experiment may repeat timeout 90 only after preregistering the explicit PoseStamped observer type and ensuring the owned stack can access the existing ROS controller-spawner lock path.
 evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-004/
-decision: PENDING
+decision: REPEAT_TIMEOUT_AB_AFTER_ENVIRONMENT_AND_MEASUREMENT_FIX
 next_experiment: EXP-005
-post_failure_rule: Only if this timeout-only A/B remains a fully evidenced VALID failure may EXP-005 instrument production readiness boundaries; do not instrument before completing EXP-004.
+post_failure_rule: Because EXP-004 was INVALID before production, EXP-005 must repeat the same timeout-90 A/B with only the preregistered environment and observer-command corrections; instrument readiness only after that repeat is a fully evidenced VALID failure.
 ```
 
 ```yaml
@@ -613,4 +630,75 @@ open_risks:
   - The Mac GLFW Viewer may not surface as org.mujoco.mujoco to Computer Use; if attribution cannot be established, EXP-004 must be INVALID rather than using an unrelated launched app.
   - Production pose, fit, publisher, truth-error, cleanup, and visual gates remain unrun.
 next_command: Before any process, create EXP-004 evidence directories and complete running-snapshot plus prelaunch Viewer discovery; after the stack and static TF start, pre-start both owned `/cup_pose` observers and prove readiness before launching production with timeout 90.
+```
+
+```yaml
+experiment_id: EXP-005
+status: PLANNED
+prior_experiment: EXP-004
+hypothesis: Repeating the still-unmeasured production timeout-90 A/B with the owned MuJoCo stack launched through require_escalated will remove only the sandbox lock denial and allow the experiment to reach the production perception boundary without changing behavior.
+prediction: The same task_start/headless=false stack reaches active controllers when run outside the filesystem sandbox, both pre-production observers are ready, and production rgbd_cup_pose either yields an acceptable /cup_pose within 90 s or provides a fully evidenced VALID product failure.
+single_variable: NONE_BEHAVIOR; repeat timeout 90 after removing the EXP-004 sandbox execution contamination
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Production runtime source remains ef6175dd146275d56979ad2860f1f3a6f94dbf79 and the worktree is clean before the PLANNED to RUNNING transition.
+  - Fresh readback proves current-worktree so101_demo_py/support/vendor, main-repository mujoco_ros2_control/plugins, empty ROS domain 180, unique session/partition, and prelaunch org.mujoco.mujoco not running.
+  - The owned stack command alone is launched with require_escalated so existing `/Users/matianyi/.ros/locks/ros2-control-controller-spawner.lock` access matches the documented Mac runtime; HOME is unchanged and no lock file is copied, moved, replaced, or deleted.
+  - The first-sample observer is preregistered as `ros2 topic echo /cup_pose geometry_msgs/msg/PoseStamped --once`; readiness proves its subscription before production. The publisher-provenance observer and all CORR-EXP-004-001 timestamp/ownership/exit gates remain unchanged.
+  - Production remains `rgbd_cup_pose --startup-timeout-s 90`; task_start, topics, TF, camera, mask, DBSCAN, fit, QoS, scene, and controller configuration remain unchanged.
+  - dynamic_cup_pick_place is never started and no robot motion is commanded.
+success_criteria:
+  - All EXP-004 observer, production, RGB-D, TF, truth-error, Viewer attribution/action/inspection, and cleanup evidence gates pass with complete sidecars.
+  - All controllers reach active before production, and production provides its first acceptable world /cup_pose within 90 s with sole-publisher provenance and truth error at most 0.01 m.
+failure_criteria:
+  - With complete valid evidence and active controllers, production emits no acceptable /cup_pose within 90 s or fails any perception, publisher, fit, TF, truth-error, Viewer, or cleanup gate.
+invalid_criteria:
+  - The owned stack is not require_escalated, lock access still fails, HOME or lock files are altered, provenance/domain/session/initial state is contaminated, an observer/evidence/visual/cleanup sidecar is missing, an unowned process is reused or stopped, or motion starts.
+provenance:
+  source_commit: ef6175dd146275d56979ad2860f1f3a6f94dbf79
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-perception-pick-place/install
+  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-perception-pick-place/install/so101_demo_py/lib/so101_demo_py/rgbd_cup_pose
+  ros_domain_id: 180
+  gz_partition: rgbd-perception-gate-exp005-20260826
+commands:
+  - command: create /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-005; capture clean head, exact package/import/runtime provenance, empty domain/process set, prelaunch Viewer=false, wall/monotonic timestamps, and exit sidecars before RUNNING
+    exit_code: PENDING
+  - command: start and prove ready the explicit-type first-sample observer and publisher-provenance observer before production, retaining complete CORR-EXP-004-001 logs/owners/timestamps/exits
+    exit_code: PENDING
+  - command: with sandbox_permissions=require_escalated and unchanged HOME, run the same ROS_DOMAIN_ID=180 GZ_PARTITION=rgbd-perception-gate-exp005-20260826 ros2 launch so101_demo_py so101_mujoco.launch.py run_mode:=execute execute:=true headless:=false session_id:=rgbd-perception-gate-exp005-20260826 mujoco_initial_keyframe:=task_start command with complete stack log/owner/timestamp/exit evidence
+    exit_code: PENDING
+  - command: after controllers are active, start the two unchanged approved static_transform_publisher commands, then production rgbd_cup_pose with --startup-timeout-s 90 and all sample/provenance/PLY/JSON/TF/truth/Viewer evidence captures
+    exit_code: PENDING
+  - command: stop only exact owned observer/static-TF/production/stack sessions or PID/PGIDs with SIGINT and retain cleanup begin/end, each exit sidecar, empty targeted process output, and empty domain output plus command exit sidecars
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-005/
+decision: PENDING
+next_experiment: EXP-006
+```
+
+```yaml
+checkpoint_id: CP-011
+last_valid_experiment: EXP-002
+current_hypothesis: The timeout-90 perception A/B remains unmeasured because EXP-004 failed at sandbox controller-spawner lock access before static TF or production; EXP-005 must repeat it with only require_escalated stack execution as an environment correction.
+working_tree_status: runtime source remains ef6175dd146275d56979ad2860f1f3a6f94dbf79; EXP-004 runtime documentation is the only tracked dirty file from clean head 83a6e8c828e1483c9d6e367e728120bbf03b91e2 and Task 7 report is ignored
+owned_processes: NONE; owned EXP-004 sessions 87454, 21199, and 34760 received SIGINT and exact wrappers/process groups are absent
+preserved_processes: No unowned process was signaled or modified; HOME and existing ROS lock files were not changed
+confirmed_conclusions:
+  - EXP-004 running/provenance/domain/Viewer-prelaunch/observer-readiness evidence was durable, but its environment was invalid when all three controller spawners were denied the existing ROS lock path.
+  - Static TF, production timeout90, production pose/fit/truth comparison, Viewer action sequence, dynamic workflow, and motion never started in EXP-004.
+  - Cleanup is durable: exact owned wrappers exited 130 after SIGINT, final targeted process and domain outputs are empty with exit 0 sidecars, and cleanup exit is 0.
+disproven_routes:
+  - EXP-004 cannot count as a timeout-90 product success/failure or support any perception-pipeline conclusion.
+  - An untyped pre-publisher `ros2 topic echo /cup_pose --once` cannot establish the observer; the known PoseStamped type must be explicit in the next preregistration.
+open_risks:
+  - EXP-005 must prove require_escalated restores controller activation without altering HOME/locks before production.
+  - The timeout-90 production, Viewer, and all downstream acceptance gates remain unmeasured.
+  - Existing retained/deletion-candidate evidence is unchanged; nothing was deleted or archived.
+next_command: In a new turn, re-read EXP-005, capture fresh clean provenance/domain/prelaunch Viewer evidence, start the explicit PoseStamped and provenance observers, then launch only the owned stack with require_escalated; do not start production until controllers are active.
 ```
