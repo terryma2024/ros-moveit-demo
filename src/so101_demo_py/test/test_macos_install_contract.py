@@ -153,14 +153,99 @@ def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:
     assert 'default_prefixes="${ros_underlay}:' in dylib_farm
 
 
-def test_macos_environment_keeps_pinned_mujoco_fork_first_in_ament_path() -> None:
-    envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
+def test_macos_environment_keeps_project_install_authoritative(tmp_path: Path) -> None:
+    project_root = tmp_path / "moveit-demo"
+    ros_workspace = tmp_path / "ros2_jazzy"
+    ros_underlay = tmp_path / "ros_underlay"
+    stale_fork = ros_workspace / "ws_mujoco_ros2_control_fork" / "install"
+    project_root.mkdir()
+    (project_root / ".envrc").write_text(
+        ENVRC_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
+    )
 
-    assert 'mujoco_fork_prefix="$ros_workspace/ws_mujoco_ros2_control_fork/install"' in envrc
-    assert (
-        'export AMENT_PREFIX_PATH="$mujoco_fork_prefix'
-        '${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"'
-    ) in envrc
+    prefixes = [
+        ros_underlay,
+        ros_workspace / "extra_ws" / "install",
+        stale_fork,
+        ros_workspace / "so101_isolated_ws" / "install",
+        project_root / "install",
+    ]
+    for prefix in prefixes:
+        prefix.mkdir(parents=True)
+        setup = (
+            f'export AMENT_PREFIX_PATH="{prefix}'
+            '${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"\n'
+        )
+        if prefix == project_root / "install":
+            setup = (
+                f'export AMENT_PREFIX_PATH="{stale_fork}'
+                '${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"\n' + setup
+            )
+        (prefix / "setup.bash").write_text(setup, encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'watch_file() { :; }; source_env() { source "$1"; }; '
+            'source "$1"; printf "%s" "$AMENT_PREFIX_PATH"',
+            "bash",
+            str(project_root / ".envrc"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            "HOME": str(tmp_path),
+            "PATH": "/usr/bin:/bin",
+            "SO101_ROS_UNDERLAY": str(ros_underlay),
+            "SO101_ROS_WORKSPACE": str(ros_workspace),
+        },
+    )
+    resolved_prefixes = result.stdout.split(":")
+
+    assert resolved_prefixes[0] == str(project_root / "install")
+    assert str(stale_fork) not in resolved_prefixes
+
+
+def test_macos_environment_keeps_dylib_farm_as_fallback(tmp_path: Path) -> None:
+    project_root = tmp_path / "moveit-demo"
+    ros_workspace = tmp_path / "ros2_jazzy"
+    project_install = project_root / "install"
+    dylib_farm = ros_workspace / "macos_dylib_farm" / "current"
+    project_install.mkdir(parents=True)
+    dylib_farm.mkdir(parents=True)
+    (project_root / ".envrc").write_text(
+        ENVRC_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (project_install / "setup.bash").write_text(
+        f'export DYLD_LIBRARY_PATH="{project_install / "lib"}'
+        '${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"\n',
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'watch_file() { :; }; source_env() { source "$1"; }; '
+            'source "$1"; printf "%s" "$DYLD_LIBRARY_PATH"',
+            "bash",
+            str(project_root / ".envrc"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            "HOME": str(tmp_path),
+            "PATH": "/usr/bin:/bin",
+            "SO101_ROS_WORKSPACE": str(ros_workspace),
+        },
+    )
+    resolved_paths = result.stdout.split(":")
+
+    assert resolved_paths[0] == str(project_install / "lib")
+    assert resolved_paths[-1] == str(dylib_farm)
 
 
 def test_mujoco_installer_accepts_source_overlay_underlay() -> None:
