@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
+import importlib.util
 import json
 import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Protocol
 
 from so101_demo.cli.rgbd_cup_pose import estimate_world_cup_pose
@@ -192,14 +193,14 @@ def _status_line(status: str, **fields: Any) -> str:
     return json.dumps({"status": status, **fields}, sort_keys=True)
 
 
-def _require_open3d() -> None:
-    try:
-        importlib.import_module("open3d")
-    except ModuleNotFoundError as error:
+def _require_open3d(remaining_startup_s: float) -> None:
+    if not math.isfinite(remaining_startup_s) or remaining_startup_s <= 0.0:
+        raise TimeoutError("startup deadline expired before Open3D preflight")
+    if importlib.util.find_spec("open3d") is None:
         raise RuntimeError(
             "Open3D is missing; install it in the ROS Python environment with "
             "python3 -m pip install open3d"
-        ) from error
+        )
 
 
 def _evidence_record(frame: CupPoseFrame, options: RgbdCupPoseOptions) -> dict[str, Any]:
@@ -253,7 +254,68 @@ def pose_message_from_frame(
     return pose
 
 
-def _create_ros_runtime(options: RgbdCupPoseOptions) -> _Runtime:
+def estimate_cup_pose_frame(
+    aligned: tuple[Any, Any, Any],
+    options: RgbdCupPoseOptions,
+    *,
+    build_cloud: Callable[..., CupPointCloudResult] = build_cup_point_cloud,
+    lookup_transform: Callable[[str, str, Any, float], Any],
+    stamp_to_time: Callable[[Any], Any],
+    tf_timeout_budget: Callable[[], float],
+) -> CupPoseFrame:
+    """Build, exactly transform, and fit one aligned RGB-D sample in memory."""
+    camera_info, color, depth = aligned
+    cloud = build_cloud(
+        camera_info,
+        color,
+        depth,
+        depth_trunc_m=options.depth_trunc_m,
+        cluster_eps_m=options.cluster_eps_m,
+        cluster_min_points=options.cluster_min_points,
+        minimum_cup_points=options.minimum_cup_points,
+    )
+    if cloud.stamp_ns <= 0:
+        raise ValueError("RGB-D source stamp must be nonzero")
+    timeout_s = tf_timeout_budget()
+    if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+        raise TimeoutError("startup deadline expired before exact-stamp TF lookup")
+    transform = lookup_transform(
+        WORLD_FRAME,
+        cloud.frame_id,
+        stamp_to_time(camera_info.header.stamp),
+        timeout_s,
+    )
+    estimate = estimate_world_cup_pose(
+        cloud.points_xyz,
+        transform,
+        table_top_z=options.table_top_z,
+        cup_height=options.cup_height,
+        expected_radius=options.expected_radius,
+        radius_tolerance=options.radius_tolerance,
+    )
+    return CupPoseFrame(
+        stamp_ns=cloud.stamp_ns,
+        source_frame_id=cloud.frame_id,
+        center_world_xyz=estimate.center_world_xyz,
+        fitted_radius_m=estimate.fitted_radius_m,
+        cloud=cloud,
+    )
+
+
+def bounded_tf_timeout_s(
+    configured_timeout_s: float,
+    *,
+    first_valid_published: bool,
+    startup_deadline: float,
+    monotonic: Callable[[], float],
+) -> float:
+    """Cap pre-success TF blocking at the remaining monotonic startup budget."""
+    if first_valid_published:
+        return configured_timeout_s
+    return min(configured_timeout_s, startup_deadline - monotonic())
+
+
+def _load_ros_api() -> Any:
     import rclpy
     from geometry_msgs.msg import PoseStamped
     from rclpy.clock import ClockType
@@ -270,209 +332,324 @@ def _create_ros_runtime(options: RgbdCupPoseOptions) -> _Runtime:
     from sensor_msgs.msg import CameraInfo, Image
     from tf2_ros import Buffer, TransformException, TransformListener
 
-    initialized_here = not rclpy.ok()
-    if initialized_here:
-        rclpy.init()
-    node = rclpy.create_node(
-        "rgbd_cup_pose",
-        parameter_overrides=[Parameter("use_sim_time", value=True)],
-        automatically_declare_parameters_from_overrides=True,
+    return SimpleNamespace(
+        rclpy=rclpy,
+        PoseStamped=PoseStamped,
+        ClockType=ClockType,
+        Duration=Duration,
+        ExternalShutdownException=ExternalShutdownException,
+        Parameter=Parameter,
+        DurabilityPolicy=DurabilityPolicy,
+        QoSProfile=QoSProfile,
+        ReliabilityPolicy=ReliabilityPolicy,
+        qos_profile_sensor_data=qos_profile_sensor_data,
+        Time=Time,
+        CameraInfo=CameraInfo,
+        Image=Image,
+        Buffer=Buffer,
+        TransformException=TransformException,
+        TransformListener=TransformListener,
     )
-    tf_buffer = Buffer()
-    tf_listener = TransformListener(tf_buffer, node)
-    pose_qos = QoSProfile(
-        depth=1,
-        reliability=ReliabilityPolicy.RELIABLE,
-        durability=DurabilityPolicy.VOLATILE,
-    )
-    publisher = node.create_publisher(PoseStamped, options.output_topic, pose_qos)
 
-    class RosRuntime:
-        def __init__(self) -> None:
-            self._buffer = AlignedRgbdBuffer()
-            self._fresh_frames = FreshFrameGate()
-            self._subscriptions: list[Any] = []
-            self._tf_listener = tf_listener
-            self._evidence_publisher = FirstValidEvidencePublisher(
-                write_ply=lambda frame: write_cup_point_cloud(
-                    frame.cloud, options.output_ply
-                ),
-                write_json=lambda frame: _write_evidence_json(frame, options),
-                publish=self._publish_pose,
-            )
-            self._processor = CupPoseFrameProcessor(
-                estimate=self._estimate_frame,
-                publish=self._evidence_publisher,
-                on_error=lambda error: node.get_logger().error(
-                    _status_line(
-                        "ERROR", failure="RGBD_CUP_POSE_FRAME_INVALID", message=str(error)
-                    )
-                ),
-            )
-            self._subscriptions.extend(
-                (
+
+def _cleanup_ros_resources(
+    *,
+    ros_api: Any,
+    node: Any | None,
+    tf_listener: Any | None,
+    publisher: Any | None,
+    subscriptions: list[Any],
+    initialized_here: bool,
+) -> None:
+    if node is not None:
+        for subscription in reversed(subscriptions):
+            try:
+                node.destroy_subscription(subscription)
+            except Exception:
+                pass
+        if publisher is not None:
+            try:
+                node.destroy_publisher(publisher)
+            except Exception:
+                pass
+    if tf_listener is not None:
+        unregister = getattr(tf_listener, "unregister", None)
+        if unregister is not None:
+            try:
+                unregister()
+            except Exception:
+                pass
+    if node is not None:
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+    if initialized_here and ros_api.rclpy.ok():
+        try:
+            ros_api.rclpy.shutdown()
+        except Exception:
+            pass
+
+
+def _create_ros_runtime(
+    options: RgbdCupPoseOptions,
+    startup_deadline: float,
+    monotonic: Callable[[], float],
+    *,
+    ros_api: Any | None = None,
+) -> _Runtime:
+    if startup_deadline - monotonic() <= 0.0:
+        raise TimeoutError("startup deadline expired before ROS runtime construction")
+    ros = ros_api or _load_ros_api()
+
+    initialized_here = not ros.rclpy.ok()
+    node = None
+    tf_listener = None
+    publisher = None
+    subscriptions: list[Any] = []
+    try:
+        if initialized_here:
+            ros.rclpy.init()
+        node = ros.rclpy.create_node(
+            "rgbd_cup_pose",
+            parameter_overrides=[ros.Parameter("use_sim_time", value=True)],
+            automatically_declare_parameters_from_overrides=True,
+        )
+        tf_buffer = ros.Buffer()
+        tf_listener = ros.TransformListener(tf_buffer, node)
+        pose_qos = ros.QoSProfile(
+            depth=1,
+            reliability=ros.ReliabilityPolicy.RELIABLE,
+            durability=ros.DurabilityPolicy.VOLATILE,
+        )
+        publisher = node.create_publisher(
+            ros.PoseStamped, options.output_topic, pose_qos
+        )
+
+        class RosRuntime:
+            def __init__(self) -> None:
+                self._buffer = AlignedRgbdBuffer()
+                self._fresh_frames = FreshFrameGate()
+                self._subscriptions = subscriptions
+                self._closed = False
+                self._evidence_publisher = FirstValidEvidencePublisher(
+                    write_ply=lambda frame: write_cup_point_cloud(
+                        frame.cloud, options.output_ply
+                    ),
+                    write_json=lambda frame: _write_evidence_json(frame, options),
+                    publish=self._publish_pose,
+                )
+                self._processor = CupPoseFrameProcessor(
+                    estimate=self._estimate_frame,
+                    publish=self._evidence_publisher,
+                    on_error=lambda error: node.get_logger().error(
+                        _status_line(
+                            "ERROR",
+                            failure="RGBD_CUP_POSE_FRAME_INVALID",
+                            message=str(error),
+                        )
+                    ),
+                )
+
+                self._subscriptions.append(
                     node.create_subscription(
-                        CameraInfo,
+                        ros.CameraInfo,
                         options.camera_info_topic,
                         self._on_camera_info,
-                        qos_profile_sensor_data,
-                    ),
+                        ros.qos_profile_sensor_data,
+                    )
+                )
+                self._subscriptions.append(
                     node.create_subscription(
-                        Image,
+                        ros.Image,
                         options.color_topic,
                         self._on_color,
-                        qos_profile_sensor_data,
-                    ),
+                        ros.qos_profile_sensor_data,
+                    )
+                )
+                self._subscriptions.append(
                     node.create_subscription(
-                        Image,
+                        ros.Image,
                         options.depth_topic,
                         self._on_depth,
-                        qos_profile_sensor_data,
-                    ),
-                )
-            )
-
-        @property
-        def first_valid_published(self) -> bool:
-            return self._evidence_publisher.published_count > 0
-
-        def _estimate_frame(self, aligned: Any) -> CupPoseFrame:
-            camera_info, color, depth = aligned
-            cloud = build_cup_point_cloud(
-                camera_info,
-                color,
-                depth,
-                depth_trunc_m=options.depth_trunc_m,
-                cluster_eps_m=options.cluster_eps_m,
-                cluster_min_points=options.cluster_min_points,
-                minimum_cup_points=options.minimum_cup_points,
-            )
-            if cloud.stamp_ns <= 0:
-                raise ValueError("RGB-D source stamp must be nonzero")
-            try:
-                transform = tf_buffer.lookup_transform(
-                    WORLD_FRAME,
-                    cloud.frame_id,
-                    Time.from_msg(camera_info.header.stamp),
-                    timeout=Duration(seconds=options.tf_timeout_s),
-                )
-            except TransformException as error:
-                raise RuntimeError(
-                    f"exact-stamp transform {WORLD_FRAME} <- {cloud.frame_id} "
-                    f"at {cloud.stamp_ns} is unavailable: {error}"
-                ) from error
-            estimate = estimate_world_cup_pose(
-                cloud.points_xyz,
-                transform,
-                table_top_z=options.table_top_z,
-                cup_height=options.cup_height,
-                expected_radius=options.expected_radius,
-                radius_tolerance=options.radius_tolerance,
-            )
-            return CupPoseFrame(
-                stamp_ns=cloud.stamp_ns,
-                source_frame_id=cloud.frame_id,
-                center_world_xyz=estimate.center_world_xyz,
-                fitted_radius_m=estimate.fitted_radius_m,
-                cloud=cloud,
-            )
-
-        def _publish_pose(self, frame: CupPoseFrame) -> None:
-            pose = pose_message_from_frame(
-                frame,
-                pose_factory=PoseStamped,
-                stamp_from_ns=lambda stamp_ns: Time(
-                    nanoseconds=stamp_ns, clock_type=ClockType.ROS_TIME
-                ).to_msg(),
-            )
-            publisher.publish(pose)
-            node.get_logger().info(
-                _status_line(
-                    "OK",
-                    stamp_ns=frame.stamp_ns,
-                    output_frame_id=WORLD_FRAME,
-                    output_topic=options.output_topic,
-                    position_xyz=list(frame.center_world_xyz),
-                    fitted_radius_m=frame.fitted_radius_m,
-                )
-            )
-
-        def _process_aligned(self, aligned: Any) -> None:
-            stamp_ns = message_stamp_ns(aligned[0])
-            if not self._fresh_frames.accept(stamp_ns):
-                node.get_logger().error(
-                    _status_line(
-                        "ERROR",
-                        failure="RGBD_CUP_POSE_STALE_FRAME",
-                        message=f"source stamp {stamp_ns} is not newer than the prior frame",
-                    )
-                )
-                return
-            self._processor.process(aligned)
-
-        def _on_camera_info(self, message: Any) -> None:
-            aligned = self._buffer.add_camera_info(message)
-            if aligned is not None:
-                self._process_aligned(aligned)
-
-        def _on_color(self, message: Any) -> None:
-            aligned = self._buffer.add_color(message)
-            if aligned is not None:
-                self._process_aligned(aligned)
-
-        def _on_depth(self, message: Any) -> None:
-            aligned = self._buffer.add_depth(message)
-            if aligned is not None:
-                self._process_aligned(aligned)
-
-        def spin_once(self, timeout_s: float) -> None:
-            try:
-                rclpy.spin_once(node, timeout_sec=timeout_s)
-            except ExternalShutdownException:
-                return
-            except TransformException as error:
-                node.get_logger().error(
-                    _status_line(
-                        "ERROR", failure="RGBD_CUP_POSE_TF_UNAVAILABLE", message=str(error)
+                        ros.qos_profile_sensor_data,
                     )
                 )
 
-        def ok(self) -> bool:
-            return rclpy.ok()
+            @property
+            def first_valid_published(self) -> bool:
+                return self._evidence_publisher.published_count > 0
 
-        def close(self) -> None:
-            self._subscriptions.clear()
-            del self._processor
-            del self._evidence_publisher
-            self._tf_listener = None
-            node.destroy_node()
-            if initialized_here and rclpy.ok():
-                rclpy.shutdown()
+            def _tf_timeout_budget(self) -> float:
+                return bounded_tf_timeout_s(
+                    options.tf_timeout_s,
+                    first_valid_published=self.first_valid_published,
+                    startup_deadline=startup_deadline,
+                    monotonic=monotonic,
+                )
 
-    return RosRuntime()
+            def _lookup_transform(
+                self, target_frame: str, source_frame: str, query_time: Any, timeout_s: float
+            ) -> Any:
+                try:
+                    return tf_buffer.lookup_transform(
+                        target_frame,
+                        source_frame,
+                        query_time,
+                        timeout=ros.Duration(seconds=timeout_s),
+                    )
+                except ros.TransformException as error:
+                    raise RuntimeError(
+                        f"exact-stamp transform {target_frame} <- {source_frame} "
+                        f"is unavailable: {error}"
+                    ) from error
+
+            def _estimate_frame(self, aligned: Any) -> CupPoseFrame:
+                return estimate_cup_pose_frame(
+                    aligned,
+                    options,
+                    lookup_transform=self._lookup_transform,
+                    stamp_to_time=ros.Time.from_msg,
+                    tf_timeout_budget=self._tf_timeout_budget,
+                )
+
+            def _publish_pose(self, frame: CupPoseFrame) -> None:
+                pose = pose_message_from_frame(
+                    frame,
+                    pose_factory=ros.PoseStamped,
+                    stamp_from_ns=lambda stamp_ns: ros.Time(
+                        nanoseconds=stamp_ns, clock_type=ros.ClockType.ROS_TIME
+                    ).to_msg(),
+                )
+                publisher.publish(pose)
+                node.get_logger().info(
+                    _status_line(
+                        "OK",
+                        stamp_ns=frame.stamp_ns,
+                        output_frame_id=WORLD_FRAME,
+                        output_topic=options.output_topic,
+                        position_xyz=list(frame.center_world_xyz),
+                        fitted_radius_m=frame.fitted_radius_m,
+                    )
+                )
+
+            def _process_aligned(self, aligned: Any) -> None:
+                stamp_ns = message_stamp_ns(aligned[0])
+                if not self._fresh_frames.accept(stamp_ns):
+                    node.get_logger().error(
+                        _status_line(
+                            "ERROR",
+                            failure="RGBD_CUP_POSE_STALE_FRAME",
+                            message=(
+                                f"source stamp {stamp_ns} is not newer than the prior frame"
+                            ),
+                        )
+                    )
+                    return
+                self._processor.process(aligned)
+
+            def _on_camera_info(self, message: Any) -> None:
+                aligned = self._buffer.add_camera_info(message)
+                if aligned is not None:
+                    self._process_aligned(aligned)
+
+            def _on_color(self, message: Any) -> None:
+                aligned = self._buffer.add_color(message)
+                if aligned is not None:
+                    self._process_aligned(aligned)
+
+            def _on_depth(self, message: Any) -> None:
+                aligned = self._buffer.add_depth(message)
+                if aligned is not None:
+                    self._process_aligned(aligned)
+
+            def spin_once(self, timeout_s: float) -> None:
+                try:
+                    ros.rclpy.spin_once(node, timeout_sec=timeout_s)
+                except ros.ExternalShutdownException:
+                    return
+                except ros.TransformException as error:
+                    node.get_logger().error(
+                        _status_line(
+                            "ERROR",
+                            failure="RGBD_CUP_POSE_TF_UNAVAILABLE",
+                            message=str(error),
+                        )
+                    )
+
+            def ok(self) -> bool:
+                return ros.rclpy.ok()
+
+            def close(self) -> None:
+                if self._closed:
+                    return
+                self._closed = True
+                _cleanup_ros_resources(
+                    ros_api=ros,
+                    node=node,
+                    tf_listener=tf_listener,
+                    publisher=publisher,
+                    subscriptions=self._subscriptions,
+                    initialized_here=initialized_here,
+                )
+                self._subscriptions.clear()
+
+        return RosRuntime()
+    except BaseException:
+        _cleanup_ros_resources(
+            ros_api=ros,
+            node=node,
+            tf_listener=tf_listener,
+            publisher=publisher,
+            subscriptions=subscriptions,
+            initialized_here=initialized_here,
+        )
+        raise
 
 
 def run_rgbd_cup_pose(
     options: RgbdCupPoseOptions,
     *,
-    runtime_factory: Callable[[RgbdCupPoseOptions], _Runtime] = _create_ros_runtime,
+    runtime_factory: Callable[
+        [RgbdCupPoseOptions, float, Callable[[], float]], _Runtime
+    ] = _create_ros_runtime,
     monotonic: Callable[[], float] = time.monotonic,
-    open3d_preflight: Callable[[], None] = _require_open3d,
+    open3d_preflight: Callable[[float], None] = _require_open3d,
 ) -> int:
     """Run until orderly shutdown, failing if startup never publishes a valid frame."""
+    deadline = monotonic() + options.startup_timeout_s
+    runtime: _Runtime | None = None
     try:
-        open3d_preflight()
-        runtime = runtime_factory(options)
-    except (OSError, RuntimeError, TimeoutError, ValueError) as error:
+        remaining_startup_s = deadline - monotonic()
+        if remaining_startup_s <= 0.0:
+            raise TimeoutError("startup deadline expired before Open3D preflight")
+        open3d_preflight(remaining_startup_s)
+        if deadline - monotonic() <= 0.0:
+            raise TimeoutError("startup deadline expired during Open3D preflight")
+        runtime = runtime_factory(options, deadline, monotonic)
+        if not runtime.first_valid_published and deadline - monotonic() <= 0.0:
+            raise TimeoutError("startup deadline expired during ROS runtime construction")
+    except TimeoutError as error:
+        print(
+            _status_line(
+                "ERROR", failure="RGBD_CUP_POSE_TIMEOUT", message=str(error)
+            ),
+            flush=True,
+        )
+        if runtime is not None:
+            runtime.close()
+        return 1
+    except (OSError, RuntimeError, ValueError) as error:
         print(
             _status_line(
                 "ERROR", failure="RGBD_CUP_POSE_PREFLIGHT_FAILED", message=str(error)
             ),
             flush=True,
         )
+        if runtime is not None:
+            runtime.close()
         return 1
 
-    deadline = monotonic() + options.startup_timeout_s
     try:
         while runtime.ok():
             now = monotonic()
@@ -493,10 +670,30 @@ def run_rgbd_cup_pose(
             if not runtime.first_valid_published:
                 timeout_s = min(timeout_s, max(0.0, deadline - now))
             runtime.spin_once(timeout_s)
-        return 0
+        if runtime.first_valid_published:
+            return 0
+        print(
+            _status_line(
+                "ERROR",
+                failure="RGBD_CUP_POSE_SHUTDOWN_BEFORE_FIRST_VALID",
+                message="ROS context shut down before a valid RGB-D cup pose was published",
+            ),
+            flush=True,
+        )
+        return 1
     except KeyboardInterrupt:
-        print(_status_line("STOPPED", reason="SIGINT"), flush=True)
-        return 0
+        if runtime.first_valid_published:
+            print(_status_line("STOPPED", reason="SIGINT"), flush=True)
+            return 0
+        print(
+            _status_line(
+                "ERROR",
+                failure="RGBD_CUP_POSE_INTERRUPTED_BEFORE_FIRST_VALID",
+                message="SIGINT arrived before a valid RGB-D cup pose was published",
+            ),
+            flush=True,
+        )
+        return 1
     except (OSError, RuntimeError, TimeoutError, ValueError) as error:
         print(
             _status_line(
