@@ -2424,3 +2424,36 @@ evidence:
 decision: RESUME_FOUR_POSITION_FULL_RESTART_QUALIFICATION_WITH_THIS_INSTALLED_BUNDLE
 next_experiment: EXP-017
 ```
+
+## CP-061 — Plan fixed-candidate task_start qualification
+
+```yaml
+checkpoint_id: CP-061
+recorded_at: 2026-08-27T02:35:25+08:00
+experiment_id: EXP-017
+status: PLANNED
+qualification: true
+position: task_start
+lifecycle: FULL_RESTART
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+record_head_before_checkpoint: a6becb0d0bfb805f2e8d7bbfc44391fe18911b13
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+installed_bundle_sha256: e1dae424668fe418e64f05cda6976308670ade43639df7b0fbc97d74fb8e4f93
+identity:
+  domain: 233
+  session: mac-mrc010-task-start-exp017
+  tmux: mrc010-mac-exp017
+  evidence_file: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-017/task-start.json
+  evidence_root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-017
+command: ros2 run so101_demo_py so101_mujoco_perception_pick_place run_mode:=execute execute:=true headless:=false session_id:=mac-mrc010-task-start-exp017 mujoco_initial_keyframe:=task_start evidence_file:=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-017/task-start.json
+capture_protocol:
+  - Concurrent exact-title coordinator captures one exact MuJoCo Viewer window ID at baseline, transport, and released-final manifest boundaries; retain manifest and PNG and inspect original resolution.
+success_criteria: Every AC-001 camera, point-cloud, TF, no-truth-bridge, DONE/19, motion/FK, physical, Planning Scene, three-capture, eleven-exit, and exact-cleanup clause passes.
+failure_criteria: With valid preconditions/provenance, any product clause failure stops the four-position batch for systematic debugging.
+helpers:
+  runner_sha256: 0ffe25a624c31aeccb300cd9947111ee5141059d579bf894ab255caaa96237e8
+  capture_sha256: bf207075ec216c60e74493ad6fc6872fa2d85d7b833348da744d58f944d1b054
+sequence_gate: No forward run until EXP-017 has a committed countable-success closure.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT
+next_experiment: EXP-017
+```
