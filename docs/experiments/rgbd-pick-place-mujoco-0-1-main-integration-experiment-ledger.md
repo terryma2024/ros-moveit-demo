@@ -2175,6 +2175,28 @@ decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN_RELIABLE_OBSERVER
 next_experiment: SMOKE-012
 ```
 
+## CP-056 — RED contract for camera-compatible perception subscription QoS
+
+```yaml
+checkpoint_id: CP-056
+recorded_at: 2026-08-27T02:20:28+08:00
+status: RED
+qualification: false
+record_head_before_checkpoint: 40ab02e1400176ab290ed60fc3cc78cb38a3a87d
+root_cause_evidence:
+  - SMOKE-011 best-effort received CameraInfo ten, color zero, depth four, and zero aligned stamps in 45.095 s.
+  - SMOKE-012 reliable volatile depth-one rolling observer received CameraInfo sixteen, color three, depth sixteen, and three aligned stamps in 1.549 s on the otherwise unchanged FastDDS stack.
+contract:
+  - All three perception camera subscriptions must use depth one, RELIABLE, VOLATILE QoS matching CameraPlugin publishers.
+red_command: python -m pytest -q -o cache_dir=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/tdd-qos-red-cache src/so101_demo_py/test/test_rgbd_cup_pose.py::test_ros_runtime_matches_reliable_depth_one_camera_qos
+red_result: one failed in 0.37 s
+red_failure: AttributeError object has no attribute depth because production still passes qos_profile_sensor_data.
+invalid_test_observation: The first invocation omitted sourced overlays and failed import; it is an environment-only observation and was rerun with the frozen candidate overlays to obtain the product RED above.
+scope: Change only the three camera subscription QoS profiles; do not alter publisher QoS, timeout, launch sequencing, perception policy, topics, TF, or motion.
+decision: COMMIT_RED_THEN_APPLY_MINIMAL_CAMERA_QOS_CHANGE
+next_experiment: NONE
+```
+
 ## CP-055 / CLOSE-SMOKE-012-001 — Reliable QoS restores aligned RGB-D delivery
 
 ```yaml
