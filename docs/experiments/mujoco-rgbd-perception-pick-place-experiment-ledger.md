@@ -2154,3 +2154,22 @@ open_risks:
   - Intermittent nonfatal pal_statistics shutdown diagnostics remain retained for final reporting.
 next_command: Commit and push this closure checkpoint, then prove fresh domain 198/title/tmux isolation and transition EXP-020 only to RUNNING.
 ```
+
+```yaml
+transition_id: TRANS-EXP-020-RUNNING-001
+recorded_at: 2026-08-26T12:36:58+08:00
+experiment_id: EXP-020
+from: PLANNED
+to: RUNNING
+source_commit: 44cf6445915b00d26dc5cd44529a0cfedf86af85
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: Generic evidence-only wrappers pass zsh syntax checks and preserve the accepted EXP-017 through EXP-019 coordinator boundaries.
+  - OBSERVED: Task source is clean at 44cf6445; gitlink and clean submodule HEAD both equal exact f19 with describe so101-0.0.3-r8-3-gf19a8cc. Canonical main is clean at b3770360.
+  - OBSERVED: Domain 198 has no nodes, no process argument names the right partition, owned tmux is absent, and exact-title Viewer count is zero.
+  - OBSERVED: Window-scope CUA session rgbd-pick-exp020-viewer-20260826 is active before launch.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/pre-running/isolation-snapshot.log
+next_command: Start concurrent capture and full-restart launch with runtime session rgbd-pick-right-exp020-20260826 and the sole product change cup_test_right_5cm.
+```
