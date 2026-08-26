@@ -50,8 +50,8 @@ def main(arguments: list[str] | None = None) -> int:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    except RCLError:
-        if rclpy.ok():
+    except RCLError as error:
+        if rclpy.ok() or "context is not valid" not in str(error):
             raise
     finally:
         node.destroy_timer(timer)
