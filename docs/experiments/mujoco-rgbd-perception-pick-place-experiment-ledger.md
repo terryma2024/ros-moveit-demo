@@ -2521,3 +2521,24 @@ open_risks:
   - Nonfatal pal_statistics shutdown diagnostics and fail-closed post-input frame rejects remain retained for final reporting.
 next_command: Commit and push this closure, then prove fresh domain 205/session/evidence/Viewer/CUA isolation and transition EXP-027 only to RUNNING.
 ```
+
+```yaml
+transition_id: TRANS-EXP-027-RUNNING-001
+recorded_at: 2026-08-26T15:23:50+08:00
+experiment_id: EXP-027
+from: PLANNED
+to: RUNNING
+source_commit: ce583cf4f6d9522afc178ba69b82bf5067e5e694
+implementation_commit: 48349ca7f6134e7bc4d15385338f86e5fbc182e7
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: Task source is clean at ce583cf4; exact f19 gitlink/submodule/describe and clean canonical main b3770360 are preserved.
+  - OBSERVED: Domain 205, exact left runtime/launch/Viewer process set, task-owned tmux, exact Viewer title, CUA identity, and all nominal/derived/session evidence identities were empty.
+  - OBSERVED: Only the allowed empty evidence parents now exist; production must allocate the session exclusively. Strict window-scope CUA session rgbd-pick-exp027-viewer-20260826 is active and desktop remains locked.
+single_variable: Change only the frozen initial keyframe from cup_test_forward_5cm to cup_test_left_5cm; all source, overlay, policy, geometry, harness, and gates are unchanged.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-027/pre-running/isolation-snapshot.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-027/pre-running/cua-start.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-027/pre-running/cua-state.json
+next_command: Commit and push this transition, then run explicit-zsh capture and full restart concurrently on domain 205 for cup_test_left_5cm.
+```
