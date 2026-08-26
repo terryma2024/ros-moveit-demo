@@ -341,3 +341,104 @@ decision: PROCEED_TO_EXP_010_MAC_FULL_RESTART
 next_experiment: EXP-010
 next_command: Read the project-local gui-capture skill, prove domain 220/session/evidence/Viewer isolation, and transition only EXP-010 to RUNNING before starting the GUI stack.
 ```
+
+## CP-002-AUDIT-CORRECTION — Task 3 review round 1
+
+This is additive; it does not rewrite CP-002 or change installed implementation commit
+`208dd216f9ef52e2792830a19c1e070b8aef1778`.
+
+```yaml
+correction_id: CP-002-AUDIT-CORRECTION
+record_head_before_correction: ae4d20af0645bbf26459e4132e4287407cba8800
+acceptance_ruling:
+  - Upstream mujoco_3d_lidar and mujoco_ros2_control_msgs intentionally register no standalone CTest. Their literal "No tests were found!!!" output is preserved and is not counted as a test.
+  - A selected leaf with no standalone CTest passes only through nonzero installed-artifact or installed-interface consumer tests against the exact candidate overlay; a raw no-tests output never passes alone.
+  - mujoco_3d_lidar substitute gate is the 3-case test_3d_lidar_plugin ament-resource/plugin consumer; 3/3 passed.
+  - mujoco_ros2_control_msgs substitute gate is test_mujoco_simulation (44 cases) plus test_viewer_camera (7 cases); 51/51 generated-interface consumer cases passed.
+  - Project contract nodeids test_macos_install_contract.py::test_installer_builds_exact_upgrade_package_set_and_checks_new_artifacts and test_macos_install_contract.py::test_integration_guide_reads_back_all_four_fork_package_prefixes passed inside the 442-case full suite. They assert the exact four-package set, required message interfaces/artifacts, and all four candidate prefix readbacks.
+accepted_environment_preamble_before_child_build: |-
+  source /Users/matianyi/ros2_jazzy/.venv/bin/activate
+  source /opt/ros/jazzy/setup.zsh
+  source /Users/matianyi/ros2_jazzy/extra_ws/install/setup.zsh
+  source /Users/matianyi/ros2_jazzy/so101_isolated_ws/install/setup.zsh
+  export VIRTUAL_ENV=/Users/matianyi/ros2_jazzy/.venv
+  export PATH="/Users/matianyi/ros2_jazzy/.venv/bin:${PATH}"
+  export PYTHONNOUSERSITE=1
+  export DYLD_LIBRARY_PATH="/Users/matianyi/ros2_jazzy/macos_dylib_farm/current${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+  export ROS_LOG_DIR=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/ros-log
+accepted_environment_preamble_before_child_test: |-
+  source /Users/matianyi/ros2_jazzy/.venv/bin/activate
+  source /opt/ros/jazzy/setup.zsh
+  source /Users/matianyi/ros2_jazzy/extra_ws/install/setup.zsh
+  source /Users/matianyi/ros2_jazzy/so101_isolated_ws/install/setup.zsh
+  export DYLD_LIBRARY_PATH="/Users/matianyi/ros2_jazzy/macos_dylib_farm/current${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+  source /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install/setup.zsh
+  export VIRTUAL_ENV=/Users/matianyi/ros2_jazzy/.venv
+  export PATH="/Users/matianyi/ros2_jazzy/.venv/bin:${PATH}"
+  export PYTHONNOUSERSITE=1
+  export ROS_LOG_DIR=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/ros-log
+accepted_environment_preamble_before_project_test: |-
+  source /Users/matianyi/ros2_jazzy/.venv/bin/activate
+  source /opt/ros/jazzy/setup.zsh
+  source /Users/matianyi/ros2_jazzy/extra_ws/install/setup.zsh
+  source /Users/matianyi/ros2_jazzy/so101_isolated_ws/install/setup.zsh
+  export DYLD_LIBRARY_PATH="/Users/matianyi/ros2_jazzy/macos_dylib_farm/current${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+  source /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install/setup.zsh
+  source /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/setup.zsh
+  export VIRTUAL_ENV=/Users/matianyi/ros2_jazzy/.venv
+  export PATH="/Users/matianyi/ros2_jazzy/.venv/bin:${PATH}"
+  export PYTHONNOUSERSITE=1
+  export SO101_SOURCE_COMMIT=208dd216f9ef52e2792830a19c1e070b8aef1778
+  export ROS_LOG_DIR=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-ros-log
+accepted_commands:
+  - command: |-
+      colcon --log-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-log build --base-paths third_party/mujoco_ros2_control --build-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-build --install-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install --packages-select mujoco_3d_lidar mujoco_ros2_control_msgs mujoco_ros2_control_plugins mujoco_ros2_control --symlink-install --event-handlers console_direct+ > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-build-command-r2.log 2>&1
+      task_rc=$?; printf '%s\n' "${task_rc}" > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-build-exit-code.txt; exit "${task_rc}"
+    preamble: accepted_environment_preamble_before_child_build
+    exit_code: 0
+    exit_code_evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-build-exit-code.txt
+  - command: |-
+      : > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-ctest.log; task_rc=0
+      for package in mujoco_3d_lidar mujoco_ros2_control_msgs mujoco_ros2_control_plugins mujoco_ros2_control; do printf 'PACKAGE=%s\n' "${package}" >> /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-ctest.log; ctest --test-dir "/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-build/${package}" --output-on-failure >> /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-ctest.log 2>&1; package_rc=$?; printf 'PACKAGE_EXIT=%s\n' "${package_rc}" >> /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-ctest.log; if test "${package_rc}" -ne 0; then task_rc=${package_rc}; fi; done
+      printf '%s\n' "${task_rc}" > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-ctest-exit-code.txt; test "${task_rc}" -eq 0 || exit "${task_rc}"
+      colcon test-result --test-result-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-build --all --verbose > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-test-result-verbose-clean-scope.txt 2>&1
+      task_rc=$?; printf '%s\n' "${task_rc}" > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-test-result-clean-scope-exit-code.txt; exit "${task_rc}"
+    preamble: accepted_environment_preamble_before_child_test
+    exit_code: 0
+    exit_code_evidence: [/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-ctest-exit-code.txt, /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-test-result-clean-scope-exit-code.txt]
+  - command: |-
+      colcon --log-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-log build --base-paths src --build-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-build --install-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install --packages-select so101_demo_py --symlink-install --event-handlers console_direct+ > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-build-command.log 2>&1
+      task_rc=$?; printf '%s\n' "${task_rc}" > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-build-exit-code.txt; exit "${task_rc}"
+    preamble: accepted_environment_preamble_before_child_test
+    exit_code: 0
+    exit_code_evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-build-exit-code.txt
+  - command: |-
+      python -m pytest src/so101_demo_py/test -q -o cache_dir=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-cache > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-full.log 2>&1
+      task_rc=$?; printf '%s\n' "${task_rc}" > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-full-exit-code.txt; exit "${task_rc}"
+    preamble: accepted_environment_preamble_before_project_test
+    result: 442 passed in 21.03 s
+    exit_code: 0
+    exit_code_evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-full-exit-code.txt
+  - command: |-
+      python -m pytest src/so101_demo_py/test/test_macos_install_contract.py src/so101_demo_py/test/test_mujoco_camera_plugin_contract.py src/so101_demo_py/test/test_mujoco_cup_test_keyframes.py src/so101_demo_py/test/test_camera_tf_contract.py src/so101_demo_py/test/test_rgbd_point_cloud.py src/so101_demo_py/test/test_rgbd_cup_pose.py src/so101_demo_py/test/test_dynamic_scene_sync.py src/so101_demo_py/test/test_perception_pick_place_launch.py src/so101_demo_py/test/test_perception_launch_runner.py -q -o cache_dir=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-directed-pytest-cache > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-directed-pytest.log 2>&1
+      task_rc=$?; printf '%s\n' "${task_rc}" > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-directed-pytest-exit-code.txt; exit "${task_rc}"
+    preamble: accepted_environment_preamble_before_project_test
+    result: 153 passed in 17.45 s
+    exit_code: 0
+    exit_code_evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-directed-pytest-exit-code.txt
+  - command: |-
+      python -m pytest src/so101_demo_py/test --collect-only -q -o cache_dir=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-cache-collect > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-collect-only.log 2>&1
+      task_rc=$?; printf '%s\n' "${task_rc}" > /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-collect-only-exit-code.txt; exit "${task_rc}"
+    preamble: accepted_environment_preamble_before_project_test
+    result: 442 tests collected
+    exit_code: 0
+    exit_code_evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-collect-only-exit-code.txt
+non_counting_out_of_root_evidence:
+  path: /tmp/so101-debug-mrc010-task1/
+  status: Retained, not used for CP-002 acceptance, and not part of the registered evidence root.
+  disposition: Deletion candidate only; no deletion performed and explicit user authorization remains required.
+retained_runs: [/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/]
+archived_runs: []
+deletion_candidates: [/tmp/so101-debug-mrc010-task1/, registered-root invalid environment attempts listed in CP-002]
+decision: CP-002_STATIC_QUALIFICATION_REMAINS_ACCEPTED_WITH_EXPLICIT_LEAF_PACKAGE_SUBSTITUTE_GATES
+```

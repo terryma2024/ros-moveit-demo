@@ -180,6 +180,21 @@ the current install guide, and the task fork install. Build `mujoco_3d_lidar`,
 `mac-candidate/fork-build` and `mac-candidate/fork-install`. Record package prefixes and library
 paths; zero-package or zero-test output fails the gate.
 
+Additive Task 3 acceptance clarification (CP-002 review round 1): “zero-test output” means zero
+accepted test coverage for a selected package, not that every leaf package must register a
+standalone CTest. A library/resource or interface-only leaf that intentionally registers no CTest
+may pass only when a nonzero installed-artifact or installed-interface consumer suite runs against
+the exact candidate overlay and is recorded per leaf. A raw `No tests were found!!!` line is never
+sufficient by itself. For CP-002, `mujoco_3d_lidar` is gated by the three-case installed ament/plugin
+consumer `test_3d_lidar_plugin`, and `mujoco_ros2_control_msgs` is gated by the 44-case
+`test_mujoco_simulation` plus seven-case `test_viewer_camera` consumers (51 cases total). The
+project-side installed contract gate additionally requires the nonzero nodeids
+`test_macos_install_contract.py::test_installer_builds_exact_upgrade_package_set_and_checks_new_artifacts`
+and
+`test_macos_install_contract.py::test_integration_guide_reads_back_all_four_fork_package_prefixes`
+inside the passing full `src/so101_demo_py/test` suite; these assert the exact four-package set,
+required message interfaces/artifacts, and all four candidate prefix readbacks.
+
 - [ ] **Step 2: Build the project package into a separate install**
 
 ```bash
