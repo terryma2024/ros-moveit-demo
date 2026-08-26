@@ -202,11 +202,15 @@ class MuJoCoROS2ControlRenderingPlugin
 {
 public:
   virtual ~MuJoCoROS2ControlRenderingPlugin() = default;
-  virtual void set_macos_render_context(void* context) = 0;
+  virtual void set_platform_render_context(void* context) = 0;
   virtual void set_rendering_enabled(bool enabled) = 0;
   virtual void close_rendering() = 0;
 };
 ```
+
+> 2026-08-26 approved amendment: the context handoff is a platform-neutral optional capability.
+> Apple supplies the main-thread-created GLFW context; non-Apple callers pass `nullptr`, and the
+> implementation treats that handoff as a no-op. Do not expose a macOS-named public virtual method.
 
 Keep these in `mujoco_ros2_control_plugins` namespace and leave `mujoco_ros2_control_plugins_base.hpp` byte-for-byte equivalent to upstream at the public class declaration.
 
@@ -421,7 +425,7 @@ Both callbacks take the simulation/UI synchronization mutex used by the upstream
 
 - [ ] **Step 4: Implement the optional renderer lifecycle in CameraPlugin**
 
-Make CameraPlugin implement `MuJoCoROS2ControlRenderingPlugin`. On macOS, `set_macos_render_context(void*)` stores only the context prepared on the main/UI thread; the camera worker makes that context current only while rendering. `set_rendering_enabled(false)` stops new frames. `close_rendering()` joins the worker and releases MuJoCo render resources before context destruction. On non-Apple builds, retain upstream EGL/GLFW setup and make the platform handoff a harmless no-op.
+Make CameraPlugin implement `MuJoCoROS2ControlRenderingPlugin`. On macOS, `set_platform_render_context(void*)` stores only the context prepared on the main/UI thread; the camera worker makes that context current only while rendering. `set_rendering_enabled(false)` stops new frames. `close_rendering()` joins the worker and releases MuJoCo render resources before context destruction. On non-Apple builds, retain upstream EGL/GLFW setup and make the platform handoff a harmless no-op.
 
 - [ ] **Step 5: Wire macOS UI ownership and defensive monitor checks**
 

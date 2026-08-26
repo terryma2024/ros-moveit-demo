@@ -16,14 +16,14 @@
 | 本地历史基线 | `f19a8cc3af61feccacb22a9f0d16cc972e3b2c08`（`so101-0.0.3-r11`） |
 | true merge commit | `6c562f861e09394ba631fa7dc4e63ea98f95e04c` |
 | true merge parents | `57fc674...`、`f19a8cc...` |
-| 最终 fork 候选 | `fcbc9f7b23f4493ceed888a22f32805a37493624` |
-| 父仓库代码 pin | `fa37de5af725fbd61c037623dc0fdd64f577f0ff` |
+| 最终 fork 候选 | `ca654e30ea9791564fab7110c90734733b68c8cc` |
+| 父仓库代码 pin | 待本次 gitlink 固化提交生成后回填 |
 | candidate label | `so101-0.1.0-r1-candidate`，不是 Git tag |
-| Linux 状态 | `VALID / QUALIFIED` |
+| Linux 状态 | 上一候选 `fcbc9f7...` 已合格；当前候选 `ca654e3...` 待复验 |
 | macOS 状态 | `BREAKER / NOT QUALIFIED` |
 | 最终 release tag | 未创建 |
 
-相对官方 `57fc674...`，fork 最终候选修改 41 个文件，约 6212 行新增、344 行删除。大量官方
+相对官方 `57fc674...`，fork 最终候选修改 42 个文件，约 6257 行新增、344 行删除。大量官方
 `0.1.0` 新增内容则通过 true merge 直接继承，不会出现在这组“相对官方”的统计中。
 
 ## 2. 升级策略
@@ -33,7 +33,7 @@
 
 ```text
 official 0.1.0 @ 57fc674 ─────┐
-                              ├─ true merge @ 6c562f8 ── migration/fixes ── fcbc9f7
+                              ├─ true merge @ 6c562f8 ── migration/fixes ── ca654e3
 local 0.0.3-r11 @ f19a8cc ───┘
 ```
 
@@ -95,7 +95,7 @@ flowchart TD
   - `on_pause`
   - `on_state_snapshot`
 - `MuJoCoROS2ControlRenderingPlugin`
-  - `set_macos_render_context`
+  - `set_platform_render_context`
   - `set_rendering_enabled`
   - `close_rendering`
 
@@ -175,9 +175,10 @@ reset”判断无法区分这些操作。最终实现把项目自有的 `ROS2Con
 旧 r11 的 camera 逻辑被迁移为官方 plugin 架构下的 rendering capability：
 
 - CameraPlugin 不再自行决定整个 viewer/context 生命周期；
+- 公共 capability 使用平台中立的 `set_platform_render_context(void*)`，不在 ABI 中暴露 macOS 名称；
 - macOS 在主线程创建隐藏 GLFW camera context，再有界借给 camera worker 渲染；
 - viewer/GLFW 的主线程任务通过 `MacOSUIDispatcher` 串行执行；
-- Linux 继续使用自身的隐藏 GLFW context，未套用 macOS Cocoa 所有权规则；
+- Linux 调用同一 capability 时传 `nullptr`，实现保持 no-op，并继续使用自身的隐藏 GLFW context；
 - `disable_rendering`、init rollback、`close_rendering` 和 worker join 有明确顺序；
 - camera topics 仍由官方 CameraPlugin 发布，SO-101 不复制第二套 RGB-D publisher。
 
@@ -361,8 +362,10 @@ invalid-context 和 SIGTERM 升级，因此该轮不合格。修复停机顺序�
 初始化的 `_glfwSetWindowSizeCocoa` 路径发生 SIGSEGV，`ros2_control_node` exit `-11`，未进入该轮
 camera/dynamic 验收。
 
-最终 `f0f09ab..fcbc9f7` 只增加测试生命周期修复，没有修改生产 runtime 源码。因此 Linux 已合格，
-但不能替代 macOS 最终联合验收；当前不得创建 `so101-0.1.0-r1` release tag。
+`fcbc9f7...` 的 Linux 全量验收仍是有效历史证据，但当前 `ca654e3...` 把公开 rendering capability
+从 `set_macos_render_context(void*)` 改为 `set_platform_render_context(void*)`，属于 ABI 与调用点变更。
+因此必须对当前精确候选重新完成 Linux 构建、camera、dynamic 和干净停机验收；它也不能替代 macOS
+最终联合验收。当前不得创建 `so101-0.1.0-r1` release tag。
 
 ## 9. 后续维护规则
 

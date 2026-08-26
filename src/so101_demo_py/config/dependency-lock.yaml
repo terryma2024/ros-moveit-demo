@@ -4,7 +4,7 @@ release: 0.1.0
 fork:
   url: git@gitee.com:zjumty/mujoco_ros2_control.git
   tag: so101-0.1.0-r1-candidate
-  commit: fcbc9f7b23f4493ceed888a22f32805a37493624
+  commit: ca654e30ea9791564fab7110c90734733b68c8cc
   lineage_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
   policy_behavior_commit: 1ef550cbbcbbcf8c0e5784648f81545724d5f90f
 upstream:
@@ -32,7 +32,7 @@ interface_sha256:
   mujoco_ros2_control_msgs/srv/SetFreeJointState: 7f32a80581f96cb438402d8863b653b343f068a4dbe18f01479b480e5a5e1547
 required_files:
   include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: e4bb0f69a48fd9686a1cd50e7e064cae0bdfc011b09576b91d6945b8f5d8b5ee
-  include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp: 496cb71e0052aa40505a38a54f8c7c18a829aa6a2aed72007de43d41d13a34f8
+  include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp: 3014522a86580b31c58c47b7079a958ba2c28fb208b1c98a5d5d08d944a29ad8
   include/mujoco_ros2_control/viewer_camera.hpp: 488364d11a6d591438bda116831e111b9fdb7934146117af2a8106120efae6ed
   lib/mujoco_3d_lidar/mujoco_plugin/libmujoco_3d_lidar.so: platform-specific
   lib/libmujoco_ros2_control_plugins_impl.so: platform-specific
