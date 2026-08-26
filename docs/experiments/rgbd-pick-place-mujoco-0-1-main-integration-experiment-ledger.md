@@ -33,8 +33,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-130
-next_experiment: EXP-047
+latest_checkpoint: CP-131
+next_experiment: EXP-048
 ```
 
 ## EXP-047 — state-events watcher task_start FULL_RESTART
@@ -88,6 +88,65 @@ recorded_at: 2026-08-27T05:18:00+08:00
 status: VALID
 owned_processes: NONE before launch
 decision: Execute and require runner/watcher zero, AC-001 structured gates, pixels, and cleanup.
+```
+
+## EXP-047 closure — VALID task_start FULL_RESTART
+
+```yaml
+closure_id: CLOSE-EXP-047-001
+recorded_at: 2026-08-27T05:22:00+08:00
+experiment_id: EXP-047
+status: VALID
+qualification: COUNTABLE_1_OF_5
+runner_exit_code: 0
+watcher_exit_code: 0
+perception: {position_error_m: 0.0006424288652577669, fitted_radius_m: 0.03938151231973142, full_points: 98123, cup_points: 141, frame: world, source_frame: task_camera_frame}
+workflow: {status: DONE, transition_count: 19, failure: null, detach_before_open: true}
+physical:
+  micro_lift: {left_contacts: 1, right_contacts: 1, table_contact: false, z_m: 0.16659469430812848}
+  lift: {left_contacts: 1, right_contacts: 1, table_contact: false, z_m: 0.22319553675802267}
+  transport: {left_contacts: 3, right_contacts: 4, table_contact: false, xyz_m: [-0.0764143805029031, -0.24715351126727972, 0.22791728182000942]}
+  final: {xyz_m: [-0.0780712617924726, -0.24750172991056177, 0.1650043118255128], xy_error_m: 0.0023441236835676734, tilt_rad: 0.009014967302607948, left_contacts: 0, right_contacts: 0, table_contact: true, velocity_near_zero: true}
+moveit: {attached_during_transport: true, detached_before_open: true, final_attached_ids: [], final_world_plastic_cup_primitives: 13}
+gui:
+  baseline: {sha256: 7d9fd8376920690e1e3f0795b83c751e7cf58d86d108cbd5147fcd8d313a5076, inspected: Cup is outside the red target with arm at the start posture and live Running counters.}
+  transport: {sha256: 7a965219ad538c295ed96a840b976d0bec3828bd33adf089ce50b3c130e4a5b7, inspected: Cup is visibly elevated and held by the gripper above the target approach.}
+  final: {sha256: b007c30b955fe7e47a197e868ed38008865432ea3f0c6725b6b4158f73204323, inspected: Upright cup is visibly inside the red ring with gripper open and arm still present.}
+  same_viewer: Exact title/window and PID 1223001 in all three fresh inventories and identity files.
+shutdown: {moveit_ordered_marker: true, ros2_control_clean_exit: true, tmux_absent: true, domain_111_empty: true, identity_process_set_empty: true}
+forbidden_routes: No truth publisher, truth bridge, cup_pose_tf_demo, fixed workflow, or perception bypass process appears.
+decision: ACCEPT_AND_CONTINUE_CONSECUTIVE_BATCH
+```
+
+## EXP-048 — forward 5 cm FULL_RESTART
+
+```yaml
+experiment_id: EXP-048
+recorded_at: 2026-08-27T05:22:00+08:00
+status: PLANNED
+prior_experiment: EXP-047
+hypothesis: The same frozen candidate completes AC-001 from cup_test_forward_5cm under an independent full restart.
+single_variable: initial_keyframe=cup_test_forward_5cm
+lifecycle: FULL_RESTART
+identity: {domain: 112, partition: linux-rgbd-forward-exp048, session: linux-rgbd-forward-exp048, tmux: linux-rgbd-forward-exp048}
+evidence_file: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-048/forward.json
+provenance_and_contract: Exact EXP-047 source/child/install/environment/watcher/AC-001; only registered identity and keyframe change.
+success_criteria: AC-001 passes every clause.
+failure_criteria: Valid behavioral failure stops the batch.
+invalid_criteria: Isolation, provenance, observation, or cleanup invalidity.
+decision: COMMIT_VALID_AND_PLAN_THEN_FRESH_PREFLIGHT
+```
+
+## CP-131 — First countable Linux success; EXP-048 planned
+
+```yaml
+checkpoint_id: CP-131
+recorded_at: 2026-08-27T05:22:00+08:00
+status: VALID
+last_valid_experiment: EXP-047
+consecutive_count: 1
+owned_processes: NONE
+next_experiment: EXP-048
 ```
 
 ## EXP-042 — watcher-qualified task_start FULL_RESTART
