@@ -30,8 +30,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-011
-next_experiment: NONE
+latest_checkpoint: CP-012
+next_experiment: SMOKE-001
 ```
 
 ## Shared live acceptance contract
@@ -832,4 +832,35 @@ evidence:
   - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-log-support-r1
 decision: COMMIT_GREEN_THEN_RUN_NON_QUALIFICATION_CRASH_BOUNDARY_SMOKE
 next_experiment: NONE
+```
+
+## CP-012 — Plan non-qualification ABI crash-boundary smoke
+
+```yaml
+checkpoint_id: CP-012
+recorded_at: 2026-08-27T00:03:21+08:00
+smoke_id: SMOKE-001
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_change: 05200680b07487abed9419003e91d65fa51a0246
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+hypothesis: The ABI-aligned candidate support plugin crosses the first authoritative physics pre_step boundary without the EXP-015 SIGSEGV.
+single_variable: Replace only the stale isolated-workspace support plugin with the candidate project-overlay support plugin built at CP-011.
+command_scope:
+  - Launch the installed base MuJoCo stack, not the perception or dynamic pick-place workflow.
+  - Use headless=false only to exercise the same camera/rendering/plugin combination.
+  - Observe active controllers, advancing simulation evidence, and process survival past the prior crash boundary; then send one owned SIGINT for controlled shutdown.
+preconditions:
+  - Domain 231, session mac-mrc010-abi-smoke-r1, task tmux mrc010-mac-abi-smoke-r1, exact Viewer title, and evidence path are empty.
+  - Candidate demo, support, and fork prefixes are the CP-011 overlays.
+  - Unrelated historical tmux sessions and windows remain untouched.
+success_criteria:
+  - Both plugins initialize, physics advances for at least five seconds beyond initialization, ros2_control_node remains alive, and no SIGSEGV/pre_step crash occurs.
+  - Owned SIGINT produces bounded clean shutdown with no domain/session/tmux/Viewer residue.
+failure_criteria:
+  - Any product process dies before the owned stop, physics evidence does not advance, or the old pre_step SIGSEGV recurs.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-smoke/abi-r1
+decision: COMMIT_PLAN_THEN_TRANSITION_RUNNING
+next_experiment: SMOKE-001
 ```
