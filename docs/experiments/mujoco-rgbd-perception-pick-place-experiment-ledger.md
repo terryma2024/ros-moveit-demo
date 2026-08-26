@@ -2705,3 +2705,37 @@ decision: RETURN_TO_RED
 next_experiment: EXP-029
 next_command: Add RED tests for spawner teardown and real LaunchService required-process propagation, implement the minimal terminal guard, rebuild/freeze a new implementation, correct the retained full-restart helper to invoke the installed runner, then requalify task_start/forward/left/right as EXP-029 through EXP-032 on fresh identities.
 ```
+
+```yaml
+checkpoint_id: CP-038
+recorded_at: 2026-08-26T15:51:25+08:00
+last_valid_experiment: EXP-028
+current_hypothesis: The exact-status boundary is now closed in source and the installed runner; four fresh physical runs must exercise that runner before completion.
+implementation_commit: 2f1ca1e7c512f50ab4eca4d121d73152ea9ed2df
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+review_return_resolution:
+  - OBSERVED: RED retained two failures: direct spawner teardown emitted a failure and the real LaunchService clean-workflow-plus-spawner-teardown case returned 1; 47 neighboring tests passed.
+  - OBSERVED: The minimal one_shot_exit_handler workflow_terminal guard makes all 49 focused tests pass while preserving the pre-terminal failure paths.
+  - OBSERVED: A new real LaunchService regression returns exact required-long-lived status 17; a clean workflow followed by spawner teardown returns 0.
+  - OBSERVED: Fresh full source suite passed 402 tests in 5.63 s; Ruff check and format check returned zero.
+  - OBSERVED: The dependency-closed six-package build passed with the task Open3D python-deps excluded from build PYTHONPATH; installed provenance passed 3 tests and the installed runner executable readback is exact.
+  - OBSERVED: Retained helper mode remains 0664 and zsh syntax is valid. Its sole command-boundary correction now invokes ros2 run so101_demo_py so101_mujoco_perception_pick_place; prior helpers and EXP-025 through EXP-028 evidence were not overwritten.
+  - OBSERVED: Local and Gitee branch read back exact implementation 2f1ca1e7; gitlink/submodule are exact f19a8cc3 with describe so101-0.0.3-r8-3-gf19a8cc and clean; canonical main is clean at b3770360.
+historical_status:
+  - CP-016 and CP-037 remain immutable historical conclusions.
+  - EXP-025 through EXP-028 remain retained physically valid but wrapper-nonqualifying history under implementation 48349ca7.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-red/pytest-red.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/pytest-focused.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/pytest-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/ruff-check-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/ruff-format-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/colcon-build.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/installed-provenance.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/helper-runner-boundary.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/source-freeze-prepush.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-11-green/gitee-readback.log
+decision: PROCEED_TO_FRESH_EXACT_RUNNER_QUALIFICATION
+next_experiment: EXP-029
+next_command: Commit and push this checkpoint, then prove fresh domain 207/session/evidence/Viewer/CUA isolation and transition EXP-029 only to RUNNING.
+```
