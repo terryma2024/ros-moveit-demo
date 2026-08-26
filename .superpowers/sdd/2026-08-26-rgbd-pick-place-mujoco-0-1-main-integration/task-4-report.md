@@ -2,11 +2,47 @@
 
 ## Status
 
-`FUNCTIONAL_PASS_GUI_EVIDENCE_UNAVAILABLE`
+`REPAIRED_CANDIDATE_FUNCTIONAL_PASS_GUI_EVIDENCE_UNAVAILABLE`
 
-All four requested Mac FULL_RESTART positions completed the installed perception-driven pick/place chain once with natural `rc=0`, `status=DONE`, and `transition_count=19`. The required exact-window screenshots are not available: the current upstream 0.1.0 non-bundled GLFW Viewer is visible to CoreGraphics but exposes zero Accessibility windows, so the unchanged capture helper cannot perform its mandatory `AXRaise`. This report does not claim that visual clause or full AC-001 qualification.
+All four requested Mac FULL_RESTART positions completed the repaired installed candidate
+`3ea1530530b274af3b3db5b9aa50165ae66b7e31` once with natural `rc=0`, `status=DONE`, and
+`transition_count=19`. The required exact-window screenshots remain unavailable: the current upstream
+0.1.0 non-bundled GLFW Viewer is visible to CoreGraphics but exposes zero Accessibility windows, so
+the unchanged capture helper cannot perform its mandatory `AXRaise`. This report claims Mac 4/4
+functional and physical success, but does not claim the unavailable visual clause.
 
-## Summary
+## Repaired candidate four-position results
+
+The repaired candidate changes the MuJoCo TCP micro-lift target from 2 mm to 4 mm while preserving
+the physical 1–10 mm acceptance gate. Each row below is a new independent process, ROS domain,
+session, evidence directory, MoveIt/controller instance, and MuJoCo world. The validator also proves
+nonempty point cloud/PLY, source-stamped `world` `/cup_pose`, nonzero trajectories, fresh monotonic
+terminal JointState/FK-TCP evidence, bilateral unsupported lift and transport, detach before open,
+stable final table placement, zero final fingertip contacts, world sync, retreat, and ordered clean
+shutdown.
+
+| Run / keyframe | Perceived world XYZ (m) | Perception error | Physical micro-lift | Max terminal TCP error | Final XY error | Result |
+|---|---:|---:|---:|---:|---:|---|
+| EXP-057 `task_start` | `[0.019499,-0.280405,0.165000]` | 0.644 mm | 3.952 mm | 0.701 mm | 2.635 mm | rc0, DONE/19 |
+| EXP-058 `cup_test_forward_5cm` | `[0.019624,-0.330460,0.165000]` | 0.594 mm | 4.017 mm | 1.162 mm | 2.489 mm | rc0, DONE/19 |
+| EXP-059 `cup_test_left_5cm` | `[-0.030362,-0.280587,0.165000]` | 0.690 mm | 3.976 mm | 0.820 mm | 2.498 mm | rc0, DONE/19 |
+| EXP-060 `cup_test_right_5cm` | `[0.069633,-0.280513,0.165000]` | 0.631 mm | 3.947 mm | 1.515 mm | 2.487 mm | rc0, DONE/19 |
+
+Repaired runtime provenance:
+
+- implementation: `3ea1530530b274af3b3db5b9aa50165ae66b7e31`
+- mujoco_ros2_control child: `5e9d67ce9fde39d35bf94cc498721abf203a0ddd` (`0.1.0`)
+- installed policy SHA256: `7d36a45b9382ba2d8a8d16646e66539ee8f1e499633f7a1b5c266d5ffbfded70`
+- installed bundle SHA256: `9c13cd8260ef5df6fd3486cb98dc6c89e06602b5cb8a2b95a1fe300ac94d1171`
+- fresh post-run suite: 448 passed in 11.95 s
+- fail-closed evidence validator: all checks passed for EXP-057 through EXP-060
+
+Evidence is retained under the registered root in `mac-runs/exp-057` through `mac-runs/exp-060`,
+with the aggregate result in `mac-repair-validation-summary.json`. Nothing was deleted or archived.
+
+## Historical pre-repair qualification
+
+### Summary
 
 The frozen production chain was:
 

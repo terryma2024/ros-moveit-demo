@@ -34,8 +34,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-147
-next_experiment: MAC_REQUALIFICATION_FROM_3EA1530
+latest_checkpoint: CP-148
+next_experiment: PUBLISH_MAC_REQUALIFICATION
 ```
 
 ## CP-140 — fresh review approved; repair five-run batch preregistered
@@ -348,6 +348,35 @@ readback_matches_local_closure: true
 record_semantics: This CP-147 commit is an additive publication record after the exact closure readback; pushing it does not change runtime bytes or any live evidence.
 decision: LINUX_COMPLETE_HAND_IMPLEMENTATION_3EA1530_TO_MAC_ORCHESTRATOR
 next_experiment: MAC_REQUALIFICATION_FROM_3EA1530
+```
+
+## CP-148 — repaired Mac four-position functional requalification valid
+
+```yaml
+checkpoint_id: CP-148
+recorded_at: 2026-08-27T05:58:35+08:00
+status: MAC_FUNCTIONAL_4_OF_4_VALID_GUI_EVIDENCE_UNAVAILABLE
+runtime_implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+installed_child_version: 0.1.0
+installed_policy_sha256: 7d36a45b9382ba2d8a8d16646e66539ee8f1e499633f7a1b5c266d5ffbfded70
+identities:
+  - EXP-057: {domain: 121, session: mac-mrc010-repair-task-start-exp057, keyframe: task_start}
+  - EXP-058: {domain: 122, session: mac-mrc010-repair-forward-exp058, keyframe: cup_test_forward_5cm}
+  - EXP-059: {domain: 123, session: mac-mrc010-repair-left-exp059, keyframe: cup_test_left_5cm}
+  - EXP-060: {domain: 124, session: mac-mrc010-repair-right-exp060, keyframe: cup_test_right_5cm}
+perception_error_range_m: [0.0005944336636481587, 0.0006900297461242743]
+physical_micro_lift_range_m: [0.003947114570562266, 0.004016502389757842]
+maximum_terminal_tcp_position_error_m: 0.0015148785670415104
+final_xy_error_range_m: [0.0024867717122782464, 0.002634902080417901]
+common_result: Each runner exits zero and reaches DONE/19 with nonempty point cloud/PLY, source-stamped world /cup_pose, nonzero trajectories, fresh monotonic terminal JointState/FK-TCP evidence, bilateral unsupported lift/transport, detach-before-open, stable final table placement, zero final fingertip contacts, world sync, retreat, ordered shutdown, and no task-owned process residue.
+fresh_post_run_tests: 448 passed in 11.95 s after ROS_LOG_DIR was redirected into the registered evidence root; the preceding sandbox-denied ~/.ros/log attempt is invalid environment evidence, not a product result.
+gui: Exact-window capture remains unavailable because the non-bundled GLFW Viewer exposes no Accessibility window for mandatory AXRaise; Mac functional/physical 4-of-4 is valid, but the unavailable visual clause is not claimed.
+evidence_root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826
+evidence: mac-runs/exp-057 through exp-060, mac-repair-validation-summary.json, validate-mac-repair.py, and task-4-report.md
+retention: All evidence retained; archived none; deleted none; no new deletion candidates.
+decision: COMMIT_PUSH_AND_LS_REMOTE_READBACK
+next_experiment: PUBLISH_MAC_REQUALIFICATION
 ```
 
 ## CP-139 — repair record commit resolved additively
