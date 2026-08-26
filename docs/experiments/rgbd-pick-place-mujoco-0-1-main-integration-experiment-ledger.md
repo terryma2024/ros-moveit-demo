@@ -529,6 +529,20 @@ decision: COMMIT_CLOSURE_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN
 next_experiment: EXP-024
 ```
 
+## CP-105 / TRANS-EXP-024-RUNNING-001 — Start forward_5cm functional FULL_RESTART
+
+```yaml
+checkpoint_id: CP-105
+transition_id: TRANS-EXP-024-RUNNING-001
+recorded_at: 2026-08-27T03:46:10+08:00
+experiment_id: EXP-024
+from: PLANNED
+to: RUNNING
+qualification_scope: FUNCTIONAL_AC001_WITH_GUI_CLAUSE_UNAVAILABLE
+pre_running_observed: Fresh domain225/session/processes/Viewer/evidence passed; task worktree clean; exact runner SHA256 8f0cbdce963608c21cc414972208ca439365e8fc90d9fba5574f0ac29353747b.
+decision: START_EXACT_INSTALLED_FULL_CHAIN_AND_WAIT_NATURAL_EXIT
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
