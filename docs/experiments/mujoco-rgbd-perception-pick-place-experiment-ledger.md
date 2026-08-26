@@ -2173,3 +2173,58 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/pre-running/isolation-snapshot.log
 next_command: Start concurrent capture and full-restart launch with runtime session rgbd-pick-right-exp020-20260826 and the sole product change cup_test_right_5cm.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-020-001
+recorded_at: 2026-08-26T12:40:06+08:00
+experiment_id: EXP-020
+status: VALID
+classification: accepted_right_full_restart
+runtime_source_commit: bc3c901044ad8449889465822122b24acc73aa68
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: Fresh production perception consumed task_camera_frame 640x480 CameraPlugin RGB-D, selected 125 cup points from 98135 full points, wrote a nonempty 3581-byte PLY, fitted radius 0.03945093696604867 m, and published world [0.06963473821765558, -0.2805149484127753, 0.165]. Error to cup_test_right_5cm is 0.000631338 m and passes the frozen 0.01 m bound.
+  - OBSERVED: summary.json retains the first valid stamp 3411999999. The sole rgbd_cup_pose process continued publishing the identical static position/radius; dynamic_cup_pick_place consumed the same position at later stamp 5221999999, and the exact stamp has one matching producer log line. No second publisher, truth bridge, or cup_pose_tf_demo process started.
+  - OBSERVED: The workflow reached DONE with all 19 expected transitions. Arm trajectory/FK/joint targets changed through approach, lift, transport, place and retreat; gripper targets changed from close to open, and controller executions completed successfully.
+  - OBSERVED: Physical truth began table-supported at [0.07, -0.28, 0.1648016103], obtained bilateral unsupported contact, lifted from z=0.1668436917 to z=0.2248432375, transported with bilateral contact, detached before open, and released table-supported at [-0.0779314634, -0.2475422471, 0.1647792997] with zero finger contacts and near-zero velocity.
+  - OBSERVED: final_xy_error_m=0.0024896191 and final_upright_tilt_rad=0.0033459569 pass policy. Planning Scene ends detached with attached_object_ids=[] and world primitive counts pedestal=1, plastic_cup=13, table=1.
+  - OBSERVED: The concurrent coordinator captured three distinct 1568x862 same-session PNGs. Direct inspection shows the right-shifted baseline cup with open gripper, the cup visibly off the table and held during transport beside an empty red target, and the released cup inside the target with the gripper open/retreating.
+  - OBSERVED: Capture coordinator exit=0 and natural launch exit=0. All required processes report clean exits; post-cleanup exact child, domain 198, partition owners, owned tmux, Viewer, and CUA session are empty.
+retained_risk:
+  - OBSERVED: rgbd_cup_pose rejected transient motion/occlusion frames outside the frozen radius tolerance while the robot moved. The workflow input is an earlier valid static sample and the publisher continued fail-closed rather than emitting those rejected frames.
+  - OBSERVED: ros2_control_node emitted two pal_statistics publisher-thread context-invalid diagnostics during shutdown, then reported a clean process exit. As in EXP-018/019, this remains a nonfatal shutdown risk.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/acceptance-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/run/full-restart.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/run/capture-coordinator.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/run/capture-coordinator.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/run.d/rgbd-pick-right-exp020-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/run.d/rgbd-pick-right-exp020-20260826/perception/cup.ply
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/run.d/rgbd-pick-right-exp020-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/gui/viewer-transport.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/gui/viewer-final.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/post-cleanup.log
+conclusion: cup_test_right_5cm has one accepted, countable FULL_RESTART RGB-D-driven physical pick-place with complete numeric, physical, Planning Scene, controller, visual, natural-exit, and cleanup evidence.
+decision: KEEP
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-029
+recorded_at: 2026-08-26T12:40:06+08:00
+last_valid_experiment: EXP-020
+current_hypothesis: All four frozen initial keyframes have now independently passed; only final source/test/runtime/evidence inventory verification remains before task completion.
+working_tree_status: Task source and exact f19 submodule are clean before this ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; EXP-020 exact child, domain 198, partition, tmux, Viewer, and CUA are empty.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+confirmed_conclusions:
+  - EXP-017 task_start, EXP-018 forward, EXP-019 left, and EXP-020 right are four accepted independent FULL_RESTART runs under implementation a8b3d87a and exact f19.
+  - Each accepted run has numeric RGB-D truth agreement, physical grasp/lift/release, detached final Planning Scene, controller/FK/joint evidence, three fresh same-session visual frames, zero natural exits, and exact-owned cleanup.
+open_risks:
+  - Intermittent nonfatal pal_statistics shutdown diagnostics occurred in EXP-018 through EXP-020 but not EXP-017.
+  - Streaming perception may reject motion/occlusion frames by design after the accepted static input; these rejected frames are not fed to the already-running workflow.
+next_command: Commit and push this closure checkpoint, then run final fresh package tests, lint/format checks, provenance/overlay/runtime cleanup checks, and an evidence inventory before the completion checkpoint.
+```
