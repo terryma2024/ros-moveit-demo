@@ -33,8 +33,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-121
-next_experiment: EXP-032
+latest_checkpoint: CP-122
+next_experiment: EXP-037
 ```
 
 ## EXP-032 — ai-station task_start Mesa FULL_RESTART
@@ -116,6 +116,71 @@ status: VALID
 experiment_id: EXP-032
 owned_processes: NONE before launch
 decision: Launch once and capture same-Viewer baseline, transport, and final evidence.
+```
+
+## EXP-032 closure — runtime dependency environment invalid before perception
+
+```yaml
+closure_id: CLOSE-EXP-032-001
+recorded_at: 2026-08-27T04:54:00+08:00
+experiment_id: EXP-032
+status: INVALID
+classification: environment_invalid_non_counting
+first_bad_boundary:
+  process: installed rgbd_cup_pose
+  child_exit_code: 1
+  failure: RGBD_CUP_POSE_PREFLIGHT_FAILED
+  message: Open3D is missing from the isolated runtime environment.
+observed:
+  - Mesa GLFW, visible MuJoCo, the 640x480 camera offscreen buffer, simulation evidence plugin, controller manager, MoveIt, and scene READ_BACK all crossed their EXP-027 boundaries.
+  - Installed rgbd_cup_pose failed closed in its dependency preflight before accepting any RGB-D sample; dynamic workflow was interrupted by launch teardown and no robot motion occurred.
+  - The registered evidence root initially contained no runtime-only Open3D directory and neither the current nor env-i Python path could import it.
+  - Repository qualification history fixes the Linux runtime contract at task-owned Open3D 0.19.0 with NumPy 1.26.4, excluded from build PYTHONPATH and prepended only for test/runtime.
+  - Exact versions were installed under this evidence root at python-deps; exact production _require_open3d, import-path/version readback, and three-point DBSCAN smoke all pass.
+  - Exit code was 1; task tmux ended naturally, domain 96 is empty, no identity process remains, and no valid Viewer capture or task-start.json exists.
+competing_hypotheses:
+  - H1 missing runtime-only dependency is confirmed by absent path/import plus the explicit production preflight failure and GREEN task-local install smoke.
+  - H2 broken or incompatible Open3D wheel is disproved by exact Open3D 0.19.0/NumPy 1.26.4 import and DBSCAN GREEN.
+  - H3 RGB-D or workflow product failure is untested because dependency preflight failed before sample acceptance or robot motion.
+evidence:
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-032/run.log
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/build-logs/uv-open3d-runtime-deps.log
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-032/open3d-runtime-smoke.txt
+decision: Retain EXP-032; allocate another never-used five-run sequence with identical product contract and task-owned python-deps prepended at runtime only.
+```
+
+### Final replacement ai-station FULL_RESTART identities after dependency closure
+
+EXP-033 through EXP-036 remain untouched reservations and are superseded. The five countable runs are:
+
+| Experiment | Domain | Keyframe | Session and partition | Evidence file |
+|---|---:|---|---|---|
+| EXP-037 | 101 | `task_start` | `linux-rgbd-task-start-exp037` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-037/task-start.json` |
+| EXP-038 | 102 | `cup_test_forward_5cm` | `linux-rgbd-forward-exp038` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-038/forward.json` |
+| EXP-039 | 103 | `cup_test_left_5cm` | `linux-rgbd-left-exp039` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-039/left.json` |
+| EXP-040 | 104 | `cup_test_right_5cm` | `linux-rgbd-right-exp040` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-040/right.json` |
+| EXP-041 | 105 | `task_start` | `linux-rgbd-task-start-repeat-exp041` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-041/task-start-repeat.json` |
+
+The only environment closure beyond CP-119 is
+`PYTHONPATH=/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/python-deps:$PYTHONPATH`
+after sourcing task overlays. It supplies exact Open3D 0.19.0/NumPy 1.26.4 and changes no source,
+perception route, truth policy, physics, motion, tolerance, or acceptance gate.
+
+## CP-122 — Open3D runtime dependency closure GREEN
+
+```yaml
+checkpoint_id: CP-122
+recorded_at: 2026-08-27T04:54:00+08:00
+status: VALID_DIAGNOSIS
+invalid_experiment: EXP-032
+owned_processes: NONE
+runtime_dependencies:
+  open3d: 0.19.0
+  numpy: 1.26.4
+  root: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/python-deps
+smoke: Production preflight, exact import provenance, and DBSCAN all pass.
+decision: Commit and push the retained INVALID closure, then preregister EXP-037.
+next_experiment: EXP-037
 ```
 
 ## Shared live acceptance contract
