@@ -113,7 +113,7 @@ The source verification gate is:
 - all focused tests green;
 - the complete affected Python suite at least matches the prior 375 passing tests;
 - Ruff check and formatting checks pass without broad reformatting;
-- all five task packages rebuild into the same fresh task-owned overlay;
+- the dependency-closed set of six task packages rebuilds into the same fresh task-owned overlay (`so101_teleop` is required by `so101_demo_py` in addition to the five originally enumerated packages);
 - installed CLI ROS-argument smoke tests pass;
 - `rosdep resolve` confirms the new package dependency keys;
 - task worktree, submodule, canonical main, owned processes, ROS domains, tmux, Viewer, and evidence provenance checks pass.

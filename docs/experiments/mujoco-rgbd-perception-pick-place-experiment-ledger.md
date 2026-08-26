@@ -2274,3 +2274,49 @@ open_risks:
   - Accepted EXP-017 through EXP-020 remain historical-only for a8b3d87a after any production-code change.
 next_command: User selects subagent-driven or inline plan execution; the selected execution skill must then run Task 1 from RED without skipping checkpoints.
 ```
+
+```yaml
+checkpoint_id: CP-032
+recorded_at: 2026-08-26T15:10:00+08:00
+last_valid_experiment: EXP-020
+current_hypothesis: The five reviewed production-boundary findings are closed at implementation 48349ca7, and the dependency-closed fresh overlay is ready for four new full-restart runs beginning with EXP-021.
+implementation_commit: 48349ca7f6134e7bc4d15385338f86e5fbc182e7
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+submodule_describe: so101-0.0.3-r8-3-gf19a8cc
+working_tree_status: Production source and exact f19 submodule are clean at the frozen implementation; only this additive ledger checkpoint and the approved design/plan corrections are pending. Canonical main is clean and unchanged at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; exact task processes, domains 180 and 185 through 202, task-owned tmux sessions, exact Viewer title, and planned EXP-021 through EXP-024 CUA sessions are empty.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+corrections:
+  - OBSERVED: The plan's original five-package selection was not dependency-closed. Fresh-overlay colcon correctly rejected so101_demo_py because its declared so101_teleop runtime dependency had no task-overlay package environment. Read-only topological ordering proved the dependency-closed set is six packages, adding so101_teleop; the design and plan now record this correction.
+  - OBSERVED: Prepending the task Open3D python-deps directory during colcon exposed setuptools 84 to the ROS build and made the legacy setup.py develop --uninstall path fail. Building from the ROS/overlay environment without that runtime-only PYTHONPATH used system setuptools 68.1.2 and completed all six packages. The Open3D directory remains required and restored for tests/runtime.
+  - OBSERVED: The plan's launch-runner --help smoke was invalid because that runner deliberately exposes launch arguments rather than an argparse help surface; both --help spellings entered the launch contract and failed closed at the explicit-execute gate. Installed presence/provenance is instead proved by ros2 pkg executables and installed-provenance tests; rgbd_cup_pose --help and dynamic_cup_pick_place --help both return zero without starting MuJoCo.
+source_verification:
+  - OBSERVED: Focused aggregation passed 111 tests; the full so101_demo_py suite passed 400 tests, exceeding the prior 375-test baseline.
+  - OBSERVED: Ruff check returned zero on all 12 touched files and Ruff format check reported all 12 files already formatted.
+  - OBSERVED: The dependency-closed six-package fresh-overlay build completed in 2.44 s. Its sole stderr was the retained upstream setuptools deprecation warning from mujoco_ros2_control.
+  - OBSERVED: Installed-provenance verification passed 3 tests; all six selected package prefixes resolve below /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/install and none resolves to /opt/ros/jazzy.
+  - OBSERVED: rosdep resolve opengl returns libgl1-mesa-dev and libglu1-mesa-dev. The public so101_mujoco_perception_pick_place executable is installed exactly once.
+  - OBSERVED: Gitlink and clean submodule HEAD both equal exact f19, with describe so101-0.0.3-r8-3-gf19a8cc; the superseded r6 overlay and old failed fetch route were not reused.
+historical_status:
+  - CP-016 remains an immutable historical blocked conclusion; no earlier entry was rewritten.
+  - EXP-017 through EXP-020 remain accepted and retained historical evidence only for implementation a8b3d87a; none counts toward the hardened implementation.
+retained_diagnostics:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/colcon-build.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/colcon-build-dependency-closed.log
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/pytest-focused.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/pytest-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/ruff-check.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/ruff-format.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/colcon-build-corrected-env.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/runtime-provenance.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/pytest-installed-provenance.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/perception-runner-executable-corrected.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/rgbd-cup-pose-help-corrected.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/dynamic-help-corrected.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/rosdep-opengl.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/source-verification/owned-runtime-clean-corrected.log
+decision: PROCEED
+next_experiment: EXP-021
+next_command: Commit and push this source freeze, verify exact Gitee readback, then transition EXP-021 from PLANNED to RUNNING only after fresh domain/session/evidence/Viewer/CUA isolation checks pass.
+```
