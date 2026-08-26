@@ -2193,3 +2193,26 @@ pre_running_observed:
 decision: START_BASE_STATIC_TF_GUI_THEN_RELIABLE_POST_SCENE_OBSERVER
 next_command: Run no perception or motion; close on the reliable three-topic gate result.
 ```
+
+## CP-054 — Reject early-exit reliable observer and continue same unchanged stack
+
+```yaml
+checkpoint_id: CP-054
+recorded_at: 2026-08-27T02:14:09+08:00
+smoke_id: SMOKE-012
+status: RUNNING_INVALID_OBSERVER_ATTEMPT
+qualification: false
+record_head_before_checkpoint: d9754fabec1172f031fb4667b3592c8a96148697
+invalid_observer:
+  - The first reliable observer stopped when every topic count reached three instead of waiting for three common exact stamps.
+  - It exited two after 0.917108 s with CameraInfo nine, color three, depth nine, and two common stamps. This cannot close the registered three-common-stamp gate.
+retained_signal:
+  - All received frames are task_camera_frame, encodings are rgb8 and 32FC1, and all 307200 sampled depth values are finite positive.
+  - Reliable QoS already materially improves over SMOKE-011 best-effort, but production change remains gated on the corrected observer.
+correction:
+  - Same unchanged live base remains running. The observer now loops until common exact stamp count reaches three or its deadline.
+  - corrected_observer_sha256: ffeca740c9b78bad3de28fcdcccc62dd7c83c7b9d8921d69037aa41cc86b3f54
+  - invalid_observer_evidence_sha256: e0521ceaea1c5e37aefbeda98a63b2aadbf9b0c905f543a98081b8ba74a7784c
+decision: RERUN_ONLY_CORRECTED_OBSERVER_ON_UNCHANGED_LIVE_STACK
+next_experiment: SMOKE-012
+```
