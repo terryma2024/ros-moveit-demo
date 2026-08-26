@@ -279,6 +279,27 @@ pre_running_observed: Fresh domain208/session/processes/Viewer/run evidence and 
 decision: START_BASE_WAIT_VIEWER_MOVE_CAPTURE_EXACT_STOP
 ```
 
+## CP-091 / CLOSE-SMOKE-017-001 — Viewer is absent from Accessibility window inventory
+
+```yaml
+checkpoint_id: CP-091
+transition_id: CLOSE-SMOKE-017-001
+recorded_at: 2026-08-27T03:27:00+08:00
+smoke_id: SMOKE-017
+from: RUNNING
+to: GUI_ENV_FAILURE
+qualification: false
+valid_base: Exact installed task_start base stack created one CG Viewer window45555/PID63676 at [308,-1250,1140,773] with no perception/dynamic/motion.
+first_bad_boundary:
+  - JXA resolved exactly one System Events process for owner PID63676 but zero Accessibility windows, so exact-title selection and movement were impossible.
+  - Setting that exact process frontmost returned frontmost=false and still window_count=0.
+conclusion: Current GLFW Viewer is not exposed as an AX window in this launch context; this is stronger than a coordinate-only mismatch. No window was moved and no capture fallback was used.
+cleanup: One Ctrl-C only to exact task tmux; domain208, exact processes, Viewer, and session are empty.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/gui-primary-smoke017
+decision: COMPARE_PRIOR_VALID_CAPTURE_LAUNCH_CONTEXT_AND_INSPECT_GLFW_WINDOW_CREATION_ACTIVATION_POSITION_HOOKS
+next_experiment: NONE
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
