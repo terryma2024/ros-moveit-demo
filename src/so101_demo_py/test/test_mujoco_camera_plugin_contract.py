@@ -3,7 +3,6 @@ from xml.etree import ElementTree
 
 import yaml
 
-
 PACKAGE = Path(__file__).resolve().parents[1]
 FORK = PACKAGE.parents[1] / "third_party" / "mujoco_ros2_control"
 
@@ -35,3 +34,10 @@ def test_task_camera_declares_a_nontrivial_rgbd_resolution() -> None:
         if camera.attrib.get("name") == "task_camera"
     )
     assert camera.attrib["resolution"] == "640 480"
+
+
+def test_support_package_declares_opengl_egl_build_contract() -> None:
+    package = ElementTree.parse(PACKAGE.parent / "so101_mujoco_support/package.xml")
+    build_dependencies = {element.text for element in package.getroot().findall("build_depend")}
+
+    assert "opengl" in build_dependencies

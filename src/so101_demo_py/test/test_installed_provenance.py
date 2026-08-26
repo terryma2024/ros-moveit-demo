@@ -19,6 +19,7 @@ EXPECTED_EXECUTABLES = {
     "rgbd_cup_pose",
     "run_qualification",
     "scene_setup",
+    "so101_mujoco_perception_pick_place",
     "teleop_reset",
     "teleop_workflow",
 }
@@ -60,9 +61,7 @@ def test_manifest_matches_selected_installed_prefix_and_source() -> None:
 def test_final_install_contains_runtime_contract() -> None:
     prefix = Path(get_package_prefix("so101_demo_py")).resolve()
     share = Path(get_package_share_directory("so101_demo_py")).resolve()
-    installed_executables = {
-        path.name for path in (prefix / "lib/so101_demo_py").iterdir()
-    }
+    installed_executables = {path.name for path in (prefix / "lib/so101_demo_py").iterdir()}
     assert installed_executables >= EXPECTED_EXECUTABLES
     assert "pick_place" not in installed_executables
     assert {path.name for path in (share / "launch").glob("*.launch.py")} == EXPECTED_LAUNCHERS
