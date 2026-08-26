@@ -265,6 +265,20 @@ decision: STOP_FORMAL_BATCH_FOR_GUI_CAPTURE_SMOKE
 next_experiment: SMOKE-017
 ```
 
+## CP-090 / TRANS-SMOKE-017-RUNNING-001 — Start primary-screen capture smoke
+
+```yaml
+checkpoint_id: CP-090
+transition_id: TRANS-SMOKE-017-RUNNING-001
+recorded_at: 2026-08-27T03:24:30+08:00
+smoke_id: SMOKE-017
+from: PLANNED
+to: RUNNING
+qualification: false
+pre_running_observed: Fresh domain208/session/processes/Viewer/run evidence and clean worktree passed; exact installed base helper SHA256 ebfd7dbf3ea52624a113f052a919a288c583a52d201a99b533a08ce6a630b45c.
+decision: START_BASE_WAIT_VIEWER_MOVE_CAPTURE_EXACT_STOP
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
