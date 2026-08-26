@@ -2106,3 +2106,45 @@ pre_running_observed:
 decision: START_BASE_STATIC_TF_GUI_THEN_POST_SCENE_RGBD_INPUT_OBSERVER
 next_command: Do not start perception unless the three-topic input observer gate exits zero.
 ```
+
+## CP-051 / CLOSE-SMOKE-011-001 — Stop at failed RGB-D input gate
+
+```yaml
+checkpoint_id: CP-051
+transition_id: CLOSE-SMOKE-011-001
+recorded_at: 2026-08-27T02:09:01+08:00
+smoke_id: SMOKE-011
+from: RUNNING
+to: VALID_INPUT_GATE_FAILURE
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_transition: b7b33e9f680a537f59174fd04a2869c76b93c12e
+valid_preconditions:
+  - Exact fixed candidate, domain/session/cwd, full base/static TF/controllers/MoveIt/Scene READ_BACK, and unique Viewer baseline passed.
+input_observer:
+  elapsed_s: 45.095307333162054
+  camera_info_count: 10
+  color_count: 0
+  depth_count: 4
+  common_stamp_count: 0
+  frames: task_camera_frame for received CameraInfo and depth
+  depth_encoding: 32FC1
+  depth_finite_positive: 307200 of 307200
+  depth_range_m: [0.5510081052780151, 41.51203536987305]
+conclusion:
+  - The product cannot form any aligned RGB-D triplet because the post-Scene best-effort observer receives no color and only sparse depth while small CameraInfo continues arriving.
+  - Phase-two 60 s perception was correctly not started. This rules out a perception timeout extension as the next action.
+next_diagnosis:
+  - CameraPlugin publishers use reliable volatile depth-one QoS for all three topics, while perception and the lean observer use sensor-data best-effort QoS under FastDDS.
+  - Run a fresh reliable subscriber A/B for exact counts/stamps before changing production. Do not switch RMW transport unless the QoS A/B also fails.
+cleanup:
+  - Exact observer exited two; exact capture/static-TF/base identities were stopped, component teardown was clean, and domain 209/task tmux/Viewer are absent.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-input-r4/live
+  observer_sha256: 67887c898fe464e0b48b83c6db132c274023a25a6278dd2cf0c185ca96e9f993
+  baseline_manifest_sha256: 9d6094d0bd9ed581fd022af0dfdfc3f362494479c00008dfabdbaaa8c688bb5a
+  baseline_png_sha256: 261fa8d8baf52806e089be125871ea93215b29e73a56c041f29b335cfc1c7cd4
+  base_log_sha256: 4cc98ba04f2957b1614a9a80842f7429824ba68562bffbbccbc45efe7fd6a719
+decision: RETAIN_INPUT_FAILURE_AND_PLAN_FRESH_RELIABLE_QOS_AB
+next_experiment: NONE
+```
