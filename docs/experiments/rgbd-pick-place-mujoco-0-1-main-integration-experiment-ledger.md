@@ -7,9 +7,10 @@ success_contract: Four independent FULL_RESTART successes on macOS, four indepen
 worktree: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/repo
 branch: codex/rgbd-pick-place-mujoco-0-1-main
 base_commit: b73748f86acc891711aa455fc911a9ebde52686d
-current_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
-implementation_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+current_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
 record_commit: 1a0c532cb4ff012bc1cef95a47594ca8a1a65fa5
+repair_record_commit: PENDING_CP138_LEDGER_COMMIT
 commit_semantics: current_commit and implementation_commit identify the immutable installed runtime; record_commit identifies the ledger-only commit that first contains CP-002 and is resolved additively after that commit exists.
 target_child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 evidence_root: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9
@@ -33,15 +34,64 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-136
-next_experiment: NONE_FREEZE_REPAIR_COMMIT_THEN_FRESH_REVIEW
+latest_checkpoint: CP-138
+next_experiment: NONE_SECOND_FRESH_REVIEW_REQUIRED
+```
+
+## CP-138 — review remediation frozen, rebuilt, installed, and provenance-bound
+
+```yaml
+checkpoint_id: CP-138
+recorded_at: 2026-08-27T05:23:35+08:00
+status: FRESH_REVIEW_REQUIRED
+implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+supersedes_unapproved_candidate: 1eb6bbbee3dc35aba1e67a65990546881eebf392
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+review_red: build-logs/repair-review-red.xml; 2 expected failures for missing after-generation wait and missing terminal generation evidence.
+review_green:
+  focused: build-logs/repair-review-green.xml; 2 passed.
+  dynamic_execute_module: build-logs/repair-review-dynamic-execute-full.xml; 10 passed.
+  demo_full_before_freeze: build-logs/repair-review-so101-demo-full.xml; 448 passed.
+  demo_full_installed_frozen: build-logs/repair-candidate-so101-demo-full-installed.xml; 448 passed.
+  fork_full: build-logs/repair-fork-test-result.log; 352 tests, 0 errors, 0 failures, 16 platform/configuration skips.
+  project_build: build-logs/repair-review-project-build.log; all support, teleop, and demo packages built and installed.
+terminal_diagnostic_contract:
+  - Only a JointState message containing all five arm joint names advances the arm-joint generation.
+  - Every executed segment waits for a generation newer than its execution boundary; after the terminal cup snapshot, capture waits for one more fresh arm-joint sample.
+  - Failure evidence persists terminal arm generation, JointState source stamp, local monotonic receive time, joint values, FK TCP/error, cup state, bilateral/table contact, and validation code via atomic JSON replace before raising.
+installed_binding:
+  runtime_module_resolved: repo/src/so101_demo_py/src/ros/dynamic_mujoco_execution.py
+  runtime_module_sha256: 8a8ae3092013674ec7036999326b67cc7a52736142391eccc23d804386f07833
+  runtime_module_git_blob_sha256_at_implementation_commit: 8a8ae3092013674ec7036999326b67cc7a52736142391eccc23d804386f07833
+  policy_resolved: repo/src/so101_demo_py/config/policies/dynamic_cup_pick/v1/mujoco.yaml
+  policy_sha256: 7d36a45b9382ba2d8a8d16646e66539ee8f1e499633f7a1b5c266d5ffbfded70
+  policy_git_blob_sha256_at_implementation_commit: 7d36a45b9382ba2d8a8d16646e66539ee8f1e499633f7a1b5c266d5ffbfded70
+  dynamic_cup_pick_place_executable_sha256: 5e23c4e05215f7b1bbc75a6abc11b346ef6111edf7136e85b334b0da388fa9e6
+  versions: {so101-demo-py: 0.1.0, so101-mujoco-support: 0.1.0, so101-teleop: 0.1.0}
+unchanged_gates: {physical_lift_min_m: 0.001, physical_lift_max_m: 0.010, truth_bridge: false, perception_bypass: false, physics_change: false}
+canonical: /data/work/ws_moveit remains read-only, unsourced, unbuilt, and unmodified.
+next_command: Commit this ledger-only provenance binding, record that commit hash additively, then obtain a second fresh approval before preregistering live runs.
+```
+
+## CP-137 — fresh review rejected first repair candidate
+
+```yaml
+checkpoint_id: CP-137
+recorded_at: 2026-08-27T05:19:00+08:00
+status: REJECTED_BY_FRESH_REVIEW
+reviewed_candidate: 1eb6bbbee3dc35aba1e67a65990546881eebf392
+findings:
+  - IMPORTANT: terminal joints could be an arbitrarily cached pre-terminal sample and were not synchronized by generation or stamp with post-action cup evidence.
+  - IMPORTANT: the test stubbed persistence and the ledger did not bind the install to the immutable repair commit.
+  - MINOR: CP-136 contained a future recorded_at timestamp.
+decision: Do not enter live batch. Add generation/stamp and durable-write RED tests, make the minimal implementation correction, rebuild exact candidate, correct ledger time, and request fresh review again.
 ```
 
 ## CP-136 — TDD repair GREEN, rebuilt and installed
 
 ```yaml
 checkpoint_id: CP-136
-recorded_at: 2026-08-27T05:22:00+08:00
+recorded_at: 2026-08-27T05:16:50+08:00
 status: REPAIR_CANDIDATE_READY_TO_FREEZE
 red_evidence:
   policy: build-logs/repair-policy-red-valid-cwd.xml; expected 0.004 m, observed 0.002 m.
