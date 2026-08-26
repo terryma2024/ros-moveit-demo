@@ -3173,3 +3173,51 @@ evidence:
 decision: ACCEPT_PRODUCTION_HARDENING_AND_QUALIFICATION
 next_command: Commit and push this completion checkpoint with remote readback, then regenerate sha256.txt and sizes.txt as the final evidence writes and verify every hash; afterward perform read-only final readback only.
 ```
+
+```yaml
+checkpoint_id: CP-046
+recorded_at: 2026-08-26T17:39:53+08:00
+last_valid_experiment: EXP-033
+completion_status: COMPLETE
+source_head_before_checkpoint: 611ae830f359e5459a6fcdd3e99175d689f6c860
+implementation_commit: 012420c9d01e2a7d0dae9d834c22dcae28c4ccfb
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+historical_state_preservation:
+  - CP-045 remains unchanged with its historical completion_status COMPLETE_PENDING_FINAL_WRITE_INVENTORY; CP-046 is the additive completion correction after the prescribed final inventory writes and read-only verification.
+success_contract_mapping:
+  - EXP-030 is the countable task_start FULL_RESTART at [0.02, -0.28, 0.165], domain 208, session rgbd-pick-task-start-exp030-20260826.
+  - EXP-031 is the countable cup_test_forward_5cm FULL_RESTART at [0.02, -0.33, 0.165], domain 209, session rgbd-pick-forward-exp031-20260826.
+  - EXP-032 is the countable cup_test_left_5cm FULL_RESTART at [-0.03, -0.28, 0.165], domain 210, session rgbd-pick-left-exp032-20260826.
+  - EXP-033 is the countable cup_test_right_5cm FULL_RESTART at [0.07, -0.28, 0.165], domain 211, session rgbd-pick-right-exp033-20260826.
+  - OBSERVED: The original user contract has no unmapped position or acceptance boundary. Each run independently has real aligned CameraPlugin RGB-D, task_camera_frame 640x480 input, a nonempty segmented cup PLY, a fresh world /cup_pose with an exact uniquely consumed source stamp, and perception error below 0.01 m.
+  - OBSERVED: Each run naturally returns launch/capture status 0 through the installed runner, reaches DONE with transition_count=19, has controller trajectories plus joint/FK evidence for all seven motion states, proves bilateral unsupported grasp/lift/transport, detaches before opening, finishes with a stable table-supported release and detached synchronized Planning Scene, and has three distinct directly inspected exact-window frames.
+  - OBSERVED: EXP-030 uses its additive zero-count gate correction without rerun; EXP-033 preserves its unrelated domain 97 Viewer correction. The original artifacts and historical conclusions remain unchanged.
+inventory_identity:
+  root: /tmp/so101-debug-rgbd-perception-pick-place-20260826
+  sha256_manifest: /tmp/so101-debug-rgbd-perception-pick-place-20260826/sha256.txt
+  sha256_manifest_lines: 22443
+  sha256_manifest_sha256: 862294de5d86cf53d0704bf1e343a00c483a8b1c4162ac5ad253f61b46c74331
+  sizes_manifest: /tmp/so101-debug-rgbd-perception-pick-place-20260826/sizes.txt
+  sizes_manifest_lines: 22443
+  sizes_manifest_sha256: 0f908cd2ab5c2391533bab66337d09a40e58b2b09057e8e0f367573da653a04e
+  sha256sum_check: PASS
+independent_review:
+  verdict: READY_TO_MERGE_YES
+  critical_findings: NONE
+  important_findings: NONE
+  minor_only: Retained nonfatal controller_manager.pal_statistics shutdown diagnostics after terminal success; all task processes exited cleanly and no qualification gate was affected.
+  report: /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-review-post-cp044/report.md
+  report_sha256: 3ac96849e449275d16392d4eb5e54084f2a4f71a354d26d419ecea923663ad03
+evidence_disposition:
+  retained:
+    - Entire registered root /tmp/so101-debug-rgbd-perception-pick-place-20260826, including all ledger-classified runs, invalid and corrected records, handoff, helpers, reviews, verification, inventory, and reproducible overlay.
+  archived: NONE.
+  durable_runs: NONE; no matching /data/work/so101-evidence task-family run exists.
+  deletion_candidates_requiring_future_explicit_authorization:
+    - /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay (approximately 1.8 GiB reproducible build/install/python-deps after reproduction is no longer needed).
+    - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-verification (approximately 160 KiB superseded pre-CP-037 diagnostics; newer final-hardening verification is authoritative).
+  deletion_performed: NONE.
+decision: COMPLETE
+next_experiment: NONE
+next_command: NONE
+```
