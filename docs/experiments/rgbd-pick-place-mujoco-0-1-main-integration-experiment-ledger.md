@@ -28,7 +28,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - The final installed candidate succeeds at all four positions on both platforms.
-latest_checkpoint: CP-002
+latest_checkpoint: CP-003
 next_experiment: EXP-010
 ```
 
@@ -59,7 +59,7 @@ ends the fixed-candidate consecutive batch.
 
 ```yaml
 experiment_id: EXP-010
-status: PLANNED
+status: RUNNING
 prior_experiment: NONE
 hypothesis: The final installed candidate completes AC-001 from task_start on macOS.
 prediction: The perceived start pose is near [0.02, -0.28, 0.165] and the cup is released stably in the red target.
@@ -441,4 +441,40 @@ retained_runs: [/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/]
 archived_runs: []
 deletion_candidates: [/tmp/so101-debug-mrc010-task1/, registered-root invalid environment attempts listed in CP-002]
 decision: CP-002_STATIC_QUALIFICATION_REMAINS_ACCEPTED_WITH_EXPLICIT_LEAF_PACKAGE_SUBSTITUTE_GATES
+```
+
+## CP-003 / TRANS-EXP-010-RUNNING-001 — Mac live recovery and first run
+
+```yaml
+checkpoint_id: CP-003
+transition_id: TRANS-EXP-010-RUNNING-001
+recorded_at: 2026-08-26T23:28:16+08:00
+experiment_id: EXP-010
+from: PLANNED
+to: RUNNING
+last_valid_experiment: NONE
+current_hypothesis: The frozen installed candidate completes AC-001 from task_start on macOS.
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_transition: 0a6be4799f017e9b088a9698457279754d7dee38
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+working_tree_status: Clean before this ledger-only transition; the immutable implementation and child checkout are unchanged.
+owned_processes: NONE
+preserved_processes: Four unrelated historical tmux sessions were left untouched; no live conflicting MuJoCo, MoveIt, RGB-D, workflow, or Viewer process was observed.
+pre_running_observed:
+  - OBSERVED: The current host is matianyideMacBook-Air.local and the task worktree, branch, implementation commit, child gitlink/checkout, and frozen candidate overlay match CP-002.
+  - OBSERVED: Natural ament prefix readback resolves so101_demo_py and all four child packages to the frozen project/fork installs; the installed exact-status runner exists and has SHA256 9ade27dcc334b8cf26d203e3e6dc8b5b26e0fe46487ca4dd7539a52286f9bfd1.
+  - OBSERVED: Domain 220 returned no nodes; session/partition mac-mrc010-task-start-exp010, task-owned tmux mrc010-mac-exp010, exact MuJoCo Viewer title, and the nominal evidence path were empty.
+  - OBSERVED: The node-list probe itself created ros2-daemon processes for domains 220 through 223 despite the attempted no-daemon environment flag. Those exact probe-owned daemons were stopped by domain before this transition; no product process or evidence identity was created.
+confirmed_conclusions:
+  - CP-002 remains the last trusted static checkpoint; none of its disproven environment routes is being reused.
+disproven_routes:
+  - A ros2 node-list emptiness probe is not process-neutral on this Mac and must be followed by exact domain daemon cleanup before a FULL_RESTART run.
+single_variable: Exercise task_start in domain 220/session mac-mrc010-task-start-exp010; implementation, overlays, policy, geometry, extrinsics, target, controller, recovery, and capture protocol remain frozen.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/host-worktree-process-window-preflight.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/escalated-process-tmux-window-preflight.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/exp010-exact-provenance-isolation.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/ros-daemon-probe-cleanup.txt
+decision: START_EXACT_INSTALLED_EXP_010
+next_command: Commit this transition, then start only mrc010-mac-exp010 and concurrently capture baseline, transport, and final from the exact MuJoCo Viewer window ID.
 ```
