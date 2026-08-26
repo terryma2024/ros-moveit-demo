@@ -17,14 +17,15 @@ confirmed_conclusions:
   - EXP-003 is audit-invalid and non-counting because its production attempt has no durable stdout/stderr plus exit sidecar and no retained RUNNING-transition snapshot; a later independent diagnostic remains useful only as non-counting evidence.
   - EXP-004 is environment-invalid and non-counting: after complete RUNNING/observer readiness evidence, all three controller spawners failed before static TF or production because the sandbox denied the ROS controller-spawner lock under ~/.ros/locks.
   - EXP-005 is pre-RUNNING environment-invalid and non-counting: normal-scope process isolation could not be audited because `ps` was denied and targeted `pgrep` returned rc3, so observers, elevation, stack, production, Viewer action, and motion never started.
+  - EXP-006 is interrupted/environment-invalid and non-counting: elevated pre/post process probes, observers, elevated stack, active controllers, and static TF publishers passed, but production and Viewer acceptance never started; strict lock metadata preservation also failed because atime/mtime/ctime changed despite stable identity, mode, size, and SHA-256.
 disproven_routes:
   - Publishing MuJoCo truth as /cup_pose does not validate production camera perception.
   - Routing production through cup_pose_tf_demo duplicates the selected world-point transform boundary.
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
-latest_checkpoint: CP-014
-next_experiment: EXP-006
+latest_checkpoint: CP-015
+next_experiment: NONE
 ```
 
 ```yaml
@@ -779,7 +780,17 @@ next_command: In a new turn only, re-read EXP-005 plus CORR-EXP-005-001, create 
 
 ```yaml
 experiment_id: EXP-006
-status: PLANNED
+status: INVALID
+result: INTERRUPTED_ENVIRONMENT_INVALID_BEFORE_PRODUCTION
+running_transition:
+  wall_time_ns: 1787695702048939000
+  monotonic_ns: 1488248994071083
+  source_head: 572bba7b2703245bee6396ea5ca546e59e81f6e8
+  preflight_final_exit: 0
+  canonical_pre_probe_exit: 0
+  observer_readiness_final_exit: 0
+  sample_observer_session: 18865
+  publisher_provenance_observer_session: 50421
 prior_experiment: EXP-005
 hypothesis: EXP-005's only unresolved preflight contamination was the filesystem sandbox blocking read-only process enumeration; permitting only the exact read-only isolation probes plus the already approved owned stack wrapper through require_escalated will reach the still-unmeasured production timeout-90 boundary without changing robot or perception behavior.
 prediction: Elevated read-only process probes prove no conflicting stack, the unchanged elevated owned stack reaches active controllers while preserving HOME/lock, and normal-scope observers plus production either yield an acceptable /cup_pose within 90 s or retain a fully evidenced VALID product failure.
@@ -807,24 +818,33 @@ provenance:
   gz_partition: rgbd-perception-gate-exp006-20260826
 commands:
   - command: In normal scope create `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-006/`, capture CORR-EXP-005-001 normal-before HOME/lock, clean provenance, empty domain180 with evidence-local ROS_LOG_DIR, and Viewer prelaunch=false.
-    exit_code: PENDING
+    exit_code: 0
   - command: With require_escalated, run only the owned read-only process-isolation wrapper containing `/bin/ps -axo pid=,ppid=,pgid=,comm=,args=` plus targeted matching, capture unchanged HOME/timestamps/command/exit, require zero conflicts, and make no signal or mutation.
-    exit_code: PENDING
+    exit_code: 0
   - command: In normal scope start and prove ready the explicit PoseStamped first-sample and publisher-provenance observers, then retain the RUNNING transition snapshot.
-    exit_code: PENDING
+    exit_code: 0
   - command: With require_escalated, run only the exact owned task_start/headless=false `ros2 launch so101_demo_py so101_mujoco.launch.py` stack wrapper after its independent CORR-EXP-005-001 elevated HOME/lock equality gate; require all controllers active.
-    exit_code: PENDING
+    exit_code: 0
   - command: In normal scope start the exact two static TFs and production `rgbd_cup_pose --startup-timeout-s 90`, capture all production/sample/TF/truth/Viewer evidence, then SIGINT only exact owned sessions/PGIDs and retain empty domain/process plus after HOME/lock comparisons.
-    exit_code: PENDING
+    exit_code: INTERRUPTED_AFTER_STATIC_TF_BEFORE_PRODUCTION; PROCESS_AND_DOMAIN_CLEANUP_0; ENVIRONMENT_PRESERVATION_1
 observed:
-  - PENDING
+  - OBSERVED: Normal preflight passed at clean head 572bba7b2703245bee6396ea5ca546e59e81f6e8 after retaining an initial documentation-only attempt that incorrectly expanded the task's short head to a wrong full hash. The corrected readback, source/package/runtime provenance, empty domain 180, normal HOME/lock, and Viewer-not-running gates all exited 0.
+  - OBSERVED: The canonical elevated read-only pre probe exited 0 with ps_rc=0, matcher_rc=0, HOME/hash comparisons 0, and zero-byte targeted output. Explicit PoseStamped sample observer session 18865 and publisher-provenance observer session 50421 retained owners/start timestamps; actual `/cup_pose` topic readback showed Publisher count 0 and Subscription count 1 before the durable RUNNING transition.
+  - OBSERVED: An additional normal-scope `kill -0` readiness diagnostic returned 1 under the sandbox. It was not a preregistered readiness gate and did not replace the actual topic endpoint, owner/timestamp, and continuously timestamped publisher-provenance evidence; the failed extra diagnostic is retained.
+  - OBSERVED: The elevated stack wrapper independently proved elevated HOME and normal-versus-elevated lock lstat/path/SHA/stat equality, then started owned session 37058. All three controllers were sampled active - arm_controller, gripper_controller, and joint_state_broadcaster. The stack log also proved real CameraPlugin initialization and a 640x480 rendering loop.
+  - OBSERVED: Exact normal-scope static TF sessions 90059 and 43155 published camera_link to task_camera_frame and base to camera_link with the approved translations/rotations. A bounded Python tf2 Buffer diagnostic did not return and was stopped as owned session 88538; a replacement tf2_echo session 31727 was still sourcing/waiting when the user changed the immediate objective.
+  - OBSERVED: Per the user interruption, production `rgbd_cup_pose --startup-timeout-s 90`, production RGB-D sample/PLY/JSON/publisher/truth error, and Viewer baseline/action/fresh inspection were never started. dynamic_cup_pick_place and robot motion never started.
+  - OBSERVED: Normal cleanup sent Ctrl-C only to exact owned sessions 18865, 50421, 90059, 43155, 31727, and 37058; the Python diagnostic 88538 had already been stopped with Ctrl-C. Observer/TF/tf2 wrappers exited 130, while the owned stack completed ordered controller/hardware shutdown and exited 0.
+  - OBSERVED: The canonical elevated post probe exited 0 with ps/matcher/HOME/hash comparisons 0 and zero-byte targeted output; its command SHA-256 exactly matched pre. Final ROS domain 180 was empty with command rc0, and Computer Use reported org.mujoco.mujoco not running. Therefore no exact-owned target remains live.
+  - OBSERVED: Normal-before/elevated-before/normal-after HOME, resolved path, lstat type, device 16777233, inode 13891096, uid 501, gid 20, mode 100644, size 0, and SHA-256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 remained equal. Strict metadata comparison failed because atime changed 1787694630 to 1787707782 and mtime/ctime changed 1787691140 to 1787707487; environment-preservation exit is 1 as preregistered.
 inferred:
-  - PENDING
-conclusion: PENDING
+  - INFERRED: EXP-006 proves the approved elevation boundary can overcome EXP-004/005's lock-access and process-observability contamination through active controllers and exact cleanup. It does not measure perception timeout90 or any product acceptance gate because production never started.
+  - INFERRED: The unchanged empty lock digest and stable file identity show no content replacement, but controller-spawner use changed timestamps. Because expected_mutable_lock_fields was preregistered as NONE, the metadata difference independently invalidates the run and cannot be retrospectively waived.
+conclusion: EXP-006 is INVALID and non-counting. The immediate runtime was safely stopped and handed off with no owned target remaining, but the experiment was interrupted before production/Viewer product gates and failed strict lock metadata preservation. No conclusion about RGB-D segmentation, fit, /cup_pose, truth error, or timeout90 is supported.
 evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-006/
-decision: PENDING
-next_experiment: EXP-007
+decision: STOP_AND_HANDOFF
+next_experiment: NONE
 ```
 
 ```yaml
@@ -908,4 +928,26 @@ open_risks:
   - EXP-006 controller, timeout90 perception, /cup_pose, truth error, Viewer sequence, and downstream product gates remain unrun.
   - Existing evidence remains retained; nothing was archived or deleted.
 next_command: In a new turn only, re-read EXP-006 plus CORR-EXP-006-001, capture normal preflight and canonical probe command evidence, then request require_escalated for the pre probe; do not start observers unless it exits 0 with zero targeted rows.
+```
+
+```yaml
+checkpoint_id: CP-015
+last_valid_experiment: EXP-002
+current_hypothesis: The production timeout90 hypothesis remains unmeasured. EXP-006 reached active controllers and static TF publishers under the approved elevation boundary, but user interruption and strict lock timestamp changes made the run INVALID before production.
+working_tree_status: EXP-006 final INVALID result is the only tracked ledger edit from clean head 572bba7b2703245bee6396ea5ca546e59e81f6e8; Task 7 report is ignored and must be updated before a ledger-only commit.
+owned_processes: NONE; canonical post probe targeted output is zero bytes with exit 0, domain 180 is empty with exit 0, and Viewer is not running.
+preserved_processes: Only exact owned sessions 18865, 50421, 90059, 43155, 31727, 37058, and prior diagnostic 88538 received Ctrl-C. No broad kill, unowned signal, dynamic workflow, production command, Viewer action, or robot motion occurred.
+confirmed_conclusions:
+  - Approved elevated process probes passed both boundaries with identical command SHA-256 and no bounded target matches; normal exact-owned cleanup completed.
+  - Elevated stack HOME/lock prelaunch equality passed and all three controllers reached active, so EXP-004's lock PermissionError was not repeated.
+  - Exact static TF publishers started, but no acceptable TF lookup sample completed before interruption and production/Viewer acceptance never started.
+  - Lock identity, ownership, mode, size, and digest remained exact, while atime/mtime/ctime changed; strict CORR-EXP-005-001 therefore invalidates EXP-006 independently of the interruption.
+disproven_routes:
+  - Active controllers and healthy camera-render logs cannot substitute for production RGB-D samples, /cup_pose, PLY/JSON, truth error, or Viewer inspection.
+  - Successful process/domain cleanup cannot convert an interrupted or environment-invalid run into a countable product result.
+open_risks:
+  - The timeout90 production chain and TF lookup behavior remain unmeasured under the repaired elevation boundary.
+  - Any future experiment must explicitly decide before launch whether controller-spawner timestamp changes are expected; EXP-006's frozen NONE rule cannot be rewritten.
+  - Existing evidence remains retained; nothing was archived or deleted.
+next_command: NONE; runtime experimentation is stopped per user direction. Await a new explicitly preregistered experiment before any process, elevation, production, GUI action, or motion.
 ```
