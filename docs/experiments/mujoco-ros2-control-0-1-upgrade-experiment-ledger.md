@@ -590,3 +590,35 @@ deletion_candidates: []
 ```
 
 The guide now matches the implemented optional-observer architecture and dispatcher ownership, states the actual authoritative ordering, and reads back all four installed fork packages including `mujoco_3d_lidar`. The registered documentation contracts prevent the obsolete base-hook guidance from returning. Task 7 consumes this exact parent and fork candidate in an isolated macOS runtime overlay.
+
+### EXP-008: Task 7 macOS runtime and camera-probe breaker
+
+```yaml
+parent_head: 2abca94748ddc382a05d70f918899367c0259d5e
+fork_candidate: 0ed759a7198e76be847e163673782b1d2cbacf26
+ros_domain_id: 227
+gz_partition: mrc010-macos-227
+tmux_session: mrc010-macos-upgrade
+runtime_state: BREAKER_NOT_QUALIFIED
+stack_initialization: main-thread GLFW, camera renderer, evidence plugin, controllers, MoveGroup PASS
+camera_contract_before_frequency: dimensions/frame/encodings/payload/full-depth/alignment PASS
+final_samples: 30 camera_info, 30 color, 30 depth
+aligned_timestamps: 4
+final_color_header_frequency_hz: 5.918367346938775 FAIL
+dynamic_pick_place: NOT_RUN because camera prerequisite failed
+final_screenshot: NOT_CREATED
+fix_rounds: 5/5 exhausted
+committed_task7_changes: none
+rejected_patch: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/runtime/rejected-task7-concurrent-probe.patch
+rejected_patch_sha256: 7a66ffaa602f177c98dae2cc4f39ad0205d9dc9696692377e8a726151e0f28ed
+review_ruling: current concurrent multiprocessing probe rejected; no CameraPlugin publisher defect proven; phase-separated strict Task 7A approved
+clean_shutdown: attempt 1 ordered but PAL invalid-context errors; attempt 2 process absence only, final clean shutdown still required
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/runtime
+archived_runs: []
+deletion_candidates: []
+```
+
+The decisive A/B result is that a color-only subscriber observed 120 consecutive real color header stamps at 9.993281827 Hz, while simultaneous large-message collection lost color samples even though camera-info and depth retained continuous 100 ms stamps. The final multiprocessing barrier cleared only Python-side metadata, not DDS subscription backlog. It therefore did not prove a camera publisher defect and is not accepted into the branch.
+
+Task 7A is a new experiment boundary, not a sixth incremental repair of the rejected concurrent collector. In one invocation and against the same stack/candidate provenance, phase one must subscribe only to real color messages and require at least 30 unique header stamps at 8-12 Hz using the original end-to-end formula. After complete teardown, phase two must collect all three topics and require at least three real samples each, at least one common header timestamp, 640x480, `task_camera_frame`, `rgb8`, `32FC1`, non-empty payloads, and a full-payload finite-positive depth check for a common timestamp. Only both phases may produce the single success JSON. Configured rate, wall timer, median/tail frequency, or historical diagnostic substitution is forbidden. A fresh dynamic run, final screenshot, and ordered error-free shutdown remain mandatory after camera success.
