@@ -1737,3 +1737,68 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/pre-running/isolation-snapshot.log
 next_command: Start exact-owned tmux rgbd-pick-exp015-20260826 with the frozen task_start full-restart wrapper, then capture baseline, transport, and released-final Viewer frames at manifest boundaries.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-015-001
+recorded_at: 2026-08-26T12:16:00+08:00
+experiment_id: EXP-015
+status: INVALID
+classification: visual_evidence_invalid_non_counting
+runtime_source_commit: 15f6c1803819e19db89885ac919fd552d5d1b3d2
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+product_observations:
+  - OBSERVED: Both launch-spawned CLIs accepted their ROS arguments; Planning Scene and all controllers initialized, perception wrote a 4013-byte 141-point PLY and summary with radius 0.03938151231973142 m and world pose [0.01950111783349788, -0.28040476095521005, 0.165]. Its task_start error is 0.000642429 m.
+  - OBSERVED: dynamic_cup_pick_place completed all 19 transitions through DONE and exited cleanly. Physical evidence includes bilateral grasp contact, unsupported lift from z=0.1669126596 to z=0.2249315880, stable bilateral-contact transport, detach/open, table-supported released pose [-0.0777913264, -0.2475540390, 0.1648327311], zero finger contacts, final_xy_error_m=0.0026268915, final_upright_tilt_rad=0.0046893371, and final Planning Scene detached world membership with 13 cup primitives.
+  - OBSERVED: The wrapper recorded natural launch exit 0. rgbd_cup_pose, dynamic workflow, MoveIt, ros2_control_node, static TF, and robot_state_publisher all reported clean process exits.
+  - OBSERVED: ros2_control_node logged two controller-manager statistics publisher-thread context-invalid diagnostics during otherwise zero-exit ordered shutdown; retain as a non-suppressed shutdown diagnostic for later acceptance review.
+visual_invalid_boundary:
+  - OBSERVED: The capture coordinator polled `pgrep -x Viewer`, but this run's visible `MuJoCo : so101_task_scene` window belonged to PID 498203 whose process comm was ros2_control_node. The wrong detector consumed the baseline window and all physical phases.
+  - OBSERVED: By the time list_windows found PID 498203/window 54525959, the manifest was DONE and the Viewer disappeared before get_window_state; baseline, transport, and final PNG files are all absent.
+  - INFERRED: The product execution is strongly successful but cannot count because the frozen three-fresh-frame visual gate is mandatory and cannot be reconstructed after shutdown.
+cleanup:
+  - OBSERVED: Exact child PID 498173, owned tmux, domain 193, domain/partition owners, Viewer window, and CUA session are all absent; corrected cleanup exits 0.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/run/full-restart.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/run.d/rgbd-pick-task-start-exp015-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/run.d/rgbd-pick-task-start-exp015-20260826/perception/cup.ply
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/run.d/rgbd-pick-task-start-exp015-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/gui/window-discovery-diagnostic.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/post-cleanup.log
+conclusion: EXP-015 is strict INVALID and non-counting solely at the missing-visual-evidence boundary; its successful physical/numeric results are retained but do not satisfy task_start acceptance.
+decision: Repeat task_start as EXP-016 with unchanged implementation/runtime policy and change only the Viewer discovery/capture coordinator.
+next_experiment: EXP-016
+```
+
+```yaml
+experiment_id: EXP-016
+status: PLANNED
+prior_experiment: EXP-015
+lifecycle: FULL_RESTART
+hypothesis: Discovering the Viewer by exact CUA window title instead of Unix process comm, with the CUA session active before launch, will retain all three mandatory frames while the unchanged product repeats the successful task_start physical outcome.
+prediction: Exact-title list_windows polling captures baseline before scene-success workflow start, manifest-state polling captures transport at LIFT or MOVE_ABOVE_PLACE and released-final at WAIT_RELEASE_SETTLE or VALIDATE_FINAL_PLACEMENT, and all unchanged product and cleanup gates pass.
+single_variable: Replace `pgrep -x Viewer` capture discovery with CUA list_windows exact title `MuJoCo : so101_task_scene`; start the window-scope CUA session before launch. No source, overlay, launch, perception, keyframe, policy, timing, or physical criterion changes.
+provenance: {implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 194, gz_partition: rgbd-pick-task-start-exp016-20260826, session_id: rgbd-pick-task-start-exp016-20260826, owned_tmux_session: rgbd-pick-exp016-20260826}
+initial_cup_xyz_m: [0.02, -0.28, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/
+success_criteria: SAME_AS_EXP_011
+invalid_criteria: SAME_AS_EXP_011
+decision: PENDING
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-024
+recorded_at: 2026-08-26T12:16:00+08:00
+last_valid_experiment: EXP-010
+current_hypothesis: The unchanged product can reproduce EXP-015's complete physical success while an exact-title CUA coordinator retains the mandatory baseline, transport, and released-final images.
+working_tree_status: Task worktree, exact f19 submodule, and canonical main are clean before this ledger append; all EXP-015 artifacts remain below the registered evidence root.
+owned_processes: NONE; domain 193, exact child, partition owner, owned tmux, Viewer, and CUA session are empty.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+confirmed_conclusions:
+  - The approved CLI fix is validated in the real full launch and no longer blocks either entrypoint.
+  - EXP-015 physical and numeric observations are successful but non-counting because all three screenshots are missing.
+  - EXP-012 through EXP-014 remain PLANNED and prohibited until task_start obtains a countable accepted run.
+next_command: Commit this closure/plan, then perform fresh domain 194 and exact-title window absence checks before transitioning EXP-016 to RUNNING.
+```
