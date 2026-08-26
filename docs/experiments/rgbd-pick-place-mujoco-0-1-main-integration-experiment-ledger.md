@@ -2788,6 +2788,34 @@ diagnostic_patch_sha256: 7ebf7d3c18dc06b923d0229e5da12ba65ca2bbd095ecae8ad908d04
 decision: CREATE_START_SIGNAL_AND_WAIT_FOR_NATURAL_FULL_CHAIN_EXIT
 ```
 
+## CP-081 / CLOSE-SMOKE-016-001 — Post-first-valid input release removes action starvation
+
+```yaml
+checkpoint_id: CP-081
+transition_id: CLOSE-SMOKE-016-001
+recorded_at: 2026-08-27T03:08:30+08:00
+smoke_id: SMOKE-016
+from: RUNNING
+to: CAUSAL_PASS
+qualification: false
+valid_preconditions: Fresh domain205/session/evidence, exact cwd/prefix/fork/support, unchanged camera_publish_rate 10.0 and motion policy, valid world pose/PLY/JSON, and INPUT_RELEASED_AFTER_FIRST_VALID count3 all passed.
+provenance_note: Runtime bundle c995f5ebedfea8a0f0bccaf19e05c839277a54f16a449df4da0795d4c5f3a95b is the deterministic diagnostic bundle with SO101_SOURCE_COMMIT=7f767f8; CP-080's c1d832e value omitted that required environment variable during readback and is superseded.
+result:
+  - Natural rc0, status DONE, transition_count 19, full state trace through detach-before-open, placement validation, sync, and retreat.
+  - 22 arm trajectories paired physical Goal reached to MoveIt Controller successfully finished with maximum delivery latency 0.053310 seconds; no waitForExecution timeout occurred.
+  - Final cup [-0.07777456, -0.24757163, 0.16483053], table_contact true, zero fingertip contacts, and settled velocities; release marker sequence 6324.
+causal_conclusion: Retaining the reliable RGB-D subscriptions after the one required perception result caused the Mac action-result starvation. Releasing exactly those three inputs after first valid pose while retaining node/publisher/TF is sufficient for the complete task_start chain at camera 10 Hz.
+cleanup: Natural shutdown; domain205, exact processes, Viewer, and session are empty.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/perception-release-smoke016
+  log_sha256: 8a7ef0805408fa0f3a69282b3ef8a0f6d60fcc5fd5f18fac33d601f526e0c304
+  manifest_sha256: ea016d164edc7ad755d5cc2166658be38e2b8184dc77973c58d25f1b90fc43ed
+  perception_summary_sha256: f962f882186116d299a41836974b0fc43d1e5fc1eb2c6f4d9a0371df2fe85842
+  ply_sha256: be6dc51ee934f0f8fb73a6744ebfa59235600a97c1143056f5d501b18fa3acb5
+decision: TDD_PRODUCTIONIZE_IDEMPOTENT_EXACT_THREE_INPUT_RELEASE_WITH_STABLE_STATUS
+next_experiment: NONE
+```
+
 ## CP-078 — Plan post-first-valid perception input-release causal probe
 
 ```yaml
