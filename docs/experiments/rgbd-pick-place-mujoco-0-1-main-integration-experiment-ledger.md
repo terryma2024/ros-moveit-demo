@@ -10,7 +10,7 @@ base_commit: b73748f86acc891711aa455fc911a9ebde52686d
 current_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
 implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
 record_commit: 1a0c532cb4ff012bc1cef95a47594ca8a1a65fa5
-repair_record_commit: PENDING_CP138_LEDGER_COMMIT
+repair_record_commit: 0ce4869fc3226e674b884cb515396df5f810df37
 commit_semantics: current_commit and implementation_commit identify the immutable installed runtime; record_commit identifies the ledger-only commit that first contains CP-002 and is resolved additively after that commit exists.
 target_child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 evidence_root: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9
@@ -34,8 +34,20 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-138
+latest_checkpoint: CP-139
 next_experiment: NONE_SECOND_FRESH_REVIEW_REQUIRED
+```
+
+## CP-139 — repair record commit resolved additively
+
+```yaml
+checkpoint_id: CP-139
+recorded_at: 2026-08-27T05:24:26+08:00
+status: FRESH_REVIEW_REQUIRED
+implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+repair_record_commit: 0ce4869fc3226e674b884cb515396df5f810df37
+meaning: The implementation commit is the exact rebuilt runtime; the repair record commit is the first immutable commit containing CP-137/CP-138, corrected times, test results, hashes, versions, and installed-source binding. This additive CP-139 resolves its hash without changing runtime bytes.
+next_command: Fresh-review implementation 3ea1530 plus repair records through current HEAD; live preregistration remains prohibited until approval.
 ```
 
 ## CP-138 — review remediation frozen, rebuilt, installed, and provenance-bound
