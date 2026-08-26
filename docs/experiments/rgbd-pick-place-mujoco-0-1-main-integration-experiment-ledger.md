@@ -1834,3 +1834,30 @@ helpers:
 decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_DOMAIN_AND_EXACT_IDENTITIES
 next_experiment: SMOKE-009
 ```
+
+## CP-042 / TRANS-SMOKE-009-RUNNING-001 — Start corrected real installed child sampling
+
+```yaml
+checkpoint_id: CP-042
+transition_id: TRANS-SMOKE-009-RUNNING-001
+recorded_at: 2026-08-27T01:41:13+08:00
+smoke_id: SMOKE-009
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 9194a6a87b6c817717aea4e2d90a12354e806497
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Domain 211 ROS graph is empty with ROS2CLI_USE_DAEMON zero; the registered evidence path, exact task tmux, exact task process identities, and MuJoCo Viewer are absent.
+  - Candidate package prefixes resolve to project-installed so101_demo_py and so101_mujoco_support plus fork-installed mujoco_ros2_control.
+  - The absolute-Python identity parser preflight passed on a short-lived exact-owned child before product startup.
+  - Idle tmux pane 86961 passed explicit in-pane cd, pane_current_path, and captured pwd against the exact task worktree.
+owned_processes:
+  - tmux_session: mrc010-mac-real-sample-r2
+    idle_pane_pid: 86961
+evidence:
+  pane_readback_sha256: 881ffbb54a4407e1bba835906fe164d88b107d124c67d5059906aa59bfe2a1b1
+decision: START_BASE_STATIC_TF_GUI_THEN_EXACT_CHILD_AND_CORRECTED_SAMPLER
+next_command: Start domain 211 base/static-TF/GUI; after full readiness start recorded installed child and exact-owned 25 s/31 s sampler.
+```
