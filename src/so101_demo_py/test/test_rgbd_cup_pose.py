@@ -753,7 +753,7 @@ def test_live_context_runtime_error_after_first_valid_pose_remains_fatal(
     assert "publisher serialization failed" in output
 
 
-def test_ros_runtime_uses_sensor_qos_and_reliable_depth_one_publisher() -> None:
+def test_ros_runtime_matches_reliable_depth_one_camera_qos() -> None:
     from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
 
     api, _rclpy, node, _listener = _fake_ros_api()
@@ -768,11 +768,12 @@ def test_ros_runtime_uses_sensor_qos_and_reliable_depth_one_publisher() -> None:
         publisher_qos = node.publisher_calls[0][2]
         assert publisher_qos.depth == 1
         assert publisher_qos.reliability == "reliable"
-        assert [call[3] for call in node.subscription_calls] == [
-            api.qos_profile_sensor_data,
-            api.qos_profile_sensor_data,
-            api.qos_profile_sensor_data,
-        ]
+        subscription_qos = [call[3] for call in node.subscription_calls]
+        assert len(subscription_qos) == 3
+        for qos in subscription_qos:
+            assert qos.depth == 1
+            assert qos.reliability == "reliable"
+            assert qos.durability == "volatile"
     finally:
         runtime.close()
 
