@@ -6,6 +6,7 @@ import importlib.util
 import math
 import os
 import struct
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -160,6 +161,204 @@ def test_phase2_scans_the_complete_depth_payload() -> None:
 
     with pytest.raises(RuntimeError, match="non-finite or non-positive"):
         PROBE.summarize_aligned_phase(infos, colors, depths)
+
+
+def test_phase2_rejects_a_consistent_wrong_resolution() -> None:
+    infos, colors, depths = _phase2_messages()
+    for message in (infos[1], colors[1], depths[1]):
+        message.width = 320
+        message.height = 240
+
+    with pytest.raises(RuntimeError, match="unexpected dimensions: 320x240"):
+        PROBE.summarize_aligned_phase(infos, colors, depths)
+
+
+def test_phase2_rejects_a_consistent_wrong_frame() -> None:
+    infos, colors, depths = _phase2_messages()
+    for message in (infos[1], colors[1], depths[1]):
+        message.header.frame_id = "wrong_frame"
+
+    with pytest.raises(RuntimeError, match="unexpected frame_id: wrong_frame"):
+        PROBE.summarize_aligned_phase(infos, colors, depths)
+
+
+class _FakeContext:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.active = False
+
+    def ok(self) -> bool:
+        return self.active
+
+
+class _FakeNode:
+    def __init__(self, events: list[str], *, destroy_result: bool = True) -> None:
+        self.events = events
+        self.destroy_result = destroy_result
+
+    def destroy_node(self) -> bool:
+        self.events.append("destroy_node")
+        return self.destroy_result
+
+
+class _FakeExecutor:
+    def __init__(
+        self,
+        events: list[str],
+        *,
+        shutdown_result: bool = True,
+        shutdown_error: Exception | None = None,
+    ) -> None:
+        self.events = events
+        self.shutdown_result = shutdown_result
+        self.shutdown_error = shutdown_error
+
+    def add_node(self, node) -> None:
+        del node
+        self.events.append("add_node")
+
+    def remove_node(self, node) -> None:
+        del node
+        self.events.append("remove_node")
+
+    def spin_once(self, timeout_sec: float) -> None:
+        del timeout_sec
+        self.events.append("spin_once")
+
+    def shutdown(self, timeout_sec: float) -> bool:
+        del timeout_sec
+        self.events.append("executor_shutdown")
+        if self.shutdown_error is not None:
+            raise self.shutdown_error
+        return self.shutdown_result
+
+
+def _install_fake_ros_lifecycle(
+    monkeypatch,
+    events: list[str],
+    *,
+    shutdown_result: bool = True,
+    shutdown_error: Exception | None = None,
+) -> None:
+    context = _FakeContext(events)
+    executor = _FakeExecutor(
+        events,
+        shutdown_result=shutdown_result,
+        shutdown_error=shutdown_error,
+    )
+
+    monkeypatch.setattr(PROBE, "Context", lambda: context)
+    monkeypatch.setattr(PROBE, "SingleThreadedExecutor", lambda context: executor)
+
+    def fake_init(*, context, signal_handler_options) -> None:
+        del signal_handler_options
+        events.append("rclpy_init")
+        context.active = True
+
+    def fake_shutdown(*, context, uninstall_handlers) -> None:
+        del uninstall_handlers
+        events.append("rclpy_shutdown")
+        context.active = False
+
+    monkeypatch.setattr(PROBE.rclpy, "init", fake_init)
+    monkeypatch.setattr(PROBE.rclpy, "shutdown", fake_shutdown)
+
+
+def test_phase_timeout_still_tears_down_every_created_resource(monkeypatch) -> None:
+    events: list[str] = []
+    _install_fake_ros_lifecycle(monkeypatch, events)
+    node = _FakeNode(events)
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        PROBE._run_node_phase(lambda context: node, lambda candidate: False, 0.0)
+
+    assert events == [
+        "rclpy_init",
+        "add_node",
+        "remove_node",
+        "executor_shutdown",
+        "destroy_node",
+        "rclpy_shutdown",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("shutdown_result", "shutdown_error"),
+    [(False, None), (True, RuntimeError("executor exploded"))],
+)
+def test_executor_shutdown_failure_makes_the_phase_fail_after_full_cleanup(
+    monkeypatch, shutdown_result: bool, shutdown_error: Exception | None
+) -> None:
+    events: list[str] = []
+    _install_fake_ros_lifecycle(
+        monkeypatch,
+        events,
+        shutdown_result=shutdown_result,
+        shutdown_error=shutdown_error,
+    )
+    node = _FakeNode(events)
+
+    with pytest.raises(RuntimeError, match="phase teardown failed"):
+        PROBE._run_node_phase(lambda context: node, lambda candidate: True, 1.0)
+
+    assert events[-4:] == [
+        "remove_node",
+        "executor_shutdown",
+        "destroy_node",
+        "rclpy_shutdown",
+    ]
+
+
+def test_node_construction_failure_still_shuts_down_executor_and_context(monkeypatch) -> None:
+    events: list[str] = []
+    _install_fake_ros_lifecycle(monkeypatch, events)
+
+    def fail_node_creation(context):
+        del context
+        events.append("node_factory")
+        raise RuntimeError("node creation failed")
+
+    with pytest.raises(RuntimeError, match="node creation failed"):
+        PROBE._run_node_phase(fail_node_creation, lambda candidate: True, 1.0)
+
+    assert events == [
+        "rclpy_init",
+        "node_factory",
+        "executor_shutdown",
+        "rclpy_shutdown",
+    ]
+
+
+def test_cli_starts_phase2_only_after_phase1_teardown_and_removes_stale_output(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    output = tmp_path / "camera-topics.json"
+    output.write_text('{"stale": true}\n', encoding="utf-8")
+    events: list[str] = []
+
+    def color_phase(timeout_s: float) -> dict:
+        del timeout_s
+        events.extend(["phase1_create", "phase1_full_teardown"])
+        return {"color_frequency_hz": 10.0}
+
+    def aligned_phase(timeout_s: float) -> dict:
+        del timeout_s
+        assert events[-1] == "phase1_full_teardown"
+        events.append("phase2_create")
+        raise RuntimeError("phase2 failed")
+
+    monkeypatch.setattr(PROBE, "collect_color_phase", color_phase)
+    monkeypatch.setattr(PROBE, "collect_aligned_phase", aligned_phase)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["macos_camera_topic_probe.py", "--output", str(output)],
+    )
+
+    assert PROBE.main() == 1
+    assert events == ["phase1_create", "phase1_full_teardown", "phase2_create"]
+    assert not output.exists()
+    assert "camera probe failed: phase2 failed" in capsys.readouterr().err
 
 
 def test_both_phases_write_one_atomic_success_json(tmp_path: Path, monkeypatch) -> None:
