@@ -1,0 +1,4 @@
+interface:
+  display_name: "GUI Capture"
+  short_description: "Capture macOS or GNOME GUI evidence"
+  default_prompt: "Use $gui-capture to capture and inspect a fresh GUI window or desktop image."
