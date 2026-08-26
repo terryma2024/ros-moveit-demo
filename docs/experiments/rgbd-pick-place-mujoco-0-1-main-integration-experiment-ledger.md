@@ -33,7 +33,48 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-122
+latest_checkpoint: CP-123
+next_experiment: EXP-037
+```
+
+## EXP-037 — dependency-closed ai-station task_start FULL_RESTART
+
+```yaml
+experiment_id: EXP-037
+recorded_at: 2026-08-27T04:57:00+08:00
+status: PLANNED
+prior_experiment: EXP-032
+hypothesis: The exact dependency-closed task environment completes every AC-001 clause from task_start.
+prediction: Production RGB-D yields a world cup pose within 0.01 m and the full physical workflow produces same-Viewer baseline/transport/final proof, bilateral unsupported lift, detach-before-open, stable target release, and clean shutdown.
+single_variable: Prepend the task-local Open3D 0.19.0/NumPy 1.26.4 python-deps proven by CP-122; every EXP-032 product input and gate is unchanged.
+lifecycle: FULL_RESTART
+provenance:
+  source_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+  child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+  runtime_executable_sha256: 48a4b9dffce6f2d34cea48cd810cb3f9caac3c3a6363ca424776dcd07eebc5ce
+  ros_domain_id: 101
+  gz_partition: linux-rgbd-task-start-exp037
+  session_id: linux-rgbd-task-start-exp037
+  tmux_session: linux-rgbd-task-start-exp037
+  evidence_file: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-037/task-start.json
+environment:
+  __GLX_VENDOR_LIBRARY_NAME: mesa
+  LIBGL_ALWAYS_SOFTWARE: "1"
+  python_deps: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/python-deps
+success_criteria: AC-001 passes every clause.
+failure_criteria: A correctly isolated observed run violates a behavioral AC-001 clause; stop for systematic debugging.
+invalid_criteria: Any provenance, dependency, GUI freshness, ownership, stale graph, or missing-observation defect.
+decision: COMMIT_PLAN_THEN_FRESH_ISOLATION_PREFLIGHT
+```
+
+## CP-123 — EXP-037 preregistered
+
+```yaml
+checkpoint_id: CP-123
+recorded_at: 2026-08-27T04:57:00+08:00
+status: VALID
+owned_processes: NONE
+decision: Commit/push, then require new identity plus Mesa/Open3D preflight before RUNNING.
 next_experiment: EXP-037
 ```
 
