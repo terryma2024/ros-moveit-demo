@@ -32,8 +32,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-017
-next_experiment: NONE
+latest_checkpoint: CP-018
+next_experiment: SMOKE-002
 ```
 
 ## Shared live acceptance contract
@@ -1053,4 +1053,38 @@ evidence:
   cleanup: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016/post-cleanup.txt
 decision: STOP_BATCH_AND_DEBUG_RGBD_RUNTIME_CONSTRUCTION
 next_experiment: NONE
+```
+
+## CP-018 — Plan non-qualification runtime-contention A/B
+
+```yaml
+checkpoint_id: CP-018
+recorded_at: 2026-08-27T00:27:16+08:00
+smoke_id: SMOKE-002
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: 17dd8fd15bdf6d8f0bf37445a7b5c0af729b0b23
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+problem: EXP-016 exceeded the 30 s startup budget after Open3D preflight but before ROS runtime construction returned.
+empty_graph_control:
+  - Fresh-process probes in legal domains 224, 225, and 226 all exited zero with total construction 6.686 to 6.782 s.
+  - Open3D import used 3.303 to 3.384 s and rclpy create_node used 2.847 to 2.872 s; no other segment exceeded 0.25 s.
+  - Fast DDS rejects domains above 232, so 233 through 235 are invalid diagnostic attempts and may not be reused for qualification.
+hypothesis: A live MuJoCo camera/physics plus MoveIt/controller stack causes CPU or thread contention that stretches one measured Open3D/ROS construction segment past 30 s.
+single_variable: Run the same staged timing probe in the same ROS domain while the exact installed base stack is live; do not start rgbd_cup_pose, dynamic_cup_pick_place, or any pick-place workflow.
+identity:
+  domain: 227
+  session: mac-mrc010-runtime-contention-r1
+  tmux: mrc010-mac-runtime-contention-r1
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/runtime-contention-r1
+method:
+  - Start exact installed base MuJoCo stack with headless=false and explicit in-pane cwd.
+  - Wait for ABI-aligned plugins, all three controllers, and Planning Scene READ_BACK.
+  - Run the frozen timing probe in the same domain with a 120 s external bound; record segment JSON and rc.
+  - Send one SIGINT only to the exact owned base-stack tmux and prove bounded cleanup.
+success_criteria: The A/B identifies whether Open3D import, ROS API load, rclpy init, create_node, TF listener, publisher, or subscriptions accounts for the EXP-016 overrun.
+failure_criteria: No segment reproduces the overrun; retain the result and reject the contention hypothesis rather than changing timeout.
+decision: COMMIT_PLAN_THEN_RUN_NON_QUALIFYING_AB
+next_experiment: SMOKE-002
 ```
