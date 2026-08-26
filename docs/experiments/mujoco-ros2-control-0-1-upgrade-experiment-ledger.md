@@ -10,25 +10,24 @@ upstream_target: 57fc6744844902d4532160b403fa95840c1d6f96
 local_r11: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
 fork_branch: codex/upstream-0.1.0-so101-r1
 fork_candidate: aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c
-linux_status: PRIOR CANDIDATE QUALIFIED; exact aeff7e5 candidate requalification in progress
+linux_status: VALID / QUALIFIED for parent a925487, fork aeff7e5
 macos_status: VALID / QUALIFIED for production runtime parent ae5b8ab, fork aeff7e5; a925487 adds only locks, contracts, and docs
-release_tag_status: NOT_AUTHORIZED until exact-candidate Linux requalification completes
+release_tag_status: ELIGIBLE_NOT_CREATED; both platforms qualified the same production fork, but no release action was requested
 retained_runs:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix1
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix2
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-exp013-requal
 archived_runs: []
 deletion_candidates: []
 
 latest_checkpoint:
-  state: MACOS_EXP013_QUALIFIED_LINUX_EXACT_CANDIDATE_REQUALIFYING
-  result: macOS parent ae5b8ab / fork aeff7e5 passed startup, camera, dynamic, GUI, and clean shutdown.
-  next_action: Requalify Linux against the same aeff7e5 fork candidate before any release tag.
-open_risks:
-  - prior Linux qualification used ca654e3, not current aeff7e5
-  - no release tag until Linux also qualifies the current exact candidate
+  state: DUAL_PLATFORM_EXACT_FORK_QUALIFIED_TAG_NOT_CREATED
+  result: macOS and Linux passed startup/build/tests, camera, dynamic, GUI, and clean shutdown against production fork aeff7e5.
+  next_action: Create a release tag only as a separate explicit release action.
+open_risks: []
 ```
 
 ## Controller rulings
@@ -985,8 +984,9 @@ against the new exact fork commit.
 ### EXP-014: Linux exact-candidate requalification after Apple-guard fix
 
 ```yaml
-status: PLANNED
-execution: DELEGATED
+status: VALID
+qualification: LINUX QUALIFIED
+execution: SUBAGENT_COMPLETE
 scope: requalify Linux against the exact parent a925487 and fork aeff7e5 after the macOS-only startup guard and parent lock synchronization
 prior_experiments: EXP-012, EXP-013
 lifecycle: ISOLATED_STACK
@@ -1000,7 +1000,49 @@ required_gates:
   - dynamic cup pick-place DONE
   - GUI screenshot
   - one clean shutdown with no owned residue, invalid context, or signal escalation
-retained_evidence: []
+run_1:
+  status: INVALID
+  reason: remote provenance reproduced stale ca654e3 locks/checker before any build or runtime
+  disposition: retained and excluded
+run_2:
+  status: VALID
+  checkpoints: 5 / 5 PASS
+  builds_and_tests:
+    fork: 6 packages; 23 / 23 wrappers; 329 JUnit; 313 pass; 16 expected skip; 0 failure/error
+    source_less: 10 / 10 wrappers; 181 JUnit; 178 pass; 3 Darwin-only skip; 0 failure/error; simulate.cc.o=0
+    parent: 3 packages; 25 / 25 native wrappers; 236 / 236 JUnit; 297 / 297 root pytest
+    contracts: copy-install, relocation maps, ABI/linkage, 13 interfaces, single mj_step, ancestry, checker, installed prefixes, and clean trees PASS
+  camera:
+    color_samples: 31
+    unique_color_header_stamps: 30
+    color_frequency_hz: 8.836075563680682
+    synchronized_color_depth_info: 3 / 3 / 3 at one common timestamp
+    dimensions: 640x480
+    frame_id: task_camera_frame
+    encodings: rgb8 / 32FC1
+    finite_positive_depth: 307200 / 307200
+    depth_range_m: 0.5510083436965942 .. 41.51203536987305
+  dynamic:
+    status: DONE
+    transition_count: 19
+    exit_code: 0
+    bilateral_grasp_contacts: 1 / 1
+    lift_delta_z_m: 0.05834971750972501
+    final_xy_error_m: 0.0018630875807854749
+    final_upright_tilt_rad: 0.008540433556220675
+  screenshot:
+    path: run-2/captures/20260826T205352-76c9c4c295b0/desktop.png
+    dimensions: 5120x2880
+    visual_result: MuJoCo Running; cup upright in red target; gripper open and retreated
+    sha256: 554f1b16e95c086f5157c903afb98fab6ecf9852b1cebe1f2406cada064c8a40
+  shutdown: one Ctrl-C; stack and bridge exit 0; owned PID/PGID=0; domain 113 nodes=0; no invalid context, escalation, or crash
+  report: run-2/linux-exp013-requal-run2-report.md
+  report_sha256: 5e3f60ec0538633fbe35417c339eacd6528c5a329e3764d38708a615c9781709
+  copyback_manifest: run-2/copyback-manifest.sha256
+  copyback_items: 101 / 101 verified remotely and locally
+  copyback_manifest_sha256: 4625b898e66e2729ed1f8c938446474548ea63e7964e08fd2e20f27ff0a6658a
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-exp013-requal
 archived_runs: []
 deletion_candidates: []
 ```
@@ -1008,4 +1050,5 @@ deletion_candidates: []
 The first delegated EXP-014 attempt stopped before build because the remote read-back reproduced the local
 provenance mismatch: gitlink and nested HEAD were `aeff7e5`, while both locks and the backend checker still named
 `ca654e3`. That fail-closed attempt is retained under the EXP-014 evidence root and is not a build, test, or runtime
-result. EXP-014 resumes only after the synchronized parent lock commit is fixed and transferred.
+result. Run 2 used the synchronized exact parent and passed all five checkpoints; its report and 101-item
+copyback manifest were independently re-read from the local evidence copy.

@@ -19,9 +19,9 @@
 | 最终 fork 候选 | `aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c` |
 | 父仓库代码 pin | `a925487de3b29a3b941994f95c93d588a968e983` |
 | candidate label | `so101-0.1.0-r1-candidate`，不是 Git tag |
-| Linux 状态 | 旧候选 `ca654e3...` 已合格；当前 `aeff7e5...` 精确候选正在 ai-station 复验 |
+| Linux 状态 | `VALID / QUALIFIED`：parent `a925487...`、fork `aeff7e5...` |
 | macOS 状态 | `VALID / QUALIFIED`：生产 runtime parent `ae5b8ab...`、fork `aeff7e5...`；`a925487...` 仅增加锁、合同和文档 |
-| 最终 release tag | 未创建；等待当前精确候选 Linux 复验 |
+| 最终 release tag | 双平台 gate 已满足，但未创建；tagging 保留为单独的显式 release 动作 |
 
 相对官方 `57fc674...`，fork 最终候选修改 42 个文件，6273 行新增、344 行删除。大量官方
 `0.1.0` 新增内容则通过 true merge 直接继承，不会出现在这组“相对官方”的统计中。
@@ -344,12 +344,31 @@ contract 会拒绝 dirty submodule、错误 origin、错误 gitlink、错误 HEA
 ### 8.1 候选级回归
 
 - macOS focused lifecycle test：20/20；source-backed core：9/9；source-less core：9/9；
-- Linux fork：6 packages、23/23 wrappers、328 JUnit cases，0 failure/error；
-- Linux source-less：10/10 wrappers、180 cases，0 failure/error；
+- Linux fork：6 packages、23/23 wrappers、329 JUnit cases，0 failure/error；
+- Linux source-less：10/10 wrappers、181 cases，0 failure/error；
 - Linux final parent：3 packages、25/25 native wrappers、236/236 JUnit、297/297 root pytest；
 - ABI、13 个 ROS interfaces、单一权威 `mj_step`、copy-install、relocation、RPATH/linkage、双 ancestry 全部通过。
 
-### 8.2 Linux 端到端（上一候选 `ca654e3...` 的历史证据）
+### 8.2 Linux 最终精确候选验收
+
+当前 parent `a925487...` / fork `aeff7e5...` 的 EXP-014 run-2 结果：
+
+- camera：31 个 color samples、30 个唯一 header，8.8360755637 Hz；RGB/depth/info 各 3 条同 timestamp；
+- 图像：640×480，`task_camera_frame`，`rgb8` / `32FC1`；307200/307200 finite-positive depth，
+  范围 0.5510083437–41.5120353699 m；
+- dynamic cup pick-place：exit 0、`DONE`、19 transitions、1/1 双侧 grasp contact；
+- lift 58.350 mm，最终 XY error 1.863 mm、upright tilt 0.008540 rad；
+- 5120×2880 多显示器截图确认 MuJoCo Running、杯子直立于红色目标圈、夹爪张开并回撤；
+- 一次 Ctrl-C 后 stack/bridge exit 0，owned PID/PGID 和 domain 113 nodes 均为 0，无 invalid-context、
+  信号升级或 crash。
+
+完整报告位于
+`/tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-exp013-requal/run-2/linux-exp013-requal-run2-report.md`，
+SHA-256 为 `5e3f60ec0538633fbe35417c339eacd6528c5a329e3764d38708a615c9781709`。
+101 项 copyback manifest 已在远端和本机全部通过，manifest SHA-256 为
+`4625b898e66e2729ed1f8c938446474548ea63e7964e08fd2e20f27ff0a6658a`。
+
+#### 8.2.1 上一候选 `ca654e3...` 的历史证据
 
 - camera：32 个 color samples、30 个唯一 header，8.4155542658 Hz；RGB/depth/info 共同 timestamp；
 - 图像：640×480，`task_camera_frame`，`rgb8` / `32FC1`；
@@ -388,9 +407,9 @@ Round 5 的 `_glfwSetWindowSizeCocoa` 崩溃已解决。根因是项目在 `Simu
 
 ### 8.4 当前 release gate
 
-macOS 已合格，但最终 tag 仍未创建。原因是这次修复把 fork commit 从 `ca654e3...` 推进到 `aeff7e5...`；
-严格的双平台规则要求 ai-station 也对这个精确 commit 复验。Linux 复验登记为 EXP-014，完成前仍不得创建
-`so101-0.1.0-r1` release tag。
+macOS 与 Linux 已对同一生产 fork `aeff7e5...` 完成 camera、dynamic、GUI 和干净停机验收；父仓精确
+code pin 为 `a925487...`，其相对 macOS runtime parent `ae5b8ab...` 只包含 lock、contract 和文档同步。
+双平台 gate 已满足，但本任务没有执行独立 release 动作，因此 `so101-0.1.0-r1` tag 仍未创建。
 
 ## 9. 后续维护规则
 
