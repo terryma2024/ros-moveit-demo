@@ -1121,3 +1121,41 @@ open_risks:
 decision: EXP-007 may proceed to its immediate pre-RUNNING isolation snapshot using only the task-owned overlay and Python dependency path. No dynamic workflow or motion is authorized in EXP-007.
 next_command: Capture and retain the exact ROS_DOMAIN_ID=185 graph, GZ_PARTITION, targeted process set, tmux list, git/submodule/install provenance, and owned launch command immediately before changing EXP-007 from PLANNED to RUNNING.
 ```
+
+```yaml
+transition_id: TRANS-EXP-007-RUNNING-001
+recorded_at: 2026-08-26T10:11:57+08:00
+experiment_id: EXP-007
+from: PLANNED
+to: RUNNING
+lifecycle: ISOLATED_STACK
+host: AI-STATION-001
+source_commit: e4a39923b1e3146f0c601baf6ec0b6de07cafebc
+implementation_commit: 919f7faa619c887f5c05df579b2ac17c545b77fe
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+submodule_describe: so101-0.0.3-r8-3-gf19a8cc
+install_overlay: /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/install
+python_dependencies: /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/python-deps
+ros_domain_id: 185
+gz_partition: rgbd-perception-ai-station-exp007-20260826
+session_id: rgbd-perception-ai-station-exp007-20260826
+owned_tmux_session: rgbd-exp007-20260826
+immediate_pre_running_observed:
+  - OBSERVED: ROS_DOMAIN_ID 185 returned no nodes with --no-daemon; only built-in /parameter_events and /rosout topics were listed.
+  - OBSERVED: The targeted simulator, controller, MoveIt, static-TF, rgbd_cup_pose, dynamic workflow, and RViz process set was empty after excluding the probe shell itself.
+  - OBSERVED: No current-user process owned GZ_PARTITION rgbd-perception-ai-station-exp007-20260826.
+  - OBSERVED: Parent worktree and exact f19a8cc submodule were clean, fresh overlay package prefixes were re-read, and existing tmux sessions were listed only.
+  - OBSERVED: The first partition scan attempted unreadable /proc environments and produced permission noise but changed no state; isolation-snapshot-v2.log is the authoritative clean readback.
+  - OBSERVED: cua-driver health is overall ok on local X11 DISPLAY=:1 with AT-SPI and screen capture available; no GUI action has occurred yet.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/pre-running/isolation-snapshot.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/pre-running/isolation-snapshot-v2.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/gui/cua-driver-probe.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/gui/cua-driver-health.log
+runtime_scope:
+  - Start only so101_mujoco.launch.py with task_start, the two approved static TF publishers, passive one-shot observers, and production rgbd_cup_pose.
+  - Do not start dynamic_cup_pick_place, fixed_cup_pick_place, cup_pose_tf_demo, or mujoco_cup_pose_bridge; command no robot motion.
+  - Capture one causally attributable Viewer baseline, camera-view-only action, and fresh post-action screenshot using snapshot-action-fresh.
+  - Stop only processes owned by tmux session rgbd-exp007-20260826 and prove the final targeted process set plus domain 185 are empty.
+next_command: Create exact-owned tmux session rgbd-exp007-20260826 and start its stack window from /opt/ros/jazzy plus the fresh task overlay with ROS_DOMAIN_ID=185, GZ_PARTITION=rgbd-perception-ai-station-exp007-20260826, headless=false, task_start, and the registered EXP-007 evidence paths.
+```
