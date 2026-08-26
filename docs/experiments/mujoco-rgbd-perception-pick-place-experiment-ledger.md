@@ -7,7 +7,7 @@ success_contract: Four independent FULL_RESTART runs each use real aligned RGB-D
 worktree: /data/work/ws_moveit/.worktrees/rgbd-perception-pick-place
 branch: codex/rgbd-perception-pick-place
 base_commit: a7e3745f13b892a8b7501980fdaf87436392ad50
-current_commit: a564f2d01971ab748907f8fd4701af62b252af90
+current_commit: 37964ba216b7d808fd5fbb51c93d6115c316e411
 evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/
 confirmed_conclusions:
   - Existing macOS CameraPlugin acceptance proves real aligned RGB-D is available only from a correctly sourced interactive runtime; topic names alone are insufficient.
@@ -27,8 +27,8 @@ open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
   - A fresh ai-station Linux build from the exact f19a8cc submodule can pass the perception-only gate without starting dynamic_cup_pick_place or robot motion.
-latest_checkpoint: CP-019
-next_experiment: EXP-008
+latest_checkpoint: CP-020
+next_experiment: EXP-009
 ```
 
 ```yaml
@@ -1279,4 +1279,86 @@ runtime_scope:
   - Prohibit every pick-place workflow, truth bridge, and robot motion command.
   - Use cua-driver session rgbd-exp008-viewer-20260826 with snapshot-action-fresh for the Viewer gate.
 next_command: Start exact-owned tmux rgbd-exp008-20260826 stack with the frozen Mesa environment and retain all child exits before starting any static TF or perception process.
+```
+
+```yaml
+closure_id: CLOSE-EXP-008-001
+recorded_at: 2026-08-26T10:27:48+08:00
+experiment_id: EXP-008
+status: INVALID
+classification: audit_invalid_non_counting
+product_observations:
+  - OBSERVED: Mesa software GLX started a visible owned MuJoCo Viewer; exact f19 CameraPlugin initialized its GLFW renderer and 640x480 offscreen buffer; all three controllers and Planning Scene passed readiness.
+  - OBSERVED: An independently retained exact-stamp RGB-D triple at stamp 180552000000 is task_camera_frame 640x480 with rgb8/32FC1, correct packed strides and byte counts, and 307200 finite positive depth values.
+  - OBSERVED: Production rgbd_cup_pose was the sole /cup_pose publisher, selected 141 cup points, fitted radius 0.03938151231973142 m, wrote a 4013-byte PLY plus JSON, and published world [0.01950111783349788, -0.28040476095521005, 0.165] with source stamp 122651999999.
+  - OBSERVED: Exact-source-stamp world<-task_camera_frame lookup succeeded at translation [0.65, -0.65, 0.55]; current MuJoCo plastic_cup truth was [0.02, -0.28, 0.16480156647042168], giving 0.0006723769125849648 m 3D error.
+  - OBSERVED: CUA baseline and pre-action screenshots showed the active canonical scene; top_down action read back successfully but visually occluded the cup; the subsequent table_corner_ne camera-only action read back successfully and its fresh inspected screenshot visibly showed the orange cup, red target, robot, table, and Running status.
+  - OBSERVED: No dynamic/fixed workflow, truth bridge, or robot motion process started.
+audit_failure:
+  - OBSERVED: Sending terminal C-c to the owned helper panes terminated each wrapper shell together with its foreground child, so perception.exit, tf-base.exit, tf-optical.exit, and stack.exit were never durably written.
+  - OBSERVED: The owned tmux session, every recorded wrapper PID, domain 186, targeted process set, Viewer window, and CUA session were all absent after cleanup; post-cleanup.log exited 0.
+  - INFERRED: Cleanup occurred, but the frozen complete-exit-sidecar criterion cannot be reconstructed from absence alone and must not be waived retrospectively.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/rgbd-sample.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/point-cloud.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/perception.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/truth-tf.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/cup.ply
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/gui/viewer-pre-action.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/gui/viewer-post-action.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/gui/viewer-post-action-2.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/run/numeric-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/run/post-cleanup.log
+conclusion: EXP-008 is strict audit INVALID and non-counting despite passing every observed perception and visual product boundary; missing frozen exit sidecars prevent VALID status.
+decision: Preserve all evidence and plan EXP-009 with identical product/runtime variables plus a prevalidated exact child PID/PGID cleanup protocol.
+next_experiment: EXP-009
+```
+
+```yaml
+experiment_id: EXP-009
+status: PLANNED
+prior_experiment: EXP-008
+hypothesis: With the same exact f19 fresh-overlay Mesa runtime, an exact child-process-group wrapper can reproduce EXP-008's perception/visual gates while retaining complete real exit sidecars and exact-owned cleanup proof.
+prediction: All EXP-008 product values remain within their frozen tolerances and each helper plus stack writes a real exit sidecar after only its recorded child PGID receives SIGINT.
+single_variable: Replace terminal C-c cleanup with prevalidated wrappers that launch each runtime in a recorded setsid child, wait in the parent, and are stopped by exact recorded child PGID; all product, source, overlay, Mesa, keyframe, and perception settings remain fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Exact f19 and fresh overlay provenance remain clean and unchanged; Mesa software GLX hidden-window smoke remains exit 0.
+  - The wrapper lifecycle is validated on a harmless task-owned process before any stack command.
+  - ROS_DOMAIN_ID 187, GZ_PARTITION rgbd-perception-ai-station-exp009-20260826, targeted process set, and owned tmux name are empty immediately before RUNNING.
+  - No workflow, truth bridge, or motion command is allowed.
+success_criteria:
+  - All EXP-008 RGB-D, point-cloud, sole publisher, radius, exact-stamp TF, <=0.01 m truth error, and fresh inspected Viewer gates pass on new EXP-009 evidence.
+  - Each runtime wrapper retains its exact child PID/PGID and genuine exit sidecar; post-cleanup domain, process, Viewer, CUA, and owned tmux sets are empty.
+failure_criteria:
+  - With preconditions satisfied, any perception, truth, visual, or cleanup product gate fails.
+invalid_criteria:
+  - Isolation/provenance is contaminated, wrapper validation fails, any exit is unauditable, Viewer environment fails, or prohibited workflow/motion starts.
+provenance:
+  source_commit: PENDING_LEDGER_COMMIT
+  implementation_commit: 919f7faa619c887f5c05df579b2ac17c545b77fe
+  submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  ros_domain_id: 187
+  gz_partition: rgbd-perception-ai-station-exp009-20260826
+  session_id: rgbd-perception-ai-station-exp009-20260826
+  owned_tmux_session: rgbd-exp009-20260826
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/
+decision: PENDING
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-020
+recorded_at: 2026-08-26T10:27:48+08:00
+last_valid_experiment: EXP-002
+current_hypothesis: EXP-009 can convert the now-proven perception chain into a countable gate by changing only the cleanup ownership protocol.
+working_tree_status: Task worktree and f19 submodule are clean before this ledger-only update; EXP-008 runtime artifacts exist only below the registered evidence root.
+owned_processes: NONE; domain 186, target set, Viewer, CUA session, and owned tmux are empty.
+preserved_processes: Existing tmux sessions and canonical main were not operated or modified.
+confirmed_conclusions:
+  - EXP-008 strongly supports the perception hypothesis but remains non-counting audit INVALID.
+  - Product settings must not be tuned for EXP-009; only process ownership/exit capture changes.
+  - Four FULL_RESTART runs remain prohibited until a VALID perception-only experiment is independently reviewed.
+next_command: Build and pass a harmless exact-child-PGID wrapper lifecycle test below exp-009/pre-running, then perform fresh domain 187 and process isolation before the RUNNING transition.
 ```
