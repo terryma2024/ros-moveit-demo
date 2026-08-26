@@ -7,21 +7,28 @@ success_contract: Four independent FULL_RESTART successes on macOS, four indepen
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-pick-place-mujoco-0-1-main
 branch: codex/rgbd-pick-place-mujoco-0-1-main
 base_commit: b73748f86acc891711aa455fc911a9ebde52686d
-current_commit: 6f40b480f4f0acdaa74946549e3643381750da52
+current_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_commit: PENDING_TASK3_FREEZE_COMMIT
+commit_semantics: current_commit and implementation_commit identify the immutable installed runtime; record_commit identifies the ledger-only commit that first contains CP-002 and is resolved additively after that commit exists.
 target_child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 evidence_root: /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/
 confirmed_conclusions:
   - OBS-001: child main@5e9d67c contains aeff7e5 and both commits have identical trees.
   - OBS-002: parent main@b73748f clean isolated-install baseline passed 303 of 303 so101_demo_py tests from /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-baseline-canonical.
   - OBS-003: origin/codex/rgbd-perception-pick-place@0649f3b retains prior four-position qualification, but those runs do not count for this new child-main candidate.
+  - OBS-006: implementation 208dd216 with child main@5e9d67c built into isolated Mac fork/project installs; 17 registered child CTests (230 JUnit cases), 442 project tests, and the 153-test directed integration set pass.
 disproven_routes:
   - OBS-004: sourcing the parent checkout .envrc in a nested worktree selects the parent install and is not valid candidate provenance.
   - OBS-005: using non-canonical /tmp build paths on macOS makes installed manifest and ament prefix strings diverge.
+  - OBS-007: enabling zsh nounset before generated colcon setup scripts aborts source at unset COLCON_TRACE and removes required CMake prefixes.
+  - OBS-008: colcon's macOS child environment omits DYLD_LIBRARY_PATH; accepted child tests use direct Homebrew CTest after same-process setup, with the candidate fork ahead of the dylib farm.
+  - OBS-009: putting the dylib farm ahead of the task fork selects the old fork library and is invalid candidate provenance.
 open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - The final installed candidate succeeds at all four positions on both platforms.
-latest_checkpoint: CP-001
+latest_checkpoint: CP-002
 next_experiment: EXP-010
 ```
 
@@ -68,7 +75,7 @@ failure_criteria:
 invalid_criteria:
   - Provenance, process isolation, GUI freshness, or evidence ownership is missing.
 provenance:
-  source_commit: UNFROZEN_PRE_IMPLEMENTATION
+  source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
   install_overlay: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install
   runtime_executable: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
   ros_domain_id: 220
@@ -105,7 +112,7 @@ failure_criteria:
 invalid_criteria:
   - Provenance, process isolation, GUI freshness, or evidence ownership is missing.
 provenance:
-  source_commit: UNFROZEN_PRE_IMPLEMENTATION
+  source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
   install_overlay: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install
   runtime_executable: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
   ros_domain_id: 221
@@ -142,7 +149,7 @@ failure_criteria:
 invalid_criteria:
   - Provenance, process isolation, GUI freshness, or evidence ownership is missing.
 provenance:
-  source_commit: UNFROZEN_PRE_IMPLEMENTATION
+  source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
   install_overlay: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install
   runtime_executable: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
   ros_domain_id: 222
@@ -179,7 +186,7 @@ failure_criteria:
 invalid_criteria:
   - Provenance, process isolation, GUI freshness, or evidence ownership is missing.
 provenance:
-  source_commit: UNFROZEN_PRE_IMPLEMENTATION
+  source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
   install_overlay: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install
   runtime_executable: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
   ros_domain_id: 223
@@ -227,7 +234,7 @@ failure_criteria:
 invalid_criteria:
   - Provenance, process isolation, GUI freshness, or evidence ownership is missing.
 provenance:
-  source_commit: UNFROZEN_PRE_IMPLEMENTATION
+  source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
   install_overlay: /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/linux-candidate/project-install
   runtime_executable: /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/linux-candidate/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
 observed:
@@ -258,4 +265,79 @@ disproven_routes:
 open_risks:
   - Merge compatibility, dual-platform builds, nine live runs, and visual gates remain unverified.
 next_command: Commit the amended design, ledger, and implementation plan; then begin the version-lock RED test.
+```
+
+```yaml
+checkpoint_id: CP-002
+recorded_at: 2026-08-26T23:03:02+08:00
+last_valid_experiment: NONE
+current_hypothesis: The exact installed 0.1.0-main candidate is statically qualified; EXP-010 must be the first fresh Mac live acceptance run.
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_commit: PENDING_TASK3_FREEZE_COMMIT
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+working_tree_status: Only this ledger is modified for CP-002; implementation commit 208dd216 and child checkout are clean.
+owned_processes: NONE
+preserved_processes: Mac parent checkout user changes; all unrelated local and ai-station worktrees, processes, tmux sessions, and evidence.
+installed_provenance:
+  fork_overlay: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install
+  project_overlay: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install
+  package_prefixes:
+    mujoco_3d_lidar: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install/mujoco_3d_lidar
+    mujoco_ros2_control_msgs: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install/mujoco_ros2_control_msgs
+    mujoco_ros2_control_plugins: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install/mujoco_ros2_control_plugins
+    mujoco_ros2_control: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install/mujoco_ros2_control
+    so101_demo_py: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py
+  runtime_executable: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
+  launch_file: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/share/so101_demo_py/launch/so101_mujoco_perception_pick_place.launch.py
+  python_runtime_module: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-build/so101_demo_py/so101_demo/runtime/launch_composition.py
+  bundle_sha256: 0caa56a10cc6d13d808aa8b57f5fbfae8c7fca808b53edccbbb47d03de7bc30e
+commands:
+  - command: colcon build four selected child packages into mac-candidate/fork-build and fork-install
+    exit_code: 0
+  - command: direct Homebrew CTest for all four selected child package build directories after same-process overlay setup
+    exit_code: 0
+  - command: colcon test-result over accepted direct-CTest JUnit scope
+    exit_code: 0
+  - command: colcon build --packages-select so101_demo_py into mac-candidate/project-build and project-install
+    exit_code: 0
+  - command: python -m pytest src/so101_demo_py/test -q
+    exit_code: 0
+  - command: python -m pytest nine directed version/camera/keyframe/TF/RGB-D/scene-sync/runner files -q
+    exit_code: 0
+automated_results:
+  child_build: Four of four selected packages built; zero-package discovery did not occur.
+  child_tests: 17 of 17 registered CTests pass; 230 JUnit cases, 0 errors, 0 failures. The lidar and msgs packages register no standalone tests; core and plugins provide the nonzero package gate.
+  project_build: so101_demo_py built into the independent project overlay.
+  project_full_tests: 442 passed in 21.03 s; collect-only independently found 442 tests.
+  project_directed_tests: 153 passed in 17.45 s.
+  backend_integration: PASS
+  lock_gitlink_child_parity: Both installed locks, source locks, gitlink, and child HEAD select main@5e9d67c; child contains upstream 0.1.0 and f19a8cc lineage, and its tree equals aeff7e5.
+invalid_non_counting_attempts:
+  - Initial child build failed before compilation because nounset interrupted generated setup scripts; it is retained under fork-build-invalid-nounset and fork-log-invalid-nounset.
+  - Initial colcon test child environment dropped DYLD_LIBRARY_PATH and produced loader errors; its dashboard and complete log are retained under fork-test-invalid-colcon-child-env and fork-test-command.log.
+  - The first direct CTest A/B put the dylib farm before the task fork and selected an old library; direct-ctest-ab-core.log is retained.
+  - A provenance readback reused zsh special variable path and lost PATH; installed-provenance-readback-invalid-zsh-path.txt is retained.
+  - An unsourced collect-only probe produced collection errors; project-pytest-collect-only-invalid-unsourced.log is retained.
+confirmed_conclusions:
+  - OBSERVED: Natural ament prefixes resolve all four child packages to fork-install and so101_demo_py to project-install; the installed runner, launch, locks, runtime library, and immutable bundle are readable there.
+  - OBSERVED: The accepted same-process Mac loader order puts the task fork before the existing farm and old fork, so candidate symbols and ROS dylibs both resolve.
+  - OBSERVED: Static qualification is complete without changing grasp geometry, motion policy, camera extrinsics, target, controller, or recovery behavior.
+disproven_routes:
+  - nounset-before-source, colcon child-env test execution, farm-before-candidate, zsh special path reuse, and unsourced pytest collection are invalid environment routes, not product regressions.
+open_risks:
+  - EXP-010 through EXP-013 have not run; camera, point cloud, TF, physical workflow, Planning Scene, fresh visuals, and clean shutdown remain live acceptance gates.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-build-command-r2.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-ctest.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-direct-test-result-verbose-clean-scope.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-build-command.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-full.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-pytest-collect-only.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-directed-pytest.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/installed-provenance-readback.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/installed-provenance-manifest.json
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/final-static-verification.txt
+decision: PROCEED_TO_EXP_010_MAC_FULL_RESTART
+next_experiment: EXP-010
+next_command: Read the project-local gui-capture skill, prove domain 220/session/evidence/Viewer isolation, and transition only EXP-010 to RUNNING before starting the GUI stack.
 ```
