@@ -1588,3 +1588,25 @@ helpers:
 decision: COMMIT_PLAN_THEN_RUN_EMPTY_PER_CALL_CONTROL
 next_experiment: SMOKE-007
 ```
+
+## CP-035 / TRANS-SMOKE-007-RUNNING-001 — Start empty per-call construction control
+
+```yaml
+checkpoint_id: CP-035
+transition_id: TRANS-SMOKE-007-RUNNING-001
+recorded_at: 2026-08-27T01:15:12+08:00
+smoke_id: SMOKE-007
+from: PLANNED
+to: RUNNING_EMPTY_CONTROL
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 165535af729af58b0e5e8275f9fd460fb5398084
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Legal domains 214/213 are graph-empty; fresh sessions/processes/tmux/evidence identities are empty.
+  - Python probe compiles; four zsh helpers pass syntax outside the restricted observer; exact process readback remains empty.
+  - Candidate bundle/prefixes remain frozen and no production source/build/install change occurred after SMOKE-006.
+owned_processes: NONE
+decision: START_EMPTY_PER_CALL_PROBE_WITH_120_SECOND_BOUND
+next_command: Run the task-owned proxy around candidate installed _create_ros_runtime in domain 214; retain flush-safe events and stop on its first valid failure.
+```
