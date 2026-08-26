@@ -242,6 +242,29 @@ pre_running_observed:
 decision: START_EXPLICIT_CWD_PRODUCT_AND_WAIT_FOR_NATURAL_EXIT_AND_THREE_CAPTURES
 ```
 
+## CP-088 / CLOSE-EXP-022-001 — Reject negative-monitor capture mapping despite product DONE
+
+```yaml
+checkpoint_id: CP-088
+transition_id: CLOSE-EXP-022-001
+recorded_at: 2026-08-27T03:23:00+08:00
+experiment_id: EXP-022
+from: RUNNING
+to: INVALID_CAPTURE_ENVIRONMENT
+qualification: false
+capture_failure: Exact CoreGraphics Viewer window45551/PID53822 was at [308,-1250] on the upper monitor; gui-capture failed its mandatory Accessibility PID/title/bounds mapping before AXRaise, producing no baseline manifest/PNG. Coordinator failed closed and did not weaken to desktop capture.
+product_diagnostic_only: Exact installed product nevertheless naturally exited rc0 with INPUT_RELEASED_AFTER_FIRST_VALID count3, DONE, and transition_count19; this is not countable without three GUI boundaries.
+cleanup: Product and coordinator exited naturally; domain207, exact processes, Viewer, and session are empty.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-022
+  log_sha256: 96d815d131e366894c7433ef2d072c43eb8e8590f90d52e9e2d48d9ce280bcd6
+  manifest_sha256: 0fc793c97ea3396a53eda8daa07534a43adabe6ba4b83a38fd0dfbcb08ac37e0
+  capture_stderr_sha256: a46f0e813158d9a0c098b4059bd67fbe96d800e8bfa5ecc096a95c81a150ba8e
+correction: Before another qualification, run a non-qualifying fresh Viewer smoke that resolves exactly one Accessibility window by exact PID/title, moves it to primary-screen positive coordinates, re-lists/freeze CG ID/bounds, and proves the unchanged gui-capture contract produces manifest+PNG.
+decision: STOP_FORMAL_BATCH_FOR_GUI_CAPTURE_SMOKE
+next_experiment: SMOKE-017
+```
+
 ## CP-086 — Plan parser-validated task_start Mac qualification
 
 ```yaml
