@@ -9,7 +9,7 @@ branch: codex/rgbd-pick-place-mujoco-0-1-main
 base_commit: b73748f86acc891711aa455fc911a9ebde52686d
 current_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
 implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
-record_commit: PENDING_TASK3_FREEZE_COMMIT
+record_commit: 1a0c532cb4ff012bc1cef95a47594ca8a1a65fa5
 commit_semantics: current_commit and implementation_commit identify the immutable installed runtime; record_commit identifies the ledger-only commit that first contains CP-002 and is resolved additively after that commit exists.
 target_child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 evidence_root: /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/
@@ -273,7 +273,7 @@ recorded_at: 2026-08-26T23:03:02+08:00
 last_valid_experiment: NONE
 current_hypothesis: The exact installed 0.1.0-main candidate is statically qualified; EXP-010 must be the first fresh Mac live acceptance run.
 implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
-record_commit: PENDING_TASK3_FREEZE_COMMIT
+record_commit: 1a0c532cb4ff012bc1cef95a47594ca8a1a65fa5
 child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 working_tree_status: Only this ledger is modified for CP-002; implementation commit 208dd216 and child checkout are clean.
 owned_processes: NONE
