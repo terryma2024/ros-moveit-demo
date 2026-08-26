@@ -7,7 +7,7 @@ success_contract: Four independent FULL_RESTART runs each use real aligned RGB-D
 worktree: /data/work/ws_moveit/.worktrees/rgbd-perception-pick-place
 branch: codex/rgbd-perception-pick-place
 base_commit: a7e3745f13b892a8b7501980fdaf87436392ad50
-current_commit: 919f7faa619c887f5c05df579b2ac17c545b77fe
+current_commit: a564f2d01971ab748907f8fd4701af62b252af90
 evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/
 confirmed_conclusions:
   - Existing macOS CameraPlugin acceptance proves real aligned RGB-D is available only from a correctly sourced interactive runtime; topic names alone are insufficient.
@@ -27,8 +27,8 @@ open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
   - A fresh ai-station Linux build from the exact f19a8cc submodule can pass the perception-only gate without starting dynamic_cup_pick_place or robot motion.
-latest_checkpoint: CP-018
-next_experiment: EXP-007
+latest_checkpoint: CP-019
+next_experiment: EXP-008
 ```
 
 ```yaml
@@ -1158,4 +1158,96 @@ runtime_scope:
   - Capture one causally attributable Viewer baseline, camera-view-only action, and fresh post-action screenshot using snapshot-action-fresh.
   - Stop only processes owned by tmux session rgbd-exp007-20260826 and prove the final targeted process set plus domain 185 are empty.
 next_command: Create exact-owned tmux session rgbd-exp007-20260826 and start its stack window from /opt/ros/jazzy plus the fresh task overlay with ROS_DOMAIN_ID=185, GZ_PARTITION=rgbd-perception-ai-station-exp007-20260826, headless=false, task_start, and the registered EXP-007 evidence paths.
+```
+
+```yaml
+closure_id: CLOSE-EXP-007-001
+recorded_at: 2026-08-26T10:16:24+08:00
+experiment_id: EXP-007
+status: INVALID
+classification: environment_invalid_non_counting
+first_bad_boundary:
+  process: fresh-overlay mujoco_ros2_control/ros2_control_node
+  child_exit_code: 1
+  message: "ERROR: could not create window"
+observed:
+  - OBSERVED: Exact f19 hardware plugin loaded and reached MuJoCo simulation initialization, then the required ros2_control_node exited 1 before controller activation, static TF, rgbd_cup_pose, Viewer action, dynamic workflow, or robot motion.
+  - OBSERVED: A same-display minimal hidden GLFW probe reproduced the failure with GLX error 65543, `Failed to create context: BadValue`, independent of ROS and SO-101.
+  - OBSERVED: nvidia-smi failed with `Driver/library version mismatch` and reported user-space NVML 595.84; DISPLAY :1 still advertised GLX/NV-GLX and remained reachable for X11 capture.
+  - OBSERVED: A single-variable minimal probe with __GLX_VENDOR_LIBRARY_NAME=mesa and LIBGL_ALWAYS_SOFTWARE=1 successfully created a hidden GLFW context on DISPLAY :1.
+  - OBSERVED: ros2 launch itself returned 0 after required-child shutdown, but its retained child record is authoritative for the ros2_control_node exit 1.
+  - OBSERVED: The owned tmux session ended, ROS_DOMAIN_ID 185 and the targeted process set were empty, and the generated MUJOCO_LOG.TXT was retained as exp-007/run/MUJOCO_LOG-attempt-1.TXT rather than deleted.
+not_started:
+  - approved static TF publishers
+  - production rgbd_cup_pose
+  - Viewer baseline/action/fresh sequence
+  - dynamic_cup_pick_place
+  - robot motion
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/run/stack-attempt-1.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/run/MUJOCO_LOG-attempt-1.TXT
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/run/glfw-hidden-smoke.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/run/glx-system-context.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/run/glfw-mesa-hidden-smoke.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/run/post-attempt-1-cleanup.log
+conclusion: EXP-007 is strict INVALID due a host GLX/NVIDIA environment mismatch before the perception boundary; it is neither a perception product failure nor a pass and must not be retried in place.
+decision: Preserve EXP-007 and plan EXP-008 as a new isolated perception-only run whose sole environment change is Mesa software GLX selection.
+next_experiment: EXP-008
+```
+
+```yaml
+experiment_id: EXP-008
+status: PLANNED
+prior_experiment: EXP-007
+hypothesis: Selecting Mesa software GLX avoids the independently reproduced NVIDIA GLX context failure while exact f19a8cc CameraPlugin still produces real aligned RGB-D and a valid production world /cup_pose.
+prediction: The fresh interactive stack creates a visible MuJoCo Viewer, publishes one aligned 640x480 rgb8/32FC1 task_camera_frame triple with finite positive depth, and production rgbd_cup_pose localizes task_start within 0.01 m of MuJoCo truth without workflow or motion.
+single_variable: Add __GLX_VENDOR_LIBRARY_NAME=mesa and LIBGL_ALWAYS_SOFTWARE=1 to every owned MuJoCo stack process environment; source, overlay, f19 submodule, keyframe, perception configuration, and acceptance criteria are unchanged.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Parent source is a clean descendant of a564f2d0 with implementation commit 919f7faa; gitlink/submodule remain exact clean f19a8cc with describe so101-0.0.3-r8-3-gf19a8cc.
+  - Fresh task-owned overlay package prefixes and Open3D dependency path are unchanged from CP-018; canonical r6 is neither sourced nor reused.
+  - ROS_DOMAIN_ID 186 and GZ_PARTITION rgbd-perception-ai-station-exp008-20260826 are empty immediately before RUNNING.
+  - dynamic_cup_pick_place, fixed_cup_pick_place, cup_pose_tf_demo, and mujoco_cup_pose_bridge are prohibited; no robot motion is commanded.
+success_criteria:
+  - Real CameraInfo, color, and depth form one exact-stamp 640x480 task_camera_frame triple with rgb8 and 32FC1 encodings and finite positive depth.
+  - Production rgbd_cup_pose is the sole fresh /cup_pose publisher, writes a nonempty selected PLY and JSON receipt with an accepted fitted radius, and retains the aligned source stamp.
+  - world to task_camera_frame TF succeeds at the source stamp and the finite world /cup_pose differs from current MuJoCo cup truth by at most 0.01 m.
+  - A causally attributable MuJoCo Viewer baseline, camera-view-only action, and fresh screenshot are retained and actually inspected.
+  - Only exact-owned processes are stopped; the final targeted process set and ROS domain are empty with complete exit evidence.
+failure_criteria:
+  - With all preconditions satisfied, any camera, segmentation, fit, TF, publisher, freshness, truth-error, visual, or cleanup product gate fails.
+invalid_criteria:
+  - Exact f19/fresh-overlay provenance fails, domain/partition/process isolation is contaminated, unowned state is reused or modified, Viewer remains unavailable due host rendering, or any prohibited workflow/motion process starts.
+provenance:
+  source_commit: PENDING_LEDGER_COMMIT
+  implementation_commit: 919f7faa619c887f5c05df579b2ac17c545b77fe
+  submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  install_overlay: /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/install
+  ros_domain_id: 186
+  gz_partition: rgbd-perception-ai-station-exp008-20260826
+  session_id: rgbd-perception-ai-station-exp008-20260826
+  owned_tmux_session: rgbd-exp008-20260826
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/
+decision: PENDING
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-019
+recorded_at: 2026-08-26T10:16:24+08:00
+last_valid_experiment: EXP-002
+current_hypothesis: EXP-008 can isolate the proven GLX vendor change from perception behavior while retaining exact f19 and fresh-overlay provenance.
+working_tree_status: The task worktree and submodule are clean before this ledger-only closure/plan update; runtime MUJOCO_LOG.TXT was moved intact into registered EXP-007 evidence.
+owned_processes: NONE; EXP-007 owned tmux ended and its ROS domain plus targeted process set are empty.
+preserved_processes: Existing tmux sessions and canonical main were not operated or modified.
+confirmed_conclusions:
+  - EXP-007 is environment-invalid before perception and non-counting; no production or physical conclusion is drawn from it.
+  - The NVIDIA GLX failure is independently reproducible, while Mesa software GLX can create a same-display GLFW context.
+  - EXP-008 is the only next route; EXP-007 evidence is retained and must not be overwritten.
+open_risks:
+  - A minimal Mesa GLFW success does not yet prove the full Viewer plus CameraPlugin rendering path.
+  - All numeric, publisher, TF, truth-error, GUI, and cleanup gates remain open.
+  - Four FULL_RESTART physical runs remain prohibited.
+next_command: Create /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008, then capture a fresh domain 186, partition, process, tmux, git/submodule, prefix, and driver isolation snapshot before transitioning EXP-008 to RUNNING.
 ```
