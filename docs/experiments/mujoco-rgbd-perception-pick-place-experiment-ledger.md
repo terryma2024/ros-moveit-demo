@@ -2367,3 +2367,26 @@ conclusion: EXP-021 is strict INVALID and non-counting because the evidence harn
 decision: Preserve EXP-021 unchanged, correct helper invocation to explicit zsh, and repeat task_start under a fresh experiment, domain, runtime session, evidence root, and CUA identity.
 next_experiment: EXP-025
 ```
+
+```yaml
+transition_id: TRANS-EXP-025-RUNNING-001
+recorded_at: 2026-08-26T15:14:33+08:00
+experiment_id: EXP-025
+from: PLANNED
+to: RUNNING
+prior_experiment: EXP-021
+source_commit: c99d8f745916270d4e86b349095efe440ab09a86
+implementation_commit: 48349ca7f6134e7bc4d15385338f86e5fbc182e7
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: Task source was clean at c99d8f74; gitlink and clean submodule HEAD both equal exact f19 with describe so101-0.0.3-r8-3-gf19a8cc. Canonical main was clean at b3770360.
+  - OBSERVED: Domain 203 had no nodes, exact runtime/launch/Viewer process set and task-owned tmux were empty, and exact Viewer title was absent.
+  - OBSERVED: The new exp-025 root, nominal run.json, run.d container, and exclusive runtime session were absent before allocation. Only the four allowed empty evidence parents were created; the production session path remains absent.
+  - OBSERVED: New strict window-scope CUA session rgbd-pick-exp025-viewer-20260826 is active with desktop_unlocked=false.
+single_harness_correction: Invoke both unchanged retained 0664 helper scripts explicitly through zsh; all product source, overlay, implementation, keyframe, policy, and acceptance gates remain frozen.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/pre-running/isolation-snapshot.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/pre-running/cua-start.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/pre-running/cua-state.json
+next_command: Commit and push this transition, then run the strict-window coordinator and full-restart wrapper concurrently via explicit zsh on domain 203 for task_start.
+```
