@@ -2055,3 +2055,35 @@ evidence:
 decision: RETAIN_VALID_FAILURE_AND_MEASURE_LATE_SUBSCRIBER_TOPIC_BOUNDARY
 next_experiment: NONE
 ```
+
+## CP-049 — Plan live RGB-D input gate and diagnostic 60 s perception continuation
+
+```yaml
+checkpoint_id: CP-049
+recorded_at: 2026-08-27T02:04:09+08:00
+smoke_id: SMOKE-011
+status: PLANNED
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_checkpoint: adf552f98d3ded517995fa87a73c29872010dd6c
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+source_evidence: CameraPlugin streaming mode stamps and publishes color, depth, and CameraInfo together on every render; late loss of a one-shot CameraInfo is rejected by source.
+identity:
+  domain: 209
+  session: mac-mrc010-rgbd-input-r4
+  tmux: mrc010-mac-rgbd-input-r4
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-input-r4/live
+phase_one_gate:
+  - After exact full Scene readiness, start a lean observer for all three camera topics.
+  - Require at least three samples each, at least three common exact stamps, task_camera_frame on all, rgb8 color, 32FC1 depth, and positive finite depth. Stop if this gate fails.
+phase_two_diagnostic:
+  - Only after the input gate passes, run the same installed perception implementation with startup-timeout-s 60.0 as a diagnostic single-variable extension.
+  - Record first frame-invalid or OK output, summary/PLY/pose timing, and whether success occurs in 30-60 s. This does not authorize a production timeout change and is non-qualifying.
+helpers:
+  base_sha256: 0dd5f0cb3d91abf79d276fadfb294c402a5f98a725248dcf1c98a74820d518c5
+  static_tf_sha256: 8db57a9c75a53937bd3c5405fda29e806a745bb68a96ec25dd103d9738a0ea97
+  observer_sha256: bf1776f7d41806f4e38e9af01b4eab84f30681dca1545b65b96ae3eb88cb3e83
+  perception60_sha256: a3c71218a769e98b104893b0f3cab85b32e35fb6e31870f547429b33a7ea9ef0
+decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_DOMAIN_AND_INPUT_GATE
+next_experiment: SMOKE-011
+```
