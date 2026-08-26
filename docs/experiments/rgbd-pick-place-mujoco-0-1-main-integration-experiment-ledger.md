@@ -224,6 +224,24 @@ decision: RETAIN_INVALID_AND_REPEAT_FRESH_TASK_START
 next_experiment: EXP-022
 ```
 
+## CP-087 / TRANS-EXP-022-RUNNING-001 — Start post-fix task_start qualification
+
+```yaml
+checkpoint_id: CP-087
+transition_id: TRANS-EXP-022-RUNNING-001
+recorded_at: 2026-08-27T03:20:15+08:00
+experiment_id: EXP-022
+from: PLANNED
+to: RUNNING
+qualification: true
+position: task_start
+implementation_commit: fff7ba3b1c7efb4472f51d0842d8bcba87d64621
+pre_running_observed:
+  - Fresh domain207/session/processes/Viewer/evidence and exact installed bundle/helper gates passed.
+  - Direct fail-closed capture coordinator PID48818 is alive with exact EXP-022 argv and capture.owner; no product has started.
+decision: START_EXPLICIT_CWD_PRODUCT_AND_WAIT_FOR_NATURAL_EXIT_AND_THREE_CAPTURES
+```
+
 ## CP-086 — Plan parser-validated task_start Mac qualification
 
 ```yaml
