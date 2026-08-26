@@ -33,8 +33,37 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-128
+latest_checkpoint: CP-129
 next_experiment: EXP-047
+```
+
+## EXP-047 — state-events watcher task_start FULL_RESTART
+
+```yaml
+experiment_id: EXP-047
+recorded_at: 2026-08-27T05:16:00+08:00
+status: PLANNED
+prior_experiment: EXP-042
+hypothesis: Watcher v2 captures the three valid same-Viewer phases while the unchanged frozen candidate repeats its task_start functional success.
+single_variable: Watcher detects incremental state_events and final WAIT_RELEASE_SETTLE; all product inputs and gates remain unchanged.
+lifecycle: FULL_RESTART
+provenance: {source_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a, child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd, runtime_executable_sha256: 48a4b9dffce6f2d34cea48cd810cb3f9caac3c3a6363ca424776dcd07eebc5ce, watcher_sha256: a4d48b2d7b3528b6286c9ca0507873db271509a8493cec00dcb5b545e9edc009}
+identity: {domain: 111, partition: linux-rgbd-task-start-exp047, session: linux-rgbd-task-start-exp047, tmux: linux-rgbd-task-start-exp047, keyframe: task_start}
+evidence_file: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-047/task-start.json
+success_criteria: AC-001 passes every clause including pixel inspection of all watcher outputs.
+failure_criteria: A valid behavioral failure stops the batch.
+invalid_criteria: Any isolation, provenance, observation, watcher, or cleanup defect.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT
+```
+
+## CP-129 — EXP-047 preregistered
+
+```yaml
+checkpoint_id: CP-129
+recorded_at: 2026-08-27T05:16:00+08:00
+status: VALID
+owned_processes: NONE
+decision: Commit/push then prove fresh domain/session/evidence/Viewer and exact dependencies.
 ```
 
 ## EXP-042 — watcher-qualified task_start FULL_RESTART
