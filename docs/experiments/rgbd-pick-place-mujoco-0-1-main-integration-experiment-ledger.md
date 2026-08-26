@@ -265,6 +265,25 @@ decision: STOP_FORMAL_BATCH_FOR_GUI_CAPTURE_SMOKE
 next_experiment: SMOKE-017
 ```
 
+## CP-089 — Plan primary-screen exact Viewer capture smoke
+
+```yaml
+checkpoint_id: CP-089
+recorded_at: 2026-08-27T03:23:30+08:00
+smoke_id: SMOKE-017
+status: PLANNED
+qualification: false
+identity: {domain: 208, session: mac-mrc010-gui-primary-smoke017, tmux: mac-mrc010-gui-primary-smoke017, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/gui-primary-smoke017}
+method:
+  - Start only the exact installed full MuJoCo base stack at task_start/headless=false; no perception/dynamic/motion.
+  - Resolve exactly one CoreGraphics Viewer by exact title and owned ros2_control_node PID, then use JXA Accessibility to resolve exactly one process by PID and one window by exact title and move it to [100,100].
+  - Re-list CoreGraphics, require the same owner PID, freeze the resulting exact window ID/positive bounds, and invoke the unchanged project gui-capture wrapper by that ID.
+success_boundary: Nonempty valid manifest+PNG whose window ID/title/positive bounds match the post-move inventory, followed by original-resolution visual inspection and exact cleanup.
+failure_boundary: Any ambiguous PID/title match, Accessibility move failure, identity drift, or capture failure stops without weakening to desktop capture.
+decision: COMMIT_PLAN_THEN_FRESH_BASE_VIEWER_REPOSITION_CAPTURE_EXACT_STOP
+next_experiment: SMOKE-017
+```
+
 ## CP-086 — Plan parser-validated task_start Mac qualification
 
 ```yaml
