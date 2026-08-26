@@ -7,7 +7,7 @@ success_contract: Four independent FULL_RESTART runs each use real aligned RGB-D
 worktree: /data/work/ws_moveit/.worktrees/rgbd-perception-pick-place
 branch: codex/rgbd-perception-pick-place
 base_commit: a7e3745f13b892a8b7501980fdaf87436392ad50
-current_commit: 371992e6e5e8b259f0019548d4e54f764ff3d335
+current_commit: 919f7faa619c887f5c05df579b2ac17c545b77fe
 evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/
 confirmed_conclusions:
   - Existing macOS CameraPlugin acceptance proves real aligned RGB-D is available only from a correctly sourced interactive runtime; topic names alone are insufficient.
@@ -27,7 +27,7 @@ open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
   - A fresh ai-station Linux build from the exact f19a8cc submodule can pass the perception-only gate without starting dynamic_cup_pick_place or robot motion.
-latest_checkpoint: CP-017
+latest_checkpoint: CP-018
 next_experiment: EXP-007
 ```
 
@@ -1079,4 +1079,45 @@ open_risks:
   - GUI/CUA instructions must be loaded before the first Viewer action.
   - Four independent FULL_RESTART physical runs remain gated on an independently reviewed VALID EXP-007.
 next_command: source /opt/ros/jazzy/setup.zsh and build the required dependency closure plus so101_demo_py with build/install/log bases only under /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/
+```
+
+```yaml
+checkpoint_id: CP-018
+recorded_at: 2026-08-26T10:08:28+08:00
+last_valid_experiment: EXP-002
+next_experiment: EXP-007
+experiment_state: PLANNED
+current_hypothesis: Exact f19a8cc CameraPlugin plus the fresh Linux overlay can produce a real aligned RGB-D cup pose within 0.01 m of MuJoCo truth without starting dynamic_cup_pick_place or commanding robot motion.
+working_tree_status: Branch codex/rgbd-perception-pick-place is clean at 919f7faa619c887f5c05df579b2ac17c545b77fe before this ledger-only checkpoint; the f19a8cc submodule is clean.
+owned_processes: NONE; build, test, package inspection, Open3D installation, and smoke tests started no ROS stack, Viewer action, dynamic workflow, or robot motion.
+preserved_processes: Existing tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui were not sent input, stopped, or modified. Canonical main and its r6 submodule remain untouched.
+observed:
+  - OBSERVED: The first fresh-overlay build failed at the so101_mujoco_support consumer boundary because f19a8cc exports OpenGL::EGL and OpenGL::OpenGL in its plugin target without exporting the OpenGL dependency; the retained RED log is exp-007/tests/colcon-build-fresh.log.
+  - OBSERVED: Commit 919f7faa adds the minimal non-Apple consumer-side OpenGL discovery before importing the locked plugin target; an exact-commit rebuild finished all five selected packages with exit 0.
+  - OBSERVED: The first full pytest invocation was invalid as a test environment because it replaced ROS PYTHONPATH and produced 35 import collection errors; after sourcing /opt/ros/jazzy then the fresh overlay without replacing PYTHONPATH, five remaining failures were isolated to a test fixture's hard-coded historical Mac evidence path.
+  - OBSERVED: Commit 919f7faa makes only those five lifecycle test invocations use pytest tmp_path while preserving production evidence fail-closed behavior; the focused file passed 34 tests and the exact-commit full package suite passed 369 tests in 4.45 seconds.
+  - OBSERVED: Task-owned Open3D 0.19.0 with NumPy 1.26.4 was installed below ai-station-overlay/python-deps; import and a three-point DBSCAN smoke test passed. The interrupted slow pip attempt is retained with exit 130, and the successful uv installation is retained with exit 0.
+  - OBSERVED: gitlink and submodule HEAD both equal f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, describe is so101-0.0.3-r8-3-gf19a8cc, and the submodule is clean.
+  - OBSERVED: mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_ros2_control, so101_mujoco_support, and so101_demo_py all resolve below the fresh task-owned install overlay; only upstream mujoco_vendor resolves to /opt/ros/jazzy.
+  - OBSERVED: The installed ros2_control_node resolves to the task-owned build binary, and ldd resolves task-built MuJoCo message libraries from the task overlay plus upstream MuJoCo 3.4.0 from /opt/ros/jazzy; no canonical r6 build/install path appears in the retained provenance readback.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/colcon-build-fresh.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/colcon-build-green.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/colcon-build-exact-919f7faa.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/pytest-perception-launch-fixture-fix.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/pytest-full-exact-919f7faa.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/uv-open3d-task-owned.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/open3d-smoke.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/fresh-overlay-provenance.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-007/tests/fresh-overlay-ldd.log
+confirmed_conclusions:
+  - CP-016 and CORR-CP-016-001 remain unchanged historical records; the former was correctly blocked at that time and the latter records the external publication correction.
+  - Fresh Linux build, full package regression, Open3D runtime dependency, exact f19 source identity, and installed runtime provenance gates are closed without using r6.
+  - EXP-007 has not transitioned to RUNNING; perception-only runtime, aligned sample, truth error, Viewer action, and exact-owned cleanup remain unverified.
+open_risks:
+  - ROS domain 185, GZ partition rgbd-perception-ai-station-exp007-20260826, process ownership, and GUI state must be freshly audited immediately before RUNNING.
+  - Camera topics, segmentation/fit, exact-stamp TF, sole /cup_pose publisher, truth error, and causal Viewer screenshot remain runtime gates.
+  - Four independent FULL_RESTART physical runs remain prohibited until EXP-007 is VALID and independently reviewed.
+decision: EXP-007 may proceed to its immediate pre-RUNNING isolation snapshot using only the task-owned overlay and Python dependency path. No dynamic workflow or motion is authorized in EXP-007.
+next_command: Capture and retain the exact ROS_DOMAIN_ID=185 graph, GZ_PARTITION, targeted process set, tmux list, git/submodule/install provenance, and owned launch command immediately before changing EXP-007 from PLANNED to RUNNING.
 ```
