@@ -24,12 +24,13 @@ disproven_routes:
   - OBS-007: enabling zsh nounset before generated colcon setup scripts aborts source at unset COLCON_TRACE and removes required CMake prefixes.
   - OBS-008: colcon's macOS child environment omits DYLD_LIBRARY_PATH; accepted child tests use direct Homebrew CTest after same-process setup, with the candidate fork ahead of the dylib farm.
   - OBS-009: putting the dylib farm ahead of the task fork selects the old fork library and is invalid candidate provenance.
+  - OBS-010: Mac EXP-015 is a VALID product failure: candidate project-install omitted ABI-dependent so101_mujoco_support, so the new 0.1.0 pre_step caller loaded the old isolated-workspace SimulationEvidencePlugin vtable and crashed with SIGSEGV before perception.
 open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
-  - The final installed candidate succeeds at all four positions on both platforms.
-latest_checkpoint: CP-008
-next_experiment: EXP-015
+  - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
+latest_checkpoint: CP-009
+next_experiment: NONE
 ```
 
 ## Shared live acceptance contract
@@ -658,7 +659,7 @@ next_experiment: EXP-015
 
 ```yaml
 experiment_id: EXP-015
-status: RUNNING
+status: VALID_FAILURE
 prior_experiment: EXP-014
 hypothesis: The unchanged frozen candidate completes task_start AC-001 when the exact-owned pane performs an observed explicit cd to the live worktree before sourcing or starting ROS.
 prediction: Pane and child cwd readbacks are exact, getcwd failures are zero, RGB-D perception succeeds, and the full physical workflow releases the cup stably in the red target.
@@ -683,16 +684,22 @@ provenance:
   gz_partition: mac-mrc010-task-start-retry-exp015
 commands:
   - command: ROS_DOMAIN_ID=230 GZ_PARTITION=mac-mrc010-task-start-retry-exp015 ros2 run so101_demo_py so101_mujoco_perception_pick_place run_mode:=execute execute:=true headless:=false session_id:=mac-mrc010-task-start-retry-exp015 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/task-start-retry.json
-    exit_code: PENDING
+    exit_code: 245
 observed:
-  - NOT_RUN
+  - Pane and child cwd readbacks equal the live task worktree, exact installed source/fork/project provenance is recorded, and getcwd-failed count is zero.
+  - The candidate loaded and initialized mujoco_camera_plugin and simulation_evidence, then ros2_control_node died with SIGSEGV -11 on the first physics pre-step callback; wrapper exit is 245.
+  - Nine ROS processes started; six exited cleanly, scene_setup exited 1 after launch shutdown, ros2_control_node exited -11, and move_group exited -9 after bounded teardown.
+  - GUI helper resolved exact Viewer window 45272 but AXRaise failed after the early product crash, so EXP-015 has no countable capture and no PNG is claimed.
+  - Exact-owned tmux, domain/session processes, and Viewer are absent after cleanup; four unrelated tmux sessions remain untouched.
 inferred:
-  - NONE
-conclusion: PENDING
+  - Candidate project-build/project-install contain no so101_mujoco_support package. Pluginlib resolved the 2026-08-14 isolated-workspace SimulationEvidencePlugin, whose CMakeCache points to the old mujoco_ros2_control_plugins install.
+  - Child 738e304's base vtable uses the slot after update for on_physics_step(model,data), while 5e9d67c uses that slot for pre_step(data). The crash report contains both the candidate runtime UUID and the stale plugin UUID and faults precisely at plugin->pre_step(data).
+conclusion: VALID behavioral failure. The installed candidate is incomplete across an ABI boundary; all four Mac positions remain unqualified and the consecutive batch stops.
 evidence:
   - /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015
-decision: PENDING
-next_experiment: EXP-011
+  - /Users/matianyi/Library/Logs/DiagnosticReports/ros2_control_node-2026-08-26-234448.ips
+decision: STOP_BATCH_REBUILD_ABI_DEPENDENT_SUPPORT_BEFORE_NEW_QUALIFICATION
+next_experiment: NONE
 ```
 
 ## CP-008 / TRANS-EXP-015-RUNNING-001 — A/B-proven cwd repair
@@ -718,4 +725,47 @@ evidence:
   - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/exp015-provenance-isolation.txt
 decision: START_EXACT_INSTALLED_EXP_015
 next_command: Commit this transition, start exact-owned mrc010-mac-exp015 with explicit in-pane cd, verify pane and child cwd readbacks, and concurrently capture the three exact-window boundaries.
+```
+
+## CP-009 / CLOSE-EXP-015-001 — Valid runtime crash stops Mac batch
+
+```yaml
+checkpoint_id: CP-009
+transition_id: CLOSE-EXP-015-001
+recorded_at: 2026-08-26T23:52:18+08:00
+experiment_id: EXP-015
+from: RUNNING
+to: VALID_FAILURE
+last_valid_experiment: NONE
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_transition: f1d2744fbf5a44c179bb6c8bd66d6bd723ebcf98
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+working_tree_status: Implementation and frozen installs were unchanged during EXP-015; this closure changes only the ledger.
+first_bad_boundary:
+  - All registered environment, cwd, ownership, and frozen executable checks passed.
+  - Both configured plugins initialized; the first authoritative physics pre-step fanout called plugin->pre_step(data) and ros2_control_node died SIGSEGV -11.
+root_cause:
+  status: CONFIRMED
+  hypothesis: Task 3 omitted ABI-dependent so101_mujoco_support from candidate project-build/install, allowing the new 0.1.0 runtime to load the old plugin vtable.
+  evidence:
+    - Candidate project-build/project-install have no so101_mujoco_support prefix, plugin XML, or dylib.
+    - Runtime pluginlib resource and plugin UUID 909C9671-8ACF-3018-8014-5516D2A54918 resolve to the 2026-08-14 isolated-workspace package; its CMakeCache targets the old fork prefix.
+    - Candidate runtime UUID CC34CCF1-ACC8-39A9-A7A1-543C105E0015 appears in the crash report and contains the failing pre_step callback.
+    - The base virtual slot changed from old on_physics_step(model,data) to new pre_step(data); the stale dylib is therefore ABI-incompatible at the exact faulting call.
+  alternatives:
+    - Camera rendering failure is disproved as the immediate boundary: the camera plugin initialized, has a current-ABI default pre_step, and its update thread remained waiting in the crash report.
+    - External signal is disproved: capture failed only after the product crash, performed no signal, and the crash is EXC_BAD_ACCESS on the physics thread.
+    - Stale cwd is disproved for EXP-015 by exact tmux/child readbacks and zero getcwd diagnostics.
+cleanup:
+  - mrc010-mac-exp015 removed; no domain 230/session process or exact Viewer remains.
+  - Unrelated tmux sessions mrc010-exp013-final-stack, mrc010-exp013-smoke-r3, mrc010-macos-task7a-r4, and mrc010-macos-task7a-r5 were preserved.
+  - Evidence was retained; nothing was deleted.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/run/full-restart.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/run/child.owner
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/run/cleanup.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/diagnosis/root-cause-boundary.md
+  - /Users/matianyi/Library/Logs/DiagnosticReports/ros2_control_node-2026-08-26-234448.ips
+decision: STOP_MAC_BATCH_AND_REQUIRE_RED_RUNTIME_CONTRACT_PLUS_CLEAN_SUPPORT_REBUILD
+next_experiment: NONE
 ```
