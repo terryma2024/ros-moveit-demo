@@ -111,12 +111,14 @@ class RosCupSceneObserver:
 class RosMujocoCupSceneObserver:
     """Read the cup from atomic MuJoCo evidence plus MoveIt readback."""
 
-    def __init__(self, node: Any, session_id: str) -> None:
+    def __init__(self, node: Any, session_id: str, expected_reset_epoch: int) -> None:
         from moveit_msgs.srv import GetPlanningScene
 
         from ..backends.mujoco.observer import MujocoWorldObserver
 
         self._node = node
+        self._session_id = session_id
+        self._expected_reset_epoch = expected_reset_epoch
         self._observer = MujocoWorldObserver(node, session_id, max_age_s=0.5)
         self._scene_client = node.create_client(GetPlanningScene, "/get_planning_scene")
 
@@ -139,6 +141,20 @@ class RosMujocoCupSceneObserver:
                 pass
         if evidence is None:
             raise CupSceneObservationError("CUP_POSE_SCENE_UNAVAILABLE: MuJoCo cup pose missing")
+        if evidence.simulation_session_id != self._session_id:
+            raise CupSceneObservationError(
+                "CUP_POSE_SCENE_SESSION_MISMATCH: "
+                f"expected {self._session_id}, got {evidence.simulation_session_id}"
+            )
+        if evidence.reset_epoch != self._expected_reset_epoch:
+            raise CupSceneObservationError(
+                "CUP_POSE_SCENE_RESET_EPOCH_MISMATCH: "
+                f"expected {self._expected_reset_epoch}, got {evidence.reset_epoch}"
+            )
+        if evidence.paused:
+            raise CupSceneObservationError(
+                "CUP_POSE_SCENE_PAUSED: MuJoCo scene evidence reports paused physics"
+            )
         if not self._scene_client.wait_for_service(
             timeout_sec=max(0.0, deadline - time.monotonic())
         ):
@@ -171,6 +187,9 @@ class RosMujocoCupSceneObserver:
             _pose(observed.pose),
             time.monotonic(),
             "plastic_cup" in attached,
+            simulation_session_id=str(evidence.simulation_session_id),
+            reset_epoch=int(evidence.reset_epoch),
+            paused=bool(evidence.paused),
         )
 
     def close(self) -> None:

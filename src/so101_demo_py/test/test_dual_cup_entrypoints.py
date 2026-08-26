@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 
 def test_setup_exposes_only_named_fixed_and_dynamic_pick_place_entries() -> None:
     source = Path("src/so101_demo_py/setup.py").read_text(encoding="utf-8")
@@ -59,6 +61,49 @@ def test_dynamic_mujoco_execute_dispatches_only_with_explicit_live_provenance(
 
     assert result == 23
     assert len(calls) == 1
+
+
+def test_dynamic_cli_removes_launch_injected_ros_arguments(monkeypatch, tmp_path) -> None:
+    from so101_demo.cli import dynamic_cup_pick_place
+    from so101_demo.ros import dynamic_runtime
+
+    calls = []
+    monkeypatch.setattr(
+        dynamic_runtime,
+        "run_dynamic_execute",
+        lambda options: calls.append(options) or 29,
+        raising=False,
+    )
+
+    assert (
+        dynamic_cup_pick_place.main(
+            [
+                "--backend",
+                "mujoco",
+                "--mode",
+                "execute",
+                "--execute",
+                "--session-id",
+                "dynamic-test",
+                "--expected-reset-epoch",
+                "0",
+                "--evidence-root",
+                str(tmp_path),
+                "--ros-args",
+            ]
+        )
+        == 29
+    )
+    assert len(calls) == 1
+
+
+def test_dynamic_cli_still_rejects_unknown_application_argument(capsys) -> None:
+    from so101_demo.cli import dynamic_cup_pick_place
+
+    with pytest.raises(SystemExit) as error:
+        dynamic_cup_pick_place.main(["--unknown-application-option"])
+    assert error.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
 
 
 def test_fixed_entrypoint_module_does_not_import_dynamic_or_rclpy() -> None:

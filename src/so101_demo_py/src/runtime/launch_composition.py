@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
-import sys
+import re
+import stat
 import uuid
+from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
 
 import yaml
@@ -31,6 +34,7 @@ from launch import LaunchDescription
 
 from ..core.policy_registry import load_policy_variant
 from ..ports.capabilities import CapabilityRequirements
+from .camera_tf import camera_static_transform_nodes
 from .composition import backend_capabilities
 from .provenance import installed_bundle
 
@@ -47,12 +51,75 @@ COMMON_ARGUMENTS = {
 
 _CONTROLLERS = ("joint_state_broadcaster", "arm_controller", "gripper_controller")
 
+MUJOCO_CUP_KEYFRAMES = (
+    "task_start",
+    "cup_test_forward_5cm",
+    "cup_test_left_5cm",
+    "cup_test_right_5cm",
+)
+
+_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+@dataclass(frozen=True, slots=True)
+class _MujocoStackActions:
+    robot_state_publisher: Node
+    simulator: Node
+    spawners: tuple[Node, ...]
+    move_group: Node
+    scene_setup: Node
+
+    @property
+    def actions(self) -> tuple:
+        return (
+            self.robot_state_publisher,
+            self.simulator,
+            *self.spawners,
+            self.move_group,
+            self.scene_setup,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _PerceptionEvidencePaths:
+    run_root: Path
+    perception: Path
+    dynamic: Path
+
+
+@dataclass(slots=True)
+class PerceptionLaunchExitStatus:
+    """First terminal child status observed by the perception launch graph."""
+
+    returncode: int | None = None
+    workflow_terminal: bool = False
+
+    def record(self, returncode: int) -> None:
+        if self.returncode is None:
+            self.returncode = returncode
+
+    def mark_workflow_terminal(self) -> None:
+        self.workflow_terminal = True
+
+    def resolve(self, launch_service_returncode: int) -> int:
+        if self.returncode in {None, 0}:
+            return launch_service_returncode
+        return self.returncode
+
 
 def _render_mujoco_robot_description(
-    share: Path, scene: str, *, headless: bool, platform_name: str | None = None
+    share: Path,
+    scene: str,
+    *,
+    headless: bool,
+    initial_keyframe: str = "task_start",
+    platform_name: str | None = None,
 ) -> str:
+    if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
+        raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
     description = (share / "assets/mujoco/so101.urdf").read_text(encoding="utf-8")
     description = description.replace("@SO101_MUJOCO_SCENE@", scene)
+    description = description.replace("@SO101_MUJOCO_INITIAL_KEYFRAME@", initial_keyframe)
     description = description.replace("@SO101_MUJOCO_HEADLESS@", str(headless).lower())
     # Interactive Darwin launches use the fork's main-thread-owned GLFW context
     # path.  Only an explicitly headless launch suppresses camera rendering.
@@ -99,15 +166,17 @@ def _advance_on_success(event, action, operation: str):
     ]
 
 
-def _mujoco_execute_actions(
-    context, share: Path, policy, session_id: str, *, include_workflow: bool
-):
+def _mujoco_stack_actions(context, share: Path, session_id: str) -> _MujocoStackActions:
     scene = LaunchConfiguration("mujoco_scene").perform(context)
+    initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
     timeout = LaunchConfiguration("readiness_timeout_s").perform(context)
-    evidence_file = Path(LaunchConfiguration("evidence_file").perform(context))
-    evidence_root = evidence_file.parent / f"{evidence_file.stem}.d"
-    robot_description = _render_mujoco_robot_description(share, scene, headless=headless)
+    robot_description = _render_mujoco_robot_description(
+        share,
+        scene,
+        headless=headless,
+        initial_keyframe=initial_keyframe,
+    )
     config = share / "config/mujoco"
     controllers = str(config / "ros2_controllers.yaml")
     parameters = [
@@ -128,7 +197,6 @@ def _mujoco_execute_actions(
         parameters=parameters,
         output="both",
         emulate_tty=True,
-        on_exit=Shutdown(reason="MuJoCo runtime exited"),
     )
     spawners = [
         Node(
@@ -157,6 +225,21 @@ def _mujoco_execute_actions(
         parameters=[{"readiness_timeout_s": float(timeout)}],
         output="both",
     )
+    return _MujocoStackActions(
+        robot_state_publisher=robot_state_publisher,
+        simulator=simulator,
+        spawners=tuple(spawners),
+        move_group=move_group,
+        scene_setup=scene_setup,
+    )
+
+
+def _mujoco_execute_actions(
+    context, share: Path, policy, session_id: str, *, include_workflow: bool
+):
+    evidence_file = Path(LaunchConfiguration("evidence_file").perform(context))
+    evidence_root = evidence_file.parent / f"{evidence_file.stem}.d"
+    stack = _mujoco_stack_actions(context, share, session_id)
     workflow = Node(
         package="so101_demo_py",
         executable="fixed_cup_pick_place",
@@ -181,7 +264,7 @@ def _mujoco_execute_actions(
     )
     start_workflow = RegisterEventHandler(
         OnProcessExit(
-            target_action=scene_setup,
+            target_action=stack.scene_setup,
             on_exit=lambda event, context: _advance_on_success(
                 event, workflow, "SO-101 Planning Scene setup"
             ),
@@ -193,16 +276,178 @@ def _mujoco_execute_actions(
             on_exit=[Shutdown(reason="SO-101 workflow complete")],
         )
     )
-    actions = [
-        robot_state_publisher,
-        simulator,
-        *spawners,
-        move_group,
-        scene_setup,
-    ]
+    simulator_shutdown = RegisterEventHandler(
+        OnProcessExit(
+            target_action=stack.simulator,
+            on_exit=[Shutdown(reason="MuJoCo runtime exited")],
+        )
+    )
+    actions = [*stack.actions, simulator_shutdown]
     if include_workflow:
         actions.extend((start_workflow, shutdown))
     return actions
+
+
+def _raise_launch_failure(_context, message: str):
+    raise RuntimeError(message)
+
+
+def _terminal_launch_actions(reason: str, *, failed: bool):
+    actions = [EmitEvent(event=ShutdownEvent(reason=reason))]
+    if failed:
+        actions.append(OpaqueFunction(function=_raise_launch_failure, args=[reason]))
+    return actions
+
+
+def perception_pick_place_exit_handlers(
+    scene_setup,
+    perception,
+    workflow,
+    *,
+    required_long_lived: tuple[tuple[str, object], ...],
+    successful_one_shots: tuple[tuple[str, object], ...],
+    exit_status: PerceptionLaunchExitStatus,
+):
+    """Create the shared fail-closed process policy for production and tests."""
+
+    def on_scene_exit(event, _context):
+        if event.returncode == 0:
+            return [perception, workflow]
+        exit_status.record(event.returncode)
+        reason = f"SO-101 Planning Scene setup failed with exit code {event.returncode}"
+        return _terminal_launch_actions(reason, failed=True)
+
+    def required_exit_handler(label: str):
+        def on_exit(event, _context):
+            if exit_status.workflow_terminal:
+                return []
+            exit_status.record(event.returncode if event.returncode != 0 else 1)
+            reason = (
+                f"{label} exited before dynamic workflow completed with exit code "
+                f"{event.returncode}"
+            )
+            return _terminal_launch_actions(reason, failed=True)
+
+        return on_exit
+
+    def one_shot_exit_handler(label: str):
+        def on_exit(event, _context):
+            if exit_status.workflow_terminal:
+                return []
+            if event.returncode == 0:
+                return []
+            exit_status.record(event.returncode)
+            reason = f"{label} failed with exit code {event.returncode}"
+            return _terminal_launch_actions(reason, failed=True)
+
+        return on_exit
+
+    def on_workflow_exit(event, _context):
+        exit_status.mark_workflow_terminal()
+        exit_status.record(event.returncode)
+        outcome = "completed" if event.returncode == 0 else "failed"
+        reason = f"Dynamic perception workflow {outcome} with exit code {event.returncode}"
+        return _terminal_launch_actions(reason, failed=event.returncode != 0)
+
+    return (
+        RegisterEventHandler(OnProcessExit(target_action=scene_setup, on_exit=on_scene_exit)),
+        *(
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=action,
+                    on_exit=required_exit_handler(label),
+                )
+            )
+            for label, action in required_long_lived
+        ),
+        *(
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=action,
+                    on_exit=one_shot_exit_handler(label),
+                )
+            )
+            for label, action in successful_one_shots
+        ),
+        RegisterEventHandler(OnProcessExit(target_action=workflow, on_exit=on_workflow_exit)),
+    )
+
+
+def _mujoco_perception_execute_actions(
+    context,
+    share: Path,
+    session_id: str,
+    *,
+    evidence_paths: _PerceptionEvidencePaths,
+    perception_timeout: str,
+    cup_pose_timeout: str,
+    exit_status: PerceptionLaunchExitStatus,
+):
+    stack = _mujoco_stack_actions(context, share, session_id)
+    camera_transforms = tuple(camera_static_transform_nodes())
+    perception = Node(
+        package="so101_demo_py",
+        executable="rgbd_cup_pose",
+        arguments=[
+            "--startup-timeout-s",
+            perception_timeout,
+            "--output-topic",
+            "/cup_pose",
+            "--output-ply",
+            str(evidence_paths.perception / "cup.ply"),
+            "--evidence-json",
+            str(evidence_paths.perception / "summary.json"),
+        ],
+        parameters=[{"use_sim_time": True}],
+        output="both",
+    )
+    workflow = Node(
+        package="so101_demo_py",
+        executable="dynamic_cup_pick_place",
+        arguments=[
+            "--backend",
+            "mujoco",
+            "--mode",
+            "execute",
+            "--execute",
+            "--cup-pose-timeout-s",
+            cup_pose_timeout,
+            "--scene-source",
+            "observe_only",
+            "--session-id",
+            session_id,
+            "--expected-reset-epoch",
+            "0",
+            "--evidence-root",
+            str(evidence_paths.dynamic),
+        ],
+        output="both",
+    )
+    handlers = perception_pick_place_exit_handlers(
+        stack.scene_setup,
+        perception,
+        workflow,
+        required_long_lived=(
+            ("MuJoCo runtime", stack.simulator),
+            ("robot_state_publisher", stack.robot_state_publisher),
+            ("MoveIt move_group", stack.move_group),
+            *(
+                (f"camera static TF {index}", node)
+                for index, node in enumerate(camera_transforms, 1)
+            ),
+            ("RGB-D perception", perception),
+        ),
+        successful_one_shots=tuple(
+            (f"controller spawner {_CONTROLLERS[index]}", node)
+            for index, node in enumerate(stack.spawners)
+        ),
+        exit_status=exit_status,
+    )
+    return [
+        *handlers,
+        *camera_transforms,
+        *stack.actions,
+    ]
 
 
 def _materialize_gazebo_model(context, share: Path):
@@ -454,15 +699,134 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
     raise RuntimeError(f"{backend} execute graph is not registered")
 
 
+def _positive_finite_launch_value(context, name: str) -> str:
+    value = LaunchConfiguration(name).perform(context)
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be finite and positive") from error
+    if not isfinite(parsed) or parsed <= 0.0:
+        raise RuntimeError(f"{name} must be finite and positive")
+    return value
+
+
+def _owned_directory(path: Path, label: str) -> Path:
+    try:
+        path.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+    metadata = path.lstat()
+    if stat.S_ISLNK(metadata.st_mode):
+        raise RuntimeError(f"{label} must not be a symlink: {path}")
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise RuntimeError(f"{label} must be a directory: {path}")
+    if metadata.st_uid != os.geteuid():
+        raise RuntimeError(f"{label} must be owned by the current user: {path}")
+    return path.resolve(strict=True)
+
+
+def _exclusive_owned_directory(path: Path, label: str) -> Path:
+    try:
+        path.mkdir(mode=0o700, exist_ok=False)
+    except FileExistsError as error:
+        raise RuntimeError(f"{label} already exists: {path}") from error
+    return _owned_directory(path, label)
+
+
+def _prepare_perception_evidence_root(
+    evidence_file: Path, session_id: str
+) -> _PerceptionEvidencePaths:
+    try:
+        evidence_parent = evidence_file.parent.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise RuntimeError("evidence_file parent directory must exist") from error
+    if not evidence_parent.is_dir():
+        raise RuntimeError("evidence_file parent must be a directory")
+
+    base = evidence_parent / f"{evidence_file.stem}.d"
+    resolved_base = _owned_directory(base, "derived evidence root")
+    if resolved_base.parent != evidence_parent:
+        raise RuntimeError("derived evidence root escapes evidence_file parent")
+
+    run_root = resolved_base / session_id
+    resolved_run_root = _exclusive_owned_directory(run_root, "session evidence root")
+    if resolved_run_root.parent != resolved_base:
+        raise RuntimeError("session evidence root escapes derived evidence root")
+
+    perception = _exclusive_owned_directory(
+        resolved_run_root / "perception", "perception evidence directory"
+    )
+    if perception.parent != resolved_run_root:
+        raise RuntimeError("perception evidence directory escapes session root")
+    dynamic = _exclusive_owned_directory(
+        resolved_run_root / "dynamic", "dynamic evidence directory"
+    )
+    if dynamic.parent != resolved_run_root:
+        raise RuntimeError("dynamic evidence directory escapes session root")
+    return _PerceptionEvidencePaths(
+        run_root=resolved_run_root,
+        perception=perception,
+        dynamic=dynamic,
+    )
+
+
+def _configured_perception_pick_place_actions(context, *, exit_status: PerceptionLaunchExitStatus):
+    run_mode = LaunchConfiguration("run_mode").perform(context)
+    execute = LaunchConfiguration("execute").perform(context)
+    headless = LaunchConfiguration("headless").perform(context)
+    if run_mode != "execute":
+        raise RuntimeError("perception pick-place requires run_mode=execute")
+    if execute != "true":
+        raise RuntimeError("perception pick-place requires execute:=true")
+    if headless not in {"true", "false"}:
+        raise RuntimeError("headless must be true or false")
+
+    initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
+    if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
+        raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
+
+    _positive_finite_launch_value(context, "readiness_timeout_s")
+    perception_timeout = _positive_finite_launch_value(context, "perception_startup_timeout_s")
+    cup_pose_timeout = _positive_finite_launch_value(context, "cup_pose_timeout_s")
+
+    session_id = LaunchConfiguration("session_id").perform(context)
+    if not _SESSION_ID_PATTERN.fullmatch(session_id):
+        raise RuntimeError(
+            "session_id must start with an alphanumeric character and contain only "
+            "letters, digits, dot, underscore, or hyphen"
+        )
+
+    evidence_file = Path(LaunchConfiguration("evidence_file").perform(context))
+    if not evidence_file.is_absolute() or evidence_file.name in {"", ".", ".."}:
+        raise RuntimeError("evidence_file must be a usable absolute file path")
+    if os.path.lexists(evidence_file):
+        raise RuntimeError("evidence_file must not already exist")
+    scene = Path(LaunchConfiguration("mujoco_scene").perform(context))
+    if not scene.is_absolute():
+        raise RuntimeError("mujoco_scene must be an absolute file path")
+    if not scene.is_file():
+        raise RuntimeError(f"mujoco_scene does not exist: {scene}")
+
+    share = Path(get_package_share_directory("so101_demo_py"))
+    evidence_paths = _prepare_perception_evidence_root(evidence_file, session_id)
+    return _mujoco_perception_execute_actions(
+        context,
+        share,
+        session_id,
+        evidence_paths=evidence_paths,
+        perception_timeout=perception_timeout,
+        cup_pose_timeout=cup_pose_timeout,
+        exit_status=exit_status,
+    )
+
+
 def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescription:
     if backend not in {"mujoco", "gazebo"}:
         raise ValueError(f"unsupported launch backend: {backend}")
     share = Path(get_package_share_directory("so101_demo_py"))
     unique = uuid.uuid4().hex
     arguments = [
-        DeclareLaunchArgument(
-            "run_mode", default_value="dry_run", choices=("dry_run", "execute")
-        ),
+        DeclareLaunchArgument("run_mode", default_value="dry_run", choices=("dry_run", "execute")),
         DeclareLaunchArgument("execute", default_value="false", choices=("true", "false")),
         DeclareLaunchArgument("headless", default_value="true", choices=("true", "false")),
         DeclareLaunchArgument("policy_id", default_value="light_cup_wall_pick"),
@@ -472,9 +836,16 @@ def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescrip
         DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
     ]
     if backend == "mujoco":
-        arguments.append(
-            DeclareLaunchArgument(
-                "mujoco_scene", default_value=str(share / "assets/mujoco/scene.xml")
+        arguments.extend(
+            (
+                DeclareLaunchArgument(
+                    "mujoco_scene", default_value=str(share / "assets/mujoco/scene.xml")
+                ),
+                DeclareLaunchArgument(
+                    "mujoco_initial_keyframe",
+                    default_value="task_start",
+                    choices=MUJOCO_CUP_KEYFRAMES,
+                ),
             )
         )
     else:
@@ -489,6 +860,46 @@ def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescrip
             OpaqueFunction(
                 function=_configured_actions,
                 kwargs={"backend": backend, "pick_place": pick_place},
+            ),
+        ]
+    )
+
+
+def build_perception_pick_place_launch_description(
+    exit_status: PerceptionLaunchExitStatus | None = None,
+) -> LaunchDescription:
+    """Build the explicit MuJoCo RGB-D-driven execute graph."""
+
+    share = Path(get_package_share_directory("so101_demo_py"))
+    unique = uuid.uuid4().hex
+    if exit_status is None:
+        exit_status = PerceptionLaunchExitStatus()
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "run_mode", default_value="dry_run", choices=("dry_run", "execute")
+            ),
+            DeclareLaunchArgument("execute", default_value="false", choices=("true", "false")),
+            DeclareLaunchArgument("headless", default_value="false", choices=("true", "false")),
+            DeclareLaunchArgument("session_id", default_value=unique),
+            DeclareLaunchArgument(
+                "evidence_file", default_value=f"/tmp/so101-perception-{unique}.json"
+            ),
+            DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
+            DeclareLaunchArgument(
+                "mujoco_scene",
+                default_value=str(share / "assets/mujoco/scene.xml"),
+            ),
+            DeclareLaunchArgument(
+                "mujoco_initial_keyframe",
+                default_value="task_start",
+                choices=MUJOCO_CUP_KEYFRAMES,
+            ),
+            DeclareLaunchArgument("perception_startup_timeout_s", default_value="30.0"),
+            DeclareLaunchArgument("cup_pose_timeout_s", default_value="45.0"),
+            OpaqueFunction(
+                function=_configured_perception_pick_place_actions,
+                kwargs={"exit_status": exit_status},
             ),
         ]
     )
