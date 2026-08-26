@@ -1988,3 +1988,29 @@ helpers:
 decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_REAL_LIVE_GREEN_SMOKE
 next_experiment: SMOKE-010
 ```
+
+## CP-047 / TRANS-SMOKE-010-RUNNING-001 — Start fixed real live perception smoke
+
+```yaml
+checkpoint_id: CP-047
+transition_id: TRANS-SMOKE-010-RUNNING-001
+recorded_at: 2026-08-27T01:57:16+08:00
+smoke_id: SMOKE-010
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_transition: f98d56b756cccb383aca24ba1f67ea889c51a0b7
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Domain 210 graph, evidence path, exact task tmux/process identities, and Viewer were fresh and empty.
+  - Candidate package prefixes and installed bundle 971b1257a90ba5940c5fa9053f32674b3aeba1305af999ce9b2cb3b75808934a were read back after the zero-exit rebuild.
+  - Idle tmux pane 27435 passed explicit in-pane cd, pane_current_path, and captured pwd against the exact task worktree.
+owned_processes:
+  - tmux_session: mrc010-mac-real-green-r3
+    idle_pane_pid: 27435
+evidence:
+  pane_readback_sha256: 881ffbb54a4407e1bba835906fe164d88b107d124c67d5059906aa59bfe2a1b1
+decision: START_BASE_STATIC_TF_GUI_OBSERVER_THEN_EXACT_INSTALLED_PERCEPTION
+next_command: Start domain 210 base/static-TF/GUI; after Scene READ_BACK start observer to readiness, then exact installed rgbd_cup_pose.
+```
