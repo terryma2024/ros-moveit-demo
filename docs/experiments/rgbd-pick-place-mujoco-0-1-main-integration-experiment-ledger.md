@@ -224,6 +224,26 @@ decision: RETAIN_INVALID_AND_REPEAT_FRESH_TASK_START
 next_experiment: EXP-022
 ```
 
+## CP-086 — Plan parser-validated task_start Mac qualification
+
+```yaml
+checkpoint_id: CP-086
+recorded_at: 2026-08-27T03:18:50+08:00
+experiment_id: EXP-022
+status: PLANNED
+qualification: true
+position: task_start
+lifecycle: FULL_RESTART
+implementation_commit: fff7ba3b1c7efb4472f51d0842d8bcba87d64621
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+installed_bundle_sha256: 5c84da5a6bed093be023336da815fc2d1c7cb169aefa72cb13d6999346f25a2a
+identity: {domain: 207, session: mac-mrc010-task-start-exp022, tmux: mac-mrc010-task-start-exp022, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-022, evidence_file: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-022/task-start.json}
+runner_gate: CP-083 unchanged except corrected capture helper SHA256 4821cb4b3be078b09a786ac637ed3c3cad40340f0763d8cd1aadfaabbf8a7eba; the exact live inventory parser was separately executed and returned NONE without syntax/runtime error before this plan.
+acceptance: Full CP-061 / AC-001 and three validated exact-window original-resolution captures.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_CAPTURE_OWNER_PRODUCT_NATURAL_EXIT
+next_experiment: EXP-022
+```
+
 ```yaml
 experiment_id: EXP-011
 status: PLANNED
