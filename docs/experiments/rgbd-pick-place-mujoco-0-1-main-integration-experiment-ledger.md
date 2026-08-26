@@ -34,7 +34,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-146
+latest_checkpoint: CP-147
 next_experiment: MAC_REQUALIFICATION_FROM_3EA1530
 ```
 
@@ -329,6 +329,24 @@ review_confirmed:
   - EXP-053's retained default-daemon graph output is a cache false positive superseded by empty direct no-daemon DDS and process readbacks.
 non_blocking_risk: EXP-055 and EXP-056 log a transient exact-stamp TF-not-ready condition during startup, then the same production perception path obtains a source-stamped OK sample and completes; this recoverable startup race does not invalidate either run.
 decision: COMMIT_PUSH_AND_LS_REMOTE_READBACK
+next_experiment: MAC_REQUALIFICATION_FROM_3EA1530
+```
+
+## CP-147 — Linux closure published and remotely read back
+
+```yaml
+checkpoint_id: CP-147
+recorded_at: 2026-08-27T05:56:36+08:00
+status: PUBLISHED
+runtime_implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+closure_commit: 0eae16876eebdc5d7899dc92896f7172262fd680
+remote: origin (Gitee)
+branch: codex/rgbd-pick-place-mujoco-0-1-main
+push_result: edb87ff..0eae168 accepted
+ls_remote_readback: 0eae16876eebdc5d7899dc92896f7172262fd680
+readback_matches_local_closure: true
+record_semantics: This CP-147 commit is an additive publication record after the exact closure readback; pushing it does not change runtime bytes or any live evidence.
+decision: LINUX_COMPLETE_HAND_IMPLEMENTATION_3EA1530_TO_MAC_ORCHESTRATOR
 next_experiment: MAC_REQUALIFICATION_FROM_3EA1530
 ```
 
