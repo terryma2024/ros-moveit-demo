@@ -1926,3 +1926,27 @@ scope: Add only the two supported rclpy Node construction keyword arguments; do 
 decision: COMMIT_RED_THEN_ADD_MINIMAL_NODE_KEYWORDS
 next_experiment: NONE
 ```
+
+## CP-045 — GREEN lean RGB-D perception node construction
+
+```yaml
+checkpoint_id: CP-045
+recorded_at: 2026-08-27T01:52:06+08:00
+status: GREEN
+qualification: false
+record_head_before_checkpoint: 3adb8df828878dbd21a80559e849a9942eb52916
+change:
+  - Pass start_parameter_services false and enable_rosout false to the existing rgbd_cup_pose rclpy.create_node call.
+  - Preserve use_sim_time true, automatic parameter override declaration, startup deadline, launch sequencing, perception policy, topics, TF, and motion behavior.
+tests:
+  - command: focused new contract
+    result: one passed in 0.22 s
+  - command: complete test_rgbd_cup_pose.py
+    result: 43 passed in 0.25 s
+  - command: complete src/so101_demo_py/test with ROS_LOG_DIR under the registered evidence root
+    result: 444 passed in 12.73 s
+invalid_test_observation:
+  - An earlier full-suite invocation omitted ROS_LOG_DIR and produced 59 PermissionError failures while launch tried to write restricted ~/.ros/log; it is environmental, retained in terminal output, and was repeated with the required registered-root ROS_LOG_DIR.
+decision: COMMIT_MINIMAL_GREEN_THEN_REBUILD_CANDIDATE_AND_RUN_REAL_LIVE_GREEN_SMOKE
+next_experiment: NONE
+```
