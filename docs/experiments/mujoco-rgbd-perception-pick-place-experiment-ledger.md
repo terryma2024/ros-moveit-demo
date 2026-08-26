@@ -2320,3 +2320,24 @@ decision: PROCEED
 next_experiment: EXP-021
 next_command: Commit and push this source freeze, verify exact Gitee readback, then transition EXP-021 from PLANNED to RUNNING only after fresh domain/session/evidence/Viewer/CUA isolation checks pass.
 ```
+
+```yaml
+transition_id: TRANS-EXP-021-RUNNING-001
+recorded_at: 2026-08-26T15:11:43+08:00
+experiment_id: EXP-021
+from: PLANNED
+to: RUNNING
+source_commit: 5a8d133c9fb0025542497c039319ffb88587dd83
+implementation_commit: 48349ca7f6134e7bc4d15385338f86e5fbc182e7
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: Task source was clean at 5a8d133c; gitlink and clean submodule HEAD both equal exact f19 with describe so101-0.0.3-r8-3-gf19a8cc. Canonical main was clean at b3770360.
+  - OBSERVED: Domain 199 had no nodes, no process argument named the task-start runtime session or production launch, task-owned tmux was absent, and the exact MuJoCo Viewer title was absent.
+  - OBSERVED: The nominal run.json, derived run.d container, and exclusive runtime session directory were all absent before parent allocation; only empty run, ros, gui, and pre-running parents were created.
+  - OBSERVED: Strict window-scope CUA session rgbd-pick-exp021-viewer-20260826 was absent and is now active with desktop_unlocked=false before launch.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/pre-running/isolation-snapshot.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/pre-running/cua-start.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/pre-running/cua-state.json
+next_command: After committing and pushing this transition, start the concurrent strict-window capture coordinator and full-restart launch on domain 199 with runtime session rgbd-pick-task-start-exp021-20260826 and sole keyframe task_start.
+```
