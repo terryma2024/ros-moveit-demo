@@ -12,6 +12,7 @@ def main(arguments: list[str] | None = None) -> int:
 
     import rclpy
     from geometry_msgs.msg import PoseStamped
+    from rclpy._rclpy_pybind11 import RCLError
     from rclpy.parameter import Parameter
     from rclpy.qos import qos_profile_sensor_data
 
@@ -49,6 +50,9 @@ def main(arguments: list[str] | None = None) -> int:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except RCLError:
+        if rclpy.ok():
+            raise
     finally:
         node.destroy_timer(timer)
         node.destroy_node()
