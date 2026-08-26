@@ -1821,3 +1821,65 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/pre-running/isolation-snapshot.log
 next_command: Launch the unchanged task_start wrapper and poll CUA list_windows by exact title at short cadence; capture baseline immediately, then use live manifest boundaries for transport and final snapshots.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-016-001
+recorded_at: 2026-08-26T12:20:18+08:00
+experiment_id: EXP-016
+status: INVALID
+classification: partial_visual_evidence_invalid_non_counting
+runtime_source_commit: 8d9a5dfcc3f1c7782e8667c0357533993d854454
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+product_observations:
+  - OBSERVED: Exact-title discovery found the Viewer as PID 504502/window 54525959 and retained a fresh 1568x862 baseline PNG before workflow motion. It was inspected as showing the task_start orange cup, red target, open gripper/robot at baseline, table, and Running status.
+  - OBSERVED: The unchanged production chain again wrote a 141-point perception result at [0.01950111783349788, -0.28040476095521005, 0.165], completed all 19 physical transitions through DONE, and naturally exited 0.
+  - OBSERVED: Bilateral unsupported grasp/lift reached z=0.2249141057; released final cup [-0.0777946324, -0.2475615565, 0.1648319370] was table-supported with zero finger contacts, final_xy_error_m=0.0026259436, final_upright_tilt_rad=0.0046694507, and detached Planning Scene world membership.
+  - OBSERVED: The same two zero-exit ros2_control_node publisher-thread context-invalid shutdown diagnostics recur and remain retained for final risk reporting.
+visual_invalid_boundary:
+  - OBSERVED: Baseline capture succeeded, proving exact-title discovery. The foreground agent then entered a blocking manifest poll; tool control did not return until after workflow DONE and Viewer shutdown.
+  - OBSERVED: No transport or final PNG exists. Baseline alone cannot satisfy the frozen same-session three-frame visual gate.
+  - INFERRED: Product behavior again succeeds, but EXP-016 remains non-counting because the capture workflow was not autonomous during the physical run.
+cleanup:
+  - OBSERVED: Exact child PID 504437, owned tmux, domain 194, domain/partition owners, Viewer, and CUA session are empty; cleanup exits 0.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/gui/window-discovery.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/gui/viewer-baseline.state.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/run/full-restart.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/run.d/rgbd-pick-task-start-exp016-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/run.d/rgbd-pick-task-start-exp016-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/post-cleanup.log
+conclusion: EXP-016 is strict INVALID and non-counting at the incomplete same-session visual gate; it retains one valid inspected baseline but no transport or final image.
+decision: Repeat task_start as EXP-017 with unchanged product and exact-title discovery, changing only from foreground/blocking polling to a task-owned autonomous capture coordinator.
+next_experiment: EXP-017
+```
+
+```yaml
+experiment_id: EXP-017
+status: PLANNED
+prior_experiment: EXP-016
+lifecycle: FULL_RESTART
+hypothesis: A task-owned capture coordinator running concurrently with launch can directly capture the exact-title Viewer at baseline, completed-LIFT transport, and completed-release validation boundaries without depending on foreground tool-call return timing.
+prediction: The coordinator writes three nonempty, distinct PNGs and state receipts before Viewer shutdown; inspection agrees with the unchanged manifest, and every product, natural-exit, and cleanup gate passes.
+single_variable: Run exact-title discovery and manifest-boundary CUA captures in a dedicated task-owned tmux window concurrent with launch. Keep implementation, overlay, keyframe, timing, policy, Mesa, session semantics, and all acceptance thresholds unchanged.
+provenance: {implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 195, gz_partition: rgbd-pick-task-start-exp017-20260826, session_id: rgbd-pick-task-start-exp017-20260826, owned_tmux_session: rgbd-pick-exp017-20260826}
+initial_cup_xyz_m: [0.02, -0.28, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/
+success_criteria: SAME_AS_EXP_011
+invalid_criteria: SAME_AS_EXP_011
+decision: PENDING
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-025
+recorded_at: 2026-08-26T12:20:18+08:00
+last_valid_experiment: EXP-010
+current_hypothesis: Moving the already-correct title/state capture logic into a concurrent task-owned coordinator will close the only remaining task_start evidence gap.
+working_tree_status: Task worktree, exact f19 submodule, and canonical main are clean before this ledger append; EXP-016 evidence is retained unchanged.
+owned_processes: NONE; domain 194, exact child, partition owner, owned tmux, Viewer, and CUA session are empty.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+next_command: Commit this closure/plan, implement and read-only inspect the evidence-only coordinator below exp-017, then prove fresh domain 195/title/tmux isolation before RUNNING.
+```
