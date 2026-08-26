@@ -28,8 +28,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - The final installed candidate succeeds at all four positions on both platforms.
-latest_checkpoint: CP-003
-next_experiment: EXP-010
+latest_checkpoint: CP-004
+next_experiment: EXP-014
 ```
 
 ## Shared live acceptance contract
@@ -59,7 +59,7 @@ ends the fixed-candidate consecutive batch.
 
 ```yaml
 experiment_id: EXP-010
-status: RUNNING
+status: INVALID
 prior_experiment: NONE
 hypothesis: The final installed candidate completes AC-001 from task_start on macOS.
 prediction: The perceived start pose is near [0.02, -0.28, 0.165] and the cup is released stably in the red target.
@@ -82,6 +82,45 @@ provenance:
   gz_partition: mac-mrc010-task-start-exp010
 commands:
   - command: ROS_DOMAIN_ID=220 GZ_PARTITION=mac-mrc010-task-start-exp010 ros2 run so101_demo_py so101_mujoco_perception_pick_place run_mode:=execute execute:=true headless:=false session_id:=mac-mrc010-task-start-exp010 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010/task-start.json
+    exit_code: 1
+observed:
+  - INVALID_ENVIRONMENT: tmux inherited a deleted historical worktree as cwd; eleven getcwd-failed XML parser diagnostics preceded RGBD_CUP_POSE_TIMEOUT.
+  - The exact Viewer baseline was captured and inspected, but transport and final boundaries never existed.
+inferred:
+  - The stale cwd is a launch-environment contaminant; this run cannot support product behavior conclusions.
+conclusion: Strict INVALID; excluded from the Mac success set.
+evidence:
+  - /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010
+decision: REPEAT
+next_experiment: EXP-014
+```
+
+```yaml
+experiment_id: EXP-014
+status: PLANNED
+prior_experiment: EXP-010
+hypothesis: Binding the task-owned tmux pane to the current live worktree removes only the stale-cwd contamination and permits the unchanged task_start candidate to complete AC-001.
+prediction: No getcwd-failed diagnostic occurs; the perceived start pose is near [0.02, -0.28, 0.165], and the unchanged workflow releases the cup stably in the red target.
+single_variable: tmux startup adds -c /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-pick-place-mujoco-0-1-main; product command, overlays, keyframe, policy, geometry, thresholds, and capture boundaries are unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - EXP-010 exact-owned product, capture helper, Viewer, tmux, and domain processes are absent; its invalid evidence remains immutable.
+  - The candidate is unchanged, the task worktree exists, and the new tmux pane cwd readback equals that task worktree before the product command starts.
+  - Domain 229, session mac-mrc010-task-start-retry-exp014, and the new run evidence path are empty.
+success_criteria:
+  - AC-001 passes every clause.
+failure_criteria:
+  - The clean unchanged candidate starts correctly but any AC-001 product clause fails.
+invalid_criteria:
+  - Provenance, cwd/process isolation, GUI freshness, or evidence ownership is missing.
+provenance:
+  source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+  install_overlay: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install
+  runtime_executable: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
+  ros_domain_id: 229
+  gz_partition: mac-mrc010-task-start-retry-exp014
+commands:
+  - command: ROS_DOMAIN_ID=229 GZ_PARTITION=mac-mrc010-task-start-retry-exp014 ros2 run so101_demo_py so101_mujoco_perception_pick_place run_mode:=execute execute:=true headless:=false session_id:=mac-mrc010-task-start-retry-exp014 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/task-start-retry.json
     exit_code: PENDING
 observed:
   - NOT_RUN
@@ -89,7 +128,7 @@ inferred:
   - NONE
 conclusion: PENDING
 evidence:
-  - /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010
+  - /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014
 decision: PENDING
 next_experiment: EXP-011
 ```
@@ -477,4 +516,42 @@ evidence:
   - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/ros-daemon-probe-cleanup.txt
 decision: START_EXACT_INSTALLED_EXP_010
 next_command: Commit this transition, then start only mrc010-mac-exp010 and concurrently capture baseline, transport, and final from the exact MuJoCo Viewer window ID.
+```
+
+## CLOSE-EXP-010-001 / CP-004 — Invalid stale-cwd environment run
+
+```yaml
+closure_id: CLOSE-EXP-010-001
+checkpoint_id: CP-004
+recorded_at: 2026-08-26T23:35:48+08:00
+experiment_id: EXP-010
+status: INVALID
+classification: stale_tmux_server_cwd_invalid_environment
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_closure: 6088dc2
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+first_bad_boundary: The new tmux pane inherited the removed .worktrees/mujoco-ros2-control-0-1-upgrade cwd; getcwd failed before production perception runtime construction.
+observed:
+  - OBSERVED: Frozen prefixes, installed runner ownership, domain 220, session, keyframe, and child commit were exact, but lsof proved shell PID 52920 held a deleted cwd and the old pathname no longer existed.
+  - OBSERVED: The log contains 11 getcwd-failed diagnostics. RGB-D perception then returned RGBD_CUP_POSE_TIMEOUT before constructing its ROS runtime; the wrapper naturally returned 1 after 11 starts, 9 clean exits, and 2 required-process deaths.
+  - OBSERVED: Exact Viewer window 45233 owned by ros2_control_node was captured once at baseline. Original-resolution inspection shows the table-supported orange cup at task_start, empty red target, open gripper, and Running status. The 2504x1770 PNG SHA256 is 6ac20e8f58e3e5dd20a61740bbd75ebdb515ffd3be9e7279431fafdb2cdfd2a7.
+  - OBSERVED: No accepted perception summary, point cloud, dynamic manifest, transport boundary, or final boundary exists; no product behavior conclusion is drawn.
+  - OBSERVED: After product terminal, the exact capture helper was interrupted with observed status 130 because its transport boundary could no longer occur. The dead exact-owned tmux was removed; target session/process/domain-daemon/Viewer identities are absent.
+inferred:
+  - INFERRED: The deleted cwd contaminated middleware runtime construction. A new tmux pane created with an explicit current worktree cwd distinguishes that environment cause without modifying the product.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010/run/child.owner
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010/run/full-restart.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010/run/capture-terminal-note.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010/gui/baseline-helper/20260826T233239-0b7a5ef12109/manifest.json
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010/gui/baseline-helper/20260826T233239-0b7a5ef12109/window.png
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-010/post-cleanup.log
+decision: REPEAT_AS_EXP_014_WITH_EXPLICIT_TMUX_CWD
+last_valid_experiment: NONE
+owned_processes: NONE
+preserved_processes: All unrelated historical tmux sessions and desktop windows remain untouched.
+open_risks:
+  - All four Mac positions remain unqualified under the current candidate.
+next_experiment: EXP-014
+next_command: Commit this INVALID closure, prove EXP-014 domain/session/evidence/Viewer isolation, transition EXP-014 to RUNNING, and start its tmux pane with -c set to the current worktree.
 ```
