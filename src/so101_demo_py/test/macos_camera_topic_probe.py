@@ -25,7 +25,7 @@ from sensor_msgs.msg import CameraInfo, Image
 
 MIN_COLOR_STAMPS = 30
 MIN_ALIGNED_PHASE_SAMPLES = 3
-MAX_RETAINED_ALIGNED_MESSAGES = 30
+MAX_RETAINED_ALIGNED_MESSAGES = 10
 
 
 def stamp_ns(message: CameraInfo | Image) -> int:
@@ -250,22 +250,59 @@ def _run_node_phase(
     timeout_s: float,
 ) -> Node:
     context = Context()
-    rclpy.init(context=context, signal_handler_options=SignalHandlerOptions.NO)
-    executor = SingleThreadedExecutor(context=context)
-    node = node_factory(context)
-    executor.add_node(node)
-    deadline = time.monotonic() + timeout_s
+    executor: SingleThreadedExecutor | None = None
+    node: Node | None = None
+    node_added = False
+    phase_error: BaseException | None = None
+    cleanup_errors: list[tuple[str, BaseException]] = []
     try:
+        rclpy.init(context=context, signal_handler_options=SignalHandlerOptions.NO)
+        executor = SingleThreadedExecutor(context=context)
+        node = node_factory(context)
+        executor.add_node(node)
+        node_added = True
+        deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline and not ready(node):
             executor.spin_once(timeout_sec=min(0.2, max(0.0, deadline - time.monotonic())))
         if not ready(node):
             raise RuntimeError(f"camera probe phase timed out after {timeout_s} seconds")
-        return node
+    except BaseException as error:  # cleanup must also run for interruption
+        phase_error = error
     finally:
-        executor.remove_node(node)
-        executor.shutdown(timeout_sec=2.0)
-        node.destroy_node()
-        rclpy.shutdown(context=context, uninstall_handlers=False)
+        if executor is not None and node is not None and node_added:
+            try:
+                executor.remove_node(node)
+            except BaseException as error:  # continue best-effort cleanup
+                cleanup_errors.append(("remove node", error))
+        if executor is not None:
+            try:
+                if executor.shutdown(timeout_sec=2.0) is False:
+                    raise RuntimeError("executor shutdown timed out")
+            except BaseException as error:  # continue best-effort cleanup
+                cleanup_errors.append(("shutdown executor", error))
+        if node is not None:
+            try:
+                if node.destroy_node() is False:
+                    raise RuntimeError("node destruction returned false")
+            except BaseException as error:  # continue best-effort cleanup
+                cleanup_errors.append(("destroy node", error))
+        try:
+            if context.ok():
+                rclpy.shutdown(context=context, uninstall_handlers=False)
+        except BaseException as error:  # no later resource may be skipped
+            cleanup_errors.append(("shutdown context", error))
+
+    if cleanup_errors:
+        details = "; ".join(f"{stage}: {error}" for stage, error in cleanup_errors)
+        teardown_error = RuntimeError(f"phase teardown failed: {details}")
+        if phase_error is not None:
+            raise teardown_error from phase_error
+        raise teardown_error from cleanup_errors[0][1]
+    if phase_error is not None:
+        raise phase_error
+    if node is None:
+        raise RuntimeError("camera probe phase created no node")
+    return node
 
 
 def collect_color_phase(timeout_s: float) -> dict:
