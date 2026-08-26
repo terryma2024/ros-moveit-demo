@@ -2998,3 +2998,50 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/pre-running/cua-state.json
 next_command: Commit and push this transition, then run explicit-zsh capture and installed full restart concurrently on domain 210 for cup_test_left_5cm.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-032-001
+recorded_at: 2026-08-26T16:16:11+08:00
+experiment_id: EXP-032
+status: VALID
+classification: accepted_exact_runner_left_full_restart
+runtime_source_commit: 25c867a1f032f58c8054ff81c72679b6d14d7ab6
+implementation_commit: 012420c9d01e2a7d0dae9d834c22dcae28c4ccfb
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: Installed runner ownership, natural launch/capture zero exits, exact topology (11 start/11 clean), and zero fatal/traceback/died signals all pass.
+  - OBSERVED: CameraPlugin RGB-D selected 377 cup points from 98144, wrote a nonempty PLY, fitted radius 0.0393664599 m, and produced world [-0.0303721132, -0.2805840368, 0.165] at unique stamp 4311999999. Error to left is 0.000692508 m; exactly one perception/workflow and no truth bridge started.
+  - OBSERVED: Exact session/reset0 reached DONE/19 with controller, joint, and FK evidence. Bilateral unsupported lift raised z 0.1668685555 to 0.2248433664; transport [-0.0764278058, -0.2476542366, 0.2281270005] had left=3/right=4 and no table contact; detach preceded open.
+  - OBSERVED: Release ended table-supported at [-0.0778777408, -0.2474273232, 0.1649440420] with zero finger contacts and near-zero velocity. final_xy_error_m=0.0025090010 and tilt=0.0074836255 pass; final scene is detached with pedestal=1, plastic_cup=13, table=1.
+  - OBSERVED: Direct inspection of three distinct 1568x862 frames shows left baseline, visibly raised bilateral transport with empty target, and released cup inside target with open gripper.
+  - OBSERVED: Exact child, domain 210, runtime process set, task-owned tmux, Viewer, and CUA are empty after cleanup.
+retained_risk:
+  - OBSERVED: Later streaming observations were not consumed; two pal_statistics shutdown diagnostics were nonfatal and every process exited cleanly.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/acceptance-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/visual-inspection.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/run/child.owner
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/run.d/rgbd-pick-left-exp032-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/run.d/rgbd-pick-left-exp032-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/gui/viewer-transport.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/gui/viewer-final.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-032/post-cleanup.log
+decision: KEEP
+next_experiment: EXP-033
+```
+
+```yaml
+checkpoint_id: CP-043
+recorded_at: 2026-08-26T16:16:11+08:00
+last_valid_experiment: EXP-032
+current_hypothesis: The installed exact-status runner generalizes across task_start, forward, and left; right is the final sole keyframe variable.
+working_tree_status: Task source and exact f19 submodule are clean before this ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; EXP-032 exact child, domain 210, runtime process set, task-owned tmux, Viewer, and CUA are empty.
+confirmed_conclusions:
+  - EXP-030 task_start, EXP-031 forward, and EXP-032 left are accepted independent exact-runner qualifications under implementation 012420c9 and exact f19.
+open_risks:
+  - Right remains untested under the exact runner; retained nonfatal shutdown diagnostics remain.
+next_command: Commit and push this closure, then prove fresh domain 211/session/evidence/Viewer/CUA isolation and transition EXP-033 only to RUNNING.
+```
