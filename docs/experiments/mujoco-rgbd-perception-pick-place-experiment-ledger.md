@@ -1362,3 +1362,28 @@ confirmed_conclusions:
   - Four FULL_RESTART runs remain prohibited until a VALID perception-only experiment is independently reviewed.
 next_command: Build and pass a harmless exact-child-PGID wrapper lifecycle test below exp-009/pre-running, then perform fresh domain 187 and process isolation before the RUNNING transition.
 ```
+
+```yaml
+transition_id: TRANS-EXP-009-RUNNING-001
+recorded_at: 2026-08-26T10:30:02+08:00
+experiment_id: EXP-009
+from: PLANNED
+to: RUNNING
+source_commit: 143c4e7ecfea13b54a58faa7ec8ae8130842da1d
+implementation_commit: 919f7faa619c887f5c05df579b2ac17c545b77fe
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+ros_domain_id: 187
+gz_partition: rgbd-perception-ai-station-exp009-20260826
+session_id: rgbd-perception-ai-station-exp009-20260826
+owned_tmux_session: rgbd-exp009-20260826
+environment:
+  __GLX_VENDOR_LIBRARY_NAME: mesa
+  LIBGL_ALWAYS_SOFTWARE: "1"
+immediate_pre_running_observed:
+  - OBSERVED: Harmless setsid wrapper smoke recorded wrapper PID, exact child PID=PGID, delivered SIGINT only to that child group, wrote genuine exit 0, and left no child.
+  - OBSERVED: Parent/f19 source is exact and clean; fresh package prefixes are unchanged; domain 187, targeted processes, EXP-009 partition owners, and owned tmux name are empty.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/pre-running/wrapper-smoke.signal.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/pre-running/isolation-snapshot.log
+next_command: Start the exact-child-PGID EXP-009 stack wrapper; only after stack/camera/scene readiness start approved TF, pre-start pose observer, and production perception wrappers using the same ownership protocol.
+```
