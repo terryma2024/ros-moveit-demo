@@ -2760,3 +2760,42 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-029/pre-running/cua-state.json
 next_command: Commit and push this transition, then run explicit-zsh capture and full restart concurrently on domain 207 for task_start.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-029-001
+recorded_at: 2026-08-26T15:55:48+08:00
+experiment_id: EXP-029
+status: INVALID
+classification: installed_runner_launch_arguments_not_applied
+runtime_source_commit: 1ec6f3d5dba17c12b79c3e8a72c9b686865eb082
+implementation_commit: 2f1ca1e7c512f50ab4eca4d121d73152ea9ed2df
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: child.owner proves the intended installed boundary was exercised through ros2 run so101_demo_py so101_mujoco_perception_pick_place with the complete frozen name:=value argument set.
+  - OBSERVED: The runner returned 1 before allocating run.json/run.d or creating a Viewer; capture returned 2 after observing the launch exit. The launch exception was perception pick-place requires run_mode=execute even though child.owner contains run_mode:=execute.
+  - OBSERVED: LaunchService(argv=...) stores argv in LaunchContext but does not translate name:=value items into LaunchConfiguration values; the direct runner currently omits ros2launch's parse-and-set boundary.
+  - OBSERVED: Exact child, domain 207, runtime process set, task-owned tmux, Viewer, and CUA are empty after cleanup; source and canonical main remain clean.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-029/run/child.owner
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-029/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-029/run/full-restart.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-029/run/capture-coordinator.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-029/run/capture-coordinator.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-029/failure-analysis.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-029/post-cleanup.log
+decision: KEEP_INVALID_DO_NOT_REUSE
+next_experiment: EXP-030_AFTER_NEW_SOURCE_FREEZE
+```
+
+```yaml
+checkpoint_id: CP-039
+recorded_at: 2026-08-26T15:55:48+08:00
+last_valid_experiment: EXP-028
+current_hypothesis: Exact child-status preservation is implemented, but the installed runner must also parse and apply public launch arguments before its configured action executes.
+review_gate: RETURN_TO_RED_RUNNER_ARGUMENT_BOUNDARY
+confirmed_conclusions:
+  - EXP-029 is retained INVALID and will never be reused.
+  - The helper correction itself is proven by child.owner; the failure is inside the installed runner's argument adaptation.
+  - CP-016, CP-037, and all prior experiment evidence remain unchanged.
+next_command: Add a focused RED real-LaunchService regression for name:=value application, implement the minimal ROS-native parse-and-set adapter, rerun full verification and freeze a new implementation before allocating EXP-030.
+```
