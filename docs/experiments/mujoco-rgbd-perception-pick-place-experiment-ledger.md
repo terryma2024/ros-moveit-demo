@@ -1251,3 +1251,32 @@ open_risks:
   - Four FULL_RESTART physical runs remain prohibited.
 next_command: Create /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008, then capture a fresh domain 186, partition, process, tmux, git/submodule, prefix, and driver isolation snapshot before transitioning EXP-008 to RUNNING.
 ```
+
+```yaml
+transition_id: TRANS-EXP-008-RUNNING-001
+recorded_at: 2026-08-26T10:18:13+08:00
+experiment_id: EXP-008
+from: PLANNED
+to: RUNNING
+source_commit: fc16504dd43b0bf591624da0b6c3a6d27d8f0b3d
+implementation_commit: 919f7faa619c887f5c05df579b2ac17c545b77fe
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+ros_domain_id: 186
+gz_partition: rgbd-perception-ai-station-exp008-20260826
+session_id: rgbd-perception-ai-station-exp008-20260826
+owned_tmux_session: rgbd-exp008-20260826
+environment_delta:
+  __GLX_VENDOR_LIBRARY_NAME: mesa
+  LIBGL_ALWAYS_SOFTWARE: "1"
+immediate_pre_running_observed:
+  - OBSERVED: Parent and f19 submodule are clean; gitlink/HEAD/describe are exact; all four task packages resolve to the fresh task overlay.
+  - OBSERVED: ROS_DOMAIN_ID 186 has no nodes, the targeted process set is empty, no current-user process owns the EXP-008 GZ partition, and the exact-owned tmux name is absent.
+  - OBSERVED: The prerequisite Mesa hidden-GLFW probe exit is 0; no EXP-008 stack or GUI action has yet started.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-008/pre-running/isolation-snapshot.log
+runtime_scope:
+  - Start only the base stack, approved static TF, passive observers, and production rgbd_cup_pose.
+  - Prohibit every pick-place workflow, truth bridge, and robot motion command.
+  - Use cua-driver session rgbd-exp008-viewer-20260826 with snapshot-action-fresh for the Viewer gate.
+next_command: Start exact-owned tmux rgbd-exp008-20260826 stack with the frozen Mesa environment and retain all child exits before starting any static TF or perception process.
+```
