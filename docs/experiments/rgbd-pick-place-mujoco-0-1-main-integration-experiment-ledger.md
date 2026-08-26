@@ -33,8 +33,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-127
-next_experiment: EXP-042
+latest_checkpoint: CP-128
+next_experiment: EXP-047
 ```
 
 ## EXP-042 — watcher-qualified task_start FULL_RESTART
@@ -94,6 +94,63 @@ recorded_at: 2026-08-27T05:09:00+08:00
 status: VALID
 owned_processes: NONE before launch
 decision: Execute one FULL_RESTART and require watcher exit zero plus runner exit zero.
+```
+
+## EXP-042 closure — functional success, watcher trigger schema invalid
+
+```yaml
+closure_id: CLOSE-EXP-042-001
+recorded_at: 2026-08-27T05:13:00+08:00
+experiment_id: EXP-042
+status: INVALID
+classification: observation_invalid_non_counting_functional_success
+runner_exit_code: 0
+watcher_exit_code: 5
+dynamic: {status: DONE, transition_count: 19, failure: null}
+perception: {position_xyz_m: [0.01950111783349788, -0.28040476095521005, 0.16499999999999998], error_m: 0.0006424288652577669, fitted_radius_m: 0.03938151231973142}
+physical:
+  - MICRO_LIFT and LIFT each retained bilateral contact with table_contact=false; lift z reached 0.22415187661800234 m.
+  - MOVE_ABOVE_PLACE retained 3 left and 4 right contacts with table_contact=false.
+  - DETACH_MOVEIT precedes OPEN_GRIPPER; detached IDs are empty and the cup becomes a 13-primitive world object.
+  - Final cup is [-0.07803156289668024, -0.24755822415782672, 0.16497200320705907], XY error 0.002399555180418881 m, tilt 0.00820281451113483 rad, zero fingertip contacts, table-supported, and effectively stationary.
+gui:
+  baseline: VALID exact-viewer pixels; inspected scene shows start cup, target, arm and live counters.
+  transport: INVALID pixels captured after Viewer teardown; inspected image is the desktop with only a stale translucent Viewer surface.
+  final: MISSING after exact-window mismatch.
+root_cause:
+  - During RUNNING, atomic manifests expose completed states in state_events; state_trace appears only in the final DONE manifest.
+  - Watcher v1 polled only state_trace, so both triggers became visible at DONE rather than during transport/release.
+  - Watcher v2 polls both state_events and final state_trace, and final trigger is WAIT_RELEASE_SETTLE, whose physical sample already proves stable zero-contact table placement before validation/sync/retreat.
+  - A fresh synthetic non-qualification v2 smoke completed baseline, MOVE_ABOVE_PLACE, and WAIT_RELEASE_SETTLE captures with same window ID/PID and exit zero.
+shutdown: Runner, ros2_control, MoveIt, tmux, domain 106, and identity process cleanup all pass; only watcher evidence completeness fails.
+decision: Retain EXP-042; allocate new identities using watcher v2 SHA256 a4d48b2d7b3528b6286c9ca0507873db271509a8493cec00dcb5b545e9edc009.
+```
+
+### State-events watcher final FULL_RESTART identities
+
+EXP-043 through EXP-046 remain untouched reservations and are superseded. The countable sequence is:
+
+| Experiment | Domain | Keyframe | Session and partition | Evidence file |
+|---|---:|---|---|---|
+| EXP-047 | 111 | `task_start` | `linux-rgbd-task-start-exp047` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-047/task-start.json` |
+| EXP-048 | 112 | `cup_test_forward_5cm` | `linux-rgbd-forward-exp048` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-048/forward.json` |
+| EXP-049 | 113 | `cup_test_left_5cm` | `linux-rgbd-left-exp049` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-049/left.json` |
+| EXP-050 | 114 | `cup_test_right_5cm` | `linux-rgbd-right-exp050` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-050/right.json` |
+| EXP-051 | 115 | `task_start` | `linux-rgbd-task-start-repeat-exp051` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-051/task-start-repeat.json` |
+
+## CP-128 — Watcher schema/timing root cause closed
+
+```yaml
+checkpoint_id: CP-128
+recorded_at: 2026-08-27T05:13:00+08:00
+status: VALID_DIAGNOSIS
+invalid_experiment: EXP-042
+functional_chain: PASS_NON_COUNTING
+watcher_v2_smoke: PASS_NON_QUALIFICATION
+watcher_v2_sha256: a4d48b2d7b3528b6286c9ca0507873db271509a8493cec00dcb5b545e9edc009
+owned_processes: NONE
+decision: Commit/push closure and preregister EXP-047.
+next_experiment: EXP-047
 ```
 
 ## EXP-037 — dependency-closed ai-station task_start FULL_RESTART
