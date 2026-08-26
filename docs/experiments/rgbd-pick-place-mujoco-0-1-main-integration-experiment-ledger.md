@@ -1610,3 +1610,31 @@ owned_processes: NONE
 decision: START_EMPTY_PER_CALL_PROBE_WITH_120_SECOND_BOUND
 next_command: Run the task-owned proxy around candidate installed _create_ros_runtime in domain 214; retain flush-safe events and stop on its first valid failure.
 ```
+
+## CP-036 / TRANS-SMOKE-007-LIVE-001 — Empty per-call control passes; authorize live phase
+
+```yaml
+checkpoint_id: CP-036
+transition_id: TRANS-SMOKE-007-LIVE-001
+recorded_at: 2026-08-27T01:17:57+08:00
+smoke_id: SMOKE-007
+from: RUNNING_EMPTY_CONTROL
+to: RUNNING_LIVE_AB
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: a10ed9ef4b227ecfd3873080ab0808eb57a47937
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+empty_control:
+  - Probe exited zero; product-equivalent deadline elapsed 6.766301 s and _create_ros_runtime total was 3.276062 s.
+  - Dominant empty phases were Open3D 3.335847 s, create_node 2.884717 s, publisher 0.236124 s, load_ros_api 0.154065 s, TransformListener 0.064793 s, and camera_info subscription 0.034787 s.
+  - All other construction calls were below 0.004 s; cleanup total was 0.012145 s. The proxy produced no publication/evidence/motion artifact and stderr was empty.
+live_preflight:
+  - Domain 213 and live evidence/session identity are empty.
+  - Idle tmux pane 79519 passed explicit cd, pane_current_path, and captured pwd against the exact task worktree; no product helper has started.
+empty_evidence:
+  owner_sha256: 4864a7bd249cfbf72c58e3904d7a5c984f2ac6b0885b5fc622cd0f8829551437
+  events_sha256: c710e105b0031d11f3d5dfb2822dc21f3b86bc1894e380ebffa421ee81eb31ec
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+decision: START_LIVE_BASE_THEN_IDENTICAL_PER_CALL_PROBE
+next_command: Start domain 213 static TF/base/GUI in cwd-gated pane; wait full readiness; run identical probe with 120 s bound.
+```
