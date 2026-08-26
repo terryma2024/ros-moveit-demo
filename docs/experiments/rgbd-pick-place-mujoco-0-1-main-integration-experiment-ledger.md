@@ -29,7 +29,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-009
+latest_checkpoint: CP-010
 next_experiment: NONE
 ```
 
@@ -767,5 +767,33 @@ evidence:
   - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/diagnosis/root-cause-boundary.md
   - /Users/matianyi/Library/Logs/DiagnosticReports/ros2_control_node-2026-08-26-234448.ips
 decision: STOP_MAC_BATCH_AND_REQUIRE_RED_RUNTIME_CONTRACT_PLUS_CLEAN_SUPPORT_REBUILD
+next_experiment: NONE
+```
+
+## CP-010 — RED candidate support-plugin provenance contract
+
+```yaml
+checkpoint_id: CP-010
+recorded_at: 2026-08-26T23:56:16+08:00
+phase: RED
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_change: f2fed42
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+contract:
+  - When so101_demo_py is selected from the isolated candidate project overlay, so101_mujoco_support must resolve from the same project-install base.
+  - That support prefix must contain the pluginlib XML and libso101_simulation_evidence_plugin with the host platform suffix.
+red_command: zsh /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/support-abi-red.zsh
+red_nodeid: src/so101_demo_py/test/test_installed_provenance.py::test_mujoco_support_plugin_comes_from_the_candidate_project_overlay
+red_exit_code: 1
+observed:
+  - Expected support prefix is /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_mujoco_support.
+  - Actual support prefix is /Users/matianyi/ros2_jazzy/so101_isolated_ws/install/so101_mujoco_support.
+  - The assertion fails before artifact checks, exactly detecting Task 3's omitted ABI-dependent package.
+planned_single_fix:
+  - Build so101_mujoco_support and so101_demo_py into the candidate project build/install against the frozen fork overlay; do not change product source behavior.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/support-abi-red.zsh
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/diagnosis/root-cause-boundary.md
+decision: COMMIT_RED_THEN_CLEAN_BUILD_SUPPORT
 next_experiment: NONE
 ```
