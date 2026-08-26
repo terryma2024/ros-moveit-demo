@@ -1638,3 +1638,63 @@ empty_evidence:
 decision: START_LIVE_BASE_THEN_IDENTICAL_PER_CALL_PROBE
 next_command: Start domain 213 static TF/base/GUI in cwd-gated pane; wait full readiness; run identical probe with 120 s bound.
 ```
+
+## CP-037 / CLOSE-SMOKE-007-001 — Per-call proxy measures slowdown but no crossing call
+
+```yaml
+checkpoint_id: CP-037
+transition_id: CLOSE-SMOKE-007-001
+recorded_at: 2026-08-27T01:23:40+08:00
+smoke_id: SMOKE-007
+from: RUNNING_LIVE_AB
+to: PASS_DIAGNOSTIC_HYPOTHESIS_REJECTED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 19ad00507f20f4a8e40a592052883dfb48e16408
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+empty_result:
+  deadline_elapsed_s: 6.766301
+  open3d_s: 3.335847
+  load_ros_api_s: 0.154065
+  create_node_s: 2.884717
+  transform_listener_s: 0.064793
+  publisher_s: 0.236124
+  camera_info_subscription_s: 0.034787
+  color_subscription_s: 0.003880
+  depth_subscription_s: 0.000221
+  construction_total_s: 3.276062
+  cleanup_total_s: 0.012145
+live_result:
+  deadline_elapsed_s: 15.972863
+  open3d_s: 7.872870
+  load_ros_api_s: 0.333781
+  create_node_s: 6.952925
+  transform_listener_s: 0.129293
+  publisher_s: 0.488720
+  camera_info_subscription_s: 0.077224
+  color_subscription_s: 0.009468
+  depth_subscription_s: 0.000789
+  construction_total_s: 7.765819
+  cleanup_total_s: 0.013359
+inference:
+  - Live stack causes a consistent roughly two-times slowdown, dominated by Open3D and create_node, but every proxied call completed and the complete product-equivalent budget remained 14.027 s below the deadline.
+  - No single synchronous boundary crossed 30 s, so the per-call proxy does not reproduce SMOKE-006's 51.686 s real installed failure and cannot authorize a source fix.
+  - The proxy's NodeProxy object or ordinary run-to-run scheduling variance may alter the real path. A fresh real installed run must sample its exact child at about 25 s and again after 30 s if still alive.
+observer_notes:
+  - Both probes exited zero and stderr was empty. TF listener finalizers emitted two additional destroy-subscription events after SUMMARY; these are retained but do not affect construction timings.
+  - Neither probe spun callbacks, published a pose, created cup evidence, started dynamic workflow, or moved the robot.
+shutdown:
+  - Exact GUI helper PID 79703 exited 130 after SIGINT; static-TF wrapper 79586 exited zero via exact TERM cleanup; base tmux received Ctrl-C and component teardown was clean.
+  - Domain 213, exact PIDs, task tmux, and Viewer are absent; unrelated windows/processes/tmux remain preserved.
+evidence:
+  empty_events_sha256: c710e105b0031d11f3d5dfb2822dc21f3b86bc1894e380ebffa421ee81eb31ec
+  live_events: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/per-call-construction-r1/live/probe-events.ndjson
+  live_events_sha256: 318bc8ac71f12daaa89baf819262e583ddb65476aca9b1725a216bd5f9bcbe76
+  live_probe_owner_sha256: 55fa466034753339e7f22fb5a706df0db79e1fedfa58a42cf78dcccd19798a7a
+  live_probe_stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  live_base_log_sha256: d4d940b66e9bd2a8a3d97828518f7851788611142a8a0bc31055d6c12ac7e5f5
+  baseline_manifest_sha256: 36db1f66d60e2b46bfb1f5fd0a8932e3ca247c0107b74babc9e35b26020dc6a2
+  baseline_png_sha256: d850bdecf9e44f3f30b509f8fa774f0bec9f7b0ad091631432e3c3b15c6917ce
+decision: RETAIN_RESULT_AND_PLAN_REAL_INSTALLED_TWO_SAMPLE_STACK_CAPTURE
+next_experiment: NONE
+```
