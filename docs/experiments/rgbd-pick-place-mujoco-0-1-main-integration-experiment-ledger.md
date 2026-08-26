@@ -2672,3 +2672,22 @@ failure_boundary: Same action-result timeout remains, disproving camera rate as 
 decision: COMMIT_PLAN_BUILD_DIAGNOSTIC_OVERLAY_THEN_FRESH_RUN
 next_experiment: SMOKE-014
 ```
+
+## CP-073 / TRANS-SMOKE-014-RUNNING-001 — Start isolated 2 Hz camera-load causal probe
+
+```yaml
+checkpoint_id: CP-073
+transition_id: TRANS-SMOKE-014-RUNNING-001
+recorded_at: 2026-08-27T02:53:00+08:00
+smoke_id: SMOKE-014
+from: PLANNED
+to: RUNNING
+qualification: false
+identity: {domain: 203, session: mac-mrc010-dds-2hz-smoke014, tmux: mac-mrc010-dds-2hz-smoke014, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/dds-2hz-smoke014/live}
+pre_running_observed:
+  - Domain 203, exact session/process identities, Viewer, and live evidence path were fresh and empty.
+  - Production prefix remained mac-candidate/project-install/so101_demo_py with camera_publish_rate 10.0 and YAML SHA256 57e4810c139bd19d9a1fba2b3618c3ce183cf87338869736c5a961b03591ca96.
+  - Diagnostic prefix resolved to mac-diagnosis/dds-2hz-smoke014/diag-install/so101_demo_py with only camera_publish_rate 2.0, YAML SHA256 fff3182aa99c100a3deeb27903bb246715a0f73f4bee7d0ee1c5cc7c87bd2681, and diagnostic bundle 2f6dee9ae868bc350b019b5ac2eb577a5c57a8e23f77a434ed1a650b10f301ed.
+runner_sha256: 351c22403c75e84c834d90c28af93f60c425d598ddba2ddd6a3d21e83ea20c6b
+decision: START_NON_QUALIFYING_FULL_CHAIN_AND_WAIT_FOR_NATURAL_EXIT
+```
