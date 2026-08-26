@@ -4,15 +4,15 @@
 task_id: so101-rgbd-pick-place-mrc010-main
 goal: Prove RGB-D-driven physical pick-place from all four MJCF cup keyframes on macOS and ai-station using child main@5e9d67c.
 success_contract: Four independent FULL_RESTART successes on macOS, four independent FULL_RESTART successes on ai-station, plus one ai-station task_start repeat so the final fixed candidate has five consecutive valid live runs.
-worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-pick-place-mujoco-0-1-main
+worktree: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/repo
 branch: codex/rgbd-pick-place-mujoco-0-1-main
 base_commit: b73748f86acc891711aa455fc911a9ebde52686d
-current_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
-implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+current_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+implementation_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
 record_commit: 1a0c532cb4ff012bc1cef95a47594ca8a1a65fa5
 commit_semantics: current_commit and implementation_commit identify the immutable installed runtime; record_commit identifies the ledger-only commit that first contains CP-002 and is resolved additively after that commit exists.
 target_child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
-evidence_root: /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/
+evidence_root: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9
 confirmed_conclusions:
   - OBS-001: child main@5e9d67c contains aeff7e5 and both commits have identical trees.
   - OBS-002: parent main@b73748f clean isolated-install baseline passed 303 of 303 so101_demo_py tests from /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-baseline-canonical.
@@ -33,8 +33,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-022
-next_experiment: SMOKE-003
+latest_checkpoint: CP-116
+next_experiment: EXP-027
 ```
 
 ## Shared live acceptance contract
@@ -3452,4 +3452,91 @@ gate_runner_sha256: a81a7e81681209d6e21674776a68992f838aeeef93ca3209de566b5b79e7
 success_boundary: Same as SMOKE-014; cross DESCEND without -6 and record action timing.
 decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_CWD_BARRIER
 next_experiment: SMOKE-015
+```
+
+## CP-115 — Resume exact Gitee candidate for isolated ai-station qualification
+
+```yaml
+checkpoint_id: CP-115
+recorded_at: 2026-08-27T04:15:00+08:00
+last_valid_experiment: EXP-026
+current_hypothesis: The exact pushed Linux candidate preserves the four-position RGB-D physical workflow and task_start repeat under five independent FULL_RESTART lifecycles.
+working_tree_status: Clean exact Gitee clone before this ledger checkpoint; only this planned checkpoint becomes modified.
+worktree: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/repo
+branch: codex/rgbd-pick-place-mujoco-0-1-main
+source_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+evidence_root: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9
+owned_processes: NONE
+preserved_processes:
+  - Existing tmux sessions codex, codex-cua, mrc010-linux-exp013-requal-codex, mrc010-linux-fix2-full-codex, mrc010-linux-platform-context-requal-codex, and their processes.
+  - Canonical /data/work/ws_moveit at main@b3770360b26fe8f6fac0e19338d250b6f5cab0e7 and its submodule state; it remains read-only and is never sourced or built.
+confirmed_conclusions:
+  - Parent Gitee branch, local HEAD, and clone all resolve to 2a636d9dfe04bb8707b196ac683396c5007cd14a.
+  - Parent gitlink, initialized child HEAD, both dependency locks, and child Gitee formal main all resolve to 5e9d67ce9fde39d35bf94cc498721abf203a0ddd.
+  - Both locks and the fork/support/demo package manifests declare release/version 0.1.0; installed-state proof remains gated on the isolated build.
+  - Mac EXP-023 through EXP-026 are retained functional successes; their independently unavailable screenshot clause is not promoted into Linux evidence.
+disproven_routes:
+  - Truth bridge, perception bypass, threshold relaxation, and retaining continuous RGB-D inputs during motion are outside the frozen candidate contract.
+  - Historical planned Linux IDs EXP-020 through EXP-024 are superseded because later Mac records consumed those IDs; they will not be reused.
+open_risks:
+  - Isolated Linux fork/support/demo build and nonzero tests are not yet complete.
+  - Five Linux FULL_RESTART results, fresh GUI captures, and clean shutdown are not yet observed.
+next_command: Run the task-owned fork installer with SO101_WORKSPACE_DIR equal to the registered evidence root, then build and test support and so101_demo_py into task-owned project bases.
+```
+
+### Corrected ai-station FULL_RESTART batch
+
+The obsolete planning table for Linux `EXP-020` through `EXP-024` is superseded without rewriting it.
+The countable Linux batch uses the following never-before-used experiment IDs and distinct identities:
+
+| Experiment | Domain | Keyframe | Session and partition | Evidence file |
+|---|---:|---|---|---|
+| EXP-027 | 91 | `task_start` | `linux-rgbd-task-start-exp027` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-027/task-start.json` |
+| EXP-028 | 92 | `cup_test_forward_5cm` | `linux-rgbd-forward-exp028` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-028/forward.json` |
+| EXP-029 | 93 | `cup_test_left_5cm` | `linux-rgbd-left-exp029` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-029/left.json` |
+| EXP-030 | 94 | `cup_test_right_5cm` | `linux-rgbd-right-exp030` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-030/right.json` |
+| EXP-031 | 95 | `task_start` | `linux-rgbd-task-start-repeat-exp031` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-031/task-start-repeat.json` |
+
+For each corrected entry, the frozen preconditions and acceptance contract are `AC-001`, source
+`2a636d9dfe04bb8707b196ac683396c5007cd14a`, child
+`5e9d67ce9fde39d35bf94cc498721abf203a0ddd`, lifecycle `FULL_RESTART`, task-owned fork/project
+installs under the registered evidence root, no truth publisher, and exact cleanup before the next
+entry. Only keyframe, domain, session/partition, and empty run directory change. A valid behavioral
+failure stops the batch for systematic debugging; an invalid environment run is retained and gets a
+new experiment ID.
+
+## CP-116 — Exact isolated Linux build and automated test gate passes
+
+```yaml
+checkpoint_id: CP-116
+recorded_at: 2026-08-27T04:20:00+08:00
+status: VALID
+source_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+fork_install: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/ws_mujoco_ros2_control_fork/install
+project_install: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/project-install
+build:
+  - Fork installer built exactly mujoco_3d_lidar, mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, and mujoco_ros2_control from a clean detached build source at child main 5e9d67c; exit 0.
+  - Project build produced so101_mujoco_support, so101_teleop, and so101_demo_py from this clone; exit 0.
+tests:
+  - Fork: 16 registered result wrappers, 239 cases, 0 errors, 0 failures, 3 platform skips.
+  - so101_mujoco_support: 20 cases, 0 errors, 0 failures, 0 skips.
+  - so101_teleop: 24 wrappers, 241 cases, 0 errors, 0 failures, 0 skips.
+  - so101_demo_py: direct superproject-root package suite 445 passed, 0 failed, in 5.36 s with retained JUnit.
+  - scripts/check_backend_integration.py: exit 0, backend integration contract passed.
+invalid_attempt:
+  - The first and confirmatory colcon-driven so101_demo_py invocations each passed 436 and failed the same nine source-layout tests because colcon invokes pytest in repo/src/so101_demo_py while those tests intentionally address paths relative to the superproject root.
+  - A same-install focused cwd A/B passed immediately from the superproject root; the repository plan's exact direct full-suite command then passed all 445. No source, threshold, or test was changed.
+installed_state:
+  - All four fork package prefixes resolve to the task fork install and their installed package.xml files declare 0.1.0; mujoco_vendor remains /opt/ros/jazzy.
+  - so101_mujoco_support, so101_teleop, and so101_demo_py prefixes resolve to the task project install and their installed package.xml files declare 0.1.0.
+  - Installed exact-status executable SHA256: 48a4b9dffce6f2d34cea48cd810cb3f9caac3c3a6363ca424776dcd07eebc5ce.
+  - Installed ros2_control_node SHA256: 4a8b64502ab546ddacb3aae48ae02995acbeea98af4c837810ceac7691038417.
+  - Installed SimulationEvidencePlugin SHA256: 61b2f48426d108d7aed797d7c1f55dbb95006cb7cafe4143029063d07fabe289.
+evidence:
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/build-logs
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/provenance/build-checkpoint-sha256.txt
+decision: COMMIT_PUSH_READBACK_THEN_START_EXP-027_ONLY_AFTER_FRESH_GUI_AND_PROCESS_PREFLIGHT
+next_experiment: EXP-027
 ```
