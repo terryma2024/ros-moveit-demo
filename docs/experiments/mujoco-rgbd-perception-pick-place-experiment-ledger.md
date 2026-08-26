@@ -2928,3 +2928,52 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/pre-running/cua-state.json
 next_command: Commit and push this transition, then run explicit-zsh capture and installed full restart concurrently on domain 209 for cup_test_forward_5cm.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-031-001
+recorded_at: 2026-08-26T16:10:50+08:00
+experiment_id: EXP-031
+status: VALID
+classification: accepted_exact_runner_forward_full_restart
+runtime_source_commit: fb14b9360b0a269653a6ac544170a77ce73228d8
+implementation_commit: 012420c9d01e2a7d0dae9d834c22dcae28c4ccfb
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: child.owner proves the installed ros2 run boundary; launch and capture naturally returned 0 and all 11 launched processes finished cleanly.
+  - OBSERVED: CameraPlugin RGB-D selected 167 cup points from 98130, wrote a nonempty PLY, fitted radius 0.0394072673 m, and produced world [0.0196201679, -0.3304561742, 0.165] at unique consumed stamp 4519999999. Error to forward is 0.000593605 m. Exactly one perception and dynamic workflow started with no truth bridge.
+  - OBSERVED: Session rgbd-pick-forward-exp031-20260826/reset epoch 0 reached DONE with transition_count=19, complete trace, controller trajectories, joint targets, and FK poses.
+  - OBSERVED: Bilateral unsupported grasp/lift/transport passed: z 0.1669466030 to 0.2248738717; transport [-0.0761413668, -0.2470235542, 0.2283608814] had left=3/right=4 and no table contact. Detach preceded open.
+  - OBSERVED: Release was table-supported at [-0.0779277951, -0.2475263781, 0.1648387545], zero finger contacts, near-zero velocity; final_xy_error_m=0.0024883402 and tilt=0.0048425956 pass; final scene is detached with pedestal=1, plastic_cup=13, table=1.
+  - OBSERVED: Direct inspection of three distinct 1568x862 same-window frames shows forward baseline, raised bilateral transport with empty target, and released cup inside target with open gripper.
+  - OBSERVED: Exact child, domain 209, runtime process set, task-owned tmux, Viewer, and CUA are empty after cleanup.
+retained_risk:
+  - OBSERVED: Streaming perception later published unconsumed observations; none replaced the unique workflow input.
+  - OBSERVED: Two pal_statistics context-invalid shutdown diagnostics were nonfatal and all processes exited cleanly.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/acceptance-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/visual-inspection.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/run/child.owner
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/run.d/rgbd-pick-forward-exp031-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/run.d/rgbd-pick-forward-exp031-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/gui/viewer-transport.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/gui/viewer-final.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-031/post-cleanup.log
+decision: KEEP
+next_experiment: EXP-032
+```
+
+```yaml
+checkpoint_id: CP-042
+recorded_at: 2026-08-26T16:10:50+08:00
+last_valid_experiment: EXP-031
+current_hypothesis: The installed exact-status runner generalizes across task_start and forward; left is the next sole keyframe variable.
+working_tree_status: Task source and exact f19 submodule are clean before this ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; EXP-031 exact child, domain 209, runtime process set, task-owned tmux, Viewer, and CUA are empty.
+confirmed_conclusions:
+  - EXP-030 task_start and EXP-031 forward are accepted independent exact-runner qualifications under implementation 012420c9 and exact f19.
+open_risks:
+  - Left and right remain untested under the exact runner; retained nonfatal shutdown diagnostics remain.
+next_command: Commit and push this closure, then prove fresh domain 210/session/evidence/Viewer/CUA isolation and transition EXP-032 only to RUNNING.
+```
