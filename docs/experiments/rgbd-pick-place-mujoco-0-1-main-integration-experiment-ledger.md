@@ -2768,6 +2768,26 @@ evidence_interpretation: Recovery samples through RECOVER_MOVE_ABOVE_PICK remain
 decision: KEEP_SMOKE_016_FOCUSED_ON_POST_FIRST_VALID_RGBD_TRAFFIC
 ```
 
+## CP-080 / TRANS-SMOKE-016-RUNNING-001 — Start perception input-release causal probe
+
+```yaml
+checkpoint_id: CP-080
+transition_id: TRANS-SMOKE-016-RUNNING-001
+recorded_at: 2026-08-27T03:05:20+08:00
+smoke_id: SMOKE-016
+from: PLANNED
+to: RUNNING
+qualification: false
+identity: {domain: 205, session: mac-mrc010-perception-release-smoke016, tmux: mac-mrc010-perception-release-smoke016, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/perception-release-smoke016}
+pre_running_observed:
+  - Fresh domain205/session/processes/Viewer/live evidence all empty; task worktree clean.
+  - Diagnostic installed prefix and module resolve inside the registered root, camera remains 10.0 Hz, input-release marker is present, diagnostic bundle is c1d832e18968387670beae12ef87e1daf0450413c98acb11f7bc5cd87484f80d.
+  - Gate-only pane PID10781 has not started ROS; pane_current_path and /bin/pwd -P both equal the exact task worktree.
+diagnostic_source_sha256: de40cd14af074459f9ac016fae3b09a121309e1e0d0fa209e7e61c82fb3fc842
+diagnostic_patch_sha256: 7ebf7d3c18dc06b923d0229e5da12ba65ca2bbd095ecae8ad908d04870e8de95
+decision: CREATE_START_SIGNAL_AND_WAIT_FOR_NATURAL_FULL_CHAIN_EXIT
+```
+
 ## CP-078 — Plan post-first-valid perception input-release causal probe
 
 ```yaml
