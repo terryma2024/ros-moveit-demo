@@ -242,21 +242,60 @@ def test_evidence_preflight_creates_owned_run_directory_before_nodes(
     assert run_root.is_dir()
     assert run_root.resolve().is_relative_to(tmp_path.resolve())
     assert run_root.stat().st_uid == os.geteuid()
+    assert run_root.stat().st_mode & 0o777 == 0o700
     assert (run_root / "perception").is_dir()
     assert (run_root / "dynamic").is_dir()
     assert _nodes(actions)
 
 
-def test_evidence_preflight_keeps_valid_preexisting_run_directory(
+def test_evidence_preflight_keeps_valid_preexisting_base_directory(
+    tmp_path: Path,
+) -> None:
+    base = tmp_path / "result.d"
+    base.mkdir()
+
+    _context, actions, _exit_status = _materialize(evidence_file=tmp_path / "result.json")
+
+    run_root = base / "session-123"
+    assert run_root.is_dir()
+    assert _nodes(actions)
+
+
+def test_evidence_preflight_rejects_preexisting_session_without_modifying_it(
     tmp_path: Path,
 ) -> None:
     run_root = tmp_path / "result.d/session-123"
     run_root.mkdir(parents=True)
+    sentinel = run_root / "accepted.txt"
+    sentinel.write_text("immutable", encoding="utf-8")
 
-    _context, actions, _exit_status = _materialize(evidence_file=tmp_path / "result.json")
+    with pytest.raises(RuntimeError, match="session evidence root already exists"):
+        _materialize(evidence_file=tmp_path / "result.json")
 
-    assert run_root.is_dir()
-    assert _nodes(actions)
+    assert sentinel.read_text(encoding="utf-8") == "immutable"
+    assert sorted(path.name for path in run_root.iterdir()) == ["accepted.txt"]
+
+
+def test_evidence_preflight_rejects_existing_nominal_file(tmp_path: Path) -> None:
+    evidence_file = tmp_path / "result.json"
+    evidence_file.write_text("accepted", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="must not already exist"):
+        _materialize(evidence_file=evidence_file)
+
+    assert evidence_file.read_text(encoding="utf-8") == "accepted"
+    assert not (tmp_path / "result.d").exists()
+
+
+def test_evidence_preflight_rejects_broken_nominal_symlink(tmp_path: Path) -> None:
+    evidence_file = tmp_path / "result.json"
+    evidence_file.symlink_to(tmp_path / "missing.json")
+
+    with pytest.raises(RuntimeError, match="must not already exist"):
+        _materialize(evidence_file=evidence_file)
+
+    assert evidence_file.is_symlink()
+    assert not (tmp_path / "result.d").exists()
 
 
 def test_evidence_preflight_passes_resolved_child_paths_to_nodes(
@@ -277,8 +316,15 @@ def test_evidence_preflight_passes_resolved_child_paths_to_nodes(
     assert str(resolved_run / "dynamic") in workflow._Node__arguments
 
 
-@pytest.mark.parametrize("component", ("base", "session"))
-def test_evidence_preflight_rejects_symlink_components(tmp_path: Path, component: str) -> None:
+@pytest.mark.parametrize(
+    ("component", "message"),
+    (("base", "symlink"), ("session", "session evidence root already exists")),
+)
+def test_evidence_preflight_rejects_symlink_components(
+    tmp_path: Path,
+    component: str,
+    message: str,
+) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()
     base = tmp_path / "result.d"
@@ -288,27 +334,18 @@ def test_evidence_preflight_rejects_symlink_components(tmp_path: Path, component
         base.mkdir()
         (base / "session-123").symlink_to(outside, target_is_directory=True)
 
-    with pytest.raises(RuntimeError, match="symlink"):
+    with pytest.raises(RuntimeError, match=message):
         _materialize(evidence_file=tmp_path / "result.json")
 
 
-@pytest.mark.parametrize("component", ("perception", "dynamic"))
-def test_evidence_preflight_rejects_symlink_final_directories(
-    tmp_path: Path, component: str
-) -> None:
-    run_root = tmp_path / "result.d/session-123"
-    run_root.mkdir(parents=True)
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (run_root / component).symlink_to(outside, target_is_directory=True)
-
-    with pytest.raises(RuntimeError, match=f"{component}.*symlink"):
-        _materialize(evidence_file=tmp_path / "result.json")
-
-
-@pytest.mark.parametrize("component", ("base", "session"))
+@pytest.mark.parametrize(
+    ("component", "message"),
+    (("base", "directory"), ("session", "session evidence root already exists")),
+)
 def test_evidence_preflight_rejects_non_directory_components(
-    tmp_path: Path, component: str
+    tmp_path: Path,
+    component: str,
+    message: str,
 ) -> None:
     base = tmp_path / "result.d"
     if component == "base":
@@ -317,19 +354,7 @@ def test_evidence_preflight_rejects_non_directory_components(
         base.mkdir()
         (base / "session-123").write_text("conflict", encoding="utf-8")
 
-    with pytest.raises(RuntimeError, match="directory"):
-        _materialize(evidence_file=tmp_path / "result.json")
-
-
-@pytest.mark.parametrize("component", ("perception", "dynamic"))
-def test_evidence_preflight_rejects_non_directory_final_paths(
-    tmp_path: Path, component: str
-) -> None:
-    run_root = tmp_path / "result.d/session-123"
-    run_root.mkdir(parents=True)
-    (run_root / component).write_text("conflict", encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match=f"{component}.*directory"):
+    with pytest.raises(RuntimeError, match=message):
         _materialize(evidence_file=tmp_path / "result.json")
 
 
@@ -341,30 +366,6 @@ def test_evidence_preflight_rejects_conflicting_directory_owner(
     monkeypatch.setattr(os, "geteuid", lambda: base.stat().st_uid + 1)
 
     with pytest.raises(RuntimeError, match="owned"):
-        _materialize(evidence_file=tmp_path / "result.json")
-
-
-@pytest.mark.parametrize("component", ("perception", "dynamic"))
-def test_evidence_preflight_rejects_foreign_owned_final_directories(
-    tmp_path: Path, monkeypatch, component: str
-) -> None:
-    run_root = tmp_path / "result.d/session-123"
-    (run_root / "perception").mkdir(parents=True)
-    (run_root / "dynamic").mkdir()
-    target = run_root / component
-    original_lstat = Path.lstat
-
-    def foreign_child_lstat(path):
-        metadata = original_lstat(path)
-        if path == target:
-            fields = list(metadata)
-            fields[4] = os.geteuid() + 1
-            return os.stat_result(fields)
-        return metadata
-
-    monkeypatch.setattr(Path, "lstat", foreign_child_lstat)
-
-    with pytest.raises(RuntimeError, match=f"{component}.*owned"):
         _materialize(evidence_file=tmp_path / "result.json")
 
 

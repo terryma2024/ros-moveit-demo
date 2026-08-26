@@ -723,6 +723,14 @@ def _owned_directory(path: Path, label: str) -> Path:
     return path.resolve(strict=True)
 
 
+def _exclusive_owned_directory(path: Path, label: str) -> Path:
+    try:
+        path.mkdir(mode=0o700, exist_ok=False)
+    except FileExistsError as error:
+        raise RuntimeError(f"{label} already exists: {path}") from error
+    return _owned_directory(path, label)
+
+
 def _prepare_perception_evidence_root(
     evidence_file: Path, session_id: str
 ) -> _PerceptionEvidencePaths:
@@ -739,14 +747,18 @@ def _prepare_perception_evidence_root(
         raise RuntimeError("derived evidence root escapes evidence_file parent")
 
     run_root = resolved_base / session_id
-    resolved_run_root = _owned_directory(run_root, "session evidence root")
+    resolved_run_root = _exclusive_owned_directory(run_root, "session evidence root")
     if resolved_run_root.parent != resolved_base:
         raise RuntimeError("session evidence root escapes derived evidence root")
 
-    perception = _owned_directory(resolved_run_root / "perception", "perception evidence directory")
+    perception = _exclusive_owned_directory(
+        resolved_run_root / "perception", "perception evidence directory"
+    )
     if perception.parent != resolved_run_root:
         raise RuntimeError("perception evidence directory escapes session root")
-    dynamic = _owned_directory(resolved_run_root / "dynamic", "dynamic evidence directory")
+    dynamic = _exclusive_owned_directory(
+        resolved_run_root / "dynamic", "dynamic evidence directory"
+    )
     if dynamic.parent != resolved_run_root:
         raise RuntimeError("dynamic evidence directory escapes session root")
     return _PerceptionEvidencePaths(
@@ -785,8 +797,8 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
     evidence_file = Path(LaunchConfiguration("evidence_file").perform(context))
     if not evidence_file.is_absolute() or evidence_file.name in {"", ".", ".."}:
         raise RuntimeError("evidence_file must be a usable absolute file path")
-    if evidence_file.exists() and not evidence_file.is_file():
-        raise RuntimeError("evidence_file must identify a file, not a directory")
+    if os.path.lexists(evidence_file):
+        raise RuntimeError("evidence_file must not already exist")
     scene = Path(LaunchConfiguration("mujoco_scene").perform(context))
     if not scene.is_absolute():
         raise RuntimeError("mujoco_scene must be an absolute file path")
