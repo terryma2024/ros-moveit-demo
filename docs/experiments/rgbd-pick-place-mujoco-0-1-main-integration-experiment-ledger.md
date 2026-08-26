@@ -2548,3 +2548,19 @@ single_runner_correction: After fresh preflight and RUNNING commit, pre-create e
 decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT
 next_experiment: EXP-019
 ```
+
+## CP-067 / TRANS-EXP-019-RUNNING-001 — Start capture-safe task_start qualification
+
+```yaml
+checkpoint_id: CP-067
+transition_id: TRANS-EXP-019-RUNNING-001
+recorded_at: 2026-08-27T02:39:40+08:00
+experiment_id: EXP-019
+from: PLANNED
+to: RUNNING
+qualification: true
+position: task_start
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+pre_running_observed: Domain 201, evidence, exact session/tmux/processes, and Viewer are fresh and empty; frozen installed provenance/helper hashes unchanged.
+decision: PRECREATE_EMPTY_RUN_GUI_THEN_START_CAPTURE_AND_FULL_RESTART
+```
