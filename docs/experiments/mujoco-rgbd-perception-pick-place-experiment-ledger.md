@@ -2853,3 +2853,57 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/pre-running/cua-state.json
 next_command: Commit and push this transition, then run explicit-zsh capture and installed full restart concurrently on domain 208 for task_start.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-030-001
+recorded_at: 2026-08-26T16:06:52+08:00
+experiment_id: EXP-030
+status: VALID
+classification: accepted_exact_runner_task_start_full_restart
+runtime_source_commit: 8bb7f4e737829b16c072253fa330b27d4635c82a
+implementation_commit: 012420c9d01e2a7d0dae9d834c22dcae28c4ccfb
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: child.owner proves ros2 run so101_demo_py so101_mujoco_perception_pick_place with the complete frozen argument set. The installed runner applied run_mode:=execute and naturally returned exact status 0; capture also returned 0.
+  - OBSERVED: Fresh CameraPlugin RGB-D consumed task_camera_frame 640x480, selected 141 cup points from 98087 full points, wrote a nonempty PLY, fitted radius 0.0393815123 m, and published world [0.0195011178, -0.2804047610, 0.165] at unique consumed stamp 3325999999. Error to task_start is 0.000642429 m.
+  - OBSERVED: Exactly one rgbd_cup_pose and one dynamic workflow started after scene setup, with no truth bridge. Dynamic input equals the accepted perception pose/stamp and session rgbd-pick-task-start-exp030-20260826/reset epoch 0.
+  - OBSERVED: Workflow reached DONE with transition_count=19 and the complete trace; seven motion states contain nonempty trajectories plus five-joint targets and seven-value FK poses.
+  - OBSERVED: Bilateral unsupported grasp was proven; lift raised z from 0.1669102891 to 0.2249682521. Transport reached [-0.0765941052, -0.2471731725, 0.2283351664] with left=3/right=4 contacts and no table contact. Detach preceded open.
+  - OBSERVED: Release ended table-supported at [-0.0777982685, -0.2475732148, 0.1648307047] with zero finger contacts and near-zero velocity. final_xy_error_m=0.0026259459 and final_upright_tilt_rad=0.0046390187 pass; final Planning Scene is detached with pedestal=1, plastic_cup=13, table=1.
+  - OBSERVED: Three distinct 1568x862 same-window frames were directly inspected: table-supported task-start baseline beside an empty target, visibly raised bilateral transport with the target empty, and released cup inside the target with the gripper open above it.
+  - OBSERVED: All 11 launched processes finished cleanly. Exact child, domain 208, session process set, task-owned tmux, Viewer, and CUA are empty after cleanup.
+gate_correction:
+  - OBSERVED: The first acceptance-gates.log reported FAIL solely because rg -c produced an empty string for valid zero-match counters. It is retained unchanged; acceptance-gates-corrected.log normalizes zero counts via pipelines and passes every machine gate without rerunning the experiment.
+retained_risk:
+  - OBSERVED: Streaming perception continued publishing later observations after the uniquely consumed input; none replaced the workflow input.
+  - OBSERVED: ros2_control_node emitted one pal_statistics context-invalid shutdown diagnostic, then exited cleanly; retain as nonfatal shutdown risk.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/acceptance-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/acceptance-gates-corrected.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/visual-inspection.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/run/child.owner
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/run.d/rgbd-pick-task-start-exp030-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/run.d/rgbd-pick-task-start-exp030-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/gui/viewer-transport.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/gui/viewer-final.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/post-cleanup.log
+decision: KEEP
+next_experiment: EXP-031
+```
+
+```yaml
+checkpoint_id: CP-041
+recorded_at: 2026-08-26T16:06:52+08:00
+last_valid_experiment: EXP-030
+current_hypothesis: The installed exact-status runner passes task_start end to end; forward is the next sole keyframe variable.
+working_tree_status: Task source and exact f19 submodule are clean before this ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; EXP-030 exact child, domain 208, runtime process set, task-owned tmux, Viewer, and CUA are empty.
+confirmed_conclusions:
+  - EXP-030 is the first current countable exact-runner qualification under implementation 012420c9 and exact f19.
+open_risks:
+  - Forward, left, and right remain untested under the exact runner.
+  - Nonfatal pal_statistics shutdown diagnostics and unconsumed later streaming observations remain retained for final reporting.
+next_command: Commit and push this closure, then prove fresh domain 209/session/evidence/Viewer/CUA isolation and transition EXP-031 only to RUNNING.
+```
