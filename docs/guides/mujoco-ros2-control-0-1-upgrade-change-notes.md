@@ -17,7 +17,7 @@
 | true merge commit | `6c562f861e09394ba631fa7dc4e63ea98f95e04c` |
 | true merge parents | `57fc674...`、`f19a8cc...` |
 | 最终 fork 候选 | `ca654e30ea9791564fab7110c90734733b68c8cc` |
-| 父仓库代码 pin | 待本次 gitlink 固化提交生成后回填 |
+| 父仓库代码 pin | `6b996c72b9fc103800112f6df33e6a90fc755e40` |
 | candidate label | `so101-0.1.0-r1-candidate`，不是 Git tag |
 | Linux 状态 | 上一候选 `fcbc9f7...` 已合格；当前候选 `ca654e3...` 待复验 |
 | macOS 状态 | `BREAKER / NOT QUALIFIED` |

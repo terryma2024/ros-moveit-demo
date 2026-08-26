@@ -771,6 +771,7 @@ Fresh parent-side verification rechecked the 342-file manifest with zero mismatc
 scope: approved ABI rename and exact-candidate requalification boundary
 previous_fork_candidate: fcbc9f7b23f4493ceed888a22f32805a37493624
 fork_candidate: ca654e30ea9791564fab7110c90734733b68c8cc
+parent_code_pin: 6b996c72b9fc103800112f6df33e6a90fc755e40
 api_change: set_macos_render_context(void*) -> set_platform_render_context(void*)
 compatibility_shim: none
 apple_contract: main-thread-created non-null GLFW context is handed to CameraPlugin
