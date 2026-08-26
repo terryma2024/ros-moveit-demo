@@ -1,15 +1,16 @@
 schema_version: 3
 provider: gitee_fork_submodule
-release: 0.0.3
+release: 0.1.0
 fork:
   url: git@gitee.com:zjumty/mujoco_ros2_control.git
-  tag: so101-0.0.3-r11
-  commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  tag: so101-0.1.0-r1-candidate
+  commit: aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c
+  lineage_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
   policy_behavior_commit: 1ef550cbbcbbcf8c0e5784648f81545724d5f90f
 upstream:
   url: https://github.com/ros-controls/mujoco_ros2_control.git
-  tag: 0.0.3
-  commit: 35ba8174b62d9560093614f981a3d4b978a96036
+  tag: 0.1.0
+  commit: 57fc6744844902d4532160b403fa95840c1d6f96
 submodule_path: third_party/mujoco_ros2_control
 paths:
   workspace_env: SO101_WORKSPACE_DIR
@@ -22,15 +23,19 @@ source_order:
   - fork_overlay
   - project_overlay
 interface_sha256:
-  mujoco_ros2_control_msgs/msg/ViewerCamera: e2547f376ac77588dcceda74431a7e44ce21b377f6bd16ea0ec27477b21ca0dc
-  mujoco_ros2_control_msgs/srv/SetViewerCamera: 9c7181b11f6aa52b2977492e97a1e24a72422a1c83c339f2ac8bea0425effd6f
-  mujoco_ros2_control_msgs/srv/GetViewerCamera: 180628889d9d00b55682c9c717562fc9328bd2867dd9020149bc201fa2e69034
-  mujoco_ros2_control_msgs/srv/ResetWorld: df91a4e6ea7590b758df9b3fd0d0c290bd0875e0b117b9aa3a0c706533cc3ab5
-  mujoco_ros2_control_msgs/srv/SetPause: e1d7d41a86128a75126500d61236cc1325c706bedc875f76f5a72746e04cc9a5
-  mujoco_ros2_control_msgs/srv/StepSimulation: 443fed7fb261958fc2e735ea99cca30f1c3385288b7be0eba52877bdc2b4f5d8
+  mujoco_ros2_control_msgs/msg/ViewerCamera: c45141d1c0ccd1a43b788dba658ee4958173014fa417645ae187e0f1431f27b6
+  mujoco_ros2_control_msgs/srv/SetViewerCamera: 6af9f78932ab0c72b2d238fa93f72a8247aa17963eab261662fdb693434435f0
+  mujoco_ros2_control_msgs/srv/GetViewerCamera: 5994f29a5564c9d8054b5cdc722cc54ef260a9914ab6e23669cf3303030bd0f4
+  mujoco_ros2_control_msgs/srv/ResetWorld: a8992885b69d937f3a4f8279e3a61b381b9f53b0362ad20bc1d6dc72825652f0
+  mujoco_ros2_control_msgs/srv/SetPause: d94b5d3602de73f8339eba794a4f768c5817f8bbf69883a539e9abf9553c6744
+  mujoco_ros2_control_msgs/srv/StepSimulation: 6e8839e778f0a7cc34662e28d5c86606f75e97bf96e8dfe145f2090ba899c987
+  mujoco_ros2_control_msgs/srv/SetFreeJointState: 7f32a80581f96cb438402d8863b653b343f068a4dbe18f01479b480e5a5e1547
 required_files:
-  include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: a3a8a891502cc83e28ff265b40f61999199889a1b6b5f19af633250b33e4c668
+  include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp: e4bb0f69a48fd9686a1cd50e7e064cae0bdfc011b09576b91d6945b8f5d8b5ee
+  include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp: 3014522a86580b31c58c47b7079a958ba2c28fb208b1c98a5d5d08d944a29ad8
   include/mujoco_ros2_control/viewer_camera.hpp: 488364d11a6d591438bda116831e111b9fdb7934146117af2a8106120efae6ed
-  lib/libmujoco_ros2_control_plugins.so: 049cf9673e4b492fd4dc31a578afda683416f8c61e452f2d36c68ac03138ed2d
-  lib/libmujoco_ros2_control.so: f06aa2943390756fcd7ecab738f71ce4e4e724cba47e6db288a70fee4e4c656b
-  lib/mujoco_ros2_control/ros2_control_node: b6df36f87b0653ac8bb0f63e93d49fe8d676fab8574b6c0f102e05fc2b129d02
+  lib/mujoco_3d_lidar/mujoco_plugin/libmujoco_3d_lidar.so: platform-specific
+  lib/libmujoco_ros2_control_plugins_impl.so: platform-specific
+  lib/libmujoco_ros2_control.so: platform-specific
+  lib/mujoco_ros2_control/ros2_control_node: platform-specific
+  share/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins.xml: platform-specific

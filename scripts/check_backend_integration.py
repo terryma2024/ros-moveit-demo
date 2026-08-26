@@ -13,9 +13,14 @@ from pathlib import Path
 import yaml
 
 APPROVED_URL = "git@gitee.com:zjumty/mujoco_ros2_control.git"
+CANDIDATE_COMMIT = "aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c"
+CANDIDATE_LABEL = "so101-0.1.0-r1-candidate"
+UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
+LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
 CANONICAL_PACKAGE = "so101_demo_py"
 IMPLEMENTATION = Path("src") / CANONICAL_PACKAGE
 LOCK_PATH = IMPLEMENTATION / "config/mujoco/dependency-lock.yaml"
+RUNTIME_LOCK_PATH = IMPLEMENTATION / "config/dependency-lock.yaml"
 POLICY_SHA256 = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 REMOVED_PACKAGES = tuple(f"so101_{backend}_demo_py" for backend in ("mujoco", "gazebo"))
 PROCESS_DOCUMENT_ROOTS = tuple(
@@ -82,10 +87,19 @@ def validate_canonical_package(repository: Path) -> None:
 
 def validate_dependency_lock(repository: Path) -> None:
     lock = yaml.safe_load((repository / LOCK_PATH).read_text(encoding="utf-8"))
+    runtime_lock = yaml.safe_load(
+        (repository / RUNTIME_LOCK_PATH).read_text(encoding="utf-8")
+    )
     require(lock.get("schema_version") == 3, "dependency lock schema drift")
     require(lock.get("provider") == "gitee_fork_submodule", "dependency provider drift")
     require(lock["fork"]["url"] == APPROVED_URL, "fork URL is not approved")
-    require(lock["fork"]["tag"] == "so101-0.0.3-r11", "fork release tag drift")
+    require(lock.get("release") == "0.1.0", "dependency release drift")
+    require(lock["fork"]["tag"] == CANDIDATE_LABEL, "fork candidate label drift")
+    require(lock["fork"]["commit"] == CANDIDATE_COMMIT, "fork candidate commit drift")
+    require(lock["fork"]["lineage_commit"] == LOCAL_R11_COMMIT, "fork lineage drift")
+    require(lock["upstream"]["commit"] == UPSTREAM_010_COMMIT, "upstream target drift")
+    require(runtime_lock["fork"] == lock["fork"], "dependency lock fork parity drift")
+    require(runtime_lock["upstream"] == lock["upstream"], "dependency lock upstream parity drift")
     submodule_path = lock["submodule_path"]
     configured_url = git(
         repository,
@@ -99,6 +113,25 @@ def validate_dependency_lock(repository: Path) -> None:
     entry = git(repository, "ls-files", "--stage", "--", submodule_path).split()
     require(len(entry) >= 2 and entry[0] == "160000", "control dependency is not a gitlink")
     require(entry[1] == lock["fork"]["commit"], "gitlink and dependency lock differ")
+    source = repository / submodule_path
+    require(git(source, "rev-parse", "HEAD") == CANDIDATE_COMMIT, "submodule HEAD drift")
+    require(git(source, "remote", "get-url", "origin") == APPROVED_URL, "fork origin drift")
+    require(
+        git(source, "status", "--porcelain", "--untracked-files=all") == "",
+        "fork source is dirty",
+    )
+    for ancestor, label in (
+        (UPSTREAM_010_COMMIT, "upstream 0.1.0"),
+        (LOCAL_R11_COMMIT, "local r11"),
+    ):
+        completed = subprocess.run(
+            ("git", "merge-base", "--is-ancestor", ancestor, CANDIDATE_COMMIT),
+            cwd=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        require(completed.returncode == 0, f"{label} ancestry is missing")
 
 
 def validate_policy(repository: Path) -> None:
