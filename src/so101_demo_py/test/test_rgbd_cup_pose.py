@@ -679,6 +679,80 @@ def test_sigint_after_first_valid_pose_is_orderly(capsys) -> None:
     assert '"status": "STOPPED"' in capsys.readouterr().out
 
 
+def test_context_shutdown_runtime_error_after_first_valid_pose_is_orderly(
+    capsys,
+) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = True
+        running = True
+        closed = False
+
+        def spin_once(self, _timeout_s: float) -> None:
+            self.running = False
+            raise RuntimeError("publisher's context is invalid")
+
+        def ok(self) -> bool:
+            return self.running
+
+        def close(self) -> None:
+            self.closed = True
+
+    runtime = FakeRuntime()
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda _options, _deadline, _monotonic: runtime,
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result == 0
+    assert runtime.closed
+    output = capsys.readouterr().out
+    assert '"status": "STOPPED"' in output
+    assert "RGBD_CUP_POSE_FATAL" not in output
+
+
+def test_live_context_runtime_error_after_first_valid_pose_remains_fatal(
+    capsys,
+) -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    class FakeRuntime:
+        first_valid_published = True
+        closed = False
+
+        def spin_once(self, _timeout_s: float) -> None:
+            raise RuntimeError("publisher serialization failed")
+
+        def ok(self) -> bool:
+            return True
+
+        def close(self) -> None:
+            self.closed = True
+
+    runtime = FakeRuntime()
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda _options, _deadline, _monotonic: runtime,
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining_s: None,
+    )
+
+    assert result != 0
+    assert runtime.closed
+    output = capsys.readouterr().out
+    assert "RGBD_CUP_POSE_FATAL" in output
+    assert "publisher serialization failed" in output
+
+
 def test_ros_runtime_uses_sensor_qos_and_reliable_depth_one_publisher() -> None:
     from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
 
