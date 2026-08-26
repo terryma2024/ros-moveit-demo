@@ -33,7 +33,55 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-119
+latest_checkpoint: CP-120
+next_experiment: EXP-032
+```
+
+## EXP-032 — ai-station task_start Mesa FULL_RESTART
+
+```yaml
+experiment_id: EXP-032
+recorded_at: 2026-08-27T04:46:00+08:00
+status: PLANNED
+prior_experiment: EXP-027
+hypothesis: With only the independently justified Mesa software GLX selector added, the frozen installed candidate completes every AC-001 clause from task_start under a fresh graph and Viewer lifecycle.
+prediction: The same Viewer exposes real RGB-D perception within 0.01 m and the physical workflow completes bilateral unsupported lift, transport, detach-before-open, and stable target placement.
+single_variable: Add __GLX_VENDOR_LIBRARY_NAME=mesa and LIBGL_ALWAYS_SOFTWARE=1; runtime source, install, keyframe, sensor, physics, workflow, and all acceptance thresholds remain unchanged from EXP-027.
+lifecycle: FULL_RESTART
+provenance:
+  source_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+  child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+  runtime_executable: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
+  runtime_executable_sha256: 48a4b9dffce6f2d34cea48cd810cb3f9caac3c3a6363ca424776dcd07eebc5ce
+  ros_domain_id: 96
+  gz_partition: linux-rgbd-task-start-exp032
+  session_id: linux-rgbd-task-start-exp032
+  tmux_session: linux-rgbd-task-start-exp032
+  evidence_file: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-032/task-start.json
+environment_delta:
+  __GLX_VENDOR_LIBRARY_NAME: mesa
+  LIBGL_ALWAYS_SOFTWARE: "1"
+preconditions:
+  - CP-115/CP-116 candidate, installed-state, hash, and automated gates remain frozen.
+  - Domain 96, exact session/partition/tmux/evidence path, task Viewer, and task process set are empty immediately before launch.
+  - EXP-027 is retained, not reused; existing unrelated sessions/windows/processes and canonical /data/work/ws_moveit remain untouched.
+success_criteria:
+  - AC-001 passes without exception, including fresh same-Viewer baseline/transport/final captures and clean owned shutdown.
+failure_criteria:
+  - A correctly isolated fixed candidate violates a behavioral AC-001 clause; stop the batch for systematic debugging.
+invalid_criteria:
+  - Any environment, provenance, ownership, GUI freshness, duplicate graph, or missing-observation defect.
+decision: COMMIT_PLAN_THEN_FRESH_ISOLATION_PREFLIGHT
+```
+
+## CP-120 — EXP-032 preregistered after proven GLX diagnosis
+
+```yaml
+checkpoint_id: CP-120
+recorded_at: 2026-08-27T04:46:00+08:00
+status: VALID
+owned_processes: NONE
+decision: Commit and push EXP-032 plan, then repeat the complete cold-start preflight on its new identity.
 next_experiment: EXP-032
 ```
 
