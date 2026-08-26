@@ -15,7 +15,8 @@
 - Work only in `/data/work/ws_moveit/.worktrees/rgbd-perception-pick-place` on `codex/rgbd-perception-pick-place`; canonical main at `/data/work/ws_moveit` must remain untouched.
 - Use the registered evidence root `/tmp/so101-debug-rgbd-perception-pick-place-20260826/`; do not create `/data/work/so101-debug-*` and do not delete evidence without explicit user authorization.
 - Keep gitlink and submodule HEAD exactly `f19a8cc3af61feccacb22a9f0d16cc972e3b2c08` (`so101-0.0.3-r8-3-gf19a8cc`); do not reuse r6 or retry the superseded failed fetch route.
-- Preserve CP-016 and EXP-017 through EXP-020 as immutable history. New code provenance requires EXP-021 through EXP-024.
+- Preserve CP-016 and EXP-017 through EXP-020 as immutable history. New code provenance requires EXP-025 through EXP-028.
+- Preserve EXP-021 as the non-counting direct-helper invocation failure. EXP-022 through EXP-024 are superseded unused identities; the corrected sequence starts at EXP-025 and invokes both retained 0664 helpers explicitly with `zsh`.
 - Do not change segmentation, point-cloud, cylinder-fit, pose transform, confidence, policy, thresholds, keyframes, geometry, grasp, attachment, placement, or recovery behavior.
 - Do not run `ament_uncrustify --reformat`; formatting edits must be targeted and `ruff format --check` is read-only.
 - Use standard Git against the Gitee `origin`; do not use `gh`.
@@ -590,7 +591,7 @@ Expected: all return zero; the first command prints exactly one matching executa
 
 - [ ] **Step 5: Freeze provenance and append the source checkpoint**
 
-Record the current code HEAD as `implementation_commit`. Append a checkpoint containing test totals, build exit, six prefixes, rosdep output, Ruff results, exact gitlink/submodule, canonical main, and clean owned-runtime scan. State explicitly that EXP-017 through EXP-020 remain historical-only for `a8b3d87a`, and EXP-021 is next.
+Record the current code HEAD as `implementation_commit`. Append a checkpoint containing test totals, build exit, six prefixes, rosdep output, Ruff results, exact gitlink/submodule, canonical main, and clean owned-runtime scan. State explicitly that EXP-017 through EXP-020 remain historical-only for `a8b3d87a`, and EXP-025 is next.
 
 - [ ] **Step 6: Commit, push, and read back the freeze**
 
@@ -603,12 +604,12 @@ git ls-remote origin refs/heads/codex/rgbd-perception-pick-place
 
 Expected: remote hash equals local HEAD; task tree and submodule are clean; canonical main remains `b3770360b26fe8f6fac0e19338d250b6f5cab0e7`.
 
-### Task 6: Accept EXP-021 at `task_start`
+### Task 6: Accept EXP-025 at `task_start`
 
 **Files:**
 
 - Modify twice: `docs/experiments/mujoco-rgbd-perception-pick-place-experiment-ledger.md`
-- Evidence: `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/`
+- Evidence: `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/`
 
 **Interfaces:**
 
@@ -617,29 +618,29 @@ Expected: remote hash equals local HEAD; task tree and submodule are clean; cano
 
 - [ ] **Step 1: Prove isolation and append PLANNED -> RUNNING**
 
-Use domain `199`, runtime session `rgbd-pick-task-start-exp021-20260826`, CUA session `rgbd-pick-exp021-viewer-20260826`, and keyframe `task_start`. Verify domain nodes, exact process arguments, tmux names, exact Viewer title, and the new evidence paths are absent. Append and commit the RUNNING transition before launch.
+Use domain `203`, runtime session `rgbd-pick-task-start-exp025-20260826`, CUA session `rgbd-pick-exp025-viewer-20260826`, and keyframe `task_start`. Verify domain nodes, exact process arguments, tmux names, exact Viewer title, and the new evidence paths are absent. Append and commit the RUNNING transition before launch.
 
 - [ ] **Step 2: Start strict-window capture and the full restart concurrently**
 
 ```zsh
-cua-driver start_session '{"session":"rgbd-pick-exp021-viewer-20260826","capture_scope":"window"}'
-/tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/capture-coordinator.zsh \
-  /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021 \
-  rgbd-pick-task-start-exp021-20260826 \
-  rgbd-pick-exp021-viewer-20260826 &
-/tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/full-restart.zsh \
-  /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021 \
-  199 rgbd-pick-task-start-exp021-20260826 task_start
+cua-driver start_session '{"session":"rgbd-pick-exp025-viewer-20260826","capture_scope":"window"}'
+zsh /tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/capture-coordinator.zsh \
+  /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025 \
+  rgbd-pick-task-start-exp025-20260826 \
+  rgbd-pick-exp025-viewer-20260826 &
+zsh /tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/full-restart.zsh \
+  /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025 \
+  203 rgbd-pick-task-start-exp025-20260826 task_start
 ```
 
 Before these commands, create only the empty parents with:
 
 ```zsh
-run_root=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021
+run_root=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025
 mkdir -p "$run_root"/{run,ros,gui,pre-running}
 ```
 
-Do not precreate `run.d/rgbd-pick-task-start-exp021-20260826`; the production launch must allocate it exclusively.
+Do not precreate `run.d/rgbd-pick-task-start-exp025-20260826`; the production launch must allocate it exclusively.
 
 - [ ] **Step 3: Evaluate all acceptance gates and inspect all three images**
 
@@ -647,121 +648,121 @@ Require launch/capture exit `0`; summary status `OK`; CameraPlugin `task_camera_
 
 - [ ] **Step 4: Close the experiment and commit**
 
-End the CUA session with `cua-driver end_session '{"session":"rgbd-pick-exp021-viewer-20260826"}'`, save exact cleanup readback, visually describe baseline/transport/final, append either VALID or INVALID closure, and commit/push the ledger. Proceed only if VALID; otherwise diagnose under `$systematic-debugging` with a new experiment ID.
+End the CUA session with `cua-driver end_session '{"session":"rgbd-pick-exp025-viewer-20260826"}'`, save exact cleanup readback, visually describe baseline/transport/final, append either VALID or INVALID closure, and commit/push the ledger. Proceed only if VALID; otherwise diagnose under `$systematic-debugging` with a new experiment ID.
 
-### Task 7: Accept EXP-022 at `cup_test_forward_5cm`
+### Task 7: Accept EXP-026 at `cup_test_forward_5cm`
 
-**Files:** ledger plus `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-022/` evidence.
+**Files:** ledger plus `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-026/` evidence.
 
 **Interfaces:** consumes frozen implementation and the two accepted helper scripts; produces one independently closed forward-keyframe run.
 
 - [ ] **Step 1: Prove isolation and append PLANNED -> RUNNING**
 
-Use domain `200`, runtime session `rgbd-pick-forward-exp022-20260826`, CUA session `rgbd-pick-exp022-viewer-20260826`, and keyframe `cup_test_forward_5cm`. Verify empty domain/process/tmux/Viewer/evidence identities; append, commit, and push RUNNING before launch.
+Use domain `204`, runtime session `rgbd-pick-forward-exp026-20260826`, CUA session `rgbd-pick-exp026-viewer-20260826`, and keyframe `cup_test_forward_5cm`. Verify empty domain/process/tmux/Viewer/evidence identities; append, commit, and push RUNNING before launch.
 
 - [ ] **Step 2: Start capture and full restart with exact identities**
 
 ```zsh
-run_root=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-022
+run_root=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-026
 mkdir -p "$run_root"/{run,ros,gui,pre-running}
-cua-driver start_session '{"session":"rgbd-pick-exp022-viewer-20260826","capture_scope":"window"}'
-/tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/capture-coordinator.zsh \
-  "$run_root" rgbd-pick-forward-exp022-20260826 \
-  rgbd-pick-exp022-viewer-20260826 &
-/tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/full-restart.zsh \
-  "$run_root" 200 rgbd-pick-forward-exp022-20260826 \
+cua-driver start_session '{"session":"rgbd-pick-exp026-viewer-20260826","capture_scope":"window"}'
+zsh /tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/capture-coordinator.zsh \
+  "$run_root" rgbd-pick-forward-exp026-20260826 \
+  rgbd-pick-exp026-viewer-20260826 &
+zsh /tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/full-restart.zsh \
+  "$run_root" 204 rgbd-pick-forward-exp026-20260826 \
   cup_test_forward_5cm
 ```
 
-Do not precreate `run.d/rgbd-pick-forward-exp022-20260826`.
+Do not precreate `run.d/rgbd-pick-forward-exp026-20260826`.
 
 - [ ] **Step 3: Evaluate the complete forward acceptance set**
 
 Require both exit files `0`; summary `OK`, `task_camera_frame`, 640x480, nonempty PLY, one RGB-D producer, zero truth bridge, summary and dynamic input within `0.01 m` of `cup_test_forward_5cm`, exact input producer stamp match, manifest `DONE` with 19 transitions and exact session/epoch, controller/FK/joint movement, bilateral unsupported grasp, lift, transport, detach, released table support, zero final finger contacts, final `xy <= 0.01 m`, tilt `<= 0.10 rad`, detached final Planning Scene with `pedestal=1`, `plastic_cup=13`, `table=1`, three distinct 1568x862 same-window images, natural child exits, and exact domain/process/tmux/Viewer/CUA cleanup. Inspect baseline, transport, and final PNGs directly.
 
-- [ ] **Step 4: Close and persist EXP-022**
+- [ ] **Step 4: Close and persist EXP-026**
 
 ```zsh
-cua-driver end_session '{"session":"rgbd-pick-exp022-viewer-20260826"}'
+cua-driver end_session '{"session":"rgbd-pick-exp026-viewer-20260826"}'
 ```
 
 Append VALID or INVALID with numeric/physical/visual evidence, commit, push, and proceed only if VALID. A rerun uses a new experiment ID.
 
-### Task 8: Accept EXP-023 at `cup_test_left_5cm`
+### Task 8: Accept EXP-027 at `cup_test_left_5cm`
 
-**Files:** ledger plus `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-023/` evidence.
+**Files:** ledger plus `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-027/` evidence.
 
 **Interfaces:** consumes frozen implementation and the two accepted helper scripts; produces one independently closed left-keyframe run.
 
 - [ ] **Step 1: Prove isolation and append PLANNED -> RUNNING**
 
-Use domain `201`, runtime session `rgbd-pick-left-exp023-20260826`, CUA session `rgbd-pick-exp023-viewer-20260826`, and keyframe `cup_test_left_5cm`. Verify empty domain/process/tmux/Viewer/evidence identities; append, commit, and push RUNNING before launch.
+Use domain `205`, runtime session `rgbd-pick-left-exp027-20260826`, CUA session `rgbd-pick-exp027-viewer-20260826`, and keyframe `cup_test_left_5cm`. Verify empty domain/process/tmux/Viewer/evidence identities; append, commit, and push RUNNING before launch.
 
 - [ ] **Step 2: Start capture and full restart with exact identities**
 
 ```zsh
-run_root=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-023
+run_root=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-027
 mkdir -p "$run_root"/{run,ros,gui,pre-running}
-cua-driver start_session '{"session":"rgbd-pick-exp023-viewer-20260826","capture_scope":"window"}'
-/tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/capture-coordinator.zsh \
-  "$run_root" rgbd-pick-left-exp023-20260826 \
-  rgbd-pick-exp023-viewer-20260826 &
-/tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/full-restart.zsh \
-  "$run_root" 201 rgbd-pick-left-exp023-20260826 \
+cua-driver start_session '{"session":"rgbd-pick-exp027-viewer-20260826","capture_scope":"window"}'
+zsh /tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/capture-coordinator.zsh \
+  "$run_root" rgbd-pick-left-exp027-20260826 \
+  rgbd-pick-exp027-viewer-20260826 &
+zsh /tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/full-restart.zsh \
+  "$run_root" 205 rgbd-pick-left-exp027-20260826 \
   cup_test_left_5cm
 ```
 
-Do not precreate `run.d/rgbd-pick-left-exp023-20260826`.
+Do not precreate `run.d/rgbd-pick-left-exp027-20260826`.
 
 - [ ] **Step 3: Evaluate the complete left acceptance set**
 
 Require both exit files `0`; summary `OK`, `task_camera_frame`, 640x480, nonempty PLY, one RGB-D producer, zero truth bridge, summary and dynamic input within `0.01 m` of `cup_test_left_5cm`, exact input producer stamp match, manifest `DONE` with 19 transitions and exact session/epoch, controller/FK/joint movement, bilateral unsupported grasp, lift, transport, detach, released table support, zero final finger contacts, final `xy <= 0.01 m`, tilt `<= 0.10 rad`, detached final Planning Scene with `pedestal=1`, `plastic_cup=13`, `table=1`, three distinct 1568x862 same-window images, natural child exits, and exact domain/process/tmux/Viewer/CUA cleanup. Inspect baseline, transport, and final PNGs directly.
 
-- [ ] **Step 4: Close and persist EXP-023**
+- [ ] **Step 4: Close and persist EXP-027**
 
 ```zsh
-cua-driver end_session '{"session":"rgbd-pick-exp023-viewer-20260826"}'
+cua-driver end_session '{"session":"rgbd-pick-exp027-viewer-20260826"}'
 ```
 
 Append VALID or INVALID with numeric/physical/visual evidence, commit, push, and proceed only if VALID. A rerun uses a new experiment ID.
 
-### Task 9: Accept EXP-024 at `cup_test_right_5cm`
+### Task 9: Accept EXP-028 at `cup_test_right_5cm`
 
-**Files:** ledger plus `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-024/` evidence.
+**Files:** ledger plus `/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/` evidence.
 
 **Interfaces:** consumes frozen implementation and the two accepted helper scripts; produces one independently closed right-keyframe run and a four-run checkpoint.
 
 - [ ] **Step 1: Prove isolation and append PLANNED -> RUNNING**
 
-Use domain `202`, runtime session `rgbd-pick-right-exp024-20260826`, CUA session `rgbd-pick-exp024-viewer-20260826`, and keyframe `cup_test_right_5cm`. Verify empty domain/process/tmux/Viewer/evidence identities; append, commit, and push RUNNING before launch.
+Use domain `206`, runtime session `rgbd-pick-right-exp028-20260826`, CUA session `rgbd-pick-exp028-viewer-20260826`, and keyframe `cup_test_right_5cm`. Verify empty domain/process/tmux/Viewer/evidence identities; append, commit, and push RUNNING before launch.
 
 - [ ] **Step 2: Start capture and full restart with exact identities**
 
 ```zsh
-run_root=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-024
+run_root=/tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028
 mkdir -p "$run_root"/{run,ros,gui,pre-running}
-cua-driver start_session '{"session":"rgbd-pick-exp024-viewer-20260826","capture_scope":"window"}'
-/tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/capture-coordinator.zsh \
-  "$run_root" rgbd-pick-right-exp024-20260826 \
-  rgbd-pick-exp024-viewer-20260826 &
-/tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/full-restart.zsh \
-  "$run_root" 202 rgbd-pick-right-exp024-20260826 \
+cua-driver start_session '{"session":"rgbd-pick-exp028-viewer-20260826","capture_scope":"window"}'
+zsh /tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/capture-coordinator.zsh \
+  "$run_root" rgbd-pick-right-exp028-20260826 \
+  rgbd-pick-exp028-viewer-20260826 &
+zsh /tmp/so101-debug-rgbd-perception-pick-place-20260826/helpers/full-restart.zsh \
+  "$run_root" 206 rgbd-pick-right-exp028-20260826 \
   cup_test_right_5cm
 ```
 
-Do not precreate `run.d/rgbd-pick-right-exp024-20260826`.
+Do not precreate `run.d/rgbd-pick-right-exp028-20260826`.
 
 - [ ] **Step 3: Evaluate the complete right acceptance set**
 
 Require both exit files `0`; summary `OK`, `task_camera_frame`, 640x480, nonempty PLY, one RGB-D producer, zero truth bridge, summary and dynamic input within `0.01 m` of `cup_test_right_5cm`, exact input producer stamp match, manifest `DONE` with 19 transitions and exact session/epoch, controller/FK/joint movement, bilateral unsupported grasp, lift, transport, detach, released table support, zero final finger contacts, final `xy <= 0.01 m`, tilt `<= 0.10 rad`, detached final Planning Scene with `pedestal=1`, `plastic_cup=13`, `table=1`, three distinct 1568x862 same-window images, natural child exits, and exact domain/process/tmux/Viewer/CUA cleanup. Inspect baseline, transport, and final PNGs directly.
 
-- [ ] **Step 4: Close and persist EXP-024 plus the four-run checkpoint**
+- [ ] **Step 4: Close and persist EXP-028 plus the four-run checkpoint**
 
 ```zsh
-cua-driver end_session '{"session":"rgbd-pick-exp024-viewer-20260826"}'
+cua-driver end_session '{"session":"rgbd-pick-exp028-viewer-20260826"}'
 ```
 
-Append VALID or INVALID with numeric/physical/visual evidence. If VALID, append a checkpoint naming EXP-021 through EXP-024 as the current countable hardened set. Commit and push. A rerun uses a new experiment ID.
+Append VALID or INVALID with numeric/physical/visual evidence. If VALID, append a checkpoint naming EXP-025 through EXP-028 as the current countable hardened set. Commit and push. A rerun uses a new experiment ID.
 
 ### Task 10: Final verification, independent review, and inventory
 
@@ -824,11 +825,11 @@ Expected: dependency-closed six-package build green, installed runner present, b
 
 - [ ] **Step 3: Request a fresh code review**
 
-Invoke `$superpowers:requesting-code-review`. Supply the approved spec, this plan, the original five findings, frozen implementation commit, exact submodule, test/build logs, and EXP-021 through EXP-024 closures. A reviewer must explicitly decide each finding and readiness. If any critical or important finding remains, append a checkpoint and return to a new RED task rather than declaring completion.
+Invoke `$superpowers:requesting-code-review`. Supply the approved spec, this plan, the original five findings, frozen implementation commit, exact submodule, test/build logs, and EXP-025 through EXP-028 closures. A reviewer must explicitly decide each finding and readiness. If any critical or important finding remains, append a checkpoint and return to a new RED task rather than declaring completion.
 
 - [ ] **Step 4: Append the completion checkpoint before the inventory**
 
-Record retained runs EXP-007 through EXP-024, archived runs (none unless already recorded), and deletion candidates without deleting them. Record old EXP-017 through EXP-020 as retained historical a8 evidence and EXP-021 through EXP-024 as the current countable set. Commit and push the ledger, then verify remote readback.
+Record retained runs EXP-007 through EXP-028, archived runs (none unless already recorded), and deletion candidates without deleting them. Record old EXP-017 through EXP-020 as retained historical a8 evidence and EXP-025 through EXP-028 as the current countable set. Commit and push the ledger, then verify remote readback.
 
 - [ ] **Step 5: Regenerate the inventory as the final evidence write**
 
