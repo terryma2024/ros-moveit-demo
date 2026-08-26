@@ -2710,3 +2710,24 @@ evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diag
 decision: RETAIN_INVALID_AND_REPEAT_WITH_EXPLICIT_CWD
 next_experiment: SMOKE-015
 ```
+
+## CP-075 — Plan explicit-cwd 2 Hz camera-load causal probe
+
+```yaml
+checkpoint_id: CP-075
+recorded_at: 2026-08-27T02:55:30+08:00
+smoke_id: SMOKE-015
+status: PLANNED
+qualification: false
+base_failure: EXP-020
+identity: {domain: 204, session: mac-mrc010-dds-2hz-smoke015, tmux: mac-mrc010-dds-2hz-smoke015, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/dds-2hz-smoke015}
+controlled_variable: Reuse the immutable SMOKE-014 diagnostic overlay and helper with camera_publish_rate 2.0; use a fresh domain/session/run/evidence only.
+runner_gate:
+  - The task-owned gate runner explicitly cds to the exact task worktree and records /bin/pwd -P before waiting.
+  - Require pane_current_path and recorded pane-pwd to both equal the task worktree before creating start.signal.
+  - Then exec the unchanged 2 Hz full-chain helper SHA256 351c22403c75e84c834d90c28af93f60c425d598ddba2ddd6a3d21e83ea20c6b.
+gate_runner_sha256: a81a7e81681209d6e21674776a68992f838aeeef93ca3209de566b5b79e7c9fd
+success_boundary: Same as SMOKE-014; cross DESCEND without -6 and record action timing.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_CWD_BARRIER
+next_experiment: SMOKE-015
+```
