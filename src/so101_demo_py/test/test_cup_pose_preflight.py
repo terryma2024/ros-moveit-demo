@@ -1,8 +1,9 @@
-import pytest
+from dataclasses import fields
+from types import SimpleNamespace
 
+import pytest
 from so101_demo.ports.cup_scene_observation import CupSceneObservation
 from so101_demo.ports.evidence import PoseEvidence
-
 from test_dynamic_pick import _sample, _template
 
 
@@ -15,6 +16,46 @@ def test_accepts_topic_simulator_and_moveit_pose_within_tolerance() -> None:
     from so101_demo.application.cup_pose_preflight import validate_cup_scene
 
     validate_cup_scene(_sample(), _observation(), _template())
+
+
+def test_scene_observation_exposes_optional_mujoco_identity() -> None:
+    names = {field.name for field in fields(CupSceneObservation)}
+    assert {"simulation_session_id", "reset_epoch", "paused"} <= names
+
+
+@pytest.mark.parametrize(
+    ("changes", "code"),
+    (
+        ({"simulation_session_id": None}, "CUP_POSE_SCENE_IDENTITY_MISSING"),
+        ({"reset_epoch": None}, "CUP_POSE_SCENE_IDENTITY_MISSING"),
+        ({"paused": None}, "CUP_POSE_SCENE_IDENTITY_MISSING"),
+        ({"simulation_session_id": "other"}, "CUP_POSE_SCENE_SESSION_MISMATCH"),
+        ({"reset_epoch": 4}, "CUP_POSE_SCENE_RESET_EPOCH_MISMATCH"),
+        ({"paused": True}, "CUP_POSE_SCENE_PAUSED"),
+    ),
+)
+def test_mujoco_identity_gate_rejects_invalid_truth(changes, code) -> None:
+    from so101_demo.application.cup_pose_preflight import (
+        CupPosePreflightError,
+        validate_mujoco_scene_identity,
+    )
+
+    values = {
+        "simulation_session_id": "task-5",
+        "reset_epoch": 3,
+        "paused": False,
+        **changes,
+    }
+    observation = SimpleNamespace(**values)
+
+    with pytest.raises(CupPosePreflightError) as caught:
+        validate_mujoco_scene_identity(
+            observation,
+            expected_session_id="task-5",
+            expected_reset_epoch=3,
+        )
+
+    assert caught.value.code == code
 
 
 def test_rejects_any_scene_divergence_or_attachment() -> None:

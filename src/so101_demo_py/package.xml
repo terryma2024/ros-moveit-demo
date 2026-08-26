@@ -25,6 +25,7 @@
   <depend>mujoco_ros2_control_plugins</depend>
   <depend>mujoco_vendor</depend>
   <depend>rclpy</depend>
+  <exec_depend>ros2launch</exec_depend>
   <depend>robot_state_publisher</depend>
   <depend>ros_gz_interfaces</depend>
   <depend>rosgraph_msgs</depend>

@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,60 @@ import numpy as np
 def message_stamp_ns(message: Any) -> int:
     stamp = message.header.stamp
     return int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
+
+
+@dataclass(frozen=True, slots=True)
+class CupPointCloudResult:
+    frame_id: str
+    stamp_ns: int
+    image_width: int
+    image_height: int
+    intrinsics_fx_fy_cx_cy: tuple[float, float, float, float]
+    points_xyz: np.ndarray
+    colors_rgb: np.ndarray
+    full_point_count: int
+    color_candidate_point_count: int
+
+    @property
+    def cup_point_count(self) -> int:
+        return int(self.points_xyz.shape[0])
+
+
+class AlignedRgbdBuffer:
+    def __init__(self, max_samples: int = 20) -> None:
+        if max_samples <= 0:
+            raise ValueError("max_samples must be positive")
+        self._max_samples = max_samples
+        self._camera_infos: dict[int, Any] = {}
+        self._colors: dict[int, Any] = {}
+        self._depths: dict[int, Any] = {}
+
+    def _add(
+        self,
+        messages: dict[int, Any],
+        message: Any,
+    ) -> tuple[Any, Any, Any] | None:
+        messages[message_stamp_ns(message)] = message
+        while len(messages) > self._max_samples:
+            messages.pop(next(iter(messages)))
+        common = self._camera_infos.keys() & self._colors.keys() & self._depths.keys()
+        if not common:
+            return None
+        stamp = max(common)
+        return (
+            self._camera_infos.pop(stamp),
+            self._colors.pop(stamp),
+            self._depths.pop(stamp),
+        )
+
+    def add_camera_info(self, message: Any) -> tuple[Any, Any, Any] | None:
+        return self._add(self._camera_infos, message)
+
+    def add_color(self, message: Any) -> tuple[Any, Any, Any] | None:
+        return self._add(self._colors, message)
+
+    def add_depth(self, message: Any) -> tuple[Any, Any, Any] | None:
+        return self._add(self._depths, message)
 
 
 def back_project_depth(
@@ -83,6 +138,9 @@ def largest_cluster_indices(labels: np.ndarray) -> np.ndarray:
 def _decode_rgb(message: Any) -> np.ndarray:
     if message.encoding.lower() != "rgb8":
         raise ValueError(f"expected rgb8 color image, got {message.encoding}")
+    expected_step = int(message.width) * 3
+    if int(message.step) != expected_step:
+        raise ValueError(f"rgb step is {message.step}, expected {expected_step}")
     expected = int(message.height) * int(message.width) * 3
     if len(message.data) != expected:
         raise ValueError(f"rgb data has {len(message.data)} bytes, expected {expected}")
@@ -94,6 +152,9 @@ def _decode_rgb(message: Any) -> np.ndarray:
 def _decode_depth(message: Any) -> np.ndarray:
     if message.encoding.upper() != "32FC1":
         raise ValueError(f"expected 32FC1 depth image, got {message.encoding}")
+    expected_step = int(message.width) * 4
+    if int(message.step) != expected_step:
+        raise ValueError(f"depth step is {message.step}, expected {expected_step}")
     expected = int(message.height) * int(message.width) * 4
     if len(message.data) != expected:
         raise ValueError(f"depth data has {len(message.data)} bytes, expected {expected}")
@@ -111,9 +172,7 @@ def _capture_aligned_rgbd(timeout_s: float) -> tuple[Any, Any, Any]:
     class AlignedRgbdCapture(Node):
         def __init__(self) -> None:
             super().__init__("rgbd_point_cloud_capture")
-            self.camera_infos: dict[int, CameraInfo] = {}
-            self.colors: dict[int, Image] = {}
-            self.depths: dict[int, Image] = {}
+            self.buffer = AlignedRgbdBuffer()
             self.aligned: tuple[CameraInfo, Image, Image] | None = None
             self.create_subscription(
                 CameraInfo, "/task_camera/camera_info", self._on_camera_info, 10
@@ -121,33 +180,14 @@ def _capture_aligned_rgbd(timeout_s: float) -> tuple[Any, Any, Any]:
             self.create_subscription(Image, "/task_camera/color", self._on_color, 10)
             self.create_subscription(Image, "/task_camera/depth", self._on_depth, 10)
 
-        @staticmethod
-        def _remember(messages: dict[int, Any], message: Any) -> None:
-            messages[message_stamp_ns(message)] = message
-            while len(messages) > 20:
-                messages.pop(next(iter(messages)))
-
-        def _match(self) -> None:
-            common = self.camera_infos.keys() & self.colors.keys() & self.depths.keys()
-            if common:
-                stamp = max(common)
-                self.aligned = (
-                    self.camera_infos[stamp],
-                    self.colors[stamp],
-                    self.depths[stamp],
-                )
-
         def _on_camera_info(self, message: CameraInfo) -> None:
-            self._remember(self.camera_infos, message)
-            self._match()
+            self.aligned = self.buffer.add_camera_info(message) or self.aligned
 
         def _on_color(self, message: Image) -> None:
-            self._remember(self.colors, message)
-            self._match()
+            self.aligned = self.buffer.add_color(message) or self.aligned
 
         def _on_depth(self, message: Image) -> None:
-            self._remember(self.depths, message)
-            self._match()
+            self.aligned = self.buffer.add_depth(message) or self.aligned
 
     initialized_here = not rclpy.ok()
     if initialized_here:
@@ -180,7 +220,7 @@ def _open3d_cloud(points: np.ndarray, colors: np.ndarray):
     return o3d, cloud
 
 
-def build_point_cloud_report(
+def build_cup_point_cloud(
     camera_info: Any,
     color_message: Any,
     depth_message: Any,
@@ -189,8 +229,7 @@ def build_point_cloud_report(
     cluster_eps_m: float,
     cluster_min_points: int,
     minimum_cup_points: int,
-    output_ply: Path,
-) -> dict[str, Any]:
+) -> CupPointCloudResult:
     if not (
         camera_info.header.frame_id
         == color_message.header.frame_id
@@ -203,6 +242,14 @@ def build_point_cloud_report(
         == (depth_message.width, depth_message.height)
     ):
         raise ValueError("CameraInfo, RGB, and depth dimensions differ")
+    if not (
+        message_stamp_ns(camera_info)
+        == message_stamp_ns(color_message)
+        == message_stamp_ns(depth_message)
+    ):
+        raise ValueError("CameraInfo, RGB, and depth stamps differ")
+    if minimum_cup_points <= 0:
+        raise ValueError("minimum_cup_points must be positive")
 
     rgb = _decode_rgb(color_message)
     depth = _decode_depth(depth_message)
@@ -222,6 +269,8 @@ def build_point_cloud_report(
     )
     if len(points) == 0:
         raise ValueError("depth image produced no valid 3D points")
+    if not np.isfinite(points).all():
+        raise ValueError("depth image produced non-finite 3D points")
     colors = rgb[pixel_rows, pixel_columns].astype(np.float64) / 255.0
     _, full_cloud = _open3d_cloud(points, colors)
 
@@ -252,26 +301,69 @@ def build_point_cloud_report(
             f"largest orange cluster contains {len(cup_points)} points, "
             f"fewer than required {minimum_cup_points}"
         )
-    center = robust_center(cup_points)
-    bounds_min = cup_points.min(axis=0)
-    bounds_max = cup_points.max(axis=0)
+    cup_colors = np.asarray(cup_cloud.colors)
+    if cup_points.ndim != 2 or cup_points.shape[1] != 3 or not np.isfinite(cup_points).all():
+        raise ValueError("selected cup points must be finite XYZ values")
+    if cup_colors.shape != cup_points.shape or not np.isfinite(cup_colors).all():
+        raise ValueError("selected cup colors must be finite RGB values")
+
+    return CupPointCloudResult(
+        frame_id=camera_info.header.frame_id,
+        stamp_ns=message_stamp_ns(camera_info),
+        image_width=int(camera_info.width),
+        image_height=int(camera_info.height),
+        intrinsics_fx_fy_cx_cy=(fx, fy, cx, cy),
+        points_xyz=cup_points,
+        colors_rgb=cup_colors,
+        full_point_count=len(points),
+        color_candidate_point_count=len(color_candidate_indices),
+    )
+
+
+def write_cup_point_cloud(result: CupPointCloudResult, output_ply: Path) -> None:
+    o3d, cup_cloud = _open3d_cloud(result.points_xyz, result.colors_rgb)
 
     output_ply.parent.mkdir(parents=True, exist_ok=True)
-    import open3d as o3d
-
     if not o3d.io.write_point_cloud(str(output_ply), cup_cloud):
         raise RuntimeError(f"failed to write point cloud to {output_ply}")
 
+
+
+def build_point_cloud_report(
+    camera_info: Any,
+    color_message: Any,
+    depth_message: Any,
+    *,
+    depth_trunc_m: float,
+    cluster_eps_m: float,
+    cluster_min_points: int,
+    minimum_cup_points: int,
+    output_ply: Path,
+) -> dict[str, Any]:
+    result = build_cup_point_cloud(
+        camera_info,
+        color_message,
+        depth_message,
+        depth_trunc_m=depth_trunc_m,
+        cluster_eps_m=cluster_eps_m,
+        cluster_min_points=cluster_min_points,
+        minimum_cup_points=minimum_cup_points,
+    )
+    write_cup_point_cloud(result, output_ply)
+    center = robust_center(result.points_xyz)
+    bounds_min = result.points_xyz.min(axis=0)
+    bounds_max = result.points_xyz.max(axis=0)
+
     return {
         "status": "OK",
-        "frame_id": camera_info.header.frame_id,
-        "stamp_ns": message_stamp_ns(camera_info),
-        "image_width": int(camera_info.width),
-        "image_height": int(camera_info.height),
-        "intrinsics_fx_fy_cx_cy": [fx, fy, cx, cy],
-        "full_point_count": len(points),
-        "color_candidate_point_count": len(color_candidate_indices),
-        "cup_point_count": len(cup_points),
+        "frame_id": result.frame_id,
+        "stamp_ns": result.stamp_ns,
+        "image_width": result.image_width,
+        "image_height": result.image_height,
+        "intrinsics_fx_fy_cx_cy": list(result.intrinsics_fx_fy_cx_cy),
+        "full_point_count": result.full_point_count,
+        "color_candidate_point_count": result.color_candidate_point_count,
+        "cup_point_count": result.cup_point_count,
         "cup_center_xyz": center.tolist(),
         "cup_bounds_min_xyz": bounds_min.tolist(),
         "cup_bounds_max_xyz": bounds_max.tolist(),

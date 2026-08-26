@@ -1,11 +1,15 @@
 import importlib.util
 import inspect
 from pathlib import Path
+from types import SimpleNamespace
 
-from launch import LaunchContext
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, RegisterEventHandler, Shutdown
+from launch.events.process import ProcessExited
+from launch_ros.utilities import evaluate_parameters
 from so101_demo.runtime import launch_composition
 from so101_demo.runtime.launch_composition import COMMON_ARGUMENTS, build_launch_description
+
+from launch import LaunchContext
 
 PACKAGE_ROOT = Path(__file__).parents[1]
 LAUNCH_ROOT = PACKAGE_ROOT / "launch"
@@ -19,9 +23,7 @@ LAUNCHERS = (
 
 def _declared(description) -> set[str]:
     return {
-        action.name
-        for action in description.entities
-        if isinstance(action, DeclareLaunchArgument)
+        action.name for action in description.entities if isinstance(action, DeclareLaunchArgument)
     }
 
 
@@ -56,17 +58,28 @@ def test_default_readiness_budget_covers_macos_source_build_startup() -> None:
     argument = next(
         action
         for action in description.entities
-        if isinstance(action, DeclareLaunchArgument)
-        and action.name == "readiness_timeout_s"
+        if isinstance(action, DeclareLaunchArgument) and action.name == "readiness_timeout_s"
     )
 
     assert float(argument.default_value[0].perform(LaunchContext())) >= 90.0
 
 
 def test_mujoco_scene_setup_receives_the_launch_readiness_budget() -> None:
-    source = inspect.getsource(launch_composition._mujoco_execute_actions)
+    context = LaunchContext()
+    context.launch_configurations.update(
+        {
+            "mujoco_scene": str(PACKAGE_ROOT / "assets/mujoco/scene.xml"),
+            "mujoco_initial_keyframe": "task_start",
+            "headless": "true",
+            "readiness_timeout_s": "123.0",
+        }
+    )
+    stack = launch_composition._mujoco_stack_actions(context, PACKAGE_ROOT, "readiness-session")
+    scene_setup = stack.scene_setup
 
-    assert 'parameters=[{"readiness_timeout_s": float(timeout)}]' in source
+    assert evaluate_parameters(context, scene_setup._Node__parameters) == (
+        {"readiness_timeout_s": 123.0},
+    )
 
 
 def test_pick_place_toggle_changes_only_workflow_launch() -> None:
@@ -118,3 +131,104 @@ def test_mujoco_rendering_is_enabled_for_interactive_macos_camera_stack() -> Non
     assert '<param name="disable_rendering">true</param>' in headless
     assert '<param name="disable_rendering">false</param>' in linux_interactive
     assert '<param name="disable_rendering">false</param>' in macos_interactive
+
+
+def test_mujoco_launch_declares_and_renders_selected_initial_keyframe() -> None:
+    description = build_launch_description(backend="mujoco", pick_place=False)
+    declared = _declared(description)
+    assert "mujoco_initial_keyframe" in declared
+
+    rendered = launch_composition._render_mujoco_robot_description(
+        PACKAGE_ROOT,
+        str(PACKAGE_ROOT / "assets/mujoco/scene.xml"),
+        headless=False,
+        initial_keyframe="cup_test_left_5cm",
+    )
+    assert '<param name="initial_keyframe">cup_test_left_5cm</param>' in rendered
+
+
+def test_fixed_mujoco_composition_still_selects_only_the_fixed_workflow() -> None:
+    context = LaunchContext()
+    context.launch_configurations.update(
+        {
+            "mujoco_scene": str(PACKAGE_ROOT / "assets/mujoco/scene.xml"),
+            "mujoco_initial_keyframe": "task_start",
+            "headless": "true",
+            "readiness_timeout_s": "90.0",
+            "evidence_file": "/tmp/fixed-regression.json",
+        }
+    )
+
+    actions = launch_composition._mujoco_execute_actions(
+        context,
+        PACKAGE_ROOT,
+        SimpleNamespace(path=PACKAGE_ROOT / "config/motion_policy.yaml"),
+        "fixed-session",
+        include_workflow=True,
+    )
+    scene_setup = next(
+        action for action in actions if getattr(action, "node_executable", None) == "scene_setup"
+    )
+    event = ProcessExited(
+        action=scene_setup,
+        name="scene_setup",
+        cmd=["scene_setup"],
+        cwd=None,
+        env=None,
+        pid=202,
+        returncode=0,
+    )
+    gated_actions = []
+    for action in actions:
+        if not isinstance(action, RegisterEventHandler):
+            continue
+        handler = action.event_handler
+        if handler.matches(event):
+            gated_actions.extend(handler.handle(event, context) or [])
+    executables = [getattr(action, "node_executable", None) for action in gated_actions]
+
+    assert executables.count("fixed_cup_pick_place") == 1
+    assert "dynamic_cup_pick_place" not in executables
+    assert "rgbd_cup_pose" not in executables
+
+
+def test_fixed_mujoco_composition_preserves_simulator_exit_shutdown() -> None:
+    context = LaunchContext()
+    context.launch_configurations.update(
+        {
+            "mujoco_scene": str(PACKAGE_ROOT / "assets/mujoco/scene.xml"),
+            "mujoco_initial_keyframe": "task_start",
+            "headless": "true",
+            "readiness_timeout_s": "90.0",
+            "evidence_file": "/tmp/fixed-simulator-shutdown.json",
+        }
+    )
+    actions = launch_composition._mujoco_execute_actions(
+        context,
+        PACKAGE_ROOT,
+        SimpleNamespace(path=PACKAGE_ROOT / "config/motion_policy.yaml"),
+        "fixed-session",
+        include_workflow=True,
+    )
+    simulator = next(
+        action
+        for action in actions
+        if getattr(action, "node_executable", None) == "ros2_control_node"
+    )
+    event = ProcessExited(
+        action=simulator,
+        name="ros2_control_node",
+        cmd=["ros2_control_node"],
+        cwd=None,
+        env=None,
+        pid=203,
+        returncode=0,
+    )
+    emitted = []
+    for action in actions:
+        if isinstance(action, RegisterEventHandler) and action.event_handler.matches(event):
+            emitted.extend(action.event_handler.handle(event, context) or [])
+
+    shutdowns = [action for action in emitted if isinstance(action, Shutdown)]
+    assert len(shutdowns) == 1
+    assert shutdowns[0].event.reason == "MuJoCo runtime exited"
