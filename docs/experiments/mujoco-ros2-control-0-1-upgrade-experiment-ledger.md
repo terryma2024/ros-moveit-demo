@@ -876,3 +876,57 @@ The two runtime failures were kept as separate fail-closed experiments. Neither 
 dynamic, or shutdown qualification for its parent candidate. Fix Round 3 is the final exception-handling
 attempt in this series; another distinct shutdown failure requires lifecycle architecture review rather than
 another catch clause.
+
+### EXP-013: macOS pre-RenderLoop Cocoa resize regression
+
+```yaml
+status: FIX COMMITTED / MACOS RUNTIME REQUALIFICATION PENDING
+scope: restore the lost macOS startup-resize guard, then requalify the exact current candidate
+parent_before_fix: 3d4107206a7d84ad1dbae33b945b5cce3e8166ad
+fork_before_fix: ca654e30ea9791564fab7110c90734733b68c8cc
+evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825
+round_5_reconstruction:
+  - pid 67077: main-thread startup fault at the same resize callback; SIGBUS / exit -10
+  - pid 71038: main-thread startup fault at the same resize callback; SIGSEGV / exit -11
+  - camera_dynamic_screenshot: NOT_RUN
+root_cause:
+  caller: project-owned pre-RenderLoop glfwSetWindowSize in mujoco_simulation.cpp
+  synchronous_cocoa_callback: PlatformUIAdapter::OnWindowResize
+  invalid_state: layout_callback_ and event_callback_ are not installed until Simulate::RenderLoop
+  failure_mode: call through an uninitialized callback pointer before RenderLoop initializes mjuiState
+disproven:
+  - wrong-thread Cocoa call; both crash reports identify com.apple.main-thread
+  - stale overlay; executable, core dylib, GLFW UUIDs and runtime prefixes match the recorded candidate
+  - shutdown race; both faults precede camera-context creation and RenderLoop entry
+historical_regression:
+  protected_commit: 44c4fb3ce4cd4706a6c0c179b86c48550a408c86
+  regression_commit: 102aba33
+  lost_contract: macOS must not resize a Cocoa viewer from the pre-RenderLoop startup callback
+single_variable_fix: restore the Apple startup no-resize guard at the migrated MujocoSimulation owner
+tdd_contract: restore the deleted macOS startup-resize regression test and observe RED before production change
+fork_after_fix: aeff7e5
+static_verification:
+  red: test_primary_monitor_guard.py failed before production change
+  green: restored startup-resize contract passed after production change
+  independent_review: PASS; 0 critical, 0 important, 0 minor findings
+isolated_build:
+  prefix: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013/fork-build/install
+  result: 6 packages built successfully
+isolated_tests:
+  core: 10/10 passed
+  plugins: 7/7 passed, including camera plugin and macOS lifecycle
+  launch: environment-invalid; default ~/.ros locks were outside the registered evidence root, then the corrected ROS_HOME run exposed an absent pose_broadcaster underlay package
+  launch_disposition: not attributed to this two-line production fix; final exact-candidate runtime remains mandatory
+runtime_policy:
+  diagnostic_smoke: one isolated repeated-startup experiment after static/build GREEN
+  final_acceptance: one exact-candidate camera + dynamic + screenshot + clean-shutdown run only after smoke is stable
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/runtime-task7a/run-4
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/runtime-task7a/run-5
+archived_runs: []
+deletion_candidates: []
+```
+
+This experiment reopens macOS only because the previous ceiling ended with an unexplained nondeterministic
+startup crash and the retained crash reports now prove a distinct, testable regression. It does not count the
+old Round 4 functional samples as final acceptance, and it does not authorize a release tag.
