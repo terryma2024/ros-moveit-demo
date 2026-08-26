@@ -34,8 +34,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-148
-next_experiment: PUBLISH_MAC_REQUALIFICATION
+latest_checkpoint: CP-149
+next_experiment: COMPLETE
 ```
 
 ## CP-140 — fresh review approved; repair five-run batch preregistered
@@ -377,6 +377,25 @@ evidence: mac-runs/exp-057 through exp-060, mac-repair-validation-summary.json, 
 retention: All evidence retained; archived none; deleted none; no new deletion candidates.
 decision: COMMIT_PUSH_AND_LS_REMOTE_READBACK
 next_experiment: PUBLISH_MAC_REQUALIFICATION
+```
+
+## CP-149 — Mac closure published and remotely read back
+
+```yaml
+checkpoint_id: CP-149
+recorded_at: 2026-08-27T05:59:18+08:00
+status: PUBLISHED
+runtime_implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+mac_closure_commit: 3edd55a9d922f99bdc380dfaa1a60954c8741a86
+remote: origin (Gitee)
+branch: codex/rgbd-pick-place-mujoco-0-1-main
+push_result: 63fdfd4..3edd55a accepted
+ls_remote_readback: 3edd55a9d922f99bdc380dfaa1a60954c8741a86
+readback_matches_local_closure: true
+record_semantics: This CP-149 commit is an additive publication record after the exact Mac closure readback; it changes no runtime bytes or live evidence.
+final_result: Linux five-run qualification and Mac four-position functional/physical qualification are complete on the same immutable implementation and formal 0.1.0 child. Mac exact-window GUI evidence remains explicitly unavailable and is not claimed.
+decision: COMPLETE
+next_experiment: COMPLETE
 ```
 
 ## CP-139 — repair record commit resolved additively
