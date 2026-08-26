@@ -365,6 +365,35 @@ class RosDynamicMujocoExecution:
             segment_joint_targets.append(list(joint_target))
             current = self._joint_state()
         after = self._snapshot()
+        terminal_pose = self._ik.forward(current)
+        details: dict[str, object] = {
+            "target_pose": [*target.position_m, *target.orientation_xyzw],
+            "resolved_joint_target_rad": list(joint_target),
+            "segment_joint_targets_rad": segment_joint_targets,
+            "resolved_fk_pose": [
+                *resolved_pose.position_m,
+                *resolved_pose.orientation_xyzw,
+            ],
+            "resolved_position_error_m": math.dist(
+                resolved_pose.position_m, target.position_m
+            ),
+            "resolved_orientation_error_rad": self._ik.orientation_error_rad(
+                resolved_pose, target
+            ),
+            "terminal_joint_positions_rad": list(current),
+            "terminal_fk_pose": [
+                *terminal_pose.position_m,
+                *terminal_pose.orientation_xyzw,
+            ],
+            "terminal_position_error_m": math.dist(
+                terminal_pose.position_m, target.position_m
+            ),
+            "terminal_orientation_error_rad": self._ik.orientation_error_rad(
+                terminal_pose, target
+            ),
+            "trajectory_points": trajectory_points,
+        }
+        validation_failure = None
         if state is State.MICRO_LIFT:
             self._before_micro_lift = before
             lift = after.object_state.position_world[2] - before.object_state.position_world[2]
@@ -373,19 +402,16 @@ class RosDynamicMujocoExecution:
                 or not self._bilateral(after)
                 or self._table_contact(after)
             ):
-                raise RuntimeError("DYNAMIC_MICRO_LIFT_NOT_PROVED")
-        self._record(
-            state,
-            before,
-            after,
-            target_pose=[*target.position_m, *target.orientation_xyzw],
-            resolved_joint_target_rad=list(joint_target),
-            segment_joint_targets_rad=segment_joint_targets,
-            resolved_fk_pose=[*resolved_pose.position_m, *resolved_pose.orientation_xyzw],
-            resolved_position_error_m=math.dist(resolved_pose.position_m, target.position_m),
-            resolved_orientation_error_rad=self._ik.orientation_error_rad(resolved_pose, target),
-            trajectory_points=trajectory_points,
-        )
+                validation_failure = "DYNAMIC_MICRO_LIFT_NOT_PROVED"
+            details.update(
+                physical_cup_lift_m=lift,
+                physical_bilateral_contact=self._bilateral(after),
+                physical_table_contact=self._table_contact(after),
+                validation_failure=validation_failure,
+            )
+        self._record(state, before, after, **details)
+        if validation_failure is not None:
+            raise RuntimeError(validation_failure)
 
     def _command_gripper(self, state: State, target: float) -> None:
         before = self._snapshot()

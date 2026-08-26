@@ -33,8 +33,59 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-134
-next_experiment: NONE_VALID_FAILURE_REQUIRES_FIX_AND_NEW_BATCH
+latest_checkpoint: CP-136
+next_experiment: NONE_FREEZE_REPAIR_COMMIT_THEN_FRESH_REVIEW
+```
+
+## CP-136 — TDD repair GREEN, rebuilt and installed
+
+```yaml
+checkpoint_id: CP-136
+recorded_at: 2026-08-27T05:22:00+08:00
+status: REPAIR_CANDIDATE_READY_TO_FREEZE
+red_evidence:
+  policy: build-logs/repair-policy-red-valid-cwd.xml; expected 0.004 m, observed 0.002 m.
+  diagnostics: build-logs/repair-diagnostics-red-valid.xml; expected one persisted failure event, observed zero.
+minimal_change:
+  - MuJoCo dynamic policy micro_lift_world_z_clearance_m changed only from 0.002 to 0.004; manifest SHA updated to 7d36a45b9382ba2d8a8d16646e66539ee8f1e499633f7a1b5c266d5ffbfded70.
+  - Post-motion state evidence now records terminal actual joints, terminal FK TCP pose and target errors, physical cup lift, bilateral contact, table contact, and validation_failure before raising DYNAMIC_MICRO_LIFT_NOT_PROVED.
+green_evidence:
+  focused: build-logs/repair-focused-green.xml; 2 passed.
+  demo_source_full: build-logs/repair-so101-demo-full-source-overlay.xml; 447 passed.
+  project_build: build-logs/repair-project-build-clean-env.log; support, teleop, demo all built and installed.
+  installed_versions: so101-demo-py=0.1.0, so101-mujoco-support=0.1.0, so101-teleop=0.1.0.
+non_product_tooling_result: The colcon test driver passed support 19/19 and all 24 teleop CTest targets, then demo reported 10 FileNotFoundError failures because those tests hard-code repository-root-relative src/so101_demo_py paths while ament_python invokes pytest from the package directory. The identical installed overlay passes all 447 demo tests when invoked from the required repository root; no product assertion failed.
+systematic_debugging: An initial rebuild failed because runtime python-deps placed setuptools 84.0.0 ahead of ROS Jazzy's system setuptools 68.1.2, removing legacy develop options used by colcon. Repeating the build with the documented build boundary (ROS plus task fork only; runtime deps added only for tests/runtime) built all three packages without cleaning or changing source.
+unchanged_gates: {physical_lift_min_m: 0.001, physical_lift_max_m: 0.010, truth_bridge: false, perception_bypass: false, physics_change: false}
+owned_processes: NONE
+preserved_canonical: /data/work/ws_moveit remains unsourced, unbuilt, and unmodified.
+next_command: Freeze the tested source and ledger as one immutable repair commit, then request fresh review before preregistering the new five-run batch.
+```
+
+## CP-135 — EXP-048 RED accepted; immutable repair candidate started
+
+```yaml
+checkpoint_id: CP-135
+recorded_at: 2026-08-27T05:09:41+08:00
+status: REPAIR_AUTHORIZED_TDD_RED
+authorization: User explicitly requires fixing the confirmed 2 mm micro-lift physical-margin failure and continuing through a fresh five-run FULL_RESTART batch without another approval pause.
+candidate_base_commit: edb87ff3448f05865b203d5d407b42fdf7b17343
+runtime_source_before_fix: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+first_bad_boundary: EXP-048 DYNAMIC_MICRO_LIFT_NOT_PROVED; controller-reported 2 mm TCP-target motion produced 0.7353310847 mm physical cup lift versus the unchanged 1 mm minimum.
+bounded_design:
+  - Increase only the MuJoCo dynamic-pick micro-lift target from 2 mm to 4 mm. This is the smallest whole-millimetre target that gives material margin over the captured forward transfer ratio; 3 mm predicts only about 1.103 mm physical lift and is not robust enough for a five-run contract.
+  - Preserve the 1 mm acceptance lower bound, 10 mm upper bound, perception route, grasp pose, gripper command, physics, speed, and every non-micro-lift target.
+  - Before raising a failed micro-lift validation, persist terminal actual arm joints, FK-derived actual TCP pose/error, target joints/FK, cup pose/velocity/contact/support, and the validation code in state_events.
+tdd_contract:
+  - RED policy test proves the source MuJoCo variant resolves a 4 mm MICRO_LIFT-versus-DESCEND TCP separation.
+  - RED execution test proves a sub-threshold physical micro-lift is recorded with terminal joint/TCP/cup diagnostics before the exception propagates.
+prohibited: [lowering acceptance threshold, truth bridge, perception bypass, direct object-state write, simulator constraint, physics edit, retry-only workaround]
+worktree_status: Clean at candidate base before this checkpoint; only this additive ledger checkpoint becomes modified.
+owned_processes: NONE
+preserved_processes: Existing codex/codex-cua and mrc010 qualification sessions/PIDs remain untouched.
+preserved_canonical: /data/work/ws_moveit main@b3770360b26fe8f6fac0e19338d250b6f5cab0e7 remains read-only, unsourced, and unbuilt.
+next_command: Add only the two regression tests, run them against the unmodified production source, and require expected RED failures before changing policy or implementation.
 ```
 
 ## EXP-047 — state-events watcher task_start FULL_RESTART

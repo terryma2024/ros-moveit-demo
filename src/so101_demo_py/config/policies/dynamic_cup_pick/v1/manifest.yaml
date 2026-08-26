@@ -10,5 +10,5 @@ variants:
     qualification_status: CALIBRATION_REQUIRED
   mujoco:
     filename: mujoco.yaml
-    sha256: 1685caef958580c206c63acb1569cecca2a485535355f46c938cd8d6d027fb79
+    sha256: 7d36a45b9382ba2d8a8d16646e66539ee8f1e499633f7a1b5c266d5ffbfded70
     qualification_status: LOCAL_E2E_CANDIDATE
