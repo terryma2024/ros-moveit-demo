@@ -33,8 +33,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-020
-next_experiment: NONE
+latest_checkpoint: CP-021
+next_experiment: SMOKE-003
 ```
 
 ## Shared live acceptance contract
@@ -1149,4 +1149,37 @@ evidence:
   timing_sha256: caa1fc2412c49633ed8149366f1a58ede2c0f303ed75854e775863e057600126
 decision: RETAIN_RESULT_AND_PLAN_CONCURRENT_STARTUP_AB
 next_experiment: NONE
+```
+
+## CP-021 — Plan scene-success concurrent-startup A/B
+
+```yaml
+checkpoint_id: CP-021
+recorded_at: 2026-08-27T00:34:41+08:00
+smoke_id: SMOKE-003
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: 49a0e3a8f01bc16a045951cd166f46bdcd2d7bf2
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+hypothesis: With the live stack already reducing runtime-construction margin to 17.14 s, simultaneous startup of dynamic_cup_pick_place at scene success supplies the remaining contention that can push rgbd_cup_pose construction past 30 s.
+single_variable: At steady-state Scene READ_BACK, start the frozen timing probe and exact installed dynamic_cup_pick_place on one barrier; retain the same low-rate GUI polling coordinator shape that was active in EXP-016.
+identity:
+  domain: 228
+  session: mac-mrc010-concurrent-startup-r1
+  tmux: mrc010-mac-concurrent-startup-r1
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/concurrent-startup-r1
+dynamic_scope:
+  - backend mujoco, mode execute, execute flag, scene_source observe_only, expected reset epoch zero.
+  - No /cup_pose publisher is started, so dynamic can only construct its source and wait; it cannot plan or move.
+  - Dynamic timeout/exit due absent /cup_pose is expected diagnostic behavior, not a product result.
+method:
+  - Start exact installed base stack headless=false; wait for both plugins, all controllers, and Planning Scene READ_BACK.
+  - Barrier-start timing probe plus installed dynamic wait, capture their separate stdout/stderr/rc/wall time, CPU snapshots, and impose a 120 s observer bound.
+  - Stop polling coordinator and base stack by exact owned identity, then prove domain/session/tmux/Viewer cleanup.
+decision_rule:
+  - If timing construction exceeds 30 s, concurrent scene-success startup reproduces the EXP-016 boundary and launch sequencing needs a TDD fix: start perception earlier while leaving dynamic scene-gated.
+  - If it stays below 30 s, reject this reproduction and do not change timeout or launch sequencing without a new discriminating RED.
+decision: COMMIT_PLAN_THEN_RUN_CONCURRENT_AB
+next_experiment: SMOKE-003
 ```
