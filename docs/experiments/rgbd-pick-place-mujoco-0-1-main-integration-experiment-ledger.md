@@ -7,8 +7,8 @@ success_contract: Four independent FULL_RESTART successes on macOS, four indepen
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-pick-place-mujoco-0-1-main
 branch: codex/rgbd-pick-place-mujoco-0-1-main
 base_commit: b73748f86acc891711aa455fc911a9ebde52686d
-current_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
-implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+current_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
 record_commit: 1a0c532cb4ff012bc1cef95a47594ca8a1a65fa5
 commit_semantics: current_commit and implementation_commit identify the immutable installed runtime; record_commit identifies the ledger-only commit that first contains CP-002 and is resolved additively after that commit exists.
 target_child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
@@ -25,11 +25,12 @@ disproven_routes:
   - OBS-008: colcon's macOS child environment omits DYLD_LIBRARY_PATH; accepted child tests use direct Homebrew CTest after same-process setup, with the candidate fork ahead of the dylib farm.
   - OBS-009: putting the dylib farm ahead of the task fork selects the old fork library and is invalid candidate provenance.
   - OBS-010: Mac EXP-015 is a VALID product failure: candidate project-install omitted ABI-dependent so101_mujoco_support, so the new 0.1.0 pre_step caller loaded the old isolated-workspace SimulationEvidencePlugin vtable and crashed with SIGSEGV before perception.
+  - OBS-011: The RED support-plugin prefix contract is GREEN after building so101_mujoco_support against the candidate fork into the candidate project overlay; support CTest 1/1 and project pytest 443/443 pass.
 open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-010
+latest_checkpoint: CP-011
 next_experiment: NONE
 ```
 
@@ -795,5 +796,40 @@ evidence:
   - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/support-abi-red.zsh
   - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/diagnosis/root-cause-boundary.md
 decision: COMMIT_RED_THEN_CLEAN_BUILD_SUPPORT
+next_experiment: NONE
+```
+
+## CP-011 — GREEN ABI-aligned support install
+
+```yaml
+checkpoint_id: CP-011
+recorded_at: 2026-08-27T00:01:32+08:00
+phase: GREEN
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_change: 74a65234551527fb5483366aa06a79a8f5efacfe
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+single_fix:
+  - Built source package so101_mujoco_support, followed by so101_demo_py, into the existing isolated candidate project build/install after the candidate fork overlay.
+  - No grasp, policy, geometry, extrinsics, controller, camera, recovery, or runtime orchestration source changed.
+installed_provenance:
+  support_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_mujoco_support
+  support_cmake_dependency: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install/mujoco_ros2_control_plugins
+  plugin_sha256: f4487cc3e2467e2ffec5b2ca2fa407d8c372b63cfe07cc1e71e777185d1a7ab7
+  plugin_uuid: 74A169FE-F055-3D0D-A333-9F7F7BAEF574
+  plugin_symbols:
+    - MuJoCoROS2ControlPluginBase::pre_step(mjData_*)
+    - SimulationEvidencePlugin::update(mjModel_ const*, mjData_*)
+    - SimulationEvidencePlugin::on_physics_step(mjModel_ const*, mjData_ const*) through the separate observer interface
+tests:
+  - focused installed prefix/XML/dylib contract: 1 passed in 0.40 s
+  - support direct CTest: 1/1 passed; test_simulation_evidence_plugin, 4.48 s
+  - full project pytest: 443/443 passed in 20.36 s
+  - ros2 package readback selects candidate project-install for both so101_demo_py and so101_mujoco_support
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/build-support-green.zsh
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/test-support-green.zsh
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/test-project-green.zsh
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-log-support-r1
+decision: COMMIT_GREEN_THEN_RUN_NON_QUALIFICATION_CRASH_BOUNDARY_SMOKE
 next_experiment: NONE
 ```
