@@ -1337,3 +1337,35 @@ evidence:
 decision: RETAIN_INVALID_AND_REPEAT_WITH_QUOTED_TOKEN_FRESH_IDENTITY
 next_experiment: NONE
 ```
+
+## CP-027 — Plan corrected-token real installed RGB-D A/B
+
+```yaml
+checkpoint_id: CP-027
+recorded_at: 2026-08-27T00:54:11+08:00
+smoke_id: SMOKE-005
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: 87e7f710139559480d01e6c65bc3dd889bc0df62
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+prior_invalid: SMOKE-004
+single_variable: Quote the zsh array token as use_sim_time:=true so it reaches rclpy unchanged; formal launch semantics, installed executable, 30 s timeout, and all product parameters remain identical.
+identity:
+  empty_domain: 217
+  empty_session: mac-mrc010-real-rgbd-empty-r2
+  live_domain: 216
+  live_session: mac-mrc010-real-rgbd-live-r2
+  live_tmux: mrc010-mac-real-rgbd-live-r2
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-entrypoint-r2
+helpers:
+  empty_sha256: 8129326df523fc5791031bc5049758240f815db0926899f3bbde86d0afe24d09
+  base_sha256: 5ca739935378b905b4a9e4415df8094b540887d7bf5f6b66d415d5d8a17d33f9
+  static_tf_sha256: fe3098a8836f95737cbab90ca44fa8460940cc9bebe07848cf53ca3a0e1fac8d
+  perception_sha256: 99311773950a7c3a9b1eee1cf8b232349c13451cc45a022c1edff5b45e9da652
+decision_rule:
+  - Empty control must enter the real installed node and end only with the expected no-valid-RGB-D timeout; a construction timeout is a valid failure and stops the A/B.
+  - Only after that control passes may the fresh live identity run. Live first-valid summary/cup.ply before 30 s is PASS_DIAGNOSTIC; either real deadline timeout is the first valid failure.
+decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_IDENTITY
+next_experiment: SMOKE-005
+```
