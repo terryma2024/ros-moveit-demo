@@ -8,7 +8,12 @@ class FakeRCLError(RuntimeError):
     """Stand in for the rclpy binding exception raised after context shutdown."""
 
 
-def _install_runtime_modules(monkeypatch, *, context_ok: bool):
+def _install_runtime_modules(
+    monkeypatch,
+    *,
+    context_ok: bool,
+    error_message: str = "failed to initialize wait set: the given context is not valid",
+):
     state = {
         "destroy_node_calls": 0,
         "destroy_timer_calls": 0,
@@ -33,7 +38,7 @@ def _install_runtime_modules(monkeypatch, *, context_ok: bool):
     rclpy.init = lambda: None
     rclpy.create_node = lambda *_args, **_kwargs: node
     rclpy.spin = lambda _node: (_ for _ in ()).throw(
-        FakeRCLError("failed to create guard condition: the given context is not valid")
+        FakeRCLError(error_message)
     )
     rclpy.ok = lambda: context_ok
     rclpy.shutdown = lambda: state.__setitem__(
@@ -90,4 +95,22 @@ def test_main_does_not_swallow_rcl_error_while_context_is_valid(monkeypatch) -> 
         "destroy_node_calls": 1,
         "destroy_timer_calls": 1,
         "shutdown_calls": 1,
+    }
+
+
+def test_main_does_not_swallow_unrelated_rcl_error_after_context_shutdown(monkeypatch) -> None:
+    from so101_demo.ros import mujoco_cup_pose_bridge
+
+    state = _install_runtime_modules(
+        monkeypatch,
+        context_ok=False,
+        error_message="failed to take timer: unrelated middleware error",
+    )
+
+    with pytest.raises(FakeRCLError, match="unrelated middleware error"):
+        mujoco_cup_pose_bridge.main(["--session-id", "shutdown-race-test"])
+    assert state == {
+        "destroy_node_calls": 1,
+        "destroy_timer_calls": 1,
+        "shutdown_calls": 0,
     }
