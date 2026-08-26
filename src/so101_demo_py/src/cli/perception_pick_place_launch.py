@@ -5,6 +5,9 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterable
 
+from launch.actions import SetLaunchConfiguration
+from ros2launch.api.api import parse_launch_arguments
+
 from launch import LaunchDescription, LaunchService
 
 from ..runtime.launch_composition import (
@@ -20,8 +23,13 @@ def run_launch_description(
     argv: Iterable[str] | None = None,
 ) -> int:
     """Run a description and return its original terminal child status."""
-    service = LaunchService(argv=argv)
-    service.include_launch_description(description)
+    arguments = list(argv or ())
+    launch_configurations = [
+        SetLaunchConfiguration(name, value) for name, value in parse_launch_arguments(arguments)
+    ]
+    configured_description = LaunchDescription([*launch_configurations, *description.entities])
+    service = LaunchService(argv=arguments)
+    service.include_launch_description(configured_description)
     return exit_status.resolve(service.run())
 
 

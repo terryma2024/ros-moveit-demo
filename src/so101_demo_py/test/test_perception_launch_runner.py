@@ -3,7 +3,8 @@ from __future__ import annotations
 import importlib
 import sys
 
-from launch.actions import ExecuteProcess, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
 from so101_demo.runtime import launch_composition
 
 from launch import LaunchDescription
@@ -84,6 +85,30 @@ def test_real_launch_service_preserves_required_long_lived_failure_exit_code() -
     result = _runner_module().run_launch_description(description, exit_status)
 
     assert result == 17
+
+
+def test_real_launch_service_applies_public_launch_arguments() -> None:
+    exit_status = _exit_status()
+    observed = []
+
+    def observe_run_mode(context):
+        observed.append(LaunchConfiguration("run_mode").perform(context))
+
+    description = LaunchDescription(
+        [
+            DeclareLaunchArgument("run_mode", default_value="observe"),
+            OpaqueFunction(function=observe_run_mode),
+        ]
+    )
+
+    result = _runner_module().run_launch_description(
+        description,
+        exit_status,
+        argv=["run_mode:=execute"],
+    )
+
+    assert result == 0
+    assert observed == ["execute"]
 
 
 def test_clean_workflow_ignores_one_shot_teardown_exit() -> None:
