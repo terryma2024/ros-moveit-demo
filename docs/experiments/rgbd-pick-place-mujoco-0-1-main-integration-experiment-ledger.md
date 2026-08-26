@@ -33,7 +33,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-116
+latest_checkpoint: CP-117
 next_experiment: EXP-027
 ```
 
@@ -3538,5 +3538,56 @@ evidence:
   - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/build-logs
   - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/provenance/build-checkpoint-sha256.txt
 decision: COMMIT_PUSH_READBACK_THEN_START_EXP-027_ONLY_AFTER_FRESH_GUI_AND_PROCESS_PREFLIGHT
+next_experiment: EXP-027
+```
+
+## EXP-027 — ai-station task_start independent FULL_RESTART
+
+```yaml
+experiment_id: EXP-027
+recorded_at: 2026-08-27T04:35:00+08:00
+status: PLANNED
+prior_experiment: EXP-026
+hypothesis: The frozen installed Linux candidate completes every AC-001 clause from task_start under a fresh graph and Viewer lifecycle.
+prediction: RGB-D perception localizes the cup within 0.01 m, the physical controller completes bilateral unsupported lift and transport, detach precedes open, and the cup remains stably placed in the red target after release.
+single_variable: initial_keyframe=task_start
+lifecycle: FULL_RESTART
+provenance:
+  source_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+  child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+  runtime_executable: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
+  runtime_executable_sha256: 48a4b9dffce6f2d34cea48cd810cb3f9caac3c3a6363ca424776dcd07eebc5ce
+  fork_install: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/ws_mujoco_ros2_control_fork/install
+  project_install: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/project-install
+  ros_domain_id: 91
+  gz_partition: linux-rgbd-task-start-exp027
+  session_id: linux-rgbd-task-start-exp027
+  tmux_session: linux-rgbd-task-start-exp027
+  evidence_file: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-027/task-start.json
+preconditions:
+  - Candidate source, child, installed 0.1.0 prefixes, executable hashes, and automated gates are frozen by CP-115 and CP-116.
+  - Domain 91, partition/session linux-rgbd-task-start-exp027, evidence destination, task-owned tmux, task Viewer, and relevant task process set are empty before launch.
+  - Existing unrelated tmux sessions, GUI windows, and processes remain untouched; canonical /data/work/ws_moveit remains read-only and unsourced.
+  - GUI captures use the exact task Viewer window through the repository gui-capture contract; the unavailable cua-driver CLI is not used for semantic control.
+command: ROS_DOMAIN_ID=91 GZ_PARTITION=linux-rgbd-task-start-exp027 ros2 run so101_demo_py so101_mujoco_perception_pick_place run_mode:=execute execute:=true headless:=false session_id:=linux-rgbd-task-start-exp027 mujoco_initial_keyframe:=task_start evidence_file:=/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-027/task-start.json
+success_criteria:
+  - AC-001 passes every provenance, RGB-D, point-cloud, tf2, /cup_pose, dynamic workflow, MoveIt, controller, MuJoCo physics, GUI evidence, and cleanup clause.
+failure_criteria:
+  - A correctly isolated, fully observed fixed candidate violates any behavioral AC-001 clause; stop the batch for systematic debugging.
+invalid_criteria:
+  - Any stale/mixed graph or GUI, provenance mismatch, missing evidence observation, duplicate stack, environment failure, or ownership ambiguity; retain it and allocate a new ID.
+decision: COMMIT_PLAN_THEN_FRESH_ISOLATION_PREFLIGHT
+```
+
+## CP-117 — EXP-027 preregistered before execution
+
+```yaml
+checkpoint_id: CP-117
+recorded_at: 2026-08-27T04:35:00+08:00
+status: VALID
+source_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a
+record_commit_before_this_checkpoint: b41ce2cc280afca678263a2a206c15ecb5c9250b
+owned_processes: NONE
+decision: Commit and push the preregistration, prove fresh domain/session/evidence/Viewer/process isolation, then transition only EXP-027 to RUNNING.
 next_experiment: EXP-027
 ```
