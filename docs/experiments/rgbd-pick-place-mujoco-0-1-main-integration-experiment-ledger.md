@@ -335,6 +335,38 @@ decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_START_ACTIVATE_CAPTURE_EXACT_STOP
 next_experiment: SMOKE-018
 ```
 
+## CP-094 / CLOSE-SMOKE-018-001 — Reject preflight reserved-variable failure
+
+```yaml
+checkpoint_id: CP-094
+transition_id: CLOSE-SMOKE-018-001
+recorded_at: 2026-08-27T03:31:30+08:00
+smoke_id: SMOKE-018
+from: PLANNED
+to: INVALID_RUNNER
+qualification: false
+first_bad_boundary: The preflight helper assigned zsh's read-only special variable status and exited before recording gate=PASS.
+product_disposition: No tmux session, ROS node, MuJoCo process, or Viewer was started; no product conclusion is drawn.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/gui-activation-smoke018
+decision: RETAIN_INVALID_AND_REPEAT_WITH_ONLY_PREFLIGHT_VARIABLE_CORRECTED
+next_experiment: SMOKE-019
+```
+
+## CP-095 — Plan corrected exact-owned AppKit activation capture smoke
+
+```yaml
+checkpoint_id: CP-095
+recorded_at: 2026-08-27T03:31:30+08:00
+smoke_id: SMOKE-019
+status: PLANNED
+qualification: false
+identity: {domain: 210, session: mac-mrc010-gui-activation-smoke019, tmux: mac-mrc010-gui-activation-smoke019, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/gui-activation-smoke019}
+controlled_change: Copy SMOKE-018 helpers to the fresh identity and change only the preflight variable status to git_status; product launch, AppKit activation, exact AX gate, and unchanged gui-capture method remain identical.
+success_boundary: Same as CP-093; leave the exact no-motion Viewer alive after the activation/capture observation for one bounded semantic read-only snapshot coordinated by the parent, then exact-stop.
+decision: COMMIT_CLOSURE_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN
+next_experiment: SMOKE-019
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
