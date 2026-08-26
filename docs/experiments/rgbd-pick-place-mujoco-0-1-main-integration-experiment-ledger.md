@@ -1247,3 +1247,38 @@ evidence:
 decision: RETAIN_RESULT_AND_PLAN_REAL_INSTALLED_RGBD_ENTRYPOINT_AB
 next_experiment: NONE
 ```
+
+## CP-024 — Plan real installed rgbd_cup_pose entrypoint A/B
+
+```yaml
+checkpoint_id: CP-024
+recorded_at: 2026-08-27T00:45:23+08:00
+smoke_id: SMOKE-004
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: 0ef545585ef417985911c62a4cd11a9d13125d41
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+problem: Staged probes reproduce the heavy Open3D/import/create-node path in 17 to 18 s, but they do not execute the actual installed CLI, RosRuntime class construction, callbacks, TF lookup, point-cloud path, or the shared 30 s first-valid deadline that failed in EXP-016.
+hypothesis: One omitted real-entrypoint phase, rather than dynamic startup alone, exhausts the remaining deadline margin on the live MuJoCo stack.
+frozen_scope:
+  - Use only the installed candidate at implementation commit 74a6523; do not rebuild, source-import, or change production code.
+  - Invoke ros2 run so101_demo_py rgbd_cup_pose with the exact formal-launch parameters: 30.0 s startup timeout, /cup_pose, run-owned cup.ply and summary.json, and use_sim_time true.
+  - Do not start dynamic_cup_pick_place; this diagnostic cannot plan or move the robot.
+identity:
+  empty_domain: 219
+  empty_session: mac-mrc010-real-rgbd-empty-r1
+  live_domain: 218
+  live_session: mac-mrc010-real-rgbd-live-r1
+  live_tmux: mrc010-mac-real-rgbd-live-r1
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-entrypoint-r1
+method:
+  - Empty control first: run the exact installed entrypoint in an otherwise empty legal domain. Expected result is runtime construction below 30 s followed by the explicit no-valid-RGB-D timeout, not a construction timeout.
+  - Stop on any valid empty-control construction failure and retain stdout/stderr/ROS logs.
+  - Live A/B only after the control passes: start exact candidate MuJoCo base stack, both formal static TF publishers, GUI baseline polling, all controllers, MoveIt, and Planning Scene READ_BACK; then start the same exact installed entrypoint.
+  - A live PASS requires first summary.json/cup.ply and a valid /cup_pose publication before 30 s. A construction timeout or first-valid timeout is the first valid failure and ends the A/B.
+  - Retain a separate read-only staged timing record for Buffer/TransformListener/QoS/publisher/three subscriptions comparison; it does not replace the real entrypoint result.
+cleanup: Send signals only to exact recorded observer/static-TF/base tmux identities; preserve unrelated processes, windows, and tmux sessions.
+decision: COMMIT_PLAN_THEN_RUN_EMPTY_CONTROL
+next_experiment: SMOKE-004
+```
