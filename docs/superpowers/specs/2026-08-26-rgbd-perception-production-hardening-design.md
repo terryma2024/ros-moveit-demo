@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-26
 
-**Status:** Proposed for user review
+**Status:** Approved by user on 2026-08-26
 
 **Task branch:** `codex/rgbd-perception-pick-place`
 
