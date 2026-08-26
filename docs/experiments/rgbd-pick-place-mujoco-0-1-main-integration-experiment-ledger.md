@@ -543,6 +543,42 @@ pre_running_observed: Fresh domain225/session/processes/Viewer/evidence passed; 
 decision: START_EXACT_INSTALLED_FULL_CHAIN_AND_WAIT_NATURAL_EXIT
 ```
 
+## CP-106 / CLOSE-EXP-024-001 — forward_5cm functional FULL_RESTART passes
+
+```yaml
+checkpoint_id: CP-106
+transition_id: CLOSE-EXP-024-001
+recorded_at: 2026-08-27T03:48:40+08:00
+experiment_id: EXP-024
+from: RUNNING
+to: FUNCTIONAL_PASS_GUI_UNAVAILABLE
+qualification_scope: FUNCTIONAL_AC001_WITH_GUI_CLAUSE_UNAVAILABLE
+result:
+  - Natural rc0, DONE/19, no failure, exact detach-before-open trace, 11 clean process exits, and one exact-three input release marker.
+  - Perception OK: 98078 full points, 221 candidates, 168 cup points, radius 0.0394035 m, world pose [0.0196236,-0.3304601,0.165], PLY retained.
+  - Final cup [-0.0779421,-0.2475342,0.1648250], table_contact=true, fingertip contacts 0/0, near-zero velocities; Planning Scene detached/world count13.
+  - Fresh exact CoreGraphics Viewer window45597/PID18337 retained; screenshot unavailable and not claimed.
+hashes: {log: 8a24abf9196e45079c7b67dd20b93645e3166163cf6035afc66351aa815a9d43, manifest: 583b515cb6d61ce3aced523d931f9ee38e3d69ee38040bb1d16b28cd26d0e17e, summary: 949b2bc37b4412bc7e03fa08a3e203af8bf42601dbc486c33dbaa824b3009c9b, ply: 2a14f8e3506500bed28b317acc745530f1da3c5dd54506fe0e06ddf1c3daf940}
+cleanup: domain225/session/processes/Viewer empty.
+decision: CONTINUE_FROZEN_BATCH_TO_LEFT_5CM
+next_experiment: EXP-025
+```
+
+## CP-107 — Plan post-fix left_5cm functional Mac FULL_RESTART
+
+```yaml
+checkpoint_id: CP-107
+recorded_at: 2026-08-27T03:48:40+08:00
+experiment_id: EXP-025
+status: PLANNED
+qualification_scope: FUNCTIONAL_AC001_WITH_GUI_CLAUSE_UNAVAILABLE
+identity: {domain: 226, session: mac-mrc010-left-exp025, tmux: mac-mrc010-left-exp025, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-025, keyframe: cup_test_left_5cm}
+frozen_runtime: Same implementation/child/bundle/runner/policy/extrinsics/controller as EXP-023; only keyframe/domain/session/evidence change.
+failure_boundary: Any valid functional failure stops the batch.
+decision: COMMIT_CLOSURE_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN
+next_experiment: EXP-025
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
