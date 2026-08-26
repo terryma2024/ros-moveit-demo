@@ -2390,3 +2390,58 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/pre-running/cua-state.json
 next_command: Commit and push this transition, then run the strict-window coordinator and full-restart wrapper concurrently via explicit zsh on domain 203 for task_start.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-025-001
+recorded_at: 2026-08-26T15:18:03+08:00
+experiment_id: EXP-025
+status: VALID
+classification: accepted_hardened_task_start_full_restart
+runtime_source_commit: 6073325d64cb247a125d1275b32072391ebc3c7b
+implementation_commit: 48349ca7f6134e7bc4d15385338f86e5fbc182e7
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: Fresh production perception consumed task_camera_frame 640x480 CameraPlugin RGB-D, selected 141 cup points from 98123 full points, wrote a nonempty 4013-byte PLY, fitted radius 0.03938151231973142 m, and published world [0.01950111783349788, -0.28040476095521005, 0.165] at source stamp 4025999999. Error to task_start is 0.000642429 m and passes the frozen 0.01 m bound.
+  - OBSERVED: Launch topology started exactly one rgbd_cup_pose and one dynamic_cup_pick_place after successful scene setup; no truth bridge or cup_pose_tf_demo process started. The dynamic input repeats the same world pose and exact source stamp, whose producer count is one.
+  - OBSERVED: The workflow recorded exact simulation_session_id rgbd-pick-task-start-exp025-20260826, expected_reset_epoch=0, and reached DONE with transition_count=19 and the complete expected trace. Arm trajectory, FK, and joint targets changed through approach, lift, transport, place, and retreat; gripper target changed from close to open.
+  - OBSERVED: Physical truth was initially table-supported, reached bilateral unsupported grasp, lifted from z=0.1669110563 to z=0.2249304895, and transported to [-0.0766323110, -0.2471532616, 0.2283063369] with bilateral contact and no table contact. Detach preceded open.
+  - OBSERVED: Release ended table-supported at [-0.0778154770, -0.2475390648, 0.1648325358] with zero finger contacts and near-zero velocity. final_xy_error_m=0.0025994254 and final_upright_tilt_rad=0.0046843389 pass policy; final Planning Scene is detached with primitive counts pedestal=1, plastic_cup=13, table=1.
+  - OBSERVED: Three distinct 1568x862 same-window PNGs were directly inspected. Baseline shows the task_start cup table-supported with open gripper; transport shows the cup visibly raised and held while the red target is empty; final shows the released cup inside the red target with the open gripper above it.
+  - OBSERVED: Capture coordinator exit=0 and natural launch exit=0. Every required process reports a clean exit; exact child, domain 203, runtime session/partition process set, task-owned tmux, exact Viewer title, and CUA session are empty after cleanup.
+retained_risk:
+  - OBSERVED: Streaming perception rejected 103 motion/occlusion frames outside the frozen radius tolerance after the accepted static input. Those frames were fail-closed and did not replace the workflow's exact accepted input.
+  - OBSERVED: ros2_control_node emitted one pal_statistics publisher-thread context-invalid diagnostic during shutdown, then reported a clean process exit. This remains a nonfatal shutdown risk and does not invalidate the all-zero natural exits and empty cleanup.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/acceptance-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/run/full-restart.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/run/capture-coordinator.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/run/capture-coordinator.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/run.d/rgbd-pick-task-start-exp025-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/run.d/rgbd-pick-task-start-exp025-20260826/perception/cup.ply
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/run.d/rgbd-pick-task-start-exp025-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/gui/viewer-transport.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/gui/viewer-final.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-025/post-cleanup.log
+conclusion: task_start has one accepted, countable hardened FULL_RESTART RGB-D-driven physical pick-place with complete numeric, identity, physical, Planning Scene, controller, visual, natural-exit, and cleanup evidence.
+decision: KEEP
+next_experiment: EXP-026
+```
+
+```yaml
+checkpoint_id: CP-033
+recorded_at: 2026-08-26T15:18:03+08:00
+last_valid_experiment: EXP-025
+current_hypothesis: Hardened task_start is accepted under implementation 48349ca7 and exact f19; forward remains the next sole keyframe variable.
+working_tree_status: Task source and exact f19 submodule are clean before this additive ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; EXP-025 exact child, domain 203, runtime session/partition process set, tmux, Viewer, and CUA are empty.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+confirmed_conclusions:
+  - EXP-025 task_start is the first accepted countable FULL_RESTART run under hardened implementation 48349ca7 and exact f19.
+  - EXP-021 remains retained INVALID and non-counting; EXP-017 through EXP-020 remain retained historical evidence only for a8b3d87a; CP-016 remains unchanged history.
+open_risks:
+  - Forward, left, and right generalization remain untested under the hardened implementation.
+  - The nonfatal pal_statistics shutdown diagnostic and fail-closed post-input motion-frame rejects remain retained for final reporting.
+next_command: Commit and push this closure, then prove fresh domain 204/session/evidence/Viewer/CUA isolation and transition EXP-026 only to RUNNING.
+```
