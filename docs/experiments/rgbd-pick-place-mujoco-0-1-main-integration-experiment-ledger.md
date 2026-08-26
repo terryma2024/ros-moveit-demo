@@ -33,7 +33,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-021
+latest_checkpoint: CP-022
 next_experiment: SMOKE-003
 ```
 
@@ -1182,4 +1182,26 @@ decision_rule:
   - If it stays below 30 s, reject this reproduction and do not change timeout or launch sequencing without a new discriminating RED.
 decision: COMMIT_PLAN_THEN_RUN_CONCURRENT_AB
 next_experiment: SMOKE-003
+```
+
+## CP-022 / TRANS-SMOKE-003-RUNNING-001 — Start concurrent-startup A/B
+
+```yaml
+checkpoint_id: CP-022
+transition_id: TRANS-SMOKE-003-RUNNING-001
+recorded_at: 2026-08-27T00:36:21+08:00
+smoke_id: SMOKE-003
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: cf0b45fe36ab6c578a90fd110d254c028ace9a19
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Domain 228/session process identity, task tmux, exact Viewer, and diagnosis evidence path are empty.
+  - Worktree is clean; base, barrier-orchestrator, and GUI polling helpers pass syntax checks with SHA256 7f9b74a7, c63e948a, and bf207075.
+  - A shell-level python command was unavailable before activating the frozen venv; the venv interpreter syntax check is GREEN and no diagnostic state was created by that observer error.
+owned_processes: NONE
+decision: START_NON_QUALIFYING_CONCURRENT_AB
+next_command: Commit transition; start base/capture; wait Scene READ_BACK; barrier-start timing plus installed dynamic wait; exact cleanup.
 ```
