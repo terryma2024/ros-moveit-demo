@@ -1392,3 +1392,29 @@ owned_processes: NONE
 decision: START_CORRECTED_EMPTY_CONTROL
 next_command: Run exact installed rgbd_cup_pose in domain 217; retain natural deadline classification before any live stack is started.
 ```
+
+## CP-029 / TRANS-SMOKE-005-LIVE-001 — Empty control passes; authorize live phase
+
+```yaml
+checkpoint_id: CP-029
+transition_id: TRANS-SMOKE-005-LIVE-001
+recorded_at: 2026-08-27T00:57:23+08:00
+smoke_id: SMOKE-005
+from: RUNNING_EMPTY_CONTROL
+to: RUNNING_LIVE_AB
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 64f65a8799ab85f0168961372e67ef2c9f95620c
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+empty_control:
+  - Exact installed entrypoint received the literal formal ROS parameter token and entered product setup.
+  - It naturally exited one after 32.474651833 s wall with the expected product boundary: no valid RGB-D cup pose was published within 30.000 seconds.
+  - It did not emit startup deadline expired during ROS runtime construction; stderr is empty. The absent graph intentionally supplied no camera topics or TF.
+  - A unified-exec observer returned late and briefly made the still-running status appear longer than the evidence timestamps; the finished-at, monotonic files, stdout, and final rc are the authoritative result.
+evidence:
+  owner_sha256: b35952654877f076afadcfd43b3968af967f7c4026da9c7e679e3f87dd041819
+  stdout_sha256: 108b952cf4a9675662f621abf42d7d0e99dfbbadf3d4c3fe6585c5c291ee3f37
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+decision: EMPTY_CONTROL_PASS_START_FRESH_LIVE_AB
+next_command: Start domain 216 base/static-TF/GUI baseline; after Planning Scene READ_BACK start only exact installed rgbd_cup_pose and stop on its first deadline classification.
+```
