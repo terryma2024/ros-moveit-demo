@@ -33,7 +33,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-120
+latest_checkpoint: CP-121
 next_experiment: EXP-032
 ```
 
@@ -83,6 +83,39 @@ status: VALID
 owned_processes: NONE
 decision: Commit and push EXP-032 plan, then repeat the complete cold-start preflight on its new identity.
 next_experiment: EXP-032
+```
+
+## EXP-032 transition to RUNNING
+
+```yaml
+transition_id: TRANS-EXP-032-RUNNING-001
+recorded_at: 2026-08-27T04:48:00+08:00
+experiment_id: EXP-032
+from: PLANNED
+to: RUNNING
+preflight:
+  parent_and_child: Clean ledger HEAD 210173862c94714ca0fb44da4befc0b4b0f73f1a with immutable runtime 2a636d9 and exact child 5e9d67c.
+  domain_96_nodes: NONE
+  target_tmux: ABSENT
+  target_evidence_and_session_root: ABSENT
+  target_processes: NONE
+  relevant_live_stack: NONE after excluding unrelated Codex command text.
+  target_viewer: ABSENT from fresh GNOME X11 window inventory.
+  mesa_glfw_recheck: PASS; visible context created immediately before RUNNING.
+  window_inventory: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-032/preflight-windows.json
+  window_inventory_sha256: 16b21bff6110fa104dd3c7b5df635659c8ca21b9ba68e15483013b1564d00b1a
+decision: START_EXACT_REGISTERED_COMMAND_WITH_MESA_ENVIRONMENT_DELTA
+```
+
+## CP-121 — EXP-032 cold-start isolation accepted
+
+```yaml
+checkpoint_id: CP-121
+recorded_at: 2026-08-27T04:48:00+08:00
+status: VALID
+experiment_id: EXP-032
+owned_processes: NONE before launch
+decision: Launch once and capture same-Viewer baseline, transport, and final evidence.
 ```
 
 ## Shared live acceptance contract
