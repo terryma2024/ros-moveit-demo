@@ -2341,3 +2341,29 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/pre-running/cua-state.json
 next_command: After committing and pushing this transition, start the concurrent strict-window capture coordinator and full-restart launch on domain 199 with runtime session rgbd-pick-task-start-exp021-20260826 and sole keyframe task_start.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-021-001
+recorded_at: 2026-08-26T15:12:49+08:00
+experiment_id: EXP-021
+status: INVALID
+classification: harness_invocation_invalid_non_counting
+runtime_source_commit: ea7aa312c42f4504ae9120f5c616fa0cb89c556d
+implementation_commit: 48349ca7f6134e7bc4d15385338f86e5fbc182e7
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+first_failure_boundary:
+  - OBSERVED: Both retained evidence helpers are readable zsh scripts with valid shebangs but mode 0664, so direct invocation returned 126 permission denied for both coordinator and full-restart before either helper body executed.
+  - OBSERVED: No launch log, nominal run.json, derived run.d container, exclusive runtime session directory, ROS node, MuJoCo Viewer, or product observation was created. No perception or manipulation conclusion can be drawn.
+  - INFERRED: This is solely a harness invocation defect in the written plan. Explicitly invoking the unchanged scripts with zsh is the minimal correction; changing their retained filesystem mode is unnecessary.
+cleanup:
+  - OBSERVED: Domain 199 has no nodes, exact runtime/launch/Viewer process set is empty, the exact Viewer window is absent, and CUA session rgbd-pick-exp021-viewer-20260826 is ended.
+  - OBSERVED: The exclusive session path remains absent, so production evidence allocation was never attempted and no collision or overwrite occurred.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/pre-running/isolation-snapshot.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/run/harness-launch-failure.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/run/cua-end.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-021/post-cleanup.log
+conclusion: EXP-021 is strict INVALID and non-counting because the evidence harness never executed; it contains no product run and is preserved without retry or overwrite.
+decision: Preserve EXP-021 unchanged, correct helper invocation to explicit zsh, and repeat task_start under a fresh experiment, domain, runtime session, evidence root, and CUA identity.
+next_experiment: EXP-025
+```
