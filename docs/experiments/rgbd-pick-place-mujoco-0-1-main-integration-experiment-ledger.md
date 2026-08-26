@@ -206,6 +206,24 @@ corrected_capture_sha256: d2f714b34ad61eac861422d2242bdd99d374c968594fb13543baf8
 decision: KEEP_EXP021_PLANNED_AND_REPEAT_FRESH_CAPTURE_OWNER_GATE
 ```
 
+## CP-085 / CLOSE-EXP-021-001 — Reject capture inventory parser before product
+
+```yaml
+checkpoint_id: CP-085
+transition_id: CLOSE-EXP-021-001
+recorded_at: 2026-08-27T03:18:20+08:00
+experiment_id: EXP-021
+from: PLANNED
+to: INVALID_CAPTURE_RUNNER
+qualification: false
+reason: The direct coordinator created only capture.owner, then its Python inventory expression failed syntax validation because escaped quotes were used inside an f-string expression. No Viewer/product/ROS/tmux was started.
+cleanup: Coordinator exited nonzero naturally; exact session/domain206/processes remain empty.
+correction: Use str.format with normal dictionary quoting in both inventory parsers; corrected helper SHA256 4821cb4b3be078b09a786ac637ed3c3cad40340f0763d8cd1aadfaabbf8a7eba.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-021
+decision: RETAIN_INVALID_AND_REPEAT_FRESH_TASK_START
+next_experiment: EXP-022
+```
+
 ```yaml
 experiment_id: EXP-011
 status: PLANNED
