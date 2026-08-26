@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -160,6 +161,15 @@ def _output_path(value: str) -> Path:
     return path
 
 
+def _application_arguments(arguments: list[str] | None) -> list[str]:
+    raw_arguments = list(sys.argv[1:] if arguments is None else arguments)
+    if "--ros-args" not in raw_arguments:
+        return raw_arguments
+    from rclpy.utilities import remove_ros_args
+
+    return remove_ros_args(args=["rgbd_cup_pose", *raw_arguments])[1:]
+
+
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="rgbd_cup_pose",
@@ -189,7 +199,7 @@ def main(arguments: list[str] | None = None) -> int:
         type=_output_path,
         default=Path("/tmp/v4-t006-cup-pose.json"),
     )
-    parsed = parser.parse_args(arguments)
+    parsed = parser.parse_args(_application_arguments(arguments))
 
     from so101_demo.ros.rgbd_cup_pose_node import (
         RgbdCupPoseOptions,

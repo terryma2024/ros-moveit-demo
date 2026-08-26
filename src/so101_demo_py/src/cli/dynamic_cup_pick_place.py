@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 
@@ -24,8 +25,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _application_arguments(arguments: list[str] | None) -> list[str]:
+    raw_arguments = list(sys.argv[1:] if arguments is None else arguments)
+    if "--ros-args" not in raw_arguments:
+        return raw_arguments
+    from rclpy.utilities import remove_ros_args
+
+    return remove_ros_args(args=["dynamic_cup_pick_place", *raw_arguments])[1:]
+
+
 def main(arguments: list[str] | None = None) -> int:
-    options = build_parser().parse_args(arguments)
+    options = build_parser().parse_args(_application_arguments(arguments))
     execute_requested = options.mode == "execute" or options.execute
     if execute_requested:
         if options.mode != "execute" or not options.execute:
