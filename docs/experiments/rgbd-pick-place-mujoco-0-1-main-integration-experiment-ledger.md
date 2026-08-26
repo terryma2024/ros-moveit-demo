@@ -2564,3 +2564,20 @@ implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
 pre_running_observed: Domain 201, evidence, exact session/tmux/processes, and Viewer are fresh and empty; frozen installed provenance/helper hashes unchanged.
 decision: PRECREATE_EMPTY_RUN_GUI_THEN_START_CAPTURE_AND_FULL_RESTART
 ```
+
+## CP-068 / CLOSE-EXP-019-001 — Reject non-executable capture invocation before product launch
+
+```yaml
+checkpoint_id: CP-068
+transition_id: CLOSE-EXP-019-001
+recorded_at: 2026-08-27T02:41:00+08:00
+experiment_id: EXP-019
+from: RUNNING
+to: INVALID_CAPTURE_RUNNER
+qualification: false
+reason: The capture helper is intentionally non-executable and the tmux command used exec path instead of explicit zsh; capture exited before owner/readiness and product never started.
+diagnostic_cleanup: An explicit-zsh observer-only check created ownership and was exact-stopped by PID; idle tmux was removed. No product, ROS graph, or Viewer existed.
+correction: Invoke the unchanged helper as exec zsh helper and require the live capture pane plus owner file before product launch.
+decision: RETAIN_INVALID_AND_REPEAT_FRESH_TASK_START
+next_experiment: EXP-020
+```
