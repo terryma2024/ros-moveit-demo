@@ -2711,6 +2711,23 @@ decision: RETAIN_INVALID_AND_REPEAT_WITH_EXPLICIT_CWD
 next_experiment: SMOKE-015
 ```
 
+## CP-076 / TRANS-SMOKE-015-RUNNING-001 — Release explicit-cwd 2 Hz probe
+
+```yaml
+checkpoint_id: CP-076
+transition_id: TRANS-SMOKE-015-RUNNING-001
+recorded_at: 2026-08-27T02:56:40+08:00
+smoke_id: SMOKE-015
+from: PLANNED
+to: RUNNING
+qualification: false
+pre_running_observed:
+  - Fresh domain204, exact session/processes, Viewer, and live evidence were empty.
+  - Gate-only tmux mac-mrc010-dds-2hz-smoke015 is owned by PID 89321 and has not started ROS/product.
+  - pane_current_path and /bin/pwd -P both read /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-pick-place-mujoco-0-1-main.
+decision: CREATE_START_SIGNAL_AND_WAIT_FOR_UNCHANGED_2HZ_HELPER_NATURAL_EXIT
+```
+
 ## CP-075 — Plan explicit-cwd 2 Hz camera-load causal probe
 
 ```yaml
