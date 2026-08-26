@@ -1733,3 +1733,27 @@ helpers:
 decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_REAL_CHILD
 next_experiment: SMOKE-008
 ```
+
+## CP-039 / TRANS-SMOKE-008-RUNNING-001 — Start real installed child sampling run
+
+```yaml
+checkpoint_id: CP-039
+transition_id: TRANS-SMOKE-008-RUNNING-001
+recorded_at: 2026-08-27T01:28:04+08:00
+smoke_id: SMOKE-008
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 5d3ae49899a4a07591320e1172e9e101c444c3e5
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Domain 212, session/process/tmux/evidence/Viewer identity are fresh and empty; all four helpers pass syntax and exact process readback is empty.
+  - Installed console script shebang is the frozen ROS venv Python and the immutable executable exists at the pre-registered path.
+  - Idle tmux pane 82924 passed explicit cd, pane_current_path, and captured pwd against the exact task worktree; no product helper has started.
+owned_processes:
+  - tmux_session: mrc010-mac-real-sample-r1
+    idle_pane_pid: 82924
+decision: START_BASE_STATIC_TF_GUI_THEN_EXACT_CHILD_AND_SAMPLER
+next_command: Start domain 212 base/static-TF/GUI; after full readiness start recorded installed child and boundary sampler.
+```
