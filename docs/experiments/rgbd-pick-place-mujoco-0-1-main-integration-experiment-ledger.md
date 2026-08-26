@@ -2756,6 +2756,26 @@ decision: DO_NOT_TDD_2HZ_ALONE; TEST_LONG_LIVED_PERCEPTION_WITH_INPUT_SUBSCRIPTI
 next_experiment: SMOKE-016
 ```
 
+## CP-078 — Plan post-first-valid perception input-release causal probe
+
+```yaml
+checkpoint_id: CP-078
+recorded_at: 2026-08-27T03:01:15+08:00
+smoke_id: SMOKE-016
+status: PLANNED
+qualification: false
+base_failures: [EXP-020, SMOKE-015]
+hypothesis: The dynamic workflow needs only the first valid /cup_pose; retaining three reliable 640x480 RGB-D subscriptions during motion causes intermittent DDS/action result starvation. Keeping rgbd_cup_pose alive while releasing only its input subscriptions immediately after the first valid publish will remove that traffic and allow all motion states to finish.
+method:
+  - Copy production so101_demo_py at commit 7f767f8 into a registered-root diagnostic source; retain camera_publish_rate 10.0 and every motion/config policy unchanged.
+  - Change only diagnostic rgbd_cup_pose runtime ownership so the three camera subscriptions are destroyed and removed after the first successful world-pose publication; keep node, TF listener, /cup_pose publisher, and launch lifetime alive.
+  - Build a separate diagnostic install, preserve diff/source/install hashes, then use fresh domain205/session mac-mrc010-perception-release-smoke016/evidence mac-diagnosis/perception-release-smoke016 with explicit cwd barrier.
+success_boundary: Full task_start workflow exits zero/DONE and action results remain promptly observed after each physical Goal reached; diagnostic log proves INPUT_RELEASED_AFTER_FIRST_VALID.
+failure_boundary: Any valid full-chain failure stops the experiment and disproves sufficiency; no timeout/policy/extrinsics change is allowed.
+decision: COMMIT_PLAN_BUILD_ISOLATED_DIAGNOSTIC_THEN_FRESH_RUN
+next_experiment: SMOKE-016
+```
+
 ## CP-075 — Plan explicit-cwd 2 Hz camera-load causal probe
 
 ```yaml
