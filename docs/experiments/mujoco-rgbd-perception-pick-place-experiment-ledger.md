@@ -2,12 +2,12 @@
 
 ```yaml
 task_id: so101-mujoco-rgbd-perception-pick-place
-goal: Complete one RGB-D perception-driven physical MuJoCo pick-place from each of four named cup positions on the local Mac.
+goal: Complete one RGB-D perception-driven physical MuJoCo pick-place from each of four named cup positions on ai-station.
 success_contract: Four independent FULL_RESTART runs each use real aligned RGB-D, publish a fresh world /cup_pose from rgbd_cup_pose, reach dynamic DONE, and pass physical, Planning Scene, controller, TF, and visual gates.
-worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-perception-pick-place
+worktree: /data/work/ws_moveit/.worktrees/rgbd-perception-pick-place
 branch: codex/rgbd-perception-pick-place
 base_commit: a7e3745f13b892a8b7501980fdaf87436392ad50
-current_commit: ef6175dd146275d56979ad2860f1f3a6f94dbf79
+current_commit: 12c0d69252f8b84ad1335877192bf23b22947c52
 evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/
 confirmed_conclusions:
   - Existing macOS CameraPlugin acceptance proves real aligned RGB-D is available only from a correctly sourced interactive runtime; topic names alone are insufficient.
@@ -18,14 +18,16 @@ confirmed_conclusions:
   - EXP-004 is environment-invalid and non-counting: after complete RUNNING/observer readiness evidence, all three controller spawners failed before static TF or production because the sandbox denied the ROS controller-spawner lock under ~/.ros/locks.
   - EXP-005 is pre-RUNNING environment-invalid and non-counting: normal-scope process isolation could not be audited because `ps` was denied and targeted `pgrep` returned rc3, so observers, elevation, stack, production, Viewer action, and motion never started.
   - EXP-006 is interrupted/environment-invalid and non-counting: elevated pre/post process probes, observers, elevated stack, active controllers, and static TF publishers passed, but production and Viewer acceptance never started; strict lock metadata preservation also failed because atime/mtime/ctime changed despite stable identity, mode, size, and SHA-256.
+  - CP-016 recovered the task on ai-station at branch commit 12c0d69252f8b84ad1335877192bf23b22947c52 with no conflicting runtime graph, but the required f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 submodule commit is not fetchable from Gitee and the r8 provenance gate remains closed.
 disproven_routes:
   - Publishing MuJoCo truth as /cup_pose does not validate production camera perception.
   - Routing production through cup_pose_tf_demo duplicates the selected world-point transform boundary.
 open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
-latest_checkpoint: CP-015
-next_experiment: NONE
+  - A fresh ai-station Linux build from the exact f19a8cc submodule can pass the perception-only gate without starting dynamic_cup_pick_place or robot motion.
+latest_checkpoint: CP-016
+next_experiment: EXP-007
 ```
 
 ```yaml
@@ -950,4 +952,78 @@ open_risks:
   - Any future experiment must explicitly decide before launch whether controller-spawner timestamp changes are expected; EXP-006's frozen NONE rule cannot be rewritten.
   - Existing evidence remains retained; nothing was archived or deleted.
 next_command: NONE; runtime experimentation is stopped per user direction. Await a new explicitly preregistered experiment before any process, elevation, production, GUI action, or motion.
+```
+
+```yaml
+experiment_id: EXP-007
+status: PLANNED
+prior_experiment: EXP-006
+hypothesis: A fresh ai-station Linux overlay built from the exact pinned mujoco_ros2_control commit f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 can produce one production-owned, fresh world /cup_pose from real aligned RGB-D within 0.01 m of MuJoCo truth before any dynamic workflow or robot motion starts.
+prediction: After the exact gitlink/submodule/cleanliness and installed-runtime provenance gates pass, an isolated task_start stack will provide aligned 640x480 rgb8 and 32FC1 samples, finite positive depth, a nonempty segmented cup cloud and valid fit, exact-stamp TF, sole rgbd_cup_pose publisher provenance, and a world pose within 0.01 m of current MuJoCo truth, together with an inspected baseline-action-fresh Viewer sequence and exact-owned cleanup.
+single_variable: Run on ai-station Linux with a fresh task-owned build/install overlay instead of the prior Mac runtime environment; production code and perception configuration remain fixed at source commit 12c0d69252f8b84ad1335877192bf23b22947c52.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - The task worktree is /data/work/ws_moveit/.worktrees/rgbd-perception-pick-place on codex/rgbd-perception-pick-place at exactly 12c0d69252f8b84ad1335877192bf23b22947c52, with no user-owned tracked changes except this planned ledger entry.
+  - git ls-tree HEAD third_party/mujoco_ros2_control, the task-worktree submodule HEAD, and the runtime build input all equal f19a8cc3af61feccacb22a9f0d16cc972e3b2c08; describe is so101-0.0.3-r8-3-gf19a8cc and the submodule is clean.
+  - The required f19a8cc commit is fetched from the configured Gitee submodule origin; no canonical-main r6 build/install or local substitute is used.
+  - Fresh build and install bases are task-owned below /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/ and all installed package prefixes and runtime executables are read back before launch.
+  - ROS_DOMAIN_ID 185 and GZ_PARTITION rgbd-perception-ai-station-exp007-20260826 are empty and unique immediately before RUNNING, and no unowned conflicting simulator, MoveIt, controller, perception, dynamic workflow, or Viewer process is reused or stopped.
+  - dynamic_cup_pick_place is not started and no robot motion is commanded in EXP-007.
+success_criteria:
+  - Real CameraInfo, color, and depth form one exact-stamp 640x480 task_camera_frame triple with rgb8 and 32FC1 encodings and finite positive depth.
+  - Production rgbd_cup_pose is the sole fresh /cup_pose publisher, writes a nonempty selected PLY and JSON receipt with a valid fitted radius, and retains the aligned source stamp.
+  - world to task_camera_frame TF succeeds at the source stamp and the finite world /cup_pose differs from current MuJoCo cup truth by at most 0.01 m.
+  - A causally attributable MuJoCo Viewer baseline, camera-view-only action, and fresh screenshot are retained and actually inspected.
+  - Only exact owned processes are stopped; the final targeted process set and ROS domain are empty with complete exit sidecars.
+failure_criteria:
+  - With all preconditions and evidence contracts satisfied, any RGB-D, segmentation, fit, TF, publisher, freshness, truth-error, visual, or cleanup product gate fails.
+invalid_criteria:
+  - The required submodule commit is unavailable from Gitee, the gitlink/HEAD/describe/cleanliness assertions fail, any runtime resolves to canonical r6 or another overlay, isolation or evidence is contaminated, an unowned process is reused or stopped, or dynamic workflow/robot motion starts.
+provenance:
+  source_commit: 12c0d69252f8b84ad1335877192bf23b22947c52
+  install_overlay: /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/install
+  runtime_executable: /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/install/so101_demo_py/lib/so101_demo_py/rgbd_cup_pose
+  ros_domain_id: 185
+  gz_partition: rgbd-perception-ai-station-exp007-20260826
+commands:
+  - command: In the task worktree run git submodule sync --recursive, fetch the required exact commit from the configured Gitee origin, run git submodule update --init --recursive, and assert gitlink equals submodule HEAD f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, describe equals so101-0.0.3-r8-3-gf19a8cc, and submodule status is clean.
+    exit_code: PENDING
+  - command: Build and test Tasks 1-6 into the fresh task-owned build/install overlay, source it, and prove package prefixes plus ros2_control_node and MuJoCo runtime provenance derive from f19a8cc.
+    exit_code: PENDING
+  - command: Capture complete RUNNING provenance/isolation/ownership evidence, then start only the isolated task_start MuJoCo stack, approved static TF publishers, pre-start /cup_pose observers, and production rgbd_cup_pose with complete logs/timestamps/exits.
+    exit_code: PENDING
+  - command: Capture aligned RGB-D, finite-depth, point-cloud/fit, TF, /cup_pose publisher/source-stamp, MuJoCo truth-error, and ai-station Viewer baseline-action-fresh evidence; then stop only exact owned processes and prove cleanup.
+    exit_code: PENDING
+observed:
+  - NONE; EXP-007 has not transitioned to RUNNING because its required submodule precondition is not currently satisfiable from Gitee.
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/
+decision: PENDING
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-016
+last_valid_experiment: EXP-002
+current_hypothesis: EXP-007 can test the fresh ai-station Linux perception-only boundary only after the exact f19a8cc submodule commit becomes fetchable from Gitee and the gitlink/HEAD/describe/clean gate passes.
+working_tree_status: Branch codex/rgbd-perception-pick-place is at 12c0d69252f8b84ad1335877192bf23b22947c52; this ledger is tracked dirty, and the failed submodule initialization leaves third_party/mujoco_ros2_control at 78758d5 with an unpopulated/deleted worktree rather than the required gitlink target.
+owned_processes: NONE; no stack, Viewer action, controller, static TF, perception, dynamic workflow, or robot motion was started.
+preserved_processes: Existing tmux sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui were only listed and were not sent input, stopped, or modified. No unowned process was signaled.
+confirmed_conclusions:
+  - Canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7 with gitlink/submodule 738e304551b4ea6db020b466086a13db71b65607 (so101-0.0.3-r6); it was not modified.
+  - The independent task worktree is on codex/rgbd-perception-pick-place at exact commit 12c0d69252f8b84ad1335877192bf23b22947c52, whose gitlink is exact f19a8cc3af61feccacb22a9f0d16cc972e3b2c08.
+  - Gitee advertises mujoco_ros2_control main/tag so101-0.0.3-r8 at 78758d5becf1829e611da1dafb201fa018ddbe7b, but no head/tag at f19a8cc; exact fetch of f19a8cc returns 128 with `not our ref`, and the required object remains absent.
+  - The initial ROS graph contained only /parameter_events and /rosout; targeted process inspection found no simulator, MoveIt, controller, perception, dynamic workflow, or Viewer runtime conflict.
+  - CP-015 is preserved: EXP-006 remains strict INVALID because controller-spawner lock atime/mtime/ctime changed, all Mac exact-owned sessions exited, post probe and target set were empty, domain 180 was empty, Viewer was false, and production, Viewer action, dynamic workflow, and robot motion never started.
+disproven_routes:
+  - Canonical r6 and Gitee r8 tag 78758d5 cannot satisfy the required f19a8cc runtime provenance gate.
+  - EXP-003 through EXP-006 remain non-counting INVALID runs and are not treated as product failures, passes, or reasons to repeat their prior contaminated routes.
+open_risks:
+  - The exact f19a8cc commit must be published to the configured Gitee submodule origin before build/runtime can proceed.
+  - The failed checkout is retained in place for audit and must not be treated as a clean or usable submodule.
+  - EXP-007 perception, TF, Viewer, and all four later FULL_RESTART physical acceptance runs remain unstarted.
+next_command: git -C /data/work/ws_moveit/.worktrees/rgbd-perception-pick-place/third_party/mujoco_ros2_control fetch origin f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
 ```
