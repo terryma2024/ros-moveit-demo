@@ -2302,3 +2302,44 @@ tests:
 decision: COMMIT_MINIMAL_GREEN_THEN_REBUILD_CANDIDATE_AND_RUN_REAL_LIVE_PERCEPTION_SMOKE
 next_experiment: SMOKE-013
 ```
+
+## CP-058 — Plan installed reliable-QoS live perception smoke
+
+```yaml
+checkpoint_id: CP-058
+recorded_at: 2026-08-27T02:27:04+08:00
+smoke_id: SMOKE-013
+status: PLANNED
+qualification: false
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+record_head_before_checkpoint: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+candidate:
+  demo_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py
+  support_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_mujoco_support
+  installed_bundle_sha256: e1dae424668fe418e64f05cda6976308670ade43639df7b0fbc97d74fb8e4f93
+  support_plugin_sha256: f4487cc3e2467e2ffec5b2ca2fa407d8c372b63cfe07cc1e71e777185d1a7ab7
+  installed_contracts: 5 passed in 1.78 s
+  support_ctest_correct_source_order: 1 of 1 test target passed, 19 gtests, in 3.61 s
+environment:
+  domain_id: 207
+  session_id: mac-mrc010-real-qos-green-r6
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-qos-green-r6/live
+  keyframe: task_start
+procedure:
+  - Fresh-read domain graph, exact tmux/process identities, evidence directory, and Viewer; require all empty.
+  - Start the installed base stack and the two registered static transforms, then wait for Scene READ_BACK and capture the exact Viewer baseline.
+  - Start the independent cup-pose observer before the exact installed rgbd_cup_pose executable with its unchanged 30.0 s startup timeout.
+  - Do not start dynamic_cup_pick_place or any motion.
+success_gate:
+  - Perception writes summary.json and nonempty cup.ply, publishes a world-frame /cup_pose observed by the independent subscriber, and exits or is exact-stopped only after those artifacts appear.
+  - First valid evidence must occur within 30.0 s measured from the perception child monotonic start; no construction timeout, no no-valid timeout, no segfault, and no truth bridge.
+  - Exact-owned cleanup leaves domain 207, session, processes, and Viewer empty.
+helpers:
+  base_sha256: 0bb34918850c2da898658d0a7d539b7fe2248c74e6171952908c18aa0affbd99
+  tf_sha256: fc1d33d0a7c684a8ee1cbff108ce8b7d2d8324eca10a2c6a6b469eb15f0ecb2a
+  perception_sha256: f1dced33a58eecd9c6ee0904da5539bc1b0d37c78f756337ffeca3c867562f38
+  observer_sha256: 86fcfbd247d6a2ea9c5f532528b5f649718018543fcca8848026affdd3070184
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN
+next_experiment: SMOKE-013
+```
