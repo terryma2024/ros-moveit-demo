@@ -2652,3 +2652,23 @@ evidence:
 decision: STOP_FOUR_POSITION_BATCH_AND_DIAGNOSE_DDS_PERCEPTION_LOAD_BEFORE_ANY_POLICY_CHANGE
 next_experiment: NONE
 ```
+
+## CP-072 — Plan 2 Hz camera-load causal A/B
+
+```yaml
+checkpoint_id: CP-072
+recorded_at: 2026-08-27T02:48:00+08:00
+smoke_id: SMOKE-014
+status: PLANNED
+qualification: false
+base_failure: EXP-020
+hypothesis: Continuous reliable 640x480 RGB-D at 10 Hz plus perception processing delays the arm action result beyond MoveIt's execution bound; reducing only CameraPlugin publish rate to 2 Hz will cross DESCEND without action-result timeout.
+method:
+  - Copy so101_demo_py at commit 7f767f8 into a registered-root diagnostic source and change only mujoco_plugins.yaml camera_publish_rate from 10.0 to 2.0.
+  - Build a separate diagnostic install against the unchanged candidate fork/support; never modify the frozen qualification source/install.
+  - Fresh domain203/session mac-mrc010-dds-2hz-smoke014/evidence mac-diagnosis/dds-2hz-smoke014; run the exact full workflow without qualification or motion-policy changes.
+success_boundary: Dynamic state trace crosses DESCEND into grasp/lift/transport without MOVEIT_EXECUTION_FAILED -6; record arm accepted/goal-reached/result-observed timestamps and camera rate.
+failure_boundary: Same action-result timeout remains, disproving camera rate as the primary causal variable.
+decision: COMMIT_PLAN_BUILD_DIAGNOSTIC_OVERLAY_THEN_FRESH_RUN
+next_experiment: SMOKE-014
+```
