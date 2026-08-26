@@ -687,3 +687,37 @@ deletion_candidates: []
 ```
 
 Package parallelism and CTest wrapping are disproven as sole causes because a fresh sequential full run hit the same boundary and the direct single-test binary hung on the third iteration. The exact lock/wait owner is not yet proven. Fix Round 1 must instrument and establish that owner before changing production code; increasing timeouts, detaching threads, skipping teardown, or force-exiting cannot qualify as a fix.
+
+Task 8 fix rounds 1-2 diagnosis, implementation, and scoped review:
+
+```yaml
+root_cause: test-local EventCollector, observer, and callback state could be destroyed before the resumed physics thread was stopped and joined
+gdb_wait_chain: fixture TearDown -> MujocoSimulation::shutdown -> physics thread in RecordingObserverPlugin::on_physics_step -> EventCollector::add
+production_code_changes: 0
+fork_fix_round_1: fbd61956bc99ad2fd3fd1500e7750d31bc0c72ae
+fix_round_1_review: FAIL; 0 critical, 1 important, 0 minor
+fix_round_1_finding: shutdown guard was constructed after physics start and two fatal assertions, leaving early-return paths unguarded
+fork_fix_round_2: fcbc9f7b23f4493ceed888a22f32805a37493624
+parent_fix_round_2: fa37de5af725fbd61c037623dc0fdd64f577f0ff
+fix_round_2_scope: one test file; declare thread-referenced locals, then guard, then register callback and start physics
+macos_source_backed: focused 20/20; core 9/9
+macos_source_less: core 9/9; direct prebuilt simulate branch; no simulate.cc object
+linux_source_backed: fresh 6-package build 6/6; focused 20/20; corrected core 9/9
+parent_contracts: macOS install contract 16/16; backend integration PASS
+fix_round_2_review: PASS; 0 critical, 0 important, 0 minor
+fork_bundle_sha256: 5f0b23cc50838287c47d6754056b31d9d565108cf57b9e8ec71ce7ead84a3cf1
+parent_bundle_sha256: a6e357659f813e59f98bf9fe8ca7b6c99c351ed889b0a7e2640b8f6b9ec64a64
+invalid_runs:
+  - macOS shell run with SIP-stripped dylib environment; excluded
+  - Linux first core run imported an ambient /opt/ros Python module; excluded after corrected isolated import provenance
+checkpoint_2_resume: IN_PROGRESS against exact fa37de5/fcbc9f7 candidate in fresh ai-station directories
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-fix1-worktree
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task8-fix1-fork.md
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task8-fix2-fork.md
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task8-fix2-parent.md
+archived_runs: []
+deletion_candidates: []
+```
+
+The accepted fix is test-lifecycle-only. `SimulationShutdownGuard` is declared after every local object referenced by the physics thread and before the thread starts, so C++ reverse destruction order synchronously shuts down and joins on normal, fatal-assertion, and exception exits. The production `shutdown()` mutex/completion guard makes the later fixture call idempotent. No timeout, detach, skip, forced exit, or production workaround was accepted. Full Linux checkpoints resume only after this exact candidate passed independent review.
