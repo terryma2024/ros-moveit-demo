@@ -2148,3 +2148,29 @@ evidence:
 decision: RETAIN_INPUT_FAILURE_AND_PLAN_FRESH_RELIABLE_QOS_AB
 next_experiment: NONE
 ```
+
+## CP-052 — Plan reliable RGB-D subscriber comparison
+
+```yaml
+checkpoint_id: CP-052
+recorded_at: 2026-08-27T02:10:05+08:00
+smoke_id: SMOKE-012
+status: PLANNED
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_checkpoint: 5cc9b63c280d86705d75f6ed41331206eb75a38a
+identity:
+  domain: 208
+  session: mac-mrc010-rgbd-reliable-r5
+  tmux: mrc010-mac-rgbd-reliable-r5
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-reliable-r5/live
+hypothesis: Matching CameraPlugin's reliable volatile depth-one QoS prevents FastDDS from silently dropping the fragmented color/depth samples seen by the best-effort SMOKE-011 observer.
+single_variable: Observer QoS changes from sensor-data best-effort to depth-one reliable volatile; base, camera plugin, scene timing, RMW, and topics remain unchanged.
+success_criteria: At least three samples and three common exact stamps across CameraInfo/color/depth, exact frame/encodings, and positive finite depth within 45 s.
+helpers:
+  base_sha256: 48c4881d0d66dbcb350b62e9ae2b1f45ff72e78910abf8d9917706df6e55522a
+  static_tf_sha256: 18dc64029217fb5e249ffc07223b0b2cd23ca13baedf9e4d05c0f0bdaa749e87
+  observer_sha256: 606923259de209371287f9cbdfe42ea2accda163331ca8d6b313082bd556f77e
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN_RELIABLE_OBSERVER
+next_experiment: SMOKE-012
+```
