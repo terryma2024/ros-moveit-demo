@@ -1905,3 +1905,24 @@ evidence:
 decision: RETAIN_ROOT_CALL_EVIDENCE_AND_BEGIN_TDD_DEFAULT_SERVICE_REDUCTION
 next_experiment: NONE
 ```
+
+## CP-044 — RED contract for lean RGB-D perception node construction
+
+```yaml
+checkpoint_id: CP-044
+recorded_at: 2026-08-27T01:49:42+08:00
+status: RED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: 306edcc70ac2c9b11656dffc1e10a3daf9dc596a
+root_cause_evidence: SMOKE-009 sampled the constructor in ROS service typesupport dlopen at both 25 s and 31 s; the perception node does not use parameter services or rosout.
+contract:
+  - rclpy.create_node must receive start_parameter_services false and enable_rosout false.
+  - automatically_declare_parameters_from_overrides must remain true and the use_sim_time true Parameter override must remain present.
+red_command: python -m pytest -q -o cache_dir=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/tdd-red-cache src/so101_demo_py/test/test_rgbd_cup_pose.py::test_ros_runtime_disables_unused_default_services_without_dropping_sim_time
+red_result: one failed in 0.32 s
+red_failure: KeyError start_parameter_services
+scope: Add only the two supported rclpy Node construction keyword arguments; do not alter timeout, launch sequencing, perception policy, topics, TF, or motion.
+decision: COMMIT_RED_THEN_ADD_MINIMAL_NODE_KEYWORDS
+next_experiment: NONE
+```

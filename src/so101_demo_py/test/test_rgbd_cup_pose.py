@@ -777,6 +777,37 @@ def test_ros_runtime_uses_sensor_qos_and_reliable_depth_one_publisher() -> None:
         runtime.close()
 
 
+def test_ros_runtime_disables_unused_default_services_without_dropping_sim_time() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+
+    api, fake_rclpy, node, _listener = _fake_ros_api()
+    create_node_calls = []
+
+    def record_create_node(name, **kwargs):
+        create_node_calls.append((name, kwargs))
+        return node
+
+    fake_rclpy.create_node = record_create_node
+    runtime = _create_ros_runtime(
+        RgbdCupPoseOptions(),
+        startup_deadline=11.0,
+        monotonic=lambda: 10.0,
+        ros_api=api,
+    )
+    try:
+        assert len(create_node_calls) == 1
+        name, kwargs = create_node_calls[0]
+        assert name == "rgbd_cup_pose"
+        assert kwargs["start_parameter_services"] is False
+        assert kwargs["enable_rosout"] is False
+        assert kwargs["automatically_declare_parameters_from_overrides"] is True
+        assert kwargs["parameter_overrides"] == [
+            api.Parameter("use_sim_time", value=True)
+        ]
+    finally:
+        runtime.close()
+
+
 def test_partial_ros_runtime_construction_cleans_every_created_resource() -> None:
     from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
 
