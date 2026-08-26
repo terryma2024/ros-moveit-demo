@@ -4,30 +4,31 @@
 task_id: mujoco-control-1-0-upgrade-20260825
 evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825
 parent_branch: codex/mujoco-ros2-control-0-1-upgrade
-parent_code_pin: db6b1f20ff1ef8f8b7d9f9074c5828713b8bdacb
+parent_code_pin: ae5b8ab97dfd33c82ee6779193fc5516636f2b02
 parent_document_lineage_base: 9e54f5f
 upstream_target: 57fc6744844902d4532160b403fa95840c1d6f96
 local_r11: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
 fork_branch: codex/upstream-0.1.0-so101-r1
-fork_candidate: ca654e30ea9791564fab7110c90734733b68c8cc
-linux_status: VALID / QUALIFIED for parent runtime 7709b31, code pin db6b1f2, fork ca654e3
-macos_status: BREAKER / NOT_RUNTIME_QUALIFIED
-release_tag_status: NOT_AUTHORIZED
+fork_candidate: aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c
+linux_status: PRIOR CANDIDATE QUALIFIED; exact aeff7e5 candidate requalification in progress
+macos_status: VALID / QUALIFIED for parent ae5b8ab, fork aeff7e5
+release_tag_status: NOT_AUTHORIZED until exact-candidate Linux requalification completes
 retained_runs:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix1
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix2
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013
 archived_runs: []
 deletion_candidates: []
 
 latest_checkpoint:
-  state: LINUX_PLATFORM_CONTEXT_QUALIFIED_MACOS_BLOCKED
-  result: Exact-candidate Linux CP1-CP5 are VALID, including camera, dynamic, GUI, and clean shutdown.
-  next_action: Resolve the retained macOS Cocoa runtime blocker and qualify macOS against the same fork candidate before any release tag.
+  state: MACOS_EXP013_QUALIFIED_LINUX_EXACT_CANDIDATE_REQUALIFYING
+  result: macOS parent ae5b8ab / fork aeff7e5 passed startup, camera, dynamic, GUI, and clean shutdown.
+  next_action: Requalify Linux against the same aeff7e5 fork candidate before any release tag.
 open_risks:
-  - macOS final runtime camera/dynamic/clean-shutdown acceptance remains invalid after the prior Cocoa crash
-  - no release tag until macOS and Linux qualify the same exact candidate
+  - prior Linux qualification used ca654e3, not current aeff7e5
+  - no release tag until Linux also qualifies the current exact candidate
 ```
 
 ## Controller rulings
@@ -880,11 +881,12 @@ another catch clause.
 ### EXP-013: macOS pre-RenderLoop Cocoa resize regression
 
 ```yaml
-status: FIX COMMITTED / MACOS RUNTIME REQUALIFICATION PENDING
+status: VALID
+qualification: MACOS QUALIFIED
 scope: restore the lost macOS startup-resize guard, then requalify the exact current candidate
 parent_before_fix: 3d4107206a7d84ad1dbae33b945b5cce3e8166ad
 fork_before_fix: ca654e30ea9791564fab7110c90734733b68c8cc
-evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825
+evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013
 round_5_reconstruction:
   - pid 67077: main-thread startup fault at the same resize callback; SIGBUS / exit -10
   - pid 71038: main-thread startup fault at the same resize callback; SIGSEGV / exit -11
@@ -905,10 +907,16 @@ historical_regression:
 single_variable_fix: restore the Apple startup no-resize guard at the migrated MujocoSimulation owner
 tdd_contract: restore the deleted macOS startup-resize regression test and observe RED before production change
 fork_after_fix: aeff7e5
+parent_after_fix: ae5b8ab
 static_verification:
   red: test_primary_monitor_guard.py failed before production change
   green: restored startup-resize contract passed after production change
   independent_review: PASS; 0 critical, 0 important, 0 minor findings
+parent_lock_followup:
+  red: two focused provenance tests failed because gitlink was aeff7e5 while both locks still named ca654e3
+  green: 2/2 focused provenance tests passed after synchronizing both locks, checker, and test constant
+  full_contract: 16/16 passed in a sourced macOS ROS environment
+  backend_contract: passed
 isolated_build:
   prefix: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013/fork-build/install
   result: 6 packages built successfully
@@ -920,13 +928,84 @@ isolated_tests:
 runtime_policy:
   diagnostic_smoke: one isolated repeated-startup experiment after static/build GREEN
   final_acceptance: one exact-candidate camera + dynamic + screenshot + clean-shutdown run only after smoke is stable
+runtime_diagnostic:
+  repeated_startup: 3/3 crossed the former Cocoa fault site and entered camera rendering
+  accepted_shutdown_probe: run-3 used one foreground-process-group Ctrl-C; all long-lived nodes exited cleanly with no escalation or invalid context
+  invalid_shutdown_evidence:
+    - run-1 terminal pipeline interruption did not retain complete shutdown logging
+    - run-2 signaled only the ros2 launch root, causing launch to escalate child processes after 5 seconds
+  disposition: invalid signal-delivery probes retained but excluded from acceptance
+final_macos_acceptance:
+  parent: ae5b8ab97dfd33c82ee6779193fc5516636f2b02
+  fork: aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c
+  camera:
+    color_samples: 30
+    unique_color_header_stamps: 30
+    color_frequency_hz: 9.986225895316805
+    aligned_rgb_depth_info: true
+    dimensions: 640x480
+    frame_id: task_camera_frame
+    encodings: rgb8 / 32FC1
+    finite_positive_depth: 307200 / 307200
+    sha256: 2e35777b9d15002d0f54b34dae49862308abb44d94a3d1c043944baaa16ee4a7
+  dynamic:
+    status: DONE
+    transition_count: 19
+    exit_code: 0
+    manifest_sha256: b9a124e6c2d5797796a94a13aadedfac4bc97d69cf7ef58bfc205213c184ad77
+  screenshot:
+    path: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013/final/macos-final-mujoco-monitor2.png
+    sha256: 2532461a6ffa6da5e9c3394e0f4a5ab6d4d1406e01f803a53b89b5ec087ac92a
+  shutdown: one foreground Ctrl-C; UI cleanup on process main thread; PAL publishers stopped before context invalidation; all long-lived nodes clean exit; no signal escalation, invalid context, or crash
+  post_shutdown_readback:
+    timing: fresh read-back after acceptance; not captured at the exact stop instant
+    process_inventory: final/post-shutdown-process-inventory.log
+    process_inventory_result: stack wrapper PID 93250 absent; bridge wrapper PID 93448 absent
+    process_inventory_sha256: e7b9149ca4dc72e388f25932510af3194fb26e603fc43943047e93f534871ed3
+    domain_nodes: final/post-shutdown-domain-nodes.log
+    domain_nodes_result: ROS_DOMAIN_ID 220 node_count=0
+    domain_nodes_sha256: 17c66e91378e48e8ab759af158477bba2faf820b95baaf98139bbf5aeaa69d70
+    tmux: final/post-shutdown-tmux.log
+    tmux_result: final-stack and smoke-r3 panes dead; final-bridge session absent; protected Round 4/5 sessions unchanged
+    tmux_sha256: 9156852092e949b1712cfa5d5d0ee9bc394497a1a7bf2ee666974385eb3edc06
 retained_evidence:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/runtime-task7a/run-4
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/runtime-task7a/run-5
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013/startup-smoke
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013/final
 archived_runs: []
 deletion_candidates: []
 ```
 
 This experiment reopens macOS only because the previous ceiling ended with an unexplained nondeterministic
-startup crash and the retained crash reports now prove a distinct, testable regression. It does not count the
-old Round 4 functional samples as final acceptance, and it does not authorize a release tag.
+startup crash and the retained crash reports proved a distinct, testable regression. The fresh final run, not
+the old Round 4 samples, is the macOS qualification evidence. A release tag still requires Linux requalification
+against the new exact fork commit.
+
+### EXP-014: Linux exact-candidate requalification after Apple-guard fix
+
+```yaml
+status: PLANNED
+execution: DELEGATED
+scope: requalify Linux against the exact parent ae5b8ab and fork aeff7e5 after the macOS-only startup guard
+prior_experiments: EXP-012, EXP-013
+lifecycle: ISOLATED_STACK
+source_parent: ae5b8ab97dfd33c82ee6779193fc5516636f2b02
+source_fork: aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c
+evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-exp013-requal
+required_gates:
+  - exact commit, gitlink, clean source, and dual ancestry
+  - isolated build and key tests
+  - camera RGB/depth/camera-info payload, timing, alignment, and finite-positive depth
+  - dynamic cup pick-place DONE
+  - GUI screenshot
+  - one clean shutdown with no owned residue, invalid context, or signal escalation
+retained_evidence: []
+archived_runs: []
+deletion_candidates: []
+```
+
+The first delegated EXP-014 attempt stopped before build because the remote read-back reproduced the local
+provenance mismatch: gitlink and nested HEAD were `aeff7e5`, while both locks and the backend checker still named
+`ca654e3`. That fail-closed attempt is retained under the EXP-014 evidence root and is not a build, test, or runtime
+result. EXP-014 resumes only after the synchronized parent lock commit is fixed and transferred.

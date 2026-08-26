@@ -4,7 +4,7 @@ release: 0.1.0
 fork:
   url: git@gitee.com:zjumty/mujoco_ros2_control.git
   tag: so101-0.1.0-r1-candidate
-  commit: ca654e30ea9791564fab7110c90734733b68c8cc
+  commit: aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c
   lineage_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
   policy_behavior_commit: 1ef550cbbcbbcf8c0e5784648f81545724d5f90f
 upstream:
