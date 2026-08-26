@@ -2087,3 +2087,22 @@ helpers:
 decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_DOMAIN_AND_INPUT_GATE
 next_experiment: SMOKE-011
 ```
+
+## CP-050 / TRANS-SMOKE-011-RUNNING-001 — Start live RGB-D input gate
+
+```yaml
+checkpoint_id: CP-050
+transition_id: TRANS-SMOKE-011-RUNNING-001
+recorded_at: 2026-08-27T02:05:10+08:00
+smoke_id: SMOKE-011
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_transition: 77a617514136514ad716762504cbc23e1d6f468e
+pre_running_observed:
+  - Domain 209 graph, evidence, exact task tmux/process identities, and Viewer were fresh and empty.
+  - Idle tmux pane 48630 passed explicit in-pane cd, pane_current_path, and captured pwd against the exact worktree.
+decision: START_BASE_STATIC_TF_GUI_THEN_POST_SCENE_RGBD_INPUT_OBSERVER
+next_command: Do not start perception unless the three-topic input observer gate exits zero.
+```
