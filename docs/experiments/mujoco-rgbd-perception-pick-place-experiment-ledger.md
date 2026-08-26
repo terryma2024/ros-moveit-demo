@@ -3066,3 +3066,57 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/pre-running/cua-state.json
 next_command: Commit and push this transition, then run explicit-zsh capture and installed full restart concurrently on domain 211 for cup_test_right_5cm.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-033-001
+recorded_at: 2026-08-26T16:20:46+08:00
+experiment_id: EXP-033
+status: VALID
+classification: accepted_exact_runner_right_full_restart
+runtime_source_commit: 886b3490d6800c935e3966cb4ec9bab517a259a9
+implementation_commit: 012420c9d01e2a7d0dae9d834c22dcae28c4ccfb
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: Installed runner ownership, natural launch/capture zero exits, exact topology (11 start/11 clean), and zero fatal/traceback/died signals all pass.
+  - OBSERVED: CameraPlugin RGB-D selected 125 cup points from 98123, wrote a nonempty PLY, fitted radius 0.0394509370 m, and produced world [0.0696347382, -0.2805149484, 0.165] at unique stamp 3517999999. Error to right is 0.000631338 m; exactly one perception/workflow and no truth bridge started.
+  - OBSERVED: Exact session/reset0 reached DONE/19 with controller, joint, and FK evidence. Bilateral unsupported lift raised z 0.1668849920 to 0.2248814490; transport [-0.0769784529, -0.2462549180, 0.2283013739] had left=3/right=4 and no table contact; detach preceded open.
+  - OBSERVED: Release ended table-supported at [-0.0779240559, -0.2475426678, 0.1647845381] with zero finger contacts and near-zero velocity. final_xy_error_m=0.0024968044 and tilt=0.0034863138 pass; final scene is detached with pedestal=1, plastic_cup=13, table=1.
+  - OBSERVED: Direct inspection of three distinct 1568x862 frames shows right baseline, visibly raised bilateral transport with empty target, and released cup inside target with open gripper.
+  - OBSERVED: Task Viewer PID 753696/window 54525959 was used for all three captures and is absent after cleanup. Exact child, domain 211, runtime process set, task-owned tmux, and task CUA are empty.
+cleanup_correction:
+  - OBSERVED: Original post-cleanup.log saw a same-title Viewer PID 756195 that started after task capture discovery. Read-only ownership proves it is an unrelated concurrent domain 97/GZ partition mrc010-linux-platform-context-requal run under a different evidence root; it was preserved and not operated. post-cleanup-corrected.log distinguishes it from absent task Viewer PID 753696.
+retained_risk:
+  - OBSERVED: Later streaming observations were not consumed; two pal_statistics shutdown diagnostics were nonfatal and every task process exited cleanly.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/acceptance-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/visual-inspection.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/run/child.owner
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/run/capture-coordinator.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/run.d/rgbd-pick-right-exp033-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/run.d/rgbd-pick-right-exp033-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/gui/viewer-transport.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/gui/viewer-final.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/post-cleanup.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-033/post-cleanup-corrected.log
+decision: KEEP
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-044
+recorded_at: 2026-08-26T16:20:46+08:00
+last_valid_experiment: EXP-033
+current_hypothesis: All four frozen keyframes independently pass through the installed exact-status runner under implementation 012420c9 and exact f19; final verification and independent review remain.
+working_tree_status: Task source and exact f19 submodule are clean before this ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; EXP-033 child/domain 211/session/task Viewer PID/task CUA/task-owned tmux are empty. One explicitly identified unrelated domain 97 Viewer is preserved.
+confirmed_conclusions:
+  - EXP-030 task_start, EXP-031 forward, EXP-032 left, and EXP-033 right are the current countable independent exact-runner set.
+  - Each has RGB-D numeric identity, exact MuJoCo session/reset, full DONE/19 workflow, bilateral unsupported grasp/lift/transport, detached stable release, controller/FK/joint evidence, three directly inspected exact-window frames, natural zero exits, and exact-owned cleanup.
+  - EXP-029 remains retained INVALID; EXP-025 through EXP-028 remain physically valid but wrapper-nonqualifying; CP-016 and CP-037 remain immutable history.
+open_risks:
+  - Nonfatal pal_statistics shutdown diagnostics and unconsumed later streaming observations remain retained.
+  - An unrelated concurrent domain 97 MuJoCo process may still be active and must be preserved during final exact-owned cleanup/readback.
+next_command: Commit and push this four-run closure, repeat fresh full/static/build/installed/provenance/cleanup verification, then request a new independent review of all original and CP-037 findings.
+```
