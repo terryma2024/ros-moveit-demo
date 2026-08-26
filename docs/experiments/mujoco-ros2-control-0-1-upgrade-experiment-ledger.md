@@ -622,3 +622,35 @@ deletion_candidates: []
 The decisive A/B result is that a color-only subscriber observed 120 consecutive real color header stamps at 9.993281827 Hz, while simultaneous large-message collection lost color samples even though camera-info and depth retained continuous 100 ms stamps. The final multiprocessing barrier cleared only Python-side metadata, not DDS subscription backlog. It therefore did not prove a camera publisher defect and is not accepted into the branch.
 
 Task 7A is a new experiment boundary, not a sixth incremental repair of the rejected concurrent collector. In one invocation and against the same stack/candidate provenance, phase one must subscribe only to real color messages and require at least 30 unique header stamps at 8-12 Hz using the original end-to-end formula. After complete teardown, phase two must collect all three topics and require at least three real samples each, at least one common header timestamp, 640x480, `task_camera_frame`, `rgb8`, `32FC1`, non-empty payloads, and a full-payload finite-positive depth check for a common timestamp. Only both phases may produce the single success JSON. Configured rate, wall timer, median/tail frequency, or historical diagnostic substitution is forbidden. A fresh dynamic run, final screenshot, and ordered error-free shutdown remain mandatory after camera success.
+
+### EXP-009: Task 7A phase-separated camera and final macOS breaker
+
+```yaml
+final_parent_code: 22a98d740219abda9459ea3c9cc67eb9fb07fc12
+task_report_commit: 0899900bc6d0590174b48b49e277d2e616e56483
+final_fork_gitlink: f0f09abfe1498e1c6aa84a37a78cea87d2198b1d
+fork_bundle_sha256: f3ea454231135e3eb96d7740ccdbef475dd87e117ea98c8d692bb553f663f186
+fork_full_gate: 23 wrappers, 334 cases, 0 failures, 0 errors, 19 skips
+source_less_gate: 9/9 wrappers, 182 cases
+project_gate: 293/293 passed
+phase_probe_source_review: PASS 0 critical, 0 important, 0 minor
+pal_shutdown_source_review: PASS 0 critical, 0 important, 0 minor
+round_4_camera: PASS 30 unique color stamps, 9.81719702098849 Hz, aligned RGB-D, 307200/307200 finite-positive depth
+round_4_dynamic: DONE with 19 transitions and full lift/transport/place/release/retreat evidence
+round_4_screenshot_sha256: 0d1f875ba9b23c813e0ae90573d2f5eb44960a8d7878dad247476c44b87997ce
+round_4_qualification: INVALID because two PAL invalid-context errors and SIGTERM escalation occurred on shutdown
+round_5_runtime: BREAKER_NOT_QUALIFIED
+round_5_failure: SIGSEGV in _glfwSetWindowSizeCocoa, ros2_control_node exit -11, MoveGroup SIGTERM escalation
+round_5_camera: NOT_RUN
+round_5_dynamic: NOT_RUN
+round_5_screenshot: NOT_CREATED
+runtime_rounds: 5/5 exhausted
+final_tag_created: false
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/runtime-task7a
+archived_runs: []
+deletion_candidates:
+  - rejected Task 7 concurrent probe patch and superseded build/runtime diagnostics remain retained pending explicit authorization
+```
+
+The final macOS code and regression candidate is fully built and reviewed, and one retained run proves the camera and dynamic behavior functionally. It is nevertheless not macOS-qualified because no single final run combines those outcomes with the mandatory clean-shutdown contract. The fifth and final runtime attempt crashed in the Cocoa GLFW window-resize path before readiness. The approved SDD ceiling prohibits a sixth Task 7A runtime attempt; Linux qualification proceeds independently and cannot erase this macOS blocker.
