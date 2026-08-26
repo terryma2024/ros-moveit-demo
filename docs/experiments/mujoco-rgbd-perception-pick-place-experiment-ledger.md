@@ -1702,3 +1702,38 @@ confirmed_conclusions:
   - EXP-012 through EXP-014 remain PLANNED but prohibited until an approved implementation and fresh task_start retry reach a countable physical result.
 next_command: Await explicit approval of EXP-015's bounded remove_ros_args design; after approval, begin with focused RED tests for both affected CLIs.
 ```
+
+```yaml
+transition_id: TRANS-EXP-015-RUNNING-001
+recorded_at: 2026-08-26T12:12:15+08:00
+experiment_id: EXP-015
+from: PLANNED
+to: RUNNING
+approval: User explicitly approved the bounded remove_ros_args design.
+source_commit: PENDING_LEDGER_COMMIT
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: Focused RED produced exactly two exit-2 failures for the two launch-injected ROS argument forms while both unknown-application-argument controls remained strict and passed.
+  - OBSERVED: The minimal implementation conditionally applies rclpy.utilities.remove_ros_args only when `--ros-args` is present; focused GREEN passed 5 tests including the existing no-rclpy-import boundary, affected regression passed 83 tests, and the full package suite passed 375 tests.
+  - OBSERVED: Ruff lint passes on all four changed files, both production CLIs pass Ruff format check, git diff check passes, and the two changed test files retain only their identical pre-existing whole-file format baseline; no bulk formatting was performed.
+  - OBSERVED: The implementation is committed and pushed as a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a. The same five-package task overlay rebuilt successfully, and both installed entrypoints accept their exact ROS-argument shapes with help exit 0.
+  - OBSERVED: Immediate isolation finds task source and exact f19 clean, canonical main clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7, all five package prefixes in the task overlay, domain 193 empty, no domain/partition owner, owned tmux absent, Viewer count zero, and CUA daemon healthy.
+  - OBSERVED: Fresh Mesa ctypes GLFW smoke created and destroyed a hidden window on DISPLAY :1 with exit 0.
+environment:
+  ROS_DOMAIN_ID: 193
+  GZ_PARTITION: rgbd-pick-task-start-exp015-20260826
+  __GLX_VENDOR_LIBRARY_NAME: mesa
+  LIBGL_ALWAYS_SOFTWARE: "1"
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/tdd/red-focused.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/tdd/green-focused.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/tdd/green-affected.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/tdd/pytest-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/tdd/static-checks.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/overlay-rebuild.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/pre-running/installed-cli-ros-args-smoke.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/pre-running/glfw-mesa-ctypes-hidden-smoke.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/pre-running/isolation-snapshot.log
+next_command: Start exact-owned tmux rgbd-pick-exp015-20260826 with the frozen task_start full-restart wrapper, then capture baseline, transport, and released-final Viewer frames at manifest boundaries.
+```
