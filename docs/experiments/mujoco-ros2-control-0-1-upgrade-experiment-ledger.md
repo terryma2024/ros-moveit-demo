@@ -710,7 +710,7 @@ parent_bundle_sha256: a6e357659f813e59f98bf9fe8ca7b6c99c351ed889b0a7e2640b8f6b9e
 invalid_runs:
   - macOS shell run with SIP-stripped dylib environment; excluded
   - Linux first core run imported an ambient /opt/ros Python module; excluded after corrected isolated import provenance
-checkpoint_2_resume: IN_PROGRESS against exact fa37de5/fcbc9f7 candidate in fresh ai-station directories
+checkpoint_2_resume: COMPLETE against exact fa37de5/fcbc9f7 candidate in fresh ai-station directories
 retained_evidence:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-fix1-worktree
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/reviews/task8-fix1-fork.md
@@ -721,3 +721,46 @@ deletion_candidates: []
 ```
 
 The accepted fix is test-lifecycle-only. `SimulationShutdownGuard` is declared after every local object referenced by the physics thread and before the thread starts, so C++ reverse destruction order synchronously shuts down and joins on normal, fatal-assertion, and exception exits. The production `shutdown()` mutex/completion guard makes the later fixture call idempotent. No timeout, detach, skip, forced exit, or production workaround was accepted. Full Linux checkpoints resume only after this exact candidate passed independent review.
+
+Task 8 final Linux qualification:
+
+```yaml
+qualification: VALID
+parent_code: fa37de5af725fbd61c037623dc0fdd64f577f0ff
+fork_candidate: fcbc9f7b23f4493ceed888a22f32805a37493624
+remote_tmux: mrc010-linux-fix2-full-codex
+remote_domain: 83
+remote_partition: mrc010-linux-fix2-full
+checkpoint_1: VALID exact bundles, hashes, clean commits, gitlink, locks, and double ancestry
+checkpoint_2: VALID
+fork_gate: 6 packages; 22/22 Linux wrappers; 327 JUnit cases; 311 passed; 16 skipped; 0 failures/errors
+source_less_gate: 9/9 wrappers; 179 JUnit cases; 176 passed; 3 skipped; 0 failures/errors; no simulate.cc object
+project_gate: 3 packages; 25 native wrappers; 529/529 cases passed
+linux_camera_skip_contamination: PASS; camera tests executed with SKIP_CAMERA_TESTS=true
+static_gates: copy-install, relocation, ABI, r11 interfaces, 13 ROS interfaces, linkage, single mj_step, and backend integration PASS
+checkpoint_3_camera: VALID
+camera_color: 30 unique headers at 8.906633906633907 Hz
+camera_alignment: 3 info/color/depth samples with common stamp 59820000000
+camera_contract: 640x480; task_camera_frame; rgb8; 32FC1; 307200/307200 positive finite depth
+camera_json_sha256: 508d80117c3dc8cd4db6e3eb229d418c5ecb9b30edd40f7ac82008c70d1339bc
+graphics_environment: task-local Mesa software GL after host NVIDIA driver/library mismatch was independently reproduced
+checkpoint_4_dynamic: VALID; exit 0; DONE; QUALIFIED; 19 transitions
+dynamic_phases: lift, transport, place, release, retreat PASS
+dynamic_final_xy_error_m: 0.0018543216494020017
+dynamic_final_upright_tilt_rad: 0.008856173390143201
+planning_scene_sync_max_position_error_m: 0.0
+checkpoint_5: VALID
+screenshot_sha256: 7182bb4642a8b336209fed238717cd4da0ef3755e24ea8f51b708f1b60f2b8f0
+shutdown: one Ctrl-C per owned pane; 2 s runtime exit; no escalation, invalid context, or thread/context crash
+post_shutdown: 0 owned runtime PIDs; 0 domain-83 task nodes; preserved sessions 5/5 and related PIDs 15/15
+copyback_files: 342 SHA-verified
+copyback_manifest_sha256: 651606ddecf6aab2ef8e0bf6372908c0d6d49b10fc925e2d1728311c7d712693
+retained_remote_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-runtime-fix2-full
+retained_local_copy:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux/fix2-full
+archived_runs: []
+deletion_candidates: []
+```
+
+Fresh parent-side verification rechecked the 342-file manifest with zero mismatches, asserted all five checkpoint JSON contracts, read back the exact candidate/gitlink and both ancestry paths, recomputed camera/dynamic/screenshot hashes, and inspected the retained screenshot pixels. Linux is qualified for the exact `fa37de5`/`fcbc9f7` code candidate. Overall Task 9 remains blocked: macOS Task 7A exhausted its five permitted runtime rounds and the final exact-candidate run crashed in `_glfwSetWindowSizeCocoa` before camera/dynamic qualification. Linux success does not authorize a final tag or an overall `QUALIFIED` ledger state.
