@@ -33,7 +33,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-117
+latest_checkpoint: CP-118
 next_experiment: EXP-027
 ```
 
@@ -3590,4 +3590,40 @@ record_commit_before_this_checkpoint: b41ce2cc280afca678263a2a206c15ecb5c9250b
 owned_processes: NONE
 decision: Commit and push the preregistration, prove fresh domain/session/evidence/Viewer/process isolation, then transition only EXP-027 to RUNNING.
 next_experiment: EXP-027
+```
+
+## EXP-027 transition to RUNNING
+
+```yaml
+transition_id: TRANS-EXP-027-RUNNING-001
+recorded_at: 2026-08-27T04:38:00+08:00
+experiment_id: EXP-027
+from: PLANNED
+to: RUNNING
+preflight:
+  parent_status: Clean branch at preregistration commit 8510d4a4bc01c285f5231f795065e25c32fc333b with immutable runtime tree inherited from 2a636d9.
+  child_status: Clean exact checkout 5e9d67ce9fde39d35bf94cc498721abf203a0ddd.
+  domain_91_nodes: NONE
+  target_tmux: ABSENT
+  target_evidence_file: ABSENT
+  target_session_evidence_root: ABSENT
+  target_processes: NONE; the only literal matches were the preflight shell and rg command themselves.
+  relevant_live_stack: NONE
+  target_viewer: ABSENT from fresh GNOME X11 window inventory.
+  preserved_tmux: [codex, codex-cua, mrc010-linux-exp013-requal-codex, mrc010-linux-fix2-full-codex, mrc010-linux-platform-context-requal-codex, mrc010-rgbd-main-codex]
+  canonical_readback: main@b3770360b26fe8f6fac0e19338d250b6f5cab0e7, unchanged and read-only.
+  window_inventory: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-027/preflight-windows.json
+  window_inventory_sha256: 16b21bff6110fa104dd3c7b5df635659c8ca21b9ba68e15483013b1564d00b1a
+decision: Launch the exact installed candidate once in the registered task-owned tmux with fresh GUI environment and capture same-Viewer baseline, transport, and final stages.
+```
+
+## CP-118 — EXP-027 cold-start isolation accepted
+
+```yaml
+checkpoint_id: CP-118
+recorded_at: 2026-08-27T04:38:00+08:00
+status: VALID
+experiment_id: EXP-027
+owned_processes: NONE before launch
+decision: START_EXACT_REGISTERED_COMMAND
 ```
