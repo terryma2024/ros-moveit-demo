@@ -1387,3 +1387,85 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/pre-running/isolation-snapshot.log
 next_command: Start the exact-child-PGID EXP-009 stack wrapper; only after stack/camera/scene readiness start approved TF, pre-start pose observer, and production perception wrappers using the same ownership protocol.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-009-001
+recorded_at: 2026-08-26T10:39:19+08:00
+experiment_id: EXP-009
+status: INVALID
+classification: audit_invalid_non_counting
+product_observations:
+  - OBSERVED: Exact f19 and the fresh five-package overlay remained clean; Mesa software GLX started a fresh visible Viewer, CameraPlugin initialized its 640x480 offscreen renderer, controllers and Planning Scene passed readiness, and no workflow, truth bridge, or robot-motion process started.
+  - OBSERVED: Before production start, /cup_pose had zero publishers and one waiting observer; afterward rgbd_cup_pose was its sole publisher.
+  - OBSERVED: The retained exact-stamp RGB-D triple is task_camera_frame 640x480 rgb8/32FC1 with packed byte counts and all 307200 depth values finite and positive.
+  - OBSERVED: Production selected 141 cup points, fitted radius 0.03938151231973142 m, wrote a 4013-byte PLY, and published world [0.01950111783349788, -0.28040476095521005, 0.165]. The independent point-cloud path also selected 141 points and wrote an identical-hash 4013-byte PLY.
+  - OBSERVED: Exact-source-stamp world<-task_camera_frame lookup succeeded at translation [0.65, -0.65, 0.55]; MuJoCo plastic_cup truth was [0.02, -0.28, 0.16480156647042168], giving 0.0006723769125849648 m 3D error and passing the 0.01 m gate.
+  - OBSERVED: Fresh CUA baseline and post-table_corner_ne screenshots have different hashes; the inspected post-action image visibly contains the orange cup, red target, robot, table, and Running status, while camera_preset readback reported success and matched=true.
+audit_failure:
+  - OBSERVED: Exact recorded child-PGID SIGINT produced genuine exits observer=0, tf-base=0, tf-optical=0, stack=0, but perception=1.
+  - OBSERVED: The perception tail identifies a shutdown race: after prior successful publications, SIGINT invalidated the ROS context during a final publisher call, which raised `Failed to publish: publisher's context is invalid`; the existing runtime classified that RuntimeError as RGBD_CUP_POSE_FATAL.
+  - OBSERVED: Post-cleanup domain 187, every recorded child PID, owned tmux, targeted Python process set, Viewer window, and CUA session are empty.
+  - INFERRED: This is a production shutdown-classification defect, not a perception or isolation failure, but the frozen all-zero auditable-exit criterion cannot be waived.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/perception.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/rgbd-sample.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/truth-tf.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/point-cloud.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/cup.ply
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/cup-independent.ply
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/gui/viewer-after-table-corner-ne.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/run/perception.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-009/run/post-cleanup.log
+conclusion: EXP-009 is strict audit INVALID and non-counting despite passing every perception, truth, topology, and visual product gate; its genuine perception exit 1 proves an orderly-shutdown race that must be corrected and rerun rather than normalized in evidence.
+decision: Preserve all EXP-009 evidence and plan EXP-010 with one production variable: shutdown-aware RuntimeError classification after a first valid publication.
+next_experiment: EXP-010
+```
+
+```yaml
+experiment_id: EXP-010
+status: PLANNED
+prior_experiment: EXP-009
+hypothesis: If rgbd_cup_pose observes a RuntimeError only after at least one valid publication and the ROS runtime is already not-ok, classifying that exception as orderly context shutdown will preserve real failures while allowing exact PGID SIGINT to exit 0.
+prediction: A focused regression test fails on the current implementation and passes after the minimal branch; a fresh exact-f19 overlay rebuild and full package suite pass; a new isolated perception run reproduces every EXP-009 product gate and records all helper plus stack exits as 0.
+single_variable: In run_rgbd_cup_pose's runtime-error handler only, distinguish post-success context shutdown (`first_valid_published` and `not runtime.ok()`) from a RuntimeError while context remains live; do not change perception, TF, camera, Mesa, scene, keyframe, or lifecycle settings.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Explicit approval of the bounded design is received before implementation, as required by the brainstorming workflow.
+  - Add and observe a focused RED test before changing production code, then run focused and full package verification and rebuild the same fresh overlay.
+  - Use a new ROS domain, partition, session id, owned tmux, and exp-010 evidence directory; retain EXP-009 unchanged.
+success_criteria:
+  - All EXP-009 product gates pass on fresh evidence and exact child-PGID cleanup writes observer=0, TF helpers=0, perception=0, and stack=0.
+  - Post-cleanup domain, process, Viewer, CUA, and owned tmux sets are empty.
+failure_criteria:
+  - The focused fix does not make the live SIGINT path exit 0, or any product gate fails with valid isolation/provenance.
+invalid_criteria:
+  - Approval/TDD/provenance/isolation evidence is incomplete, prohibited workflow or motion starts, or any exit remains unauditable.
+provenance:
+  source_commit: PENDING
+  implementation_commit: PENDING
+  submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  ros_domain_id: 188
+  gz_partition: rgbd-perception-ai-station-exp010-20260826
+  session_id: rgbd-perception-ai-station-exp010-20260826
+  owned_tmux_session: rgbd-exp010-20260826
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/
+decision: PENDING_APPROVAL
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-021
+recorded_at: 2026-08-26T10:39:19+08:00
+last_valid_experiment: EXP-002
+current_hypothesis: A minimal shutdown-aware error classification can convert the fully passing EXP-009 perception product into an auditable all-zero lifecycle on a fresh EXP-010 rerun.
+working_tree_status: Parent task worktree and exact f19 submodule were clean before this ledger append; runtime artifacts remain only below the registered /tmp evidence root.
+owned_processes: NONE; domain 187, all recorded child PIDs, owned tmux, Viewer, CUA session, and targeted process set are empty.
+preserved_processes: Existing unrelated tmux sessions and canonical main at b3770360b26fe8f6fac0e19338d250b6f5cab0e7 were not operated or modified.
+confirmed_conclusions:
+  - EXP-009 independently reconfirms the RGB-D/perception/truth/visual product chain but is non-counting because perception genuinely exited 1.
+  - The failure is localized to post-success ROS-context shutdown classification; normal live-context RuntimeError behavior must remain fatal.
+  - Four FULL_RESTART runs remain prohibited until a VALID perception-only experiment is independently reviewed.
+next_command: Await explicit approval of the bounded two-branch design, then begin EXP-010 with a focused RED regression test.
+```
