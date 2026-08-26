@@ -2473,3 +2473,26 @@ preserved_empty_state: EXP-017 evidence root, tmux, exact session processes, and
 decision: RETAIN_INVALID_PLAN_AND_USE_FRESH_SUPPORTED_DOMAIN
 next_experiment: EXP-018
 ```
+
+## CP-063 — Replan task_start qualification on supported domain
+
+```yaml
+checkpoint_id: CP-063
+recorded_at: 2026-08-27T02:36:30+08:00
+experiment_id: EXP-018
+status: PLANNED
+qualification: true
+position: task_start
+lifecycle: FULL_RESTART
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+installed_bundle_sha256: e1dae424668fe418e64f05cda6976308670ade43639df7b0fbc97d74fb8e4f93
+identity:
+  domain: 200
+  session: mac-mrc010-task-start-exp018
+  tmux: mrc010-mac-exp018
+  evidence_file: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-018/task-start.json
+single_change_from_exp017: Replace unsupported domain 233 with supported fresh domain 200 and fresh experiment/session/evidence identities; all product, helper, capture, and AC-001 criteria remain exactly CP-061.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT
+next_experiment: EXP-018
+```
