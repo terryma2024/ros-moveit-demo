@@ -1757,3 +1757,39 @@ owned_processes:
 decision: START_BASE_STATIC_TF_GUI_THEN_EXACT_CHILD_AND_SAMPLER
 next_command: Start domain 212 base/static-TF/GUI; after full readiness start recorded installed child and boundary sampler.
 ```
+
+## CP-040 / CLOSE-SMOKE-008-001 — Reject sampler environment before first sample
+
+```yaml
+checkpoint_id: CP-040
+transition_id: CLOSE-SMOKE-008-001
+recorded_at: 2026-08-27T01:33:39+08:00
+smoke_id: SMOKE-008
+from: RUNNING
+to: INVALID_SAMPLER
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 1fe6a6bfd8dcff9f1a3916fa26c6fb3ba31e8e44
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+valid_preconditions:
+  - Exact cwd/provenance/installed child identity, domain 212, base/static TF/controllers/MoveIt/Scene READ_BACK, and exact Viewer baseline all passed.
+invalid_observer:
+  - sample-real-perception-r1.zsh did not source the venv and invoked an unavailable unqualified python token while calculating the 25 s remaining delay.
+  - The empty remaining value made sleep fail; the sampler exited 66 before invoking macOS sample. No process was sampled or signaled by the invalid sampler.
+  - Therefore the stack-sampling objective is invalid and no root-call inference is made from this run.
+retained_behavior_observation:
+  - The exact immutable installed child was independently recorded as PID 85092, PPID 84538, with exact executable and argv readback.
+  - It naturally reproduced RGBD_CUP_POSE_TIMEOUT: startup deadline expired during ROS runtime construction after 51.306446333 s wall, rc one, with no summary.json/cup.ply.
+  - This repeats SMOKE-006's product failure but supplies no new stack evidence and remains non-qualifying.
+cleanup:
+  - The child had already exited when exact SIGINT was attempted; exact GUI helper/static-TF/base identities were then stopped, component teardown was clean, and the returned idle tmux was removed by exact name.
+  - Domain 212, exact PIDs, task tmux, and Viewer are absent; unrelated windows/processes/tmux remain preserved.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-sampling-r1/live
+  perception_owner_sha256: fef7d97231db31a13fa31fb2c658bf273b0c08d2b9ce5465ed24519aedefb422
+  child_owner_sha256: aa2bdce4882212e0dd70efb7fa20ea300005410e2166441402cb56407452f2e2
+  stdout_sha256: 95b969fca349efacfe7a6111fc5ace0f49ac6171511174a16f0f7213be6ade0a
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+decision: RETAIN_INVALID_AND_REPEAT_WITH_ABSOLUTE_VENV_PYTHON_PLUS_IDENTITY_PARSER_PREFLIGHT
+next_experiment: NONE
+```
