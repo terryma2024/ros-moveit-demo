@@ -32,7 +32,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-018
+latest_checkpoint: CP-019
 next_experiment: SMOKE-002
 ```
 
@@ -1087,4 +1087,26 @@ success_criteria: The A/B identifies whether Open3D import, ROS API load, rclpy 
 failure_criteria: No segment reproduces the overrun; retain the result and reject the contention hypothesis rather than changing timeout.
 decision: COMMIT_PLAN_THEN_RUN_NON_QUALIFYING_AB
 next_experiment: SMOKE-002
+```
+
+## CP-019 / TRANS-SMOKE-002-RUNNING-001 — Start runtime-contention A/B
+
+```yaml
+checkpoint_id: CP-019
+transition_id: TRANS-SMOKE-002-RUNNING-001
+recorded_at: 2026-08-27T00:28:28+08:00
+smoke_id: SMOKE-002
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 6892c87bcfff4e38fc184b5a90c59f0ad020d5fa
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Domain 227/session process identity, mrc010-mac-runtime-contention-r1, exact Viewer title, and diagnosis evidence path are empty.
+  - Worktree is clean; installed candidate prefixes remain frozen and SMOKE-001's ABI-aligned plugin is unchanged.
+  - Base runner and timing probe pass syntax/readback; SHA256 values are 41d02e347ff3982d35afc8707e4119e1f3888e2f61b0b67d335bc9360425727e and a0e6083edc8953a73562e80ad7da5871579e01aaf584c9ec2160ee50f6566d91.
+owned_processes: NONE
+decision: START_NON_QUALIFYING_BASE_STACK_AB
+next_command: Commit transition, start exact-owned base stack with explicit cwd, wait for all readiness markers, run same-domain timing probe under 120 s bound, then exact SIGINT cleanup.
 ```
