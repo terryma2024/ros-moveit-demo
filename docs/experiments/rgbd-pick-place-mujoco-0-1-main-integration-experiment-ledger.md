@@ -1861,3 +1861,47 @@ evidence:
 decision: START_BASE_STATIC_TF_GUI_THEN_EXACT_CHILD_AND_CORRECTED_SAMPLER
 next_command: Start domain 211 base/static-TF/GUI; after full readiness start recorded installed child and exact-owned 25 s/31 s sampler.
 ```
+
+## CP-043 / CLOSE-SMOKE-009-001 — Localize constructor timeout to default ROS service typesupport loading
+
+```yaml
+checkpoint_id: CP-043
+transition_id: CLOSE-SMOKE-009-001
+recorded_at: 2026-08-27T01:47:12+08:00
+smoke_id: SMOKE-009
+from: RUNNING
+to: VALID_DIAGNOSTIC_FAILURE
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: d5b5e04deb912833bc3c0923c292575b3d4b76db
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+valid_preconditions:
+  - Exact worktree/provenance/domain/session/installed-child identity passed; base/static TF/controllers/MoveIt/Scene READ_BACK and unique Viewer baseline all passed before child start.
+  - The corrected absolute-Python observer matched exact PID 90419, parent 88997, and immutable installed executable at both boundaries; macOS sample returned zero twice.
+observed_product_failure:
+  - The unchanged child naturally exited one with RGBD_CUP_POSE_TIMEOUT during ROS runtime construction, no summary.json/cup.ply, and measured wall 35.235684875 s.
+  - Sampling is intentionally perturbing, so this wall value is diagnostic only and is not compared directly with the unsampled 51 s failures.
+root_call_evidence:
+  - At 25 s, all 1343 main-thread samples were inside rcl_service_init -> rmw_create_service -> FastRTPS service typesupport lookup -> rcpputils SharedLibrary -> rcutils_load_shared_library -> dyld dlopen/path-image scanning.
+  - At 31 s, all 1519 main-thread samples were specifically inside rcl_node_type_description_service_init and then the same service-typesupport/dlopen chain.
+  - This places the first bad boundary inside rclpy Node construction's automatically created ROS services, before TF, publisher, or RGB-D subscriptions. It rejects Open3D, subscription creation, and generic CPU scheduling as the active blocked call in this reproduction.
+next_tdd_boundary:
+  - The perception node does not consume ROS parameter services or rosout. Add a RED contract requiring Node construction to pass start_parameter_services false and enable_rosout false while preserving automatic parameter declaration and use_sim_time behavior.
+  - Local Jazzy exposes both switches but no type-description-service switch; the type-description service remains and must be validated in a real live GREEN smoke after removing the avoidable default services.
+cleanup:
+  - Exact child exited naturally; exact capture/static-TF helpers received only their owned interrupt, base tmux received one Ctrl-C, and controller manager, Move Group, RSP, MuJoCo UI, and hardware teardown were clean in base log.
+  - The base helper shell returned to its task pane before writing a wrapper exit-code file; this observer gap is retained and does not alter component-level clean teardown.
+  - Domain 211, exact PIDs, task tmux, and Viewer are absent; unrelated windows/processes/tmux remain preserved.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-sampling-r2/live
+  perception_owner_sha256: e088e5bb23b0c6f9c5bca4cb1348433b846b4d47ae755457e13547a3cb65848b
+  perception_child_owner_sha256: 5940b469e67ca37357f13c509b02ed8de6a6cc171aca652e314e3bdc91381a64
+  stdout_sha256: 95b969fca349efacfe7a6111fc5ace0f49ac6171511174a16f0f7213be6ade0a
+  sample_25s_sha256: d966aab67090877bd09c33ee28737621659554fd1d4acbbf9413903b57f0885d
+  sample_31s_sha256: 79281a40d2a444fd7a6144f0c1622d2216bf6d7e688e949e0a31fa21774cba86
+  baseline_manifest_sha256: bc65c3a311725e9b1c9ea2431a256ca0588233230ed8cab5fab60b46873668ea
+  baseline_png_sha256: b70b934fa57e079efabfaed81ef1af5a9d13d7472163753d5eb229efaba6576d
+  base_log_sha256: d1e408ed0b3cb6297ca7ca5d3f62f5d25a2971b1712146ea3d5a26a0286882e5
+decision: RETAIN_ROOT_CALL_EVIDENCE_AND_BEGIN_TDD_DEFAULT_SERVICE_REDUCTION
+next_experiment: NONE
+```
