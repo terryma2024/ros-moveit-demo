@@ -424,6 +424,23 @@ decision: COMMIT_CLOSURE_PLAN_THEN_BUILD_BOUNDED_CAPTURE_PANE_AND_FRESH_PREFLIGH
 next_experiment: SMOKE-020
 ```
 
+## CP-099 / TRANS-SMOKE-020-RUNNING-001 — Start task-owned tmux capture-context smoke
+
+```yaml
+checkpoint_id: CP-099
+transition_id: TRANS-SMOKE-020-RUNNING-001
+recorded_at: 2026-08-27T03:38:40+08:00
+smoke_id: SMOKE-020
+from: PLANNED
+to: RUNNING
+qualification: false
+pre_running_observed:
+  - Fresh domain211, exact session/processes/Viewer, and runtime evidence were empty; task worktree was clean.
+  - Base runner 0548a2a0f6e514c99c20cdc429c8c8ca4511259284d7e96bf5645103074576cb and tmux-local capture runner 2d815c87b0596da001edbf0a4bb4e50e146269424d21fa88609515dfc3204145 passed syntax/hash readback.
+  - The capture pane will call unchanged project gui-capture helper f9a8eb4cadce8be7b2de3f596fec625e82a2cf1ccbeeec7458e3024b893afc4e by explicit bash.
+decision: START_EXACT_TWO_PANE_NO_MOTION_CAPTURE_SMOKE
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
