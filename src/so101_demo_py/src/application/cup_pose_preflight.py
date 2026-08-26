@@ -15,6 +15,41 @@ class CupPosePreflightError(RuntimeError):
         self.code = code
 
 
+def validate_mujoco_scene_identity(
+    observation: CupSceneObservation,
+    *,
+    expected_session_id: str,
+    expected_reset_epoch: int,
+) -> None:
+    missing = tuple(
+        name
+        for name in ("simulation_session_id", "reset_epoch", "paused")
+        if getattr(observation, name) is None
+    )
+    if missing:
+        raise CupPosePreflightError(
+            "CUP_POSE_SCENE_IDENTITY_MISSING",
+            f"MuJoCo scene identity fields are missing: {', '.join(missing)}",
+        )
+    if observation.simulation_session_id != expected_session_id:
+        raise CupPosePreflightError(
+            "CUP_POSE_SCENE_SESSION_MISMATCH",
+            "MuJoCo scene session mismatch: "
+            f"expected {expected_session_id}, got {observation.simulation_session_id}",
+        )
+    if observation.reset_epoch != expected_reset_epoch:
+        raise CupPosePreflightError(
+            "CUP_POSE_SCENE_RESET_EPOCH_MISMATCH",
+            "MuJoCo scene reset epoch mismatch: "
+            f"expected {expected_reset_epoch}, got {observation.reset_epoch}",
+        )
+    if observation.paused:
+        raise CupPosePreflightError(
+            "CUP_POSE_SCENE_PAUSED",
+            "MuJoCo scene evidence reports paused physics",
+        )
+
+
 def _position_distance(left: PoseEvidence, right: PoseEvidence) -> float:
     return math.sqrt(
         sum((a - b) ** 2 for a, b in zip(left.position_m, right.position_m, strict=True))
@@ -25,10 +60,7 @@ def _orientation_distance(left: PoseEvidence, right: PoseEvidence) -> float:
     left_norm = math.sqrt(sum(value * value for value in left.orientation_xyzw))
     right_norm = math.sqrt(sum(value * value for value in right.orientation_xyzw))
     dot = abs(
-        sum(
-            a * b
-            for a, b in zip(left.orientation_xyzw, right.orientation_xyzw, strict=True)
-        )
+        sum(a * b for a, b in zip(left.orientation_xyzw, right.orientation_xyzw, strict=True))
         / (left_norm * right_norm)
     )
     return 2.0 * math.acos(min(1.0, max(-1.0, dot)))

@@ -5,15 +5,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from so101_demo.core.domain import RunStatus, State
 from so101_demo.core.task_geometry import TaskGeometry, load_task_geometry
 from so101_demo.ports.cup_scene_observation import CupSceneObservation
 from so101_demo.ports.evidence import PoseEvidence
 from so101_demo.ports.planning_scene import SceneCommandReceipt
-
 from test_dynamic_pick import _sample, _template
-
 
 PACKAGE = Path(__file__).parents[1]
 
@@ -36,7 +33,32 @@ def _observation(
         (simulator_x if moveit_x is None else moveit_x, -0.28, 0.165),
         (0.0, 0.0, 0.0, 1.0),
     )
-    return CupSceneObservation(simulator, 1.0, moveit, 1.1, attached)
+    return CupSceneObservation(
+        simulator,
+        1.0,
+        moveit,
+        1.1,
+        attached,
+        simulation_session_id="task-5",
+        reset_epoch=3,
+        paused=False,
+    )
+
+
+def _identity_observation(**changes):
+    observation = _observation(simulator_x=-0.03, moveit_x=-0.03)
+    values = {
+        "simulator_pose_world": observation.simulator_pose_world,
+        "simulator_received_monotonic_s": observation.simulator_received_monotonic_s,
+        "moveit_pose_world": observation.moveit_pose_world,
+        "moveit_received_monotonic_s": observation.moveit_received_monotonic_s,
+        "moveit_attached": observation.moveit_attached,
+        "simulation_session_id": "task-5",
+        "reset_epoch": 3,
+        "paused": False,
+        **changes,
+    }
+    return SimpleNamespace(**values)
 
 
 def _receipt(
@@ -110,8 +132,8 @@ class RecordingTaskScenePort:
 
 
 def test_divergent_perception_rejects_before_any_scene_mutation() -> None:
-    from so101_demo.application.dynamic_scene_sync import prepare_dynamic_cup_scene
     from so101_demo.application.cup_pose_preflight import CupPosePreflightError
+    from so101_demo.application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
     scene = RecordingTaskScenePort()
     with pytest.raises(CupPosePreflightError, match="topic_vs_simulator") as captured:
@@ -128,8 +150,8 @@ def test_divergent_perception_rejects_before_any_scene_mutation() -> None:
 
 
 def test_attached_cup_rejects_before_any_scene_mutation() -> None:
-    from so101_demo.application.dynamic_scene_sync import prepare_dynamic_cup_scene
     from so101_demo.application.cup_pose_preflight import CupPosePreflightError
+    from so101_demo.application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
     scene = RecordingTaskScenePort()
     with pytest.raises(CupPosePreflightError, match="world object") as captured:
@@ -191,8 +213,8 @@ def test_scene_transaction_failures_stop_at_the_failed_boundary(
     expected_calls: list[str],
     message: str,
 ) -> None:
-    from so101_demo.application.dynamic_scene_sync import prepare_dynamic_cup_scene
     from so101_demo.application.cup_pose_preflight import CupPosePreflightError
+    from so101_demo.application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
     scene = RecordingTaskScenePort(
         apply_success=apply_success,
@@ -278,8 +300,8 @@ def test_scene_readback_failure_identifies_mismatched_object_property_and_member
 def test_missing_or_duplicate_plastic_cup_fails_closed_without_scene_mutation(
     objects: tuple[str, ...],
 ) -> None:
-    from so101_demo.application.dynamic_scene_sync import prepare_dynamic_cup_scene
     from so101_demo.application.cup_pose_preflight import CupPosePreflightError
+    from so101_demo.application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
     geometry = _geometry()
     if objects:
@@ -441,8 +463,9 @@ def _runtime(
         events.append("source.create")
         return _FakeSource(events, sample)
 
-    def observer_factory(_node, session_id: str):
+    def observer_factory(_node, session_id: str, expected_reset_epoch: int):
         assert session_id == "task-5"
+        assert expected_reset_epoch == 3
         events.append("truth.create")
         return _FakeObserver(events, observations, faults)
 
@@ -552,6 +575,48 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
 
 
 @pytest.mark.parametrize(
+    ("changes", "failure_code"),
+    (
+        ({"simulation_session_id": None}, "CUP_POSE_SCENE_IDENTITY_MISSING"),
+        ({"reset_epoch": None}, "CUP_POSE_SCENE_IDENTITY_MISSING"),
+        ({"paused": None}, "CUP_POSE_SCENE_IDENTITY_MISSING"),
+        ({"simulation_session_id": "other"}, "CUP_POSE_SCENE_SESSION_MISMATCH"),
+        ({"reset_epoch": 4}, "CUP_POSE_SCENE_RESET_EPOCH_MISMATCH"),
+        ({"paused": True}, "CUP_POSE_SCENE_PAUSED"),
+    ),
+)
+def test_run_dynamic_execute_rejects_invalid_identity_before_scene_mutation(
+    tmp_path,
+    capsys,
+    changes,
+    failure_code: str,
+) -> None:
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    scene = RecordingTaskScenePort()
+    observation = _identity_observation(**changes)
+
+    assert (
+        run_dynamic_execute(
+            _options(tmp_path),
+            _runtime=_runtime(
+                events,
+                observations=(observation, observation, observation),
+                scene=scene,
+            ),
+        )
+        == 1
+    )
+
+    assert failure_code in capsys.readouterr().out
+    assert "task_scene.create" not in events
+    assert "task_scene.apply" not in events
+    assert "targets.resolve" not in events
+    assert scene.calls == []
+
+
+@pytest.mark.parametrize(
     ("observations", "apply_success", "observe_success"),
     (
         ((_observation(simulator_x=0.02),), True, True),
@@ -591,10 +656,13 @@ def test_run_dynamic_execute_scene_failures_never_resolve_targets_or_construct_m
         observe_success=observe_success,
     )
 
-    assert run_dynamic_execute(
-        _options(tmp_path),
-        _runtime=_runtime(events, observations=observations, scene=scene),
-    ) == 1
+    assert (
+        run_dynamic_execute(
+            _options(tmp_path),
+            _runtime=_runtime(events, observations=observations, scene=scene),
+        )
+        == 1
+    )
 
     assert "targets.resolve" not in events
     assert "execution.create" not in events
@@ -612,15 +680,18 @@ def test_rclpy_init_failure_is_actionable_without_claiming_context_ownership(
     events: list[str] = []
     scene = RecordingTaskScenePort()
 
-    assert run_dynamic_execute(
-        _options(tmp_path),
-        _runtime=_runtime(
-            events,
-            observations=(),
-            scene=scene,
-            faults=frozenset({"rclpy.init"}),
-        ),
-    ) == 1
+    assert (
+        run_dynamic_execute(
+            _options(tmp_path),
+            _runtime=_runtime(
+                events,
+                observations=(),
+                scene=scene,
+                faults=frozenset({"rclpy.init"}),
+            ),
+        )
+        == 1
+    )
 
     assert events == ["geometry.load", "ros.init"]
     assert "failure=RCLPY_INIT_FAILED" in capsys.readouterr().out
@@ -635,15 +706,18 @@ def test_node_creation_failure_after_init_still_shuts_down_owned_context(
     events: list[str] = []
     scene = RecordingTaskScenePort()
 
-    assert run_dynamic_execute(
-        _options(tmp_path),
-        _runtime=_runtime(
-            events,
-            observations=(),
-            scene=scene,
-            faults=frozenset({"node.create"}),
-        ),
-    ) == 1
+    assert (
+        run_dynamic_execute(
+            _options(tmp_path),
+            _runtime=_runtime(
+                events,
+                observations=(),
+                scene=scene,
+                faults=frozenset({"node.create"}),
+            ),
+        )
+        == 1
+    )
 
     assert events == ["geometry.load", "ros.init", "node.create", "ros.shutdown"]
     assert "failure=NODE_CREATE_FAILED" in capsys.readouterr().out
@@ -667,19 +741,22 @@ def test_cleanup_attempts_every_owned_resource_and_aggregates_all_failures(
         }
     )
 
-    assert run_dynamic_execute(
-        _options(tmp_path),
-        _runtime=_runtime(
-            events,
-            observations=(
-                _observation(simulator_x=-0.03, moveit_x=0.02),
-                _observation(simulator_x=-0.03, moveit_x=-0.03),
-                _observation(simulator_x=-0.03, moveit_x=-0.03),
+    assert (
+        run_dynamic_execute(
+            _options(tmp_path),
+            _runtime=_runtime(
+                events,
+                observations=(
+                    _observation(simulator_x=-0.03, moveit_x=0.02),
+                    _observation(simulator_x=-0.03, moveit_x=-0.03),
+                    _observation(simulator_x=-0.03, moveit_x=-0.03),
+                ),
+                scene=scene,
+                faults=faults,
             ),
-            scene=scene,
-            faults=faults,
-        ),
-    ) == 1
+        )
+        == 1
+    )
 
     assert not hasattr(scene, "close")
     assert scene.closed
@@ -723,19 +800,22 @@ def test_primary_workflow_failure_survives_finish_and_cleanup_failures(
         }
     )
 
-    assert run_dynamic_execute(
-        _options(tmp_path),
-        _runtime=_runtime(
-            events,
-            observations=(
-                _observation(simulator_x=-0.03, moveit_x=0.02),
-                _observation(simulator_x=-0.03, moveit_x=-0.03),
-                _observation(simulator_x=-0.03, moveit_x=-0.03),
+    assert (
+        run_dynamic_execute(
+            _options(tmp_path),
+            _runtime=_runtime(
+                events,
+                observations=(
+                    _observation(simulator_x=-0.03, moveit_x=0.02),
+                    _observation(simulator_x=-0.03, moveit_x=-0.03),
+                    _observation(simulator_x=-0.03, moveit_x=-0.03),
+                ),
+                scene=scene,
+                faults=faults,
             ),
-            scene=scene,
-            faults=faults,
-        ),
-    ) == 1
+        )
+        == 1
+    )
 
     lines = capsys.readouterr().out.splitlines()
     assert "failure=PRIMARY_WORKFLOW_FAILED" in lines[0]
@@ -760,19 +840,22 @@ def test_finish_failure_after_done_is_actionable_and_cleanup_still_completes(
     events: list[str] = []
     scene = RecordingTaskScenePort()
 
-    assert run_dynamic_execute(
-        _options(tmp_path),
-        _runtime=_runtime(
-            events,
-            observations=(
-                _observation(simulator_x=-0.03, moveit_x=0.02),
-                _observation(simulator_x=-0.03, moveit_x=-0.03),
-                _observation(simulator_x=-0.03, moveit_x=-0.03),
+    assert (
+        run_dynamic_execute(
+            _options(tmp_path),
+            _runtime=_runtime(
+                events,
+                observations=(
+                    _observation(simulator_x=-0.03, moveit_x=0.02),
+                    _observation(simulator_x=-0.03, moveit_x=-0.03),
+                    _observation(simulator_x=-0.03, moveit_x=-0.03),
+                ),
+                scene=scene,
+                faults=frozenset({"execution.finish"}),
             ),
-            scene=scene,
-            faults=frozenset({"execution.finish"}),
-        ),
-    ) == 1
+        )
+        == 1
+    )
 
     output = capsys.readouterr().out
     assert "failure=DYNAMIC_EXECUTION_FINISH_FAILED" in output
