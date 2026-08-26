@@ -1369,3 +1369,26 @@ decision_rule:
 decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_IDENTITY
 next_experiment: SMOKE-005
 ```
+
+## CP-028 / TRANS-SMOKE-005-RUNNING-001 — Start corrected real RGB-D control
+
+```yaml
+checkpoint_id: CP-028
+transition_id: TRANS-SMOKE-005-RUNNING-001
+recorded_at: 2026-08-27T00:55:25+08:00
+smoke_id: SMOKE-005
+from: PLANNED
+to: RUNNING
+phase: EMPTY_CONTROL
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: a873cbd0ddd19be4ef026374c4dd4edc9d252455
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Domains 217 and 216 are graph-empty with daemon use disabled; fresh process/session/tmux/evidence identities are empty.
+  - All four r2 helpers pass zsh syntax checks outside the restricted observer; exact process readback remains empty afterward.
+  - The corrected empty/perception command arrays preserve the literal quoted ROS parameter token use_sim_time:=true.
+owned_processes: NONE
+decision: START_CORRECTED_EMPTY_CONTROL
+next_command: Run exact installed rgbd_cup_pose in domain 217; retain natural deadline classification before any live stack is started.
+```
