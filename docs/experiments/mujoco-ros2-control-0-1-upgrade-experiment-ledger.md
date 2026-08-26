@@ -4,18 +4,28 @@
 task_id: mujoco-control-1-0-upgrade-20260825
 evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825
 parent_branch: codex/mujoco-ros2-control-0-1-upgrade
-parent_head: 453faaddcca6468bc0d68cb5dbc81cd7bb773e34
+parent_code_pin: 6b996c72b9fc103800112f6df33e6a90fc755e40
+parent_document_checkpoint: 0d4790032683a848a9de178d8e505ca8da57e403
 upstream_target: 57fc6744844902d4532160b403fa95840c1d6f96
 local_r11: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
 fork_branch: codex/upstream-0.1.0-so101-r1
-retained_runs: []
+fork_candidate: ca654e30ea9791564fab7110c90734733b68c8cc
+linux_status: REQUALIFICATION_IN_PROGRESS for current exact candidate; fcbc9f7 evidence is historical only
+macos_status: BREAKER / NOT_RUNTIME_QUALIFIED
+release_tag_status: NOT_AUTHORIZED
+retained_runs:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal
 archived_runs: []
 deletion_candidates: []
 
 latest_checkpoint:
-  state: TASK_2_QUALIFIED
-  hypothesis: The reviewed optional observer dispatcher can now be wired only at upstream 0.1.0's authoritative physics, pause, reset, and snapshot transition points.
-  next_command: Add Task 3 RED transition-order and reset-atomicity tests before wiring the dispatcher into MujocoSimulation.
+  state: PLATFORM_CONTEXT_LINUX_REQUALIFICATION_IN_PROGRESS
+  hypothesis: The platform-neutral ABI rename preserves Apple context ownership and Linux nullptr/no-op behavior after a clean rebuild.
+  next_action: Complete exact-candidate ai-station build, camera, dynamic, GUI, and clean-shutdown gates; then update EXP-011 and run final review.
+open_risks:
+  - macOS final runtime camera/dynamic/clean-shutdown acceptance remains invalid after the prior Cocoa crash
+  - no release tag until macOS and Linux qualify the same exact candidate
 ```
 
 ## Controller rulings
@@ -790,7 +800,10 @@ fresh_macos_tests:
 parent_contracts:
   - macOS install and camera contracts 20/20
   - backend integration PASS
-independent_review: PASS; 0 critical, 0 important, 0 minor
+scoped_implementation_review: PASS; 0 critical, 0 important, 0 minor
+scoped_review_evidence: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename/scoped-implementation-review.md
+final_cross_repo_review: WITH_FIXES; code findings 0/0/0, stale ledger header required correction
+final_review_evidence: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename/final-cross-repo-review.md
 linux_previous_evidence: remains valid only for exact fa37de5/fcbc9f7 pair
 linux_current_candidate: REQUALIFICATION_REQUIRED
 macos_current_candidate: NOT_RUNTIME_QUALIFIED
