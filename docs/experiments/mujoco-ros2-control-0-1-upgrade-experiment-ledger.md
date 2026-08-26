@@ -10,7 +10,7 @@ upstream_target: 57fc6744844902d4532160b403fa95840c1d6f96
 local_r11: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
 fork_branch: codex/upstream-0.1.0-so101-r1
 fork_candidate: ca654e30ea9791564fab7110c90734733b68c8cc
-linux_status: SHUTDOWN_FIX2_REQUALIFICATION_IN_PROGRESS for current exact candidate
+linux_status: VALID / QUALIFIED for parent runtime 7709b31, code pin db6b1f2, fork ca654e3
 macos_status: BREAKER / NOT_RUNTIME_QUALIFIED
 release_tag_status: NOT_AUTHORIZED
 retained_runs:
@@ -22,9 +22,9 @@ archived_runs: []
 deletion_candidates: []
 
 latest_checkpoint:
-  state: PLATFORM_CONTEXT_LINUX_SHUTDOWN_FIX2_REQUALIFICATION_IN_PROGRESS
-  hypothesis: Explicit Jazzy ExternalShutdownException handling closes the remaining test-only truth-bridge shutdown boundary without weakening RCLError handling.
-  next_action: Complete exact-parent ai-station minimal shutdown, camera, dynamic, GUI, and clean-shutdown gates; then update EXP-012 and run final review.
+  state: LINUX_PLATFORM_CONTEXT_QUALIFIED_MACOS_BLOCKED
+  result: Exact-candidate Linux CP1-CP5 are VALID, including camera, dynamic, GUI, and clean shutdown.
+  next_action: Resolve the retained macOS Cocoa runtime blocker and qualify macOS against the same fork candidate before any release tag.
 open_risks:
   - macOS final runtime camera/dynamic/clean-shutdown acceptance remains invalid after the prior Cocoa crash
   - no release tag until macOS and Linux qualify the same exact candidate
@@ -807,7 +807,7 @@ scoped_review_evidence: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/pla
 final_cross_repo_review: WITH_FIXES; code findings 0/0/0, stale ledger header required correction
 final_review_evidence: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename/final-cross-repo-review.md
 linux_previous_evidence: remains valid only for exact fa37de5/fcbc9f7 pair
-linux_current_candidate: REQUALIFICATION_REQUIRED
+linux_current_candidate: VALID / QUALIFIED; see EXP-012
 macos_current_candidate: NOT_RUNTIME_QUALIFIED
 retained_evidence:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename
@@ -847,7 +847,22 @@ fix_round_3_behavior:
   - rethrow context-valid and unrelated RCLError cases
 fix_round_3_tests: focused 4/4; related 35/35; package 297/297
 fix_round_3_review: PASS; 0 critical, 0 important, 0 minor
-fix_round_3_linux_runtime: IN_PROGRESS
+fix_round_3_linux_runtime: VALID / QUALIFIED
+qualified_parent_runtime: 7709b31f717972b1d3e4942c6fd7aeeac1b5ee3b
+qualified_parent_code_pin: db6b1f20ff1ef8f8b7d9f9074c5828713b8bdacb
+qualified_fork: ca654e30ea9791564fab7110c90734733b68c8cc
+fresh_builds: nested 6/6; parent 3/3
+final_tests: focused 4/4; native wrappers 25/25; native JUnit 236/236; root pytest 297/297
+minimal_sigint: bridge exit 0; nodes 0->1->0; no shutdown exception or traceback
+camera: 32 colors; 30 unique stamps; 8.4155542658 Hz; aligned info/color/depth 3/3/3
+camera_contract: 640x480; task_camera_frame; rgb8; 32FC1; depth 307200/307200 finite-positive
+dynamic: exit 0; DONE; QUALIFIED; 19 transitions; final XY error 0.0018901047 m
+screenshot_sha256: 81d3d2a608190d206e207524e11d45ab456bcc0598e30005fe1120543da4bbf4
+shutdown: one Ctrl-C; stack/bridge/pane exit 0; no duplicate, escalation, invalid context, or traceback
+post_shutdown: 0 owned PIDs; 0 domain-99 nodes; protected sessions and PIDs unchanged
+copyback_files: 22534 SHA-verified
+copyback_manifest_sha256: 4495642d15092866e999efc2ad1154006d19faf8c1bd87ab9fb5fa4a2fd8603f
+final_report: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix2/linux-shutdown-fix2-report.md
 retained_evidence:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename/bridge-shutdown-fix
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal

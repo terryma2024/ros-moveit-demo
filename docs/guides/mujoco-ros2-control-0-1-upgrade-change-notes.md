@@ -19,7 +19,7 @@
 | 最终 fork 候选 | `ca654e30ea9791564fab7110c90734733b68c8cc` |
 | 父仓库代码 pin | `db6b1f20ff1ef8f8b7d9f9074c5828713b8bdacb` |
 | candidate label | `so101-0.1.0-r1-candidate`，不是 Git tag |
-| Linux 状态 | 当前 `ca654e3...` 功能门已通过；父仓库 shutdown fix 后最终复验中 |
+| Linux 状态 | `VALID / QUALIFIED`：parent runtime `7709b31...`、code pin `db6b1f2...`、fork `ca654e3...` |
 | macOS 状态 | `BREAKER / NOT QUALIFIED` |
 | 最终 release tag | 未创建 |
 
@@ -337,23 +337,25 @@ contract 会拒绝 dirty submodule、错误 origin、错误 gitlink、错误 HEA
 ### 8.1 候选级回归
 
 - macOS focused lifecycle test：20/20；source-backed core：9/9；source-less core：9/9；
-- Linux fork：6 packages、22/22 wrappers、327 JUnit cases，0 failure/error；
-- Linux source-less：9/9 wrappers、179 cases，0 failure/error；
-- Linux project：3 packages、529/529 cases；
+- Linux fork：6 packages、23/23 wrappers、328 JUnit cases，0 failure/error；
+- Linux source-less：10/10 wrappers、180 cases，0 failure/error；
+- Linux final parent：3 packages、25/25 native wrappers、236/236 JUnit、297/297 root pytest；
 - ABI、13 个 ROS interfaces、单一权威 `mj_step`、copy-install、relocation、RPATH/linkage、双 ancestry 全部通过。
 
 ### 8.2 Linux 端到端
 
-- camera：30 个唯一 color header，8.9066339066 Hz；RGB/depth/info 共同 timestamp；
+- camera：32 个 color samples、30 个唯一 header，8.4155542658 Hz；RGB/depth/info 共同 timestamp；
 - 图像：640×480，`task_camera_frame`，`rgb8` / `32FC1`；
 - depth：307200/307200 finite-positive；
 - dynamic cup pick-place：exit 0、`DONE/QUALIFIED`、19 transitions；
-- lift/transport/place/release/retreat 全部通过，最终 XY error 1.854 mm；
+- lift/transport/place/release/retreat 全部通过，最终 XY error 1.890 mm、upright tilt 0.008014 rad；
 - GUI 截图与物理/MoveIt/controller/TF 证据一致；
 - 一次正常 Ctrl-C 后无残留 task PID/node、无 invalid-context 或信号升级。
 
-Linux 完整报告位于：
-`/tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux/fix2-full/linux-task8-fix2-full-report.md`。
+当前精确候选的 Linux 完整报告位于：
+`/tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix2/linux-shutdown-fix2-report.md`。
+copyback manifest 包含 22534 项，远端/本地均 22534 OK、0 failure，SHA-256 为
+`4495642d15092866e999efc2ad1154006d19faf8c1bd87ab9fb5fa4a2fd8603f`。
 
 ### 8.3 macOS 当前 blocker
 
@@ -362,10 +364,8 @@ invalid-context 和 SIGTERM 升级，因此该轮不合格。修复停机顺序�
 初始化的 `_glfwSetWindowSizeCocoa` 路径发生 SIGSEGV，`ros2_control_node` exit `-11`，未进入该轮
 camera/dynamic 验收。
 
-`fcbc9f7...` 的 Linux 全量验收仍是有效历史证据，但当前 `ca654e3...` 把公开 rendering capability
-从 `set_macos_render_context(void*)` 改为 `set_platform_render_context(void*)`，属于 ABI 与调用点变更。
-因此必须对当前精确候选重新完成 Linux 构建、camera、dynamic 和干净停机验收；它也不能替代 macOS
-最终联合验收。当前不得创建 `so101-0.1.0-r1` release tag。
+当前 `7709b31...` / `db6b1f2...` / `ca654e3...` 精确候选已重新完成 Linux 构建、camera、dynamic、GUI
+和干净停机验收。该结果不能替代 macOS 最终联合验收；当前仍不得创建 `so101-0.1.0-r1` release tag。
 
 ## 9. 后续维护规则
 
