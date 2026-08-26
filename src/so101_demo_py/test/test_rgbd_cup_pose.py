@@ -100,6 +100,7 @@ class _FakeNode:
         self.destroyed_publishers = []
         self.destroyed_subscriptions = []
         self.destroyed = False
+        self.info_messages = []
 
     def create_publisher(self, message_type, topic, qos):
         publisher = SimpleNamespace(publish=lambda _message: None)
@@ -124,7 +125,10 @@ class _FakeNode:
         self.destroyed = True
 
     def get_logger(self):
-        return SimpleNamespace(error=lambda _message: None, info=lambda _message: None)
+        return SimpleNamespace(
+            error=lambda _message: None,
+            info=self.info_messages.append,
+        )
 
 
 def _fake_ros_api(*, fail_subscription_number: int | None = None):
@@ -776,6 +780,41 @@ def test_ros_runtime_matches_reliable_depth_one_camera_qos() -> None:
             assert qos.durability == "volatile"
     finally:
         runtime.close()
+
+
+def test_first_valid_publish_releases_exact_rgbd_inputs_once_and_cleanup_is_safe(
+    monkeypatch,
+) -> None:
+    from so101_demo.ros import rgbd_cup_pose_node
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+
+    api, _rclpy, node, _listener = _fake_ros_api()
+    monkeypatch.setattr(
+        rgbd_cup_pose_node,
+        "pose_message_from_frame",
+        lambda *_args, **_kwargs: object(),
+    )
+    runtime = _create_ros_runtime(
+        RgbdCupPoseOptions(),
+        startup_deadline=11.0,
+        monotonic=lambda: 10.0,
+        ros_api=api,
+    )
+    created = [call[4] for call in node.subscription_calls]
+
+    runtime._publish_pose(_valid_frame(stamp_ns=20))
+
+    assert node.destroyed_subscriptions == list(reversed(created))
+    assert any(
+        '"released_subscription_count": 3' in message
+        and '"status": "INPUT_RELEASED_AFTER_FIRST_VALID"' in message
+        for message in node.info_messages
+    )
+
+    runtime._publish_pose(_valid_frame(stamp_ns=21))
+    runtime.close()
+
+    assert node.destroyed_subscriptions == list(reversed(created))
 
 
 def test_ros_runtime_disables_unused_default_services_without_dropping_sim_time() -> None:
