@@ -48,7 +48,7 @@ URDF/SRDF 提供关节语义、TF、MoveIt group 和 controller 映射；MJCF �
 | submodule | `third_party/mujoco_ros2_control` |
 | fork | `git@gitee.com:zjumty/mujoco_ros2_control.git` |
 | candidate label | `so101-0.1.0-r1-candidate` |
-| gitlink commit | `41a67efee2f2fe2394e327e5b4cae541806f7772` |
+| gitlink commit | `f0f09abfe1498e1c6aa84a37a78cea87d2198b1d` |
 | upstream tag | `0.1.0` |
 | upstream commit | `57fc6744844902d4532160b403fa95840c1d6f96` |
 | local lineage | `f19a8cc3af61feccacb22a9f0d16cc972e3b2c08` (`so101-0.0.3-r11`) |
