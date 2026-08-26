@@ -2457,3 +2457,19 @@ sequence_gate: No forward run until EXP-017 has a committed countable-success cl
 decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT
 next_experiment: EXP-017
 ```
+
+## CP-062 / CLOSE-EXP-017-001 — Reject unsupported FastDDS domain before product launch
+
+```yaml
+checkpoint_id: CP-062
+transition_id: CLOSE-EXP-017-001
+recorded_at: 2026-08-27T02:36:05+08:00
+experiment_id: EXP-017
+from: PLANNED
+to: INVALID_PREFLIGHT
+qualification: false
+reason: FastDDS rejected domain 233 because its calculated port exceeds the supported range; the empty-graph probe failed before any ROS entity or product process was created.
+preserved_empty_state: EXP-017 evidence root, tmux, exact session processes, and MuJoCo Viewer remained absent.
+decision: RETAIN_INVALID_PLAN_AND_USE_FRESH_SUPPORTED_DOMAIN
+next_experiment: EXP-018
+```
