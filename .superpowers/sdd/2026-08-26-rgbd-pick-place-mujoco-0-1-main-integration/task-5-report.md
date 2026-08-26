@@ -71,3 +71,10 @@ race in EXP-055/056; the same production perception path subsequently produced i
 
 The Mac orchestrator should use implementation commit `3ea1530` for its fresh four-position
 regression after this Linux closure commit is pushed.
+
+## Publication
+
+- Linux closure commit: `0eae16876eebdc5d7899dc92896f7172262fd680`.
+- Gitee push: accepted on `codex/rgbd-pick-place-mujoco-0-1-main`.
+- First post-push `git ls-remote`: exact match at `0eae16876eebdc5d7899dc92896f7172262fd680`.
+- CP-147 is the additive publication-readback record; it changes no runtime or evidence.
