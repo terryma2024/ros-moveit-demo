@@ -1507,3 +1507,45 @@ cwd_gate_sha256: 9b385e02891b19a4e9ad7285190d84c3b512d8c2890ba3403ac209f1eb4c4ee
 decision: START_STATIC_TF_BASE_GUI_THEN_REAL_PERCEPTION
 next_command: Start r3 static TF; send exact r3 base helper to the cwd-gated pane; start exact-Viewer polling; after Scene READ_BACK start exact installed rgbd_cup_pose.
 ```
+
+## CP-033 / CLOSE-SMOKE-006-001 — Real live entrypoint reproduces ROS runtime construction overrun
+
+```yaml
+checkpoint_id: CP-033
+transition_id: CLOSE-SMOKE-006-001
+recorded_at: 2026-08-27T01:10:22+08:00
+smoke_id: SMOKE-006
+from: RUNNING
+to: VALID_FAILURE
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 03f4197019a788a5068f1d79cca2c3df2ed57ab8
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+valid_preconditions:
+  - In-pane cwd gate, candidate project/fork/support prefixes, ABI-aligned support plugin, legal domain 215, fresh session/evidence, and exact task ownership all passed.
+  - MuJoCo camera/simulation stack remained live; joint_state_broadcaster, gripper_controller, and arm_controller activated; MoveIt announced ready; Planning Scene READ_BACK succeeded.
+  - Exact Viewer window 45356 owned by ros2_control_node PID 76011 was captured at 1140x773 before perception startup. Both formal static TF publishers remained live.
+failure:
+  - Exact installed rgbd_cup_pose started at 01:07:19 with the formal 30.0 s parameters, literal use_sim_time true, and no dynamic/motion process.
+  - It produced no summary.json or cup.ply, then naturally exited one after 51.686113917 s wall with RGBD_CUP_POSE_TIMEOUT: startup deadline expired during ROS runtime construction.
+  - Stderr contains only ros2run's failure wrapper. The process naturally exited between the decision to sample and exact PID resolution, so no stack sample was taken and no unrelated PID was sampled.
+comparison:
+  - SMOKE-005 empty control reached only the ordinary no-camera first-valid timeout after 32.474651833 s wall, proving the real installed constructor can finish inside the deadline without a live stack.
+  - SMOKE-002/003 staged probes finished live construction in 17.142 to 18.332 s; therefore their instrumentation omitted or failed to isolate the real blocking call reproduced here.
+shutdown:
+  - Perception exited naturally. Exact GUI helper PID 75967 received SIGINT and exited 130; exact static-TF wrapper 75804 used its task-owned TERM cleanup and exited zero; base tmux received Ctrl-C.
+  - RobotSystem/controllers, move_group ordered shutdown, robot_state_publisher, and ros2_control_node all completed cleanly. The returned idle task tmux was then removed by exact session name.
+  - Domain 215 graph, exact PIDs, task tmux, and exact Viewer are absent; unrelated windows/processes/tmux sessions remain preserved.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-entrypoint-r3/live
+  perception_owner_sha256: f2626d88c08e08e741feee53ec6467a46c8774814ec4338823727e4b73029961
+  perception_stdout_sha256: 2e7a1127621a702581e453ca74b9d989279c892d09c2cacf4b421e780833a390
+  perception_stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  base_owner_sha256: fc22f656fe3d1f37588d21b352f67e51cf6331281dfb956634c1e5accb24b99b
+  base_log_sha256: a3fd49afd4a518d3d0a114dca2d39b573302c82211e59b24d3d1e15cca29cb3c
+  tf_owner_sha256: 66bc7329c7eeb8fe79af34b046d2cb8a19eb9f3a886d5079d5b5539fd4b9c878
+  baseline_manifest_sha256: a2ec36fe0dc532bd8d5909f5834e51cd56df3edb835f5f878d62d2d3fc3061d6
+  baseline_png_sha256: ee04cb674d2c4364d5f6d4b700cef2c6577ed3d4f19f5d8fcec1aa5d11a8be02
+decision: STOP_QUALIFICATION_AND_STAGE_PER_CALL_CONSTRUCTION_TIMING
+next_experiment: NONE
+```
