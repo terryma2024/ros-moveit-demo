@@ -384,6 +384,46 @@ pre_running_observed:
 decision: START_NO_MOTION_BASE_ACTIVATE_EXACT_CAPTURE_AND_HOLD_FOR_SEMANTIC_SNAPSHOT
 ```
 
+## CP-097 / CLOSE-SMOKE-019-001 — AppKit and semantic activation cannot expose the owned Viewer
+
+```yaml
+checkpoint_id: CP-097
+transition_id: CLOSE-SMOKE-019-001
+recorded_at: 2026-08-27T03:36:40+08:00
+smoke_id: SMOKE-019
+from: RUNNING
+to: GUI_ENV_FAILURE
+qualification: false
+valid_base: Exact installed task_start base stack produced one CoreGraphics Viewer window45559/PID87138 at [308,-1250,1140,773], completed controller activation and scene setup, and executed no perception/dynamic/motion.
+first_bad_boundary:
+  - NSRunningApplication activation for exact-owned PID87138 returned accepted=true, but after 50 polls System Events still reported frontmost=false, window_count=0, and exact_title_count=0.
+  - The required unchanged gui-capture wrapper was not invoked because its mandatory AXRaise precondition was not met.
+semantic_cross_check: Project-allowed semantic GUI lookup rejected display name ros2_control_node; app inventory exposed only unrelated bundle org.mujoco.mujoco with isRunning=false, so it could not address PID87138 without violating exact identity.
+observer_note: The first read-only CoreGraphics parser invocation had an f-string quoting error; corrected parsing against the unchanged live stack froze the exact ID/PID above and did not mutate product state.
+cleanup: One Ctrl-C only to exact task tmux; domain210, matching processes, Viewer, and session are empty. All components report clean shutdown. The no-motion wrapper's exit-code/finished-at files are absent because the pane/session ended during SIGINT, retained as an observer gap rather than a product failure.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/gui-activation-smoke019
+decision: TEST_PRIOR_SUCCESSFUL_TASK_OWNED_TMUX_CAPTURE_INVOCATION_CONTEXT
+next_experiment: SMOKE-020
+```
+
+## CP-098 — Plan task-owned tmux capture-context smoke
+
+```yaml
+checkpoint_id: CP-098
+recorded_at: 2026-08-27T03:36:40+08:00
+smoke_id: SMOKE-020
+status: PLANNED
+qualification: false
+identity: {domain: 211, session: mac-mrc010-gui-tmux-smoke020, tmux: mac-mrc010-gui-tmux-smoke020, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/gui-tmux-smoke020}
+hypothesis: Accessibility/TCC attribution differs between direct Codex exec and the task-owned tmux context used by all retained successful gui-capture manifests; invoking the unchanged wrapper from an exact-owned tmux capture pane will restore exact AXRaise and capture for the same negative-monitor Viewer.
+method:
+  - Start only the exact installed task_start/headless=false base stack with no perception/dynamic/motion in the registered tmux session.
+  - In a second exact-owned pane of that same session, wait for exactly one CoreGraphics title, prove its owner PID is the exact candidate ros2_control_node child, freeze ID/PID/bounds, and invoke unchanged capture-gui once by exact window ID.
+  - Require matching nonempty manifest and PNG and inspect original resolution; any AX or identity failure stops without fallback. Then exact-stop the whole task-owned session.
+decision: COMMIT_CLOSURE_PLAN_THEN_BUILD_BOUNDED_CAPTURE_PANE_AND_FRESH_PREFLIGHT
+next_experiment: SMOKE-020
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
