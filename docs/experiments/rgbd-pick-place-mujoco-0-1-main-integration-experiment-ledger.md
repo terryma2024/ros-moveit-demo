@@ -28,7 +28,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - The final installed candidate succeeds at all four positions on both platforms.
-latest_checkpoint: CP-007
+latest_checkpoint: CP-008
 next_experiment: EXP-015
 ```
 
@@ -658,7 +658,7 @@ next_experiment: EXP-015
 
 ```yaml
 experiment_id: EXP-015
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-014
 hypothesis: The unchanged frozen candidate completes task_start AC-001 when the exact-owned pane performs an observed explicit cd to the live worktree before sourcing or starting ROS.
 prediction: Pane and child cwd readbacks are exact, getcwd failures are zero, RGB-D perception succeeds, and the full physical workflow releases the cup stably in the red target.
@@ -693,4 +693,29 @@ evidence:
   - /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015
 decision: PENDING
 next_experiment: EXP-011
+```
+
+## CP-008 / TRANS-EXP-015-RUNNING-001 — A/B-proven cwd repair
+
+```yaml
+checkpoint_id: CP-008
+transition_id: TRANS-EXP-015-RUNNING-001
+recorded_at: 2026-08-26T23:43:28+08:00
+experiment_id: EXP-015
+from: PLANNED
+to: RUNNING
+last_valid_experiment: NONE
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_transition: 33ba47d37bd924bbc96795eeba0f6fff897e1b98
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+working_tree_status: Clean before this ledger-only transition; implementation, installed overlays, and child are unchanged.
+owned_processes: NONE
+pre_running_observed:
+  - OBSERVED: Current task worktree and child are exact; domain 230/session process identity, mrc010-mac-exp015, exact Viewer title, and the EXP-015 evidence path are empty.
+  - OBSERVED: CP-007 non-product A/B proves the explicit in-pane absolute cd produces the exact live worktree on this preserved shared tmux server.
+single_variable: Apply only the A/B-proven in-pane cd before the unchanged installed product command.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/exp015-provenance-isolation.txt
+decision: START_EXACT_INSTALLED_EXP_015
+next_command: Commit this transition, start exact-owned mrc010-mac-exp015 with explicit in-pane cd, verify pane and child cwd readbacks, and concurrently capture the three exact-window boundaries.
 ```
