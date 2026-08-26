@@ -367,6 +367,23 @@ decision: COMMIT_CLOSURE_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN
 next_experiment: SMOKE-019
 ```
 
+## CP-096 / TRANS-SMOKE-019-RUNNING-001 — Start exact-owned AppKit activation capture smoke
+
+```yaml
+checkpoint_id: CP-096
+transition_id: TRANS-SMOKE-019-RUNNING-001
+recorded_at: 2026-08-27T03:34:00+08:00
+smoke_id: SMOKE-019
+from: PLANNED
+to: RUNNING
+qualification: false
+pre_running_observed:
+  - Fresh domain210, exact session/processes/Viewer, and runtime evidence were empty; task worktree was clean.
+  - Candidate demo/support/fork prefixes and bundle 5c84da5a6bed093be023336da815fc2d1c7cb169aefa72cb13d6999346f25a2a passed readback.
+  - Runner 12ea724da3da806d21706d9516f6d425ed688e7657198203877315d295e754a8, AppKit helper baf6aa889e996c2a78dedcfc2f1f561d412abd85c024f5a36601cd12d39018dc, and unchanged capture helper 4821cb4b3be078b09a786ac637ed3c3cad40340f0763d8cd1aadfaabbf8a7eba passed hash/readback.
+decision: START_NO_MOTION_BASE_ACTIVATE_EXACT_CAPTURE_AND_HOLD_FOR_SEMANTIC_SNAPSHOT
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
