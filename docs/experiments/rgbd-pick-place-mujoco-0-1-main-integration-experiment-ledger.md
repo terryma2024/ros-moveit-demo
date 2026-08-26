@@ -1698,3 +1698,38 @@ evidence:
 decision: RETAIN_RESULT_AND_PLAN_REAL_INSTALLED_TWO_SAMPLE_STACK_CAPTURE
 next_experiment: NONE
 ```
+
+## CP-038 — Plan real installed child stack sampling at deadline boundaries
+
+```yaml
+checkpoint_id: CP-038
+recorded_at: 2026-08-27T01:26:38+08:00
+smoke_id: SMOKE-008
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: a444ef78427df100896af086b589f9c40802897a
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+problem: Transparent proxy timing changes the node object/path or catches a fast scheduling sample; it does not reproduce the exact installed entrypoint's real 51.686 s construction timeout.
+hypothesis: Sampling the unmodified installed console-script child while it crosses the 30 s deadline will reveal whether it is blocked in Python import, rclpy/rcl/rmw construction, a TF/pub/sub call, or system scheduling.
+identity:
+  domain: 212
+  session: mac-mrc010-real-sample-r1
+  tmux: mrc010-mac-real-sample-r1
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-sampling-r1/live
+exact_child_contract:
+  - Execute the immutable installed console script /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/lib/so101_demo_py/rgbd_cup_pose directly with the exact formal arguments and venv shebang used by ros2 run.
+  - Run it as the only background child of a recorded task wrapper; record actual PID, exact parent PID, launch argv, executable path, start/end monotonic, stdout/stderr, rc, and command readback before sampling.
+  - Start no dynamic workflow and no motion. Base/static TF/GUI/controller/MoveIt/Scene readiness must match the prior live failures behind an explicit in-pane cwd gate.
+sampling:
+  - At 25 s and 31 s from the child's monotonic start, first skip if summary.json already proves construction complete or if the child exited.
+  - Otherwise require exact parent and executable-prefix readback, then run macOS sample on only that PID for 2 s with 1 ms interval and retain identity/status/output for each boundary.
+  - Sampling may perturb timing and is diagnostic only. After the second boundary, allow natural failure up to a 120 s observer bound; if construction already completed, exact SIGINT the owned child rather than leaving it spinning.
+helpers:
+  base_sha256: 206772203c2747fa4fb789715000133a0e9414cfa7b7bd0ff088e7edec3291b0
+  static_tf_sha256: 77f2edeb18169e2e7edf85b9e8eb059f2e09cce9652c89962bf1520884b7961a
+  perception_sha256: 0a0ec61a455f42c625bacd368548f094a4f2484c6b873b924bb1ff3e97378ca3
+  sampler_sha256: 4a60765304ffec491b7f69607f90c34c96e3dc1d8c61781ccc57fb95f63f8cee
+decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_REAL_CHILD
+next_experiment: SMOKE-008
+```
