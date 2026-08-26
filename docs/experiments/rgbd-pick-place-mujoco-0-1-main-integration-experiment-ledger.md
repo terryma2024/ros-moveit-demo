@@ -33,8 +33,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-118
-next_experiment: EXP-027
+latest_checkpoint: CP-119
+next_experiment: EXP-032
 ```
 
 ## Shared live acceptance contract
@@ -3626,4 +3626,68 @@ status: VALID
 experiment_id: EXP-027
 owned_processes: NONE before launch
 decision: START_EXACT_REGISTERED_COMMAND
+```
+
+## EXP-027 closure — host GLX environment invalid before perception
+
+```yaml
+closure_id: CLOSE-EXP-027-001
+recorded_at: 2026-08-27T04:42:00+08:00
+experiment_id: EXP-027
+status: INVALID
+classification: environment_invalid_non_counting
+first_bad_boundary:
+  process: task-installed mujoco_ros2_control/ros2_control_node
+  child_exit_code: 1
+  message: "ERROR: could not create window"
+observed:
+  - Exact child plugin and task-owned scene loaded, then MuJoCo simulation initialization failed before controller activation, RGB-D perception, workflow, or robot motion.
+  - Same-display standalone GLFW A/B independently reproduced GLX error 65543 `Failed to create context: BadValue`; adding DBUS and XDG session variables did not change it.
+  - nvidia-smi exited 18 with driver/library mismatch: loaded kernel module 595.71.05 versus installed user-space 595.84.
+  - The single environment change __GLX_VENDOR_LIBRARY_NAME=mesa plus LIBGL_ALWAYS_SOFTWARE=1 made the same standalone GLFW probe create a visible context successfully.
+  - Launch returned 1, the owned tmux ended naturally, domain 91 was empty, and no session-identity process remained. No task-start.json was produced.
+  - No unrelated tmux session, process, GUI window, or canonical workspace state was stopped or modified.
+competing_hypotheses:
+  - H1 missing X11 authentication was disproved because xdpyinfo and xset both succeeded in the exact minimal environment.
+  - H2 missing DBUS/XDG session variables was disproved by unchanged standalone GLFW failure after adding them.
+  - H3 NVIDIA kernel/user-space GLX mismatch was confirmed by independent GLFW failure, exact version readback, nvidia-smi exit 18, and Mesa-only GREEN probe.
+not_started: [rgbd_cup_pose, point_cloud_fit, dynamic_cup_pick_place, robot_motion, gui_capture]
+evidence:
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-027/run.log
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-027/glfw-probe-a-minimal.txt
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-027/glfw-probe-b-session-vars.txt
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-027/glx-root-cause.txt
+decision: Retain EXP-027 without retry; supersede the untouched EXP-028 through EXP-031 plan and allocate a fresh five-run batch whose sole environment delta is the already-qualified Mesa software GLX selector.
+```
+
+### Replacement ai-station FULL_RESTART batch after EXP-027 invalid environment
+
+The untouched EXP-028 through EXP-031 reservations are superseded, not rewritten or executed. The
+countable sequence moves to fresh identities so no INVALID evidence path, domain, or session is reused:
+
+| Experiment | Domain | Keyframe | Session and partition | Evidence file |
+|---|---:|---|---|---|
+| EXP-032 | 96 | `task_start` | `linux-rgbd-task-start-exp032` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-032/task-start.json` |
+| EXP-033 | 97 | `cup_test_forward_5cm` | `linux-rgbd-forward-exp033` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-033/forward.json` |
+| EXP-034 | 98 | `cup_test_left_5cm` | `linux-rgbd-left-exp034` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-034/left.json` |
+| EXP-035 | 99 | `cup_test_right_5cm` | `linux-rgbd-right-exp035` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-035/right.json` |
+| EXP-036 | 100 | `task_start` | `linux-rgbd-task-start-repeat-exp036` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-036/task-start-repeat.json` |
+
+All CP-115/CP-116 provenance, AC-001 thresholds, production perception path, no-truth-publisher rule,
+and physical acceptance gates remain unchanged. Every owned process gets
+`__GLX_VENDOR_LIBRARY_NAME=mesa` and `LIBGL_ALWAYS_SOFTWARE=1`; this selects a working host renderer
+and changes no source, sensor, motion, physics, tolerance, or acceptance threshold.
+
+## CP-119 — EXP-027 retained INVALID; replacement batch registered
+
+```yaml
+checkpoint_id: CP-119
+recorded_at: 2026-08-27T04:42:00+08:00
+status: VALID_DIAGNOSIS
+last_valid_experiment: EXP-026
+invalid_experiment: EXP-027
+owned_processes: NONE
+confirmed_conclusion: Host NVIDIA kernel/user-space mismatch prevents native GLX; task-local Mesa software GLX passes the independent window-creation probe.
+decision: Commit and push the INVALID closure, then preregister and cold-start EXP-032 only.
+next_experiment: EXP-032
 ```
