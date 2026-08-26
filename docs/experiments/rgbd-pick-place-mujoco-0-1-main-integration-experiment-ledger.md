@@ -491,6 +491,44 @@ pre_running_observed: Fresh domain224/session/processes/Viewer/evidence passed; 
 decision: START_EXACT_INSTALLED_FULL_CHAIN_AND_WAIT_NATURAL_EXIT
 ```
 
+## CP-103 / CLOSE-EXP-023-001 — task_start functional FULL_RESTART passes
+
+```yaml
+checkpoint_id: CP-103
+transition_id: CLOSE-EXP-023-001
+recorded_at: 2026-08-27T03:45:20+08:00
+experiment_id: EXP-023
+from: RUNNING
+to: FUNCTIONAL_PASS_GUI_UNAVAILABLE
+qualification_scope: FUNCTIONAL_AC001_WITH_GUI_CLAUSE_UNAVAILABLE
+result:
+  - Natural rc0, status DONE, transition_count 19, no failure, exact detach-before-open trace, and all 11 launched processes exited cleanly.
+  - Perception status OK: 640x480, full points 98078, color candidates 260, cup points 141, fitted radius 0.0393806 m, world pose [0.0194991,-0.280405,0.165], frame world; PLY retained.
+  - Exact three RGB-D inputs released after first valid pose; complete controller sequence finished without action timeout.
+  - Final cup [-0.0778031,-0.2475911,0.1648313], table_contact=true, left/right fingertip contacts 0/0, near-zero velocities; Planning Scene detached with plastic_cup world count 13.
+  - Fresh exact CoreGraphics Viewer window45593/PID10050 identity retained; screenshot clause remains unavailable per CP-100 and is not claimed.
+hashes: {log: 84bd096a1313a339e8e735456f1637d7420bbf6ca70c3a6674d932d0528bed44, manifest: fc288004843d8731b05e0b962f392ec162d946a50dd26a3b5bf542e638cbe84b, summary: 02564ad61ebb87d6906deef3788a23cb1e881ea6f034feb22c6284c055450224, ply: be6dc51ee934f0f8fb73a6744ebfa59235600a97c1143056f5d501b18fa3acb5}
+cleanup: domain224/session/processes/Viewer empty after natural exit.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-023
+decision: CONTINUE_FROZEN_BATCH_TO_FORWARD_5CM
+next_experiment: EXP-024
+```
+
+## CP-104 — Plan post-fix forward_5cm functional Mac FULL_RESTART
+
+```yaml
+checkpoint_id: CP-104
+recorded_at: 2026-08-27T03:45:20+08:00
+experiment_id: EXP-024
+status: PLANNED
+qualification_scope: FUNCTIONAL_AC001_WITH_GUI_CLAUSE_UNAVAILABLE
+identity: {domain: 225, session: mac-mrc010-forward-exp024, tmux: mac-mrc010-forward-exp024, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-024, keyframe: cup_test_forward_5cm}
+frozen_runtime: Same implementation/child/bundle/runner/policy/extrinsics/controller as EXP-023; only keyframe/domain/session/evidence change.
+failure_boundary: Any valid functional failure stops the batch.
+decision: COMMIT_CLOSURE_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN
+next_experiment: EXP-024
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
