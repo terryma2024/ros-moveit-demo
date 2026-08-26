@@ -33,8 +33,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-124
-next_experiment: EXP-037
+latest_checkpoint: CP-125
+next_experiment: EXP-042
 ```
 
 ## EXP-037 — dependency-closed ai-station task_start FULL_RESTART
@@ -108,6 +108,74 @@ status: VALID
 experiment_id: EXP-037
 owned_processes: NONE before launch
 decision: Launch and capture the exact task Viewer through the full workflow.
+```
+
+## EXP-037 closure — functional success, GUI evidence incomplete
+
+```yaml
+closure_id: CLOSE-EXP-037-001
+recorded_at: 2026-08-27T05:04:00+08:00
+experiment_id: EXP-037
+status: INVALID
+classification: observation_invalid_non_counting_functional_success
+runner_exit_code: 0
+functional_result:
+  dynamic_status: DONE
+  transition_count: 19
+  perceived_cup_world_xyz_m: [0.01950111783349788, -0.28040476095521005, 0.16499999999999998]
+  task_start_truth_xyz_m: [0.02, -0.28, 0.165]
+  perception_position_error_m: 0.000642
+  fitted_radius_m: 0.03938151231973142
+  micro_lift: {left_contacts: 1, right_contacts: 1, table_contact: false, cup_z_m: 0.16611729488460686}
+  lift: {left_contacts: 1, right_contacts: 1, table_contact: false, cup_z_m: 0.2240798933399803}
+  transport: {left_contacts: 3, right_contacts: 4, table_contact: false, cup_xyz_m: [-0.0761946208466835, -0.24726949229545409, 0.22789778213782172]}
+  ordering: DETACH_MOVEIT precedes OPEN_GRIPPER in the exact state_trace.
+  final: {cup_xyz_m: [-0.07803873722073029, -0.24748637398463, 0.16498841543473644], xy_error_m: 0.0023705234693464886, upright_tilt_rad: 0.0086131485940038, left_contacts: 0, right_contacts: 0, table_contact: true, attached_ids: [], linear_velocity_norm_near_zero: true}
+  moveit: Cup attached during transport, detached before open, and synchronized as a 13-primitive world object at final pose.
+  shutdown: Runner zero, ordered MoveIt shutdown marker, ros2_control clean exit, tmux absent, domain 101 empty, no identity process remains.
+gui_result:
+  baseline: Captured and pixel-inspected from exact MuJoCo client window PID 1209657; scene shows the task cup, red target, arm/gripper, Running status, and live simulation counters.
+  transport: MISSING; Viewer closed between manifest inspection and the second fresh window identity check.
+  final: MISSING for the same observation-orchestration reason.
+  classification: AC-001 requires all three images, so functional success cannot count.
+evidence:
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-037/task-start.d/linux-rgbd-task-start-exp037/perception/summary.json
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-037/task-start.d/linux-rgbd-task-start-exp037/perception/cup.ply
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-037/task-start.d/linux-rgbd-task-start-exp037/dynamic/dynamic-execute-manifest.json
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-037/gui/baseline
+decision: Retain EXP-037. Replace manual polling with a pre-start task-owned gui-capture watcher triggered by atomic state_trace updates; do not alter product code, timings, or thresholds.
+```
+
+### Watcher-qualified final FULL_RESTART identities
+
+EXP-038 through EXP-041 remain untouched reservations and are superseded. The final five-run sequence is:
+
+| Experiment | Domain | Keyframe | Session and partition | Evidence file |
+|---|---:|---|---|---|
+| EXP-042 | 106 | `task_start` | `linux-rgbd-task-start-exp042` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-042/task-start.json` |
+| EXP-043 | 107 | `cup_test_forward_5cm` | `linux-rgbd-forward-exp043` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-043/forward.json` |
+| EXP-044 | 108 | `cup_test_left_5cm` | `linux-rgbd-left-exp044` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-044/left.json` |
+| EXP-045 | 109 | `cup_test_right_5cm` | `linux-rgbd-right-exp045` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-045/right.json` |
+| EXP-046 | 110 | `task_start` | `linux-rgbd-task-start-repeat-exp046` | `/data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-046/task-start-repeat.json` |
+
+The task-owned watcher starts before the exact runner, selects one exact `MuJoCo/MuJoCo` client,
+records `_NET_WM_PID` and cmdline, captures baseline immediately, then repeats fresh window identity
+and capture when atomic `state_trace` contains `MOVE_ABOVE_PLACE` and
+`VALIDATE_FINAL_PLACEMENT`. A synthetic non-qualification GLFW/window/manifest smoke proved all
+three captures and same ID/PID checks complete before window exit. It observes pixels only.
+
+## CP-125 — Functional chain GREEN; automatic GUI watcher GREEN
+
+```yaml
+checkpoint_id: CP-125
+recorded_at: 2026-08-27T05:04:00+08:00
+status: VALID_DIAGNOSIS
+invalid_experiment: EXP-037
+functional_chain: PASS_NON_COUNTING
+gui_watcher_smoke: PASS_NON_QUALIFICATION
+owned_processes: NONE
+decision: Commit/push closure, then preregister EXP-042 with the watcher as observation-only evidence plumbing.
+next_experiment: EXP-042
 ```
 
 ## EXP-032 — ai-station task_start Mesa FULL_RESTART
