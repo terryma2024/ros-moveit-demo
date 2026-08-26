@@ -90,13 +90,13 @@ execute 调试时先用 `stop_after:=<STATE>` 将动作缩到首个失败边界�
 
 ## 视觉验收
 
-截图与 GUI 控制路由必须使用 `$ai-station-gui`，同时保留本文件的 SO-101 数据/视觉联合证据门。
+截图与 GUI 控制路由必须使用 `$gui-capture`，同时保留本文件的 SO-101 数据/视觉联合证据门。
 
 1. 运行本轮 build 对应的 GUI stack。
 2. 在加载 `~/gui-env.zsh` 和正确 ROS overlay 的 tmux shell 中运行 `ros2 run so101_teleop tile_ai_station_guis.py`，要求 `LAYOUT_OK`：RViz 左、Gazebo 右，各约占工作区 50%。
-3. 从本轮 `mktemp -d` 证据目录定义 `capture_evidence_dir`，运行 `.agents/skills/ai-station-gui/scripts/capture-ai-station.sh --local --output-root "$capture_evidence_dir/captures"` 保存 baseline screenshot，并实际检查新的 `desktop.png` 已呈现左右分屏、无遮挡且两侧场景可辨认。
+3. 从本轮 `mktemp -d` 证据目录定义 `capture_evidence_dir`，运行 `.agents/skills/gui-capture/scripts/capture-gui.sh --local --desktop --output-root "$capture_evidence_dir/captures"` 保存 baseline screenshot，并实际检查 manifest 声明的新鲜 `desktop.png` 已呈现左右分屏、无遮挡且两侧场景可辨认。
 4. 使用 CUA 时按 `snapshot -> action -> fresh snapshot`；调整窗口内部视角后再次确认分屏没有被破坏。
-5. 完成本轮动作后再次按 `$ai-station-gui` 路由生成新鲜截图。
+5. 完成本轮动作后再次按 `$gui-capture` 路由生成新鲜截图。
 6. 实际打开新的 desktop/RViz/Gazebo 图片，描述：机械臂姿态、夹爪开合、Coke 初末 pose、是否穿透/掉落、Planning Scene 显示是否一致。
 
 截图必须与数据状态共同验收。至少保留一个数值证据，例如 Coke 6D pose 或关节/TF 前后差值，防止相机角度造成误判。

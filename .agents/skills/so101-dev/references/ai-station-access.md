@@ -64,8 +64,8 @@ source install/setup.zsh
 
 ## GUI 进程
 
-GUI screenshot、桌面检查和语义控制必须使用项目内 `$ai-station-gui`；读取
-`.agents/skills/ai-station-gui/SKILL.md` 后按其当前 agent capability 路由执行。
+GUI screenshot、桌面检查和语义控制必须使用项目内 `$gui-capture`；读取
+`.agents/skills/gui-capture/SKILL.md` 后按其当前平台和 agent capability 路由执行。
 SO-101 的 provenance、进程所有权和视觉证据门仍由 `$so101-dev` 约束。
 
 任何需要显示到已登录 GNOME 会话的 GUI 程序都必须由 tmux 持有，并在该 tmux shell 内先执行：
@@ -107,7 +107,7 @@ ros2 run so101_teleop tile_ai_station_guis.py
 
 - 命令退出码为 `0`，输出 `LAYOUT_OK RVIZ=... GAZEBO=...`；
 - 回读位置和尺寸与目标几何的差值不超过默认 `12 px` 装饰边框容差；
-- 分屏后用 `$ai-station-gui` 生成本轮新鲜桌面截图；
+- 分屏后用 `$gui-capture` 的 GNOME desktop 模式生成本轮新鲜桌面截图；
 - 实际打开新的 `desktop.png`，确认 RViz 左、Gazebo 右，各约占可用工作区 50%，两侧关键场景均可见且没有互相遮挡。
 
 `LAYOUT_ERROR` 或退出码 `2` 表示失败。根据错误检查缺少的窗口、X11 依赖、`DISPLAY` 或窗口几何；不要把命令已发送当成分屏成功。若窗口尺寸正确但内部场景不可辨认，再用 CUA 按 `snapshot -> action -> fresh snapshot` 调整相机或面板，并保存新截图。
@@ -122,19 +122,19 @@ ros2 run so101_teleop tile_ai_station_guis.py
 4. CUA 每次动作前获取 snapshot，动作后获取 fresh snapshot；element 索引只属于产生它的那次 snapshot。
 5. 工具回报 `verified=false`、`degraded=true` 或效果不确定时，以新截图/read-back 验证，不把发送动作当成动作生效。
 
-需要 CUA 驱动细节时按 `$ai-station-gui` 检查当前 agent 已加载的能力与现场 schema；不得把另一个 agent 的会话当作本 agent 的控制能力。
+需要 CUA 驱动细节时按 `$gui-capture` 检查当前 agent 已加载的能力与现场 schema；不得把另一个 agent 的会话当作本 agent 的控制能力。
 
 ## 视觉证据
 
-先按 `$ai-station-gui` 判断当前 agent 是否有健康的 CUA 能力。脚本 fallback 只抓取截图；本机入口为：
+先按 `$gui-capture` 判断当前 agent 是否有健康的 CUA 能力。脚本 fallback 只抓取截图；GNOME X11 本机入口为：
 
 ```bash
 capture_evidence_dir=$(mktemp -d)
-.agents/skills/ai-station-gui/scripts/capture-ai-station.sh --local \
+.agents/skills/gui-capture/scripts/capture-gui.sh --local --desktop \
   --output-root "$capture_evidence_dir/captures"
 ```
 
-`desktop.png` 必须存在且新鲜；RViz 和 Ghostty 是可选 manifest 字段，窗口缺失不构成失败。直接运行在 ai-station 时不得 SSH 自身；仅 Mac/orchestrator 使用显式 remote 模式。
+manifest 声明的 `desktop.png` 必须存在且新鲜。直接运行在 ai-station 时不得 SSH 自身；仅 Mac/orchestrator 使用显式 remote 模式。
 
 验收截图必须：
 

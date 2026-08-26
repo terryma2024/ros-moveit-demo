@@ -7,7 +7,7 @@ description: Use when recording a Gazebo window as pick-place evidence, diagnosi
 
 本 skill 用于 ai-station 上 SO101 Gazebo 抓取实验的可复现视频取证:相机就位、单栈就绪、精确录屏、分层抽帧和证据对齐报告。判断与排序在 Codex;工具只做确定性的原子操作,不提供端到端脚本。
 
-**必须同时使用 `$so101-dev` 和 `$ai-station-gui`**。本 skill 继承 SO-101 的 provenance 三层确认、单栈前提、A/B 单变量隔离和构建-source 规则；桌面截图与 GUI 控制由 `$ai-station-gui` 按当前 agent 能力路由，视频结论仍按 `OBSERVED / INFERRED / HYPOTHESIS` 分层。
+**必须同时使用 `$so101-dev` 和 `$gui-capture`**。本 skill 继承 SO-101 的 provenance 三层确认、单栈前提、A/B 单变量隔离和构建-source 规则；桌面截图与 GUI 控制由 `$gui-capture` 按当前平台和 agent 能力路由，视频结论仍按 `OBSERVED / INFERRED / HYPOTHESIS` 分层。
 
 ## 工具与证据目录
 
@@ -32,7 +32,7 @@ description: Use when recording a Gazebo window as pick-place evidence, diagnosi
 1. **Provenance**:记录本地和 ai-station 的 commit、branch、`git status --short`、安装前缀和工具版本,写入 `manifest.json`。按 `$so101-dev` 规则从运行进程、安装产物和 source tree 三者确认版本。
 2. **Camera compute/apply**:从四个 preset 选一个 compute;人工核对数值和 SDF diff 后才 apply。数学覆盖只是候选,最终视角由 ready 末帧验收。
 3. **Inventory/精确清理**:运行 `so101_stack_inventory.py` 存为 `process-inventory-before.json`。把资源分为“本轮停止”“必须保留”“不确定”;只向确认属于本轮旧 stack 的 PID 发正常终止信号,超时后对同一 PID 升级。再次 inventory 存 `process-inventory-after.json`,证明无重复 Gazebo、MoveIt、controller、robot_state_publisher 或抓取进程。
-4. **GUI/maximize**:在明确 tmux session 中 source `~/gui-env.zsh`、ROS Jazzy 和最新 workspace overlay(不得硬编码 `DISPLAY`/`XAUTHORITY`)。启动必要服务和唯一 Gazebo GUI,然后运行 `ros2 run so101_teleop tile_ai_station_guis.py --maximize gazebo`,必须输出 `LAYOUT_OK`。桌面截图或内部 GUI 控制调用 `$ai-station-gui`。
+4. **GUI/maximize**:在明确 tmux session 中 source `~/gui-env.zsh`、ROS Jazzy 和最新 workspace overlay(不得硬编码 `DISPLAY`/`XAUTHORITY`)。启动必要服务和唯一 Gazebo GUI,然后运行 `ros2 run so101_teleop tile_ai_station_guis.py --maximize gazebo`,必须输出 `LAYOUT_OK`。桌面截图或内部 GUI 控制调用 `$gui-capture`。
 5. **1 秒 probe 与视觉判断**:录制约 1 秒 `ready-probe.mkv`,正常 stop 后提取 `ready-last-frame.png`。**实际查看图片**:确认完整机械臂、杯子、桌面和放置区可见,无加载空白、错误对话框或严重遮挡。ready 未通过不得进入下一步。
 6. **正式录屏与 pre-roll**:`ros2 run so101_teleop gazebo_window_recorder.py start` 录 `run.mkv`,`status` 确认在录且文件增长。保留 2–3 秒 pre-roll(抓取程序启动前的稳定场景)。
 7. **独立启动任务**:单独命令启动抓取程序,记录完整命令、wall-clock 开始时间、日志路径(`pick-place.log`)和退出码。录屏与任务不得封装成同一条命令。
