@@ -2255,3 +2255,22 @@ open_risks:
   - Intermittent nonfatal pal_statistics shutdown diagnostics remain a retained risk unless the hardening exposes a causal relationship.
 next_command: Await explicit user review of the written hardening design; after approval, invoke the writing-plans workflow before changing production code.
 ```
+
+```yaml
+checkpoint_id: CP-031
+recorded_at: 2026-08-26T14:37:18+08:00
+last_valid_experiment: EXP-020
+current_hypothesis: The user-approved minimal hardening design is now decomposed into four test-first code tasks, an implementation freeze, four fresh full-restart acceptance runs, and a final independent review/inventory gate.
+working_tree_status: Task branch and origin matched cleanly at 67bac0d64e5dabffa07058b80f4ba96dc7ecbd48 before this planning checkpoint; exact f19 submodule and canonical main b3770360 remain preserved.
+owned_processes: NONE; this planning phase performed only source/evidence reads and rosdep/dpkg resolution checks.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+confirmed_conclusions:
+  - User explicitly approved docs/superpowers/specs/2026-08-26-rgbd-perception-production-hardening-design.md; its status is now Approved.
+  - The implementation plan is docs/superpowers/plans/2026-08-26-rgbd-perception-production-hardening.md and contains RED/GREEN tests, exact interfaces, commits, fresh-overlay verification, EXP-021 through EXP-024 identities, review, and final inventory.
+  - OBSERVED: On this ai-station rosdep resolves key opengl to apt packages libgl1-mesa-dev and libglu1-mesa-dev. Raw apt names libgl-dev, libegl-dev, libgl1-mesa-dev, and libegl1-mesa-dev are not rosdep keys. The installed libgl1-mesa-dev chain includes libglvnd-dev, which depends on both libgl-dev and libegl-dev.
+  - No production source was changed during design or planning.
+open_risks:
+  - The five final-review findings remain open until the plan is executed and independently reviewed.
+  - Accepted EXP-017 through EXP-020 remain historical-only for a8b3d87a after any production-code change.
+next_command: User selects subagent-driven or inline plan execution; the selected execution skill must then run Task 1 from RED without skipping checkpoints.
+```
