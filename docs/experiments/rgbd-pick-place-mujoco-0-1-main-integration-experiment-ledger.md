@@ -2363,3 +2363,64 @@ pre_running_observed:
 decision: START_BASE_STATIC_TF_GUI_THEN_OBSERVER_AND_INSTALLED_PERCEPTION
 next_command: No dynamic node or motion; close on the first valid installed perception result.
 ```
+
+## CP-060 / CLOSE-SMOKE-013-001 — Installed reliable-QoS perception succeeds on live MuJoCo RGB-D
+
+```yaml
+checkpoint_id: CP-060
+transition_id: CLOSE-SMOKE-013-001
+recorded_at: 2026-08-27T02:33:42+08:00
+smoke_id: SMOKE-013
+from: RUNNING
+to: VALID_DIAGNOSTIC_SUCCESS
+qualification: false
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+record_head_before_transition: 2432b91b0eb96893c8d53d45ca6cc75341ad5f9f
+provenance:
+  demo_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py
+  support_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_mujoco_support
+  installed_bundle_sha256: e1dae424668fe418e64f05cda6976308670ade43639df7b0fbc97d74fb8e4f93
+  support_plugin_sha256: f4487cc3e2467e2ffec5b2ca2fa407d8c372b63cfe07cc1e71e777185d1a7ab7
+timing:
+  observer_ready_epoch_s: 1787769103.0150871
+  perception_owner_start_epoch_s: 1787769112.0
+  first_ok_epoch_s: 1787769133.503602
+  first_ok_from_owner_s: 21.503602
+  summary_mtime_from_monotonic_start_file_mtime_s: 17.961806
+  startup_deadline_s: 30.0
+perception:
+  status: OK
+  input_frame_id: task_camera_frame
+  output_frame_id: world
+  output_topic: /cup_pose
+  position_xyz: [0.01949905513971856, -0.28040477913291795, 0.16499999999999998]
+  fitted_radius_m: 0.03938055155330842
+  expected_radius_m: 0.04
+  full_point_count: 98080
+  color_candidate_point_count: 260
+  cup_point_count: 141
+  ply_bytes: 4013
+independent_observer:
+  frame_id: world
+  position_xyz: [0.01949905513971856, -0.28040477913291795, 0.16499999999999998]
+  orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+gui:
+  exact_window_id: 45489
+  exact_owner_pid: 17308
+  original_capture_resolution: [2504, 1770]
+shutdown:
+  - After success artifacts appeared, one Ctrl-C was sent only to the exact perception pane; child PID 24361 disappeared, but its wrapper pane exited before writing exit-code and finished-at files. This bounded observer gap is not a product failure.
+  - Exact Ctrl-C then stopped only this run's base and TF panes; robot_state_publisher, move_group, ros2_control, controllers, UI, and plugin teardown were clean.
+  - Post-cleanup domain 207 had no nodes, task tmux/process identities and Viewer were absent, with only builtin /parameter_events and /rosout topic names reported.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-qos-green-r6/live
+  summary_sha256: a13551970de14650c5ef7607f987ea4c560ebfc7c915cb4a16b1802ba47bc0bc
+  ply_sha256: be6dc51ee934f0f8fb73a6744ebfa59235600a97c1143056f5d501b18fa3acb5
+  observer_sha256: 950a1a6e8cbade56ce329475b2366b44b9a154a70c53aadd5aca3d6fd8db7180
+  perception_log_sha256: eccc728e9f87f7f5e0a6dc23107e73848396c3f66fc4571c08d5f8afc5323fc0
+  baseline_manifest_sha256: 23da5a26dda26853f1e3eb66d1f3726bc07485e70ef2ffb268c10ac23c31c7b4
+  baseline_png_sha256: 5e95b4e5f296d1751d82bab1872a476a619ac8b4390a1fad73976ecc8937485c
+  base_log_sha256: 61d2295f46272f8550765ffb0780bc7ab16357b0a30f6a42b98058a19217744a
+decision: RESUME_FOUR_POSITION_FULL_RESTART_QUALIFICATION_WITH_THIS_INSTALLED_BUNDLE
+next_experiment: EXP-017
+```
