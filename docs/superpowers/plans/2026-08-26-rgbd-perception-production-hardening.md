@@ -851,3 +851,35 @@ Expected: verification returns zero. Afterward perform only read-only checks so 
 - [ ] **Step 6: Final readback**
 
 Verify local HEAD equals Gitee branch HEAD, task tree clean, submodule/gitlink exact f19 and clean, canonical main unchanged, all task-owned resources absent, and no unrecorded evidence disposition. Report completion only with this fresh evidence.
+
+---
+
+## Independent-review return amendment
+
+The first Task 10 review stopped completion at Step 3. EXP-025 through EXP-028 used the public launch file through `ros2 launch`, not the installed status-preserving runner, and `one_shot_exit_handler` did not ignore teardown exits after the workflow became terminal. CP-037 retains that review. The following tasks supersede the unexecuted Task 10 Steps 4 through 6; no prior evidence is rewritten.
+
+### Task 11: Close the exercised exact-status boundary
+
+- [ ] Add a RED direct-dispatch regression proving a nonzero controller-spawner exit after a clean terminal workflow emits no failure and preserves status 0.
+- [ ] Add RED real-LaunchService runner regressions proving an exact required-long-lived failure is returned and a clean workflow followed by spawner teardown returns 0.
+- [ ] Add the minimal `workflow_terminal` guard to `one_shot_exit_handler`; do not alter pre-terminal spawner failure behavior.
+- [ ] Run focused RED/GREEN, the full suite, Ruff, and the dependency-closed six-package build. Freeze the new implementation commit and verify installed provenance/executable readback.
+- [ ] Correct only the retained full-restart helper command boundary from `ros2 launch ...launch.py` to `ros2 run so101_demo_py so101_mujoco_perception_pick_place ...`; validate it with zsh syntax/readback and preserve all prior helper/run evidence.
+
+### Task 12: Requalify the installed runner at four keyframes
+
+Use the unchanged capture coordinator and acceptance gates with fresh identities:
+
+- EXP-029: domain 207, session `rgbd-pick-task-start-exp029-20260826`, CUA `rgbd-pick-exp029-viewer-20260826`, keyframe `task_start`.
+- EXP-030: domain 208, session `rgbd-pick-forward-exp030-20260826`, CUA `rgbd-pick-exp030-viewer-20260826`, keyframe `cup_test_forward_5cm`.
+- EXP-031: domain 209, session `rgbd-pick-left-exp031-20260826`, CUA `rgbd-pick-exp031-viewer-20260826`, keyframe `cup_test_left_5cm`.
+- EXP-032: domain 210, session `rgbd-pick-right-exp032-20260826`, CUA `rgbd-pick-exp032-viewer-20260826`, keyframe `cup_test_right_5cm`.
+
+For each run, prove all identities/evidence paths absent, append and push RUNNING before launch, use explicit `zsh` helper invocation, apply the complete Task 6 acceptance/visual/cleanup gates, and append/push VALID or INVALID before proceeding. `child.owner` must prove `ros2 run so101_demo_py so101_mujoco_perception_pick_place`; any rerun consumes a new experiment ID.
+
+### Task 13: Repeat final review, checkpoint, and final-write inventory
+
+- [ ] Repeat 400-test full suite, Ruff, rosdep, six-package build without runtime Open3D setuptools on build `PYTHONPATH`, installed provenance/CLI checks, exact f19/canonical/Gitee readback, and domains 180/185 through 210 plus process/tmux/Viewer/CUA cleanup.
+- [ ] Request a new independent review of the post-CP-037 diff. It must close both exact-status issues and explicitly recertify all five original findings.
+- [ ] Append/push the completion checkpoint with retained, archived, and deletion-candidate disposition. Treat EXP-029 through EXP-032 as the only current countable exact-runner set; retain EXP-025 through EXP-028 as physically valid but wrapper-nonqualifying history.
+- [ ] Regenerate `sha256.txt` and `sizes.txt` as the last evidence writes, verify every hash, then perform read-only final readback only.

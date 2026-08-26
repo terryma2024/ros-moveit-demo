@@ -2673,3 +2673,35 @@ open_risks:
   - Streaming perception rejects motion/occlusion frames by design after the accepted static input; those rejects do not replace the workflow input.
 next_command: Commit and push this four-run closure, then repeat full tests, Ruff, six-package build, installed provenance, exact f19/canonical/owned-runtime checks, request independent code review, and produce the final evidence inventory as the last evidence write.
 ```
+
+```yaml
+checkpoint_id: CP-037
+recorded_at: 2026-08-26T15:43:00+08:00
+last_valid_experiment: EXP-028
+current_hypothesis: Four original findings are closed, but exact launch-status qualification remains open because the accepted runtime helper bypassed the installed status-preserving runner and one-shot teardown lacks the terminal guard.
+implementation_commit: 48349ca7f6134e7bc4d15385338f86e5fbc182e7
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+review_gate: BLOCKED_PENDING_STATUS_BOUNDARY_FIX
+independent_review:
+  - CLOSED: MuJoCo session/reset epoch/unpaused validation precedes Planning Scene construction and mutation, with zero-scene-call regressions.
+  - CLOSED: Evidence session/output allocation is exclusive and collision/path-safety tests preserve existing contents.
+  - CLOSED: Installed provenance contains so101_mujoco_perception_pick_place and final readback lists it exactly once.
+  - CLOSED: package.xml declares rosdep key opengl and rosdep plus six-package build pass.
+  - OPEN_CRITICAL: EXP-025 through EXP-028 invoked ros2 launch through the retained helper, while exact status resolution exists only in the installed so101_mujoco_perception_pick_place runner. The physical runs therefore do not qualify that wrapper boundary.
+  - OPEN_IMPORTANT: one_shot_exit_handler does not ignore controller-spawner teardown exits after workflow_terminal, and the teardown regression omits spawners.
+verification_before_review:
+  - OBSERVED: Fresh full suite passed 400 tests in 5.56 s; Ruff check/format and rosdep resolve opengl returned zero.
+  - OBSERVED: Dependency-closed six-package build passed in 2.37 s using system setuptools 68.1.2; installed provenance passed 3 tests; local/Gitee, exact f19, canonical main, and domains 180/185-206 plus process/tmux/Viewer/CUA cleanup were exact and empty.
+historical_status:
+  - EXP-025 through EXP-028 remain retained, valid physical/numeric/visual evidence for implementation 48349ca7, but are non-qualifying for the unexercised installed exact-status boundary and cannot complete the post-fix task.
+  - EXP-021 remains retained INVALID/non-counting; EXP-017 through EXP-020 remain historical-only for a8b3d87a; CP-016 remains immutable history.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-review/report.md
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification/pytest-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification/colcon-build.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification/pytest-installed-provenance.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification/owned-runtime-clean.log
+decision: RETURN_TO_RED
+next_experiment: EXP-029
+next_command: Add RED tests for spawner teardown and real LaunchService required-process propagation, implement the minimal terminal guard, rebuild/freeze a new implementation, correct the retained full-restart helper to invoke the installed runner, then requalify task_start/forward/left/right as EXP-029 through EXP-032 on fresh identities.
+```
