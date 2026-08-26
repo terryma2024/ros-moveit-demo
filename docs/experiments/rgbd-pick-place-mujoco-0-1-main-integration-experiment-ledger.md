@@ -33,7 +33,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-126
+latest_checkpoint: CP-127
 next_experiment: EXP-042
 ```
 
@@ -70,6 +70,30 @@ status: VALID
 owned_processes: NONE
 decision: Commit/push, preflight the new identity, then start runner and watcher once.
 next_experiment: EXP-042
+```
+
+## EXP-042 transition to RUNNING
+
+```yaml
+transition_id: TRANS-EXP-042-RUNNING-001
+recorded_at: 2026-08-27T05:09:00+08:00
+experiment_id: EXP-042
+from: PLANNED
+to: RUNNING
+preflight: {domain_106_nodes: NONE, target_tmux_process_evidence_root: ABSENT, target_viewer: ABSENT, mesa_glfw: PASS, open3d_numpy_exact: PASS, parent_child_status: CLEAN}
+window_inventory_sha256: 16b21bff6110fa104dd3c7b5df635659c8ca21b9ba68e15483013b1564d00b1a
+watcher_sha256: ce1fccf91f6707b95c7bf4e4d96c03b8b77b98dac233a6355c62eab138d0d507
+decision: START_WATCHER_THEN_EXACT_RUNNER_ONCE
+```
+
+## CP-127 — EXP-042 ready to execute
+
+```yaml
+checkpoint_id: CP-127
+recorded_at: 2026-08-27T05:09:00+08:00
+status: VALID
+owned_processes: NONE before launch
+decision: Execute one FULL_RESTART and require watcher exit zero plus runner exit zero.
 ```
 
 ## EXP-037 — dependency-closed ai-station task_start FULL_RESTART
