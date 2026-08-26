@@ -1549,3 +1549,42 @@ evidence:
 decision: STOP_QUALIFICATION_AND_STAGE_PER_CALL_CONSTRUCTION_TIMING
 next_experiment: NONE
 ```
+
+## CP-034 — Plan transparent per-call ROS runtime construction timing
+
+```yaml
+checkpoint_id: CP-034
+recorded_at: 2026-08-27T01:13:55+08:00
+smoke_id: SMOKE-007
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: cd647c808b038be2b81e533ac847b961060b5c92
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+problem: The real installed live entrypoint takes 51.686 s and reports a construction timeout, while the prior manual staged probe reports only 17 to 18 s and therefore lacks a discriminating resource boundary.
+hypothesis: One synchronous call inside the real candidate installed _create_ros_runtime becomes disproportionately slow only with the live stack; a transparent ROS API proxy can identify it without changing frozen production code.
+identity:
+  empty_domain: 214
+  empty_session: mac-mrc010-per-call-empty-r1
+  live_domain: 213
+  live_session: mac-mrc010-per-call-live-r1
+  live_tmux: mrc010-mac-per-call-live-r1
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/per-call-construction-r1
+probe_contract:
+  - Import candidate installed rgbd_cup_pose_node, begin the same 30 s budget, preflight Open3D, call installed _load_ros_api, then invoke installed _create_ros_runtime with a transparent proxy.
+  - Emit flush-safe monotonic START/END events for rclpy.ok/init/create_node, Parameter, Buffer, TransformListener, QoSProfile, publisher, each of three subscriptions, reverse cleanup, and total construction/close.
+  - Use the formal /cup_pose publisher and camera topics but never spin callbacks. No pose can be published and no dynamic/MoveIt workflow or motion process is started.
+  - Impose a 120 s observer bound. If a call remains open, sample only its exact-owned PID for two seconds, then stop that observer and retain the last START event.
+method:
+  - Run empty-domain control first in domain 214 and stop on any valid probe failure.
+  - Only after empty completes, start the exact candidate base/static-TF/GUI stack in fresh domain 213 behind an explicit in-pane cwd gate; wait all controllers, MoveIt, and Scene READ_BACK; run the identical probe.
+  - Compare per-call durations and identify the first call responsible for the live overrun before any TDD product fix.
+helpers:
+  probe_sha256: 1203a40abb2cb92c930ad9d222d04693cfcfc4a79828c68338a7fac5e24a3d21
+  empty_sha256: ed922430b987ffc29f14489550b0b4b0d2fdd641faa0ff6840e5b2b2bb598092
+  live_base_sha256: f502288e8cfc3ec58876f6d12ddc55bf30157064bdcd972606a5b717a51e9902
+  live_tf_sha256: f7b8eac025bf977cd91409d617859c534c83d5a67cca305cf710d2e38b044298
+  live_probe_sha256: 2bba21382024a73913dae6cd8acd47a1638f7297c837fe1aed1dd756098a081c
+decision: COMMIT_PLAN_THEN_RUN_EMPTY_PER_CALL_CONTROL
+next_experiment: SMOKE-007
+```
